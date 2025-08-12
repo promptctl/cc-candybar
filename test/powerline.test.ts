@@ -82,7 +82,7 @@ function createHookData(): ClaudeHookData {
   };
 }
 
-function createConfig(segments: any): PowerlineConfig {
+function createConfig(segments: Record<string, unknown>): PowerlineConfig {
   return {
     theme: "light",
     display: { lines: [{ segments }] },

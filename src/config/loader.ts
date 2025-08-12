@@ -11,15 +11,27 @@ function deepMerge<T extends Record<string, any>>(
   const result = { ...target };
 
   for (const key in source) {
-    if (source[key] !== undefined) {
+    const sourceValue = source[key];
+    if (sourceValue !== undefined) {
       if (
-        typeof source[key] === "object" &&
-        source[key] !== null &&
-        !Array.isArray(source[key])
+        typeof sourceValue === "object" &&
+        sourceValue !== null &&
+        !Array.isArray(sourceValue)
       ) {
-        result[key] = deepMerge(result[key] || ({} as any), source[key] as any);
+        const targetValue = result[key] || {};
+        result[key] = deepMerge(
+          targetValue as Record<string, any>,
+          sourceValue as Record<string, any>
+        ) as T[Extract<keyof T, string>];
+      } else if (Array.isArray(sourceValue) && sourceValue.length === 0) {
+        const targetValue = result[key];
+        if (!Array.isArray(targetValue) || targetValue.length > 0) {
+          continue;
+        } else {
+          result[key] = sourceValue as T[Extract<keyof T, string>];
+        }
       } else {
-        result[key] = source[key] as any;
+        result[key] = sourceValue as T[Extract<keyof T, string>];
       }
     }
   }
@@ -67,7 +79,9 @@ function loadEnvConfig(): Partial<PowerlineConfig> {
   }
 
   if (process.env.CLAUDE_POWERLINE_STYLE) {
-    config.display = config.display || { lines: [] };
+    if (!config.display) {
+      config.display = { lines: [] };
+    }
     const style = process.env.CLAUDE_POWERLINE_STYLE;
     if (style === "minimal" || style === "powerline") {
       config.display.style = style;
@@ -85,7 +99,9 @@ function loadEnvConfig(): Partial<PowerlineConfig> {
       | "tokens"
       | "both"
       | "breakdown";
-    config.display = config.display || { lines: [] };
+    if (!config.display) {
+      config.display = { lines: [] };
+    }
 
     if (config.display.lines.length === 0) {
       config.display.lines = [{ segments: {} }];
@@ -129,7 +145,9 @@ function parseCLIOverrides(args: string[]): Partial<PowerlineConfig> {
   if (styleIndex !== -1) {
     const style = args[styleIndex]?.split("=")[1];
     if (style) {
-      config.display = config.display || { lines: [] };
+      if (!config.display) {
+        config.display = { lines: [] };
+      }
       if (style === "minimal" || style === "powerline") {
         config.display.style = style;
       } else {
@@ -186,7 +204,9 @@ function parseCLIOverrides(args: string[]): Partial<PowerlineConfig> {
       usageType &&
       ["cost", "tokens", "both", "breakdown"].includes(usageType)
     ) {
-      config.display = config.display || { lines: [] };
+      if (!config.display) {
+        config.display = { lines: [] };
+      }
 
       if (config.display.lines.length === 0) {
         config.display.lines = [{ segments: {} }];

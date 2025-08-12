@@ -141,16 +141,10 @@ Usage in Claude Code settings.json:
       process.exit(0);
     }
 
-    let hookData: ClaudeHookData;
-    try {
-      hookData = (await json(process.stdin)) as ClaudeHookData;
-    } catch (error) {
-      if (
-        error instanceof Error &&
-        error.message.includes("Unexpected end of JSON input")
-      ) {
-        console.error("Error: No input provided");
-        console.log(`
+    const hookData = (await json(process.stdin)) as ClaudeHookData;
+    if (!hookData) {
+      console.error("Error: No input provided");
+      console.log(`
 claude-powerline - Beautiful powerline statusline for Claude Code
 
 Usage: claude-powerline [options]
@@ -167,12 +161,6 @@ Options:
 
 See example config at: https://github.com/Owloops/claude-powerline/blob/main/.claude-powerline.json
 `);
-      } else {
-        console.error(
-          "Error: Invalid JSON input:",
-          error instanceof Error ? error.message : String(error)
-        );
-      }
       process.exit(1);
     }
 

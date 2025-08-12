@@ -1,8 +1,19 @@
 import type { ClaudeHookData, PowerlineColors } from "./types";
-import type { PowerlineConfig, LineConfig } from "./types/config";
+import type {
+  PowerlineConfig,
+  LineConfig,
+  AnySegmentConfig,
+  GitSegmentConfig,
+  UsageSegmentConfig,
+  BlockSegmentConfig,
+} from "./types/config";
 import { hexToAnsi, extractBgToFg } from "./lib/colors";
 import { getTheme } from "./themes";
-import { UsageProvider } from "./lib/usage-provider";
+import {
+  UsageProvider,
+  UsageInfo,
+  SessionBlockInfo,
+} from "./lib/usage-provider";
 import { GitService } from "./lib/git-service";
 import { TmuxService } from "./lib/tmux-service";
 import { SegmentRenderer, PowerlineSymbols } from "./lib/segment-renderer";
@@ -50,15 +61,17 @@ export class PowerlineRenderer {
   private renderLine(
     lineConfig: LineConfig,
     hookData: ClaudeHookData,
-    usageInfo: any,
-    sessionBlockInfo: any
+    usageInfo: UsageInfo,
+    sessionBlockInfo: SessionBlockInfo | null
   ): string {
     const colors = this.getThemeColors();
     const currentDir = hookData.workspace?.current_dir || hookData.cwd || "/";
 
     const segments = Object.entries(lineConfig.segments)
-      .filter(([_, config]: [string, any]) => config?.enabled)
-      .map(([type, config]: [string, any]) => ({ type, config }));
+      .filter(
+        ([_, config]: [string, AnySegmentConfig | undefined]) => config?.enabled
+      )
+      .map(([type, config]: [string, AnySegmentConfig]) => ({ type, config }));
 
     let line = colors.reset;
 
@@ -95,11 +108,11 @@ export class PowerlineRenderer {
   }
 
   private renderSegment(
-    segment: any,
+    segment: { type: string; config: AnySegmentConfig },
     hookData: ClaudeHookData,
-    usageInfo: any,
-    sessionBlockInfo: any,
-    colors: any,
+    usageInfo: UsageInfo,
+    sessionBlockInfo: SessionBlockInfo | null,
+    colors: PowerlineColors,
     currentDir: string
   ) {
     switch (segment.type) {
@@ -107,7 +120,7 @@ export class PowerlineRenderer {
         return this.segmentRenderer.renderDirectory(hookData, colors);
 
       case "git":
-        const showSha = segment.config?.showSha || false;
+        const showSha = (segment.config as GitSegmentConfig)?.showSha || false;
         const gitInfo = this.gitService.getGitInfo(currentDir, showSha);
         return gitInfo
           ? this.segmentRenderer.renderGit(gitInfo, colors, showSha)
@@ -117,15 +130,18 @@ export class PowerlineRenderer {
         return this.segmentRenderer.renderModel(hookData, colors);
 
       case "session":
-        const usageType = segment.config?.type || "cost";
+        const usageType =
+          (segment.config as UsageSegmentConfig)?.type || "cost";
         return this.segmentRenderer.renderSession(usageInfo, colors, usageType);
 
       case "today":
-        const todayType = segment.config?.type || "cost";
+        const todayType =
+          (segment.config as UsageSegmentConfig)?.type || "cost";
         return this.segmentRenderer.renderToday(usageInfo, colors, todayType);
 
       case "block":
-        const blockType = segment.config?.type || "cost";
+        const blockType =
+          (segment.config as BlockSegmentConfig)?.type || "cost";
         return this.segmentRenderer.renderBlock(
           sessionBlockInfo,
           colors,

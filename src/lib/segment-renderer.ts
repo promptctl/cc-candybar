@@ -1,5 +1,5 @@
 import type { PowerlineConfig } from "../types/config";
-import type { ClaudeHookData } from "../types";
+import type { ClaudeHookData, PowerlineColors } from "../types";
 import {
   formatCost,
   formatTokens,
@@ -7,7 +7,11 @@ import {
   formatTimeRemaining,
 } from "./formatters";
 import { getBudgetStatus } from "./budget";
-import type { UsageInfo, SessionBlockInfo } from "./usage-provider";
+import type {
+  UsageInfo,
+  SessionBlockInfo,
+  TokenBreakdown,
+} from "./usage-provider";
 import type { GitInfo } from "./git-service";
 
 export interface PowerlineSymbols {
@@ -36,7 +40,10 @@ export class SegmentRenderer {
     private readonly symbols: PowerlineSymbols
   ) {}
 
-  renderDirectory(hookData: ClaudeHookData, colors: any): SegmentData {
+  renderDirectory(
+    hookData: ClaudeHookData,
+    colors: PowerlineColors
+  ): SegmentData {
     const currentDir = hookData.workspace?.current_dir || hookData.cwd || "/";
     const projectDir = hookData.workspace?.project_dir;
     const dirName = this.getDisplayDirectoryName(currentDir, projectDir);
@@ -50,7 +57,7 @@ export class SegmentRenderer {
 
   renderGit(
     gitInfo: GitInfo,
-    colors: any,
+    colors: PowerlineColors,
     showSha = false
   ): SegmentData | null {
     if (!gitInfo) return null;
@@ -83,7 +90,7 @@ export class SegmentRenderer {
     };
   }
 
-  renderModel(hookData: ClaudeHookData, colors: any): SegmentData {
+  renderModel(hookData: ClaudeHookData, colors: PowerlineColors): SegmentData {
     const modelName = hookData.model?.display_name || "Claude";
 
     return {
@@ -93,7 +100,11 @@ export class SegmentRenderer {
     };
   }
 
-  renderSession(usageInfo: UsageInfo, colors: any, type = "cost"): SegmentData {
+  renderSession(
+    usageInfo: UsageInfo,
+    colors: PowerlineColors,
+    type = "cost"
+  ): SegmentData {
     const sessionBudget = this.config.budget?.session;
     const text = `${this.symbols.session_cost} ${this.formatUsageWithBudget(
       usageInfo.session.cost,
@@ -111,7 +122,11 @@ export class SegmentRenderer {
     };
   }
 
-  renderToday(usageInfo: UsageInfo, colors: any, type = "cost"): SegmentData {
+  renderToday(
+    usageInfo: UsageInfo,
+    colors: PowerlineColors,
+    type = "cost"
+  ): SegmentData {
     const todayBudget = this.config.budget?.today;
     const text = `Today ${this.formatUsageWithBudget(
       usageInfo.daily.cost,
@@ -131,7 +146,7 @@ export class SegmentRenderer {
 
   renderBlock(
     blockInfo: SessionBlockInfo | null,
-    colors: any,
+    colors: PowerlineColors,
     type = "cost"
   ): SegmentData | null {
     if (!blockInfo) return null;
@@ -145,7 +160,10 @@ export class SegmentRenderer {
     };
   }
 
-  renderTmux(sessionId: string | null, colors: any): SegmentData | null {
+  renderTmux(
+    sessionId: string | null,
+    colors: PowerlineColors
+  ): SegmentData | null {
     if (!sessionId) return null;
 
     return {
@@ -176,7 +194,7 @@ export class SegmentRenderer {
   private formatUsageDisplay(
     cost: number | null,
     tokens: number | null,
-    tokenBreakdown: any,
+    tokenBreakdown: TokenBreakdown | null,
     type: string
   ): string {
     switch (type) {
@@ -196,7 +214,7 @@ export class SegmentRenderer {
   private formatUsageWithBudget(
     cost: number | null,
     tokens: number | null,
-    tokenBreakdown: any,
+    tokenBreakdown: TokenBreakdown | null,
     type: string,
     budget: number | undefined,
     warningThreshold = 80

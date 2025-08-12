@@ -16,6 +16,13 @@ export interface BlockSegmentConfig extends SegmentConfig {
 
 export interface TmuxSegmentConfig extends SegmentConfig {}
 
+export type AnySegmentConfig =
+  | SegmentConfig
+  | GitSegmentConfig
+  | UsageSegmentConfig
+  | BlockSegmentConfig
+  | TmuxSegmentConfig;
+
 export interface SegmentColor {
   bg: string;
   fg: string;

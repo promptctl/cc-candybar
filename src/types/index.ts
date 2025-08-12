@@ -32,3 +32,26 @@ export interface PowerlineColors {
   tmuxBg: string;
   tmuxFg: string;
 }
+
+export interface TokenBreakdown {
+  input: number;
+  output: number;
+  reasoning: number;
+}
+
+export interface UsageInfo {
+  sessionCost: number;
+  sessionTokens: number;
+  sessionTokenBreakdown: TokenBreakdown;
+  todayCost: number;
+  todayTokens: number;
+  todayTokenBreakdown: TokenBreakdown;
+  todayBudget?: number;
+  sessionBudget?: number;
+}
+
+export interface SessionBlockInfo {
+  blockCost: number;
+  blockTokens: number;
+  blockTokenBreakdown: TokenBreakdown;
+}
