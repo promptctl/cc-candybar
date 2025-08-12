@@ -1,6 +1,6 @@
 {
   "name": "@owloops/claude-powerline",
-  "version": "1.1.11",
+  "version": "1.1.12",
   "description": "Beautiful vim-style powerline statusline for Claude Code with real-time cost tracking, git integration, and custom themes",
   "type": "module",
   "main": "./dist/index.js",

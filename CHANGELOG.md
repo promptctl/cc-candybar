@@ -1,3 +1,10 @@
+## [1.1.12](https://github.com/Owloops/claude-powerline/compare/v1.1.11...v1.1.12) (2025-08-12)
+
+
+### Bug Fixes
+
+* resolve style options empty output and improve type safety ([589c1c9](https://github.com/Owloops/claude-powerline/commit/589c1c99c76d2be7dcf0d8d0f013deca7da05ae3))
+
 ## [1.1.11](https://github.com/Owloops/claude-powerline/compare/v1.1.10...v1.1.11) (2025-08-12)
 
 
