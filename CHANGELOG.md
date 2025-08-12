@@ -1,3 +1,10 @@
+## [1.1.8](https://github.com/Owloops/claude-powerline/compare/v1.1.7...v1.1.8) (2025-08-12)
+
+
+### Bug Fixes
+
+* remove leftover statement from readme ([0ca0c31](https://github.com/Owloops/claude-powerline/commit/0ca0c31ece08aa5779680cbb2baaa094bbcce175))
+
 ## [1.1.7](https://github.com/Owloops/claude-powerline/compare/v1.1.6...v1.1.7) (2025-08-12)
 
 
