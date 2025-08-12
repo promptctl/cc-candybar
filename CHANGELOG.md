@@ -1,3 +1,10 @@
+## [1.1.7](https://github.com/Owloops/claude-powerline/compare/v1.1.6...v1.1.7) (2025-08-12)
+
+
+### Bug Fixes
+
+* implement missing --usage cli option and reorganize documentation ([952a408](https://github.com/Owloops/claude-powerline/commit/952a408c044ed7f2653339ba3aaa7775c43ad9a4))
+
 ## [1.1.6](https://github.com/Owloops/claude-powerline/compare/v1.1.5...v1.1.6) (2025-08-12)
 
 
