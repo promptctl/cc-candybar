@@ -1,3 +1,10 @@
+## [1.1.13](https://github.com/Owloops/claude-powerline/compare/v1.1.12...v1.1.13) (2025-08-12)
+
+
+### Bug Fixes
+
+* add custom segments documentation with shell composition ([c447d04](https://github.com/Owloops/claude-powerline/commit/c447d04aa263d41792017c0c6e9cdbf9379f2c96))
+
 ## [1.1.12](https://github.com/Owloops/claude-powerline/compare/v1.1.11...v1.1.12) (2025-08-12)
 
 
