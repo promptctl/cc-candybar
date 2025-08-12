@@ -1,3 +1,10 @@
+## [1.1.9](https://github.com/Owloops/claude-powerline/compare/v1.1.8...v1.1.9) (2025-08-12)
+
+
+### Bug Fixes
+
+* document live config reload and clean up roadmap ([8944e59](https://github.com/Owloops/claude-powerline/commit/8944e59538aa7a751832df373dd8df4bc0d9b703))
+
 ## [1.1.8](https://github.com/Owloops/claude-powerline/compare/v1.1.7...v1.1.8) (2025-08-12)
 
 
