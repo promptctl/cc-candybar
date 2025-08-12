@@ -1,3 +1,10 @@
+## [1.1.11](https://github.com/Owloops/claude-powerline/compare/v1.1.10...v1.1.11) (2025-08-12)
+
+
+### Bug Fixes
+
+* replace synchronous stdin reading with native stream/consumers for npx compatibility ([39d45d6](https://github.com/Owloops/claude-powerline/commit/39d45d69da90d9185f6cfcb816bf7f83ece7c7da))
+
 ## [1.1.10](https://github.com/Owloops/claude-powerline/compare/v1.1.9...v1.1.10) (2025-08-12)
 
 
