@@ -158,8 +158,6 @@ claude-powerline --usage=breakdown
 claude-powerline --daily-budget=50
 ```
 
-- **breakdown**: Show detailed token breakdown (`1.2Kin + 0.8Kout + 1.5Kcached`)
-
 ### Status Indicators
 
 - **Git**: `✓` Clean, `●` Dirty, `⚠` Conflicts, `↑3` Ahead, `↓2` Behind remote
