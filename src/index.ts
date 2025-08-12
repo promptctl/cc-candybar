@@ -5,7 +5,6 @@ import path from "node:path";
 import fs from "node:fs";
 import { execSync } from "node:child_process";
 import os from "node:os";
-import getStdin from "get-stdin";
 import { PowerlineRenderer } from "./powerline";
 import { loadConfigFromCLI } from "./config/loader";
 import type { ClaudeHookData } from "./types";
@@ -141,7 +140,7 @@ Usage in Claude Code settings.json:
       process.exit(0);
     }
 
-    const stdin = await getStdin();
+    const stdin = fs.readFileSync(process.stdin.fd, "utf8").trim();
     if (stdin.length === 0) {
       console.error("Error: No input provided");
       console.log(`

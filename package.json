@@ -50,8 +50,7 @@
     "provenance": true
   },
   "dependencies": {
-    "ccusage": "^15.9.1",
-    "get-stdin": "^9.0.0"
+    "ccusage": "^15.9.1"
   },
   "devDependencies": {
     "@eslint/js": "^9.33.0",
