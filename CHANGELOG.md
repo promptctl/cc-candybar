@@ -1,3 +1,10 @@
+## [1.1.10](https://github.com/Owloops/claude-powerline/compare/v1.1.9...v1.1.10) (2025-08-12)
+
+
+### Bug Fixes
+
+* replace get-stdin with native fs.readFileSync for better maintainability ([50ba1ff](https://github.com/Owloops/claude-powerline/commit/50ba1ffc90470e5d9e9cf9631e296bf3c4613641))
+
 ## [1.1.9](https://github.com/Owloops/claude-powerline/compare/v1.1.8...v1.1.9) (2025-08-12)
 
 
