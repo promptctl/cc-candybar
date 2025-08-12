@@ -1,3 +1,10 @@
+## [1.1.6](https://github.com/Owloops/claude-powerline/compare/v1.1.5...v1.1.6) (2025-08-12)
+
+
+### Bug Fixes
+
+* add popular themes with validation and modernize readme showcase ([e1a513d](https://github.com/Owloops/claude-powerline/commit/e1a513d465df7ffaf7d5ca6435924c86bd2594a0))
+
 ## [1.1.5](https://github.com/Owloops/claude-powerline/compare/v1.1.4...v1.1.5) (2025-08-12)
 
 
