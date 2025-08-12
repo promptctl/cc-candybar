@@ -59,7 +59,7 @@ export interface BudgetConfig {
 }
 
 export interface PowerlineConfig {
-  theme: "light" | "dark" | "custom";
+  theme: "light" | "dark" | "nord" | "tokyo-night" | "rose-pine" | "custom";
   display: DisplayConfig;
   colors?: {
     custom: ColorTheme;

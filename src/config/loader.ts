@@ -68,9 +68,15 @@ function loadEnvConfig(): Partial<PowerlineConfig> {
 
   if (process.env.CLAUDE_POWERLINE_STYLE) {
     config.display = config.display || { lines: [] };
-    config.display.style = process.env.CLAUDE_POWERLINE_STYLE as
-      | "minimal"
-      | "powerline";
+    const style = process.env.CLAUDE_POWERLINE_STYLE;
+    if (style === "minimal" || style === "powerline") {
+      config.display.style = style;
+    } else {
+      console.warn(
+        `Invalid display style '${style}' from environment variable, falling back to 'minimal'`
+      );
+      config.display.style = "minimal";
+    }
   }
 
   if (process.env.CLAUDE_POWERLINE_USAGE_TYPE) {
@@ -124,7 +130,14 @@ function parseCLIOverrides(args: string[]): Partial<PowerlineConfig> {
     const style = args[styleIndex]?.split("=")[1];
     if (style) {
       config.display = config.display || { lines: [] };
-      config.display.style = style as "minimal" | "powerline";
+      if (style === "minimal" || style === "powerline") {
+        config.display.style = style;
+      } else {
+        console.warn(
+          `Invalid display style '${style}' from CLI argument, falling back to 'minimal'`
+        );
+        config.display.style = "minimal";
+      }
     }
   }
 
@@ -187,6 +200,17 @@ export function loadConfig(options: ConfigLoadOptions = {}): PowerlineConfig {
     }
   }
 
+  if (
+    config.display?.style &&
+    config.display.style !== "minimal" &&
+    config.display.style !== "powerline"
+  ) {
+    console.warn(
+      `Invalid display style '${config.display.style}' in config file, falling back to 'minimal'`
+    );
+    config.display.style = "minimal";
+  }
+
   if (!ignoreEnvVars) {
     const envConfig = loadEnvConfig();
     config = deepMerge(config, envConfig);
@@ -218,4 +242,3 @@ export function getConfigPath(
 ): string | null {
   return findConfigFile(customPath, projectDir);
 }
-

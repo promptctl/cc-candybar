@@ -1,19 +1,71 @@
+<div align="center">
+
 # Claude Powerline
 
-A vim-style powerline statusline for Claude Code with real-time usage tracking, git integration, and custom themes.
+**A vim-style powerline statusline for Claude Code with real-time usage tracking, git integration, and custom themes.**
 
 ![Language:TypeScript](https://img.shields.io/static/v1?label=Language&message=TypeScript&color=blue&style=flat-square)
 ![License:MIT](https://img.shields.io/static/v1?label=License&message=MIT&color=blue&style=flat-square)
 [![npm version](https://img.shields.io/npm/v/@owloops/claude-powerline?style=flat-square)](https://www.npmjs.com/package/@owloops/claude-powerline)
 
+<table>
+   <tr>
+      <td align="center">
+         <img src="images/claude-powerline-dark.png" width="300" alt="Dark Theme"><br>
+         <strong>Dark</strong>
+      </td>
+      <td align="center">
+         <img src="images/claude-powerline-light.png" width="300" alt="Light Theme"><br>
+         <strong>Light</strong>
+      </td>
+   </tr>
+   <tr>
+      <td align="center">
+         <img src="images/claude-powerline-nord.png" width="300" alt="Nord Theme"><br>
+         <strong>Nord</strong>
+      </td>
+      <td align="center">
+         <img src="images/claude-powerline-tokyo-night.png" width="300" alt="Tokyo Night Theme"><br>
+         <strong>Tokyo Night</strong>
+      </td>
+   </tr>
+   <tr>
+      <td align="center">
+         <img src="images/claude-powerline-rose-pine.png" width="300" alt="Rose Pine Theme"><br>
+         <strong>Rose Pine</strong>
+      </td>
+      <td align="center">
+         <img src="images/claude-powerline-custom.png" width="300" alt="Custom Theme"><br>
+         <em>Create your own!</em>
+      </td>
+   </tr>
+</table>
+</div>
+
 ## Features
+
+<table>
+<tr>
+<td width="50%">
+
+### Core Features
 
 - **Vim-style powerline** with proper arrows and segments
 - **Real-time usage tracking** with costs, tokens, and session blocks
 - **Git integration** with branch, status, ahead/behind counts
+
+</td>
+<td width="50%" valign="top">
+
+### Customization
+
 - **Custom themes** with full color control
 - **Budget monitoring** with percentage warnings
 - **Flexible configuration** via JSON files and environment variables
+
+</td>
+</tr>
+</table>
 
 ## Installation
 
@@ -33,7 +85,8 @@ Add to your Claude Code `settings.json`:
 }
 ```
 
-> **Note:** Using `npx` automatically downloads and runs the latest version, ensuring you always have the newest features and fixes without manual updates.
+> [!NOTE]  
+> Using `npx` automatically downloads and runs the latest version, ensuring you always have the newest features and fixes without manual updates.
 
 ## Usage
 
@@ -64,16 +117,6 @@ Set separator style:
 ```bash
 claude-powerline --style=powerline
 ```
-
-## Screenshots
-
-### Dark Theme (Default)
-
-![Dark Theme](images/powerline-dark.png)
-
-### Light Theme
-
-![Light theme](images/powerline-light.png)
 
 ## Default Segments
 

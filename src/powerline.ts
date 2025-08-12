@@ -143,7 +143,7 @@ export class PowerlineRenderer {
 
   private initializeSymbols(): PowerlineSymbols {
     const isMinimalStyle = this.config.display.style === "minimal";
-    
+
     return {
       right: isMinimalStyle ? "" : "\uE0B0",
       branch: "⑂",
@@ -166,12 +166,17 @@ export class PowerlineRenderer {
     if (theme === "custom") {
       colorTheme = this.config.colors?.custom;
       if (!colorTheme) {
-        throw new Error("Custom theme selected but no colors provided in configuration");
+        throw new Error(
+          "Custom theme selected but no colors provided in configuration"
+        );
       }
     } else {
       colorTheme = getTheme(theme);
       if (!colorTheme) {
-        throw new Error(`Built-in theme '${theme}' not found`);
+        console.warn(
+          `Built-in theme '${theme}' not found, falling back to 'dark' theme`
+        );
+        colorTheme = getTheme("dark")!;
       }
     }
 

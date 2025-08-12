@@ -1,7 +1,7 @@
 {
-  "theme": "custom",
+  "theme": "rose-pine",
   "display": {
-    "style": "minimal",
+    "style": "powerline",
     "lines": [
       {
         "segments": {
@@ -18,13 +18,13 @@
   },
   "colors": {
     "custom": {
-      "directory": { "bg": "#2e3440", "fg": "#d8dee9" },
-      "git": { "bg": "#3b4252", "fg": "#88c0d0" },
-      "model": { "bg": "#434c5e", "fg": "#b48ead" },
-      "session": { "bg": "#4c566a", "fg": "#8fbcbb" },
-      "today": { "bg": "#5e81ac", "fg": "#eceff4" },
-      "block": { "bg": "#81a1c1", "fg": "#2e3440" },
-      "tmux": { "bg": "#a3be8c", "fg": "#2e3440" }
+      "directory": { "bg": "#2a2a2a", "fg": "#e0e0e0" },
+      "git": { "bg": "#3a3a3a", "fg": "#d0d0d0" },
+      "model": { "bg": "#4a4a4a", "fg": "#c0c0c0" },
+      "session": { "bg": "#5a5a5a", "fg": "#b0b0b0" },
+      "today": { "bg": "#6a6a6a", "fg": "#f0f0f0" },
+      "block": { "bg": "#7a7a7a", "fg": "#2a2a2a" },
+      "tmux": { "bg": "#8a8a8a", "fg": "#2a2a2a" }
     }
   },
   "budget": {
