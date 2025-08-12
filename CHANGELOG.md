@@ -1,3 +1,10 @@
+## [1.1.4](https://github.com/Owloops/claude-powerline/compare/v1.1.3...v1.1.4) (2025-08-12)
+
+
+### Bug Fixes
+
+* resolve windows git segment path handling issues ([f5fc23e](https://github.com/Owloops/claude-powerline/commit/f5fc23eb16be6e54a53590628a52a628893708f5))
+
 ## [1.1.3](https://github.com/Owloops/claude-powerline/compare/v1.1.2...v1.1.3) (2025-08-12)
 
 
