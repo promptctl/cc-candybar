@@ -175,6 +175,40 @@ function parseCLIOverrides(args: string[]): Partial<PowerlineConfig> {
     }
   }
 
+  const usageIndex = args.findIndex((arg) => arg.startsWith("--usage="));
+  if (usageIndex !== -1) {
+    const usageType = args[usageIndex]?.split("=")[1] as
+      | "cost"
+      | "tokens"
+      | "both"
+      | "breakdown";
+    if (
+      usageType &&
+      ["cost", "tokens", "both", "breakdown"].includes(usageType)
+    ) {
+      config.display = config.display || { lines: [] };
+
+      if (config.display.lines.length === 0) {
+        config.display.lines = [{ segments: {} }];
+      }
+
+      config.display.lines.forEach((line) => {
+        if (line.segments.session) {
+          line.segments.session.type = usageType;
+        }
+        if (line.segments.today) {
+          line.segments.today.type = usageType;
+        }
+        if (line.segments.block) {
+          line.segments.block.type =
+            usageType === "breakdown" || usageType === "both"
+              ? "cost"
+              : usageType;
+        }
+      });
+    }
+  }
+
   return config;
 }
 

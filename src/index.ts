@@ -102,7 +102,6 @@ async function main(): Promise<void> {
       process.exit(0);
     }
 
-
     if (showHelp) {
       console.log(`
 claude-powerline - Beautiful powerline statusline for Claude Code
@@ -110,7 +109,8 @@ claude-powerline - Beautiful powerline statusline for Claude Code
 Usage: claude-powerline [options]
 
 Options:
-  --theme=THEME            Set theme: light, dark, custom
+  --theme=THEME            Set theme: dark, light, nord, tokyo-night, rose-pine, custom
+  --style=STYLE            Set separator style: minimal, powerline
   --usage=TYPE             Usage display: cost, tokens, both, breakdown
   --session-budget=AMOUNT  Set session budget for percentage tracking
   --daily-budget=AMOUNT    Set daily budget for percentage tracking
@@ -120,8 +120,8 @@ Options:
 
 Configuration:
   Config files are loaded in this order (highest priority first):
-  1. CLI arguments (--theme, --usage, --config)
-  2. Environment variables (CLAUDE_POWERLINE_THEME, CLAUDE_POWERLINE_USAGE_TYPE, CLAUDE_POWERLINE_CONFIG)
+  1. CLI arguments (--theme, --style, --usage, --config)
+  2. Environment variables (CLAUDE_POWERLINE_THEME, CLAUDE_POWERLINE_STYLE, CLAUDE_POWERLINE_USAGE_TYPE, CLAUDE_POWERLINE_CONFIG)
   3. ./.claude-powerline.json (project)
   4. ~/.claude/claude-powerline.json (user)
   5. ~/.config/claude-powerline/config.json (XDG)
@@ -150,7 +150,8 @@ claude-powerline - Beautiful powerline statusline for Claude Code
 Usage: claude-powerline [options]
 
 Options:
-  --theme=THEME            Set theme: light, dark, custom
+  --theme=THEME            Set theme: dark, light, nord, tokyo-night, rose-pine, custom
+  --style=STYLE            Set separator style: minimal, powerline
   --usage=TYPE             Usage display: cost, tokens, both, breakdown
   --session-budget=AMOUNT  Set session budget for percentage tracking
   --daily-budget=AMOUNT    Set daily budget for percentage tracking

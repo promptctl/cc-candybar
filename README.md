@@ -11,31 +11,31 @@
 <table>
    <tr>
       <td align="center">
-         <img src="images/claude-powerline-dark.png" width="300" alt="Dark Theme"><br>
+         <img src="images/claude-powerline-dark.png" width="400" alt="Dark Theme"><br>
          <strong>Dark</strong>
       </td>
       <td align="center">
-         <img src="images/claude-powerline-light.png" width="300" alt="Light Theme"><br>
+         <img src="images/claude-powerline-light.png" width="400" alt="Light Theme"><br>
          <strong>Light</strong>
       </td>
    </tr>
    <tr>
       <td align="center">
-         <img src="images/claude-powerline-nord.png" width="300" alt="Nord Theme"><br>
+         <img src="images/claude-powerline-nord.png" width="400" alt="Nord Theme"><br>
          <strong>Nord</strong>
       </td>
       <td align="center">
-         <img src="images/claude-powerline-tokyo-night.png" width="300" alt="Tokyo Night Theme"><br>
+         <img src="images/claude-powerline-tokyo-night.png" width="400" alt="Tokyo Night Theme"><br>
          <strong>Tokyo Night</strong>
       </td>
    </tr>
    <tr>
       <td align="center">
-         <img src="images/claude-powerline-rose-pine.png" width="300" alt="Rose Pine Theme"><br>
+         <img src="images/claude-powerline-rose-pine.png" width="400" alt="Rose Pine Theme"><br>
          <strong>Rose Pine</strong>
       </td>
       <td align="center">
-         <img src="images/claude-powerline-custom.png" width="300" alt="Custom Theme"><br>
+         <img src="images/claude-powerline-custom.png" width="400" alt="Custom Theme"><br>
          <em>Create your own!</em>
       </td>
    </tr>
@@ -46,7 +46,7 @@
 
 <table>
 <tr>
-<td width="50%">
+<td width="50%" valign="top">
 
 ### Core Features
 
@@ -69,17 +69,29 @@
 
 ## Installation
 
+### Requirements
+
+- **Node.js 18+**
+- **Claude Code**
+
+### Setup
+
+**Install powerline fonts:**
+
 ```bash
-npx -y @owloops/claude-powerline --install-fonts  # Install powerline fonts
+npx -y @owloops/claude-powerline --install-fonts
 ```
 
-Add to your Claude Code `settings.json`:
+> [!WARNING]  
+> Without powerline fonts, arrow separators display as placeholder characters (�). The default `--style=minimal` mode resolves it by not using the powerline unicode.
+
+**Add to your Claude Code `settings.json`:**
 
 ```json
 {
   "statusLine": {
-    "type": "command",
-    "command": "npx -y @owloops/claude-powerline",
+    "type": "command", 
+    "command": "npx -y @owloops/claude-powerline --style=powerline",
     "padding": 0
   }
 }
@@ -91,54 +103,67 @@ Add to your Claude Code `settings.json`:
 ## Usage
 
 ```bash
-# Basic usage (single line with directory, git, model, session, today)
-claude-powerline
-
-# Dark theme
-claude-powerline --theme=dark
-
-# Show tokens instead of costs  
-claude-powerline --usage=tokens
-
-# Show token breakdown (input/output)
-claude-powerline --usage=breakdown
-
-# Set budgets with warnings
-claude-powerline --daily-budget=50 --session-budget=20
+claude-powerline [OPTIONS]
 ```
 
-## Styles
+Options are specified by command line flags. Overall configuration can also use environment variables or configuration files.
 
-Set separator style:
+## Command Line Options
 
-- **powerline** - Powerline arrows (requires Powerline fonts)
-- **minimal** - Rectangular segments, no separators (default)
-
-```bash
-claude-powerline --style=powerline
-```
-
-## Default Segments
-
-By default displays: `Directory | Git Branch | Model | Session Usage | Today Usage`
+| Option | Values | Description |
+|--------|--------|-------------|
+| `--theme` | `dark` (default), `light`, `nord`, `tokyo-night`, `rose-pine`, `custom` | Set color theme |
+| `--style` | `minimal` (default), `powerline` | Set separator style |
+| `--usage` | `cost`, `tokens`, `both`, `breakdown` | Set usage display format |
+| `--daily-budget` | `AMOUNT` | Set daily budget limit in USD |
+| `--session-budget` | `AMOUNT` | Set session budget limit in USD |
+| `--config` | `PATH` | Use custom config file path |
+| `--install-fonts` | - | Install powerline fonts to system |
+| `-h, --help` | - | Show help message |
 
 ### Usage Display Types
 
 - **cost**: Show dollar amounts (`$0.05`)
-- **tokens**: Show token counts (`1.2K tokens`)
+- **tokens**: Show token counts (`1.2K tokens`)  
 - **both**: Show both (`$0.05 (1.2K tokens)`)
 - **breakdown**: Show detailed token breakdown (`1.2Kin + 0.8Kout + 1.5Kcached`)
 
-### Git Status Indicators
+## Examples
 
-- `✓` Clean, `●` Dirty, `⚠` Conflicts
-- `↑3` Ahead, `↓2` Behind remote
+### Default Configuration
 
-### Budget Indicators
+```bash
+# Shows directory, git, model, session usage (tokens), today usage (both)
+# Uses dark theme, minimal style, $50 daily budget
+claude-powerline
+```
 
-- `25%` Normal (under 50%)
-- `+75%` Moderate (50-79%)  
-- `!85%` Warning (80%+, configurable)
+### Theme and Style
+
+```bash
+# Nord theme with powerline arrows
+claude-powerline --theme=nord --style=powerline
+
+# Tokyo Night theme, minimal style
+claude-powerline --theme=tokyo-night --style=minimal
+```
+
+### Usage Display
+
+```bash
+# Show token breakdown instead of costs
+claude-powerline --usage=breakdown
+
+# Set daily budget limit
+claude-powerline --daily-budget=50
+```
+
+- **breakdown**: Show detailed token breakdown (`1.2Kin + 0.8Kout + 1.5Kcached`)
+
+### Status Indicators
+
+- **Git**: `✓` Clean, `●` Dirty, `⚠` Conflicts, `↑3` Ahead, `↓2` Behind remote
+- **Budget**: `25%` Normal (under 50%), `+75%` Moderate (50-79%), `!85%` Warning (80%+)
 
 ## Configuration
 
@@ -149,13 +174,15 @@ Create config file:
 curl -o ~/.claude/claude-powerline.json https://raw.githubusercontent.com/Owloops/claude-powerline/main/.claude-powerline.json
 ```
 
-Config files loaded in priority order:
+Configuration priority (top overrides bottom):
 
-1. CLI arguments (`--theme`, `--usage`, `--config`)
-2. Environment variables (`CLAUDE_POWERLINE_THEME`, `CLAUDE_POWERLINE_USAGE_TYPE`, `CLAUDE_POWERLINE_CONFIG`)
-3. `./.claude-powerline.json` (project)
-4. `~/.claude/claude-powerline.json` (user)  
-5. `~/.config/claude-powerline/config.json` (XDG)
+1. CLI arguments (`--theme`, `--style`, `--usage`, `--config`)
+2. Environment variables (`CLAUDE_POWERLINE_THEME`, `CLAUDE_POWERLINE_STYLE`, `CLAUDE_POWERLINE_USAGE_TYPE`, `CLAUDE_POWERLINE_CONFIG`)
+3. Config files (first found):
+   - `./.claude-powerline.json` (project)
+   - `~/.claude/claude-powerline.json` (user)  
+   - `~/.config/claude-powerline/config.json` (XDG)
+4. Default values
 
 ### Enable Additional Segments
 
@@ -207,13 +234,8 @@ To prevent segment cutoff, configure multiple lines:
 }
 ```
 
-### Built-in Themes
-
-Use `light` or `dark` themes with no configuration needed:
-
-```bash
-claude-powerline --theme=light  # or --theme=dark (default)
-```
+> [!NOTE]  
+> Claude Code system messages (e.g., Context left until auto-compact) may truncate the status line mid-sequence. Multi-line layouts help prevent segment cutoff.
 
 ### Custom Colors
 
@@ -240,15 +262,10 @@ To customize colors, copy dark or light theme colors from `src/themes/` in the r
 
 ```bash
 export CLAUDE_POWERLINE_THEME=dark
+export CLAUDE_POWERLINE_STYLE=powerline
 export CLAUDE_POWERLINE_USAGE_TYPE=tokens
 export CLAUDE_POWERLINE_CONFIG=/path/to/config.json
 ```
-
-## Requirements
-
-- Node.js ≥ 18.0.0
-- Terminal with powerline font support
-- Git (optional, for git integration)
 
 ## Troubleshooting
 
