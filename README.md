@@ -259,6 +259,63 @@ To customize colors, copy dark or light theme colors from `src/themes/` in the r
 }
 ```
 
+## Custom Segments
+
+Extend the statusline by wrapping the command with shell composition:
+
+### Add Custom Segments
+
+Use `tput` for colors that match your terminal theme:
+
+```json
+{
+  "statusLine": {
+    "type": "command",
+    "command": "npx -y @owloops/claude-powerline && echo \"$(tput setab 4)$(tput setaf 15) ⏱ $(date +%H:%M) $(tput sgr0)\"",
+    "padding": 0
+  }
+}
+```
+
+Common `tput` colors:
+
+- `setab 1` (red bg) `setaf 15` (white fg)
+- `setab 2` (green bg) `setaf 0` (black fg)
+- `setab 4` (blue bg) `setaf 15` (white fg)
+- `setab 6` (cyan bg) `setaf 0` (black fg)
+
+### Custom Wrapper Script
+
+Create `~/.local/bin/my-statusline`:
+
+```bash
+#!/bin/bash
+# Option 1: Same line (continuous)
+cat | npx -y @owloops/claude-powerline | tr -d '\n'
+echo -n "$(tput setab 6)$(tput setaf 0) ⏱ $(date +%H:%M) $(tput sgr0)"
+echo "$(tput setab 2)$(tput setaf 0) ☁ $(curl -s wttr.in?format=%t 2>/dev/null || echo '?') $(tput sgr0)"
+
+# Option 2: Separate lines (multiline)
+# cat | npx -y @owloops/claude-powerline
+# echo "$(tput setab 6)$(tput setaf 0) ⏱ $(date +%H:%M) $(tput sgr0)"
+# echo "$(tput setab 2)$(tput setaf 0) ☁ $(curl -s wttr.in?format=%t 2>/dev/null || echo '?') $(tput sgr0)"
+```
+
+Then use it in `settings.json`:
+
+```json
+{
+  "statusLine": {
+    "type": "command",
+    "command": "/full/path/to/my-statusline",
+    "padding": 0
+  }
+}
+```
+
+> [!TIP]  
+> Shell composition provides unlimited flexibility while keeping the core package secure - no arbitrary command execution needed. Use full absolute paths or ensure scripts are in your PATH.
+
 ## Environment Variables
 
 ```bash
