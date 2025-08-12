@@ -5,6 +5,7 @@ import path from "node:path";
 import fs from "node:fs";
 import { execSync } from "node:child_process";
 import os from "node:os";
+import { json } from "node:stream/consumers";
 import { PowerlineRenderer } from "./powerline";
 import { loadConfigFromCLI } from "./config/loader";
 import type { ClaudeHookData } from "./types";
@@ -140,10 +141,16 @@ Usage in Claude Code settings.json:
       process.exit(0);
     }
 
-    const stdin = fs.readFileSync(process.stdin.fd, "utf8").trim();
-    if (stdin.length === 0) {
-      console.error("Error: No input provided");
-      console.log(`
+    let hookData: ClaudeHookData;
+    try {
+      hookData = (await json(process.stdin)) as ClaudeHookData;
+    } catch (error) {
+      if (
+        error instanceof Error &&
+        error.message.includes("Unexpected end of JSON input")
+      ) {
+        console.error("Error: No input provided");
+        console.log(`
 claude-powerline - Beautiful powerline statusline for Claude Code
 
 Usage: claude-powerline [options]
@@ -160,17 +167,12 @@ Options:
 
 See example config at: https://github.com/Owloops/claude-powerline/blob/main/.claude-powerline.json
 `);
-      process.exit(1);
-    }
-
-    let hookData: ClaudeHookData;
-    try {
-      hookData = JSON.parse(stdin.trim());
-    } catch (error) {
-      console.error(
-        "Error: Invalid JSON input:",
-        error instanceof Error ? error.message : String(error)
-      );
+      } else {
+        console.error(
+          "Error: Invalid JSON input:",
+          error instanceof Error ? error.message : String(error)
+        );
+      }
       process.exit(1);
     }
 
