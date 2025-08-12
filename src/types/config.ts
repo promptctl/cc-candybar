@@ -45,6 +45,7 @@ export interface LineConfig {
 
 export interface DisplayConfig {
   lines: LineConfig[];
+  style?: "minimal" | "powerline";
 }
 
 export interface BudgetItemConfig {
@@ -60,10 +61,8 @@ export interface BudgetConfig {
 export interface PowerlineConfig {
   theme: "light" | "dark" | "custom";
   display: DisplayConfig;
-  colors: {
-    light?: ColorTheme;
-    dark?: ColorTheme;
-    custom?: ColorTheme;
+  colors?: {
+    custom: ColorTheme;
   };
   budget?: BudgetConfig;
 }

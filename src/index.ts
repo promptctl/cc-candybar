@@ -7,7 +7,7 @@ import { execSync } from "node:child_process";
 import os from "node:os";
 import getStdin from "get-stdin";
 import { PowerlineRenderer } from "./powerline";
-import { loadConfigFromCLI, getDefaultConfigJSON } from "./config/loader";
+import { loadConfigFromCLI } from "./config/loader";
 import type { ClaudeHookData } from "./types";
 
 async function installFonts(): Promise<void> {
@@ -96,17 +96,12 @@ async function main(): Promise<void> {
     const showHelp =
       process.argv.includes("--help") || process.argv.includes("-h");
     const installFontsFlag = process.argv.includes("--install-fonts");
-    const printDefaultConfig = process.argv.includes("--print-default-config");
 
     if (installFontsFlag) {
       await installFonts();
       process.exit(0);
     }
 
-    if (printDefaultConfig) {
-      console.log(getDefaultConfigJSON());
-      process.exit(0);
-    }
 
     if (showHelp) {
       console.log(`
@@ -121,7 +116,6 @@ Options:
   --daily-budget=AMOUNT    Set daily budget for percentage tracking
   --config=PATH            Use custom config file path
   --install-fonts          Install powerline fonts to system
-  --print-default-config   Print default configuration template
   -h, --help               Show this help
 
 Configuration:
@@ -133,8 +127,7 @@ Configuration:
   5. ~/.config/claude-powerline/config.json (XDG)
 
 Creating a config file:
-  claude-powerline --print-default-config > ~/.claude/claude-powerline.json
-  claude-powerline --print-default-config > .claude-powerline.json
+  Copy example from: https://github.com/Owloops/claude-powerline/blob/main/.claude-powerline.json
 
 Usage in Claude Code settings.json:
 {
@@ -163,10 +156,9 @@ Options:
   --daily-budget=AMOUNT    Set daily budget for percentage tracking
   --config=PATH            Use custom config file path
   --install-fonts          Install powerline fonts to system
-  --print-default-config   Print default configuration template
   -h, --help               Show this help
 
-Run 'claude-powerline --print-default-config' to see configuration options.
+See example config at: https://github.com/Owloops/claude-powerline/blob/main/.claude-powerline.json
 `);
       process.exit(1);
     }

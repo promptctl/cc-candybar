@@ -1,6 +1,7 @@
 import type { ClaudeHookData, PowerlineColors } from "./types";
 import type { PowerlineConfig, LineConfig } from "./types/config";
 import { hexToAnsi, extractBgToFg } from "./lib/colors";
+import { getTheme } from "./themes";
 import { UsageProvider } from "./lib/usage-provider";
 import { GitService } from "./lib/git-service";
 import { TmuxService } from "./lib/tmux-service";
@@ -141,9 +142,11 @@ export class PowerlineRenderer {
   }
 
   private initializeSymbols(): PowerlineSymbols {
+    const isMinimalStyle = this.config.display.style === "minimal";
+    
     return {
-      right: "\uE0B0",
-      branch: "\uE0A0",
+      right: isMinimalStyle ? "" : "\uE0B0",
+      branch: "⑂",
       model: "⚡",
       git_clean: "✓",
       git_dirty: "●",
@@ -158,10 +161,18 @@ export class PowerlineRenderer {
 
   private getThemeColors(): PowerlineColors {
     const theme = this.config.theme;
-    const colorTheme = this.config.colors[theme];
+    let colorTheme;
 
-    if (!colorTheme) {
-      throw new Error(`Theme '${theme}' not found in configuration`);
+    if (theme === "custom") {
+      colorTheme = this.config.colors?.custom;
+      if (!colorTheme) {
+        throw new Error("Custom theme selected but no colors provided in configuration");
+      }
+    } else {
+      colorTheme = getTheme(theme);
+      if (!colorTheme) {
+        throw new Error(`Built-in theme '${theme}' not found`);
+      }
     }
 
     return {

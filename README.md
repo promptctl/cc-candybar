@@ -54,6 +54,17 @@ claude-powerline --usage=breakdown
 claude-powerline --daily-budget=50 --session-budget=20
 ```
 
+## Styles
+
+Set separator style:
+
+- **powerline** - Powerline arrows (requires Powerline fonts)
+- **minimal** - Rectangular segments, no separators (default)
+
+```bash
+claude-powerline --style=powerline
+```
+
 ## Screenshots
 
 ### Dark Theme (Default)
@@ -88,10 +99,11 @@ By default displays: `Directory | Git Branch | Model | Session Usage | Today Usa
 
 ## Configuration
 
-Generate config template:
+Create config file:
 
 ```bash
-claude-powerline --print-default-config > ~/.claude/claude-powerline.json
+# Copy example config from repository
+curl -o ~/.claude/claude-powerline.json https://raw.githubusercontent.com/Owloops/claude-powerline/main/.claude-powerline.json
 ```
 
 Config files loaded in priority order:
@@ -152,7 +164,17 @@ To prevent segment cutoff, configure multiple lines:
 }
 ```
 
-### Custom Theme
+### Built-in Themes
+
+Use `light` or `dark` themes with no configuration needed:
+
+```bash
+claude-powerline --theme=light  # or --theme=dark (default)
+```
+
+### Custom Colors
+
+To customize colors, copy dark or light theme colors from `src/themes/` in the repository, then modify:
 
 ```json
 {
@@ -167,10 +189,6 @@ To prevent segment cutoff, configure multiple lines:
       "block": { "bg": "#cc6600", "fg": "#ffffff" },
       "tmux": { "bg": "#228b22", "fg": "#ffffff" }
     }
-  },
-  "budget": {
-    "session": { "warningThreshold": 80 },
-    "today": { "amount": 50, "warningThreshold": 80 }
   }
 }
 ```

@@ -4,7 +4,6 @@ import { DEFAULT_CONFIG } from "../src/config/defaults";
 import {
   loadConfig,
   loadConfigFromCLI,
-  getDefaultConfigJSON,
 } from "../src/config/loader";
 
 jest.mock("node:fs");
@@ -112,11 +111,4 @@ describe("config", () => {
     });
   });
 
-  describe("getDefaultConfigJSON", () => {
-    it("should return valid JSON string", () => {
-      const json = getDefaultConfigJSON();
-      const parsed = JSON.parse(json);
-      expect(parsed).toEqual(DEFAULT_CONFIG);
-    });
-  });
 });

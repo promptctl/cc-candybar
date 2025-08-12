@@ -66,6 +66,13 @@ function loadEnvConfig(): Partial<PowerlineConfig> {
       | "custom";
   }
 
+  if (process.env.CLAUDE_POWERLINE_STYLE) {
+    config.display = config.display || { lines: [] };
+    config.display.style = process.env.CLAUDE_POWERLINE_STYLE as
+      | "minimal"
+      | "powerline";
+  }
+
   if (process.env.CLAUDE_POWERLINE_USAGE_TYPE) {
     const usageType = process.env.CLAUDE_POWERLINE_USAGE_TYPE as
       | "cost"
@@ -109,6 +116,15 @@ function parseCLIOverrides(args: string[]): Partial<PowerlineConfig> {
     const theme = args[themeIndex]?.split("=")[1];
     if (theme) {
       config.theme = theme as "light" | "dark" | "custom";
+    }
+  }
+
+  const styleIndex = args.findIndex((arg) => arg.startsWith("--style="));
+  if (styleIndex !== -1) {
+    const style = args[styleIndex]?.split("=")[1];
+    if (style) {
+      config.display = config.display || { lines: [] };
+      config.display.style = style as "minimal" | "powerline";
     }
   }
 
@@ -203,6 +219,3 @@ export function getConfigPath(
   return findConfigFile(customPath, projectDir);
 }
 
-export function getDefaultConfigJSON(): string {
-  return JSON.stringify(DEFAULT_CONFIG, null, 2);
-}
