@@ -182,6 +182,9 @@ Configuration priority (top overrides bottom):
    - `~/.config/claude-powerline/config.json` (XDG)
 4. Default values
 
+> [!NOTE]  
+> Config files are reloaded automatically when changed - no need to restart Claude Code.
+
 ### Enable Additional Segments
 
 ```json

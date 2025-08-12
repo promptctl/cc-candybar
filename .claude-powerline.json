@@ -1,7 +1,7 @@
 {
-  "theme": "rose-pine",
+  "theme": "nord",
   "display": {
-    "style": "powerline",
+    "style": "minimal",
     "lines": [
       {
         "segments": {
