@@ -1,3 +1,11 @@
+## [1.1.5](https://github.com/Owloops/claude-powerline/compare/v1.1.4...v1.1.5) (2025-08-12)
+
+
+### Bug Fixes
+
+* refactor theme system with minimal style and built-in themes ([47c4d37](https://github.com/Owloops/claude-powerline/commit/47c4d374a5e2619a75e8ac5c34283b5801b18279))
+* update tests for new theme system structure ([e4ffbc3](https://github.com/Owloops/claude-powerline/commit/e4ffbc332e896bb24aa8d11bcfd0d6b7a6e2c9b8))
+
 ## [1.1.4](https://github.com/Owloops/claude-powerline/compare/v1.1.3...v1.1.4) (2025-08-12)
 
 
