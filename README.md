@@ -18,8 +18,7 @@ A vim-style powerline statusline for Claude Code with real-time usage tracking, 
 ## Installation
 
 ```bash
-npm install -g @owloops/claude-powerline
-claude-powerline --install-fonts  # Install powerline fonts
+npx -y @owloops/claude-powerline --install-fonts  # Install powerline fonts
 ```
 
 Add to your Claude Code `settings.json`:
@@ -28,11 +27,13 @@ Add to your Claude Code `settings.json`:
 {
   "statusLine": {
     "type": "command",
-    "command": "claude-powerline",
+    "command": "npx -y @owloops/claude-powerline",
     "padding": 0
   }
 }
 ```
+
+> **Note:** Using `npx` automatically downloads and runs the latest version, ensuring you always have the newest features and fixes without manual updates.
 
 ## Usage
 
