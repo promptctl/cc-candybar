@@ -289,14 +289,11 @@ export class SegmentRenderer {
     projectDir?: string
   ): string {
     if (projectDir && projectDir !== currentDir) {
-      const projectName = projectDir.split("/").pop() || "project";
-      const currentDirName = currentDir.split("/").pop() || "root";
-
-      if (currentDir.includes(projectDir)) {
-        return `${projectName}/${currentDirName}`;
+      if (currentDir.startsWith(projectDir)) {
+        const relativePath = currentDir.slice(projectDir.length + 1);
+        return relativePath || projectDir.split("/").pop() || "project";
       }
-
-      return currentDirName;
+      return currentDir.split("/").pop() || "root";
     }
 
     return currentDir.split("/").pop() || "root";

@@ -7,5 +7,5 @@ export const rosePineTheme: ColorTheme = {
   session: { bg: "#26233a", fg: "#f6c177" },
   tmux: { bg: "#26233a", fg: "#908caa" },
   context: { bg: "#393552", fg: "#e0def4" },
-  metrics: { bg: "#c4a7e7", fg: "#191724" },
+  metrics: { bg: "#524f67", fg: "#e0def4" },
 };

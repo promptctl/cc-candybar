@@ -20,8 +20,15 @@ export class GitService {
     }
   }
 
-  getGitInfo(workingDir: string, showSha = false): GitInfo | null {
-    if (!this.isGitRepo(workingDir)) {
+  getGitInfo(
+    workingDir: string,
+    showSha = false,
+    projectDir?: string
+  ): GitInfo | null {
+    const gitDir =
+      projectDir && this.isGitRepo(projectDir) ? projectDir : workingDir;
+
+    if (!this.isGitRepo(gitDir)) {
       return {
         branch: "detached",
         status: "clean",
@@ -32,10 +39,10 @@ export class GitService {
     }
 
     try {
-      const branch = this.getBranch(workingDir);
-      const status = this.getStatus(workingDir);
-      const { ahead, behind } = this.getAheadBehind(workingDir);
-      const sha = showSha ? this.getSha(workingDir) || undefined : undefined;
+      const branch = this.getBranch(gitDir);
+      const status = this.getStatus(gitDir);
+      const { ahead, behind } = this.getAheadBehind(gitDir);
+      const sha = showSha ? this.getSha(gitDir) || undefined : undefined;
 
       return {
         branch: branch || "detached",

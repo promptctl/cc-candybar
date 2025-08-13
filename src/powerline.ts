@@ -165,7 +165,11 @@ export class PowerlineRenderer {
       case "git":
         if (!this.needsGitInfo()) return null;
         const showSha = (segment.config as GitSegmentConfig)?.showSha || false;
-        const gitInfo = this.gitService.getGitInfo(currentDir, showSha);
+        const gitInfo = this.gitService.getGitInfo(
+          currentDir,
+          showSha,
+          hookData.workspace?.project_dir
+        );
         return gitInfo
           ? this.segmentRenderer.renderGit(gitInfo, colors, showSha)
           : null;

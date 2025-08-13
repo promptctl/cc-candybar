@@ -25,11 +25,10 @@ interface TranscriptEntry {
     };
   };
   costUSD?: number;
+  isSidechain?: boolean;
 }
 
-
 export class MetricsProvider {
-
   private async loadTranscriptEntries(
     sessionId: string
   ): Promise<TranscriptEntry[]> {
@@ -53,6 +52,11 @@ export class MetricsProvider {
       for (const line of lines) {
         try {
           const entry = JSON.parse(line) as TranscriptEntry;
+
+          if (entry.isSidechain === true) {
+            continue;
+          }
+
           entries.push(entry);
         } catch (parseError) {
           debug(`Failed to parse JSONL line: ${parseError}`);
@@ -135,9 +139,15 @@ export class MetricsProvider {
       return null;
     }
 
-    return (
-      responseTimes.reduce((sum, time) => sum + time, 0) / responseTimes.length
+    const avgResponseTime =
+      responseTimes.reduce((sum, time) => sum + time, 0) / responseTimes.length;
+    debug(
+      `Calculated average response time: ${avgResponseTime.toFixed(2)}s from ${responseTimes.length} measurements`
     );
+    debug(
+      `Response times: [${responseTimes.map((t) => t.toFixed(1)).join(", ")}]`
+    );
+    return avgResponseTime;
   }
 
   private calculateSessionDuration(entries: TranscriptEntry[]): number | null {
@@ -171,6 +181,30 @@ export class MetricsProvider {
     return duration > 0 ? duration : null;
   }
 
+  private calculateBurnRateDuration(entries: TranscriptEntry[]): number | null {
+    if (entries.length === 0) return null;
+
+    const now = new Date();
+    const timestamps = entries
+      .map((entry) => entry.timestamp)
+      .filter(Boolean)
+      .map((ts) => new Date(ts))
+      .filter((ts) => now.getTime() - ts.getTime() < 2 * 60 * 60 * 1000)
+      .sort((a, b) => a.getTime() - b.getTime());
+
+    if (timestamps.length === 0) return null;
+
+    const sessionStart = timestamps[0];
+    if (!sessionStart) return null;
+
+    const durationFromStart = Math.max(
+      (now.getTime() - sessionStart.getTime()) / 1000,
+      30 * 60
+    );
+
+    return durationFromStart;
+  }
+
   private calculateMessageCount(entries: TranscriptEntry[]): number {
     return entries.filter((entry) => {
       const messageType =
@@ -183,8 +217,17 @@ export class MetricsProvider {
     entries: TranscriptEntry[]
   ): Promise<number> {
     let total = 0;
+    const processedEntries = new Set<string>();
 
     for (const entry of entries) {
+      const entryKey = `${entry.timestamp}-${JSON.stringify(entry.message?.usage || {})}`;
+
+      if (processedEntries.has(entryKey)) {
+        debug(`Skipping duplicate entry at ${entry.timestamp}`);
+        continue;
+      }
+      processedEntries.add(entryKey);
+
       if (typeof entry.costUSD === "number") {
         total += entry.costUSD;
       } else if (entry.message?.usage) {
@@ -193,13 +236,23 @@ export class MetricsProvider {
       }
     }
 
-    return total;
+    return Math.round(total * 10000) / 10000;
   }
 
   private calculateTotalTokens(entries: TranscriptEntry[]): number {
+    const processedEntries = new Set<string>();
+
     return entries.reduce((total, entry) => {
       const usage = entry.message?.usage;
       if (!usage) return total;
+
+      const entryKey = `${entry.timestamp}-${JSON.stringify(usage)}`;
+
+      if (processedEntries.has(entryKey)) {
+        debug(`Skipping duplicate token entry at ${entry.timestamp}`);
+        return total;
+      }
+      processedEntries.add(entryKey);
 
       return (
         total +
@@ -234,18 +287,29 @@ export class MetricsProvider {
       let costBurnRate: number | null = null;
       let tokenBurnRate: number | null = null;
 
-      if (sessionDuration && sessionDuration > 0) {
-        const hoursElapsed = sessionDuration / 3600;
+      const burnRateDuration = this.calculateBurnRateDuration(entries);
+      if (burnRateDuration && burnRateDuration > 60) {
+        const hoursElapsed = burnRateDuration / 3600;
 
-        const totalCost = await this.calculateTotalCost(entries);
-        const totalTokens = this.calculateTotalTokens(entries);
+        if (hoursElapsed <= 0) {
+          debug(`Invalid hours elapsed: ${hoursElapsed}`);
+        } else {
+          const totalCost = await this.calculateTotalCost(entries);
+          const totalTokens = this.calculateTotalTokens(entries);
 
-        if (totalCost > 0) {
-          costBurnRate = totalCost / hoursElapsed;
-        }
+          if (totalCost > 0) {
+            costBurnRate = Math.round((totalCost / hoursElapsed) * 100) / 100;
+            debug(
+              `Cost burn rate: $${costBurnRate}/h (total: $${totalCost}, duration: ${hoursElapsed}h)`
+            );
+          }
 
-        if (totalTokens > 0) {
-          tokenBurnRate = totalTokens / hoursElapsed;
+          if (totalTokens > 0) {
+            tokenBurnRate = Math.round(totalTokens / hoursElapsed);
+            debug(
+              `Token burn rate: ${tokenBurnRate}/h (total: ${totalTokens}, duration: ${hoursElapsed}h)`
+            );
+          }
         }
       }
 

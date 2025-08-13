@@ -259,6 +259,8 @@ The metrics segment displays performance analytics from your Claude sessions:
 - `showCostBurnRate`: Cost burn rate per hour (`⟢ $1.20/h`)
 - `showTokenBurnRate`: Token burn rate per hour (`⟢ 450K/h`)
 
+![Metrics Segment Example](images/claude-powerline-metrics.png)
+
 ### Multi-line Layout (Optional)
 
 To prevent segment cutoff, configure multiple lines:
