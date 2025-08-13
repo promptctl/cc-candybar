@@ -1,3 +1,10 @@
+## [1.1.15](https://github.com/Owloops/claude-powerline/compare/v1.1.14...v1.1.15) (2025-08-13)
+
+
+### Bug Fixes
+
+* eliminate git error messages and improve tty user experience ([98a28aa](https://github.com/Owloops/claude-powerline/commit/98a28aae419e741da058e7a615cfa34832e5c23a))
+
 ## [1.1.14](https://github.com/Owloops/claude-powerline/compare/v1.1.13...v1.1.14) (2025-08-13)
 
 
