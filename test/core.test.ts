@@ -62,7 +62,7 @@ describe("Core Functionality", () => {
       };
 
       const result = await renderer.generateStatusline(hookData);
-      expect(result).toContain("N/A");
+      expect(result).toContain("0 tokens");
     });
   });
 
