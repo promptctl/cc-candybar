@@ -7,4 +7,5 @@ export const tokyoNightTheme: ColorTheme = {
   session: { bg: "#222436", fg: "#86e1fc" },
   tmux: { bg: "#191b29", fg: "#4fd6be" },
   context: { bg: "#414868", fg: "#c0caf5" },
+  metrics: { bg: "#bb9af7", fg: "#1a1b26" },
 };

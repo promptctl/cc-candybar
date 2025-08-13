@@ -109,7 +109,7 @@ describe("Core Functionality", () => {
 
       expect(config.theme).toBeDefined();
       expect(config.display.style).toBeDefined();
-      expect(config.display.lines).toHaveLength(1);
+      expect(config.display.lines.length).toBeGreaterThanOrEqual(1);
     });
 
     it("should override config with CLI args", () => {

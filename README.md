@@ -52,6 +52,7 @@
 
 - **Vim-style powerline** with proper arrows and segments
 - **Real-time session tracking** with costs and tokens
+- **Performance metrics** with response times and burn rates
 - **Context monitoring** showing tokens used and auto-compact threshold
 - **Git integration** with branch, status, ahead/behind counts
 
@@ -128,6 +129,9 @@ Options are specified by command line flags. Overall configuration can also use 
 | `--install-fonts` | - | Install powerline fonts to system |
 | `-h, --help` | - | Show help message |
 
+> [!NOTE]  
+> Global options have CLI flags and environment variables. Individual segments are configured through config files.
+
 ### Usage Display Types
 
 - **cost**: Show dollar amounts (`$0.05`)
@@ -182,8 +186,8 @@ curl -o ~/.claude/claude-powerline.json https://raw.githubusercontent.com/Owloop
 
 Configuration priority (top overrides bottom):
 
-1. CLI arguments (`--theme`, `--style`, `--usage`, `--config`)
-2. Environment variables (`CLAUDE_POWERLINE_THEME`, `CLAUDE_POWERLINE_STYLE`, `CLAUDE_POWERLINE_USAGE_TYPE`, `CLAUDE_POWERLINE_CONFIG`)
+1. CLI arguments (`--theme`, `--style`, `--usage`, `--session-budget`, `--config`)
+2. Environment variables (`CLAUDE_POWERLINE_THEME`, `CLAUDE_POWERLINE_STYLE`, `CLAUDE_POWERLINE_USAGE_TYPE`, `CLAUDE_POWERLINE_SESSION_BUDGET`, `CLAUDE_POWERLINE_CONFIG`)
 3. Config files (first found):
    - `./.claude-powerline.json` (project)
    - `~/.claude/claude-powerline.json` (user)  
@@ -206,7 +210,15 @@ Configuration priority (top overrides bottom):
           "model": { "enabled": true },
           "session": { "enabled": true, "type": "tokens" },
           "context": { "enabled": true },
-          "tmux": { "enabled": true }
+          "tmux": { "enabled": true },
+          "metrics": { 
+            "enabled": true,
+            "showResponseTime": true,
+            "showDuration": true,
+            "showMessageCount": true,
+            "showCostBurnRate": false,
+            "showTokenBurnRate": false
+          }
         }
       }
     ]
@@ -222,6 +234,30 @@ Configuration priority (top overrides bottom):
 - **session**: Token usage and costs for current session
 - **context**: Context window usage and auto-compact threshold
 - **tmux**: Tmux session name and window info (when in tmux)
+- **metrics**: Performance analytics (response time, session duration, message count, burn rates)
+
+#### Metrics Configuration
+
+The metrics segment displays performance analytics from your Claude sessions:
+
+```json
+"metrics": {
+  "enabled": true,
+  "showResponseTime": true,
+  "showDuration": true, 
+  "showMessageCount": true,
+  "showCostBurnRate": false,
+  "showTokenBurnRate": false
+}
+```
+
+**Options:**
+
+- `showResponseTime`: Average response time per message (`⧖ 3.2s`)
+- `showDuration`: Total session duration (`⧗ 28m`)
+- `showMessageCount`: Number of user messages (`⟐ 93`)
+- `showCostBurnRate`: Cost burn rate per hour (`⟢ $1.20/h`)
+- `showTokenBurnRate`: Token burn rate per hour (`⟢ 450K/h`)
 
 ### Multi-line Layout (Optional)
 
@@ -242,7 +278,8 @@ To prevent segment cutoff, configure multiple lines:
         "segments": {
           "session": { "enabled": true, "type": "tokens" },
           "context": { "enabled": true },
-          "tmux": { "enabled": true }
+          "tmux": { "enabled": false },
+          "metrics": { "enabled": true }
         }
       }
     ]
@@ -267,7 +304,8 @@ To customize colors, copy dark or light theme colors from `src/themes/` in the r
       "model": { "bg": "#9900cc", "fg": "#ffffff" },
       "session": { "bg": "#cc0099", "fg": "#ffffff" },
       "context": { "bg": "#4a5568", "fg": "#ffffff" },
-      "tmux": { "bg": "#228b22", "fg": "#ffffff" }
+      "tmux": { "bg": "#228b22", "fg": "#ffffff" },
+      "metrics": { "bg": "#374151", "fg": "#ffffff" }
     }
   }
 }

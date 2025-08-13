@@ -7,4 +7,5 @@ export const nordTheme: ColorTheme = {
   session: { bg: "#2e3440", fg: "#88c0d0" },
   tmux: { bg: "#2e3440", fg: "#8fbcbb" },
   context: { bg: "#5e81ac", fg: "#eceff4" },
+  metrics: { bg: "#b48ead", fg: "#2e3440" },
 };

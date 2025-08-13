@@ -308,18 +308,18 @@ export class PricingService {
     };
   }
 
-  static async calculateCostForEntry(entry: Record<string, unknown>): Promise<number> {
-    const message = entry.message as Record<string, unknown> | undefined;
-    const usage = message?.usage as Record<string, unknown> | undefined;
+  static async calculateCostForEntry(entry: any): Promise<number> {
+    const message = entry.message;
+    const usage = message?.usage;
     if (!usage) return 0;
 
     const modelId = this.extractModelId(entry);
     const pricing = await this.getModelPricing(modelId);
     
-    const inputTokens = (usage.input_tokens as number) || 0;
-    const outputTokens = (usage.output_tokens as number) || 0;
-    const cacheCreationTokens = (usage.cache_creation_input_tokens as number) || 0;
-    const cacheReadTokens = (usage.cache_read_input_tokens as number) || 0;
+    const inputTokens = usage.input_tokens || 0;
+    const outputTokens = usage.output_tokens || 0;
+    const cacheCreationTokens = usage.cache_creation_input_tokens || 0;
+    const cacheReadTokens = usage.cache_read_input_tokens || 0;
     
     const inputCost = (inputTokens / 1_000_000) * pricing.input;
     const outputCost = (outputTokens / 1_000_000) * pricing.output;
@@ -329,19 +329,18 @@ export class PricingService {
     return inputCost + outputCost + cacheCreationCost + cacheReadCost;
   }
 
-  private static extractModelId(entry: Record<string, unknown>): string {
+  private static extractModelId(entry: any): string {
     if (entry.model && typeof entry.model === 'string') {
       return entry.model;
     }
     
-    const message = entry.message as Record<string, unknown> | undefined;
+    const message = entry.message;
     if (message?.model) {
       const model = message.model;
       if (typeof model === 'string') {
         return model;
       }
-      const modelObj = model as Record<string, unknown>;
-      return (modelObj.id as string) || 'claude-3-5-sonnet-20241022';
+      return model?.id || 'claude-3-5-sonnet-20241022';
     }
     
     if (entry.model_id && typeof entry.model_id === 'string') {

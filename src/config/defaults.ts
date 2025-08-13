@@ -16,6 +16,7 @@ export const DEFAULT_CONFIG: PowerlineConfig = {
           session: { enabled: true, type: "tokens" },
           tmux: { enabled: false },
           context: { enabled: true },
+          metrics: { enabled: false },
         },
       },
     ],

@@ -7,4 +7,5 @@ export const lightTheme: ColorTheme = {
   session: { bg: "#da70d6", fg: "#ffffff" },
   tmux: { bg: "#32cd32", fg: "#ffffff" },
   context: { bg: "#718096", fg: "#ffffff" },
+  metrics: { bg: "#6b7280", fg: "#ffffff" },
 };

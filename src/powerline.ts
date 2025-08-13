@@ -10,11 +10,14 @@ import {
   ContextInfo,
   GitService,
   TmuxService,
+  MetricsProvider,
+  MetricsInfo,
   SegmentRenderer,
   PowerlineSymbols,
   AnySegmentConfig,
   GitSegmentConfig,
   UsageSegmentConfig,
+  MetricsSegmentConfig,
 } from "./segments";
 
 export class PowerlineRenderer {
@@ -23,6 +26,7 @@ export class PowerlineRenderer {
   private readonly contextProvider: ContextProvider;
   private readonly gitService: GitService;
   private readonly tmuxService: TmuxService;
+  private readonly metricsProvider: MetricsProvider;
   private readonly segmentRenderer: SegmentRenderer;
 
   constructor(private readonly config: PowerlineConfig) {
@@ -31,6 +35,7 @@ export class PowerlineRenderer {
     this.contextProvider = new ContextProvider();
     this.gitService = new GitService();
     this.tmuxService = new TmuxService();
+    this.metricsProvider = new MetricsProvider();
     this.segmentRenderer = new SegmentRenderer(config, this.symbols);
   }
 
@@ -56,6 +61,12 @@ export class PowerlineRenderer {
     );
   }
 
+  private needsMetricsInfo(): boolean {
+    return this.config.display.lines.some(
+      (line) => line.segments.metrics?.enabled
+    );
+  }
+
   async generateStatusline(hookData: ClaudeHookData): Promise<string> {
     const usageInfo = this.needsUsageInfo()
       ? await this.usageProvider.getUsageInfo(hookData.session_id)
@@ -68,9 +79,19 @@ export class PowerlineRenderer {
         )
       : null;
 
+    const metricsInfo = this.needsMetricsInfo()
+      ? await this.metricsProvider.getMetricsInfo(hookData.session_id)
+      : null;
+
     const lines = this.config.display.lines
       .map((lineConfig) =>
-        this.renderLine(lineConfig, hookData, usageInfo, contextInfo)
+        this.renderLine(
+          lineConfig,
+          hookData,
+          usageInfo,
+          contextInfo,
+          metricsInfo
+        )
       )
       .filter((line) => line.length > 0);
 
@@ -81,7 +102,8 @@ export class PowerlineRenderer {
     lineConfig: LineConfig,
     hookData: ClaudeHookData,
     usageInfo: UsageInfo | null,
-    contextInfo: ContextInfo | null
+    contextInfo: ContextInfo | null,
+    metricsInfo: MetricsInfo | null
   ): string {
     const colors = this.getThemeColors();
     const currentDir = hookData.workspace?.current_dir || hookData.cwd || "/";
@@ -109,6 +131,7 @@ export class PowerlineRenderer {
         hookData,
         usageInfo,
         contextInfo,
+        metricsInfo,
         colors,
         currentDir
       );
@@ -131,6 +154,7 @@ export class PowerlineRenderer {
     hookData: ClaudeHookData,
     usageInfo: UsageInfo | null,
     contextInfo: ContextInfo | null,
+    metricsInfo: MetricsInfo | null,
     colors: PowerlineColors,
     currentDir: string
   ) {
@@ -164,6 +188,14 @@ export class PowerlineRenderer {
         if (!this.needsContextInfo()) return null;
         return this.segmentRenderer.renderContext(contextInfo, colors);
 
+      case "metrics":
+        const metricsConfig = segment.config as MetricsSegmentConfig;
+        return this.segmentRenderer.renderMetrics(
+          metricsInfo,
+          colors,
+          metricsConfig
+        );
+
       default:
         return null;
     }
@@ -183,6 +215,10 @@ export class PowerlineRenderer {
       git_behind: "↓",
       session_cost: "⊡",
       context_time: "◷",
+      metrics_response: "⧖",
+      metrics_duration: "⧗",
+      metrics_messages: "⟐",
+      metrics_burn: "⟢",
     };
   }
 
@@ -221,6 +257,8 @@ export class PowerlineRenderer {
       tmuxFg: hexToAnsi(colorTheme.tmux.fg, false),
       contextBg: hexToAnsi(colorTheme.context.bg, true),
       contextFg: hexToAnsi(colorTheme.context.fg, false),
+      metricsBg: hexToAnsi(colorTheme.metrics.bg, true),
+      metricsFg: hexToAnsi(colorTheme.metrics.fg, false),
     };
   }
 
@@ -241,6 +279,8 @@ export class PowerlineRenderer {
         return colors.tmuxBg;
       case "context":
         return colors.contextBg;
+      case "metrics":
+        return colors.metricsBg;
       default:
         return colors.modeBg;
     }

@@ -9,6 +9,7 @@ import type {
   UsageSegmentConfig,
   TmuxSegmentConfig,
   ContextSegmentConfig,
+  MetricsSegmentConfig,
 } from "../segments/renderer";
 
 export interface LineConfig {
@@ -19,6 +20,7 @@ export interface LineConfig {
     session?: UsageSegmentConfig;
     tmux?: TmuxSegmentConfig;
     context?: ContextSegmentConfig;
+    metrics?: MetricsSegmentConfig;
   };
 }
 
@@ -153,6 +155,19 @@ function loadEnvConfig(): Partial<PowerlineConfig> {
     }
   }
 
+  if (process.env.CLAUDE_POWERLINE_SESSION_BUDGET) {
+    const sessionBudget = parseFloat(process.env.CLAUDE_POWERLINE_SESSION_BUDGET);
+    if (!isNaN(sessionBudget) && sessionBudget > 0) {
+      config.budget = {
+        ...config.budget,
+        session: {
+          ...DEFAULT_CONFIG.budget?.session,
+          amount: sessionBudget,
+        },
+      };
+    }
+  }
+
   return config;
 }
 
@@ -188,7 +203,6 @@ function parseCLIOverrides(args: string[]): Partial<PowerlineConfig> {
       }
     }
   }
-
 
   const sessionBudgetIndex = args.findIndex((arg) =>
     arg.startsWith("--session-budget=")

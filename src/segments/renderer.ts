@@ -18,12 +18,21 @@ export interface TmuxSegmentConfig extends SegmentConfig {}
 
 export interface ContextSegmentConfig extends SegmentConfig {}
 
+export interface MetricsSegmentConfig extends SegmentConfig {
+  showResponseTime?: boolean;
+  showDuration?: boolean;
+  showMessageCount?: boolean;
+  showCostBurnRate?: boolean;
+  showTokenBurnRate?: boolean;
+}
+
 export type AnySegmentConfig =
   | SegmentConfig
   | GitSegmentConfig
   | UsageSegmentConfig
   | TmuxSegmentConfig
-  | ContextSegmentConfig;
+  | ContextSegmentConfig
+  | MetricsSegmentConfig;
 
 import {
   formatCost,
@@ -31,7 +40,13 @@ import {
   formatTokenBreakdown,
 } from "../utils/formatters";
 import { getBudgetStatus } from "../utils/budget";
-import type { UsageInfo, TokenBreakdown, GitInfo, ContextInfo } from ".";
+import type {
+  UsageInfo,
+  TokenBreakdown,
+  GitInfo,
+  ContextInfo,
+  MetricsInfo,
+} from ".";
 
 export interface PowerlineSymbols {
   right: string;
@@ -44,6 +59,10 @@ export interface PowerlineSymbols {
   git_behind: string;
   session_cost: string;
   context_time: string;
+  metrics_response: string;
+  metrics_duration: string;
+  metrics_messages: string;
+  metrics_burn: string;
 }
 
 export interface SegmentData {
@@ -180,6 +199,89 @@ export class SegmentRenderer {
       bgColor: colors.contextBg,
       fgColor: colors.contextFg,
     };
+  }
+
+  renderMetrics(
+    metricsInfo: MetricsInfo | null,
+    colors: PowerlineColors,
+    config?: MetricsSegmentConfig
+  ): SegmentData | null {
+    if (!metricsInfo) {
+      return {
+        text: `${this.symbols.metrics_response} new`,
+        bgColor: colors.metricsBg,
+        fgColor: colors.metricsFg,
+      };
+    }
+
+    const parts: string[] = [];
+
+    if (
+      config?.showResponseTime !== false &&
+      metricsInfo.responseTime !== null
+    ) {
+      const responseTime =
+        metricsInfo.responseTime < 60
+          ? `${metricsInfo.responseTime.toFixed(1)}s`
+          : `${(metricsInfo.responseTime / 60).toFixed(1)}m`;
+      parts.push(`${this.symbols.metrics_response} ${responseTime}`);
+    }
+
+    if (
+      config?.showDuration !== false &&
+      metricsInfo.sessionDuration !== null
+    ) {
+      const duration = this.formatDuration(metricsInfo.sessionDuration);
+      parts.push(`${this.symbols.metrics_duration} ${duration}`);
+    }
+
+    if (
+      config?.showMessageCount !== false &&
+      metricsInfo.messageCount !== null
+    ) {
+      parts.push(
+        `${this.symbols.metrics_messages} ${metricsInfo.messageCount}`
+      );
+    }
+
+    if (config?.showCostBurnRate && metricsInfo.costBurnRate !== null) {
+      const burnRate =
+        metricsInfo.costBurnRate < 1
+          ? `${(metricsInfo.costBurnRate * 100).toFixed(0)}¢/h`
+          : `$${metricsInfo.costBurnRate.toFixed(2)}/h`;
+      parts.push(`${this.symbols.metrics_burn} ${burnRate}`);
+    }
+
+    if (config?.showTokenBurnRate && metricsInfo.tokenBurnRate !== null) {
+      const tokenRate = formatTokens(Math.round(metricsInfo.tokenBurnRate));
+      parts.push(`${this.symbols.metrics_burn} ${tokenRate}/h`);
+    }
+
+    if (parts.length === 0) {
+      return {
+        text: `${this.symbols.metrics_response} active`,
+        bgColor: colors.metricsBg,
+        fgColor: colors.metricsFg,
+      };
+    }
+
+    return {
+      text: parts.join(" "),
+      bgColor: colors.metricsBg,
+      fgColor: colors.metricsFg,
+    };
+  }
+
+  private formatDuration(seconds: number): string {
+    if (seconds < 60) {
+      return `${seconds.toFixed(0)}s`;
+    } else if (seconds < 3600) {
+      return `${(seconds / 60).toFixed(0)}m`;
+    } else if (seconds < 86400) {
+      return `${(seconds / 3600).toFixed(1)}h`;
+    } else {
+      return `${(seconds / 86400).toFixed(1)}d`;
+    }
   }
 
   private getDisplayDirectoryName(

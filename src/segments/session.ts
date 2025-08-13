@@ -1,9 +1,7 @@
 import { readFile } from "node:fs/promises";
-import { existsSync } from "node:fs";
-import { join } from "node:path";
-import { homedir } from "node:os";
 import { debug } from "../utils/logger";
 import { PricingService } from "./pricing";
+import { findTranscriptFile } from "../utils/claude";
 
 export interface SessionUsageEntry {
   timestamp: string;
@@ -41,62 +39,10 @@ export interface UsageInfo {
 }
 
 export class SessionProvider {
-  private getClaudePaths(): string[] {
-    const paths: string[] = [];
-    
-    const homeDir = homedir();
-    const defaultPath = join(homeDir, ".claude");
-    
-    if (existsSync(defaultPath)) {
-      paths.push(defaultPath);
-    }
-    
-    return paths;
-  }
-
-  private async findProjectPaths(claudePaths: string[]): Promise<string[]> {
-    const projectPaths: string[] = [];
-    
-    for (const claudePath of claudePaths) {
-      const projectsDir = join(claudePath, "projects");
-      
-      if (existsSync(projectsDir)) {
-        try {
-          const { readdir } = await import("node:fs/promises");
-          const entries = await readdir(projectsDir, { withFileTypes: true });
-          
-          for (const entry of entries) {
-            if (entry.isDirectory()) {
-              const projectPath = join(projectsDir, entry.name);
-              projectPaths.push(projectPath);
-            }
-          }
-        } catch (error) {
-          debug(`Failed to read projects directory ${projectsDir}:`, error);
-        }
-      }
-    }
-    
-    return projectPaths;
-  }
-
-  private async findTranscriptFile(sessionId: string): Promise<string | null> {
-    const claudePaths = this.getClaudePaths();
-    const projectPaths = await this.findProjectPaths(claudePaths);
-    
-    for (const projectPath of projectPaths) {
-      const transcriptPath = join(projectPath, `${sessionId}.jsonl`);
-      if (existsSync(transcriptPath)) {
-        return transcriptPath;
-      }
-    }
-    
-    return null;
-  }
 
   async getSessionUsage(sessionId: string): Promise<SessionUsage | null> {
     try {
-      const transcriptPath = await this.findTranscriptFile(sessionId);
+      const transcriptPath = await findTranscriptFile(sessionId);
       if (!transcriptPath) {
         debug(`No transcript found for session: ${sessionId}`);
         return null;
