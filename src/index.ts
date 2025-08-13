@@ -187,7 +187,7 @@ echo '{"session_id":"test-session","workspace":{"project_dir":"/path/to/project"
     debug(`Received hook data:`, JSON.stringify(hookData, null, 2));
 
     if (!hookData) {
-      console.error("Error: No input provided");
+      console.error("Error: No input data received from stdin");
       console.log(`
 claude-powerline - Beautiful powerline statusline for Claude Code
 
