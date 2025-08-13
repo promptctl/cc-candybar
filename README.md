@@ -340,6 +340,12 @@ export CLAUDE_POWERLINE_CONFIG=/path/to/config.json
 
 **Tmux segment not showing?** Ensure you're in a tmux session and enable it in config.
 
+**Debug logging:** Enable debug output to troubleshoot issues:
+```bash
+export CLAUDE_POWERLINE_DEBUG=1
+# Then use Claude Code normally - debug info will appear in stderr
+```
+
 ## Contributing
 
 Contributions are welcome! Please feel free to submit issues or pull requests.
