@@ -50,7 +50,7 @@ jobs:
           };
           
           for (const [modelId, modelData] of Object.entries(litellmData)) {
-            if (!modelId.toLowerCase().includes('claude') || !modelData || typeof modelData !== 'object') {
+            if (!modelId.startsWith('claude-') || !modelData || typeof modelData !== 'object') {
               continue;
             }
             
