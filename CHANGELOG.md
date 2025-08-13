@@ -1,3 +1,10 @@
+## [1.4.2](https://github.com/Owloops/claude-powerline/compare/v1.4.1...v1.4.2) (2025-08-13)
+
+
+### Bug Fixes
+
+* add contributors documentation for community contributions ([f006a47](https://github.com/Owloops/claude-powerline/commit/f006a470c2b3cc1b0f076952c12510af8f53c9e9))
+
 ## [1.4.1](https://github.com/Owloops/claude-powerline/compare/v1.4.0...v1.4.1) (2025-08-13)
 
 
