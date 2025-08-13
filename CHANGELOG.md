@@ -1,3 +1,11 @@
+## [1.3.1](https://github.com/Owloops/claude-powerline/compare/v1.3.0...v1.3.1) (2025-08-13)
+
+
+### Bug Fixes
+
+* improve stdin error message ([c582628](https://github.com/Owloops/claude-powerline/commit/c5826280d5d2cb86f8a613c516352625f2be48b1))
+* remove deprecated features ([6b3bae0](https://github.com/Owloops/claude-powerline/commit/6b3bae00333cf101e3387f371866131bb6148b95))
+
 # [1.3.0](https://github.com/Owloops/claude-powerline/compare/v1.2.1...v1.3.0) (2025-08-13)
 
 
