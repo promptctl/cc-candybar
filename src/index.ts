@@ -108,15 +108,17 @@ claude-powerline - Beautiful powerline statusline for Claude Code
 
 Usage: claude-powerline [options]
 
-Options:
+Standalone Commands:
+  --install-fonts          Install powerline fonts to system
+  -h, --help               Show this help
+
+Claude Code Options (for settings.json):
   --theme=THEME            Set theme: dark, light, nord, tokyo-night, rose-pine, custom
   --style=STYLE            Set separator style: minimal, powerline
   --usage=TYPE             Usage display: cost, tokens, both, breakdown
   --session-budget=AMOUNT  Set session budget for percentage tracking
   --daily-budget=AMOUNT    Set daily budget for percentage tracking
   --config=PATH            Use custom config file path
-  --install-fonts          Install powerline fonts to system
-  -h, --help               Show this help
 
 Configuration:
   Config files are loaded in this order (highest priority first):
@@ -139,6 +141,27 @@ Usage in Claude Code settings.json:
 }
 `);
       process.exit(0);
+    }
+
+    if (process.stdin.isTTY === true) {
+      console.error(`Error: This tool requires input from Claude Code
+
+claude-powerline is designed to be used as a Claude Code statusLine command.
+It reads hook data from stdin and outputs formatted statusline.
+
+Add to ~/.claude/settings.json:
+{
+  "statusLine": {
+    "type": "command",
+    "command": "claude-powerline --style=powerline"
+  }
+}
+
+Run with --help for more options.
+
+To test output manually:
+echo '{"workspace":{"project_dir":"/path/to/project"},"session":{"id":"test","model":"claude"}}' | claude-powerline --style=powerline`);
+      process.exit(1);
     }
 
     const hookData = (await json(process.stdin)) as ClaudeHookData;

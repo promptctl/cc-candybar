@@ -166,7 +166,7 @@ describe("PowerlineRenderer behavior", () => {
 
       const result = await renderer.generateStatusline(createHookData());
 
-      expect(result).toContain("main");
+      expect(result).toContain("detached");
     });
   });
 

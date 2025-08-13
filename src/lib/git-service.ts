@@ -1,4 +1,6 @@
 import { execSync } from "node:child_process";
+import fs from "node:fs";
+import path from "node:path";
 
 export interface GitInfo {
   branch: string;
@@ -9,7 +11,25 @@ export interface GitInfo {
 }
 
 export class GitService {
+  private isGitRepo(workingDir: string): boolean {
+    try {
+      return fs.existsSync(path.join(workingDir, ".git"));
+    } catch {
+      return false;
+    }
+  }
+
   getGitInfo(workingDir: string, showSha = false): GitInfo | null {
+    if (!this.isGitRepo(workingDir)) {
+      return {
+        branch: "detached",
+        status: "clean",
+        ahead: 0,
+        behind: 0,
+        sha: undefined,
+      };
+    }
+
     try {
       const branch = this.getBranch(workingDir);
       const status = this.getStatus(workingDir);
