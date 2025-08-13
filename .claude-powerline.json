@@ -11,7 +11,8 @@
           "session": { "enabled": true, "type": "tokens" },
           "today": { "enabled": true, "type": "both" },
           "block": { "enabled": false, "type": "cost" },
-          "tmux": { "enabled": false }
+          "tmux": { "enabled": false },
+          "context": { "enabled": true }
         }
       }
     ]
@@ -24,7 +25,8 @@
       "session": { "bg": "#5a5a5a", "fg": "#b0b0b0" },
       "today": { "bg": "#6a6a6a", "fg": "#f0f0f0" },
       "block": { "bg": "#7a7a7a", "fg": "#2a2a2a" },
-      "tmux": { "bg": "#8a8a8a", "fg": "#2a2a2a" }
+      "tmux": { "bg": "#8a8a8a", "fg": "#2a2a2a" },
+      "context": { "bg": "#9a5a9a", "fg": "#ffffff" }
     }
   },
   "budget": {

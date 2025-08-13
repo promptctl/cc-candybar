@@ -52,6 +52,7 @@
 
 - **Vim-style powerline** with proper arrows and segments
 - **Real-time usage tracking** with costs, tokens, and session blocks
+- **Context monitoring** showing tokens used and auto-compact threshold
 - **Git integration** with branch, status, ahead/behind counts
 
 </td>
@@ -140,7 +141,7 @@ Options are specified by command line flags. Overall configuration can also use 
 ### Default Configuration
 
 ```bash
-# Shows directory, git, model, session usage (tokens), today usage (both)
+# Shows directory, git, model, session usage (tokens), today usage (both), context info
 # Uses dark theme, minimal style, $50 daily budget
 claude-powerline
 ```
@@ -168,6 +169,7 @@ claude-powerline --daily-budget=50
 ### Status Indicators
 
 - **Git**: `✓` Clean, `●` Dirty, `⚠` Conflicts, `↑3` Ahead, `↓2` Behind remote
+- **Context**: `⊡ 34,040 (79%)` - Token count and percentage remaining until auto-compact
 - **Budget**: `25%` Normal (under 50%), `+75%` Moderate (50-79%), `!85%` Warning (80%+)
 
 ## Configuration
@@ -206,6 +208,7 @@ Configuration priority (top overrides bottom):
           "session": { "enabled": true, "type": "tokens" },
           "today": { "enabled": true, "type": "both" },
           "block": { "enabled": false, "type": "cost" },
+          "context": { "enabled": true },
           "tmux": { "enabled": true }
         }
       }
@@ -234,6 +237,7 @@ To prevent segment cutoff, configure multiple lines:
           "session": { "enabled": true, "type": "tokens" },
           "today": { "enabled": true, "type": "both" },
           "block": { "enabled": false, "type": "cost" },
+          "context": { "enabled": true },
           "tmux": { "enabled": true }
         }
       }
@@ -260,6 +264,7 @@ To customize colors, copy dark or light theme colors from `src/themes/` in the r
       "session": { "bg": "#cc0099", "fg": "#ffffff" },
       "today": { "bg": "#00cc66", "fg": "#000000" },
       "block": { "bg": "#cc6600", "fg": "#ffffff" },
+      "context": { "bg": "#4a5568", "fg": "#ffffff" },
       "tmux": { "bg": "#228b22", "fg": "#ffffff" }
     }
   }
@@ -341,6 +346,7 @@ export CLAUDE_POWERLINE_CONFIG=/path/to/config.json
 **Tmux segment not showing?** Ensure you're in a tmux session and enable it in config.
 
 **Debug logging:** Enable debug output to troubleshoot issues:
+
 ```bash
 export CLAUDE_POWERLINE_DEBUG=1
 # Then use Claude Code normally - debug info will appear in stderr

@@ -9,7 +9,20 @@ import { json } from "node:stream/consumers";
 import { PowerlineRenderer } from "./powerline";
 import { loadConfigFromCLI } from "./config/loader";
 import { debug } from "./lib/logger";
-import type { ClaudeHookData } from "./types";
+export interface ClaudeHookData {
+  hook_event_name: string;
+  session_id: string;
+  transcript_path: string;
+  cwd: string;
+  model: {
+    id: string;
+    display_name: string;
+  };
+  workspace: {
+    current_dir: string;
+    project_dir: string;
+  };
+}
 
 async function installFonts(): Promise<void> {
   try {

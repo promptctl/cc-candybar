@@ -1,6 +1,6 @@
 import { PowerlineRenderer } from "../src/powerline";
-import type { ClaudeHookData } from "../src/types";
-import type { PowerlineConfig } from "../src/types/config";
+import type { ClaudeHookData } from "../src/index";
+import type { PowerlineConfig } from "../src/config/loader";
 
 jest.mock("ccusage/data-loader", () => ({
   loadSessionUsageById: jest.fn().mockResolvedValue({

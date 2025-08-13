@@ -1,4 +1,4 @@
-import type { PowerlineConfig } from "../types/config";
+import type { PowerlineConfig } from "./loader";
 
 export const DEFAULT_CONFIG: PowerlineConfig = {
   theme: "dark",
@@ -17,6 +17,7 @@ export const DEFAULT_CONFIG: PowerlineConfig = {
           today: { enabled: true, type: "both" },
           block: { enabled: false, type: "cost" },
           tmux: { enabled: false },
+          context: { enabled: true },
         },
       },
     ],

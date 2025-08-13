@@ -1,4 +1,4 @@
-import type { ColorTheme } from "../types/config";
+import type { ColorTheme } from "./index";
 
 export const tokyoNightTheme: ColorTheme = {
   directory: { bg: "#2f334d", fg: "#82aaff" },
@@ -8,4 +8,5 @@ export const tokyoNightTheme: ColorTheme = {
   today: { bg: "#2f334d", fg: "#ffc777" },
   block: { bg: "#1e2030", fg: "#ff966c" },
   tmux: { bg: "#191b29", fg: "#4fd6be" },
+  context: { bg: "#414868", fg: "#c0caf5" },
 };

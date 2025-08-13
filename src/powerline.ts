@@ -1,12 +1,12 @@
-import type { ClaudeHookData, PowerlineColors } from "./types";
+import type { ClaudeHookData } from "./index";
+import type { PowerlineColors } from "./themes";
+import type { PowerlineConfig, LineConfig } from "./config/loader";
 import type {
-  PowerlineConfig,
-  LineConfig,
   AnySegmentConfig,
   GitSegmentConfig,
   UsageSegmentConfig,
   BlockSegmentConfig,
-} from "./types/config";
+} from "./lib/segment-renderer";
 import { hexToAnsi, extractBgToFg } from "./lib/colors";
 import { getTheme } from "./themes";
 import {
@@ -14,6 +14,7 @@ import {
   UsageInfo,
   SessionBlockInfo,
 } from "./lib/usage-provider";
+import { ContextProvider, ContextInfo } from "./lib/context-provider";
 import { GitService } from "./lib/git-service";
 import { TmuxService } from "./lib/tmux-service";
 import { SegmentRenderer, PowerlineSymbols } from "./lib/segment-renderer";
@@ -21,6 +22,7 @@ import { SegmentRenderer, PowerlineSymbols } from "./lib/segment-renderer";
 export class PowerlineRenderer {
   private readonly symbols: PowerlineSymbols;
   private readonly usageProvider: UsageProvider;
+  private readonly contextProvider: ContextProvider;
   private readonly gitService: GitService;
   private readonly tmuxService: TmuxService;
   private readonly segmentRenderer: SegmentRenderer;
@@ -28,6 +30,7 @@ export class PowerlineRenderer {
   constructor(private readonly config: PowerlineConfig) {
     this.symbols = this.initializeSymbols();
     this.usageProvider = new UsageProvider();
+    this.contextProvider = new ContextProvider();
     this.gitService = new GitService();
     this.tmuxService = new TmuxService();
     this.segmentRenderer = new SegmentRenderer(config, this.symbols);
@@ -49,6 +52,12 @@ export class PowerlineRenderer {
     );
   }
 
+  private needsContextInfo(): boolean {
+    return this.config.display.lines.some(
+      (line) => line.segments.context?.enabled
+    );
+  }
+
   async generateStatusline(hookData: ClaudeHookData): Promise<string> {
     const usageInfo = this.needsUsageInfo()
       ? await this.usageProvider.getUsageInfo(hookData.session_id)
@@ -59,9 +68,22 @@ export class PowerlineRenderer {
       sessionBlockInfo = await this.usageProvider.getSessionBlockInfo();
     }
 
+    const contextInfo = this.needsContextInfo()
+      ? this.contextProvider.calculateContextTokens(
+          hookData.transcript_path,
+          hookData.model?.id
+        )
+      : null;
+
     const lines = this.config.display.lines
       .map((lineConfig) =>
-        this.renderLine(lineConfig, hookData, usageInfo, sessionBlockInfo)
+        this.renderLine(
+          lineConfig,
+          hookData,
+          usageInfo,
+          sessionBlockInfo,
+          contextInfo
+        )
       )
       .filter((line) => line.length > 0);
 
@@ -78,7 +100,8 @@ export class PowerlineRenderer {
     lineConfig: LineConfig,
     hookData: ClaudeHookData,
     usageInfo: UsageInfo | null,
-    sessionBlockInfo: SessionBlockInfo | null
+    sessionBlockInfo: SessionBlockInfo | null,
+    contextInfo: ContextInfo | null
   ): string {
     const colors = this.getThemeColors();
     const currentDir = hookData.workspace?.current_dir || hookData.cwd || "/";
@@ -106,6 +129,7 @@ export class PowerlineRenderer {
         hookData,
         usageInfo,
         sessionBlockInfo,
+        contextInfo,
         colors,
         currentDir
       );
@@ -128,6 +152,7 @@ export class PowerlineRenderer {
     hookData: ClaudeHookData,
     usageInfo: UsageInfo | null,
     sessionBlockInfo: SessionBlockInfo | null,
+    contextInfo: ContextInfo | null,
     colors: PowerlineColors,
     currentDir: string
   ) {
@@ -171,6 +196,10 @@ export class PowerlineRenderer {
         if (!this.needsTmuxInfo()) return null;
         const tmuxSessionId = this.tmuxService.getSessionId();
         return this.segmentRenderer.renderTmux(tmuxSessionId, colors);
+
+      case "context":
+        if (!this.needsContextInfo()) return null;
+        return this.segmentRenderer.renderContext(contextInfo, colors);
 
       default:
         return null;
@@ -234,6 +263,8 @@ export class PowerlineRenderer {
       burnFg: hexToAnsi(colorTheme.today.fg, false),
       tmuxBg: hexToAnsi(colorTheme.tmux.bg, true),
       tmuxFg: hexToAnsi(colorTheme.tmux.fg, false),
+      contextBg: hexToAnsi(colorTheme.context.bg, true),
+      contextFg: hexToAnsi(colorTheme.context.fg, false),
     };
   }
 
@@ -256,6 +287,8 @@ export class PowerlineRenderer {
         return colors.blockBg;
       case "tmux":
         return colors.tmuxBg;
+      case "context":
+        return colors.contextBg;
       default:
         return colors.modeBg;
     }

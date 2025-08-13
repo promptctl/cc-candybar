@@ -1,5 +1,35 @@
-import type { PowerlineConfig } from "../types/config";
-import type { ClaudeHookData, PowerlineColors } from "../types";
+import type { ClaudeHookData } from "../index";
+import type { PowerlineColors } from "../themes";
+import type { PowerlineConfig } from "../config/loader";
+
+export interface SegmentConfig {
+  enabled: boolean;
+}
+
+export interface GitSegmentConfig extends SegmentConfig {
+  showSha: boolean;
+}
+
+export interface UsageSegmentConfig extends SegmentConfig {
+  type: "cost" | "tokens" | "both" | "breakdown";
+}
+
+export interface BlockSegmentConfig extends SegmentConfig {
+  type?: "cost" | "tokens";
+}
+
+export interface TmuxSegmentConfig extends SegmentConfig {}
+
+export interface ContextSegmentConfig extends SegmentConfig {}
+
+export type AnySegmentConfig =
+  | SegmentConfig
+  | GitSegmentConfig
+  | UsageSegmentConfig
+  | BlockSegmentConfig
+  | TmuxSegmentConfig
+  | ContextSegmentConfig;
+
 import {
   formatCost,
   formatTokens,
@@ -13,6 +43,7 @@ import type {
   TokenBreakdown,
 } from "./usage-provider";
 import type { GitInfo } from "./git-service";
+import type { ContextInfo } from "./context-provider";
 
 export interface PowerlineSymbols {
   right: string;
@@ -170,6 +201,23 @@ export class SegmentRenderer {
       text: `tmux:${sessionId}`,
       bgColor: colors.tmuxBg,
       fgColor: colors.tmuxFg,
+    };
+  }
+
+  renderContext(
+    contextInfo: ContextInfo | null,
+    colors: PowerlineColors
+  ): SegmentData | null {
+    if (!contextInfo) return null;
+
+    const tokenDisplay = contextInfo.inputTokens.toLocaleString();
+
+    const contextLeft = `${contextInfo.contextLeftPercentage}%`;
+
+    return {
+      text: `⊡ ${tokenDisplay} (${contextLeft})`,
+      bgColor: colors.contextBg,
+      fgColor: colors.contextFg,
     };
   }
 

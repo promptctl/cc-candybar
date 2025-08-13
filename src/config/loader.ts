@@ -1,8 +1,61 @@
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
-import type { PowerlineConfig, ConfigLoadOptions } from "../types/config";
 import { DEFAULT_CONFIG } from "./defaults";
+import type { ColorTheme } from "../themes";
+import type {
+  SegmentConfig,
+  GitSegmentConfig,
+  UsageSegmentConfig,
+  BlockSegmentConfig,
+  TmuxSegmentConfig,
+  ContextSegmentConfig,
+} from "../lib/segment-renderer";
+
+export interface LineConfig {
+  segments: {
+    directory?: SegmentConfig;
+    git?: GitSegmentConfig;
+    model?: SegmentConfig;
+    session?: UsageSegmentConfig;
+    today?: UsageSegmentConfig;
+    block?: BlockSegmentConfig;
+    tmux?: TmuxSegmentConfig;
+    context?: ContextSegmentConfig;
+  };
+}
+
+export interface DisplayConfig {
+  lines: LineConfig[];
+  style?: "minimal" | "powerline";
+}
+
+export interface BudgetItemConfig {
+  amount?: number;
+  warningThreshold?: number;
+}
+
+export interface BudgetConfig {
+  session?: BudgetItemConfig;
+  today?: BudgetItemConfig;
+}
+
+export interface PowerlineConfig {
+  theme: "light" | "dark" | "nord" | "tokyo-night" | "rose-pine" | "custom";
+  display: DisplayConfig;
+  colors?: {
+    custom: ColorTheme;
+  };
+  budget?: BudgetConfig;
+  usageType?: "cost" | "tokens" | "both" | "breakdown";
+}
+
+export interface ConfigLoadOptions {
+  configPath?: string;
+  ignoreEnvVars?: boolean;
+  cliOverrides?: Partial<PowerlineConfig>;
+  projectDir?: string;
+}
 
 function deepMerge<T extends Record<string, any>>(
   target: T,

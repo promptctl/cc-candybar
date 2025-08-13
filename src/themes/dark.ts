@@ -1,4 +1,4 @@
-import type { ColorTheme } from "../types/config";
+import type { ColorTheme } from "./index";
 
 export const darkTheme: ColorTheme = {
   directory: { bg: "#8b4513", fg: "#ffffff" },
@@ -8,4 +8,5 @@ export const darkTheme: ColorTheme = {
   today: { bg: "#a0520d", fg: "#ffffff" },
   block: { bg: "#8b4500", fg: "#ffffff" },
   tmux: { bg: "#2f4f2f", fg: "#90ee90" },
+  context: { bg: "#4a5568", fg: "#cbd5e0" },
 };
