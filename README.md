@@ -398,6 +398,8 @@ export CLAUDE_POWERLINE_DEBUG=1
 
 Contributions are welcome! Please feel free to submit issues or pull requests.
 
+See [CONTRIBUTORS.md](CONTRIBUTORS.md) for people who have contributed outside of GitHub PRs.
+
 ## License
 
 This project is licensed under the [MIT License](LICENSE).
