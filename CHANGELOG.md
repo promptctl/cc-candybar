@@ -1,3 +1,10 @@
+# [1.2.0](https://github.com/Owloops/claude-powerline/compare/v1.1.15...v1.2.0) (2025-08-13)
+
+
+### Features
+
+* add debug logging for troubleshooting ([bff8483](https://github.com/Owloops/claude-powerline/commit/bff8483d3840810fab27f1844df198f6016142c7))
+
 ## [1.1.15](https://github.com/Owloops/claude-powerline/compare/v1.1.14...v1.1.15) (2025-08-13)
 
 
