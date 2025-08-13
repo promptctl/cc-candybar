@@ -134,7 +134,6 @@ Claude Code Options (for settings.json):
   --style=STYLE            Set separator style: minimal, powerline
   --usage=TYPE             Usage display: cost, tokens, both, breakdown
   --session-budget=AMOUNT  Set session budget for percentage tracking
-  --daily-budget=AMOUNT    Set daily budget for percentage tracking
   --config=PATH            Use custom config file path
 
 Configuration:
@@ -199,7 +198,6 @@ Options:
   --style=STYLE            Set separator style: minimal, powerline
   --usage=TYPE             Usage display: cost, tokens, both, breakdown
   --session-budget=AMOUNT  Set session budget for percentage tracking
-  --daily-budget=AMOUNT    Set daily budget for percentage tracking
   --config=PATH            Use custom config file path
   --install-fonts          Install powerline fonts to system
   -h, --help               Show this help

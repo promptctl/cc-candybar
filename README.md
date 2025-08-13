@@ -123,7 +123,6 @@ Options are specified by command line flags. Overall configuration can also use 
 | `--theme` | `dark` (default), `light`, `nord`, `tokyo-night`, `rose-pine`, `custom` | Set color theme |
 | `--style` | `minimal` (default), `powerline` | Set separator style |
 | `--usage` | `cost`, `tokens`, `both`, `breakdown` | Set usage display format |
-| `--daily-budget` | `AMOUNT` | Set daily budget limit in USD |
 | `--session-budget` | `AMOUNT` | Set session budget limit in USD |
 | `--config` | `PATH` | Use custom config file path |
 | `--install-fonts` | - | Install powerline fonts to system |
@@ -162,8 +161,8 @@ claude-powerline --theme=tokyo-night --style=minimal
 # Show token breakdown instead of costs
 claude-powerline --usage=breakdown
 
-# Set daily budget limit
-claude-powerline --daily-budget=50
+# Set session budget limit
+claude-powerline --session-budget=50
 ```
 
 ### Status Indicators
