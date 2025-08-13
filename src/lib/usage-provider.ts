@@ -93,6 +93,7 @@ export class UsageProvider {
     logger.level = 0;
 
     try {
+      debug(`Starting usage info retrieval for session: ${sessionId}`);
       const claudePaths = getClaudePaths();
       debug(`Found ${claudePaths.length} Claude paths:`, claudePaths);
 

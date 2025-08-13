@@ -164,7 +164,7 @@ Add to ~/.claude/settings.json:
 Run with --help for more options.
 
 To test output manually:
-echo '{"workspace":{"project_dir":"/path/to/project"},"session":{"id":"test","model":"claude"}}' | claude-powerline --style=powerline`);
+echo '{"session_id":"test-session","workspace":{"project_dir":"/path/to/project"},"model":{"id":"claude-3-5-sonnet","display_name":"Claude"}}' | claude-powerline --style=powerline`);
       process.exit(1);
     }
 
@@ -172,6 +172,8 @@ echo '{"workspace":{"project_dir":"/path/to/project"},"session":{"id":"test","mo
     debug(`Process args:`, process.argv);
 
     const hookData = (await json(process.stdin)) as ClaudeHookData;
+    debug(`Received hook data:`, JSON.stringify(hookData, null, 2));
+
     if (!hookData) {
       console.error("Error: No input provided");
       console.log(`

@@ -33,10 +33,26 @@ export class PowerlineRenderer {
     this.segmentRenderer = new SegmentRenderer(config, this.symbols);
   }
 
-  async generateStatusline(hookData: ClaudeHookData): Promise<string> {
-    const usageInfo = await this.usageProvider.getUsageInfo(
-      hookData.session_id
+  private needsUsageInfo(): boolean {
+    return this.config.display.lines.some(
+      (line) => line.segments.session?.enabled || line.segments.today?.enabled
     );
+  }
+
+  private needsGitInfo(): boolean {
+    return this.config.display.lines.some((line) => line.segments.git?.enabled);
+  }
+
+  private needsTmuxInfo(): boolean {
+    return this.config.display.lines.some(
+      (line) => line.segments.tmux?.enabled
+    );
+  }
+
+  async generateStatusline(hookData: ClaudeHookData): Promise<string> {
+    const usageInfo = this.needsUsageInfo()
+      ? await this.usageProvider.getUsageInfo(hookData.session_id)
+      : null;
 
     let sessionBlockInfo = null;
     if (this.needsSessionBlock()) {
@@ -61,7 +77,7 @@ export class PowerlineRenderer {
   private renderLine(
     lineConfig: LineConfig,
     hookData: ClaudeHookData,
-    usageInfo: UsageInfo,
+    usageInfo: UsageInfo | null,
     sessionBlockInfo: SessionBlockInfo | null
   ): string {
     const colors = this.getThemeColors();
@@ -110,7 +126,7 @@ export class PowerlineRenderer {
   private renderSegment(
     segment: { type: string; config: AnySegmentConfig },
     hookData: ClaudeHookData,
-    usageInfo: UsageInfo,
+    usageInfo: UsageInfo | null,
     sessionBlockInfo: SessionBlockInfo | null,
     colors: PowerlineColors,
     currentDir: string
@@ -120,6 +136,7 @@ export class PowerlineRenderer {
         return this.segmentRenderer.renderDirectory(hookData, colors);
 
       case "git":
+        if (!this.needsGitInfo()) return null;
         const showSha = (segment.config as GitSegmentConfig)?.showSha || false;
         const gitInfo = this.gitService.getGitInfo(currentDir, showSha);
         return gitInfo
@@ -130,11 +147,13 @@ export class PowerlineRenderer {
         return this.segmentRenderer.renderModel(hookData, colors);
 
       case "session":
+        if (!usageInfo) return null;
         const usageType =
           (segment.config as UsageSegmentConfig)?.type || "cost";
         return this.segmentRenderer.renderSession(usageInfo, colors, usageType);
 
       case "today":
+        if (!usageInfo) return null;
         const todayType =
           (segment.config as UsageSegmentConfig)?.type || "cost";
         return this.segmentRenderer.renderToday(usageInfo, colors, todayType);
@@ -149,6 +168,7 @@ export class PowerlineRenderer {
         );
 
       case "tmux":
+        if (!this.needsTmuxInfo()) return null;
         const tmuxSessionId = this.tmuxService.getSessionId();
         return this.segmentRenderer.renderTmux(tmuxSessionId, colors);
 
