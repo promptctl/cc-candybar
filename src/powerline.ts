@@ -5,15 +5,10 @@ import type {
   AnySegmentConfig,
   GitSegmentConfig,
   UsageSegmentConfig,
-  BlockSegmentConfig,
 } from "./lib/segment-renderer";
 import { hexToAnsi, extractBgToFg } from "./lib/colors";
 import { getTheme } from "./themes";
-import {
-  UsageProvider,
-  UsageInfo,
-  SessionBlockInfo,
-} from "./lib/usage-provider";
+import { UsageProvider, UsageInfo } from "./lib/usage-provider";
 import { ContextProvider, ContextInfo } from "./lib/context-provider";
 import { GitService } from "./lib/git-service";
 import { TmuxService } from "./lib/tmux-service";
@@ -38,7 +33,7 @@ export class PowerlineRenderer {
 
   private needsUsageInfo(): boolean {
     return this.config.display.lines.some(
-      (line) => line.segments.session?.enabled || line.segments.today?.enabled
+      (line) => line.segments.session?.enabled
     );
   }
 
@@ -63,11 +58,6 @@ export class PowerlineRenderer {
       ? await this.usageProvider.getUsageInfo(hookData.session_id)
       : null;
 
-    let sessionBlockInfo = null;
-    if (this.needsSessionBlock()) {
-      sessionBlockInfo = await this.usageProvider.getSessionBlockInfo();
-    }
-
     const contextInfo = this.needsContextInfo()
       ? this.contextProvider.calculateContextTokens(
           hookData.transcript_path,
@@ -77,30 +67,17 @@ export class PowerlineRenderer {
 
     const lines = this.config.display.lines
       .map((lineConfig) =>
-        this.renderLine(
-          lineConfig,
-          hookData,
-          usageInfo,
-          sessionBlockInfo,
-          contextInfo
-        )
+        this.renderLine(lineConfig, hookData, usageInfo, contextInfo)
       )
       .filter((line) => line.length > 0);
 
     return lines.join("\n");
   }
 
-  private needsSessionBlock(): boolean {
-    return this.config.display.lines.some(
-      (line) => line.segments.block?.enabled
-    );
-  }
-
   private renderLine(
     lineConfig: LineConfig,
     hookData: ClaudeHookData,
     usageInfo: UsageInfo | null,
-    sessionBlockInfo: SessionBlockInfo | null,
     contextInfo: ContextInfo | null
   ): string {
     const colors = this.getThemeColors();
@@ -128,7 +105,6 @@ export class PowerlineRenderer {
         segment,
         hookData,
         usageInfo,
-        sessionBlockInfo,
         contextInfo,
         colors,
         currentDir
@@ -151,7 +127,6 @@ export class PowerlineRenderer {
     segment: { type: string; config: AnySegmentConfig },
     hookData: ClaudeHookData,
     usageInfo: UsageInfo | null,
-    sessionBlockInfo: SessionBlockInfo | null,
     contextInfo: ContextInfo | null,
     colors: PowerlineColors,
     currentDir: string
@@ -176,21 +151,6 @@ export class PowerlineRenderer {
         const usageType =
           (segment.config as UsageSegmentConfig)?.type || "cost";
         return this.segmentRenderer.renderSession(usageInfo, colors, usageType);
-
-      case "today":
-        if (!usageInfo) return null;
-        const todayType =
-          (segment.config as UsageSegmentConfig)?.type || "cost";
-        return this.segmentRenderer.renderToday(usageInfo, colors, todayType);
-
-      case "block":
-        const blockType =
-          (segment.config as BlockSegmentConfig)?.type || "cost";
-        return this.segmentRenderer.renderBlock(
-          sessionBlockInfo,
-          colors,
-          blockType
-        );
 
       case "tmux":
         if (!this.needsTmuxInfo()) return null;
@@ -219,8 +179,6 @@ export class PowerlineRenderer {
       git_ahead: "↑",
       git_behind: "↓",
       session_cost: "Session",
-      daily_cost: "Today",
-      block_cost: "Block",
     };
   }
 
@@ -255,12 +213,6 @@ export class PowerlineRenderer {
       modelFg: hexToAnsi(colorTheme.model.fg, false),
       sessionBg: hexToAnsi(colorTheme.session.bg, true),
       sessionFg: hexToAnsi(colorTheme.session.fg, false),
-      todayBg: hexToAnsi(colorTheme.today.bg, true),
-      todayFg: hexToAnsi(colorTheme.today.fg, false),
-      blockBg: hexToAnsi(colorTheme.block.bg, true),
-      blockFg: hexToAnsi(colorTheme.block.fg, false),
-      burnLowBg: hexToAnsi(colorTheme.today.bg, true),
-      burnFg: hexToAnsi(colorTheme.today.fg, false),
       tmuxBg: hexToAnsi(colorTheme.tmux.bg, true),
       tmuxFg: hexToAnsi(colorTheme.tmux.fg, false),
       contextBg: hexToAnsi(colorTheme.context.bg, true),
@@ -281,10 +233,6 @@ export class PowerlineRenderer {
         return colors.modelBg;
       case "session":
         return colors.sessionBg;
-      case "today":
-        return colors.burnLowBg;
-      case "block":
-        return colors.blockBg;
       case "tmux":
         return colors.tmuxBg;
       case "context":

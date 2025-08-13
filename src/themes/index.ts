@@ -14,8 +14,6 @@ export interface ColorTheme {
   git: SegmentColor;
   model: SegmentColor;
   session: SegmentColor;
-  today: SegmentColor;
-  block: SegmentColor;
   tmux: SegmentColor;
   context: SegmentColor;
 }
@@ -30,12 +28,6 @@ export interface PowerlineColors {
   modelFg: string;
   sessionBg: string;
   sessionFg: string;
-  todayBg: string;
-  todayFg: string;
-  blockBg: string;
-  blockFg: string;
-  burnLowBg: string;
-  burnFg: string;
   tmuxBg: string;
   tmuxFg: string;
   contextBg: string;

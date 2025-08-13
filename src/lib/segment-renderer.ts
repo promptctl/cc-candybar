@@ -14,10 +14,6 @@ export interface UsageSegmentConfig extends SegmentConfig {
   type: "cost" | "tokens" | "both" | "breakdown";
 }
 
-export interface BlockSegmentConfig extends SegmentConfig {
-  type?: "cost" | "tokens";
-}
-
 export interface TmuxSegmentConfig extends SegmentConfig {}
 
 export interface ContextSegmentConfig extends SegmentConfig {}
@@ -26,22 +22,12 @@ export type AnySegmentConfig =
   | SegmentConfig
   | GitSegmentConfig
   | UsageSegmentConfig
-  | BlockSegmentConfig
   | TmuxSegmentConfig
   | ContextSegmentConfig;
 
-import {
-  formatCost,
-  formatTokens,
-  formatTokenBreakdown,
-  formatTimeRemaining,
-} from "./formatters";
+import { formatCost, formatTokens, formatTokenBreakdown } from "./formatters";
 import { getBudgetStatus } from "./budget";
-import type {
-  UsageInfo,
-  SessionBlockInfo,
-  TokenBreakdown,
-} from "./usage-provider";
+import type { UsageInfo, TokenBreakdown } from "./usage-provider";
 import type { GitInfo } from "./git-service";
 import type { ContextInfo } from "./context-provider";
 
@@ -55,8 +41,6 @@ export interface PowerlineSymbols {
   git_ahead: string;
   git_behind: string;
   session_cost: string;
-  daily_cost: string;
-  block_cost: string;
 }
 
 export interface SegmentData {
@@ -153,44 +137,6 @@ export class SegmentRenderer {
     };
   }
 
-  renderToday(
-    usageInfo: UsageInfo,
-    colors: PowerlineColors,
-    type = "cost"
-  ): SegmentData {
-    const todayBudget = this.config.budget?.today;
-    const text = `Today ${this.formatUsageWithBudget(
-      usageInfo.daily.cost,
-      usageInfo.daily.tokens,
-      usageInfo.daily.tokenBreakdown,
-      type,
-      todayBudget?.amount,
-      todayBudget?.warningThreshold || 80
-    )}`;
-
-    return {
-      text,
-      bgColor: colors.burnLowBg,
-      fgColor: colors.burnFg,
-    };
-  }
-
-  renderBlock(
-    blockInfo: SessionBlockInfo | null,
-    colors: PowerlineColors,
-    type = "cost"
-  ): SegmentData | null {
-    if (!blockInfo) return null;
-
-    const text = `${this.symbols.block_cost} ${this.formatSessionBlockInfo(blockInfo, type)}`;
-
-    return {
-      text,
-      bgColor: colors.blockBg,
-      fgColor: colors.blockFg,
-    };
-  }
-
   renderTmux(
     sessionId: string | null,
     colors: PowerlineColors
@@ -280,38 +226,5 @@ export class SegmentRenderer {
     }
 
     return baseDisplay;
-  }
-
-  private formatSessionBlockInfo(
-    blockInfo: SessionBlockInfo,
-    type = "cost"
-  ): string {
-    if (!blockInfo.isActive) {
-      return "No active block";
-    }
-
-    const timeStr = formatTimeRemaining(blockInfo.timeRemaining);
-
-    if (type === "tokens") {
-      const tokensStr = formatTokens(blockInfo.tokens);
-      let result = `${tokensStr} (${timeStr} left)`;
-
-      if (blockInfo.tokenBurnRate !== null && blockInfo.tokenBurnRate > 0) {
-        const burnRateStr = `${formatTokens(blockInfo.tokenBurnRate)}/hr`;
-        result += ` ${burnRateStr}`;
-      }
-
-      return result;
-    } else {
-      const costStr = formatCost(blockInfo.cost);
-      let result = `${costStr} (${timeStr} left)`;
-
-      if (blockInfo.burnRate !== null && blockInfo.burnRate > 0) {
-        const burnRateStr = `${formatCost(blockInfo.burnRate)}/hr`;
-        result += ` ${burnRateStr}`;
-      }
-
-      return result;
-    }
   }
 }

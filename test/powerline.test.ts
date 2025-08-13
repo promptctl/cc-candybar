@@ -28,22 +28,6 @@ jest.mock("ccusage/data-loader", () => ({
       cost: 1.25,
     },
   ]),
-  loadSessionBlockData: jest.fn().mockResolvedValue([
-    {
-      id: "2024-01-01T10:00:00.000Z",
-      startTime: new Date("2024-01-01T10:00:00.000Z"),
-      endTime: new Date("2024-01-01T15:00:00.000Z"),
-      isActive: true,
-      costUSD: 2.5,
-      entries: [],
-      tokenCounts: {
-        inputTokens: 5000,
-        outputTokens: 2000,
-        cacheCreationInputTokens: 500,
-        cacheReadInputTokens: 100,
-      },
-    },
-  ]),
   getClaudePaths: jest.fn().mockReturnValue(["/mock/path"]),
 }));
 
@@ -87,7 +71,6 @@ function createConfig(segments: Record<string, unknown>): PowerlineConfig {
     theme: "light",
     display: { lines: [{ segments }] },
     budget: {
-      today: { amount: 50, warningThreshold: 80 },
       session: { warningThreshold: 80 },
     },
   };
@@ -126,28 +109,6 @@ describe("PowerlineRenderer behavior", () => {
     });
   });
 
-  describe("budget warnings", () => {
-    it("shows warning indicator when over threshold", async () => {
-      const config = createConfig({ today: { enabled: true, type: "cost" } });
-      config.budget!.today!.amount = 1.5;
-      const renderer = new PowerlineRenderer(config);
-
-      const result = await renderer.generateStatusline(createHookData());
-
-      expect(result).toContain("!");
-    });
-
-    it("does not show percentage when no budget amount set", async () => {
-      const config = createConfig({ today: { enabled: true, type: "cost" } });
-      config.budget!.today = { warningThreshold: 80 };
-      const renderer = new PowerlineRenderer(config);
-
-      const result = await renderer.generateStatusline(createHookData());
-
-      expect(result).not.toContain("%");
-    });
-  });
-
   describe("directory display", () => {
     it("shows project name when in project root", async () => {
       const config = createConfig({ directory: { enabled: true } });
@@ -182,28 +143,6 @@ describe("PowerlineRenderer behavior", () => {
       expect(result).toContain("mysession");
 
       delete process.env.TMUX_PANE;
-    });
-  });
-
-  describe("block segment", () => {
-    it("shows cost rate by default", async () => {
-      const config = createConfig({ block: { enabled: true } });
-      const renderer = new PowerlineRenderer(config);
-
-      const result = await renderer.generateStatusline(createHookData());
-
-      expect(result).toContain("$2.50");
-      expect(result).toContain("/hr");
-    });
-
-    it("shows token rate when configured", async () => {
-      const config = createConfig({ block: { enabled: true, type: "tokens" } });
-      const renderer = new PowerlineRenderer(config);
-
-      const result = await renderer.generateStatusline(createHookData());
-
-      expect(result).toContain("tokens");
-      expect(result).toContain("/hr");
     });
   });
 });

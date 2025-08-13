@@ -7,7 +7,6 @@ import type {
   SegmentConfig,
   GitSegmentConfig,
   UsageSegmentConfig,
-  BlockSegmentConfig,
   TmuxSegmentConfig,
   ContextSegmentConfig,
 } from "../lib/segment-renderer";
@@ -18,8 +17,6 @@ export interface LineConfig {
     git?: GitSegmentConfig;
     model?: SegmentConfig;
     session?: UsageSegmentConfig;
-    today?: UsageSegmentConfig;
-    block?: BlockSegmentConfig;
     tmux?: TmuxSegmentConfig;
     context?: ContextSegmentConfig;
   };
@@ -37,7 +34,6 @@ export interface BudgetItemConfig {
 
 export interface BudgetConfig {
   session?: BudgetItemConfig;
-  today?: BudgetItemConfig;
 }
 
 export interface PowerlineConfig {
@@ -193,21 +189,6 @@ function parseCLIOverrides(args: string[]): Partial<PowerlineConfig> {
     }
   }
 
-  const dailyBudgetIndex = args.findIndex((arg) =>
-    arg.startsWith("--daily-budget=")
-  );
-  if (dailyBudgetIndex !== -1) {
-    const dailyBudget = parseFloat(args[dailyBudgetIndex]?.split("=")[1] || "");
-    if (!isNaN(dailyBudget) && dailyBudget > 0) {
-      config.budget = {
-        ...config.budget,
-        today: {
-          ...DEFAULT_CONFIG.budget?.today,
-          amount: dailyBudget,
-        },
-      };
-    }
-  }
 
   const sessionBudgetIndex = args.findIndex((arg) =>
     arg.startsWith("--session-budget=")
@@ -289,15 +270,6 @@ export function loadConfig(options: ConfigLoadOptions = {}): PowerlineConfig {
     config.display.lines.forEach((line) => {
       if (line.segments.session) {
         line.segments.session.type = config.usageType!;
-      }
-      if (line.segments.today) {
-        line.segments.today.type = config.usageType!;
-      }
-      if (line.segments.block) {
-        line.segments.block.type =
-          config.usageType === "breakdown" || config.usageType === "both"
-            ? "cost"
-            : config.usageType!;
       }
     });
     delete config.usageType;

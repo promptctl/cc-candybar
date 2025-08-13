@@ -51,7 +51,7 @@
 ### Core Features
 
 - **Vim-style powerline** with proper arrows and segments
-- **Real-time usage tracking** with costs, tokens, and session blocks
+- **Real-time usage tracking** with costs and tokens
 - **Context monitoring** showing tokens used and auto-compact threshold
 - **Git integration** with branch, status, ahead/behind counts
 
@@ -141,8 +141,8 @@ Options are specified by command line flags. Overall configuration can also use 
 ### Default Configuration
 
 ```bash
-# Shows directory, git, model, session usage (tokens), today usage (both), context info
-# Uses dark theme, minimal style, $50 daily budget
+# Shows directory, git, model, session usage (tokens), context info
+# Uses dark theme, minimal style
 claude-powerline
 ```
 
@@ -206,8 +206,6 @@ Configuration priority (top overrides bottom):
           "git": { "enabled": true, "showSha": true },
           "model": { "enabled": true },
           "session": { "enabled": true, "type": "tokens" },
-          "today": { "enabled": true, "type": "both" },
-          "block": { "enabled": false, "type": "cost" },
           "context": { "enabled": true },
           "tmux": { "enabled": true }
         }
@@ -235,8 +233,6 @@ To prevent segment cutoff, configure multiple lines:
       {
         "segments": {
           "session": { "enabled": true, "type": "tokens" },
-          "today": { "enabled": true, "type": "both" },
-          "block": { "enabled": false, "type": "cost" },
           "context": { "enabled": true },
           "tmux": { "enabled": true }
         }
@@ -262,8 +258,6 @@ To customize colors, copy dark or light theme colors from `src/themes/` in the r
       "git": { "bg": "#0066cc", "fg": "#ffffff" },
       "model": { "bg": "#9900cc", "fg": "#ffffff" },
       "session": { "bg": "#cc0099", "fg": "#ffffff" },
-      "today": { "bg": "#00cc66", "fg": "#000000" },
-      "block": { "bg": "#cc6600", "fg": "#ffffff" },
       "context": { "bg": "#4a5568", "fg": "#ffffff" },
       "tmux": { "bg": "#228b22", "fg": "#ffffff" }
     }

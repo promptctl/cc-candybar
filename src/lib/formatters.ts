@@ -42,16 +42,3 @@ export function formatTokenBreakdown(breakdown: TokenBreakdown | null): string {
 
   return parts.length > 0 ? parts.join(" + ") : "0 tokens";
 }
-
-export function formatTimeRemaining(minutes: number): string {
-  if (minutes <= 0) return "0m";
-
-  const hours = Math.floor(minutes / 60);
-  const mins = minutes % 60;
-
-  if (hours > 0) {
-    return `${hours}h${mins > 0 ? ` ${mins}m` : ""}`;
-  }
-
-  return `${mins}m`;
-}

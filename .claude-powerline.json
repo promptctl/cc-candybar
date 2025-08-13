@@ -9,8 +9,6 @@
           "git": { "enabled": true, "showSha": false },
           "model": { "enabled": true },
           "session": { "enabled": true, "type": "tokens" },
-          "today": { "enabled": true, "type": "both" },
-          "block": { "enabled": false, "type": "cost" },
           "tmux": { "enabled": false },
           "context": { "enabled": true }
         }
@@ -23,14 +21,11 @@
       "git": { "bg": "#3a3a3a", "fg": "#d0d0d0" },
       "model": { "bg": "#4a4a4a", "fg": "#c0c0c0" },
       "session": { "bg": "#5a5a5a", "fg": "#b0b0b0" },
-      "today": { "bg": "#6a6a6a", "fg": "#f0f0f0" },
-      "block": { "bg": "#7a7a7a", "fg": "#2a2a2a" },
       "tmux": { "bg": "#8a8a8a", "fg": "#2a2a2a" },
       "context": { "bg": "#9a5a9a", "fg": "#ffffff" }
     }
   },
   "budget": {
-    "session": { "warningThreshold": 80 },
-    "today": { "amount": 50, "warningThreshold": 80 }
+    "session": { "warningThreshold": 80 }
   }
 }

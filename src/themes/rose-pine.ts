@@ -5,8 +5,6 @@ export const rosePineTheme: ColorTheme = {
   git: { bg: "#1f1d2e", fg: "#9ccfd8" },
   model: { bg: "#191724", fg: "#ebbcba" },
   session: { bg: "#26233a", fg: "#f6c177" },
-  today: { bg: "#1f1d2e", fg: "#eb6f92" },
-  block: { bg: "#191724", fg: "#31748f" },
   tmux: { bg: "#26233a", fg: "#908caa" },
   context: { bg: "#393552", fg: "#e0def4" },
 };

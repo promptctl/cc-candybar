@@ -1,10 +1,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import { DEFAULT_CONFIG } from "../src/config/defaults";
-import {
-  loadConfig,
-  loadConfigFromCLI,
-} from "../src/config/loader";
+import { loadConfig, loadConfigFromCLI } from "../src/config/loader";
 
 jest.mock("node:fs");
 jest.mock("node:os");
@@ -24,7 +21,7 @@ describe("config", () => {
       expect(DEFAULT_CONFIG.theme).toBe("dark");
       expect(DEFAULT_CONFIG.display.lines).toHaveLength(1);
       expect(DEFAULT_CONFIG.display.style).toBe("minimal");
-      expect(DEFAULT_CONFIG.budget?.today).toBeDefined();
+      expect(DEFAULT_CONFIG.budget?.session).toBeDefined();
     });
   });
 
@@ -68,39 +65,16 @@ describe("config", () => {
     it("should parse budget flags", () => {
       mockFs.existsSync.mockReturnValue(false);
 
-      const dailyConfig = loadConfigFromCLI([
-        "node",
-        "script",
-        "--daily-budget=25.50",
-      ]);
-      expect(dailyConfig.budget?.today?.amount).toBe(25.5);
-
       const sessionConfig = loadConfigFromCLI([
         "node",
         "script",
         "--session-budget=15.75",
       ]);
       expect(sessionConfig.budget?.session?.amount).toBe(15.75);
-
-      const bothConfig = loadConfigFromCLI([
-        "node",
-        "script",
-        "--session-budget=10",
-        "--daily-budget=50",
-      ]);
-      expect(bothConfig.budget?.session?.amount).toBe(10);
-      expect(bothConfig.budget?.today?.amount).toBe(50);
     });
 
     it("should ignore invalid budget values", () => {
       mockFs.existsSync.mockReturnValue(false);
-
-      const config = loadConfigFromCLI([
-        "node",
-        "script",
-        "--daily-budget=invalid",
-      ]);
-      expect(config.budget?.today?.amount).toBe(50);
 
       const sessionConfig = loadConfigFromCLI([
         "node",
@@ -110,5 +84,4 @@ describe("config", () => {
       expect(sessionConfig.budget?.session?.amount).toBeUndefined();
     });
   });
-
 });
