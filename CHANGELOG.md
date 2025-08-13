@@ -1,3 +1,10 @@
+## [1.2.1](https://github.com/Owloops/claude-powerline/compare/v1.2.0...v1.2.1) (2025-08-13)
+
+
+### Bug Fixes
+
+* skip external calls when segments disabled ([7544b72](https://github.com/Owloops/claude-powerline/commit/7544b7260a44d8f01ed25436d0334e047efbfa7d))
+
 # [1.2.0](https://github.com/Owloops/claude-powerline/compare/v1.1.15...v1.2.0) (2025-08-13)
 
 
