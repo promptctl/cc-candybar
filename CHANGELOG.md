@@ -1,3 +1,11 @@
+## [1.1.14](https://github.com/Owloops/claude-powerline/compare/v1.1.13...v1.1.14) (2025-08-13)
+
+
+### Bug Fixes
+
+* add claude interface screenshot with setup clarifications ([669c818](https://github.com/Owloops/claude-powerline/commit/669c818bf6066206512eeff55bba0db0d3f715c4))
+* usage flag now respects configuration priority order ([7656185](https://github.com/Owloops/claude-powerline/commit/76561854b58d0f655d61bbbf43e7eb4acc4b929c))
+
 ## [1.1.13](https://github.com/Owloops/claude-powerline/compare/v1.1.12...v1.1.13) (2025-08-12)
 
 
