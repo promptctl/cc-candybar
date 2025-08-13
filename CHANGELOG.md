@@ -1,3 +1,10 @@
+# [1.4.0](https://github.com/Owloops/claude-powerline/compare/v1.3.2...v1.4.0) (2025-08-13)
+
+
+### Features
+
+* add metrics segment with response time and burn rate calculations ([1c1a7b5](https://github.com/Owloops/claude-powerline/commit/1c1a7b5a39f8cac363e87286f999ae911662a7fc))
+
 ## [1.3.2](https://github.com/Owloops/claude-powerline/compare/v1.3.1...v1.3.2) (2025-08-13)
 
 
