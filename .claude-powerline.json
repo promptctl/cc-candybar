@@ -1,15 +1,15 @@
 {
-  "theme": "nord",
+  "theme": "dark",
   "display": {
-    "style": "minimal",
+    "style": "powerline",
     "lines": [
       {
         "segments": {
           "directory": { "enabled": true },
           "git": { "enabled": true, "showSha": false },
           "model": { "enabled": true },
-          "session": { "enabled": true, "type": "both" },
-          "tmux": { "enabled": true },
+          "session": { "enabled": true, "type": "tokens" },
+          "tmux": { "enabled": false },
           "context": { "enabled": true }
         }
       }

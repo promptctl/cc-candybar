@@ -3,18 +3,18 @@ import type { PowerlineColors } from "./themes";
 import type { PowerlineConfig, LineConfig } from "./config/loader";
 import { hexToAnsi, extractBgToFg } from "./utils/colors";
 import { getTheme } from "./themes";
-import { 
-  UsageProvider, 
-  UsageInfo, 
-  ContextProvider, 
-  ContextInfo, 
-  GitService, 
+import {
+  UsageProvider,
+  UsageInfo,
+  ContextProvider,
+  ContextInfo,
+  GitService,
   TmuxService,
   SegmentRenderer,
   PowerlineSymbols,
   AnySegmentConfig,
   GitSegmentConfig,
-  UsageSegmentConfig
+  UsageSegmentConfig,
 } from "./segments";
 
 export class PowerlineRenderer {
@@ -181,7 +181,8 @@ export class PowerlineRenderer {
       git_conflicts: "⚠",
       git_ahead: "↑",
       git_behind: "↓",
-      session_cost: "Session",
+      session_cost: "⊡",
+      context_time: "◷",
     };
   }
 

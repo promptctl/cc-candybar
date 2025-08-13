@@ -25,7 +25,11 @@ export type AnySegmentConfig =
   | TmuxSegmentConfig
   | ContextSegmentConfig;
 
-import { formatCost, formatTokens, formatTokenBreakdown } from "../utils/formatters";
+import {
+  formatCost,
+  formatTokens,
+  formatTokenBreakdown,
+} from "../utils/formatters";
 import { getBudgetStatus } from "../utils/budget";
 import type { UsageInfo, TokenBreakdown, GitInfo, ContextInfo } from ".";
 
@@ -39,6 +43,7 @@ export interface PowerlineSymbols {
   git_ahead: string;
   git_behind: string;
   session_cost: string;
+  context_time: string;
 }
 
 export interface SegmentData {
@@ -139,7 +144,13 @@ export class SegmentRenderer {
     sessionId: string | null,
     colors: PowerlineColors
   ): SegmentData | null {
-    if (!sessionId) return null;
+    if (!sessionId) {
+      return {
+        text: `tmux:none`,
+        bgColor: colors.tmuxBg,
+        fgColor: colors.tmuxFg,
+      };
+    }
 
     return {
       text: `tmux:${sessionId}`,
@@ -152,14 +163,20 @@ export class SegmentRenderer {
     contextInfo: ContextInfo | null,
     colors: PowerlineColors
   ): SegmentData | null {
-    if (!contextInfo) return null;
+    if (!contextInfo) {
+      return {
+        text: `${this.symbols.context_time} 0 (100%)`,
+        bgColor: colors.contextBg,
+        fgColor: colors.contextFg,
+      };
+    }
 
     const tokenDisplay = contextInfo.inputTokens.toLocaleString();
 
     const contextLeft = `${contextInfo.contextLeftPercentage}%`;
 
     return {
-      text: `⊡ ${tokenDisplay} (${contextLeft})`,
+      text: `${this.symbols.context_time} ${tokenDisplay} (${contextLeft})`,
       bgColor: colors.contextBg,
       fgColor: colors.contextFg,
     };
