@@ -1,5 +1,5 @@
-import { debug } from "./logger";
-import { readFileSync } from "fs";
+import { readFileSync } from "node:fs";
+import { debug } from "../utils/logger";
 
 export interface ContextInfo {
   inputTokens: number;
@@ -101,7 +101,7 @@ export class ContextProvider {
           Math.max(0, Math.round((contextLength / contextLimit) * 100))
         );
 
-        const usableLimit = Math.round(contextLimit * 0.75);
+        const usableLimit = Math.round(contextLimit * 0.8);
         const usablePercentage = Math.min(
           100,
           Math.max(0, Math.round((contextLength / usableLimit) * 100))

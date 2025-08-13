@@ -1,0 +1,208 @@
+import { readFile } from "node:fs/promises";
+import { existsSync } from "node:fs";
+import { join } from "node:path";
+import { homedir } from "node:os";
+import { debug } from "../utils/logger";
+import { PricingService } from "./pricing";
+
+export interface SessionUsageEntry {
+  timestamp: string;
+  message: {
+    usage: {
+      input_tokens: number;
+      output_tokens: number;
+      cache_creation_input_tokens?: number;
+      cache_read_input_tokens?: number;
+    };
+  };
+  costUSD?: number;
+}
+
+export interface SessionUsage {
+  totalCost: number;
+  entries: SessionUsageEntry[];
+}
+
+export interface TokenBreakdown {
+  input: number;
+  output: number;
+  cacheCreation: number;
+  cacheRead: number;
+}
+
+export interface SessionInfo {
+  cost: number | null;
+  tokens: number | null;
+  tokenBreakdown: TokenBreakdown | null;
+}
+
+export interface UsageInfo {
+  session: SessionInfo;
+}
+
+export class SessionProvider {
+  private getClaudePaths(): string[] {
+    const paths: string[] = [];
+    
+    const homeDir = homedir();
+    const defaultPath = join(homeDir, ".claude");
+    
+    if (existsSync(defaultPath)) {
+      paths.push(defaultPath);
+    }
+    
+    return paths;
+  }
+
+  private async findProjectPaths(claudePaths: string[]): Promise<string[]> {
+    const projectPaths: string[] = [];
+    
+    for (const claudePath of claudePaths) {
+      const projectsDir = join(claudePath, "projects");
+      
+      if (existsSync(projectsDir)) {
+        try {
+          const { readdir } = await import("node:fs/promises");
+          const entries = await readdir(projectsDir, { withFileTypes: true });
+          
+          for (const entry of entries) {
+            if (entry.isDirectory()) {
+              const projectPath = join(projectsDir, entry.name);
+              projectPaths.push(projectPath);
+            }
+          }
+        } catch (error) {
+          debug(`Failed to read projects directory ${projectsDir}:`, error);
+        }
+      }
+    }
+    
+    return projectPaths;
+  }
+
+  private async findTranscriptFile(sessionId: string): Promise<string | null> {
+    const claudePaths = this.getClaudePaths();
+    const projectPaths = await this.findProjectPaths(claudePaths);
+    
+    for (const projectPath of projectPaths) {
+      const transcriptPath = join(projectPath, `${sessionId}.jsonl`);
+      if (existsSync(transcriptPath)) {
+        return transcriptPath;
+      }
+    }
+    
+    return null;
+  }
+
+  async getSessionUsage(sessionId: string): Promise<SessionUsage | null> {
+    try {
+      const transcriptPath = await this.findTranscriptFile(sessionId);
+      if (!transcriptPath) {
+        debug(`No transcript found for session: ${sessionId}`);
+        return null;
+      }
+
+      debug(`Found transcript at: ${transcriptPath}`);
+      
+      const content = await readFile(transcriptPath, 'utf-8');
+      const lines = content.trim().split('\n').filter(line => line.trim());
+      
+      if (lines.length === 0) {
+        return { totalCost: 0, entries: [] };
+      }
+
+      const entries: SessionUsageEntry[] = [];
+      let totalCost = 0;
+
+      for (const line of lines) {
+        try {
+          const entry = JSON.parse(line) as Record<string, unknown>;
+          
+          if (entry.message && typeof entry.message === 'object') {
+            const message = entry.message as Record<string, unknown>;
+            if (message.usage && typeof message.usage === 'object') {
+              const sessionEntry: SessionUsageEntry = {
+                timestamp: (entry.timestamp as string) || new Date().toISOString(),
+                message: {
+                  usage: message.usage as SessionUsageEntry['message']['usage']
+                }
+              };
+
+              if (typeof entry.costUSD === 'number') {
+                sessionEntry.costUSD = entry.costUSD;
+                totalCost += entry.costUSD;
+              } else {
+                const cost = await PricingService.calculateCostForEntry(entry);
+                sessionEntry.costUSD = cost;
+                totalCost += cost;
+              }
+
+              entries.push(sessionEntry);
+            }
+          }
+        } catch (parseError) {
+          debug(`Failed to parse JSONL line: ${parseError}`);
+          continue;
+        }
+      }
+
+      debug(`Parsed ${entries.length} usage entries, total cost: $${totalCost.toFixed(4)}`);
+      return { totalCost, entries };
+
+    } catch (error) {
+      debug(`Error reading session usage for ${sessionId}:`, error);
+      return null;
+    }
+  }
+
+  calculateTokenBreakdown(entries: SessionUsageEntry[]): TokenBreakdown {
+    return entries.reduce(
+      (breakdown, entry) => ({
+        input: breakdown.input + (entry.message.usage.input_tokens || 0),
+        output: breakdown.output + (entry.message.usage.output_tokens || 0),
+        cacheCreation: breakdown.cacheCreation + (entry.message.usage.cache_creation_input_tokens || 0),
+        cacheRead: breakdown.cacheRead + (entry.message.usage.cache_read_input_tokens || 0),
+      }),
+      { input: 0, output: 0, cacheCreation: 0, cacheRead: 0 }
+    );
+  }
+
+  async getSessionInfo(sessionId: string): Promise<SessionInfo> {
+    const sessionUsage = await this.getSessionUsage(sessionId);
+    
+    if (!sessionUsage || sessionUsage.entries.length === 0) {
+      return { cost: null, tokens: null, tokenBreakdown: null };
+    }
+
+    const tokenBreakdown = this.calculateTokenBreakdown(sessionUsage.entries);
+    const totalTokens = tokenBreakdown.input + tokenBreakdown.output + 
+                       tokenBreakdown.cacheCreation + tokenBreakdown.cacheRead;
+
+    return {
+      cost: sessionUsage.totalCost,
+      tokens: totalTokens,
+      tokenBreakdown,
+    };
+  }
+}
+
+export class UsageProvider {
+  private sessionProvider = new SessionProvider();
+
+  async getUsageInfo(sessionId: string): Promise<UsageInfo> {
+    try {
+      debug(`Starting usage info retrieval for session: ${sessionId}`);
+      
+      const sessionInfo = await this.sessionProvider.getSessionInfo(sessionId);
+      
+      return {
+        session: sessionInfo,
+      };
+    } catch (error) {
+      debug(`Error getting usage info for session ${sessionId}:`, error);
+      return {
+        session: { cost: null, tokens: null, tokenBreakdown: null },
+      };
+    }
+  }
+}

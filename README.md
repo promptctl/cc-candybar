@@ -51,7 +51,7 @@
 ### Core Features
 
 - **Vim-style powerline** with proper arrows and segments
-- **Real-time usage tracking** with costs and tokens
+- **Real-time session tracking** with costs and tokens
 - **Context monitoring** showing tokens used and auto-compact threshold
 - **Git integration** with branch, status, ahead/behind counts
 
@@ -194,7 +194,7 @@ Configuration priority (top overrides bottom):
 > [!NOTE]  
 > Config files are reloaded automatically when changed - no need to restart Claude Code.
 
-### Enable Additional Segments
+### Available Segments
 
 ```json
 {
@@ -214,6 +214,15 @@ Configuration priority (top overrides bottom):
   }
 }
 ```
+
+### Segment Details
+
+- **directory**: Current working directory name
+- **git**: Branch, status (clean/dirty), ahead/behind counts, SHA (optional)
+- **model**: Current Claude model being used
+- **session**: Token usage and costs for current session
+- **context**: Context window usage and auto-compact threshold
+- **tmux**: Tmux session name and window info (when in tmux)
 
 ### Multi-line Layout (Optional)
 
@@ -335,7 +344,7 @@ export CLAUDE_POWERLINE_CONFIG=/path/to/config.json
 
 **Arrows not displaying?** Run `claude-powerline --install-fonts` and set terminal font to a powerline-patched font.
 
-**Cost showing N/A?** Verify [ccusage](https://github.com/ryanschneider/ccusage) is working and session ID matches.
+**Cost showing N/A?** Check that Claude session files are accessible in ~/.claude directory.
 
 **Tmux segment not showing?** Ensure you're in a tmux session and enable it in config.
 

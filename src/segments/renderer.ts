@@ -25,11 +25,9 @@ export type AnySegmentConfig =
   | TmuxSegmentConfig
   | ContextSegmentConfig;
 
-import { formatCost, formatTokens, formatTokenBreakdown } from "./formatters";
-import { getBudgetStatus } from "./budget";
-import type { UsageInfo, TokenBreakdown } from "./usage-provider";
-import type { GitInfo } from "./git-service";
-import type { ContextInfo } from "./context-provider";
+import { formatCost, formatTokens, formatTokenBreakdown } from "../utils/formatters";
+import { getBudgetStatus } from "../utils/budget";
+import type { UsageInfo, TokenBreakdown, GitInfo, ContextInfo } from ".";
 
 export interface PowerlineSymbols {
   right: string;

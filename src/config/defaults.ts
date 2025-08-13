@@ -14,7 +14,7 @@ export const DEFAULT_CONFIG: PowerlineConfig = {
           },
           model: { enabled: true },
           session: { enabled: true, type: "tokens" },
-          tmux: { enabled: false },
+          tmux: { enabled: true },
           context: { enabled: true },
         },
       },

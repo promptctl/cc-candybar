@@ -1,5 +1,5 @@
 import { execSync } from "node:child_process";
-import { debug } from "./logger";
+import { debug } from "../utils/logger";
 
 export class TmuxService {
   getSessionId(): string | null {

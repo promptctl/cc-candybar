@@ -8,7 +8,7 @@ import os from "node:os";
 import { json } from "node:stream/consumers";
 import { PowerlineRenderer } from "./powerline";
 import { loadConfigFromCLI } from "./config/loader";
-import { debug } from "./lib/logger";
+import { debug } from "./utils/logger";
 export interface ClaudeHookData {
   hook_event_name: string;
   session_id: string;

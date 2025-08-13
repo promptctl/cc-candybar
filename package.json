@@ -49,9 +49,7 @@
     "access": "public",
     "provenance": true
   },
-  "dependencies": {
-    "ccusage": "^15.9.5"
-  },
+  "dependencies": {},
   "devDependencies": {
     "@eslint/js": "^9.33.0",
     "@semantic-release/changelog": "^6.0.3",

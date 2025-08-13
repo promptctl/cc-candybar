@@ -1,18 +1,21 @@
 import type { ClaudeHookData } from "./index";
 import type { PowerlineColors } from "./themes";
 import type { PowerlineConfig, LineConfig } from "./config/loader";
-import type {
+import { hexToAnsi, extractBgToFg } from "./utils/colors";
+import { getTheme } from "./themes";
+import { 
+  UsageProvider, 
+  UsageInfo, 
+  ContextProvider, 
+  ContextInfo, 
+  GitService, 
+  TmuxService,
+  SegmentRenderer,
+  PowerlineSymbols,
   AnySegmentConfig,
   GitSegmentConfig,
-  UsageSegmentConfig,
-} from "./lib/segment-renderer";
-import { hexToAnsi, extractBgToFg } from "./lib/colors";
-import { getTheme } from "./themes";
-import { UsageProvider, UsageInfo } from "./lib/usage-provider";
-import { ContextProvider, ContextInfo } from "./lib/context-provider";
-import { GitService } from "./lib/git-service";
-import { TmuxService } from "./lib/tmux-service";
-import { SegmentRenderer, PowerlineSymbols } from "./lib/segment-renderer";
+  UsageSegmentConfig
+} from "./segments";
 
 export class PowerlineRenderer {
   private readonly symbols: PowerlineSymbols;

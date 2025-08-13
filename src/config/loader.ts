@@ -9,7 +9,7 @@ import type {
   UsageSegmentConfig,
   TmuxSegmentConfig,
   ContextSegmentConfig,
-} from "../lib/segment-renderer";
+} from "../segments/renderer";
 
 export interface LineConfig {
   segments: {

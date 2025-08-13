@@ -8,8 +8,8 @@
           "directory": { "enabled": true },
           "git": { "enabled": true, "showSha": false },
           "model": { "enabled": true },
-          "session": { "enabled": true, "type": "tokens" },
-          "tmux": { "enabled": false },
+          "session": { "enabled": true, "type": "both" },
+          "tmux": { "enabled": true },
           "context": { "enabled": true }
         }
       }
@@ -26,6 +26,6 @@
     }
   },
   "budget": {
-    "session": { "warningThreshold": 80 }
+    "session": { "warningThreshold": 80, "amount": 50 }
   }
 }
