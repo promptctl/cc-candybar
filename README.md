@@ -100,6 +100,13 @@ npx -y @owloops/claude-powerline --install-fonts
 > [!NOTE]  
 > Using `npx` automatically downloads and runs the latest version, ensuring you always have the newest features and fixes without manual updates.
 
+**Start a Claude session:** It appears at the bottom during conversations.
+
+![Claude Code with powerline](images/claude-interface-with-powerline.png)
+
+> [!TIP]  
+> The statusline shows your **current directory name** (not "claude powerline") and updates with live usage data during Claude conversations.
+
 ## Usage
 
 ```bash
