@@ -1,3 +1,10 @@
+## [1.4.1](https://github.com/Owloops/claude-powerline/compare/v1.4.0...v1.4.1) (2025-08-13)
+
+
+### Bug Fixes
+
+* improve metrics accuracy and directory/git context handling ([e722f46](https://github.com/Owloops/claude-powerline/commit/e722f467bc1a8b9f37588bb41341c63c60081edc))
+
 # [1.4.0](https://github.com/Owloops/claude-powerline/compare/v1.3.2...v1.4.0) (2025-08-13)
 
 
