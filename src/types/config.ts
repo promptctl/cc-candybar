@@ -72,6 +72,7 @@ export interface PowerlineConfig {
     custom: ColorTheme;
   };
   budget?: BudgetConfig;
+  usageType?: "cost" | "tokens" | "both" | "breakdown";
 }
 
 export interface ConfigLoadOptions {

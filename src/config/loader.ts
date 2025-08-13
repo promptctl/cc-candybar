@@ -99,28 +99,9 @@ function loadEnvConfig(): Partial<PowerlineConfig> {
       | "tokens"
       | "both"
       | "breakdown";
-    if (!config.display) {
-      config.display = { lines: [] };
+    if (["cost", "tokens", "both", "breakdown"].includes(usageType)) {
+      config.usageType = usageType;
     }
-
-    if (config.display.lines.length === 0) {
-      config.display.lines = [{ segments: {} }];
-    }
-
-    config.display.lines.forEach((line) => {
-      if (line.segments.session) {
-        line.segments.session.type = usageType;
-      }
-      if (line.segments.today) {
-        line.segments.today.type = usageType;
-      }
-      if (line.segments.block) {
-        line.segments.block.type =
-          usageType === "breakdown" || usageType === "both"
-            ? "cost"
-            : usageType;
-      }
-    });
   }
 
   return config;
@@ -204,28 +185,7 @@ function parseCLIOverrides(args: string[]): Partial<PowerlineConfig> {
       usageType &&
       ["cost", "tokens", "both", "breakdown"].includes(usageType)
     ) {
-      if (!config.display) {
-        config.display = { lines: [] };
-      }
-
-      if (config.display.lines.length === 0) {
-        config.display.lines = [{ segments: {} }];
-      }
-
-      config.display.lines.forEach((line) => {
-        if (line.segments.session) {
-          line.segments.session.type = usageType;
-        }
-        if (line.segments.today) {
-          line.segments.today.type = usageType;
-        }
-        if (line.segments.block) {
-          line.segments.block.type =
-            usageType === "breakdown" || usageType === "both"
-              ? "cost"
-              : usageType;
-        }
-      });
+      config.usageType = usageType;
     }
   }
 
@@ -271,6 +231,24 @@ export function loadConfig(options: ConfigLoadOptions = {}): PowerlineConfig {
   }
 
   config = deepMerge(config, cliOverrides);
+
+  if (config.usageType) {
+    config.display.lines.forEach((line) => {
+      if (line.segments.session) {
+        line.segments.session.type = config.usageType!;
+      }
+      if (line.segments.today) {
+        line.segments.today.type = config.usageType!;
+      }
+      if (line.segments.block) {
+        line.segments.block.type =
+          config.usageType === "breakdown" || config.usageType === "both"
+            ? "cost"
+            : config.usageType!;
+      }
+    });
+    delete config.usageType;
+  }
 
   return config;
 }
