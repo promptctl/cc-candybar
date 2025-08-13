@@ -1,3 +1,17 @@
+# [1.3.0](https://github.com/Owloops/claude-powerline/compare/v1.2.1...v1.3.0) (2025-08-13)
+
+
+### Bug Fixes
+
+* clean state visuals ([6706b32](https://github.com/Owloops/claude-powerline/commit/6706b32f3843d9223d6f68a40a89bda458f47b8d))
+* empty tokens test ([0dcf9eb](https://github.com/Owloops/claude-powerline/commit/0dcf9eb73ed884bef4facd4e2c7de56b32a5ab60))
+* restructure codebase with segments/utils folders, external pricing system, and improved session tracking without ccusage dependency ([39bc3d7](https://github.com/Owloops/claude-powerline/commit/39bc3d782fb6d41bf0b9837329cf2c28dffdaa0f))
+
+
+### Features
+
+* add context segment and reorganize types ([2fb3062](https://github.com/Owloops/claude-powerline/commit/2fb3062b888a93e6f96a06155c0336cc39e7ccd7))
+
 ## [1.2.1](https://github.com/Owloops/claude-powerline/compare/v1.2.0...v1.2.1) (2025-08-13)
 
 
