@@ -1,3 +1,10 @@
+## [1.3.2](https://github.com/Owloops/claude-powerline/compare/v1.3.1...v1.3.2) (2025-08-13)
+
+
+### Bug Fixes
+
+* filter pricing data to core models only ([eb5e5d5](https://github.com/Owloops/claude-powerline/commit/eb5e5d51f7d22a8a86d7389a3a2c69f1015823d7))
+
 ## [1.3.1](https://github.com/Owloops/claude-powerline/compare/v1.3.0...v1.3.1) (2025-08-13)
 
 
