@@ -1,6 +1,7 @@
 import { execSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
+import { debug } from "./logger";
 
 export interface GitInfo {
   branch: string;
@@ -57,7 +58,8 @@ export class GitService {
           timeout: 1000,
         }).trim() || null
       );
-    } catch {
+    } catch (error) {
+      debug(`Git branch command failed in ${workingDir}:`, error);
       return null;
     }
   }
@@ -81,7 +83,8 @@ export class GitService {
       }
 
       return "dirty";
-    } catch {
+    } catch (error) {
+      debug(`Git status command failed in ${workingDir}:`, error);
       return "clean";
     }
   }
@@ -107,7 +110,8 @@ export class GitService {
         ahead: parseInt(aheadResult) || 0,
         behind: parseInt(behindResult) || 0,
       };
-    } catch {
+    } catch (error) {
+      debug(`Git ahead/behind command failed in ${workingDir}:`, error);
       return { ahead: 0, behind: 0 };
     }
   }

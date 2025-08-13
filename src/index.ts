@@ -8,6 +8,7 @@ import os from "node:os";
 import { json } from "node:stream/consumers";
 import { PowerlineRenderer } from "./powerline";
 import { loadConfigFromCLI } from "./config/loader";
+import { debug } from "./lib/logger";
 import type { ClaudeHookData } from "./types";
 
 async function installFonts(): Promise<void> {
@@ -112,6 +113,9 @@ Standalone Commands:
   --install-fonts          Install powerline fonts to system
   -h, --help               Show this help
 
+Debugging:
+  CLAUDE_POWERLINE_DEBUG=1 Enable debug logging for troubleshooting
+
 Claude Code Options (for settings.json):
   --theme=THEME            Set theme: dark, light, nord, tokyo-night, rose-pine, custom
   --style=STYLE            Set separator style: minimal, powerline
@@ -163,6 +167,9 @@ To test output manually:
 echo '{"workspace":{"project_dir":"/path/to/project"},"session":{"id":"test","model":"claude"}}' | claude-powerline --style=powerline`);
       process.exit(1);
     }
+
+    debug(`Working directory: ${process.cwd()}`);
+    debug(`Process args:`, process.argv);
 
     const hookData = (await json(process.stdin)) as ClaudeHookData;
     if (!hookData) {

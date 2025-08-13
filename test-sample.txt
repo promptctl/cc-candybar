@@ -1,0 +1,1 @@
+CLAUDE_POWERLINE_DEBUG=1 echo '{"workspace":{"project_dir":"/Users/pgagnidze/Development/personal/owloops/claude-powerline"},"session":{"id":"test-session-123","model":"claude-3-5-sonnet-20241022"}}' | node dist/index.js --style=powerline

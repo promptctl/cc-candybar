@@ -6,6 +6,7 @@ import {
 } from "ccusage/data-loader";
 import { calculateTotals, getTotalTokens } from "ccusage/calculate-cost";
 import { logger } from "ccusage/logger";
+import { debug } from "./logger";
 
 export interface TokenBreakdown {
   input: number;
@@ -93,7 +94,10 @@ export class UsageProvider {
 
     try {
       const claudePaths = getClaudePaths();
+      debug(`Found ${claudePaths.length} Claude paths:`, claudePaths);
+
       if (claudePaths.length === 0) {
+        debug(`No Claude paths found, returning empty usage data`);
         return {
           session: { cost: null, tokens: null, tokenBreakdown: null },
           daily: { cost: 0, tokens: 0, tokenBreakdown: null },
@@ -121,11 +125,14 @@ export class UsageProvider {
 
   private async getSessionData(sessionId: string) {
     try {
+      debug(`Loading session data for ID: ${sessionId}`);
+
       const sessionData = await loadSessionUsageById(sessionId, {
         mode: "auto",
       });
 
       if (!sessionData) {
+        debug(`No session data found for ID: ${sessionId}`);
         return { cost: null, tokens: null, tokenBreakdown: null };
       }
 
@@ -154,7 +161,8 @@ export class UsageProvider {
         tokens: totalTokens,
         tokenBreakdown: breakdown,
       };
-    } catch {
+    } catch (error) {
+      debug(`Error loading session data for ID ${sessionId}:`, error);
       return { cost: null, tokens: null, tokenBreakdown: null };
     }
   }
@@ -164,6 +172,8 @@ export class UsageProvider {
       const today = new Date();
       const todayStr =
         today.toISOString().split("T")[0]?.replace(/-/g, "") ?? "";
+
+      debug(`Loading daily data for date: ${todayStr}`);
 
       const dailyData = await loadDailyUsageData({
         since: todayStr,
@@ -193,7 +203,8 @@ export class UsageProvider {
         tokens: getTotalTokens(totals),
         tokenBreakdown: breakdown,
       };
-    } catch {
+    } catch (error) {
+      debug(`Error loading daily usage data:`, error);
       return { cost: 0, tokens: 0, tokenBreakdown: null };
     }
   }
