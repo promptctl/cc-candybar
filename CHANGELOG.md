@@ -1,3 +1,10 @@
+## [1.4.4](https://github.com/Owloops/claude-powerline/compare/v1.4.3...v1.4.4) (2025-08-14)
+
+
+### Bug Fixes
+
+* simplify config loader and add comprehensive tests ([3e61806](https://github.com/Owloops/claude-powerline/commit/3e618068efde80c16e7f175f9d9cae8f22c1708a))
+
 ## [1.4.3](https://github.com/Owloops/claude-powerline/compare/v1.4.2...v1.4.3) (2025-08-14)
 
 
