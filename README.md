@@ -517,21 +517,7 @@ export CLAUDE_POWERLINE_THEME=dark
 export CLAUDE_POWERLINE_STYLE=powerline
 export CLAUDE_POWERLINE_USAGE_TYPE=tokens
 export CLAUDE_POWERLINE_CONFIG=/path/to/config.json
-```
-
-## Troubleshooting
-
-**Arrows not displaying?** Run `claude-powerline --install-fonts` and set terminal font to a powerline-patched font.
-
-**Cost showing N/A?** Check that Claude session files are accessible in ~/.claude directory.
-
-**Tmux segment not showing?** Ensure you're in a tmux session and enable it in config.
-
-**Debug logging:** Enable debug output to troubleshoot issues:
-
-```bash
-export CLAUDE_POWERLINE_DEBUG=1
-# Then use Claude Code normally - debug info will appear in stderr
+export CLAUDE_POWERLINE_DEBUG=1  # Enable debug logging
 ```
 
 ## Contributing
