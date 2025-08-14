@@ -124,7 +124,7 @@ describe("Core Functionality", () => {
   });
 
   describe("Context Calculation", () => {
-    it("should calculate context usage", () => {
+    it("should calculate context usage", async () => {
       const transcript = [
         '{"timestamp":"2024-01-01T10:00:00Z","message":{"usage":{"input_tokens":10000,"cache_read_input_tokens":5000}},"isSidechain":false}',
       ].join("\n");
@@ -134,7 +134,7 @@ describe("Core Functionality", () => {
 
       const { ContextProvider } = require("../src/segments/context");
       const contextProvider = new ContextProvider();
-      const result = contextProvider.calculateContextTokens(transcriptPath);
+      const result = await contextProvider.calculateContextTokens(transcriptPath);
 
       expect(result).toBeDefined();
       expect(result.inputTokens).toBe(15000);

@@ -1,7 +1,10 @@
-import { readFile } from "node:fs/promises";
 import { debug } from "../utils/logger";
 import { PricingService } from "./pricing";
-import { findTranscriptFile } from "../utils/claude";
+import {
+  findTranscriptFile,
+  parseJsonlFile,
+  type ParsedEntry,
+} from "../utils/claude";
 
 export interface SessionUsageEntry {
   timestamp: string;
@@ -38,8 +41,23 @@ export interface UsageInfo {
   session: SessionInfo;
 }
 
-export class SessionProvider {
+function convertToSessionEntry(entry: ParsedEntry): SessionUsageEntry {
+  return {
+    timestamp: entry.timestamp.toISOString(),
+    message: {
+      usage: {
+        input_tokens: entry.message?.usage?.input_tokens || 0,
+        output_tokens: entry.message?.usage?.output_tokens || 0,
+        cache_creation_input_tokens:
+          entry.message?.usage?.cache_creation_input_tokens,
+        cache_read_input_tokens: entry.message?.usage?.cache_read_input_tokens,
+      },
+    },
+    costUSD: entry.costUSD,
+  };
+}
 
+export class SessionProvider {
   async getSessionUsage(sessionId: string): Promise<SessionUsage | null> {
     try {
       const transcriptPath = await findTranscriptFile(sessionId);
@@ -49,52 +67,36 @@ export class SessionProvider {
       }
 
       debug(`Found transcript at: ${transcriptPath}`);
-      
-      const content = await readFile(transcriptPath, 'utf-8');
-      const lines = content.trim().split('\n').filter(line => line.trim());
-      
-      if (lines.length === 0) {
+
+      const parsedEntries = await parseJsonlFile(transcriptPath);
+
+      if (parsedEntries.length === 0) {
         return { totalCost: 0, entries: [] };
       }
 
       const entries: SessionUsageEntry[] = [];
       let totalCost = 0;
 
-      for (const line of lines) {
-        try {
-          const entry = JSON.parse(line) as Record<string, unknown>;
-          
-          if (entry.message && typeof entry.message === 'object') {
-            const message = entry.message as Record<string, unknown>;
-            if (message.usage && typeof message.usage === 'object') {
-              const sessionEntry: SessionUsageEntry = {
-                timestamp: (entry.timestamp as string) || new Date().toISOString(),
-                message: {
-                  usage: message.usage as SessionUsageEntry['message']['usage']
-                }
-              };
+      for (const entry of parsedEntries) {
+        if (entry.message?.usage) {
+          const sessionEntry = convertToSessionEntry(entry);
 
-              if (typeof entry.costUSD === 'number') {
-                sessionEntry.costUSD = entry.costUSD;
-                totalCost += entry.costUSD;
-              } else {
-                const cost = await PricingService.calculateCostForEntry(entry);
-                sessionEntry.costUSD = cost;
-                totalCost += cost;
-              }
-
-              entries.push(sessionEntry);
-            }
+          if (sessionEntry.costUSD !== undefined) {
+            totalCost += sessionEntry.costUSD;
+          } else {
+            const cost = await PricingService.calculateCostForEntry(entry.raw);
+            sessionEntry.costUSD = cost;
+            totalCost += cost;
           }
-        } catch (parseError) {
-          debug(`Failed to parse JSONL line: ${parseError}`);
-          continue;
+
+          entries.push(sessionEntry);
         }
       }
 
-      debug(`Parsed ${entries.length} usage entries, total cost: $${totalCost.toFixed(4)}`);
+      debug(
+        `Parsed ${entries.length} usage entries, total cost: $${totalCost.toFixed(4)}`
+      );
       return { totalCost, entries };
-
     } catch (error) {
       debug(`Error reading session usage for ${sessionId}:`, error);
       return null;
@@ -106,8 +108,12 @@ export class SessionProvider {
       (breakdown, entry) => ({
         input: breakdown.input + (entry.message.usage.input_tokens || 0),
         output: breakdown.output + (entry.message.usage.output_tokens || 0),
-        cacheCreation: breakdown.cacheCreation + (entry.message.usage.cache_creation_input_tokens || 0),
-        cacheRead: breakdown.cacheRead + (entry.message.usage.cache_read_input_tokens || 0),
+        cacheCreation:
+          breakdown.cacheCreation +
+          (entry.message.usage.cache_creation_input_tokens || 0),
+        cacheRead:
+          breakdown.cacheRead +
+          (entry.message.usage.cache_read_input_tokens || 0),
       }),
       { input: 0, output: 0, cacheCreation: 0, cacheRead: 0 }
     );
@@ -115,14 +121,17 @@ export class SessionProvider {
 
   async getSessionInfo(sessionId: string): Promise<SessionInfo> {
     const sessionUsage = await this.getSessionUsage(sessionId);
-    
+
     if (!sessionUsage || sessionUsage.entries.length === 0) {
       return { cost: null, tokens: null, tokenBreakdown: null };
     }
 
     const tokenBreakdown = this.calculateTokenBreakdown(sessionUsage.entries);
-    const totalTokens = tokenBreakdown.input + tokenBreakdown.output + 
-                       tokenBreakdown.cacheCreation + tokenBreakdown.cacheRead;
+    const totalTokens =
+      tokenBreakdown.input +
+      tokenBreakdown.output +
+      tokenBreakdown.cacheCreation +
+      tokenBreakdown.cacheRead;
 
     return {
       cost: sessionUsage.totalCost,
@@ -138,9 +147,9 @@ export class UsageProvider {
   async getUsageInfo(sessionId: string): Promise<UsageInfo> {
     try {
       debug(`Starting usage info retrieval for session: ${sessionId}`);
-      
+
       const sessionInfo = await this.sessionProvider.getSessionInfo(sessionId);
-      
+
       return {
         session: sessionInfo,
       };

@@ -26,13 +26,23 @@ export interface MetricsSegmentConfig extends SegmentConfig {
   showTokenBurnRate?: boolean;
 }
 
+export interface BlockSegmentConfig extends SegmentConfig {
+  type: "cost" | "tokens" | "both" | "time";
+}
+
+export interface TodaySegmentConfig extends SegmentConfig {
+  type: "cost" | "tokens" | "both" | "breakdown";
+}
+
 export type AnySegmentConfig =
   | SegmentConfig
   | GitSegmentConfig
   | UsageSegmentConfig
   | TmuxSegmentConfig
   | ContextSegmentConfig
-  | MetricsSegmentConfig;
+  | MetricsSegmentConfig
+  | BlockSegmentConfig
+  | TodaySegmentConfig;
 
 import {
   formatCost,
@@ -47,6 +57,8 @@ import type {
   ContextInfo,
   MetricsInfo,
 } from ".";
+import type { BlockInfo } from "./block";
+import type { TodayInfo } from "./today";
 
 export interface PowerlineSymbols {
   right: string;
@@ -58,6 +70,8 @@ export interface PowerlineSymbols {
   git_ahead: string;
   git_behind: string;
   session_cost: string;
+  block_cost: string;
+  today_cost: string;
   context_time: string;
   metrics_response: string;
   metrics_duration: string;
@@ -269,6 +283,73 @@ export class SegmentRenderer {
       text: parts.join(" "),
       bgColor: colors.metricsBg,
       fgColor: colors.metricsFg,
+    };
+  }
+
+  renderBlock(
+    blockInfo: BlockInfo,
+    colors: PowerlineColors,
+    type = "cost"
+  ): SegmentData {
+    let displayText: string;
+
+    if (blockInfo.cost === null && blockInfo.tokens === null) {
+      displayText = "No active block";
+    } else {
+      // Always include time remaining when available
+      const timeStr = blockInfo.timeRemaining !== null 
+        ? (() => {
+            const hours = Math.floor(blockInfo.timeRemaining / 60);
+            const minutes = blockInfo.timeRemaining % 60;
+            return hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`;
+          })()
+        : null;
+
+      switch (type) {
+        case "cost":
+          displayText = timeStr 
+            ? `${formatCost(blockInfo.cost)} (${timeStr} left)`
+            : formatCost(blockInfo.cost);
+          break;
+        case "tokens":
+          displayText = timeStr
+            ? `${formatTokens(blockInfo.tokens)} (${timeStr} left)`
+            : formatTokens(blockInfo.tokens);
+          break;
+        default:
+          // Default to cost display
+          displayText = timeStr 
+            ? `${formatCost(blockInfo.cost)} (${timeStr} left)`
+            : formatCost(blockInfo.cost);
+      }
+    }
+
+    return {
+      text: `${this.symbols.block_cost} ${displayText}`,
+      bgColor: colors.blockBg,
+      fgColor: colors.blockFg,
+    };
+  }
+
+  renderToday(
+    todayInfo: TodayInfo,
+    colors: PowerlineColors,
+    type = "cost"
+  ): SegmentData {
+    const todayBudget = this.config.budget?.today;
+    const text = `${this.symbols.today_cost} ${this.formatUsageWithBudget(
+      todayInfo.cost,
+      todayInfo.tokens,
+      todayInfo.tokenBreakdown,
+      type,
+      todayBudget?.amount,
+      todayBudget?.warningThreshold
+    )}`;
+
+    return {
+      text,
+      bgColor: colors.todayBg,
+      fgColor: colors.todayFg,
     };
   }
 

@@ -14,6 +14,8 @@ export const DEFAULT_CONFIG: PowerlineConfig = {
           },
           model: { enabled: true },
           session: { enabled: true, type: "tokens" },
+          today: { enabled: false, type: "cost" },
+          block: { enabled: true, type: "cost" },
           tmux: { enabled: false },
           context: { enabled: true },
           metrics: { enabled: false },
@@ -24,6 +26,10 @@ export const DEFAULT_CONFIG: PowerlineConfig = {
   budget: {
     session: {
       warningThreshold: 80,
+    },
+    today: {
+      warningThreshold: 80,
+      amount: 50,
     },
   },
 };

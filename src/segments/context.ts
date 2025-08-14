@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { debug } from "../utils/logger";
+import { parseJsonlFile, type ParsedEntry } from "../utils/claude";
 
 export interface ContextInfo {
   inputTokens: number;
@@ -13,18 +14,6 @@ export interface ContextInfo {
 interface ContextUsageThresholds {
   LOW: number;
   MEDIUM: number;
-}
-
-interface TranscriptEntry {
-  message?: {
-    usage?: {
-      input_tokens?: number;
-      cache_read_input_tokens?: number;
-      cache_creation_input_tokens?: number;
-    };
-  };
-  isSidechain?: boolean;
-  timestamp?: string;
 }
 
 export class ContextProvider {
@@ -41,46 +30,45 @@ export class ContextProvider {
     return 200000;
   }
 
-  calculateContextTokens(
+  async calculateContextTokens(
     transcriptPath: string,
     modelId?: string
-  ): ContextInfo | null {
+  ): Promise<ContextInfo | null> {
     try {
       debug(`Calculating context tokens from transcript: ${transcriptPath}`);
 
-      const content = readFileSync(transcriptPath, "utf-8");
-      if (!content) {
-        debug("Transcript file is empty");
+      try {
+        const content = readFileSync(transcriptPath, "utf-8");
+        if (!content) {
+          debug("Transcript file is empty");
+          return null;
+        }
+      } catch {
+        debug("Could not read transcript file");
         return null;
       }
 
-      const lines = content.trim().split("\n");
-      if (lines.length === 0) {
-        debug("No lines in transcript");
+      const parsedEntries = await parseJsonlFile(transcriptPath);
+
+      if (parsedEntries.length === 0) {
+        debug("No entries in transcript");
         return null;
       }
 
-      let mostRecentEntry: TranscriptEntry | null = null;
-      let mostRecentTime = 0;
+      let mostRecentEntry: ParsedEntry | null = null;
 
-      for (const line of lines) {
-        if (!line.trim()) continue;
+      for (let i = parsedEntries.length - 1; i >= 0; i--) {
+        const entry = parsedEntries[i];
+        if (!entry) continue;
 
-        try {
-          const entry: TranscriptEntry = JSON.parse(line);
+        if (!entry.message?.usage?.input_tokens) continue;
+        if (entry.isSidechain === true) continue;
 
-          if (!entry.message?.usage?.input_tokens) continue;
-
-          if (entry.isSidechain === true) continue;
-
-          if (!entry.timestamp) continue;
-
-          const entryTime = new Date(entry.timestamp).getTime();
-          if (entryTime > mostRecentTime) {
-            mostRecentTime = entryTime;
-            mostRecentEntry = entry;
-          }
-        } catch {}
+        mostRecentEntry = entry;
+        debug(
+          `Context segment: Found most recent entry at ${entry.timestamp.toISOString()}, stopping search`
+        );
+        break;
       }
 
       if (mostRecentEntry?.message?.usage) {

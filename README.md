@@ -52,6 +52,8 @@
 
 - **Vim-style powerline** with proper arrows and segments
 - **Real-time session tracking** with costs and tokens
+- **Billing window tracking** with 5-hour block usage
+- **Daily usage monitoring** with budget alerts
 - **Performance metrics** with response times and burn rates
 - **Context monitoring** showing tokens used and auto-compact threshold
 - **Git integration** with branch, status, ahead/behind counts
@@ -144,7 +146,7 @@ Options are specified by command line flags. Overall configuration can also use 
 ### Default Configuration
 
 ```bash
-# Shows directory, git, model, session usage (tokens), context info
+# Shows directory, git, model, session usage (tokens), block usage, context info
 # Uses dark theme, minimal style
 claude-powerline
 ```
@@ -209,6 +211,8 @@ Configuration priority (top overrides bottom):
           "git": { "enabled": true, "showSha": true },
           "model": { "enabled": true },
           "session": { "enabled": true, "type": "tokens" },
+          "block": { "enabled": true, "type": "cost" },
+          "today": { "enabled": true, "type": "cost" },
           "context": { "enabled": true },
           "tmux": { "enabled": true },
           "metrics": { 
@@ -232,6 +236,8 @@ Configuration priority (top overrides bottom):
 - **git**: Branch, status (clean/dirty), ahead/behind counts, SHA (optional)
 - **model**: Current Claude model being used
 - **session**: Token usage and costs for current session
+- **block**: Usage within current 5-hour billing window
+- **today**: Total daily usage with budget monitoring
 - **context**: Context window usage and auto-compact threshold
 - **tmux**: Tmux session name and window info (when in tmux)
 - **metrics**: Performance analytics (response time, session duration, message count, burn rates)
@@ -261,6 +267,69 @@ The metrics segment displays performance analytics from your Claude sessions:
 
 ![Metrics Segment Example](images/claude-powerline-metrics.png)
 
+#### Usage Segments Configuration
+
+The powerline includes three complementary usage segments:
+
+```json
+{
+  "segments": {
+    "session": { "enabled": true, "type": "tokens" },
+    "block": { "enabled": true, "type": "cost" },
+    "today": { "enabled": true, "type": "cost" }
+  },
+  "budget": {
+    "session": { "amount": 10.0, "warningThreshold": 80 },
+    "today": { "amount": 25.0, "warningThreshold": 80 }
+  }
+}
+```
+
+**Segment Types:**
+
+- **session**: Real-time usage for current Claude conversation
+- **block**: Usage within current 5-hour billing window (Claude's rate limit period)
+- **today**: Total daily usage with budget monitoring
+
+**Display Options:**
+
+**Session & Today segments:**
+- `cost`: Show dollar amounts (`$0.05`)
+- `tokens`: Show token counts (`1.2K tokens`)
+- `both`: Show both (`$0.05 (1.2K)`)
+- `breakdown`: Show token breakdown (`1.2Kin + 0.8Kout + 1.5Kcached`)
+
+**Block segment** (always shows time remaining):
+- `cost`: Show cost + time (`$0.05 (2h 30m left)`)
+- `tokens`: Show tokens + time (`1.2K tokens (2h 30m left)`)
+
+**Budget Configuration:**
+
+```json
+"budget": {
+  "session": {
+    "amount": 10.0,
+    "warningThreshold": 80
+  },
+  "today": {
+    "amount": 25.0, 
+    "warningThreshold": 80
+  }
+}
+```
+
+**Budget Indicators:**
+
+- `25%` Normal (under 50%)
+- `+75%` Moderate (50-79%)
+- `!85%` Warning (80%+)
+
+**Why Use Different Segments?**
+
+- **session**: Track spending per conversation  
+- **block**: Monitor rate limits with time remaining (Claude throttles after 5-hour usage peaks)
+- **today**: Stay within daily budgets
+
 ### Multi-line Layout (Optional)
 
 To prevent segment cutoff, configure multiple lines:
@@ -279,6 +348,8 @@ To prevent segment cutoff, configure multiple lines:
       {
         "segments": {
           "session": { "enabled": true, "type": "tokens" },
+          "block": { "enabled": true, "type": "cost" },
+          "today": { "enabled": true, "type": "cost" },
           "context": { "enabled": true },
           "tmux": { "enabled": false },
           "metrics": { "enabled": true }
@@ -305,6 +376,8 @@ To customize colors, copy dark or light theme colors from `src/themes/` in the r
       "git": { "bg": "#0066cc", "fg": "#ffffff" },
       "model": { "bg": "#9900cc", "fg": "#ffffff" },
       "session": { "bg": "#cc0099", "fg": "#ffffff" },
+      "block": { "bg": "#404040", "fg": "#cccccc" },
+      "today": { "bg": "#303030", "fg": "#dddddd" },
       "context": { "bg": "#4a5568", "fg": "#ffffff" },
       "tmux": { "bg": "#228b22", "fg": "#ffffff" },
       "metrics": { "bg": "#374151", "fg": "#ffffff" }

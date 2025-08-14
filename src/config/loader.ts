@@ -10,6 +10,8 @@ import type {
   TmuxSegmentConfig,
   ContextSegmentConfig,
   MetricsSegmentConfig,
+  BlockSegmentConfig,
+  TodaySegmentConfig,
 } from "../segments/renderer";
 
 export interface LineConfig {
@@ -18,6 +20,8 @@ export interface LineConfig {
     git?: GitSegmentConfig;
     model?: SegmentConfig;
     session?: UsageSegmentConfig;
+    block?: BlockSegmentConfig;
+    today?: TodaySegmentConfig;
     tmux?: TmuxSegmentConfig;
     context?: ContextSegmentConfig;
     metrics?: MetricsSegmentConfig;
@@ -36,6 +40,7 @@ export interface BudgetItemConfig {
 
 export interface BudgetConfig {
   session?: BudgetItemConfig;
+  today?: BudgetItemConfig;
 }
 
 export interface PowerlineConfig {

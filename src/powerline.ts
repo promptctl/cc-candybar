@@ -18,11 +18,17 @@ import {
   GitSegmentConfig,
   UsageSegmentConfig,
   MetricsSegmentConfig,
+  BlockSegmentConfig,
+  TodaySegmentConfig,
 } from "./segments";
+import { BlockProvider, BlockInfo } from "./segments/block";
+import { TodayProvider, TodayInfo } from "./segments/today";
 
 export class PowerlineRenderer {
   private readonly symbols: PowerlineSymbols;
   private readonly usageProvider: UsageProvider;
+  private readonly blockProvider: BlockProvider;
+  private readonly todayProvider: TodayProvider;
   private readonly contextProvider: ContextProvider;
   private readonly gitService: GitService;
   private readonly tmuxService: TmuxService;
@@ -32,6 +38,8 @@ export class PowerlineRenderer {
   constructor(private readonly config: PowerlineConfig) {
     this.symbols = this.initializeSymbols();
     this.usageProvider = new UsageProvider();
+    this.blockProvider = new BlockProvider();
+    this.todayProvider = new TodayProvider();
     this.contextProvider = new ContextProvider();
     this.gitService = new GitService();
     this.tmuxService = new TmuxService();
@@ -67,13 +75,33 @@ export class PowerlineRenderer {
     );
   }
 
+  private needsBlockInfo(): boolean {
+    return this.config.display.lines.some(
+      (line) => line.segments.block?.enabled
+    );
+  }
+
+  private needsTodayInfo(): boolean {
+    return this.config.display.lines.some(
+      (line) => line.segments.today?.enabled
+    );
+  }
+
   async generateStatusline(hookData: ClaudeHookData): Promise<string> {
     const usageInfo = this.needsUsageInfo()
       ? await this.usageProvider.getUsageInfo(hookData.session_id)
       : null;
 
+    const blockInfo = this.needsBlockInfo()
+      ? await this.blockProvider.getActiveBlockInfo()
+      : null;
+
+    const todayInfo = this.needsTodayInfo()
+      ? await this.todayProvider.getTodayInfo()
+      : null;
+
     const contextInfo = this.needsContextInfo()
-      ? this.contextProvider.calculateContextTokens(
+      ? await this.contextProvider.calculateContextTokens(
           hookData.transcript_path,
           hookData.model?.id
         )
@@ -89,6 +117,8 @@ export class PowerlineRenderer {
           lineConfig,
           hookData,
           usageInfo,
+          blockInfo,
+          todayInfo,
           contextInfo,
           metricsInfo
         )
@@ -102,6 +132,8 @@ export class PowerlineRenderer {
     lineConfig: LineConfig,
     hookData: ClaudeHookData,
     usageInfo: UsageInfo | null,
+    blockInfo: BlockInfo | null,
+    todayInfo: TodayInfo | null,
     contextInfo: ContextInfo | null,
     metricsInfo: MetricsInfo | null
   ): string {
@@ -130,6 +162,8 @@ export class PowerlineRenderer {
         segment,
         hookData,
         usageInfo,
+        blockInfo,
+        todayInfo,
         contextInfo,
         metricsInfo,
         colors,
@@ -153,6 +187,8 @@ export class PowerlineRenderer {
     segment: { type: string; config: AnySegmentConfig },
     hookData: ClaudeHookData,
     usageInfo: UsageInfo | null,
+    blockInfo: BlockInfo | null,
+    todayInfo: TodayInfo | null,
     contextInfo: ContextInfo | null,
     metricsInfo: MetricsInfo | null,
     colors: PowerlineColors,
@@ -202,6 +238,18 @@ export class PowerlineRenderer {
           metricsConfig
         );
 
+      case "block":
+        if (!blockInfo) return null;
+        const blockType =
+          (segment.config as BlockSegmentConfig)?.type || "cost";
+        return this.segmentRenderer.renderBlock(blockInfo, colors, blockType);
+
+      case "today":
+        if (!todayInfo) return null;
+        const todayType =
+          (segment.config as TodaySegmentConfig)?.type || "cost";
+        return this.segmentRenderer.renderToday(todayInfo, colors, todayType);
+
       default:
         return null;
     }
@@ -220,6 +268,8 @@ export class PowerlineRenderer {
       git_ahead: "↑",
       git_behind: "↓",
       session_cost: "⊡",
+      block_cost: "⏲",
+      today_cost: "⊙",
       context_time: "◷",
       metrics_response: "⧖",
       metrics_duration: "⧗",
@@ -259,6 +309,10 @@ export class PowerlineRenderer {
       modelFg: hexToAnsi(colorTheme.model.fg, false),
       sessionBg: hexToAnsi(colorTheme.session.bg, true),
       sessionFg: hexToAnsi(colorTheme.session.fg, false),
+      blockBg: hexToAnsi(colorTheme.block.bg, true),
+      blockFg: hexToAnsi(colorTheme.block.fg, false),
+      todayBg: hexToAnsi(colorTheme.today.bg, true),
+      todayFg: hexToAnsi(colorTheme.today.fg, false),
       tmuxBg: hexToAnsi(colorTheme.tmux.bg, true),
       tmuxFg: hexToAnsi(colorTheme.tmux.fg, false),
       contextBg: hexToAnsi(colorTheme.context.bg, true),
@@ -281,6 +335,10 @@ export class PowerlineRenderer {
         return colors.modelBg;
       case "session":
         return colors.sessionBg;
+      case "block":
+        return colors.blockBg;
+      case "today":
+        return colors.todayBg;
       case "tmux":
         return colors.tmuxBg;
       case "context":

@@ -16,4 +16,6 @@ export {
   GitSegmentConfig,
   UsageSegmentConfig,
   MetricsSegmentConfig,
+  BlockSegmentConfig,
+  TodaySegmentConfig,
 } from "./renderer";
