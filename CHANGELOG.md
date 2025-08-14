@@ -1,3 +1,10 @@
+# [1.5.0](https://github.com/Owloops/claude-powerline/compare/v1.4.5...v1.5.0) (2025-08-14)
+
+
+### Features
+
+* add today and block usage segments with timezone fixes ([fa2e552](https://github.com/Owloops/claude-powerline/commit/fa2e55225bb8a054b3281ff8c0064a83068bc4c5))
+
 ## [1.4.5](https://github.com/Owloops/claude-powerline/compare/v1.4.4...v1.4.5) (2025-08-14)
 
 
