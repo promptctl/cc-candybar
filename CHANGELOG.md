@@ -1,3 +1,11 @@
+## [1.5.3](https://github.com/Owloops/claude-powerline/compare/v1.5.2...v1.5.3) (2025-08-14)
+
+
+### Bug Fixes
+
+* resolve cost calculation discrepancies and move burn rates to block segment ([bc0eb51](https://github.com/Owloops/claude-powerline/commit/bc0eb511381d3c045057023ab3b2b56a77bdf6ee))
+* update test expectations for dynamic block time calculations ([a209ed0](https://github.com/Owloops/claude-powerline/commit/a209ed0ad6efffa8017dfbb633264aeb0324cfce))
+
 ## [1.5.2](https://github.com/Owloops/claude-powerline/compare/v1.5.1...v1.5.2) (2025-08-14)
 
 
