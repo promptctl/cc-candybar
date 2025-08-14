@@ -1,3 +1,10 @@
+## [1.5.1](https://github.com/Owloops/claude-powerline/compare/v1.5.0...v1.5.1) (2025-08-14)
+
+
+### Bug Fixes
+
+* streamline documentation by removing unused troubleshooting section ([d5272ee](https://github.com/Owloops/claude-powerline/commit/d5272ee85788338ab0f339d453ce8fb0698dac4f))
+
 # [1.5.0](https://github.com/Owloops/claude-powerline/compare/v1.4.5...v1.5.0) (2025-08-14)
 
 
