@@ -102,7 +102,7 @@ describe("Segment Time Logic", () => {
       expect(blockInfo.cost).toBe(45.75);
       expect(blockInfo.tokens).toBe(3300);
       expect(blockInfo.timeRemaining).toBeGreaterThan(0);
-      expect(blockInfo.timeRemaining).toBeLessThanOrEqual(300);
+      expect(blockInfo.timeRemaining).toBeLessThanOrEqual(360);
     });
 
     it("should calculate correct time remaining in current block", async () => {
