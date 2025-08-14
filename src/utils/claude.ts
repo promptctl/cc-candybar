@@ -143,6 +143,7 @@ export async function getFileModificationDate(
 export interface ParsedEntry {
   timestamp: Date;
   message?: {
+    id?: string;
     usage?: {
       input_tokens?: number;
       output_tokens?: number;
@@ -154,6 +155,24 @@ export interface ParsedEntry {
   costUSD?: number;
   isSidechain?: boolean;
   raw: Record<string, unknown>;
+}
+
+export function createUniqueHash(entry: ParsedEntry): string | null {
+  const messageId =
+    entry.message?.id ||
+    (typeof entry.raw.message === "object" &&
+    entry.raw.message !== null &&
+    "id" in entry.raw.message
+      ? (entry.raw.message.id as string)
+      : undefined);
+  const requestId =
+    "requestId" in entry.raw ? (entry.raw.requestId as string) : undefined;
+
+  if (!messageId || !requestId) {
+    return null;
+  }
+
+  return `${messageId}:${requestId}`;
 }
 
 export async function parseJsonlFile(filePath: string): Promise<ParsedEntry[]> {
@@ -200,6 +219,7 @@ export async function loadEntriesFromProjects(
   const entries: ParsedEntry[] = [];
   const claudePaths = getClaudePaths();
   const projectPaths = await findProjectPaths(claudePaths);
+  const processedHashes = new Set<string>();
 
   const allFiles: string[] = [];
   for (const projectPath of projectPaths) {
@@ -241,6 +261,16 @@ export async function loadEntriesFromProjects(
   for (const filePath of allFiles) {
     const fileEntries = await parseJsonlFile(filePath);
     for (const entry of fileEntries) {
+      const uniqueHash = createUniqueHash(entry);
+      if (uniqueHash && processedHashes.has(uniqueHash)) {
+        debug(`Skipping duplicate entry: ${uniqueHash}`);
+        continue;
+      }
+
+      if (uniqueHash) {
+        processedHashes.add(uniqueHash);
+      }
+
       if (!timeFilter || timeFilter(entry)) {
         entries.push(entry);
       }

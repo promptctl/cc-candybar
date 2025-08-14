@@ -25,7 +25,7 @@ export const DEFAULT_CONFIG: PowerlineConfig = {
           model: { enabled: true },
           session: { enabled: true, type: "tokens" },
           today: { enabled: false, type: "cost" },
-          block: { enabled: true, type: "cost" },
+          block: { enabled: true, type: "cost", burnType: "cost" },
           tmux: { enabled: false },
           context: { enabled: true },
           metrics: { 
@@ -34,8 +34,6 @@ export const DEFAULT_CONFIG: PowerlineConfig = {
             showLastResponseTime: false,
             showDuration: true,
             showMessageCount: true,
-            showCostBurnRate: false,
-            showTokenBurnRate: false,
           },
         },
       },

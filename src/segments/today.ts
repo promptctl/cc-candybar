@@ -29,11 +29,6 @@ function formatDate(date: Date): string {
   return `${year}-${month}-${day}`;
 }
 
-function isToday(date: Date): boolean {
-  const today = new Date();
-  return formatDate(date) === formatDate(today);
-}
-
 function getTotalTokens(usage: TodayUsageEntry["usage"]): number {
   return (
     usage.inputTokens +
@@ -64,15 +59,16 @@ export class TodayProvider {
   private readonly CACHE_TTL = 300000;
 
   private async loadTodayEntries(): Promise<TodayUsageEntry[]> {
-    const todayStart = new Date();
-    todayStart.setHours(0, 0, 0, 0);
+    const today = new Date();
+    const todayDateString = formatDate(today);
 
-    debug(
-      `Today segment: Loading entries since ${todayStart.toLocaleString()}`
-    );
+    debug(`Today segment: Loading entries for date ${todayDateString}`);
+
+    const weekAgo = new Date();
+    weekAgo.setDate(weekAgo.getDate() - 7);
 
     const fileFilter = (_filePath: string, modTime: Date): boolean => {
-      return modTime >= todayStart;
+      return modTime >= weekAgo;
     };
 
     const parsedEntries = await loadEntriesFromProjects(
@@ -85,12 +81,9 @@ export class TodayProvider {
     let entriesFound = 0;
 
     for (const entry of parsedEntries) {
-      if (entry.timestamp < todayStart) {
-        debug(`Today segment: Early exit at ${entry.timestamp.toISOString()}`);
-        break;
-      }
+      const entryDateString = formatDate(entry.timestamp);
 
-      if (entry.message?.usage && isToday(entry.timestamp)) {
+      if (entryDateString === todayDateString && entry.message?.usage) {
         const todayEntry = convertToTodayEntry(entry);
 
         if (!todayEntry.costUSD && entry.raw) {
@@ -104,7 +97,9 @@ export class TodayProvider {
       }
     }
 
-    debug(`Today segment: Found ${entriesFound} entries for today`);
+    debug(
+      `Today segment: Found ${entriesFound} entries for today (${todayDateString})`
+    );
     return todayEntries;
   }
 

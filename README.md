@@ -52,9 +52,9 @@
 
 - **Vim-style powerline** with proper arrows and segments
 - **Real-time session tracking** with costs and tokens
-- **Billing window tracking** with 5-hour block usage
+- **Billing window tracking** with 5-hour blocks and burn rates
 - **Daily usage monitoring** with budget alerts
-- **Performance metrics** with response times and burn rates
+- **Performance metrics** with response times
 - **Context monitoring** showing tokens used and auto-compact threshold
 - **Git integration** with branch, status, ahead/behind counts
 
@@ -237,7 +237,7 @@ Configuration priority (top overrides bottom):
           },
           "model": { "enabled": true },
           "session": { "enabled": true, "type": "tokens" },
-          "block": { "enabled": true, "type": "cost" },
+          "block": { "enabled": true, "type": "cost", "burnType": "cost" },
           "today": { "enabled": true, "type": "cost" },
           "context": { "enabled": true },
           "tmux": { "enabled": true },
@@ -246,9 +246,7 @@ Configuration priority (top overrides bottom):
             "showResponseTime": true,
             "showLastResponseTime": false,
             "showDuration": true,
-            "showMessageCount": true,
-            "showCostBurnRate": false,
-            "showTokenBurnRate": false
+            "showMessageCount": true
           }
         }
       }
@@ -315,9 +313,7 @@ The metrics segment displays performance analytics from your Claude sessions:
   "showResponseTime": true,      // Average response time (`⧖ 3.2s`)
   "showLastResponseTime": false, // Last response time (`Δ 2.8s`)
   "showDuration": true,          // Session duration (`⧗ 28m`)
-  "showMessageCount": true,      // User message count (`⟐ 93`)
-  "showCostBurnRate": false,     // Cost per hour (`⟢ $1.20/h`)
-  "showTokenBurnRate": false     // Tokens per hour (`⟢ 450K/h`)
+  "showMessageCount": true       // User message count (`⟐ 93`)
 }
 ```
 
@@ -327,8 +323,6 @@ The metrics segment displays performance analytics from your Claude sessions:
 - `showLastResponseTime`: Time for the last response (shows `0.0s` while waiting)
 - `showDuration`: Total time since session started
 - `showMessageCount`: Number of user messages sent
-- `showCostBurnRate`: Spending rate per hour
-- `showTokenBurnRate`: Token consumption rate per hour
 
 ![Metrics Segment Example](images/claude-powerline-metrics.png)
 
@@ -369,6 +363,19 @@ The powerline includes three complementary usage segments:
 
 - `cost`: Show cost + time (`$0.05 (2h 30m left)`)
 - `tokens`: Show tokens + time (`1.2K tokens (2h 30m left)`)
+- `both`: Show both cost and tokens + time
+- `time`: Show only time remaining
+
+**Block burn rates** (configured with `burnType`):
+
+```json
+"block": { "enabled": true, "type": "cost", "burnType": "cost" }
+```
+
+- `cost`: Show cost burn rate (`$0.05 | $1.20/h (2h 30m left)`)
+- `tokens`: Show token burn rate (`1.2K | 450K/h (2h 30m left)`)  
+- `both`: Show both burn rates
+- `none`: Hide burn rates
 
 **Budget Configuration:**
 
@@ -415,7 +422,7 @@ To prevent segment cutoff, configure multiple lines:
       {
         "segments": {
           "session": { "enabled": true, "type": "tokens" },
-          "block": { "enabled": true, "type": "cost" },
+          "block": { "enabled": true, "type": "cost", "burnType": "cost" },
           "today": { "enabled": true, "type": "cost" },
           "context": { "enabled": true },
           "tmux": { "enabled": false },

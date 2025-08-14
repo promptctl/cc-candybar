@@ -18,23 +18,21 @@
             "showRepoName": false
           },
           "model": { "enabled": true },
-          "session": { "enabled": true, "type": "tokens" },
-          "today": { "enabled": true, "type": "cost" },
+          "session": { "enabled": true, "type": "both" },
+          "today": { "enabled": true, "type": "both" },
           "context": { "enabled": true }
         }
       },
       {
         "segments": {
           "tmux": { "enabled": false },
-          "block": { "enabled": true, "type": "cost" },
+          "block": { "enabled": true, "type": "cost", "burnType": "cost" },
           "metrics": { 
             "enabled": true,
             "showResponseTime": true,
             "showLastResponseTime": false,
             "showDuration": true,
-            "showMessageCount": true,
-            "showCostBurnRate": true,
-            "showTokenBurnRate": true
+            "showMessageCount": true
           }
         }
       }

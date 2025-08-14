@@ -2,6 +2,7 @@ import path from "node:path";
 import type { ClaudeHookData } from "../index";
 import type { PowerlineColors } from "../themes";
 import type { PowerlineConfig } from "../config/loader";
+import type { BlockInfo } from "./block";
 
 export interface SegmentConfig {
   enabled: boolean;
@@ -36,12 +37,11 @@ export interface MetricsSegmentConfig extends SegmentConfig {
   showLastResponseTime?: boolean;
   showDuration?: boolean;
   showMessageCount?: boolean;
-  showCostBurnRate?: boolean;
-  showTokenBurnRate?: boolean;
 }
 
 export interface BlockSegmentConfig extends SegmentConfig {
   type: "cost" | "tokens" | "both" | "time";
+  burnType?: "cost" | "tokens" | "both" | "none";
 }
 
 export interface TodaySegmentConfig extends SegmentConfig {
@@ -72,7 +72,6 @@ import type {
   ContextInfo,
   MetricsInfo,
 } from ".";
-import type { BlockInfo } from "./block";
 import type { TodayInfo } from "./today";
 
 export interface PowerlineSymbols {
@@ -326,6 +325,7 @@ export class SegmentRenderer {
   renderMetrics(
     metricsInfo: MetricsInfo | null,
     colors: PowerlineColors,
+    _blockInfo: BlockInfo | null,
     config?: MetricsSegmentConfig
   ): SegmentData | null {
     if (!metricsInfo) {
@@ -376,19 +376,6 @@ export class SegmentRenderer {
       );
     }
 
-    if (config?.showCostBurnRate && metricsInfo.costBurnRate !== null) {
-      const burnRate =
-        metricsInfo.costBurnRate < 1
-          ? `${(metricsInfo.costBurnRate * 100).toFixed(0)}¢/h`
-          : `$${metricsInfo.costBurnRate.toFixed(2)}/h`;
-      parts.push(`${this.symbols.metrics_burn} ${burnRate}`);
-    }
-
-    if (config?.showTokenBurnRate && metricsInfo.tokenBurnRate !== null) {
-      const tokenRate = formatTokens(Math.round(metricsInfo.tokenBurnRate));
-      parts.push(`${this.symbols.metrics_burn} ${tokenRate}/h`);
-    }
-
     if (parts.length === 0) {
       return {
         text: `${this.symbols.metrics_response} active`,
@@ -407,13 +394,16 @@ export class SegmentRenderer {
   renderBlock(
     blockInfo: BlockInfo,
     colors: PowerlineColors,
-    type = "cost"
+    config?: BlockSegmentConfig
   ): SegmentData {
     let displayText: string;
 
     if (blockInfo.cost === null && blockInfo.tokens === null) {
       displayText = "No active block";
     } else {
+      const type = config?.type || "cost";
+      const burnType = config?.burnType;
+
       const timeStr =
         blockInfo.timeRemaining !== null
           ? (() => {
@@ -423,21 +413,65 @@ export class SegmentRenderer {
             })()
           : null;
 
+      let mainContent: string;
       switch (type) {
         case "cost":
-          displayText = timeStr
-            ? `${formatCost(blockInfo.cost)} (${timeStr} left)`
-            : formatCost(blockInfo.cost);
+          mainContent = formatCost(blockInfo.cost);
           break;
         case "tokens":
-          displayText = timeStr
-            ? `${formatTokens(blockInfo.tokens)} (${timeStr} left)`
-            : formatTokens(blockInfo.tokens);
+          mainContent = formatTokens(blockInfo.tokens);
+          break;
+        case "both":
+          mainContent = `${formatCost(blockInfo.cost)} / ${formatTokens(blockInfo.tokens)}`;
+          break;
+        case "time":
+          mainContent = timeStr || "N/A";
           break;
         default:
-          displayText = timeStr
-            ? `${formatCost(blockInfo.cost)} (${timeStr} left)`
-            : formatCost(blockInfo.cost);
+          mainContent = formatCost(blockInfo.cost);
+      }
+
+      let burnContent = "";
+      if (burnType && burnType !== "none") {
+        switch (burnType) {
+          case "cost":
+            const costBurnRate =
+              blockInfo.burnRate !== null
+                ? blockInfo.burnRate < 1
+                  ? `${(blockInfo.burnRate * 100).toFixed(0)}¢/h`
+                  : `$${blockInfo.burnRate.toFixed(2)}/h`
+                : "N/A";
+            burnContent = ` | ${costBurnRate}`;
+            break;
+          case "tokens":
+            const tokenBurnRate =
+              blockInfo.tokenBurnRate !== null
+                ? `${formatTokens(Math.round(blockInfo.tokenBurnRate))}/h`
+                : "N/A";
+            burnContent = ` | ${tokenBurnRate}`;
+            break;
+          case "both":
+            const costBurn =
+              blockInfo.burnRate !== null
+                ? blockInfo.burnRate < 1
+                  ? `${(blockInfo.burnRate * 100).toFixed(0)}¢/h`
+                  : `$${blockInfo.burnRate.toFixed(2)}/h`
+                : "N/A";
+            const tokenBurn =
+              blockInfo.tokenBurnRate !== null
+                ? `${formatTokens(Math.round(blockInfo.tokenBurnRate))}/h`
+                : "N/A";
+            burnContent = ` | ${costBurn} / ${tokenBurn}`;
+            break;
+        }
+      }
+
+      if (type === "time") {
+        displayText = mainContent;
+      } else {
+        displayText = timeStr
+          ? `${mainContent}${burnContent} (${timeStr} left)`
+          : `${mainContent}${burnContent}`;
       }
     }
 

@@ -249,14 +249,14 @@ export class PowerlineRenderer {
         return this.segmentRenderer.renderMetrics(
           metricsInfo,
           colors,
+          blockInfo,
           metricsConfig
         );
 
       case "block":
         if (!blockInfo) return null;
-        const blockType =
-          (segment.config as BlockSegmentConfig)?.type || "cost";
-        return this.segmentRenderer.renderBlock(blockInfo, colors, blockType);
+        const blockConfig = segment.config as BlockSegmentConfig;
+        return this.segmentRenderer.renderBlock(blockInfo, colors, blockConfig);
 
       case "today":
         if (!todayInfo) return null;
