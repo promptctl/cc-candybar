@@ -1,3 +1,10 @@
+## [1.4.5](https://github.com/Owloops/claude-powerline/compare/v1.4.4...v1.4.5) (2025-08-14)
+
+
+### Bug Fixes
+
+* enhance claude path discovery with multi-path and environment support ([04b6e6f](https://github.com/Owloops/claude-powerline/commit/04b6e6f04ee77d8b0f625419b55f9a53a0bc8b01))
+
 ## [1.4.4](https://github.com/Owloops/claude-powerline/compare/v1.4.3...v1.4.4) (2025-08-14)
 
 
