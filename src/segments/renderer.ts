@@ -1,3 +1,4 @@
+import path from "node:path";
 import type { ClaudeHookData } from "../index";
 import type { PowerlineColors } from "../themes";
 import type { PowerlineConfig } from "../config/loader";
@@ -6,8 +7,20 @@ export interface SegmentConfig {
   enabled: boolean;
 }
 
+export interface DirectorySegmentConfig extends SegmentConfig {
+  showBasename?: boolean;
+}
+
 export interface GitSegmentConfig extends SegmentConfig {
-  showSha: boolean;
+  showSha?: boolean;
+  showAheadBehind?: boolean;
+  showWorkingTree?: boolean;
+  showOperation?: boolean;
+  showTag?: boolean;
+  showTimeSinceCommit?: boolean;
+  showStashCount?: boolean;
+  showUpstream?: boolean;
+  showRepoName?: boolean;
 }
 
 export interface UsageSegmentConfig extends SegmentConfig {
@@ -20,6 +33,7 @@ export interface ContextSegmentConfig extends SegmentConfig {}
 
 export interface MetricsSegmentConfig extends SegmentConfig {
   showResponseTime?: boolean;
+  showLastResponseTime?: boolean;
   showDuration?: boolean;
   showMessageCount?: boolean;
   showCostBurnRate?: boolean;
@@ -36,6 +50,7 @@ export interface TodaySegmentConfig extends SegmentConfig {
 
 export type AnySegmentConfig =
   | SegmentConfig
+  | DirectorySegmentConfig
   | GitSegmentConfig
   | UsageSegmentConfig
   | TmuxSegmentConfig
@@ -69,11 +84,18 @@ export interface PowerlineSymbols {
   git_conflicts: string;
   git_ahead: string;
   git_behind: string;
+  git_worktree: string;
+  git_tag: string;
+  git_sha: string;
+  git_upstream: string;
+  git_stash: string;
+  git_time: string;
   session_cost: string;
   block_cost: string;
   today_cost: string;
   context_time: string;
   metrics_response: string;
+  metrics_last_response: string;
   metrics_duration: string;
   metrics_messages: string;
   metrics_burn: string;
@@ -93,11 +115,35 @@ export class SegmentRenderer {
 
   renderDirectory(
     hookData: ClaudeHookData,
-    colors: PowerlineColors
+    colors: PowerlineColors,
+    config?: DirectorySegmentConfig
   ): SegmentData {
     const currentDir = hookData.workspace?.current_dir || hookData.cwd || "/";
     const projectDir = hookData.workspace?.project_dir;
-    const dirName = this.getDisplayDirectoryName(currentDir, projectDir);
+
+    if (config?.showBasename) {
+      const basename = path.basename(currentDir) || "root";
+      return {
+        text: basename,
+        bgColor: colors.modeBg,
+        fgColor: colors.modeFg,
+      };
+    }
+
+    const homeDir = process.env.HOME || process.env.USERPROFILE;
+    let displayDir = currentDir;
+    let displayProjectDir = projectDir;
+
+    if (homeDir) {
+      if (currentDir.startsWith(homeDir)) {
+        displayDir = currentDir.replace(homeDir, "~");
+      }
+      if (projectDir && projectDir.startsWith(homeDir)) {
+        displayProjectDir = projectDir.replace(homeDir, "~");
+      }
+    }
+
+    const dirName = this.getDisplayDirectoryName(displayDir, displayProjectDir);
 
     return {
       text: dirName,
@@ -109,9 +155,76 @@ export class SegmentRenderer {
   renderGit(
     gitInfo: GitInfo,
     colors: PowerlineColors,
-    showSha = false
+    config?: GitSegmentConfig
   ): SegmentData | null {
     if (!gitInfo) return null;
+
+    const parts: string[] = [];
+
+    if (config?.showRepoName && gitInfo.repoName) {
+      parts.push(gitInfo.repoName);
+      if (gitInfo.isWorktree) {
+        parts.push(this.symbols.git_worktree);
+      }
+    }
+
+    if (config?.showOperation && gitInfo.operation) {
+      parts.push(`[${gitInfo.operation}]`);
+    }
+
+    parts.push(`${this.symbols.branch} ${gitInfo.branch}`);
+
+    if (config?.showTag && gitInfo.tag) {
+      parts.push(`${this.symbols.git_tag} ${gitInfo.tag}`);
+    }
+
+    if (config?.showSha && gitInfo.sha) {
+      parts.push(`${this.symbols.git_sha} ${gitInfo.sha}`);
+    }
+
+    if (config?.showAheadBehind !== false) {
+      if (gitInfo.ahead > 0 && gitInfo.behind > 0) {
+        parts.push(
+          `${this.symbols.git_ahead}${gitInfo.ahead}${this.symbols.git_behind}${gitInfo.behind}`
+        );
+      } else if (gitInfo.ahead > 0) {
+        parts.push(`${this.symbols.git_ahead}${gitInfo.ahead}`);
+      } else if (gitInfo.behind > 0) {
+        parts.push(`${this.symbols.git_behind}${gitInfo.behind}`);
+      }
+    }
+
+    if (config?.showWorkingTree) {
+      const counts: string[] = [];
+      if (gitInfo.staged && gitInfo.staged > 0)
+        counts.push(`+${gitInfo.staged}`);
+      if (gitInfo.unstaged && gitInfo.unstaged > 0)
+        counts.push(`~${gitInfo.unstaged}`);
+      if (gitInfo.untracked && gitInfo.untracked > 0)
+        counts.push(`?${gitInfo.untracked}`);
+      if (gitInfo.conflicts && gitInfo.conflicts > 0)
+        counts.push(`!${gitInfo.conflicts}`);
+      if (counts.length > 0) {
+        parts.push(`(${counts.join(" ")})`);
+      }
+    }
+
+    if (config?.showUpstream && gitInfo.upstream) {
+      parts.push(`${this.symbols.git_upstream}${gitInfo.upstream}`);
+    }
+
+    if (
+      config?.showStashCount &&
+      gitInfo.stashCount &&
+      gitInfo.stashCount > 0
+    ) {
+      parts.push(`${this.symbols.git_stash} ${gitInfo.stashCount}`);
+    }
+
+    if (config?.showTimeSinceCommit && gitInfo.timeSinceCommit !== undefined) {
+      const time = this.formatTimeSince(gitInfo.timeSinceCommit);
+      parts.push(`${this.symbols.git_time} ${time}`);
+    }
 
     let gitStatusIcon = this.symbols.git_clean;
     if (gitInfo.status === "conflicts") {
@@ -119,26 +232,21 @@ export class SegmentRenderer {
     } else if (gitInfo.status === "dirty") {
       gitStatusIcon = this.symbols.git_dirty;
     }
-
-    let text = `${this.symbols.branch} ${gitInfo.branch} ${gitStatusIcon}`;
-
-    if (gitInfo.sha && showSha) {
-      text += ` ${gitInfo.sha}`;
-    }
-
-    if (gitInfo.ahead > 0 && gitInfo.behind > 0) {
-      text += ` ${this.symbols.git_ahead}${gitInfo.ahead}${this.symbols.git_behind}${gitInfo.behind}`;
-    } else if (gitInfo.ahead > 0) {
-      text += ` ${this.symbols.git_ahead}${gitInfo.ahead}`;
-    } else if (gitInfo.behind > 0) {
-      text += ` ${this.symbols.git_behind}${gitInfo.behind}`;
-    }
+    parts.push(gitStatusIcon);
 
     return {
-      text,
+      text: parts.join(" "),
       bgColor: colors.gitBg,
       fgColor: colors.gitFg,
     };
+  }
+
+  private formatTimeSince(seconds: number): string {
+    if (seconds < 60) return `${seconds}s`;
+    if (seconds < 3600) return `${Math.floor(seconds / 60)}m`;
+    if (seconds < 86400) return `${Math.floor(seconds / 3600)}h`;
+    if (seconds < 604800) return `${Math.floor(seconds / 86400)}d`;
+    return `${Math.floor(seconds / 604800)}w`;
   }
 
   renderModel(hookData: ClaudeHookData, colors: PowerlineColors): SegmentData {
@@ -230,6 +338,16 @@ export class SegmentRenderer {
 
     const parts: string[] = [];
 
+    if (config?.showLastResponseTime) {
+      const lastResponseTime =
+        metricsInfo.lastResponseTime === null
+          ? "0.0s"
+          : metricsInfo.lastResponseTime < 60
+            ? `${metricsInfo.lastResponseTime.toFixed(1)}s`
+            : `${(metricsInfo.lastResponseTime / 60).toFixed(1)}m`;
+      parts.push(`${this.symbols.metrics_last_response} ${lastResponseTime}`);
+    }
+
     if (
       config?.showResponseTime !== false &&
       metricsInfo.responseTime !== null
@@ -296,18 +414,18 @@ export class SegmentRenderer {
     if (blockInfo.cost === null && blockInfo.tokens === null) {
       displayText = "No active block";
     } else {
-      // Always include time remaining when available
-      const timeStr = blockInfo.timeRemaining !== null 
-        ? (() => {
-            const hours = Math.floor(blockInfo.timeRemaining / 60);
-            const minutes = blockInfo.timeRemaining % 60;
-            return hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`;
-          })()
-        : null;
+      const timeStr =
+        blockInfo.timeRemaining !== null
+          ? (() => {
+              const hours = Math.floor(blockInfo.timeRemaining / 60);
+              const minutes = blockInfo.timeRemaining % 60;
+              return hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`;
+            })()
+          : null;
 
       switch (type) {
         case "cost":
-          displayText = timeStr 
+          displayText = timeStr
             ? `${formatCost(blockInfo.cost)} (${timeStr} left)`
             : formatCost(blockInfo.cost);
           break;
@@ -317,8 +435,7 @@ export class SegmentRenderer {
             : formatTokens(blockInfo.tokens);
           break;
         default:
-          // Default to cost display
-          displayText = timeStr 
+          displayText = timeStr
             ? `${formatCost(blockInfo.cost)} (${timeStr} left)`
             : formatCost(blockInfo.cost);
       }
@@ -369,15 +486,19 @@ export class SegmentRenderer {
     currentDir: string,
     projectDir?: string
   ): string {
+    if (currentDir.startsWith("~")) {
+      return currentDir;
+    }
+
     if (projectDir && projectDir !== currentDir) {
       if (currentDir.startsWith(projectDir)) {
         const relativePath = currentDir.slice(projectDir.length + 1);
-        return relativePath || projectDir.split("/").pop() || "project";
+        return relativePath || path.basename(projectDir) || "project";
       }
-      return currentDir.split("/").pop() || "root";
+      return path.basename(currentDir) || "root";
     }
 
-    return currentDir.split("/").pop() || "root";
+    return path.basename(currentDir) || "root";
   }
 
   private formatUsageDisplay(
