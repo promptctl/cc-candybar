@@ -56,6 +56,15 @@ async function installFonts(): Promise<void> {
 
     const tempDir = path.join(os.tmpdir(), "powerline-fonts");
 
+    const cleanup = () => {
+      if (fs.existsSync(tempDir)) {
+        fs.rmSync(tempDir, { recursive: true, force: true });
+      }
+    };
+
+    process.on("SIGINT", cleanup);
+    process.on("SIGTERM", cleanup);
+
     try {
       if (fs.existsSync(tempDir)) {
         fs.rmSync(tempDir, { recursive: true, force: true });
@@ -90,9 +99,9 @@ async function installFonts(): Promise<void> {
         "Popular choices: Source Code Pro Powerline, DejaVu Sans Mono Powerline, Ubuntu Mono Powerline"
       );
     } finally {
-      if (fs.existsSync(tempDir)) {
-        fs.rmSync(tempDir, { recursive: true, force: true });
-      }
+      cleanup();
+      process.removeListener("SIGINT", cleanup);
+      process.removeListener("SIGTERM", cleanup);
     }
   } catch (error) {
     console.error(

@@ -172,7 +172,7 @@ claude-powerline --session-budget=50
 ### Status Indicators
 
 - **Git**: `✓` Clean, `●` Dirty, `⚠` Conflicts, `↑3` Ahead, `↓2` Behind remote
-- **Context**: `⊡ 34,040 (79%)` - Token count and percentage remaining until auto-compact
+- **Context**: `⊡ 34,040 (79%)` - Token count and percentage remaining until auto-compact (uses 75% of 200k limit)
 - **Budget**: `25%` Normal (under 50%), `+75%` Moderate (50-79%), `!85%` Warning (80%+)
 
 ## Configuration
