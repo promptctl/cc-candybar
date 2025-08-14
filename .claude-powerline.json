@@ -5,7 +5,7 @@
     "lines": [
       {
         "segments": {
-          "directory": { "enabled": true, "useBasename": false },
+          "directory": { "enabled": true, "showBasename": true },
           "git": { 
             "enabled": true, 
             "showSha": false,

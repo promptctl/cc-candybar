@@ -222,7 +222,7 @@ Configuration priority (top overrides bottom):
         "segments": {
           "directory": { 
             "enabled": true,
-            "useBasename": false
+            "showBasename": false
           },
           "git": { 
             "enabled": true, 
@@ -259,7 +259,7 @@ Configuration priority (top overrides bottom):
 
 ### Segment Details
 
-- **directory**: Current working directory name (supports `useBasename` option)
+- **directory**: Current working directory name (supports `showBasename` option)
 - **git**: Branch, status, and extensive repository information (see Git Configuration below)
 - **model**: Current Claude model being used
 - **session**: Token usage and costs for current session
@@ -274,7 +274,7 @@ Configuration priority (top overrides bottom):
 ```json
 "directory": {
   "enabled": true,
-  "useBasename": false  // Show only folder name instead of full path
+  "showBasename": false  // Show only folder name instead of full path
 }
 ```
 
