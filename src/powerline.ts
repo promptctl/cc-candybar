@@ -180,7 +180,9 @@ export class PowerlineRenderer {
       case "session":
         if (!usageInfo) return null;
         const usageType =
-          (segment.config as UsageSegmentConfig)?.type || "cost";
+          this.config.usageType ||
+          (segment.config as UsageSegmentConfig)?.type ||
+          "cost";
         return this.segmentRenderer.renderSession(usageInfo, colors, usageType);
 
       case "tmux":

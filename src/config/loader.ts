@@ -48,11 +48,25 @@ export interface PowerlineConfig {
   usageType?: "cost" | "tokens" | "both" | "breakdown";
 }
 
-export interface ConfigLoadOptions {
-  configPath?: string;
-  ignoreEnvVars?: boolean;
-  cliOverrides?: Partial<PowerlineConfig>;
-  projectDir?: string;
+function isValidTheme(theme: string): theme is PowerlineConfig["theme"] {
+  return [
+    "light",
+    "dark",
+    "nord",
+    "tokyo-night",
+    "rose-pine",
+    "custom",
+  ].includes(theme);
+}
+
+function isValidStyle(style: string): style is "minimal" | "powerline" {
+  return style === "minimal" || style === "powerline";
+}
+
+function isValidUsageType(
+  usageType: string
+): usageType is "cost" | "tokens" | "both" | "breakdown" {
+  return ["cost", "tokens", "both", "breakdown"].includes(usageType);
 }
 
 function deepMerge<T extends Record<string, any>>(
@@ -74,13 +88,6 @@ function deepMerge<T extends Record<string, any>>(
           targetValue as Record<string, any>,
           sourceValue as Record<string, any>
         ) as T[Extract<keyof T, string>];
-      } else if (Array.isArray(sourceValue) && sourceValue.length === 0) {
-        const targetValue = result[key];
-        if (!Array.isArray(targetValue) || targetValue.length > 0) {
-          continue;
-        } else {
-          result[key] = sourceValue as T[Extract<keyof T, string>];
-        }
       } else {
         result[key] = sourceValue as T[Extract<keyof T, string>];
       }
@@ -121,51 +128,45 @@ function loadConfigFile(filePath: string): Partial<PowerlineConfig> {
 
 function loadEnvConfig(): Partial<PowerlineConfig> {
   const config: Partial<PowerlineConfig> = {};
+  const display: Partial<DisplayConfig> = {};
 
-  if (process.env.CLAUDE_POWERLINE_THEME) {
-    config.theme = process.env.CLAUDE_POWERLINE_THEME as
-      | "light"
-      | "dark"
-      | "custom";
+  const theme = process.env.CLAUDE_POWERLINE_THEME;
+  if (theme && isValidTheme(theme)) {
+    config.theme = theme;
   }
 
-  if (process.env.CLAUDE_POWERLINE_STYLE) {
-    if (!config.display) {
-      config.display = { lines: [] };
-    }
-    const style = process.env.CLAUDE_POWERLINE_STYLE;
-    if (style === "minimal" || style === "powerline") {
-      config.display.style = style;
+  const style = process.env.CLAUDE_POWERLINE_STYLE;
+  if (style) {
+    if (isValidStyle(style)) {
+      display.style = style;
     } else {
       console.warn(
         `Invalid display style '${style}' from environment variable, falling back to 'minimal'`
       );
-      config.display.style = "minimal";
+      display.style = "minimal";
     }
   }
 
-  if (process.env.CLAUDE_POWERLINE_USAGE_TYPE) {
-    const usageType = process.env.CLAUDE_POWERLINE_USAGE_TYPE as
-      | "cost"
-      | "tokens"
-      | "both"
-      | "breakdown";
-    if (["cost", "tokens", "both", "breakdown"].includes(usageType)) {
-      config.usageType = usageType;
-    }
+  const usageType = process.env.CLAUDE_POWERLINE_USAGE_TYPE;
+  if (usageType && isValidUsageType(usageType)) {
+    config.usageType = usageType;
   }
 
-  if (process.env.CLAUDE_POWERLINE_SESSION_BUDGET) {
-    const sessionBudget = parseFloat(process.env.CLAUDE_POWERLINE_SESSION_BUDGET);
+  const sessionBudgetStr = process.env.CLAUDE_POWERLINE_SESSION_BUDGET;
+  if (sessionBudgetStr) {
+    const sessionBudget = parseFloat(sessionBudgetStr);
     if (!isNaN(sessionBudget) && sessionBudget > 0) {
       config.budget = {
-        ...config.budget,
         session: {
           ...DEFAULT_CONFIG.budget?.session,
           amount: sessionBudget,
         },
       };
     }
+  }
+
+  if (Object.keys(display).length > 0) {
+    config.display = display as DisplayConfig;
   }
 
   return config;
@@ -177,43 +178,39 @@ function getConfigPathFromEnv(): string | undefined {
 
 function parseCLIOverrides(args: string[]): Partial<PowerlineConfig> {
   const config: Partial<PowerlineConfig> = {};
+  const display: Partial<DisplayConfig> = {};
 
-  const themeIndex = args.findIndex((arg) => arg.startsWith("--theme="));
-  if (themeIndex !== -1) {
-    const theme = args[themeIndex]?.split("=")[1];
-    if (theme) {
-      config.theme = theme as "light" | "dark" | "custom";
+  const theme = args.find((arg) => arg.startsWith("--theme="))?.split("=")[1];
+  if (theme && isValidTheme(theme)) {
+    config.theme = theme;
+  }
+
+  const style = args.find((arg) => arg.startsWith("--style="))?.split("=")[1];
+  if (style) {
+    if (isValidStyle(style)) {
+      display.style = style;
+    } else {
+      console.warn(
+        `Invalid display style '${style}' from CLI argument, falling back to 'minimal'`
+      );
+      display.style = "minimal";
     }
   }
 
-  const styleIndex = args.findIndex((arg) => arg.startsWith("--style="));
-  if (styleIndex !== -1) {
-    const style = args[styleIndex]?.split("=")[1];
-    if (style) {
-      if (!config.display) {
-        config.display = { lines: [] };
-      }
-      if (style === "minimal" || style === "powerline") {
-        config.display.style = style;
-      } else {
-        console.warn(
-          `Invalid display style '${style}' from CLI argument, falling back to 'minimal'`
-        );
-        config.display.style = "minimal";
-      }
-    }
+  const usageType = args
+    .find((arg) => arg.startsWith("--usage="))
+    ?.split("=")[1];
+  if (usageType && isValidUsageType(usageType)) {
+    config.usageType = usageType;
   }
 
-  const sessionBudgetIndex = args.findIndex((arg) =>
-    arg.startsWith("--session-budget=")
-  );
-  if (sessionBudgetIndex !== -1) {
-    const sessionBudget = parseFloat(
-      args[sessionBudgetIndex]?.split("=")[1] || ""
-    );
+  const sessionBudgetStr = args
+    .find((arg) => arg.startsWith("--session-budget="))
+    ?.split("=")[1];
+  if (sessionBudgetStr) {
+    const sessionBudget = parseFloat(sessionBudgetStr);
     if (!isNaN(sessionBudget) && sessionBudget > 0) {
       config.budget = {
-        ...config.budget,
         session: {
           ...DEFAULT_CONFIG.budget?.session,
           amount: sessionBudget,
@@ -222,33 +219,22 @@ function parseCLIOverrides(args: string[]): Partial<PowerlineConfig> {
     }
   }
 
-  const usageIndex = args.findIndex((arg) => arg.startsWith("--usage="));
-  if (usageIndex !== -1) {
-    const usageType = args[usageIndex]?.split("=")[1] as
-      | "cost"
-      | "tokens"
-      | "both"
-      | "breakdown";
-    if (
-      usageType &&
-      ["cost", "tokens", "both", "breakdown"].includes(usageType)
-    ) {
-      config.usageType = usageType;
-    }
+  if (Object.keys(display).length > 0) {
+    config.display = display as DisplayConfig;
   }
 
   return config;
 }
 
-export function loadConfig(options: ConfigLoadOptions = {}): PowerlineConfig {
-  const {
-    configPath,
-    ignoreEnvVars = false,
-    cliOverrides = {},
-    projectDir,
-  } = options;
-
+export function loadConfig(
+  args: string[] = process.argv,
+  projectDir?: string
+): PowerlineConfig {
   let config: PowerlineConfig = JSON.parse(JSON.stringify(DEFAULT_CONFIG));
+
+  const configPath =
+    args.find((arg) => arg.startsWith("--config="))?.split("=")[1] ||
+    getConfigPathFromEnv();
 
   const configFile = findConfigFile(configPath, projectDir);
   if (configFile) {
@@ -262,54 +248,27 @@ export function loadConfig(options: ConfigLoadOptions = {}): PowerlineConfig {
     }
   }
 
-  if (
-    config.display?.style &&
-    config.display.style !== "minimal" &&
-    config.display.style !== "powerline"
-  ) {
+  if (config.display?.style && !isValidStyle(config.display.style)) {
     console.warn(
       `Invalid display style '${config.display.style}' in config file, falling back to 'minimal'`
     );
     config.display.style = "minimal";
   }
 
-  if (!ignoreEnvVars) {
-    const envConfig = loadEnvConfig();
-    config = deepMerge(config, envConfig);
+  if (config.theme && !isValidTheme(config.theme)) {
+    console.warn(
+      `Invalid theme '${config.theme}' in config file, falling back to 'dark'`
+    );
+    config.theme = "dark";
   }
 
+  const envConfig = loadEnvConfig();
+  config = deepMerge(config, envConfig);
+
+  const cliOverrides = parseCLIOverrides(args);
   config = deepMerge(config, cliOverrides);
-
-  if (config.usageType) {
-    config.display.lines.forEach((line) => {
-      if (line.segments.session) {
-        line.segments.session.type = config.usageType!;
-      }
-    });
-    delete config.usageType;
-  }
 
   return config;
 }
 
-export function loadConfigFromCLI(
-  args: string[] = process.argv,
-  projectDir?: string
-): PowerlineConfig {
-  const configPathIndex = args.findIndex((arg) => arg.startsWith("--config="));
-  const configPath =
-    configPathIndex !== -1
-      ? args[configPathIndex]?.split("=")[1]
-      : getConfigPathFromEnv();
-
-  const cliOverrides = parseCLIOverrides(args);
-
-  return loadConfig({ configPath, cliOverrides, projectDir });
-}
-
-export function getConfigPath(
-  customPath?: string,
-  projectDir?: string
-): string | null {
-  return findConfigFile(customPath, projectDir);
-}
+export const loadConfigFromCLI = loadConfig;
