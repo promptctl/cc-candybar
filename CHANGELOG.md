@@ -1,3 +1,10 @@
+## [1.4.3](https://github.com/Owloops/claude-powerline/compare/v1.4.2...v1.4.3) (2025-08-14)
+
+
+### Bug Fixes
+
+* improve performance and reliability with caching and timeouts ([4b3bc15](https://github.com/Owloops/claude-powerline/commit/4b3bc15b8948293385e53e286441753d55221c10))
+
 ## [1.4.2](https://github.com/Owloops/claude-powerline/compare/v1.4.1...v1.4.2) (2025-08-13)
 
 
