@@ -202,6 +202,8 @@ curl -o ~/.claude/claude-powerline.json https://raw.githubusercontent.com/Owloop
 > [!IMPORTANT]  
 > The example configuration showcases all available segments and features of the powerline.
 
+![All Segments Demo](images/claude-powerline-all-segments.png)
+
 Configuration priority (top overrides bottom):
 
 1. CLI arguments (`--theme`, `--style`, `--usage`, `--session-budget`, `--config`)

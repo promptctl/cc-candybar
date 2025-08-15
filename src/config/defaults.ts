@@ -9,7 +9,7 @@ export const DEFAULT_CONFIG: PowerlineConfig = {
         segments: {
           directory: { 
             enabled: true,
-            showBasename: false
+            showBasename: true
           },
           git: {
             enabled: true,
@@ -26,6 +26,7 @@ export const DEFAULT_CONFIG: PowerlineConfig = {
           session: { enabled: true, type: "tokens" },
           today: { enabled: false, type: "cost" },
           block: { enabled: true, type: "cost", burnType: "cost" },
+          version: { enabled: false },
           tmux: { enabled: false },
           context: { enabled: true },
           metrics: { 
