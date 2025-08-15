@@ -1,3 +1,10 @@
+# [1.6.0](https://github.com/Owloops/claude-powerline/compare/v1.5.6...v1.6.0) (2025-08-15)
+
+
+### Features
+
+* add comprehensive segments demo and improve defaults ([08e8590](https://github.com/Owloops/claude-powerline/commit/08e85906c3173da35a8839722bc1854bab55f508))
+
 ## [1.5.6](https://github.com/Owloops/claude-powerline/compare/v1.5.5...v1.5.6) (2025-08-15)
 
 
