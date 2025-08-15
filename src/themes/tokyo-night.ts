@@ -10,4 +10,5 @@ export const tokyoNightTheme: ColorTheme = {
   tmux: { bg: "#191b29", fg: "#4fd6be" },
   context: { bg: "#414868", fg: "#c0caf5" },
   metrics: { bg: "#3d59a1", fg: "#c0caf5" },
+  version: { bg: "#292e42", fg: "#bb9af7" },
 };

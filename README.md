@@ -247,7 +247,8 @@ Configuration priority (top overrides bottom):
             "showLastResponseTime": false,
             "showDuration": true,
             "showMessageCount": true
-          }
+          },
+          "version": { "enabled": true }
         }
       }
     ]
@@ -266,6 +267,7 @@ Configuration priority (top overrides bottom):
 - **context**: Context window usage and auto-compact threshold
 - **tmux**: Tmux session name and window info (when in tmux)
 - **metrics**: Performance analytics (see Metrics Configuration below)
+- **version**: Claude Code version (e.g., v1.0.81)
 
 #### Directory Configuration
 
@@ -426,7 +428,8 @@ To prevent segment cutoff, configure multiple lines:
           "today": { "enabled": true, "type": "cost" },
           "context": { "enabled": true },
           "tmux": { "enabled": false },
-          "metrics": { "enabled": true }
+          "metrics": { "enabled": true },
+          "version": { "enabled": true }
         }
       }
     ]

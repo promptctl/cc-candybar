@@ -1,12 +1,18 @@
 import { BlockProvider } from "../src/segments/block";
 import { TodayProvider } from "../src/segments/today";
+import { VersionProvider } from "../src/segments/version";
 import { loadEntriesFromProjects } from "../src/utils/claude";
 import { mkdirSync, rmSync } from "fs";
 import { join } from "path";
 import { tmpdir } from "os";
+import { execSync } from "node:child_process";
 
 jest.mock("../src/utils/claude", () => ({
   loadEntriesFromProjects: jest.fn(),
+}));
+
+jest.mock("node:child_process", () => ({
+  execSync: jest.fn(),
 }));
 
 const mockLoadEntries = loadEntriesFromProjects as jest.MockedFunction<
@@ -227,6 +233,18 @@ describe("Segment Time Logic", () => {
 
       expect(blockInfo.cost).toBeNull();
       expect(blockInfo.tokens).toBeNull();
+    });
+  });
+
+  describe("Version Segment", () => {
+    it("should get Claude version", async () => {
+      const mockExecSync = execSync as jest.MockedFunction<typeof execSync>;
+      mockExecSync.mockReturnValue("1.0.81 (Claude Code)" as any);
+
+      const provider = new VersionProvider();
+      const info = await provider.getVersionInfo();
+
+      expect(info.version).toBe("v1.0.81");
     });
   });
 });

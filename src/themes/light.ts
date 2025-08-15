@@ -10,4 +10,5 @@ export const lightTheme: ColorTheme = {
   tmux: { bg: "#32cd32", fg: "#ffffff" },
   context: { bg: "#718096", fg: "#ffffff" },
   metrics: { bg: "#6b7280", fg: "#ffffff" },
+  version: { bg: "#8b7dd8", fg: "#ffffff" },
 };

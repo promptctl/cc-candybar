@@ -19,6 +19,7 @@ export interface ColorTheme {
   tmux: SegmentColor;
   context: SegmentColor;
   metrics: SegmentColor;
+  version: SegmentColor;
 }
 
 export interface PowerlineColors {
@@ -41,6 +42,8 @@ export interface PowerlineColors {
   contextFg: string;
   metricsBg: string;
   metricsFg: string;
+  versionBg: string;
+  versionFg: string;
 }
 
 export const BUILT_IN_THEMES: Record<string, ColorTheme> = {

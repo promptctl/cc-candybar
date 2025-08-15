@@ -12,6 +12,8 @@ import {
   TmuxService,
   MetricsProvider,
   MetricsInfo,
+  VersionProvider,
+  VersionInfo,
   SegmentRenderer,
   PowerlineSymbols,
   AnySegmentConfig,
@@ -21,6 +23,7 @@ import {
   MetricsSegmentConfig,
   BlockSegmentConfig,
   TodaySegmentConfig,
+  VersionSegmentConfig,
 } from "./segments";
 import { BlockProvider, BlockInfo } from "./segments/block";
 import { TodayProvider, TodayInfo } from "./segments/today";
@@ -34,6 +37,7 @@ export class PowerlineRenderer {
   private readonly gitService: GitService;
   private readonly tmuxService: TmuxService;
   private readonly metricsProvider: MetricsProvider;
+  private readonly versionProvider: VersionProvider;
   private readonly segmentRenderer: SegmentRenderer;
 
   constructor(private readonly config: PowerlineConfig) {
@@ -45,6 +49,7 @@ export class PowerlineRenderer {
     this.gitService = new GitService();
     this.tmuxService = new TmuxService();
     this.metricsProvider = new MetricsProvider();
+    this.versionProvider = new VersionProvider();
     this.segmentRenderer = new SegmentRenderer(config, this.symbols);
   }
 
@@ -88,6 +93,12 @@ export class PowerlineRenderer {
     );
   }
 
+  private needsVersionInfo(): boolean {
+    return this.config.display.lines.some(
+      (line) => line.segments.version?.enabled
+    );
+  }
+
   async generateStatusline(hookData: ClaudeHookData): Promise<string> {
     const usageInfo = this.needsUsageInfo()
       ? await this.usageProvider.getUsageInfo(hookData.session_id)
@@ -112,6 +123,10 @@ export class PowerlineRenderer {
       ? await this.metricsProvider.getMetricsInfo(hookData.session_id)
       : null;
 
+    const versionInfo = this.needsVersionInfo()
+      ? await this.versionProvider.getVersionInfo()
+      : null;
+
     const lines = this.config.display.lines
       .map((lineConfig) =>
         this.renderLine(
@@ -121,7 +136,8 @@ export class PowerlineRenderer {
           blockInfo,
           todayInfo,
           contextInfo,
-          metricsInfo
+          metricsInfo,
+          versionInfo
         )
       )
       .filter((line) => line.length > 0);
@@ -136,7 +152,8 @@ export class PowerlineRenderer {
     blockInfo: BlockInfo | null,
     todayInfo: TodayInfo | null,
     contextInfo: ContextInfo | null,
-    metricsInfo: MetricsInfo | null
+    metricsInfo: MetricsInfo | null,
+    versionInfo: VersionInfo | null
   ): string {
     const colors = this.getThemeColors();
     const currentDir = hookData.workspace?.current_dir || hookData.cwd || "/";
@@ -167,6 +184,7 @@ export class PowerlineRenderer {
         todayInfo,
         contextInfo,
         metricsInfo,
+        versionInfo,
         colors,
         currentDir
       );
@@ -192,6 +210,7 @@ export class PowerlineRenderer {
     todayInfo: TodayInfo | null,
     contextInfo: ContextInfo | null,
     metricsInfo: MetricsInfo | null,
+    versionInfo: VersionInfo | null,
     colors: PowerlineColors,
     currentDir: string
   ) {
@@ -264,6 +283,11 @@ export class PowerlineRenderer {
           (segment.config as TodaySegmentConfig)?.type || "cost";
         return this.segmentRenderer.renderToday(todayInfo, colors, todayType);
 
+      case "version":
+        if (!versionInfo) return null;
+        const versionConfig = segment.config as VersionSegmentConfig;
+        return this.segmentRenderer.renderVersion(versionInfo, colors, versionConfig);
+
       default:
         return null;
     }
@@ -296,6 +320,7 @@ export class PowerlineRenderer {
       metrics_duration: "⧗",
       metrics_messages: "⟐",
       metrics_burn: "⟢",
+      version: "◈",
     };
   }
 
@@ -320,26 +345,60 @@ export class PowerlineRenderer {
       }
     }
 
+    const fallbackTheme = getTheme("dark")!;
+
     return {
       reset: "\x1b[0m",
-      modeBg: hexToAnsi(colorTheme.directory.bg, true),
-      modeFg: hexToAnsi(colorTheme.directory.fg, false),
-      gitBg: hexToAnsi(colorTheme.git.bg, true),
-      gitFg: hexToAnsi(colorTheme.git.fg, false),
-      modelBg: hexToAnsi(colorTheme.model.bg, true),
-      modelFg: hexToAnsi(colorTheme.model.fg, false),
-      sessionBg: hexToAnsi(colorTheme.session.bg, true),
-      sessionFg: hexToAnsi(colorTheme.session.fg, false),
-      blockBg: hexToAnsi(colorTheme.block.bg, true),
-      blockFg: hexToAnsi(colorTheme.block.fg, false),
-      todayBg: hexToAnsi(colorTheme.today.bg, true),
-      todayFg: hexToAnsi(colorTheme.today.fg, false),
-      tmuxBg: hexToAnsi(colorTheme.tmux.bg, true),
-      tmuxFg: hexToAnsi(colorTheme.tmux.fg, false),
-      contextBg: hexToAnsi(colorTheme.context.bg, true),
-      contextFg: hexToAnsi(colorTheme.context.fg, false),
-      metricsBg: hexToAnsi(colorTheme.metrics.bg, true),
-      metricsFg: hexToAnsi(colorTheme.metrics.fg, false),
+      modeBg: hexToAnsi(
+        colorTheme.directory?.bg || fallbackTheme.directory.bg,
+        true
+      ),
+      modeFg: hexToAnsi(
+        colorTheme.directory?.fg || fallbackTheme.directory.fg,
+        false
+      ),
+      gitBg: hexToAnsi(colorTheme.git?.bg || fallbackTheme.git.bg, true),
+      gitFg: hexToAnsi(colorTheme.git?.fg || fallbackTheme.git.fg, false),
+      modelBg: hexToAnsi(colorTheme.model?.bg || fallbackTheme.model.bg, true),
+      modelFg: hexToAnsi(colorTheme.model?.fg || fallbackTheme.model.fg, false),
+      sessionBg: hexToAnsi(
+        colorTheme.session?.bg || fallbackTheme.session.bg,
+        true
+      ),
+      sessionFg: hexToAnsi(
+        colorTheme.session?.fg || fallbackTheme.session.fg,
+        false
+      ),
+      blockBg: hexToAnsi(colorTheme.block?.bg || fallbackTheme.block.bg, true),
+      blockFg: hexToAnsi(colorTheme.block?.fg || fallbackTheme.block.fg, false),
+      todayBg: hexToAnsi(colorTheme.today?.bg || fallbackTheme.today.bg, true),
+      todayFg: hexToAnsi(colorTheme.today?.fg || fallbackTheme.today.fg, false),
+      tmuxBg: hexToAnsi(colorTheme.tmux?.bg || fallbackTheme.tmux.bg, true),
+      tmuxFg: hexToAnsi(colorTheme.tmux?.fg || fallbackTheme.tmux.fg, false),
+      contextBg: hexToAnsi(
+        colorTheme.context?.bg || fallbackTheme.context.bg,
+        true
+      ),
+      contextFg: hexToAnsi(
+        colorTheme.context?.fg || fallbackTheme.context.fg,
+        false
+      ),
+      metricsBg: hexToAnsi(
+        colorTheme.metrics?.bg || fallbackTheme.metrics.bg,
+        true
+      ),
+      metricsFg: hexToAnsi(
+        colorTheme.metrics?.fg || fallbackTheme.metrics.fg,
+        false
+      ),
+      versionBg: hexToAnsi(
+        colorTheme.version?.bg || fallbackTheme.version.bg,
+        true
+      ),
+      versionFg: hexToAnsi(
+        colorTheme.version?.fg || fallbackTheme.version.fg,
+        false
+      ),
     };
   }
 
@@ -366,6 +425,8 @@ export class PowerlineRenderer {
         return colors.contextBg;
       case "metrics":
         return colors.metricsBg;
+      case "version":
+        return colors.versionBg;
       default:
         return colors.modeBg;
     }

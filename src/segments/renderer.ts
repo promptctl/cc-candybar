@@ -48,6 +48,8 @@ export interface TodaySegmentConfig extends SegmentConfig {
   type: "cost" | "tokens" | "both" | "breakdown";
 }
 
+export interface VersionSegmentConfig extends SegmentConfig {}
+
 export type AnySegmentConfig =
   | SegmentConfig
   | DirectorySegmentConfig
@@ -57,7 +59,8 @@ export type AnySegmentConfig =
   | ContextSegmentConfig
   | MetricsSegmentConfig
   | BlockSegmentConfig
-  | TodaySegmentConfig;
+  | TodaySegmentConfig
+  | VersionSegmentConfig;
 
 import {
   formatCost,
@@ -71,6 +74,7 @@ import type {
   GitInfo,
   ContextInfo,
   MetricsInfo,
+  VersionInfo,
 } from ".";
 import type { TodayInfo } from "./today";
 
@@ -98,6 +102,7 @@ export interface PowerlineSymbols {
   metrics_duration: string;
   metrics_messages: string;
   metrics_burn: string;
+  version: string;
 }
 
 export interface SegmentData {
@@ -576,5 +581,21 @@ export class SegmentRenderer {
     }
 
     return baseDisplay;
+  }
+
+  renderVersion(
+    versionInfo: VersionInfo | null,
+    colors: PowerlineColors,
+    _config?: VersionSegmentConfig
+  ): SegmentData | null {
+    if (!versionInfo || !versionInfo.version) {
+      return null;
+    }
+
+    return {
+      text: `${this.symbols.version} ${versionInfo.version}`,
+      bgColor: colors.versionBg,
+      fgColor: colors.versionFg,
+    };
   }
 }
