@@ -1,3 +1,11 @@
+## [1.5.4](https://github.com/Owloops/claude-powerline/compare/v1.5.3...v1.5.4) (2025-08-15)
+
+
+### Bug Fixes
+
+* add ttl cache to version segment for update detection ([340d1b5](https://github.com/Owloops/claude-powerline/commit/340d1b59017757cd8eba5672dc93a71eb4172607))
+* add version segment to display claude version ([ed60aa5](https://github.com/Owloops/claude-powerline/commit/ed60aa504b5b034ce969eedf49c8a45a5f218242)), closes [#8](https://github.com/Owloops/claude-powerline/issues/8)
+
 ## [1.5.3](https://github.com/Owloops/claude-powerline/compare/v1.5.2...v1.5.3) (2025-08-14)
 
 
