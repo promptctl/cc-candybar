@@ -199,6 +199,9 @@ Create config file:
 curl -o ~/.claude/claude-powerline.json https://raw.githubusercontent.com/Owloops/claude-powerline/main/.claude-powerline.json
 ```
 
+> [!IMPORTANT]  
+> The example configuration showcases all available segments and features of the powerline.
+
 Configuration priority (top overrides bottom):
 
 1. CLI arguments (`--theme`, `--style`, `--usage`, `--session-budget`, `--config`)

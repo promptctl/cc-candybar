@@ -6,34 +6,38 @@
       {
         "segments": {
           "directory": { "enabled": true, "showBasename": true },
-          "git": { 
-            "enabled": true, 
-            "showSha": false,
-            "showWorkingTree": false,
-            "showOperation": false,
-            "showTag": false,
-            "showTimeSinceCommit": false,
-            "showStashCount": false,
-            "showUpstream": false,
-            "showRepoName": false
-          },
           "model": { "enabled": true },
           "session": { "enabled": true, "type": "both" },
-          "today": { "enabled": true, "type": "both" },
-          "context": { "enabled": true },
-          "version": { "enabled": true }
+          "today": { "enabled": true, "type": "both" }
         }
       },
       {
         "segments": {
-          "tmux": { "enabled": false },
           "block": { "enabled": true, "type": "cost", "burnType": "cost" },
-          "metrics": { 
+          "version": { "enabled": true },
+          "metrics": {
             "enabled": true,
             "showResponseTime": true,
             "showLastResponseTime": false,
             "showDuration": true,
             "showMessageCount": true
+          },
+          "context": { "enabled": true },
+          "tmux": { "enabled": false }
+        }
+      },
+      {
+        "segments": {
+          "git": {
+            "enabled": true,
+            "showSha": true,
+            "showWorkingTree": true,
+            "showOperation": true,
+            "showTag": true,
+            "showTimeSinceCommit": true,
+            "showStashCount": true,
+            "showUpstream": true,
+            "showRepoName": true
           }
         }
       }
