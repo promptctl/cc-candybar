@@ -457,11 +457,18 @@ To customize colors, copy dark or light theme colors from `src/themes/` in the r
       "today": { "bg": "#303030", "fg": "#dddddd" },
       "context": { "bg": "#4a5568", "fg": "#ffffff" },
       "tmux": { "bg": "#228b22", "fg": "#ffffff" },
-      "metrics": { "bg": "#374151", "fg": "#ffffff" }
+      "metrics": { "bg": "#374151", "fg": "#ffffff" },
+      "version": { "bg": "#2d3748", "fg": "#ffffff" }
     }
   }
 }
 ```
+
+> [!TIP]
+> Use `"transparent"` or `"none"` for background colors to create a minimal look:
+> ```json
+> "directory": { "bg": "transparent", "fg": "#00ff00" }
+> ```
 
 ## Custom Segments
 
