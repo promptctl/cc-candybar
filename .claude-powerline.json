@@ -41,8 +41,8 @@
   },
   "colors": {
     "custom": {
-      "directory": { "bg": "none", "fg": "#e0e0e0" },
-      "git": { "bg": "none", "fg": "#d0d0d0" },
+      "directory": { "bg": "#2a2a2a", "fg": "#e0e0e0" },
+      "git": { "bg": "#3a3a3a", "fg": "#d0d0d0" },
       "model": { "bg": "#4a4a4a", "fg": "#c0c0c0" },
       "session": { "bg": "#5a5a5a", "fg": "#b0b0b0" },
       "block": { "bg": "#404040", "fg": "#cccccc" },
