@@ -1,3 +1,10 @@
+## [1.5.6](https://github.com/Owloops/claude-powerline/compare/v1.5.5...v1.5.6) (2025-08-15)
+
+
+### Bug Fixes
+
+* enhance example config with comprehensive segment showcase ([8993ba4](https://github.com/Owloops/claude-powerline/commit/8993ba46138beb004b09cf3ca5d6febd66928389))
+
 ## [1.5.5](https://github.com/Owloops/claude-powerline/compare/v1.5.4...v1.5.5) (2025-08-15)
 
 
