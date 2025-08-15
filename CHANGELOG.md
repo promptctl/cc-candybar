@@ -1,3 +1,11 @@
+## [1.5.5](https://github.com/Owloops/claude-powerline/compare/v1.5.4...v1.5.5) (2025-08-15)
+
+
+### Bug Fixes
+
+* add support for transparent backgrounds in custom themes ([2889535](https://github.com/Owloops/claude-powerline/commit/288953574bc5e2762e5a3260a08ff13803fb1ddf))
+* restore original config colors ([7b5a379](https://github.com/Owloops/claude-powerline/commit/7b5a37992e14ee322a1545424b40550f8e2e1778))
+
 ## [1.5.4](https://github.com/Owloops/claude-powerline/compare/v1.5.3...v1.5.4) (2025-08-15)
 
 
