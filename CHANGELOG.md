@@ -1,3 +1,10 @@
+## [1.6.2](https://github.com/Owloops/claude-powerline/compare/v1.6.1...v1.6.2) (2025-08-17)
+
+
+### Bug Fixes
+
+* update npm downloads badge to correct package name ([9e70dac](https://github.com/Owloops/claude-powerline/commit/9e70dacfeeb49c1a87559cfdfc1942147c5b88cd))
+
 ## [1.6.1](https://github.com/Owloops/claude-powerline/compare/v1.6.0...v1.6.1) (2025-08-17)
 
 
