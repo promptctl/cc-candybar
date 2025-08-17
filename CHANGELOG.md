@@ -1,3 +1,10 @@
+## [1.6.1](https://github.com/Owloops/claude-powerline/compare/v1.6.0...v1.6.1) (2025-08-17)
+
+
+### Bug Fixes
+
+* streamline documentation and remove unused cli flags ([eaae545](https://github.com/Owloops/claude-powerline/commit/eaae54540a7d17fc4646be8b331750861d9d63ac))
+
 # [1.6.0](https://github.com/Owloops/claude-powerline/compare/v1.5.6...v1.6.0) (2025-08-15)
 
 
