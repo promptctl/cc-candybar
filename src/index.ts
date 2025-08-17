@@ -141,29 +141,10 @@ Debugging:
 Claude Code Options (for settings.json):
   --theme=THEME            Set theme: dark, light, nord, tokyo-night, rose-pine, custom
   --style=STYLE            Set separator style: minimal, powerline
-  --usage=TYPE             Usage display: cost, tokens, both, breakdown
-  --session-budget=AMOUNT  Set session budget for percentage tracking
   --config=PATH            Use custom config file path
 
-Configuration:
-  Config files are loaded in this order (highest priority first):
-  1. CLI arguments (--theme, --style, --usage, --config)
-  2. Environment variables (CLAUDE_POWERLINE_THEME, CLAUDE_POWERLINE_STYLE, CLAUDE_POWERLINE_USAGE_TYPE, CLAUDE_POWERLINE_CONFIG)
-  3. ./.claude-powerline.json (project)
-  4. ~/.claude/claude-powerline.json (user)
-  5. ~/.config/claude-powerline/config.json (XDG)
+See example config at: https://github.com/Owloops/claude-powerline/blob/main/.claude-powerline.json
 
-Creating a config file:
-  Copy example from: https://github.com/Owloops/claude-powerline/blob/main/.claude-powerline.json
-
-Usage in Claude Code settings.json:
-{
-  "statusLine": {
-    "type": "command",
-    "command": "claude-powerline",
-    "padding": 0
-  }
-}
 `);
       process.exit(0);
     }
@@ -205,8 +186,6 @@ Usage: claude-powerline [options]
 Options:
   --theme=THEME            Set theme: dark, light, nord, tokyo-night, rose-pine, custom
   --style=STYLE            Set separator style: minimal, powerline
-  --usage=TYPE             Usage display: cost, tokens, both, breakdown
-  --session-budget=AMOUNT  Set session budget for percentage tracking
   --config=PATH            Use custom config file path
   --install-fonts          Install powerline fonts to system
   -h, --help               Show this help

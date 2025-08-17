@@ -4,38 +4,41 @@
 
 **A vim-style powerline statusline for Claude Code with real-time usage tracking, git integration, and custom themes.**
 
-![Language:TypeScript](https://img.shields.io/static/v1?label=Language&message=TypeScript&color=blue&style=flat-square)
 ![License:MIT](https://img.shields.io/static/v1?label=License&message=MIT&color=blue&style=flat-square)
+[![npm downloads](https://img.shields.io/npm/dm/ccstatusline.svg)](https://www.npmjs.com/package/ccstatusline)
 [![npm version](https://img.shields.io/npm/v/@owloops/claude-powerline?style=flat-square)](https://www.npmjs.com/package/@owloops/claude-powerline)
+[![Install size](https://packagephobia.com/badge?p=@owloops/claude-powerline)](https://packagephobia.com/result?p=@owloops/claude-powerline)
+
+[![Mentioned in Awesome Claude Code](https://awesome.re/mentioned-badge-flat.svg)](https://github.com/hesreallyhim/awesome-claude-code)
 
 <table>
    <tr>
       <td align="center">
-         <img src="images/claude-powerline-dark.png" width="400" alt="Dark Theme"><br>
+         <img src="images/claude-powerline-dark.png" width="500" alt="Dark Theme"><br>
          <strong>Dark</strong>
       </td>
       <td align="center">
-         <img src="images/claude-powerline-light.png" width="400" alt="Light Theme"><br>
+         <img src="images/claude-powerline-light.png" width="500" alt="Light Theme"><br>
          <strong>Light</strong>
       </td>
    </tr>
    <tr>
       <td align="center">
-         <img src="images/claude-powerline-nord.png" width="400" alt="Nord Theme"><br>
+         <img src="images/claude-powerline-nord.png" width="500" alt="Nord Theme"><br>
          <strong>Nord</strong>
       </td>
       <td align="center">
-         <img src="images/claude-powerline-tokyo-night.png" width="400" alt="Tokyo Night Theme"><br>
+         <img src="images/claude-powerline-tokyo-night.png" width="500" alt="Tokyo Night Theme"><br>
          <strong>Tokyo Night</strong>
       </td>
    </tr>
    <tr>
       <td align="center">
-         <img src="images/claude-powerline-rose-pine.png" width="400" alt="Rose Pine Theme"><br>
+         <img src="images/claude-powerline-rose-pine.png" width="500" alt="Rose Pine Theme"><br>
          <strong>Rose Pine</strong>
       </td>
       <td align="center">
-         <img src="images/claude-powerline-custom.png" width="400" alt="Custom Theme"><br>
+         <img src="images/claude-powerline-custom.png" width="500" alt="Custom Theme"><br>
          <em>Create your own!</em>
       </td>
    </tr>
@@ -46,26 +49,38 @@
 
 <table>
 <tr>
-<td width="50%" valign="top">
+<td width="50%">
 
-### Core Features
+### Usage Tracking
 
-- **Vim-style powerline** with proper arrows and segments
-- **Real-time session tracking** with costs and tokens
-- **Billing window tracking** with 5-hour blocks and burn rates
-- **Daily usage monitoring** with budget alerts
-- **Performance metrics** with response times
-- **Context monitoring** showing tokens used and auto-compact threshold
-- **Git integration** with branch, status, ahead/behind counts
+- Real-time session costs
+- 5-hour billing window monitoring
+- Daily budget alerts with percentages
+- Token breakdown (input/output/cached)
+
+### Git Integration
+
+- Branch status with clean/dirty indicators
+- Commits ahead/behind remote tracking
+- Repository info (SHA, tags, stash count)
+- Working tree staged/unstaged/untracked counts
 
 </td>
-<td width="50%" valign="top">
+<td width="50%">
 
 ### Customization
 
-- **Custom themes** with full color control
-- **Budget monitoring** with percentage warnings
-- **Flexible configuration** via JSON files and environment variables
+- 5 built-in themes (dark, light, nord, tokyo-night, rose-pine)
+- Custom color configuration
+- Powerline and minimal separator styles
+- Multi-line layouts to prevent cutoff
+
+### Performance Metrics
+
+- Average and last response times
+- Session duration tracking
+- Message count monitoring
+- Context usage with auto-compact threshold
 
 </td>
 </tr>
@@ -73,347 +88,284 @@
 
 ## Installation
 
-### Requirements
-
-- **Node.js 18+**
-- **Claude Code**
-
 ### Setup
 
-**Install powerline fonts:**
+Requires Node.js 18+ and Claude Code.
+
+**1. Install powerline fonts:**
 
 ```bash
 npx -y @owloops/claude-powerline --install-fonts
 ```
 
-> [!WARNING]  
-> Without powerline fonts, arrow separators display as placeholder characters (�). The default `--style=minimal` mode resolves it by not using the powerline unicode.
-
-**Add to your Claude Code `settings.json`:**
+**2. Add to your Claude Code `settings.json`:**
 
 ```json
 {
   "statusLine": {
     "type": "command", 
     "command": "npx -y @owloops/claude-powerline@latest --style=powerline",
-    "padding": 0
   }
 }
 ```
 
-> [!NOTE]  
-> Using `npx` automatically downloads and runs the latest version, ensuring you always have the newest features and fixes without manual updates.
-
-**Start a Claude session:** It appears at the bottom during conversations.
+**3. Start a Claude session** - the statusline appears at the bottom during conversations.
 
 ![Claude Code with powerline](images/claude-interface-with-powerline.png)
 
-> [!TIP]  
-> The statusline shows your **current directory name** (not "claude powerline") and updates with live usage data during Claude conversations.
+Using `npx` automatically downloads and runs the latest version without manual updates.
+
+> [!NOTE]  
+> If you encounter font issues, use `--style=minimal` (default) which works without powerline fonts.
 
 ## Usage
 
-```bash
-claude-powerline [OPTIONS]
-```
+Once added to Claude Code settings, the statusline runs automatically. For customization:
 
-Options are specified by command line flags. Overall configuration can also use environment variables or configuration files.
+**CLI Options:**
 
-## Command Line Options
+- `--theme` - `dark` (default), `light`, `nord`, `tokyo-night`, `rose-pine`, `custom`
+- `--style` - `minimal` (default), `powerline`
+- `--config` - Custom config file path
+- `--install-fonts` - Install powerline fonts
+- `--help` - Show help
 
-| Option             | Values                                                                  | Description                       |
-| ------------------ | ----------------------------------------------------------------------- | --------------------------------- |
-| `--theme`          | `dark` (default), `light`, `nord`, `tokyo-night`, `rose-pine`, `custom` | Set color theme                   |
-| `--style`          | `minimal` (default), `powerline`                                        | Set separator style               |
-| `--usage`          | `cost`, `tokens`, `both`, `breakdown`                                   | Set usage display format          |
-| `--session-budget` | `AMOUNT`                                                                | Set session budget limit in USD   |
-| `--config`         | `PATH`                                                                  | Use custom config file path       |
-| `--install-fonts`  | -                                                                       | Install powerline fonts to system |
-| `-h, --help`       | -                                                                       | Show help message                 |
-
-> [!NOTE]  
-> Global options have CLI flags and environment variables. Individual segments are configured through config files.
-
-### Usage Display Types
-
-- **cost**: Show dollar amounts (`$0.05`)
-- **tokens**: Show token counts (`1.2K tokens`)  
-- **both**: Show both (`$0.05 (1.2K tokens)`)
-- **breakdown**: Show detailed token breakdown (`1.2Kin + 0.8Kout + 1.5Kcached`)
-
-## Examples
-
-### Default Configuration
+**Examples:**
 
 ```bash
-# Shows directory, git, model, session usage (tokens), block usage, context info
-# Uses dark theme, minimal style
-claude-powerline
-```
-
-### Theme and Style
-
-```bash
-# Nord theme with powerline arrows
 claude-powerline --theme=nord --style=powerline
-
-# Tokyo Night theme, minimal style
-claude-powerline --theme=tokyo-night --style=minimal
+claude-powerline --config=/path/to/config.json
 ```
 
-### Usage Display
+**Environment Variables:**
 
 ```bash
-# Show token breakdown instead of costs
-claude-powerline --usage=breakdown
-
-# Set session budget limit
-claude-powerline --session-budget=50
+export CLAUDE_POWERLINE_THEME=dark
+export CLAUDE_POWERLINE_STYLE=powerline
+export CLAUDE_POWERLINE_CONFIG=/path/to/config.json
+export CLAUDE_POWERLINE_DEBUG=1  # Enable debug logging
 ```
-
-### Status Indicators
-
-#### Symbols
-
-- **Session**: `§` Section sign for session costs
-- **Block**: `◱` Clock symbol for 5-hour blocks  
-- **Today**: `☉` Sun symbol for daily usage
-- **Git Branch**: `⎇` Branch symbol
-- **Git Tag**: `⌂` House/tag symbol
-- **Git SHA**: `♯` Hash symbol
-- **Git Stash**: `⧇` Double square symbol
-- **Metrics Delta**: `Δ` Delta for last response time
-
-#### Status States
-
-- **Git**: `✓` Clean, `●` Dirty, `⚠` Conflicts, `↑3` Ahead, `↓2` Behind remote
-- **Context**: `◔ 34,040 (79%)` - Token count and percentage remaining until auto-compact
-- **Budget**: `25%` Normal (under 50%), `+75%` Moderate (50-79%), `!85%` Warning (80%+)
 
 ## Configuration
 
-Create config file:
+**Get example config:**
 
 ```bash
-# Copy example config from repository
+# Download full-featured example config
 curl -o ~/.claude/claude-powerline.json https://raw.githubusercontent.com/Owloops/claude-powerline/main/.claude-powerline.json
 ```
 
-> [!IMPORTANT]  
-> The example configuration showcases all available segments and features of the powerline.
+**Config locations** (first found wins):
 
-![All Segments Demo](images/claude-powerline-all-segments.png)
+- `./.claude-powerline.json` - Project-specific
+- `~/.claude/claude-powerline.json` - User config  
+- `~/.config/claude-powerline/config.json` - XDG standard
 
-Configuration priority (top overrides bottom):
+**Override priority:** CLI flags → Environment variables → Config files → Defaults
 
-1. CLI arguments (`--theme`, `--style`, `--usage`, `--session-budget`, `--config`)
-2. Environment variables (`CLAUDE_POWERLINE_THEME`, `CLAUDE_POWERLINE_STYLE`, `CLAUDE_POWERLINE_USAGE_TYPE`, `CLAUDE_POWERLINE_SESSION_BUDGET`, `CLAUDE_POWERLINE_CONFIG`)
-3. Config files (first found):
-   - `./.claude-powerline.json` (project)
-   - `~/.claude/claude-powerline.json` (user)  
-   - `~/.config/claude-powerline/config.json` (XDG)
-4. Default values
-
-> [!NOTE]  
-> Config files are reloaded automatically when changed - no need to restart Claude Code.
+Config files reload automatically and no restart needed.
 
 ### Available Segments
 
-```json
-{
-  "display": {
-    "lines": [
-      {
-        "segments": {
-          "directory": { 
-            "enabled": true,
-            "showBasename": false
-          },
-          "git": { 
-            "enabled": true, 
-            "showSha": true,
-            "showWorkingTree": false,
-            "showOperation": false,
-            "showTag": false,
-            "showTimeSinceCommit": false,
-            "showStashCount": false,
-            "showUpstream": false,
-            "showRepoName": false
-          },
-          "model": { "enabled": true },
-          "session": { "enabled": true, "type": "tokens" },
-          "block": { "enabled": true, "type": "cost", "burnType": "cost" },
-          "today": { "enabled": true, "type": "cost" },
-          "context": { "enabled": true },
-          "tmux": { "enabled": true },
-          "metrics": { 
-            "enabled": true,
-            "showResponseTime": true,
-            "showLastResponseTime": false,
-            "showDuration": true,
-            "showMessageCount": true
-          },
-          "version": { "enabled": true }
-        }
-      }
-    ]
-  }
-}
-```
+| Segment | Description | Key Options |
+|---------|-------------|-------------|
+| `directory` | Current working directory | `showBasename` |
+| `git` | Branch, status, repository info | `showSha`, `showWorkingTree`, `showTag`, `showStashCount`, `showOperation`, `showTimeSinceCommit`, `showUpstream`, `showRepoName` |
+| `model` | Current Claude model | - |
+| `session` | Real-time usage for conversation | `type`: `cost`\|`tokens`\|`both`\|`breakdown` |
+| `block` | 5-hour billing window usage | `type`, `burnType`: `cost`\|`tokens`\|`both`\|`none` |
+| `today` | Daily usage with budget monitoring | `type` |
+| `context` | Context window usage | - |
+| `tmux` | Tmux session info | - |
+| `metrics` | Performance analytics | `showResponseTime`, `showLastResponseTime`, `showDuration`, `showMessageCount` |
+| `version` | Claude Code version | - |
 
-### Segment Details
+### Segment Configuration
 
-- **directory**: Current working directory name (supports `showBasename` option)
-- **git**: Branch, status, and extensive repository information (see Git Configuration below)
-- **model**: Current Claude model being used
-- **session**: Token usage and costs for current session
-- **block**: Usage within current 5-hour billing window
-- **today**: Total daily usage with budget monitoring
-- **context**: Context window usage and auto-compact threshold
-- **tmux**: Tmux session name and window info (when in tmux)
-- **metrics**: Performance analytics (see Metrics Configuration below)
-- **version**: Claude Code version (e.g., v1.0.81)
+#### Directory
 
-#### Directory Configuration
+Shows current working directory name.
 
 ```json
 "directory": {
   "enabled": true,
-  "showBasename": false  // Show only folder name instead of full path
+  "showBasename": false
 }
 ```
 
-#### Git Configuration
+**Options:**
 
-The git segment now supports extensive repository information:
+- `showBasename`: Show only folder name instead of full path
+
+#### Git
+
+Shows branch, status, and repository information.
 
 ```json
 "git": {
   "enabled": true,
-  "showSha": true,              // Show abbreviated commit SHA (♯ abc123)
-  "showWorkingTree": false,     // Show staged/unstaged/untracked counts ((+1 ~2 ?3))
-  "showOperation": false,        // Show ongoing operations (MERGE/REBASE/CHERRY-PICK)
-  "showTag": false,              // Show nearest tag (⌂ v1.5.0)
-  "showTimeSinceCommit": false, // Show time since last commit (⏰ 2h)
-  "showStashCount": false,      // Show stash count (⧇ 3)
-  "showUpstream": false,        // Show upstream branch (→ origin/main)
-  "showRepoName": false         // Show repository name
+  "showSha": true,
+  "showWorkingTree": false,
+  "showOperation": false,
+  "showTag": false,
+  "showTimeSinceCommit": false,
+  "showStashCount": false,
+  "showUpstream": false,
+  "showRepoName": false
 }
 ```
 
-**Git Status Indicators:**
+**Options:**
 
-- `✓` Clean working tree
-- `●` Uncommitted changes
-- `⚠` Merge conflicts
-- `↑3` Commits ahead of upstream
-- `↓2` Commits behind upstream
-- `(+1 ~2 ?3)` Staged/Unstaged/Untracked file counts
+- `showSha`: Show abbreviated commit SHA
+- `showWorkingTree`: Show staged/unstaged/untracked counts
+- `showOperation`: Show ongoing operations (MERGE/REBASE/CHERRY-PICK)
+- `showTag`: Show nearest tag
+- `showTimeSinceCommit`: Show time since last commit
+- `showStashCount`: Show stash count
+- `showUpstream`: Show upstream branch
+- `showRepoName`: Show repository name
 
-#### Metrics Configuration
+**Symbols:**
 
-The metrics segment displays performance analytics from your Claude sessions:
+- `⎇` Branch • `♯` SHA • `⌂` Tag • `⧇` Stash • `✓` Clean • `●` Dirty • `⚠` Conflicts • `↑3` Ahead • `↓2` Behind • `(+1 ~2 ?3)` Staged/Unstaged/Untracked
+
+#### Metrics
+
+Shows performance analytics from your Claude sessions.
 
 ```json
 "metrics": {
   "enabled": true,
-  "showResponseTime": true,      // Average response time (`⧖ 3.2s`)
-  "showLastResponseTime": false, // Last response time (`Δ 2.8s`)
-  "showDuration": true,          // Session duration (`⧗ 28m`)
-  "showMessageCount": true       // User message count (`⟐ 93`)
+  "showResponseTime": true,
+  "showLastResponseTime": false,
+  "showDuration": true,
+  "showMessageCount": true
 }
 ```
 
-**Metrics Display:**
+**Options:**
 
 - `showResponseTime`: Average response time across all messages
 - `showLastResponseTime`: Time for the last response (shows `0.0s` while waiting)
 - `showDuration`: Total time since session started
 - `showMessageCount`: Number of user messages sent
 
-![Metrics Segment Example](images/claude-powerline-metrics.png)
+**Symbols:**
 
-#### Usage Segments Configuration
+- `⧖` Average response time • `Δ` Last response time • `⧗` Session duration • `⟐` Message count
 
-The powerline includes three complementary usage segments:
+#### Model
+
+Shows current Claude model being used.
 
 ```json
-{
-  "segments": {
-    "session": { "enabled": true, "type": "tokens" },
-    "block": { "enabled": true, "type": "cost" },
-    "today": { "enabled": true, "type": "cost" }
-  },
-  "budget": {
-    "session": { "amount": 10.0, "warningThreshold": 80 },
-    "today": { "amount": 25.0, "warningThreshold": 80 }
-  }
+"model": {
+  "enabled": true
 }
 ```
 
-**Segment Types:**
+#### Context
 
-- **session**: Real-time usage for current Claude conversation
-- **block**: Usage within current 5-hour billing window (Claude's rate limit period)
-- **today**: Total daily usage with budget monitoring
-
-**Display Options:**
-
-**Session & Today segments:**
-
-- `cost`: Show dollar amounts (`$0.05`)
-- `tokens`: Show token counts (`1.2K tokens`)
-- `both`: Show both (`$0.05 (1.2K)`)
-- `breakdown`: Show token breakdown (`1.2Kin + 0.8Kout + 1.5Kcached`)
-
-**Block segment** (always shows time remaining):
-
-- `cost`: Show cost + time (`$0.05 (2h 30m left)`)
-- `tokens`: Show tokens + time (`1.2K tokens (2h 30m left)`)
-- `both`: Show both cost and tokens + time
-- `time`: Show only time remaining
-
-**Block burn rates** (configured with `burnType`):
+Shows context window usage and auto-compact threshold.
 
 ```json
-"block": { "enabled": true, "type": "cost", "burnType": "cost" }
+"context": {
+  "enabled": true
+}
 ```
 
-- `cost`: Show cost burn rate (`$0.05 | $1.20/h (2h 30m left)`)
-- `tokens`: Show token burn rate (`1.2K | 450K/h (2h 30m left)`)  
-- `both`: Show both burn rates
-- `none`: Hide burn rates
+**Display:** `◔ 34,040 (79%)` - tokens used and percentage remaining until auto-compact
 
-**Budget Configuration:**
+#### Tmux
+
+Shows tmux session name and window info when in tmux.
+
+```json
+"tmux": {
+  "enabled": true
+}
+```
+
+#### Version
+
+Shows Claude Code version.
+
+```json
+"version": {
+  "enabled": true
+}
+```
+
+**Display:** `v1.0.81`
+
+#### Session
+
+Shows real-time usage for current Claude conversation.
+
+```json
+"session": {
+  "enabled": true,
+  "type": "tokens"
+}
+```
+
+**Options:**
+
+- `type`: Display format - `cost` | `tokens` | `both` | `breakdown`
+
+**Symbols:** `§` Session
+
+#### Block
+
+Shows usage within current 5-hour billing window (Claude's rate limit period).
+
+```json
+"block": {
+  "enabled": true,
+  "type": "cost",
+  "burnType": "cost"
+}
+```
+
+**Options:**
+
+- `type`: Display format - `cost` | `tokens` | `both` | `time`
+- `burnType`: Burn rate display - `cost` | `tokens` | `both` | `none`
+
+**Symbols:** `◱` Block
+
+#### Today
+
+Shows total daily usage with budget monitoring.
+
+```json
+"today": {
+  "enabled": true,
+  "type": "cost"
+}
+```
+
+**Options:**
+
+- `type`: Display format - `cost` | `tokens` | `both` | `breakdown`
+
+**Symbols:** `☉` Today
+
+### Budget Configuration
 
 ```json
 "budget": {
-  "session": {
-    "amount": 10.0,
-    "warningThreshold": 80
-  },
-  "today": {
-    "amount": 25.0, 
-    "warningThreshold": 80
-  }
+  "session": { "amount": 10.0, "warningThreshold": 80 },
+  "today": { "amount": 25.0, "warningThreshold": 80 }
 }
 ```
 
-**Budget Indicators:**
+**Indicators:** `25%` Normal • `+75%` Moderate (50-79%) • `!85%` Warning (80%+)
 
-- `25%` Normal (under 50%)
-- `+75%` Moderate (50-79%)
-- `!85%` Warning (80%+)
+### Multi-line Layout
 
-**Why Use Different Segments?**
-
-- **session**: Track spending per conversation  
-- **block**: Monitor rate limits with time remaining (Claude throttles after 5-hour usage peaks)
-- **today**: Stay within daily budgets
-
-### Multi-line Layout (Optional)
-
-To prevent segment cutoff, configure multiple lines:
+Prevent segment cutoff by organizing segments across multiple lines.
 
 ```json
 {
@@ -428,13 +380,9 @@ To prevent segment cutoff, configure multiple lines:
       },
       {
         "segments": {
-          "session": { "enabled": true, "type": "tokens" },
-          "block": { "enabled": true, "type": "cost", "burnType": "cost" },
-          "today": { "enabled": true, "type": "cost" },
-          "context": { "enabled": true },
-          "tmux": { "enabled": false },
-          "metrics": { "enabled": true },
-          "version": { "enabled": true }
+          "session": { "enabled": true },
+          "today": { "enabled": true },
+          "context": { "enabled": true }
         }
       }
     ]
@@ -443,11 +391,11 @@ To prevent segment cutoff, configure multiple lines:
 ```
 
 > [!NOTE]  
-> Claude Code system messages (e.g., Context left until auto-compact) may truncate the status line mid-sequence. Multi-line layouts help prevent segment cutoff.
+> Claude Code system messages may truncate long status lines. Multi-line layouts prevent segment cutoff and improve readability.
 
 ### Custom Colors
 
-To customize colors, copy dark or light theme colors from `src/themes/` in the repository, then modify:
+Create custom themes by defining segment colors.
 
 ```json
 {
@@ -456,91 +404,59 @@ To customize colors, copy dark or light theme colors from `src/themes/` in the r
     "custom": {
       "directory": { "bg": "#ff6600", "fg": "#ffffff" },
       "git": { "bg": "#0066cc", "fg": "#ffffff" },
-      "model": { "bg": "#9900cc", "fg": "#ffffff" },
-      "session": { "bg": "#cc0099", "fg": "#ffffff" },
-      "block": { "bg": "#404040", "fg": "#cccccc" },
-      "today": { "bg": "#303030", "fg": "#dddddd" },
-      "context": { "bg": "#4a5568", "fg": "#ffffff" },
-      "tmux": { "bg": "#228b22", "fg": "#ffffff" },
-      "metrics": { "bg": "#374151", "fg": "#ffffff" },
-      "version": { "bg": "#2d3748", "fg": "#ffffff" }
+      "session": { "bg": "#cc0099", "fg": "#ffffff" }
     }
   }
 }
 ```
 
-> [!TIP]
-> Use `"transparent"` or `"none"` for background colors to create a minimal look:
-> ```json
-> "directory": { "bg": "transparent", "fg": "#00ff00" }
-> ```
+**Color Options:**
+
+- `bg`: Background color (hex, `transparent`, or `none`)
+- `fg`: Foreground/text color (hex)
+
+> [!TIP]  
+> Copy existing theme colors from `src/themes/` in the repository as a starting point.
 
 ## Custom Segments
 
-Extend the statusline by wrapping the command with shell composition:
+Extend the statusline using shell composition for unlimited flexibility.
 
-### Add Custom Segments
+### Simple Addition
 
-Use `tput` for colors that match your terminal theme:
+Add custom segments using shell commands:
 
 ```json
 {
   "statusLine": {
     "type": "command",
-    "command": "npx -y @owloops/claude-powerline && echo \"$(tput setab 4)$(tput setaf 15) ⏱ $(date +%H:%M) $(tput sgr0)\"",
+    "command": "npx -y @owloops/claude-powerline && echo \" $(date +%H:%M)\"",
     "padding": 0
   }
 }
 ```
 
-Common `tput` colors:
+### With Colors
 
-- `setab 1` (red bg) `setaf 15` (white fg)
-- `setab 2` (green bg) `setaf 0` (black fg)
-- `setab 4` (blue bg) `setaf 15` (white fg)
-- `setab 6` (cyan bg) `setaf 0` (black fg)
+Use `tput` for terminal-compatible colors:
 
-### Custom Wrapper Script
+```bash
+echo "$(tput setab 4)$(tput setaf 15) ⏱ $(date +%H:%M) $(tput sgr0)"
+# setab: background (1-7) | setaf: foreground (0-15) | sgr0: reset
+```
 
-Create `~/.local/bin/my-statusline`:
+### Advanced Script
+
+Create `~/.local/bin/my-statusline` for complex extensions:
 
 ```bash
 #!/bin/bash
-# Option 1: Same line (continuous)
-cat | npx -y @owloops/claude-powerline | tr -d '\n'
-echo -n "$(tput setab 6)$(tput setaf 0) ⏱ $(date +%H:%M) $(tput sgr0)"
-echo "$(tput setab 2)$(tput setaf 0) ☁ $(curl -s wttr.in?format=%t 2>/dev/null || echo '?') $(tput sgr0)"
-
-# Option 2: Separate lines (multiline)
-# cat | npx -y @owloops/claude-powerline
-# echo "$(tput setab 6)$(tput setaf 0) ⏱ $(date +%H:%M) $(tput sgr0)"
-# echo "$(tput setab 2)$(tput setaf 0) ☁ $(curl -s wttr.in?format=%t 2>/dev/null || echo '?') $(tput sgr0)"
-```
-
-Then use it in `settings.json`:
-
-```json
-{
-  "statusLine": {
-    "type": "command",
-    "command": "/full/path/to/my-statusline",
-    "padding": 0
-  }
-}
+npx -y @owloops/claude-powerline
+echo "$(tput setab 6)$(tput setaf 0) ⏱ $(date +%H:%M) $(tput sgr0)"
 ```
 
 > [!TIP]  
-> Shell composition provides unlimited flexibility while keeping the core package secure - no arbitrary command execution needed. Use full absolute paths or ensure scripts are in your PATH.
-
-## Environment Variables
-
-```bash
-export CLAUDE_POWERLINE_THEME=dark
-export CLAUDE_POWERLINE_STYLE=powerline
-export CLAUDE_POWERLINE_USAGE_TYPE=tokens
-export CLAUDE_POWERLINE_CONFIG=/path/to/config.json
-export CLAUDE_POWERLINE_DEBUG=1  # Enable debug logging
-```
+> Shell composition provides unlimited flexibility while keeping the core package secure.
 
 ## Contributing
 

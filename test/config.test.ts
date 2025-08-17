@@ -87,34 +87,12 @@ describe("config", () => {
       );
       consoleSpy.mockRestore();
     });
-
-    it("should parse budget flags", () => {
-      mockFs.existsSync.mockReturnValue(false);
-      const sessionConfig = loadConfigFromCLI([
-        "node",
-        "script",
-        "--session-budget=15.75",
-      ]);
-      expect(sessionConfig.budget?.session?.amount).toBe(15.75);
-    });
-
-    it("should ignore invalid budget values", () => {
-      mockFs.existsSync.mockReturnValue(false);
-      const sessionConfig = loadConfigFromCLI([
-        "node",
-        "script",
-        "--session-budget=invalid",
-      ]);
-      expect(sessionConfig.budget?.session?.amount).toBeUndefined();
-    });
   });
 
   describe("environment variables", () => {
     beforeEach(() => {
       delete process.env.CLAUDE_POWERLINE_THEME;
       delete process.env.CLAUDE_POWERLINE_STYLE;
-      delete process.env.CLAUDE_POWERLINE_USAGE_TYPE;
-      delete process.env.CLAUDE_POWERLINE_SESSION_BUDGET;
     });
 
     it("should preserve display lines when setting style via environment", () => {

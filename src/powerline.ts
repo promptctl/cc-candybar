@@ -249,9 +249,7 @@ export class PowerlineRenderer {
       case "session":
         if (!usageInfo) return null;
         const usageType =
-          this.config.usageType ||
-          (segment.config as UsageSegmentConfig)?.type ||
-          "cost";
+          (segment.config as UsageSegmentConfig)?.type || "cost";
         return this.segmentRenderer.renderSession(usageInfo, colors, usageType);
 
       case "tmux":
@@ -286,7 +284,11 @@ export class PowerlineRenderer {
       case "version":
         if (!versionInfo) return null;
         const versionConfig = segment.config as VersionSegmentConfig;
-        return this.segmentRenderer.renderVersion(versionInfo, colors, versionConfig);
+        return this.segmentRenderer.renderVersion(
+          versionInfo,
+          colors,
+          versionConfig
+        );
 
       default:
         return null;

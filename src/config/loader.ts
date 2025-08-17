@@ -53,7 +53,6 @@ export interface PowerlineConfig {
     custom: ColorTheme;
   };
   budget?: BudgetConfig;
-  usageType?: "cost" | "tokens" | "both" | "breakdown";
 }
 
 function isValidTheme(theme: string): theme is PowerlineConfig["theme"] {
@@ -69,12 +68,6 @@ function isValidTheme(theme: string): theme is PowerlineConfig["theme"] {
 
 function isValidStyle(style: string): style is "minimal" | "powerline" {
   return style === "minimal" || style === "powerline";
-}
-
-function isValidUsageType(
-  usageType: string
-): usageType is "cost" | "tokens" | "both" | "breakdown" {
-  return ["cost", "tokens", "both", "breakdown"].includes(usageType);
 }
 
 function deepMerge<T extends Record<string, any>>(
@@ -155,24 +148,6 @@ function loadEnvConfig(): Partial<PowerlineConfig> {
     }
   }
 
-  const usageType = process.env.CLAUDE_POWERLINE_USAGE_TYPE;
-  if (usageType && isValidUsageType(usageType)) {
-    config.usageType = usageType;
-  }
-
-  const sessionBudgetStr = process.env.CLAUDE_POWERLINE_SESSION_BUDGET;
-  if (sessionBudgetStr) {
-    const sessionBudget = parseFloat(sessionBudgetStr);
-    if (!isNaN(sessionBudget) && sessionBudget > 0) {
-      config.budget = {
-        session: {
-          ...DEFAULT_CONFIG.budget?.session,
-          amount: sessionBudget,
-        },
-      };
-    }
-  }
-
   if (Object.keys(display).length > 0) {
     config.display = display as DisplayConfig;
   }
@@ -202,28 +177,6 @@ function parseCLIOverrides(args: string[]): Partial<PowerlineConfig> {
         `Invalid display style '${style}' from CLI argument, falling back to 'minimal'`
       );
       display.style = "minimal";
-    }
-  }
-
-  const usageType = args
-    .find((arg) => arg.startsWith("--usage="))
-    ?.split("=")[1];
-  if (usageType && isValidUsageType(usageType)) {
-    config.usageType = usageType;
-  }
-
-  const sessionBudgetStr = args
-    .find((arg) => arg.startsWith("--session-budget="))
-    ?.split("=")[1];
-  if (sessionBudgetStr) {
-    const sessionBudget = parseFloat(sessionBudgetStr);
-    if (!isNaN(sessionBudget) && sessionBudget > 0) {
-      config.budget = {
-        session: {
-          ...DEFAULT_CONFIG.budget?.session,
-          amount: sessionBudget,
-        },
-      };
     }
   }
 
