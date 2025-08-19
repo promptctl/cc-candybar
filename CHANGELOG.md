@@ -1,3 +1,10 @@
+## [1.6.7](https://github.com/Owloops/claude-powerline/compare/v1.6.6...v1.6.7) (2025-08-19)
+
+
+### Bug Fixes
+
+* improve README segment configuration readability with separators ([8f11c3a](https://github.com/Owloops/claude-powerline/commit/8f11c3a12c73430120bfd6c311a0ba104098f8b0))
+
 ## [1.6.6](https://github.com/Owloops/claude-powerline/compare/v1.6.5...v1.6.6) (2025-08-19)
 
 
