@@ -1,3 +1,10 @@
+## [1.6.3](https://github.com/Owloops/claude-powerline/compare/v1.6.2...v1.6.3) (2025-08-19)
+
+
+### Bug Fixes
+
+* optimize bundle size with minify, treeshake, and node18 target ([4a72b44](https://github.com/Owloops/claude-powerline/commit/4a72b443565fb5280e9006748c330bc69e063e7a))
+
 ## [1.6.2](https://github.com/Owloops/claude-powerline/compare/v1.6.1...v1.6.2) (2025-08-17)
 
 
