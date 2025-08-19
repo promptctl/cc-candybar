@@ -1,4 +1,9 @@
 import { debug } from "../utils/logger";
+import { homedir } from "node:os";
+import { join } from "node:path";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { get } from "node:https";
+import { URL } from "node:url";
 
 export interface ModelPricing {
   name: string;
@@ -149,10 +154,6 @@ export class PricingService {
     "https://raw.githubusercontent.com/Owloops/claude-powerline/main/pricing.json";
 
   private static getCacheFilePath(): string {
-    const { homedir } = require("os");
-    const { join } = require("path");
-    const { mkdirSync } = require("fs");
-
     const cacheDir = join(homedir(), ".claude", "cache");
     try {
       mkdirSync(cacheDir, { recursive: true });
@@ -166,7 +167,6 @@ export class PricingService {
     timestamp: number;
   } | null {
     try {
-      const { readFileSync } = require("fs");
       const cacheFile = this.getCacheFilePath();
       const content = readFileSync(cacheFile, "utf-8");
       const cached = JSON.parse(content);
@@ -180,13 +180,102 @@ export class PricingService {
 
   private static saveDiskCache(data: Record<string, ModelPricing>): void {
     try {
-      const { writeFileSync } = require("fs");
       const cacheFile = this.getCacheFilePath();
       const cacheData = { data, timestamp: Date.now() };
       writeFileSync(cacheFile, JSON.stringify(cacheData));
     } catch (error) {
       debug("Failed to save pricing cache to disk:", error);
     }
+  }
+
+  private static async fetchPricingData(): Promise<Record<
+    string,
+    ModelPricing
+  > | null> {
+    return new Promise((resolve) => {
+      const parsedUrl = new URL(this.GITHUB_PRICING_URL);
+
+      const request = get(
+        {
+          hostname: parsedUrl.hostname,
+          path: parsedUrl.pathname,
+          headers: {
+            "User-Agent": "claude-powerline",
+            "Cache-Control": "no-cache",
+          },
+          timeout: 5000,
+        },
+        (response) => {
+          if (response.statusCode !== 200) {
+            debug(`HTTP ${response.statusCode}: ${response.statusMessage}`);
+            resolve(null);
+            return;
+          }
+
+          let data = "";
+          let size = 0;
+          const MAX_SIZE = 1024 * 1024;
+
+          response.on("data", (chunk) => {
+            size += chunk.length;
+            if (size > MAX_SIZE) {
+              debug("Response too large");
+              request.destroy();
+              resolve(null);
+              return;
+            }
+            data += chunk;
+          });
+
+          response.on("end", () => {
+            try {
+              const json = JSON.parse(data);
+              const dataObj = json as Record<string, unknown>;
+              const meta = dataObj._meta as { updated?: string } | undefined;
+
+              const pricingData: Record<string, unknown> = {};
+              for (const [key, value] of Object.entries(dataObj)) {
+                if (key !== "_meta") {
+                  pricingData[key] = value;
+                }
+              }
+
+              if (this.validatePricingData(pricingData)) {
+                debug(
+                  `Fetched fresh pricing from GitHub for ${Object.keys(pricingData).length} models`
+                );
+                debug(`Pricing last updated: ${meta?.updated || "unknown"}`);
+                resolve(pricingData);
+              } else {
+                debug("Invalid pricing data structure");
+                resolve(null);
+              }
+            } catch (error) {
+              debug("Failed to parse JSON:", error);
+              resolve(null);
+            }
+          });
+
+          response.on("error", (error) => {
+            debug("Response error:", error);
+            resolve(null);
+          });
+        }
+      );
+
+      request.on("error", (error) => {
+        debug("Request error:", error);
+        resolve(null);
+      });
+
+      request.on("timeout", () => {
+        debug("Request timeout");
+        request.destroy();
+        resolve(null);
+      });
+
+      request.end();
+    });
   }
 
   static async getCurrentPricing(): Promise<Record<string, ModelPricing>> {
@@ -210,43 +299,15 @@ export class PricingService {
       return diskCached.data;
     }
 
-    try {
-      const response = await globalThis.fetch(this.GITHUB_PRICING_URL, {
-        headers: {
-          "User-Agent": "claude-powerline",
-          "Cache-Control": "no-cache",
-        },
+    const freshData = await this.fetchPricingData();
+    if (freshData) {
+      this.memoryCache.clear();
+      this.memoryCache.set("pricing", {
+        data: freshData,
+        timestamp: now,
       });
-
-      if (response.ok) {
-        const data = await response.json();
-
-        const dataObj = data as Record<string, unknown>;
-        const meta = dataObj._meta as { updated?: string } | undefined;
-
-        const pricingData: Record<string, unknown> = {};
-        for (const [key, value] of Object.entries(dataObj)) {
-          if (key !== "_meta") {
-            pricingData[key] = value;
-          }
-        }
-
-        if (this.validatePricingData(pricingData)) {
-          this.memoryCache.clear();
-          this.memoryCache.set("pricing", {
-            data: pricingData,
-            timestamp: now,
-          });
-          this.saveDiskCache(pricingData);
-          debug(
-            `Fetched fresh pricing from GitHub for ${Object.keys(pricingData).length} models`
-          );
-          debug(`Pricing last updated: ${meta?.updated || "unknown"}`);
-          return pricingData;
-        }
-      }
-    } catch (error) {
-      debug("Failed to fetch pricing from GitHub, using fallback:", error);
+      this.saveDiskCache(freshData);
+      return freshData;
     }
 
     if (diskCached) {

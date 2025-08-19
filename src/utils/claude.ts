@@ -4,6 +4,21 @@ import { join, posix } from "node:path";
 import { homedir } from "node:os";
 import { debug } from "./logger";
 
+export interface ClaudeHookData {
+  hook_event_name: string;
+  session_id: string;
+  transcript_path: string;
+  cwd: string;
+  model: {
+    id: string;
+    display_name: string;
+  };
+  workspace: {
+    current_dir: string;
+    project_dir: string;
+  };
+}
+
 export function getClaudePaths(): string[] {
   const paths: string[] = [];
 

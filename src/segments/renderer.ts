@@ -1,5 +1,5 @@
 import path from "node:path";
-import type { ClaudeHookData } from "../index";
+import type { ClaudeHookData } from "../utils/claude";
 import type { PowerlineColors } from "../themes";
 import type { PowerlineConfig } from "../config/loader";
 import type { BlockInfo } from "./block";

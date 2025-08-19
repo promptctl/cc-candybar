@@ -1,5 +1,5 @@
 import { PowerlineRenderer } from "../src/powerline";
-import type { ClaudeHookData } from "../src/index";
+import type { ClaudeHookData } from "../src/utils/claude";
 
 jest.mock("../src/segments/session", () => ({
   SessionProvider: jest.fn().mockImplementation(() => ({

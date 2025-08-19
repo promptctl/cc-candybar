@@ -464,6 +464,10 @@ Contributions are welcome! Please feel free to submit issues or pull requests.
 
 See [CONTRIBUTORS.md](CONTRIBUTORS.md) for people who have contributed outside of GitHub PRs.
 
+### Library Usage
+
+Claude-powerline is designed as a CLI tool for Claude Code statuslines. While the codebase contains reusable components like `PricingService` and `PowerlineRenderer`, we currently focus on the CLI use case to keep the project simple and maintainable.
+
 ## License
 
 This project is licensed under the [MIT License](LICENSE).

@@ -1,4 +1,4 @@
-import type { ClaudeHookData } from "./index";
+import type { ClaudeHookData } from "./utils/claude";
 import type { PowerlineColors } from "./themes";
 import type { PowerlineConfig, LineConfig } from "./config/loader";
 import { hexToAnsi, extractBgToFg } from "./utils/colors";

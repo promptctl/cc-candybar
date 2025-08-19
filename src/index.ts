@@ -9,20 +9,7 @@ import { json } from "node:stream/consumers";
 import { PowerlineRenderer } from "./powerline";
 import { loadConfigFromCLI } from "./config/loader";
 import { debug } from "./utils/logger";
-export interface ClaudeHookData {
-  hook_event_name: string;
-  session_id: string;
-  transcript_path: string;
-  cwd: string;
-  model: {
-    id: string;
-    display_name: string;
-  };
-  workspace: {
-    current_dir: string;
-    project_dir: string;
-  };
-}
+import type { ClaudeHookData } from "./utils/claude";
 
 async function installFonts(): Promise<void> {
   try {
@@ -51,7 +38,7 @@ async function installFonts(): Promise<void> {
       fs.mkdirSync(fontDir, { recursive: true });
     }
 
-    console.log("📦 Installing Powerline Fonts...");
+    console.log("Installing Powerline Fonts...");
     console.log("Downloading from https://github.com/powerline/fonts");
 
     const tempDir = path.join(os.tmpdir(), "powerline-fonts");
@@ -91,7 +78,7 @@ async function installFonts(): Promise<void> {
         );
       }
 
-      console.log("✅ Powerline fonts installation complete!");
+      console.log("Powerline fonts installation complete!");
       console.log(
         "Please restart your terminal and set your terminal font to a powerline font."
       );
@@ -109,24 +96,13 @@ async function installFonts(): Promise<void> {
       error instanceof Error ? error.message : String(error)
     );
     console.log(
-      "💡 You can manually install fonts from: https://github.com/powerline/fonts"
+      "You can manually install fonts from: https://github.com/powerline/fonts"
     );
   }
 }
 
-async function main(): Promise<void> {
-  try {
-    const showHelp =
-      process.argv.includes("--help") || process.argv.includes("-h");
-    const installFontsFlag = process.argv.includes("--install-fonts");
-
-    if (installFontsFlag) {
-      await installFonts();
-      process.exit(0);
-    }
-
-    if (showHelp) {
-      console.log(`
+function showHelpText(): void {
+  console.log(`
 claude-powerline - Beautiful powerline statusline for Claude Code
 
 Usage: claude-powerline [options]
@@ -146,6 +122,21 @@ Claude Code Options (for settings.json):
 See example config at: https://github.com/Owloops/claude-powerline/blob/main/.claude-powerline.json
 
 `);
+}
+
+async function main(): Promise<void> {
+  try {
+    const showHelp =
+      process.argv.includes("--help") || process.argv.includes("-h");
+    const installFontsFlag = process.argv.includes("--install-fonts");
+
+    if (installFontsFlag) {
+      await installFonts();
+      process.exit(0);
+    }
+
+    if (showHelp) {
+      showHelpText();
       process.exit(0);
     }
 
@@ -178,20 +169,7 @@ echo '{"session_id":"test-session","workspace":{"project_dir":"/path/to/project"
 
     if (!hookData) {
       console.error("Error: No input data received from stdin");
-      console.log(`
-claude-powerline - Beautiful powerline statusline for Claude Code
-
-Usage: claude-powerline [options]
-
-Options:
-  --theme=THEME            Set theme: dark, light, nord, tokyo-night, rose-pine, custom
-  --style=STYLE            Set separator style: minimal, powerline
-  --config=PATH            Use custom config file path
-  --install-fonts          Install powerline fonts to system
-  -h, --help               Show this help
-
-See example config at: https://github.com/Owloops/claude-powerline/blob/main/.claude-powerline.json
-`);
+      showHelpText();
       process.exit(1);
     }
 
