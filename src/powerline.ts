@@ -1,5 +1,5 @@
 import type { ClaudeHookData } from "./utils/claude";
-import type { PowerlineColors } from "./themes";
+import type { PowerlineColors, ColorTheme } from "./themes";
 import type { PowerlineConfig, LineConfig } from "./config/loader";
 import { hexToAnsi, extractBgToFg } from "./utils/colors";
 import { getTheme } from "./themes";
@@ -53,77 +53,37 @@ export class PowerlineRenderer {
     this.segmentRenderer = new SegmentRenderer(config, this.symbols);
   }
 
-  private needsUsageInfo(): boolean {
+  private needsSegmentInfo(segmentType: keyof LineConfig["segments"]): boolean {
     return this.config.display.lines.some(
-      (line) => line.segments.session?.enabled
-    );
-  }
-
-  private needsGitInfo(): boolean {
-    return this.config.display.lines.some((line) => line.segments.git?.enabled);
-  }
-
-  private needsTmuxInfo(): boolean {
-    return this.config.display.lines.some(
-      (line) => line.segments.tmux?.enabled
-    );
-  }
-
-  private needsContextInfo(): boolean {
-    return this.config.display.lines.some(
-      (line) => line.segments.context?.enabled
-    );
-  }
-
-  private needsMetricsInfo(): boolean {
-    return this.config.display.lines.some(
-      (line) => line.segments.metrics?.enabled
-    );
-  }
-
-  private needsBlockInfo(): boolean {
-    return this.config.display.lines.some(
-      (line) => line.segments.block?.enabled
-    );
-  }
-
-  private needsTodayInfo(): boolean {
-    return this.config.display.lines.some(
-      (line) => line.segments.today?.enabled
-    );
-  }
-
-  private needsVersionInfo(): boolean {
-    return this.config.display.lines.some(
-      (line) => line.segments.version?.enabled
+      (line) => line.segments[segmentType]?.enabled
     );
   }
 
   async generateStatusline(hookData: ClaudeHookData): Promise<string> {
-    const usageInfo = this.needsUsageInfo()
+    const usageInfo = this.needsSegmentInfo("session")
       ? await this.usageProvider.getUsageInfo(hookData.session_id)
       : null;
 
-    const blockInfo = this.needsBlockInfo()
+    const blockInfo = this.needsSegmentInfo("block")
       ? await this.blockProvider.getActiveBlockInfo()
       : null;
 
-    const todayInfo = this.needsTodayInfo()
+    const todayInfo = this.needsSegmentInfo("today")
       ? await this.todayProvider.getTodayInfo()
       : null;
 
-    const contextInfo = this.needsContextInfo()
+    const contextInfo = this.needsSegmentInfo("context")
       ? await this.contextProvider.calculateContextTokens(
           hookData.transcript_path,
           hookData.model?.id
         )
       : null;
 
-    const metricsInfo = this.needsMetricsInfo()
+    const metricsInfo = this.needsSegmentInfo("metrics")
       ? await this.metricsProvider.getMetricsInfo(hookData.session_id)
       : null;
 
-    const versionInfo = this.needsVersionInfo()
+    const versionInfo = this.needsSegmentInfo("version")
       ? await this.versionProvider.getVersionInfo()
       : null;
 
@@ -214,85 +174,170 @@ export class PowerlineRenderer {
     colors: PowerlineColors,
     currentDir: string
   ) {
-    switch (segment.type) {
-      case "directory":
-        return this.segmentRenderer.renderDirectory(
-          hookData,
-          colors,
-          segment.config as DirectorySegmentConfig
-        );
-
-      case "git":
-        if (!this.needsGitInfo()) return null;
-        const gitConfig = segment.config as GitSegmentConfig;
-        const gitInfo = this.gitService.getGitInfo(
-          currentDir,
-          {
-            showSha: gitConfig?.showSha,
-            showWorkingTree: gitConfig?.showWorkingTree,
-            showOperation: gitConfig?.showOperation,
-            showTag: gitConfig?.showTag,
-            showTimeSinceCommit: gitConfig?.showTimeSinceCommit,
-            showStashCount: gitConfig?.showStashCount,
-            showUpstream: gitConfig?.showUpstream,
-            showRepoName: gitConfig?.showRepoName,
-          },
-          hookData.workspace?.project_dir
-        );
-        return gitInfo
-          ? this.segmentRenderer.renderGit(gitInfo, colors, gitConfig)
-          : null;
-
-      case "model":
-        return this.segmentRenderer.renderModel(hookData, colors);
-
-      case "session":
-        if (!usageInfo) return null;
-        const usageType =
-          (segment.config as UsageSegmentConfig)?.type || "cost";
-        return this.segmentRenderer.renderSession(usageInfo, colors, usageType);
-
-      case "tmux":
-        if (!this.needsTmuxInfo()) return null;
-        const tmuxSessionId = this.tmuxService.getSessionId();
-        return this.segmentRenderer.renderTmux(tmuxSessionId, colors);
-
-      case "context":
-        if (!this.needsContextInfo()) return null;
-        return this.segmentRenderer.renderContext(contextInfo, colors);
-
-      case "metrics":
-        const metricsConfig = segment.config as MetricsSegmentConfig;
-        return this.segmentRenderer.renderMetrics(
-          metricsInfo,
-          colors,
-          blockInfo,
-          metricsConfig
-        );
-
-      case "block":
-        if (!blockInfo) return null;
-        const blockConfig = segment.config as BlockSegmentConfig;
-        return this.segmentRenderer.renderBlock(blockInfo, colors, blockConfig);
-
-      case "today":
-        if (!todayInfo) return null;
-        const todayType =
-          (segment.config as TodaySegmentConfig)?.type || "cost";
-        return this.segmentRenderer.renderToday(todayInfo, colors, todayType);
-
-      case "version":
-        if (!versionInfo) return null;
-        const versionConfig = segment.config as VersionSegmentConfig;
-        return this.segmentRenderer.renderVersion(
-          versionInfo,
-          colors,
-          versionConfig
-        );
-
-      default:
-        return null;
+    if (segment.type === "directory") {
+      return this.segmentRenderer.renderDirectory(
+        hookData,
+        colors,
+        segment.config as DirectorySegmentConfig
+      );
     }
+    if (segment.type === "model") {
+      return this.segmentRenderer.renderModel(hookData, colors);
+    }
+
+    if (segment.type === "git") {
+      return this.renderGitSegment(
+        segment.config as GitSegmentConfig,
+        hookData,
+        colors,
+        currentDir
+      );
+    }
+
+    if (segment.type === "session") {
+      return this.renderSessionSegment(
+        segment.config as UsageSegmentConfig,
+        usageInfo,
+        colors
+      );
+    }
+
+    if (segment.type === "tmux") {
+      return this.renderTmuxSegment(colors);
+    }
+
+    if (segment.type === "context") {
+      return this.renderContextSegment(contextInfo, colors);
+    }
+
+    if (segment.type === "metrics") {
+      return this.renderMetricsSegment(
+        segment.config as MetricsSegmentConfig,
+        metricsInfo,
+        blockInfo,
+        colors
+      );
+    }
+
+    if (segment.type === "block") {
+      return this.renderBlockSegment(
+        segment.config as BlockSegmentConfig,
+        blockInfo,
+        colors
+      );
+    }
+
+    if (segment.type === "today") {
+      return this.renderTodaySegment(
+        segment.config as TodaySegmentConfig,
+        todayInfo,
+        colors
+      );
+    }
+
+    if (segment.type === "version") {
+      return this.renderVersionSegment(
+        segment.config as VersionSegmentConfig,
+        versionInfo,
+        colors
+      );
+    }
+
+    return null;
+  }
+
+  private renderGitSegment(
+    config: GitSegmentConfig,
+    hookData: ClaudeHookData,
+    colors: PowerlineColors,
+    currentDir: string
+  ) {
+    if (!this.needsSegmentInfo("git")) return null;
+
+    const gitInfo = this.gitService.getGitInfo(
+      currentDir,
+      {
+        showSha: config?.showSha,
+        showWorkingTree: config?.showWorkingTree,
+        showOperation: config?.showOperation,
+        showTag: config?.showTag,
+        showTimeSinceCommit: config?.showTimeSinceCommit,
+        showStashCount: config?.showStashCount,
+        showUpstream: config?.showUpstream,
+        showRepoName: config?.showRepoName,
+      },
+      hookData.workspace?.project_dir
+    );
+
+    return gitInfo
+      ? this.segmentRenderer.renderGit(gitInfo, colors, config)
+      : null;
+  }
+
+  private renderSessionSegment(
+    config: UsageSegmentConfig,
+    usageInfo: UsageInfo | null,
+    colors: PowerlineColors
+  ) {
+    if (!usageInfo) return null;
+    const usageType = config?.type || "cost";
+    return this.segmentRenderer.renderSession(usageInfo, colors, usageType);
+  }
+
+  private renderTmuxSegment(colors: PowerlineColors) {
+    if (!this.needsSegmentInfo("tmux")) return null;
+    const tmuxSessionId = this.tmuxService.getSessionId();
+    return this.segmentRenderer.renderTmux(tmuxSessionId, colors);
+  }
+
+  private renderContextSegment(
+    contextInfo: ContextInfo | null,
+    colors: PowerlineColors
+  ) {
+    if (!this.needsSegmentInfo("context")) return null;
+    return this.segmentRenderer.renderContext(contextInfo, colors);
+  }
+
+  private renderMetricsSegment(
+    config: MetricsSegmentConfig,
+    metricsInfo: MetricsInfo | null,
+    blockInfo: BlockInfo | null,
+    colors: PowerlineColors
+  ) {
+    return this.segmentRenderer.renderMetrics(
+      metricsInfo,
+      colors,
+      blockInfo,
+      config
+    );
+  }
+
+  private renderBlockSegment(
+    config: BlockSegmentConfig,
+    blockInfo: BlockInfo | null,
+    colors: PowerlineColors
+  ) {
+    if (!blockInfo) return null;
+    return this.segmentRenderer.renderBlock(blockInfo, colors, config);
+  }
+
+  private renderTodaySegment(
+    config: TodaySegmentConfig,
+    todayInfo: TodayInfo | null,
+    colors: PowerlineColors
+  ) {
+    if (!todayInfo) return null;
+    const todayType = config?.type || "cost";
+    return this.segmentRenderer.renderToday(todayInfo, colors, todayType);
+  }
+
+  private renderVersionSegment(
+    config: VersionSegmentConfig,
+    versionInfo: VersionInfo | null,
+    colors: PowerlineColors
+  ) {
+    if (!versionInfo) return null;
+    return this.segmentRenderer.renderVersion(versionInfo, colors, config);
   }
 
   private initializeSymbols(): PowerlineSymbols {
@@ -348,59 +393,47 @@ export class PowerlineRenderer {
     }
 
     const fallbackTheme = getTheme("dark")!;
+    const getSegmentColors = (segment: keyof ColorTheme) => {
+      const colors = colorTheme[segment] || fallbackTheme[segment];
+      return {
+        bg: hexToAnsi(colors.bg, true),
+        fg: hexToAnsi(colors.fg, false),
+      };
+    };
+
+    const directory = getSegmentColors("directory");
+    const git = getSegmentColors("git");
+    const model = getSegmentColors("model");
+    const session = getSegmentColors("session");
+    const block = getSegmentColors("block");
+    const today = getSegmentColors("today");
+    const tmux = getSegmentColors("tmux");
+    const context = getSegmentColors("context");
+    const metrics = getSegmentColors("metrics");
+    const version = getSegmentColors("version");
 
     return {
       reset: "\x1b[0m",
-      modeBg: hexToAnsi(
-        colorTheme.directory?.bg || fallbackTheme.directory.bg,
-        true
-      ),
-      modeFg: hexToAnsi(
-        colorTheme.directory?.fg || fallbackTheme.directory.fg,
-        false
-      ),
-      gitBg: hexToAnsi(colorTheme.git?.bg || fallbackTheme.git.bg, true),
-      gitFg: hexToAnsi(colorTheme.git?.fg || fallbackTheme.git.fg, false),
-      modelBg: hexToAnsi(colorTheme.model?.bg || fallbackTheme.model.bg, true),
-      modelFg: hexToAnsi(colorTheme.model?.fg || fallbackTheme.model.fg, false),
-      sessionBg: hexToAnsi(
-        colorTheme.session?.bg || fallbackTheme.session.bg,
-        true
-      ),
-      sessionFg: hexToAnsi(
-        colorTheme.session?.fg || fallbackTheme.session.fg,
-        false
-      ),
-      blockBg: hexToAnsi(colorTheme.block?.bg || fallbackTheme.block.bg, true),
-      blockFg: hexToAnsi(colorTheme.block?.fg || fallbackTheme.block.fg, false),
-      todayBg: hexToAnsi(colorTheme.today?.bg || fallbackTheme.today.bg, true),
-      todayFg: hexToAnsi(colorTheme.today?.fg || fallbackTheme.today.fg, false),
-      tmuxBg: hexToAnsi(colorTheme.tmux?.bg || fallbackTheme.tmux.bg, true),
-      tmuxFg: hexToAnsi(colorTheme.tmux?.fg || fallbackTheme.tmux.fg, false),
-      contextBg: hexToAnsi(
-        colorTheme.context?.bg || fallbackTheme.context.bg,
-        true
-      ),
-      contextFg: hexToAnsi(
-        colorTheme.context?.fg || fallbackTheme.context.fg,
-        false
-      ),
-      metricsBg: hexToAnsi(
-        colorTheme.metrics?.bg || fallbackTheme.metrics.bg,
-        true
-      ),
-      metricsFg: hexToAnsi(
-        colorTheme.metrics?.fg || fallbackTheme.metrics.fg,
-        false
-      ),
-      versionBg: hexToAnsi(
-        colorTheme.version?.bg || fallbackTheme.version.bg,
-        true
-      ),
-      versionFg: hexToAnsi(
-        colorTheme.version?.fg || fallbackTheme.version.fg,
-        false
-      ),
+      modeBg: directory.bg,
+      modeFg: directory.fg,
+      gitBg: git.bg,
+      gitFg: git.fg,
+      modelBg: model.bg,
+      modelFg: model.fg,
+      sessionBg: session.bg,
+      sessionFg: session.fg,
+      blockBg: block.bg,
+      blockFg: block.fg,
+      todayBg: today.bg,
+      todayFg: today.fg,
+      tmuxBg: tmux.bg,
+      tmuxFg: tmux.fg,
+      contextBg: context.bg,
+      contextFg: context.fg,
+      metricsBg: metrics.bg,
+      metricsFg: metrics.fg,
+      versionBg: version.bg,
+      versionFg: version.fg,
     };
   }
 
