@@ -42,3 +42,23 @@ export function formatTokenBreakdown(breakdown: TokenBreakdown | null): string {
 
   return parts.length > 0 ? parts.join(" + ") : "0 tokens";
 }
+
+export function formatTimeSince(seconds: number): string {
+  if (seconds < 60) return `${seconds}s`;
+  if (seconds < 3600) return `${Math.floor(seconds / 60)}m`;
+  if (seconds < 86400) return `${Math.floor(seconds / 3600)}h`;
+  if (seconds < 604800) return `${Math.floor(seconds / 86400)}d`;
+  return `${Math.floor(seconds / 604800)}w`;
+}
+
+export function formatDuration(seconds: number): string {
+  if (seconds < 60) {
+    return `${seconds.toFixed(0)}s`;
+  } else if (seconds < 3600) {
+    return `${(seconds / 60).toFixed(0)}m`;
+  } else if (seconds < 86400) {
+    return `${(seconds / 3600).toFixed(1)}h`;
+  } else {
+    return `${(seconds / 86400).toFixed(1)}d`;
+  }
+}

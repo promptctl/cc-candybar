@@ -66,6 +66,8 @@ import {
   formatCost,
   formatTokens,
   formatTokenBreakdown,
+  formatTimeSince,
+  formatDuration,
 } from "../utils/formatters";
 import { getBudgetStatus } from "../utils/budget";
 import type {
@@ -226,7 +228,7 @@ export class SegmentRenderer {
     }
 
     if (config?.showTimeSinceCommit && gitInfo.timeSinceCommit !== undefined) {
-      const time = this.formatTimeSince(gitInfo.timeSinceCommit);
+      const time = formatTimeSince(gitInfo.timeSinceCommit);
       parts.push(`${this.symbols.git_time} ${time}`);
     }
 
@@ -245,13 +247,6 @@ export class SegmentRenderer {
     };
   }
 
-  private formatTimeSince(seconds: number): string {
-    if (seconds < 60) return `${seconds}s`;
-    if (seconds < 3600) return `${Math.floor(seconds / 60)}m`;
-    if (seconds < 86400) return `${Math.floor(seconds / 3600)}h`;
-    if (seconds < 604800) return `${Math.floor(seconds / 86400)}d`;
-    return `${Math.floor(seconds / 604800)}w`;
-  }
 
   renderModel(hookData: ClaudeHookData, colors: PowerlineColors): SegmentData {
     const modelName = hookData.model?.display_name || "Claude";
@@ -368,7 +363,7 @@ export class SegmentRenderer {
       config?.showDuration !== false &&
       metricsInfo.sessionDuration !== null
     ) {
-      const duration = this.formatDuration(metricsInfo.sessionDuration);
+      const duration = formatDuration(metricsInfo.sessionDuration);
       parts.push(`${this.symbols.metrics_duration} ${duration}`);
     }
 
@@ -509,17 +504,6 @@ export class SegmentRenderer {
     };
   }
 
-  private formatDuration(seconds: number): string {
-    if (seconds < 60) {
-      return `${seconds.toFixed(0)}s`;
-    } else if (seconds < 3600) {
-      return `${(seconds / 60).toFixed(0)}m`;
-    } else if (seconds < 86400) {
-      return `${(seconds / 3600).toFixed(1)}h`;
-    } else {
-      return `${(seconds / 86400).toFixed(1)}d`;
-    }
-  }
 
   private getDisplayDirectoryName(
     currentDir: string,
