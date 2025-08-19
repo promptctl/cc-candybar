@@ -1,3 +1,10 @@
+## [1.6.5](https://github.com/Owloops/claude-powerline/compare/v1.6.4...v1.6.5) (2025-08-19)
+
+
+### Bug Fixes
+
+* improve powerline renderer maintainability with dedicated segment methods ([0b491b1](https://github.com/Owloops/claude-powerline/commit/0b491b15d8fef16f3d8b16b2d8e7f1c7f222e3a4))
+
 ## [1.6.4](https://github.com/Owloops/claude-powerline/compare/v1.6.3...v1.6.4) (2025-08-19)
 
 
