@@ -1,3 +1,10 @@
+## [1.6.6](https://github.com/Owloops/claude-powerline/compare/v1.6.5...v1.6.6) (2025-08-19)
+
+
+### Bug Fixes
+
+* move time formatting functions to utils/formatters ([a8d5943](https://github.com/Owloops/claude-powerline/commit/a8d5943ceb33e3b40a79f86f3168753965cbd070))
+
 ## [1.6.5](https://github.com/Owloops/claude-powerline/compare/v1.6.4...v1.6.5) (2025-08-19)
 
 
