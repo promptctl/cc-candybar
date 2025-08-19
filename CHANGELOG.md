@@ -1,3 +1,10 @@
+## [1.6.4](https://github.com/Owloops/claude-powerline/compare/v1.6.3...v1.6.4) (2025-08-19)
+
+
+### Bug Fixes
+
+* modernize networking, optimize build config, and clean up exports ([7a8ec28](https://github.com/Owloops/claude-powerline/commit/7a8ec28cb759d31ee90b017e610b952980bf6c47))
+
 ## [1.6.3](https://github.com/Owloops/claude-powerline/compare/v1.6.2...v1.6.3) (2025-08-19)
 
 
