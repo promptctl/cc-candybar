@@ -198,6 +198,8 @@ Shows current working directory name.
 
 - `showBasename`: Show only folder name instead of full path
 
+---
+
 #### Git
 
 Shows branch, status, and repository information.
@@ -231,6 +233,8 @@ Shows branch, status, and repository information.
 
 - `⎇` Branch • `♯` SHA • `⌂` Tag • `⧇` Stash • `✓` Clean • `●` Dirty • `⚠` Conflicts • `↑3` Ahead • `↓2` Behind • `(+1 ~2 ?3)` Staged/Unstaged/Untracked
 
+---
+
 #### Metrics
 
 Shows performance analytics from your Claude sessions.
@@ -256,6 +260,8 @@ Shows performance analytics from your Claude sessions.
 
 - `⧖` Average response time • `Δ` Last response time • `⧗` Session duration • `⟐` Message count
 
+---
+
 #### Model
 
 Shows current Claude model being used.
@@ -265,6 +271,8 @@ Shows current Claude model being used.
   "enabled": true
 }
 ```
+
+---
 
 #### Context
 
@@ -278,6 +286,8 @@ Shows context window usage and auto-compact threshold.
 
 **Display:** `◔ 34,040 (79%)` - tokens used and percentage remaining until auto-compact
 
+---
+
 #### Tmux
 
 Shows tmux session name and window info when in tmux.
@@ -287,6 +297,8 @@ Shows tmux session name and window info when in tmux.
   "enabled": true
 }
 ```
+
+---
 
 #### Version
 
@@ -299,6 +311,8 @@ Shows Claude Code version.
 ```
 
 **Display:** `v1.0.81`
+
+---
 
 #### Session
 
@@ -316,6 +330,8 @@ Shows real-time usage for current Claude conversation.
 - `type`: Display format - `cost` | `tokens` | `both` | `breakdown`
 
 **Symbols:** `§` Session
+
+---
 
 #### Block
 
@@ -335,6 +351,8 @@ Shows usage within current 5-hour billing window (Claude's rate limit period).
 - `burnType`: Burn rate display - `cost` | `tokens` | `both` | `none`
 
 **Symbols:** `◱` Block
+
+---
 
 #### Today
 
