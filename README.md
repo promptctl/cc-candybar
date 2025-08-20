@@ -91,7 +91,7 @@
 
 ### Setup
 
-Requires Node.js 18+ and Claude Code.
+Requires Node.js 18+, Claude Code, and Git 2.0+.
 
 **1. Install powerline fonts:**
 

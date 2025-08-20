@@ -126,17 +126,30 @@ export class GitService {
 
   private getBranch(workingDir: string): string | null {
     try {
-      return (
-        execSync("git branch --show-current", {
+      const branch = execSync("git branch --show-current", {
+        cwd: workingDir,
+        encoding: "utf8",
+        timeout: 5000,
+      }).trim();
+      if (branch) {
+        return branch;
+      }
+    } catch {
+      try {
+        const branch = execSync("git symbolic-ref --short HEAD", {
           cwd: workingDir,
           encoding: "utf8",
           timeout: 5000,
-        }).trim() || null
-      );
-    } catch (error) {
-      debug(`Git branch command failed in ${workingDir}:`, error);
-      return null;
+        }).trim();
+        if (branch) {
+          return branch;
+        }
+      } catch {
+        return null;
+      }
     }
+
+    return null;
   }
 
   private getStatus(workingDir: string): "clean" | "dirty" | "conflicts" {
@@ -171,7 +184,7 @@ export class GitService {
     conflicts: number;
   } {
     try {
-      const gitStatus = execSync("git status --porcelain=v1", {
+      const gitStatus = execSync("git status --porcelain", {
         cwd: workingDir,
         encoding: "utf8",
         timeout: 5000,
