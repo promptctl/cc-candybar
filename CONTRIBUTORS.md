@@ -10,6 +10,7 @@ These people have helped make this project better through bug reports, feature i
 
 - **[rgfx](https://github.com/rgfx)** - Opened issues and provided new ideas for project improvements
 - **[FallDownTheSystem](https://github.com/FallDownTheSystem)** - Helped debug performance issues on Windows ([ccusage#497](https://github.com/ryoppippi/ccusage/pull/497))
+- **[leependu](https://github.com/leependu)** - Contributed icon customization ideas and well-implemented feature proposal
 
 ---
 
