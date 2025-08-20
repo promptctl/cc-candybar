@@ -1,3 +1,10 @@
+## [1.6.8](https://github.com/Owloops/claude-powerline/compare/v1.6.7...v1.6.8) (2025-08-20)
+
+
+### Bug Fixes
+
+* improve git branch detection with fallback for older versions ([8b7fd90](https://github.com/Owloops/claude-powerline/commit/8b7fd90b60c73d6adce1f997130bec433a3d7ebd))
+
 ## [1.6.7](https://github.com/Owloops/claude-powerline/compare/v1.6.6...v1.6.7) (2025-08-19)
 
 
