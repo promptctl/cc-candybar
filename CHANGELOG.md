@@ -1,3 +1,11 @@
+## [1.7.6](https://github.com/Owloops/claude-powerline/compare/v1.7.5...v1.7.6) (2025-08-21)
+
+
+### Bug Fixes
+
+* optimize version segment to use hook data instead of external command ([40fa808](https://github.com/Owloops/claude-powerline/commit/40fa808d44d63f720e466fbb5d8fa5b8d9021c15))
+* version tests ([dc354fe](https://github.com/Owloops/claude-powerline/commit/dc354fe2b6b6716e5ca0414ff8e0ef66fb22470a))
+
 ## [1.7.5](https://github.com/Owloops/claude-powerline/compare/v1.7.4...v1.7.5) (2025-08-21)
 
 
