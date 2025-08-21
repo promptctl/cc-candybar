@@ -91,7 +91,6 @@ export class PowerlineRenderer {
     return this._metricsProvider;
   }
 
-
   private get segmentRenderer(): SegmentRenderer {
     if (!this._segmentRenderer) {
       this._segmentRenderer = new SegmentRenderer(this.config, this.symbols);
@@ -107,7 +106,7 @@ export class PowerlineRenderer {
 
   async generateStatusline(hookData: ClaudeHookData): Promise<string> {
     const usageInfo = this.needsSegmentInfo("session")
-      ? await this.usageProvider.getUsageInfo(hookData.session_id)
+      ? await this.usageProvider.getUsageInfo(hookData.session_id, hookData)
       : null;
 
     const blockInfo = this.needsSegmentInfo("block")
@@ -128,7 +127,6 @@ export class PowerlineRenderer {
     const metricsInfo = this.needsSegmentInfo("metrics")
       ? await this.metricsProvider.getMetricsInfo(hookData.session_id, hookData)
       : null;
-
 
     const lines = await Promise.all(
       this.config.display.lines.map((lineConfig) =>
@@ -154,7 +152,7 @@ export class PowerlineRenderer {
     blockInfo: BlockInfo | null,
     todayInfo: TodayInfo | null,
     contextInfo: ContextInfo | null,
-    metricsInfo: MetricsInfo | null,
+    metricsInfo: MetricsInfo | null
   ): Promise<string> {
     const colors = this.getThemeColors();
     const currentDir = hookData.workspace?.current_dir || hookData.cwd || "/";

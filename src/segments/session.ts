@@ -4,6 +4,7 @@ import {
   findTranscriptFile,
   parseJsonlFile,
   type ParsedEntry,
+  type ClaudeHookData,
 } from "../utils/claude";
 
 export interface SessionUsageEntry {
@@ -119,11 +120,18 @@ export class SessionProvider {
     );
   }
 
-  async getSessionInfo(sessionId: string): Promise<SessionInfo> {
+  async getSessionInfo(
+    sessionId: string,
+    hookData?: ClaudeHookData
+  ): Promise<SessionInfo> {
     const sessionUsage = await this.getSessionUsage(sessionId);
 
     if (!sessionUsage || sessionUsage.entries.length === 0) {
-      return { cost: null, tokens: null, tokenBreakdown: null };
+      return {
+        cost: null,
+        tokens: null,
+        tokenBreakdown: null,
+      };
     }
 
     const tokenBreakdown = this.calculateTokenBreakdown(sessionUsage.entries);
@@ -133,8 +141,12 @@ export class SessionProvider {
       tokenBreakdown.cacheCreation +
       tokenBreakdown.cacheRead;
 
+    const calculatedCost = sessionUsage.totalCost;
+    const hookDataCost = hookData?.cost?.total_cost_usd ?? null;
+    const cost = calculatedCost ?? hookDataCost; /** @todo calculated cost matches with ccusage variant, hook data cost is slightly different */
+
     return {
-      cost: sessionUsage.totalCost,
+      cost,
       tokens: totalTokens,
       tokenBreakdown,
     };
@@ -144,11 +156,17 @@ export class SessionProvider {
 export class UsageProvider {
   private sessionProvider = new SessionProvider();
 
-  async getUsageInfo(sessionId: string): Promise<UsageInfo> {
+  async getUsageInfo(
+    sessionId: string,
+    hookData?: ClaudeHookData
+  ): Promise<UsageInfo> {
     try {
       debug(`Starting usage info retrieval for session: ${sessionId}`);
 
-      const sessionInfo = await this.sessionProvider.getSessionInfo(sessionId);
+      const sessionInfo = await this.sessionProvider.getSessionInfo(
+        sessionId,
+        hookData
+      );
 
       return {
         session: sessionInfo,
