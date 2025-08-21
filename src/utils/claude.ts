@@ -1,7 +1,8 @@
 import { readdir, readFile, stat } from "node:fs/promises";
-import { existsSync } from "node:fs";
+import { existsSync, createReadStream } from "node:fs";
 import { join, posix } from "node:path";
 import { homedir } from "node:os";
+import { createInterface } from "node:readline";
 import { debug } from "./logger";
 
 export interface ClaudeHookData {
@@ -190,39 +191,77 @@ export function createUniqueHash(entry: ParsedEntry): string | null {
   return `${messageId}:${requestId}`;
 }
 
-const parseCache = new Map<string, { 
-  entries: ParsedEntry[]; 
-  mtime: number; 
-  timestamp: number; 
-}>();
-
-const PARSE_CACHE_TTL = 300000;
+const STREAMING_THRESHOLD_BYTES = 1024 * 1024;
 
 export async function parseJsonlFile(filePath: string): Promise<ParsedEntry[]> {
   try {
     const stats = await stat(filePath);
-    const currentMtime = stats.mtime.getTime();
-    const now = Date.now();
+    const fileSizeBytes = stats.size;
+    let entries: ParsedEntry[];
     
-    const cached = parseCache.get(filePath);
-    if (cached && 
-        cached.mtime === currentMtime && 
-        now - cached.timestamp < PARSE_CACHE_TTL) {
-      debug(`Using in-memory cached parsed entries for ${filePath}`);
-      return cached.entries;
+    if (fileSizeBytes > STREAMING_THRESHOLD_BYTES) {
+      debug(`Using streaming parser for large file ${filePath} (${Math.round(fileSizeBytes / 1024)}KB)`);
+      entries = await parseJsonlFileStreaming(filePath);
+    } else {
+      entries = await parseJsonlFileInMemory(filePath);
     }
     
-    const content = await readFile(filePath, "utf-8");
-    const lines = content
-      .trim()
-      .split("\n")
-      .filter((line) => line.trim());
-    const entries: ParsedEntry[] = [];
+    debug(`Parsed ${entries.length} entries from ${filePath}`);
+    
+    return entries;
+  } catch (error) {
+    debug(`Failed to read file ${filePath}:`, error);
+    return [];
+  }
+}
 
-    for (const line of lines) {
+async function parseJsonlFileInMemory(filePath: string): Promise<ParsedEntry[]> {
+  const content = await readFile(filePath, "utf-8");
+  const lines = content
+    .trim()
+    .split("\n")
+    .filter((line) => line.trim());
+  const entries: ParsedEntry[] = [];
+
+  for (const line of lines) {
+    try {
+      const raw = JSON.parse(line);
+      if (!raw.timestamp) continue;
+
+      const entry: ParsedEntry = {
+        timestamp: new Date(raw.timestamp),
+        message: raw.message,
+        costUSD: typeof raw.costUSD === "number" ? raw.costUSD : undefined,
+        isSidechain: raw.isSidechain === true,
+        raw,
+      };
+
+      entries.push(entry);
+    } catch (parseError) {
+      debug(`Failed to parse JSONL line: ${parseError}`);
+      continue;
+    }
+  }
+
+  return entries;
+}
+
+async function parseJsonlFileStreaming(filePath: string): Promise<ParsedEntry[]> {
+  return new Promise((resolve, reject) => {
+    const entries: ParsedEntry[] = [];
+    const fileStream = createReadStream(filePath, { encoding: 'utf8' });
+    const rl = createInterface({
+      input: fileStream,
+      crlfDelay: Infinity
+    });
+
+    rl.on('line', (line) => {
+      const trimmedLine = line.trim();
+      if (!trimmedLine) return;
+
       try {
-        const raw = JSON.parse(line);
-        if (!raw.timestamp) continue;
+        const raw = JSON.parse(trimmedLine);
+        if (!raw.timestamp) return;
 
         const entry: ParsedEntry = {
           timestamp: new Date(raw.timestamp),
@@ -235,22 +274,23 @@ export async function parseJsonlFile(filePath: string): Promise<ParsedEntry[]> {
         entries.push(entry);
       } catch (parseError) {
         debug(`Failed to parse JSONL line: ${parseError}`);
-        continue;
       }
-    }
-
-    parseCache.set(filePath, {
-      entries,
-      mtime: currentMtime,
-      timestamp: now,
     });
-    
-    debug(`Parsed and cached ${entries.length} entries from ${filePath}`);
-    return entries;
-  } catch (error) {
-    debug(`Failed to read file ${filePath}:`, error);
-    return [];
-  }
+
+    rl.on('close', () => {
+      resolve(entries);
+    });
+
+    rl.on('error', (error) => {
+      debug(`Streaming parser error for ${filePath}:`, error);
+      reject(error);
+    });
+
+    fileStream.on('error', (error) => {
+      debug(`File stream error for ${filePath}:`, error);
+      reject(error);
+    });
+  });
 }
 
 export async function loadEntriesFromProjects(
@@ -258,13 +298,11 @@ export async function loadEntriesFromProjects(
   fileFilter?: (filePath: string, modTime: Date) => boolean,
   sortFiles = false
 ): Promise<ParsedEntry[]> {
-  const entries: ParsedEntry[] = [];
   const claudePaths = getClaudePaths();
   const projectPaths = await findProjectPaths(claudePaths);
   const processedHashes = new Set<string>();
 
-  const allFiles: string[] = [];
-  for (const projectPath of projectPaths) {
+  const allFilesPromises = projectPaths.map(async (projectPath) => {
     try {
       const files = await readdir(projectPath);
       const jsonlFiles = files.filter((file) => file.endsWith(".jsonl"));
@@ -279,20 +317,22 @@ export async function loadEntriesFromProjects(
       });
 
       const fileStats = await Promise.all(fileStatsPromises);
-
-      for (const stat of fileStats) {
-        if (
+      return fileStats.filter(
+        (stat) =>
           stat?.mtime &&
           (!fileFilter || fileFilter(stat.filePath, stat.mtime))
-        ) {
-          allFiles.push(stat.filePath);
-        }
-      }
+      );
     } catch (dirError) {
       debug(`Failed to read project directory ${projectPath}:`, dirError);
-      continue;
+      return [];
     }
-  }
+  });
+
+  const allFileResults = await Promise.all(allFilesPromises);
+  const allFiles = allFileResults
+    .flat()
+    .filter((file): file is { filePath: string; mtime: Date } => file !== null)
+    .map((file) => file.filePath);
 
   if (sortFiles) {
     const sortedFiles = await sortFilesByTimestamp(allFiles, false);
@@ -300,23 +340,24 @@ export async function loadEntriesFromProjects(
     allFiles.push(...sortedFiles);
   }
 
-  for (const filePath of allFiles) {
+  const entries: ParsedEntry[] = [];
+  const filePromises = allFiles.map(async (filePath) => {
     const fileEntries = await parseJsonlFile(filePath);
-    for (const entry of fileEntries) {
+    return fileEntries.filter((entry) => {
       const uniqueHash = createUniqueHash(entry);
       if (uniqueHash && processedHashes.has(uniqueHash)) {
-        debug(`Skipping duplicate entry: ${uniqueHash}`);
-        continue;
+        return false;
       }
-
       if (uniqueHash) {
         processedHashes.add(uniqueHash);
       }
+      return !timeFilter || timeFilter(entry);
+    });
+  });
 
-      if (!timeFilter || timeFilter(entry)) {
-        entries.push(entry);
-      }
-    }
+  const fileResults = await Promise.all(filePromises);
+  for (const fileEntries of fileResults) {
+    entries.push(...fileEntries);
   }
 
   return entries;

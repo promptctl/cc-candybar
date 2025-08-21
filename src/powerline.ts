@@ -27,30 +27,85 @@ import {
 } from "./segments";
 import { BlockProvider, BlockInfo } from "./segments/block";
 import { TodayProvider, TodayInfo } from "./segments/today";
+import { SYMBOLS, RESET_CODE } from "./utils/constants";
 
 export class PowerlineRenderer {
   private readonly symbols: PowerlineSymbols;
-  private readonly usageProvider: UsageProvider;
-  private readonly blockProvider: BlockProvider;
-  private readonly todayProvider: TodayProvider;
-  private readonly contextProvider: ContextProvider;
-  private readonly gitService: GitService;
-  private readonly tmuxService: TmuxService;
-  private readonly metricsProvider: MetricsProvider;
-  private readonly versionProvider: VersionProvider;
-  private readonly segmentRenderer: SegmentRenderer;
+  private _usageProvider?: UsageProvider;
+  private _blockProvider?: BlockProvider;
+  private _todayProvider?: TodayProvider;
+  private _contextProvider?: ContextProvider;
+  private _gitService?: GitService;
+  private _tmuxService?: TmuxService;
+  private _metricsProvider?: MetricsProvider;
+  private _versionProvider?: VersionProvider;
+  private _segmentRenderer?: SegmentRenderer;
 
   constructor(private readonly config: PowerlineConfig) {
     this.symbols = this.initializeSymbols();
-    this.usageProvider = new UsageProvider();
-    this.blockProvider = new BlockProvider();
-    this.todayProvider = new TodayProvider();
-    this.contextProvider = new ContextProvider();
-    this.gitService = new GitService();
-    this.tmuxService = new TmuxService();
-    this.metricsProvider = new MetricsProvider();
-    this.versionProvider = new VersionProvider();
-    this.segmentRenderer = new SegmentRenderer(config, this.symbols);
+  }
+
+  private get usageProvider(): UsageProvider {
+    if (!this._usageProvider) {
+      this._usageProvider = new UsageProvider();
+    }
+    return this._usageProvider;
+  }
+
+  private get blockProvider(): BlockProvider {
+    if (!this._blockProvider) {
+      this._blockProvider = new BlockProvider();
+    }
+    return this._blockProvider;
+  }
+
+  private get todayProvider(): TodayProvider {
+    if (!this._todayProvider) {
+      this._todayProvider = new TodayProvider();
+    }
+    return this._todayProvider;
+  }
+
+  private get contextProvider(): ContextProvider {
+    if (!this._contextProvider) {
+      this._contextProvider = new ContextProvider();
+    }
+    return this._contextProvider;
+  }
+
+  private get gitService(): GitService {
+    if (!this._gitService) {
+      this._gitService = new GitService();
+    }
+    return this._gitService;
+  }
+
+  private get tmuxService(): TmuxService {
+    if (!this._tmuxService) {
+      this._tmuxService = new TmuxService();
+    }
+    return this._tmuxService;
+  }
+
+  private get metricsProvider(): MetricsProvider {
+    if (!this._metricsProvider) {
+      this._metricsProvider = new MetricsProvider();
+    }
+    return this._metricsProvider;
+  }
+
+  private get versionProvider(): VersionProvider {
+    if (!this._versionProvider) {
+      this._versionProvider = new VersionProvider();
+    }
+    return this._versionProvider;
+  }
+
+  private get segmentRenderer(): SegmentRenderer {
+    if (!this._segmentRenderer) {
+      this._segmentRenderer = new SegmentRenderer(this.config, this.symbols);
+    }
+    return this._segmentRenderer;
   }
 
   private needsSegmentInfo(segmentType: keyof LineConfig["segments"]): boolean {
@@ -203,7 +258,7 @@ export class PowerlineRenderer {
     }
 
     if (segment.type === "tmux") {
-      return this.renderTmuxSegment(colors);
+      return await this.renderTmuxSegment(colors);
     }
 
     if (segment.type === "context") {
@@ -284,9 +339,9 @@ export class PowerlineRenderer {
     return this.segmentRenderer.renderSession(usageInfo, colors, usageType);
   }
 
-  private renderTmuxSegment(colors: PowerlineColors) {
+  private async renderTmuxSegment(colors: PowerlineColors) {
     if (!this.needsSegmentInfo("tmux")) return null;
-    const tmuxSessionId = this.tmuxService.getSessionId();
+    const tmuxSessionId = await this.tmuxService.getSessionId();
     return this.segmentRenderer.renderTmux(tmuxSessionId, colors);
   }
 
@@ -344,30 +399,30 @@ export class PowerlineRenderer {
     const isMinimalStyle = this.config.display.style === "minimal";
 
     return {
-      right: isMinimalStyle ? "" : "\uE0B0",
-      branch: "⎇",
-      model: "⚡",
-      git_clean: "✓",
-      git_dirty: "●",
-      git_conflicts: "⚠",
-      git_ahead: "↑",
-      git_behind: "↓",
-      git_worktree: "⧉",
-      git_tag: "⌂",
-      git_sha: "♯",
-      git_upstream: "→",
-      git_stash: "⧇",
-      git_time: "◷",
-      session_cost: "§",
-      block_cost: "◱",
-      today_cost: "☉",
-      context_time: "◔",
-      metrics_response: "⧖",
-      metrics_last_response: "Δ",
-      metrics_duration: "⧗",
-      metrics_messages: "⟐",
-      metrics_burn: "⟢",
-      version: "◈",
+      right: isMinimalStyle ? "" : SYMBOLS.right,
+      branch: SYMBOLS.branch,
+      model: SYMBOLS.model,
+      git_clean: SYMBOLS.git_clean,
+      git_dirty: SYMBOLS.git_dirty,
+      git_conflicts: SYMBOLS.git_conflicts,
+      git_ahead: SYMBOLS.git_ahead,
+      git_behind: SYMBOLS.git_behind,
+      git_worktree: SYMBOLS.git_worktree,
+      git_tag: SYMBOLS.git_tag,
+      git_sha: SYMBOLS.git_sha,
+      git_upstream: SYMBOLS.git_upstream,
+      git_stash: SYMBOLS.git_stash,
+      git_time: SYMBOLS.git_time,
+      session_cost: SYMBOLS.session_cost,
+      block_cost: SYMBOLS.block_cost,
+      today_cost: SYMBOLS.today_cost,
+      context_time: SYMBOLS.context_time,
+      metrics_response: SYMBOLS.metrics_response,
+      metrics_last_response: SYMBOLS.metrics_last_response,
+      metrics_duration: SYMBOLS.metrics_duration,
+      metrics_messages: SYMBOLS.metrics_messages,
+      metrics_burn: SYMBOLS.metrics_burn,
+      version: SYMBOLS.version,
     };
   }
 
@@ -413,7 +468,7 @@ export class PowerlineRenderer {
     const version = getSegmentColors("version");
 
     return {
-      reset: "\x1b[0m",
+      reset: RESET_CODE,
       modeBg: directory.bg,
       modeFg: directory.fg,
       gitBg: git.bg,
@@ -475,13 +530,11 @@ export class PowerlineRenderer {
   ): string {
     let output = `${bgColor}${fgColor} ${text} `;
 
-    const reset = "\x1b[0m";
-
     if (nextBgColor) {
       const arrowFgColor = extractBgToFg(bgColor);
-      output += `${reset}${nextBgColor}${arrowFgColor}${this.symbols.right}`;
+      output += `${RESET_CODE}${nextBgColor}${arrowFgColor}${this.symbols.right}`;
     } else {
-      output += `${reset}${extractBgToFg(bgColor)}${this.symbols.right}${reset}`;
+      output += `${RESET_CODE}${extractBgToFg(bgColor)}${this.symbols.right}${RESET_CODE}`;
     }
 
     return output;

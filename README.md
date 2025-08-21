@@ -116,9 +116,6 @@ npx -y @owloops/claude-powerline --install-fonts
 
 Using `npx` automatically downloads and runs the latest version without manual updates.
 
-> [!NOTE]  
-> If you encounter font issues, use `--style=minimal` (default) which works without powerline fonts.
-
 ## Usage
 
 Once added to Claude Code settings, the statusline runs automatically. For customization:
@@ -439,23 +436,23 @@ Create custom themes by defining segment colors.
 
 ## Performance
 
-`claude-powerline` is optimized for speed, with most segments responding instantly. Performance primarily depends on which segments you enable, especially the `git` segment.
+`claude-powerline` executes in ~800ms with intelligent caching. Performance depends on enabled segments and options.
 
-### Performance Guide
+### Segment Performance
 
-| Impact      | Segments                               | Notes                                  |
+| Impact      | Segments                               | Details                                |
 |-------------|----------------------------------------|----------------------------------------|
-| **Minimal** | `directory`, `model`, `tmux`, `version`  | Instant response using static data.    |
-| **Low**     | `session`, `block`, `today`, `context` | Fast, using in-memory and cached data. |
-| **Moderate**| `git` (with default options)           | Fast, uses an intelligent cache.       |
-| **High**    | `git` (with extended options enabled)  | Can be slower as it runs more commands.|
+| **Instant** | `directory`, `model`, `tmux`, `version`| No external commands                   |
+| **Fast**    | `session`, `block`, `today`, `context` | Smart caching, minimal I/O             |
+| **Cached**  | `git` (default options)               | Disk cache with smart invalidation     |
+| **Slower**  | `git` (extended options)              | Additional git commands per option     |
 
-### Tips for Optimal Performance
+### Optimization Tips
 
-For the fastest experience, especially if you run multiple Claude instances:
-
-1. **Use Default Git Settings:** The `git` segment is fastest with its default configuration. Enabling extended options like `showWorkingTree`, `showStashCount`, or `showTimeSinceCommit` will increase latency as more git commands are executed.
-2. **Be Selective with Segments:** Only enable the segments you find most useful. A minimal configuration will always be the fastest.
+- **Install globally** - Use `npm install -g @owloops/claude-powerline` to avoid npx overhead (~200-500ms faster)
+- **Disable unused segments** - Only enable what you need
+- **Use default git options** - Extended options (`showStashCount`, `showTimeSinceCommit`) run extra commands, especially slow in large repositories  
+- **Cache works automatically** - Git status cached until repository changes
 
 ## Custom Segments
 

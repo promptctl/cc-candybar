@@ -55,10 +55,6 @@ function convertToTodayEntry(entry: ParsedEntry): TodayUsageEntry {
 }
 
 export class TodayProvider {
-  private cache: Map<string, { data: TodayUsageEntry[]; timestamp: number }> =
-    new Map();
-  private readonly CACHE_TTL = 300000;
-
   private async loadTodayEntries(): Promise<TodayUsageEntry[]> {
     const today = new Date();
     const todayDateString = formatDate(today);
@@ -116,21 +112,8 @@ export class TodayProvider {
   }
 
   private async getTodayEntries(): Promise<TodayUsageEntry[]> {
-    const cacheKey = "today";
-    const cached = this.cache.get(cacheKey);
-    const now = Date.now();
-
-    if (cached && now - cached.timestamp < this.CACHE_TTL) {
-      return cached.data;
-    }
-
-    this.cache.clear();
-
     try {
-      const entries = await this.loadTodayEntries();
-
-      this.cache.set(cacheKey, { data: entries, timestamp: now });
-      return entries;
+      return await this.loadTodayEntries();
     } catch (error) {
       debug("Error loading today's entries:", error);
       return [];

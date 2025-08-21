@@ -143,11 +143,8 @@ const OFFLINE_PRICING_DATA: Record<string, ModelPricing> = {
 };
 
 export class PricingService {
-  private static memoryCache: Map<
-    string,
-    { data: Record<string, ModelPricing>; timestamp: number }
-  > = new Map();
-  private static readonly CACHE_TTL = 24 * 60 * 60 * 1000;
+  private static executionCache: Record<string, ModelPricing> | null = null;
+  private static modelPricingCache = new Map<string, ModelPricing>();
   private static readonly GITHUB_PRICING_URL =
     "https://raw.githubusercontent.com/Owloops/claude-powerline/main/pricing.json";
 
@@ -255,47 +252,44 @@ export class PricingService {
   }
 
   static async getCurrentPricing(): Promise<Record<string, ModelPricing>> {
-    const now = Date.now();
-
-    const memCached = this.memoryCache.get("pricing");
-    if (memCached && now - memCached.timestamp < this.CACHE_TTL) {
+    if (this.executionCache !== null) {
       debug(
-        `Using memory cached pricing data for ${Object.keys(memCached.data).length} models`
+        `[CACHE-HIT] Pricing execution cache: ${Object.keys(this.executionCache).length} models`
       );
-      return memCached.data;
+      return this.executionCache;
     }
 
     const diskCached = await this.loadDiskCache();
-    if (diskCached && now - (Date.now() - 100) < this.CACHE_TTL) {
-      this.memoryCache.clear();
-      this.memoryCache.set("pricing", { data: diskCached, timestamp: now });
+    if (diskCached) {
       debug(
-        `Using CacheManager disk cached pricing data for ${Object.keys(diskCached).length} models`
+        `[CACHE-HIT] Pricing disk cache: ${Object.keys(diskCached).length} models`
+      );
+      this.executionCache = diskCached;
+      debug(
+        `[CACHE-SET] Pricing execution cache stored: ${Object.keys(diskCached).length} models`
       );
       return diskCached;
     }
 
     const freshData = await this.fetchPricingData();
     if (freshData) {
-      this.memoryCache.clear();
-      this.memoryCache.set("pricing", {
-        data: freshData,
-        timestamp: now,
-      });
       await this.saveDiskCache(freshData);
+      debug(
+        `[CACHE-SET] Pricing disk cache stored: ${Object.keys(freshData).length} models`
+      );
+      this.executionCache = freshData;
+      debug(
+        `[CACHE-SET] Pricing execution cache stored: ${Object.keys(freshData).length} models`
+      );
       return freshData;
     }
 
-    if (diskCached) {
-      this.memoryCache.set("pricing", { data: diskCached, timestamp: now });
-      debug(
-        `Using stale CacheManager cached pricing data for ${Object.keys(diskCached).length} models`
-      );
-      return diskCached;
-    }
-
     debug(
-      `Using offline pricing data for ${Object.keys(OFFLINE_PRICING_DATA).length} models`
+      `[CACHE-FALLBACK] Using offline pricing data: ${Object.keys(OFFLINE_PRICING_DATA).length} models`
+    );
+    this.executionCache = OFFLINE_PRICING_DATA;
+    debug(
+      `[CACHE-SET] Pricing execution cache stored: ${Object.keys(OFFLINE_PRICING_DATA).length} models`
     );
     return OFFLINE_PRICING_DATA;
   }
@@ -322,13 +316,23 @@ export class PricingService {
   }
 
   static async getModelPricing(modelId: string): Promise<ModelPricing> {
-    const allPricing = await this.getCurrentPricing();
-
-    if (allPricing[modelId]) {
-      return allPricing[modelId];
+    if (this.modelPricingCache.has(modelId)) {
+      debug(`[CACHE-HIT] Model pricing cache: ${modelId}`);
+      return this.modelPricingCache.get(modelId)!;
     }
 
-    return this.fuzzyMatchModel(modelId, allPricing);
+    const allPricing = await this.getCurrentPricing();
+    let pricing: ModelPricing;
+
+    if (allPricing[modelId]) {
+      pricing = allPricing[modelId];
+    } else {
+      pricing = this.fuzzyMatchModel(modelId, allPricing);
+    }
+
+    this.modelPricingCache.set(modelId, pricing);
+    debug(`[CACHE-SET] Model pricing cache: ${modelId}`);
+    return pricing;
   }
 
   private static fuzzyMatchModel(

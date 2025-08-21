@@ -39,9 +39,6 @@ function convertToUsageEntry(entry: ParsedEntry): UsageEntry {
 
 export class BlockProvider {
   private readonly sessionDurationHours = 5;
-  private cache: Map<string, { data: UsageEntry[]; timestamp: number }> =
-    new Map();
-  private readonly CACHE_TTL = 60000;
 
   private floorToHour(timestamp: Date): Date {
     const floored = new Date(timestamp);
@@ -136,17 +133,6 @@ export class BlockProvider {
   }
 
   private async loadUsageEntries(): Promise<UsageEntry[]> {
-    const cacheKey = "block";
-    const cached = this.cache.get(cacheKey);
-    const now = Date.now();
-
-    if (cached && now - cached.timestamp < this.CACHE_TTL) {
-      debug("Using memory cached block entries");
-      return cached.data;
-    }
-
-    this.cache.clear();
-
     try {
       debug(`Block segment: Loading entries for dynamic session blocks`);
 
@@ -202,7 +188,6 @@ export class BlockProvider {
         result = [];
       }
 
-      this.cache.set(cacheKey, { data: result, timestamp: now });
       return result;
     } catch (error) {
       debug("Error loading block entries:", error);

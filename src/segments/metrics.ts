@@ -1,6 +1,5 @@
 import { readFile } from "node:fs/promises";
 import { debug } from "../utils/logger";
-import { PricingService } from "./pricing";
 import { findTranscriptFile } from "../utils/claude";
 
 export interface MetricsInfo {
@@ -8,8 +7,6 @@ export interface MetricsInfo {
   lastResponseTime: number | null;
   sessionDuration: number | null;
   messageCount: number | null;
-  costBurnRate: number | null;
-  tokenBurnRate: number | null;
 }
 
 interface TranscriptEntry {
@@ -252,30 +249,6 @@ export class MetricsProvider {
     return duration > 0 ? duration : null;
   }
 
-  private calculateBurnRateDuration(entries: TranscriptEntry[]): number | null {
-    if (entries.length === 0) return null;
-
-    const now = new Date();
-    const timestamps = entries
-      .map((entry) => entry.timestamp)
-      .filter(Boolean)
-      .map((ts) => new Date(ts))
-      .filter((ts) => now.getTime() - ts.getTime() < 2 * 60 * 60 * 1000)
-      .sort((a, b) => a.getTime() - b.getTime());
-
-    if (timestamps.length === 0) return null;
-
-    const sessionStart = timestamps[0];
-    if (!sessionStart) return null;
-
-    const durationFromStart = Math.max(
-      (now.getTime() - sessionStart.getTime()) / 1000,
-      30 * 60
-    );
-
-    return durationFromStart;
-  }
-
   private calculateMessageCount(entries: TranscriptEntry[]): number {
     return entries.filter((entry) => {
       const messageType =
@@ -285,57 +258,6 @@ export class MetricsProvider {
         entry.message?.content?.[0]?.type === "tool_result";
       return messageType === "user" && !isToolResult;
     }).length;
-  }
-
-  private async calculateTotalCost(
-    entries: TranscriptEntry[]
-  ): Promise<number> {
-    let total = 0;
-    const processedEntries = new Set<string>();
-
-    for (const entry of entries) {
-      const entryKey = `${entry.timestamp}-${JSON.stringify(entry.message?.usage || {})}`;
-
-      if (processedEntries.has(entryKey)) {
-        debug(`Skipping duplicate entry at ${entry.timestamp}`);
-        continue;
-      }
-      processedEntries.add(entryKey);
-
-      if (typeof entry.costUSD === "number") {
-        total += entry.costUSD;
-      } else if (entry.message?.usage) {
-        const cost = await PricingService.calculateCostForEntry(entry);
-        total += cost;
-      }
-    }
-
-    return Math.round(total * 10000) / 10000;
-  }
-
-  private calculateTotalTokens(entries: TranscriptEntry[]): number {
-    const processedEntries = new Set<string>();
-
-    return entries.reduce((total, entry) => {
-      const usage = entry.message?.usage;
-      if (!usage) return total;
-
-      const entryKey = `${entry.timestamp}-${JSON.stringify(usage)}`;
-
-      if (processedEntries.has(entryKey)) {
-        debug(`Skipping duplicate token entry at ${entry.timestamp}`);
-        return total;
-      }
-      processedEntries.add(entryKey);
-
-      return (
-        total +
-        (usage.input_tokens || 0) +
-        (usage.output_tokens || 0) +
-        (usage.cache_creation_input_tokens || 0) +
-        (usage.cache_read_input_tokens || 0)
-      );
-    }, 0);
   }
 
   async getMetricsInfo(sessionId: string): Promise<MetricsInfo> {
@@ -350,8 +272,6 @@ export class MetricsProvider {
           lastResponseTime: null,
           sessionDuration: null,
           messageCount: null,
-          costBurnRate: null,
-          tokenBurnRate: null,
         };
       }
 
@@ -359,34 +279,6 @@ export class MetricsProvider {
       const sessionDuration = this.calculateSessionDuration(entries);
       const messageCount = this.calculateMessageCount(entries);
 
-      let costBurnRate: number | null = null;
-      let tokenBurnRate: number | null = null;
-
-      const burnRateDuration = this.calculateBurnRateDuration(entries);
-      if (burnRateDuration && burnRateDuration > 60) {
-        const hoursElapsed = burnRateDuration / 3600;
-
-        if (hoursElapsed <= 0) {
-          debug(`Invalid hours elapsed: ${hoursElapsed}`);
-        } else {
-          const totalCost = await this.calculateTotalCost(entries);
-          const totalTokens = this.calculateTotalTokens(entries);
-
-          if (totalCost > 0) {
-            costBurnRate = Math.round((totalCost / hoursElapsed) * 100) / 100;
-            debug(
-              `Cost burn rate: $${costBurnRate}/h (total: $${totalCost}, duration: ${hoursElapsed}h)`
-            );
-          }
-
-          if (totalTokens > 0) {
-            tokenBurnRate = Math.round(totalTokens / hoursElapsed);
-            debug(
-              `Token burn rate: ${tokenBurnRate}/h (total: ${totalTokens}, duration: ${hoursElapsed}h)`
-            );
-          }
-        }
-      }
 
       debug(
         `Metrics calculated: avgResponseTime=${responseTimes.average?.toFixed(2) || "null"}s, lastResponseTime=${responseTimes.last?.toFixed(2) || "null"}s, sessionDuration=${sessionDuration?.toFixed(0) || "null"}s, messageCount=${messageCount}`
@@ -397,8 +289,6 @@ export class MetricsProvider {
         lastResponseTime: responseTimes.last,
         sessionDuration,
         messageCount,
-        costBurnRate,
-        tokenBurnRate,
       };
     } catch (error) {
       debug(`Error calculating metrics for session ${sessionId}:`, error);
@@ -407,8 +297,6 @@ export class MetricsProvider {
         lastResponseTime: null,
         sessionDuration: null,
         messageCount: null,
-        costBurnRate: null,
-        tokenBurnRate: null,
       };
     }
   }

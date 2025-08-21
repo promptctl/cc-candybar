@@ -1,36 +1,27 @@
-import { execSync } from "node:child_process";
+import { exec } from "node:child_process";
+import { promisify } from "node:util";
 import { debug } from "../utils/logger";
+
+const execAsync = promisify(exec);
 
 export interface VersionInfo {
   version: string | null;
 }
 
 export class VersionProvider {
-  private cachedVersion: string | null = null;
-  private cacheTimestamp: number = 0;
-  private readonly CACHE_TTL = 30000;
-
-  getClaudeVersion(): string | null {
-    const now = Date.now();
-    if (
-      this.cachedVersion !== null &&
-      now - this.cacheTimestamp < this.CACHE_TTL
-    ) {
-      return this.cachedVersion;
-    }
-
+  async getClaudeVersion(): Promise<string | null> {
     try {
-      const output = execSync("claude --version", {
+      const result = await execAsync("claude --version", {
         encoding: "utf8",
         timeout: 1000,
-      }).trim();
+      });
+      const output = result.stdout.trim();
 
       const match = output.match(/^([\d.]+)/);
       if (match) {
-        this.cachedVersion = `v${match[1]}`;
-        this.cacheTimestamp = now;
-        debug(`Claude Code version: ${this.cachedVersion}`);
-        return this.cachedVersion;
+        const version = `v${match[1]}`;
+        debug(`Claude Code version: ${version}`);
+        return version;
       }
 
       debug(`Could not parse version from: ${output}`);
@@ -42,7 +33,7 @@ export class VersionProvider {
   }
 
   async getVersionInfo(): Promise<VersionInfo> {
-    const version = this.getClaudeVersion();
+    const version = await this.getClaudeVersion();
     return { version };
   }
 }

@@ -1,0 +1,28 @@
+export const RESET_CODE = "\x1b[0m";
+export const SYMBOLS = {
+  right: "\uE0B0",
+  branch: "⎇",
+  model: "⚡",
+  git_clean: "✓",
+  git_dirty: "●",
+  git_conflicts: "⚠",
+  git_ahead: "↑",
+  git_behind: "↓",
+  git_worktree: "⧉",
+  git_tag: "⌂",
+  git_sha: "♯",
+  git_upstream: "→",
+  git_stash: "⧇",
+  git_time: "◷",
+  session_cost: "§",
+  block_cost: "◱",
+  today_cost: "☉",
+  context_time: "◔",
+  metrics_response: "⧖",
+  metrics_last_response: "Δ",
+  metrics_duration: "⧗",
+  metrics_messages: "⟐",
+  metrics_burn: "⟢",
+  version: "◈",
+} as const;
+

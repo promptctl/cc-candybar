@@ -27,43 +27,6 @@ export interface GitInfo {
 }
 
 export class GitService {
-  private memoryCache: Map<
-    string,
-    { data: GitInfo | null; timestamp: number }
-  > = new Map();
-  private readonly CACHE_TTL = 1000;
-  private lastGitStateCache: Map<string, string> = new Map();
-
-  private async hasGitChanged(gitDir: string): Promise<boolean> {
-    try {
-      const indexPath = path.join(gitDir, ".git", "index");
-      const headPath = path.join(gitDir, ".git", "HEAD");
-
-      const [indexStat, headStat] = await Promise.all([
-        fs.promises.stat(indexPath).catch(() => null),
-        fs.promises.stat(headPath).catch(() => null),
-      ]);
-
-      const indexTime = indexStat?.mtime.getTime() || 0;
-      const headTime = headStat?.mtime.getTime() || 0;
-      const stateKey = `${indexTime}-${headTime}`;
-
-      const lastStateKey = this.lastGitStateCache.get(gitDir);
-
-      if (lastStateKey === stateKey) {
-        debug(`Git state unchanged for ${gitDir}, extending cache`);
-        return false;
-      }
-
-      this.lastGitStateCache.set(gitDir, stateKey);
-      debug(`Git state changed for ${gitDir}, invalidating cache`);
-      return true;
-    } catch (error) {
-      debug(`Error checking git state for ${gitDir}:`, error);
-      return true;
-    }
-  }
-
   private isGitRepo(workingDir: string): boolean {
     try {
       return fs.existsSync(path.join(workingDir, ".git"));
@@ -89,53 +52,40 @@ export class GitService {
     const gitDir =
       projectDir && this.isGitRepo(projectDir) ? projectDir : workingDir;
 
-    const optionsKey = JSON.stringify(options);
-    const cacheKey = `${gitDir}:${optionsKey}`;
-    const now = Date.now();
-
     if (!this.isGitRepo(gitDir)) {
       return null;
     }
 
-    const memCached = this.memoryCache.get(cacheKey);
-    if (memCached && now - memCached.timestamp < this.CACHE_TTL) {
-      debug(`Using memory cached git info for ${gitDir}`);
-      return memCached.data;
-    }
-
     const diskCached = await CacheManager.getGitCache(gitDir);
-    const gitChanged = await this.hasGitChanged(gitDir);
-    const dynamicTTL = gitChanged ? this.CACHE_TTL : this.CACHE_TTL * 10;
-
-    if (diskCached && now - (Date.now() - 100) < dynamicTTL) {
-      this.memoryCache.clear();
-      this.memoryCache.set(cacheKey, { data: diskCached, timestamp: now });
-      debug(`Using CacheManager disk cached git info for ${gitDir}`);
+    if (diskCached) {
+      debug(`[CACHE-HIT] Git disk cache: ${gitDir}`);
       return diskCached;
     }
 
     try {
-      const [branch, status, aheadBehind] = await Promise.all([
-        this.getBranchAsync(gitDir),
-        this.getStatusAsync(gitDir),
+      const [statusWithBranch, aheadBehind] = await Promise.all([
+        this.getStatusWithBranchAsync(gitDir),
         this.getAheadBehindAsync(gitDir),
       ]);
 
       const result: GitInfo = {
-        branch: branch || "detached",
-        status,
+        branch: statusWithBranch.branch || "detached",
+        status: statusWithBranch.status,
         ahead: aheadBehind.ahead,
         behind: aheadBehind.behind,
       };
+
+      if (options.showWorkingTree && statusWithBranch.workingTree) {
+        result.staged = statusWithBranch.workingTree.staged;
+        result.unstaged = statusWithBranch.workingTree.unstaged;
+        result.untracked = statusWithBranch.workingTree.untracked;
+        result.conflicts = statusWithBranch.workingTree.conflicts;
+      }
 
       const optionalOperations: Record<string, Promise<any>> = {};
 
       if (options.showSha) {
         optionalOperations.sha = this.getShaAsync(gitDir);
-      }
-
-      if (options.showWorkingTree) {
-        optionalOperations.workingTree = this.getWorkingTreeCountsAsync(gitDir);
       }
 
       if (options.showTag) {
@@ -177,16 +127,6 @@ export class GitService {
         result.sha = resultMap.get("sha") || undefined;
       }
 
-      if (options.showWorkingTree) {
-        const counts = resultMap.get("workingTree");
-        if (counts) {
-          result.staged = counts.staged;
-          result.unstaged = counts.unstaged;
-          result.untracked = counts.untracked;
-          result.conflicts = counts.conflicts;
-        }
-      }
-
       if (options.showOperation) {
         result.operation = this.getOngoingOperation(gitDir) || undefined;
       }
@@ -212,71 +152,12 @@ export class GitService {
         result.isWorktree = this.isWorktree(gitDir);
       }
 
-      this.memoryCache.clear();
-      this.memoryCache.set(cacheKey, { data: result, timestamp: now });
       await CacheManager.setGitCache(gitDir, result);
-
+      debug(`[CACHE-SET] Git disk cache stored: ${gitDir}`);
       CacheManager.cleanupOldCache().catch(() => {});
-
       return result;
     } catch {
-      this.memoryCache.set(cacheKey, { data: null, timestamp: now });
       return null;
-    }
-  }
-
-  private async getWorkingTreeCountsAsync(workingDir: string): Promise<{
-    staged: number;
-    unstaged: number;
-    untracked: number;
-    conflicts: number;
-  }> {
-    try {
-      const result = await execAsync("git status --porcelain", {
-        cwd: workingDir,
-        encoding: "utf8",
-        timeout: 2000,
-      });
-      const gitStatus = result.stdout;
-
-      let staged = 0;
-      let unstaged = 0;
-      let untracked = 0;
-      let conflicts = 0;
-
-      if (!gitStatus.trim()) {
-        return { staged, unstaged, untracked, conflicts };
-      }
-
-      const lines = gitStatus.split("\n");
-      for (const line of lines) {
-        if (!line || line.length < 2) continue;
-        const indexStatus = line.charAt(0);
-        const worktreeStatus = line.charAt(1);
-
-        if (indexStatus === "?" && worktreeStatus === "?") {
-          untracked++;
-          continue;
-        }
-
-        const statusPair = indexStatus + worktreeStatus;
-        if (["DD", "AU", "UD", "UA", "DU", "AA", "UU"].includes(statusPair)) {
-          conflicts++;
-          continue;
-        }
-
-        if (indexStatus !== " " && indexStatus !== "?") {
-          staged++;
-        }
-        if (worktreeStatus !== " " && worktreeStatus !== "?") {
-          unstaged++;
-        }
-      }
-
-      return { staged, unstaged, untracked, conflicts };
-    } catch (error) {
-      debug(`Git working tree counts failed in ${workingDir}:`, error);
-      return { staged: 0, unstaged: 0, untracked: 0, conflicts: 0 };
     }
   }
 
@@ -413,7 +294,88 @@ export class GitService {
     }
   }
 
-  private async getBranchAsync(workingDir: string): Promise<string | null> {
+  private async getStatusWithBranchAsync(workingDir: string): Promise<{
+    branch: string | null;
+    status: "clean" | "dirty" | "conflicts";
+    workingTree?: {
+      staged: number;
+      unstaged: number;
+      untracked: number;
+      conflicts: number;
+    };
+  }> {
+    try {
+      debug(`[GIT-EXEC] Running git status in ${workingDir}`);
+      const result = await execAsync("git status --porcelain -b", {
+        cwd: workingDir,
+        encoding: "utf8",
+        timeout: 2000,
+      });
+      const output = result.stdout;
+      const lines = output.split("\n");
+
+      let branch: string | null = null;
+      let status: "clean" | "dirty" | "conflicts" = "clean";
+      let staged = 0;
+      let unstaged = 0;
+      let untracked = 0;
+      let conflicts = 0;
+
+      for (const line of lines) {
+        if (!line) continue;
+
+        if (line.startsWith("## ")) {
+          const branchLine = line.substring(3);
+          const branchMatch = branchLine.split("...")[0];
+          if (branchMatch && branchMatch !== "HEAD (no branch)") {
+            branch = branchMatch;
+          }
+          continue;
+        }
+
+        if (line.length >= 2) {
+          const indexStatus = line.charAt(0);
+          const worktreeStatus = line.charAt(1);
+
+          if (indexStatus === "?" && worktreeStatus === "?") {
+            untracked++;
+            if (status === "clean") status = "dirty";
+            continue;
+          }
+
+          const statusPair = indexStatus + worktreeStatus;
+          if (["DD", "AU", "UD", "UA", "DU", "AA", "UU"].includes(statusPair)) {
+            conflicts++;
+            status = "conflicts";
+            continue;
+          }
+
+          if (indexStatus !== " " && indexStatus !== "?") {
+            staged++;
+            if (status === "clean") status = "dirty";
+          }
+          if (worktreeStatus !== " " && worktreeStatus !== "?") {
+            unstaged++;
+            if (status === "clean") status = "dirty";
+          }
+        }
+      }
+
+      return {
+        branch: branch || (await this.getFallbackBranch(workingDir)),
+        status,
+        workingTree: { staged, unstaged, untracked, conflicts },
+      };
+    } catch (error) {
+      debug(`Git status with branch command failed in ${workingDir}:`, error);
+      return {
+        branch: await this.getFallbackBranch(workingDir),
+        status: "clean",
+      };
+    }
+  }
+
+  private async getFallbackBranch(workingDir: string): Promise<string | null> {
     try {
       const result = await execAsync("git branch --show-current", {
         cwd: workingDir,
@@ -442,39 +404,12 @@ export class GitService {
     return null;
   }
 
-  private async getStatusAsync(
-    workingDir: string
-  ): Promise<"clean" | "dirty" | "conflicts"> {
-    try {
-      const result = await execAsync("git status --porcelain", {
-        cwd: workingDir,
-        encoding: "utf8",
-        timeout: 2000,
-      });
-      const gitStatus = result.stdout.trim();
-
-      if (!gitStatus) return "clean";
-
-      if (
-        gitStatus.includes("UU") ||
-        gitStatus.includes("AA") ||
-        gitStatus.includes("DD")
-      ) {
-        return "conflicts";
-      }
-
-      return "dirty";
-    } catch (error) {
-      debug(`Git status command failed in ${workingDir}:`, error);
-      return "clean";
-    }
-  }
-
   private async getAheadBehindAsync(workingDir: string): Promise<{
     ahead: number;
     behind: number;
   }> {
     try {
+      debug(`[GIT-EXEC] Running git ahead/behind in ${workingDir}`);
       const [aheadResult, behindResult] = await Promise.all([
         execAsync("git rev-list --count @{u}..HEAD", {
           cwd: workingDir,

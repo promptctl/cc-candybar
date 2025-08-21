@@ -1,8 +1,11 @@
-import { execSync } from "node:child_process";
+import { exec } from "node:child_process";
+import { promisify } from "node:util";
 import { debug } from "../utils/logger";
 
+const execAsync = promisify(exec);
+
 export class TmuxService {
-  getSessionId(): string | null {
+  async getSessionId(): Promise<string | null> {
     try {
       if (!process.env.TMUX_PANE) {
         debug(`TMUX_PANE not set, not in tmux session`);
@@ -11,10 +14,11 @@ export class TmuxService {
 
       debug(`Getting tmux session ID, TMUX_PANE: ${process.env.TMUX_PANE}`);
 
-      const sessionId = execSync("tmux display-message -p '#S'", {
+      const result = await execAsync("tmux display-message -p '#S'", {
         encoding: "utf8",
         timeout: 1000,
-      }).trim();
+      });
+      const sessionId = result.stdout.trim();
 
       debug(`Tmux session ID: ${sessionId || "empty"}`);
 

@@ -4,15 +4,24 @@ import { homedir } from "node:os";
 import { createHash } from "node:crypto";
 import { setTimeout } from "node:timers/promises";
 import { debug } from "./logger";
-import { getClaudePaths, findProjectPaths, getFileModificationDate } from "./claude";
+import {
+  getClaudePaths,
+  findProjectPaths,
+  getFileModificationDate,
+} from "./claude";
 
 export interface CacheEntry<T> {
   data: T;
   timestamp: number;
+  gitModTime?: number;
 }
 
 export class CacheManager {
-  private static readonly CACHE_DIR = path.join(homedir(), ".claude", "powerline");
+  private static readonly CACHE_DIR = path.join(
+    homedir(),
+    ".claude",
+    "powerline"
+  );
   private static readonly GIT_CACHE_DIR = path.join(this.CACHE_DIR, "git");
   private static readonly USAGE_CACHE_DIR = path.join(this.CACHE_DIR, "usage");
   private static readonly LOCKS_DIR = path.join(this.CACHE_DIR, "locks");
@@ -22,10 +31,13 @@ export class CacheManager {
     return fs.existsSync(lockFile);
   }
 
-  private static async acquireLock(name: string, timeout = 5000): Promise<boolean> {
+  private static async acquireLock(
+    name: string,
+    timeout = 5000
+  ): Promise<boolean> {
     const RETRY_DELAY_MS = 50;
-    const FILE_CREATE_FLAG = 'wx';
-    
+    const FILE_CREATE_FLAG = "wx";
+
     await this.ensureCacheDirectories();
     const lockFile = path.join(this.LOCKS_DIR, name);
     const startTime = Date.now();
@@ -33,11 +45,13 @@ export class CacheManager {
 
     while (Date.now() - startTime < timeout) {
       try {
-        await fs.promises.writeFile(lockFile, lockContent, { flag: FILE_CREATE_FLAG });
+        await fs.promises.writeFile(lockFile, lockContent, {
+          flag: FILE_CREATE_FLAG,
+        });
         debug(`Lock acquired for ${name}`);
         return true;
       } catch (error: any) {
-        if (error.code === 'EEXIST') {
+        if (error.code === "EEXIST") {
           await setTimeout(RETRY_DELAY_MS);
         } else {
           throw error;
@@ -54,7 +68,7 @@ export class CacheManager {
       await fs.promises.unlink(lockFile);
       debug(`Lock released for ${name}`);
     } catch (error: any) {
-      if (error.code !== 'ENOENT') {
+      if (error.code !== "ENOENT") {
         debug(`Error releasing lock for ${name}:`, error);
       }
     }
@@ -77,12 +91,41 @@ export class CacheManager {
     return createHash("md5").update(projectPath).digest("hex").substring(0, 8);
   }
 
+  private static async getGitRepoModTime(projectPath: string): Promise<number> {
+    try {
+      const gitDir = path.join(projectPath, ".git");
+      const indexPath = path.join(gitDir, "index");
+      const headPath = path.join(gitDir, "HEAD");
+
+      let latestModTime = 0;
+
+      try {
+        const indexStats = await fs.promises.stat(indexPath);
+        latestModTime = Math.max(latestModTime, indexStats.mtime.getTime());
+      } catch {}
+
+      try {
+        const headStats = await fs.promises.stat(headPath);
+        latestModTime = Math.max(latestModTime, headStats.mtime.getTime());
+      } catch {}
+
+      try {
+        const projectStats = await fs.promises.stat(projectPath);
+        latestModTime = Math.max(latestModTime, projectStats.mtime.getTime());
+      } catch {}
+
+      return latestModTime;
+    } catch (error) {
+      debug(`Failed to get git repo mod time for ${projectPath}:`, error);
+      return Date.now();
+    }
+  }
+
   static async getGitCache(projectPath: string): Promise<any | null> {
     const MAX_RETRIES = 3;
     const RETRY_DELAY_MS = 75;
-    const CACHE_TTL_MS = 500;
     const FILE_ENCODING = "utf-8";
-    
+
     await this.ensureCacheDirectories();
     const hash = this.createProjectHash(projectPath);
     const cachePath = path.join(this.GIT_CACHE_DIR, `${hash}.json`);
@@ -99,26 +142,32 @@ export class CacheManager {
       try {
         const content = await fs.promises.readFile(cachePath, FILE_ENCODING);
         const cached: CacheEntry<any> = JSON.parse(content);
-        const cacheAge = Date.now() - cached.timestamp;
-        const isCacheValid = cacheAge < CACHE_TTL_MS;
+        const currentGitModTime = await this.getGitRepoModTime(projectPath);
+        const cachedGitModTime = cached.gitModTime || 0;
+        const isRepoUnchanged = currentGitModTime <= cachedGitModTime;
 
-        if (isCacheValid) {
-          debug(`Using shared git cache for ${projectPath}`);
+        if (isRepoUnchanged) {
+          debug(`[CACHE-HIT] Git disk cache: ${projectPath}`);
           return cached.data;
         }
+        debug(`[CACHE-MISS] Git repo changed: ${projectPath}`);
         return null;
       } catch (error: any) {
-        if (error.code === 'ENOENT') {
+        if (error.code === "ENOENT") {
           debug(`No shared git cache found for ${projectPath}`);
           return null;
         }
         const attemptNumber = attempt + 1;
-        debug(`Attempt ${attemptNumber} failed to read git cache for ${projectPath}: ${error.message}. Retrying...`);
+        debug(
+          `Attempt ${attemptNumber} failed to read git cache for ${projectPath}: ${error.message}. Retrying...`
+        );
         await setTimeout(RETRY_DELAY_MS);
       }
     }
 
-    debug(`Failed to read git cache for ${projectPath} after ${MAX_RETRIES} attempts.`);
+    debug(
+      `Failed to read git cache for ${projectPath} after ${MAX_RETRIES} attempts.`
+    );
     return null;
   }
 
@@ -134,16 +183,18 @@ export class CacheManager {
     try {
       await this.ensureCacheDirectories();
       const cachePath = path.join(this.GIT_CACHE_DIR, `${hash}.json`);
+      const gitModTime = await this.getGitRepoModTime(projectPath);
       const cacheEntry: CacheEntry<any> = {
         data,
         timestamp: Date.now(),
+        gitModTime,
       };
       await fs.promises.writeFile(
         cachePath,
         JSON.stringify(cacheEntry),
         "utf-8"
       );
-      debug(`Saved shared git cache for ${projectPath}`);
+      debug(`[CACHE-SET] Git disk cache stored: ${projectPath}`);
     } catch (error) {
       debug(`Failed to save git cache for ${projectPath}:`, error);
     } finally {
@@ -151,11 +202,14 @@ export class CacheManager {
     }
   }
 
-  static async getUsageCache(cacheType: 'today' | 'block' | 'pricing', latestMtime?: number): Promise<any | null> {
+  static async getUsageCache(
+    cacheType: "today" | "block" | "pricing",
+    latestMtime?: number
+  ): Promise<any | null> {
     const MAX_RETRIES = 3;
     const RETRY_DELAY_MS = 75;
     const FILE_ENCODING = "utf-8";
-    
+
     await this.ensureCacheDirectories();
     const cachePath = path.join(this.USAGE_CACHE_DIR, `${cacheType}.json`);
     const lockName = `${cacheType}.usage.lock`;
@@ -172,40 +226,48 @@ export class CacheManager {
         const content = await fs.promises.readFile(cachePath, FILE_ENCODING);
         const cached: CacheEntry<any> = JSON.parse(content);
         const cacheIsValid = !latestMtime || cached.timestamp >= latestMtime;
-        
+
         if (cacheIsValid) {
-          debug(`Using shared ${cacheType} usage cache`);
+          debug(`[CACHE-HIT] ${cacheType} disk cache: found`);
           return this.deserializeDates(cached.data);
         } else {
-          debug(`${cacheType} cache outdated: cache=${cached.timestamp}, latest=${latestMtime}`);
+          debug(
+            `${cacheType} cache outdated: cache=${cached.timestamp}, latest=${latestMtime}`
+          );
           return null;
         }
       } catch (error: any) {
-        if (error.code === 'ENOENT') {
+        if (error.code === "ENOENT") {
           debug(`No shared ${cacheType} usage cache found`);
           return null;
         }
         const attemptNumber = attempt + 1;
-        debug(`Attempt ${attemptNumber} failed to read ${cacheType} cache: ${error.message}. Retrying...`);
+        debug(
+          `Attempt ${attemptNumber} failed to read ${cacheType} cache: ${error.message}. Retrying...`
+        );
         await setTimeout(RETRY_DELAY_MS);
       }
     }
-    
+
     debug(`Failed to read ${cacheType} cache after ${MAX_RETRIES} attempts.`);
     return null;
   }
 
   private static deserializeDates(data: any): any {
     if (Array.isArray(data)) {
-      return data.map(entry => ({
+      return data.map((entry) => ({
         ...entry,
-        timestamp: new Date(entry.timestamp)
+        timestamp: new Date(entry.timestamp),
       }));
     }
     return data;
   }
-  
-  static async setUsageCache(cacheType: 'today' | 'block' | 'pricing', data: any, latestMtime?: number): Promise<void> {
+
+  static async setUsageCache(
+    cacheType: "today" | "block" | "pricing",
+    data: any,
+    latestMtime?: number
+  ): Promise<void> {
     const lockName = `${cacheType}.usage.lock`;
     const lockAcquired = await this.acquireLock(lockName);
     if (!lockAcquired) {
@@ -222,9 +284,9 @@ export class CacheManager {
         timestamp: cacheTimestamp,
       };
       const cacheContent = JSON.stringify(cacheEntry);
-      
+
       await fs.promises.writeFile(cachePath, cacheContent, "utf-8");
-      debug(`Saved shared ${cacheType} usage cache`);
+      debug(`[CACHE-SET] ${cacheType} disk cache stored`);
     } catch (error) {
       debug(`Failed to save ${cacheType} usage cache:`, error);
     } finally {
@@ -236,14 +298,14 @@ export class CacheManager {
     try {
       const claudePaths = getClaudePaths();
       const projectPaths = await findProjectPaths(claudePaths);
-      
+
       let latestMtime = 0;
-      
+
       for (const projectPath of projectPaths) {
         try {
           const files = await fs.promises.readdir(projectPath);
           const jsonlFiles = files.filter((file) => file.endsWith(".jsonl"));
-          
+
           for (const file of jsonlFiles) {
             const filePath = path.join(projectPath, file);
             const mtime = await getFileModificationDate(filePath);
@@ -256,7 +318,7 @@ export class CacheManager {
           continue;
         }
       }
-      
+
       return latestMtime;
     } catch (error) {
       debug("Failed to get latest transcript mtime:", error);
@@ -264,10 +326,9 @@ export class CacheManager {
     }
   }
 
-
   static async cleanupOldCache(maxAge = 24 * 60 * 60 * 1000): Promise<void> {
     await this.ensureCacheDirectories();
-    
+
     const now = Date.now();
     const cleanupMarker = path.join(this.CACHE_DIR, ".cleanup");
 
@@ -276,20 +337,19 @@ export class CacheManager {
       if (now - parseInt(lastCleanup) < 60 * 60 * 1000) {
         return;
       }
-    } catch {
-    }
+    } catch {}
 
     try {
       const dirs = [this.GIT_CACHE_DIR, this.USAGE_CACHE_DIR];
-      
+
       for (const dir of dirs) {
         try {
           const files = await fs.promises.readdir(dir);
-          
+
           for (const file of files) {
             const filePath = path.join(dir, file);
             const stats = await fs.promises.stat(filePath);
-            
+
             if (now - stats.mtime.getTime() > maxAge) {
               await fs.promises.unlink(filePath);
               debug(`Cleaned up old cache file: ${file}`);
