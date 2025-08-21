@@ -152,7 +152,9 @@ export class PricingService {
     string,
     ModelPricing
   > | null> {
-    return await CacheManager.getUsageCache("pricing");
+    const TTL_24H = 24 * 60 * 60 * 1000;
+    const minValidTime = Date.now() - TTL_24H;
+    return await CacheManager.getUsageCache("pricing", minValidTime);
   }
 
   private static async saveDiskCache(
