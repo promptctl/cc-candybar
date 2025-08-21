@@ -1,3 +1,11 @@
+## [1.7.2](https://github.com/Owloops/claude-powerline/compare/v1.7.1...v1.7.2) (2025-08-21)
+
+
+### Bug Fixes
+
+* benchmark table, defaults and segments test ([23a989b](https://github.com/Owloops/claude-powerline/commit/23a989b5b87e739652aa2da1440079fceaf4663e))
+* default config benchmark in readme ([6c598ed](https://github.com/Owloops/claude-powerline/commit/6c598edc313336e1c03613dcb066c2de95074030))
+
 ## [1.7.1](https://github.com/Owloops/claude-powerline/compare/v1.7.0...v1.7.1) (2025-08-21)
 
 
