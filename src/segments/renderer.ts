@@ -37,6 +37,8 @@ export interface MetricsSegmentConfig extends SegmentConfig {
   showLastResponseTime?: boolean;
   showDuration?: boolean;
   showMessageCount?: boolean;
+  showLinesAdded?: boolean;
+  showLinesRemoved?: boolean;
 }
 
 export interface BlockSegmentConfig extends SegmentConfig {
@@ -102,6 +104,8 @@ export interface PowerlineSymbols {
   metrics_last_response: string;
   metrics_duration: string;
   metrics_messages: string;
+  metrics_lines_added: string;
+  metrics_lines_removed: string;
   metrics_burn: string;
   version: string;
 }
@@ -336,13 +340,11 @@ export class SegmentRenderer {
 
     const parts: string[] = [];
 
-    if (config?.showLastResponseTime) {
+    if (config?.showLastResponseTime && metricsInfo.lastResponseTime !== null) {
       const lastResponseTime =
-        metricsInfo.lastResponseTime === null
-          ? "0.0s"
-          : metricsInfo.lastResponseTime < 60
-            ? `${metricsInfo.lastResponseTime.toFixed(1)}s`
-            : `${(metricsInfo.lastResponseTime / 60).toFixed(1)}m`;
+        metricsInfo.lastResponseTime < 60
+          ? `${metricsInfo.lastResponseTime.toFixed(1)}s`
+          : `${(metricsInfo.lastResponseTime / 60).toFixed(1)}m`;
       parts.push(`${this.symbols.metrics_last_response} ${lastResponseTime}`);
     }
 
@@ -371,6 +373,26 @@ export class SegmentRenderer {
     ) {
       parts.push(
         `${this.symbols.metrics_messages} ${metricsInfo.messageCount}`
+      );
+    }
+
+    if (
+      config?.showLinesAdded !== false &&
+      metricsInfo.linesAdded !== null &&
+      metricsInfo.linesAdded > 0
+    ) {
+      parts.push(
+        `${this.symbols.metrics_lines_added} ${metricsInfo.linesAdded}`
+      );
+    }
+
+    if (
+      config?.showLinesRemoved !== false &&
+      metricsInfo.linesRemoved !== null &&
+      metricsInfo.linesRemoved > 0
+    ) {
+      parts.push(
+        `${this.symbols.metrics_lines_removed} ${metricsInfo.linesRemoved}`
       );
     }
 

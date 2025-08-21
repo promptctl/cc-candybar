@@ -1,12 +1,14 @@
 import { readFile } from "node:fs/promises";
 import { debug } from "../utils/logger";
-import { findTranscriptFile } from "../utils/claude";
+import { findTranscriptFile, ClaudeHookData } from "../utils/claude";
 
 export interface MetricsInfo {
   responseTime: number | null;
   lastResponseTime: number | null;
   sessionDuration: number | null;
   messageCount: number | null;
+  linesAdded: number | null;
+  linesRemoved: number | null;
 }
 
 interface TranscriptEntry {
@@ -26,7 +28,6 @@ interface TranscriptEntry {
       cache_read_input_tokens?: number;
     };
   };
-  costUSD?: number;
   isSidechain?: boolean;
 }
 
@@ -74,181 +75,6 @@ export class MetricsProvider {
     }
   }
 
-  private calculateResponseTimes(entries: TranscriptEntry[]): {
-    average: number | null;
-    last: number | null;
-  } {
-    const userMessages: Date[] = [];
-    const assistantMessages: Date[] = [];
-    let lastUserMessageIndex = -1;
-    let lastUserMessageTime: Date | null = null;
-    let lastResponseEndTime: Date | null = null;
-    let lastResponseEndIndex = -1;
-
-    for (let i = 0; i < entries.length; i++) {
-      const entry = entries[i];
-      if (!entry || !entry.timestamp) continue;
-
-      try {
-        const timestamp = new Date(entry.timestamp);
-        const messageType =
-          entry.type || entry.message?.role || entry.message?.type;
-
-        const isToolResult =
-          entry.type === "user" &&
-          entry.message?.content?.[0]?.type === "tool_result";
-
-        const isRealUserMessage = messageType === "user" && !isToolResult;
-
-        if (isRealUserMessage) {
-          userMessages.push(timestamp);
-          lastUserMessageTime = timestamp;
-          lastUserMessageIndex = i;
-          lastResponseEndTime = null;
-          lastResponseEndIndex = -1;
-          debug(
-            `Found user message at index ${i}, timestamp ${timestamp.toISOString()}`
-          );
-        } else if (lastUserMessageIndex >= 0) {
-          const isPartOfResponse =
-            messageType === "assistant" ||
-            isToolResult ||
-            messageType === "system" ||
-            entry.message?.usage;
-
-          if (isPartOfResponse) {
-            lastResponseEndTime = timestamp;
-            lastResponseEndIndex = i;
-
-            if (messageType === "assistant" || entry.message?.usage) {
-              assistantMessages.push(timestamp);
-              debug(
-                `Found assistant message at index ${i}, timestamp ${timestamp.toISOString()}`
-              );
-            } else if (isToolResult) {
-              debug(
-                `Found tool result at index ${i}, timestamp ${timestamp.toISOString()}`
-              );
-            } else {
-              debug(
-                `Found ${messageType} message at index ${i}, timestamp ${timestamp.toISOString()}`
-              );
-            }
-          }
-        }
-      } catch {
-        continue;
-      }
-    }
-
-    if (userMessages.length === 0 || assistantMessages.length === 0) {
-      return { average: null, last: null };
-    }
-
-    const responseTimes: number[] = [];
-
-    for (const assistantTime of assistantMessages) {
-      const priorUsers = userMessages.filter(
-        (userTime) => userTime < assistantTime
-      );
-
-      if (priorUsers.length > 0) {
-        const userTime = new Date(
-          Math.max(...priorUsers.map((d) => d.getTime()))
-        );
-        const responseTime =
-          (assistantTime.getTime() - userTime.getTime()) / 1000;
-
-        if (responseTime > 0.1 && responseTime < 300) {
-          responseTimes.push(responseTime);
-          debug(`Valid response time: ${responseTime.toFixed(1)}s`);
-        } else {
-          debug(
-            `Rejected response time: ${responseTime.toFixed(1)}s (outside 0.1s-5m range)`
-          );
-        }
-      }
-    }
-
-    let lastResponseTime: number | null = null;
-    if (
-      lastUserMessageTime &&
-      lastResponseEndTime &&
-      lastResponseEndIndex > lastUserMessageIndex
-    ) {
-      const timeDiff =
-        lastResponseEndTime.getTime() - lastUserMessageTime.getTime();
-      const positionDiff = lastResponseEndIndex - lastUserMessageIndex;
-
-      if (timeDiff === 0 && positionDiff > 0) {
-        lastResponseTime = positionDiff * 0.1;
-        debug(
-          `Estimated last response time from position difference: ${lastResponseTime.toFixed(2)}s (${positionDiff} messages)`
-        );
-      } else if (timeDiff > 0) {
-        lastResponseTime = timeDiff / 1000;
-        debug(
-          `Last response time from timestamps: ${lastResponseTime.toFixed(2)}s`
-        );
-      }
-
-      debug(
-        `Last user message at index ${lastUserMessageIndex}, timestamp ${lastUserMessageTime.toISOString()}`
-      );
-      debug(
-        `Last response end at index ${lastResponseEndIndex}, timestamp ${lastResponseEndTime.toISOString()}`
-      );
-    }
-
-    if (responseTimes.length === 0 && lastResponseTime === null) {
-      return { average: null, last: null };
-    }
-
-    const avgResponseTime =
-      responseTimes.length > 0
-        ? responseTimes.reduce((sum, time) => sum + time, 0) /
-          responseTimes.length
-        : null;
-
-    debug(
-      `Calculated average response time: ${avgResponseTime?.toFixed(2) || "null"}s from ${responseTimes.length} measurements`
-    );
-    debug(`Last response time: ${lastResponseTime?.toFixed(2) || "null"}s`);
-
-    return { average: avgResponseTime, last: lastResponseTime };
-  }
-
-  private calculateSessionDuration(entries: TranscriptEntry[]): number | null {
-    const timestamps: Date[] = [];
-
-    for (const entry of entries) {
-      if (!entry.timestamp) continue;
-
-      try {
-        timestamps.push(new Date(entry.timestamp));
-      } catch {
-        continue;
-      }
-    }
-
-    if (timestamps.length < 2) {
-      return null;
-    }
-
-    timestamps.sort((a, b) => a.getTime() - b.getTime());
-
-    const lastTimestamp = timestamps[timestamps.length - 1];
-    const firstTimestamp = timestamps[0];
-
-    if (!lastTimestamp || !firstTimestamp) {
-      return null;
-    }
-
-    const duration =
-      (lastTimestamp.getTime() - firstTimestamp.getTime()) / 1000;
-    return duration > 0 ? duration : null;
-  }
-
   private calculateMessageCount(entries: TranscriptEntry[]): number {
     return entries.filter((entry) => {
       const messageType =
@@ -260,43 +86,87 @@ export class MetricsProvider {
     }).length;
   }
 
-  async getMetricsInfo(sessionId: string): Promise<MetricsInfo> {
+  private calculateLastResponseTime(entries: TranscriptEntry[]): number | null {
+    if (entries.length === 0) return null;
+
+    const recentEntries = entries.slice(-20);
+
+    let lastUserTime: Date | null = null;
+    let bestResponseTime: number | null = null;
+
+    for (const entry of recentEntries) {
+      if (!entry.timestamp) continue;
+
+      try {
+        const timestamp = new Date(entry.timestamp);
+        const messageType =
+          entry.type || entry.message?.role || entry.message?.type;
+
+        const isToolResult =
+          entry.type === "user" &&
+          entry.message?.content?.[0]?.type === "tool_result";
+        const isRealUserMessage = messageType === "user" && !isToolResult;
+
+        if (isRealUserMessage) {
+          lastUserTime = timestamp;
+        } else if (messageType === "assistant" && lastUserTime) {
+          const responseTime =
+            (timestamp.getTime() - lastUserTime.getTime()) / 1000;
+          if (responseTime > 0.1 && responseTime < 300) {
+            bestResponseTime = responseTime;
+          }
+        }
+      } catch {
+        continue;
+      }
+    }
+
+    return bestResponseTime;
+  }
+
+  async getMetricsInfo(
+    sessionId: string,
+    hookData: ClaudeHookData
+  ): Promise<MetricsInfo> {
     try {
-      debug(`Starting metrics calculation for session: ${sessionId}`);
+      debug(`Getting metrics from hook data for session: ${sessionId}`);
 
-      const entries = await this.loadTranscriptEntries(sessionId);
-
-      if (entries.length === 0) {
+      if (!hookData.cost) {
+        debug(`No cost data available in hook data`);
         return {
           responseTime: null,
           lastResponseTime: null,
           sessionDuration: null,
           messageCount: null,
+          linesAdded: null,
+          linesRemoved: null,
         };
       }
 
-      const responseTimes = this.calculateResponseTimes(entries);
-      const sessionDuration = this.calculateSessionDuration(entries);
+      const entries = await this.loadTranscriptEntries(sessionId);
       const messageCount = this.calculateMessageCount(entries);
-
-
-      debug(
-        `Metrics calculated: avgResponseTime=${responseTimes.average?.toFixed(2) || "null"}s, lastResponseTime=${responseTimes.last?.toFixed(2) || "null"}s, sessionDuration=${sessionDuration?.toFixed(0) || "null"}s, messageCount=${messageCount}`
-      );
+      const lastResponseTime = this.calculateLastResponseTime(entries);
 
       return {
-        responseTime: responseTimes.average,
-        lastResponseTime: responseTimes.last,
-        sessionDuration,
+        responseTime: hookData.cost.total_api_duration_ms / 1000,
+        lastResponseTime,
+        sessionDuration: hookData.cost.total_duration_ms / 1000,
         messageCount,
+        linesAdded: hookData.cost.total_lines_added,
+        linesRemoved: hookData.cost.total_lines_removed,
       };
     } catch (error) {
-      debug(`Error calculating metrics for session ${sessionId}:`, error);
+      debug(
+        `Error getting metrics from hook data for session ${sessionId}:`,
+        error
+      );
       return {
         responseTime: null,
         lastResponseTime: null,
         sessionDuration: null,
         messageCount: null,
+        linesAdded: null,
+        linesRemoved: null,
       };
     }
   }

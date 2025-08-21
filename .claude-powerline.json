@@ -18,9 +18,11 @@
           "metrics": {
             "enabled": true,
             "showResponseTime": true,
-            "showLastResponseTime": false,
+            "showLastResponseTime": true,
             "showDuration": true,
-            "showMessageCount": true
+            "showMessageCount": true,
+            "showLinesAdded": true,
+            "showLinesRemoved": true
           },
           "context": { "enabled": true },
           "tmux": { "enabled": false }

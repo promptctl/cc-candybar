@@ -126,7 +126,7 @@ export class PowerlineRenderer {
       : null;
 
     const metricsInfo = this.needsSegmentInfo("metrics")
-      ? await this.metricsProvider.getMetricsInfo(hookData.session_id)
+      ? await this.metricsProvider.getMetricsInfo(hookData.session_id, hookData)
       : null;
 
 
@@ -404,6 +404,8 @@ export class PowerlineRenderer {
       metrics_last_response: SYMBOLS.metrics_last_response,
       metrics_duration: SYMBOLS.metrics_duration,
       metrics_messages: SYMBOLS.metrics_messages,
+      metrics_lines_added: SYMBOLS.metrics_lines_added,
+      metrics_lines_removed: SYMBOLS.metrics_lines_removed,
       metrics_burn: SYMBOLS.metrics_burn,
       version: SYMBOLS.version,
     };

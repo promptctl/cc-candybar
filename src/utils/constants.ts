@@ -22,6 +22,8 @@ export const SYMBOLS = {
   metrics_last_response: "Δ",
   metrics_duration: "⧗",
   metrics_messages: "⟐",
+  metrics_lines_added: "+",
+  metrics_lines_removed: "-",
   metrics_burn: "⟢",
   version: "◈",
 } as const;

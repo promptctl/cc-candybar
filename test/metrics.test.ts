@@ -3,10 +3,34 @@ import { writeFileSync, unlinkSync, mkdtempSync } from "fs";
 import { join } from "path";
 import { tmpdir } from "os";
 import * as claudePaths from "../src/utils/claude";
+import type { ClaudeHookData } from "../src/utils/claude";
 
 describe("Metrics Provider", () => {
   let tempDir: string;
   let metricsProvider: MetricsProvider;
+
+  const createMockHookData = (sessionId: string): ClaudeHookData => ({
+    hook_event_name: "Status",
+    session_id: sessionId,
+    transcript_path: `/path/to/${sessionId}.jsonl`,
+    cwd: "/test/cwd",
+    model: {
+      id: "claude-opus-4-1",
+      display_name: "Opus",
+    },
+    workspace: {
+      current_dir: "/test/workspace",
+      project_dir: "/test/project",
+    },
+    version: "1.0.0",
+    cost: {
+      total_cost_usd: 0.5,
+      total_duration_ms: 120000,
+      total_api_duration_ms: 5000,
+      total_lines_added: 25,
+      total_lines_removed: 10,
+    },
+  });
 
   beforeEach(() => {
     tempDir = mkdtempSync(join(tmpdir(), "metrics-test-"));
@@ -36,21 +60,35 @@ describe("Metrics Provider", () => {
       .spyOn(claudePaths, "findTranscriptFile")
       .mockResolvedValue(transcriptPath);
 
-    const metrics = await metricsProvider.getMetricsInfo("test-session");
+    const mockHookData = createMockHookData("test-session");
+    const metrics = await metricsProvider.getMetricsInfo(
+      "test-session",
+      mockHookData
+    );
 
     expect(metrics.messageCount).toBe(2);
-    expect(metrics.sessionDuration).toBeGreaterThan(0);
-    expect(metrics.responseTime).toBeGreaterThan(0);
+    expect(metrics.sessionDuration).toBe(120);
+    expect(metrics.responseTime).toBe(5);
+    expect(metrics.lastResponseTime).toBeGreaterThan(0);
+    expect(metrics.linesAdded).toBe(25);
+    expect(metrics.linesRemoved).toBe(10);
   });
 
   it("handles missing transcript gracefully", async () => {
     jest.spyOn(claudePaths, "findTranscriptFile").mockResolvedValue(null);
 
-    const metrics = await metricsProvider.getMetricsInfo("nonexistent-session");
+    const mockHookData = createMockHookData("nonexistent-session");
+    const metrics = await metricsProvider.getMetricsInfo(
+      "nonexistent-session",
+      mockHookData
+    );
 
-    expect(metrics.messageCount).toBeNull();
-    expect(metrics.sessionDuration).toBeNull();
-    expect(metrics.responseTime).toBeNull();
+    expect(metrics.messageCount).toBe(0);
+    expect(metrics.sessionDuration).toBe(120);
+    expect(metrics.responseTime).toBe(5);
+    expect(metrics.lastResponseTime).toBeNull();
+    expect(metrics.linesAdded).toBe(25);
+    expect(metrics.linesRemoved).toBe(10);
   });
 
   it("handles empty transcript gracefully", async () => {
@@ -61,10 +99,17 @@ describe("Metrics Provider", () => {
       .spyOn(claudePaths, "findTranscriptFile")
       .mockResolvedValue(transcriptPath);
 
-    const metrics = await metricsProvider.getMetricsInfo("empty-session");
+    const mockHookData = createMockHookData("empty-session");
+    const metrics = await metricsProvider.getMetricsInfo(
+      "empty-session",
+      mockHookData
+    );
 
-    expect(metrics.messageCount).toBeNull();
-    expect(metrics.sessionDuration).toBeNull();
-    expect(metrics.responseTime).toBeNull();
+    expect(metrics.messageCount).toBe(0);
+    expect(metrics.sessionDuration).toBe(120);
+    expect(metrics.responseTime).toBe(5);
+    expect(metrics.lastResponseTime).toBeNull();
+    expect(metrics.linesAdded).toBe(25);
+    expect(metrics.linesRemoved).toBe(10);
   });
 });

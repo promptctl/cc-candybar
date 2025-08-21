@@ -175,7 +175,7 @@ Config files reload automatically and no restart needed.
 | `today` | Daily usage with budget monitoring | `type` |
 | `context` | Context window usage | - |
 | `tmux` | Tmux session info | - |
-| `metrics` | Performance analytics | `showResponseTime`, `showLastResponseTime`, `showDuration`, `showMessageCount` |
+| `metrics` | Performance analytics | `showResponseTime`, `showLastResponseTime`, `showDuration`, `showMessageCount`, `showLinesAdded`, `showLinesRemoved` |
 | `version` | Claude Code version | - |
 
 ### Segment Configuration
@@ -242,20 +242,24 @@ Shows performance analytics from your Claude sessions.
   "showResponseTime": true,
   "showLastResponseTime": false,
   "showDuration": true,
-  "showMessageCount": true
+  "showMessageCount": true,
+  "showLinesAdded": true,
+  "showLinesRemoved": true
 }
 ```
 
 **Options:**
 
-- `showResponseTime`: Average response time across all messages
-- `showLastResponseTime`: Time for the last response (shows `0.0s` while waiting)
-- `showDuration`: Total time since session started
+- `showResponseTime`: Total API duration across all requests
+- `showLastResponseTime`: Individual response time for most recent query
+- `showDuration`: Total session duration
 - `showMessageCount`: Number of user messages sent
+- `showLinesAdded`: Lines of code added during session
+- `showLinesRemoved`: Lines of code removed during session
 
 **Symbols:**
 
-- `⧖` Average response time • `Δ` Last response time • `⧗` Session duration • `⟐` Message count
+- `⧖` Total API time • `Δ` Last response • `⧗` Session duration • `⟐` Messages • `+` Lines added • `-` Lines removed
 
 ---
 

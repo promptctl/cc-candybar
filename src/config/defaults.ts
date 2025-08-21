@@ -32,9 +32,11 @@ export const DEFAULT_CONFIG: PowerlineConfig = {
           metrics: { 
             enabled: false,
             showResponseTime: true,
-            showLastResponseTime: false,
+            showLastResponseTime: true,
             showDuration: true,
             showMessageCount: true,
+            showLinesAdded: true,
+            showLinesRemoved: true,
           },
         },
       },
