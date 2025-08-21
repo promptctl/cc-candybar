@@ -1,3 +1,10 @@
+## [1.7.5](https://github.com/Owloops/claude-powerline/compare/v1.7.4...v1.7.5) (2025-08-21)
+
+
+### Bug Fixes
+
+* optimize today segment with efficient file and time filters ([5e281f2](https://github.com/Owloops/claude-powerline/commit/5e281f20968bcc868df7fff8af225a0821d59fb0))
+
 ## [1.7.4](https://github.com/Owloops/claude-powerline/compare/v1.7.3...v1.7.4) (2025-08-21)
 
 
