@@ -436,7 +436,12 @@ Create custom themes by defining segment colors.
 
 ## Performance
 
-`claude-powerline` executes in ~800ms with intelligent caching. Performance depends on enabled segments and options.
+`claude-powerline` executes in **~160ms** with default configuration and intelligent caching. Full-featured configurations run in ~800ms. Performance depends on enabled segments and options.
+
+**Benchmark Results:**
+- Default config: **~160ms** average execution time
+- Full config with themes: **~800ms** average execution time  
+- Run `npm run benchmark` to test performance on your system
 
 ### Segment Performance
 

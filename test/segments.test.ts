@@ -13,6 +13,15 @@ jest.mock("../src/utils/claude", () => ({
 
 jest.mock("node:child_process", () => ({
   execSync: jest.fn(),
+  exec: jest
+    .fn()
+    .mockImplementation((cmd: string, _options: any, callback: any) => {
+      let result = "1.0.81 (Claude Code)";
+      if (typeof callback === "function") {
+        callback(null, { stdout: result, stderr: "" });
+      }
+      return result;
+    }),
 }));
 
 const mockLoadEntries = loadEntriesFromProjects as jest.MockedFunction<

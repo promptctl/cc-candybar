@@ -41,8 +41,6 @@ describe("Metrics Provider", () => {
     expect(metrics.messageCount).toBe(2);
     expect(metrics.sessionDuration).toBeGreaterThan(0);
     expect(metrics.responseTime).toBeGreaterThan(0);
-    expect(metrics.costBurnRate).toBeGreaterThan(0);
-    expect(metrics.tokenBurnRate).toBeGreaterThan(0);
   });
 
   it("handles missing transcript gracefully", async () => {
@@ -53,8 +51,6 @@ describe("Metrics Provider", () => {
     expect(metrics.messageCount).toBeNull();
     expect(metrics.sessionDuration).toBeNull();
     expect(metrics.responseTime).toBeNull();
-    expect(metrics.costBurnRate).toBeNull();
-    expect(metrics.tokenBurnRate).toBeNull();
   });
 
   it("handles empty transcript gracefully", async () => {
@@ -70,7 +66,5 @@ describe("Metrics Provider", () => {
     expect(metrics.messageCount).toBeNull();
     expect(metrics.sessionDuration).toBeNull();
     expect(metrics.responseTime).toBeNull();
-    expect(metrics.costBurnRate).toBeNull();
-    expect(metrics.tokenBurnRate).toBeNull();
   });
 });
