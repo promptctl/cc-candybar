@@ -1,3 +1,11 @@
+## [1.7.1](https://github.com/Owloops/claude-powerline/compare/v1.7.0...v1.7.1) (2025-08-21)
+
+
+### Bug Fixes
+
+* implement smart cache invalidation and optimize pricing lookups ([92b16af](https://github.com/Owloops/claude-powerline/commit/92b16af6f774b5cd8230b2927814a5a70a51b026))
+* tests and add benchmark script ([3e2c6db](https://github.com/Owloops/claude-powerline/commit/3e2c6dbe605a09ce885cd7e59e0569b7dd8649f1))
+
 # [1.7.0](https://github.com/Owloops/claude-powerline/compare/v1.6.9...v1.7.0) (2025-08-21)
 
 
