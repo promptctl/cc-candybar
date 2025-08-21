@@ -1,27 +1,16 @@
 import { BlockProvider } from "../src/segments/block";
 import { TodayProvider } from "../src/segments/today";
-import { VersionProvider } from "../src/segments/version";
-import { loadEntriesFromProjects } from "../src/utils/claude";
+import { SegmentRenderer } from "../src/segments/renderer";
+import {
+  loadEntriesFromProjects,
+  type ClaudeHookData,
+} from "../src/utils/claude";
 import { mkdirSync, rmSync } from "fs";
 import { join } from "path";
 import { tmpdir } from "os";
-import { execSync } from "node:child_process";
 
 jest.mock("../src/utils/claude", () => ({
   loadEntriesFromProjects: jest.fn(),
-}));
-
-jest.mock("node:child_process", () => ({
-  execSync: jest.fn(),
-  exec: jest
-    .fn()
-    .mockImplementation((cmd: string, _options: any, callback: any) => {
-      const result = "1.0.81 (Claude Code)";
-      if (typeof callback === "function") {
-        callback(null, { stdout: result, stderr: "" });
-      }
-      return result;
-    }),
 }));
 
 const mockLoadEntries = loadEntriesFromProjects as jest.MockedFunction<
@@ -246,14 +235,26 @@ describe("Segment Time Logic", () => {
   });
 
   describe("Version Segment", () => {
-    it("should get Claude version", async () => {
-      const mockExecSync = execSync as jest.MockedFunction<typeof execSync>;
-      mockExecSync.mockReturnValue("1.0.81 (Claude Code)" as any);
+    it("should render version from hook data", () => {
+      const config = { theme: "dark", display: { style: "minimal" } } as any;
+      const symbols = { version: "◈" } as any;
+      const colors = {} as any;
+      const renderer = new SegmentRenderer(config, symbols);
 
-      const provider = new VersionProvider();
-      const info = await provider.getVersionInfo();
+      const hookData: ClaudeHookData = {
+        hook_event_name: "Status",
+        session_id: "test-session",
+        transcript_path: "/tmp/test.json",
+        cwd: "/test",
+        model: { id: "claude-3-5-sonnet", display_name: "Claude" },
+        workspace: { current_dir: "/test", project_dir: "/test" },
+        version: "1.0.80",
+      };
 
-      expect(info.version).toBe("v1.0.81");
+      const result = renderer.renderVersion(hookData, colors);
+
+      expect(result).not.toBeNull();
+      expect(result?.text).toContain("v1.0.80");
     });
   });
 });
