@@ -1,3 +1,10 @@
+## [1.7.3](https://github.com/Owloops/claude-powerline/compare/v1.7.2...v1.7.3) (2025-08-21)
+
+
+### Bug Fixes
+
+* version caching ([35c98d8](https://github.com/Owloops/claude-powerline/commit/35c98d80669b8414bbd1201afdd2e9fab7124814))
+
 ## [1.7.2](https://github.com/Owloops/claude-powerline/compare/v1.7.1...v1.7.2) (2025-08-21)
 
 
