@@ -25,6 +25,10 @@ export class CacheManager {
   private static readonly GIT_CACHE_DIR = path.join(this.CACHE_DIR, "git");
   private static readonly USAGE_CACHE_DIR = path.join(this.CACHE_DIR, "usage");
   private static readonly LOCKS_DIR = path.join(this.CACHE_DIR, "locks");
+  private static readonly VERSION_CACHE_DIR = path.join(
+    this.CACHE_DIR,
+    "version"
+  );
 
   private static isLocked(name: string): boolean {
     const lockFile = path.join(this.LOCKS_DIR, name);
@@ -81,6 +85,7 @@ export class CacheManager {
         fs.promises.mkdir(this.GIT_CACHE_DIR, { recursive: true }),
         fs.promises.mkdir(this.USAGE_CACHE_DIR, { recursive: true }),
         fs.promises.mkdir(this.LOCKS_DIR, { recursive: true }),
+        fs.promises.mkdir(this.VERSION_CACHE_DIR, { recursive: true }),
       ]);
     } catch (error) {
       debug("Failed to create cache directories:", error);
@@ -340,7 +345,11 @@ export class CacheManager {
     } catch {}
 
     try {
-      const dirs = [this.GIT_CACHE_DIR, this.USAGE_CACHE_DIR];
+      const dirs = [
+        this.GIT_CACHE_DIR,
+        this.USAGE_CACHE_DIR,
+        this.VERSION_CACHE_DIR,
+      ];
 
       for (const dir of dirs) {
         try {
@@ -364,6 +373,85 @@ export class CacheManager {
       debug("Cache cleanup completed");
     } catch (error) {
       debug("Error during cache cleanup:", error);
+    }
+  }
+
+  static async getVersionCache(
+    maxAge = 24 * 60 * 60 * 1000
+  ): Promise<string | null> {
+    const MAX_RETRIES = 3;
+    const RETRY_DELAY_MS = 75;
+    const FILE_ENCODING = "utf-8";
+
+    await this.ensureCacheDirectories();
+    const cachePath = path.join(this.VERSION_CACHE_DIR, "claude-version.json");
+    const lockName = "claude-version.lock";
+
+    for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+      const isCurrentlyLocked = this.isLocked(lockName);
+      if (isCurrentlyLocked) {
+        debug("Version cache is locked, waiting...");
+        await setTimeout(RETRY_DELAY_MS);
+        continue;
+      }
+
+      try {
+        const content = await fs.promises.readFile(cachePath, FILE_ENCODING);
+        const cached: CacheEntry<string> = JSON.parse(content);
+        const cacheAge = Date.now() - cached.timestamp;
+
+        if (cacheAge <= maxAge) {
+          debug(`[CACHE-HIT] Version cache: ${cached.data}`);
+          return cached.data;
+        } else {
+          debug(
+            `Version cache expired: age=${Math.round(cacheAge / 1000 / 60)}min`
+          );
+          return null;
+        }
+      } catch (error: any) {
+        if (error.code === "ENOENT") {
+          debug("No version cache found");
+          return null;
+        }
+        const attemptNumber = attempt + 1;
+        debug(
+          `Attempt ${attemptNumber} failed to read version cache: ${error.message}. Retrying...`
+        );
+        await setTimeout(RETRY_DELAY_MS);
+      }
+    }
+
+    debug(`Failed to read version cache after ${MAX_RETRIES} attempts.`);
+    return null;
+  }
+
+  static async setVersionCache(version: string): Promise<void> {
+    const lockName = "claude-version.lock";
+    const lockAcquired = await this.acquireLock(lockName);
+    if (!lockAcquired) {
+      debug("Could not acquire lock to set version cache");
+      return;
+    }
+
+    try {
+      await this.ensureCacheDirectories();
+      const cachePath = path.join(
+        this.VERSION_CACHE_DIR,
+        "claude-version.json"
+      );
+      const cacheEntry: CacheEntry<string> = {
+        data: version,
+        timestamp: Date.now(),
+      };
+      const cacheContent = JSON.stringify(cacheEntry);
+
+      await fs.promises.writeFile(cachePath, cacheContent, "utf-8");
+      debug(`[CACHE-SET] Version cache stored: ${version}`);
+    } catch (error) {
+      debug("Failed to save version cache:", error);
+    } finally {
+      await this.releaseLock(lockName);
     }
   }
 }

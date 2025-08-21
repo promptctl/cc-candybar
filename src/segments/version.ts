@@ -1,6 +1,7 @@
 import { exec } from "node:child_process";
 import { promisify } from "node:util";
 import { debug } from "../utils/logger";
+import { CacheManager } from "../utils/cache";
 
 const execAsync = promisify(exec);
 
@@ -10,6 +11,12 @@ export interface VersionInfo {
 
 export class VersionProvider {
   async getClaudeVersion(): Promise<string | null> {
+    const cacheMaxAge = 30 * 60 * 1000;
+    const cachedVersion = await CacheManager.getVersionCache(cacheMaxAge);
+    if (cachedVersion) {
+      return cachedVersion;
+    }
+
     try {
       const result = await execAsync("claude --version", {
         encoding: "utf8",
@@ -21,6 +28,9 @@ export class VersionProvider {
       if (match) {
         const version = `v${match[1]}`;
         debug(`Claude Code version: ${version}`);
+
+        await CacheManager.setVersionCache(version);
+
         return version;
       }
 

@@ -436,16 +436,25 @@ Create custom themes by defining segment colors.
 
 ## Performance
 
-**~50ms** default config • **~720ms** full-featured • Run `npm run benchmark` to test your system
+• **~50ms** default config
+• **~190ms** full-featured
+• Run `npm run benchmark` to test your system
 
-| Performance | Segments                               | Timing                                 |
-|-------------|----------------------------------------|----------------------------------------|
-| **Instant** | `directory`, `model`, `session`, `context`, `metrics` | ~40ms                     |
-| **Cached**  | `git`, `tmux`                          | First: ~70-90ms, cached: ~40ms         |
-| **Medium**  | `today` (cached), `block`              | ~55-165ms                              |
-| **Heavy**   | `today` (first run), `version`         | ~460-642ms                             |
+| Segment     | First Run | Cached   | Notes                           |
+|-------------|-----------|----------|--------------------------------|
+| `directory` | ~40ms     | ✗        | No external commands           |
+| `model`     | ~40ms     | ✗        | Uses hook data                 |
+| `session`   | ~41ms     | ✗        | Minimal transcript parsing     |
+| `context`   | ~40ms     | ✗        | Hook data calculation          |
+| `metrics`   | ~40ms     | ✗        | Transcript analysis            |
+| `git`       | ~70ms     | ~40ms    | Smart repo change detection    |
+| `tmux`      | ~90ms     | ~40ms    | Environment check + cache      |
+| `block`     | ~165ms    | ✗        | 5-hour window transcript load  |
+| `today`     | ~460ms    | ~55ms    | Full daily transcript load     |
+| `version`   | ~630ms    | ~40ms    | `claude --version` + 30min cache |
 
-**Tips:** Install globally (`npm install -g`) to avoid npx overhead • Disable unused segments • Cache works automatically
+• **Tips:** Install globally (`npm install -g`) to avoid npx overhead
+• Disable unused segments
 
 ## Custom Segments
 
