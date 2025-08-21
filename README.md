@@ -454,7 +454,7 @@ Create custom themes by defining segment colors.
 | `session`   | ~41ms     | ✗        | Minimal transcript parsing     |
 | `context`   | ~40ms     | ✗        | Hook data calculation          |
 | `metrics`   | ~40ms     | ✗        | Transcript analysis            |
-| `git`       | ~70ms     | ~40ms    | Smart repo change detection    |
+| `git`       | ~70ms     | ✗        | No caching for fresh data      |
 | `tmux`      | ~90ms     | ✗        | Environment check + command     |
 | `block`     | ~165ms    | ✗        | 5-hour window transcript load  |
 | `today`     | ~460ms    | ~55ms    | Full daily transcript load     |
@@ -462,6 +462,7 @@ Create custom themes by defining segment colors.
 
 • **Tips:** Install globally (`npm install -g`) to avoid npx overhead
 • Disable unused segments
+• **Cache cleanup:** Remove `~/.claude/powerline/` to clear usage cache if needed
 
 ## Custom Segments
 

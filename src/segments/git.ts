@@ -3,7 +3,6 @@ import { promisify } from "node:util";
 import fs from "node:fs";
 import path from "node:path";
 import { debug } from "../utils/logger";
-import { CacheManager } from "../utils/cache";
 
 const execAsync = promisify(exec);
 
@@ -54,12 +53,6 @@ export class GitService {
 
     if (!this.isGitRepo(gitDir)) {
       return null;
-    }
-
-    const diskCached = await CacheManager.getGitCache(gitDir);
-    if (diskCached) {
-      debug(`[CACHE-HIT] Git disk cache: ${gitDir}`);
-      return diskCached;
     }
 
     try {
@@ -161,9 +154,6 @@ export class GitService {
         result.isWorktree = this.isWorktree(gitDir);
       }
 
-      await CacheManager.setGitCache(gitDir, result);
-      debug(`[CACHE-SET] Git disk cache stored: ${gitDir}`);
-      CacheManager.cleanupOldCache().catch(() => {});
       return result;
     } catch {
       return null;
