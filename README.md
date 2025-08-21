@@ -440,7 +440,7 @@ Create custom themes by defining segment colors.
 
 ## Performance
 
-• **~50ms** default config
+• **~50ms** default config (`directory`, `git`, `model`, `session`, `today`, `context`)
 • **~190ms** full-featured
 
 **Benchmark Tool:**
