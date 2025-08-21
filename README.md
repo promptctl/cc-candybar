@@ -436,7 +436,7 @@ Create custom themes by defining segment colors.
 
 ## Performance
 
-**~40ms** default config • **~720ms** full-featured • Run `npm run benchmark` to test your system
+**~50ms** default config • **~720ms** full-featured • Run `npm run benchmark` to test your system
 
 | Performance | Segments                               | Timing                                 |
 |-------------|----------------------------------------|----------------------------------------|
