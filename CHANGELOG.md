@@ -1,3 +1,10 @@
+## [1.7.9](https://github.com/Owloops/claude-powerline/compare/v1.7.8...v1.7.9) (2025-08-21)
+
+
+### Bug Fixes
+
+* improve git cache invalidation to track remote refs ([53dc664](https://github.com/Owloops/claude-powerline/commit/53dc664a7888b421a598466687156d78cf9290e4))
+
 ## [1.7.8](https://github.com/Owloops/claude-powerline/compare/v1.7.7...v1.7.8) (2025-08-21)
 
 
