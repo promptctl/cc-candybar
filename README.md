@@ -173,8 +173,8 @@ Config files reload automatically and no restart needed.
 | `directory` | Current working directory | `showBasename` |
 | `git` | Branch, status, repository info | `showSha`, `showWorkingTree`, `showTag`, `showStashCount`, `showOperation`, `showTimeSinceCommit`, `showUpstream`, `showRepoName` |
 | `model` | Current Claude model | - |
-| `session` | Real-time usage for conversation | `type`: `cost`\|`tokens`\|`both`\|`breakdown` |
-| `block` | 5-hour billing window usage | `type`, `burnType`: `cost`\|`tokens`\|`both`\|`none` |
+| `session` | Real-time usage for conversation | `type`: `cost`|`tokens`|`both`|`breakdown` |
+| `block` | 5-hour billing window usage | `type`, `burnType`: `cost`|`tokens`|`both`|`none` |
 | `today` | Daily usage with budget monitoring | `type` |
 | `context` | Context window usage | - |
 | `tmux` | Tmux session info | - |
@@ -335,7 +335,7 @@ Shows real-time usage for current Claude conversation.
 
 #### Block
 
-Shows usage within current 5-hour billing window (Claude's rate limit period).
+Shows usage within current 5-hour billing window (Claude\'s rate limit period).
 
 ```json
 "block": {
@@ -436,6 +436,26 @@ Create custom themes by defining segment colors.
 
 > [!TIP]  
 > Copy existing theme colors from `src/themes/` in the repository as a starting point.
+
+## Performance
+
+`claude-powerline` is optimized for speed, with most segments responding instantly. Performance primarily depends on which segments you enable, especially the `git` segment.
+
+### Performance Guide
+
+| Impact      | Segments                               | Notes                                  |
+|-------------|----------------------------------------|----------------------------------------|
+| **Minimal** | `directory`, `model`, `tmux`, `version`  | Instant response using static data.    |
+| **Low**     | `session`, `block`, `today`, `context` | Fast, using in-memory and cached data. |
+| **Moderate**| `git` (with default options)           | Fast, uses an intelligent cache.       |
+| **High**    | `git` (with extended options enabled)  | Can be slower as it runs more commands.|
+
+### Tips for Optimal Performance
+
+For the fastest experience, especially if you run multiple Claude instances:
+
+1. **Use Default Git Settings:** The `git` segment is fastest with its default configuration. Enabling extended options like `showWorkingTree`, `showStashCount`, or `showTimeSinceCommit` will increase latency as more git commands are executed.
+2. **Be Selective with Segments:** Only enable the segments you find most useful. A minimal configuration will always be the fastest.
 
 ## Custom Segments
 

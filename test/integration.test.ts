@@ -31,10 +31,16 @@ jest.mock("../src/segments/session", () => ({
 }));
 
 jest.mock("node:child_process", () => ({
-  execSync: jest.fn().mockImplementation((cmd: string) => {
-    if (cmd.includes("git branch --show-current")) return "main\n";
-    if (cmd.includes("git status --porcelain")) return "";
-    return "";
+  exec: jest.fn().mockImplementation((cmd: string, _options: any, callback: any) => {
+    let result = "";
+    if (cmd.includes("git branch --show-current")) result = "main\n";
+    else if (cmd.includes("git status --porcelain")) result = "";
+    else if (cmd.includes("git rev-list --count")) result = "0\n";
+    
+    if (typeof callback === 'function') {
+      callback(null, { stdout: result, stderr: "" });
+    }
+    return result;
   }),
 }));
 

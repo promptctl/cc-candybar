@@ -39,6 +39,9 @@ function convertToUsageEntry(entry: ParsedEntry): UsageEntry {
 
 export class BlockProvider {
   private readonly sessionDurationHours = 5;
+  private cache: Map<string, { data: UsageEntry[]; timestamp: number }> =
+    new Map();
+  private readonly CACHE_TTL = 60000;
 
   private floorToHour(timestamp: Date): Date {
     const floored = new Date(timestamp);
@@ -133,56 +136,76 @@ export class BlockProvider {
   }
 
   private async loadUsageEntries(): Promise<UsageEntry[]> {
-    debug(`Block segment: Loading entries for dynamic session blocks`);
+    const cacheKey = "block";
+    const cached = this.cache.get(cacheKey);
+    const now = Date.now();
 
-    const dayAgo = new Date();
-    dayAgo.setDate(dayAgo.getDate() - 1);
-
-    const fileFilter = (_filePath: string, modTime: Date): boolean => {
-      return modTime >= dayAgo;
-    };
-
-    const parsedEntries = await loadEntriesFromProjects(
-      undefined,
-      fileFilter,
-      true
-    );
-
-    const allUsageEntries: UsageEntry[] = [];
-
-    for (const entry of parsedEntries) {
-      if (entry.message?.usage) {
-        const usageEntry = convertToUsageEntry(entry);
-
-        if (!usageEntry.costUSD && entry.raw) {
-          usageEntry.costUSD = await PricingService.calculateCostForEntry(
-            entry.raw
-          );
-        }
-
-        allUsageEntries.push(usageEntry);
-      }
+    if (cached && now - cached.timestamp < this.CACHE_TTL) {
+      debug("Using memory cached block entries");
+      return cached.data;
     }
 
-    const sessionBlocks = this.identifySessionBlocks(allUsageEntries);
-    debug(`Block segment: Found ${sessionBlocks.length} session blocks`);
+    this.cache.clear();
 
-    const activeBlock = this.findActiveBlock(sessionBlocks);
+    try {
+      debug(`Block segment: Loading entries for dynamic session blocks`);
 
-    if (activeBlock && activeBlock.length > 0) {
-      debug(
-        `Block segment: Found active block with ${activeBlock.length} entries`
+      const dayAgo = new Date();
+      dayAgo.setDate(dayAgo.getDate() - 1);
+
+      const fileFilter = (_filePath: string, modTime: Date): boolean => {
+        return modTime >= dayAgo;
+      };
+
+      const parsedEntries = await loadEntriesFromProjects(
+        undefined,
+        fileFilter,
+        true
       );
-      const blockStart = activeBlock[0];
-      const blockEnd = activeBlock[activeBlock.length - 1];
-      if (blockStart && blockEnd) {
-        debug(
-          `Block segment: Active block from ${blockStart.timestamp.toISOString()} to ${blockEnd.timestamp.toISOString()}`
-        );
+
+      const allUsageEntries: UsageEntry[] = [];
+
+      for (const entry of parsedEntries) {
+        if (entry.message?.usage) {
+          const usageEntry = convertToUsageEntry(entry);
+
+          if (!usageEntry.costUSD && entry.raw) {
+            usageEntry.costUSD = await PricingService.calculateCostForEntry(
+              entry.raw
+            );
+          }
+
+          allUsageEntries.push(usageEntry);
+        }
       }
-      return activeBlock;
-    } else {
-      debug(`Block segment: No active block found`);
+
+      const sessionBlocks = this.identifySessionBlocks(allUsageEntries);
+      debug(`Block segment: Found ${sessionBlocks.length} session blocks`);
+
+      const activeBlock = this.findActiveBlock(sessionBlocks);
+
+      let result: UsageEntry[] = [];
+      if (activeBlock && activeBlock.length > 0) {
+        debug(
+          `Block segment: Found active block with ${activeBlock.length} entries`
+        );
+        const blockStart = activeBlock[0];
+        const blockEnd = activeBlock[activeBlock.length - 1];
+        if (blockStart && blockEnd) {
+          debug(
+            `Block segment: Active block from ${blockStart.timestamp.toISOString()} to ${blockEnd.timestamp.toISOString()}`
+          );
+        }
+        result = activeBlock;
+      } else {
+        debug(`Block segment: No active block found`);
+        result = [];
+      }
+
+      this.cache.set(cacheKey, { data: result, timestamp: now });
+      return result;
+    } catch (error) {
+      debug("Error loading block entries:", error);
       return [];
     }
   }

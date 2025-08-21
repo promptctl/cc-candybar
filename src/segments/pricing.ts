@@ -1,9 +1,7 @@
 import { debug } from "../utils/logger";
-import { homedir } from "node:os";
-import { join } from "node:path";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { get } from "node:https";
 import { URL } from "node:url";
+import { CacheManager } from "../utils/cache";
 
 export interface ModelPricing {
   name: string;
@@ -153,39 +151,17 @@ export class PricingService {
   private static readonly GITHUB_PRICING_URL =
     "https://raw.githubusercontent.com/Owloops/claude-powerline/main/pricing.json";
 
-  private static getCacheFilePath(): string {
-    const cacheDir = join(homedir(), ".claude", "cache");
-    try {
-      mkdirSync(cacheDir, { recursive: true });
-    } catch {}
-
-    return join(cacheDir, "pricing.json");
+  private static async loadDiskCache(): Promise<Record<
+    string,
+    ModelPricing
+  > | null> {
+    return await CacheManager.getUsageCache("pricing");
   }
 
-  private static loadDiskCache(): {
-    data: Record<string, ModelPricing>;
-    timestamp: number;
-  } | null {
-    try {
-      const cacheFile = this.getCacheFilePath();
-      const content = readFileSync(cacheFile, "utf-8");
-      const cached = JSON.parse(content);
-
-      if (cached && cached.data && cached.timestamp) {
-        return cached;
-      }
-    } catch {}
-    return null;
-  }
-
-  private static saveDiskCache(data: Record<string, ModelPricing>): void {
-    try {
-      const cacheFile = this.getCacheFilePath();
-      const cacheData = { data, timestamp: Date.now() };
-      writeFileSync(cacheFile, JSON.stringify(cacheData));
-    } catch (error) {
-      debug("Failed to save pricing cache to disk:", error);
-    }
+  private static async saveDiskCache(
+    data: Record<string, ModelPricing>
+  ): Promise<void> {
+    await CacheManager.setUsageCache("pricing", data);
   }
 
   private static async fetchPricingData(): Promise<Record<
@@ -289,14 +265,14 @@ export class PricingService {
       return memCached.data;
     }
 
-    const diskCached = this.loadDiskCache();
-    if (diskCached && now - diskCached.timestamp < this.CACHE_TTL) {
+    const diskCached = await this.loadDiskCache();
+    if (diskCached && now - (Date.now() - 100) < this.CACHE_TTL) {
       this.memoryCache.clear();
-      this.memoryCache.set("pricing", diskCached);
+      this.memoryCache.set("pricing", { data: diskCached, timestamp: now });
       debug(
-        `Using disk cached pricing data for ${Object.keys(diskCached.data).length} models`
+        `Using CacheManager disk cached pricing data for ${Object.keys(diskCached).length} models`
       );
-      return diskCached.data;
+      return diskCached;
     }
 
     const freshData = await this.fetchPricingData();
@@ -306,16 +282,16 @@ export class PricingService {
         data: freshData,
         timestamp: now,
       });
-      this.saveDiskCache(freshData);
+      await this.saveDiskCache(freshData);
       return freshData;
     }
 
     if (diskCached) {
-      this.memoryCache.set("pricing", diskCached);
+      this.memoryCache.set("pricing", { data: diskCached, timestamp: now });
       debug(
-        `Using stale cached pricing data for ${Object.keys(diskCached.data).length} models`
+        `Using stale CacheManager cached pricing data for ${Object.keys(diskCached).length} models`
       );
-      return diskCached.data;
+      return diskCached;
     }
 
     debug(

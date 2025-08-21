@@ -190,8 +190,28 @@ export function createUniqueHash(entry: ParsedEntry): string | null {
   return `${messageId}:${requestId}`;
 }
 
+const parseCache = new Map<string, { 
+  entries: ParsedEntry[]; 
+  mtime: number; 
+  timestamp: number; 
+}>();
+
+const PARSE_CACHE_TTL = 300000;
+
 export async function parseJsonlFile(filePath: string): Promise<ParsedEntry[]> {
   try {
+    const stats = await stat(filePath);
+    const currentMtime = stats.mtime.getTime();
+    const now = Date.now();
+    
+    const cached = parseCache.get(filePath);
+    if (cached && 
+        cached.mtime === currentMtime && 
+        now - cached.timestamp < PARSE_CACHE_TTL) {
+      debug(`Using in-memory cached parsed entries for ${filePath}`);
+      return cached.entries;
+    }
+    
     const content = await readFile(filePath, "utf-8");
     const lines = content
       .trim()
@@ -219,6 +239,13 @@ export async function parseJsonlFile(filePath: string): Promise<ParsedEntry[]> {
       }
     }
 
+    parseCache.set(filePath, {
+      entries,
+      mtime: currentMtime,
+      timestamp: now,
+    });
+    
+    debug(`Parsed and cached ${entries.length} entries from ${filePath}`);
     return entries;
   } catch (error) {
     debug(`Failed to read file ${filePath}:`, error);

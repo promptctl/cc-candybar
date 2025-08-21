@@ -87,8 +87,8 @@ export class PowerlineRenderer {
       ? await this.versionProvider.getVersionInfo()
       : null;
 
-    const lines = this.config.display.lines
-      .map((lineConfig) =>
+    const lines = await Promise.all(
+      this.config.display.lines.map((lineConfig) =>
         this.renderLine(
           lineConfig,
           hookData,
@@ -100,12 +100,12 @@ export class PowerlineRenderer {
           versionInfo
         )
       )
-      .filter((line) => line.length > 0);
+    );
 
-    return lines.join("\n");
+    return lines.filter((line) => line.length > 0).join("\n");
   }
 
-  private renderLine(
+  private async renderLine(
     lineConfig: LineConfig,
     hookData: ClaudeHookData,
     usageInfo: UsageInfo | null,
@@ -114,7 +114,7 @@ export class PowerlineRenderer {
     contextInfo: ContextInfo | null,
     metricsInfo: MetricsInfo | null,
     versionInfo: VersionInfo | null
-  ): string {
+  ): Promise<string> {
     const colors = this.getThemeColors();
     const currentDir = hookData.workspace?.current_dir || hookData.cwd || "/";
 
@@ -136,7 +136,7 @@ export class PowerlineRenderer {
         ? this.getSegmentBgColor(nextSegment.type, colors)
         : "";
 
-      const segmentData = this.renderSegment(
+      const segmentData = await this.renderSegment(
         segment,
         hookData,
         usageInfo,
@@ -162,7 +162,7 @@ export class PowerlineRenderer {
     return line;
   }
 
-  private renderSegment(
+  private async renderSegment(
     segment: { type: string; config: AnySegmentConfig },
     hookData: ClaudeHookData,
     usageInfo: UsageInfo | null,
@@ -186,7 +186,7 @@ export class PowerlineRenderer {
     }
 
     if (segment.type === "git") {
-      return this.renderGitSegment(
+      return await this.renderGitSegment(
         segment.config as GitSegmentConfig,
         hookData,
         colors,
@@ -246,7 +246,7 @@ export class PowerlineRenderer {
     return null;
   }
 
-  private renderGitSegment(
+  private async renderGitSegment(
     config: GitSegmentConfig,
     hookData: ClaudeHookData,
     colors: PowerlineColors,
@@ -254,7 +254,7 @@ export class PowerlineRenderer {
   ) {
     if (!this.needsSegmentInfo("git")) return null;
 
-    const gitInfo = this.gitService.getGitInfo(
+    const gitInfo = await this.gitService.getGitInfo(
       currentDir,
       {
         showSha: config?.showSha,

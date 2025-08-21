@@ -7,3 +7,4 @@ dist/
 coverage/
 *.local.md
 *.local.sh
+*.local.txt

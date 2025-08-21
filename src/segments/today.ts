@@ -1,5 +1,6 @@
 import { debug } from "../utils/logger";
 import { PricingService } from "./pricing";
+import { CacheManager } from "../utils/cache";
 import { loadEntriesFromProjects, type ParsedEntry } from "../utils/claude";
 import type { TokenBreakdown } from "./session";
 
@@ -64,6 +65,14 @@ export class TodayProvider {
 
     debug(`Today segment: Loading entries for date ${todayDateString}`);
 
+    const latestMtime = await CacheManager.getLatestTranscriptMtime();
+
+    const sharedCached = await CacheManager.getUsageCache("today", latestMtime);
+    if (sharedCached) {
+      debug("Using shared today usage cache");
+      return sharedCached;
+    }
+
     const weekAgo = new Date();
     weekAgo.setDate(weekAgo.getDate() - 7);
 
@@ -100,6 +109,9 @@ export class TodayProvider {
     debug(
       `Today segment: Found ${entriesFound} entries for today (${todayDateString})`
     );
+
+    await CacheManager.setUsageCache("today", todayEntries, latestMtime);
+
     return todayEntries;
   }
 
