@@ -1,3 +1,10 @@
+## [1.7.4](https://github.com/Owloops/claude-powerline/compare/v1.7.3...v1.7.4) (2025-08-21)
+
+
+### Bug Fixes
+
+* optimize git operations with hybrid sequential/parallel execution strategy ([c626e40](https://github.com/Owloops/claude-powerline/commit/c626e40dacf4fdad9018bcb0a6e1c1113e4834d6))
+
 ## [1.7.3](https://github.com/Owloops/claude-powerline/compare/v1.7.2...v1.7.3) (2025-08-21)
 
 
