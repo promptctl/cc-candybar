@@ -94,20 +94,23 @@ export class CacheManager {
   private static async getGitRepoModTime(projectPath: string): Promise<number> {
     try {
       const gitDir = path.join(projectPath, ".git");
-      const indexPath = path.join(gitDir, "index");
-      const headPath = path.join(gitDir, "HEAD");
-
       let latestModTime = 0;
 
-      try {
-        const indexStats = await fs.promises.stat(indexPath);
-        latestModTime = Math.max(latestModTime, indexStats.mtime.getTime());
-      } catch {}
+      const gitFiles = [
+        path.join(gitDir, "index"),
+        path.join(gitDir, "HEAD"),
+        path.join(gitDir, "FETCH_HEAD"),
+        path.join(gitDir, "refs", "heads"),
+        path.join(gitDir, "refs", "remotes"),
+        path.join(gitDir, "logs", "HEAD"),
+      ];
 
-      try {
-        const headStats = await fs.promises.stat(headPath);
-        latestModTime = Math.max(latestModTime, headStats.mtime.getTime());
-      } catch {}
+      for (const filePath of gitFiles) {
+        try {
+          const stats = await fs.promises.stat(filePath);
+          latestModTime = Math.max(latestModTime, stats.mtime.getTime());
+        } catch {}
+      }
 
       try {
         const projectStats = await fs.promises.stat(projectPath);
