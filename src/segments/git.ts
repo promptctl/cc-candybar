@@ -63,10 +63,8 @@ export class GitService {
     }
 
     try {
-      const [statusWithBranch, aheadBehind] = await Promise.all([
-        this.getStatusWithBranchAsync(gitDir),
-        this.getAheadBehindAsync(gitDir),
-      ]);
+      const statusWithBranch = await this.getStatusWithBranchAsync(gitDir);
+      const aheadBehind = await this.getAheadBehindAsync(gitDir);
 
       const result: GitInfo = {
         branch: statusWithBranch.branch || "detached",
@@ -82,46 +80,57 @@ export class GitService {
         result.conflicts = statusWithBranch.workingTree.conflicts;
       }
 
-      const optionalOperations: Record<string, Promise<any>> = {};
+      const heavyOperations: Record<string, Promise<any>> = {};
+      const lightOperations: Record<string, Promise<any>> = {};
 
       if (options.showSha) {
-        optionalOperations.sha = this.getShaAsync(gitDir);
+        heavyOperations.sha = this.getShaAsync(gitDir);
       }
 
       if (options.showTag) {
-        optionalOperations.tag = this.getNearestTagAsync(gitDir);
+        heavyOperations.tag = this.getNearestTagAsync(gitDir);
       }
 
       if (options.showTimeSinceCommit) {
-        optionalOperations.timeSinceCommit =
+        heavyOperations.timeSinceCommit =
           this.getTimeSinceLastCommitAsync(gitDir);
       }
 
       if (options.showStashCount) {
-        optionalOperations.stashCount = this.getStashCountAsync(gitDir);
+        lightOperations.stashCount = this.getStashCountAsync(gitDir);
       }
 
       if (options.showUpstream) {
-        optionalOperations.upstream = this.getUpstreamAsync(gitDir);
+        lightOperations.upstream = this.getUpstreamAsync(gitDir);
       }
 
       if (options.showRepoName) {
-        optionalOperations.repoName = this.getRepoNameAsync(gitDir);
+        lightOperations.repoName = this.getRepoNameAsync(gitDir);
       }
 
-      const optionalResults = await Promise.allSettled(
-        Object.entries(optionalOperations).map(async ([key, promise]) => ({
-          key,
-          value: await promise,
-        }))
-      );
-
       const resultMap = new Map<string, any>();
-      optionalResults.forEach((result) => {
-        if (result.status === "fulfilled") {
-          resultMap.set(result.value.key, result.value.value);
-        }
-      });
+
+      for (const [key, promise] of Object.entries(heavyOperations)) {
+        try {
+          const value = await promise;
+          resultMap.set(key, value);
+        } catch {}
+      }
+
+      if (Object.keys(lightOperations).length > 0) {
+        const lightResults = await Promise.allSettled(
+          Object.entries(lightOperations).map(async ([key, promise]) => ({
+            key,
+            value: await promise,
+          }))
+        );
+
+        lightResults.forEach((result) => {
+          if (result.status === "fulfilled") {
+            resultMap.set(result.value.key, result.value.value);
+          }
+        });
+      }
 
       if (options.showSha) {
         result.sha = resultMap.get("sha") || undefined;
