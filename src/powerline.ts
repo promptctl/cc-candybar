@@ -12,8 +12,6 @@ import {
   TmuxService,
   MetricsProvider,
   MetricsInfo,
-  VersionProvider,
-  VersionInfo,
   SegmentRenderer,
   PowerlineSymbols,
   AnySegmentConfig,
@@ -38,7 +36,6 @@ export class PowerlineRenderer {
   private _gitService?: GitService;
   private _tmuxService?: TmuxService;
   private _metricsProvider?: MetricsProvider;
-  private _versionProvider?: VersionProvider;
   private _segmentRenderer?: SegmentRenderer;
 
   constructor(private readonly config: PowerlineConfig) {
@@ -94,12 +91,6 @@ export class PowerlineRenderer {
     return this._metricsProvider;
   }
 
-  private get versionProvider(): VersionProvider {
-    if (!this._versionProvider) {
-      this._versionProvider = new VersionProvider();
-    }
-    return this._versionProvider;
-  }
 
   private get segmentRenderer(): SegmentRenderer {
     if (!this._segmentRenderer) {
@@ -138,9 +129,6 @@ export class PowerlineRenderer {
       ? await this.metricsProvider.getMetricsInfo(hookData.session_id)
       : null;
 
-    const versionInfo = this.needsSegmentInfo("version")
-      ? await this.versionProvider.getVersionInfo()
-      : null;
 
     const lines = await Promise.all(
       this.config.display.lines.map((lineConfig) =>
@@ -151,8 +139,7 @@ export class PowerlineRenderer {
           blockInfo,
           todayInfo,
           contextInfo,
-          metricsInfo,
-          versionInfo
+          metricsInfo
         )
       )
     );
@@ -168,7 +155,6 @@ export class PowerlineRenderer {
     todayInfo: TodayInfo | null,
     contextInfo: ContextInfo | null,
     metricsInfo: MetricsInfo | null,
-    versionInfo: VersionInfo | null
   ): Promise<string> {
     const colors = this.getThemeColors();
     const currentDir = hookData.workspace?.current_dir || hookData.cwd || "/";
@@ -199,7 +185,6 @@ export class PowerlineRenderer {
         todayInfo,
         contextInfo,
         metricsInfo,
-        versionInfo,
         colors,
         currentDir
       );
@@ -225,7 +210,6 @@ export class PowerlineRenderer {
     todayInfo: TodayInfo | null,
     contextInfo: ContextInfo | null,
     metricsInfo: MetricsInfo | null,
-    versionInfo: VersionInfo | null,
     colors: PowerlineColors,
     currentDir: string
   ) {
@@ -293,7 +277,7 @@ export class PowerlineRenderer {
     if (segment.type === "version") {
       return this.renderVersionSegment(
         segment.config as VersionSegmentConfig,
-        versionInfo,
+        hookData,
         colors
       );
     }
@@ -388,11 +372,10 @@ export class PowerlineRenderer {
 
   private renderVersionSegment(
     config: VersionSegmentConfig,
-    versionInfo: VersionInfo | null,
+    hookData: ClaudeHookData,
     colors: PowerlineColors
   ) {
-    if (!versionInfo) return null;
-    return this.segmentRenderer.renderVersion(versionInfo, colors, config);
+    return this.segmentRenderer.renderVersion(hookData, colors, config);
   }
 
   private initializeSymbols(): PowerlineSymbols {

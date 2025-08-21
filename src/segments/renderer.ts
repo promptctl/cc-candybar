@@ -76,7 +76,6 @@ import type {
   GitInfo,
   ContextInfo,
   MetricsInfo,
-  VersionInfo,
 } from ".";
 import type { TodayInfo } from "./today";
 
@@ -246,7 +245,6 @@ export class SegmentRenderer {
       fgColor: colors.gitFg,
     };
   }
-
 
   renderModel(hookData: ClaudeHookData, colors: PowerlineColors): SegmentData {
     const modelName = hookData.model?.display_name || "Claude";
@@ -504,7 +502,6 @@ export class SegmentRenderer {
     };
   }
 
-
   private getDisplayDirectoryName(
     currentDir: string,
     projectDir?: string
@@ -568,16 +565,16 @@ export class SegmentRenderer {
   }
 
   renderVersion(
-    versionInfo: VersionInfo | null,
+    hookData: ClaudeHookData,
     colors: PowerlineColors,
     _config?: VersionSegmentConfig
   ): SegmentData | null {
-    if (!versionInfo || !versionInfo.version) {
+    if (!hookData.version) {
       return null;
     }
 
     return {
-      text: `${this.symbols.version} ${versionInfo.version}`,
+      text: `${this.symbols.version} v${hookData.version}`,
       bgColor: colors.versionBg,
       fgColor: colors.versionFg,
     };

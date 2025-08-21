@@ -451,10 +451,10 @@ Create custom themes by defining segment colors.
 | `context`   | ~40ms     | ✗        | Hook data calculation          |
 | `metrics`   | ~40ms     | ✗        | Transcript analysis            |
 | `git`       | ~70ms     | ~40ms    | Smart repo change detection    |
-| `tmux`      | ~90ms     | ~40ms    | Environment check + cache      |
+| `tmux`      | ~90ms     | ✗        | Environment check + command     |
 | `block`     | ~165ms    | ✗        | 5-hour window transcript load  |
 | `today`     | ~460ms    | ~55ms    | Full daily transcript load     |
-| `version`   | ~630ms    | ~40ms    | `claude --version` + 30min cache |
+| `version`   | ~40ms     | ✗        | Uses hook data                    |
 
 • **Tips:** Install globally (`npm install -g`) to avoid npx overhead
 • Disable unused segments

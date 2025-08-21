@@ -18,6 +18,7 @@ export interface ClaudeHookData {
     current_dir: string;
     project_dir: string;
   };
+  version?: string;
 }
 
 export function getClaudePaths(): string[] {

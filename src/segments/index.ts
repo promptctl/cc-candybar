@@ -9,7 +9,6 @@ export {
 } from "./session";
 export { ContextProvider, ContextInfo } from "./context";
 export { MetricsProvider, MetricsInfo } from "./metrics";
-export { VersionProvider, VersionInfo } from "./version";
 export {
   SegmentRenderer,
   PowerlineSymbols,
