@@ -1,3 +1,10 @@
+# [1.7.0](https://github.com/Owloops/claude-powerline/compare/v1.6.9...v1.7.0) (2025-08-21)
+
+
+### Features
+
+* optimize segment caching with memory-only for time-sensitive data and dual caching for stable data ([a1c0051](https://github.com/Owloops/claude-powerline/commit/a1c0051739b5b26f09aeeb325615e0b36e1b1a14))
+
 ## [1.6.9](https://github.com/Owloops/claude-powerline/compare/v1.6.8...v1.6.9) (2025-08-21)
 
 
