@@ -69,15 +69,23 @@ export class TodayProvider {
       return sharedCached;
     }
 
-    const weekAgo = new Date();
-    weekAgo.setDate(weekAgo.getDate() - 7);
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    yesterday.setHours(0, 0, 0, 0);
 
     const fileFilter = (_filePath: string, modTime: Date): boolean => {
-      return modTime >= weekAgo;
+      return modTime >= yesterday;
+    };
+
+    const todayMidnight = new Date();
+    todayMidnight.setHours(0, 0, 0, 0);
+
+    const timeFilter = (entry: ParsedEntry): boolean => {
+      return entry.timestamp >= todayMidnight;
     };
 
     const parsedEntries = await loadEntriesFromProjects(
-      undefined,
+      timeFilter,
       fileFilter,
       true
     );
