@@ -1,3 +1,10 @@
+## [1.6.9](https://github.com/Owloops/claude-powerline/compare/v1.6.8...v1.6.9) (2025-08-21)
+
+
+### Bug Fixes
+
+* invalid json in example settings usage ([#13](https://github.com/Owloops/claude-powerline/issues/13)) ([be985f1](https://github.com/Owloops/claude-powerline/commit/be985f1f397000a91f851d4e3129473ae75839cd))
+
 ## [1.6.8](https://github.com/Owloops/claude-powerline/compare/v1.6.7...v1.6.8) (2025-08-20)
 
 
