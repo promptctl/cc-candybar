@@ -1,3 +1,10 @@
+## [1.7.8](https://github.com/Owloops/claude-powerline/compare/v1.7.7...v1.7.8) (2025-08-21)
+
+
+### Bug Fixes
+
+* add hook data total cost as a fallback ([8906cf7](https://github.com/Owloops/claude-powerline/commit/8906cf7b8744b704ef19ba114b39212ff53f0e9c))
+
 ## [1.7.7](https://github.com/Owloops/claude-powerline/compare/v1.7.6...v1.7.7) (2025-08-21)
 
 
