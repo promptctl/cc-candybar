@@ -1,3 +1,10 @@
+## [1.7.10](https://github.com/Owloops/claude-powerline/compare/v1.7.9...v1.7.10) (2025-08-21)
+
+
+### Bug Fixes
+
+* remove git caching for real-time data ([415bfda](https://github.com/Owloops/claude-powerline/commit/415bfda71ae8eef6d08a92ceeda49d179d91253f))
+
 ## [1.7.9](https://github.com/Owloops/claude-powerline/compare/v1.7.8...v1.7.9) (2025-08-21)
 
 
