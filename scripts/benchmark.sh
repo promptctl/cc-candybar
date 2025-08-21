@@ -39,7 +39,7 @@ run_benchmark() {
     local description=$2
     local theme_flag=${3:-""}
     
-    local test_json='{"session_id":"test-session","workspace":{"project_dir":"'$(pwd)'","current_dir":"'$(pwd)'"},"model":{"id":"claude-3-5-sonnet","display_name":"Claude"},"transcript_path":"/dev/null","cwd":"'$(pwd)'"}'
+    local test_json='{"session_id":"f9525f01-0b62-4e79-ab06-045ba1e837cc","workspace":{"project_dir":"'$(pwd)'","current_dir":"'$(pwd)'"},"model":{"id":"claude-3-5-sonnet","display_name":"Claude"},"transcript_path":"/dev/null","cwd":"'$(pwd)'"}'
     
     echo -e "${BLUE}--- $description ---${RESET}"
     

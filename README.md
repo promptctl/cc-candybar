@@ -436,28 +436,16 @@ Create custom themes by defining segment colors.
 
 ## Performance
 
-`claude-powerline` executes in **~160ms** with default configuration and intelligent caching. Full-featured configurations run in ~800ms. Performance depends on enabled segments and options.
+**~40ms** default config • **~720ms** full-featured • Run `npm run benchmark` to test your system
 
-**Benchmark Results:**
-- Default config: **~160ms** average execution time
-- Full config with themes: **~800ms** average execution time  
-- Run `npm run benchmark` to test performance on your system
-
-### Segment Performance
-
-| Impact      | Segments                               | Details                                |
+| Performance | Segments                               | Timing                                 |
 |-------------|----------------------------------------|----------------------------------------|
-| **Instant** | `directory`, `model`, `tmux`, `version`| No external commands                   |
-| **Fast**    | `session`, `block`, `today`, `context` | Smart caching, minimal I/O             |
-| **Cached**  | `git` (default options)               | Disk cache with smart invalidation     |
-| **Slower**  | `git` (extended options)              | Additional git commands per option     |
+| **Instant** | `directory`, `model`, `session`, `context`, `metrics` | ~40ms                     |
+| **Cached**  | `git`, `tmux`                          | First: ~70-90ms, cached: ~40ms         |
+| **Medium**  | `today` (cached), `block`              | ~55-165ms                              |
+| **Heavy**   | `today` (first run), `version`         | ~460-642ms                             |
 
-### Optimization Tips
-
-- **Install globally** - Use `npm install -g @owloops/claude-powerline` to avoid npx overhead (~200-500ms faster)
-- **Disable unused segments** - Only enable what you need
-- **Use default git options** - Extended options (`showStashCount`, `showTimeSinceCommit`) run extra commands, especially slow in large repositories  
-- **Cache works automatically** - Git status cached until repository changes
+**Tips:** Install globally (`npm install -g`) to avoid npx overhead • Disable unused segments • Cache works automatically
 
 ## Custom Segments
 

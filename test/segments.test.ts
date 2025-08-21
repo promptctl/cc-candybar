@@ -16,7 +16,7 @@ jest.mock("node:child_process", () => ({
   exec: jest
     .fn()
     .mockImplementation((cmd: string, _options: any, callback: any) => {
-      let result = "1.0.81 (Claude Code)";
+      const result = "1.0.81 (Claude Code)";
       if (typeof callback === "function") {
         callback(null, { stdout: result, stderr: "" });
       }
