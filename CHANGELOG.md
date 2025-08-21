@@ -1,3 +1,10 @@
+## [1.7.7](https://github.com/Owloops/claude-powerline/compare/v1.7.6...v1.7.7) (2025-08-21)
+
+
+### Bug Fixes
+
+* add hook data optimization for metrics segment with lines added/removed tracking ([27ecf72](https://github.com/Owloops/claude-powerline/commit/27ecf72ad3a0617dc381f97188b992c35336dcc8))
+
 ## [1.7.6](https://github.com/Owloops/claude-powerline/compare/v1.7.5...v1.7.6) (2025-08-21)
 
 
