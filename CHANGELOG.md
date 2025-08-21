@@ -1,3 +1,10 @@
+# [1.8.0](https://github.com/Owloops/claude-powerline/compare/v1.7.10...v1.8.0) (2025-08-21)
+
+
+### Features
+
+* add 24h ttl for pricing cache ([7bb06a1](https://github.com/Owloops/claude-powerline/commit/7bb06a1f67d41044fd439ebf9c32bd899383ddfe))
+
 ## [1.7.10](https://github.com/Owloops/claude-powerline/compare/v1.7.9...v1.7.10) (2025-08-21)
 
 
