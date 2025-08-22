@@ -163,21 +163,6 @@ curl -o ~/.claude/claude-powerline.json https://raw.githubusercontent.com/Owloop
 
 Config files reload automatically and no restart needed.
 
-### Available Segments
-
-| Segment | Description | Key Options |
-|---------|-------------|-------------|
-| `directory` | Current working directory | `showBasename` |
-| `git` | Branch, status, repository info | `showSha`, `showWorkingTree`, `showTag`, `showStashCount`, `showOperation`, `showTimeSinceCommit`, `showUpstream`, `showRepoName` |
-| `model` | Current Claude model | - |
-| `session` | Real-time usage for conversation | `type`: `cost`|`tokens`|`both`|`breakdown` |
-| `block` | 5-hour billing window usage | `type`, `burnType`: `cost`|`tokens`|`both`|`none` |
-| `today` | Daily usage with budget monitoring | `type` |
-| `context` | Context window usage | - |
-| `tmux` | Tmux session info | - |
-| `metrics` | Performance analytics | `showResponseTime`, `showLastResponseTime`, `showDuration`, `showMessageCount`, `showLinesAdded`, `showLinesRemoved` |
-| `version` | Claude Code version | - |
-
 ### Segment Configuration
 
 #### Directory
@@ -468,18 +453,18 @@ Create custom themes by defining segment colors.
 
 - `npm run benchmark:timing` - Execution timing tests
 
-| Segment     | First Run | Cached   | Notes                           |
-|-------------|-----------|----------|--------------------------------|
-| `directory` | ~40ms     | ✗        | No external commands           |
-| `model`     | ~40ms     | ✗        | Uses hook data                 |
-| `session`   | ~40ms     | ✗        | Minimal transcript parsing     |
-| `context`   | ~40ms     | ✗        | Hook data calculation          |
-| `metrics`   | ~40ms     | ✗        | Transcript analysis            |
-| `git`       | ~60ms     | ✗        | No caching for fresh data      |
-| `tmux`      | ~50ms     | ✗        | Environment check + command     |
-| `block`     | ~180ms    | ✗        | 5-hour window transcript load  |
-| `today`     | ~250ms    | ~50ms    | Full daily transcript load     |
-| `version`   | ~40ms     | ✗        | Uses hook data                    |
+| Segment     | Timing    | Notes                           |
+|-------------|-----------|--------------------------------|
+| `directory` | ~40ms     | No external commands           |
+| `model`     | ~40ms     | Uses hook data                 |
+| `session`   | ~40ms     | Minimal transcript parsing     |
+| `context`   | ~40ms     | Hook data calculation          |
+| `metrics`   | ~40ms     | Transcript analysis            |
+| `git`       | ~60ms     | No caching for fresh data      |
+| `tmux`      | ~50ms     | Environment check + command     |
+| `block`     | ~180ms    | 5-hour window transcript load  |
+| `today`     | ~250ms    | Full daily transcript load (cached: ~50ms) |
+| `version`   | ~40ms     | Uses hook data                    |
 
 • **Tips:** Install globally (`npm install -g`) to avoid npx overhead
 • Disable unused segments
