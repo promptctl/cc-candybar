@@ -13,7 +13,7 @@
       },
       {
         "segments": {
-          "block": { "enabled": true, "type": "cost", "burnType": "cost" },
+          "block": { "enabled": true, "type": "weighted", "burnType": "tokens" },
           "version": { "enabled": true },
           "metrics": {
             "enabled": true,
@@ -24,7 +24,7 @@
             "showLinesAdded": true,
             "showLinesRemoved": true
           },
-          "context": { "enabled": true },
+          "context": { "enabled": true, "showPercentageOnly": false },
           "tmux": { "enabled": false }
         }
       },
@@ -61,6 +61,7 @@
   },
   "budget": {
     "session": { "warningThreshold": 80 },
-    "today": { "amount": 5.0, "warningThreshold": 80 }
+    "today": { "amount": 5.0, "warningThreshold": 80 },
+    "block": { "amount": 20000000, "type": "tokens", "warningThreshold": 80 }
   }
 }

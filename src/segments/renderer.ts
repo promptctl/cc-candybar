@@ -31,7 +31,9 @@ export interface UsageSegmentConfig extends SegmentConfig {
 
 export interface TmuxSegmentConfig extends SegmentConfig {}
 
-export interface ContextSegmentConfig extends SegmentConfig {}
+export interface ContextSegmentConfig extends SegmentConfig {
+  showPercentageOnly?: boolean;
+}
 
 export interface MetricsSegmentConfig extends SegmentConfig {
   showResponseTime?: boolean;
@@ -43,7 +45,7 @@ export interface MetricsSegmentConfig extends SegmentConfig {
 }
 
 export interface BlockSegmentConfig extends SegmentConfig {
-  type: "cost" | "tokens" | "both" | "time";
+  type: "cost" | "tokens" | "both" | "time" | "weighted";
   burnType?: "cost" | "tokens" | "both" | "none";
 }
 
@@ -279,7 +281,8 @@ export class SegmentRenderer {
           usageInfo.session.tokenBreakdown,
           type,
           sessionBudget?.amount,
-          sessionBudget?.warningThreshold || 80
+          sessionBudget?.warningThreshold || 80,
+          sessionBudget?.type
         );
 
     const text = `${this.symbols.session_cost} ${formattedUsage}`;
@@ -312,7 +315,8 @@ export class SegmentRenderer {
 
   renderContext(
     contextInfo: ContextInfo | null,
-    colors: PowerlineColors
+    colors: PowerlineColors,
+    config?: ContextSegmentConfig
   ): SegmentData | null {
     if (!contextInfo) {
       return {
@@ -322,12 +326,14 @@ export class SegmentRenderer {
       };
     }
 
-    const tokenDisplay = contextInfo.inputTokens.toLocaleString();
-
     const contextLeft = `${contextInfo.contextLeftPercentage}%`;
 
+    const text = config?.showPercentageOnly
+      ? `${this.symbols.context_time} ${contextLeft}`
+      : `${this.symbols.context_time} ${contextInfo.inputTokens.toLocaleString()} (${contextLeft})`;
+
     return {
-      text: `${this.symbols.context_time} ${tokenDisplay} (${contextLeft})`,
+      text,
       bgColor: colors.contextBg,
       fgColor: colors.contextFg,
     };
@@ -432,6 +438,7 @@ export class SegmentRenderer {
     } else {
       const type = config?.type || "cost";
       const burnType = config?.burnType;
+      const blockBudget = this.config.budget?.block;
 
       const timeStr =
         blockInfo.timeRemaining !== null
@@ -445,19 +452,82 @@ export class SegmentRenderer {
       let mainContent: string;
       switch (type) {
         case "cost":
-          mainContent = formatCost(blockInfo.cost);
+          if (blockBudget?.amount && blockBudget?.type === "cost") {
+            mainContent = this.formatUsageWithBudget(
+              blockInfo.cost,
+              null,
+              null,
+              "cost",
+              blockBudget.amount,
+              blockBudget.warningThreshold,
+              blockBudget.type
+            );
+          } else {
+            mainContent = formatCost(blockInfo.cost);
+          }
           break;
         case "tokens":
-          mainContent = formatTokens(blockInfo.tokens);
+          if (blockBudget?.amount && blockBudget?.type === "tokens") {
+            mainContent = this.formatUsageWithBudget(
+              null,
+              blockInfo.tokens,
+              null,
+              "tokens",
+              blockBudget.amount,
+              blockBudget.warningThreshold,
+              blockBudget.type
+            );
+          } else {
+            mainContent = formatTokens(blockInfo.tokens);
+          }
+          break;
+        case "weighted":
+          const rateLimit =
+            blockBudget?.type === "tokens" ? blockBudget.amount : undefined;
+          const weightedDisplay = formatTokens(blockInfo.weightedTokens);
+          if (rateLimit && blockInfo.weightedTokens !== null) {
+            const rateLimitStatus = getBudgetStatus(
+              blockInfo.weightedTokens,
+              rateLimit,
+              blockBudget?.warningThreshold || 80
+            );
+            mainContent = `${weightedDisplay}${rateLimitStatus.displayText}`;
+          } else {
+            mainContent = `${weightedDisplay} (weighted)`;
+          }
           break;
         case "both":
-          mainContent = `${formatCost(blockInfo.cost)} / ${formatTokens(blockInfo.tokens)}`;
+          if (blockBudget?.amount) {
+            mainContent = this.formatUsageWithBudget(
+              blockInfo.cost,
+              blockInfo.tokens,
+              null,
+              "both",
+              blockBudget.amount,
+              blockBudget.warningThreshold,
+              blockBudget.type
+            );
+          } else {
+            mainContent = `${formatCost(blockInfo.cost)} / ${formatTokens(blockInfo.tokens)}`;
+          }
           break;
         case "time":
           mainContent = timeStr || "N/A";
           break;
         default:
-          mainContent = formatCost(blockInfo.cost);
+          if (blockBudget?.amount && blockBudget?.type === "cost") {
+            mainContent = this.formatUsageWithBudget(
+              blockInfo.cost,
+              null,
+              null,
+              "cost",
+              blockBudget.amount,
+              blockBudget.warningThreshold,
+              blockBudget.type
+            );
+          } else {
+            mainContent = formatCost(blockInfo.cost);
+          }
       }
 
       let burnContent = "";
@@ -523,7 +593,8 @@ export class SegmentRenderer {
       todayInfo.tokenBreakdown,
       type,
       todayBudget?.amount,
-      todayBudget?.warningThreshold
+      todayBudget?.warningThreshold,
+      todayBudget?.type
     )}`;
 
     return {
@@ -603,7 +674,8 @@ export class SegmentRenderer {
     tokenBreakdown: TokenBreakdown | null,
     type: string,
     budget: number | undefined,
-    warningThreshold = 80
+    warningThreshold = 80,
+    budgetType?: "cost" | "tokens"
   ): string {
     const baseDisplay = this.formatUsageDisplay(
       cost,
@@ -612,9 +684,25 @@ export class SegmentRenderer {
       type
     );
 
-    if (budget && budget > 0 && cost !== null) {
-      const budgetStatus = getBudgetStatus(cost, budget, warningThreshold);
-      return baseDisplay + budgetStatus.displayText;
+    if (budget && budget > 0) {
+      let budgetValue: number | null = null;
+
+      if (budgetType === "tokens" && tokens !== null) {
+        budgetValue = tokens;
+      } else if (budgetType === "cost" && cost !== null) {
+        budgetValue = cost;
+      } else if (!budgetType && cost !== null) {
+        budgetValue = cost;
+      }
+
+      if (budgetValue !== null) {
+        const budgetStatus = getBudgetStatus(
+          budgetValue,
+          budget,
+          warningThreshold
+        );
+        return baseDisplay + budgetStatus.displayText;
+      }
     }
 
     return baseDisplay;

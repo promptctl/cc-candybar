@@ -209,16 +209,18 @@ export async function parseJsonlFile(filePath: string): Promise<ParsedEntry[]> {
     const stats = await stat(filePath);
     const fileSizeBytes = stats.size;
     let entries: ParsedEntry[];
-    
+
     if (fileSizeBytes > STREAMING_THRESHOLD_BYTES) {
-      debug(`Using streaming parser for large file ${filePath} (${Math.round(fileSizeBytes / 1024)}KB)`);
+      debug(
+        `Using streaming parser for large file ${filePath} (${Math.round(fileSizeBytes / 1024)}KB)`
+      );
       entries = await parseJsonlFileStreaming(filePath);
     } else {
       entries = await parseJsonlFileInMemory(filePath);
     }
-    
+
     debug(`Parsed ${entries.length} entries from ${filePath}`);
-    
+
     return entries;
   } catch (error) {
     debug(`Failed to read file ${filePath}:`, error);
@@ -226,7 +228,9 @@ export async function parseJsonlFile(filePath: string): Promise<ParsedEntry[]> {
   }
 }
 
-async function parseJsonlFileInMemory(filePath: string): Promise<ParsedEntry[]> {
+async function parseJsonlFileInMemory(
+  filePath: string
+): Promise<ParsedEntry[]> {
   const content = await readFile(filePath, "utf-8");
   const lines = content
     .trim()
@@ -257,16 +261,18 @@ async function parseJsonlFileInMemory(filePath: string): Promise<ParsedEntry[]> 
   return entries;
 }
 
-async function parseJsonlFileStreaming(filePath: string): Promise<ParsedEntry[]> {
+async function parseJsonlFileStreaming(
+  filePath: string
+): Promise<ParsedEntry[]> {
   return new Promise((resolve, reject) => {
     const entries: ParsedEntry[] = [];
-    const fileStream = createReadStream(filePath, { encoding: 'utf8' });
+    const fileStream = createReadStream(filePath, { encoding: "utf8" });
     const rl = createInterface({
       input: fileStream,
-      crlfDelay: Infinity
+      crlfDelay: Infinity,
     });
 
-    rl.on('line', (line) => {
+    rl.on("line", (line) => {
       const trimmedLine = line.trim();
       if (!trimmedLine) return;
 
@@ -288,22 +294,32 @@ async function parseJsonlFileStreaming(filePath: string): Promise<ParsedEntry[]>
       }
     });
 
-    rl.on('close', () => {
+    rl.on("close", () => {
       resolve(entries);
     });
 
-    rl.on('error', (error) => {
+    rl.on("error", (error) => {
       debug(`Streaming parser error for ${filePath}:`, error);
       reject(error);
     });
 
-    fileStream.on('error', (error) => {
+    fileStream.on("error", (error) => {
       debug(`File stream error for ${filePath}:`, error);
       reject(error);
     });
   });
 }
 
+/**
+ * Loads entries from Claude projects with deterministic deduplication.
+ * @param timeFilter Optional filter to apply based on timestamp
+ * @param fileFilter Optional filter to apply based on file path and modification time  
+ * @param sortFiles Whether to sort files by modification time
+ * @returns Deduplicated entries sorted by timestamp
+ * @note Sorts entries by timestamp before deduplication to ensure consistent
+ *       duplicate selection. Otherwise, parallel file loading causes race conditions
+ *       where different duplicates are kept on each run, leading to flickering values.
+ */
 export async function loadEntriesFromProjects(
   timeFilter?: (entry: ParsedEntry) => boolean,
   fileFilter?: (filePath: string, modTime: Date) => boolean,
@@ -330,8 +346,7 @@ export async function loadEntriesFromProjects(
       const fileStats = await Promise.all(fileStatsPromises);
       return fileStats.filter(
         (stat) =>
-          stat?.mtime &&
-          (!fileFilter || fileFilter(stat.filePath, stat.mtime))
+          stat?.mtime && (!fileFilter || fileFilter(stat.filePath, stat.mtime))
       );
     } catch (dirError) {
       debug(`Failed to read project directory ${projectPath}:`, dirError);
@@ -340,30 +355,21 @@ export async function loadEntriesFromProjects(
   });
 
   const allFileResults = await Promise.all(allFilesPromises);
-  const allFiles = allFileResults
+  const allFilesWithMtime = allFileResults
     .flat()
-    .filter((file): file is { filePath: string; mtime: Date } => file !== null)
-    .map((file) => file.filePath);
+    .filter((file): file is { filePath: string; mtime: Date } => file !== null);
 
   if (sortFiles) {
-    const sortedFiles = await sortFilesByTimestamp(allFiles, false);
-    allFiles.length = 0;
-    allFiles.push(...sortedFiles);
+    allFilesWithMtime.sort((a, b) => b.mtime.getTime() - a.mtime.getTime());
   }
 
+  const allFiles = allFilesWithMtime.map((file) => file.filePath);
+
   const entries: ParsedEntry[] = [];
+
   const filePromises = allFiles.map(async (filePath) => {
     const fileEntries = await parseJsonlFile(filePath);
-    return fileEntries.filter((entry) => {
-      const uniqueHash = createUniqueHash(entry);
-      if (uniqueHash && processedHashes.has(uniqueHash)) {
-        return false;
-      }
-      if (uniqueHash) {
-        processedHashes.add(uniqueHash);
-      }
-      return !timeFilter || timeFilter(entry);
-    });
+    return fileEntries.filter((entry) => !timeFilter || timeFilter(entry));
   });
 
   const fileResults = await Promise.all(filePromises);
@@ -371,5 +377,19 @@ export async function loadEntriesFromProjects(
     entries.push(...fileEntries);
   }
 
-  return entries;
+  entries.sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
+
+  const deduplicatedEntries: ParsedEntry[] = [];
+  for (const entry of entries) {
+    const uniqueHash = createUniqueHash(entry);
+    if (uniqueHash && processedHashes.has(uniqueHash)) {
+      continue;
+    }
+    if (uniqueHash) {
+      processedHashes.add(uniqueHash);
+    }
+    deduplicatedEntries.push(entry);
+  }
+
+  return deduplicatedEntries;
 }

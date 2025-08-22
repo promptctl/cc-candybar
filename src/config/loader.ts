@@ -39,11 +39,13 @@ export interface DisplayConfig {
 export interface BudgetItemConfig {
   amount?: number;
   warningThreshold?: number;
+  type?: "cost" | "tokens";
 }
 
 export interface BudgetConfig {
   session?: BudgetItemConfig;
   today?: BudgetItemConfig;
+  block?: BudgetItemConfig;
 }
 
 export interface PowerlineConfig {

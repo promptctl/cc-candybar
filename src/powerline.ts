@@ -18,6 +18,7 @@ import {
   DirectorySegmentConfig,
   GitSegmentConfig,
   UsageSegmentConfig,
+  ContextSegmentConfig,
   MetricsSegmentConfig,
   BlockSegmentConfig,
   TodaySegmentConfig,
@@ -244,7 +245,11 @@ export class PowerlineRenderer {
     }
 
     if (segment.type === "context") {
-      return this.renderContextSegment(contextInfo, colors);
+      return this.renderContextSegment(
+        segment.config as ContextSegmentConfig,
+        contextInfo,
+        colors
+      );
     }
 
     if (segment.type === "metrics") {
@@ -327,11 +332,12 @@ export class PowerlineRenderer {
   }
 
   private renderContextSegment(
+    config: ContextSegmentConfig,
     contextInfo: ContextInfo | null,
     colors: PowerlineColors
   ) {
     if (!this.needsSegmentInfo("context")) return null;
-    return this.segmentRenderer.renderContext(contextInfo, colors);
+    return this.segmentRenderer.renderContext(contextInfo, colors, config);
   }
 
   private renderMetricsSegment(

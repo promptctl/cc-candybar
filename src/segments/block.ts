@@ -17,9 +17,17 @@ export interface UsageEntry {
 export interface BlockInfo {
   cost: number | null;
   tokens: number | null;
+  weightedTokens: number | null;
   timeRemaining: number | null;
   burnRate: number | null;
   tokenBurnRate: number | null;
+}
+
+function getModelRateLimitWeight(model: string): number {
+  if (model.includes("opus")) return 5;
+  if (model.includes("sonnet")) return 1;
+  if (model.includes("haiku")) return 1;
+  return 1;
 }
 
 function convertToUsageEntry(entry: ParsedEntry): UsageEntry {
@@ -204,6 +212,7 @@ export class BlockProvider {
         return {
           cost: null,
           tokens: null,
+          weightedTokens: null,
           timeRemaining: null,
           burnRate: null,
           tokenBurnRate: null,
@@ -219,6 +228,16 @@ export class BlockProvider {
           entry.usage.cacheCreationInputTokens +
           entry.usage.cacheReadInputTokens
         );
+      }, 0);
+
+      const weightedTokens = entries.reduce((sum, entry) => {
+        const entryTokens =
+          entry.usage.inputTokens +
+          entry.usage.outputTokens +
+          entry.usage.cacheCreationInputTokens +
+          entry.usage.cacheReadInputTokens;
+        const weight = getModelRateLimitWeight(entry.model);
+        return sum + entryTokens * weight;
       }, 0);
 
       const now = new Date();
@@ -258,8 +277,13 @@ export class BlockProvider {
             if (totalCost > 0) {
               burnRate = (totalCost / durationMinutes) * 60;
             }
-            if (totalTokens > 0) {
-              tokenBurnRate = (totalTokens / durationMinutes) * 60;
+
+            const nonCacheTokens = entries.reduce((sum, entry) => {
+              return sum + entry.usage.inputTokens + entry.usage.outputTokens;
+            }, 0);
+
+            if (nonCacheTokens > 0) {
+              tokenBurnRate = (nonCacheTokens / durationMinutes) * 60;
             }
           }
         }
@@ -272,6 +296,7 @@ export class BlockProvider {
       return {
         cost: totalCost,
         tokens: totalTokens,
+        weightedTokens,
         timeRemaining,
         burnRate,
         tokenBurnRate,
@@ -281,6 +306,7 @@ export class BlockProvider {
       return {
         cost: null,
         tokens: null,
+        weightedTokens: null,
         timeRemaining: null,
         burnRate: null,
         tokenBurnRate: null,

@@ -16,6 +16,7 @@ export {
   DirectorySegmentConfig,
   GitSegmentConfig,
   UsageSegmentConfig,
+  ContextSegmentConfig,
   MetricsSegmentConfig,
   BlockSegmentConfig,
   TodaySegmentConfig,

@@ -28,7 +28,7 @@ export const DEFAULT_CONFIG: PowerlineConfig = {
           block: { enabled: false, type: "cost", burnType: "cost" },
           version: { enabled: false },
           tmux: { enabled: false },
-          context: { enabled: true },
+          context: { enabled: true, showPercentageOnly: false },
           metrics: {
             enabled: false,
             showResponseTime: true,
@@ -49,6 +49,10 @@ export const DEFAULT_CONFIG: PowerlineConfig = {
     today: {
       warningThreshold: 80,
       amount: 50,
+    },
+    block: {
+      warningThreshold: 80,
+      amount: 15,
     },
   },
 };

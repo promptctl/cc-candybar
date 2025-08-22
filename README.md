@@ -281,11 +281,16 @@ Shows context window usage and auto-compact threshold.
 
 ```json
 "context": {
-  "enabled": true
+  "enabled": true,
+  "showPercentageOnly": false
 }
 ```
 
-**Display:** `◔ 34,040 (79%)` - tokens used and percentage remaining until auto-compact
+**Options:**
+
+- `showPercentageOnly`: Show only percentage remaining (default: false)
+
+**Display:** `◔ 34,040 (79%)` or `◔ 79%` (percentage only)
 
 ---
 
@@ -343,17 +348,24 @@ Shows usage within current 5-hour billing window (Claude\'s rate limit period).
 ```json
 "block": {
   "enabled": true,
-  "type": "cost",
+  "type": "weighted",
   "burnType": "cost"
 }
 ```
 
 **Options:**
 
-- `type`: Display format - `cost` | `tokens` | `both` | `time`
+- `type`: Display format - `cost` | `tokens` | `both` | `time` | `weighted`
 - `burnType`: Burn rate display - `cost` | `tokens` | `both` | `none`
 
+**Weighted Tokens:** Opus tokens count 5x toward rate limits compared to Sonnet/Haiku tokens
+
+**Rate Limit Indicators:** `25%` Normal • `+75%` Moderate (50-79%) • `!85%` Warning (80%+)
+
 **Symbols:** `◱` Block
+
+> [!TIP]  
+> Claude's rate limits consider multiple factors beyond tokens (message count, length, attachments, model). See [Anthropic's usage documentation](https://support.anthropic.com/en/articles/11014257-about-claude-s-max-plan-usage) for details.
 
 ---
 
@@ -379,9 +391,16 @@ Shows total daily usage with budget monitoring.
 ```json
 "budget": {
   "session": { "amount": 10.0, "warningThreshold": 80 },
-  "today": { "amount": 25.0, "warningThreshold": 80 }
+  "today": { "amount": 25.0, "warningThreshold": 80 },
+  "block": { "amount": 15.0, "type": "cost", "warningThreshold": 80 }
 }
 ```
+
+**Options:**
+
+- `amount`: Budget limit (required for percentage display)
+- `type`: Budget type - `cost` (USD) | `tokens` (for token-based limits)
+- `warningThreshold`: Warning threshold percentage (default: 80)
 
 **Indicators:** `25%` Normal • `+75%` Moderate (50-79%) • `!85%` Warning (80%+)
 
