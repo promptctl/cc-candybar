@@ -1,3 +1,10 @@
+## [1.9.3](https://github.com/Owloops/claude-powerline/compare/v1.9.2...v1.9.3) (2025-08-22)
+
+
+### Bug Fixes
+
+* performance report doc ([85afa34](https://github.com/Owloops/claude-powerline/commit/85afa34a35e0dd7191495ea539011307f49ddcd2))
+
 ## [1.9.2](https://github.com/Owloops/claude-powerline/compare/v1.9.1...v1.9.2) (2025-08-22)
 
 
