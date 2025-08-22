@@ -1,3 +1,10 @@
+# [1.9.0](https://github.com/Owloops/claude-powerline/compare/v1.8.0...v1.9.0) (2025-08-22)
+
+
+### Features
+
+* use authentic hook data and remove pricing service ([be45e23](https://github.com/Owloops/claude-powerline/commit/be45e234a742096e1e63d22f813bbafa2cceee8c))
+
 # [1.8.0](https://github.com/Owloops/claude-powerline/compare/v1.7.10...v1.8.0) (2025-08-21)
 
 
