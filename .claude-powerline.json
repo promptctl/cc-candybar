@@ -7,7 +7,7 @@
         "segments": {
           "directory": { "enabled": true, "showBasename": true },
           "model": { "enabled": true },
-          "session": { "enabled": true, "type": "both" },
+          "session": { "enabled": true, "type": "both", "costSource": "calculated" },
           "today": { "enabled": true, "type": "both" }
         }
       },

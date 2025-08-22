@@ -322,13 +322,15 @@ Shows real-time usage for current Claude conversation.
 ```json
 "session": {
   "enabled": true,
-  "type": "tokens"
+  "type": "tokens",
+  "costSource": "calculated"
 }
 ```
 
 **Options:**
 
 - `type`: Display format - `cost` | `tokens` | `both` | `breakdown`
+- `costSource`: Cost calculation method - `calculated` (ccusage-style) | `official` (hook data)
 
 **Symbols:** `§` Session
 

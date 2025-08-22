@@ -26,6 +26,7 @@ export interface GitSegmentConfig extends SegmentConfig {
 
 export interface UsageSegmentConfig extends SegmentConfig {
   type: "cost" | "tokens" | "both" | "breakdown";
+  costSource?: "calculated" | "official";
 }
 
 export interface TmuxSegmentConfig extends SegmentConfig {}
@@ -78,6 +79,7 @@ import type {
   GitInfo,
   ContextInfo,
   MetricsInfo,
+  SessionInfo,
 } from ".";
 import type { TodayInfo } from "./today";
 
@@ -263,17 +265,24 @@ export class SegmentRenderer {
   renderSession(
     usageInfo: UsageInfo,
     colors: PowerlineColors,
-    type = "cost"
+    config?: UsageSegmentConfig
   ): SegmentData {
+    const type = config?.type || "cost";
+    const costSource = config?.costSource;
     const sessionBudget = this.config.budget?.session;
-    const text = `${this.symbols.session_cost} ${this.formatUsageWithBudget(
-      usageInfo.session.cost,
-      usageInfo.session.tokens,
-      usageInfo.session.tokenBreakdown,
-      type,
-      sessionBudget?.amount,
-      sessionBudget?.warningThreshold || 80
-    )}`;
+
+    const formattedUsage = costSource
+      ? this.formatSessionUsageDisplay(usageInfo.session, type, costSource)
+      : this.formatUsageWithBudget(
+          usageInfo.session.cost,
+          usageInfo.session.tokens,
+          usageInfo.session.tokenBreakdown,
+          type,
+          sessionBudget?.amount,
+          sessionBudget?.warningThreshold || 80
+        );
+
+    const text = `${this.symbols.session_cost} ${formattedUsage}`;
 
     return {
       text,
@@ -560,6 +569,31 @@ export class SegmentRenderer {
         return formatTokenBreakdown(tokenBreakdown);
       default:
         return formatCost(cost);
+    }
+  }
+
+  private formatSessionUsageDisplay(
+    sessionInfo: SessionInfo,
+    type: string,
+    costSource?: string
+  ): string {
+    const getCost = () => {
+      if (costSource === "calculated") return sessionInfo.calculatedCost;
+      if (costSource === "official") return sessionInfo.officialCost;
+      return sessionInfo.cost;
+    };
+
+    switch (type) {
+      case "cost":
+        return formatCost(getCost());
+      case "tokens":
+        return formatTokens(sessionInfo.tokens);
+      case "both":
+        return `${formatCost(getCost())} (${formatTokens(sessionInfo.tokens)})`;
+      case "breakdown":
+        return formatTokenBreakdown(sessionInfo.tokenBreakdown);
+      default:
+        return formatCost(getCost());
     }
   }
 

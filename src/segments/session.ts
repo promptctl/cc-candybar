@@ -34,6 +34,8 @@ export interface TokenBreakdown {
 
 export interface SessionInfo {
   cost: number | null;
+  calculatedCost: number | null;
+  officialCost: number | null;
   tokens: number | null;
   tokenBreakdown: TokenBreakdown | null;
 }
@@ -129,6 +131,8 @@ export class SessionProvider {
     if (!sessionUsage || sessionUsage.entries.length === 0) {
       return {
         cost: null,
+        calculatedCost: null,
+        officialCost: null,
         tokens: null,
         tokenBreakdown: null,
       };
@@ -143,10 +147,12 @@ export class SessionProvider {
 
     const calculatedCost = sessionUsage.totalCost;
     const hookDataCost = hookData?.cost?.total_cost_usd ?? null;
-    const cost = calculatedCost ?? hookDataCost; /** @todo calculated cost matches with ccusage variant, hook data cost is slightly different */
+    const cost = calculatedCost ?? hookDataCost;
 
     return {
       cost,
+      calculatedCost,
+      officialCost: hookDataCost,
       tokens: totalTokens,
       tokenBreakdown,
     };
@@ -174,7 +180,13 @@ export class UsageProvider {
     } catch (error) {
       debug(`Error getting usage info for session ${sessionId}:`, error);
       return {
-        session: { cost: null, tokens: null, tokenBreakdown: null },
+        session: {
+          cost: null,
+          calculatedCost: null,
+          officialCost: null,
+          tokens: null,
+          tokenBreakdown: null,
+        },
       };
     }
   }

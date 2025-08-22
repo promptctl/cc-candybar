@@ -317,8 +317,7 @@ export class PowerlineRenderer {
     colors: PowerlineColors
   ) {
     if (!usageInfo) return null;
-    const usageType = config?.type || "cost";
-    return this.segmentRenderer.renderSession(usageInfo, colors, usageType);
+    return this.segmentRenderer.renderSession(usageInfo, colors, config);
   }
 
   private async renderTmuxSegment(colors: PowerlineColors) {
