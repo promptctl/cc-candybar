@@ -1,3 +1,10 @@
+## [1.9.2](https://github.com/Owloops/claude-powerline/compare/v1.9.1...v1.9.2) (2025-08-22)
+
+
+### Bug Fixes
+
+* add unified budget system with cost and token limits for all segments ([fe80730](https://github.com/Owloops/claude-powerline/commit/fe8073007fa2a8877a53de9d60c1f353a608e148))
+
 ## [1.9.1](https://github.com/Owloops/claude-powerline/compare/v1.9.0...v1.9.1) (2025-08-22)
 
 
