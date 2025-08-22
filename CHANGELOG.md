@@ -1,3 +1,10 @@
+## [1.9.4](https://github.com/Owloops/claude-powerline/compare/v1.9.3...v1.9.4) (2025-08-22)
+
+
+### Bug Fixes
+
+* include cache tokens in burn rate calculation ([3050149](https://github.com/Owloops/claude-powerline/commit/30501492a643380b44c5093d1c2a6df3c5cad694))
+
 ## [1.9.3](https://github.com/Owloops/claude-powerline/compare/v1.9.2...v1.9.3) (2025-08-22)
 
 
