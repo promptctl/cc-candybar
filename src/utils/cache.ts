@@ -26,7 +26,36 @@ export class CacheManager {
 
   private static isLocked(name: string): boolean {
     const lockFile = path.join(this.LOCKS_DIR, name);
-    return fs.existsSync(lockFile);
+    if (!fs.existsSync(lockFile)) {
+      return false;
+    }
+
+    try {
+      const lockContent = fs.readFileSync(lockFile, "utf-8");
+      const pid = parseInt(lockContent.trim(), 10);
+
+      if (isNaN(pid)) {
+        debug(`Invalid PID in lock file ${name}, removing stale lock`);
+        fs.unlinkSync(lockFile);
+        return false;
+      }
+
+      try {
+        process.kill(pid, 0);
+        return true;
+      } catch (error: any) {
+        if (error.code === "ESRCH") {
+          debug(`Removing stale lock file ${name} for dead process ${pid}`);
+          fs.unlinkSync(lockFile);
+          return false;
+        }
+        debug(`Error checking process ${pid} for lock ${name}:`, error);
+        return true;
+      }
+    } catch (error) {
+      debug(`Error reading lock file ${name}:`, error);
+      return true;
+    }
   }
 
   private static async acquireLock(
