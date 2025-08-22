@@ -43,6 +43,7 @@ export interface BudgetItemConfig {
 
 export interface BudgetConfig {
   session?: BudgetItemConfig;
+  today?: BudgetItemConfig;
 }
 
 export interface PowerlineConfig {

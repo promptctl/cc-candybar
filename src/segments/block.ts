@@ -1,4 +1,5 @@
 import { debug } from "../utils/logger";
+import { PricingService } from "./pricing";
 import { loadEntriesFromProjects, type ParsedEntry } from "../utils/claude";
 
 export interface UsageEntry {
@@ -9,12 +10,15 @@ export interface UsageEntry {
     cacheCreationInputTokens: number;
     cacheReadInputTokens: number;
   };
+  costUSD: number;
   model: string;
 }
 
 export interface BlockInfo {
+  cost: number | null;
   tokens: number | null;
   timeRemaining: number | null;
+  burnRate: number | null;
   tokenBurnRate: number | null;
 }
 
@@ -28,6 +32,7 @@ function convertToUsageEntry(entry: ParsedEntry): UsageEntry {
         entry.message?.usage?.cache_creation_input_tokens || 0,
       cacheReadInputTokens: entry.message?.usage?.cache_read_input_tokens || 0,
     },
+    costUSD: entry.costUSD || 0,
     model: entry.message?.model || "unknown",
   };
 }
@@ -149,6 +154,13 @@ export class BlockProvider {
       for (const entry of parsedEntries) {
         if (entry.message?.usage) {
           const usageEntry = convertToUsageEntry(entry);
+
+          if (!usageEntry.costUSD && entry.raw) {
+            usageEntry.costUSD = await PricingService.calculateCostForEntry(
+              entry.raw
+            );
+          }
+
           allUsageEntries.push(usageEntry);
         }
       }
@@ -190,12 +202,15 @@ export class BlockProvider {
       if (entries.length === 0) {
         debug("Block segment: No entries in current block");
         return {
+          cost: null,
           tokens: null,
           timeRemaining: null,
+          burnRate: null,
           tokenBurnRate: null,
         };
       }
 
+      const totalCost = entries.reduce((sum, entry) => sum + entry.costUSD, 0);
       const totalTokens = entries.reduce((sum, entry) => {
         return (
           sum +
@@ -225,9 +240,10 @@ export class BlockProvider {
         }
       }
 
+      let burnRate: number | null = null;
       let tokenBurnRate: number | null = null;
 
-      if (entries.length >= 1 && totalTokens > 0) {
+      if (entries.length >= 1 && (totalCost > 0 || totalTokens > 0)) {
         const timestamps = entries
           .map((entry) => entry.timestamp)
           .sort((a, b) => a.getTime() - b.getTime());
@@ -238,26 +254,35 @@ export class BlockProvider {
           const durationMinutes =
             (lastEntry.getTime() - firstEntry.getTime()) / (1000 * 60);
 
-          if (durationMinutes > 0 && totalTokens > 0) {
-            tokenBurnRate = (totalTokens / durationMinutes) * 60;
+          if (durationMinutes > 0) {
+            if (totalCost > 0) {
+              burnRate = (totalCost / durationMinutes) * 60;
+            }
+            if (totalTokens > 0) {
+              tokenBurnRate = (totalTokens / durationMinutes) * 60;
+            }
           }
         }
       }
 
       debug(
-        `Block segment: ${totalTokens} tokens, ${timeRemaining}m remaining, token burn rate: ${tokenBurnRate ? tokenBurnRate.toFixed(0) + " tokens/hr" : "N/A"}`
+        `Block segment: $${totalCost.toFixed(2)}, ${totalTokens} tokens, ${timeRemaining}m remaining, burn rate: ${burnRate ? "$" + burnRate.toFixed(2) + "/hr" : "N/A"}`
       );
 
       return {
+        cost: totalCost,
         tokens: totalTokens,
         timeRemaining,
+        burnRate,
         tokenBurnRate,
       };
     } catch (error) {
       debug("Error getting active block info:", error);
       return {
+        cost: null,
         tokens: null,
         timeRemaining: null,
+        burnRate: null,
         tokenBurnRate: null,
       };
     }

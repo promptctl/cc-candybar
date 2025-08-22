@@ -42,12 +42,12 @@ export interface MetricsSegmentConfig extends SegmentConfig {
 }
 
 export interface BlockSegmentConfig extends SegmentConfig {
-  type: "tokens" | "time";
-  burnType?: "tokens" | "none";
+  type: "cost" | "tokens" | "both" | "time";
+  burnType?: "cost" | "tokens" | "both" | "none";
 }
 
 export interface TodaySegmentConfig extends SegmentConfig {
-  type: "tokens" | "breakdown";
+  type: "cost" | "tokens" | "both" | "breakdown";
 }
 
 export interface VersionSegmentConfig extends SegmentConfig {}
@@ -65,11 +65,13 @@ export type AnySegmentConfig =
   | VersionSegmentConfig;
 
 import {
+  formatCost,
   formatTokens,
   formatTokenBreakdown,
   formatTimeSince,
   formatDuration,
 } from "../utils/formatters";
+import { getBudgetStatus } from "../utils/budget";
 import type {
   UsageInfo,
   TokenBreakdown,
@@ -416,10 +418,10 @@ export class SegmentRenderer {
   ): SegmentData {
     let displayText: string;
 
-    if (blockInfo.tokens === null) {
+    if (blockInfo.cost === null && blockInfo.tokens === null) {
       displayText = "No active block";
     } else {
-      const type = config?.type || "tokens";
+      const type = config?.type || "cost";
       const burnType = config?.burnType;
 
       const timeStr =
@@ -433,25 +435,53 @@ export class SegmentRenderer {
 
       let mainContent: string;
       switch (type) {
+        case "cost":
+          mainContent = formatCost(blockInfo.cost);
+          break;
         case "tokens":
           mainContent = formatTokens(blockInfo.tokens);
+          break;
+        case "both":
+          mainContent = `${formatCost(blockInfo.cost)} / ${formatTokens(blockInfo.tokens)}`;
           break;
         case "time":
           mainContent = timeStr || "N/A";
           break;
         default:
-          mainContent = formatTokens(blockInfo.tokens);
+          mainContent = formatCost(blockInfo.cost);
       }
 
       let burnContent = "";
       if (burnType && burnType !== "none") {
         switch (burnType) {
+          case "cost":
+            const costBurnRate =
+              blockInfo.burnRate !== null
+                ? blockInfo.burnRate < 1
+                  ? `${(blockInfo.burnRate * 100).toFixed(0)}¢/h`
+                  : `$${blockInfo.burnRate.toFixed(2)}/h`
+                : "N/A";
+            burnContent = ` | ${costBurnRate}`;
+            break;
           case "tokens":
             const tokenBurnRate =
               blockInfo.tokenBurnRate !== null
                 ? `${formatTokens(Math.round(blockInfo.tokenBurnRate))}/h`
                 : "N/A";
             burnContent = ` | ${tokenBurnRate}`;
+            break;
+          case "both":
+            const costBurn =
+              blockInfo.burnRate !== null
+                ? blockInfo.burnRate < 1
+                  ? `${(blockInfo.burnRate * 100).toFixed(0)}¢/h`
+                  : `$${blockInfo.burnRate.toFixed(2)}/h`
+                : "N/A";
+            const tokenBurn =
+              blockInfo.tokenBurnRate !== null
+                ? `${formatTokens(Math.round(blockInfo.tokenBurnRate))}/h`
+                : "N/A";
+            burnContent = ` | ${costBurn} / ${tokenBurn}`;
             break;
         }
       }
@@ -475,15 +505,16 @@ export class SegmentRenderer {
   renderToday(
     todayInfo: TodayInfo,
     colors: PowerlineColors,
-    type = "tokens"
+    type = "cost"
   ): SegmentData {
+    const todayBudget = this.config.budget?.today;
     const text = `${this.symbols.today_cost} ${this.formatUsageWithBudget(
-      null,
+      todayInfo.cost,
       todayInfo.tokens,
       todayInfo.tokenBreakdown,
       type,
-      undefined,
-      undefined
+      todayBudget?.amount,
+      todayBudget?.warningThreshold
     )}`;
 
     return {
@@ -520,17 +551,15 @@ export class SegmentRenderer {
   ): string {
     switch (type) {
       case "cost":
-        return cost !== null ? `$${cost.toFixed(2)}` : "No cost data";
+        return formatCost(cost);
       case "tokens":
         return formatTokens(tokens);
       case "both":
-        return cost !== null
-          ? `$${cost.toFixed(2)} (${formatTokens(tokens)})`
-          : formatTokens(tokens);
+        return `${formatCost(cost)} (${formatTokens(tokens)})`;
       case "breakdown":
         return formatTokenBreakdown(tokenBreakdown);
       default:
-        return formatTokens(tokens);
+        return formatCost(cost);
     }
   }
 
@@ -549,26 +578,9 @@ export class SegmentRenderer {
       type
     );
 
-    if (
-      budget &&
-      budget > 0 &&
-      cost !== null &&
-      (type === "cost" || type === "both")
-    ) {
-      const percentage = Math.min(100, (cost / budget) * 100);
-      const isWarning = percentage >= warningThreshold;
-      const percentStr = `${percentage.toFixed(0)}%`;
-
-      let budgetDisplay = "";
-      if (isWarning) {
-        budgetDisplay = ` !${percentStr}`;
-      } else if (percentage >= 50) {
-        budgetDisplay = ` +${percentStr}`;
-      } else {
-        budgetDisplay = ` ${percentStr}`;
-      }
-
-      return baseDisplay + budgetDisplay;
+    if (budget && budget > 0 && cost !== null) {
+      const budgetStatus = getBudgetStatus(cost, budget, warningThreshold);
+      return baseDisplay + budgetStatus.displayText;
     }
 
     return baseDisplay;

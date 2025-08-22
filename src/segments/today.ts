@@ -1,4 +1,5 @@
 import { debug } from "../utils/logger";
+import { PricingService } from "./pricing";
 import { CacheManager } from "../utils/cache";
 import { loadEntriesFromProjects, type ParsedEntry } from "../utils/claude";
 import type { TokenBreakdown } from "./session";
@@ -11,10 +12,12 @@ export interface TodayUsageEntry {
     cacheCreationInputTokens: number;
     cacheReadInputTokens: number;
   };
+  costUSD: number;
   model: string;
 }
 
 export interface TodayInfo {
+  cost: number | null;
   tokens: number | null;
   tokenBreakdown: TokenBreakdown | null;
   date: string;
@@ -46,6 +49,7 @@ function convertToTodayEntry(entry: ParsedEntry): TodayUsageEntry {
         entry.message?.usage?.cache_creation_input_tokens || 0,
       cacheReadInputTokens: entry.message?.usage?.cache_read_input_tokens || 0,
     },
+    costUSD: entry.costUSD || 0,
     model: entry.message?.model || "unknown",
   };
 }
@@ -94,6 +98,13 @@ export class TodayProvider {
 
       if (entryDateString === todayDateString && entry.message?.usage) {
         const todayEntry = convertToTodayEntry(entry);
+
+        if (!todayEntry.costUSD && entry.raw) {
+          todayEntry.costUSD = await PricingService.calculateCostForEntry(
+            entry.raw
+          );
+        }
+
         todayEntries.push(todayEntry);
         entriesFound++;
       }
@@ -123,12 +134,14 @@ export class TodayProvider {
 
       if (entries.length === 0) {
         return {
+          cost: null,
           tokens: null,
           tokenBreakdown: null,
           date: formatDate(new Date()),
         };
       }
 
+      const totalCost = entries.reduce((sum, entry) => sum + entry.costUSD, 0);
       const totalTokens = entries.reduce(
         (sum, entry) => sum + getTotalTokens(entry.usage),
         0
@@ -150,9 +163,12 @@ export class TodayProvider {
         }
       );
 
-      debug(`Today segment: ${totalTokens} tokens total`);
+      debug(
+        `Today segment: $${totalCost.toFixed(2)}, ${totalTokens} tokens total`
+      );
 
       return {
+        cost: totalCost,
         tokens: totalTokens,
         tokenBreakdown,
         date: formatDate(new Date()),
@@ -160,6 +176,7 @@ export class TodayProvider {
     } catch (error) {
       debug("Error getting today's info:", error);
       return {
+        cost: null,
         tokens: null,
         tokenBreakdown: null,
         date: formatDate(new Date()),

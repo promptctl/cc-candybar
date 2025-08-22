@@ -1,4 +1,5 @@
 import { debug } from "../utils/logger";
+import { PricingService } from "./pricing";
 import {
   findTranscriptFile,
   parseJsonlFile,
@@ -16,9 +17,11 @@ export interface SessionUsageEntry {
       cache_read_input_tokens?: number;
     };
   };
+  costUSD?: number;
 }
 
 export interface SessionUsage {
+  totalCost: number;
   entries: SessionUsageEntry[];
 }
 
@@ -51,6 +54,7 @@ function convertToSessionEntry(entry: ParsedEntry): SessionUsageEntry {
         cache_read_input_tokens: entry.message?.usage?.cache_read_input_tokens,
       },
     },
+    costUSD: entry.costUSD,
   };
 }
 
@@ -68,20 +72,32 @@ export class SessionProvider {
       const parsedEntries = await parseJsonlFile(transcriptPath);
 
       if (parsedEntries.length === 0) {
-        return { entries: [] };
+        return { totalCost: 0, entries: [] };
       }
 
       const entries: SessionUsageEntry[] = [];
+      let totalCost = 0;
 
       for (const entry of parsedEntries) {
         if (entry.message?.usage) {
           const sessionEntry = convertToSessionEntry(entry);
+
+          if (sessionEntry.costUSD !== undefined) {
+            totalCost += sessionEntry.costUSD;
+          } else {
+            const cost = await PricingService.calculateCostForEntry(entry.raw);
+            sessionEntry.costUSD = cost;
+            totalCost += cost;
+          }
+
           entries.push(sessionEntry);
         }
       }
 
-      debug(`Parsed ${entries.length} usage entries`);
-      return { entries };
+      debug(
+        `Parsed ${entries.length} usage entries, total cost: $${totalCost.toFixed(4)}`
+      );
+      return { totalCost, entries };
     } catch (error) {
       debug(`Error reading session usage for ${sessionId}:`, error);
       return null;
@@ -125,7 +141,9 @@ export class SessionProvider {
       tokenBreakdown.cacheCreation +
       tokenBreakdown.cacheRead;
 
-    const cost = hookData?.cost?.total_cost_usd ?? null;
+    const calculatedCost = sessionUsage.totalCost;
+    const hookDataCost = hookData?.cost?.total_cost_usd ?? null;
+    const cost = calculatedCost ?? hookDataCost; /** @todo calculated cost matches with ccusage variant, hook data cost is slightly different */
 
     return {
       cost,

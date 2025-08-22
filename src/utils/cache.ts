@@ -26,36 +26,7 @@ export class CacheManager {
 
   private static isLocked(name: string): boolean {
     const lockFile = path.join(this.LOCKS_DIR, name);
-    if (!fs.existsSync(lockFile)) {
-      return false;
-    }
-
-    try {
-      const lockContent = fs.readFileSync(lockFile, "utf-8");
-      const pid = parseInt(lockContent.trim(), 10);
-
-      if (isNaN(pid)) {
-        debug(`Invalid PID in lock file ${name}, removing stale lock`);
-        fs.unlinkSync(lockFile);
-        return false;
-      }
-
-      try {
-        process.kill(pid, 0);
-        return true;
-      } catch (error: any) {
-        if (error.code === "ESRCH") {
-          debug(`Removing stale lock file ${name} for dead process ${pid}`);
-          fs.unlinkSync(lockFile);
-          return false;
-        }
-        debug(`Error checking process ${pid} for lock ${name}:`, error);
-        return true;
-      }
-    } catch (error) {
-      debug(`Error reading lock file ${name}:`, error);
-      return true;
-    }
+    return fs.existsSync(lockFile);
   }
 
   private static async acquireLock(
@@ -118,7 +89,7 @@ export class CacheManager {
   }
 
   static async getUsageCache(
-    cacheType: "today" | "block",
+    cacheType: "today" | "block" | "pricing",
     latestMtime?: number
   ): Promise<any | null> {
     const MAX_RETRIES = 3;
@@ -179,7 +150,7 @@ export class CacheManager {
   }
 
   static async setUsageCache(
-    cacheType: "today" | "block",
+    cacheType: "today" | "block" | "pricing",
     data: any,
     latestMtime?: number
   ): Promise<void> {
