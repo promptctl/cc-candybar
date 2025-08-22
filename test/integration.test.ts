@@ -31,17 +31,19 @@ jest.mock("../src/segments/session", () => ({
 }));
 
 jest.mock("node:child_process", () => ({
-  exec: jest.fn().mockImplementation((cmd: string, _options: any, callback: any) => {
-    let result = "";
-    if (cmd.includes("git branch --show-current")) result = "main\n";
-    else if (cmd.includes("git status --porcelain")) result = "";
-    else if (cmd.includes("git rev-list --count")) result = "0\n";
-    
-    if (typeof callback === 'function') {
-      callback(null, { stdout: result, stderr: "" });
-    }
-    return result;
-  }),
+  exec: jest
+    .fn()
+    .mockImplementation((cmd: string, _options: any, callback: any) => {
+      let result = "";
+      if (cmd.includes("git branch --show-current")) result = "main\n";
+      else if (cmd.includes("git status --porcelain")) result = "";
+      else if (cmd.includes("git rev-list --count")) result = "0\n";
+
+      if (typeof callback === "function") {
+        callback(null, { stdout: result, stderr: "" });
+      }
+      return result;
+    }),
 }));
 
 describe("Integration Tests", () => {
@@ -57,6 +59,13 @@ describe("Integration Tests", () => {
     workspace: {
       current_dir: "/Users/test/claude-powerline",
       project_dir: "/Users/test/claude-powerline",
+    },
+    cost: {
+      total_cost_usd: 0.05,
+      total_duration_ms: 1000,
+      total_api_duration_ms: 500,
+      total_lines_added: 10,
+      total_lines_removed: 5,
     },
   };
 

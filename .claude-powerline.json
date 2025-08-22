@@ -8,13 +8,12 @@
           "directory": { "enabled": true, "showBasename": true },
           "model": { "enabled": true },
           "session": { "enabled": true, "type": "both" },
-          "today": { "enabled": true, "type": "both" }
+          "today": { "enabled": true, "type": "breakdown" }
         }
       },
       {
         "segments": {
-          "block": { "enabled": true, "type": "cost", "burnType": "cost" },
-          "version": { "enabled": true },
+          "block": { "enabled": true, "type": "tokens", "burnType": "tokens" },
           "metrics": {
             "enabled": true,
             "showResponseTime": true,
@@ -40,7 +39,8 @@
             "showStashCount": true,
             "showUpstream": true,
             "showRepoName": true
-          }
+          },
+          "version": { "enabled": true }
         }
       }
     ]
@@ -60,7 +60,6 @@
     }
   },
   "budget": {
-    "session": { "warningThreshold": 80 },
-    "today": { "amount": 5.0, "warningThreshold": 80 }
+    "session": { "amount": 5.0, "warningThreshold": 80 }
   }
 }

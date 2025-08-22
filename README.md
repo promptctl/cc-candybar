@@ -54,9 +54,9 @@
 
 ### Usage Tracking
 
-- Real-time session costs
-- 5-hour billing window monitoring
-- Daily budget alerts with percentages
+- Real-time session costs from Claude Code hook data
+- 5-hour billing window token monitoring
+- Session budget alerts with percentages
 - Token breakdown (input/output/cached)
 
 ### Git Integration
@@ -171,8 +171,8 @@ Config files reload automatically and no restart needed.
 | `git` | Branch, status, repository info | `showSha`, `showWorkingTree`, `showTag`, `showStashCount`, `showOperation`, `showTimeSinceCommit`, `showUpstream`, `showRepoName` |
 | `model` | Current Claude model | - |
 | `session` | Real-time usage for conversation | `type`: `cost`|`tokens`|`both`|`breakdown` |
-| `block` | 5-hour billing window usage | `type`, `burnType`: `cost`|`tokens`|`both`|`none` |
-| `today` | Daily usage with budget monitoring | `type` |
+| `block` | 5-hour billing window token usage | `type`: `tokens`|`time`, `burnType`: `tokens`|`none` |
+| `today` | Daily token usage | `type`: `tokens`|`breakdown` |
 | `context` | Context window usage | - |
 | `tmux` | Tmux session info | - |
 | `metrics` | Performance analytics | `showResponseTime`, `showLastResponseTime`, `showDuration`, `showMessageCount`, `showLinesAdded`, `showLinesRemoved` |
@@ -336,20 +336,20 @@ Shows real-time usage for current Claude conversation.
 
 #### Block
 
-Shows usage within current 5-hour billing window (Claude\'s rate limit period).
+Shows token usage within current 5-hour billing window (Claude\'s rate limit period).
 
 ```json
 "block": {
   "enabled": true,
-  "type": "cost",
-  "burnType": "cost"
+  "type": "tokens",
+  "burnType": "tokens"
 }
 ```
 
 **Options:**
 
-- `type`: Display format - `cost` | `tokens` | `both` | `time`
-- `burnType`: Burn rate display - `cost` | `tokens` | `both` | `none`
+- `type`: Display format - `tokens` | `time`
+- `burnType`: Burn rate display - `tokens` | `none`
 
 **Symbols:** `◱` Block
 
@@ -357,27 +357,28 @@ Shows usage within current 5-hour billing window (Claude\'s rate limit period).
 
 #### Today
 
-Shows total daily usage with budget monitoring.
+Shows total daily token usage.
 
 ```json
 "today": {
   "enabled": true,
-  "type": "cost"
+  "type": "tokens"
 }
 ```
 
 **Options:**
 
-- `type`: Display format - `cost` | `tokens` | `both` | `breakdown`
+- `type`: Display format - `tokens` | `breakdown`
 
 **Symbols:** `☉` Today
 
 ### Budget Configuration
 
+Session cost budget monitoring with percentage indicators.
+
 ```json
 "budget": {
-  "session": { "amount": 10.0, "warningThreshold": 80 },
-  "today": { "amount": 25.0, "warningThreshold": 80 }
+  "session": { "amount": 10.0, "warningThreshold": 80 }
 }
 ```
 
@@ -440,8 +441,8 @@ Create custom themes by defining segment colors.
 
 ## Performance
 
-• **~50ms** default config (`directory`, `git`, `model`, `session`, `today`, `context`)
-• **~190ms** full-featured
+• **~80ms** default config (`directory`, `git`, `model`, `session`, `today`, `context`)
+• **~300ms** full-featured
 
 **Benchmark Tool:**
 
@@ -451,14 +452,14 @@ Create custom themes by defining segment colors.
 |-------------|-----------|----------|--------------------------------|
 | `directory` | ~40ms     | ✗        | No external commands           |
 | `model`     | ~40ms     | ✗        | Uses hook data                 |
-| `session`   | ~41ms     | ✗        | Minimal transcript parsing     |
+| `session`   | ~40ms     | ✗        | Minimal transcript parsing     |
 | `context`   | ~40ms     | ✗        | Hook data calculation          |
 | `metrics`   | ~40ms     | ✗        | Transcript analysis            |
-| `git`       | ~70ms     | ✗        | No caching for fresh data      |
-| `tmux`      | ~90ms     | ✗        | Environment check + command     |
-| `block`     | ~165ms    | ✗        | 5-hour window transcript load  |
-| `today`     | ~460ms    | ~55ms    | Full daily transcript load     |
-| `version`   | ~40ms     | ✗        | Uses hook data                    |
+| `git`       | ~60ms     | ✗        | Default config parameters      |
+| `tmux`      | ~50ms     | ✗        | Environment check + command    |
+| `block`     | ~240ms    | ✗        | 5-hour window transcript load  |
+| `today`     | ~250ms    | ~45ms    | Full daily transcript load     |
+| `version`   | ~40ms     | ✗        | Uses hook data                 |
 
 • **Tips:** Install globally (`npm install -g`) to avoid npx overhead
 • Disable unused segments
@@ -512,7 +513,7 @@ See [CONTRIBUTORS.md](CONTRIBUTORS.md) for people who have contributed outside o
 
 ### Library Usage
 
-Claude-powerline is designed as a CLI tool for Claude Code statuslines. While the codebase contains reusable components like `PricingService` and `PowerlineRenderer`, we currently focus on the CLI use case to keep the project simple and maintainable.
+Claude-powerline is designed as a CLI tool for Claude Code statuslines. While the codebase contains reusable components like `PowerlineRenderer`, we currently focus on the CLI use case to keep the project simple and maintainable.
 
 ## License
 

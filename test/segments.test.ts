@@ -46,7 +46,6 @@ describe("Segment Time Logic", () => {
           },
           model: "claude-3-5-sonnet",
         },
-        costUSD: 25.5,
         raw: {},
       },
       {
@@ -60,7 +59,6 @@ describe("Segment Time Logic", () => {
           },
           model: "claude-3-5-sonnet",
         },
-        costUSD: 45.75,
         raw: {},
       },
     ];
@@ -94,7 +92,6 @@ describe("Segment Time Logic", () => {
           },
           model: "claude-3-5-sonnet",
         },
-        costUSD: 45.75,
         raw: {},
       };
 
@@ -103,7 +100,6 @@ describe("Segment Time Logic", () => {
       const blockProvider = new BlockProvider();
       const blockInfo = await blockProvider.getActiveBlockInfo();
 
-      expect(blockInfo.cost).toBe(45.75);
       expect(blockInfo.tokens).toBe(3300);
       expect(blockInfo.timeRemaining).toBeGreaterThan(0);
       expect(blockInfo.timeRemaining).toBeLessThanOrEqual(360);
@@ -127,7 +123,6 @@ describe("Segment Time Logic", () => {
           },
           model: "claude-3-5-sonnet",
         },
-        costUSD: 1.0,
         raw: {},
       };
 
@@ -152,7 +147,6 @@ describe("Segment Time Logic", () => {
       const todayProvider = new TodayProvider();
       const todayInfo = await todayProvider.getTodayInfo();
 
-      expect(todayInfo.cost).toBe(71.25);
       expect(todayInfo.tokens).toBe(4950);
 
       expect(todayInfo.tokenBreakdown).toBeDefined();
@@ -205,11 +199,9 @@ describe("Segment Time Logic", () => {
       const blockInfo = await blockProvider.getActiveBlockInfo();
       const todayInfo = await todayProvider.getTodayInfo();
 
-      expect(blockInfo.cost).toBeNull();
       expect(blockInfo.tokens).toBeNull();
       expect(blockInfo.timeRemaining).toBeNull();
 
-      expect(todayInfo.cost).toBeNull();
       expect(todayInfo.tokens).toBeNull();
       expect(todayInfo.tokenBreakdown).toBeNull();
     });
@@ -219,7 +211,6 @@ describe("Segment Time Logic", () => {
         {
           timestamp: new Date(),
           message: {},
-          costUSD: 0,
           raw: {},
         },
       ];
@@ -229,7 +220,6 @@ describe("Segment Time Logic", () => {
       const blockProvider = new BlockProvider();
       const blockInfo = await blockProvider.getActiveBlockInfo();
 
-      expect(blockInfo.cost).toBeNull();
       expect(blockInfo.tokens).toBeNull();
     });
   });

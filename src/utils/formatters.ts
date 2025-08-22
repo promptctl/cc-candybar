@@ -5,12 +5,6 @@ interface TokenBreakdown {
   cacheRead: number;
 }
 
-export function formatCost(cost: number | null): string {
-  if (cost === null) return "$0.00";
-  if (cost < 0.01) return "<$0.01";
-  return `$${cost.toFixed(2)}`;
-}
-
 export function formatTokens(tokens: number | null): string {
   if (tokens === null) return "0 tokens";
   if (tokens === 0) return "0 tokens";

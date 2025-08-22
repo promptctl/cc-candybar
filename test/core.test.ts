@@ -78,7 +78,6 @@ describe("Core Functionality", () => {
               cache_creation_input_tokens: 100,
             },
           },
-          costUSD: 0.05,
         },
         {
           timestamp: "2024-01-01T10:01:00Z",
@@ -89,7 +88,6 @@ describe("Core Functionality", () => {
               cache_read_input_tokens: 200,
             },
           },
-          costUSD: 0.08,
         },
       ];
 
@@ -134,7 +132,8 @@ describe("Core Functionality", () => {
 
       const { ContextProvider } = require("../src/segments/context");
       const contextProvider = new ContextProvider();
-      const result = await contextProvider.calculateContextTokens(transcriptPath);
+      const result =
+        await contextProvider.calculateContextTokens(transcriptPath);
 
       expect(result).toBeDefined();
       expect(result.inputTokens).toBe(15000);
