@@ -278,12 +278,8 @@ export class BlockProvider {
               burnRate = (totalCost / durationMinutes) * 60;
             }
 
-            const nonCacheTokens = entries.reduce((sum, entry) => {
-              return sum + entry.usage.inputTokens + entry.usage.outputTokens;
-            }, 0);
-
-            if (nonCacheTokens > 0) {
-              tokenBurnRate = (nonCacheTokens / durationMinutes) * 60;
+            if (totalTokens > 0) {
+              tokenBurnRate = (totalTokens / durationMinutes) * 60;
             }
           }
         }
