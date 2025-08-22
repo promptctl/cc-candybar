@@ -1,3 +1,16 @@
+## [1.9.1](https://github.com/Owloops/claude-powerline/compare/v1.9.0...v1.9.1) (2025-08-22)
+
+
+### Bug Fixes
+
+* add explicit ccusage and official cost data options for session segment ([968db3e](https://github.com/Owloops/claude-powerline/commit/968db3e62377d2789860fe8b437759c0c9e7e50a))
+* improve stale cache lock detection for better performance ([83eef85](https://github.com/Owloops/claude-powerline/commit/83eef85d6a4b44f91af087e14e6edf26b9ec69ed))
+
+
+### Reverts
+
+* Revert "feat: use authentic hook data and remove pricing service" ([b492350](https://github.com/Owloops/claude-powerline/commit/b492350dc0123dd70b0ee2a149d89b2d28415d26))
+
 # [1.9.0](https://github.com/Owloops/claude-powerline/compare/v1.8.0...v1.9.0) (2025-08-22)
 
 
