@@ -461,8 +461,8 @@ Create custom themes by defining segment colors.
 
 ## Performance
 
-• **~50ms** default config (`directory`, `git`, `model`, `session`, `today`, `context`)
-• **~190ms** full-featured
+• **~80ms** default config (`directory`, `git`, `model`, `session`, `today`, `context`)
+• **~240ms** full-featured
 
 **Benchmark Tool:**
 
@@ -472,13 +472,13 @@ Create custom themes by defining segment colors.
 |-------------|-----------|----------|--------------------------------|
 | `directory` | ~40ms     | ✗        | No external commands           |
 | `model`     | ~40ms     | ✗        | Uses hook data                 |
-| `session`   | ~41ms     | ✗        | Minimal transcript parsing     |
+| `session`   | ~40ms     | ✗        | Minimal transcript parsing     |
 | `context`   | ~40ms     | ✗        | Hook data calculation          |
 | `metrics`   | ~40ms     | ✗        | Transcript analysis            |
-| `git`       | ~70ms     | ✗        | No caching for fresh data      |
-| `tmux`      | ~90ms     | ✗        | Environment check + command     |
-| `block`     | ~165ms    | ✗        | 5-hour window transcript load  |
-| `today`     | ~460ms    | ~55ms    | Full daily transcript load     |
+| `git`       | ~60ms     | ✗        | No caching for fresh data      |
+| `tmux`      | ~50ms     | ✗        | Environment check + command     |
+| `block`     | ~180ms    | ✗        | 5-hour window transcript load  |
+| `today`     | ~250ms    | ~50ms    | Full daily transcript load     |
 | `version`   | ~40ms     | ✗        | Uses hook data                    |
 
 • **Tips:** Install globally (`npm install -g`) to avoid npx overhead
