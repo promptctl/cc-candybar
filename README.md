@@ -436,7 +436,7 @@ Automatically detects terminal color capabilities for optimal display.
 - `ansi256` - 256-color with backgrounds
 - `truecolor` - 24-bit RGB colors
 
-Each theme includes optimized color variants for different terminal capabilities. macOS Terminal.app automatically uses 256-color variants for better appearance.
+Each theme includes optimized color variants for different terminal capabilities.
 
 Respects `NO_COLOR`, `FORCE_COLOR`, and `COLORTERM` environment variables.
 
