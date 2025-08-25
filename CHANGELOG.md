@@ -1,3 +1,11 @@
+## [1.9.5](https://github.com/Owloops/claude-powerline/compare/v1.9.4...v1.9.5) (2025-08-25)
+
+
+### Bug Fixes
+
+* add color depth-optimized theme variants for terminal compatibility ([8d37da5](https://github.com/Owloops/claude-powerline/commit/8d37da5b799127b86e4dd8d546f6a3f1b042345a))
+* isolate test environment variables for CI compatibility ([ed0b292](https://github.com/Owloops/claude-powerline/commit/ed0b2929bc9121fd6e05ca45eb869114b1d9a0d8))
+
 ## [1.9.4](https://github.com/Owloops/claude-powerline/compare/v1.9.3...v1.9.4) (2025-08-22)
 
 
