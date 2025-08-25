@@ -1,7 +1,13 @@
 import type { ClaudeHookData } from "./utils/claude";
 import type { PowerlineColors, ColorTheme } from "./themes";
 import type { PowerlineConfig, LineConfig } from "./config/loader";
-import { hexToAnsi, extractBgToFg } from "./utils/colors";
+import {
+  hexToAnsi,
+  extractBgToFg,
+  getColorSupport,
+  hexToBasicAnsi,
+  hexTo256Ansi,
+} from "./utils/colors";
 import { getTheme } from "./themes";
 import {
   UsageProvider,
@@ -418,6 +424,9 @@ export class PowerlineRenderer {
     const theme = this.config.theme;
     let colorTheme;
 
+    const colorMode = this.config.display.colorCompatibility || "auto";
+    const colorSupport = colorMode === "auto" ? getColorSupport() : colorMode;
+
     if (theme === "custom") {
       colorTheme = this.config.colors?.custom;
       if (!colorTheme) {
@@ -426,22 +435,36 @@ export class PowerlineRenderer {
         );
       }
     } else {
-      colorTheme = getTheme(theme);
+      colorTheme = getTheme(theme, colorSupport);
       if (!colorTheme) {
         console.warn(
           `Built-in theme '${theme}' not found, falling back to 'dark' theme`
         );
-        colorTheme = getTheme("dark")!;
+        colorTheme = getTheme("dark", colorSupport)!;
       }
     }
 
-    const fallbackTheme = getTheme("dark")!;
+    const fallbackTheme = getTheme("dark", colorSupport)!;
+
     const getSegmentColors = (segment: keyof ColorTheme) => {
       const colors = colorTheme[segment] || fallbackTheme[segment];
-      return {
-        bg: hexToAnsi(colors.bg, true),
-        fg: hexToAnsi(colors.fg, false),
-      };
+
+      if (colorSupport === "ansi") {
+        return {
+          bg: hexToBasicAnsi(colors.bg, true),
+          fg: hexToBasicAnsi(colors.fg, false),
+        };
+      } else if (colorSupport === "ansi256") {
+        return {
+          bg: hexTo256Ansi(colors.bg, true),
+          fg: hexTo256Ansi(colors.fg, false),
+        };
+      } else {
+        return {
+          bg: hexToAnsi(colors.bg, true),
+          fg: hexToAnsi(colors.fg, false),
+        };
+      }
     };
 
     const directory = getSegmentColors("directory");
@@ -518,11 +541,15 @@ export class PowerlineRenderer {
   ): string {
     let output = `${bgColor}${fgColor} ${text} `;
 
+    const colorMode = this.config.display.colorCompatibility || "auto";
+    const colorSupport = colorMode === "auto" ? getColorSupport() : colorMode;
+    const isBasicMode = colorSupport === "ansi";
+
     if (nextBgColor) {
-      const arrowFgColor = extractBgToFg(bgColor);
+      const arrowFgColor = extractBgToFg(bgColor, isBasicMode);
       output += `${RESET_CODE}${nextBgColor}${arrowFgColor}${this.symbols.right}`;
     } else {
-      output += `${RESET_CODE}${extractBgToFg(bgColor)}${this.symbols.right}${RESET_CODE}`;
+      output += `${RESET_CODE}${extractBgToFg(bgColor, isBasicMode)}${this.symbols.right}${RESET_CODE}`;
     }
 
     return output;

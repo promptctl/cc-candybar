@@ -34,6 +34,7 @@ export interface LineConfig {
 export interface DisplayConfig {
   lines: LineConfig[];
   style?: "minimal" | "powerline";
+  colorCompatibility?: "auto" | "ansi" | "ansi256" | "truecolor";
 }
 
 export interface BudgetItemConfig {

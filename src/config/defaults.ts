@@ -4,6 +4,7 @@ export const DEFAULT_CONFIG: PowerlineConfig = {
   theme: "dark",
   display: {
     style: "minimal",
+    colorCompatibility: "auto",
     lines: [
       {
         segments: {

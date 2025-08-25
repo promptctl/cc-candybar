@@ -12,3 +12,29 @@ export const darkTheme: ColorTheme = {
   metrics: { bg: "#374151", fg: "#d1d5db" },
   version: { bg: "#3a3a4a", fg: "#b8b8d0" },
 };
+
+export const darkAnsi256Theme: ColorTheme = {
+  directory: { bg: "#af5f00", fg: "#ffffff" },
+  git: { bg: "#444444", fg: "#ffffff" },
+  model: { bg: "#3a3a3a", fg: "#ffffff" },
+  session: { bg: "#262626", fg: "#00ffff" },
+  block: { bg: "#303030", fg: "#87ceeb" },
+  today: { bg: "#1c1c1c", fg: "#87ff87" },
+  tmux: { bg: "#444444", fg: "#87ff87" },
+  context: { bg: "#585858", fg: "#d0d0d0" },
+  metrics: { bg: "#4e4e4e", fg: "#d0d0d0" },
+  version: { bg: "#444444", fg: "#d7afff" },
+};
+
+export const darkAnsiTheme: ColorTheme = {
+  directory: { bg: "#d75f00", fg: "#ffffff" },
+  git: { bg: "#585858", fg: "#ffffff" },
+  model: { bg: "#444444", fg: "#ffffff" },
+  session: { bg: "#303030", fg: "#00ffff" },
+  block: { bg: "#3a3a3a", fg: "#5fafff" },
+  today: { bg: "#262626", fg: "#00ff00" },
+  tmux: { bg: "#585858", fg: "#00ff00" },
+  context: { bg: "#808080", fg: "#ffffff" },
+  metrics: { bg: "#666666", fg: "#ffffff" },
+  version: { bg: "#585858", fg: "#af87ff" },
+};

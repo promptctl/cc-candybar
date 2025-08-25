@@ -2,6 +2,7 @@
   "theme": "custom",
   "display": {
     "style": "powerline",
+    "colorCompatibility": "auto",
     "lines": [
       {
         "segments": {
