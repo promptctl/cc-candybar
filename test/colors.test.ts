@@ -41,25 +41,23 @@ describe("Colors", () => {
     });
 
     it("should detect macOS Terminal as ansi256", () => {
-      process.env = { ...originalEnv };
-      delete process.env.COLORTERM;
-      delete process.env.TERM;
+      process.env = {};
       process.env.TERM_PROGRAM = "Apple_Terminal";
       expect(getColorSupport()).toBe("ansi256");
     });
 
     it("should detect modern terminals as truecolor", () => {
-      process.env = { ...originalEnv };
+      process.env = {};
       process.env.TERM_PROGRAM = "vscode";
       expect(getColorSupport()).toBe("truecolor");
 
-      process.env = { ...originalEnv };
+      process.env = {};
       process.env.TERM = "alacritty";
       expect(getColorSupport()).toBe("truecolor");
     });
 
     it("should respect NO_COLOR", () => {
-      process.env = { ...originalEnv };
+      process.env = {};
       process.env.NO_COLOR = "1";
       expect(getColorSupport()).toBe("none");
     });
