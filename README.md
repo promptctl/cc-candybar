@@ -12,6 +12,12 @@
 
 [![Mentioned in Awesome Claude Code](https://awesome.re/mentioned-badge-flat.svg)](https://github.com/hesreallyhim/awesome-claude-code)
 
+### Demo
+
+<img src="images/demo.gif" alt="Claude Powerline Demo" width="600"/>
+
+*Live demonstration: real-time usage tracking, git integration, and theme showcase*
+
 <table>
    <tr>
       <td align="center">
