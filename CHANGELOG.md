@@ -1,3 +1,10 @@
+## [1.9.8](https://github.com/Owloops/claude-powerline/compare/v1.9.7...v1.9.8) (2025-08-27)
+
+
+### Bug Fixes
+
+* remove redundancy and improve documentation clarity ([23d5a21](https://github.com/Owloops/claude-powerline/commit/23d5a21649b35675f59617f3708633d92fcda13c))
+
 ## [1.9.7](https://github.com/Owloops/claude-powerline/compare/v1.9.6...v1.9.7) (2025-08-27)
 
 
