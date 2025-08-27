@@ -153,7 +153,7 @@ export CLAUDE_POWERLINE_DEBUG=1  # Enable debug logging
 curl -o ~/.claude/claude-powerline.json https://raw.githubusercontent.com/Owloops/claude-powerline/main/.claude-powerline.json
 ```
 
-**Config locations** (first found wins):
+**Config locations** (in priority order):
 
 - `./.claude-powerline.json` - Project-specific
 - `~/.claude/claude-powerline.json` - User config  
@@ -302,6 +302,8 @@ Configure context window limits for different model types. Defaults to 200K toke
 }
 ```
 
+**Display:** `tmux:session-name`
+
 </details>
 
 <details>
@@ -355,12 +357,7 @@ Configure context window limits for different model types. Defaults to 200K toke
 
 **Weighted Tokens:** Opus tokens count 5x toward rate limits compared to Sonnet/Haiku tokens
 
-**Rate Limit Indicators:** `25%` Normal • `+75%` Moderate (50-79%) • `!85%` Warning (80%+)
-
 **Symbols:** `◱` Block
-
-> [!TIP]  
-> Claude's rate limits consider multiple factors beyond tokens (message count, length, attachments, model). See [Anthropic's usage documentation](https://support.anthropic.com/en/articles/11014257-about-claude-s-max-plan-usage) for details.
 
 </details>
 
@@ -399,6 +396,9 @@ Configure context window limits for different model types. Defaults to 200K toke
 - `warningThreshold`: Warning threshold percentage (default: 80)
 
 **Indicators:** `25%` Normal • `+75%` Moderate (50-79%) • `!85%` Warning (80%+)
+
+> [!TIP]  
+> Claude's rate limits consider multiple factors beyond tokens (message count, length, attachments, model). See [Anthropic's usage documentation](https://support.anthropic.com/en/articles/11014257-about-claude-s-max-plan-usage) for details.
 
 ### Multi-line Layout
 
