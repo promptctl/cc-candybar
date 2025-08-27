@@ -1,3 +1,10 @@
+## [1.9.9](https://github.com/Owloops/claude-powerline/compare/v1.9.8...v1.9.9) (2025-08-27)
+
+
+### Bug Fixes
+
+* add live demo gif and improve readme organization ([7c02c18](https://github.com/Owloops/claude-powerline/commit/7c02c18a40718a651fa40e960ea81c20b086ec19))
+
 ## [1.9.8](https://github.com/Owloops/claude-powerline/compare/v1.9.7...v1.9.8) (2025-08-27)
 
 
