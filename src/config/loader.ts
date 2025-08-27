@@ -56,6 +56,7 @@ export interface PowerlineConfig {
     custom: ColorTheme;
   };
   budget?: BudgetConfig;
+  modelContextLimits?: Record<string, number>;
 }
 
 function isValidTheme(theme: string): theme is PowerlineConfig["theme"] {

@@ -277,6 +277,25 @@ Shows context window usage and auto-compact threshold.
 
 **Display:** `◔ 34,040 (79%)` or `◔ 79%` (percentage only)
 
+##### Model Context Limits
+
+Configure context window limits for different model types. Defaults to 200K tokens for all models.
+
+```json
+"modelContextLimits": {
+  "sonnet": 1000000,
+  "opus": 200000
+}
+```
+
+**Available Model Types:**
+
+- `sonnet`: Claude Sonnet models (3.5, 4, etc.)
+- `opus`: Claude Opus models  
+- `default`: Fallback for unrecognized models (200K)
+
+**Note:** Sonnet 4's 1M context window is currently in beta for tier 4+ users. Set `"sonnet": 1000000` when you have access.
+
 ---
 
 #### Tmux

@@ -72,7 +72,7 @@ export class PowerlineRenderer {
 
   private get contextProvider(): ContextProvider {
     if (!this._contextProvider) {
-      this._contextProvider = new ContextProvider();
+      this._contextProvider = new ContextProvider(this.config);
     }
     return this._contextProvider;
   }

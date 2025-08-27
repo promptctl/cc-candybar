@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { debug } from "../utils/logger";
 import { parseJsonlFile, type ParsedEntry } from "../utils/claude";
+import type { PowerlineConfig } from "../config/loader";
 
 export interface ContextInfo {
   inputTokens: number;
@@ -21,13 +22,33 @@ export class ContextProvider {
     LOW: 50,
     MEDIUM: 80,
   };
+  private readonly config: PowerlineConfig;
+
+  constructor(config: PowerlineConfig) {
+    this.config = config;
+  }
 
   getContextUsageThresholds(): ContextUsageThresholds {
     return this.thresholds;
   }
 
-  private getContextLimit(_modelId: string): number {
-    return 200000;
+  private getContextLimit(modelId: string): number {
+    const modelLimits = this.config.modelContextLimits || { default: 200000 };
+    const modelType = this.getModelType(modelId);
+    return modelLimits[modelType] || modelLimits.default || 200000;
+  }
+
+  private getModelType(modelId: string): string {
+    const id = modelId.toLowerCase();
+
+    if (id.includes("sonnet")) {
+      return "sonnet";
+    }
+    if (id.includes("opus")) {
+      return "opus";
+    }
+
+    return "default";
   }
 
   async calculateContextTokens(

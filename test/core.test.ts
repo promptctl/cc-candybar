@@ -1,6 +1,7 @@
 import { PowerlineRenderer } from "../src/powerline";
 import { SessionProvider } from "../src/segments";
 import { loadConfigFromCLI } from "../src/config/loader";
+import { DEFAULT_CONFIG } from "../src/config/defaults";
 import { writeFileSync, unlinkSync, mkdtempSync } from "fs";
 import { join } from "path";
 import { tmpdir } from "os";
@@ -133,12 +134,105 @@ describe("Core Functionality", () => {
       writeFileSync(transcriptPath, transcript);
 
       const { ContextProvider } = require("../src/segments/context");
-      const contextProvider = new ContextProvider();
-      const result = await contextProvider.calculateContextTokens(transcriptPath);
+      const contextProvider = new ContextProvider(DEFAULT_CONFIG);
+      const result =
+        await contextProvider.calculateContextTokens(transcriptPath);
 
       expect(result).toBeDefined();
       expect(result.inputTokens).toBe(15000);
       expect(result.percentage).toBeGreaterThan(0);
+    });
+
+    it("should use configurable context limits for sonnet models", async () => {
+      const transcript = [
+        '{"timestamp":"2024-01-01T10:00:00Z","message":{"usage":{"input_tokens":500000}},"isSidechain":false}',
+      ].join("\n");
+
+      const transcriptPath = join(tempDir, "test-sonnet.jsonl");
+      writeFileSync(transcriptPath, transcript);
+
+      const customConfig = {
+        ...DEFAULT_CONFIG,
+        modelContextLimits: {
+          default: 200000,
+          sonnet: 1000000,
+          opus: 200000,
+        },
+      };
+
+      const { ContextProvider } = require("../src/segments/context");
+      const contextProvider = new ContextProvider(customConfig);
+      const result = await contextProvider.calculateContextTokens(
+        transcriptPath,
+        "claude-sonnet-4-20250514"
+      );
+
+      expect(result).toBeDefined();
+      expect(result.inputTokens).toBe(500000);
+      expect(result.maxTokens).toBe(1000000);
+      expect(result.percentage).toBe(50);
+    });
+
+    it("should use default limit for unknown model types", async () => {
+      const transcript = [
+        '{"timestamp":"2024-01-01T10:00:00Z","message":{"usage":{"input_tokens":100000}},"isSidechain":false}',
+      ].join("\n");
+
+      const transcriptPath = join(tempDir, "test-unknown.jsonl");
+      writeFileSync(transcriptPath, transcript);
+
+      const customConfig = {
+        ...DEFAULT_CONFIG,
+        modelContextLimits: {
+          default: 200000,
+          sonnet: 1000000,
+        },
+      };
+
+      const { ContextProvider } = require("../src/segments/context");
+      const contextProvider = new ContextProvider(customConfig);
+      const result = await contextProvider.calculateContextTokens(
+        transcriptPath,
+        "unknown-model"
+      );
+
+      expect(result).toBeDefined();
+      expect(result.inputTokens).toBe(100000);
+      expect(result.maxTokens).toBe(200000);
+      expect(result.percentage).toBe(50);
+    });
+
+    it("should map model IDs to correct model types", async () => {
+      const transcript = [
+        '{"timestamp":"2024-01-01T10:00:00Z","message":{"usage":{"input_tokens":300000}},"isSidechain":false}',
+      ].join("\n");
+
+      const transcriptPath = join(tempDir, "test-mapping.jsonl");
+      writeFileSync(transcriptPath, transcript);
+
+      const customConfig = {
+        ...DEFAULT_CONFIG,
+        modelContextLimits: {
+          default: 200000,
+          sonnet: 500000,
+          opus: 400000,
+        },
+      };
+
+      const { ContextProvider } = require("../src/segments/context");
+      const contextProvider = new ContextProvider(customConfig);
+
+      const sonnetResult = await contextProvider.calculateContextTokens(
+        transcriptPath,
+        "claude-3-5-sonnet-20241022"
+      );
+      expect(sonnetResult?.maxTokens).toBe(500000);
+
+      const opusResult = await contextProvider.calculateContextTokens(
+        transcriptPath,
+        "claude-opus-4-20250514"
+      );
+      expect(opusResult?.maxTokens).toBe(400000);
     });
   });
 });

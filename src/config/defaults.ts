@@ -56,4 +56,9 @@ export const DEFAULT_CONFIG: PowerlineConfig = {
       amount: 15,
     },
   },
+  modelContextLimits: {
+    default: 200000,
+    sonnet: 200000,
+    opus: 200000,
+  },
 };

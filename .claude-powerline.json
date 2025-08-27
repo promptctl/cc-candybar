@@ -64,5 +64,8 @@
     "session": { "warningThreshold": 80 },
     "today": { "amount": 5.0, "warningThreshold": 80 },
     "block": { "amount": 20000000, "type": "tokens", "warningThreshold": 80 }
+  },
+  "modelContextLimits": {
+    "sonnet": 200000
   }
 }
