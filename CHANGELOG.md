@@ -1,3 +1,10 @@
+## [1.9.7](https://github.com/Owloops/claude-powerline/compare/v1.9.6...v1.9.7) (2025-08-27)
+
+
+### Bug Fixes
+
+* improve readme structure and organization ([5677258](https://github.com/Owloops/claude-powerline/commit/56772583fb05d1d39f97fb06f2776004523a4f48))
+
 ## [1.9.6](https://github.com/Owloops/claude-powerline/compare/v1.9.5...v1.9.6) (2025-08-27)
 
 
