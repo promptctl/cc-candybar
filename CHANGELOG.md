@@ -1,3 +1,10 @@
+## [1.9.6](https://github.com/Owloops/claude-powerline/compare/v1.9.5...v1.9.6) (2025-08-27)
+
+
+### Bug Fixes
+
+* add configurable model context limits to fix sonnet 1m context percentages ([8e12362](https://github.com/Owloops/claude-powerline/commit/8e12362ca71844a2513d38c77184de459dd3b36d))
+
 ## [1.9.5](https://github.com/Owloops/claude-powerline/compare/v1.9.4...v1.9.5) (2025-08-25)
 
 
