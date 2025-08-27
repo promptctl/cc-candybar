@@ -165,9 +165,8 @@ Config files reload automatically and no restart needed.
 
 ### Segment Configuration
 
-#### Directory
-
-Shows current working directory name.
+<details>
+<summary><strong>Directory</strong> - Shows current working directory name</summary>
 
 ```json
 "directory": {
@@ -180,11 +179,10 @@ Shows current working directory name.
 
 - `showBasename`: Show only folder name instead of full path
 
----
+</details>
 
-#### Git
-
-Shows branch, status, and repository information.
+<details>
+<summary><strong>Git</strong> - Shows branch, status, and repository information</summary>
 
 ```json
 "git": {
@@ -215,11 +213,10 @@ Shows branch, status, and repository information.
 
 - `⎇` Branch • `♯` SHA • `⌂` Tag • `⧇` Stash • `✓` Clean • `●` Dirty • `⚠` Conflicts • `↑3` Ahead • `↓2` Behind • `(+1 ~2 ?3)` Staged/Unstaged/Untracked
 
----
+</details>
 
-#### Metrics
-
-Shows performance analytics from your Claude sessions.
+<details>
+<summary><strong>Metrics</strong> - Shows performance analytics from your Claude sessions</summary>
 
 ```json
 "metrics": {
@@ -246,11 +243,10 @@ Shows performance analytics from your Claude sessions.
 
 - `⧖` Total API time • `Δ` Last response • `⧗` Session duration • `⟐` Messages • `+` Lines added • `-` Lines removed
 
----
+</details>
 
-#### Model
-
-Shows current Claude model being used.
+<details>
+<summary><strong>Model</strong> - Shows current Claude model being used</summary>
 
 ```json
 "model": {
@@ -258,11 +254,10 @@ Shows current Claude model being used.
 }
 ```
 
----
+</details>
 
-#### Context
-
-Shows context window usage and auto-compact threshold.
+<details>
+<summary><strong>Context</strong> - Shows context window usage and auto-compact threshold</summary>
 
 ```json
 "context": {
@@ -296,11 +291,10 @@ Configure context window limits for different model types. Defaults to 200K toke
 
 **Note:** Sonnet 4's 1M context window is currently in beta for tier 4+ users. Set `"sonnet": 1000000` when you have access.
 
----
+</details>
 
-#### Tmux
-
-Shows tmux session name and window info when in tmux.
+<details>
+<summary><strong>Tmux</strong> - Shows tmux session name and window info when in tmux</summary>
 
 ```json
 "tmux": {
@@ -308,11 +302,10 @@ Shows tmux session name and window info when in tmux.
 }
 ```
 
----
+</details>
 
-#### Version
-
-Shows Claude Code version.
+<details>
+<summary><strong>Version</strong> - Shows Claude Code version</summary>
 
 ```json
 "version": {
@@ -322,11 +315,10 @@ Shows Claude Code version.
 
 **Display:** `v1.0.81`
 
----
+</details>
 
-#### Session
-
-Shows real-time usage for current Claude conversation.
+<details>
+<summary><strong>Session</strong> - Shows real-time usage for current Claude conversation</summary>
 
 ```json
 "session": {
@@ -343,11 +335,10 @@ Shows real-time usage for current Claude conversation.
 
 **Symbols:** `§` Session
 
----
+</details>
 
-#### Block
-
-Shows usage within current 5-hour billing window (Claude\'s rate limit period).
+<details>
+<summary><strong>Block</strong> - Shows usage within current 5-hour billing window (Claude's rate limit period)</summary>
 
 ```json
 "block": {
@@ -371,11 +362,10 @@ Shows usage within current 5-hour billing window (Claude\'s rate limit period).
 > [!TIP]  
 > Claude's rate limits consider multiple factors beyond tokens (message count, length, attachments, model). See [Anthropic's usage documentation](https://support.anthropic.com/en/articles/11014257-about-claude-s-max-plan-usage) for details.
 
----
+</details>
 
-#### Today
-
-Shows total daily usage with budget monitoring.
+<details>
+<summary><strong>Today</strong> - Shows total daily usage with budget monitoring</summary>
 
 ```json
 "today": {
@@ -389,6 +379,8 @@ Shows total daily usage with budget monitoring.
 - `type`: Display format - `cost` | `tokens` | `both` | `breakdown`
 
 **Symbols:** `☉` Today
+
+</details>
 
 ### Budget Configuration
 
@@ -438,34 +430,16 @@ Prevent segment cutoff by organizing segments across multiple lines.
 > [!NOTE]  
 > Claude Code system messages may truncate long status lines. Multi-line layouts prevent segment cutoff and improve readability.
 
-### Color Compatibility
+### Colors & Themes
 
-Automatically detects terminal color capabilities for optimal display.
-
-```json
-{
-  "display": {
-    "colorCompatibility": "auto"
-  }
-}
-```
-
-- `auto` (default) - Automatic detection
-- `ansi` - 16-color text-only mode  
-- `ansi256` - 256-color with backgrounds
-- `truecolor` - 24-bit RGB colors
-
-Each theme includes optimized color variants for different terminal capabilities.
-
-Respects `NO_COLOR`, `FORCE_COLOR`, and `COLORTERM` environment variables.
-
-### Custom Colors
-
-Create custom themes by defining segment colors.
+Create custom themes and configure color compatibility:
 
 ```json
 {
   "theme": "custom",
+  "display": {
+    "colorCompatibility": "auto"
+  },
   "colors": {
     "custom": {
       "directory": { "bg": "#ff6600", "fg": "#ffffff" },
@@ -476,47 +450,46 @@ Create custom themes by defining segment colors.
 }
 ```
 
-**Color Options:**
+**Color Options:** `bg` (hex, `transparent`, `none`) • `fg` (hex)
 
-- `bg`: Background color (hex, `transparent`, or `none`)
-- `fg`: Foreground/text color (hex)
-
-> [!TIP]  
-> Copy existing theme colors from `src/themes/` in the repository as a starting point.
+**Compatibility Modes:** `auto` (default), `ansi`, `ansi256`, `truecolor`. Respects `NO_COLOR`, `FORCE_COLOR`, and `COLORTERM` environment variables.
 
 ## Performance
 
-• **~80ms** default config (`directory`, `git`, `model`, `session`, `today`, `context`)
-• **~240ms** full-featured
+Execution times for different configurations:
 
-**Benchmark Tool:**
+- **~80ms** default config (`directory`, `git`, `model`, `session`, `today`, `context`)
+- **~240ms** full-featured (all segments enabled)
 
-- `npm run benchmark:timing` - Execution timing tests
+<details>
+<summary><strong>Detailed Segment Timings</strong></summary>
 
-| Segment     | Timing    | Notes                           |
-|-------------|-----------|--------------------------------|
-| `directory` | ~40ms     | No external commands           |
-| `model`     | ~40ms     | Uses hook data                 |
-| `session`   | ~40ms     | Minimal transcript parsing     |
-| `context`   | ~40ms     | Hook data calculation          |
-| `metrics`   | ~40ms     | Transcript analysis            |
-| `git`       | ~60ms     | No caching for fresh data      |
-| `tmux`      | ~50ms     | Environment check + command     |
-| `block`     | ~180ms    | 5-hour window transcript load  |
-| `today`     | ~250ms    | Full daily transcript load (cached: ~50ms) |
-| `version`   | ~40ms     | Uses hook data                    |
+| Segment | Timing | Notes |
+|---------|--------|-------|
+| `directory` | ~40ms | No external commands |
+| `model` | ~40ms | Uses hook data |
+| `session` | ~40ms | Minimal transcript parsing |
+| `context` | ~40ms | Hook data calculation |
+| `metrics` | ~40ms | Transcript analysis |
+| `git` | ~60ms | No caching for fresh data |
+| `tmux` | ~50ms | Environment check + command |
+| `block` | ~180ms | 5-hour window transcript load |
+| `today` | ~250ms | Full daily transcript load (cached: ~50ms) |
+| `version` | ~40ms | Uses hook data |
 
-• **Tips:** Install globally (`npm install -g`) to avoid npx overhead
-• Disable unused segments
-• **Cache cleanup:** Remove `~/.claude/powerline/` to clear usage cache if needed
+**Benchmark:** `npm run benchmark:timing`
+
+</details>
+
+### Optimization Tips
+
+- **Global install:** `npm install -g` to avoid npx overhead
+- **Disable unused segments** for faster execution
+- **Cache cleanup:** Remove `~/.claude/powerline/` if needed
 
 ## Custom Segments
 
-Extend the statusline using shell composition for unlimited flexibility.
-
-### Simple Addition
-
-Add custom segments using shell commands:
+Extend the statusline using shell composition:
 
 ```json
 {
@@ -528,37 +501,14 @@ Add custom segments using shell commands:
 }
 ```
 
-### With Colors
-
-Use `tput` for terminal-compatible colors:
-
-```bash
-echo "$(tput setab 4)$(tput setaf 15) ⏱ $(date +%H:%M) $(tput sgr0)"
-# setab: background (1-7) | setaf: foreground (0-15) | sgr0: reset
-```
-
-### Advanced Script
-
-Create `~/.local/bin/my-statusline` for complex extensions:
-
-```bash
-#!/bin/bash
-npx -y @owloops/claude-powerline
-echo "$(tput setab 6)$(tput setaf 0) ⏱ $(date +%H:%M) $(tput sgr0)"
-```
-
-> [!TIP]  
-> Shell composition provides unlimited flexibility while keeping the core package secure.
+> [!NOTE]  
+> Use `tput` for colors: `setab <bg>` (background), `setaf <fg>` (foreground), `sgr0` (reset). Example: `echo "$(tput setab 4)$(tput setaf 15) text $(tput sgr0)"`. For complex logic, create a shell script with multiple commands, conditions, and variables.
 
 ## Contributing
 
 Contributions are welcome! Please feel free to submit issues or pull requests.
 
 See [CONTRIBUTORS.md](CONTRIBUTORS.md) for people who have contributed outside of GitHub PRs.
-
-### Library Usage
-
-Claude-powerline is designed as a CLI tool for Claude Code statuslines. While the codebase contains reusable components like `PricingService` and `PowerlineRenderer`, we currently focus on the CLI use case to keep the project simple and maintainable.
 
 ## License
 
