@@ -156,6 +156,46 @@ const OFFLINE_PRICING_DATA: Record<string, ModelPricing> = {
     cache_write_1h: 6.0,
     cache_read: 0.3,
   },
+  "claude-opus-4-5": {
+    name: "Claude Opus 4.5",
+    input: 5.0,
+    output: 25.0,
+    cache_write_5m: 6.25,
+    cache_write_1h: 10.0,
+    cache_read: 0.5,
+  },
+  "claude-opus-4-5-20251101": {
+    name: "Claude Opus 4.5",
+    input: 5.0,
+    output: 25.0,
+    cache_write_5m: 6.25,
+    cache_write_1h: 10.0,
+    cache_read: 0.5,
+  },
+  "claude-opus-4-6": {
+    name: "Claude Opus 4.6",
+    input: 5.0,
+    output: 25.0,
+    cache_write_5m: 6.25,
+    cache_write_1h: 10.0,
+    cache_read: 0.5,
+  },
+  "claude-opus-4-6-20260205": {
+    name: "Claude Opus 4.6",
+    input: 5.0,
+    output: 25.0,
+    cache_write_5m: 6.25,
+    cache_write_1h: 10.0,
+    cache_read: 0.5,
+  },
+  "claude-sonnet-4-6": {
+    name: "Claude Sonnet 4.6",
+    input: 3.0,
+    output: 15.0,
+    cache_write_5m: 3.75,
+    cache_write_1h: 6.0,
+    cache_read: 0.3,
+  },
   "claude-3-7-sonnet-latest": {
     name: "Claude 3.7 Sonnet Latest",
     input: 3.0,
@@ -382,12 +422,24 @@ export class PricingService {
     }
     const patterns = [
       {
+        pattern: ["opus-4-6", "claude-opus-4-6"],
+        fallback: "claude-opus-4-6-20260205",
+      },
+      {
+        pattern: ["opus-4-5", "claude-opus-4-5"],
+        fallback: "claude-opus-4-5-20251101",
+      },
+      {
         pattern: ["opus-4-1", "claude-opus-4-1"],
         fallback: "claude-opus-4-1-20250805",
       },
       {
         pattern: ["opus-4", "claude-opus-4"],
         fallback: "claude-opus-4-20250514",
+      },
+      {
+        pattern: ["sonnet-4-6", "sonnet-4.6", "claude-sonnet-4-6"],
+        fallback: "claude-sonnet-4-6",
       },
       {
         pattern: ["sonnet-4.5", "4-5-sonnet", "sonnet-4-5"],
