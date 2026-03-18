@@ -1,3 +1,10 @@
+## [1.20.1](https://github.com/Owloops/claude-powerline/compare/v1.20.0...v1.20.1) (2026-03-18)
+
+
+### Bug Fixes
+
+* **pricing:** add opus 4.5/4.6 and sonnet 4.6 to offline pricing and fuzzy match ([#71](https://github.com/Owloops/claude-powerline/issues/71)) ([9ce358c](https://github.com/Owloops/claude-powerline/commit/9ce358c1b7f8a904851c24634f464dd74795876d))
+
 # [1.20.0](https://github.com/Owloops/claude-powerline/compare/v1.19.6...v1.20.0) (2026-03-18)
 
 
