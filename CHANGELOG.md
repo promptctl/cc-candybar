@@ -1,3 +1,10 @@
+# [1.20.0](https://github.com/Owloops/claude-powerline/compare/v1.19.6...v1.20.0) (2026-03-18)
+
+
+### Features
+
+* add TUI panel display mode ([#70](https://github.com/Owloops/claude-powerline/issues/70)) ([74c7b63](https://github.com/Owloops/claude-powerline/commit/74c7b63493703fdb772886252a692e772c06435e))
+
 ## [1.19.6](https://github.com/Owloops/claude-powerline/compare/v1.19.5...v1.19.6) (2026-03-12)
 
 
