@@ -7,6 +7,7 @@ import {
   getColorSupport,
   hexToBasicAnsi,
   hexTo256Ansi,
+  hexColorDistance,
 } from "./utils/colors";
 import { getTheme } from "./themes";
 import {
@@ -33,8 +34,10 @@ import {
 } from "./segments";
 import { BlockProvider, BlockInfo } from "./segments/block";
 import { TodayProvider, TodayInfo } from "./segments/today";
-import { SYMBOLS, TEXT_SYMBOLS, RESET_CODE } from "./utils/constants";
+import { SYMBOLS, TEXT_SYMBOLS, RESET_CODE, BOX_CHARS, BOX_CHARS_TEXT } from "./utils/constants";
 import { getTerminalWidth, visibleLength } from "./utils/terminal";
+import { renderTuiPanel } from "./tui";
+import type { TuiData } from "./tui";
 
 interface RenderedSegment {
   type: string;
@@ -121,6 +124,10 @@ export class PowerlineRenderer {
   }
 
   async generateStatusline(hookData: ClaudeHookData): Promise<string> {
+    if (this.config.display.style === "tui") {
+      return this.generateTuiStatusline(hookData);
+    }
+
     const usageInfo = this.needsSegmentInfo("session")
       ? await this.usageProvider.getUsageInfo(hookData.session_id, hookData)
       : null;
@@ -247,6 +254,51 @@ export class PowerlineRenderer {
     }
 
     return outputLines.join("\n");
+  }
+
+  private async generateTuiStatusline(hookData: ClaudeHookData): Promise<string> {
+    const colors = this.getThemeColors();
+    const terminalWidth = getTerminalWidth();
+    const currentDir = hookData.workspace?.current_dir || hookData.cwd || "/";
+    const charset = this.config.display.charset || "unicode";
+    const boxChars = charset === "text" ? BOX_CHARS_TEXT : BOX_CHARS;
+    const contextSegmentConfig = this.config.display.lines
+      .map((line) => line.segments.context)
+      .find((c) => c?.enabled) as ContextSegmentConfig | undefined;
+    const autocompactBuffer = contextSegmentConfig?.autocompactBuffer ?? 33000;
+
+    const results = await Promise.allSettled([
+      this.usageProvider.getUsageInfo(hookData.session_id, hookData),
+      this.blockProvider.getActiveBlockInfo(),
+      this.todayProvider.getTodayInfo(),
+      this.contextProvider.getContextInfo(hookData, autocompactBuffer),
+      this.metricsProvider.getMetricsInfo(hookData.session_id, hookData),
+      this.gitService.getGitInfo(
+        currentDir,
+        { showSha: false, showWorkingTree: true, showOperation: false, showTag: false, showTimeSinceCommit: false, showStashCount: false, showUpstream: false, showRepoName: false },
+        hookData.workspace?.project_dir,
+      ),
+      this.tmuxService.getSessionId(),
+    ]);
+    const val = <T>(r: PromiseSettledResult<T>) => r.status === "fulfilled" ? r.value : null;
+    const [usageInfo, blockInfo, todayInfo, contextInfo, metricsInfo, gitInfo, tmuxSessionId] = [
+      val(results[0]!), val(results[1]!), val(results[2]!), val(results[3]!),
+      val(results[4]!), val(results[5]!), val(results[6]!),
+    ] as const;
+
+    const tuiData: TuiData = {
+      hookData,
+      usageInfo,
+      blockInfo,
+      todayInfo,
+      contextInfo,
+      metricsInfo,
+      gitInfo,
+      tmuxSessionId,
+      colors,
+    };
+
+    return renderTuiPanel(tuiData, boxChars, colors.reset, terminalWidth, this.config);
   }
 
   private calculateSegmentWidth(segment: RenderedSegment, isFirst: boolean): number {
@@ -591,8 +643,17 @@ export class PowerlineRenderer {
 
     const fallbackTheme = getTheme("dark", colorSupport)!;
 
-    const getSegmentColors = (segment: keyof ColorTheme) => {
+    const isTui = this.config.display.style === "tui";
+    const isLightTheme = theme === "light";
+    const terminalRef = isLightTheme ? "#f0f0f0" : "#1e1e1e";
+
+    const getSegmentColors = (segment: Exclude<keyof ColorTheme, "tui">) => {
       const colors = colorTheme[segment] || fallbackTheme[segment];
+
+      let fgHex = colors.fg;
+      if (isTui && hexColorDistance(fgHex, terminalRef) < 60) {
+        fgHex = colors.bg;
+      }
 
       if (colorSupport === "none") {
         return {
@@ -602,17 +663,17 @@ export class PowerlineRenderer {
       } else if (colorSupport === "ansi") {
         return {
           bg: hexToBasicAnsi(colors.bg, true),
-          fg: hexToBasicAnsi(colors.fg, false),
+          fg: hexToBasicAnsi(fgHex, false),
         };
       } else if (colorSupport === "ansi256") {
         return {
           bg: hexTo256Ansi(colors.bg, true),
-          fg: hexTo256Ansi(colors.fg, false),
+          fg: hexTo256Ansi(fgHex, false),
         };
       } else {
         return {
           bg: hexToAnsi(colors.bg, true),
-          fg: hexToAnsi(colors.fg, false),
+          fg: hexToAnsi(fgHex, false),
         };
       }
     };
