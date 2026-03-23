@@ -30,6 +30,7 @@ import {
   BlockSegmentConfig,
   TodaySegmentConfig,
   VersionSegmentConfig,
+  SessionIdSegmentConfig,
   EnvSegmentConfig,
 } from "./segments";
 import { BlockProvider, BlockInfo } from "./segments/block";
@@ -431,6 +432,12 @@ export class PowerlineRenderer {
       );
     }
 
+    if (segment.type === "sessionId") {
+      return hookData.session_id
+        ? this.segmentRenderer.renderSessionId(hookData.session_id, colors, segment.config as SessionIdSegmentConfig)
+        : null;
+    }
+
     if (segment.type === "tmux") {
       return await this.renderTmuxSegment(colors);
     }
@@ -614,6 +621,7 @@ export class PowerlineRenderer {
       bar_filled: symbolSet.bar_filled,
       bar_empty: symbolSet.bar_empty,
       env: symbolSet.env,
+      session_id: symbolSet.session_id,
     };
   }
 
@@ -735,6 +743,7 @@ export class PowerlineRenderer {
       case "model":
         return colors.modelBg;
       case "session":
+      case "sessionId":
         return colors.sessionBg;
       case "block":
         return colors.blockBg;

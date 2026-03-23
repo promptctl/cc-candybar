@@ -32,6 +32,7 @@ export const SYMBOLS = {
   bar_filled: "▪",
   bar_empty: "▫",
   env: "⚙",
+  session_id: "⌗",
 } as const;
 
 export const BOX_CHARS = {
@@ -88,5 +89,6 @@ export const TEXT_SYMBOLS = {
   bar_filled: "=",
   bar_empty: "-",
   env: "$",
+  session_id: "#",
 } as const;
 
