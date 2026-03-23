@@ -2,6 +2,7 @@ import js from "@eslint/js";
 import tseslint from "@typescript-eslint/eslint-plugin";
 import tsparser from "@typescript-eslint/parser";
 import prettierConfig from "eslint-config-prettier";
+import prettierPlugin from "eslint-plugin-prettier";
 
 export default [
   js.configs.recommended,
@@ -31,6 +32,7 @@ export default [
     },
     plugins: {
       "@typescript-eslint": tseslint,
+      prettier: prettierPlugin,
     },
     rules: {
       "no-unused-vars": "off",
@@ -43,6 +45,7 @@ export default [
       "no-var": "error",
       "no-empty": ["error", { allowEmptyCatch: true }],
       "no-case-declarations": "off",
+      "prettier/prettier": "error",
     },
   },
   prettierConfig,
