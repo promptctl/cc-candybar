@@ -33,7 +33,12 @@ export const DEFAULT_CONFIG: PowerlineConfig = {
           version: { enabled: false },
           tmux: { enabled: false },
           sessionId: { enabled: false, showIdLabel: true },
-          context: { enabled: true, showPercentageOnly: false, displayStyle: "text", autocompactBuffer: 33000 },
+          context: {
+            enabled: true,
+            showPercentageOnly: false,
+            displayStyle: "text",
+            autocompactBuffer: 33000,
+          },
           metrics: {
             enabled: false,
             showResponseTime: true,

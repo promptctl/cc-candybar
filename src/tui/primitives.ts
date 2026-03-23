@@ -45,7 +45,11 @@ export function truncateAnsi(text: string, maxWidth: number): string {
   return result;
 }
 
-export function contentRow(box: BoxChars, content: string, innerWidth: number): string {
+export function contentRow(
+  box: BoxChars,
+  content: string,
+  innerWidth: number,
+): string {
   const maxContent = innerWidth - 2;
   const truncated = truncateAnsi(content, maxContent);
   const padded = padRight(truncated, maxContent);
@@ -82,7 +86,11 @@ export function spreadEven(parts: string[], totalWidth: number): string {
   let result = parts[0] ?? "";
   let usedWidth = widths[0] ?? 0;
   for (let i = 1; i < parts.length; i++) {
-    const remaining = totalWidth - usedWidth - (suffixWidths[i] ?? 0) - (parts.length - 1 - i) * 2;
+    const remaining =
+      totalWidth -
+      usedWidth -
+      (suffixWidths[i] ?? 0) -
+      (parts.length - 1 - i) * 2;
     const gap = Math.max(2, Math.min(gapPerSlot, remaining));
     result += " ".repeat(gap) + (parts[i] ?? "");
     usedWidth += gap + (widths[i] ?? 0);
@@ -91,7 +99,11 @@ export function spreadEven(parts: string[], totalWidth: number): string {
   return result;
 }
 
-export function spreadTwo(left: string, right: string, totalWidth: number): string {
+export function spreadTwo(
+  left: string,
+  right: string,
+  totalWidth: number,
+): string {
   if (!right) {
     return left;
   }

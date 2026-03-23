@@ -1,16 +1,14 @@
-export { GitService, GitInfo } from "./git";
+export { GitService } from "./git";
+export type { GitInfo } from "./git";
 export { TmuxService } from "./tmux";
-export {
-  SessionProvider,
-  UsageProvider,
-  SessionInfo,
-  UsageInfo,
-  TokenBreakdown,
-} from "./session";
-export { ContextProvider, ContextInfo } from "./context";
-export { MetricsProvider, MetricsInfo } from "./metrics";
-export {
-  SegmentRenderer,
+export { SessionProvider, UsageProvider } from "./session";
+export type { SessionInfo, UsageInfo, TokenBreakdown } from "./session";
+export { ContextProvider } from "./context";
+export type { ContextInfo } from "./context";
+export { MetricsProvider } from "./metrics";
+export type { MetricsInfo } from "./metrics";
+export { SegmentRenderer } from "./renderer";
+export type {
   PowerlineSymbols,
   AnySegmentConfig,
   DirectorySegmentConfig,

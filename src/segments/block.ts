@@ -60,7 +60,7 @@ export class BlockProvider {
     const sessionDurationMs = this.sessionDurationHours * 60 * 60 * 1000;
     const blocks: UsageEntry[][] = [];
     const sortedEntries = [...entries].sort(
-      (a, b) => a.timestamp.getTime() - b.timestamp.getTime()
+      (a, b) => a.timestamp.getTime() - b.timestamp.getTime(),
     );
 
     let currentBlockStart: Date | null = null;
@@ -106,7 +106,7 @@ export class BlockProvider {
 
   private createBlockInfo(
     startTime: Date,
-    entries: UsageEntry[]
+    entries: UsageEntry[],
   ): { block: UsageEntry[]; isActive: boolean } {
     const now = new Date();
     const sessionDurationMs = this.sessionDurationHours * 60 * 60 * 1000;
@@ -154,7 +154,7 @@ export class BlockProvider {
       const parsedEntries = await loadEntriesFromProjects(
         undefined,
         fileFilter,
-        true
+        true,
       );
 
       const allUsageEntries: UsageEntry[] = [];
@@ -165,7 +165,7 @@ export class BlockProvider {
 
           if (!usageEntry.costUSD && entry.raw) {
             usageEntry.costUSD = await PricingService.calculateCostForEntry(
-              entry.raw
+              entry.raw,
             );
           }
 
@@ -181,13 +181,13 @@ export class BlockProvider {
       let result: UsageEntry[] = [];
       if (activeBlock && activeBlock.length > 0) {
         debug(
-          `Block segment: Found active block with ${activeBlock.length} entries`
+          `Block segment: Found active block with ${activeBlock.length} entries`,
         );
         const blockStart = activeBlock[0];
         const blockEnd = activeBlock[activeBlock.length - 1];
         if (blockStart && blockEnd) {
           debug(
-            `Block segment: Active block from ${blockStart.timestamp.toISOString()} to ${blockEnd.timestamp.toISOString()}`
+            `Block segment: Active block from ${blockStart.timestamp.toISOString()} to ${blockEnd.timestamp.toISOString()}`,
           );
         }
         result = activeBlock;
@@ -249,12 +249,14 @@ export class BlockProvider {
           const sessionDurationMs = this.sessionDurationHours * 60 * 60 * 1000;
           const blockStartTime = this.floorToHour(firstEntry.timestamp);
           const sessionEndTime = new Date(
-            blockStartTime.getTime() + sessionDurationMs
+            blockStartTime.getTime() + sessionDurationMs,
           );
 
           timeRemaining = Math.max(
             0,
-            Math.round((sessionEndTime.getTime() - now.getTime()) / (1000 * 60))
+            Math.round(
+              (sessionEndTime.getTime() - now.getTime()) / (1000 * 60),
+            ),
           );
         }
       }
@@ -286,7 +288,7 @@ export class BlockProvider {
       }
 
       debug(
-        `Block segment: $${totalCost.toFixed(2)}, ${totalTokens} tokens, ${timeRemaining}m remaining, burn rate: ${burnRate ? "$" + burnRate.toFixed(2) + "/hr" : "N/A"}`
+        `Block segment: $${totalCost.toFixed(2)}, ${totalTokens} tokens, ${timeRemaining}m remaining, burn rate: ${burnRate ? "$" + burnRate.toFixed(2) + "/hr" : "N/A"}`,
       );
 
       return {

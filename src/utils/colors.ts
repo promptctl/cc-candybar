@@ -17,7 +17,7 @@ export function hexToAnsi(hex: string, isBackground: boolean): string {
 
 export function extractBgToFg(
   ansiCode: string,
-  useTextOnly: boolean = false
+  useTextOnly: boolean = false,
 ): string {
   if (!ansiCode || ansiCode === "") {
     return "";
@@ -133,7 +133,7 @@ export function getColorSupport(): "none" | "ansi" | "ansi256" | "truecolor" {
 
   if (
     /^screen|^xterm|^vt100|^vt220|^rxvt|color|ansi|cygwin|linux/i.test(
-      env.TERM || ""
+      env.TERM || "",
     )
   ) {
     return "ansi";

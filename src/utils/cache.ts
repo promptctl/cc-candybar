@@ -19,7 +19,7 @@ export class CacheManager {
   private static readonly CACHE_DIR = path.join(
     homedir(),
     ".claude",
-    "powerline"
+    "powerline",
   );
   private static readonly USAGE_CACHE_DIR = path.join(this.CACHE_DIR, "usage");
   private static readonly LOCKS_DIR = path.join(this.CACHE_DIR, "locks");
@@ -60,7 +60,7 @@ export class CacheManager {
 
   private static async acquireLock(
     name: string,
-    timeout = 5000
+    timeout = 5000,
   ): Promise<boolean> {
     const RETRY_DELAY_MS = 50;
     const FILE_CREATE_FLAG = "wx";
@@ -119,7 +119,7 @@ export class CacheManager {
 
   static async getUsageCache(
     cacheType: "today" | "block" | "pricing",
-    latestMtime?: number
+    latestMtime?: number,
   ): Promise<any | null> {
     const MAX_RETRIES = 3;
     const RETRY_DELAY_MS = 75;
@@ -147,7 +147,7 @@ export class CacheManager {
           return this.deserializeDates(cached.data);
         } else {
           debug(
-            `${cacheType} cache outdated: cache=${cached.timestamp}, latest=${latestMtime}`
+            `${cacheType} cache outdated: cache=${cached.timestamp}, latest=${latestMtime}`,
           );
           return null;
         }
@@ -158,7 +158,7 @@ export class CacheManager {
         }
         const attemptNumber = attempt + 1;
         debug(
-          `Attempt ${attemptNumber} failed to read ${cacheType} cache: ${error.message}. Retrying...`
+          `Attempt ${attemptNumber} failed to read ${cacheType} cache: ${error.message}. Retrying...`,
         );
         await setTimeout(RETRY_DELAY_MS);
       }
@@ -181,7 +181,7 @@ export class CacheManager {
   static async setUsageCache(
     cacheType: "today" | "block" | "pricing",
     data: any,
-    latestMtime?: number
+    latestMtime?: number,
   ): Promise<void> {
     const lockName = `${cacheType}.usage.lock`;
     const lockAcquired = await this.acquireLock(lockName);

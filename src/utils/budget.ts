@@ -6,7 +6,7 @@ export interface BudgetStatus {
 
 export function calculateBudgetPercentage(
   cost: number,
-  budget: number | undefined
+  budget: number | undefined,
 ): number | null {
   if (!budget || budget <= 0 || cost < 0) return null;
   return Math.min(100, (cost / budget) * 100);
@@ -15,7 +15,7 @@ export function calculateBudgetPercentage(
 export function getBudgetStatus(
   cost: number,
   budget: number | undefined,
-  warningThreshold = 80
+  warningThreshold = 80,
 ): BudgetStatus {
   const percentage = calculateBudgetPercentage(cost, budget);
 

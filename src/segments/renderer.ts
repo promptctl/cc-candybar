@@ -35,7 +35,18 @@ export interface TmuxSegmentConfig extends SegmentConfig {}
 
 export interface ContextSegmentConfig extends SegmentConfig {
   showPercentageOnly?: boolean;
-  displayStyle?: "text" | "ball" | "bar" | "blocks" | "blocks-line" | "capped" | "dots" | "filled" | "geometric" | "line" | "squares";
+  displayStyle?:
+    | "text"
+    | "ball"
+    | "bar"
+    | "blocks"
+    | "blocks-line"
+    | "capped"
+    | "dots"
+    | "filled"
+    | "geometric"
+    | "line"
+    | "squares";
   autocompactBuffer?: number;
   percentageMode?: "remaining" | "used";
 }
@@ -148,15 +159,15 @@ interface BarStyleDef {
 }
 
 const BAR_STYLES: Record<string, BarStyleDef> = {
-  ball:          { filled: "─", empty: "─", marker: "●" },
-  blocks:        { filled: "█", empty: "░" },
+  ball: { filled: "─", empty: "─", marker: "●" },
+  blocks: { filled: "█", empty: "░" },
   "blocks-line": { filled: "█", empty: "─" },
-  capped:        { filled: "━", empty: "┄", cap: "╸" },
-  dots:          { filled: "●", empty: "○" },
-  filled:        { filled: "■", empty: "□" },
-  geometric:     { filled: "▰", empty: "▱" },
-  line:          { filled: "━", empty: "┄" },
-  squares:       { filled: "◼", empty: "◻" },
+  capped: { filled: "━", empty: "┄", cap: "╸" },
+  dots: { filled: "●", empty: "○" },
+  filled: { filled: "■", empty: "□" },
+  geometric: { filled: "▰", empty: "▱" },
+  line: { filled: "━", empty: "┄" },
+  squares: { filled: "◼", empty: "◻" },
 };
 
 export class SegmentRenderer {
@@ -350,7 +361,9 @@ export class SegmentRenderer {
     config?: SessionIdSegmentConfig,
   ): SegmentData {
     const showLabel = config?.showIdLabel !== false;
-    const text = showLabel ? `${this.symbols.session_id} ${sessionId}` : sessionId;
+    const text = showLabel
+      ? `${this.symbols.session_id} ${sessionId}`
+      : sessionId;
 
     return {
       text,
@@ -388,9 +401,13 @@ export class SegmentRenderer {
     const defaultMode = style === "text" ? "remaining" : "used";
     const mode = config?.percentageMode ?? defaultMode;
 
-    const barStyleDef = style === "bar"
-      ? { filled: this.symbols.bar_filled, empty: this.symbols.bar_empty } as BarStyleDef
-      : BAR_STYLES[style] ?? null;
+    const barStyleDef =
+      style === "bar"
+        ? ({
+            filled: this.symbols.bar_filled,
+            empty: this.symbols.bar_empty,
+          } as BarStyleDef)
+        : (BAR_STYLES[style] ?? null);
 
     const emptyPct = mode === "remaining" ? "100%" : "0%";
     if (!contextInfo) {
@@ -420,14 +437,22 @@ export class SegmentRenderer {
       fgColor = colors.contextWarningFg;
     }
 
-    const pct = mode === "remaining"
-      ? contextInfo.contextLeftPercentage
-      : contextInfo.usablePercentage;
-    const filledCount = Math.round((contextInfo.usablePercentage / 100) * barLength);
+    const pct =
+      mode === "remaining"
+        ? contextInfo.contextLeftPercentage
+        : contextInfo.usablePercentage;
+    const filledCount = Math.round(
+      (contextInfo.usablePercentage / 100) * barLength,
+    );
     const emptyCount = barLength - filledCount;
 
     if (barStyleDef) {
-      const bar = this.buildBar(barStyleDef, filledCount, emptyCount, barLength);
+      const bar = this.buildBar(
+        barStyleDef,
+        filledCount,
+        emptyCount,
+        barLength,
+      );
 
       const text = config?.showPercentageOnly
         ? `${bar} ${pct}%`
@@ -443,10 +468,17 @@ export class SegmentRenderer {
     return { text, bgColor, fgColor };
   }
 
-  private buildBar(s: BarStyleDef, filledCount: number, emptyCount: number, barLength: number): string {
+  private buildBar(
+    s: BarStyleDef,
+    filledCount: number,
+    emptyCount: number,
+    barLength: number,
+  ): string {
     if (s.marker) {
       const pos = Math.min(filledCount, barLength - 1);
-      return s.filled.repeat(pos) + s.marker + s.empty.repeat(barLength - pos - 1);
+      return (
+        s.filled.repeat(pos) + s.marker + s.empty.repeat(barLength - pos - 1)
+      );
     }
     if (s.cap) {
       if (filledCount === 0) {
@@ -455,7 +487,9 @@ export class SegmentRenderer {
       if (filledCount >= barLength) {
         return s.filled.repeat(barLength);
       }
-      return s.filled.repeat(filledCount - 1) + s.cap + s.empty.repeat(emptyCount);
+      return (
+        s.filled.repeat(filledCount - 1) + s.cap + s.empty.repeat(emptyCount)
+      );
     }
     return s.filled.repeat(filledCount) + s.empty.repeat(emptyCount);
   }

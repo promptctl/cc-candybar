@@ -72,7 +72,7 @@ export function getClaudePaths(): string[] {
 }
 
 export async function findProjectPaths(
-  claudePaths: string[]
+  claudePaths: string[],
 ): Promise<string[]> {
   const projectPaths: string[] = [];
 
@@ -99,7 +99,7 @@ export async function findProjectPaths(
 }
 
 export async function findTranscriptFile(
-  sessionId: string
+  sessionId: string,
 ): Promise<string | null> {
   const claudePaths = getClaudePaths();
   const projectPaths = await findProjectPaths(claudePaths);
@@ -116,7 +116,7 @@ export async function findTranscriptFile(
 
 export async function findAgentTranscripts(
   sessionId: string,
-  projectPath: string
+  projectPath: string,
 ): Promise<string[]> {
   const agentFiles: string[] = [];
 
@@ -124,7 +124,9 @@ export async function findAgentTranscripts(
 
   try {
     const files = await readdir(subagentsDir);
-    const agentFileNames = files.filter((f) => f.startsWith("agent-") && f.endsWith(".jsonl"));
+    const agentFileNames = files.filter(
+      (f) => f.startsWith("agent-") && f.endsWith(".jsonl"),
+    );
 
     for (const fileName of agentFileNames) {
       const filePath = posix.join(subagentsDir, fileName);
@@ -149,7 +151,7 @@ export async function findAgentTranscripts(
 }
 
 export async function getEarliestTimestamp(
-  filePath: string
+  filePath: string,
 ): Promise<Date | null> {
   try {
     const content = await readFile(filePath, "utf-8");
@@ -182,13 +184,13 @@ export async function getEarliestTimestamp(
 
 export async function sortFilesByTimestamp(
   files: string[],
-  oldestFirst = true
+  oldestFirst = true,
 ): Promise<string[]> {
   const filesWithTimestamps = await Promise.all(
     files.map(async (file) => ({
       file,
       timestamp: await getEarliestTimestamp(file),
-    }))
+    })),
   );
 
   return filesWithTimestamps
@@ -203,7 +205,7 @@ export async function sortFilesByTimestamp(
 }
 
 export async function getFileModificationDate(
-  filePath: string
+  filePath: string,
 ): Promise<Date | null> {
   try {
     const stats = await stat(filePath);
@@ -258,7 +260,7 @@ export async function parseJsonlFile(filePath: string): Promise<ParsedEntry[]> {
 
     if (fileSizeBytes > STREAMING_THRESHOLD_BYTES) {
       debug(
-        `Using streaming parser for large file ${filePath} (${Math.round(fileSizeBytes / 1024)}KB)`
+        `Using streaming parser for large file ${filePath} (${Math.round(fileSizeBytes / 1024)}KB)`,
       );
       entries = await parseJsonlFileStreaming(filePath);
     } else {
@@ -275,7 +277,7 @@ export async function parseJsonlFile(filePath: string): Promise<ParsedEntry[]> {
 }
 
 async function parseJsonlFileInMemory(
-  filePath: string
+  filePath: string,
 ): Promise<ParsedEntry[]> {
   const content = await readFile(filePath, "utf-8");
   const lines = content
@@ -308,7 +310,7 @@ async function parseJsonlFileInMemory(
 }
 
 async function parseJsonlFileStreaming(
-  filePath: string
+  filePath: string,
 ): Promise<ParsedEntry[]> {
   return new Promise((resolve, reject) => {
     const entries: ParsedEntry[] = [];
@@ -369,7 +371,7 @@ async function statFile(filePath: string): Promise<FileStat | null> {
 
 async function collectProjectFiles(
   projectPath: string,
-  fileFilter?: (filePath: string, modTime: Date) => boolean
+  fileFilter?: (filePath: string, modTime: Date) => boolean,
 ): Promise<FileStat[]> {
   try {
     const entries = await readdir(projectPath, { withFileTypes: true });
@@ -399,7 +401,7 @@ async function collectProjectFiles(
 
     return [...sessionResults, ...subagentResults].filter(
       (s): s is FileStat =>
-        s !== null && (!fileFilter || fileFilter(s.filePath, s.mtime))
+        s !== null && (!fileFilter || fileFilter(s.filePath, s.mtime)),
     );
   } catch (dirError) {
     debug(`Failed to read project directory ${projectPath}:`, dirError);
@@ -420,14 +422,14 @@ async function collectProjectFiles(
 export async function loadEntriesFromProjects(
   timeFilter?: (entry: ParsedEntry) => boolean,
   fileFilter?: (filePath: string, modTime: Date) => boolean,
-  sortFiles = false
+  sortFiles = false,
 ): Promise<ParsedEntry[]> {
   const claudePaths = getClaudePaths();
   const projectPaths = await findProjectPaths(claudePaths);
   const processedHashes = new Set<string>();
 
   const allFilesPromises = projectPaths.map((projectPath) =>
-    collectProjectFiles(projectPath, fileFilter)
+    collectProjectFiles(projectPath, fileFilter),
   );
 
   const allFileResults = await Promise.all(allFilesPromises);

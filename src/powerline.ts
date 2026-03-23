@@ -35,7 +35,13 @@ import {
 } from "./segments";
 import { BlockProvider, BlockInfo } from "./segments/block";
 import { TodayProvider, TodayInfo } from "./segments/today";
-import { SYMBOLS, TEXT_SYMBOLS, RESET_CODE, BOX_CHARS, BOX_CHARS_TEXT } from "./utils/constants";
+import {
+  SYMBOLS,
+  TEXT_SYMBOLS,
+  RESET_CODE,
+  BOX_CHARS,
+  BOX_CHARS_TEXT,
+} from "./utils/constants";
 import { getTerminalWidth, visibleLength } from "./utils/terminal";
 import { renderTuiPanel } from "./tui";
 import type { TuiData } from "./tui";
@@ -120,7 +126,7 @@ export class PowerlineRenderer {
 
   private needsSegmentInfo(segmentType: keyof LineConfig["segments"]): boolean {
     return this.config.display.lines.some(
-      (line) => line.segments[segmentType]?.enabled
+      (line) => line.segments[segmentType]?.enabled,
     );
   }
 
@@ -160,7 +166,7 @@ export class PowerlineRenderer {
         blockInfo,
         todayInfo,
         contextInfo,
-        metricsInfo
+        metricsInfo,
       );
     }
 
@@ -173,9 +179,9 @@ export class PowerlineRenderer {
           blockInfo,
           todayInfo,
           contextInfo,
-          metricsInfo
-        )
-      )
+          metricsInfo,
+        ),
+      ),
     );
 
     return lines.filter((line) => line.length > 0).join("\n");
@@ -187,7 +193,7 @@ export class PowerlineRenderer {
     blockInfo: BlockInfo | null,
     todayInfo: TodayInfo | null,
     contextInfo: ContextInfo | null,
-    metricsInfo: MetricsInfo | null
+    metricsInfo: MetricsInfo | null,
   ): Promise<string> {
     const colors = this.getThemeColors();
     const currentDir = hookData.workspace?.current_dir || hookData.cwd || "/";
@@ -198,9 +204,13 @@ export class PowerlineRenderer {
     for (const lineConfig of this.config.display.lines) {
       const segments = Object.entries(lineConfig.segments)
         .filter(
-          ([_, config]: [string, AnySegmentConfig | undefined]) => config?.enabled
+          ([_, config]: [string, AnySegmentConfig | undefined]) =>
+            config?.enabled,
         )
-        .map(([type, config]: [string, AnySegmentConfig]) => ({ type, config }));
+        .map(([type, config]: [string, AnySegmentConfig]) => ({
+          type,
+          config,
+        }));
 
       const renderedSegments: RenderedSegment[] = [];
       for (const segment of segments) {
@@ -213,7 +223,7 @@ export class PowerlineRenderer {
           contextInfo,
           metricsInfo,
           colors,
-          currentDir
+          currentDir,
         );
 
         if (segmentData) {
@@ -237,10 +247,18 @@ export class PowerlineRenderer {
       let currentLineWidth = 0;
 
       for (const segment of renderedSegments) {
-        const segmentWidth = this.calculateSegmentWidth(segment, currentLineSegments.length === 0);
+        const segmentWidth = this.calculateSegmentWidth(
+          segment,
+          currentLineSegments.length === 0,
+        );
 
-        if (currentLineSegments.length > 0 && currentLineWidth + segmentWidth > terminalWidth) {
-          outputLines.push(this.buildLineFromSegments(currentLineSegments, colors));
+        if (
+          currentLineSegments.length > 0 &&
+          currentLineWidth + segmentWidth > terminalWidth
+        ) {
+          outputLines.push(
+            this.buildLineFromSegments(currentLineSegments, colors),
+          );
           currentLineSegments = [];
           currentLineWidth = 0;
         }
@@ -250,14 +268,18 @@ export class PowerlineRenderer {
       }
 
       if (currentLineSegments.length > 0) {
-        outputLines.push(this.buildLineFromSegments(currentLineSegments, colors));
+        outputLines.push(
+          this.buildLineFromSegments(currentLineSegments, colors),
+        );
       }
     }
 
     return outputLines.join("\n");
   }
 
-  private async generateTuiStatusline(hookData: ClaudeHookData): Promise<string> {
+  private async generateTuiStatusline(
+    hookData: ClaudeHookData,
+  ): Promise<string> {
     const colors = this.getThemeColors();
     const terminalWidth = getTerminalWidth();
     const currentDir = hookData.workspace?.current_dir || hookData.cwd || "/";
@@ -276,15 +298,38 @@ export class PowerlineRenderer {
       this.metricsProvider.getMetricsInfo(hookData.session_id, hookData),
       this.gitService.getGitInfo(
         currentDir,
-        { showSha: false, showWorkingTree: true, showOperation: false, showTag: false, showTimeSinceCommit: false, showStashCount: false, showUpstream: false, showRepoName: false },
+        {
+          showSha: false,
+          showWorkingTree: true,
+          showOperation: false,
+          showTag: false,
+          showTimeSinceCommit: false,
+          showStashCount: false,
+          showUpstream: false,
+          showRepoName: false,
+        },
         hookData.workspace?.project_dir,
       ),
       this.tmuxService.getSessionId(),
     ]);
-    const val = <T>(r: PromiseSettledResult<T>) => r.status === "fulfilled" ? r.value : null;
-    const [usageInfo, blockInfo, todayInfo, contextInfo, metricsInfo, gitInfo, tmuxSessionId] = [
-      val(results[0]!), val(results[1]!), val(results[2]!), val(results[3]!),
-      val(results[4]!), val(results[5]!), val(results[6]!),
+    const val = <T>(r: PromiseSettledResult<T>) =>
+      r.status === "fulfilled" ? r.value : null;
+    const [
+      usageInfo,
+      blockInfo,
+      todayInfo,
+      contextInfo,
+      metricsInfo,
+      gitInfo,
+      tmuxSessionId,
+    ] = [
+      val(results[0]!),
+      val(results[1]!),
+      val(results[2]!),
+      val(results[3]!),
+      val(results[4]!),
+      val(results[5]!),
+      val(results[6]!),
     ] as const;
 
     const tuiData: TuiData = {
@@ -299,10 +344,19 @@ export class PowerlineRenderer {
       colors,
     };
 
-    return renderTuiPanel(tuiData, boxChars, colors.reset, terminalWidth, this.config);
+    return renderTuiPanel(
+      tuiData,
+      boxChars,
+      colors.reset,
+      terminalWidth,
+      this.config,
+    );
   }
 
-  private calculateSegmentWidth(segment: RenderedSegment, isFirst: boolean): number {
+  private calculateSegmentWidth(
+    segment: RenderedSegment,
+    isFirst: boolean,
+  ): number {
     const isCapsuleStyle = this.config.display.style === "capsule";
     const textWidth = visibleLength(segment.text);
     const padding = this.config.display.padding ?? 1;
@@ -319,7 +373,7 @@ export class PowerlineRenderer {
 
   private buildLineFromSegments(
     segments: RenderedSegment[],
-    colors: PowerlineColors
+    colors: PowerlineColors,
   ): string {
     const isCapsuleStyle = this.config.display.style === "capsule";
     let line = colors.reset;
@@ -341,7 +395,7 @@ export class PowerlineRenderer {
         segment.fgColor,
         segment.text,
         nextSegment?.bgColor,
-        colors
+        colors,
       );
     }
 
@@ -355,14 +409,15 @@ export class PowerlineRenderer {
     blockInfo: BlockInfo | null,
     todayInfo: TodayInfo | null,
     contextInfo: ContextInfo | null,
-    metricsInfo: MetricsInfo | null
+    metricsInfo: MetricsInfo | null,
   ): Promise<string> {
     const colors = this.getThemeColors();
     const currentDir = hookData.workspace?.current_dir || hookData.cwd || "/";
 
     const segments = Object.entries(lineConfig.segments)
       .filter(
-        ([_, config]: [string, AnySegmentConfig | undefined]) => config?.enabled
+        ([_, config]: [string, AnySegmentConfig | undefined]) =>
+          config?.enabled,
       )
       .map(([type, config]: [string, AnySegmentConfig]) => ({ type, config }));
 
@@ -377,7 +432,7 @@ export class PowerlineRenderer {
         contextInfo,
         metricsInfo,
         colors,
-        currentDir
+        currentDir,
       );
 
       if (segmentData) {
@@ -402,13 +457,13 @@ export class PowerlineRenderer {
     contextInfo: ContextInfo | null,
     metricsInfo: MetricsInfo | null,
     colors: PowerlineColors,
-    currentDir: string
+    currentDir: string,
   ) {
     if (segment.type === "directory") {
       return this.segmentRenderer.renderDirectory(
         hookData,
         colors,
-        segment.config as DirectorySegmentConfig
+        segment.config as DirectorySegmentConfig,
       );
     }
     if (segment.type === "model") {
@@ -420,7 +475,7 @@ export class PowerlineRenderer {
         segment.config as GitSegmentConfig,
         hookData,
         colors,
-        currentDir
+        currentDir,
       );
     }
 
@@ -428,13 +483,17 @@ export class PowerlineRenderer {
       return this.renderSessionSegment(
         segment.config as UsageSegmentConfig,
         usageInfo,
-        colors
+        colors,
       );
     }
 
     if (segment.type === "sessionId") {
       return hookData.session_id
-        ? this.segmentRenderer.renderSessionId(hookData.session_id, colors, segment.config as SessionIdSegmentConfig)
+        ? this.segmentRenderer.renderSessionId(
+            hookData.session_id,
+            colors,
+            segment.config as SessionIdSegmentConfig,
+          )
         : null;
     }
 
@@ -446,7 +505,7 @@ export class PowerlineRenderer {
       return this.renderContextSegment(
         segment.config as ContextSegmentConfig,
         contextInfo,
-        colors
+        colors,
       );
     }
 
@@ -455,7 +514,7 @@ export class PowerlineRenderer {
         segment.config as MetricsSegmentConfig,
         metricsInfo,
         blockInfo,
-        colors
+        colors,
       );
     }
 
@@ -463,7 +522,7 @@ export class PowerlineRenderer {
       return this.renderBlockSegment(
         segment.config as BlockSegmentConfig,
         blockInfo,
-        colors
+        colors,
       );
     }
 
@@ -471,7 +530,7 @@ export class PowerlineRenderer {
       return this.renderTodaySegment(
         segment.config as TodaySegmentConfig,
         todayInfo,
-        colors
+        colors,
       );
     }
 
@@ -479,12 +538,15 @@ export class PowerlineRenderer {
       return this.renderVersionSegment(
         segment.config as VersionSegmentConfig,
         hookData,
-        colors
+        colors,
       );
     }
 
     if (segment.type === "env") {
-      return this.segmentRenderer.renderEnv(colors, segment.config as EnvSegmentConfig);
+      return this.segmentRenderer.renderEnv(
+        colors,
+        segment.config as EnvSegmentConfig,
+      );
     }
 
     return null;
@@ -494,7 +556,7 @@ export class PowerlineRenderer {
     config: GitSegmentConfig,
     hookData: ClaudeHookData,
     colors: PowerlineColors,
-    currentDir: string
+    currentDir: string,
   ) {
     if (!this.needsSegmentInfo("git")) return null;
 
@@ -510,7 +572,7 @@ export class PowerlineRenderer {
         showUpstream: config?.showUpstream,
         showRepoName: config?.showRepoName,
       },
-      hookData.workspace?.project_dir
+      hookData.workspace?.project_dir,
     );
 
     return gitInfo
@@ -521,7 +583,7 @@ export class PowerlineRenderer {
   private renderSessionSegment(
     config: UsageSegmentConfig,
     usageInfo: UsageInfo | null,
-    colors: PowerlineColors
+    colors: PowerlineColors,
   ) {
     if (!usageInfo) return null;
     return this.segmentRenderer.renderSession(usageInfo, colors, config);
@@ -536,7 +598,7 @@ export class PowerlineRenderer {
   private renderContextSegment(
     config: ContextSegmentConfig,
     contextInfo: ContextInfo | null,
-    colors: PowerlineColors
+    colors: PowerlineColors,
   ) {
     if (!this.needsSegmentInfo("context")) return null;
     return this.segmentRenderer.renderContext(contextInfo, colors, config);
@@ -546,20 +608,20 @@ export class PowerlineRenderer {
     config: MetricsSegmentConfig,
     metricsInfo: MetricsInfo | null,
     blockInfo: BlockInfo | null,
-    colors: PowerlineColors
+    colors: PowerlineColors,
   ) {
     return this.segmentRenderer.renderMetrics(
       metricsInfo,
       colors,
       blockInfo,
-      config
+      config,
     );
   }
 
   private renderBlockSegment(
     config: BlockSegmentConfig,
     blockInfo: BlockInfo | null,
-    colors: PowerlineColors
+    colors: PowerlineColors,
   ) {
     if (!blockInfo) return null;
     return this.segmentRenderer.renderBlock(blockInfo, colors, config);
@@ -568,7 +630,7 @@ export class PowerlineRenderer {
   private renderTodaySegment(
     config: TodaySegmentConfig,
     todayInfo: TodayInfo | null,
-    colors: PowerlineColors
+    colors: PowerlineColors,
   ) {
     if (!todayInfo) return null;
     const todayType = config?.type || "cost";
@@ -578,7 +640,7 @@ export class PowerlineRenderer {
   private renderVersionSegment(
     config: VersionSegmentConfig,
     hookData: ClaudeHookData,
-    colors: PowerlineColors
+    colors: PowerlineColors,
   ) {
     return this.segmentRenderer.renderVersion(hookData, colors, config);
   }
@@ -591,7 +653,11 @@ export class PowerlineRenderer {
     const symbolSet = charset === "text" ? TEXT_SYMBOLS : SYMBOLS;
 
     return {
-      right: isMinimalStyle ? "" : (isCapsuleStyle ? symbolSet.right_rounded : symbolSet.right),
+      right: isMinimalStyle
+        ? ""
+        : isCapsuleStyle
+          ? symbolSet.right_rounded
+          : symbolSet.right,
       left: isCapsuleStyle ? symbolSet.left_rounded : "",
       branch: symbolSet.branch,
       model: symbolSet.model,
@@ -636,14 +702,14 @@ export class PowerlineRenderer {
       colorTheme = this.config.colors?.custom;
       if (!colorTheme) {
         throw new Error(
-          "Custom theme selected but no colors provided in configuration"
+          "Custom theme selected but no colors provided in configuration",
         );
       }
     } else {
       colorTheme = getTheme(theme, colorSupport);
       if (!colorTheme) {
         console.warn(
-          `Built-in theme '${theme}' not found, falling back to 'dark' theme`
+          `Built-in theme '${theme}' not found, falling back to 'dark' theme`,
         );
         colorTheme = getTheme("dark", colorSupport)!;
       }
@@ -733,7 +799,7 @@ export class PowerlineRenderer {
 
   private getSegmentBgColor(
     segmentType: string,
-    colors: PowerlineColors
+    colors: PowerlineColors,
   ): string {
     switch (segmentType) {
       case "directory":
@@ -769,7 +835,7 @@ export class PowerlineRenderer {
     fgColor: string,
     text: string,
     nextBgColor: string | undefined,
-    colors: PowerlineColors
+    colors: PowerlineColors,
   ): string {
     const isCapsuleStyle = this.config.display.style === "capsule";
     const padding = " ".repeat(this.config.display.padding ?? 1);

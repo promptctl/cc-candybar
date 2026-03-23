@@ -45,8 +45,7 @@ function getWindowsTerminalWidth(): number | null {
       const parsed = parseInt(match[1], 10);
       if (!isNaN(parsed) && parsed > 0) return parsed;
     }
-  } catch {
-  }
+  } catch {}
   return null;
 }
 
@@ -64,8 +63,7 @@ function getUnixTerminalWidth(): number | null {
         const parsed = parseInt(width, 10);
         if (!isNaN(parsed) && parsed > 0) return parsed;
       }
-    } catch {
-    }
+    } catch {}
   }
 
   try {
@@ -76,8 +74,7 @@ function getUnixTerminalWidth(): number | null {
 
     const parsed = parseInt(width, 10);
     if (!isNaN(parsed) && parsed > 0) return parsed;
-  } catch {
-  }
+  } catch {}
 
   return null;
 }

@@ -76,14 +76,16 @@ export function formatModelName(rawName: string): string {
     return rawName;
   }
 
-  const { family, newMajor, newMinor, oldMajor, oldMinor, oldFamily } = match.groups;
+  const { family, newMajor, newMinor, oldMajor, oldMinor, oldFamily } =
+    match.groups;
 
   const modelFamily = family || oldFamily;
   const major = newMajor || oldMajor;
   const minor = newMinor || oldMinor;
 
   if (modelFamily && major) {
-    const capitalizedFamily = modelFamily.charAt(0).toUpperCase() + modelFamily.slice(1).toLowerCase();
+    const capitalizedFamily =
+      modelFamily.charAt(0).toUpperCase() + modelFamily.slice(1).toLowerCase();
     const version = minor ? `${major}.${minor}` : major;
     return `${capitalizedFamily} ${version}`;
   }

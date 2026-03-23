@@ -87,7 +87,7 @@ export class TodayProvider {
     const parsedEntries = await loadEntriesFromProjects(
       timeFilter,
       fileFilter,
-      true
+      true,
     );
     const todayEntries: TodayUsageEntry[] = [];
 
@@ -101,7 +101,7 @@ export class TodayProvider {
 
         if (!todayEntry.costUSD && entry.raw) {
           todayEntry.costUSD = await PricingService.calculateCostForEntry(
-            entry.raw
+            entry.raw,
           );
         }
 
@@ -111,7 +111,7 @@ export class TodayProvider {
     }
 
     debug(
-      `Today segment: Found ${entriesFound} entries for today (${todayDateString})`
+      `Today segment: Found ${entriesFound} entries for today (${todayDateString})`,
     );
 
     await CacheManager.setUsageCache("today", todayEntries, latestMtime);
@@ -144,7 +144,7 @@ export class TodayProvider {
       const totalCost = entries.reduce((sum, entry) => sum + entry.costUSD, 0);
       const totalTokens = entries.reduce(
         (sum, entry) => sum + getTotalTokens(entry.usage),
-        0
+        0,
       );
 
       const tokenBreakdown = entries.reduce(
@@ -160,11 +160,11 @@ export class TodayProvider {
           output: 0,
           cacheCreation: 0,
           cacheRead: 0,
-        }
+        },
       );
 
       debug(
-        `Today segment: $${totalCost.toFixed(2)}, ${totalTokens} tokens total`
+        `Today segment: $${totalCost.toFixed(2)}, ${totalTokens} tokens total`,
       );
 
       return {

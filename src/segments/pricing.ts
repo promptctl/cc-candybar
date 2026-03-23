@@ -230,7 +230,7 @@ export class PricingService {
   }
 
   private static async saveDiskCache(
-    data: Record<string, ModelPricing>
+    data: Record<string, ModelPricing>,
   ): Promise<void> {
     await CacheManager.setUsageCache("pricing", data);
   }
@@ -289,7 +289,7 @@ export class PricingService {
 
               if (this.validatePricingData(pricingData)) {
                 debug(
-                  `Fetched fresh pricing from GitHub for ${Object.keys(pricingData).length} models`
+                  `Fetched fresh pricing from GitHub for ${Object.keys(pricingData).length} models`,
                 );
                 debug(`Pricing last updated: ${meta?.updated || "unknown"}`);
                 resolve(pricingData);
@@ -307,7 +307,7 @@ export class PricingService {
             debug("Response error:", error);
             resolve(null);
           });
-        }
+        },
       );
 
       request.on("error", (error) => {
@@ -328,7 +328,7 @@ export class PricingService {
   static async getCurrentPricing(): Promise<Record<string, ModelPricing>> {
     if (this.executionCache !== null) {
       debug(
-        `[CACHE-HIT] Pricing execution cache: ${Object.keys(this.executionCache).length} models`
+        `[CACHE-HIT] Pricing execution cache: ${Object.keys(this.executionCache).length} models`,
       );
       return this.executionCache;
     }
@@ -336,11 +336,11 @@ export class PricingService {
     const diskCached = await this.loadDiskCache();
     if (diskCached) {
       debug(
-        `[CACHE-HIT] Pricing disk cache: ${Object.keys(diskCached).length} models`
+        `[CACHE-HIT] Pricing disk cache: ${Object.keys(diskCached).length} models`,
       );
       this.executionCache = diskCached;
       debug(
-        `[CACHE-SET] Pricing execution cache stored: ${Object.keys(diskCached).length} models`
+        `[CACHE-SET] Pricing execution cache stored: ${Object.keys(diskCached).length} models`,
       );
       return diskCached;
     }
@@ -349,27 +349,27 @@ export class PricingService {
     if (freshData) {
       await this.saveDiskCache(freshData);
       debug(
-        `[CACHE-SET] Pricing disk cache stored: ${Object.keys(freshData).length} models`
+        `[CACHE-SET] Pricing disk cache stored: ${Object.keys(freshData).length} models`,
       );
       this.executionCache = freshData;
       debug(
-        `[CACHE-SET] Pricing execution cache stored: ${Object.keys(freshData).length} models`
+        `[CACHE-SET] Pricing execution cache stored: ${Object.keys(freshData).length} models`,
       );
       return freshData;
     }
 
     debug(
-      `[CACHE-FALLBACK] Using offline pricing data: ${Object.keys(OFFLINE_PRICING_DATA).length} models`
+      `[CACHE-FALLBACK] Using offline pricing data: ${Object.keys(OFFLINE_PRICING_DATA).length} models`,
     );
     this.executionCache = OFFLINE_PRICING_DATA;
     debug(
-      `[CACHE-SET] Pricing execution cache stored: ${Object.keys(OFFLINE_PRICING_DATA).length} models`
+      `[CACHE-SET] Pricing execution cache stored: ${Object.keys(OFFLINE_PRICING_DATA).length} models`,
     );
     return OFFLINE_PRICING_DATA;
   }
 
   private static validatePricingData(
-    data: unknown
+    data: unknown,
   ): data is Record<string, ModelPricing> {
     if (!data || typeof data !== "object") return false;
 
@@ -411,7 +411,7 @@ export class PricingService {
 
   private static fuzzyMatchModel(
     modelId: string,
-    allPricing: Record<string, ModelPricing>
+    allPricing: Record<string, ModelPricing>,
   ): ModelPricing {
     const lowerModelId = modelId.toLowerCase();
 

@@ -11,11 +11,7 @@ import {
   rosePineAnsi256Theme,
   rosePineAnsiTheme,
 } from "./rose-pine";
-import {
-  gruvboxTheme,
-  gruvboxAnsi256Theme,
-  gruvboxAnsiTheme,
-} from "./gruvbox";
+import { gruvboxTheme, gruvboxAnsi256Theme, gruvboxAnsiTheme } from "./gruvbox";
 
 export interface SegmentColor {
   bg: string;
@@ -91,7 +87,7 @@ export const BUILT_IN_THEMES: Record<string, ColorTheme> = {
 
 export function getTheme(
   themeName: string,
-  colorSupport?: "none" | "ansi" | "ansi256" | "truecolor"
+  colorSupport?: "none" | "ansi" | "ansi256" | "truecolor",
 ): ColorTheme | null {
   const baseTheme = BUILT_IN_THEMES[themeName];
   if (!baseTheme) return null;

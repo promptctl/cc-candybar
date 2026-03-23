@@ -57,7 +57,14 @@ export interface BudgetConfig {
 }
 
 export interface PowerlineConfig {
-  theme: "light" | "dark" | "nord" | "tokyo-night" | "rose-pine" | "gruvbox" | "custom";
+  theme:
+    | "light"
+    | "dark"
+    | "nord"
+    | "tokyo-night"
+    | "rose-pine"
+    | "gruvbox"
+    | "custom";
   display: DisplayConfig;
   colors?: {
     custom: ColorTheme;
@@ -78,8 +85,15 @@ function isValidTheme(theme: string): theme is PowerlineConfig["theme"] {
   ].includes(theme);
 }
 
-function isValidStyle(style: string): style is "minimal" | "powerline" | "capsule" | "tui" {
-  return style === "minimal" || style === "powerline" || style === "capsule" || style === "tui";
+function isValidStyle(
+  style: string,
+): style is "minimal" | "powerline" | "capsule" | "tui" {
+  return (
+    style === "minimal" ||
+    style === "powerline" ||
+    style === "capsule" ||
+    style === "tui"
+  );
 }
 
 function isValidCharset(charset: string): charset is "unicode" | "text" {
@@ -101,7 +115,7 @@ function getArgValue(args: string[], argName: string): string | undefined {
 
 function deepMerge<T extends Record<string, any>>(
   target: T,
-  source: Partial<T>
+  source: Partial<T>,
 ): T {
   const result = { ...target };
 
@@ -116,7 +130,7 @@ function deepMerge<T extends Record<string, any>>(
         const targetValue = result[key] || {};
         result[key] = deepMerge(
           targetValue as Record<string, any>,
-          sourceValue as Record<string, any>
+          sourceValue as Record<string, any>,
         ) as T[Extract<keyof T, string>];
       } else {
         result[key] = sourceValue as T[Extract<keyof T, string>];
@@ -129,7 +143,7 @@ function deepMerge<T extends Record<string, any>>(
 
 function findConfigFile(
   customPath?: string,
-  projectDir?: string
+  projectDir?: string,
 ): string | null {
   if (customPath) {
     return fs.existsSync(customPath) ? customPath : null;
@@ -151,7 +165,7 @@ function loadConfigFile(filePath: string): Partial<PowerlineConfig> {
     return JSON.parse(content);
   } catch (error) {
     throw new Error(
-      `Failed to load config file ${filePath}: ${error instanceof Error ? error.message : String(error)}`
+      `Failed to load config file ${filePath}: ${error instanceof Error ? error.message : String(error)}`,
     );
   }
 }
@@ -171,7 +185,7 @@ function loadEnvConfig(): Partial<PowerlineConfig> {
       display.style = style;
     } else {
       console.warn(
-        `Invalid display style '${style}' from environment variable, falling back to 'minimal'`
+        `Invalid display style '${style}' from environment variable, falling back to 'minimal'`,
       );
       display.style = "minimal";
     }
@@ -203,7 +217,7 @@ function parseCLIOverrides(args: string[]): Partial<PowerlineConfig> {
       display.style = style;
     } else {
       console.warn(
-        `Invalid display style '${style}' from CLI argument, falling back to 'minimal'`
+        `Invalid display style '${style}' from CLI argument, falling back to 'minimal'`,
       );
       display.style = "minimal";
     }
@@ -215,7 +229,7 @@ function parseCLIOverrides(args: string[]): Partial<PowerlineConfig> {
       display.charset = charset;
     } else {
       console.warn(
-        `Invalid charset '${charset}' from CLI argument, falling back to 'unicode'`
+        `Invalid charset '${charset}' from CLI argument, falling back to 'unicode'`,
       );
       display.charset = "unicode";
     }
@@ -230,7 +244,7 @@ function parseCLIOverrides(args: string[]): Partial<PowerlineConfig> {
 
 export function loadConfig(
   args: string[] = process.argv,
-  projectDir?: string
+  projectDir?: string,
 ): PowerlineConfig {
   let config: PowerlineConfig = JSON.parse(JSON.stringify(DEFAULT_CONFIG));
 
@@ -246,28 +260,28 @@ export function loadConfig(
       config = deepMerge(config, fileConfig);
     } catch (err) {
       console.warn(
-        `Warning: ${err instanceof Error ? err.message : String(err)}`
+        `Warning: ${err instanceof Error ? err.message : String(err)}`,
       );
     }
   }
 
   if (config.display?.style && !isValidStyle(config.display.style)) {
     console.warn(
-      `Invalid display style '${config.display.style}' in config file, falling back to 'minimal'`
+      `Invalid display style '${config.display.style}' in config file, falling back to 'minimal'`,
     );
     config.display.style = "minimal";
   }
 
   if (config.display?.charset && !isValidCharset(config.display.charset)) {
     console.warn(
-      `Invalid charset '${config.display.charset}' in config file, falling back to 'unicode'`
+      `Invalid charset '${config.display.charset}' in config file, falling back to 'unicode'`,
     );
     config.display.charset = "unicode";
   }
 
   if (config.theme && !isValidTheme(config.theme)) {
     console.warn(
-      `Invalid theme '${config.theme}' in config file, falling back to 'dark'`
+      `Invalid theme '${config.theme}' in config file, falling back to 'dark'`,
     );
     config.theme = "dark";
   }

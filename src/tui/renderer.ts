@@ -46,7 +46,8 @@ export function renderTuiPanel(
   terminalWidth: number | null,
   config: PowerlineConfig,
 ): string {
-  const sym = (config.display.charset || "unicode") === "text" ? TEXT_SYMBOLS : SYMBOLS;
+  const sym =
+    (config.display.charset || "unicode") === "text" ? TEXT_SYMBOLS : SYMBOLS;
   const colors = data.colors;
   const panelWidth = calculatePanelWidth(terminalWidth);
   const innerWidth = panelWidth - 2;
@@ -62,7 +63,17 @@ export function renderTuiPanel(
     lines.push(contentRow(box, contextLine, innerWidth));
   }
 
-  const ctx: RenderCtx = { lines, data, box, contentWidth, innerWidth, sym, config, reset, colors };
+  const ctx: RenderCtx = {
+    lines,
+    data,
+    box,
+    contentWidth,
+    innerWidth,
+    sym,
+    config,
+    reset,
+    colors,
+  };
 
   if (mode === "wide") {
     renderWideMetrics(ctx);

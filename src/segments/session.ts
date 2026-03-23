@@ -75,7 +75,10 @@ export class SessionProvider {
 
       const parsedEntries = await parseJsonlFile(transcriptPath);
       const projectPath = dirname(transcriptPath);
-      const agentTranscripts = await findAgentTranscripts(sessionId, projectPath);
+      const agentTranscripts = await findAgentTranscripts(
+        sessionId,
+        projectPath,
+      );
 
       debug(`Found ${agentTranscripts.length} agent transcripts for session`);
 
@@ -108,7 +111,7 @@ export class SessionProvider {
       }
 
       debug(
-        `Parsed ${entries.length} usage entries, total cost: $${totalCost.toFixed(4)}`
+        `Parsed ${entries.length} usage entries, total cost: $${totalCost.toFixed(4)}`,
       );
       return { totalCost, entries };
     } catch (error) {
@@ -129,13 +132,13 @@ export class SessionProvider {
           breakdown.cacheRead +
           (entry.message.usage.cache_read_input_tokens || 0),
       }),
-      { input: 0, output: 0, cacheCreation: 0, cacheRead: 0 }
+      { input: 0, output: 0, cacheCreation: 0, cacheRead: 0 },
     );
   }
 
   async getSessionInfo(
     sessionId: string,
-    hookData?: ClaudeHookData
+    hookData?: ClaudeHookData,
   ): Promise<SessionInfo> {
     const sessionUsage = await this.getSessionUsage(sessionId);
 
@@ -175,14 +178,14 @@ export class UsageProvider {
 
   async getUsageInfo(
     sessionId: string,
-    hookData?: ClaudeHookData
+    hookData?: ClaudeHookData,
   ): Promise<UsageInfo> {
     try {
       debug(`Starting usage info retrieval for session: ${sessionId}`);
 
       const sessionInfo = await this.sessionProvider.getSessionInfo(
         sessionId,
-        hookData
+        hookData,
       );
 
       return {

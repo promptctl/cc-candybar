@@ -91,4 +91,3 @@ export const TEXT_SYMBOLS = {
   env: "$",
   session_id: "#",
 } as const;
-

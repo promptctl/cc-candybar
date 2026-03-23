@@ -33,7 +33,7 @@ interface TranscriptEntry {
 
 export class MetricsProvider {
   private async loadTranscriptEntries(
-    sessionId: string
+    sessionId: string,
   ): Promise<TranscriptEntry[]> {
     try {
       const transcriptPath = await findTranscriptFile(sessionId);
@@ -126,7 +126,7 @@ export class MetricsProvider {
 
   async getMetricsInfo(
     sessionId: string,
-    hookData: ClaudeHookData
+    hookData: ClaudeHookData,
   ): Promise<MetricsInfo> {
     try {
       debug(`Getting metrics from hook data for session: ${sessionId}`);
@@ -158,7 +158,7 @@ export class MetricsProvider {
     } catch (error) {
       debug(
         `Error getting metrics from hook data for session ${sessionId}:`,
-        error
+        error,
       );
       return {
         responseTime: null,
