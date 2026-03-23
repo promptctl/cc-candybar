@@ -1,3 +1,12 @@
+## [1.21.1](https://github.com/Owloops/claude-powerline/compare/v1.21.0...v1.21.1) (2026-03-23)
+
+
+### Bug Fixes
+
+* **build:** migrate from tsup to tsdown ([b076793](https://github.com/Owloops/claude-powerline/commit/b0767939b671518a5cd22e59515338525a63f61e))
+* **lint:** wire up eslint-plugin-prettier ([c204128](https://github.com/Owloops/claude-powerline/commit/c204128749769ad07db071791124067bfabe8d9f))
+* **style:** apply prettier formatting and clean up tsconfig ([4d2622d](https://github.com/Owloops/claude-powerline/commit/4d2622d2ea3f37f95a55f213fa400c30f869b1e5))
+
 # [1.21.0](https://github.com/Owloops/claude-powerline/compare/v1.20.1...v1.21.0) (2026-03-23)
 
 
