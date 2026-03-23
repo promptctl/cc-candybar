@@ -1,3 +1,10 @@
+# [1.21.0](https://github.com/Owloops/claude-powerline/compare/v1.20.1...v1.21.0) (2026-03-23)
+
+
+### Features
+
+* **segment:** add session id segment ([#69](https://github.com/Owloops/claude-powerline/issues/69)) ([27ab7f7](https://github.com/Owloops/claude-powerline/commit/27ab7f733d877549e3f9fb3bc441ca298e4e4212))
+
 ## [1.20.1](https://github.com/Owloops/claude-powerline/compare/v1.20.0...v1.20.1) (2026-03-18)
 
 
