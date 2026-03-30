@@ -1,3 +1,10 @@
+## [1.21.2](https://github.com/Owloops/claude-powerline/compare/v1.21.1...v1.21.2) (2026-03-30)
+
+
+### Bug Fixes
+
+* **pricing:** use actual cache pricing from litellm and drop legacy claude-3 models ([775ef07](https://github.com/Owloops/claude-powerline/commit/775ef074a866641526c498eafbaf4e2bbaf43733))
+
 ## [1.21.1](https://github.com/Owloops/claude-powerline/compare/v1.21.0...v1.21.1) (2026-03-23)
 
 
