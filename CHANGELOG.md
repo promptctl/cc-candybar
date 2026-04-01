@@ -1,3 +1,15 @@
+# [1.22.0](https://github.com/Owloops/claude-powerline/compare/v1.21.2...v1.22.0) (2026-04-01)
+
+
+### Bug Fixes
+
+* **style:** apply prettier formatting to rate limits changes ([dab2d78](https://github.com/Owloops/claude-powerline/commit/dab2d78836ec3895173819896e553fad6bcd0899))
+
+
+### Features
+
+* **segment:** add native rate limits support and weekly segment ([03e65d6](https://github.com/Owloops/claude-powerline/commit/03e65d6dfbeaa853026050ca86caa0ab42559c59))
+
 ## [1.21.2](https://github.com/Owloops/claude-powerline/compare/v1.21.1...v1.21.2) (2026-03-30)
 
 
