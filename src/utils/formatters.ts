@@ -121,3 +121,20 @@ export function formatTimeRemaining(totalMinutes: number): string {
   const minutes = totalMinutes % 60;
   return hours > 0 ? `${hours}h ${minutes}m left` : `${minutes}m left`;
 }
+
+export function formatLongTimeRemaining(totalMinutes: number): string {
+  if (totalMinutes >= 1440) {
+    const days = Math.floor(totalMinutes / 1440);
+    const hours = Math.floor((totalMinutes % 1440) / 60);
+    return hours > 0 ? `${days}d ${hours}h` : `${days}d`;
+  } else if (totalMinutes >= 60) {
+    const hours = Math.floor(totalMinutes / 60);
+    const minutes = totalMinutes % 60;
+    return minutes > 0 ? `${hours}h ${minutes}m` : `${hours}h`;
+  }
+  return `${totalMinutes}m`;
+}
+
+export function minutesUntilReset(epochSeconds: number): number {
+  return Math.round(Math.max(0, epochSeconds * 1000 - Date.now()) / 60000);
+}

@@ -21,4 +21,5 @@ export type {
   VersionSegmentConfig,
   SessionIdSegmentConfig,
   EnvSegmentConfig,
+  WeeklySegmentConfig,
 } from "./renderer";

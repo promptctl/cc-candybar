@@ -1,6 +1,11 @@
 import { debug } from "../utils/logger";
+import { minutesUntilReset } from "../utils/formatters";
 import { PricingService } from "./pricing";
-import { loadEntriesFromProjects, type ParsedEntry } from "../utils/claude";
+import {
+  loadEntriesFromProjects,
+  type ParsedEntry,
+  type ClaudeHookData,
+} from "../utils/claude";
 
 export interface UsageEntry {
   timestamp: Date;
@@ -21,6 +26,8 @@ export interface BlockInfo {
   timeRemaining: number | null;
   burnRate: number | null;
   tokenBurnRate: number | null;
+  source: "transcript" | "native";
+  nativeUtilization: number | null;
 }
 
 function getModelRateLimitWeight(model: string): number {
@@ -203,7 +210,27 @@ export class BlockProvider {
     }
   }
 
-  async getActiveBlockInfo(): Promise<BlockInfo> {
+  async getActiveBlockInfo(hookData?: ClaudeHookData): Promise<BlockInfo> {
+    const fiveHour = hookData?.rate_limits?.five_hour;
+    if (fiveHour) {
+      const timeRemaining = minutesUntilReset(fiveHour.resets_at);
+
+      debug(
+        `Block segment: Using native rate_limits: ${fiveHour.used_percentage}%, resets in ${timeRemaining}m`,
+      );
+
+      return {
+        cost: null,
+        tokens: null,
+        weightedTokens: null,
+        timeRemaining,
+        burnRate: null,
+        tokenBurnRate: null,
+        source: "native",
+        nativeUtilization: fiveHour.used_percentage,
+      };
+    }
+
     try {
       const entries = await this.loadUsageEntries();
 
@@ -216,6 +243,8 @@ export class BlockProvider {
           timeRemaining: null,
           burnRate: null,
           tokenBurnRate: null,
+          source: "transcript",
+          nativeUtilization: null,
         };
       }
 
@@ -298,6 +327,8 @@ export class BlockProvider {
         timeRemaining,
         burnRate,
         tokenBurnRate,
+        source: "transcript",
+        nativeUtilization: null,
       };
     } catch (error) {
       debug("Error getting active block info:", error);
@@ -308,6 +339,8 @@ export class BlockProvider {
         timeRemaining: null,
         burnRate: null,
         tokenBurnRate: null,
+        source: "transcript",
+        nativeUtilization: null,
       };
     }
   }

@@ -9,6 +9,8 @@ import {
   formatModelName,
   formatResponseTime,
   formatTimeRemaining,
+  formatLongTimeRemaining,
+  minutesUntilReset,
   abbreviateFishStyle,
 } from "../utils/formatters";
 import { getBudgetStatus } from "../utils/budget";
@@ -112,6 +114,12 @@ export function collectMetricSegments(
         colors.blockFg,
         reset,
       ),
+    );
+  }
+  const sevenDay = data.hookData.rate_limits?.seven_day;
+  if (sevenDay) {
+    segments.push(
+      colorize(formatWeeklySegment(sevenDay, sym), colors.weeklyFg, reset),
     );
   }
   if (data.usageInfo) {
@@ -254,6 +262,7 @@ export function collectFooterParts(
       );
     }
     if (
+      data.blockInfo?.source !== "native" &&
       data.blockInfo?.burnRate !== null &&
       data.blockInfo?.burnRate !== undefined &&
       data.blockInfo.burnRate > 0
@@ -291,6 +300,15 @@ export function formatBlockSegment(
   sym: SymbolSet,
   config: PowerlineConfig,
 ): string {
+  if (blockInfo.source === "native" && blockInfo.nativeUtilization !== null) {
+    const pct = Math.round(blockInfo.nativeUtilization);
+    let text = `${sym.block_cost} ${pct}%`;
+    if (blockInfo.timeRemaining !== null) {
+      text += ` · ${formatTimeRemaining(blockInfo.timeRemaining)}`;
+    }
+    return text;
+  }
+
   const blockCost = formatCost(blockInfo.cost);
   let text = `${sym.block_cost} ${blockCost}`;
 
@@ -309,6 +327,15 @@ export function formatBlockSegment(
   }
 
   return text;
+}
+
+export function formatWeeklySegment(
+  sevenDay: { used_percentage: number; resets_at: number },
+  sym: SymbolSet,
+): string {
+  const pct = Math.round(sevenDay.used_percentage);
+  const timeStr = formatLongTimeRemaining(minutesUntilReset(sevenDay.resets_at));
+  return `${sym.weekly_cost} ${pct}%${timeStr ? ` · ${timeStr}` : ""}`;
 }
 
 export function formatSessionSegment(

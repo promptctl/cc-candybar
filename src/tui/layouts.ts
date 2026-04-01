@@ -14,6 +14,7 @@ import {
   collectWorkspaceParts,
   collectFooterParts,
   formatBlockSegment,
+  formatWeeklySegment,
   formatSessionSegment,
   formatTodaySegment,
 } from "./sections";
@@ -90,6 +91,12 @@ export function renderMediumMetrics(ctx: RenderCtx): void {
       ),
     );
   }
+  const sevenDay = data.hookData.rate_limits?.seven_day;
+  if (sevenDay) {
+    line1Parts.push(
+      colorize(formatWeeklySegment(sevenDay, sym), colors.weeklyFg, reset),
+    );
+  }
   if (data.todayInfo) {
     line1Parts.push(
       colorize(
@@ -120,7 +127,7 @@ export function renderMediumMetrics(ctx: RenderCtx): void {
     lines.push(
       contentRow(
         box,
-        spreadTwo(line1Parts[0] ?? "", line1Parts[1] ?? "", contentWidth),
+        spreadEven(line1Parts, contentWidth),
         innerWidth,
       ),
     );
@@ -192,6 +199,20 @@ export function renderNarrowMetrics(ctx: RenderCtx): void {
         colorize(
           formatBlockSegment(data.blockInfo, sym, config),
           colors.blockFg,
+          reset,
+        ),
+        innerWidth,
+      ),
+    );
+  }
+  const narrowSevenDay = data.hookData.rate_limits?.seven_day;
+  if (narrowSevenDay) {
+    lines.push(
+      contentRow(
+        box,
+        colorize(
+          formatWeeklySegment(narrowSevenDay, sym),
+          colors.weeklyFg,
           reset,
         ),
         innerWidth,

@@ -33,20 +33,22 @@ export interface UsageSegmentConfig extends SegmentConfig {
 
 export interface TmuxSegmentConfig extends SegmentConfig {}
 
+export type BarDisplayStyle =
+  | "text"
+  | "ball"
+  | "bar"
+  | "blocks"
+  | "blocks-line"
+  | "capped"
+  | "dots"
+  | "filled"
+  | "geometric"
+  | "line"
+  | "squares";
+
 export interface ContextSegmentConfig extends SegmentConfig {
   showPercentageOnly?: boolean;
-  displayStyle?:
-    | "text"
-    | "ball"
-    | "bar"
-    | "blocks"
-    | "blocks-line"
-    | "capped"
-    | "dots"
-    | "filled"
-    | "geometric"
-    | "line"
-    | "squares";
+  displayStyle?: BarDisplayStyle;
   autocompactBuffer?: number;
   percentageMode?: "remaining" | "used";
 }
@@ -63,6 +65,7 @@ export interface MetricsSegmentConfig extends SegmentConfig {
 export interface BlockSegmentConfig extends SegmentConfig {
   type: "cost" | "tokens" | "both" | "time" | "weighted";
   burnType?: "cost" | "tokens" | "both" | "none";
+  displayStyle?: BarDisplayStyle;
 }
 
 export interface TodaySegmentConfig extends SegmentConfig {
@@ -80,6 +83,10 @@ export interface EnvSegmentConfig extends SegmentConfig {
   prefix?: string;
 }
 
+export interface WeeklySegmentConfig extends SegmentConfig {
+  displayStyle?: BarDisplayStyle;
+}
+
 export type AnySegmentConfig =
   | SegmentConfig
   | DirectorySegmentConfig
@@ -92,7 +99,8 @@ export type AnySegmentConfig =
   | TodaySegmentConfig
   | VersionSegmentConfig
   | SessionIdSegmentConfig
-  | EnvSegmentConfig;
+  | EnvSegmentConfig
+  | WeeklySegmentConfig;
 
 import {
   formatCost,
@@ -100,6 +108,8 @@ import {
   formatTokenBreakdown,
   formatTimeSince,
   formatDuration,
+  formatLongTimeRemaining,
+  minutesUntilReset,
 } from "../utils/formatters";
 import { getBudgetStatus } from "../utils/budget";
 import type {
@@ -143,6 +153,7 @@ export interface PowerlineSymbols {
   bar_empty: string;
   env: string;
   session_id: string;
+  weekly_cost: string;
 }
 
 export interface SegmentData {
@@ -401,13 +412,7 @@ export class SegmentRenderer {
     const defaultMode = style === "text" ? "remaining" : "used";
     const mode = config?.percentageMode ?? defaultMode;
 
-    const barStyleDef =
-      style === "bar"
-        ? ({
-            filled: this.symbols.bar_filled,
-            empty: this.symbols.bar_empty,
-          } as BarStyleDef)
-        : (BAR_STYLES[style] ?? null);
+    const barStyleDef = this.resolveBarStyleDef(style);
 
     const emptyPct = mode === "remaining" ? "100%" : "0%";
     if (!contextInfo) {
@@ -492,6 +497,30 @@ export class SegmentRenderer {
       );
     }
     return s.filled.repeat(filledCount) + s.empty.repeat(emptyCount);
+  }
+
+  private resolveBarStyleDef(style: string): BarStyleDef | null {
+    return style === "bar"
+      ? { filled: this.symbols.bar_filled, empty: this.symbols.bar_empty }
+      : (BAR_STYLES[style] ?? null);
+  }
+
+  private formatPercentageWithBar(
+    pct: number,
+    displayStyle?: BarDisplayStyle,
+    timeStr?: string | null,
+  ): string {
+    const style = displayStyle ?? "text";
+    const barStyleDef = this.resolveBarStyleDef(style);
+    const barLength = 10;
+
+    if (barStyleDef) {
+      const filledCount = Math.round((pct / 100) * barLength);
+      const emptyCount = barLength - filledCount;
+      const bar = this.buildBar(barStyleDef, filledCount, emptyCount, barLength);
+      return timeStr ? `${bar} ${pct}% (${timeStr})` : `${bar} ${pct}%`;
+    }
+    return timeStr ? `${pct}% (${timeStr})` : `${pct}%`;
   }
 
   renderMetrics(
@@ -586,6 +615,44 @@ export class SegmentRenderer {
     colors: PowerlineColors,
     config?: BlockSegmentConfig,
   ): SegmentData {
+    if (blockInfo.source === "native" && blockInfo.nativeUtilization !== null) {
+      return this.renderNativeBlock(blockInfo, colors, config);
+    }
+    return this.renderTranscriptBlock(blockInfo, colors, config);
+  }
+
+  private renderNativeBlock(
+    blockInfo: BlockInfo,
+    colors: PowerlineColors,
+    config?: BlockSegmentConfig,
+  ): SegmentData {
+    const pct = Math.round(blockInfo.nativeUtilization!);
+    const timeStr = this.formatBlockTimeRemaining(blockInfo.timeRemaining);
+    const blockBudget = this.config.budget?.block;
+    const warningThreshold = blockBudget?.warningThreshold ?? 80;
+
+    let bgColor = colors.blockBg;
+    let fgColor = colors.blockFg;
+    if (pct >= warningThreshold) {
+      bgColor = colors.contextCriticalBg;
+      fgColor = colors.contextCriticalFg;
+    } else if (pct >= 50) {
+      bgColor = colors.contextWarningBg;
+      fgColor = colors.contextWarningFg;
+    }
+
+    return {
+      text: `${this.symbols.block_cost} ${this.formatPercentageWithBar(pct, config?.displayStyle, timeStr)}`,
+      bgColor,
+      fgColor,
+    };
+  }
+
+  private renderTranscriptBlock(
+    blockInfo: BlockInfo,
+    colors: PowerlineColors,
+    config?: BlockSegmentConfig,
+  ): SegmentData {
     let displayText: string;
 
     if (blockInfo.cost === null && blockInfo.tokens === null) {
@@ -595,14 +662,7 @@ export class SegmentRenderer {
       const burnType = config?.burnType;
       const blockBudget = this.config.budget?.block;
 
-      const timeStr =
-        blockInfo.timeRemaining !== null
-          ? (() => {
-              const hours = Math.floor(blockInfo.timeRemaining / 60);
-              const minutes = blockInfo.timeRemaining % 60;
-              return hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`;
-            })()
-          : null;
+      const timeStr = this.formatBlockTimeRemaining(blockInfo.timeRemaining);
 
       let mainContent: string;
       switch (type) {
@@ -628,7 +688,7 @@ export class SegmentRenderer {
             blockBudget?.type,
           );
           break;
-        case "weighted":
+        case "weighted": {
           const rateLimit =
             blockBudget?.type === "tokens" ? blockBudget.amount : undefined;
           const weightedDisplay = formatTokens(blockInfo.weightedTokens);
@@ -643,6 +703,7 @@ export class SegmentRenderer {
             mainContent = `${weightedDisplay} (weighted)`;
           }
           break;
+        }
         case "both":
           mainContent = this.formatUsageWithBudget(
             blockInfo.cost,
@@ -672,7 +733,7 @@ export class SegmentRenderer {
       let burnContent = "";
       if (burnType && burnType !== "none") {
         switch (burnType) {
-          case "cost":
+          case "cost": {
             const costBurnRate =
               blockInfo.burnRate !== null
                 ? blockInfo.burnRate < 1
@@ -681,14 +742,16 @@ export class SegmentRenderer {
                 : "N/A";
             burnContent = ` | ${costBurnRate}`;
             break;
-          case "tokens":
+          }
+          case "tokens": {
             const tokenBurnRate =
               blockInfo.tokenBurnRate !== null
                 ? `${formatTokens(Math.round(blockInfo.tokenBurnRate))}/h`
                 : "N/A";
             burnContent = ` | ${tokenBurnRate}`;
             break;
-          case "both":
+          }
+          case "both": {
             const costBurn =
               blockInfo.burnRate !== null
                 ? blockInfo.burnRate < 1
@@ -701,6 +764,7 @@ export class SegmentRenderer {
                 : "N/A";
             burnContent = ` | ${costBurn} / ${tokenBurn}`;
             break;
+          }
         }
       }
 
@@ -717,6 +781,41 @@ export class SegmentRenderer {
       text: `${this.symbols.block_cost} ${displayText}`,
       bgColor: colors.blockBg,
       fgColor: colors.blockFg,
+    };
+  }
+
+  private formatBlockTimeRemaining(timeRemaining: number | null): string | null {
+    if (timeRemaining === null) return null;
+    const hours = Math.floor(timeRemaining / 60);
+    const minutes = timeRemaining % 60;
+    return hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`;
+  }
+
+  renderWeekly(
+    hookData: ClaudeHookData,
+    colors: PowerlineColors,
+    config?: WeeklySegmentConfig,
+  ): SegmentData | null {
+    const sevenDay = hookData.rate_limits?.seven_day;
+    if (!sevenDay) return null;
+
+    const pct = Math.round(sevenDay.used_percentage);
+    const timeStr = formatLongTimeRemaining(minutesUntilReset(sevenDay.resets_at));
+
+    let bgColor = colors.weeklyBg;
+    let fgColor = colors.weeklyFg;
+    if (pct >= 80) {
+      bgColor = colors.contextCriticalBg;
+      fgColor = colors.contextCriticalFg;
+    } else if (pct >= 50) {
+      bgColor = colors.contextWarningBg;
+      fgColor = colors.contextWarningFg;
+    }
+
+    return {
+      text: `${this.symbols.weekly_cost} ${this.formatPercentageWithBar(pct, config?.displayStyle, timeStr)}`,
+      bgColor,
+      fgColor,
     };
   }
 

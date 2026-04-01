@@ -446,6 +446,191 @@ describe("Segment Time Logic", () => {
     });
   });
 
+  describe("Block Segment - Native Rate Limits", () => {
+    it("should use native rate_limits when present and skip transcript loading", async () => {
+      mockLoadEntries.mockClear();
+
+      const hookData: ClaudeHookData = {
+        hook_event_name: "Status",
+        session_id: "test",
+        transcript_path: "/tmp/test.json",
+        cwd: "/test",
+        model: { id: "claude-sonnet-4-6", display_name: "Sonnet" },
+        workspace: { current_dir: "/test", project_dir: "/test" },
+        rate_limits: {
+          five_hour: {
+            used_percentage: 42.5,
+            resets_at: Math.floor(Date.now() / 1000) + 3 * 3600,
+          },
+        },
+      };
+
+      const blockProvider = new BlockProvider();
+      const blockInfo = await blockProvider.getActiveBlockInfo(hookData);
+
+      expect(blockInfo.source).toBe("native");
+      expect(blockInfo.nativeUtilization).toBe(42.5);
+      expect(blockInfo.timeRemaining).toBeGreaterThan(0);
+      expect(blockInfo.timeRemaining).toBeLessThanOrEqual(180);
+      expect(blockInfo.cost).toBeNull();
+      expect(blockInfo.tokens).toBeNull();
+      expect(blockInfo.burnRate).toBeNull();
+      expect(mockLoadEntries).not.toHaveBeenCalled();
+    });
+
+    it("should fall back to transcript parsing when rate_limits is absent", async () => {
+      mockLoadEntries.mockResolvedValue([]);
+
+      const hookData: ClaudeHookData = {
+        hook_event_name: "Status",
+        session_id: "test",
+        transcript_path: "/tmp/test.json",
+        cwd: "/test",
+        model: { id: "claude-sonnet-4-6", display_name: "Sonnet" },
+        workspace: { current_dir: "/test", project_dir: "/test" },
+      };
+
+      const blockProvider = new BlockProvider();
+      const blockInfo = await blockProvider.getActiveBlockInfo(hookData);
+
+      expect(blockInfo.source).toBe("transcript");
+      expect(blockInfo.nativeUtilization).toBeNull();
+      expect(mockLoadEntries).toHaveBeenCalled();
+    });
+
+    it("should fall back to transcript parsing when called without hookData", async () => {
+      mockLoadEntries.mockResolvedValue([]);
+
+      const blockProvider = new BlockProvider();
+      const blockInfo = await blockProvider.getActiveBlockInfo();
+
+      expect(blockInfo.source).toBe("transcript");
+      expect(blockInfo.nativeUtilization).toBeNull();
+    });
+
+    it("should render native block data with text style", () => {
+      const config = { theme: "dark", display: { style: "minimal" }, budget: { block: { warningThreshold: 80 } } } as any;
+      const symbols = { block_cost: "◱", bar_filled: "▪", bar_empty: "▫" } as any;
+      const colors = {
+        blockBg: "#2a2a2a", blockFg: "#87ceeb",
+        contextWarningBg: "#92400e", contextWarningFg: "#fbbf24",
+        contextCriticalBg: "#991b1b", contextCriticalFg: "#fca5a5",
+      } as any;
+
+      const renderer = new SegmentRenderer(config, symbols);
+      const blockInfo = {
+        cost: null, tokens: null, weightedTokens: null,
+        timeRemaining: 180, burnRate: null, tokenBurnRate: null,
+        source: "native" as const, nativeUtilization: 35,
+      };
+
+      const result = renderer.renderBlock(blockInfo, colors, { enabled: true, type: "cost", displayStyle: "text" });
+      expect(result.text).toContain("◱");
+      expect(result.text).toContain("35%");
+      expect(result.text).toContain("3h 0m");
+      expect(result.bgColor).toBe(colors.blockBg);
+    });
+
+    it("should render native block with bar display style", () => {
+      const config = { theme: "dark", display: { style: "minimal" }, budget: { block: { warningThreshold: 80 } } } as any;
+      const symbols = { block_cost: "◱", bar_filled: "▪", bar_empty: "▫" } as any;
+      const colors = {
+        blockBg: "#2a2a2a", blockFg: "#87ceeb",
+        contextWarningBg: "#92400e", contextWarningFg: "#fbbf24",
+        contextCriticalBg: "#991b1b", contextCriticalFg: "#fca5a5",
+      } as any;
+
+      const renderer = new SegmentRenderer(config, symbols);
+      const blockInfo = {
+        cost: null, tokens: null, weightedTokens: null,
+        timeRemaining: 60, burnRate: null, tokenBurnRate: null,
+        source: "native" as const, nativeUtilization: 50,
+      };
+
+      const result = renderer.renderBlock(blockInfo, colors, { enabled: true, type: "cost", displayStyle: "bar" });
+      expect(result.text).toContain("▪");
+      expect(result.text).toContain("▫");
+      expect(result.text).toContain("50%");
+    });
+
+    it("should apply warning colors when native utilization >= 50%", () => {
+      const config = { theme: "dark", display: { style: "minimal" }, budget: { block: { warningThreshold: 80 } } } as any;
+      const symbols = { block_cost: "◱" } as any;
+      const colors = {
+        blockBg: "#2a2a2a", blockFg: "#87ceeb",
+        contextWarningBg: "#92400e", contextWarningFg: "#fbbf24",
+        contextCriticalBg: "#991b1b", contextCriticalFg: "#fca5a5",
+      } as any;
+
+      const renderer = new SegmentRenderer(config, symbols);
+
+      const at60 = renderer.renderBlock(
+        { cost: null, tokens: null, weightedTokens: null, timeRemaining: 120, burnRate: null, tokenBurnRate: null, source: "native", nativeUtilization: 60 },
+        colors, { enabled: true, type: "cost" },
+      );
+      expect(at60.bgColor).toBe(colors.contextWarningBg);
+
+      const at90 = renderer.renderBlock(
+        { cost: null, tokens: null, weightedTokens: null, timeRemaining: 30, burnRate: null, tokenBurnRate: null, source: "native", nativeUtilization: 90 },
+        colors, { enabled: true, type: "cost" },
+      );
+      expect(at90.bgColor).toBe(colors.contextCriticalBg);
+    });
+  });
+
+  describe("Weekly Segment", () => {
+    it("should render when seven_day rate limits are present", () => {
+      const config = { theme: "dark", display: { style: "minimal" } } as any;
+      const symbols = { weekly_cost: "◑" } as any;
+      const colors = {
+        weeklyBg: "#2a2a3a", weeklyFg: "#a0c4e8",
+        contextWarningBg: "#92400e", contextWarningFg: "#fbbf24",
+        contextCriticalBg: "#991b1b", contextCriticalFg: "#fca5a5",
+      } as any;
+
+      const renderer = new SegmentRenderer(config, symbols);
+      const hookData: ClaudeHookData = {
+        hook_event_name: "Status",
+        session_id: "test",
+        transcript_path: "/tmp/test.json",
+        cwd: "/test",
+        model: { id: "claude-sonnet-4-6", display_name: "Sonnet" },
+        workspace: { current_dir: "/test", project_dir: "/test" },
+        rate_limits: {
+          seven_day: {
+            used_percentage: 41.2,
+            resets_at: Math.floor(Date.now() / 1000) + 4 * 24 * 3600,
+          },
+        },
+      };
+
+      const result = renderer.renderWeekly(hookData, colors);
+      expect(result).not.toBeNull();
+      expect(result!.text).toContain("◑");
+      expect(result!.text).toContain("41%");
+      expect(result!.bgColor).toBe(colors.weeklyBg);
+    });
+
+    it("should return null when seven_day rate limits are absent", () => {
+      const config = { theme: "dark", display: { style: "minimal" } } as any;
+      const symbols = { weekly_cost: "◑" } as any;
+      const colors = { weeklyBg: "#2a2a3a", weeklyFg: "#a0c4e8" } as any;
+
+      const renderer = new SegmentRenderer(config, symbols);
+      const hookData: ClaudeHookData = {
+        hook_event_name: "Status",
+        session_id: "test",
+        transcript_path: "/tmp/test.json",
+        cwd: "/test",
+        model: { id: "claude-sonnet-4-6", display_name: "Sonnet" },
+        workspace: { current_dir: "/test", project_dir: "/test" },
+      };
+
+      const result = renderer.renderWeekly(hookData, colors);
+      expect(result).toBeNull();
+    });
+  });
+
   describe("Context Segment Bar Styles", () => {
     const config = { theme: "dark", display: { style: "minimal" } } as any;
     const symbols = {

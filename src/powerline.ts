@@ -32,6 +32,7 @@ import {
   VersionSegmentConfig,
   SessionIdSegmentConfig,
   EnvSegmentConfig,
+  WeeklySegmentConfig,
 } from "./segments";
 import { BlockProvider, BlockInfo } from "./segments/block";
 import { TodayProvider, TodayInfo } from "./segments/today";
@@ -140,7 +141,7 @@ export class PowerlineRenderer {
       : null;
 
     const blockInfo = this.needsSegmentInfo("block")
-      ? await this.blockProvider.getActiveBlockInfo()
+      ? await this.blockProvider.getActiveBlockInfo(hookData)
       : null;
 
     const todayInfo = this.needsSegmentInfo("today")
@@ -292,7 +293,7 @@ export class PowerlineRenderer {
 
     const results = await Promise.allSettled([
       this.usageProvider.getUsageInfo(hookData.session_id, hookData),
-      this.blockProvider.getActiveBlockInfo(),
+      this.blockProvider.getActiveBlockInfo(hookData),
       this.todayProvider.getTodayInfo(),
       this.contextProvider.getContextInfo(hookData, autocompactBuffer),
       this.metricsProvider.getMetricsInfo(hookData.session_id, hookData),
@@ -549,6 +550,14 @@ export class PowerlineRenderer {
       );
     }
 
+    if (segment.type === "weekly") {
+      return this.segmentRenderer.renderWeekly(
+        hookData,
+        colors,
+        segment.config as WeeklySegmentConfig,
+      );
+    }
+
     return null;
   }
 
@@ -688,6 +697,7 @@ export class PowerlineRenderer {
       bar_empty: symbolSet.bar_empty,
       env: symbolSet.env,
       session_id: symbolSet.session_id,
+      weekly_cost: symbolSet.weekly_cost,
     };
   }
 
@@ -765,6 +775,7 @@ export class PowerlineRenderer {
     const metrics = getSegmentColors("metrics");
     const version = getSegmentColors("version");
     const env = getSegmentColors("env");
+    const weekly = getSegmentColors("weekly");
 
     return {
       reset: colorSupport === "none" ? "" : RESET_CODE,
@@ -794,6 +805,8 @@ export class PowerlineRenderer {
       versionFg: version.fg,
       envBg: env.bg,
       envFg: env.fg,
+      weeklyBg: weekly.bg,
+      weeklyFg: weekly.fg,
     };
   }
 
@@ -825,6 +838,8 @@ export class PowerlineRenderer {
         return colors.versionBg;
       case "env":
         return colors.envBg;
+      case "weekly":
+        return colors.weeklyBg;
       default:
         return colors.modeBg;
     }
