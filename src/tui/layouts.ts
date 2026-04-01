@@ -125,11 +125,7 @@ export function renderMediumMetrics(ctx: RenderCtx): void {
 
   if (line1Parts.length > 0) {
     lines.push(
-      contentRow(
-        box,
-        spreadEven(line1Parts, contentWidth),
-        innerWidth,
-      ),
+      contentRow(box, spreadEven(line1Parts, contentWidth), innerWidth),
     );
   }
   if (line2Parts.length > 0) {

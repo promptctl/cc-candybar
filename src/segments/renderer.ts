@@ -517,7 +517,12 @@ export class SegmentRenderer {
     if (barStyleDef) {
       const filledCount = Math.round((pct / 100) * barLength);
       const emptyCount = barLength - filledCount;
-      const bar = this.buildBar(barStyleDef, filledCount, emptyCount, barLength);
+      const bar = this.buildBar(
+        barStyleDef,
+        filledCount,
+        emptyCount,
+        barLength,
+      );
       return timeStr ? `${bar} ${pct}% (${timeStr})` : `${bar} ${pct}%`;
     }
     return timeStr ? `${pct}% (${timeStr})` : `${pct}%`;
@@ -784,7 +789,9 @@ export class SegmentRenderer {
     };
   }
 
-  private formatBlockTimeRemaining(timeRemaining: number | null): string | null {
+  private formatBlockTimeRemaining(
+    timeRemaining: number | null,
+  ): string | null {
     if (timeRemaining === null) return null;
     const hours = Math.floor(timeRemaining / 60);
     const minutes = timeRemaining % 60;
@@ -800,7 +807,9 @@ export class SegmentRenderer {
     if (!sevenDay) return null;
 
     const pct = Math.round(sevenDay.used_percentage);
-    const timeStr = formatLongTimeRemaining(minutesUntilReset(sevenDay.resets_at));
+    const timeStr = formatLongTimeRemaining(
+      minutesUntilReset(sevenDay.resets_at),
+    );
 
     let bgColor = colors.weeklyBg;
     let fgColor = colors.weeklyFg;

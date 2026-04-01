@@ -334,7 +334,9 @@ export function formatWeeklySegment(
   sym: SymbolSet,
 ): string {
   const pct = Math.round(sevenDay.used_percentage);
-  const timeStr = formatLongTimeRemaining(minutesUntilReset(sevenDay.resets_at));
+  const timeStr = formatLongTimeRemaining(
+    minutesUntilReset(sevenDay.resets_at),
+  );
   return `${sym.weekly_cost} ${pct}%${timeStr ? ` · ${timeStr}` : ""}`;
 }
 
