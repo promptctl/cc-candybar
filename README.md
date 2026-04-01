@@ -434,7 +434,8 @@ Configure context window limits for different model types. Defaults to 200K toke
 "block": {
   "enabled": true,
   "type": "weighted",
-  "burnType": "cost"
+  "burnType": "cost",
+  "displayStyle": "text"
 }
 ```
 
@@ -442,10 +443,49 @@ Configure context window limits for different model types. Defaults to 200K toke
 
 - `type`: Display format - `cost` | `tokens` | `both` | `time` | `weighted`
 - `burnType`: Burn rate display - `cost` | `tokens` | `both` | `none`
+- `displayStyle`: Visual style for utilization display (see table below). Only applies when native rate limit data is available.
 
-**Weighted Tokens:** Opus tokens count 5x toward rate limits compared to Sonnet/Haiku tokens
+**Native Rate Limits:** When Claude Code provides `rate_limits` in its hook data (Claude.ai Pro/Max subscribers), the block segment displays the official 5-hour utilization percentage and reset countdown instead of transcript-based estimates. This is more accurate, accounts for cross-machine usage, and requires no disk I/O. When native data is unavailable (API users, older Claude Code versions), the segment falls back to transcript-based cost/token tracking.
+
+**Display Styles** (native mode only):
+
+| Style | Example |
+|-------|---------|
+| `text` (default) | `◱ 23% (4h 12m)` |
+| `bar` | `◱ ▪▪▫▫▫▫▫▫▫▫ 23% (4h 12m)` |
+| `blocks` | `◱ ██░░░░░░░░ 23% (4h 12m)` |
+| `blocks-line` | `◱ ██──────── 23% (4h 12m)` |
+| `capped` | `◱ ━╸┄┄┄┄┄┄┄┄ 23% (4h 12m)` |
+| `dots` | `◱ ●●○○○○○○○○ 23% (4h 12m)` |
+| `filled` | `◱ ■■□□□□□□□□ 23% (4h 12m)` |
+| `geometric` | `◱ ▰▰▱▱▱▱▱▱▱▱ 23% (4h 12m)` |
+| `line` | `◱ ━━┄┄┄┄┄┄┄┄ 23% (4h 12m)` |
+| `squares` | `◱ ◼◼◻◻◻◻◻◻◻◻ 23% (4h 12m)` |
+| `ball` | `◱ ──●─────── 23% (4h 12m)` |
+
+**Weighted Tokens:** In transcript mode, Opus tokens count 5x toward rate limits compared to Sonnet/Haiku tokens
 
 **Symbols:** `◱` Block (unicode) • `B` Block (text)
+
+</details>
+
+<details>
+<summary><strong>Weekly</strong> - Shows usage within 7-day rolling rate limit window</summary>
+
+```json
+"weekly": {
+  "enabled": true,
+  "displayStyle": "text"
+}
+```
+
+**Options:**
+
+- `displayStyle`: Visual style for utilization display - same options as the block segment (see table above)
+
+Only visible when Claude Code provides native `rate_limits.seven_day` data (Claude.ai Pro/Max subscribers). Hidden when the data is not available.
+
+**Symbols:** `◑` Weekly (unicode) • `W` Weekly (text)
 
 </details>
 
