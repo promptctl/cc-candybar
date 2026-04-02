@@ -1,3 +1,10 @@
+## [1.23.3](https://github.com/Owloops/claude-powerline/compare/v1.23.2...v1.23.3) (2026-04-02)
+
+
+### Bug Fixes
+
+* **plugin:** verify binary before use and add theme previews ([848582f](https://github.com/Owloops/claude-powerline/commit/848582f9fe14cc4387659e4c8ba3152b2581e7ee))
+
 ## [1.23.2](https://github.com/Owloops/claude-powerline/compare/v1.23.1...v1.23.2) (2026-04-02)
 
 
