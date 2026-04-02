@@ -1,3 +1,10 @@
+## [1.23.4](https://github.com/Owloops/claude-powerline/compare/v1.23.3...v1.23.4) (2026-04-02)
+
+
+### Bug Fixes
+
+* **docs:** remove redundant features section from readme ([4a09117](https://github.com/Owloops/claude-powerline/commit/4a0911735cb7a24b08b84737229e01c2872c9962))
+
 ## [1.23.3](https://github.com/Owloops/claude-powerline/compare/v1.23.2...v1.23.3) (2026-04-02)
 
 
