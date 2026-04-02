@@ -1,3 +1,10 @@
+## [1.23.2](https://github.com/Owloops/claude-powerline/compare/v1.23.1...v1.23.2) (2026-04-02)
+
+
+### Bug Fixes
+
+* **docs:** correct plugin install commands in readme ([a4f6256](https://github.com/Owloops/claude-powerline/commit/a4f62569e62986473015fc69a8dd44cb2e328e4e))
+
 ## [1.23.1](https://github.com/Owloops/claude-powerline/compare/v1.23.0...v1.23.1) (2026-04-02)
 
 
