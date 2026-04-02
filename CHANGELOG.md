@@ -1,3 +1,10 @@
+## [1.22.1](https://github.com/Owloops/claude-powerline/compare/v1.22.0...v1.22.1) (2026-04-02)
+
+
+### Bug Fixes
+
+* **context:** prefer native used_percentage from hook data ([25dc1ec](https://github.com/Owloops/claude-powerline/commit/25dc1ec7663ffe17fd0663846283296b3bbb30a6))
+
 # [1.22.0](https://github.com/Owloops/claude-powerline/compare/v1.21.2...v1.22.0) (2026-04-01)
 
 
