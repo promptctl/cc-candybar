@@ -1,3 +1,10 @@
+# [1.23.0](https://github.com/Owloops/claude-powerline/compare/v1.22.1...v1.23.0) (2026-04-02)
+
+
+### Features
+
+* **plugin:** add setup wizard with /powerline command ([249b8ae](https://github.com/Owloops/claude-powerline/commit/249b8ae68a6125ee2f8d974e147328b57a09bae0))
+
 ## [1.22.1](https://github.com/Owloops/claude-powerline/compare/v1.22.0...v1.22.1) (2026-04-02)
 
 
