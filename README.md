@@ -114,9 +114,9 @@ Requires Node.js 18+, Claude Code, and Git 2.0+. For best display, install a [Ne
 The interactive wizard walks you through theme, style, font, segment, and budget selection.
 
 ```bash
-# run inside Claude Code (pick one install method)
-/plugin marketplace add Owloops/claude-powerline   # from GitHub
-/plugin install @owloops/claude-powerline@claude-powerline   # or from npm
+# run inside Claude Code, one at a time
+/plugin marketplace add Owloops/claude-powerline
+/plugin install claude-powerline@claude-powerline
 /powerline
 ```
 
