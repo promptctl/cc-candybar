@@ -12,44 +12,8 @@
 
 [![Mentioned in Awesome Claude Code](https://awesome.re/mentioned-badge-flat.svg)](https://github.com/hesreallyhim/awesome-claude-code)
 
-### Demo
-
 <img src="images/demo-tui.gif" alt="Claude Powerline TUI Mode Demo" width="600"/>
 
-_Live demonstration: real-time usage tracking, git integration, and theme showcase_
-
-<table>
-   <tr>
-      <td align="center">
-         <img src="images/claude-powerline-dark.png" width="500" alt="Dark Theme"><br>
-         <strong>Dark</strong>
-      </td>
-      <td align="center">
-         <img src="images/claude-powerline-light.png" width="500" alt="Light Theme"><br>
-         <strong>Light</strong>
-      </td>
-   </tr>
-   <tr>
-      <td align="center">
-         <img src="images/claude-powerline-nord.png" width="500" alt="Nord Theme"><br>
-         <strong>Nord</strong>
-      </td>
-      <td align="center">
-         <img src="images/claude-powerline-tokyo-night.png" width="500" alt="Tokyo Night Theme"><br>
-         <strong>Tokyo Night</strong>
-      </td>
-   </tr>
-   <tr>
-      <td align="center">
-         <img src="images/claude-powerline-rose-pine.png" width="500" alt="Rose Pine Theme"><br>
-         <strong>Rose Pine</strong>
-      </td>
-      <td align="center">
-         <img src="images/claude-powerline-custom.png" width="500" alt="Custom Theme"><br>
-         <em>Create your own!</em>
-      </td>
-   </tr>
-</table>
 </div>
 
 ## Installation
@@ -82,20 +46,17 @@ Add to your Claude Code `settings.json`:
 }
 ```
 
-Start a Claude session and the statusline appears at the bottom.
-
-![Claude Code with powerline](images/claude-interface-with-powerline.png)
-
-Using `npx` automatically downloads and runs the latest version without manual updates.
+Start a Claude session and the statusline appears at the bottom. Using `npx` automatically downloads and runs the latest version without manual updates.
 
 ## Styles
 
-<img src="images/claude-powerline-styles.png" alt="Claude Powerline Styles" width="600">
+<img src="images/claude-powerline-styles.png" alt="Claude Powerline Styles" width="700">
 
-- **minimal** -- Segments separated by spaces, no decorations
-- **powerline** -- Arrow-shaped separators between segments (best with Nerd Font)
-- **capsule** -- Rounded pill-shaped segments (best with Nerd Font)
-- **tui** -- Bordered panel with responsive multi-line layout. TUI mode is **opinionated**: it always displays all data regardless of segment configuration. Only theme, charset, and budget thresholds are respected.
+## Themes
+
+<img src="images/claude-powerline-themes.png" alt="Claude Powerline Themes" width="700">
+
+6 built-in themes (dark, light, nord, tokyo-night, rose-pine, gruvbox) or [create your own](#configuration).
 
 <details>
 <summary><h2>Configuration</h2></summary>
