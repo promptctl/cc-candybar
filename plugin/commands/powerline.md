@@ -88,7 +88,18 @@ Then ask:
 
 ## Step 3: Theme Selection
 
-Display the available themes and tell the user to type their choice:
+Show a preview of all six themes using the bundled preview script.
+
+> [!IMPORTANT]
+> You cannot render ANSI escape codes in your text output.
+> You MUST run the preview command below and let the terminal display the result.
+> After running, tell the user to expand the bash output if they cannot see the previews.
+
+```bash
+${CLAUDE_PLUGIN_ROOT}/bin/preview.sh --compare-themes --charset=${charset}
+```
+
+After running the command, display the theme list and tell the user to check the bash output above for previews:
 
 ````markdown
 **Available themes:**

@@ -51,15 +51,21 @@ cleanup() {
 }
 trap cleanup EXIT
 
+test_binary() {
+    local bin="$1"
+    printf '{}' | "${bin}" --help >/dev/null 2>&1
+}
+
 find_binary() {
     local npm_bin="${PLUGIN_ROOT}/../bin/claude-powerline"
-    if [[ -f "${npm_bin}" ]]; then
+    if [[ -f "${npm_bin}" ]] && test_binary "${npm_bin}"; then
         printf '%s' "${npm_bin}"
         return 0
     fi
 
-    if command -v claude-powerline >/dev/null 2>&1; then
-        command -v claude-powerline
+    local path_bin
+    if path_bin="$(command -v claude-powerline 2>/dev/null)" && test_binary "${path_bin}"; then
+        printf '%s' "${path_bin}"
         return 0
     fi
 
