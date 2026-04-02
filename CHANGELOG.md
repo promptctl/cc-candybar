@@ -1,3 +1,10 @@
+## [1.23.1](https://github.com/Owloops/claude-powerline/compare/v1.23.0...v1.23.1) (2026-04-02)
+
+
+### Bug Fixes
+
+* **plugin:** add marketplace.json for plugin discovery ([b99ea4e](https://github.com/Owloops/claude-powerline/commit/b99ea4e76ce114966efad10ba54f61f9fe8ae8f5))
+
 # [1.23.0](https://github.com/Owloops/claude-powerline/compare/v1.22.1...v1.23.0) (2026-04-02)
 
 
