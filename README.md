@@ -52,59 +52,6 @@ _Live demonstration: real-time usage tracking, git integration, and theme showca
 </table>
 </div>
 
-## Features
-
-<table>
-<tr>
-<td width="50%">
-
-**Real-time usage tracking**
-
-Monitor session costs, 5-hour billing windows, and daily budgets with percentage alerts.
-
-</td>
-<td width="50%">
-
-**Git integration**
-
-Branch status, commits ahead/behind, working tree changes, and repository info at a glance.
-
-</td>
-</tr>
-<tr>
-<td width="50%">
-
-**6 built-in themes**
-
-Dark, light, nord, tokyo-night, rose-pine, and gruvbox themes with full custom color support.
-
-</td>
-<td width="50%">
-
-**Multiple styles**
-
-Minimal, powerline, capsule, and TUI panel display with unicode or ASCII character sets.
-
-</td>
-</tr>
-<tr>
-<td width="50%">
-
-**Auto-wrap layout**
-
-Segments automatically wrap to new lines based on terminal width. No more cutoff.
-
-</td>
-<td width="50%">
-
-**Zero dependencies**
-
-Lightweight and fast with no external dependencies to install.
-
-</td>
-</tr>
-</table>
-
 ## Installation
 
 Requires Node.js 18+, Claude Code, and Git 2.0+. For best display, install a [Nerd Font](https://www.nerdfonts.com/) or use `--charset=text` for ASCII-only symbols.
