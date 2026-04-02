@@ -1,3 +1,10 @@
+## [1.23.5](https://github.com/Owloops/claude-powerline/compare/v1.23.4...v1.23.5) (2026-04-02)
+
+
+### Bug Fixes
+
+* **docs:** replace per-theme screenshots with unified theme and style images ([74a52fd](https://github.com/Owloops/claude-powerline/commit/74a52fd69249f72e43ac6db2465b8b755240f3f2))
+
 ## [1.23.4](https://github.com/Owloops/claude-powerline/compare/v1.23.3...v1.23.4) (2026-04-02)
 
 
