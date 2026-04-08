@@ -1,3 +1,10 @@
+## [1.24.1](https://github.com/Owloops/claude-powerline/compare/v1.24.0...v1.24.1) (2026-04-08)
+
+
+### Bug Fixes
+
+* **tui:** crash when custom theme has fg-only color entries ([04745a5](https://github.com/Owloops/claude-powerline/commit/04745a55e59e28965d01ce8faf11ba2f0c494ab9))
+
 # [1.24.0](https://github.com/Owloops/claude-powerline/compare/v1.23.5...v1.24.0) (2026-04-08)
 
 
