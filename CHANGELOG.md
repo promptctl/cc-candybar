@@ -1,3 +1,10 @@
+## [1.24.4](https://github.com/Owloops/claude-powerline/compare/v1.24.3...v1.24.4) (2026-04-08)
+
+
+### Bug Fixes
+
+* **block:** remove transcript fallback, use native rate limits only ([6697e5d](https://github.com/Owloops/claude-powerline/commit/6697e5dca6c58eaba06ab4ffb61771d96156a955))
+
 ## [1.24.3](https://github.com/Owloops/claude-powerline/compare/v1.24.2...v1.24.3) (2026-04-08)
 
 
