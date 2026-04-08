@@ -739,7 +739,12 @@ export class PowerlineRenderer {
     const terminalRef = isLightTheme ? "#f0f0f0" : "#1e1e1e";
 
     const getSegmentColors = (segment: Exclude<keyof ColorTheme, "tui">) => {
-      const colors = colorTheme[segment] || fallbackTheme[segment];
+      const fallback = fallbackTheme[segment];
+      const custom = colorTheme[segment];
+      const colors = {
+        fg: custom?.fg || fallback.fg,
+        bg: custom?.bg || fallback.bg,
+      };
 
       let fgHex = colors.fg;
       if (isTui && hexColorDistance(fgHex, terminalRef) < 60) {
