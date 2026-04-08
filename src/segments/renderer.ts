@@ -21,7 +21,6 @@ import {
   formatTimeSince,
   formatDuration,
   formatLongTimeRemaining,
-  formatBurnRate,
   collapseHome,
   minutesUntilReset,
 } from "../utils/formatters";
@@ -614,19 +613,8 @@ export class SegmentRenderer {
     colors: PowerlineColors,
     config?: BlockSegmentConfig,
   ): SegmentData {
-    if (blockInfo.source === "native" && blockInfo.nativeUtilization !== null) {
-      return this.renderNativeBlock(blockInfo, colors, config);
-    }
-    return this.renderTranscriptBlock(blockInfo, colors, config);
-  }
-
-  private renderNativeBlock(
-    blockInfo: BlockInfo,
-    colors: PowerlineColors,
-    config?: BlockSegmentConfig,
-  ): SegmentData {
-    const pct = Math.round(blockInfo.nativeUtilization!);
-    const timeStr = this.formatBlockTimeRemaining(blockInfo.timeRemaining);
+    const pct = Math.round(blockInfo.nativeUtilization);
+    const timeStr = formatLongTimeRemaining(blockInfo.timeRemaining);
     const blockBudget = this.config.budget?.block;
     const warningThreshold = blockBudget?.warningThreshold ?? 80;
 
@@ -645,139 +633,6 @@ export class SegmentRenderer {
       bgColor,
       fgColor,
     };
-  }
-
-  private renderTranscriptBlock(
-    blockInfo: BlockInfo,
-    colors: PowerlineColors,
-    config?: BlockSegmentConfig,
-  ): SegmentData {
-    let displayText: string;
-
-    if (blockInfo.cost === null && blockInfo.tokens === null) {
-      displayText = "No active block";
-    } else {
-      const type = config?.type || "cost";
-      const burnType = config?.burnType;
-      const blockBudget = this.config.budget?.block;
-
-      const timeStr = this.formatBlockTimeRemaining(blockInfo.timeRemaining);
-
-      let mainContent: string;
-      switch (type) {
-        case "cost":
-          mainContent = this.formatUsageWithBudget(
-            blockInfo.cost,
-            null,
-            null,
-            "cost",
-            blockBudget?.amount,
-            blockBudget?.warningThreshold,
-            blockBudget?.type,
-          );
-          break;
-        case "tokens":
-          mainContent = this.formatUsageWithBudget(
-            null,
-            blockInfo.tokens,
-            null,
-            "tokens",
-            blockBudget?.amount,
-            blockBudget?.warningThreshold,
-            blockBudget?.type,
-          );
-          break;
-        case "weighted": {
-          const rateLimit =
-            blockBudget?.type === "tokens" ? blockBudget.amount : undefined;
-          const weightedDisplay = formatTokens(blockInfo.weightedTokens);
-          if (rateLimit && blockInfo.weightedTokens !== null) {
-            const rateLimitStatus = getBudgetStatus(
-              blockInfo.weightedTokens,
-              rateLimit,
-              blockBudget?.warningThreshold || 80,
-            );
-            mainContent = `${weightedDisplay}${rateLimitStatus.displayText}`;
-          } else {
-            mainContent = `${weightedDisplay} (weighted)`;
-          }
-          break;
-        }
-        case "both":
-          mainContent = this.formatUsageWithBudget(
-            blockInfo.cost,
-            blockInfo.tokens,
-            null,
-            "both",
-            blockBudget?.amount,
-            blockBudget?.warningThreshold,
-            blockBudget?.type,
-          );
-          break;
-        case "time":
-          mainContent = timeStr || "N/A";
-          break;
-        default:
-          mainContent = this.formatUsageWithBudget(
-            blockInfo.cost,
-            null,
-            null,
-            "cost",
-            blockBudget?.amount,
-            blockBudget?.warningThreshold,
-            blockBudget?.type,
-          );
-      }
-
-      let burnContent = "";
-      if (burnType && burnType !== "none") {
-        switch (burnType) {
-          case "cost": {
-            const costBurnRate = formatBurnRate(blockInfo.burnRate) || "N/A";
-            burnContent = ` | ${costBurnRate}`;
-            break;
-          }
-          case "tokens": {
-            const tokenBurnRate =
-              blockInfo.tokenBurnRate !== null
-                ? `${formatTokens(Math.round(blockInfo.tokenBurnRate))}/h`
-                : "N/A";
-            burnContent = ` | ${tokenBurnRate}`;
-            break;
-          }
-          case "both": {
-            const costBurn = formatBurnRate(blockInfo.burnRate) || "N/A";
-            const tokenBurn =
-              blockInfo.tokenBurnRate !== null
-                ? `${formatTokens(Math.round(blockInfo.tokenBurnRate))}/h`
-                : "N/A";
-            burnContent = ` | ${costBurn} / ${tokenBurn}`;
-            break;
-          }
-        }
-      }
-
-      if (type === "time") {
-        displayText = mainContent;
-      } else {
-        displayText = timeStr
-          ? `${mainContent}${burnContent} (${timeStr} left)`
-          : `${mainContent}${burnContent}`;
-      }
-    }
-
-    return {
-      text: `${this.symbols.block_cost} ${displayText}`,
-      bgColor: colors.blockBg,
-      fgColor: colors.blockFg,
-    };
-  }
-
-  private formatBlockTimeRemaining(
-    timeRemaining: number | null,
-  ): string | null {
-    if (timeRemaining === null) return null;
-    return formatLongTimeRemaining(timeRemaining);
   }
 
   renderWeekly(

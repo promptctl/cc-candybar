@@ -278,21 +278,17 @@ Configure context window limits for different model types. Defaults to 200K toke
 ```json
 "block": {
   "enabled": true,
-  "type": "weighted",
-  "burnType": "cost",
   "displayStyle": "text"
 }
 ```
 
 **Options:**
 
-- `type`: Display format - `cost` | `tokens` | `both` | `time` | `weighted`
-- `burnType`: Burn rate display - `cost` | `tokens` | `both` | `none`
-- `displayStyle`: Visual style for utilization display (see table below). Only applies when native rate limit data is available.
+- `displayStyle`: Visual style for utilization display (see table below)
 
-**Native Rate Limits:** When Claude Code provides `rate_limits` in its hook data (Claude.ai Pro/Max subscribers), the block segment displays the official 5-hour utilization percentage and reset countdown instead of transcript-based estimates. This is more accurate, accounts for cross-machine usage, and requires no disk I/O. When native data is unavailable (API users, older Claude Code versions), the segment falls back to transcript-based cost/token tracking.
+Requires Claude Code's native `rate_limits` hook data (Claude.ai Pro/Max subscribers). Displays the official 5-hour utilization percentage and reset countdown. Hidden when native data is unavailable.
 
-**Display Styles** (native mode only):
+**Display Styles:**
 
 | Style | Example |
 |-------|---------|
@@ -307,8 +303,6 @@ Configure context window limits for different model types. Defaults to 200K toke
 | `line` | `◱ ━━┄┄┄┄┄┄┄┄ 23% (4h 12m)` |
 | `squares` | `◱ ◼◼◻◻◻◻◻◻◻◻ 23% (4h 12m)` |
 | `ball` | `◱ ──●─────── 23% (4h 12m)` |
-
-**Weighted Tokens:** In transcript mode, Opus tokens count 5x toward rate limits compared to Sonnet/Haiku tokens
 
 **Symbols:** `◱` Block (unicode) &#8226; `B` Block (text)
 
@@ -728,7 +722,7 @@ Use bare segment names to render the full pre-formatted segment:
 ```
 context  block  session  today   weekly
 git      dir    version  tmux    metrics
-activity burn   env
+activity env
 ```
 
 #### Dot-Notation Subsegments
@@ -745,7 +739,6 @@ Use `segment.part` to place individual pieces of a segment into separate cells w
 | `weekly` | `icon`, `bar`, `pct`, `time` |
 | `metrics` | `response`, `responseIcon`, `responseVal`, `lastResponse`, `lastResponseIcon`, `lastResponseVal`, `added`, `addedIcon`, `addedVal`, `removed`, `removedIcon`, `removedVal` |
 | `activity` | `duration`, `durationIcon`, `durationVal`, `messages`, `messagesIcon`, `messagesVal` |
-| `burn` | `icon`, `rate` |
 | `version` | `icon`, `value` |
 | `tmux` | `label`, `value` |
 | `dir` | `value` |
@@ -761,7 +754,7 @@ Example, block segment with a progress bar, mirroring the context layout:
 ```
 
 > [!NOTE]
-> `context.bar`, `block.bar`, and `weekly.bar` are width-aware. Their progress bars render at exactly the resolved column width. Block bar uses `nativeUtilization` when available, or `cost / budget` for transcript mode. Weekly bar uses the 7-day `used_percentage`.
+> `context.bar`, `block.bar`, and `weekly.bar` are width-aware. Their progress bars render at exactly the resolved column width. Block bar uses `nativeUtilization` from the 5-hour rate limit data. Weekly bar uses the 7-day `used_percentage`.
 
 #### Custom Box Characters
 
@@ -844,37 +837,6 @@ Empty segments are automatically removed. Cells resolve to `.`, empty rows are d
 
 > [!NOTE]
 > Claude Code's internal progress indicators (spinner, context bar) may briefly overlap the TUI panel during tool calls. This is a limitation of the hook architecture and resolves once the tool call completes.
-
-</details>
-
-<details>
-<summary><strong>Performance</strong></summary>
-
-Execution times for different configurations:
-
-- **~80ms** default config (`directory`, `git`, `model`, `session`, `today`, `context`)
-- **~240ms** full-featured (all segments enabled)
-
-| Segment     | Timing | Notes                                      |
-| ----------- | ------ | ------------------------------------------ |
-| `directory` | ~40ms  | No external commands                       |
-| `model`     | ~40ms  | Uses hook data                             |
-| `session`   | ~40ms  | Minimal transcript parsing                 |
-| `context`   | ~40ms  | Hook data calculation                      |
-| `metrics`   | ~40ms  | Transcript analysis                        |
-| `git`       | ~60ms  | No caching for fresh data                  |
-| `tmux`      | ~50ms  | Environment check + command                |
-| `block`     | ~180ms | 5-hour window transcript load              |
-| `today`     | ~250ms | Full daily transcript load (cached: ~50ms) |
-| `version`   | ~40ms  | Uses hook data                             |
-
-**Benchmark:** `npm run benchmark:timing`
-
-**Optimization Tips:**
-
-- **Global install:** `npm install -g` to avoid npx overhead
-- **Disable unused segments** for faster execution
-- **Cache cleanup:** Remove `~/.claude/powerline/` if needed
 
 </details>
 

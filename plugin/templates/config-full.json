@@ -18,7 +18,7 @@
       {
         "segments": {
           "today": { "enabled": true, "type": "cost" },
-          "block": { "enabled": true, "type": "cost", "burnType": "cost", "displayStyle": "replace:BAR_STYLE" },
+          "block": { "enabled": true, "displayStyle": "replace:BAR_STYLE" },
           "weekly": { "enabled": true, "displayStyle": "replace:BAR_STYLE" },
           "context": {
             "enabled": true,

@@ -50,7 +50,6 @@ const SEGMENT_NAME_LIST = [
   "tmux",
   "metrics",
   "activity",
-  "burn",
   "env",
 ] as const;
 
@@ -90,7 +89,6 @@ export const SEGMENT_PARTS: Record<SegmentName, readonly string[]> = {
     "messagesVal",
   ],
   model: ["icon", "value"],
-  burn: ["icon", "rate"],
   version: ["icon", "value"],
   tmux: ["label", "value"],
   dir: ["value"],

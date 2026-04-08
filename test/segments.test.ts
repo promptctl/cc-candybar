@@ -74,76 +74,37 @@ describe("Segment Time Logic", () => {
   });
 
   describe("Block Segment", () => {
-    it("should only include entries from current 5-hour window", async () => {
-      const now = new Date();
-      const hoursSinceMidnight = now.getHours();
-      const blockNumber = Math.floor(hoursSinceMidnight / 5);
-      const blockStart = new Date();
-      blockStart.setHours(blockNumber * 5, 0, 0, 0);
-      const blockEnd = new Date();
-      blockEnd.setHours((blockNumber + 1) * 5, 0, 0, 0);
-
-      const currentBlockEntry = {
-        timestamp: new Date(blockStart.getTime() + 60 * 60 * 1000),
-        message: {
-          usage: {
-            input_tokens: 2000,
-            output_tokens: 1000,
-            cache_creation_input_tokens: 200,
-            cache_read_input_tokens: 100,
-          },
-          model: "claude-3-5-sonnet",
+    it("should return native rate limit data when available", async () => {
+      const resetsAt = Math.floor(Date.now() / 1000) + 3600;
+      const hookData = {
+        rate_limits: {
+          five_hour: { used_percentage: 35, resets_at: resetsAt },
         },
-        costUSD: 45.75,
-        raw: {},
-      };
-
-      mockLoadEntries.mockResolvedValue([currentBlockEntry]);
+      } as ClaudeHookData;
 
       const blockProvider = new BlockProvider();
-      const blockInfo = await blockProvider.getActiveBlockInfo();
+      const blockInfo = await blockProvider.getActiveBlockInfo(hookData);
 
-      expect(blockInfo.cost).toBe(45.75);
-      expect(blockInfo.tokens).toBe(3300);
-      expect(blockInfo.timeRemaining).toBeGreaterThan(0);
-      expect(blockInfo.timeRemaining).toBeLessThanOrEqual(360);
+      expect(blockInfo).not.toBeNull();
+      expect(blockInfo!.nativeUtilization).toBe(35);
+      expect(blockInfo!.timeRemaining).toBeGreaterThan(0);
+      expect(blockInfo!.timeRemaining).toBeLessThanOrEqual(60);
     });
 
-    it("should calculate correct time remaining in current block", async () => {
-      const now = new Date();
-      const hoursSinceMidnight = now.getHours();
-      const blockNumber = Math.floor(hoursSinceMidnight / 5);
-      const blockStart = new Date();
-      blockStart.setHours(blockNumber * 5, 0, 0, 0);
-
-      const mockEntry = {
-        timestamp: new Date(blockStart.getTime() + 30 * 60 * 1000),
-        message: {
-          usage: {
-            input_tokens: 100,
-            output_tokens: 50,
-            cache_creation_input_tokens: 0,
-            cache_read_input_tokens: 0,
-          },
-          model: "claude-3-5-sonnet",
-        },
-        costUSD: 1.0,
-        raw: {},
-      };
-
-      mockLoadEntries.mockResolvedValue([mockEntry]);
-
+    it("should return null when no native data is available", async () => {
       const blockProvider = new BlockProvider();
       const blockInfo = await blockProvider.getActiveBlockInfo();
 
-      const blockEnd = new Date();
-      blockEnd.setHours((blockNumber + 1) * 5, 0, 0, 0);
-      const expectedRemaining = Math.max(
-        0,
-        Math.round((blockEnd.getTime() - now.getTime()) / (1000 * 60))
-      );
+      expect(blockInfo).toBeNull();
+    });
 
-      expect(blockInfo.timeRemaining).toBe(expectedRemaining);
+    it("should return null when hook data has no rate_limits", async () => {
+      const hookData = { cwd: "/tmp" } as ClaudeHookData;
+
+      const blockProvider = new BlockProvider();
+      const blockInfo = await blockProvider.getActiveBlockInfo(hookData);
+
+      expect(blockInfo).toBeNull();
     });
   });
 
@@ -196,41 +157,19 @@ describe("Segment Time Logic", () => {
   });
 
   describe("Edge Cases", () => {
-    it("should handle no entries gracefully", async () => {
-      mockLoadEntries.mockResolvedValue([]);
-
+    it("should handle no hook data gracefully", async () => {
       const blockProvider = new BlockProvider();
       const todayProvider = new TodayProvider();
 
+      mockLoadEntries.mockResolvedValue([]);
       const blockInfo = await blockProvider.getActiveBlockInfo();
       const todayInfo = await todayProvider.getTodayInfo();
 
-      expect(blockInfo.cost).toBeNull();
-      expect(blockInfo.tokens).toBeNull();
-      expect(blockInfo.timeRemaining).toBeNull();
+      expect(blockInfo).toBeNull();
 
       expect(todayInfo.cost).toBeNull();
       expect(todayInfo.tokens).toBeNull();
       expect(todayInfo.tokenBreakdown).toBeNull();
-    });
-
-    it("should handle entries without usage data", async () => {
-      const entriesWithoutUsage = [
-        {
-          timestamp: new Date(),
-          message: {},
-          costUSD: 0,
-          raw: {},
-        },
-      ];
-
-      mockLoadEntries.mockResolvedValue(entriesWithoutUsage);
-
-      const blockProvider = new BlockProvider();
-      const blockInfo = await blockProvider.getActiveBlockInfo();
-
-      expect(blockInfo.cost).toBeNull();
-      expect(blockInfo.tokens).toBeNull();
     });
   });
 
@@ -468,19 +407,13 @@ describe("Segment Time Logic", () => {
       const blockProvider = new BlockProvider();
       const blockInfo = await blockProvider.getActiveBlockInfo(hookData);
 
-      expect(blockInfo.source).toBe("native");
-      expect(blockInfo.nativeUtilization).toBe(42.5);
-      expect(blockInfo.timeRemaining).toBeGreaterThan(0);
-      expect(blockInfo.timeRemaining).toBeLessThanOrEqual(180);
-      expect(blockInfo.cost).toBeNull();
-      expect(blockInfo.tokens).toBeNull();
-      expect(blockInfo.burnRate).toBeNull();
-      expect(mockLoadEntries).not.toHaveBeenCalled();
+      expect(blockInfo).not.toBeNull();
+      expect(blockInfo!.nativeUtilization).toBe(42.5);
+      expect(blockInfo!.timeRemaining).toBeGreaterThan(0);
+      expect(blockInfo!.timeRemaining).toBeLessThanOrEqual(180);
     });
 
-    it("should fall back to transcript parsing when rate_limits is absent", async () => {
-      mockLoadEntries.mockResolvedValue([]);
-
+    it("should return null when rate_limits is absent", async () => {
       const hookData: ClaudeHookData = {
         hook_event_name: "Status",
         session_id: "test",
@@ -493,19 +426,14 @@ describe("Segment Time Logic", () => {
       const blockProvider = new BlockProvider();
       const blockInfo = await blockProvider.getActiveBlockInfo(hookData);
 
-      expect(blockInfo.source).toBe("transcript");
-      expect(blockInfo.nativeUtilization).toBeNull();
-      expect(mockLoadEntries).toHaveBeenCalled();
+      expect(blockInfo).toBeNull();
     });
 
-    it("should fall back to transcript parsing when called without hookData", async () => {
-      mockLoadEntries.mockResolvedValue([]);
-
+    it("should return null when called without hookData", async () => {
       const blockProvider = new BlockProvider();
       const blockInfo = await blockProvider.getActiveBlockInfo();
 
-      expect(blockInfo.source).toBe("transcript");
-      expect(blockInfo.nativeUtilization).toBeNull();
+      expect(blockInfo).toBeNull();
     });
 
     it("should render native block data with text style", () => {
@@ -518,11 +446,7 @@ describe("Segment Time Logic", () => {
       } as any;
 
       const renderer = new SegmentRenderer(config, symbols);
-      const blockInfo = {
-        cost: null, tokens: null, weightedTokens: null,
-        timeRemaining: 180, burnRate: null, tokenBurnRate: null,
-        source: "native" as const, nativeUtilization: 35,
-      };
+      const blockInfo = { nativeUtilization: 35, timeRemaining: 180 };
 
       const result = renderer.renderBlock(blockInfo, colors, { enabled: true, type: "cost", displayStyle: "text" });
       expect(result.text).toContain("◱");
@@ -541,11 +465,7 @@ describe("Segment Time Logic", () => {
       } as any;
 
       const renderer = new SegmentRenderer(config, symbols);
-      const blockInfo = {
-        cost: null, tokens: null, weightedTokens: null,
-        timeRemaining: 60, burnRate: null, tokenBurnRate: null,
-        source: "native" as const, nativeUtilization: 50,
-      };
+      const blockInfo = { nativeUtilization: 50, timeRemaining: 60 };
 
       const result = renderer.renderBlock(blockInfo, colors, { enabled: true, type: "cost", displayStyle: "bar" });
       expect(result.text).toContain("▪");
@@ -565,13 +485,13 @@ describe("Segment Time Logic", () => {
       const renderer = new SegmentRenderer(config, symbols);
 
       const at60 = renderer.renderBlock(
-        { cost: null, tokens: null, weightedTokens: null, timeRemaining: 120, burnRate: null, tokenBurnRate: null, source: "native", nativeUtilization: 60 },
+        { nativeUtilization: 60, timeRemaining: 120 },
         colors, { enabled: true, type: "cost" },
       );
       expect(at60.bgColor).toBe(colors.contextWarningBg);
 
       const at90 = renderer.renderBlock(
-        { cost: null, tokens: null, weightedTokens: null, timeRemaining: 30, burnRate: null, tokenBurnRate: null, source: "native", nativeUtilization: 90 },
+        { nativeUtilization: 90, timeRemaining: 30 },
         colors, { enabled: true, type: "cost" },
       );
       expect(at90.bgColor).toBe(colors.contextCriticalBg);

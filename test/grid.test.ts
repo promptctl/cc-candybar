@@ -683,7 +683,6 @@ describe("isValidSegmentRef", () => {
     expect(isValidSegmentRef("context.tokens")).toBe(true);
     expect(isValidSegmentRef("block.time")).toBe(true);
     expect(isValidSegmentRef("version.value")).toBe(true);
-    expect(isValidSegmentRef("burn.rate")).toBe(true);
   });
 
   it("should reject invalid segment names", () => {

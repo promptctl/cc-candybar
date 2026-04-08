@@ -14,7 +14,6 @@ import { visibleLength } from "../utils/terminal";
 import {
   formatCost,
   formatTokenCount,
-  formatBurnRate,
   collapseHome,
   formatDuration,
   formatModelName,
@@ -190,20 +189,7 @@ export function buildBlockBar(
 ): string {
   if (!data.blockInfo) return "";
 
-  let pct: number | null = null;
-  if (
-    data.blockInfo.source === "native" &&
-    data.blockInfo.nativeUtilization !== null
-  ) {
-    pct = data.blockInfo.nativeUtilization;
-  } else {
-    const blockBudget = config.budget?.block;
-    if (blockBudget?.amount && data.blockInfo.cost !== null) {
-      pct = Math.min(100, (data.blockInfo.cost / blockBudget.amount) * 100);
-    }
-  }
-  if (pct === null) return "";
-
+  const pct = data.blockInfo.nativeUtilization;
   const warningThreshold = config.budget?.block?.warningThreshold ?? 80;
   const defaultFg =
     partFg?.["block.bar"] ?? partFg?.["block"] ?? colors.blockFg;
@@ -407,10 +393,6 @@ export function collectFooterParts(
         `${sym.metrics_lines_removed}${data.metricsInfo.linesRemoved}`,
       );
     }
-    if (data.blockInfo?.source !== "native") {
-      const burnStr = formatBurnRate(data.blockInfo?.burnRate);
-      if (burnStr) metricParts.push(`${sym.metrics_burn} ${burnStr}`);
-    }
     if (metricParts.length > 0) {
       parts.push(colorize(metricParts.join(" · "), colors.metricsFg, reset));
     }
@@ -436,50 +418,17 @@ export function collectFooterParts(
 export function formatBlockParts(
   blockInfo: TuiData["blockInfo"] & {},
   sym: SymbolSet,
-  config: PowerlineConfig,
+  _config: PowerlineConfig,
 ): Record<string, string> {
-  let value: string;
-  if (blockInfo.source === "native" && blockInfo.nativeUtilization !== null) {
-    value = `${Math.round(blockInfo.nativeUtilization)}%`;
-  } else {
-    value = formatCost(blockInfo.cost);
-  }
-
-  const time =
-    blockInfo.timeRemaining !== null
-      ? formatTimeRemaining(blockInfo.timeRemaining)
-      : "";
-
-  let budget = "";
-  if (blockInfo.source !== "native") {
-    const blockBudget = config.budget?.block;
-    if (blockBudget?.amount && blockInfo.cost !== null) {
-      budget = getBudgetStatus(
-        blockInfo.cost,
-        blockBudget.amount,
-        blockBudget.warningThreshold || 80,
-      ).displayText;
-    }
-  }
-
-  // Only set a bar placeholder if the bar will actually render.
-  // Native source uses nativeUtilization; transcript mode needs a budget.
-  let hasBar = false;
-  if (blockInfo.source === "native" && blockInfo.nativeUtilization !== null) {
-    hasBar = true;
-  } else {
-    const blockBudget = config.budget?.block;
-    if (blockBudget?.amount && blockInfo.cost !== null) {
-      hasBar = true;
-    }
-  }
+  const value = `${Math.round(blockInfo.nativeUtilization)}%`;
+  const time = formatTimeRemaining(blockInfo.timeRemaining);
 
   return {
     icon: sym.block_cost,
     value,
     time,
-    budget,
-    bar: hasBar ? " " : "",
+    budget: "",
+    bar: " ",
   };
 }
 
@@ -587,24 +536,6 @@ export function formatTodaySegment(
   let text = `${parts.icon} ${parts.cost} ${parts.label}`;
   if (parts.budget) text += parts.budget;
   return text;
-}
-
-export function formatBurnParts(
-  blockInfo: TuiData["blockInfo"],
-  sym: SymbolSet,
-): Record<string, string> {
-  const rate = formatBurnRate(blockInfo?.burnRate);
-  if (!rate) return { icon: "", rate: "" };
-  return { icon: sym.metrics_burn, rate };
-}
-
-export function formatBurnSegment(
-  blockInfo: TuiData["blockInfo"],
-  sym: SymbolSet,
-): string {
-  const parts = formatBurnParts(blockInfo, sym);
-  if (!parts.icon) return "";
-  return `${parts.icon} ${parts.rate}`;
 }
 
 function formatMetricsParts(
@@ -1106,21 +1037,6 @@ export function resolveSegments(
     result,
     "activity",
     formatActivityParts(data, sym),
-    colors.metricsFg,
-    reset,
-    pf,
-  );
-
-  // Burn
-  const burnColor = pf?.["burn"] ?? colors.metricsFg;
-  result.burn = colorizeOrEmpty(
-    formatBurnSegment(data.blockInfo, sym),
-    burnColor,
-  );
-  addParts(
-    result,
-    "burn",
-    formatBurnParts(data.blockInfo, sym),
     colors.metricsFg,
     reset,
     pf,
