@@ -1,3 +1,10 @@
+# [1.24.0](https://github.com/Owloops/claude-powerline/compare/v1.23.5...v1.24.0) (2026-04-08)
+
+
+### Features
+
+* CSS Grid-like layout engine for TUI panels ([#76](https://github.com/Owloops/claude-powerline/issues/76)) ([776e377](https://github.com/Owloops/claude-powerline/commit/776e3776fec22d2a00d17e1b8cccd4d01a6b5c45))
+
 ## [1.23.5](https://github.com/Owloops/claude-powerline/compare/v1.23.4...v1.23.5) (2026-04-02)
 
 
