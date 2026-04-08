@@ -1,7 +1,8 @@
 import { execSync } from "node:child_process";
 
-const ESC = String.fromCharCode(27);
+export const ESC = String.fromCharCode(27);
 const ANSI_REGEX = new RegExp(`${ESC}\\[[0-9;]*m`, "g");
+export const ANSI_SPLIT = new RegExp(`(${ESC}\\[[0-9;]*m)`);
 const VALID_TTY_PATTERN = /^[a-zA-Z0-9/]+$/;
 
 function findParentTty(): string | null {
@@ -80,11 +81,13 @@ function getUnixTerminalWidth(): number | null {
 }
 
 /**
- * @info Returns 70% of terminal width to reserve space for Claude Code's
- * right-side UI messages (e.g., "ctrl-g to edit prompt in Nvim", "Thinking off")
+ * @info Reserves characters for Claude Code's right-side UI messages
+ * (e.g., "Current: 2.1.78 · latest: 2.1.78", "Thinking off")
  */
+const RESERVED_CHARS = 45;
+
 export function getTerminalWidth(): number | null {
-  const applyReserve = (w: number) => Math.floor(w * 0.7);
+  const applyReserve = (w: number) => Math.max(1, w - RESERVED_CHARS);
 
   const envColumns = process.env.COLUMNS;
   if (envColumns) {
@@ -103,6 +106,17 @@ export function getTerminalWidth(): number | null {
 
   const width = getUnixTerminalWidth();
   return width ? applyReserve(width) : null;
+}
+
+export function getRawTerminalWidth(): number | null {
+  // Skip COLUMNS env and process.stdout.columns — Claude Code sets those
+  // to an already-reserved panel width. We need the actual terminal width
+  // so the grid engine can apply its own widthReserve.
+  if (process.platform === "win32") {
+    return getWindowsTerminalWidth();
+  }
+
+  return getUnixTerminalWidth();
 }
 
 export function stripAnsi(str: string): string {

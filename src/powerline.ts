@@ -1,25 +1,10 @@
 import type { ClaudeHookData } from "./utils/claude";
 import type { PowerlineColors, ColorTheme } from "./themes";
 import type { PowerlineConfig, LineConfig } from "./config/loader";
-import {
-  hexToAnsi,
-  extractBgToFg,
-  getColorSupport,
-  hexToBasicAnsi,
-  hexTo256Ansi,
-  hexColorDistance,
-} from "./utils/colors";
-import { getTheme } from "./themes";
-import {
-  UsageProvider,
+import type {
   UsageInfo,
-  ContextProvider,
   ContextInfo,
-  GitService,
-  TmuxService,
-  MetricsProvider,
   MetricsInfo,
-  SegmentRenderer,
   PowerlineSymbols,
   AnySegmentConfig,
   DirectorySegmentConfig,
@@ -34,8 +19,29 @@ import {
   EnvSegmentConfig,
   WeeklySegmentConfig,
 } from "./segments";
-import { BlockProvider, BlockInfo } from "./segments/block";
-import { TodayProvider, TodayInfo } from "./segments/today";
+import type { BlockInfo } from "./segments/block";
+import type { TodayInfo } from "./segments/today";
+import type { TuiData } from "./tui";
+
+import {
+  hexToAnsi,
+  extractBgToFg,
+  getColorSupport,
+  hexToBasicAnsi,
+  hexTo256Ansi,
+  hexColorDistance,
+} from "./utils/colors";
+import { getTheme } from "./themes";
+import {
+  UsageProvider,
+  ContextProvider,
+  GitService,
+  TmuxService,
+  MetricsProvider,
+  SegmentRenderer,
+} from "./segments";
+import { BlockProvider } from "./segments/block";
+import { TodayProvider } from "./segments/today";
 import {
   SYMBOLS,
   TEXT_SYMBOLS,
@@ -45,7 +51,6 @@ import {
 } from "./utils/constants";
 import { getTerminalWidth, visibleLength } from "./utils/terminal";
 import { renderTuiPanel } from "./tui";
-import type { TuiData } from "./tui";
 
 interface RenderedSegment {
   type: string;
@@ -616,15 +621,10 @@ export class PowerlineRenderer {
   private renderMetricsSegment(
     config: MetricsSegmentConfig,
     metricsInfo: MetricsInfo | null,
-    blockInfo: BlockInfo | null,
+    _blockInfo: BlockInfo | null,
     colors: PowerlineColors,
   ) {
-    return this.segmentRenderer.renderMetrics(
-      metricsInfo,
-      colors,
-      blockInfo,
-      config,
-    );
+    return this.segmentRenderer.renderMetrics(metricsInfo, colors, config);
   }
 
   private renderBlockSegment(
@@ -725,6 +725,13 @@ export class PowerlineRenderer {
       }
     }
 
+    const convertHex = (hex: string, isBg: boolean): string => {
+      if (colorSupport === "none") return "";
+      if (colorSupport === "ansi") return hexToBasicAnsi(hex, isBg);
+      if (colorSupport === "ansi256") return hexTo256Ansi(hex, isBg);
+      return hexToAnsi(hex, isBg);
+    };
+
     const fallbackTheme = getTheme("dark", colorSupport)!;
 
     const isTui = this.config.display.style === "tui";
@@ -739,27 +746,10 @@ export class PowerlineRenderer {
         fgHex = colors.bg;
       }
 
-      if (colorSupport === "none") {
-        return {
-          bg: "",
-          fg: "",
-        };
-      } else if (colorSupport === "ansi") {
-        return {
-          bg: hexToBasicAnsi(colors.bg, true),
-          fg: hexToBasicAnsi(fgHex, false),
-        };
-      } else if (colorSupport === "ansi256") {
-        return {
-          bg: hexTo256Ansi(colors.bg, true),
-          fg: hexTo256Ansi(fgHex, false),
-        };
-      } else {
-        return {
-          bg: hexToAnsi(colors.bg, true),
-          fg: hexToAnsi(fgHex, false),
-        };
-      }
+      return {
+        bg: convertHex(colors.bg, true),
+        fg: convertHex(fgHex, false),
+      };
     };
 
     const directory = getSegmentColors("directory");
@@ -807,7 +797,25 @@ export class PowerlineRenderer {
       envFg: env.fg,
       weeklyBg: weekly.bg,
       weeklyFg: weekly.fg,
+      partFg: this.resolvePartColors(convertHex),
     };
+  }
+
+  private resolvePartColors(
+    convertHex: (hex: string, isBg: boolean) => string,
+  ): Record<string, string> {
+    const custom = this.config.colors?.custom as
+      | Record<string, { fg?: string }>
+      | undefined;
+    if (!custom) return {};
+
+    const result: Record<string, string> = {};
+    for (const key of Object.keys(custom)) {
+      const entry = custom[key];
+      if (!entry?.fg) continue;
+      result[key] = convertHex(entry.fg, false);
+    }
+    return result;
   }
 
   private getSegmentBgColor(

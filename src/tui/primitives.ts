@@ -1,6 +1,6 @@
 import type { BoxChars } from "./types";
 
-import { visibleLength, stripAnsi } from "../utils/terminal";
+import { visibleLength, stripAnsi, ESC, ANSI_SPLIT } from "../utils/terminal";
 
 export function colorize(text: string, fgColor: string, reset: string): string {
   if (!fgColor) {
@@ -17,8 +17,24 @@ export function padRight(text: string, width: number): string {
   return text + " ".repeat(width - visible);
 }
 
-const ESC = String.fromCharCode(27);
-const ANSI_SPLIT = new RegExp(`(${ESC}\\[[0-9;]*m)`);
+export function padLeft(text: string, width: number): string {
+  const visible = visibleLength(text);
+  if (visible >= width) {
+    return text;
+  }
+  return " ".repeat(width - visible) + text;
+}
+
+export function padCenter(text: string, width: number): string {
+  const visible = visibleLength(text);
+  if (visible >= width) {
+    return text;
+  }
+  const totalPad = width - visible;
+  const leftPad = Math.floor(totalPad / 2);
+  const rightPad = totalPad - leftPad;
+  return " ".repeat(leftPad) + text + " ".repeat(rightPad);
+}
 
 export function truncateAnsi(text: string, maxWidth: number): string {
   if (stripAnsi(text).length <= maxWidth) {
@@ -35,7 +51,7 @@ export function truncateAnsi(text: string, maxWidth: number): string {
     }
     for (const char of part) {
       if (width >= maxWidth - 1) {
-        result += "…";
+        result += "…\x1b[0m";
         return result;
       }
       result += char;
@@ -60,8 +76,44 @@ export function divider(box: BoxChars, innerWidth: number): string {
   return box.teeLeft + box.horizontal.repeat(innerWidth) + box.teeRight;
 }
 
-export function bottomBorder(box: BoxChars, innerWidth: number): string {
-  return box.bottomLeft + box.horizontal.repeat(innerWidth) + box.bottomRight;
+export function bottomBorder(
+  box: BoxChars,
+  innerWidth: number,
+  leftText?: string,
+  rightText?: string,
+): string {
+  if (!leftText && !rightText) {
+    return box.bottomLeft + box.horizontal.repeat(innerWidth) + box.bottomRight;
+  }
+
+  let left = leftText ? ` ${leftText} ` : "";
+  let right = rightText ? ` ${rightText} ` : "";
+  let leftLen = visibleLength(left);
+  let rightLen = visibleLength(right);
+
+  // Truncate if combined text exceeds innerWidth
+  if (leftLen + rightLen > innerWidth) {
+    const maxLeft = Math.max(0, innerWidth - rightLen);
+    if (leftLen > maxLeft) {
+      left = truncateAnsi(left, maxLeft);
+      leftLen = visibleLength(left);
+    }
+    if (leftLen + rightLen > innerWidth) {
+      const maxRight = Math.max(0, innerWidth - leftLen);
+      right = truncateAnsi(right, maxRight);
+      rightLen = visibleLength(right);
+    }
+  }
+
+  const fillCount = innerWidth - leftLen - rightLen;
+
+  return (
+    box.bottomLeft +
+    left +
+    box.horizontal.repeat(Math.max(0, fillCount)) +
+    right +
+    box.bottomRight
+  );
 }
 
 export function spreadEven(parts: string[], totalWidth: number): string {
@@ -77,7 +129,7 @@ export function spreadEven(parts: string[], totalWidth: number): string {
   const totalGap = totalWidth - totalContentWidth;
   const gapPerSlot = Math.max(2, Math.floor(totalGap / (parts.length - 1)));
 
-  const suffixWidths = new Array<number>(parts.length);
+  const suffixWidths = Array.from<number>({ length: parts.length });
   suffixWidths[parts.length - 1] = widths[parts.length - 1] ?? 0;
   for (let i = parts.length - 2; i >= 0; i--) {
     suffixWidths[i] = (suffixWidths[i + 1] ?? 0) + (widths[i] ?? 0);

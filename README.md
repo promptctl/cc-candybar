@@ -568,6 +568,18 @@ Create custom themes and configure color compatibility:
 
 **Color Options:** `bg` (hex, `transparent`, `none`) &#8226; `fg` (hex)
 
+**TUI Grid Colors:** In TUI grid mode, custom colors also support bare segment names and dot-notation parts as keys. A bare segment key (e.g. `"context"`) sets the default color for the segment and all its parts. A part key (e.g. `"context.bar"`) overrides a specific part:
+
+```json
+"colors": {
+  "custom": {
+    "model": { "fg": "#e0d68a" },
+    "context": { "fg": "#7dcfff" },
+    "metrics.lastResponse": { "fg": "#bb9af7" }
+  }
+}
+```
+
 **Compatibility Modes:** `auto` (default), `ansi`, `ansi256`, `truecolor`
 
 **Environment Variables:**
@@ -597,11 +609,238 @@ Create custom themes and configure color compatibility:
 }
 ```
 
-The panel adapts to terminal width across three breakpoints:
+By default, the TUI panel uses a built-in responsive layout. For full control over what goes where, add a `display.tui` object to your config — this activates the **grid layout engine**, a CSS Grid-inspired system that lets you define rows, columns, spans, and responsive breakpoints.
 
-- **Wide** (80+ cols): metrics on one line, workspace and footer spread across columns
-- **Medium** (55-79 cols): metrics split across two lines, stacked footer
-- **Narrow** (<55 cols): fully stacked layout
+#### Grid Layout Configuration
+
+Add `display.tui` to your config file to enable the grid engine:
+
+```json
+{
+  "display": {
+    "style": "tui",
+    "tui": {
+      "fitContent": true,
+      "widthReserve": 45,
+      "minWidth": 32,
+      "maxWidth": 120,
+      "padding": { "horizontal": 4 },
+      "separator": {
+        "column": "  ",
+        "divider": "─"
+      },
+      "box": { ... },
+      "title": { ... },
+      "footer": { ... },
+      "segments": { ... },
+      "breakpoints": [ ... ]
+    }
+  }
+}
+```
+
+| Property | Type | Default | Description |
+|---|---|---|---|
+| `fitContent` | `boolean` | `false` | Panel shrinks to fit content instead of filling terminal width |
+| `widthReserve` | `number` | `45` | Characters reserved from terminal width (ignored when `fitContent: true`) |
+| `minWidth` | `number` | `32` | Minimum panel width |
+| `maxWidth` | `number` | `∞` | Maximum panel width |
+| `padding.horizontal` | `number` | `0` | Extra horizontal padding in `fitContent` mode |
+| `separator.column` | `string` | `"  "` | String placed between columns |
+| `separator.divider` | `string` | box char | Character used for `---` divider rows |
+| `box` | `object` | — | Custom box-drawing characters (see below) |
+| `title` | `object` | — | Title bar text configuration (see below) |
+| `footer` | `object` | — | Footer text configuration (see below) |
+| `segments` | `object` | — | Custom segment templates (see below) |
+| `breakpoints` | `array` | required | Responsive layout definitions |
+
+#### Breakpoints
+
+Each breakpoint defines a complete layout that activates when the panel width is at or above its `minWidth`. The engine picks the first match, sorted widest-first.
+
+```json
+"breakpoints": [
+  {
+    "minWidth": 80,
+    "areas": [
+      "git.head      git.head     git.head     .               git.working",
+      "---",
+      "context.icon  context.bar  context.bar  context.pct     context.tokens",
+      "block.icon    block.bar    block.bar    block.value     block.time"
+    ],
+    "columns": ["auto", "1fr", "auto", "auto", "auto"],
+    "align": ["left", "left", "right", "right", "right"]
+  },
+  {
+    "minWidth": 55,
+    "areas": [
+      "git.head             git.working",
+      "---",
+      "context.bar          context.tokens",
+      "block                ."
+    ],
+    "columns": ["1fr", "auto"],
+    "align": ["left", "right"]
+  },
+  {
+    "minWidth": 0,
+    "areas": [
+      "git.head",
+      "git.working",
+      "---",
+      "context",
+      "block"
+    ],
+    "columns": ["1fr"],
+    "align": ["left"]
+  }
+]
+```
+
+| Property | Type | Required | Description |
+|---|---|---|---|
+| `minWidth` | `number` | yes | Minimum panel width to activate this layout |
+| `areas` | `string[]` | yes | Grid rows — each string is one row of space-separated cell names |
+| `columns` | `string[]` | yes | Column sizing: `"auto"`, `"1fr"` / `"2fr"`, or a fixed number like `"20"` |
+| `align` | `string[]` | no | Per-column alignment: `"left"`, `"center"`, or `"right"` (defaults to `"left"`) |
+
+**Column sizing:**
+- `"auto"` — shrinks to the widest content in that column
+- `"1fr"`, `"2fr"` — fractional units that divide remaining space proportionally
+- `"20"` — fixed width in characters
+
+**Special area tokens:**
+- `.` — empty cell (renders as blank space)
+- `---` — full-width horizontal divider row
+
+**Spanning:** repeat the same name in adjacent cells to span columns:
+
+```
+"context.bar  context.bar  context.bar  context.pct  context.tokens"
+```
+
+Here `context.bar` spans the first three columns.
+
+#### Segment Names
+
+Use bare segment names to render the full pre-formatted segment:
+
+```
+context  block  session  today   weekly
+git      dir    version  tmux    metrics
+activity burn   env
+```
+
+#### Dot-Notation Subsegments
+
+Use `segment.part` to place individual pieces of a segment into separate cells with independent alignment:
+
+| Segment | Parts |
+|---|---|
+| `git` | `icon`, `branch`, `status`, `ahead`, `behind`, `working`, `head` |
+| `context` | `icon`, `bar`, `pct`, `tokens` |
+| `block` | `icon`, `bar`, `value`, `time`, `budget` |
+| `session` | `icon`, `cost`, `tokens`, `budget` |
+| `today` | `icon`, `cost`, `label`, `budget` |
+| `weekly` | `icon`, `bar`, `pct`, `time` |
+| `metrics` | `response`, `responseIcon`, `responseVal`, `lastResponse`, `lastResponseIcon`, `lastResponseVal`, `added`, `addedIcon`, `addedVal`, `removed`, `removedIcon`, `removedVal` |
+| `activity` | `duration`, `durationIcon`, `durationVal`, `messages`, `messagesIcon`, `messagesVal` |
+| `burn` | `icon`, `rate` |
+| `version` | `icon`, `value` |
+| `tmux` | `label`, `value` |
+| `dir` | `value` |
+| `env` | `prefix`, `value` |
+
+Example — block segment with a progress bar, mirroring the context layout:
+
+```json
+"areas": [
+  "context.icon  context.bar  context.bar  context.pct  context.tokens",
+  "block.icon    block.bar    block.bar    block.value  block.time"
+]
+```
+
+> [!NOTE]
+> `context.bar`, `block.bar`, and `weekly.bar` are width-aware — their progress bars render at exactly the resolved column width. Block bar uses `nativeUtilization` when available, or `cost / budget` for transcript mode. Weekly bar uses the 7-day `used_percentage`.
+
+#### Custom Box Characters
+
+Override individual box-drawing characters. Partial overrides merge with the charset default (`unicode` or `text`):
+
+```json
+"box": {
+  "topLeft": "┌",
+  "topRight": "┐",
+  "bottomLeft": "└",
+  "bottomRight": "┘",
+  "horizontal": "─",
+  "vertical": "│",
+  "teeLeft": "├",
+  "teeRight": "┤"
+}
+```
+
+Only specify the characters you want to change — the rest inherit from the active charset.
+
+#### Title Bar
+
+Configure the left and right text in the top border. Supports `{model}` and any `{segment}` or `{segment.part}` token that resolves from segment data:
+
+```json
+"title": {
+  "left": "{model}",
+  "right": "{dir}"
+}
+```
+
+| Property | Type | Default | Description |
+|---|---|---|---|
+| `left` | `string` | `"{model}"` | Left-side text (supports tokens) |
+| `right` | `string \| false` | `"claude-powerline"` | Right-side text, or `false` to hide |
+
+#### Footer
+
+Same as the title bar, but on the bottom border. Defaults to no text (plain border):
+
+```json
+"footer": {
+  "left": "{weekly}",
+  "right": "{metrics.lastResponse}"
+}
+```
+
+| Property | Type | Default | Description |
+|---|---|---|---|
+| `left` | `string` | — | Left-side footer text (supports tokens) |
+| `right` | `string` | — | Right-side footer text (supports tokens) |
+
+Tokens resolve any segment or subsegment reference: `{model}`, `{dir}`, `{git.head}`, `{block.value}`, `{metrics.lastResponse}`, etc.
+
+#### Segment Templates
+
+Define custom compositions for composite cells using the `segments` key. This assembles multiple parts into a single cell:
+
+```json
+"segments": {
+  "metrics.lastResponse": {
+    "items": ["{lastResponseIcon}", "{lastResponseVal}"],
+    "gap": 1,
+    "justify": "start"
+  }
+}
+```
+
+| Property | Type | Default | Description |
+|---|---|---|---|
+| `items` | `string[]` | required | Part references like `"{partName}"` or literal strings |
+| `gap` | `number` | `1` | Spaces between items |
+| `justify` | `string` | `"start"` | `"start"` packs items left; `"between"` distributes across cell width |
+
+The template name (e.g. `metrics.lastResponse`) can then be used as a cell name in `areas`.
+
+#### Automatic Culling
+
+Empty segments are automatically removed — cells resolve to `.`, empty rows are dropped, and orphaned dividers are cleaned up. A wide layout gracefully degrades when data is unavailable.
 
 > [!NOTE]
 > Claude Code's internal progress indicators (spinner, context bar) may briefly overlap the TUI panel during tool calls. This is a limitation of the hook architecture and resolves once the tool call completes.
