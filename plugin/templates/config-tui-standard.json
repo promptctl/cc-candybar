@@ -46,20 +46,6 @@
       }
     ]
   },
-  "colors": {
-    "custom": {
-      "model": { "fg": "#e0d68a" },
-      "dir": { "fg": "#d2e08a" },
-      "git": { "fg": "#c3e88d" },
-      "git.working": { "fg": "#90c499" },
-      "context": { "fg": "#7ecbc8" },
-      "context.pct": { "fg": "#70a4c9" },
-      "context.tokens": { "fg": "#70a4c9" },
-      "block": { "fg": "#7aa2f7" },
-      "block.value": { "fg": "#6e92de" },
-      "block.time": { "fg": "#6e92de" }
-    }
-  },
   "budget": {
     "session": { "warningThreshold": 80 }
   },

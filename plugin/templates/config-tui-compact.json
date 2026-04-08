@@ -38,17 +38,6 @@
       }
     ]
   },
-  "colors": {
-    "custom": {
-      "model": { "fg": "#e0d68a" },
-      "dir": { "fg": "#d2e08a" },
-      "git": { "fg": "#c3e88d" },
-      "git.working": { "fg": "#90c499" },
-      "context": { "fg": "#7ecbc8" },
-      "context.pct": { "fg": "#71b7b4" },
-      "context.tokens": { "fg": "#71b7b4" }
-    }
-  },
   "budget": {
     "session": { "warningThreshold": 80 }
   },

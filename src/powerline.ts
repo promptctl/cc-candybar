@@ -802,7 +802,7 @@ export class PowerlineRenderer {
       envFg: env.fg,
       weeklyBg: weekly.bg,
       weeklyFg: weekly.fg,
-      partFg: this.resolvePartColors(convertHex),
+      partFg: theme === "custom" ? this.resolvePartColors(convertHex) : {},
     };
   }
 
