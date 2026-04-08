@@ -1,3 +1,10 @@
+## [1.24.3](https://github.com/Owloops/claude-powerline/compare/v1.24.2...v1.24.3) (2026-04-08)
+
+
+### Bug Fixes
+
+* **tui:** remove hardcoded custom colors from templates and restrict part colors to custom theme ([2248025](https://github.com/Owloops/claude-powerline/commit/2248025e6a17916ed7b2d61a6b6ce7b6ef285cb3))
+
 ## [1.24.2](https://github.com/Owloops/claude-powerline/compare/v1.24.1...v1.24.2) (2026-04-08)
 
 
