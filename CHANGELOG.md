@@ -1,3 +1,10 @@
+## [1.24.2](https://github.com/Owloops/claude-powerline/compare/v1.24.1...v1.24.2) (2026-04-08)
+
+
+### Bug Fixes
+
+* **docs:** replace em dashes with standard punctuation in README ([10a516a](https://github.com/Owloops/claude-powerline/commit/10a516afa29b975d468058a6ef8d774853aab06a))
+
 ## [1.24.1](https://github.com/Owloops/claude-powerline/compare/v1.24.0...v1.24.1) (2026-04-08)
 
 
