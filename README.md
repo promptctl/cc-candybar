@@ -609,7 +609,7 @@ Create custom themes and configure color compatibility:
 }
 ```
 
-By default, the TUI panel uses a built-in responsive layout. For full control over what goes where, add a `display.tui` object to your config — this activates the **grid layout engine**, a CSS Grid-inspired system that lets you define rows, columns, spans, and responsive breakpoints.
+By default, the TUI panel uses a built-in responsive layout. For full control over what goes where, add a `display.tui` object to your config. This activates the **grid layout engine**, a CSS Grid-inspired system that lets you define rows, columns, spans, and responsive breakpoints.
 
 #### Grid Layout Configuration
 
@@ -648,10 +648,10 @@ Add `display.tui` to your config file to enable the grid engine:
 | `padding.horizontal` | `number` | `0` | Extra horizontal padding in `fitContent` mode |
 | `separator.column` | `string` | `"  "` | String placed between columns |
 | `separator.divider` | `string` | box char | Character used for `---` divider rows |
-| `box` | `object` | — | Custom box-drawing characters (see below) |
-| `title` | `object` | — | Title bar text configuration (see below) |
-| `footer` | `object` | — | Footer text configuration (see below) |
-| `segments` | `object` | — | Custom segment templates (see below) |
+| `box` | `object` | -- | Custom box-drawing characters (see below) |
+| `title` | `object` | -- | Title bar text configuration (see below) |
+| `footer` | `object` | -- | Footer text configuration (see below) |
+| `segments` | `object` | -- | Custom segment templates (see below) |
 | `breakpoints` | `array` | required | Responsive layout definitions |
 
 #### Breakpoints
@@ -700,18 +700,18 @@ Each breakpoint defines a complete layout that activates when the panel width is
 | Property | Type | Required | Description |
 |---|---|---|---|
 | `minWidth` | `number` | yes | Minimum panel width to activate this layout |
-| `areas` | `string[]` | yes | Grid rows — each string is one row of space-separated cell names |
+| `areas` | `string[]` | yes | Grid rows, each string is one row of space-separated cell names |
 | `columns` | `string[]` | yes | Column sizing: `"auto"`, `"1fr"` / `"2fr"`, or a fixed number like `"20"` |
 | `align` | `string[]` | no | Per-column alignment: `"left"`, `"center"`, or `"right"` (defaults to `"left"`) |
 
 **Column sizing:**
-- `"auto"` — shrinks to the widest content in that column
-- `"1fr"`, `"2fr"` — fractional units that divide remaining space proportionally
-- `"20"` — fixed width in characters
+- `"auto"` - shrinks to the widest content in that column
+- `"1fr"`, `"2fr"` - fractional units that divide remaining space proportionally
+- `"20"` - fixed width in characters
 
 **Special area tokens:**
-- `.` — empty cell (renders as blank space)
-- `---` — full-width horizontal divider row
+- `.` - empty cell (renders as blank space)
+- `---` - full-width horizontal divider row
 
 **Spanning:** repeat the same name in adjacent cells to span columns:
 
@@ -751,7 +751,7 @@ Use `segment.part` to place individual pieces of a segment into separate cells w
 | `dir` | `value` |
 | `env` | `prefix`, `value` |
 
-Example — block segment with a progress bar, mirroring the context layout:
+Example, block segment with a progress bar, mirroring the context layout:
 
 ```json
 "areas": [
@@ -761,7 +761,7 @@ Example — block segment with a progress bar, mirroring the context layout:
 ```
 
 > [!NOTE]
-> `context.bar`, `block.bar`, and `weekly.bar` are width-aware — their progress bars render at exactly the resolved column width. Block bar uses `nativeUtilization` when available, or `cost / budget` for transcript mode. Weekly bar uses the 7-day `used_percentage`.
+> `context.bar`, `block.bar`, and `weekly.bar` are width-aware. Their progress bars render at exactly the resolved column width. Block bar uses `nativeUtilization` when available, or `cost / budget` for transcript mode. Weekly bar uses the 7-day `used_percentage`.
 
 #### Custom Box Characters
 
@@ -780,7 +780,7 @@ Override individual box-drawing characters. Partial overrides merge with the cha
 }
 ```
 
-Only specify the characters you want to change — the rest inherit from the active charset.
+Only specify the characters you want to change. The rest inherit from the active charset.
 
 #### Title Bar
 
@@ -811,8 +811,8 @@ Same as the title bar, but on the bottom border. Defaults to no text (plain bord
 
 | Property | Type | Default | Description |
 |---|---|---|---|
-| `left` | `string` | — | Left-side footer text (supports tokens) |
-| `right` | `string` | — | Right-side footer text (supports tokens) |
+| `left` | `string` | -- | Left-side footer text (supports tokens) |
+| `right` | `string` | -- | Right-side footer text (supports tokens) |
 
 Tokens resolve any segment or subsegment reference: `{model}`, `{dir}`, `{git.head}`, `{block.value}`, `{metrics.lastResponse}`, etc.
 
@@ -840,7 +840,7 @@ The template name (e.g. `metrics.lastResponse`) can then be used as a cell name 
 
 #### Automatic Culling
 
-Empty segments are automatically removed — cells resolve to `.`, empty rows are dropped, and orphaned dividers are cleaned up. A wide layout gracefully degrades when data is unavailable.
+Empty segments are automatically removed. Cells resolve to `.`, empty rows are dropped, and orphaned dividers are cleaned up. A wide layout gracefully degrades when data is unavailable.
 
 > [!NOTE]
 > Claude Code's internal progress indicators (spinner, context bar) may briefly overlap the TUI panel during tool calls. This is a limitation of the hook architecture and resolves once the tool call completes.
