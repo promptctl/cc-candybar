@@ -1,3 +1,10 @@
+# [1.25.0](https://github.com/Owloops/claude-powerline/compare/v1.24.4...v1.25.0) (2026-04-14)
+
+
+### Features
+
+* add browser-safe entry point and TUI grid helpers ([#78](https://github.com/Owloops/claude-powerline/issues/78)) ([65d52d1](https://github.com/Owloops/claude-powerline/commit/65d52d15f85dc481f5d2165050771e894fadb957))
+
 ## [1.24.4](https://github.com/Owloops/claude-powerline/compare/v1.24.3...v1.24.4) (2026-04-08)
 
 
