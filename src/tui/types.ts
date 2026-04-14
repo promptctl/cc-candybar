@@ -60,12 +60,21 @@ export const VALID_SEGMENT_NAMES: ReadonlySet<string> = new Set<SegmentName>(
 );
 
 export const SEGMENT_PARTS: Record<SegmentName, readonly string[]> = {
-  session: ["icon", "cost", "tokens", "budget"],
-  block: ["icon", "value", "time", "budget", "bar"],
+  session: ["icon", "label", "cost", "tokens", "budget"],
+  block: ["icon", "label", "value", "time", "budget", "bar"],
   today: ["icon", "cost", "label", "budget"],
-  weekly: ["icon", "pct", "time", "bar"],
-  git: ["icon", "branch", "status", "ahead", "behind", "working", "head"],
-  context: ["icon", "bar", "pct", "tokens"],
+  weekly: ["icon", "label", "pct", "time", "bar"],
+  git: [
+    "icon",
+    "info",
+    "branch",
+    "status",
+    "ahead",
+    "behind",
+    "working",
+    "head",
+  ],
+  context: ["icon", "label", "bar", "pct", "tokens"],
   metrics: [
     "response",
     "responseIcon",
@@ -81,6 +90,7 @@ export const SEGMENT_PARTS: Record<SegmentName, readonly string[]> = {
     "removedVal",
   ],
   activity: [
+    "icon",
     "duration",
     "durationIcon",
     "durationVal",
@@ -91,7 +101,7 @@ export const SEGMENT_PARTS: Record<SegmentName, readonly string[]> = {
   model: ["icon", "value"],
   version: ["icon", "value"],
   tmux: ["label", "value"],
-  dir: ["value"],
+  dir: ["icon", "value"],
   env: ["prefix", "value"],
 } as const;
 
@@ -132,7 +142,7 @@ export interface SegmentTemplate {
 
 export interface TuiTitleConfig {
   left?: string;
-  right?: string | false;
+  right?: string;
 }
 
 export interface TuiFooterConfig {
