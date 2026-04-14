@@ -1,3 +1,10 @@
+## [1.25.1](https://github.com/Owloops/claude-powerline/compare/v1.25.0...v1.25.1) (2026-04-14)
+
+
+### Bug Fixes
+
+* rename git.info to git.headVal for consistency ([#80](https://github.com/Owloops/claude-powerline/issues/80)) ([086beb4](https://github.com/Owloops/claude-powerline/commit/086beb4f518fc7545005c5d3b032867856eae615))
+
 # [1.25.0](https://github.com/Owloops/claude-powerline/compare/v1.24.4...v1.25.0) (2026-04-14)
 
 
