@@ -1,3 +1,10 @@
+## [1.25.2](https://github.com/Owloops/claude-powerline/compare/v1.25.1...v1.25.2) (2026-04-20)
+
+
+### Bug Fixes
+
+* add powerline studio section with demo gif ([f5d41ee](https://github.com/Owloops/claude-powerline/commit/f5d41ee1c413973685a69a1f3d4861f2d5f15d72))
+
 ## [1.25.1](https://github.com/Owloops/claude-powerline/compare/v1.25.0...v1.25.1) (2026-04-14)
 
 
