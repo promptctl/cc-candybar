@@ -48,15 +48,29 @@ Add to your Claude Code `settings.json`:
 
 Start a Claude session and the statusline appears at the bottom. Using `npx` automatically downloads and runs the latest version without manual updates.
 
-## Styles
+## Powerline Studio
+
+<a href="https://powerline.owloops.com/">
+  <img src="images/powerline-studio.gif" alt="Powerline Studio visual configurator" width="700">
+</a>
+
+[**powerline.owloops.com**](https://powerline.owloops.com/) is a visual configurator for claude-powerline. Click segments in the preview to toggle options, switch styles and themes live, reorder, then copy or download the JSON into `~/.claude/claude-powerline.json`. Paste an existing config to edit it.
+
+<details>
+<summary><strong>Styles</strong></summary>
 
 <img src="images/claude-powerline-styles.png" alt="Claude Powerline Styles" width="700">
 
-## Themes
+</details>
+
+<details>
+<summary><strong>Themes</strong></summary>
 
 <img src="images/claude-powerline-themes.png" alt="Claude Powerline Themes" width="700">
 
 6 built-in themes (dark, light, nord, tokyo-night, rose-pine, gruvbox) or [create your own](#configuration).
+
+</details>
 
 <details>
 <summary><h2>Configuration</h2></summary>
