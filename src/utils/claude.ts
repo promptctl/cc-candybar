@@ -265,12 +265,20 @@ export function createUniqueHash(entry: ParsedEntry): string | null {
 
 const STREAMING_THRESHOLD_BYTES = 1024 * 1024;
 
+const parseCache = new Map<string, ParsedEntry[]>();
+
 export async function parseJsonlFile(filePath: string): Promise<ParsedEntry[]> {
   try {
     const stats = await stat(filePath);
     const fileSizeBytes = stats.size;
-    let entries: ParsedEntry[];
+    const cacheKey = `${filePath}:${stats.mtimeMs}:${fileSizeBytes}`;
+    const cached = parseCache.get(cacheKey);
+    if (cached) {
+      debug(`[parse-cache] hit ${filePath}`);
+      return cached;
+    }
 
+    let entries: ParsedEntry[];
     if (fileSizeBytes > STREAMING_THRESHOLD_BYTES) {
       debug(
         `Using streaming parser for large file ${filePath} (${Math.round(fileSizeBytes / 1024)}KB)`,
@@ -281,7 +289,7 @@ export async function parseJsonlFile(filePath: string): Promise<ParsedEntry[]> {
     }
 
     debug(`Parsed ${entries.length} entries from ${filePath}`);
-
+    parseCache.set(cacheKey, entries);
     return entries;
   } catch (error) {
     debug(`Failed to read file ${filePath}:`, error);

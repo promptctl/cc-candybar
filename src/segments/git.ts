@@ -3,6 +3,7 @@ import { promisify } from "node:util";
 import fs from "node:fs";
 import path from "node:path";
 import { debug } from "../utils/logger";
+import { withGitCache, GIT_CACHE_TTL_MS } from "../utils/git-cache";
 
 const execAsync = promisify(exec);
 
@@ -59,6 +60,26 @@ export class GitService {
   }
 
   async getGitInfo(
+    workingDir: string,
+    options: {
+      showSha?: boolean;
+      showWorkingTree?: boolean;
+      showOperation?: boolean;
+      showTag?: boolean;
+      showTimeSinceCommit?: boolean;
+      showStashCount?: boolean;
+      showUpstream?: boolean;
+      showRepoName?: boolean;
+    } = {},
+    projectDir?: string,
+  ): Promise<GitInfo | null> {
+    const cacheKey = `${workingDir}|${projectDir ?? ""}|${JSON.stringify(options)}`;
+    return withGitCache(cacheKey, GIT_CACHE_TTL_MS, () =>
+      this.computeGitInfo(workingDir, options, projectDir),
+    );
+  }
+
+  private async computeGitInfo(
     workingDir: string,
     options: {
       showSha?: boolean;
