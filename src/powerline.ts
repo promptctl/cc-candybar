@@ -55,15 +55,21 @@ import { renderTuiPanel } from "./tui";
 import { statSync } from "node:fs";
 
 const CACHE_TTL_MS = 60 * 60 * 1000; // Anthropic prompt cache: 1h
+const CACHE_BAR_LEN = 8;
+const CACHE_BAR_FILLED = "█";
+const CACHE_BAR_EMPTY = "░";
 
 function computeCacheWarmth(transcriptPath: string): string | null {
   try {
     const ageMs = Date.now() - statSync(transcriptPath).mtimeMs;
-    if (ageMs < CACHE_TTL_MS) {
-      const min = Math.floor(ageMs / 60000);
-      return `✓${min}m`;
-    }
-    return "✗cold";
+    if (ageMs >= CACHE_TTL_MS) return "✗ cold";
+    const remainMs = CACHE_TTL_MS - ageMs;
+    const remainMin = Math.ceil(remainMs / 60000);
+    const filled = Math.round((remainMs / CACHE_TTL_MS) * CACHE_BAR_LEN);
+    const bar =
+      CACHE_BAR_FILLED.repeat(filled) +
+      CACHE_BAR_EMPTY.repeat(CACHE_BAR_LEN - filled);
+    return `${bar} ${remainMin}m`;
   } catch {
     return null;
   }
