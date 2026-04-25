@@ -52,17 +52,19 @@ import {
 import { visibleLength } from "./utils/terminal";
 import { getTerminalWidth, getRawTerminalWidth } from "./utils/terminal-width";
 import { renderTuiPanel } from "./tui";
-import { parseJsonlFile } from "./utils/claude";
+import { openSync, readSync, closeSync, statSync } from "node:fs";
 
 const CACHE_TTL_MS = 60 * 60 * 1000; // Anthropic prompt cache: 1h
 const CACHE_RED_HEX = "#ef4444";
 const CACHE_YELLOW_HEX = "#eab308";
+const TAIL_CHUNK = 64 * 1024;
+const TAIL_MAX = 1 * 1024 * 1024;
 
-async function computeCacheWarmth(
+function computeCacheWarmth(
   transcriptPath: string,
   restoreAnsi: string,
-): Promise<string | null> {
-  const lastCacheTs = await findLastCacheActivityTs(transcriptPath);
+): string | null {
+  const lastCacheTs = findLastCacheActivityTs(transcriptPath);
   if (lastCacheTs == null) return null;
   const ageMs = Date.now() - lastCacheTs;
   if (ageMs >= CACHE_TTL_MS) return colorize("cold", CACHE_RED_HEX, restoreAnsi);
@@ -73,22 +75,74 @@ async function computeCacheWarmth(
   return text;
 }
 
-async function findLastCacheActivityTs(
-  transcriptPath: string,
-): Promise<number | null> {
+// Tail-read JSONL transcript and return the timestamp of the last entry
+// with cache_read_input_tokens > 0 or cache_creation_input_tokens > 0.
+function findLastCacheActivityTs(transcriptPath: string): number | null {
+  let fd: number | null = null;
   try {
-    const entries = await parseJsonlFile(transcriptPath);
-    for (let i = entries.length - 1; i >= 0; i--) {
-      const u = entries[i]?.message?.usage;
-      if (!u) continue;
-      if ((u.cache_read_input_tokens || 0) > 0 || (u.cache_creation_input_tokens || 0) > 0) {
-        return entries[i]!.timestamp.getTime();
-      }
+    fd = openSync(transcriptPath, "r");
+    const size = statSync(transcriptPath).size;
+    let tailStart = Math.max(0, size - TAIL_CHUNK);
+    let buf = Buffer.alloc(0);
+
+    while (true) {
+      const chunkLen = size - tailStart;
+      const chunk = Buffer.alloc(chunkLen);
+      readSync(fd, chunk, 0, chunkLen, tailStart);
+      buf = chunk;
+
+      const ts = scanBufferForLastCacheTs(buf, tailStart === 0);
+      if (ts != null) return ts;
+      if (tailStart === 0) return null;
+
+      const grown = Math.min(buf.length * 2, TAIL_MAX);
+      tailStart = Math.max(0, size - grown);
+      if (size - tailStart === buf.length) return null;
     }
-    return null;
   } catch {
     return null;
+  } finally {
+    if (fd != null) try { closeSync(fd); } catch {}
   }
+}
+
+function scanBufferForLastCacheTs(
+  buf: Buffer,
+  bufStartsAtFileBeginning: boolean,
+): number | null {
+  const text = buf.toString("utf8");
+  const lines = text.split("\n");
+  // Drop first line if our window doesn't start at file beginning —
+  // it's likely a partial line.
+  const start = bufStartsAtFileBeginning ? 0 : 1;
+  for (let i = lines.length - 1; i >= start; i--) {
+    const line = lines[i];
+    if (!line) continue;
+    if (
+      !line.includes("cache_read_input_tokens") &&
+      !line.includes("cache_creation_input_tokens")
+    ) {
+      continue;
+    }
+    try {
+      const obj = JSON.parse(line);
+      const u = obj?.message?.usage;
+      if (!u) continue;
+      if (
+        (u.cache_read_input_tokens || 0) > 0 ||
+        (u.cache_creation_input_tokens || 0) > 0
+      ) {
+        const ts = obj.timestamp;
+        if (typeof ts === "string") {
+          const ms = Date.parse(ts);
+          if (!Number.isNaN(ms)) return ms;
+        }
+      }
+    } catch {
+      continue;
+    }
+  }
+  return null;
 }
 
 function colorize(text: string, hex: string, restoreAnsi: string): string {
@@ -654,7 +708,7 @@ export class PowerlineRenderer {
     return this.segmentRenderer.renderTmux(tmuxSessionId, colors);
   }
 
-  private async renderContextSegment(
+  private renderContextSegment(
     config: ContextSegmentConfig,
     contextInfo: ContextInfo | null,
     colors: PowerlineColors,
@@ -663,10 +717,7 @@ export class PowerlineRenderer {
     if (!this.needsSegmentInfo("context")) return null;
     const seg = this.segmentRenderer.renderContext(contextInfo, colors, config);
     if (!seg || !hookData?.transcript_path) return seg;
-    const warmth = await computeCacheWarmth(
-      hookData.transcript_path,
-      seg.fgColor,
-    );
+    const warmth = computeCacheWarmth(hookData.transcript_path, seg.fgColor);
     if (warmth) seg.text = `${seg.text} ${warmth}`;
     return seg;
   }
