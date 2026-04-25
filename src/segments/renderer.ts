@@ -13,6 +13,7 @@ import type { TodayInfo } from "./today";
 
 import {
   formatModelName,
+  shortenModelName,
   abbreviateFishStyle,
   formatCost,
   formatTokens,
@@ -32,6 +33,11 @@ export interface SegmentConfig {
 export interface DirectorySegmentConfig extends SegmentConfig {
   showBasename?: boolean;
   style?: "full" | "fish" | "basename";
+}
+
+export interface ModelSegmentConfig extends SegmentConfig {
+  style?: "full" | "short";
+  showSymbol?: boolean;
 }
 
 export interface GitSegmentConfig extends SegmentConfig {
@@ -110,6 +116,7 @@ export interface WeeklySegmentConfig extends SegmentConfig {
 export type AnySegmentConfig =
   | SegmentConfig
   | DirectorySegmentConfig
+  | ModelSegmentConfig
   | GitSegmentConfig
   | UsageSegmentConfig
   | TmuxSegmentConfig
@@ -314,12 +321,22 @@ export class SegmentRenderer {
     };
   }
 
-  renderModel(hookData: ClaudeHookData, colors: PowerlineColors): SegmentData {
+  renderModel(
+    hookData: ClaudeHookData,
+    colors: PowerlineColors,
+    config?: ModelSegmentConfig,
+  ): SegmentData {
     const rawName = hookData.model?.display_name || "Claude";
-    const modelName = formatModelName(rawName);
+    const formatted = formatModelName(rawName);
+    const modelName =
+      config?.style === "short" ? shortenModelName(formatted) : formatted;
+    const showSymbol = config?.showSymbol !== false;
+    const text = showSymbol
+      ? `${this.symbols.model} ${modelName}`
+      : modelName;
 
     return {
-      text: `${this.symbols.model} ${modelName}`,
+      text,
       bgColor: colors.modelBg,
       fgColor: colors.modelFg,
     };

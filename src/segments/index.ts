@@ -12,6 +12,7 @@ export type {
   PowerlineSymbols,
   AnySegmentConfig,
   DirectorySegmentConfig,
+  ModelSegmentConfig,
   GitSegmentConfig,
   UsageSegmentConfig,
   ContextSegmentConfig,

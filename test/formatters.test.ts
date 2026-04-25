@@ -1,4 +1,4 @@
-import { formatModelName } from "../src/utils/formatters";
+import { formatModelName, shortenModelName } from "../src/utils/formatters";
 
 describe("formatModelName", () => {
   describe("AWS Bedrock models", () => {
@@ -139,5 +139,37 @@ describe("formatModelName", () => {
         formatModelName("  anthropic.claude-sonnet-4-5-20250929-v1:0  "),
       ).toBe("Sonnet 4.5");
     });
+
+    it("should strip parenthetical variant suffixes", () => {
+      expect(formatModelName("Opus 4.7 (1M context)")).toBe("Opus 4.7");
+      expect(formatModelName("Sonnet 4.6 (extended thinking)")).toBe(
+        "Sonnet 4.6",
+      );
+      expect(formatModelName("claude-opus-4-7 (1M context)")).toBe("Opus 4.7");
+    });
+
+    it("should strip bracketed model id suffixes", () => {
+      expect(formatModelName("claude-opus-4-7[1m]")).toBe("Opus 4.7");
+      expect(formatModelName("claude-sonnet-4-6[beta]")).toBe("Sonnet 4.6");
+    });
+
+    it("should normalize already-formatted friendly names", () => {
+      expect(formatModelName("Opus 4.7")).toBe("Opus 4.7");
+      expect(formatModelName("opus 4")).toBe("Opus 4");
+      expect(formatModelName("HAIKU 4.5")).toBe("Haiku 4.5");
+    });
+  });
+});
+
+describe("shortenModelName", () => {
+  it("should reduce family to its initial", () => {
+    expect(shortenModelName("Opus 4.7")).toBe("O4.7");
+    expect(shortenModelName("Sonnet 4.6")).toBe("S4.6");
+    expect(shortenModelName("Haiku 4")).toBe("H4");
+  });
+
+  it("should pass through unrecognized input", () => {
+    expect(shortenModelName("Claude")).toBe("Claude");
+    expect(shortenModelName("custom-model")).toBe("custom-model");
   });
 });

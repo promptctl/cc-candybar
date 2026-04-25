@@ -8,6 +8,7 @@ import type {
   PowerlineSymbols,
   AnySegmentConfig,
   DirectorySegmentConfig,
+  ModelSegmentConfig,
   GitSegmentConfig,
   UsageSegmentConfig,
   ContextSegmentConfig,
@@ -556,7 +557,11 @@ export class PowerlineRenderer {
       );
     }
     if (segment.type === "model") {
-      return this.segmentRenderer.renderModel(hookData, colors);
+      return this.segmentRenderer.renderModel(
+        hookData,
+        colors,
+        segment.config as ModelSegmentConfig,
+      );
     }
 
     if (segment.type === "git") {
