@@ -55,24 +55,28 @@ import { renderTuiPanel } from "./tui";
 import { statSync } from "node:fs";
 
 const CACHE_TTL_MS = 60 * 60 * 1000; // Anthropic prompt cache: 1h
-const CACHE_BAR_LEN = 8;
-const CACHE_BAR_FILLED = "█";
-const CACHE_BAR_EMPTY = "░";
+const CACHE_RED_HEX = "#ef4444";
+const CACHE_YELLOW_HEX = "#eab308";
 
-function computeCacheWarmth(transcriptPath: string): string | null {
+function computeCacheWarmth(
+  transcriptPath: string,
+  restoreAnsi: string,
+): string | null {
   try {
     const ageMs = Date.now() - statSync(transcriptPath).mtimeMs;
-    if (ageMs >= CACHE_TTL_MS) return "✗ cold";
-    const remainMs = CACHE_TTL_MS - ageMs;
-    const remainMin = Math.ceil(remainMs / 60000);
-    const filled = Math.round((remainMs / CACHE_TTL_MS) * CACHE_BAR_LEN);
-    const bar =
-      CACHE_BAR_FILLED.repeat(filled) +
-      CACHE_BAR_EMPTY.repeat(CACHE_BAR_LEN - filled);
-    return `${bar} ${remainMin}m`;
+    if (ageMs >= CACHE_TTL_MS) return colorize("cold", CACHE_RED_HEX, restoreAnsi);
+    const remainMin = Math.ceil((CACHE_TTL_MS - ageMs) / 60000);
+    const text = `${remainMin}m`;
+    if (remainMin <= 8) return colorize(text, CACHE_RED_HEX, restoreAnsi);
+    if (remainMin <= 20) return colorize(text, CACHE_YELLOW_HEX, restoreAnsi);
+    return text;
   } catch {
     return null;
   }
+}
+
+function colorize(text: string, hex: string, restoreAnsi: string): string {
+  return `${hexToAnsi(hex, false)}${text}${restoreAnsi}`;
 }
 
 interface RenderedSegment {
@@ -643,7 +647,7 @@ export class PowerlineRenderer {
     if (!this.needsSegmentInfo("context")) return null;
     const seg = this.segmentRenderer.renderContext(contextInfo, colors, config);
     if (!seg || !hookData?.transcript_path) return seg;
-    const warmth = computeCacheWarmth(hookData.transcript_path);
+    const warmth = computeCacheWarmth(hookData.transcript_path, seg.fgColor);
     if (warmth) seg.text = `${seg.text} ${warmth}`;
     return seg;
   }
