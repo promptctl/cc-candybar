@@ -68,7 +68,8 @@ function computeCacheWarmth(
   const lastCacheTs = findLastCacheActivityTs(transcriptPath);
   if (lastCacheTs == null) return null;
   const ageMs = Date.now() - lastCacheTs;
-  if (ageMs >= CACHE_TTL_MS) return colorize("◴ cold", CACHE_RED_HEX, restoreAnsi);
+  if (ageMs >= CACHE_TTL_MS)
+    return colorize("◴ cold", CACHE_RED_HEX, restoreAnsi);
   const remainMin = Math.ceil((CACHE_TTL_MS - ageMs) / 60000);
   const text = `◴ ${remainMin}m`;
   if (remainMin <= 8) return colorize(text, CACHE_RED_HEX, restoreAnsi);
@@ -103,7 +104,10 @@ function findLastCacheActivityTs(transcriptPath: string): number | null {
   } catch {
     return null;
   } finally {
-    if (fd != null) try { closeSync(fd); } catch {}
+    if (fd != null)
+      try {
+        closeSync(fd);
+      } catch {}
   }
 }
 

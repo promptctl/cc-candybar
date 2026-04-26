@@ -447,7 +447,11 @@ function applyOverrideFlags(config: PowerlineConfig, args: string[]): void {
           continue;
         }
         const key = pair.slice(0, eq);
-        writeResolved(config, `display.${key}`, parseSetValue(pair.slice(eq + 1)));
+        writeResolved(
+          config,
+          `display.${key}`,
+          parseSetValue(pair.slice(eq + 1)),
+        );
       }
       continue;
     }

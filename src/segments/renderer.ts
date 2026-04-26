@@ -332,9 +332,7 @@ export class SegmentRenderer {
     const modelName =
       config?.style === "short" ? shortenModelName(formatted) : formatted;
     const showSymbol = config?.showSymbol !== false;
-    const text = showSymbol
-      ? `${this.symbols.model} ${modelName}`
-      : modelName;
+    const text = showSymbol ? `${this.symbols.model} ${modelName}` : modelName;
 
     return {
       text,
