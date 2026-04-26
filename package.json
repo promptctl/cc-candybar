@@ -1,6 +1,6 @@
 {
   "name": "@promptctl/claude-powerline",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Powerline statusline for Claude Code — fork of @owloops/claude-powerline with CLI override flags (--layout, --set, --show, --display, --segment) so the entire config can live in settings.json without a separate config file.",
   "type": "module",
   "main": "./dist/index.mjs",

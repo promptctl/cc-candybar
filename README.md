@@ -19,8 +19,32 @@
 - **`--display`** — set multiple `display.*` fields in one flag (`--display autoWrap=false,padding=1`).
 - **`--segment`** — set multiple segment fields in one flag (`--segment block.type=weighted,sessionId.length=8`).
 - **`--set`** — universal escape hatch for any dotted config path (`--set color.git=#3a3a3a/#d0d0d0`).
+- **`install` / `install-url-handler` subcommands (macOS)** — one-shot setup that installs a URL handler app and writes the renderer command into `~/.claude/settings.json`. Combined with `clickAction` on the sessionId segment, cmd-clicking the sessionId in your terminal copies the full id to your clipboard.
 
 All flags slot into the existing config precedence chain (CLI > env > file > defaults). See `--help` for the full reference.
+
+## Quick start (macOS)
+
+```bash
+pnpm dlx @promptctl/claude-powerline@latest install
+```
+
+That single command:
+
+1. Builds `~/Applications/PromptCtl URL Handler.app` and registers the `cpwl://` URL scheme with macOS Launch Services.
+2. Copies the runtime into `~/Library/Application Support/PromptCtl/url-handler.mjs` (stable path independent of pnpm cache).
+3. Writes the statusline renderer command into `~/.claude/settings.json`.
+
+Restart Claude Code. The statusline appears, and cmd-clicking the sessionId copies the full id to your clipboard.
+
+To override the default config, pass renderer flags after `install`:
+
+```bash
+pnpm dlx @promptctl/claude-powerline@latest install \
+  --style=capsule \
+  --layout 'directory model session' \
+  --show git=workingTree
+```
 
 ## Installation
 
