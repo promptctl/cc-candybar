@@ -365,12 +365,12 @@ describe("Segment Time Logic", () => {
 
     it("should render session id with label by default", () => {
       const result = renderer.renderSessionId(sessionId, colors);
-      expect(result.text).toBe(`⌗ ${sessionId}`);
+      expect(result.text).toBe(`⌗${sessionId}`);
     });
 
     it("should render session id with label when showIdLabel is true", () => {
       const result = renderer.renderSessionId(sessionId, colors, { enabled: true, showIdLabel: true });
-      expect(result.text).toBe(`⌗ ${sessionId}`);
+      expect(result.text).toBe(`⌗${sessionId}`);
     });
 
     it("should render session id without label when showIdLabel is false", () => {

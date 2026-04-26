@@ -410,7 +410,7 @@ export class SegmentRenderer {
         ? sessionId.slice(0, config.length)
         : sessionId;
     const visible = showLabel
-      ? `${this.symbols.session_id} ${truncated}`
+      ? `${this.symbols.session_id}${truncated}`
       : truncated;
 
     // [LAW:locality-or-seam] click action wraps visible text in OSC 8
