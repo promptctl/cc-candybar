@@ -102,6 +102,7 @@ export interface VersionSegmentConfig extends SegmentConfig {}
 
 export interface SessionIdSegmentConfig extends SegmentConfig {
   showIdLabel?: boolean;
+  length?: number;
 }
 
 export interface EnvSegmentConfig extends SegmentConfig {
@@ -382,9 +383,13 @@ export class SegmentRenderer {
     config?: SessionIdSegmentConfig,
   ): SegmentData {
     const showLabel = config?.showIdLabel !== false;
+    const truncated =
+      config?.length && config.length > 0
+        ? sessionId.slice(0, config.length)
+        : sessionId;
     const text = showLabel
-      ? `${this.symbols.session_id} ${sessionId}`
-      : sessionId;
+      ? `${this.symbols.session_id} ${truncated}`
+      : truncated;
 
     return {
       text,

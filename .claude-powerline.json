@@ -61,14 +61,9 @@
         "segments": {
           "git": {
             "enabled": true,
-            "showSha": true,
             "showWorkingTree": true,
-            "showOperation": true,
-            "showTag": true,
-            "showTimeSinceCommit": true,
-            "showStashCount": true,
             "showUpstream": true,
-            "showRepoName": true
+            "showTimeSinceCommit": true
           }
         }
       }
