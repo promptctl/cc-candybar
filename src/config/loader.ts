@@ -211,6 +211,268 @@ function getConfigPathFromEnv(): string | undefined {
   return process.env.CLAUDE_POWERLINE_CONFIG;
 }
 
+type SegmentName = keyof LineConfig["segments"];
+
+const VALID_SEGMENT_NAMES: ReadonlySet<string> = new Set([
+  "directory",
+  "git",
+  "model",
+  "session",
+  "block",
+  "today",
+  "tmux",
+  "context",
+  "metrics",
+  "version",
+  "sessionId",
+  "env",
+  "weekly",
+]);
+
+function parseLayout(raw: string): LineConfig[] {
+  // [LAW:one-source-of-truth] seed each segment from DEFAULT_CONFIG so layout
+  // doesn't redefine defaults, only references them. Users supply diffs via --set.
+  const defaultsByName: Partial<LineConfig["segments"]> = {};
+  for (const line of DEFAULT_CONFIG.display.lines) {
+    for (const [name, cfg] of Object.entries(line.segments)) {
+      if (cfg !== undefined) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (defaultsByName as any)[name] = cfg;
+      }
+    }
+  }
+
+  return raw.split("|").map((linePart) => {
+    const names = linePart.trim().split(/\s+/).filter(Boolean);
+    const segments: LineConfig["segments"] = {};
+    for (const name of names) {
+      if (!VALID_SEGMENT_NAMES.has(name)) {
+        process.stderr.write(
+          `Warning: --layout references unknown segment "${name}" (skipped).\n`,
+        );
+        continue;
+      }
+      const seed = defaultsByName[name as SegmentName];
+
+      const cloned = seed ? JSON.parse(JSON.stringify(seed)) : {};
+      cloned.enabled = true;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (segments as any)[name] = cloned;
+    }
+    return { segments };
+  });
+}
+
+function parseSetValue(raw: string): unknown {
+  if (raw === "true") return true;
+  if (raw === "false") return false;
+  if (/^-?\d+(?:\.\d+)?$/.test(raw)) return Number(raw);
+  return raw;
+}
+
+const OVERRIDE_FLAGS = ["set", "show", "display", "segment"] as const;
+type OverrideFlag = (typeof OVERRIDE_FLAGS)[number];
+
+function* iterateOverrideFlags(
+  args: string[],
+): Generator<{ kind: OverrideFlag; body: string }> {
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
+    if (arg === undefined) continue;
+    for (const kind of OVERRIDE_FLAGS) {
+      const flag = `--${kind}`;
+      if (arg === flag && i + 1 < args.length) {
+        yield { kind, body: args[i + 1]! };
+        i++;
+        break;
+      }
+      if (arg.startsWith(`${flag}=`)) {
+        yield { kind, body: arg.slice(flag.length + 1) };
+        break;
+      }
+    }
+  }
+}
+
+interface ResolvedOverride {
+  path: string[];
+  value: unknown;
+}
+
+function resolveOverride(
+  rawPath: string,
+  value: unknown,
+  config: PowerlineConfig,
+): ResolvedOverride[] {
+  const parts = rawPath.split(".");
+  const head = parts[0];
+
+  // segment.<name>.<...> → display.lines[k].segments.<name>.<...>
+  if (head === "segment" && parts.length >= 3) {
+    const segName = parts[1]!;
+    const rest = parts.slice(2);
+    const lines = config.display.lines;
+    for (let i = 0; i < lines.length; i++) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const segs = lines[i]!.segments as any;
+      if (segs && segs[segName] !== undefined) {
+        return [
+          {
+            path: ["display", "lines", String(i), "segments", segName, ...rest],
+            value,
+          },
+        ];
+      }
+    }
+    process.stderr.write(
+      `Warning: --set ${rawPath} but segment "${segName}" is not in the layout (use --layout to include it).\n`,
+    );
+    return [];
+  }
+
+  // color.<name>="#bg/#fg" → bg+fg pair
+  if (head === "color" && parts.length === 2) {
+    const segName = parts[1]!;
+    if (typeof value !== "string" || !value.includes("/")) {
+      process.stderr.write(
+        `Warning: --set ${rawPath} expects "#bg/#fg" format, got "${String(value)}".\n`,
+      );
+      return [];
+    }
+    const slash = value.indexOf("/");
+    const bg = value.slice(0, slash);
+    const fg = value.slice(slash + 1);
+    return [
+      { path: ["colors", "custom", segName, "bg"], value: bg },
+      { path: ["colors", "custom", segName, "fg"], value: fg },
+    ];
+  }
+
+  // color.<name>.{bg,fg}=#hex
+  if (
+    head === "color" &&
+    parts.length === 3 &&
+    (parts[2] === "bg" || parts[2] === "fg")
+  ) {
+    return [{ path: ["colors", "custom", parts[1]!, parts[2]!], value }];
+  }
+
+  // budget.<name>.<key>
+  if (head === "budget" && parts.length === 3) {
+    return [{ path: ["budget", parts[1]!, parts[2]!], value }];
+  }
+
+  // modelLimit.<name> → modelContextLimits.<name>
+  if (head === "modelLimit" && parts.length === 2) {
+    return [{ path: ["modelContextLimits", parts[1]!], value }];
+  }
+
+  // literal dotted path
+  return [{ path: parts, value }];
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function writeAtPath(root: any, path: string[], value: unknown): void {
+  let cur = root;
+  for (let i = 0; i < path.length - 1; i++) {
+    const key = path[i]!;
+    if (cur[key] === undefined || cur[key] === null) {
+      cur[key] = {};
+    }
+    cur = cur[key];
+  }
+  cur[path[path.length - 1]!] = value;
+}
+
+function writeResolved(
+  config: PowerlineConfig,
+  rawPath: string,
+  value: unknown,
+): void {
+  for (const ov of resolveOverride(rawPath, value, config)) {
+    writeAtPath(config, ov.path, ov.value);
+  }
+}
+
+function splitCsvPairs(body: string): string[] {
+  return body
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+// [LAW:one-type-per-behavior] --set, --show, --display, --segment are all
+// sugars for "write a config value via resolveOverride/writeAtPath". This
+// single dispatcher walks argv in order so last-in-args wins regardless of
+// which flag is used.
+function applyOverrideFlags(config: PowerlineConfig, args: string[]): void {
+  for (const { kind, body } of iterateOverrideFlags(args)) {
+    if (kind === "set") {
+      const eq = body.indexOf("=");
+      if (eq === -1) {
+        writeResolved(config, body, true);
+      } else {
+        writeResolved(
+          config,
+          body.slice(0, eq),
+          parseSetValue(body.slice(eq + 1)),
+        );
+      }
+      continue;
+    }
+
+    if (kind === "show") {
+      const eq = body.indexOf("=");
+      if (eq <= 0) {
+        process.stderr.write(
+          `Warning: --show ${body} expects "<segment>=<flag1,flag2,...>" format.\n`,
+        );
+        continue;
+      }
+      const segName = body.slice(0, eq);
+      for (const flag of splitCsvPairs(body.slice(eq + 1))) {
+        const field = `show${flag[0]!.toUpperCase()}${flag.slice(1)}`;
+        writeResolved(config, `segment.${segName}.${field}`, true);
+      }
+      continue;
+    }
+
+    if (kind === "display") {
+      for (const pair of splitCsvPairs(body)) {
+        const eq = pair.indexOf("=");
+        if (eq <= 0) {
+          process.stderr.write(
+            `Warning: --display ${pair} expects "<key>=<value>" (comma-separated for multiple).\n`,
+          );
+          continue;
+        }
+        const key = pair.slice(0, eq);
+        writeResolved(config, `display.${key}`, parseSetValue(pair.slice(eq + 1)));
+      }
+      continue;
+    }
+
+    if (kind === "segment") {
+      for (const pair of splitCsvPairs(body)) {
+        const eq = pair.indexOf("=");
+        if (eq <= 0 || !pair.slice(0, eq).includes(".")) {
+          process.stderr.write(
+            `Warning: --segment ${pair} expects "<segName>.<field>=<value>" (comma-separated for multiple).\n`,
+          );
+          continue;
+        }
+        const lhs = pair.slice(0, eq);
+        writeResolved(
+          config,
+          `segment.${lhs}`,
+          parseSetValue(pair.slice(eq + 1)),
+        );
+      }
+      continue;
+    }
+  }
+}
+
 function parseCLIOverrides(args: string[]): Partial<PowerlineConfig> {
   const config: Partial<PowerlineConfig> = {};
   const display: Partial<DisplayConfig> = {};
@@ -444,6 +706,17 @@ export function loadConfig(
 
   const cliOverrides = parseCLIOverrides(args);
   config = deepMerge(config, cliOverrides);
+
+  // [LAW:dataflow-not-control-flow] --layout replaces display.lines wholesale
+  // (lines[] is an array — deepMerge replaces arrays — so the layout owns
+  // structure deterministically). --set then writes values into the resolved
+  // structure.
+  const layoutArg = getArgValue(args, "--layout");
+  if (layoutArg !== undefined) {
+    config.display.lines = parseLayout(layoutArg);
+  }
+
+  applyOverrideFlags(config, args);
 
   // Validate grid config if present
   if (config.display?.tui) {

@@ -25,6 +25,41 @@ Claude Code Options (for settings.json):
   --style=STYLE            Set separator style: minimal, powerline, capsule, tui
   --charset=CHARSET        Set character set: unicode (default), text
   --config=PATH            Use custom config file path
+  --layout=LAYOUT          Define lines and segment order, e.g.
+                           "directory model session today | block context | git"
+                           (segments inherit defaults; use --set to override)
+  --show SEG=A,B,C         Shorthand: enable show* booleans on a segment.
+                           Each comma-separated flag F becomes
+                           segment.SEG.show<Capitalize(F)>=true. Example:
+                             --show git=workingTree,upstream,timeSinceCommit
+                           is equivalent to:
+                             --set segment.git.showWorkingTree
+                             --set segment.git.showUpstream
+                             --set segment.git.showTimeSinceCommit
+  --display K=V,K=V        Shorthand for display.K=V (comma-separated). Example:
+                             --display autoWrap=false,padding=1
+                           is equivalent to:
+                             --set display.autoWrap=false
+                             --set display.padding=1
+  --segment SEG.K=V,...    Shorthand for segment.SEG.K=V (comma-separated).
+                           Example:
+                             --segment block.type=weighted,sessionId.length=8
+                           is equivalent to:
+                             --set segment.block.type=weighted
+                             --set segment.sessionId.length=8
+  --set KEY=VALUE          Override any config value (repeatable). Examples:
+                             --set theme=custom
+                             --set display.style=capsule
+                             --set segment.git.showWorkingTree=true
+                             --set segment.session.type=both
+                             --set color.git=#3a3a3a/#d0d0d0
+                             --set color.session.bg=#5a5a5a
+                             --set budget.today.amount=5
+                             --set modelLimit.sonnet=200000
+                           Bareword (no '=') means '=true'. Numbers and
+                           true/false are auto-parsed. Anything else is a
+                           string. Unknown short prefixes fall through as
+                           literal dotted paths.
 
 See example config at: https://github.com/Owloops/claude-powerline/blob/main/.claude-powerline.json
 
