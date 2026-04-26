@@ -100,9 +100,17 @@ export interface TodaySegmentConfig extends SegmentConfig {
 
 export interface VersionSegmentConfig extends SegmentConfig {}
 
+export interface ClickActionUrl {
+  kind: "url";
+  scheme: string;
+}
+
+export type ClickAction = ClickActionUrl;
+
 export interface SessionIdSegmentConfig extends SegmentConfig {
   showIdLabel?: boolean;
   length?: number;
+  clickAction?: ClickAction;
 }
 
 export interface EnvSegmentConfig extends SegmentConfig {
@@ -189,6 +197,22 @@ const BAR_STYLES: Record<string, BarStyleDef> = {
   line: { filled: "━", empty: "┄" },
   squares: { filled: "◼", empty: "◻" },
 };
+
+const OSC = "\u001b]";
+const ST = "\u001b\\";
+
+export function wrapClickAction(
+  visible: string,
+  payload: string,
+  action: ClickAction | undefined,
+): string {
+  if (!action) return visible;
+  if (action.kind === "url") {
+    const url = `${action.scheme}://${encodeURIComponent(payload)}`;
+    return `${OSC}8;;${url}${ST}${visible}${OSC}8;;${ST}`;
+  }
+  return visible;
+}
 
 export class SegmentRenderer {
   constructor(
@@ -385,9 +409,13 @@ export class SegmentRenderer {
       config?.length && config.length > 0
         ? sessionId.slice(0, config.length)
         : sessionId;
-    const text = showLabel
+    const visible = showLabel
       ? `${this.symbols.session_id} ${truncated}`
       : truncated;
+
+    // [LAW:locality-or-seam] click action wraps visible text in OSC 8
+    // hyperlink. Truncation is unaffected — the URL carries the full id.
+    const text = wrapClickAction(visible, sessionId, config?.clickAction);
 
     return {
       text,

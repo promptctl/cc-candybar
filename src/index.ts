@@ -7,6 +7,7 @@ import { json } from "node:stream/consumers";
 import { PowerlineRenderer } from "./powerline";
 import { loadConfigFromCLI } from "./config/loader";
 import { debug } from "./utils/logger";
+import { runInstall, runInstallUrlHandler, runUrlHandle } from "./install";
 
 function showHelpText(): void {
   console.log(`
@@ -47,6 +48,18 @@ Claude Code Options (for settings.json):
                            is equivalent to:
                              --set segment.block.type=weighted
                              --set segment.sessionId.length=8
+Subcommands (macOS):
+  install [args...]        One-shot setup. Creates the URL handler app, registers
+                           the cpwl:// scheme, and writes the renderer command
+                           into ~/.claude/settings.json. With no args, uses
+                           Brandon's default config; pass renderer flags to
+                           override.
+  install-url-handler      Just create + register the URL handler app
+                           (~/Applications/PromptCtl URL Handler.app).
+  url-handle URL           Internal — invoked by the URL handler app on
+                           cmd-click. Parses cpwl://<verb>/<value> and
+                           dispatches (currently: copy to clipboard).
+
   --set KEY=VALUE          Override any config value (repeatable). Examples:
                              --set theme=custom
                              --set display.style=capsule
@@ -73,6 +86,23 @@ async function main(): Promise<void> {
 
     if (showHelp) {
       showHelpText();
+      process.exit(0);
+    }
+
+    // [LAW:dataflow-not-control-flow] Subcommand dispatch is data: argv[2]
+    // selects the handler. Each handler short-circuits via process.exit().
+    // Default fallthrough = the existing stdin-driven render flow.
+    const subcommand = process.argv[2];
+    if (subcommand === "install") {
+      runInstall(process.argv.slice(3));
+      process.exit(0);
+    }
+    if (subcommand === "install-url-handler") {
+      runInstallUrlHandler();
+      process.exit(0);
+    }
+    if (subcommand === "url-handle") {
+      runUrlHandle(process.argv[3]);
       process.exit(0);
     }
 
