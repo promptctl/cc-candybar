@@ -1,4 +1,9 @@
 import { defineConfig } from 'tsdown';
+import pkg from './package.json' with { type: 'json' };
+
+const define = {
+	__PACKAGE_VERSION__: JSON.stringify(pkg.version),
+};
 
 export default defineConfig([
 	{
@@ -9,6 +14,7 @@ export default defineConfig([
 		clean: true,
 		minify: true,
 		nodeProtocol: true,
+		define,
 	},
 	{
 		entry: ['src/browser.ts'],
@@ -19,5 +25,6 @@ export default defineConfig([
 		minify: true,
 		dts: true,
 		deps: { neverBundle: [/^node:/] },
+		define,
 	},
 ]);

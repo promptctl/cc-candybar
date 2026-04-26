@@ -65,18 +65,18 @@ The wizard writes `~/.claude/claude-powerline.json` and updates your `settings.j
 
 ### Manual Setup
 
-Add to your Claude Code `settings.json`:
+If you'd rather skip the `install` subcommand, you can edit `settings.json` directly. Important: **pin the version**, don't use `@latest`. `pnpm dlx` caches aggressively and `@latest` will keep resolving to whatever was first cached, never picking up new releases. The `install` subcommand handles this for you by baking the current version into the command at setup time.
 
 ```json
 {
   "statusLine": {
     "type": "command",
-    "command": "pnpm dlx @promptctl/claude-powerline@latest --style=powerline"
+    "command": "pnpm dlx @promptctl/claude-powerline@0.2.2 --style=powerline"
   }
 }
 ```
 
-Start a Claude session and the statusline appears at the bottom. Using `npx` automatically downloads and runs the latest version without manual updates.
+To upgrade later, re-run `pnpm dlx @promptctl/claude-powerline@latest install` (or update the pinned version in `settings.json`).
 
 ## Powerline Studio
 
@@ -642,7 +642,7 @@ Create custom themes and configure color compatibility:
 {
   "statusLine": {
     "type": "command",
-    "command": "pnpm dlx @promptctl/claude-powerline@latest --style=tui"
+    "command": "pnpm dlx @promptctl/claude-powerline@0.2.2 --style=tui"
   }
 }
 ```

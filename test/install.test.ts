@@ -104,20 +104,26 @@ describe("install — shellEscape", () => {
 });
 
 describe("install — buildStatusLineCommand", () => {
-  it("prepends pnpm dlx with the latest tag and shell-escapes args", () => {
+  it("prepends pnpm dlx with a pinned version and shell-escapes args", () => {
     const cmd = buildStatusLineCommand([
       "--style=powerline",
       "--layout",
       "directory git | model",
     ]);
-    expect(cmd).toBe(
-      "pnpm dlx @promptctl/claude-powerline@latest --style=powerline --layout 'directory git | model'",
+    // Version is replaced by tsdown's `define` at build time; in tests it
+    // falls back to "dev". We assert the shape and the version-pinning, not
+    // a specific version string.
+    expect(cmd).toMatch(
+      /^pnpm dlx @promptctl\/claude-powerline@[^\s]+ --style=powerline --layout 'directory git \| model'$/,
     );
+    // Critically: must NOT use @latest (would defeat pnpm dlx cache busting).
+    expect(cmd).not.toContain("@latest");
   });
 
   it("produces a stable string from DEFAULT_INSTALL_ARGS", () => {
     const cmd = buildStatusLineCommand(DEFAULT_INSTALL_ARGS);
-    expect(cmd).toContain("pnpm dlx @promptctl/claude-powerline@latest");
+    expect(cmd).toMatch(/^pnpm dlx @promptctl\/claude-powerline@[^\s]+ /);
+    expect(cmd).not.toContain("@latest");
     expect(cmd).toContain("--style=powerline");
     expect(cmd).toContain(
       "'directory git | model context block weekly sessionId'",

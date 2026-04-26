@@ -3,6 +3,14 @@ import path from "node:path";
 import os from "node:os";
 import { execFileSync, spawnSync } from "node:child_process";
 
+// [LAW:one-source-of-truth] Replaced at build time by tsdown's `define` option
+// from package.json. The pinned version is what we write into settings.json so
+// pnpm's content-addressable cache key changes on every release — no stale
+// versions sticking around because of `@latest` resolution.
+declare const __PACKAGE_VERSION__: string;
+const PACKAGE_VERSION =
+  typeof __PACKAGE_VERSION__ !== "undefined" ? __PACKAGE_VERSION__ : "dev";
+
 const PACKAGE_NAME = "@promptctl/claude-powerline";
 const URL_SCHEME = "cpwl";
 const BUNDLE_ID = "com.promptctl.url-handler";
@@ -33,7 +41,7 @@ function buildStatusLineCommand(rendererArgs: readonly string[]): string {
   return [
     "pnpm",
     "dlx",
-    `${PACKAGE_NAME}@latest`,
+    `${PACKAGE_NAME}@${PACKAGE_VERSION}`,
     ...rendererArgs.map(shellEscape),
   ].join(" ");
 }
