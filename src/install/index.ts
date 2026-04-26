@@ -76,14 +76,30 @@ function appleScriptSource(nodePath: string, scriptPath: string): string {
   ].join("\n");
 }
 
+// [LAW:one-source-of-truth] The bundle that contains *this* function is
+// the thing we need to copy to a stable location. Two invocation paths
+// reach us:
+//   - via the bin shim: process.argv[1] = ".../bin/claude-powerline" which
+//     does `import '../dist/index.mjs'`. Copying the shim itself would
+//     break — its relative import wouldn't resolve from the new location.
+//     So resolve to the sibling dist/index.mjs.
+//   - direct node:      process.argv[1] = ".../dist/index.mjs". Use as-is.
+export function locateBundledDist(argv1: string | undefined): string {
+  if (!argv1) {
+    throw new Error("install-url-handler: process.argv[1] not set");
+  }
+  if (argv1.endsWith(".mjs") || argv1.endsWith(".js")) {
+    return argv1;
+  }
+  // Treat argv[1] as a bin shim and assume sibling dist/index.mjs.
+  return path.resolve(path.dirname(argv1), "..", "dist", "index.mjs");
+}
+
 function copyDistToStableLocation(): string {
-  // process.argv[1] is the running .mjs (bundled dist when published, or the
-  // dlx-cached copy when invoked via `pnpm dlx`). Copy it to a stable path so
-  // pnpm cache eviction doesn't break click-to-copy later.
-  const source = process.argv[1];
-  if (!source || !fs.existsSync(source)) {
+  const source = locateBundledDist(process.argv[1]);
+  if (!fs.existsSync(source)) {
     throw new Error(
-      `install-url-handler: cannot locate the running script (process.argv[1]=${source}). The handler needs a stable copy of the bundled dist.`,
+      `install-url-handler: bundled dist not found at ${source}. Reinstall the package.`,
     );
   }
   fs.mkdirSync(supportDir(), { recursive: true });

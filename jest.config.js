@@ -5,9 +5,12 @@ export default {
   roots: ["<rootDir>/test"],
   testMatch: ["**/*.test.ts"],
   transform: {
-    "^.+\\.tsx?$": ["ts-jest", {
-      useESM: true
-    }],
+    "^.+\\.tsx?$": [
+      "ts-jest",
+      {
+        useESM: true,
+      },
+    ],
   },
   testTimeout: 30000,
 };

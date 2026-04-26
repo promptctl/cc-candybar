@@ -1,4 +1,4 @@
-import { parseHandlerUrl, __test__ } from "../src/install";
+import { parseHandlerUrl, locateBundledDist, __test__ } from "../src/install";
 import { wrapClickAction } from "../src/segments/renderer";
 
 const { shellEscape, buildStatusLineCommand, DEFAULT_INSTALL_ARGS } = __test__;
@@ -46,6 +46,40 @@ describe("install — parseHandlerUrl", () => {
       verb: "copy",
       value: "bar",
     });
+  });
+});
+
+describe("install — locateBundledDist", () => {
+  it("returns argv[1] directly when it ends in .mjs", () => {
+    expect(locateBundledDist("/path/to/dist/index.mjs")).toBe(
+      "/path/to/dist/index.mjs",
+    );
+  });
+
+  it("returns argv[1] directly when it ends in .js", () => {
+    expect(locateBundledDist("/path/to/dist/index.js")).toBe(
+      "/path/to/dist/index.js",
+    );
+  });
+
+  it("resolves to sibling dist/index.mjs for bin shim", () => {
+    expect(locateBundledDist("/usr/local/bin/claude-powerline")).toBe(
+      "/usr/local/dist/index.mjs",
+    );
+  });
+
+  it("handles npm @scope/pkg layout", () => {
+    expect(
+      locateBundledDist(
+        "/Users/x/.pnpm/store/v3/@promptctl+claude-powerline@0.2.0/bin/claude-powerline",
+      ),
+    ).toBe(
+      "/Users/x/.pnpm/store/v3/@promptctl+claude-powerline@0.2.0/dist/index.mjs",
+    );
+  });
+
+  it("throws on undefined argv[1]", () => {
+    expect(() => locateBundledDist(undefined)).toThrow(/argv\[1\]/);
   });
 });
 
