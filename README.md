@@ -2,19 +2,25 @@
 
 # Claude Powerline
 
-**A vim-style powerline statusline for Claude Code with real-time usage tracking, git integration, and custom themes.**
+**Powerline statusline for Claude Code — fork of [@promptctl/claude-powerline](https://github.com/Owloops/claude-powerline) with CLI override flags so the entire config can live in `settings.json` without a separate file.**
 
 ![License:MIT](https://img.shields.io/static/v1?label=License&message=MIT&color=blue&style=flat-square)
-[![npm downloads](https://img.shields.io/npm/dm/@owloops/claude-powerline.svg)](https://www.npmjs.com/package/@owloops/claude-powerline)
-[![npm version](https://img.shields.io/npm/v/@owloops/claude-powerline?style=flat-square)](https://www.npmjs.com/package/@owloops/claude-powerline)
-[![Install size](https://packagephobia.com/badge?p=@owloops/claude-powerline)](https://packagephobia.com/result?p=@owloops/claude-powerline)
-[![Dependencies](https://img.shields.io/badge/dependencies-zero-brightgreen)](https://www.npmjs.com/package/@owloops/claude-powerline)
-
-[![Mentioned in Awesome Claude Code](https://awesome.re/mentioned-badge-flat.svg)](https://github.com/hesreallyhim/awesome-claude-code)
+[![npm version](https://img.shields.io/npm/v/@promptctl/claude-powerline?style=flat-square)](https://www.npmjs.com/package/@promptctl/claude-powerline)
+[![Dependencies](https://img.shields.io/badge/dependencies-zero-brightgreen)](https://www.npmjs.com/package/@promptctl/claude-powerline)
 
 <img src="images/demo-tui.gif" alt="Claude Powerline TUI Mode Demo" width="600"/>
 
 </div>
+
+## What this fork adds
+
+- **`--layout`** — define lines and segment ordering inline (`"directory git | model context block"`).
+- **`--show`** — enable multiple `show*` booleans on a segment in one flag (`--show git=workingTree,upstream,timeSinceCommit`).
+- **`--display`** — set multiple `display.*` fields in one flag (`--display autoWrap=false,padding=1`).
+- **`--segment`** — set multiple segment fields in one flag (`--segment block.type=weighted,sessionId.length=8`).
+- **`--set`** — universal escape hatch for any dotted config path (`--set color.git=#3a3a3a/#d0d0d0`).
+
+All flags slot into the existing config precedence chain (CLI > env > file > defaults). See `--help` for the full reference.
 
 ## Installation
 
@@ -41,7 +47,7 @@ Add to your Claude Code `settings.json`:
 {
   "statusLine": {
     "type": "command",
-    "command": "npx -y @owloops/claude-powerline@latest --style=powerline"
+    "command": "pnpm dlx @promptctl/claude-powerline@latest --style=powerline"
   }
 }
 ```
@@ -612,7 +618,7 @@ Create custom themes and configure color compatibility:
 {
   "statusLine": {
     "type": "command",
-    "command": "npx -y @owloops/claude-powerline@latest --style=tui"
+    "command": "pnpm dlx @promptctl/claude-powerline@latest --style=tui"
   }
 }
 ```
@@ -863,7 +869,7 @@ Extend the statusline using shell composition:
 {
   "statusLine": {
     "type": "command",
-    "command": "npx -y @owloops/claude-powerline && echo \" $(date +%H:%M)\"",
+    "command": "pnpm dlx @promptctl/claude-powerline && echo \" $(date +%H:%M)\"",
     "padding": 0
   }
 }

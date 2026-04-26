@@ -1,7 +1,7 @@
 {
-  "name": "@owloops/claude-powerline",
-  "version": "1.25.2",
-  "description": "Beautiful vim-style powerline statusline for Claude Code with real-time usage tracking, git integration, and custom themes",
+  "name": "@promptctl/claude-powerline",
+  "version": "0.1.0",
+  "description": "Powerline statusline for Claude Code — fork of @owloops/claude-powerline with CLI override flags (--layout, --set, --show, --display, --segment) so the entire config can live in settings.json without a separate config file.",
   "type": "module",
   "main": "./dist/index.mjs",
   "module": "./dist/index.mjs",
@@ -35,15 +35,15 @@
     "typescript",
     "claude-code"
   ],
-  "author": "Owloops",
+  "author": "Brandon Fryslie",
   "license": "MIT",
-  "homepage": "https://github.com/Owloops/claude-powerline#readme",
+  "homepage": "https://github.com/promptctl/claude-powerline#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Owloops/claude-powerline.git"
+    "url": "git+https://github.com/promptctl/claude-powerline.git"
   },
   "bugs": {
-    "url": "https://github.com/Owloops/claude-powerline/issues"
+    "url": "https://github.com/promptctl/claude-powerline/issues"
   },
   "engines": {
     "node": ">=18.0.0"
@@ -57,8 +57,7 @@
     "LICENSE"
   ],
   "publishConfig": {
-    "access": "public",
-    "provenance": true
+    "access": "public"
   },
   "devDependencies": {
     "@eslint/js": "^9.33.0",
