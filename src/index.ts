@@ -8,6 +8,9 @@ import { PowerlineRenderer } from "./powerline";
 import { loadConfigFromCLI } from "./config/loader";
 import { debug } from "./utils/logger";
 import { runInstall, runInstallUrlHandler, runUrlHandle } from "./install";
+import { runDaemon } from "./daemon/server";
+import { tryRenderViaDaemon } from "./daemon/client";
+import { spawnDaemonDetached } from "./daemon/spawn";
 
 function showHelpText(): void {
   console.log(`
@@ -105,6 +108,10 @@ async function main(): Promise<void> {
       runUrlHandle(process.argv[3]);
       process.exit(0);
     }
+    if (subcommand === "daemon") {
+      runDaemon();
+      return; // daemon owns its own lifecycle
+    }
 
     if (process.stdin.isTTY === true) {
       console.error(`Error: This tool requires input from Claude Code
@@ -137,6 +144,25 @@ echo '{"session_id":"test-session","workspace":{"project_dir":"/path/to/project"
       console.error("Error: No input data received from stdin");
       showHelpText();
       process.exit(1);
+    }
+
+    // [LAW:dataflow-not-control-flow] Daemon path is an *optimization*, never
+    // a correctness dependency. Any failure (no socket, refused, timeout,
+    // version mismatch) falls through to inline render and fires a detached
+    // daemon spawn so the *next* invocation finds it.
+    const useDaemon = process.env.CLAUDE_POWERLINE_NO_DAEMON !== "1";
+    if (useDaemon) {
+      const outcome = await tryRenderViaDaemon(
+        hookData,
+        process.argv,
+        process.cwd(),
+      );
+      if (outcome.ok && outcome.output !== undefined) {
+        process.stdout.write(outcome.output);
+        process.exit(0);
+      }
+      // Fall through. Spawn detached for next invocation.
+      spawnDaemonDetached();
     }
 
     const projectDir = hookData.workspace?.project_dir;
