@@ -36,6 +36,7 @@ export interface StatsSnapshot {
     closed: number;
     evicted: number;
   };
+  nextRestartReason: string | null;
 }
 
 export class RuntimeStats {
@@ -53,6 +54,7 @@ export class RuntimeStats {
     gitCache: StatsSnapshot["gitCache"];
     usageCache: StatsSnapshot["usageCache"];
     watchersActive: number;
+    nextRestartReason?: string | null;
   }): StatsSnapshot {
     const mem = process.memoryUsage();
     return {
@@ -76,6 +78,7 @@ export class RuntimeStats {
         closed: this.watchersClosed,
         evicted: this.watchersEvicted,
       },
+      nextRestartReason: extras.nextRestartReason ?? null,
     };
   }
 }

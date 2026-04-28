@@ -126,5 +126,9 @@ export function formatStats(s: StatsSnapshot): string {
   lines.push(`  opened        ${s.watchers.opened}`);
   lines.push(`  closed        ${s.watchers.closed}`);
   lines.push(`  evicted       ${s.watchers.evicted}`);
+  if (s.nextRestartReason) {
+    lines.push(``);
+    lines.push(`nextRestart    ${s.nextRestartReason}`);
+  }
   return lines.join("\n") + "\n";
 }

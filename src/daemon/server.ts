@@ -16,6 +16,7 @@ import { CachedGitService } from "./cache/git";
 import { CachedUsageProvider } from "./cache/usage";
 import { WatcherRegistry } from "./cache/watchers";
 import { RuntimeStats } from "./stats";
+import { makeLimits, realLimitsDeps, type LimitsHandle } from "./limits";
 
 // [LAW:one-source-of-truth] one cache instance per daemon process — multiple
 // instances would defeat the share-across-sessions invariant.
@@ -85,6 +86,7 @@ export function runDaemon(): void {
     );
     armIdleTimer();
     armBinaryWatch();
+    armLimits();
   });
 }
 
@@ -116,6 +118,15 @@ function armBinaryWatch(): void {
     }
   }, BIN_CHECK_INTERVAL_MS);
   timer.unref();
+}
+
+// --- self-shutdown on RSS / age ---
+let limits: LimitsHandle | null = null;
+function armLimits(): void {
+  limits = makeLimits(
+    realLimitsDeps(stats.startedAt.getTime(), (code) => shutdown(code)),
+  );
+  limits.arm();
 }
 
 // --- single-instance mutex ---
@@ -332,6 +343,7 @@ async function handleRequest(req: Request): Promise<Response> {
         gitCache: gitService.getStats(),
         usageCache: usageProvider.getStats(),
         watchersActive: watcherRegistry.size(),
+        nextRestartReason: limits?.describeNextRestart() ?? null,
       }),
     };
   }
