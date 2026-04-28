@@ -159,8 +159,14 @@ export class PowerlineRenderer {
   private _metricsProvider?: MetricsProvider;
   private _segmentRenderer?: SegmentRenderer;
 
-  constructor(private readonly config: PowerlineConfig) {
+  constructor(
+    private readonly config: PowerlineConfig,
+    deps?: { gitService?: GitService },
+  ) {
     this.symbols = this.initializeSymbols();
+    // [LAW:locality-or-seam] dependency injection lets the daemon swap in a
+    // cached GitService without the renderer knowing about the cache.
+    if (deps?.gitService) this._gitService = deps.gitService;
   }
 
   private get usageProvider(): UsageProvider {

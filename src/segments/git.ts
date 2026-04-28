@@ -45,7 +45,9 @@ export class GitService {
     });
   }
 
-  private async findGitRoot(workingDir: string): Promise<string | null> {
+  // [LAW:locality-or-seam] public so daemon-side caches can key on the
+  // repoRoot they'd otherwise have to re-derive.
+  async findGitRoot(workingDir: string): Promise<string | null> {
     try {
       const result = await this.execGitAsync("git rev-parse --show-toplevel", {
         cwd: workingDir,

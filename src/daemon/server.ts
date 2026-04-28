@@ -12,6 +12,11 @@ import {
 import type { Request, Response } from "./protocol";
 import { PowerlineRenderer } from "../powerline";
 import { loadConfigFromCLI } from "../config/loader";
+import { CachedGitService } from "./cache/git";
+
+// [LAW:one-source-of-truth] one cache instance per daemon process — multiple
+// instances would defeat the share-across-sessions invariant.
+const gitService = new CachedGitService();
 
 const IDLE_SHUTDOWN_MS = 30 * 60 * 1000;
 const REQUEST_TIMEOUT_MS = 200;
@@ -298,12 +303,13 @@ async function handleRequest(req: Request): Promise<Response> {
     const t0 = Date.now();
     const projectDir = req.hookData.workspace?.project_dir;
     const config = loadConfigFromCLI(req.args, projectDir);
-    const renderer = new PowerlineRenderer(config);
+    const renderer = new PowerlineRenderer(config, { gitService });
     const output = await renderer.generateStatusline(req.hookData);
     const ms = Date.now() - t0;
+    const stats = gitService.getStats();
     dlog(
       "info",
-      `render sid=${req.hookData.session_id ?? "?"} took=${ms}ms`,
+      `render sid=${req.hookData.session_id ?? "?"} took=${ms}ms gitCache size=${stats.size} hits=${stats.hits} misses=${stats.misses}`,
     );
     return { ok: true, output: output + "\n" };
   }
