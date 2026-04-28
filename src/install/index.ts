@@ -260,6 +260,7 @@ export function runUrlHandle(rawUrl: string | undefined): void {
   const handlers: Record<string, (value: string) => void> = {
     copy: copyToClipboard,
     "open-vscode": openInVscode,
+    "toolbar-toggle": toggleToolbarExpanded,
   };
   const handler = handlers[parsed.verb];
   if (!handler) {
@@ -276,6 +277,30 @@ function copyToClipboard(text: string): void {
       `url-handle: pbcopy failed (status ${result.status})\n`,
     );
     process.exit(1);
+  }
+}
+
+// Toggle the per-session flag at ~/.claude/.toolbar-state/<sessionId>.
+// The value is the session id (passed via the cpwl:// URL by the toolbar
+// item, e.g. `▸{toolbar-toggle(session.id)}`). Renderer reads this on the
+// next refresh to decide whether to show `?`-prefixed extras for that session.
+function toggleToolbarExpanded(sessionId: string): void {
+  if (!sessionId) {
+    process.stderr.write("toolbar-toggle: empty session id (ignored)\n");
+    return;
+  }
+  // Reject path traversal — sessionId comes from a URL, treat as untrusted.
+  if (sessionId.includes("/") || sessionId.includes("..")) {
+    process.stderr.write(`toolbar-toggle: invalid session id "${sessionId}"\n`);
+    return;
+  }
+  const dir = path.join(os.homedir(), ".claude", ".toolbar-state");
+  const flagPath = path.join(dir, sessionId);
+  if (fs.existsSync(flagPath)) {
+    fs.unlinkSync(flagPath);
+  } else {
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(flagPath, "");
   }
 }
 

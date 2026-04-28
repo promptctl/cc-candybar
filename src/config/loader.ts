@@ -20,12 +20,15 @@ import type {
   SessionIdSegmentConfig,
   EnvSegmentConfig,
   WeeklySegmentConfig,
+  ToolbarSegmentConfig,
 } from "../segments/renderer";
+import { parseToolbarDsl } from "../segments/renderer";
 
 export interface LineConfig {
   segments: {
     directory?: DirectorySegmentConfig;
     git?: GitSegmentConfig;
+    gitTaculous?: GitSegmentConfig;
     model?: SegmentConfig;
     session?: UsageSegmentConfig;
     block?: BlockSegmentConfig;
@@ -37,6 +40,7 @@ export interface LineConfig {
     sessionId?: SessionIdSegmentConfig;
     env?: EnvSegmentConfig;
     weekly?: WeeklySegmentConfig;
+    toolbar?: ToolbarSegmentConfig;
   };
 }
 
@@ -216,6 +220,7 @@ type SegmentName = keyof LineConfig["segments"];
 const VALID_SEGMENT_NAMES: ReadonlySet<string> = new Set([
   "directory",
   "git",
+  "gitTaculous",
   "model",
   "session",
   "block",
@@ -227,6 +232,7 @@ const VALID_SEGMENT_NAMES: ReadonlySet<string> = new Set([
   "sessionId",
   "env",
   "weekly",
+  "toolbar",
 ]);
 
 function parseLayout(raw: string): LineConfig[] {
@@ -372,12 +378,18 @@ function resolveOverride(
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
+// [LAW:dataflow-not-control-flow] Numeric path segments produce arrays;
+// non-numeric produce objects. Same loop, branch driven by the next key's
+// shape — lets dotted CLI overrides like `actions.0.verb` build arrays
+// without a separate array-aware path syntax.
+const isArrayIndex = (s: string): boolean => /^(0|[1-9][0-9]*)$/.test(s);
+
 function writeAtPath(root: any, path: string[], value: unknown): void {
   let cur = root;
   for (let i = 0; i < path.length - 1; i++) {
     const key = path[i]!;
     if (cur[key] === undefined || cur[key] === null) {
-      cur[key] = {};
+      cur[key] = isArrayIndex(path[i + 1]!) ? [] : {};
     }
     cur = cur[key];
   }
@@ -721,6 +733,27 @@ export function loadConfig(
   }
 
   applyOverrideFlags(config, args);
+
+  // [LAW:dataflow-not-control-flow] --toolbar 'EXPR' parses the inline DSL
+  // into ToolbarItem[] and writes it onto every line that already has a
+  // toolbar segment in the layout. The DSL is the source of truth for items.
+  const toolbarArg = getArgValue(args, "--toolbar");
+  if (toolbarArg !== undefined) {
+    const items = parseToolbarDsl(toolbarArg);
+    let attached = false;
+    for (const line of config.display.lines) {
+      if (line.segments.toolbar) {
+        line.segments.toolbar.items = items;
+        line.segments.toolbar.enabled = true;
+        attached = true;
+      }
+    }
+    if (!attached) {
+      process.stderr.write(
+        `Warning: --toolbar provided but no "toolbar" segment in layout (use --layout '... toolbar ...').\n`,
+      );
+    }
+  }
 
   // Validate grid config if present
   if (config.display?.tui) {

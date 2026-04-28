@@ -25,6 +25,8 @@ import {
   minutesUntilReset,
 } from "../utils/formatters";
 import { getBudgetStatus } from "../utils/budget";
+import fsSync from "node:fs";
+import pathSync from "node:path";
 
 export interface SegmentConfig {
   enabled: boolean;
@@ -100,9 +102,22 @@ export interface TodaySegmentConfig extends SegmentConfig {
 
 export interface VersionSegmentConfig extends SegmentConfig {}
 
+export type ClickActionSource = "sessionId" | "transcriptPath" | "projectDir";
+
+export interface ClickActionEntry {
+  // Verb the URL handler will dispatch on (e.g. "copy", "open-vscode").
+  verb: string;
+  // Where in hookData the URL value comes from.
+  source: ClickActionSource;
+  // Visible glyph for this target. Omit on the first action to wrap the
+  // segment's main text instead.
+  glyph?: string;
+}
+
 export interface ClickActionUrl {
   kind: "url";
   scheme: string;
+  actions: ClickActionEntry[];
 }
 
 export type ClickAction = ClickActionUrl;
@@ -122,6 +137,29 @@ export interface WeeklySegmentConfig extends SegmentConfig {
   displayStyle?: BarDisplayStyle;
 }
 
+export interface ToolbarItem {
+  // Visible label. Supports `${expr}` interpolations resolved against the
+  // toolbar context (e.g. `${session.id:8}`, `📂`).
+  text: string;
+  // Click verb dispatched by the cpwl:// handler (e.g. "copy", "open-vscode",
+  // "open-url", "toolbar-toggle"). Adding a verb means adding a row in the
+  // dispatch table — the toolbar itself doesn't care which verbs exist.
+  verb: string;
+  // Resolver expression for the value passed to the verb. Empty string is
+  // valid (for action verbs like toolbar-toggle that ignore the value).
+  expr: string;
+  // Optional override scheme (defaults to "cpwl").
+  scheme?: string;
+  // Items prefixed with `?` in the DSL are "extras" — only rendered when
+  // ~/.claude/.toolbar-expanded exists (toggled via the toolbar-toggle verb).
+  extra?: boolean;
+}
+
+export interface ToolbarSegmentConfig extends SegmentConfig {
+  items?: ToolbarItem[];
+  separator?: string;
+}
+
 export type AnySegmentConfig =
   | SegmentConfig
   | DirectorySegmentConfig
@@ -136,7 +174,8 @@ export type AnySegmentConfig =
   | VersionSegmentConfig
   | SessionIdSegmentConfig
   | EnvSegmentConfig
-  | WeeklySegmentConfig;
+  | WeeklySegmentConfig
+  | ToolbarSegmentConfig;
 
 export interface PowerlineSymbols {
   right: string;
@@ -201,17 +240,60 @@ const BAR_STYLES: Record<string, BarStyleDef> = {
 const OSC = "\u001b]";
 const ST = "\u001b\\";
 
-export function wrapClickAction(
-  visible: string,
-  payload: string,
-  action: ClickAction | undefined,
+export function wrapOsc8(visible: string, url: string): string {
+  return `${OSC}8;;${url}${ST}${visible}${OSC}8;;${ST}`;
+}
+
+export function buildClickUrl(
+  scheme: string,
+  verb: string,
+  value: string,
 ): string {
-  if (!action) return visible;
-  if (action.kind === "url") {
-    const url = `${action.scheme}://${encodeURIComponent(payload)}`;
-    return `${OSC}8;;${url}${ST}${visible}${OSC}8;;${ST}`;
+  return `${scheme}://${verb}/${encodeURIComponent(value)}`;
+}
+
+export interface ClickActionContext {
+  sessionId: string;
+  transcriptPath?: string;
+  projectDir?: string;
+}
+
+function resolveClickSource(
+  source: ClickActionSource,
+  ctx: ClickActionContext,
+): string | undefined {
+  // [LAW:dataflow-not-control-flow] Source is a closed enum; resolution is a
+  // direct field lookup, not a chain of conditional branches.
+  return ctx[source];
+}
+
+// Build the segment's click-action text: the visible label, optionally wrapped
+// in OSC 8 by the first action without a glyph, with appended glyph targets
+// for every other action that has one. Sources resolving to undefined are
+// silently dropped — the data decides what's clickable.
+export function applyClickActions(
+  visible: string,
+  action: ClickAction | undefined,
+  ctx: ClickActionContext,
+): string {
+  if (!action || !Array.isArray(action.actions)) return visible;
+  let mainWrapped = false;
+  let mainText = visible;
+  const glyphs: string[] = [];
+  for (const entry of action.actions) {
+    const value = resolveClickSource(entry.source, ctx);
+    if (value === undefined) continue;
+    const url = buildClickUrl(action.scheme, entry.verb, value);
+    if (!entry.glyph && !mainWrapped) {
+      mainText = wrapOsc8(visible, url);
+      mainWrapped = true;
+      continue;
+    }
+    if (entry.glyph) {
+      glyphs.push(wrapOsc8(entry.glyph, url));
+    }
   }
-  return visible;
+  return glyphs.length > 0 ? `${mainText} ${glyphs.join(" ")}` : mainText;
 }
 
 export class SegmentRenderer {
@@ -346,6 +428,85 @@ export class SegmentRenderer {
     };
   }
 
+  // p10k git-taculous shape: `(git) [<sha> ][S][U] <branch>[ [<upstream>[ +N/-N]]][ (N stashed)]`
+  // Inline ANSI green/red for S/+ahead and red for U/-behind, restored to fg between codes.
+  // Reuses GitInfo populated by GitService — no extra git subprocess calls.
+  renderGitTaculous(
+    gitInfo: GitInfo,
+    colors: PowerlineColors,
+    config?: GitSegmentConfig,
+  ): SegmentData | null {
+    if (!gitInfo) return null;
+
+    const fg = colors.gitFg;
+    const GREEN = "\x1b[32m";
+    const RED = "\x1b[31m";
+
+    const parts: string[] = ["(git)"];
+
+    if (config?.showRepoName && gitInfo.repoName) {
+      parts.push(
+        gitInfo.isWorktree
+          ? `${gitInfo.repoName} ${this.symbols.git_worktree}`
+          : gitInfo.repoName,
+      );
+    }
+
+    if (config?.showOperation && gitInfo.operation) {
+      parts.push(`[${gitInfo.operation}]`);
+    }
+
+    if (config?.showSha && gitInfo.sha) {
+      parts.push(gitInfo.sha);
+    }
+
+    if (config?.showWorkingTree) {
+      const flags: string[] = [];
+      if ((gitInfo.staged ?? 0) > 0) flags.push(`${GREEN}S${fg}`);
+      const dirtyUnstaged = (gitInfo.unstaged ?? 0) + (gitInfo.untracked ?? 0);
+      if (dirtyUnstaged > 0) flags.push(`${RED}U${fg}`);
+      if ((gitInfo.conflicts ?? 0) > 0)
+        flags.push(`${RED}!${gitInfo.conflicts}${fg}`);
+      if (flags.length) parts.push(flags.join(""));
+    }
+
+    let branchStr = `${this.symbols.branch} ${gitInfo.branch}`;
+    if (config?.showUpstream && gitInfo.upstream) {
+      const ab: string[] = [];
+      if (gitInfo.ahead > 0) ab.push(`${GREEN}+${gitInfo.ahead}${fg}`);
+      if (gitInfo.behind > 0) ab.push(`${RED}-${gitInfo.behind}${fg}`);
+      branchStr += ` [${gitInfo.upstream}${ab.length ? ` ${ab.join("/")}` : ""}]`;
+    } else if (config?.showAheadBehind !== false) {
+      const ab: string[] = [];
+      if (gitInfo.ahead > 0)
+        ab.push(`${GREEN}${this.symbols.git_ahead}${gitInfo.ahead}${fg}`);
+      if (gitInfo.behind > 0)
+        ab.push(`${RED}${this.symbols.git_behind}${gitInfo.behind}${fg}`);
+      if (ab.length) branchStr += ` ${ab.join("")}`;
+    }
+    parts.push(branchStr);
+
+    if (config?.showTag && gitInfo.tag) {
+      parts.push(`${this.symbols.git_tag} ${gitInfo.tag}`);
+    }
+
+    if (config?.showStashCount && (gitInfo.stashCount ?? 0) > 0) {
+      parts.push(`(${gitInfo.stashCount} stashed)`);
+    }
+
+    if (config?.showTimeSinceCommit && gitInfo.timeSinceCommit !== undefined) {
+      parts.push(
+        `${this.symbols.git_time} ${formatTimeSince(gitInfo.timeSinceCommit)}`,
+      );
+    }
+
+    return {
+      text: parts.join(" "),
+      bgColor: colors.gitBg,
+      fgColor: colors.gitFg,
+    };
+  }
+
   renderModel(
     hookData: ClaudeHookData,
     colors: PowerlineColors,
@@ -403,6 +564,7 @@ export class SegmentRenderer {
     sessionId: string,
     colors: PowerlineColors,
     config?: SessionIdSegmentConfig,
+    ctx?: Omit<ClickActionContext, "sessionId">,
   ): SegmentData {
     const showLabel = config?.showIdLabel !== false;
     const truncated =
@@ -413,9 +575,14 @@ export class SegmentRenderer {
       ? `${this.symbols.session_id}${truncated}`
       : truncated;
 
-    // [LAW:locality-or-seam] click action wraps visible text in OSC 8
-    // hyperlink. Truncation is unaffected — the URL carries the full id.
-    const text = wrapClickAction(visible, sessionId, config?.clickAction);
+    // [LAW:locality-or-seam] click actions wrap visible text and/or append
+    // glyph targets via OSC 8. Truncation is unaffected — each URL carries
+    // the full source value.
+    const text = applyClickActions(visible, config?.clickAction, {
+      sessionId,
+      transcriptPath: ctx?.transcriptPath,
+      projectDir: ctx?.projectDir,
+    });
 
     return {
       text,
@@ -840,5 +1007,173 @@ export class SegmentRenderer {
       ? `${this.symbols.env} ${prefix}: ${value}`
       : `${this.symbols.env} ${value}`;
     return { text, bgColor: colors.envBg, fgColor: colors.envFg };
+  }
+
+  renderToolbar(
+    config: ToolbarSegmentConfig,
+    colors: PowerlineColors,
+    ctx: ToolbarContext,
+  ): SegmentData | null {
+    const items = config.items;
+    if (!items || items.length === 0) return null;
+    const sep = config.separator ?? " ";
+
+    const expanded = isToolbarExpanded(ctx.sessionId);
+    const parts: string[] = [];
+    for (const item of items) {
+      if (item.extra && !expanded) continue;
+      // Empty expr → action verb (e.g. toolbar-toggle); use empty value.
+      // Non-empty expr that fails to resolve → hide this item (data-driven).
+      let value: string;
+      if (item.expr === "") {
+        value = "";
+      } else {
+        const resolved = resolveToolbarExpr(item.expr, ctx);
+        if (resolved === undefined || resolved === "") continue;
+        value = resolved;
+      }
+      const visible = interpolateToolbarText(item.text, ctx);
+      const scheme = item.scheme ?? "cpwl";
+      const url = `${scheme}://${item.verb}/${encodeURIComponent(value)}`;
+      parts.push(wrapOsc8(visible, url));
+    }
+    if (parts.length === 0) return null;
+    return {
+      text: parts.join(sep),
+      bgColor: colors.sessionBg,
+      fgColor: colors.sessionFg,
+    };
+  }
+}
+
+// Resolver registry — sync, no extra IO. Add a row, get a new placeholder.
+// [LAW:dataflow-not-control-flow] Single dispatch table; the expression name
+// selects which field to read, not which branch to execute.
+export interface ToolbarContext {
+  sessionId: string;
+  transcriptPath?: string;
+  projectDir?: string;
+  currentDir?: string;
+  modelName?: string;
+  modelShort?: string;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  hookData?: Record<string, any>;
+}
+
+const TOOLBAR_RESOLVERS: Record<
+  string,
+  (ctx: ToolbarContext, arg?: string) => string | undefined
+> = {
+  sessionId: (c) => c.sessionId,
+  "session.id": (c, arg) => {
+    const id = c.sessionId;
+    if (!id) return undefined;
+    const n = arg ? parseInt(arg, 10) : NaN;
+    return Number.isFinite(n) && n > 0 ? id.slice(0, n) : id;
+  },
+  transcriptPath: (c) => c.transcriptPath,
+  projectDir: (c) => c.projectDir,
+  cwd: (c) => c.currentDir,
+  currentDir: (c) => c.currentDir,
+  "model.name": (c) => c.modelName,
+  "model.short": (c) => c.modelShort,
+};
+
+export function resolveToolbarExpr(
+  expr: string,
+  ctx: ToolbarContext,
+): string | undefined {
+  const trimmed = expr.trim();
+
+  // env.NAME
+  if (trimmed.startsWith("env.")) {
+    return globalThis.process?.env?.[trimmed.slice(4)];
+  }
+
+  // hook.dotted.path — escape hatch into raw hook data
+  if (trimmed.startsWith("hook.")) {
+    const path = trimmed.slice(5).split(".");
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let cur: any = ctx.hookData;
+    for (const key of path) {
+      if (cur == null) return undefined;
+      cur = cur[key];
+    }
+    return cur == null ? undefined : String(cur);
+  }
+
+  // name[:arg] form (e.g. session.id:8)
+  const colon = trimmed.indexOf(":");
+  const name = colon >= 0 ? trimmed.slice(0, colon) : trimmed;
+  const arg = colon >= 0 ? trimmed.slice(colon + 1) : undefined;
+  const resolver = TOOLBAR_RESOLVERS[name];
+  return resolver ? resolver(ctx, arg) : undefined;
+}
+
+export function interpolateToolbarText(
+  text: string,
+  ctx: ToolbarContext,
+): string {
+  return text.replace(/\$\{([^}]+)\}/g, (_, expr) => {
+    const v = resolveToolbarExpr(expr, ctx);
+    return v ?? "";
+  });
+}
+
+// DSL: items separated by whitespace; each item is `<text>{<verb>(<expr>)}`.
+// `<text>` may be empty and may contain `${expr}` interpolations.
+// [LAW:dataflow-not-control-flow] Parse to a flat ToolbarItem[]; the renderer
+// always walks the same loop — variability lives in the items list.
+export function parseToolbarDsl(raw: string): ToolbarItem[] {
+  if (!raw) return [];
+  const items: ToolbarItem[] = [];
+  // Split on whitespace not inside ${...} or {...}.
+  const tokens: string[] = [];
+  let buf = "";
+  let depth = 0;
+  for (let i = 0; i < raw.length; i++) {
+    const ch = raw[i]!;
+    if (ch === "{") depth++;
+    else if (ch === "}") depth = Math.max(0, depth - 1);
+    if (depth === 0 && /\s/.test(ch)) {
+      if (buf) {
+        tokens.push(buf);
+        buf = "";
+      }
+      continue;
+    }
+    buf += ch;
+  }
+  if (buf) tokens.push(buf);
+
+  for (const tok of tokens) {
+    const extra = tok.startsWith("?");
+    const body = extra ? tok.slice(1) : tok;
+    const m = body.match(/^(.*?)\{([a-zA-Z][\w-]*)\(([^)]*)\)\}$/);
+    if (!m) {
+      process.stderr.write(
+        `Warning: --toolbar item "${tok}" is not of form [?]<text>{verb(expr)} (skipped).\n`,
+      );
+      continue;
+    }
+    const [, text = "", verb = "", expr = ""] = m;
+    items.push({ text, verb, expr, ...(extra ? { extra: true } : {}) });
+  }
+  return items;
+}
+
+// Per-session toolbar collapse/expand state. Presence of the flag file
+// `~/.claude/.toolbar-state/<sessionId>` means expanded. The click handler
+// (toolbar-toggle verb) receives the session id as its URL value and toggles
+// the corresponding file. Sessions accumulate forever; acceptable for v1.
+function isToolbarExpanded(sessionId: string | undefined): boolean {
+  const home = globalThis.process?.env?.HOME;
+  if (!home || !sessionId) return false;
+  try {
+    return fsSync.existsSync(
+      pathSync.join(home, ".claude", ".toolbar-state", sessionId),
+    );
+  } catch {
+    return false;
   }
 }

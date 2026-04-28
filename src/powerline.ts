@@ -19,7 +19,9 @@ import type {
   SessionIdSegmentConfig,
   EnvSegmentConfig,
   WeeklySegmentConfig,
+  ToolbarSegmentConfig,
 } from "./segments";
+import { formatModelName, shortenModelName } from "./utils/formatters";
 import type { BlockInfo } from "./segments/block";
 import type { TodayInfo } from "./segments/today";
 import type { TuiData } from "./tui";
@@ -577,6 +579,15 @@ export class PowerlineRenderer {
       );
     }
 
+    if (segment.type === "gitTaculous") {
+      return await this.renderGitTaculousSegment(
+        segment.config as GitSegmentConfig,
+        hookData,
+        colors,
+        currentDir,
+      );
+    }
+
     if (segment.type === "session") {
       return this.renderSessionSegment(
         segment.config as UsageSegmentConfig,
@@ -591,6 +602,10 @@ export class PowerlineRenderer {
             hookData.session_id,
             colors,
             segment.config as SessionIdSegmentConfig,
+            {
+              transcriptPath: hookData.transcript_path,
+              projectDir: hookData.workspace?.project_dir,
+            },
           )
         : null;
     }
@@ -656,6 +671,24 @@ export class PowerlineRenderer {
       );
     }
 
+    if (segment.type === "toolbar") {
+      const rawName = hookData.model?.display_name || "Claude";
+      const formatted = formatModelName(rawName);
+      return this.segmentRenderer.renderToolbar(
+        segment.config as ToolbarSegmentConfig,
+        colors,
+        {
+          sessionId: hookData.session_id ?? "",
+          transcriptPath: hookData.transcript_path,
+          projectDir: hookData.workspace?.project_dir,
+          currentDir: hookData.workspace?.current_dir || hookData.cwd,
+          modelName: formatted,
+          modelShort: shortenModelName(formatted),
+          hookData: hookData as unknown as Record<string, unknown>,
+        },
+      );
+    }
+
     return null;
   }
 
@@ -684,6 +717,34 @@ export class PowerlineRenderer {
 
     return gitInfo
       ? this.segmentRenderer.renderGit(gitInfo, colors, config)
+      : null;
+  }
+
+  private async renderGitTaculousSegment(
+    config: GitSegmentConfig,
+    hookData: ClaudeHookData,
+    colors: PowerlineColors,
+    currentDir: string,
+  ) {
+    if (!this.needsSegmentInfo("gitTaculous")) return null;
+
+    const gitInfo = await this.gitService.getGitInfo(
+      currentDir,
+      {
+        showSha: config?.showSha,
+        showWorkingTree: config?.showWorkingTree,
+        showOperation: config?.showOperation,
+        showTag: config?.showTag,
+        showTimeSinceCommit: config?.showTimeSinceCommit,
+        showStashCount: config?.showStashCount,
+        showUpstream: config?.showUpstream,
+        showRepoName: config?.showRepoName,
+      },
+      hookData.workspace?.project_dir,
+    );
+
+    return gitInfo
+      ? this.segmentRenderer.renderGitTaculous(gitInfo, colors, config)
       : null;
   }
 
@@ -929,6 +990,7 @@ export class PowerlineRenderer {
       case "directory":
         return colors.modeBg;
       case "git":
+      case "gitTaculous":
         return colors.gitBg;
       case "model":
         return colors.modelBg;
@@ -951,6 +1013,8 @@ export class PowerlineRenderer {
         return colors.envBg;
       case "weekly":
         return colors.weeklyBg;
+      case "toolbar":
+        return colors.sessionBg;
       default:
         return colors.modeBg;
     }
