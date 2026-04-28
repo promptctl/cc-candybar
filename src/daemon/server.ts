@@ -13,10 +13,12 @@ import type { Request, Response } from "./protocol";
 import { PowerlineRenderer } from "../powerline";
 import { loadConfigFromCLI } from "../config/loader";
 import { CachedGitService } from "./cache/git";
+import { CachedUsageProvider } from "./cache/usage";
 
 // [LAW:one-source-of-truth] one cache instance per daemon process — multiple
 // instances would defeat the share-across-sessions invariant.
 const gitService = new CachedGitService();
+const usageProvider = new CachedUsageProvider();
 
 const IDLE_SHUTDOWN_MS = 30 * 60 * 1000;
 const REQUEST_TIMEOUT_MS = 200;
@@ -221,6 +223,11 @@ function shutdown(code: number): void {
   } catch (e) {
     dlog("warn", `gitService close failed: ${(e as Error).message}`);
   }
+  try {
+    usageProvider.close();
+  } catch (e) {
+    dlog("warn", `usageProvider close failed: ${(e as Error).message}`);
+  }
   releasePidfile();
   closeLog();
   // Give any in-flight `sock.write` a moment to flush before exit. 100ms is
@@ -308,13 +315,17 @@ async function handleRequest(req: Request): Promise<Response> {
     const t0 = Date.now();
     const projectDir = req.hookData.workspace?.project_dir;
     const config = loadConfigFromCLI(req.args, projectDir);
-    const renderer = new PowerlineRenderer(config, { gitService });
+    const renderer = new PowerlineRenderer(config, {
+      gitService,
+      usageProvider,
+    });
     const output = await renderer.generateStatusline(req.hookData);
     const ms = Date.now() - t0;
-    const stats = gitService.getStats();
+    const g = gitService.getStats();
+    const u = usageProvider.getStats();
     dlog(
       "info",
-      `render sid=${req.hookData.session_id ?? "?"} took=${ms}ms gitCache size=${stats.size} hits=${stats.hits} misses=${stats.misses}`,
+      `render sid=${req.hookData.session_id ?? "?"} took=${ms}ms git=${g.size}/${g.hits}h/${g.misses}m usage=${u.size}/${u.hits}h/${u.misses}m`,
     );
     return { ok: true, output: output + "\n" };
   }

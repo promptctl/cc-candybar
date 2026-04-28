@@ -161,12 +161,13 @@ export class PowerlineRenderer {
 
   constructor(
     private readonly config: PowerlineConfig,
-    deps?: { gitService?: GitService },
+    deps?: { gitService?: GitService; usageProvider?: UsageProvider },
   ) {
     this.symbols = this.initializeSymbols();
-    // [LAW:locality-or-seam] dependency injection lets the daemon swap in a
-    // cached GitService without the renderer knowing about the cache.
+    // [LAW:locality-or-seam] dependency injection lets the daemon swap in
+    // cached service implementations without the renderer knowing.
     if (deps?.gitService) this._gitService = deps.gitService;
+    if (deps?.usageProvider) this._usageProvider = deps.usageProvider;
   }
 
   private get usageProvider(): UsageProvider {
