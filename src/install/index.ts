@@ -13,8 +13,8 @@ const PACKAGE_VERSION =
 
 const PACKAGE_NAME = "@promptctl/claude-powerline";
 const URL_SCHEME = "cpwl";
-const BUNDLE_ID = "com.promptctl.url-handler";
-const APP_NAME = "PromptCtl URL Handler";
+const BUNDLE_ID = "com.claudepowerline.url-handler";
+const APP_NAME = "ClaudePowerlineURLHandler";
 
 // [LAW:one-source-of-truth] These are the renderer flags `claude-powerline
 // install` writes into ~/.claude/settings.json when invoked with no args.
@@ -28,7 +28,23 @@ const DEFAULT_INSTALL_ARGS: readonly string[] = [
   "--show",
   "git=workingTree,upstream,timeSinceCommit",
   "--segment",
-  "block.type=weighted,sessionId.length=8,sessionId.clickAction.kind=url,sessionId.clickAction.scheme=cpwl",
+  [
+    "block.type=weighted",
+    "sessionId.length=8",
+    "sessionId.clickAction.kind=url",
+    "sessionId.clickAction.scheme=cpwl",
+    // First action wraps the visible session id text (no glyph): copy.
+    "sessionId.clickAction.actions.0.verb=copy",
+    "sessionId.clickAction.actions.0.source=sessionId",
+    // Second action: open the session JSONL transcript in VSCode.
+    "sessionId.clickAction.actions.1.verb=open-vscode",
+    "sessionId.clickAction.actions.1.source=transcriptPath",
+    "sessionId.clickAction.actions.1.glyph=📄",
+    // Third action: open the project working directory in VSCode.
+    "sessionId.clickAction.actions.2.verb=open-vscode",
+    "sessionId.clickAction.actions.2.source=projectDir",
+    "sessionId.clickAction.actions.2.glyph=📂",
+  ].join(","),
 ];
 
 function shellEscape(arg: string): string {
@@ -63,7 +79,12 @@ function ensureMacOS(): void {
 }
 
 function supportDir(): string {
-  return path.join(os.homedir(), "Library", "Application Support", "PromptCtl");
+  return path.join(
+    os.homedir(),
+    "Library",
+    "Application Support",
+    "ClaudePowerline",
+  );
 }
 
 function stableScriptPath(): string {
@@ -74,7 +95,7 @@ function appleScriptSource(nodePath: string, scriptPath: string): string {
   // [LAW:no-shared-mutable-globals] Bake absolute paths into the AppleScript
   // so click-time invocation doesn't depend on PATH, pnpm dlx cache state, or
   // a global npm install. The script path is a stable copy under
-  // ~/Library/Application Support/PromptCtl that we own.
+  // ~/Library/Application Support/ClaudePowerline that we own.
   const escNode = nodePath.replace(/"/g, '\\"');
   const escScript = scriptPath.replace(/"/g, '\\"');
   return [
@@ -233,13 +254,19 @@ export function runUrlHandle(rawUrl: string | undefined): void {
     process.exit(1);
   }
 
-  if (parsed.verb === "copy") {
-    copyToClipboard(parsed.value);
-    return;
+  // [LAW:dataflow-not-control-flow] Verb dispatch table — each entry maps a
+  // verb name to a handler that takes the parsed value. Adding a verb means
+  // adding a row, not branching deeper.
+  const handlers: Record<string, (value: string) => void> = {
+    copy: copyToClipboard,
+    "open-vscode": openInVscode,
+  };
+  const handler = handlers[parsed.verb];
+  if (!handler) {
+    process.stderr.write(`url-handle: unknown verb "${parsed.verb}"\n`);
+    process.exit(1);
   }
-
-  process.stderr.write(`url-handle: unknown verb "${parsed.verb}"\n`);
-  process.exit(1);
+  handler(parsed.value);
 }
 
 function copyToClipboard(text: string): void {
@@ -247,6 +274,23 @@ function copyToClipboard(text: string): void {
   if (result.status !== 0) {
     process.stderr.write(
       `url-handle: pbcopy failed (status ${result.status})\n`,
+    );
+    process.exit(1);
+  }
+}
+
+function openInVscode(target: string): void {
+  // [LAW:no-shared-mutable-globals] /usr/bin/open is a stable system path; -a
+  // delegates app resolution to Launch Services so we don't have to know
+  // where `code` is on PATH at click time.
+  const result = spawnSync("/usr/bin/open", [
+    "-a",
+    "Visual Studio Code",
+    target,
+  ]);
+  if (result.status !== 0) {
+    process.stderr.write(
+      `url-handle: open -a "Visual Studio Code" failed (status ${result.status})\n`,
     );
     process.exit(1);
   }

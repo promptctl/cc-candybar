@@ -1,5 +1,9 @@
 import { parseHandlerUrl, locateBundledDist, __test__ } from "../src/install";
-import { wrapClickAction } from "../src/segments/renderer";
+import {
+  applyClickActions,
+  buildClickUrl,
+  wrapOsc8,
+} from "../src/segments/renderer";
 
 const { shellEscape, buildStatusLineCommand, DEFAULT_INSTALL_ARGS } = __test__;
 
@@ -129,37 +133,108 @@ describe("install — buildStatusLineCommand", () => {
       "'directory git | model context block weekly sessionId'",
     );
     expect(cmd).toContain("--show git=workingTree,upstream,timeSinceCommit");
+    // Three click actions: copy (default), open jsonl, open project dir.
+    expect(cmd).toContain("sessionId.clickAction.kind=url");
+    expect(cmd).toContain("sessionId.clickAction.actions.0.verb=copy");
     expect(cmd).toContain(
-      "--segment block.type=weighted,sessionId.length=8,sessionId.clickAction.kind=url,sessionId.clickAction.scheme=cpwl",
+      "sessionId.clickAction.actions.1.verb=open-vscode",
+    );
+    expect(cmd).toContain(
+      "sessionId.clickAction.actions.1.source=transcriptPath",
+    );
+    expect(cmd).toContain(
+      "sessionId.clickAction.actions.2.source=projectDir",
     );
   });
 });
 
-describe("renderer — wrapClickAction (OSC 8)", () => {
-  it("returns visible text unchanged when no action", () => {
-    expect(wrapClickAction("hi", "abc", undefined)).toBe("hi");
-  });
-
-  it("wraps in OSC 8 hyperlink for kind=url", () => {
-    const got = wrapClickAction("test-ses", "test-session-12345", {
-      kind: "url",
-      scheme: "cpwl",
-    });
-    expect(got).toBe(
-      "\u001b]8;;cpwl://test-session-12345\u001b\\test-ses\u001b]8;;\u001b\\",
+describe("renderer — wrapOsc8 / buildClickUrl", () => {
+  it("wraps visible text in an OSC 8 hyperlink", () => {
+    expect(wrapOsc8("hi", "cpwl://copy/abc")).toBe(
+      "\u001b]8;;cpwl://copy/abc\u001b\\hi\u001b]8;;\u001b\\",
     );
   });
 
-  it("URL-encodes special chars in the payload", () => {
-    const got = wrapClickAction("v", "a b/c?d", {
-      kind: "url",
-      scheme: "cpwl",
-    });
-    expect(got).toContain("cpwl://a%20b%2Fc%3Fd");
+  it("URL-encodes the value in buildClickUrl", () => {
+    expect(buildClickUrl("cpwl", "copy", "a b/c?d")).toBe(
+      "cpwl://copy/a%20b%2Fc%3Fd",
+    );
   });
 
-  it("uses the configured scheme verbatim", () => {
-    const got = wrapClickAction("v", "abc", { kind: "url", scheme: "myapp" });
-    expect(got).toContain("myapp://abc");
+  it("includes the verb in the URL", () => {
+    expect(buildClickUrl("cpwl", "open-vscode", "/tmp/foo")).toBe(
+      "cpwl://open-vscode/%2Ftmp%2Ffoo",
+    );
+  });
+});
+
+describe("renderer — applyClickActions", () => {
+  const ctx = {
+    sessionId: "abc-123",
+    transcriptPath: "/tmp/log.jsonl",
+    projectDir: "/tmp/proj",
+  };
+
+  it("returns visible text unchanged when no action", () => {
+    expect(applyClickActions("hi", undefined, ctx)).toBe("hi");
+  });
+
+  it("first action without glyph wraps the visible text", () => {
+    const got = applyClickActions("hi", {
+      kind: "url",
+      scheme: "cpwl",
+      actions: [{ verb: "copy", source: "sessionId" }],
+    }, ctx);
+    expect(got).toBe("\u001b]8;;cpwl://copy/abc-123\u001b\\hi\u001b]8;;\u001b\\");
+  });
+
+  it("appends one OSC 8-wrapped glyph per extra action", () => {
+    const got = applyClickActions("hi", {
+      kind: "url",
+      scheme: "cpwl",
+      actions: [
+        { verb: "copy", source: "sessionId" },
+        { verb: "open-vscode", source: "transcriptPath", glyph: "📄" },
+        { verb: "open-vscode", source: "projectDir", glyph: "📂" },
+      ],
+    }, ctx);
+    expect(got).toContain("cpwl://copy/abc-123");
+    expect(got).toContain(
+      "cpwl://open-vscode/" + encodeURIComponent("/tmp/log.jsonl"),
+    );
+    expect(got).toContain(
+      "cpwl://open-vscode/" + encodeURIComponent("/tmp/proj"),
+    );
+    expect(got).toContain("📄");
+    expect(got).toContain("📂");
+    expect(got.startsWith("\u001b]8;;cpwl://copy/abc-123")).toBe(true);
+  });
+
+  it("silently drops actions whose source is missing", () => {
+    const got = applyClickActions("hi", {
+      kind: "url",
+      scheme: "cpwl",
+      actions: [
+        { verb: "copy", source: "sessionId" },
+        { verb: "open-vscode", source: "projectDir", glyph: "📂" },
+      ],
+    }, { sessionId: "abc-123" });
+    expect(got).toContain("cpwl://copy/abc-123");
+    expect(got).not.toContain("📂");
+  });
+
+  it("only one action without a glyph wraps main text", () => {
+    const got = applyClickActions("hi", {
+      kind: "url",
+      scheme: "cpwl",
+      actions: [
+        { verb: "copy", source: "sessionId" },
+        // Second no-glyph entry is a misconfiguration; should be ignored,
+        // not double-wrap.
+        { verb: "open-vscode", source: "projectDir" },
+      ],
+    }, ctx);
+    expect(got).toContain("cpwl://copy/abc-123");
+    expect(got).not.toContain("cpwl://open-vscode");
   });
 });

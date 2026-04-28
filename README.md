@@ -31,8 +31,8 @@ pnpm dlx @promptctl/claude-powerline@latest install
 
 That single command:
 
-1. Builds `~/Applications/PromptCtl URL Handler.app` and registers the `cpwl://` URL scheme with macOS Launch Services.
-2. Copies the runtime into `~/Library/Application Support/PromptCtl/url-handler.mjs` (stable path independent of pnpm cache).
+1. Builds `~/Applications/ClaudePowerlineURLHandler.app` and registers the `cpwl://` URL scheme with macOS Launch Services.
+2. Copies the runtime into `~/Library/Application Support/ClaudePowerline/url-handler.mjs` (stable path independent of pnpm cache).
 3. Writes the statusline renderer command into `~/.claude/settings.json`.
 
 Restart Claude Code. The statusline appears, and cmd-clicking the sessionId copies the full id to your clipboard.

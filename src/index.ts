@@ -55,7 +55,7 @@ Subcommands (macOS):
                            Brandon's default config; pass renderer flags to
                            override.
   install-url-handler      Just create + register the URL handler app
-                           (~/Applications/PromptCtl URL Handler.app).
+                           (~/Applications/ClaudePowerlineURLHandler.app).
   url-handle URL           Internal — invoked by the URL handler app on
                            cmd-click. Parses cpwl://<verb>/<value> and
                            dispatches (currently: copy to clipboard).
