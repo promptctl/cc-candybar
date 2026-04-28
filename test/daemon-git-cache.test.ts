@@ -29,9 +29,16 @@ class StubGitService extends GitService {
 
 function makeCache(opts: { ttlMs?: number; maxEntries?: number } = {}) {
   const inner = new StubGitService();
-  const svc = new CachedGitService({ ...opts, inner });
+  // sanityIntervalMs=0 disables the periodic check in unit tests; we drive
+  // it manually via runSanityCheckNow().
+  const svc = new CachedGitService({ ...opts, inner, sanityIntervalMs: 0 });
   return { svc, inner };
 }
+
+afterEach(() => {
+  // Watchers will fail on the synthetic /repo/* paths but registry guards
+  // against the resulting throw; nothing to clean up here.
+});
 
 describe("CachedGitService", () => {
   test("two cwds in same repo share one cache entry", async () => {
@@ -42,7 +49,7 @@ describe("CachedGitService", () => {
     await svc.getGitInfo("/repo/b", { showSha: false });
 
     expect(inner.computeCalls).toHaveLength(1);
-    expect(svc.getStats()).toEqual({ size: 1, hits: 1, misses: 1 });
+    expect(svc.getStats()).toMatchObject({ size: 1, hits: 1, misses: 1 });
   });
 
   test("different repos get different entries", async () => {

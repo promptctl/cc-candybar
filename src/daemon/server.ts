@@ -216,6 +216,11 @@ function shutdown(code: number): void {
   try {
     fs.unlinkSync(socketPath());
   } catch {}
+  try {
+    gitService.close();
+  } catch (e) {
+    dlog("warn", `gitService close failed: ${(e as Error).message}`);
+  }
   releasePidfile();
   closeLog();
   // Give any in-flight `sock.write` a moment to flush before exit. 100ms is
