@@ -1,9 +1,10 @@
 import type { Socket } from "node:net";
 import type { ClaudeHookData } from "../utils/claude";
+import type { StatsSnapshot } from "./stats";
 
 // Bumped on any wire-format change. Clients send their version; daemon refuses
 // mismatches and shuts down so the next client respawns from current binary.
-export const PROTOCOL_VERSION = 1;
+export const PROTOCOL_VERSION = 2;
 
 export interface RenderRequest {
   v: number;
@@ -18,10 +19,16 @@ export interface ShutdownRequest {
   kind: "shutdown";
 }
 
-export type Request = RenderRequest | ShutdownRequest;
+export interface StatsRequest {
+  v: number;
+  kind: "stats";
+}
+
+export type Request = RenderRequest | ShutdownRequest | StatsRequest;
 
 export type Response =
   | { ok: true; output: string }
+  | { ok: true; stats: StatsSnapshot }
   | { ok: false; error: string; code: ErrorCode };
 
 export type ErrorCode =

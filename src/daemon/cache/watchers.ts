@@ -28,13 +28,24 @@ export interface WatcherHandle {
   release(): void;
 }
 
+export interface WatcherCounters {
+  watchersOpened: number;
+  watchersClosed: number;
+  watchersEvicted: number;
+}
+
 export class WatcherRegistry {
   private readonly slots = new Map<string, WatcherSlot>();
   private readonly maxWatchers: number;
+  private readonly counters?: WatcherCounters;
   private closed = false;
 
-  constructor(opts: { maxWatchers?: number } = {}) {
+  constructor(opts: {
+    maxWatchers?: number;
+    counters?: WatcherCounters;
+  } = {}) {
     this.maxWatchers = opts.maxWatchers ?? DEFAULT_MAX_WATCHERS;
+    this.counters = opts.counters;
   }
 
   // Acquire (or share) a watcher for `repoRoot`. Multiple acquires share a
@@ -70,6 +81,7 @@ export class WatcherRegistry {
     };
     this.openWatchers(slot);
     this.slots.set(repoRoot, slot);
+    if (this.counters) this.counters.watchersOpened++;
     this.evictIfNeeded();
     return this.makeHandle(repoRoot);
   }
@@ -143,6 +155,7 @@ export class WatcherRegistry {
       } catch {}
     }
     slot.watchers = [];
+    if (this.counters) this.counters.watchersClosed++;
   }
 
   private evictIfNeeded(): void {
@@ -154,6 +167,7 @@ export class WatcherRegistry {
       const slot = this.slots.get(oldest)!;
       this.closeSlot(slot);
       this.slots.delete(oldest);
+      if (this.counters) this.counters.watchersEvicted++;
       // Force the consumer to drop their entry too — without this the cache
       // would keep stale data with no watcher behind it.
       try {

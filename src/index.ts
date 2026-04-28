@@ -10,6 +10,7 @@ import { debug } from "./utils/logger";
 import { runInstall, runInstallUrlHandler, runUrlHandle } from "./install";
 import { runDaemon } from "./daemon/server";
 import { tryRenderViaDaemon } from "./daemon/client";
+import { runDaemonStats } from "./daemon/client-stats";
 import { spawnDaemonDetached } from "./daemon/spawn";
 
 function showHelpText(): void {
@@ -62,6 +63,9 @@ Subcommands (macOS):
   url-handle URL           Internal — invoked by the URL handler app on
                            cmd-click. Parses cpwl://<verb>/<value> and
                            dispatches (currently: copy to clipboard).
+  daemon-stats [--json]    Query the running daemon for runtime stats:
+                           uptime, RSS, cache hit rates, watcher count,
+                           request totals. Does not spawn a daemon.
 
   --set KEY=VALUE          Override any config value (repeatable). Examples:
                              --set theme=custom
@@ -111,6 +115,10 @@ async function main(): Promise<void> {
     if (subcommand === "daemon") {
       runDaemon();
       return; // daemon owns its own lifecycle
+    }
+    if (subcommand === "daemon-stats") {
+      await runDaemonStats(process.argv.slice(3));
+      process.exit(0);
     }
 
     if (process.stdin.isTTY === true) {

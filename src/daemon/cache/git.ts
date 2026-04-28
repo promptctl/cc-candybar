@@ -90,6 +90,10 @@ export class CachedGitService extends GitService {
     }
   }
 
+  getWatcherRegistry(): WatcherRegistry {
+    return this.watchers;
+  }
+
   getStats(): {
     size: number;
     hits: number;

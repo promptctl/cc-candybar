@@ -14,10 +14,14 @@ import { PowerlineRenderer } from "../powerline";
 import { loadConfigFromCLI } from "../config/loader";
 import { CachedGitService } from "./cache/git";
 import { CachedUsageProvider } from "./cache/usage";
+import { WatcherRegistry } from "./cache/watchers";
+import { RuntimeStats } from "./stats";
 
 // [LAW:one-source-of-truth] one cache instance per daemon process — multiple
 // instances would defeat the share-across-sessions invariant.
-const gitService = new CachedGitService();
+const stats = new RuntimeStats();
+const watcherRegistry = new WatcherRegistry({ counters: stats });
+const gitService = new CachedGitService({ watchers: watcherRegistry });
 const usageProvider = new CachedUsageProvider();
 
 const IDLE_SHUTDOWN_MS = 30 * 60 * 1000;
@@ -228,6 +232,11 @@ function shutdown(code: number): void {
   } catch (e) {
     dlog("warn", `usageProvider close failed: ${(e as Error).message}`);
   }
+  try {
+    watcherRegistry.closeAll();
+  } catch (e) {
+    dlog("warn", `watcherRegistry close failed: ${(e as Error).message}`);
+  }
   releasePidfile();
   closeLog();
   // Give any in-flight `sock.write` a moment to flush before exit. 100ms is
@@ -239,6 +248,7 @@ function shutdown(code: number): void {
 
 function handleConnection(sock: net.Socket): void {
   inFlight++;
+  stats.inFlight = inFlight;
   let responded = false;
 
   const respond = (resp: Response): void => {
@@ -253,6 +263,7 @@ function handleConnection(sock: net.Socket): void {
   // Per-request timeout protects the daemon from a single slow request
   // (e.g. a hung git call) blocking subsequent connections.
   const timer = setTimeout(() => {
+    stats.requestsTimedOut++;
     respond({ ok: false, error: "request exceeded 200ms", code: "TIMEOUT" });
   }, REQUEST_TIMEOUT_MS);
 
@@ -282,6 +293,7 @@ function handleConnection(sock: net.Socket): void {
   sock.on("close", () => {
     clearTimeout(timer);
     inFlight = Math.max(0, inFlight - 1);
+    stats.inFlight = inFlight;
     armIdleTimer();
   });
 }
@@ -311,23 +323,42 @@ async function handleRequest(req: Request): Promise<Response> {
     return { ok: true, output: "" };
   }
 
+  if (req.kind === "stats") {
+    // [LAW:single-enforcer] Stats requests do NOT bump request counters —
+    // observability shouldn't pollute the metric being observed.
+    return {
+      ok: true,
+      stats: stats.snapshot({
+        gitCache: gitService.getStats(),
+        usageCache: usageProvider.getStats(),
+        watchersActive: watcherRegistry.size(),
+      }),
+    };
+  }
+
   if (req.kind === "render") {
+    stats.requestsTotal++;
     const t0 = Date.now();
-    const projectDir = req.hookData.workspace?.project_dir;
-    const config = loadConfigFromCLI(req.args, projectDir);
-    const renderer = new PowerlineRenderer(config, {
-      gitService,
-      usageProvider,
-    });
-    const output = await renderer.generateStatusline(req.hookData);
-    const ms = Date.now() - t0;
-    const g = gitService.getStats();
-    const u = usageProvider.getStats();
-    dlog(
-      "info",
-      `render sid=${req.hookData.session_id ?? "?"} took=${ms}ms git=${g.size}/${g.hits}h/${g.misses}m usage=${u.size}/${u.hits}h/${u.misses}m`,
-    );
-    return { ok: true, output: output + "\n" };
+    try {
+      const projectDir = req.hookData.workspace?.project_dir;
+      const config = loadConfigFromCLI(req.args, projectDir);
+      const renderer = new PowerlineRenderer(config, {
+        gitService,
+        usageProvider,
+      });
+      const output = await renderer.generateStatusline(req.hookData);
+      const ms = Date.now() - t0;
+      const g = gitService.getStats();
+      const u = usageProvider.getStats();
+      dlog(
+        "info",
+        `render sid=${req.hookData.session_id ?? "?"} took=${ms}ms git=${g.size}/${g.hits}h/${g.misses}m usage=${u.size}/${u.hits}h/${u.misses}m`,
+      );
+      return { ok: true, output: output + "\n" };
+    } catch (e) {
+      stats.requestsErrored++;
+      throw e;
+    }
   }
 
   return { ok: false, error: "unknown kind", code: "BAD_REQUEST" };

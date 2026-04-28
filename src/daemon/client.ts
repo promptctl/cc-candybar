@@ -39,8 +39,11 @@ export async function tryRenderViaDaemon(
       },
       TOTAL_BUDGET_MS,
     );
-    if (resp.ok) {
+    if (resp.ok && "output" in resp) {
       return { ok: true, output: resp.output };
+    }
+    if (resp.ok) {
+      return { ok: false, reason: "unexpected stats response to render" };
     }
     return { ok: false, reason: resp.code };
   } catch (e) {
