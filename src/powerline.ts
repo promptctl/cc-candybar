@@ -28,11 +28,11 @@ import type { TuiData } from "./tui";
 
 import {
   hexToAnsi,
-  extractBgToFg,
   hexToBasicAnsi,
   hexTo256Ansi,
   hexColorDistance,
 } from "./utils/colors";
+import { buildLineStrip, type StripStyle } from "./render/strip";
 import { getColorSupport } from "./utils/color-support";
 import { getTheme } from "./themes";
 import {
@@ -146,6 +146,8 @@ interface RenderedSegment {
   text: string;
   bgColor: string;
   fgColor: string;
+  bgHex?: string;
+  fgHex?: string;
 }
 
 export class PowerlineRenderer {
@@ -334,6 +336,8 @@ export class PowerlineRenderer {
             text: segmentData.text,
             bgColor: segmentData.bgColor,
             fgColor: segmentData.fgColor,
+            bgHex: segmentData.bgHex,
+            fgHex: segmentData.fgHex,
           });
         }
       }
@@ -476,33 +480,25 @@ export class PowerlineRenderer {
 
   private buildLineFromSegments(
     segments: RenderedSegment[],
-    colors: PowerlineColors,
+    _colors: PowerlineColors,
   ): string {
-    const isCapsuleStyle = this.config.display.style === "capsule";
-    let line = colors.reset;
-
-    for (let i = 0; i < segments.length; i++) {
-      const segment = segments[i];
-      if (!segment) continue;
-
-      const isFirst = i === 0;
-      const isLast = i === segments.length - 1;
-      const nextSegment = !isLast ? segments[i + 1] : null;
-
-      if (isCapsuleStyle && !isFirst) {
-        line += " ";
-      }
-
-      line += this.formatSegment(
-        segment.bgColor,
-        segment.fgColor,
-        segment.text,
-        nextSegment?.bgColor,
-        colors,
-      );
-    }
-
-    return line;
+    const style = this.config.display.style;
+    // [LAW:dataflow-not-control-flow] map config display style to a Strip
+    // style enum; renderer-internal layout has the canonical 3 shapes.
+    const stripStyle: StripStyle =
+      style === "capsule" ? "capsule" : style === "minimal" ? "plain" : "powerline";
+    // [LAW:single-enforcer] Use powerline's getColorSupport() as the single
+    // authority for "auto" resolution — preserves existing detection (which
+    // emits ANSI even in non-TTY contexts like CI / Jest) instead of letting
+    // rich-js's stricter detector silently drop color.
+    const compat = this.config.display.colorCompatibility ?? "auto";
+    const resolved = compat === "auto" ? getColorSupport() : compat;
+    const richCompat =
+      resolved === "ansi256" ? "256" : resolved === "none" ? "none" : resolved;
+    return buildLineStrip(segments, {
+      style: stripStyle,
+      colorCompatibility: richCompat,
+    });
   }
 
   private async renderLine(
@@ -544,6 +540,8 @@ export class PowerlineRenderer {
           text: segmentData.text,
           bgColor: segmentData.bgColor,
           fgColor: segmentData.fgColor,
+          bgHex: segmentData.bgHex,
+          fgHex: segmentData.fgHex,
         });
       }
     }
@@ -920,6 +918,8 @@ export class PowerlineRenderer {
       return {
         bg: convertHex(colors.bg, true),
         fg: convertHex(fgHex, false),
+        bgHex: colors.bg,
+        fgHex: fgHex,
       };
     };
 
@@ -937,6 +937,9 @@ export class PowerlineRenderer {
     const version = getSegmentColors("version");
     const env = getSegmentColors("env");
     const weekly = getSegmentColors("weekly");
+
+    const partFgHex =
+      theme === "custom" ? this.resolvePartHexColors() : {};
 
     return {
       reset: colorSupport === "none" ? "" : RESET_CODE,
@@ -969,7 +972,51 @@ export class PowerlineRenderer {
       weeklyBg: weekly.bg,
       weeklyFg: weekly.fg,
       partFg: theme === "custom" ? this.resolvePartColors(convertHex) : {},
+      hex: {
+        modeBg: directory.bgHex,
+        modeFg: directory.fgHex,
+        gitBg: git.bgHex,
+        gitFg: git.fgHex,
+        modelBg: model.bgHex,
+        modelFg: model.fgHex,
+        sessionBg: session.bgHex,
+        sessionFg: session.fgHex,
+        blockBg: block.bgHex,
+        blockFg: block.fgHex,
+        todayBg: today.bgHex,
+        todayFg: today.fgHex,
+        tmuxBg: tmux.bgHex,
+        tmuxFg: tmux.fgHex,
+        contextBg: context.bgHex,
+        contextFg: context.fgHex,
+        contextWarningBg: contextWarning.bgHex,
+        contextWarningFg: contextWarning.fgHex,
+        contextCriticalBg: contextCritical.bgHex,
+        contextCriticalFg: contextCritical.fgHex,
+        metricsBg: metrics.bgHex,
+        metricsFg: metrics.fgHex,
+        versionBg: version.bgHex,
+        versionFg: version.fgHex,
+        envBg: env.bgHex,
+        envFg: env.fgHex,
+        weeklyBg: weekly.bgHex,
+        weeklyFg: weekly.fgHex,
+        partFg: partFgHex,
+      },
     };
+  }
+
+  private resolvePartHexColors(): Record<string, string> {
+    const custom = this.config.colors?.custom as
+      | Record<string, { fg?: string }>
+      | undefined;
+    if (!custom) return {};
+    const result: Record<string, string> = {};
+    for (const key of Object.keys(custom)) {
+      const entry = custom[key];
+      if (entry?.fg) result[key] = entry.fg;
+    }
+    return result;
   }
 
   private resolvePartColors(
@@ -1027,45 +1074,4 @@ export class PowerlineRenderer {
     }
   }
 
-  private formatSegment(
-    bgColor: string,
-    fgColor: string,
-    text: string,
-    nextBgColor: string | undefined,
-    colors: PowerlineColors,
-  ): string {
-    const isCapsuleStyle = this.config.display.style === "capsule";
-    const padding = " ".repeat(this.config.display.padding ?? 1);
-
-    if (isCapsuleStyle) {
-      const colorMode = this.config.display.colorCompatibility || "auto";
-      const colorSupport = colorMode === "auto" ? getColorSupport() : colorMode;
-      const isBasicMode = colorSupport === "ansi";
-
-      const capFgColor = extractBgToFg(bgColor, isBasicMode);
-
-      const leftCap = `${capFgColor}${this.symbols.left}${colors.reset}`;
-
-      const content = `${bgColor}${fgColor}${padding}${text}${padding}${colors.reset}`;
-
-      const rightCap = `${capFgColor}${this.symbols.right}${colors.reset}`;
-
-      return `${leftCap}${content}${rightCap}`;
-    }
-
-    let output = `${bgColor}${fgColor}${padding}${text}${padding}`;
-
-    const colorMode = this.config.display.colorCompatibility || "auto";
-    const colorSupport = colorMode === "auto" ? getColorSupport() : colorMode;
-    const isBasicMode = colorSupport === "ansi";
-
-    if (nextBgColor) {
-      const arrowFgColor = extractBgToFg(bgColor, isBasicMode);
-      output += `${colors.reset}${nextBgColor}${arrowFgColor}${this.symbols.right}`;
-    } else {
-      output += `${colors.reset}${extractBgToFg(bgColor, isBasicMode)}${this.symbols.right}${colors.reset}`;
-    }
-
-    return output;
-  }
 }

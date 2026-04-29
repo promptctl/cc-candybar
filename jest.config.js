@@ -4,8 +4,15 @@ export default {
   testEnvironment: "node",
   roots: ["<rootDir>/test"],
   testMatch: ["**/*.test.ts"],
+  moduleNameMapper: {
+    "^rich-js$": "<rootDir>/node_modules/rich-js/dist/index.js",
+    "^(\\.{1,2}/.*)\\.js$": "$1",
+  },
+  transformIgnorePatterns: [
+    "node_modules/(?!(rich-js|string-width|strip-ansi|ansi-regex|emoji-regex|get-east-asian-width|eastasianwidth)/)",
+  ],
   transform: {
-    "^.+\\.tsx?$": [
+    "^.+\\.(t|j)sx?$": [
       "ts-jest",
       {
         useESM: true,

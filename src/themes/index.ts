@@ -35,6 +35,38 @@ export interface ColorTheme {
   weekly: SegmentColor;
 }
 
+export interface PowerlineHexColors {
+  modeBg: string;
+  modeFg: string;
+  gitBg: string;
+  gitFg: string;
+  modelBg: string;
+  modelFg: string;
+  sessionBg: string;
+  sessionFg: string;
+  blockBg: string;
+  blockFg: string;
+  todayBg: string;
+  todayFg: string;
+  tmuxBg: string;
+  tmuxFg: string;
+  contextBg: string;
+  contextFg: string;
+  contextWarningBg: string;
+  contextWarningFg: string;
+  contextCriticalBg: string;
+  contextCriticalFg: string;
+  metricsBg: string;
+  metricsFg: string;
+  versionBg: string;
+  versionFg: string;
+  envBg: string;
+  envFg: string;
+  weeklyBg: string;
+  weeklyFg: string;
+  partFg: Record<string, string>;
+}
+
 export interface PowerlineColors {
   reset: string;
   modeBg: string;
@@ -66,6 +98,7 @@ export interface PowerlineColors {
   weeklyBg: string;
   weeklyFg: string;
   partFg: Record<string, string>;
+  hex?: PowerlineHexColors;
 }
 
 export const BUILT_IN_THEMES: Record<string, ColorTheme> = {
