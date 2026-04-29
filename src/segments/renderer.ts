@@ -216,6 +216,8 @@ export interface SegmentData {
   text: string;
   bgColor: string;
   fgColor: string;
+  bgHex?: string;
+  fgHex?: string;
 }
 
 interface BarStyleDef {
@@ -317,7 +319,7 @@ export class SegmentRenderer {
       return {
         text: basename,
         bgColor: colors.modeBg,
-        fgColor: colors.modeFg,
+        fgColor: colors.modeFg, bgHex: colors.hex?.modeBg, fgHex: colors.hex?.modeFg,
       };
     }
 
@@ -335,7 +337,7 @@ export class SegmentRenderer {
     return {
       text: dirName,
       bgColor: colors.modeBg,
-      fgColor: colors.modeFg,
+      fgColor: colors.modeFg, bgHex: colors.hex?.modeBg, fgHex: colors.hex?.modeFg,
     };
   }
 
@@ -424,7 +426,7 @@ export class SegmentRenderer {
     return {
       text: parts.join(" "),
       bgColor: colors.gitBg,
-      fgColor: colors.gitFg,
+      fgColor: colors.gitFg, bgHex: colors.hex?.gitBg, fgHex: colors.hex?.gitFg,
     };
   }
 
@@ -503,7 +505,7 @@ export class SegmentRenderer {
     return {
       text: parts.join(" "),
       bgColor: colors.gitBg,
-      fgColor: colors.gitFg,
+      fgColor: colors.gitFg, bgHex: colors.hex?.gitBg, fgHex: colors.hex?.gitFg,
     };
   }
 
@@ -522,7 +524,7 @@ export class SegmentRenderer {
     return {
       text,
       bgColor: colors.modelBg,
-      fgColor: colors.modelFg,
+      fgColor: colors.modelFg, bgHex: colors.hex?.modelBg, fgHex: colors.hex?.modelFg,
     };
   }
 
@@ -556,7 +558,7 @@ export class SegmentRenderer {
     return {
       text,
       bgColor: colors.sessionBg,
-      fgColor: colors.sessionFg,
+      fgColor: colors.sessionFg, bgHex: colors.hex?.sessionBg, fgHex: colors.hex?.sessionFg,
     };
   }
 
@@ -587,7 +589,7 @@ export class SegmentRenderer {
     return {
       text,
       bgColor: colors.sessionBg,
-      fgColor: colors.sessionFg,
+      fgColor: colors.sessionFg, bgHex: colors.hex?.sessionBg, fgHex: colors.hex?.sessionFg,
     };
   }
 
@@ -599,14 +601,14 @@ export class SegmentRenderer {
       return {
         text: `tmux:none`,
         bgColor: colors.tmuxBg,
-        fgColor: colors.tmuxFg,
+        fgColor: colors.tmuxFg, bgHex: colors.hex?.tmuxBg, fgHex: colors.hex?.tmuxFg,
       };
     }
 
     return {
       text: `tmux:${sessionId}`,
       bgColor: colors.tmuxBg,
-      fgColor: colors.tmuxFg,
+      fgColor: colors.tmuxFg, bgHex: colors.hex?.tmuxBg, fgHex: colors.hex?.tmuxFg,
     };
   }
 
@@ -629,25 +631,31 @@ export class SegmentRenderer {
         return {
           text: `${emptyBar} ${emptyPct}`,
           bgColor: colors.contextBg,
-          fgColor: colors.contextFg,
+          fgColor: colors.contextFg, bgHex: colors.hex?.contextBg, fgHex: colors.hex?.contextFg,
         };
       }
       return {
         text: `${this.symbols.context_time} 0 (${emptyPct})`,
         bgColor: colors.contextBg,
-        fgColor: colors.contextFg,
+        fgColor: colors.contextFg, bgHex: colors.hex?.contextBg, fgHex: colors.hex?.contextFg,
       };
     }
 
     let bgColor = colors.contextBg;
     let fgColor = colors.contextFg;
+    let bgHex = colors.hex?.contextBg;
+    let fgHex = colors.hex?.contextFg;
 
     if (contextInfo.contextLeftPercentage <= 20) {
       bgColor = colors.contextCriticalBg;
       fgColor = colors.contextCriticalFg;
+      bgHex = colors.hex?.contextCriticalBg;
+      fgHex = colors.hex?.contextCriticalFg;
     } else if (contextInfo.contextLeftPercentage <= 40) {
       bgColor = colors.contextWarningBg;
       fgColor = colors.contextWarningFg;
+      bgHex = colors.hex?.contextWarningBg;
+      fgHex = colors.hex?.contextWarningFg;
     }
 
     const pct =
@@ -671,14 +679,14 @@ export class SegmentRenderer {
         ? `${bar} ${pct}%`
         : `${bar} ${contextInfo.totalTokens.toLocaleString()} (${pct}%)`;
 
-      return { text, bgColor, fgColor };
+      return { text, bgColor, fgColor, bgHex, fgHex };
     }
 
     const text = config?.showPercentageOnly
       ? `${this.symbols.context_time} ${pct}%`
       : `${this.symbols.context_time} ${contextInfo.totalTokens.toLocaleString()} (${pct}%)`;
 
-    return { text, bgColor, fgColor };
+    return { text, bgColor, fgColor, bgHex, fgHex };
   }
 
   private buildBar(
@@ -745,7 +753,7 @@ export class SegmentRenderer {
       return {
         text: `${this.symbols.metrics_response} new`,
         bgColor: colors.metricsBg,
-        fgColor: colors.metricsFg,
+        fgColor: colors.metricsFg, bgHex: colors.hex?.metricsBg, fgHex: colors.hex?.metricsFg,
       };
     }
 
@@ -811,14 +819,14 @@ export class SegmentRenderer {
       return {
         text: `${this.symbols.metrics_response} active`,
         bgColor: colors.metricsBg,
-        fgColor: colors.metricsFg,
+        fgColor: colors.metricsFg, bgHex: colors.hex?.metricsBg, fgHex: colors.hex?.metricsFg,
       };
     }
 
     return {
       text: parts.join(" "),
       bgColor: colors.metricsBg,
-      fgColor: colors.metricsFg,
+      fgColor: colors.metricsFg, bgHex: colors.hex?.metricsBg, fgHex: colors.hex?.metricsFg,
     };
   }
 
@@ -834,18 +842,26 @@ export class SegmentRenderer {
 
     let bgColor = colors.blockBg;
     let fgColor = colors.blockFg;
+    let bgHex = colors.hex?.blockBg;
+    let fgHex = colors.hex?.blockFg;
     if (pct >= warningThreshold) {
       bgColor = colors.contextCriticalBg;
       fgColor = colors.contextCriticalFg;
+      bgHex = colors.hex?.contextCriticalBg;
+      fgHex = colors.hex?.contextCriticalFg;
     } else if (pct >= 50) {
       bgColor = colors.contextWarningBg;
       fgColor = colors.contextWarningFg;
+      bgHex = colors.hex?.contextWarningBg;
+      fgHex = colors.hex?.contextWarningFg;
     }
 
     return {
       text: `${this.symbols.block_cost} ${this.formatPercentageWithBar(pct, config?.displayStyle, timeStr)}`,
       bgColor,
       fgColor,
+      bgHex,
+      fgHex,
     };
   }
 
@@ -864,18 +880,26 @@ export class SegmentRenderer {
 
     let bgColor = colors.weeklyBg;
     let fgColor = colors.weeklyFg;
+    let bgHex = colors.hex?.weeklyBg;
+    let fgHex = colors.hex?.weeklyFg;
     if (pct >= 80) {
       bgColor = colors.contextCriticalBg;
       fgColor = colors.contextCriticalFg;
+      bgHex = colors.hex?.contextCriticalBg;
+      fgHex = colors.hex?.contextCriticalFg;
     } else if (pct >= 50) {
       bgColor = colors.contextWarningBg;
       fgColor = colors.contextWarningFg;
+      bgHex = colors.hex?.contextWarningBg;
+      fgHex = colors.hex?.contextWarningFg;
     }
 
     return {
       text: `${this.symbols.weekly_cost} ${this.formatPercentageWithBar(pct, config?.displayStyle, timeStr)}`,
       bgColor,
       fgColor,
+      bgHex,
+      fgHex,
     };
   }
 
@@ -898,7 +922,7 @@ export class SegmentRenderer {
     return {
       text,
       bgColor: colors.todayBg,
-      fgColor: colors.todayFg,
+      fgColor: colors.todayFg, bgHex: colors.hex?.todayBg, fgHex: colors.hex?.todayFg,
     };
   }
 
@@ -992,7 +1016,7 @@ export class SegmentRenderer {
     return {
       text: `${this.symbols.version} v${hookData.version}`,
       bgColor: colors.versionBg,
-      fgColor: colors.versionFg,
+      fgColor: colors.versionFg, bgHex: colors.hex?.versionBg, fgHex: colors.hex?.versionFg,
     };
   }
 
@@ -1006,7 +1030,7 @@ export class SegmentRenderer {
     const text = prefix
       ? `${this.symbols.env} ${prefix}: ${value}`
       : `${this.symbols.env} ${value}`;
-    return { text, bgColor: colors.envBg, fgColor: colors.envFg };
+    return { text, bgColor: colors.envBg, fgColor: colors.envFg, bgHex: colors.hex?.envBg, fgHex: colors.hex?.envFg };
   }
 
   renderToolbar(
@@ -1041,7 +1065,7 @@ export class SegmentRenderer {
     return {
       text: parts.join(sep),
       bgColor: colors.sessionBg,
-      fgColor: colors.sessionFg,
+      fgColor: colors.sessionFg, bgHex: colors.hex?.sessionBg, fgHex: colors.hex?.sessionFg,
     };
   }
 }

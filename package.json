@@ -76,5 +76,8 @@
     "ts-jest": "^29.4.1",
     "tsdown": "^0.21.4",
     "typescript": "^5.0.0"
+  },
+  "dependencies": {
+    "rich-js": "file:../rich-js"
   }
 }

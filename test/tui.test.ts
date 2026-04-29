@@ -17,6 +17,18 @@ const PLAIN_COLORS: PowerlineColors = {
   envBg: "", envFg: "",
   weeklyBg: "", weeklyFg: "",
   partFg: {},
+  hex: {
+    modeBg: "", modeFg: "", gitBg: "", gitFg: "",
+    modelBg: "", modelFg: "", sessionBg: "", sessionFg: "",
+    blockBg: "", blockFg: "", todayBg: "", todayFg: "",
+    tmuxBg: "", tmuxFg: "", contextBg: "", contextFg: "",
+    contextWarningBg: "", contextWarningFg: "",
+    contextCriticalBg: "", contextCriticalFg: "",
+    metricsBg: "", metricsFg: "", versionBg: "", versionFg: "",
+    envBg: "", envFg: "",
+    weeklyBg: "", weeklyFg: "",
+    partFg: {},
+  },
 };
 
 const tuiConfig: PowerlineConfig = {
