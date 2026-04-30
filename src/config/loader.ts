@@ -157,14 +157,21 @@ function deepMerge<T extends Record<string, any>>(
 function findConfigFile(
   customPath?: string,
   projectDir?: string,
+  cwd?: string,
 ): string | null {
   if (customPath) {
     return fs.existsSync(customPath) ? customPath : null;
   }
 
+  // [LAW:dataflow-not-control-flow] cwd flows in as a value rather than being
+  // read from process.cwd(). The daemon's process cwd is meaningless to the
+  // request — only the *requester's* cwd matters. Callers thread the right
+  // value through (inline: process.cwd(); daemon: req.cwd from the wire).
+  const effectiveCwd = cwd ?? process.cwd();
+
   const locations = [
     ...(projectDir ? [path.join(projectDir, ".claude-powerline.json")] : []),
-    path.join(process.cwd(), ".claude-powerline.json"),
+    path.join(effectiveCwd, ".claude-powerline.json"),
     path.join(os.homedir(), ".claude", "claude-powerline.json"),
     path.join(os.homedir(), ".config", "claude-powerline", "config.json"),
   ];
@@ -676,6 +683,7 @@ function validateGridConfig(tui: TuiGridConfig): string | null {
 export function loadConfig(
   args: string[] = process.argv,
   projectDir?: string,
+  cwd?: string,
 ): PowerlineConfig {
   let config: PowerlineConfig = JSON.parse(JSON.stringify(DEFAULT_CONFIG));
 
@@ -684,7 +692,7 @@ export function loadConfig(
     ? rawConfigPath.replace("~", os.homedir())
     : rawConfigPath;
 
-  const configFile = findConfigFile(configPath, projectDir);
+  const configFile = findConfigFile(configPath, projectDir, cwd);
   if (configFile) {
     try {
       const fileConfig = loadConfigFile(configFile);

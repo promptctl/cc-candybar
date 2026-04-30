@@ -174,7 +174,7 @@ echo '{"session_id":"test-session","workspace":{"project_dir":"/path/to/project"
     }
 
     const projectDir = hookData.workspace?.project_dir;
-    const config = loadConfigFromCLI(process.argv, projectDir);
+    const config = loadConfigFromCLI(process.argv, projectDir, process.cwd());
     const renderer = new PowerlineRenderer(config);
     const statusline = await renderer.generateStatusline(hookData);
 
