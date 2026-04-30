@@ -5,6 +5,7 @@ import {
   PowerlineJoiner,
   CapsuleJoiner,
   PlainJoiner,
+  FlexStrip,
   renderToString,
   type Joiner,
   type ColorSystemSpec,
@@ -63,4 +64,30 @@ export function buildLineStrip(
     colorSystem: options.colorCompatibility,
     endWithNewline: false,
   });
+}
+
+/**
+ * Renders a row of segments into one or more wrapped lines using rich-js
+ * FlexStrip. Each wrapped row reuses the same Joiner — start-cap, mid-join,
+ * and end-cap fire at every line boundary, so wrapped rows look identical
+ * to natural endpoints. Replaces the manual currentLineWidth tracking in
+ * generateAutoWrapStatusline / calculateSegmentWidth.
+ *
+ * Returned string has wrapped rows joined by `\n` with no trailing newline,
+ * matching buildLineStrip's contract for the caller.
+ */
+export function buildFlexStripLines(
+  segments: readonly RenderedSegmentLike[],
+  options: BuildLineOptions & { width: number },
+): string {
+  if (segments.length === 0) return "";
+  const cells = segments.map(toStripCell);
+  const joiner = pickJoiner(options.style, options.separator);
+  const flex = new FlexStrip(cells, { joiner });
+  const out = renderToString(flex, {
+    width: options.width,
+    colorSystem: options.colorCompatibility,
+    endWithNewline: false,
+  });
+  return out.endsWith("\n") ? out.slice(0, -1) : out;
 }

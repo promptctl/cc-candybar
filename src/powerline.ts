@@ -32,7 +32,11 @@ import {
   hexTo256Ansi,
   hexColorDistance,
 } from "./utils/colors";
-import { buildLineStrip, type StripStyle } from "./render/strip";
+import {
+  buildLineStrip,
+  buildFlexStripLines,
+  type StripStyle,
+} from "./render/strip";
 import { getColorSupport } from "./utils/color-support";
 import { getTheme } from "./themes";
 import {
@@ -52,7 +56,6 @@ import {
   BOX_CHARS,
   BOX_CHARS_TEXT,
 } from "./utils/constants";
-import { visibleLength } from "./utils/terminal";
 import { getTerminalWidth, getRawTerminalWidth } from "./utils/terminal-width";
 import { renderTuiPanel } from "./tui";
 import { openSync, readSync, closeSync, statSync } from "node:fs";
@@ -344,40 +347,17 @@ export class PowerlineRenderer {
 
       if (renderedSegments.length === 0) continue;
 
-      if (!terminalWidth || terminalWidth <= 0) {
-        outputLines.push(this.buildLineFromSegments(renderedSegments, colors));
-        continue;
-      }
-
-      let currentLineSegments: RenderedSegment[] = [];
-      let currentLineWidth = 0;
-
-      for (const segment of renderedSegments) {
-        const segmentWidth = this.calculateSegmentWidth(
-          segment,
-          currentLineSegments.length === 0,
-        );
-
-        if (
-          currentLineSegments.length > 0 &&
-          currentLineWidth + segmentWidth > terminalWidth
-        ) {
-          outputLines.push(
-            this.buildLineFromSegments(currentLineSegments, colors),
-          );
-          currentLineSegments = [];
-          currentLineWidth = 0;
-        }
-
-        currentLineSegments.push(segment);
-        currentLineWidth += segmentWidth;
-      }
-
-      if (currentLineSegments.length > 0) {
-        outputLines.push(
-          this.buildLineFromSegments(currentLineSegments, colors),
-        );
-      }
+      // [LAW:dataflow-not-control-flow] Wrap is one FlexStrip construction;
+      // no terminal width → render single line via FlexStrip with effectively
+      // unbounded width. The same code path runs every render — only the
+      // width value varies.
+      const effectiveWidth =
+        terminalWidth && terminalWidth > 0
+          ? terminalWidth
+          : Number.MAX_SAFE_INTEGER;
+      outputLines.push(
+        this.buildFlexLineFromSegments(renderedSegments, effectiveWidth),
+      );
     }
 
     return outputLines.join("\n");
@@ -460,33 +440,20 @@ export class PowerlineRenderer {
     );
   }
 
-  private calculateSegmentWidth(
-    segment: RenderedSegment,
-    isFirst: boolean,
-  ): number {
-    const isCapsuleStyle = this.config.display.style === "capsule";
-    const textWidth = visibleLength(segment.text);
-    const padding = this.config.display.padding ?? 1;
-    const paddingWidth = padding * 2;
-
-    if (isCapsuleStyle) {
-      const capsuleOverhead = 2 + paddingWidth + (isFirst ? 0 : 1);
-      return textWidth + capsuleOverhead;
-    }
-
-    const powerlineOverhead = 1 + paddingWidth;
-    return textWidth + powerlineOverhead;
-  }
-
-  private buildLineFromSegments(
-    segments: RenderedSegment[],
-    _colors: PowerlineColors,
-  ): string {
+  // [LAW:single-enforcer] One place resolves config.display.style →
+  // StripStyle and config.display.colorCompatibility → rich-js color spec.
+  // Both buildLineStrip and buildFlexStripLines callers funnel through here.
+  private resolveStripOptions(): {
+    style: StripStyle;
+    colorCompatibility: "truecolor" | "256" | "ansi" | "none";
+  } {
     const style = this.config.display.style;
-    // [LAW:dataflow-not-control-flow] map config display style to a Strip
-    // style enum; renderer-internal layout has the canonical 3 shapes.
     const stripStyle: StripStyle =
-      style === "capsule" ? "capsule" : style === "minimal" ? "plain" : "powerline";
+      style === "capsule"
+        ? "capsule"
+        : style === "minimal"
+          ? "plain"
+          : "powerline";
     // [LAW:single-enforcer] Use powerline's getColorSupport() as the single
     // authority for "auto" resolution — preserves existing detection (which
     // emits ANSI even in non-TTY contexts like CI / Jest) instead of letting
@@ -495,9 +462,23 @@ export class PowerlineRenderer {
     const resolved = compat === "auto" ? getColorSupport() : compat;
     const richCompat =
       resolved === "ansi256" ? "256" : resolved === "none" ? "none" : resolved;
-    return buildLineStrip(segments, {
-      style: stripStyle,
-      colorCompatibility: richCompat,
+    return { style: stripStyle, colorCompatibility: richCompat };
+  }
+
+  private buildLineFromSegments(
+    segments: RenderedSegment[],
+    _colors: PowerlineColors,
+  ): string {
+    return buildLineStrip(segments, this.resolveStripOptions());
+  }
+
+  private buildFlexLineFromSegments(
+    segments: RenderedSegment[],
+    width: number,
+  ): string {
+    return buildFlexStripLines(segments, {
+      ...this.resolveStripOptions(),
+      width,
     });
   }
 
@@ -938,8 +919,7 @@ export class PowerlineRenderer {
     const env = getSegmentColors("env");
     const weekly = getSegmentColors("weekly");
 
-    const partFgHex =
-      theme === "custom" ? this.resolvePartHexColors() : {};
+    const partFgHex = theme === "custom" ? this.resolvePartHexColors() : {};
 
     return {
       reset: colorSupport === "none" ? "" : RESET_CODE,
@@ -1073,5 +1053,4 @@ export class PowerlineRenderer {
         return colors.modeBg;
     }
   }
-
 }
