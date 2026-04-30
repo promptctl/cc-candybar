@@ -100,6 +100,9 @@ export function formatStats(s: StatsSnapshot): string {
   lines.push(`  uptime        ${fmtUptime(s.uptimeSec)}`);
   lines.push(`  rss           ${fmtBytes(s.rssBytes)}`);
   lines.push(`  heapUsed      ${fmtBytes(s.heapUsedBytes)}`);
+  lines.push(`  heapTotal     ${fmtBytes(s.heapTotalBytes)}`);
+  lines.push(`  external      ${fmtBytes(s.externalBytes)}`);
+  lines.push(`  arrayBuffers  ${fmtBytes(s.arrayBuffersBytes)}`);
   lines.push(``);
   lines.push(`requests`);
   lines.push(`  total         ${s.requests.total}`);

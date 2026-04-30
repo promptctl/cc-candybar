@@ -11,6 +11,9 @@ export interface StatsSnapshot {
   uptimeSec: number;
   rssBytes: number;
   heapUsedBytes: number;
+  heapTotalBytes: number;
+  externalBytes: number;
+  arrayBuffersBytes: number;
   requests: {
     total: number;
     errored: number;
@@ -64,6 +67,9 @@ export class RuntimeStats {
       uptimeSec: Math.floor((Date.now() - this.startedAt.getTime()) / 1000),
       rssBytes: mem.rss,
       heapUsedBytes: mem.heapUsed,
+      heapTotalBytes: mem.heapTotal,
+      externalBytes: mem.external,
+      arrayBuffersBytes: mem.arrayBuffers,
       requests: {
         total: this.requestsTotal,
         errored: this.requestsErrored,
