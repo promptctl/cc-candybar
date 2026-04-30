@@ -250,9 +250,15 @@ function shutdown(code: number): void {
   }
   releasePidfile();
   closeLog();
-  // Give any in-flight `sock.write` a moment to flush before exit. 100ms is
-  // generous; we'd rather a clean exit than a clipped log line.
-  setTimeout(() => process.exit(code), 100);
+  // [LAW:single-enforcer] Exactly one path out of the process. Backstop with
+  // SIGKILL because we previously observed shut-down daemons staying alive in
+  // uv__io_poll — something (event loop handle, swallowed exception in a
+  // post-end log write) was preventing process.exit from actually firing.
+  // The hard kill makes "shutdown was called" mechanically equivalent to
+  // "process is gone", which is the invariant the singleton mutex relies on.
+  const kill = setTimeout(() => process.kill(process.pid, "SIGKILL"), 500);
+  kill.unref();
+  process.exit(code);
 }
 
 // --- per-connection handler ---
