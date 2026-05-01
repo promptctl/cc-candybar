@@ -360,8 +360,8 @@ async function handleRequest(req: Request): Promise<Response> {
     try {
       const projectDir = req.hookData.workspace?.project_dir;
       // [LAW:dataflow-not-control-flow] thread the *request's* cwd, not the
-      // daemon's process.cwd(), so daemon and inline render paths produce
-      // identical output for identical inputs.
+      // daemon's process.cwd(), so config resolution depends only on request
+      // data — the daemon's own working directory must not influence output.
       const config = loadConfigFromCLI(req.args, projectDir, req.cwd);
       const renderer = new PowerlineRenderer(config, {
         gitService,

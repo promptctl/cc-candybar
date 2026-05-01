@@ -15,11 +15,12 @@ export interface ClientOutcome {
 }
 
 // Try to render via the daemon. Any failure (no socket, refused, timeout,
-// version mismatch, unknown error) returns ok:false; the caller is expected
-// to fall through to inline rendering and optionally spawn a new daemon.
+// version mismatch, unknown error) returns ok:false; the caller spawns a
+// detached daemon for the *next* invocation and emits empty output for this
+// one. There is no inline render path — see src/index.ts.
 //
 // [LAW:dataflow-not-control-flow] The outcome is data; the caller's branch
-// is uniform: ok→print, !ok→inline+spawn. No special casing per failure mode.
+// is uniform: ok→print, !ok→spawn+empty. No special casing per failure mode.
 export async function tryRenderViaDaemon(
   hookData: ClaudeHookData,
   args: string[],

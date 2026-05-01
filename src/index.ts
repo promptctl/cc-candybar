@@ -4,8 +4,6 @@ import type { ClaudeHookData } from "./utils/claude";
 
 import process from "node:process";
 import { json } from "node:stream/consumers";
-import { PowerlineRenderer } from "./powerline";
-import { loadConfigFromCLI } from "./config/loader";
 import { debug } from "./utils/logger";
 import { runInstall, runInstallUrlHandler, runUrlHandle } from "./install";
 import { runDaemon } from "./daemon/server";
@@ -154,31 +152,25 @@ echo '{"session_id":"test-session","workspace":{"project_dir":"/path/to/project"
       process.exit(1);
     }
 
-    // [LAW:dataflow-not-control-flow] Daemon path is an *optimization*, never
-    // a correctness dependency. Any failure (no socket, refused, timeout,
-    // version mismatch) falls through to inline render and fires a detached
-    // daemon spawn so the *next* invocation finds it.
-    const useDaemon = process.env.CLAUDE_POWERLINE_NO_DAEMON !== "1";
-    if (useDaemon) {
-      const outcome = await tryRenderViaDaemon(
-        hookData,
-        process.argv,
-        process.cwd(),
-      );
-      if (outcome.ok && outcome.output !== undefined) {
-        process.stdout.write(outcome.output);
-        process.exit(0);
-      }
-      // Fall through. Spawn detached for next invocation.
-      spawnDaemonDetached();
+    // [LAW:one-source-of-truth] The daemon is the *only* renderer. The CLI is
+    // a dumb relay: forward stdin to the daemon, print whatever comes back.
+    // There is no inline render path — two renderers would drift (the CLI has
+    // no shared gitService/usageProvider, no per-session state, no warm
+    // caches). On daemon miss we spawn detached and emit empty output; the
+    // next status-line refresh hits the warm daemon and renders for real.
+    const outcome = await tryRenderViaDaemon(
+      hookData,
+      process.argv,
+      process.cwd(),
+    );
+    if (outcome.ok && outcome.output !== undefined) {
+      process.stdout.write(outcome.output);
+      process.exit(0);
     }
-
-    const projectDir = hookData.workspace?.project_dir;
-    const config = loadConfigFromCLI(process.argv, projectDir, process.cwd());
-    const renderer = new PowerlineRenderer(config);
-    const statusline = await renderer.generateStatusline(hookData);
-
-    console.log(statusline);
+    debug(`daemon unavailable (${outcome.reason ?? "?"}) — spawning detached`);
+    spawnDaemonDetached();
+    process.stdout.write("\n");
+    process.exit(0);
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     console.error("Error generating statusline:", errorMessage);

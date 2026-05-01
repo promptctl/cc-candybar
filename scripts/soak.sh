@@ -2,18 +2,16 @@
 # 24h soak test harness for the claude-powerline daemon.
 #
 # Spawns N concurrent client loops against a shared daemon, samples RSS over
-# time, periodically asserts daemon-rendered output matches the inline-render
-# path, and at the end reports pass/fail against:
+# time, and at the end reports pass/fail against:
 #   - final RSS < 100MB
 #   - RSS slope < 1MB/hr (per daemon PID segment)
-#   - zero output divergences
 #
 # Usage:
 #   scripts/soak.sh [--duration=SEC] [--clients=N] [--out=DIR] [--skip-build]
-#                   [--sample-interval=SEC] [--diverge-interval=SEC]
+#                   [--sample-interval=SEC]
 #
 # Defaults: 24h, 30 clients, /tmp/claude-powerline-soak-<ts>, build first,
-# 60s RSS sampling, 300s divergence checks.
+# 60s RSS sampling.
 #
 # Verifying leak detection (acceptance criterion):
 #   1. Add to src/daemon/server.ts (top of handleRequest's render branch):
@@ -35,10 +33,9 @@ CLIENTS=30
 OUT_DIR=""
 SKIP_BUILD=0
 SAMPLE_INTERVAL=60
-DIVERGE_INTERVAL=300
 
 usage() {
-  sed -n '2,16p' "$0"
+  sed -n '2,14p' "$0"
   exit 2
 }
 
@@ -49,7 +46,6 @@ for arg in "$@"; do
     --out=*)              OUT_DIR="${arg#*=}" ;;
     --skip-build)         SKIP_BUILD=1 ;;
     --sample-interval=*)  SAMPLE_INTERVAL="${arg#*=}" ;;
-    --diverge-interval=*) DIVERGE_INTERVAL="${arg#*=}" ;;
     -h|--help)            usage ;;
     *) echo "unknown arg: $arg" >&2; usage ;;
   esac
@@ -62,15 +58,13 @@ mkdir -p "$OUT_DIR"
 readonly OUT_DIR
 
 readonly FIXTURES_DIR="${OUT_DIR}/fixtures"
-readonly DIVERGE_DIR="${OUT_DIR}/divergence"
 readonly CLIENT_OUT_DIR="${OUT_DIR}/clients"
 readonly RSS_CSV="${OUT_DIR}/soak.csv"
 readonly DAEMON_LOG="${OUT_DIR}/daemon.log"
 readonly SUMMARY="${OUT_DIR}/summary.txt"
 readonly REPOS_LIST="${OUT_DIR}/repos.txt"
-readonly CANARY_REPO="${FIXTURES_DIR}/canary"
 
-mkdir -p "$FIXTURES_DIR" "$DIVERGE_DIR" "$CLIENT_OUT_DIR"
+mkdir -p "$FIXTURES_DIR" "$CLIENT_OUT_DIR"
 
 log() {
   printf '[%s] %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$*"
@@ -88,9 +82,7 @@ require uuidgen
 
 # --- fixture creation ---------------------------------------------------------
 # We create synthetic git repos with varied state so the gitCache exercises its
-# branches/dirty/ahead/stash code paths. The "canary" repo is reserved for the
-# divergence checker — no client touches it, so its state is quiescent and the
-# daemon's cached view matches the inline view byte-for-byte.
+# branches/dirty/ahead/stash code paths.
 
 mk_fixture() {
   local name="$1"; shift
@@ -135,23 +127,6 @@ create_fixtures() {
   mk_fixture ahead   state_ahead
   mk_fixture branch  state_branch
   mk_fixture stash   state_stash
-  # Canary is a clean repo; intentionally NOT added to REPOS_LIST so clients
-  # never touch it. The divergence checker uses it directly.
-  #
-  # Commit is backdated 30 days so the renderer's "time since last commit"
-  # segment reads "30d" or similar — a string stable across the few-second gap
-  # between daemon and inline calls. A fresh "init" commit instead reads
-  # "16s" vs "31s" between calls and produces spurious mismatches.
-  rm -rf "$CANARY_REPO"
-  mkdir -p "$CANARY_REPO"
-  git -C "$CANARY_REPO" init -q -b main
-  git -C "$CANARY_REPO" config user.email soak@test
-  git -C "$CANARY_REPO" config user.name soak
-  echo "canary" > "$CANARY_REPO/README.md"
-  git -C "$CANARY_REPO" add README.md
-  GIT_AUTHOR_DATE="$(date -u -v-30d +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -d '30 days ago' +%Y-%m-%dT%H:%M:%SZ)" \
-  GIT_COMMITTER_DATE="$(date -u -v-30d +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -d '30 days ago' +%Y-%m-%dT%H:%M:%SZ)" \
-    git -C "$CANARY_REPO" commit -q -m "init"
 }
 
 # --- daemon lifecycle ---------------------------------------------------------
@@ -173,17 +148,10 @@ stop_existing_daemon() {
   rm -f "$PID_FILE"
 }
 
-# Ensure a daemon is up and (best-effort) record whether *we* spawned it.
-# Ownership matters for divergence checking: the config loader resolves files
-# relative to process.cwd() (src/config/loader.ts findConfigFile), so an
-# externally-spawned daemon with a different CWD will legitimately produce
-# different output from our inline-render path. We auto-disable divergence
-# checks when we don't own the daemon, rather than reporting false positives.
-WE_OWN_DAEMON=0
+# Ensure a daemon is up.
 start_daemon() {
   if daemon_is_up; then
-    log "observing already-running daemon (pid=$(read_daemon_pid)) — divergence checks disabled"
-    WE_OWN_DAEMON=0
+    log "observing already-running daemon (pid=$(read_daemon_pid))"
     return 0
   fi
   log "spawning daemon"
@@ -192,9 +160,6 @@ start_daemon() {
   disown "$spawn_pid" 2>/dev/null || true
   for _ in $(seq 1 100); do
     if daemon_is_up; then
-      local fpid
-      fpid="$(read_daemon_pid)"
-      WE_OWN_DAEMON=$([[ "$fpid" == "$spawn_pid" ]] && echo 1 || echo 0)
       return 0
     fi
     sleep 0.1
@@ -237,66 +202,6 @@ sampler_loop() {
   done
 }
 
-# Divergence checker: every $DIVERGE_INTERVAL run the canary hookData through
-# both the daemon path and the inline path; if outputs differ OR either path
-# errors, save full context (hookData, both stdouts, both stderrs, both exit
-# codes) to disk and increment the mismatch counter. We do NOT swallow render
-# failures — a daemon that errors on canary input is a regression worth
-# surfacing as forcefully as a byte-divergence.
-divergence_loop() {
-  local check_id=0
-  local mismatches_file="${DIVERGE_DIR}/mismatches"
-  local checks_file="${DIVERGE_DIR}/checks"
-  printf 0 > "$mismatches_file"
-  printf 0 > "$checks_file"
-  while :; do
-    sleep "$DIVERGE_INTERVAL"
-    check_id=$((check_id + 1))
-    local d="${DIVERGE_DIR}/check-${check_id}"
-    mkdir -p "$d"
-    local hook
-    hook="$(make_hookdata "$CANARY_REPO" "soak-canary-$(uuidgen)")"
-    printf '%s' "$hook" > "$d/hookData.json"
-
-    local drc=0 irc=0
-    printf '%s' "$hook" | node "${REPO_ROOT}/dist/index.mjs" \
-      >"$d/daemon.out" 2>"$d/daemon.err" || drc=$?
-    printf '%s' "$hook" | env CLAUDE_POWERLINE_NO_DAEMON=1 node "${REPO_ROOT}/dist/index.mjs" \
-      >"$d/inline.out" 2>"$d/inline.err" || irc=$?
-    printf '%d %d\n' "$drc" "$irc" > "$d/exit_codes"
-
-    printf '%s' "$(($(cat "$checks_file") + 1))" > "$checks_file"
-
-    local diverged=0
-    if [[ "$drc" -ne 0 ]] || [[ "$irc" -ne 0 ]]; then
-      diverged=1
-    elif ! cmp -s "$d/daemon.out" "$d/inline.out"; then
-      diverged=1
-    fi
-
-    if [[ "$diverged" -eq 1 ]]; then
-      printf '%s' "$(($(cat "$mismatches_file") + 1))" > "$mismatches_file"
-    else
-      # Pass — clean up the noise so failed checks stand out in DIVERGE_DIR.
-      rm -rf "$d"
-    fi
-  done
-}
-
-# --- hookData helper ----------------------------------------------------------
-
-make_hookdata() {
-  local repo="$1"; local sid="$2"
-  jq -cn --arg repo "$repo" --arg sid "$sid" '{
-    hook_event_name: "Status",
-    session_id: $sid,
-    transcript_path: "/dev/null",
-    cwd: $repo,
-    model: {id: "claude-3-5-sonnet", display_name: "Claude"},
-    workspace: {current_dir: $repo, project_dir: $repo}
-  }'
-}
-
 # --- orchestrate --------------------------------------------------------------
 
 CHILD_PIDS=()
@@ -321,7 +226,6 @@ cleanup() {
 trap cleanup EXIT INT TERM
 
 # export helpers for client subshells
-export -f make_hookdata
 export REPO_ROOT
 
 if [[ "$SKIP_BUILD" -eq 0 ]]; then
@@ -335,7 +239,7 @@ if [[ ! -f "${REPO_ROOT}/dist/index.mjs" ]]; then
 fi
 
 log "out dir: $OUT_DIR"
-log "duration: ${DURATION}s clients: $CLIENTS sample: ${SAMPLE_INTERVAL}s diverge: ${DIVERGE_INTERVAL}s"
+log "duration: ${DURATION}s clients: $CLIENTS sample: ${SAMPLE_INTERVAL}s"
 
 create_fixtures
 log "fixtures created: $(wc -l <"$REPOS_LIST" | tr -d ' ') repos"
@@ -354,17 +258,8 @@ for i in $(seq 1 "$CLIENTS"); do
 done
 log "spawned $CLIENTS clients"
 
-# spawn sampler + divergence checker. Divergence is skipped when we don't own
-# the daemon — see start_daemon for why.
 sampler_loop &
 CHILD_PIDS+=("$!")
-if [[ "$WE_OWN_DAEMON" -eq 1 ]]; then
-  divergence_loop &
-  CHILD_PIDS+=("$!")
-else
-  log "divergence loop skipped (we do not own the daemon)"
-  printf 'skipped\n' > "${DIVERGE_DIR}/skipped"
-fi
 
 # Wait for duration with periodic progress.
 END_TS=$(( $(date +%s) + DURATION ))
