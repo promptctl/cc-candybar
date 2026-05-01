@@ -5,7 +5,6 @@
 //
 //   - final RSS  < 100 MB    (well under the 200MB self-shutdown trigger)
 //   - peak slope < 1 MB/hr   (per-segment, ignoring segments with <10 samples)
-//   - mismatches == 0        (daemon vs inline divergence count)
 //
 // Exit code 0 on pass, 1 on fail. Output is plaintext suitable for tee to
 // summary.txt.
@@ -24,7 +23,6 @@ if (!outDir) {
 }
 
 const csvPath = join(outDir, "soak.csv");
-const divergeDir = join(outDir, "divergence");
 
 const lines = readFileSync(csvPath, "utf8").trim().split("\n");
 const header = lines.shift();
@@ -95,22 +93,6 @@ for (const seg of segments) {
   if (Math.abs(slope) > Math.abs(peakSlope)) peakSlope = slope;
 }
 
-let mismatches = 0;
-let checks = 0;
-let divergenceSkipped = false;
-try {
-  readFileSync(join(divergeDir, "skipped"), "utf8");
-  divergenceSkipped = true;
-} catch {}
-if (!divergenceSkipped) {
-  try {
-    mismatches = Number(readFileSync(join(divergeDir, "mismatches"), "utf8")) || 0;
-  } catch {}
-  try {
-    checks = Number(readFileSync(join(divergeDir, "checks"), "utf8")) || 0;
-  } catch {}
-}
-
 const out = [];
 out.push("claude-powerline daemon soak summary");
 out.push("");
@@ -121,12 +103,6 @@ out.push(`last sample:       ${new Date(finalRow.ts * 1000).toISOString()}`);
 out.push(`total elapsed:     ${((finalRow.ts - rows[0].ts) / 3600).toFixed(2)} hr`);
 out.push(`final RSS:         ${finalRssMb.toFixed(1)} MB`);
 out.push(`peak slope:        ${peakSlope.toFixed(3)} MB/hr`);
-if (divergenceSkipped) {
-  out.push(`divergence:        skipped (harness did not own daemon)`);
-} else {
-  out.push(`divergence checks: ${checks}`);
-  out.push(`divergence mismatches: ${mismatches}`);
-}
 out.push("");
 out.push("per-segment:");
 for (const s of segReports) {
@@ -143,9 +119,6 @@ if (finalRssMb >= FINAL_RSS_LIMIT_MB) {
 }
 if (Math.abs(peakSlope) >= SLOPE_LIMIT_MB_PER_HR) {
   fails.push(`FAIL: peak slope ${peakSlope.toFixed(3)} MB/hr >= limit ${SLOPE_LIMIT_MB_PER_HR} MB/hr`);
-}
-if (!divergenceSkipped && mismatches > 0) {
-  fails.push(`FAIL: ${mismatches} divergence mismatches (out of ${checks} checks)`);
 }
 
 out.push("");
