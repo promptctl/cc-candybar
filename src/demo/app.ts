@@ -106,33 +106,128 @@ function getTerminalHeight(): number {
 
 // --- Palette legend ---
 
+const PALETTE_GROUPS = [
+  {
+    title: "Core",
+    vars: [
+      "primary", "secondary", "accent", "boost",
+      "success", "warning", "error",
+    ],
+  },
+  {
+    title: "Surfaces",
+    vars: [
+      "background", "foreground", "panel", "surface",
+      "surface-active", "foreground-disabled",
+      "primary-background", "secondary-background",
+    ],
+  },
+  {
+    title: "Text",
+    vars: [
+      "text", "text-primary", "text-secondary", "text-accent",
+      "text-muted", "text-success", "text-warning", "text-error",
+      "text-disabled",
+    ],
+  },
+  {
+    title: "Borders & Buttons",
+    vars: [
+      "border", "border-blurred",
+      "button-foreground", "button-color-foreground",
+    ],
+  },
+  {
+    title: "Cursor & Input",
+    vars: [
+      "block-cursor-background", "block-cursor-foreground",
+      "block-cursor-blurred-background", "block-cursor-blurred-foreground",
+      "block-hover-background",
+      "input-cursor-background", "input-cursor-foreground",
+      "input-selection-background",
+    ],
+  },
+  {
+    title: "Links",
+    vars: [
+      "link-color", "link-color-hover",
+      "link-background", "link-background-hover",
+    ],
+  },
+  {
+    title: "Scrollbar",
+    vars: [
+      "scrollbar", "scrollbar-hover", "scrollbar-active",
+      "scrollbar-background", "scrollbar-background-hover",
+      "scrollbar-background-active", "scrollbar-corner-color",
+    ],
+  },
+  {
+    title: "Footer",
+    vars: [
+      "footer-background", "footer-foreground",
+      "footer-description-background", "footer-description-foreground",
+      "footer-item-background", "footer-key-background",
+      "footer-key-foreground",
+    ],
+  },
+  {
+    title: "Markdown Headings",
+    vars: [
+      "markdown-h1-color", "markdown-h1-background",
+      "markdown-h2-color", "markdown-h2-background",
+      "markdown-h3-color", "markdown-h3-background",
+      "markdown-h4-color", "markdown-h4-background",
+      "markdown-h5-color", "markdown-h5-background",
+      "markdown-h6-color", "markdown-h6-background",
+    ],
+  },
+];
+
+const SWATCH_PAD = 2; // spaces inside swatch (1 left + 1 right)
+const GAP = 2; // gap between swatches
+
+function contrastFg(rgba: ColorRgba): string {
+  const bright = rgba.red > 128 && rgba.green > 128 && rgba.blue > 128;
+  return bright ? "#000000" : "#ffffff";
+}
+
 function buildPaletteLegend(width: number): string[] {
   const palette = getThemePalette(themes[themeIdx]!);
   if (!palette) return [];
 
-  // Filter to base variables (no -darken-N / -lighten-N / -muted suffixes)
-  const baseVars = [...palette.vars.entries()].filter(
-    ([k]) =>
-      !k.includes("-darken-") &&
-      !k.includes("-lighten-") &&
-      !k.endsWith("-muted"),
-  );
-
-  const swatchWidth = 16; // "█" + space + label (up to ~13 chars)
-  const cols = Math.max(1, Math.floor((width - 1) / swatchWidth));
-
   const lines: string[] = [];
-  for (let rowStart = 0; rowStart < baseVars.length; rowStart += cols) {
-    const rowVars = baseVars.slice(rowStart, rowStart + cols);
-    let line = "";
-    for (const [name, rgba] of rowVars) {
-      const hex = colorToHex(rgba);
-      // Use bg color for block + contrasting fg for label
-      const label = name.length > 13 ? name.slice(0, 12) + "…" : name;
-      line += `${hexToAnsiBg(hex)}${hexToAnsiFg(rgba.red > 128 && rgba.green > 128 && rgba.blue > 128 ? "#000000" : "#ffffff")} ${label.padEnd(13)}${RESET}`;
+
+  for (const group of PALETTE_GROUPS) {
+    // Group header
+    lines.push(`${DIM}  ${group.title}${RESET}`);
+
+    // Column width = longest name in this group + padding
+    const maxNameLen = Math.max(...group.vars.map((v) => v.length));
+    const colWidth = maxNameLen + SWATCH_PAD + GAP;
+
+    const cols = Math.max(1, Math.floor(width / colWidth));
+
+    for (let rowStart = 0; rowStart < group.vars.length; rowStart += cols) {
+      const rowVars = group.vars.slice(rowStart, rowStart + cols);
+      let line = "";
+      for (const name of rowVars) {
+        const rgba = palette.vars.get(name);
+        // [LAW:dataflow-not-control-flow] missing var produces a dim
+        // placeholder — data decides output, not a skip branch.
+        if (!rgba) {
+          line += `${DIM} ${name.padEnd(maxNameLen)} ${RESET}${" ".repeat(GAP)}`;
+          continue;
+        }
+        const hex = colorToHex(rgba);
+        const fg = contrastFg(rgba);
+        const padded = name.padEnd(maxNameLen);
+        line += `${hexToAnsiBg(hex)}${hexToAnsiFg(fg)} ${padded} ${RESET}${" ".repeat(GAP)}`;
+      }
+      lines.push(line);
     }
-    lines.push(line);
   }
+
   return lines;
 }
 
