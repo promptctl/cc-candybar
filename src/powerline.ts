@@ -1,5 +1,5 @@
 import type { ClaudeHookData } from "./utils/claude";
-import type { PowerlineColors, ColorTheme } from "./themes";
+import type { PowerlineColors } from "./themes";
 import type { PowerlineConfig, LineConfig } from "./config/loader";
 import type {
   UsageInfo,
@@ -27,19 +27,15 @@ import type { BlockInfo } from "./segments/block";
 import type { TodayInfo } from "./segments/today";
 import type { TuiData } from "./tui";
 
-import {
-  hexToAnsi,
-  hexToBasicAnsi,
-  hexTo256Ansi,
-  hexColorDistance,
-} from "./utils/colors";
+import { resolveThemeColors } from "./themes";
 import {
   buildLineStrip,
   buildFlexStripLines,
   type StripStyle,
 } from "./render/strip";
 import { getColorSupport } from "./utils/color-support";
-import { getTheme } from "./themes";
+import { hexToAnsi } from "./utils/colors";
+import type { SegmentOverride } from "./themes/cascade.js";
 import {
   UsageProvider,
   ContextProvider,
@@ -53,7 +49,6 @@ import { TodayProvider } from "./segments/today";
 import {
   SYMBOLS,
   TEXT_SYMBOLS,
-  RESET_CODE,
   BOX_CHARS,
   BOX_CHARS_TEXT,
 } from "./utils/constants";
@@ -858,210 +853,32 @@ export class PowerlineRenderer {
   }
 
   private getThemeColors(): PowerlineColors {
-    const theme = this.config.theme;
-    let colorTheme;
-
     const colorMode = this.config.display.colorCompatibility || "auto";
-    const colorSupport = colorMode === "auto" ? getColorSupport() : colorMode;
+    const resolved = colorMode === "auto" ? getColorSupport() : colorMode;
+    const colorSupport =
+      resolved === "ansi256"
+        ? "ansi256" as const
+        : resolved === "none"
+          ? "none" as const
+          : resolved === "ansi"
+            ? "ansi" as const
+            : "truecolor" as const;
 
-    if (theme === "custom") {
-      colorTheme = this.config.colors?.custom;
-      if (!colorTheme) {
-        throw new Error(
-          "Custom theme selected but no colors provided in configuration",
-        );
-      }
-    } else {
-      colorTheme = getTheme(theme, colorSupport);
-      if (!colorTheme) {
-        console.warn(
-          `Built-in theme '${theme}' not found, falling back to 'dark' theme`,
-        );
-        colorTheme = getTheme("dark", colorSupport)!;
-      }
-    }
+    const theme = this.config.theme === "custom" && this.config.colors?.custom
+      ? "textual-dark"
+      : this.config.theme;
 
-    const convertHex = (hex: string, isBg: boolean): string => {
-      if (colorSupport === "none") return "";
-      if (colorSupport === "ansi") return hexToBasicAnsi(hex, isBg);
-      if (colorSupport === "ansi256") return hexTo256Ansi(hex, isBg);
-      return hexToAnsi(hex, isBg);
-    };
-
-    const fallbackTheme = getTheme("dark", colorSupport)!;
-
-    const isTui = this.config.display.style === "tui";
-    const isLightTheme = theme === "light";
-    const terminalRef = isLightTheme ? "#f0f0f0" : "#1e1e1e";
-
-    const getSegmentColors = (segment: Exclude<keyof ColorTheme, "tui">) => {
-      const fallback = fallbackTheme[segment];
-      const custom = colorTheme[segment];
-      const colors = {
-        fg: custom?.fg || fallback.fg,
-        bg: custom?.bg || fallback.bg,
-      };
-
-      let fgHex = colors.fg;
-      if (isTui && hexColorDistance(fgHex, terminalRef) < 60) {
-        fgHex = colors.bg;
-      }
-
-      return {
-        bg: convertHex(colors.bg, true),
-        fg: convertHex(fgHex, false),
-        bgHex: colors.bg,
-        fgHex: fgHex,
-      };
-    };
-
-    const directory = getSegmentColors("directory");
-    const git = getSegmentColors("git");
-    const model = getSegmentColors("model");
-    const session = getSegmentColors("session");
-    const block = getSegmentColors("block");
-    const today = getSegmentColors("today");
-    const tmux = getSegmentColors("tmux");
-    const context = getSegmentColors("context");
-    const contextWarning = getSegmentColors("contextWarning");
-    const contextCritical = getSegmentColors("contextCritical");
-    const metrics = getSegmentColors("metrics");
-    const version = getSegmentColors("version");
-    const env = getSegmentColors("env");
-    const weekly = getSegmentColors("weekly");
-
-    const partFgHex = theme === "custom" ? this.resolvePartHexColors() : {};
-
-    return {
-      reset: colorSupport === "none" ? "" : RESET_CODE,
-      modeBg: directory.bg,
-      modeFg: directory.fg,
-      gitBg: git.bg,
-      gitFg: git.fg,
-      modelBg: model.bg,
-      modelFg: model.fg,
-      sessionBg: session.bg,
-      sessionFg: session.fg,
-      blockBg: block.bg,
-      blockFg: block.fg,
-      todayBg: today.bg,
-      todayFg: today.fg,
-      tmuxBg: tmux.bg,
-      tmuxFg: tmux.fg,
-      contextBg: context.bg,
-      contextFg: context.fg,
-      contextWarningBg: contextWarning.bg,
-      contextWarningFg: contextWarning.fg,
-      contextCriticalBg: contextCritical.bg,
-      contextCriticalFg: contextCritical.fg,
-      metricsBg: metrics.bg,
-      metricsFg: metrics.fg,
-      versionBg: version.bg,
-      versionFg: version.fg,
-      envBg: env.bg,
-      envFg: env.fg,
-      weeklyBg: weekly.bg,
-      weeklyFg: weekly.fg,
-      partFg: theme === "custom" ? this.resolvePartColors(convertHex) : {},
-      hex: {
-        modeBg: directory.bgHex,
-        modeFg: directory.fgHex,
-        gitBg: git.bgHex,
-        gitFg: git.fgHex,
-        modelBg: model.bgHex,
-        modelFg: model.fgHex,
-        sessionBg: session.bgHex,
-        sessionFg: session.fgHex,
-        blockBg: block.bgHex,
-        blockFg: block.fgHex,
-        todayBg: today.bgHex,
-        todayFg: today.fgHex,
-        tmuxBg: tmux.bgHex,
-        tmuxFg: tmux.fgHex,
-        contextBg: context.bgHex,
-        contextFg: context.fgHex,
-        contextWarningBg: contextWarning.bgHex,
-        contextWarningFg: contextWarning.fgHex,
-        contextCriticalBg: contextCritical.bgHex,
-        contextCriticalFg: contextCritical.fgHex,
-        metricsBg: metrics.bgHex,
-        metricsFg: metrics.fgHex,
-        versionBg: version.bgHex,
-        versionFg: version.fgHex,
-        envBg: env.bgHex,
-        envFg: env.fgHex,
-        weeklyBg: weekly.bgHex,
-        weeklyFg: weekly.fgHex,
-        partFg: partFgHex,
-      },
-    };
-  }
-
-  private resolvePartHexColors(): Record<string, string> {
-    const custom = this.config.colors?.custom as
-      | Record<string, { fg?: string }>
-      | undefined;
-    if (!custom) return {};
-    const result: Record<string, string> = {};
-    for (const key of Object.keys(custom)) {
-      const entry = custom[key];
-      if (entry?.fg) result[key] = entry.fg;
-    }
-    return result;
-  }
-
-  private resolvePartColors(
-    convertHex: (hex: string, isBg: boolean) => string,
-  ): Record<string, string> {
-    const custom = this.config.colors?.custom as
-      | Record<string, { fg?: string }>
-      | undefined;
-    if (!custom) return {};
-
-    const result: Record<string, string> = {};
-    for (const key of Object.keys(custom)) {
-      const entry = custom[key];
-      if (!entry?.fg) continue;
-      result[key] = convertHex(entry.fg, false);
-    }
-    return result;
-  }
-
-  private getSegmentBgColor(
-    segmentType: string,
-    colors: PowerlineColors,
-  ): string {
-    switch (segmentType) {
-      case "directory":
-        return colors.modeBg;
-      case "git":
-      case "gitTaculous":
-        return colors.gitBg;
-      case "model":
-        return colors.modelBg;
-      case "session":
-      case "sessionId":
-        return colors.sessionBg;
-      case "block":
-        return colors.blockBg;
-      case "today":
-        return colors.todayBg;
-      case "tmux":
-        return colors.tmuxBg;
-      case "context":
-        return colors.contextBg;
-      case "metrics":
-        return colors.metricsBg;
-      case "version":
-        return colors.versionBg;
-      case "env":
-        return colors.envBg;
-      case "weekly":
-        return colors.weeklyBg;
-      case "toolbar":
-        return colors.sessionBg;
-      default:
-        return colors.modeBg;
-    }
+    return resolveThemeColors({
+      theme,
+      themeMapping: this.config.themeMapping as
+        | Record<string, SegmentOverride>
+        | undefined,
+      hueStep: this.config.hueStep,
+      customColors: this.config.theme === "custom"
+        ? this.config.colors?.custom
+        : undefined,
+      colorSupport,
+      isTui: this.config.display.style === "tui",
+    });
   }
 }

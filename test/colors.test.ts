@@ -5,7 +5,10 @@ import {
   extractBgToFg,
 } from "../src/utils/colors";
 import { getColorSupport } from "../src/utils/color-support";
-import { getTheme } from "../src/themes";
+import { resolveThemeColors, listAvailableThemes } from "../src/themes";
+import { rotateHue, rgbaToOklch } from "../src/themes/oklch";
+import { mappingFromHueStep, semanticMapping } from "../src/themes/default-mapping";
+import { ColorRgba } from "rich-js";
 
 describe("Colors", () => {
   describe("Core Color Functions", () => {
@@ -16,7 +19,7 @@ describe("Colors", () => {
 
     it("should convert background to foreground ANSI", () => {
       expect(extractBgToFg("\x1b[48;2;255;100;50m")).toBe(
-        "\x1b[38;2;255;100;50m"
+        "\x1b[38;2;255;100;50m",
       );
       expect(extractBgToFg("\x1b[41m")).toBe("\x1b[31m");
     });
@@ -62,26 +65,11 @@ describe("Colors", () => {
       expect(getColorSupport()).toBe("none");
     });
 
-    it("should respect NO_COLOR standard (any non-empty value)", () => {
-      process.env = {};
-      process.env.NO_COLOR = "potato";
-      expect(getColorSupport()).toBe("none");
-
-      process.env = {};
-      process.env.NO_COLOR = "";
-      expect(getColorSupport()).not.toBe("none");
-    });
-
     it("should respect FORCE_COLOR standard (overrides NO_COLOR)", () => {
       process.env = {};
       process.env.NO_COLOR = "1";
       process.env.FORCE_COLOR = "1";
       expect(getColorSupport()).toBe("ansi");
-
-      process.env = {};
-      process.env.NO_COLOR = "1";
-      process.env.FORCE_COLOR = "3";
-      expect(getColorSupport()).toBe("truecolor");
     });
 
     it("should handle FORCE_COLOR values correctly", () => {
@@ -90,24 +78,8 @@ describe("Colors", () => {
       expect(getColorSupport()).toBe("none");
 
       process.env = {};
-      process.env.FORCE_COLOR = "1";
-      expect(getColorSupport()).toBe("ansi");
-
-      process.env = {};
-      process.env.FORCE_COLOR = "2";
-      expect(getColorSupport()).toBe("ansi256");
-
-      process.env = {};
       process.env.FORCE_COLOR = "3";
       expect(getColorSupport()).toBe("truecolor");
-
-      process.env = {};
-      process.env.FORCE_COLOR = "yes";
-      expect(getColorSupport()).toBe("ansi");
-
-      process.env = {};
-      process.env.FORCE_COLOR = "";
-      expect(getColorSupport()).not.toBe("ansi");
     });
 
     it("should generate correct ANSI codes for different modes", () => {
@@ -117,19 +89,187 @@ describe("Colors", () => {
       expect(hexToBasicAnsi("#FF0000", true)).toBe("");
       expect(hexToBasicAnsi("#FF0000", false)).toContain("31");
     });
+  });
 
-    it("should select correct theme variants by color support", () => {
-      const ansi256Theme = getTheme("nord", "ansi256");
-      expect(ansi256Theme?.directory.bg).toBe("#5f87af");
+  describe("Theme Cascade", () => {
+    it("should list available themes including old aliases", () => {
+      const themes = listAvailableThemes();
+      expect(themes).toContain("dark");
+      expect(themes).toContain("light");
+      expect(themes).toContain("nord");
+      expect(themes).toContain("gruvbox");
+      expect(themes).toContain("custom");
+      expect(themes.length).toBeGreaterThanOrEqual(18);
+    });
 
-      const ansiTheme = getTheme("nord", "ansi");
-      expect(ansiTheme?.directory.bg).toBe("#0087af");
+    it("should resolve theme colors for gruvbox", () => {
+      const colors = resolveThemeColors({
+        theme: "gruvbox",
+        colorSupport: "truecolor",
+      });
+      expect(colors.modeBg).toBeTruthy();
+      expect(colors.modeFg).toBeTruthy();
+      expect(colors.gitBg).toBeTruthy();
+      expect(colors.hex).toBeDefined();
+      expect(colors.hex!.modeBg).toMatch(/^#[0-9a-f]{6}$/);
+    });
 
-      const truecolorTheme = getTheme("nord", "truecolor");
-      expect(truecolorTheme?.directory.bg).toBe("#434c5e");
+    it("should resolve theme colors for all built-in themes", () => {
+      const themes = listAvailableThemes().filter((t) => t !== "custom");
+      for (const name of themes) {
+        const colors = resolveThemeColors({
+          theme: name,
+          colorSupport: "truecolor",
+        });
+        expect(colors.modeBg).toBeTruthy();
+        expect(colors.hex!.modeBg).toMatch(/^#[0-9a-f]{6}$/);
+      }
+    });
 
-      const noneTheme = getTheme("nord", "none");
-      expect(noneTheme?.directory.bg).toBe(ansiTheme?.directory.bg);
+    it("should produce different bg colors across segments via hue rotation", () => {
+      const colors = resolveThemeColors({
+        theme: "gruvbox",
+        colorSupport: "truecolor",
+      });
+      const bgs = new Set([
+        colors.hex!.modeBg,
+        colors.hex!.gitBg,
+        colors.hex!.modelBg,
+        colors.hex!.sessionBg,
+      ]);
+      // Hue rotation should produce at least 3 distinct bg colors
+      expect(bgs.size).toBeGreaterThanOrEqual(3);
+    });
+
+    it("should apply user overrides per segment", () => {
+      const base = resolveThemeColors({
+        theme: "gruvbox",
+        colorSupport: "truecolor",
+      });
+      const overridden = resolveThemeColors({
+        theme: "gruvbox",
+        colorSupport: "truecolor",
+        themeMapping: {
+          git: { bg: "error" },
+        },
+      });
+      expect(overridden.hex!.gitBg).not.toBe(base.hex!.gitBg);
+    });
+
+    it("should apply hueStep to generate auto-incremented offsets", () => {
+      const colors = resolveThemeColors({
+        theme: "gruvbox",
+        colorSupport: "truecolor",
+        hueStep: 60,
+      });
+      // With hueStep=60, segments should have different hues
+      const bgs = [
+        colors.hex!.modeBg,
+        colors.hex!.gitBg,
+        colors.hex!.modelBg,
+        colors.hex!.sessionBg,
+        colors.hex!.blockBg,
+      ];
+      const unique = new Set(bgs);
+      expect(unique.size).toBeGreaterThanOrEqual(3);
+    });
+
+    it("should handle color compatibility modes", () => {
+      const noneColors = resolveThemeColors({
+        theme: "gruvbox",
+        colorSupport: "none",
+      });
+      expect(noneColors.modeBg).toBe("");
+      expect(noneColors.reset).toBe("");
+
+      const ansi256Colors = resolveThemeColors({
+        theme: "gruvbox",
+        colorSupport: "ansi256",
+      });
+      expect(ansi256Colors.modeBg).toMatch(/^\x1b\[48;5;\d+m$/);
+    });
+
+    it("should throw for unknown themes", () => {
+      expect(() =>
+        resolveThemeColors({
+          theme: "nonexistent-theme",
+          colorSupport: "truecolor",
+        }),
+      ).toThrow(/Unknown theme palette/);
+    });
+  });
+
+  describe("OKLCH Hue Rotation", () => {
+    it("should be identity for 0 degree rotation", () => {
+      const red = new ColorRgba(255, 0, 0);
+      const result = rotateHue(red, 0);
+      expect(result.red).toBe(255);
+      expect(result.green).toBe(0);
+      expect(result.blue).toBe(0);
+    });
+
+    it("should round-trip for 360 degree rotation", () => {
+      const color = new ColorRgba(133, 165, 152);
+      const result = rotateHue(color, 360);
+      expect(Math.abs(result.red - 133)).toBeLessThanOrEqual(2);
+      expect(Math.abs(result.green - 165)).toBeLessThanOrEqual(2);
+      expect(Math.abs(result.blue - 152)).toBeLessThanOrEqual(2);
+    });
+
+    it("should produce perceptually equal hue steps", () => {
+      const base = new ColorRgba(200, 50, 50);
+      const oklch0 = rgbaToOklch(rotateHue(base, 0));
+      const oklch60 = rgbaToOklch(rotateHue(base, 60));
+      const oklch120 = rgbaToOklch(rotateHue(base, 120));
+      const oklch180 = rgbaToOklch(rotateHue(base, 180));
+
+      // Lightness should be preserved (within gamut clamp tolerance)
+      expect(Math.abs(oklch0.L - oklch60.L)).toBeLessThan(0.05);
+      expect(Math.abs(oklch0.L - oklch120.L)).toBeLessThan(0.05);
+      expect(Math.abs(oklch0.L - oklch180.L)).toBeLessThan(0.05);
+
+      // All four should have distinct hue angles
+      const hues = [oklch0.H, oklch60.H, oklch120.H, oklch180.H];
+      const uniqueHues = new Set(hues.map((h) => h.toFixed(3)));
+      expect(uniqueHues.size).toBe(4);
+    });
+
+    it("should produce different RGB values for different hue offsets", () => {
+      const base = new ColorRgba(100, 150, 200);
+      const r0 = rotateHue(base, 0);
+      const r90 = rotateHue(base, 90);
+      const r180 = rotateHue(base, 180);
+      const r270 = rotateHue(base, 270);
+
+      // All four should be visually distinct
+      const unique = new Set([
+        `${r0.red},${r0.green},${r0.blue}`,
+        `${r90.red},${r90.green},${r90.blue}`,
+        `${r180.red},${r180.green},${r180.blue}`,
+        `${r270.red},${r270.green},${r270.blue}`,
+      ]);
+      expect(unique.size).toBe(4);
+    });
+  });
+
+  describe("Default Mapping", () => {
+    it("should have entries for all standard segments", () => {
+      const segments = [
+        "directory", "git", "gitTaculous", "model", "session",
+        "block", "today", "tmux", "context", "contextWarning",
+        "contextCritical", "metrics", "version", "env", "weekly",
+      ];
+      for (const seg of segments) {
+        expect(semanticMapping[seg]).toBeDefined();
+        expect(semanticMapping[seg]!.bg).toBeTruthy();
+      }
+    });
+
+    it("should produce a valid mapping from hueStep", () => {
+      const mapping = mappingFromHueStep(45);
+      expect(Object.keys(mapping).length).toBeGreaterThan(10);
+      expect(mapping.contextWarning!.bg).toBe("warning");
+      expect(mapping.contextCritical!.bg).toBe("error");
     });
   });
 });

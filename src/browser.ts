@@ -77,26 +77,17 @@ export type { TuiPanelOptions } from "./tui/renderer";
 
 // --- Themes ---
 
-export { getTheme, BUILT_IN_THEMES } from "./themes";
 export {
-  darkTheme,
-  darkAnsi256Theme,
-  darkAnsiTheme,
-  lightTheme,
-  lightAnsi256Theme,
-  lightAnsiTheme,
-  nordTheme,
-  nordAnsi256Theme,
-  nordAnsiTheme,
-  tokyoNightTheme,
-  tokyoNightAnsi256Theme,
-  tokyoNightAnsiTheme,
-  rosePineTheme,
-  rosePineAnsi256Theme,
-  rosePineAnsiTheme,
-  gruvboxTheme,
-  gruvboxAnsi256Theme,
-  gruvboxAnsiTheme,
+  resolveThemeColors,
+  listAvailableThemes,
+  semanticMapping,
+  mappingFromHueStep,
+  rotateHue,
+} from "./themes";
+export type {
+  CascadeConfig,
+  SegmentColors,
+  PaletteMapping,
 } from "./themes";
 
 // --- Constants ---
