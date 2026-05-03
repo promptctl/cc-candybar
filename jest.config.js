@@ -6,6 +6,7 @@ export default {
   testMatch: ["**/*.test.ts"],
   moduleNameMapper: {
     "^rich-js$": "<rootDir>/node_modules/rich-js/dist/index.js",
+    "^rich-js/themes/data$": "<rootDir>/node_modules/rich-js/dist/themes/data/index.js",
     "^(\\.{1,2}/.*)\\.js$": "$1",
   },
   transformIgnorePatterns: [

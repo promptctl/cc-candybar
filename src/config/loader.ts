@@ -3,6 +3,7 @@ import path from "node:path";
 import os from "node:os";
 import { DEFAULT_CONFIG } from "./defaults";
 import type { ColorTheme } from "../themes";
+import { listAvailableThemes } from "../themes/cascade.js";
 import type { TuiGridConfig } from "../tui/types";
 import { isValidSegmentRef } from "../tui/types";
 import { BOX_PRESETS } from "../utils/constants";
@@ -66,33 +67,29 @@ export interface BudgetConfig {
   block?: BudgetItemConfig;
 }
 
+export interface SegmentColorOverride {
+  bg?: string;
+  fg?: string;
+  hue?: number;
+  palette?: string;
+}
+
 export interface PowerlineConfig {
-  theme:
-    | "light"
-    | "dark"
-    | "nord"
-    | "tokyo-night"
-    | "rose-pine"
-    | "gruvbox"
-    | "custom";
+  theme: string;
   display: DisplayConfig;
   colors?: {
     custom: ColorTheme;
   };
+  themeMapping?: Record<string, SegmentColorOverride>;
+  hueStep?: number;
   budget?: BudgetConfig;
   modelContextLimits?: Record<string, number>;
 }
 
-function isValidTheme(theme: string): theme is PowerlineConfig["theme"] {
-  return [
-    "light",
-    "dark",
-    "nord",
-    "tokyo-night",
-    "rose-pine",
-    "gruvbox",
-    "custom",
-  ].includes(theme);
+const VALID_THEMES = new Set<string>([...listAvailableThemes()]);
+
+function isValidTheme(theme: string): boolean {
+  return VALID_THEMES.has(theme);
 }
 
 function isValidStyle(
