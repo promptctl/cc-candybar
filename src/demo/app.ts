@@ -40,6 +40,8 @@ const SEGMENT_COLOR_KEYS: Record<
 };
 
 // --- Mapping presets ---
+// Each preset specifies BOTH fg and bg independently per segment.
+// Textual pattern: core colors → button-color-foreground, muted → text-*, surfaces → foreground.
 
 type MappingPreset = {
   name: string;
@@ -53,98 +55,103 @@ const MAPPING_PRESETS: MappingPreset[] = [
     overrides: null,
   },
   {
-    name: "Semantic",
+    name: "Button",
     overrides: {
-      directory: { bg: "primary" },
-      git: { bg: "secondary" },
-      model: { bg: "accent" },
-      session: { bg: "success" },
-      context: { bg: "panel" },
-      contextWarning: { bg: "warning" },
-      contextCritical: { bg: "error" },
-      block: { bg: "boost" },
-      today: { bg: "primary" },
-      tmux: { bg: "secondary" },
-      metrics: { bg: "accent" },
-      version: { bg: "success" },
-      env: { bg: "panel" },
-      weekly: { bg: "boost" },
+      directory:       { bg: "primary",   fg: "button-color-foreground" },
+      git:             { bg: "secondary", fg: "button-color-foreground" },
+      gitTaculous:     { bg: "secondary", fg: "button-color-foreground" },
+      model:           { bg: "accent",    fg: "button-color-foreground" },
+      session:         { bg: "success",   fg: "button-color-foreground" },
+      context:         { bg: "panel",     fg: "foreground" },
+      contextWarning:  { bg: "warning",   fg: "button-color-foreground" },
+      contextCritical: { bg: "error",     fg: "button-color-foreground" },
+      block:           { bg: "boost",     fg: "button-color-foreground" },
+      today:           { bg: "primary",   fg: "button-color-foreground" },
+      tmux:            { bg: "secondary", fg: "button-color-foreground" },
+      metrics:         { bg: "accent",    fg: "button-color-foreground" },
+      version:         { bg: "success",   fg: "button-color-foreground" },
+      env:             { bg: "panel",     fg: "foreground" },
+      weekly:          { bg: "boost",     fg: "button-color-foreground" },
     },
   },
   {
-    name: "Muted",
+    name: "Muted + Text",
     overrides: {
-      directory: { bg: "primary-muted" },
-      git: { bg: "secondary-muted" },
-      model: { bg: "accent-muted" },
-      session: { bg: "success-muted" },
-      context: { bg: "warning-muted" },
-      contextWarning: { bg: "warning" },
-      contextCritical: { bg: "error" },
-      block: { bg: "error-muted" },
-      today: { bg: "primary-muted" },
-      tmux: { bg: "secondary-muted" },
-      metrics: { bg: "accent-muted" },
-      version: { bg: "success-muted" },
-      env: { bg: "warning-muted" },
-      weekly: { bg: "error-muted" },
+      directory:       { bg: "primary-muted",   fg: "text-primary" },
+      git:             { bg: "secondary-muted", fg: "text-secondary" },
+      gitTaculous:     { bg: "secondary-muted", fg: "text-secondary" },
+      model:           { bg: "accent-muted",    fg: "text-accent" },
+      session:         { bg: "success-muted",   fg: "text-success" },
+      context:         { bg: "warning-muted",   fg: "text-warning" },
+      contextWarning:  { bg: "warning",         fg: "button-color-foreground" },
+      contextCritical: { bg: "error",           fg: "button-color-foreground" },
+      block:           { bg: "error-muted",     fg: "text-error" },
+      today:           { bg: "primary-muted",   fg: "text-primary" },
+      tmux:            { bg: "secondary-muted", fg: "text-secondary" },
+      metrics:         { bg: "accent-muted",    fg: "text-accent" },
+      version:         { bg: "success-muted",   fg: "text-success" },
+      env:             { bg: "warning-muted",   fg: "text-warning" },
+      weekly:          { bg: "error-muted",     fg: "text-error" },
     },
   },
   {
-    name: "Surface",
+    name: "Surface + Foreground",
     overrides: {
-      directory: { bg: "surface" },
-      git: { bg: "surface-active" },
-      model: { bg: "panel" },
-      session: { bg: "surface" },
-      context: { bg: "surface-active" },
-      contextWarning: { bg: "warning" },
-      contextCritical: { bg: "error" },
-      block: { bg: "panel" },
-      today: { bg: "surface" },
-      tmux: { bg: "surface-active" },
-      metrics: { bg: "panel" },
-      version: { bg: "surface" },
-      env: { bg: "surface-active" },
-      weekly: { bg: "panel" },
+      directory:       { bg: "surface",         fg: "foreground" },
+      git:             { bg: "surface-active",  fg: "foreground" },
+      gitTaculous:     { bg: "surface-active",  fg: "foreground" },
+      model:           { bg: "panel",           fg: "foreground" },
+      session:         { bg: "surface",         fg: "foreground" },
+      context:         { bg: "surface-active",  fg: "foreground" },
+      contextWarning:  { bg: "warning",         fg: "button-color-foreground" },
+      contextCritical: { bg: "error",           fg: "button-color-foreground" },
+      block:           { bg: "panel",           fg: "foreground" },
+      today:           { bg: "surface",         fg: "foreground" },
+      tmux:            { bg: "surface-active",  fg: "foreground" },
+      metrics:         { bg: "panel",           fg: "foreground" },
+      version:         { bg: "surface",         fg: "foreground" },
+      env:             { bg: "surface-active",  fg: "foreground" },
+      weekly:          { bg: "panel",           fg: "foreground" },
     },
   },
   {
-    name: "Core 3-Hue",
+    name: "Backgrounds + Button-fg",
     overrides: {
-      directory: { bg: "primary", hue: 0 },
-      git: { bg: "primary", hue: 0 },
-      model: { bg: "secondary", hue: 0 },
-      session: { bg: "secondary", hue: 0 },
-      context: { bg: "accent", hue: 0 },
-      contextWarning: { bg: "warning" },
-      contextCritical: { bg: "error" },
-      block: { bg: "primary", hue: 0 },
-      today: { bg: "secondary", hue: 0 },
-      tmux: { bg: "accent", hue: 0 },
-      metrics: { bg: "primary", hue: 0 },
-      version: { bg: "secondary", hue: 0 },
-      env: { bg: "accent", hue: 0 },
-      weekly: { bg: "primary", hue: 0 },
+      directory:       { bg: "primary-background",   fg: "button-color-foreground" },
+      git:             { bg: "secondary-background", fg: "button-color-foreground" },
+      gitTaculous:     { bg: "secondary-background", fg: "button-color-foreground" },
+      model:           { bg: "primary-background",   fg: "button-color-foreground" },
+      session:         { bg: "secondary-background", fg: "button-color-foreground" },
+      context:         { bg: "primary-background",   fg: "foreground" },
+      contextWarning:  { bg: "warning",              fg: "button-color-foreground" },
+      contextCritical: { bg: "error",                fg: "button-color-foreground" },
+      block:           { bg: "secondary-background", fg: "button-color-foreground" },
+      today:           { bg: "primary-background",   fg: "button-color-foreground" },
+      tmux:            { bg: "secondary-background", fg: "button-color-foreground" },
+      metrics:         { bg: "primary-background",   fg: "button-color-foreground" },
+      version:         { bg: "secondary-background", fg: "button-color-foreground" },
+      env:             { bg: "primary-background",   fg: "foreground" },
+      weekly:          { bg: "secondary-background", fg: "button-color-foreground" },
     },
   },
   {
-    name: "Backgrounds",
+    name: "Text on Background",
     overrides: {
-      directory: { bg: "primary-background" },
-      git: { bg: "secondary-background" },
-      model: { bg: "primary-background" },
-      session: { bg: "secondary-background" },
-      context: { bg: "primary-background" },
-      contextWarning: { bg: "warning" },
-      contextCritical: { bg: "error" },
-      block: { bg: "secondary-background" },
-      today: { bg: "primary-background" },
-      tmux: { bg: "secondary-background" },
-      metrics: { bg: "primary-background" },
-      version: { bg: "secondary-background" },
-      env: { bg: "primary-background" },
-      weekly: { bg: "secondary-background" },
+      directory:       { bg: "background", fg: "text-primary" },
+      git:             { bg: "background", fg: "text-secondary" },
+      gitTaculous:     { bg: "background", fg: "text-secondary" },
+      model:           { bg: "background", fg: "text-accent" },
+      session:         { bg: "background", fg: "text-success" },
+      context:         { bg: "background", fg: "text-warning" },
+      contextWarning:  { bg: "warning",    fg: "button-color-foreground" },
+      contextCritical: { bg: "error",      fg: "button-color-foreground" },
+      block:           { bg: "background", fg: "text-error" },
+      today:           { bg: "background", fg: "text-primary" },
+      tmux:            { bg: "background", fg: "text-secondary" },
+      metrics:         { bg: "background", fg: "text-accent" },
+      version:         { bg: "background", fg: "text-success" },
+      env:             { bg: "background", fg: "text-muted" },
+      weekly:          { bg: "background", fg: "text-error" },
     },
   },
 ];
@@ -213,15 +220,24 @@ function getTerminalHeight(): number {
 }
 
 // --- Palette legend ---
+// Every swatch shows two theme colors: one as background, one as foreground.
+// Pairings match how Textual actually uses them in widget CSS.
 
 interface LegendEntry {
   labels: string[];
-  fg: string;
-  bg: string;
+  fg: string; // palette var name for text
+  bg: string; // palette var name for background
 }
 
 const DEMO_TEXT = "The quick fox";
 
+// Pairings sourced from Textual widget default CSS:
+//   Button.-primary:  bg=$primary,    fg=$button-color-foreground
+//   Button flat:      bg=$*-muted,    fg=$text-*
+//   Header:           bg=$panel,      fg=$foreground
+//   Footer:           bg=$panel,      fg=$foreground
+//   Input:            bg=$surface,    fg=$foreground
+//   Label.primary:    bg=$primary-muted, fg=$text-primary
 const PALETTE_GROUPS: { title: string; entries: LegendEntry[] }[] = [
   {
     title: "Foreground / Background",
@@ -232,43 +248,107 @@ const PALETTE_GROUPS: { title: string; entries: LegendEntry[] }[] = [
     ],
   },
   {
-    title: "Core",
+    title: "Core (as Button backgrounds)",
     entries: [
-      { labels: ["foreground", "primary"], fg: "foreground", bg: "primary" },
-      { labels: ["foreground", "secondary"], fg: "foreground", bg: "secondary" },
-      { labels: ["foreground", "accent"], fg: "foreground", bg: "accent" },
-      { labels: ["foreground", "boost"], fg: "foreground", bg: "boost" },
-      { labels: ["foreground", "success"], fg: "foreground", bg: "success" },
-      { labels: ["foreground", "warning"], fg: "foreground", bg: "warning" },
-      { labels: ["foreground", "error"], fg: "foreground", bg: "error" },
+      { labels: ["button-color-fg", "primary"], fg: "button-color-foreground", bg: "primary" },
+      { labels: ["button-color-fg", "secondary"], fg: "button-color-foreground", bg: "secondary" },
+      { labels: ["button-color-fg", "accent"], fg: "button-color-foreground", bg: "accent" },
+      { labels: ["button-color-fg", "boost"], fg: "button-color-foreground", bg: "boost" },
+      { labels: ["button-color-fg", "success"], fg: "button-color-foreground", bg: "success" },
+      { labels: ["button-color-fg", "warning"], fg: "button-color-foreground", bg: "warning" },
+      { labels: ["button-color-fg", "error"], fg: "button-color-foreground", bg: "error" },
     ],
   },
   {
-    title: "Core Muted",
+    title: "Core Muted (as Label/flat Button backgrounds)",
     entries: [
-      { labels: ["foreground", "primary-muted"], fg: "foreground", bg: "primary-muted" },
-      { labels: ["foreground", "secondary-muted"], fg: "foreground", bg: "secondary-muted" },
-      { labels: ["foreground", "accent-muted"], fg: "foreground", bg: "accent-muted" },
-      { labels: ["foreground", "success-muted"], fg: "foreground", bg: "success-muted" },
-      { labels: ["foreground", "warning-muted"], fg: "foreground", bg: "warning-muted" },
-      { labels: ["foreground", "error-muted"], fg: "foreground", bg: "error-muted" },
+      { labels: ["text-primary", "primary-muted"], fg: "text-primary", bg: "primary-muted" },
+      { labels: ["text-secondary", "secondary-muted"], fg: "text-secondary", bg: "secondary-muted" },
+      { labels: ["text-accent", "accent-muted"], fg: "text-accent", bg: "accent-muted" },
+      { labels: ["text-success", "success-muted"], fg: "text-success", bg: "success-muted" },
+      { labels: ["text-warning", "warning-muted"], fg: "text-warning", bg: "warning-muted" },
+      { labels: ["text-error", "error-muted"], fg: "text-error", bg: "error-muted" },
     ],
   },
   {
-    title: "Surfaces",
+    title: "Surfaces (as widget backgrounds)",
     entries: [
       { labels: ["foreground", "surface"], fg: "foreground", bg: "surface" },
       { labels: ["foreground", "panel"], fg: "foreground", bg: "panel" },
       { labels: ["foreground", "surface-active"], fg: "foreground", bg: "surface-active" },
-      { labels: ["foreground", "primary-background"], fg: "foreground", bg: "primary-background" },
-      { labels: ["foreground", "secondary-background"], fg: "foreground", bg: "secondary-background" },
     ],
   },
   {
-    title: "Borders & Buttons",
+    title: "Text (foreground on background)",
     entries: [
+      { labels: ["text", "background"], fg: "text", bg: "background" },
+      { labels: ["text-primary", "background"], fg: "text-primary", bg: "background" },
+      { labels: ["text-secondary", "background"], fg: "text-secondary", bg: "background" },
+      { labels: ["text-accent", "background"], fg: "text-accent", bg: "background" },
+      { labels: ["text-muted", "background"], fg: "text-muted", bg: "background" },
+      { labels: ["text-success", "background"], fg: "text-success", bg: "background" },
+      { labels: ["text-warning", "background"], fg: "text-warning", bg: "background" },
+      { labels: ["text-error", "background"], fg: "text-error", bg: "background" },
+      { labels: ["text-disabled", "background"], fg: "text-disabled", bg: "background" },
+    ],
+  },
+  {
+    title: "Buttons & Borders",
+    entries: [
+      { labels: ["button-foreground", "surface"], fg: "button-foreground", bg: "surface" },
+      { labels: ["button-color-fg", "primary-background"], fg: "button-color-foreground", bg: "primary-background" },
+      { labels: ["button-color-fg", "secondary-background"], fg: "button-color-foreground", bg: "secondary-background" },
       { labels: ["foreground", "border"], fg: "foreground", bg: "border" },
       { labels: ["foreground", "border-blurred"], fg: "foreground", bg: "border-blurred" },
+    ],
+  },
+  {
+    title: "Cursor & Input",
+    entries: [
+      { labels: ["cursor-fg", "cursor-bg"], fg: "block-cursor-foreground", bg: "block-cursor-background" },
+      { labels: ["cursor-blurred-fg", "cursor-blurred-bg"], fg: "block-cursor-blurred-foreground", bg: "block-cursor-blurred-background" },
+      { labels: ["foreground", "block-hover-bg"], fg: "foreground", bg: "block-hover-background" },
+      { labels: ["input-cursor-fg", "input-cursor-bg"], fg: "input-cursor-foreground", bg: "input-cursor-background" },
+      { labels: ["foreground", "input-selection-bg"], fg: "foreground", bg: "input-selection-background" },
+    ],
+  },
+  {
+    title: "Links",
+    entries: [
+      { labels: ["link-color", "link-bg"], fg: "link-color", bg: "link-background" },
+      { labels: ["link-color-hover", "link-bg-hover"], fg: "link-color-hover", bg: "link-background-hover" },
+    ],
+  },
+  {
+    title: "Scrollbar",
+    entries: [
+      { labels: ["foreground", "scrollbar"], fg: "foreground", bg: "scrollbar" },
+      { labels: ["foreground", "scrollbar-hover"], fg: "foreground", bg: "scrollbar-hover" },
+      { labels: ["foreground", "scrollbar-active"], fg: "foreground", bg: "scrollbar-active" },
+      { labels: ["foreground", "scrollbar-bg"], fg: "foreground", bg: "scrollbar-background" },
+      { labels: ["foreground", "scrollbar-bg-hover"], fg: "foreground", bg: "scrollbar-background-hover" },
+      { labels: ["foreground", "scrollbar-bg-active"], fg: "foreground", bg: "scrollbar-background-active" },
+      { labels: ["foreground", "scrollbar-corner"], fg: "foreground", bg: "scrollbar-corner-color" },
+    ],
+  },
+  {
+    title: "Footer",
+    entries: [
+      { labels: ["footer-fg", "footer-bg"], fg: "footer-foreground", bg: "footer-background" },
+      { labels: ["footer-desc-fg", "footer-desc-bg"], fg: "footer-description-foreground", bg: "footer-description-background" },
+      { labels: ["foreground", "footer-item-bg"], fg: "foreground", bg: "footer-item-background" },
+      { labels: ["footer-key-fg", "footer-key-bg"], fg: "footer-key-foreground", bg: "footer-key-background" },
+    ],
+  },
+  {
+    title: "Markdown Headings",
+    entries: [
+      { labels: ["h1-color", "h1-bg"], fg: "markdown-h1-color", bg: "markdown-h1-background" },
+      { labels: ["h2-color", "h2-bg"], fg: "markdown-h2-color", bg: "markdown-h2-background" },
+      { labels: ["h3-color", "h3-bg"], fg: "markdown-h3-color", bg: "markdown-h3-background" },
+      { labels: ["h4-color", "h4-bg"], fg: "markdown-h4-color", bg: "markdown-h4-background" },
+      { labels: ["h5-color", "h5-bg"], fg: "markdown-h5-color", bg: "markdown-h5-background" },
+      { labels: ["h6-color", "h6-bg"], fg: "markdown-h6-color", bg: "markdown-h6-background" },
     ],
   },
 ];
