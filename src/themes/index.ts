@@ -8,10 +8,7 @@ export type { CascadeConfig } from "./cascade.js";
 
 // Re-export mapping types for external use
 export type { SegmentColors, PaletteMapping } from "./default-mapping.js";
-export { semanticMapping, mappingFromHueStep } from "./default-mapping.js";
-
-// Re-export OKLCH utilities
-export { rotateHue } from "./oklch.js";
+export { semanticMapping } from "./default-mapping.js";
 
 // --- Backward-compat types (consumers still reference these) ---
 
