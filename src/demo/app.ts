@@ -1,14 +1,15 @@
 import process from "node:process";
 import { resolveThemeColors, listAvailableThemes } from "../themes/index.js";
+import { getThemePalette } from "../themes/palette-registry.js";
 import type { PowerlineHexColors } from "../themes/index.js";
 import {
   buildFlexStripLines,
   type StripStyle,
 } from "../render/strip.js";
 import { MOCK_SAMPLES, type MockSegment } from "./mock-data.js";
+import type { ColorRgba } from "rich-js";
 
 // --- Segment type → PowerlineHexColors key mapping ---
-// Exclude `partFg` — it's a Record<string, string>, not a hex string.
 
 type HexColorKey = Exclude<keyof PowerlineHexColors, "partFg">;
 
@@ -37,24 +38,17 @@ const SEGMENT_COLOR_KEYS: Record<
 
 const themes = listAvailableThemes().filter((t) => t !== "custom");
 const styles: StripStyle[] = ["powerline", "capsule", "plain"];
-const HUE_STEPS = [
-  { value: null, label: "default" },
-  { value: 15, label: "15°" },
-  { value: 30, label: "30°" },
-  { value: 45, label: "45°" },
-  { value: 60, label: "60°" },
-  { value: 90, label: "90°" },
-  { value: 120, label: "120°" },
-] as const;
 
 let themeIdx = themes.indexOf("gruvbox");
 if (themeIdx === -1) themeIdx = 0;
 let sampleIdx = 0;
 let styleIdx = 0;
-let hueStepIdx = 0;
+// null = default curated offsets; number = uniform hueStep in degrees
+let hueStep: number | null = null;
+const HUE_STEP_INCREMENT = 5;
 let needsRender = true;
 
-// --- Rendering helpers ---
+// --- ANSI helpers ---
 
 const RESET = "\x1b[0m";
 const BOLD = "\x1b[1m";
@@ -76,19 +70,82 @@ function hexToAnsiFg(hex: string): string {
   return `\x1b[38;2;${r};${g};${b}m`;
 }
 
+function colorToHex(c: ColorRgba): string {
+  const r = c.red.toString(16).padStart(2, "0");
+  const g = c.green.toString(16).padStart(2, "0");
+  const b = c.blue.toString(16).padStart(2, "0");
+  return `#${r}${g}${b}`;
+}
+
+function stripAnsi(s: string): number {
+  let len = 0;
+  for (let i = 0; i < s.length; i++) {
+    if (s[i] === "\x1b") {
+      // skip to terminator
+      while (i < s.length && s[i] !== "m") i++;
+      continue;
+    }
+    len++;
+  }
+  return len;
+}
+
+function padRightAnsi(s: string, width: number): string {
+  const visible = stripAnsi(s);
+  if (visible >= width) return s;
+  return s + " ".repeat(width - visible);
+}
+
 function getTerminalWidth(): number {
   return process.stdout.columns ?? 80;
 }
+
+function getTerminalHeight(): number {
+  return process.stdout.rows ?? 24;
+}
+
+// --- Palette legend ---
+
+function buildPaletteLegend(width: number): string[] {
+  const palette = getThemePalette(themes[themeIdx]!);
+  if (!palette) return [];
+
+  // Filter to base variables (no -darken-N / -lighten-N / -muted suffixes)
+  const baseVars = [...palette.vars.entries()].filter(
+    ([k]) =>
+      !k.includes("-darken-") &&
+      !k.includes("-lighten-") &&
+      !k.endsWith("-muted"),
+  );
+
+  const swatchWidth = 16; // "█" + space + label (up to ~13 chars)
+  const cols = Math.max(1, Math.floor((width - 1) / swatchWidth));
+
+  const lines: string[] = [];
+  for (let rowStart = 0; rowStart < baseVars.length; rowStart += cols) {
+    const rowVars = baseVars.slice(rowStart, rowStart + cols);
+    let line = "";
+    for (const [name, rgba] of rowVars) {
+      const hex = colorToHex(rgba);
+      // Use bg color for block + contrasting fg for label
+      const label = name.length > 13 ? name.slice(0, 12) + "…" : name;
+      line += `${hexToAnsiBg(hex)}${hexToAnsiFg(rgba.red > 128 && rgba.green > 128 && rgba.blue > 128 ? "#000000" : "#ffffff")} ${label.padEnd(13)}${RESET}`;
+    }
+    lines.push(line);
+  }
+  return lines;
+}
+
+// --- Powerline rendering ---
 
 function buildPowerlineBar(): string {
   const theme = themes[themeIdx]!;
   const sample = MOCK_SAMPLES[sampleIdx]!;
   const style = styles[styleIdx]!;
-  const hueStep = HUE_STEPS[hueStepIdx]!;
 
   const colors = resolveThemeColors({
     theme,
-    hueStep: hueStep.value ?? undefined,
+    hueStep: hueStep ?? undefined,
     colorSupport: "truecolor",
   });
 
@@ -108,7 +165,7 @@ function buildPowerlineBar(): string {
     })
     .filter((s): s is NonNullable<typeof s> => s !== null);
 
-  const width = getTerminalWidth() - 2; // account for box borders
+  const width = getTerminalWidth() - 2;
   return buildFlexStripLines(segments, {
     style,
     colorCompatibility: "truecolor",
@@ -118,11 +175,10 @@ function buildPowerlineBar(): string {
 
 function buildColorSwatches(): string {
   const theme = themes[themeIdx]!;
-  const hueStep = HUE_STEPS[hueStepIdx]!;
 
   const colors = resolveThemeColors({
     theme,
-    hueStep: hueStep.value ?? undefined,
+    hueStep: hueStep ?? undefined,
     colorSupport: "truecolor",
   });
 
@@ -134,21 +190,24 @@ function buildColorSwatches(): string {
   for (const [name, keys] of entries) {
     const bg = hex[keys.bg];
     const fg = hex[keys.fg];
-    // [LAW:dataflow-not-control-flow] every segment produces a swatch —
-    // the data decides color, not a branch.
-    parts.push(`${hexToAnsiBg(bg)}${hexToAnsiFg(fg)} ${name.slice(0, 4).padEnd(4)} ${RESET}`);
+    parts.push(
+      `${hexToAnsiBg(bg)}${hexToAnsiFg(fg)} ${name.slice(0, 4).padEnd(4)} ${RESET}`,
+    );
   }
   return parts.join("");
 }
 
+// --- Main render ---
+
 function render(): void {
   const width = getTerminalWidth();
-  const innerWidth = width - 2; // box borders
+  const height = getTerminalHeight();
+  const innerWidth = width - 2;
 
   const theme = themes[themeIdx]!;
   const sample = MOCK_SAMPLES[sampleIdx]!;
   const style = styles[styleIdx]!;
-  const hueStep = HUE_STEPS[hueStepIdx]!;
+  const hueLabel = hueStep === null ? "default" : `${hueStep}°`;
 
   const lines: string[] = [];
 
@@ -163,35 +222,51 @@ function render(): void {
 
   // Powerline bar
   const bar = buildPowerlineBar();
-  // Strip trailing reset for embedding — we add our own line reset
   const barDisplay = bar.replace(/\x1b\[0m$/, "");
   lines.push(`${BG_DARK} ${barDisplay}${RESET}`);
 
   // Spacer
   lines.push(`${BG_DARK}${" ".repeat(innerWidth)}${RESET}`);
 
-  // Color swatches (two rows)
+  // Segment color swatches
   const swatchLine = buildColorSwatches();
-  // Truncate to innerWidth visible chars
-  lines.push(`${BG_DARK} ${swatchLine.slice(0, innerWidth * 3)}${RESET}`);
+  lines.push(
+    `${BG_DARK} ${swatchLine.slice(0, innerWidth * 3)}${RESET}`,
+  );
   lines.push(`${BG_DARK}${" ".repeat(innerWidth)}${RESET}`);
 
+  // Palette legend header
+  lines.push(
+    `${BG_PANEL}${BOLD} Palette: ${theme}${RESET}`,
+  );
+
+  // Palette legend (fills remaining space before controls)
+  const paletteLines = buildPaletteLegend(width);
+  const controlsReserve = 3; // controls + spacer + bottom
+  const availableLines = height - lines.length - controlsReserve;
+  const paletteLinesToShow = Math.min(paletteLines.length, Math.max(2, availableLines));
+
+  for (let i = 0; i < paletteLinesToShow; i++) {
+    lines.push(paletteLines[i]!);
+  }
+
   // Controls
+  lines.push(`${BG_DARK}${" ".repeat(innerWidth)}${RESET}`);
   const themeLabel = `Theme: [←/→] ${theme}`;
   const styleLabel = `Style: [s] ${style}`;
   const sampleLabel = `Sample: [↑/↓] ${sampleIdx + 1}/${MOCK_SAMPLES.length} ${sample.name}`;
-  const hueStepLabel = `Hue Step: [h] ${hueStep.label}`;
-  const quitLabel = "[q] Quit  [r] Refresh";
+  const hueStepLine = `Hue Step: [  ] ${hueLabel}  [+/-] ±${HUE_STEP_INCREMENT}°  [0] default`;
+  const quitLabel = "[q] Quit";
 
   lines.push(
     `${BG_PANEL} ${themeLabel}    ${styleLabel}    ${sampleLabel}${RESET}`,
   );
   lines.push(
-    `${BG_PANEL} ${hueStepLabel}${" ".repeat(Math.max(1, innerWidth - hueStepLabel.length - quitLabel.length - 2))}${quitLabel} ${RESET}`,
+    `${BG_PANEL} ${hueStepLine}${" ".repeat(Math.max(1, innerWidth - stripAnsi(hueStepLine) - quitLabel.length - 2))}${quitLabel} ${RESET}`,
   );
 
-  // Write to terminal
-  process.stdout.write("\x1b[2J\x1b[H"); // clear + home
+  // Write
+  process.stdout.write("\x1b[2J\x1b[H");
   process.stdout.write(lines.join("\n") + "\n");
 }
 
@@ -209,19 +284,34 @@ function handleInput(data: Buffer): void {
   // Single character keys
   if (bytes.length === 1) {
     const ch = bytes[0]!;
-    if (ch === 113) { // q
+    if (ch === 113) {
+      // q
       cleanup();
       process.exit(0);
     }
-    if (ch === 115) { // s
+    if (ch === 115) {
+      // s
       styleIdx = (styleIdx + 1) % styles.length;
       needsRender = true;
     }
-    if (ch === 104) { // h
-      hueStepIdx = (hueStepIdx + 1) % HUE_STEPS.length;
+    if (ch === 48) {
+      // 0
+      hueStep = null;
       needsRender = true;
     }
-    if (ch === 114) { // r
+    // + (0x2B or shift+= on some keyboards) or ] (0x5D)
+    if (ch === 43 || ch === 93) {
+      hueStep = (hueStep ?? 0) + HUE_STEP_INCREMENT;
+      needsRender = true;
+    }
+    // - (0x2D) or [ (0x5B)
+    if (ch === 45 || ch === 91) {
+      const next = (hueStep ?? 0) - HUE_STEP_INCREMENT;
+      hueStep = next <= 0 ? null : next;
+      needsRender = true;
+    }
+    if (ch === 114) {
+      // r
       needsRender = true;
     }
   }
@@ -229,19 +319,23 @@ function handleInput(data: Buffer): void {
   // Arrow keys: ESC [ A/B/C/D
   if (bytes.length === 3 && bytes[0] === 27 && bytes[1] === 91) {
     const dir = bytes[2]!;
-    if (dir === 67) { // right
+    if (dir === 67) {
+      // right
       themeIdx = (themeIdx + 1) % themes.length;
       needsRender = true;
     }
-    if (dir === 68) { // left
+    if (dir === 68) {
+      // left
       themeIdx = (themeIdx - 1 + themes.length) % themes.length;
       needsRender = true;
     }
-    if (dir === 65) { // up
+    if (dir === 65) {
+      // up
       sampleIdx = (sampleIdx + 1) % MOCK_SAMPLES.length;
       needsRender = true;
     }
-    if (dir === 66) { // down
+    if (dir === 66) {
+      // down
       sampleIdx = (sampleIdx - 1 + MOCK_SAMPLES.length) % MOCK_SAMPLES.length;
       needsRender = true;
     }
@@ -251,14 +345,13 @@ function handleInput(data: Buffer): void {
 // --- Lifecycle ---
 
 function cleanup(): void {
-  process.stdout.write("\x1b[?25h"); // show cursor
-  process.stdout.write("\x1b[?1049l"); // leave alt screen
+  process.stdout.write("\x1b[?25h");
+  process.stdout.write("\x1b[?1049l");
   process.stdin.setRawMode(false);
   process.stdin.pause();
 }
 
 function main(): void {
-  // Enter alt screen + hide cursor
   process.stdout.write("\x1b[?1049h");
   process.stdout.write("\x1b[?25l");
 
@@ -266,22 +359,19 @@ function main(): void {
   process.stdin.resume();
   process.stdin.on("data", handleInput);
 
-  // Re-render on terminal resize
   process.stdout.on("resize", () => {
     needsRender = true;
   });
 
-  // Render loop — only redraws when state changes
   const frame = (): void => {
     if (needsRender) {
       needsRender = false;
       render();
     }
-    setTimeout(frame, 50); // 20 Hz poll
+    setTimeout(frame, 50);
   };
   frame();
 
-  // Safety: restore terminal on uncaught errors
   process.on("uncaughtException", (err) => {
     cleanup();
     process.stderr.write(`Fatal: ${err.message}\n`);
