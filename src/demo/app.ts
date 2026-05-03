@@ -106,86 +106,139 @@ function getTerminalHeight(): number {
 
 // --- Palette legend ---
 
-const PALETTE_GROUPS = [
+// Each entry is either a flat color or a fg/bg pair.
+// Pairs render as a single swatch: fg text on bg background.
+interface LegendFlat {
+  label: string;
+  color: string; // palette var name
+}
+
+interface LegendPair {
+  label: string;
+  fg: string; // palette var name for text
+  bg: string; // palette var name for background
+}
+
+type LegendEntry = LegendFlat | LegendPair;
+
+function isPair(e: LegendEntry): e is LegendPair {
+  return "fg" in e;
+}
+
+const PALETTE_GROUPS: { title: string; entries: LegendEntry[] }[] = [
   {
     title: "Core",
-    vars: [
-      "primary", "secondary", "accent", "boost",
-      "success", "warning", "error",
+    entries: [
+      { label: "primary", color: "primary" },
+      { label: "secondary", color: "secondary" },
+      { label: "accent", color: "accent" },
+      { label: "boost", color: "boost" },
+      { label: "success", color: "success" },
+      { label: "warning", color: "warning" },
+      { label: "error", color: "error" },
     ],
   },
   {
     title: "Surfaces",
-    vars: [
-      "background", "foreground", "panel", "surface",
-      "surface-active", "foreground-disabled",
-      "primary-background", "secondary-background",
+    entries: [
+      { label: "background", color: "background" },
+      { label: "foreground", color: "foreground" },
+      { label: "panel", color: "panel" },
+      { label: "surface", color: "surface" },
+      { label: "surface-active", color: "surface-active" },
+      { label: "foreground-disabled", color: "foreground-disabled" },
     ],
   },
   {
     title: "Text",
-    vars: [
-      "text", "text-primary", "text-secondary", "text-accent",
-      "text-muted", "text-success", "text-warning", "text-error",
-      "text-disabled",
+    entries: [
+      { label: "text", fg: "text", bg: "background" },
+      { label: "text-primary", fg: "text-primary", bg: "background" },
+      { label: "text-secondary", fg: "text-secondary", bg: "background" },
+      { label: "text-accent", fg: "text-accent", bg: "background" },
+      { label: "text-muted", fg: "text-muted", bg: "background" },
+      { label: "text-success", fg: "text-success", bg: "background" },
+      { label: "text-warning", fg: "text-warning", bg: "background" },
+      { label: "text-error", fg: "text-error", bg: "background" },
+      { label: "text-disabled", fg: "text-disabled", bg: "background" },
     ],
   },
   {
     title: "Borders & Buttons",
-    vars: [
-      "border", "border-blurred",
-      "button-foreground", "button-color-foreground",
+    entries: [
+      { label: "border", color: "border" },
+      { label: "border-blurred", color: "border-blurred" },
+      { label: "button", fg: "button-foreground", bg: "primary-background" },
+      { label: "button-color", fg: "button-color-foreground", bg: "primary-background" },
     ],
   },
   {
     title: "Cursor & Input",
-    vars: [
-      "block-cursor-background", "block-cursor-foreground",
-      "block-cursor-blurred-background", "block-cursor-blurred-foreground",
-      "block-hover-background",
-      "input-cursor-background", "input-cursor-foreground",
-      "input-selection-background",
+    entries: [
+      { label: "block-cursor", fg: "block-cursor-foreground", bg: "block-cursor-background" },
+      { label: "block-blurred", fg: "block-cursor-blurred-foreground", bg: "block-cursor-blurred-background" },
+      { label: "block-hover", color: "block-hover-background" },
+      { label: "input-cursor", fg: "input-cursor-foreground", bg: "input-cursor-background" },
+      { label: "input-selection", color: "input-selection-background" },
     ],
   },
   {
     title: "Links",
-    vars: [
-      "link-color", "link-color-hover",
-      "link-background", "link-background-hover",
+    entries: [
+      { label: "link", fg: "link-color", bg: "link-background" },
+      { label: "link-hover", fg: "link-color-hover", bg: "link-background-hover" },
     ],
   },
   {
     title: "Scrollbar",
-    vars: [
-      "scrollbar", "scrollbar-hover", "scrollbar-active",
-      "scrollbar-background", "scrollbar-background-hover",
-      "scrollbar-background-active", "scrollbar-corner-color",
+    entries: [
+      { label: "scrollbar", fg: "foreground", bg: "scrollbar" },
+      { label: "scrollbar-hover", fg: "foreground", bg: "scrollbar-hover" },
+      { label: "scrollbar-active", fg: "foreground", bg: "scrollbar-active" },
+      { label: "scrollbar-bg", color: "scrollbar-background" },
+      { label: "scrollbar-bg-hover", color: "scrollbar-background-hover" },
+      { label: "scrollbar-bg-active", color: "scrollbar-background-active" },
+      { label: "scrollbar-corner", color: "scrollbar-corner-color" },
     ],
   },
   {
     title: "Footer",
-    vars: [
-      "footer-background", "footer-foreground",
-      "footer-description-background", "footer-description-foreground",
-      "footer-item-background", "footer-key-background",
-      "footer-key-foreground",
+    entries: [
+      { label: "footer", fg: "footer-foreground", bg: "footer-background" },
+      { label: "footer-desc", fg: "footer-description-foreground", bg: "footer-description-background" },
+      { label: "footer-item", color: "footer-item-background" },
+      { label: "footer-key", fg: "footer-key-foreground", bg: "footer-key-background" },
     ],
   },
   {
     title: "Markdown Headings",
-    vars: [
-      "markdown-h1-color", "markdown-h1-background",
-      "markdown-h2-color", "markdown-h2-background",
-      "markdown-h3-color", "markdown-h3-background",
-      "markdown-h4-color", "markdown-h4-background",
-      "markdown-h5-color", "markdown-h5-background",
-      "markdown-h6-color", "markdown-h6-background",
+    entries: [
+      { label: "h1", fg: "markdown-h1-color", bg: "markdown-h1-background" },
+      { label: "h2", fg: "markdown-h2-color", bg: "markdown-h2-background" },
+      { label: "h3", fg: "markdown-h3-color", bg: "markdown-h3-background" },
+      { label: "h4", fg: "markdown-h4-color", bg: "markdown-h4-background" },
+      { label: "h5", fg: "markdown-h5-color", bg: "markdown-h5-background" },
+      { label: "h6", fg: "markdown-h6-color", bg: "markdown-h6-background" },
+    ],
+  },
+  {
+    title: "Primary / Secondary Backgrounds",
+    entries: [
+      { label: "primary-bg", color: "primary-background" },
+      { label: "secondary-bg", color: "secondary-background" },
     ],
   },
 ];
 
-const SWATCH_PAD = 2; // spaces inside swatch (1 left + 1 right)
-const GAP = 2; // gap between swatches
+const SWATCH_PAD = 2;
+const GAP = 2;
+
+function resolveRgba(
+  palette: { vars: ReadonlyMap<string, ColorRgba> },
+  name: string,
+): ColorRgba | null {
+  return palette.vars.get(name) ?? null;
+}
 
 function contrastFg(rgba: ColorRgba): string {
   const bright = rgba.red > 128 && rgba.green > 128 && rgba.blue > 128;
@@ -199,30 +252,38 @@ function buildPaletteLegend(width: number): string[] {
   const lines: string[] = [];
 
   for (const group of PALETTE_GROUPS) {
-    // Group header
     lines.push(`${DIM}  ${group.title}${RESET}`);
 
-    // Column width = longest name in this group + padding
-    const maxNameLen = Math.max(...group.vars.map((v) => v.length));
-    const colWidth = maxNameLen + SWATCH_PAD + GAP;
-
+    const maxLabelLen = Math.max(...group.entries.map((e) => e.label.length));
+    const colWidth = maxLabelLen + SWATCH_PAD + GAP;
     const cols = Math.max(1, Math.floor(width / colWidth));
 
-    for (let rowStart = 0; rowStart < group.vars.length; rowStart += cols) {
-      const rowVars = group.vars.slice(rowStart, rowStart + cols);
+    for (let rowStart = 0; rowStart < group.entries.length; rowStart += cols) {
+      const row = group.entries.slice(rowStart, rowStart + cols);
       let line = "";
-      for (const name of rowVars) {
-        const rgba = palette.vars.get(name);
-        // [LAW:dataflow-not-control-flow] missing var produces a dim
-        // placeholder — data decides output, not a skip branch.
-        if (!rgba) {
-          line += `${DIM} ${name.padEnd(maxNameLen)} ${RESET}${" ".repeat(GAP)}`;
-          continue;
+      for (const entry of row) {
+        const padded = entry.label.padEnd(maxLabelLen);
+
+        if (isPair(entry)) {
+          const fgRgba = resolveRgba(palette, entry.fg);
+          const bgRgba = resolveRgba(palette, entry.bg);
+          if (!fgRgba || !bgRgba) {
+            line += `${DIM} ${padded} ${RESET}${" ".repeat(GAP)}`;
+            continue;
+          }
+          const bgHex = colorToHex(bgRgba);
+          const fgHex = colorToHex(fgRgba);
+          line += `${hexToAnsiBg(bgHex)}${hexToAnsiFg(fgHex)} ${padded} ${RESET}${" ".repeat(GAP)}`;
+        } else {
+          const rgba = resolveRgba(palette, entry.color);
+          if (!rgba) {
+            line += `${DIM} ${padded} ${RESET}${" ".repeat(GAP)}`;
+            continue;
+          }
+          const hex = colorToHex(rgba);
+          const fg = contrastFg(rgba);
+          line += `${hexToAnsiBg(hex)}${hexToAnsiFg(fg)} ${padded} ${RESET}${" ".repeat(GAP)}`;
         }
-        const hex = colorToHex(rgba);
-        const fg = contrastFg(rgba);
-        const padded = name.padEnd(maxNameLen);
-        line += `${hexToAnsiBg(hex)}${hexToAnsiFg(fg)} ${padded} ${RESET}${" ".repeat(GAP)}`;
       }
       lines.push(line);
     }
