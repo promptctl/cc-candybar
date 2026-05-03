@@ -51,10 +51,6 @@ type MappingPreset = {
 
 const MAPPING_PRESETS: MappingPreset[] = [
   {
-    name: "Primary + Hue",
-    overrides: null,
-  },
-  {
     name: "Button",
     overrides: {
       directory:       { bg: "primary",   fg: "button-color-foreground" },
@@ -166,7 +162,7 @@ if (themeIdx === -1) themeIdx = 0;
 let sampleIdx = 0;
 let styleIdx = 0;
 let mappingIdx = 0;
-let hueStep: number | null = null;
+let hueStep = 0;
 const HUE_STEP_INCREMENT = 5;
 let needsRender = true;
 
@@ -470,7 +466,7 @@ function render(): void {
   const sample = MOCK_SAMPLES[sampleIdx]!;
   const style = styles[styleIdx]!;
   const preset = MAPPING_PRESETS[mappingIdx]!;
-  const hueLabel = hueStep === null ? "default" : `${hueStep}°`;
+  const hueLabel = `${hueStep}°`;
 
   const lines: string[] = [];
 
@@ -573,18 +569,17 @@ function handleInput(data: Buffer): void {
     }
     if (ch === 48) {
       // 0
-      hueStep = null;
+      hueStep = 0;
       needsRender = true;
     }
     if (ch === 43 || ch === 93 || ch === 46) {
       // + or ] or .
-      hueStep = (hueStep ?? 0) + HUE_STEP_INCREMENT;
+      hueStep += HUE_STEP_INCREMENT;
       needsRender = true;
     }
     if (ch === 45 || ch === 91 || ch === 44) {
       // - or [ or ,
-      const next = (hueStep ?? 0) - HUE_STEP_INCREMENT;
-      hueStep = next <= 0 ? null : next;
+      hueStep = Math.max(0, hueStep - HUE_STEP_INCREMENT);
       needsRender = true;
     }
   }
