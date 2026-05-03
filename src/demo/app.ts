@@ -37,7 +37,15 @@ const SEGMENT_COLOR_KEYS: Record<
 
 const themes = listAvailableThemes().filter((t) => t !== "custom");
 const styles: StripStyle[] = ["powerline", "capsule", "plain"];
-const HUE_STEPS = [null, 15, 30, 45, 60, 90, 120] as const;
+const HUE_STEPS = [
+  { value: null, label: "default" },
+  { value: 15, label: "15°" },
+  { value: 30, label: "30°" },
+  { value: 45, label: "45°" },
+  { value: 60, label: "60°" },
+  { value: 90, label: "90°" },
+  { value: 120, label: "120°" },
+] as const;
 
 let themeIdx = themes.indexOf("gruvbox");
 if (themeIdx === -1) themeIdx = 0;
@@ -80,7 +88,7 @@ function buildPowerlineBar(): string {
 
   const colors = resolveThemeColors({
     theme,
-    hueStep: hueStep ?? undefined,
+    hueStep: hueStep.value ?? undefined,
     colorSupport: "truecolor",
   });
 
@@ -114,7 +122,7 @@ function buildColorSwatches(): string {
 
   const colors = resolveThemeColors({
     theme,
-    hueStep: hueStep ?? undefined,
+    hueStep: hueStep.value ?? undefined,
     colorSupport: "truecolor",
   });
 
@@ -172,7 +180,7 @@ function render(): void {
   const themeLabel = `Theme: [←/→] ${theme}`;
   const styleLabel = `Style: [s] ${style}`;
   const sampleLabel = `Sample: [↑/↓] ${sampleIdx + 1}/${MOCK_SAMPLES.length} ${sample.name}`;
-  const hueStepLabel = `Hue Step: [h] ${hueStep ?? "off"}`;
+  const hueStepLabel = `Hue Step: [h] ${hueStep.label}`;
   const quitLabel = "[q] Quit  [r] Refresh";
 
   lines.push(
