@@ -1,5 +1,9 @@
 import process from "node:process";
-import { resolveThemeColors, listAvailableThemes } from "../themes/index.js";
+import {
+  resolveThemeColors,
+  listAvailableThemes,
+  type SegmentColors,
+} from "../themes/index.js";
 import { getThemePalette } from "../themes/palette-registry.js";
 import type { PowerlineHexColors } from "../themes/index.js";
 import {
@@ -8,6 +12,7 @@ import {
 } from "../render/strip.js";
 import { MOCK_SAMPLES, type MockSegment } from "./mock-data.js";
 import type { ColorRgba } from "rich-js";
+import type { SegmentOverride } from "../themes/cascade.js";
 
 // --- Segment type → PowerlineHexColors key mapping ---
 
@@ -34,6 +39,116 @@ const SEGMENT_COLOR_KEYS: Record<
   weekly: { bg: "weeklyBg", fg: "weeklyFg" },
 };
 
+// --- Mapping presets ---
+
+type MappingPreset = {
+  name: string;
+  // null = use semanticMapping defaults. Non-null = override passed to cascade.
+  overrides: Record<string, SegmentOverride> | null;
+};
+
+const MAPPING_PRESETS: MappingPreset[] = [
+  {
+    name: "Primary + Hue",
+    overrides: null,
+  },
+  {
+    name: "Semantic",
+    overrides: {
+      directory: { bg: "primary" },
+      git: { bg: "secondary" },
+      model: { bg: "accent" },
+      session: { bg: "success" },
+      context: { bg: "panel" },
+      contextWarning: { bg: "warning" },
+      contextCritical: { bg: "error" },
+      block: { bg: "boost" },
+      today: { bg: "primary" },
+      tmux: { bg: "secondary" },
+      metrics: { bg: "accent" },
+      version: { bg: "success" },
+      env: { bg: "panel" },
+      weekly: { bg: "boost" },
+    },
+  },
+  {
+    name: "Muted",
+    overrides: {
+      directory: { bg: "primary-muted" },
+      git: { bg: "secondary-muted" },
+      model: { bg: "accent-muted" },
+      session: { bg: "success-muted" },
+      context: { bg: "warning-muted" },
+      contextWarning: { bg: "warning" },
+      contextCritical: { bg: "error" },
+      block: { bg: "error-muted" },
+      today: { bg: "primary-muted" },
+      tmux: { bg: "secondary-muted" },
+      metrics: { bg: "accent-muted" },
+      version: { bg: "success-muted" },
+      env: { bg: "warning-muted" },
+      weekly: { bg: "error-muted" },
+    },
+  },
+  {
+    name: "Surface",
+    overrides: {
+      directory: { bg: "surface" },
+      git: { bg: "surface-active" },
+      model: { bg: "panel" },
+      session: { bg: "surface" },
+      context: { bg: "surface-active" },
+      contextWarning: { bg: "warning" },
+      contextCritical: { bg: "error" },
+      block: { bg: "panel" },
+      today: { bg: "surface" },
+      tmux: { bg: "surface-active" },
+      metrics: { bg: "panel" },
+      version: { bg: "surface" },
+      env: { bg: "surface-active" },
+      weekly: { bg: "panel" },
+    },
+  },
+  {
+    name: "Core 3-Hue",
+    overrides: {
+      directory: { bg: "primary", hue: 0 },
+      git: { bg: "primary", hue: 0 },
+      model: { bg: "secondary", hue: 0 },
+      session: { bg: "secondary", hue: 0 },
+      context: { bg: "accent", hue: 0 },
+      contextWarning: { bg: "warning" },
+      contextCritical: { bg: "error" },
+      block: { bg: "primary", hue: 0 },
+      today: { bg: "secondary", hue: 0 },
+      tmux: { bg: "accent", hue: 0 },
+      metrics: { bg: "primary", hue: 0 },
+      version: { bg: "secondary", hue: 0 },
+      env: { bg: "accent", hue: 0 },
+      weekly: { bg: "primary", hue: 0 },
+    },
+  },
+  {
+    name: "Backgrounds",
+    overrides: {
+      directory: { bg: "primary-background" },
+      git: { bg: "secondary-background" },
+      model: { bg: "primary-background" },
+      session: { bg: "secondary-background" },
+      context: { bg: "primary-background" },
+      contextWarning: { bg: "warning" },
+      contextCritical: { bg: "error" },
+      block: { bg: "secondary-background" },
+      today: { bg: "primary-background" },
+      tmux: { bg: "secondary-background" },
+      metrics: { bg: "primary-background" },
+      version: { bg: "secondary-background" },
+      env: { bg: "primary-background" },
+      weekly: { bg: "secondary-background" },
+    },
+  },
+];
+
 // --- State ---
 
 const themes = listAvailableThemes().filter((t) => t !== "custom");
@@ -43,7 +158,7 @@ let themeIdx = themes.indexOf("gruvbox");
 if (themeIdx === -1) themeIdx = 0;
 let sampleIdx = 0;
 let styleIdx = 0;
-// null = default curated offsets; number = uniform hueStep in degrees
+let mappingIdx = 0;
 let hueStep: number | null = null;
 const HUE_STEP_INCREMENT = 5;
 let needsRender = true;
@@ -81,19 +196,12 @@ function stripAnsi(s: string): number {
   let len = 0;
   for (let i = 0; i < s.length; i++) {
     if (s[i] === "\x1b") {
-      // skip to terminator
       while (i < s.length && s[i] !== "m") i++;
       continue;
     }
     len++;
   }
   return len;
-}
-
-function padRightAnsi(s: string, width: number): string {
-  const visible = stripAnsi(s);
-  if (visible >= width) return s;
-  return s + " ".repeat(width - visible);
 }
 
 function getTerminalWidth(): number {
@@ -105,24 +213,15 @@ function getTerminalHeight(): number {
 }
 
 // --- Palette legend ---
-// Every swatch shows two theme colors: one as background, one as foreground.
-// Pairings match how Textual actually uses them in widget CSS.
 
 interface LegendEntry {
   labels: string[];
-  fg: string; // palette var name for text
-  bg: string; // palette var name for background
+  fg: string;
+  bg: string;
 }
 
 const DEMO_TEXT = "The quick fox";
 
-// Pairings sourced from Textual widget default CSS:
-//   Button.-primary:  bg=$primary,    fg=$button-color-foreground
-//   Button flat:      bg=$*-muted,    fg=$text-*
-//   Header:           bg=$panel,      fg=$foreground
-//   Footer:           bg=$panel,      fg=$foreground
-//   Input:            bg=$surface,    fg=$foreground
-//   Label.primary:    bg=$primary-muted, fg=$text-primary
 const PALETTE_GROUPS: { title: string; entries: LegendEntry[] }[] = [
   {
     title: "Foreground / Background",
@@ -133,119 +232,48 @@ const PALETTE_GROUPS: { title: string; entries: LegendEntry[] }[] = [
     ],
   },
   {
-    title: "Core (as Button backgrounds)",
+    title: "Core",
     entries: [
-      { labels: ["button-color-fg", "primary"], fg: "button-color-foreground", bg: "primary" },
-      { labels: ["button-color-fg", "secondary"], fg: "button-color-foreground", bg: "secondary" },
-      { labels: ["button-color-fg", "accent"], fg: "button-color-foreground", bg: "accent" },
-      { labels: ["button-color-fg", "boost"], fg: "button-color-foreground", bg: "boost" },
-      { labels: ["button-color-fg", "success"], fg: "button-color-foreground", bg: "success" },
-      { labels: ["button-color-fg", "warning"], fg: "button-color-foreground", bg: "warning" },
-      { labels: ["button-color-fg", "error"], fg: "button-color-foreground", bg: "error" },
+      { labels: ["foreground", "primary"], fg: "foreground", bg: "primary" },
+      { labels: ["foreground", "secondary"], fg: "foreground", bg: "secondary" },
+      { labels: ["foreground", "accent"], fg: "foreground", bg: "accent" },
+      { labels: ["foreground", "boost"], fg: "foreground", bg: "boost" },
+      { labels: ["foreground", "success"], fg: "foreground", bg: "success" },
+      { labels: ["foreground", "warning"], fg: "foreground", bg: "warning" },
+      { labels: ["foreground", "error"], fg: "foreground", bg: "error" },
     ],
   },
   {
-    title: "Core Muted (as Label/flat Button backgrounds)",
+    title: "Core Muted",
     entries: [
-      { labels: ["text-primary", "primary-muted"], fg: "text-primary", bg: "primary-muted" },
-      { labels: ["text-secondary", "secondary-muted"], fg: "text-secondary", bg: "secondary-muted" },
-      { labels: ["text-accent", "accent-muted"], fg: "text-accent", bg: "accent-muted" },
-      { labels: ["text-success", "success-muted"], fg: "text-success", bg: "success-muted" },
-      { labels: ["text-warning", "warning-muted"], fg: "text-warning", bg: "warning-muted" },
-      { labels: ["text-error", "error-muted"], fg: "text-error", bg: "error-muted" },
+      { labels: ["foreground", "primary-muted"], fg: "foreground", bg: "primary-muted" },
+      { labels: ["foreground", "secondary-muted"], fg: "foreground", bg: "secondary-muted" },
+      { labels: ["foreground", "accent-muted"], fg: "foreground", bg: "accent-muted" },
+      { labels: ["foreground", "success-muted"], fg: "foreground", bg: "success-muted" },
+      { labels: ["foreground", "warning-muted"], fg: "foreground", bg: "warning-muted" },
+      { labels: ["foreground", "error-muted"], fg: "foreground", bg: "error-muted" },
     ],
   },
   {
-    title: "Surfaces (as widget backgrounds)",
+    title: "Surfaces",
     entries: [
       { labels: ["foreground", "surface"], fg: "foreground", bg: "surface" },
       { labels: ["foreground", "panel"], fg: "foreground", bg: "panel" },
       { labels: ["foreground", "surface-active"], fg: "foreground", bg: "surface-active" },
+      { labels: ["foreground", "primary-background"], fg: "foreground", bg: "primary-background" },
+      { labels: ["foreground", "secondary-background"], fg: "foreground", bg: "secondary-background" },
     ],
   },
   {
-    title: "Text (foreground on background)",
+    title: "Borders & Buttons",
     entries: [
-      { labels: ["text", "background"], fg: "text", bg: "background" },
-      { labels: ["text-primary", "background"], fg: "text-primary", bg: "background" },
-      { labels: ["text-secondary", "background"], fg: "text-secondary", bg: "background" },
-      { labels: ["text-accent", "background"], fg: "text-accent", bg: "background" },
-      { labels: ["text-muted", "background"], fg: "text-muted", bg: "background" },
-      { labels: ["text-success", "background"], fg: "text-success", bg: "background" },
-      { labels: ["text-warning", "background"], fg: "text-warning", bg: "background" },
-      { labels: ["text-error", "background"], fg: "text-error", bg: "background" },
-      { labels: ["text-disabled", "background"], fg: "text-disabled", bg: "background" },
-    ],
-  },
-  {
-    title: "Buttons & Borders",
-    entries: [
-      { labels: ["button-foreground", "surface"], fg: "button-foreground", bg: "surface" },
-      { labels: ["button-color-fg", "primary-background"], fg: "button-color-foreground", bg: "primary-background" },
-      { labels: ["button-color-fg", "secondary-background"], fg: "button-color-foreground", bg: "secondary-background" },
       { labels: ["foreground", "border"], fg: "foreground", bg: "border" },
       { labels: ["foreground", "border-blurred"], fg: "foreground", bg: "border-blurred" },
-    ],
-  },
-  {
-    title: "Cursor & Input",
-    entries: [
-      { labels: ["cursor-fg", "cursor-bg"], fg: "block-cursor-foreground", bg: "block-cursor-background" },
-      { labels: ["cursor-blurred-fg", "cursor-blurred-bg"], fg: "block-cursor-blurred-foreground", bg: "block-cursor-blurred-background" },
-      { labels: ["foreground", "block-hover-bg"], fg: "foreground", bg: "block-hover-background" },
-      { labels: ["input-cursor-fg", "input-cursor-bg"], fg: "input-cursor-foreground", bg: "input-cursor-background" },
-      { labels: ["foreground", "input-selection-bg"], fg: "foreground", bg: "input-selection-background" },
-    ],
-  },
-  {
-    title: "Links",
-    entries: [
-      { labels: ["link-color", "link-bg"], fg: "link-color", bg: "link-background" },
-      { labels: ["link-color-hover", "link-bg-hover"], fg: "link-color-hover", bg: "link-background-hover" },
-    ],
-  },
-  {
-    title: "Scrollbar",
-    entries: [
-      { labels: ["foreground", "scrollbar"], fg: "foreground", bg: "scrollbar" },
-      { labels: ["foreground", "scrollbar-hover"], fg: "foreground", bg: "scrollbar-hover" },
-      { labels: ["foreground", "scrollbar-active"], fg: "foreground", bg: "scrollbar-active" },
-      { labels: ["foreground", "scrollbar-bg"], fg: "foreground", bg: "scrollbar-background" },
-      { labels: ["foreground", "scrollbar-bg-hover"], fg: "foreground", bg: "scrollbar-background-hover" },
-      { labels: ["foreground", "scrollbar-bg-active"], fg: "foreground", bg: "scrollbar-background-active" },
-      { labels: ["foreground", "scrollbar-corner"], fg: "foreground", bg: "scrollbar-corner-color" },
-    ],
-  },
-  {
-    title: "Footer",
-    entries: [
-      { labels: ["footer-fg", "footer-bg"], fg: "footer-foreground", bg: "footer-background" },
-      { labels: ["footer-desc-fg", "footer-desc-bg"], fg: "footer-description-foreground", bg: "footer-description-background" },
-      { labels: ["foreground", "footer-item-bg"], fg: "foreground", bg: "footer-item-background" },
-      { labels: ["footer-key-fg", "footer-key-bg"], fg: "footer-key-foreground", bg: "footer-key-background" },
-    ],
-  },
-  {
-    title: "Markdown Headings",
-    entries: [
-      { labels: ["h1-color", "h1-bg"], fg: "markdown-h1-color", bg: "markdown-h1-background" },
-      { labels: ["h2-color", "h2-bg"], fg: "markdown-h2-color", bg: "markdown-h2-background" },
-      { labels: ["h3-color", "h3-bg"], fg: "markdown-h3-color", bg: "markdown-h3-background" },
-      { labels: ["h4-color", "h4-bg"], fg: "markdown-h4-color", bg: "markdown-h4-background" },
-      { labels: ["h5-color", "h5-bg"], fg: "markdown-h5-color", bg: "markdown-h5-background" },
-      { labels: ["h6-color", "h6-bg"], fg: "markdown-h6-color", bg: "markdown-h6-background" },
     ],
   },
 ];
 
 const GAP = 2;
-
-function resolveRgba(
-  palette: { vars: ReadonlyMap<string, ColorRgba> },
-  name: string,
-): ColorRgba | null {
-  return palette.vars.get(name) ?? null;
-}
 
 function buildPaletteLegend(width: number): string[] {
   const palette = getThemePalette(themes[themeIdx]!);
@@ -267,8 +295,8 @@ function buildPaletteLegend(width: number): string[] {
       const row = group.entries.slice(rowStart, rowStart + cols);
       let line = "";
       for (const entry of row) {
-        const fgRgba = resolveRgba(palette, entry.fg);
-        const bgRgba = resolveRgba(palette, entry.bg);
+        const fgRgba = palette.vars.get(entry.fg);
+        const bgRgba = palette.vars.get(entry.bg);
         if (!fgRgba || !bgRgba) {
           line += `${DIM}[${DEMO_TEXT}] ${entry.labels.join("  ")}${RESET}${" ".repeat(GAP)}`;
           continue;
@@ -292,10 +320,12 @@ function buildPowerlineBar(): string {
   const theme = themes[themeIdx]!;
   const sample = MOCK_SAMPLES[sampleIdx]!;
   const style = styles[styleIdx]!;
+  const preset = MAPPING_PRESETS[mappingIdx]!;
 
   const colors = resolveThemeColors({
     theme,
     hueStep: hueStep ?? undefined,
+    themeMapping: preset.overrides ?? undefined,
     colorSupport: "truecolor",
   });
 
@@ -325,10 +355,12 @@ function buildPowerlineBar(): string {
 
 function buildColorSwatches(): string {
   const theme = themes[themeIdx]!;
+  const preset = MAPPING_PRESETS[mappingIdx]!;
 
   const colors = resolveThemeColors({
     theme,
     hueStep: hueStep ?? undefined,
+    themeMapping: preset.overrides ?? undefined,
     colorSupport: "truecolor",
   });
 
@@ -357,6 +389,7 @@ function render(): void {
   const theme = themes[themeIdx]!;
   const sample = MOCK_SAMPLES[sampleIdx]!;
   const style = styles[styleIdx]!;
+  const preset = MAPPING_PRESETS[mappingIdx]!;
   const hueLabel = hueStep === null ? "default" : `${hueStep}°`;
 
   const lines: string[] = [];
@@ -392,9 +425,12 @@ function render(): void {
 
   // Palette legend (fills remaining space before controls)
   const paletteLines = buildPaletteLegend(width);
-  const controlsReserve = 3; // controls + spacer + bottom
+  const controlsReserve = 3;
   const availableLines = height - lines.length - controlsReserve;
-  const paletteLinesToShow = Math.min(paletteLines.length, Math.max(2, availableLines));
+  const paletteLinesToShow = Math.min(
+    paletteLines.length,
+    Math.max(2, availableLines),
+  );
 
   for (let i = 0; i < paletteLinesToShow; i++) {
     lines.push(paletteLines[i]!);
@@ -402,17 +438,18 @@ function render(): void {
 
   // Controls
   lines.push(`${BG_DARK}${" ".repeat(innerWidth)}${RESET}`);
+  const mappingLabel = `Mapping: [m] ${preset.name} (${mappingIdx + 1}/${MAPPING_PRESETS.length})`;
   const themeLabel = `Theme: [←/→] ${theme}`;
   const styleLabel = `Style: [s] ${style}`;
-  const sampleLabel = `Sample: [↑/↓] ${sampleIdx + 1}/${MOCK_SAMPLES.length} ${sample.name}`;
-  const hueStepLine = `Hue Step: [  ] ${hueLabel}  [+/-] ±${HUE_STEP_INCREMENT}°  [0] default`;
+  const sampleLabel = `Sample: [↑/↓] ${sampleIdx + 1}/${MOCK_SAMPLES.length}`;
+  const hueLine = `Hue: [  ] ${hueLabel}  [+/-] ±${HUE_STEP_INCREMENT}°  [0] default`;
   const quitLabel = "[q] Quit";
 
   lines.push(
-    `${BG_PANEL} ${themeLabel}    ${styleLabel}    ${sampleLabel}${RESET}`,
+    `${BG_PANEL} ${mappingLabel}    ${themeLabel}    ${styleLabel}${RESET}`,
   );
   lines.push(
-    `${BG_PANEL} ${hueStepLine}${" ".repeat(Math.max(1, innerWidth - stripAnsi(hueStepLine) - quitLabel.length - 2))}${quitLabel} ${RESET}`,
+    `${BG_PANEL} ${sampleLabel}    ${hueLine}${" ".repeat(Math.max(1, innerWidth - stripAnsi(sampleLabel) - stripAnsi(hueLine) - quitLabel.length - 6))}${quitLabel} ${RESET}`,
   );
 
   // Write
@@ -439,6 +476,16 @@ function handleInput(data: Buffer): void {
       cleanup();
       process.exit(0);
     }
+    if (ch === 109) {
+      // m
+      mappingIdx = (mappingIdx + 1) % MAPPING_PRESETS.length;
+      needsRender = true;
+    }
+    if (ch === 77) {
+      // M (shift+m)
+      mappingIdx = (mappingIdx - 1 + MAPPING_PRESETS.length) % MAPPING_PRESETS.length;
+      needsRender = true;
+    }
     if (ch === 115) {
       // s
       styleIdx = (styleIdx + 1) % styles.length;
@@ -449,19 +496,15 @@ function handleInput(data: Buffer): void {
       hueStep = null;
       needsRender = true;
     }
-    // + (0x2B or shift+= on some keyboards) or ] (0x5D)
     if (ch === 43 || ch === 93) {
+      // + or ]
       hueStep = (hueStep ?? 0) + HUE_STEP_INCREMENT;
       needsRender = true;
     }
-    // - (0x2D) or [ (0x5B)
     if (ch === 45 || ch === 91) {
+      // - or [
       const next = (hueStep ?? 0) - HUE_STEP_INCREMENT;
       hueStep = next <= 0 ? null : next;
-      needsRender = true;
-    }
-    if (ch === 114) {
-      // r
       needsRender = true;
     }
   }
@@ -470,22 +513,18 @@ function handleInput(data: Buffer): void {
   if (bytes.length === 3 && bytes[0] === 27 && bytes[1] === 91) {
     const dir = bytes[2]!;
     if (dir === 67) {
-      // right
       themeIdx = (themeIdx + 1) % themes.length;
       needsRender = true;
     }
     if (dir === 68) {
-      // left
       themeIdx = (themeIdx - 1 + themes.length) % themes.length;
       needsRender = true;
     }
     if (dir === 65) {
-      // up
       sampleIdx = (sampleIdx + 1) % MOCK_SAMPLES.length;
       needsRender = true;
     }
     if (dir === 66) {
-      // down
       sampleIdx = (sampleIdx - 1 + MOCK_SAMPLES.length) % MOCK_SAMPLES.length;
       needsRender = true;
     }
