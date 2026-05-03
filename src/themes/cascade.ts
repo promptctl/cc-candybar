@@ -97,16 +97,20 @@ function resolveSegment(
   const bgRgba = resolver.resolve(spec.bg);
   if (!bgRgba) return null;
 
-  const rotatedBg =
-    spec.hue != null && spec.hue !== 0 ? rotateHue(bgRgba, spec.hue) : bgRgba;
+  const applyHue = (c: ColorRgba): ColorRgba =>
+    spec.hue != null && spec.hue !== 0 ? rotateHue(c, spec.hue) : c;
+
+  const rotatedBg = applyHue(bgRgba);
 
   const bgCtx = { against: rotatedBg };
   const fgRgba = resolver.resolve(spec.fg, bgCtx);
   if (!fgRgba) return null;
 
+  const rotatedFg = applyHue(fgRgba);
+
   return {
     bgHex: colorToHex(rotatedBg),
-    fgHex: colorToHex(fgRgba),
+    fgHex: colorToHex(rotatedFg),
   };
 }
 
