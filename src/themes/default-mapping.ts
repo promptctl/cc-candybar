@@ -18,22 +18,22 @@ export interface SegmentColors {
 export type PaletteMapping = Record<string, SegmentColors>;
 
 export const semanticMapping: PaletteMapping = {
-  directory:       { bg: "primary", fg: "auto",  hue: 0 },
-  git:             { bg: "primary", fg: "auto",  hue: 25 },
-  gitTaculous:     { bg: "primary", fg: "auto",  hue: 25 },
-  model:           { bg: "primary", fg: "auto",  hue: 50 },
-  session:         { bg: "primary", fg: "auto",  hue: 75 },
-  block:           { bg: "primary", fg: "auto",  hue: 100 },
-  today:           { bg: "primary", fg: "auto",  hue: 125 },
-  tmux:            { bg: "primary", fg: "auto",  hue: 150 },
-  context:         { bg: "primary", fg: "auto",  hue: 175 },
-  contextWarning:  { bg: "warning", fg: "auto" },
-  contextCritical: { bg: "error",   fg: "auto" },
-  metrics:         { bg: "primary", fg: "auto",  hue: 200 },
-  version:         { bg: "primary", fg: "auto",  hue: 225 },
-  env:             { bg: "primary", fg: "auto",  hue: 250 },
-  weekly:          { bg: "primary", fg: "auto",  hue: 275 },
-  toolbar:         { bg: "primary", fg: "auto",  hue: 300 },
+  directory:       { bg: "primary", fg: "foreground",  hue: 0 },
+  git:             { bg: "primary", fg: "foreground",  hue: 25 },
+  gitTaculous:     { bg: "primary", fg: "foreground",  hue: 25 },
+  model:           { bg: "primary", fg: "foreground",  hue: 50 },
+  session:         { bg: "primary", fg: "foreground",  hue: 75 },
+  block:           { bg: "primary", fg: "foreground",  hue: 100 },
+  today:           { bg: "primary", fg: "foreground",  hue: 125 },
+  tmux:            { bg: "primary", fg: "foreground",  hue: 150 },
+  context:         { bg: "primary", fg: "foreground",  hue: 175 },
+  contextWarning:  { bg: "warning", fg: "foreground" },
+  contextCritical: { bg: "error",   fg: "foreground" },
+  metrics:         { bg: "primary", fg: "foreground",  hue: 200 },
+  version:         { bg: "primary", fg: "foreground",  hue: 225 },
+  env:             { bg: "primary", fg: "foreground",  hue: 250 },
+  weekly:          { bg: "primary", fg: "foreground",  hue: 275 },
+  toolbar:         { bg: "primary", fg: "foreground",  hue: 300 },
 };
 
 /**
@@ -68,11 +68,11 @@ export function mappingFromHueStep(step: number): PaletteMapping {
   let hueIndex = 0;
   for (const name of SEGMENT_ORDER) {
     if (name === "contextWarning") {
-      result[name] = { bg: "warning", fg: "auto" };
+      result[name] = { bg: "warning", fg: "foreground" };
     } else if (name === "contextCritical") {
-      result[name] = { bg: "error", fg: "auto" };
+      result[name] = { bg: "error", fg: "foreground" };
     } else {
-      result[name] = { bg: "primary", fg: "auto", hue: hueIndex * step };
+      result[name] = { bg: "primary", fg: "foreground", hue: hueIndex * step };
       hueIndex++;
     }
   }
