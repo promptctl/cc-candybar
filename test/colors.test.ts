@@ -126,10 +126,21 @@ describe("Colors", () => {
       }
     });
 
-    it("should produce different bg colors across segments via hue rotation", () => {
+    it("should produce uniform bg colors without hueStep", () => {
       const colors = resolveThemeColors({
         theme: "gruvbox",
         colorSupport: "truecolor",
+      });
+      // Default mapping is uniform — all segments use primary
+      expect(colors.hex!.modeBg).toBe(colors.hex!.gitBg);
+      expect(colors.hex!.modeBg).toBe(colors.hex!.modelBg);
+    });
+
+    it("should produce distinct bg colors with hueStep", () => {
+      const colors = resolveThemeColors({
+        theme: "gruvbox",
+        colorSupport: "truecolor",
+        hueStep: 30,
       });
       const bgs = new Set([
         colors.hex!.modeBg,
@@ -137,7 +148,6 @@ describe("Colors", () => {
         colors.hex!.modelBg,
         colors.hex!.sessionBg,
       ]);
-      // Hue rotation should produce at least 3 distinct bg colors
       expect(bgs.size).toBeGreaterThanOrEqual(3);
     });
 

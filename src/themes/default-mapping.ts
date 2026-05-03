@@ -1,39 +1,39 @@
 /**
- * Default semantic mapping from segment names to Textual palette variables.
+ * Default mapping from segment names to Textual palette variables.
  *
- * All segments use `primary` as the bg base variable with OKLCH hue rotation
- * for visual variety. The `hue` field specifies the rotation offset in degrees.
+ * All segments use the same base (primary bg, foreground fg).
+ * Variety comes from hueStep at resolution time, which rotates
+ * the base color by position — not from hardcoded per-segment offsets.
  *
- * `contextWarning` and `contextCritical` use `warning`/`error` directly —
- * these are semantically fixed colors (yellow/red) that must not rotate.
+ * contextWarning and contextCritical use warning/error directly —
+ * these are semantically fixed colors that must not rotate.
  */
 
 export interface SegmentColors {
   bg: string;
   fg: string;
-  /** OKLCH hue rotation offset in degrees. 0 = no rotation. */
   hue?: number;
 }
 
 export type PaletteMapping = Record<string, SegmentColors>;
 
 export const semanticMapping: PaletteMapping = {
-  directory:       { bg: "primary", fg: "foreground",  hue: 0 },
-  git:             { bg: "primary", fg: "foreground",  hue: 25 },
-  gitTaculous:     { bg: "primary", fg: "foreground",  hue: 25 },
-  model:           { bg: "primary", fg: "foreground",  hue: 50 },
-  session:         { bg: "primary", fg: "foreground",  hue: 75 },
-  block:           { bg: "primary", fg: "foreground",  hue: 100 },
-  today:           { bg: "primary", fg: "foreground",  hue: 125 },
-  tmux:            { bg: "primary", fg: "foreground",  hue: 150 },
-  context:         { bg: "primary", fg: "foreground",  hue: 175 },
+  directory:       { bg: "primary", fg: "foreground" },
+  git:             { bg: "primary", fg: "foreground" },
+  gitTaculous:     { bg: "primary", fg: "foreground" },
+  model:           { bg: "primary", fg: "foreground" },
+  session:         { bg: "primary", fg: "foreground" },
+  block:           { bg: "primary", fg: "foreground" },
+  today:           { bg: "primary", fg: "foreground" },
+  tmux:            { bg: "primary", fg: "foreground" },
+  context:         { bg: "primary", fg: "foreground" },
   contextWarning:  { bg: "warning", fg: "foreground" },
   contextCritical: { bg: "error",   fg: "foreground" },
-  metrics:         { bg: "primary", fg: "foreground",  hue: 200 },
-  version:         { bg: "primary", fg: "foreground",  hue: 225 },
-  env:             { bg: "primary", fg: "foreground",  hue: 250 },
-  weekly:          { bg: "primary", fg: "foreground",  hue: 275 },
-  toolbar:         { bg: "primary", fg: "foreground",  hue: 300 },
+  metrics:         { bg: "primary", fg: "foreground" },
+  version:         { bg: "primary", fg: "foreground" },
+  env:             { bg: "primary", fg: "foreground" },
+  weekly:          { bg: "primary", fg: "foreground" },
+  toolbar:         { bg: "primary", fg: "foreground" },
 };
 
 /**
