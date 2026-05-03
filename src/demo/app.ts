@@ -522,7 +522,7 @@ function render(): void {
   const themeLabel = `Theme: [←/→] ${theme}`;
   const styleLabel = `Style: [s] ${style}`;
   const sampleLabel = `Sample: [↑/↓] ${sampleIdx + 1}/${MOCK_SAMPLES.length}`;
-  const hueLine = `Hue: [  ] ${hueLabel}  [+/-] ±${HUE_STEP_INCREMENT}°  [0] default`;
+  const hueLine = `Hue: [,/.] ${hueLabel}  [+/-] ±${HUE_STEP_INCREMENT}°  [0] default`;
   const quitLabel = "[q] Quit";
 
   lines.push(
@@ -576,13 +576,13 @@ function handleInput(data: Buffer): void {
       hueStep = null;
       needsRender = true;
     }
-    if (ch === 43 || ch === 93) {
-      // + or ]
+    if (ch === 43 || ch === 93 || ch === 46) {
+      // + or ] or .
       hueStep = (hueStep ?? 0) + HUE_STEP_INCREMENT;
       needsRender = true;
     }
-    if (ch === 45 || ch === 91) {
-      // - or [
+    if (ch === 45 || ch === 91 || ch === 44) {
+      // - or [ or ,
       const next = (hueStep ?? 0) - HUE_STEP_INCREMENT;
       hueStep = next <= 0 ? null : next;
       needsRender = true;
