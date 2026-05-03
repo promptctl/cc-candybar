@@ -52,23 +52,7 @@ type MappingPreset = {
 const MAPPING_PRESETS: MappingPreset[] = [
   {
     name: "Button",
-    overrides: {
-      directory:       { bg: "primary",   fg: "button-color-foreground" },
-      git:             { bg: "secondary", fg: "button-color-foreground" },
-      gitTaculous:     { bg: "secondary", fg: "button-color-foreground" },
-      model:           { bg: "accent",    fg: "button-color-foreground" },
-      session:         { bg: "success",   fg: "button-color-foreground" },
-      context:         { bg: "panel",     fg: "foreground" },
-      contextWarning:  { bg: "warning",   fg: "button-color-foreground" },
-      contextCritical: { bg: "error",     fg: "button-color-foreground" },
-      block:           { bg: "boost",     fg: "button-color-foreground" },
-      today:           { bg: "primary",   fg: "button-color-foreground" },
-      tmux:            { bg: "secondary", fg: "button-color-foreground" },
-      metrics:         { bg: "accent",    fg: "button-color-foreground" },
-      version:         { bg: "success",   fg: "button-color-foreground" },
-      env:             { bg: "panel",     fg: "foreground" },
-      weekly:          { bg: "boost",     fg: "button-color-foreground" },
-    },
+    overrides: null,
   },
   {
     name: "Muted + Text",
@@ -162,8 +146,6 @@ if (themeIdx === -1) themeIdx = 0;
 let sampleIdx = 0;
 let styleIdx = 0;
 let mappingIdx = 0;
-let hueStep = 0;
-const HUE_STEP_INCREMENT = 5;
 let needsRender = true;
 
 // --- ANSI helpers ---
@@ -400,7 +382,6 @@ function buildPowerlineBar(): string {
 
   const colors = resolveThemeColors({
     theme,
-    hueStep: hueStep ?? undefined,
     themeMapping: preset.overrides ?? undefined,
     colorSupport: "truecolor",
   });
@@ -435,7 +416,6 @@ function buildColorSwatches(): string {
 
   const colors = resolveThemeColors({
     theme,
-    hueStep: hueStep ?? undefined,
     themeMapping: preset.overrides ?? undefined,
     colorSupport: "truecolor",
   });
@@ -466,7 +446,6 @@ function render(): void {
   const sample = MOCK_SAMPLES[sampleIdx]!;
   const style = styles[styleIdx]!;
   const preset = MAPPING_PRESETS[mappingIdx]!;
-  const hueLabel = `${hueStep}°`;
 
   const lines: string[] = [];
 
@@ -518,14 +497,13 @@ function render(): void {
   const themeLabel = `Theme: [←/→] ${theme}`;
   const styleLabel = `Style: [s] ${style}`;
   const sampleLabel = `Sample: [↑/↓] ${sampleIdx + 1}/${MOCK_SAMPLES.length}`;
-  const hueLine = `Hue: [,/.] ${hueLabel}  [+/-] ±${HUE_STEP_INCREMENT}°  [0] default`;
   const quitLabel = "[q] Quit";
 
   lines.push(
     `${BG_PANEL} ${mappingLabel}    ${themeLabel}    ${styleLabel}${RESET}`,
   );
   lines.push(
-    `${BG_PANEL} ${sampleLabel}    ${hueLine}${" ".repeat(Math.max(1, innerWidth - stripAnsi(sampleLabel) - stripAnsi(hueLine) - quitLabel.length - 6))}${quitLabel} ${RESET}`,
+    `${BG_PANEL} ${sampleLabel}${" ".repeat(Math.max(1, innerWidth - stripAnsi(sampleLabel) - quitLabel.length - 2))}${quitLabel} ${RESET}`,
   );
 
   // Write
@@ -565,21 +543,6 @@ function handleInput(data: Buffer): void {
     if (ch === 115) {
       // s
       styleIdx = (styleIdx + 1) % styles.length;
-      needsRender = true;
-    }
-    if (ch === 48) {
-      // 0
-      hueStep = 0;
-      needsRender = true;
-    }
-    if (ch === 43 || ch === 93 || ch === 46) {
-      // + or ] or .
-      hueStep += HUE_STEP_INCREMENT;
-      needsRender = true;
-    }
-    if (ch === 45 || ch === 91 || ch === 44) {
-      // - or [ or ,
-      hueStep = Math.max(0, hueStep - HUE_STEP_INCREMENT);
       needsRender = true;
     }
   }

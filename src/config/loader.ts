@@ -81,7 +81,6 @@ export interface PowerlineConfig {
     custom: ColorTheme;
   };
   themeMapping?: Record<string, SegmentColorOverride>;
-  hueStep?: number;
   budget?: BudgetConfig;
   modelContextLimits?: Record<string, number>;
 }

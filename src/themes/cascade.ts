@@ -11,10 +11,8 @@ import {
   hexColorDistance,
 } from "../utils/colors";
 import { RESET_CODE } from "../utils/constants";
-import { rotateHue } from "./oklch.js";
 import {
   semanticMapping,
-  mappingFromHueStep,
   type PaletteMapping,
   type SegmentColors,
 } from "./default-mapping.js";
@@ -45,7 +43,6 @@ function colorToHex(c: ColorRgba): string {
 export interface SegmentOverride {
   bg?: string;
   fg?: string;
-  hue?: number;
   palette?: string;
 }
 
@@ -57,11 +54,10 @@ function mergeOverrides(
   const merged: PaletteMapping = { ...base };
   for (const [seg, ov] of Object.entries(overrides)) {
     if (!ov) continue;
-    const existing = merged[seg] ?? { bg: "primary", fg: "auto" };
+    const existing = merged[seg] ?? { bg: "primary", fg: "foreground" };
     merged[seg] = {
       bg: ov.bg ?? existing.bg,
       fg: ov.fg ?? existing.fg,
-      hue: ov.hue ?? existing.hue,
     };
     // [LAW:locality-or-seam] Per-segment palette pull is stored as a special
     // marker — the cascade resolver reads it when resolving that segment.
@@ -97,20 +93,13 @@ function resolveSegment(
   const bgRgba = resolver.resolve(spec.bg);
   if (!bgRgba) return null;
 
-  const applyHue = (c: ColorRgba): ColorRgba =>
-    spec.hue != null && spec.hue !== 0 ? rotateHue(c, spec.hue) : c;
-
-  const rotatedBg = applyHue(bgRgba);
-
-  const bgCtx = { against: rotatedBg };
+  const bgCtx = { against: bgRgba };
   const fgRgba = resolver.resolve(spec.fg, bgCtx);
   if (!fgRgba) return null;
 
-  const rotatedFg = applyHue(fgRgba);
-
   return {
-    bgHex: colorToHex(rotatedBg),
-    fgHex: colorToHex(rotatedFg),
+    bgHex: colorToHex(bgRgba),
+    fgHex: colorToHex(fgRgba),
   };
 }
 
@@ -123,7 +112,7 @@ function customThemeToOverrides(
   for (const [seg, colors] of Object.entries(custom)) {
     if (!colors) continue;
     const c = colors as { bg?: string; fg?: string };
-    overrides[seg] = { bg: c.bg, fg: c.fg, hue: 0 };
+    overrides[seg] = { bg: c.bg, fg: c.fg };
   }
   return overrides;
 }
@@ -133,7 +122,6 @@ function customThemeToOverrides(
 export interface CascadeConfig {
   theme: string;
   themeMapping?: Record<string, SegmentOverride>;
-  hueStep?: number;
   customColors?: ColorTheme;
   colorSupport: "none" | "ansi" | "ansi256" | "truecolor";
   isTui?: boolean;
@@ -147,11 +135,7 @@ export function resolveThemeColors(config: CascadeConfig): PowerlineColors {
     throw new Error(`Unknown theme palette: "${config.theme}"`);
   }
 
-  // Select mapping: hueStep generates one, otherwise use semantic default
-  let mapping: PaletteMapping =
-    config.hueStep != null
-      ? mappingFromHueStep(config.hueStep)
-      : semanticMapping;
+  let mapping: PaletteMapping = semanticMapping;
 
   // Merge custom theme colors (backward compat with colors.custom)
   if (config.customColors) {
