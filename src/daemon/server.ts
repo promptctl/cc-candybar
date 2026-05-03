@@ -1,7 +1,9 @@
 import fs from "node:fs";
 import net from "node:net";
+import os from "node:os";
 import path from "node:path";
 import process from "node:process";
+import { spawnSync } from "node:child_process";
 import { daemonDir, pidPath, socketPath } from "./paths";
 import { dlog, closeLog } from "./log";
 import {
@@ -17,6 +19,7 @@ import { CachedUsageProvider } from "./cache/usage";
 import { WatcherRegistry } from "./cache/watchers";
 import { RuntimeStats } from "./stats";
 import { makeLimits, realLimitsDeps, type LimitsHandle } from "./limits";
+import { ToolbarState } from "./toolbar-state";
 
 // [LAW:one-source-of-truth] one cache instance per daemon process — multiple
 // instances would defeat the share-across-sessions invariant.
@@ -24,6 +27,7 @@ const stats = new RuntimeStats();
 const watcherRegistry = new WatcherRegistry({ counters: stats });
 const gitService = new CachedGitService({ watchers: watcherRegistry });
 const usageProvider = new CachedUsageProvider();
+const toolbarState = new ToolbarState();
 
 const IDLE_SHUTDOWN_MS = 30 * 60 * 1000;
 const REQUEST_TIMEOUT_MS = 200;
@@ -366,6 +370,7 @@ async function handleRequest(req: Request): Promise<Response> {
       const renderer = new PowerlineRenderer(config, {
         gitService,
         usageProvider,
+        toolbarState,
       });
       const output = await renderer.generateStatusline(req.hookData);
       const ms = Date.now() - t0;
@@ -382,7 +387,74 @@ async function handleRequest(req: Request): Promise<Response> {
     }
   }
 
+  if (req.kind === "click") {
+    return handleClick(req.verb, req.value);
+  }
+
   return { ok: false, error: "unknown kind", code: "BAD_REQUEST" };
+}
+
+// --- click verb dispatch ---
+// [LAW:dataflow-not-control-flow] Verb dispatch table — each entry maps a verb
+// to a handler. Adding a verb means adding a row, not branching deeper.
+const clickHandlers: Record<string, (value: string) => void> = {
+  copy: clickCopy,
+  "open-vscode": clickOpenVscode,
+  "toolbar-toggle": clickToolbarToggle,
+};
+
+function handleClick(verb: string, value: string): Response {
+  const handler = clickHandlers[verb];
+  if (!handler) {
+    return { ok: false, error: `unknown click verb: ${verb}`, code: "BAD_REQUEST" };
+  }
+  try {
+    handler(value);
+    return { ok: true, output: "" };
+  } catch (e) {
+    return {
+      ok: false,
+      error: String(e instanceof Error ? e.message : e),
+      code: "RENDER_FAILED",
+    };
+  }
+}
+
+function clickCopy(text: string): void {
+  const result = spawnSync("/usr/bin/pbcopy", [], { input: text });
+  if (result.status !== 0) {
+    throw new Error(`pbcopy failed (status ${result.status})`);
+  }
+}
+
+function clickOpenVscode(target: string): void {
+  const result = spawnSync("/usr/bin/open", [
+    "-a",
+    "Visual Studio Code",
+    target,
+  ]);
+  if (result.status !== 0) {
+    throw new Error(`open -a "Visual Studio Code" failed (status ${result.status})`);
+  }
+}
+
+function clickToolbarToggle(sessionId: string): void {
+  if (!sessionId) return;
+  if (sessionId.includes("/") || sessionId.includes("..")) return;
+  // Update in-memory state (authoritative) + file (persistence for cold start).
+  toolbarState.toggle(sessionId);
+  const dir = path.join(os.homedir(), ".claude", ".toolbar-state");
+  const flagPath = path.join(dir, sessionId);
+  try {
+    if (fs.existsSync(flagPath)) {
+      fs.unlinkSync(flagPath);
+    } else {
+      fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(flagPath, "");
+    }
+  } catch (e) {
+    dlog("warn", `toolbar-toggle file write failed: ${(e as Error).message}`);
+  }
 }
 
 // Suppress "unused path import" — kept for clarity if we add directory ops.
