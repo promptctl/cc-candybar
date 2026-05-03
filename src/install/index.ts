@@ -343,11 +343,14 @@ function openInVscode(target: string): void {
 export function runInstall(rendererArgs: string[]): void {
   ensureMacOS();
 
+  const force = rendererArgs.includes("--force");
+  const filteredArgs = rendererArgs.filter((a) => a !== "--force");
+
   const argsToInstall =
-    rendererArgs.length > 0 ? rendererArgs : [...DEFAULT_INSTALL_ARGS];
+    filteredArgs.length > 0 ? filteredArgs : [...DEFAULT_INSTALL_ARGS];
 
   runInstallUrlHandler();
-  updateClaudeSettings(argsToInstall);
+  updateClaudeSettings(argsToInstall, force);
 
   process.stdout.write(`✓ install complete.\n`);
   process.stdout.write(
@@ -355,8 +358,12 @@ export function runInstall(rendererArgs: string[]): void {
   );
 }
 
-function updateClaudeSettings(rendererArgs: readonly string[]): void {
-  const target = settingsJsonPath();
+function updateClaudeSettings(
+  rendererArgs: readonly string[],
+  force: boolean,
+  overridePath?: string,
+): void {
+  const target = overridePath ?? settingsJsonPath();
   fs.mkdirSync(path.dirname(target), { recursive: true });
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -369,6 +376,22 @@ function updateClaudeSettings(rendererArgs: readonly string[]): void {
         `Could not parse ${target}: ${err instanceof Error ? err.message : String(err)}`,
       );
     }
+  }
+
+  const existing = settings.statusLine?.command as string | undefined;
+  // [LAW:one-source-of-truth] Detection: if the existing command starts with
+  // our package prefix, we (or a prior version of us) wrote it. Any other
+  // value is a user customization we must not silently destroy.
+  const managedPrefix = `pnpm dlx ${PACKAGE_NAME}@`;
+  const isOurs = typeof existing === "string" && existing.startsWith(managedPrefix);
+
+  if (existing && !isOurs && !force) {
+    process.stderr.write(
+      `Skipping settings.json update: existing statusLine.command appears customized.\n` +
+        `  Current: ${existing}\n` +
+        `  To overwrite, re-run with --force.\n`,
+    );
+    return;
   }
 
   settings.statusLine = {
@@ -385,4 +408,5 @@ export const __test__ = {
   shellEscape,
   buildStatusLineCommand,
   DEFAULT_INSTALL_ARGS,
+  updateClaudeSettings,
 };
