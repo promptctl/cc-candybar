@@ -2,6 +2,8 @@ import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import { execFileSync, spawnSync } from "node:child_process";
+import { tryClickViaDaemon } from "../daemon/client";
+import { spawnDaemonDetached } from "../daemon/spawn";
 
 // [LAW:one-source-of-truth] Replaced at build time by tsdown's `define` option
 // from package.json. The pinned version is what we write into settings.json so
@@ -254,6 +256,22 @@ export function runUrlHandle(rawUrl: string | undefined): void {
     process.exit(1);
   }
 
+  // [LAW:dataflow-not-control-flow] Route through daemon first; local fallback
+  // only when daemon is unreachable. Same pattern as render path: daemon-first
+  // with graceful degradation.
+  void runUrlHandleAsync(parsed);
+}
+
+async function runUrlHandleAsync(parsed: ParsedUrl): Promise<void> {
+  const outcome = await tryClickViaDaemon(parsed.verb, parsed.value);
+  if (outcome.ok) {
+    process.exit(0);
+  }
+
+  // Daemon unavailable — fall back to local handlers so user clicks never
+  // silently fail. Spawn daemon so the *next* click hits the daemon.
+  spawnDaemonDetached();
+
   // [LAW:dataflow-not-control-flow] Verb dispatch table — each entry maps a
   // verb name to a handler that takes the parsed value. Adding a verb means
   // adding a row, not branching deeper.
@@ -268,6 +286,7 @@ export function runUrlHandle(rawUrl: string | undefined): void {
     process.exit(1);
   }
   handler(parsed.value);
+  process.exit(0);
 }
 
 function copyToClipboard(text: string): void {

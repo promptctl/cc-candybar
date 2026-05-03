@@ -10,6 +10,7 @@ import type {
   MetricsInfo,
 } from ".";
 import type { TodayInfo } from "./today";
+import type { ToolbarStateReader } from "../daemon/toolbar-state";
 
 import {
   formatModelName,
@@ -302,6 +303,7 @@ export class SegmentRenderer {
   constructor(
     private readonly config: PowerlineConfig,
     private readonly symbols: PowerlineSymbols,
+    private readonly toolbarState?: ToolbarStateReader,
   ) {}
 
   renderDirectory(
@@ -1042,7 +1044,7 @@ export class SegmentRenderer {
     if (!items || items.length === 0) return null;
     const sep = config.separator ?? " ";
 
-    const expanded = isToolbarExpanded(ctx.sessionId);
+    const expanded = isToolbarExpanded(ctx.sessionId, this.toolbarState);
     const parts: string[] = [];
     for (const item of items) {
       if (item.extra && !expanded) continue;
@@ -1186,13 +1188,17 @@ export function parseToolbarDsl(raw: string): ToolbarItem[] {
   return items;
 }
 
-// Per-session toolbar collapse/expand state. Presence of the flag file
-// `~/.claude/.toolbar-state/<sessionId>` means expanded. The click handler
-// (toolbar-toggle verb) receives the session id as its URL value and toggles
-// the corresponding file. Sessions accumulate forever; acceptable for v1.
-function isToolbarExpanded(sessionId: string | undefined): boolean {
+// Per-session toolbar collapse/expand state. When the daemon provides an
+// in-memory ToolbarStateReader, it is authoritative (the daemon owns mutations
+// via click handlers). File fallback is for non-daemon renders only.
+function isToolbarExpanded(
+  sessionId: string | undefined,
+  state?: ToolbarStateReader,
+): boolean {
+  if (!sessionId) return false;
+  if (state) return state.isExpanded(sessionId);
   const home = globalThis.process?.env?.HOME;
-  if (!home || !sessionId) return false;
+  if (!home) return false;
   try {
     return fsSync.existsSync(
       pathSync.join(home, ".claude", ".toolbar-state", sessionId),

@@ -19,12 +19,23 @@ export interface ShutdownRequest {
   kind: "shutdown";
 }
 
+export interface ClickRequest {
+  v: number;
+  kind: "click";
+  verb: string;
+  value: string;
+}
+
 export interface StatsRequest {
   v: number;
   kind: "stats";
 }
 
-export type Request = RenderRequest | ShutdownRequest | StatsRequest;
+export type Request =
+  | RenderRequest
+  | ShutdownRequest
+  | StatsRequest
+  | ClickRequest;
 
 export type Response =
   | { ok: true; output: string }

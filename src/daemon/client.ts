@@ -6,6 +6,7 @@ import type { Response } from "./protocol";
 
 const CONNECT_TIMEOUT_MS = 50;
 const TOTAL_BUDGET_MS = 150;
+const CLICK_BUDGET_MS = 200;
 
 export interface ClientOutcome {
   ok: boolean;
@@ -45,6 +46,36 @@ export async function tryRenderViaDaemon(
     }
     if (resp.ok) {
       return { ok: false, reason: "unexpected stats response to render" };
+    }
+    return { ok: false, reason: resp.code };
+  } catch (e) {
+    return { ok: false, reason: e instanceof Error ? e.message : String(e) };
+  } finally {
+    if (sock) sock.destroy();
+  }
+}
+
+// [LAW:dataflow-not-control-flow] Same pattern as tryRenderViaDaemon: outcome
+// is data, caller branches uniformly on ok/!ok.
+export async function tryClickViaDaemon(
+  verb: string,
+  value: string,
+): Promise<ClientOutcome> {
+  let sock: net.Socket | null = null;
+  try {
+    sock = await connectWithTimeout(socketPath(), CONNECT_TIMEOUT_MS);
+    const resp: Response = await sendOne(
+      sock,
+      {
+        v: PROTOCOL_VERSION,
+        kind: "click",
+        verb,
+        value,
+      },
+      CLICK_BUDGET_MS,
+    );
+    if (resp.ok) {
+      return { ok: true };
     }
     return { ok: false, reason: resp.code };
   } catch (e) {

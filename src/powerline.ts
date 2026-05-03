@@ -21,6 +21,7 @@ import type {
   WeeklySegmentConfig,
   ToolbarSegmentConfig,
 } from "./segments";
+import type { ToolbarStateReader } from "./daemon/toolbar-state";
 import { formatModelName, shortenModelName } from "./utils/formatters";
 import type { BlockInfo } from "./segments/block";
 import type { TodayInfo } from "./segments/today";
@@ -163,16 +164,22 @@ export class PowerlineRenderer {
   private _tmuxService?: TmuxService;
   private _metricsProvider?: MetricsProvider;
   private _segmentRenderer?: SegmentRenderer;
+  private _toolbarState?: ToolbarStateReader;
 
   constructor(
     private readonly config: PowerlineConfig,
-    deps?: { gitService?: GitService; usageProvider?: UsageProvider },
+    deps?: {
+      gitService?: GitService;
+      usageProvider?: UsageProvider;
+      toolbarState?: ToolbarStateReader;
+    },
   ) {
     this.symbols = this.initializeSymbols();
     // [LAW:locality-or-seam] dependency injection lets the daemon swap in
     // cached service implementations without the renderer knowing.
     if (deps?.gitService) this._gitService = deps.gitService;
     if (deps?.usageProvider) this._usageProvider = deps.usageProvider;
+    if (deps?.toolbarState) this._toolbarState = deps.toolbarState;
   }
 
   private get usageProvider(): UsageProvider {
@@ -226,7 +233,11 @@ export class PowerlineRenderer {
 
   private get segmentRenderer(): SegmentRenderer {
     if (!this._segmentRenderer) {
-      this._segmentRenderer = new SegmentRenderer(this.config, this.symbols);
+      this._segmentRenderer = new SegmentRenderer(
+        this.config,
+        this.symbols,
+        this._toolbarState,
+      );
     }
     return this._segmentRenderer;
   }
