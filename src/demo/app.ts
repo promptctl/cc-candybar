@@ -106,7 +106,7 @@ function getTerminalHeight(): number {
 
 // --- Palette legend ---
 // Every swatch shows two theme colors: one as background, one as foreground.
-// No arbitrary/contrast-picked colors — both come from the palette.
+// Pairings match how Textual actually uses them in widget CSS.
 
 interface LegendEntry {
   labels: string[];
@@ -116,31 +116,55 @@ interface LegendEntry {
 
 const DEMO_TEXT = "The quick fox";
 
+// Pairings sourced from Textual widget default CSS:
+//   Button.-primary:  bg=$primary,    fg=$button-color-foreground
+//   Button flat:      bg=$*-muted,    fg=$text-*
+//   Header:           bg=$panel,      fg=$foreground
+//   Footer:           bg=$panel,      fg=$foreground
+//   Input:            bg=$surface,    fg=$foreground
+//   Label.primary:    bg=$primary-muted, fg=$text-primary
 const PALETTE_GROUPS: { title: string; entries: LegendEntry[] }[] = [
   {
-    title: "Core",
-    entries: [
-      { labels: ["primary"], fg: "foreground", bg: "primary" },
-      { labels: ["secondary"], fg: "foreground", bg: "secondary" },
-      { labels: ["accent"], fg: "foreground", bg: "accent" },
-      { labels: ["boost"], fg: "foreground", bg: "boost" },
-      { labels: ["success"], fg: "text-success", bg: "success" },
-      { labels: ["warning"], fg: "text-warning", bg: "warning" },
-      { labels: ["error"], fg: "text-error", bg: "error" },
-    ],
-  },
-  {
-    title: "Surfaces",
+    title: "Foreground / Background",
     entries: [
       { labels: ["foreground", "background"], fg: "foreground", bg: "background" },
-      { labels: ["foreground", "panel"], fg: "foreground", bg: "panel" },
-      { labels: ["foreground", "surface"], fg: "foreground", bg: "surface" },
-      { labels: ["foreground", "surface-active"], fg: "foreground", bg: "surface-active" },
+      { labels: ["foreground-muted", "background"], fg: "foreground-muted", bg: "background" },
       { labels: ["foreground-disabled", "background"], fg: "foreground-disabled", bg: "background" },
     ],
   },
   {
-    title: "Text",
+    title: "Core (as Button backgrounds)",
+    entries: [
+      { labels: ["button-color-fg", "primary"], fg: "button-color-foreground", bg: "primary" },
+      { labels: ["button-color-fg", "secondary"], fg: "button-color-foreground", bg: "secondary" },
+      { labels: ["button-color-fg", "accent"], fg: "button-color-foreground", bg: "accent" },
+      { labels: ["button-color-fg", "boost"], fg: "button-color-foreground", bg: "boost" },
+      { labels: ["button-color-fg", "success"], fg: "button-color-foreground", bg: "success" },
+      { labels: ["button-color-fg", "warning"], fg: "button-color-foreground", bg: "warning" },
+      { labels: ["button-color-fg", "error"], fg: "button-color-foreground", bg: "error" },
+    ],
+  },
+  {
+    title: "Core Muted (as Label/flat Button backgrounds)",
+    entries: [
+      { labels: ["text-primary", "primary-muted"], fg: "text-primary", bg: "primary-muted" },
+      { labels: ["text-secondary", "secondary-muted"], fg: "text-secondary", bg: "secondary-muted" },
+      { labels: ["text-accent", "accent-muted"], fg: "text-accent", bg: "accent-muted" },
+      { labels: ["text-success", "success-muted"], fg: "text-success", bg: "success-muted" },
+      { labels: ["text-warning", "warning-muted"], fg: "text-warning", bg: "warning-muted" },
+      { labels: ["text-error", "error-muted"], fg: "text-error", bg: "error-muted" },
+    ],
+  },
+  {
+    title: "Surfaces (as widget backgrounds)",
+    entries: [
+      { labels: ["foreground", "surface"], fg: "foreground", bg: "surface" },
+      { labels: ["foreground", "panel"], fg: "foreground", bg: "panel" },
+      { labels: ["foreground", "surface-active"], fg: "foreground", bg: "surface-active" },
+    ],
+  },
+  {
+    title: "Text (foreground on background)",
     entries: [
       { labels: ["text", "background"], fg: "text", bg: "background" },
       { labels: ["text-primary", "background"], fg: "text-primary", bg: "background" },
@@ -154,29 +178,30 @@ const PALETTE_GROUPS: { title: string; entries: LegendEntry[] }[] = [
     ],
   },
   {
-    title: "Borders & Buttons",
+    title: "Buttons & Borders",
     entries: [
+      { labels: ["button-foreground", "surface"], fg: "button-foreground", bg: "surface" },
+      { labels: ["button-color-fg", "primary-background"], fg: "button-color-foreground", bg: "primary-background" },
+      { labels: ["button-color-fg", "secondary-background"], fg: "button-color-foreground", bg: "secondary-background" },
       { labels: ["foreground", "border"], fg: "foreground", bg: "border" },
       { labels: ["foreground", "border-blurred"], fg: "foreground", bg: "border-blurred" },
-      { labels: ["button-foreground", "primary-background"], fg: "button-foreground", bg: "primary-background" },
-      { labels: ["button-color-foreground", "primary-background"], fg: "button-color-foreground", bg: "primary-background" },
     ],
   },
   {
     title: "Cursor & Input",
     entries: [
-      { labels: ["block-cursor-foreground", "block-cursor-background"], fg: "block-cursor-foreground", bg: "block-cursor-background" },
-      { labels: ["block-cursor-blurred-fg", "block-cursor-blurred-bg"], fg: "block-cursor-blurred-foreground", bg: "block-cursor-blurred-background" },
-      { labels: ["foreground", "block-hover-background"], fg: "foreground", bg: "block-hover-background" },
-      { labels: ["input-cursor-foreground", "input-cursor-background"], fg: "input-cursor-foreground", bg: "input-cursor-background" },
-      { labels: ["foreground", "input-selection-background"], fg: "foreground", bg: "input-selection-background" },
+      { labels: ["cursor-fg", "cursor-bg"], fg: "block-cursor-foreground", bg: "block-cursor-background" },
+      { labels: ["cursor-blurred-fg", "cursor-blurred-bg"], fg: "block-cursor-blurred-foreground", bg: "block-cursor-blurred-background" },
+      { labels: ["foreground", "block-hover-bg"], fg: "foreground", bg: "block-hover-background" },
+      { labels: ["input-cursor-fg", "input-cursor-bg"], fg: "input-cursor-foreground", bg: "input-cursor-background" },
+      { labels: ["foreground", "input-selection-bg"], fg: "foreground", bg: "input-selection-background" },
     ],
   },
   {
     title: "Links",
     entries: [
-      { labels: ["link-color", "link-background"], fg: "link-color", bg: "link-background" },
-      { labels: ["link-color-hover", "link-background-hover"], fg: "link-color-hover", bg: "link-background-hover" },
+      { labels: ["link-color", "link-bg"], fg: "link-color", bg: "link-background" },
+      { labels: ["link-color-hover", "link-bg-hover"], fg: "link-color-hover", bg: "link-background-hover" },
     ],
   },
   {
@@ -185,19 +210,19 @@ const PALETTE_GROUPS: { title: string; entries: LegendEntry[] }[] = [
       { labels: ["foreground", "scrollbar"], fg: "foreground", bg: "scrollbar" },
       { labels: ["foreground", "scrollbar-hover"], fg: "foreground", bg: "scrollbar-hover" },
       { labels: ["foreground", "scrollbar-active"], fg: "foreground", bg: "scrollbar-active" },
-      { labels: ["foreground", "scrollbar-background"], fg: "foreground", bg: "scrollbar-background" },
-      { labels: ["foreground", "scrollbar-background-hover"], fg: "foreground", bg: "scrollbar-background-hover" },
-      { labels: ["foreground", "scrollbar-background-active"], fg: "foreground", bg: "scrollbar-background-active" },
-      { labels: ["foreground", "scrollbar-corner-color"], fg: "foreground", bg: "scrollbar-corner-color" },
+      { labels: ["foreground", "scrollbar-bg"], fg: "foreground", bg: "scrollbar-background" },
+      { labels: ["foreground", "scrollbar-bg-hover"], fg: "foreground", bg: "scrollbar-background-hover" },
+      { labels: ["foreground", "scrollbar-bg-active"], fg: "foreground", bg: "scrollbar-background-active" },
+      { labels: ["foreground", "scrollbar-corner"], fg: "foreground", bg: "scrollbar-corner-color" },
     ],
   },
   {
     title: "Footer",
     entries: [
-      { labels: ["footer-foreground", "footer-background"], fg: "footer-foreground", bg: "footer-background" },
+      { labels: ["footer-fg", "footer-bg"], fg: "footer-foreground", bg: "footer-background" },
       { labels: ["footer-desc-fg", "footer-desc-bg"], fg: "footer-description-foreground", bg: "footer-description-background" },
-      { labels: ["foreground", "footer-item-background"], fg: "foreground", bg: "footer-item-background" },
-      { labels: ["footer-key-foreground", "footer-key-background"], fg: "footer-key-foreground", bg: "footer-key-background" },
+      { labels: ["foreground", "footer-item-bg"], fg: "foreground", bg: "footer-item-background" },
+      { labels: ["footer-key-fg", "footer-key-bg"], fg: "footer-key-foreground", bg: "footer-key-background" },
     ],
   },
   {
@@ -209,13 +234,6 @@ const PALETTE_GROUPS: { title: string; entries: LegendEntry[] }[] = [
       { labels: ["h4-color", "h4-bg"], fg: "markdown-h4-color", bg: "markdown-h4-background" },
       { labels: ["h5-color", "h5-bg"], fg: "markdown-h5-color", bg: "markdown-h5-background" },
       { labels: ["h6-color", "h6-bg"], fg: "markdown-h6-color", bg: "markdown-h6-background" },
-    ],
-  },
-  {
-    title: "Backgrounds",
-    entries: [
-      { labels: ["foreground", "primary-background"], fg: "foreground", bg: "primary-background" },
-      { labels: ["foreground", "secondary-background"], fg: "foreground", bg: "secondary-background" },
     ],
   },
 ];
