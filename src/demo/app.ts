@@ -105,24 +105,13 @@ function getTerminalHeight(): number {
 }
 
 // --- Palette legend ---
+// Every swatch shows two theme colors: one as background, one as foreground.
+// No arbitrary/contrast-picked colors — both come from the palette.
 
-// Each entry is either a flat color or a fg/bg pair.
-// Pairs render as a single swatch: fg text on bg background.
-interface LegendFlat {
-  labels: string[];
-  color: string; // palette var name
-}
-
-interface LegendPair {
+interface LegendEntry {
   labels: string[];
   fg: string; // palette var name for text
   bg: string; // palette var name for background
-}
-
-type LegendEntry = LegendFlat | LegendPair;
-
-function isPair(e: LegendEntry): e is LegendPair {
-  return "fg" in e;
 }
 
 const DEMO_TEXT = "The quick fox";
@@ -131,45 +120,44 @@ const PALETTE_GROUPS: { title: string; entries: LegendEntry[] }[] = [
   {
     title: "Core",
     entries: [
-      { labels: ["primary"], color: "primary" },
-      { labels: ["secondary"], color: "secondary" },
-      { labels: ["accent"], color: "accent" },
-      { labels: ["boost"], color: "boost" },
-      { labels: ["success"], color: "success" },
-      { labels: ["warning"], color: "warning" },
-      { labels: ["error"], color: "error" },
+      { labels: ["primary"], fg: "foreground", bg: "primary" },
+      { labels: ["secondary"], fg: "foreground", bg: "secondary" },
+      { labels: ["accent"], fg: "foreground", bg: "accent" },
+      { labels: ["boost"], fg: "foreground", bg: "boost" },
+      { labels: ["success"], fg: "text-success", bg: "success" },
+      { labels: ["warning"], fg: "text-warning", bg: "warning" },
+      { labels: ["error"], fg: "text-error", bg: "error" },
     ],
   },
   {
     title: "Surfaces",
     entries: [
-      { labels: ["background"], color: "background" },
-      { labels: ["foreground"], color: "foreground" },
-      { labels: ["panel"], color: "panel" },
-      { labels: ["surface"], color: "surface" },
-      { labels: ["surface-active"], color: "surface-active" },
-      { labels: ["foreground-disabled"], color: "foreground-disabled" },
+      { labels: ["foreground", "background"], fg: "foreground", bg: "background" },
+      { labels: ["foreground", "panel"], fg: "foreground", bg: "panel" },
+      { labels: ["foreground", "surface"], fg: "foreground", bg: "surface" },
+      { labels: ["foreground", "surface-active"], fg: "foreground", bg: "surface-active" },
+      { labels: ["foreground-disabled", "background"], fg: "foreground-disabled", bg: "background" },
     ],
   },
   {
     title: "Text",
     entries: [
-      { labels: ["text"], fg: "text", bg: "background" },
-      { labels: ["text-primary"], fg: "text-primary", bg: "background" },
-      { labels: ["text-secondary"], fg: "text-secondary", bg: "background" },
-      { labels: ["text-accent"], fg: "text-accent", bg: "background" },
-      { labels: ["text-muted"], fg: "text-muted", bg: "background" },
-      { labels: ["text-success"], fg: "text-success", bg: "background" },
-      { labels: ["text-warning"], fg: "text-warning", bg: "background" },
-      { labels: ["text-error"], fg: "text-error", bg: "background" },
-      { labels: ["text-disabled"], fg: "text-disabled", bg: "background" },
+      { labels: ["text", "background"], fg: "text", bg: "background" },
+      { labels: ["text-primary", "background"], fg: "text-primary", bg: "background" },
+      { labels: ["text-secondary", "background"], fg: "text-secondary", bg: "background" },
+      { labels: ["text-accent", "background"], fg: "text-accent", bg: "background" },
+      { labels: ["text-muted", "background"], fg: "text-muted", bg: "background" },
+      { labels: ["text-success", "background"], fg: "text-success", bg: "background" },
+      { labels: ["text-warning", "background"], fg: "text-warning", bg: "background" },
+      { labels: ["text-error", "background"], fg: "text-error", bg: "background" },
+      { labels: ["text-disabled", "background"], fg: "text-disabled", bg: "background" },
     ],
   },
   {
     title: "Borders & Buttons",
     entries: [
-      { labels: ["border"], color: "border" },
-      { labels: ["border-blurred"], color: "border-blurred" },
+      { labels: ["foreground", "border"], fg: "foreground", bg: "border" },
+      { labels: ["foreground", "border-blurred"], fg: "foreground", bg: "border-blurred" },
       { labels: ["button-foreground", "primary-background"], fg: "button-foreground", bg: "primary-background" },
       { labels: ["button-color-foreground", "primary-background"], fg: "button-color-foreground", bg: "primary-background" },
     ],
@@ -177,39 +165,39 @@ const PALETTE_GROUPS: { title: string; entries: LegendEntry[] }[] = [
   {
     title: "Cursor & Input",
     entries: [
-      { labels: ["block-cursor-fg", "block-cursor-bg"], fg: "block-cursor-foreground", bg: "block-cursor-background" },
-      { labels: ["block-blurred-fg", "block-blurred-bg"], fg: "block-cursor-blurred-foreground", bg: "block-cursor-blurred-background" },
-      { labels: ["block-hover-background"], color: "block-hover-background" },
-      { labels: ["input-cursor-fg", "input-cursor-bg"], fg: "input-cursor-foreground", bg: "input-cursor-background" },
-      { labels: ["input-selection"], color: "input-selection-background" },
+      { labels: ["block-cursor-foreground", "block-cursor-background"], fg: "block-cursor-foreground", bg: "block-cursor-background" },
+      { labels: ["block-cursor-blurred-fg", "block-cursor-blurred-bg"], fg: "block-cursor-blurred-foreground", bg: "block-cursor-blurred-background" },
+      { labels: ["foreground", "block-hover-background"], fg: "foreground", bg: "block-hover-background" },
+      { labels: ["input-cursor-foreground", "input-cursor-background"], fg: "input-cursor-foreground", bg: "input-cursor-background" },
+      { labels: ["foreground", "input-selection-background"], fg: "foreground", bg: "input-selection-background" },
     ],
   },
   {
     title: "Links",
     entries: [
       { labels: ["link-color", "link-background"], fg: "link-color", bg: "link-background" },
-      { labels: ["link-color-hover", "link-bg-hover"], fg: "link-color-hover", bg: "link-background-hover" },
+      { labels: ["link-color-hover", "link-background-hover"], fg: "link-color-hover", bg: "link-background-hover" },
     ],
   },
   {
     title: "Scrollbar",
     entries: [
-      { labels: ["scrollbar"], fg: "foreground", bg: "scrollbar" },
-      { labels: ["scrollbar-hover"], fg: "foreground", bg: "scrollbar-hover" },
-      { labels: ["scrollbar-active"], fg: "foreground", bg: "scrollbar-active" },
-      { labels: ["scrollbar-background"], color: "scrollbar-background" },
-      { labels: ["scrollbar-bg-hover"], color: "scrollbar-background-hover" },
-      { labels: ["scrollbar-bg-active"], color: "scrollbar-background-active" },
-      { labels: ["scrollbar-corner"], color: "scrollbar-corner-color" },
+      { labels: ["foreground", "scrollbar"], fg: "foreground", bg: "scrollbar" },
+      { labels: ["foreground", "scrollbar-hover"], fg: "foreground", bg: "scrollbar-hover" },
+      { labels: ["foreground", "scrollbar-active"], fg: "foreground", bg: "scrollbar-active" },
+      { labels: ["foreground", "scrollbar-background"], fg: "foreground", bg: "scrollbar-background" },
+      { labels: ["foreground", "scrollbar-background-hover"], fg: "foreground", bg: "scrollbar-background-hover" },
+      { labels: ["foreground", "scrollbar-background-active"], fg: "foreground", bg: "scrollbar-background-active" },
+      { labels: ["foreground", "scrollbar-corner-color"], fg: "foreground", bg: "scrollbar-corner-color" },
     ],
   },
   {
     title: "Footer",
     entries: [
-      { labels: ["footer-fg", "footer-bg"], fg: "footer-foreground", bg: "footer-background" },
+      { labels: ["footer-foreground", "footer-background"], fg: "footer-foreground", bg: "footer-background" },
       { labels: ["footer-desc-fg", "footer-desc-bg"], fg: "footer-description-foreground", bg: "footer-description-background" },
-      { labels: ["footer-item-bg"], color: "footer-item-background" },
-      { labels: ["footer-key-fg", "footer-key-bg"], fg: "footer-key-foreground", bg: "footer-key-background" },
+      { labels: ["foreground", "footer-item-background"], fg: "foreground", bg: "footer-item-background" },
+      { labels: ["footer-key-foreground", "footer-key-background"], fg: "footer-key-foreground", bg: "footer-key-background" },
     ],
   },
   {
@@ -224,10 +212,10 @@ const PALETTE_GROUPS: { title: string; entries: LegendEntry[] }[] = [
     ],
   },
   {
-    title: "Primary / Secondary Backgrounds",
+    title: "Backgrounds",
     entries: [
-      { labels: ["primary-background"], color: "primary-background" },
-      { labels: ["secondary-background"], color: "secondary-background" },
+      { labels: ["foreground", "primary-background"], fg: "foreground", bg: "primary-background" },
+      { labels: ["foreground", "secondary-background"], fg: "foreground", bg: "secondary-background" },
     ],
   },
 ];
@@ -241,11 +229,6 @@ function resolveRgba(
   return palette.vars.get(name) ?? null;
 }
 
-function contrastFg(rgba: ColorRgba): string {
-  const bright = rgba.red > 128 && rgba.green > 128 && rgba.blue > 128;
-  return bright ? "#000000" : "#ffffff";
-}
-
 function buildPaletteLegend(width: number): string[] {
   const palette = getThemePalette(themes[themeIdx]!);
   if (!palette) return [];
@@ -255,9 +238,7 @@ function buildPaletteLegend(width: number): string[] {
   for (const group of PALETTE_GROUPS) {
     lines.push(`${DIM}  ${group.title}${RESET}`);
 
-    // Each entry renders as: [swatch DEMO_TEXT] label1 label2
-    // Column width = swatch width + max labels text + gap
-    const swatchVisible = DEMO_TEXT.length + 2; // spaces around demo text
+    const swatchVisible = DEMO_TEXT.length + 2;
     const maxLabelsLen = Math.max(
       ...group.entries.map((e) => e.labels.join("  ").length),
     );
@@ -268,30 +249,17 @@ function buildPaletteLegend(width: number): string[] {
       const row = group.entries.slice(rowStart, rowStart + cols);
       let line = "";
       for (const entry of row) {
-        if (isPair(entry)) {
-          const fgRgba = resolveRgba(palette, entry.fg);
-          const bgRgba = resolveRgba(palette, entry.bg);
-          if (!fgRgba || !bgRgba) {
-            line += `${DIM}[${DEMO_TEXT}] ${entry.labels.join("  ")}${RESET}${" ".repeat(GAP)}`;
-            continue;
-          }
-          const bgHex = colorToHex(bgRgba);
-          const fgHex = colorToHex(fgRgba);
-          const swatch = `${hexToAnsiBg(bgHex)}${hexToAnsiFg(fgHex)} ${DEMO_TEXT} ${RESET}`;
-          const labels = entry.labels.join("  ").padEnd(maxLabelsLen);
-          line += `${swatch} ${DIM}${labels}${RESET}${" ".repeat(GAP)}`;
-        } else {
-          const rgba = resolveRgba(palette, entry.color);
-          if (!rgba) {
-            line += `${DIM}[${DEMO_TEXT}] ${entry.labels.join("  ")}${RESET}${" ".repeat(GAP)}`;
-            continue;
-          }
-          const hex = colorToHex(rgba);
-          const fg = contrastFg(rgba);
-          const swatch = `${hexToAnsiBg(hex)}${hexToAnsiFg(fg)} ${DEMO_TEXT} ${RESET}`;
-          const labels = entry.labels.join("  ").padEnd(maxLabelsLen);
-          line += `${swatch} ${DIM}${labels}${RESET}${" ".repeat(GAP)}`;
+        const fgRgba = resolveRgba(palette, entry.fg);
+        const bgRgba = resolveRgba(palette, entry.bg);
+        if (!fgRgba || !bgRgba) {
+          line += `${DIM}[${DEMO_TEXT}] ${entry.labels.join("  ")}${RESET}${" ".repeat(GAP)}`;
+          continue;
         }
+        const fgHex = colorToHex(fgRgba);
+        const bgHex = colorToHex(bgRgba);
+        const swatch = `${hexToAnsiBg(bgHex)}${hexToAnsiFg(fgHex)} ${DEMO_TEXT} ${RESET}`;
+        const labels = entry.labels.join("  ").padEnd(maxLabelsLen);
+        line += `${swatch} ${DIM}${labels}${RESET}${" ".repeat(GAP)}`;
       }
       lines.push(line);
     }
