@@ -12,10 +12,9 @@ import {
   makeFrameReader,
 } from "./protocol";
 import type { Request, Response } from "./protocol";
-import { PowerlineRenderer } from "../powerline";
-import { loadConfigFromCLI } from "../config/loader";
 import { CachedGitService } from "./cache/git";
 import { CachedUsageProvider } from "./cache/usage";
+import { RenderCache } from "./cache/render";
 import { WatcherRegistry } from "./cache/watchers";
 import { RuntimeStats } from "./stats";
 import { makeLimits, realLimitsDeps, type LimitsHandle } from "./limits";
@@ -28,6 +27,7 @@ const watcherRegistry = new WatcherRegistry({ counters: stats });
 const gitService = new CachedGitService({ watchers: watcherRegistry });
 const usageProvider = new CachedUsageProvider();
 const toolbarState = new ToolbarState();
+const renderCache = new RenderCache({ gitService, usageProvider, toolbarState });
 
 const IDLE_SHUTDOWN_MS = 30 * 60 * 1000;
 const REQUEST_TIMEOUT_MS = 200;
@@ -366,12 +366,11 @@ async function handleRequest(req: Request): Promise<Response> {
       // [LAW:dataflow-not-control-flow] thread the *request's* cwd, not the
       // daemon's process.cwd(), so config resolution depends only on request
       // data — the daemon's own working directory must not influence output.
-      const config = loadConfigFromCLI(req.args, projectDir, req.cwd);
-      const renderer = new PowerlineRenderer(config, {
-        gitService,
-        usageProvider,
-        toolbarState,
-      });
+      const { renderer } = renderCache.getOrCreate(
+        req.args,
+        projectDir,
+        req.cwd,
+      );
       const output = await renderer.generateStatusline(req.hookData);
       const ms = Date.now() - t0;
       const g = gitService.getStats();
