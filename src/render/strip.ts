@@ -62,7 +62,6 @@ export function buildLineStrip(
   const strip = new Strip(cells, joiner);
   return renderToString(strip, {
     colorSystem: options.colorCompatibility,
-    endWithNewline: false,
   });
 }
 
@@ -87,7 +86,6 @@ export function buildFlexStripLines(
   const out = renderToString(flex, {
     width: options.width,
     colorSystem: options.colorCompatibility,
-    endWithNewline: false,
   });
   return out.endsWith("\n") ? out.slice(0, -1) : out;
 }
