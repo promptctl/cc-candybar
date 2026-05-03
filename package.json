@@ -25,6 +25,7 @@
     "test": "jest",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
+    "demo": "tsx src/demo/app.ts",
     "benchmark:timing": "scripts/benchmark_timing.sh",
     "prepublishOnly": "npm run lint && npm run typecheck && npm run build"
   },
@@ -75,6 +76,7 @@
     "semantic-release": "^25.0.2",
     "ts-jest": "^29.4.1",
     "tsdown": "^0.21.4",
+    "tsx": "^4.21.0",
     "typescript": "^5.0.0"
   },
   "dependencies": {
