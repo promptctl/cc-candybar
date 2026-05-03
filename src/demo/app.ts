@@ -109,12 +109,12 @@ function getTerminalHeight(): number {
 // Each entry is either a flat color or a fg/bg pair.
 // Pairs render as a single swatch: fg text on bg background.
 interface LegendFlat {
-  label: string;
+  labels: string[];
   color: string; // palette var name
 }
 
 interface LegendPair {
-  label: string;
+  labels: string[];
   fg: string; // palette var name for text
   bg: string; // palette var name for background
 }
@@ -125,112 +125,113 @@ function isPair(e: LegendEntry): e is LegendPair {
   return "fg" in e;
 }
 
+const DEMO_TEXT = "The quick fox";
+
 const PALETTE_GROUPS: { title: string; entries: LegendEntry[] }[] = [
   {
     title: "Core",
     entries: [
-      { label: "primary", color: "primary" },
-      { label: "secondary", color: "secondary" },
-      { label: "accent", color: "accent" },
-      { label: "boost", color: "boost" },
-      { label: "success", color: "success" },
-      { label: "warning", color: "warning" },
-      { label: "error", color: "error" },
+      { labels: ["primary"], color: "primary" },
+      { labels: ["secondary"], color: "secondary" },
+      { labels: ["accent"], color: "accent" },
+      { labels: ["boost"], color: "boost" },
+      { labels: ["success"], color: "success" },
+      { labels: ["warning"], color: "warning" },
+      { labels: ["error"], color: "error" },
     ],
   },
   {
     title: "Surfaces",
     entries: [
-      { label: "background", color: "background" },
-      { label: "foreground", color: "foreground" },
-      { label: "panel", color: "panel" },
-      { label: "surface", color: "surface" },
-      { label: "surface-active", color: "surface-active" },
-      { label: "foreground-disabled", color: "foreground-disabled" },
+      { labels: ["background"], color: "background" },
+      { labels: ["foreground"], color: "foreground" },
+      { labels: ["panel"], color: "panel" },
+      { labels: ["surface"], color: "surface" },
+      { labels: ["surface-active"], color: "surface-active" },
+      { labels: ["foreground-disabled"], color: "foreground-disabled" },
     ],
   },
   {
     title: "Text",
     entries: [
-      { label: "text", fg: "text", bg: "background" },
-      { label: "text-primary", fg: "text-primary", bg: "background" },
-      { label: "text-secondary", fg: "text-secondary", bg: "background" },
-      { label: "text-accent", fg: "text-accent", bg: "background" },
-      { label: "text-muted", fg: "text-muted", bg: "background" },
-      { label: "text-success", fg: "text-success", bg: "background" },
-      { label: "text-warning", fg: "text-warning", bg: "background" },
-      { label: "text-error", fg: "text-error", bg: "background" },
-      { label: "text-disabled", fg: "text-disabled", bg: "background" },
+      { labels: ["text"], fg: "text", bg: "background" },
+      { labels: ["text-primary"], fg: "text-primary", bg: "background" },
+      { labels: ["text-secondary"], fg: "text-secondary", bg: "background" },
+      { labels: ["text-accent"], fg: "text-accent", bg: "background" },
+      { labels: ["text-muted"], fg: "text-muted", bg: "background" },
+      { labels: ["text-success"], fg: "text-success", bg: "background" },
+      { labels: ["text-warning"], fg: "text-warning", bg: "background" },
+      { labels: ["text-error"], fg: "text-error", bg: "background" },
+      { labels: ["text-disabled"], fg: "text-disabled", bg: "background" },
     ],
   },
   {
     title: "Borders & Buttons",
     entries: [
-      { label: "border", color: "border" },
-      { label: "border-blurred", color: "border-blurred" },
-      { label: "button", fg: "button-foreground", bg: "primary-background" },
-      { label: "button-color", fg: "button-color-foreground", bg: "primary-background" },
+      { labels: ["border"], color: "border" },
+      { labels: ["border-blurred"], color: "border-blurred" },
+      { labels: ["button-foreground", "primary-background"], fg: "button-foreground", bg: "primary-background" },
+      { labels: ["button-color-foreground", "primary-background"], fg: "button-color-foreground", bg: "primary-background" },
     ],
   },
   {
     title: "Cursor & Input",
     entries: [
-      { label: "block-cursor", fg: "block-cursor-foreground", bg: "block-cursor-background" },
-      { label: "block-blurred", fg: "block-cursor-blurred-foreground", bg: "block-cursor-blurred-background" },
-      { label: "block-hover", color: "block-hover-background" },
-      { label: "input-cursor", fg: "input-cursor-foreground", bg: "input-cursor-background" },
-      { label: "input-selection", color: "input-selection-background" },
+      { labels: ["block-cursor-fg", "block-cursor-bg"], fg: "block-cursor-foreground", bg: "block-cursor-background" },
+      { labels: ["block-blurred-fg", "block-blurred-bg"], fg: "block-cursor-blurred-foreground", bg: "block-cursor-blurred-background" },
+      { labels: ["block-hover-background"], color: "block-hover-background" },
+      { labels: ["input-cursor-fg", "input-cursor-bg"], fg: "input-cursor-foreground", bg: "input-cursor-background" },
+      { labels: ["input-selection"], color: "input-selection-background" },
     ],
   },
   {
     title: "Links",
     entries: [
-      { label: "link", fg: "link-color", bg: "link-background" },
-      { label: "link-hover", fg: "link-color-hover", bg: "link-background-hover" },
+      { labels: ["link-color", "link-background"], fg: "link-color", bg: "link-background" },
+      { labels: ["link-color-hover", "link-bg-hover"], fg: "link-color-hover", bg: "link-background-hover" },
     ],
   },
   {
     title: "Scrollbar",
     entries: [
-      { label: "scrollbar", fg: "foreground", bg: "scrollbar" },
-      { label: "scrollbar-hover", fg: "foreground", bg: "scrollbar-hover" },
-      { label: "scrollbar-active", fg: "foreground", bg: "scrollbar-active" },
-      { label: "scrollbar-bg", color: "scrollbar-background" },
-      { label: "scrollbar-bg-hover", color: "scrollbar-background-hover" },
-      { label: "scrollbar-bg-active", color: "scrollbar-background-active" },
-      { label: "scrollbar-corner", color: "scrollbar-corner-color" },
+      { labels: ["scrollbar"], fg: "foreground", bg: "scrollbar" },
+      { labels: ["scrollbar-hover"], fg: "foreground", bg: "scrollbar-hover" },
+      { labels: ["scrollbar-active"], fg: "foreground", bg: "scrollbar-active" },
+      { labels: ["scrollbar-background"], color: "scrollbar-background" },
+      { labels: ["scrollbar-bg-hover"], color: "scrollbar-background-hover" },
+      { labels: ["scrollbar-bg-active"], color: "scrollbar-background-active" },
+      { labels: ["scrollbar-corner"], color: "scrollbar-corner-color" },
     ],
   },
   {
     title: "Footer",
     entries: [
-      { label: "footer", fg: "footer-foreground", bg: "footer-background" },
-      { label: "footer-desc", fg: "footer-description-foreground", bg: "footer-description-background" },
-      { label: "footer-item", color: "footer-item-background" },
-      { label: "footer-key", fg: "footer-key-foreground", bg: "footer-key-background" },
+      { labels: ["footer-fg", "footer-bg"], fg: "footer-foreground", bg: "footer-background" },
+      { labels: ["footer-desc-fg", "footer-desc-bg"], fg: "footer-description-foreground", bg: "footer-description-background" },
+      { labels: ["footer-item-bg"], color: "footer-item-background" },
+      { labels: ["footer-key-fg", "footer-key-bg"], fg: "footer-key-foreground", bg: "footer-key-background" },
     ],
   },
   {
     title: "Markdown Headings",
     entries: [
-      { label: "h1", fg: "markdown-h1-color", bg: "markdown-h1-background" },
-      { label: "h2", fg: "markdown-h2-color", bg: "markdown-h2-background" },
-      { label: "h3", fg: "markdown-h3-color", bg: "markdown-h3-background" },
-      { label: "h4", fg: "markdown-h4-color", bg: "markdown-h4-background" },
-      { label: "h5", fg: "markdown-h5-color", bg: "markdown-h5-background" },
-      { label: "h6", fg: "markdown-h6-color", bg: "markdown-h6-background" },
+      { labels: ["h1-color", "h1-bg"], fg: "markdown-h1-color", bg: "markdown-h1-background" },
+      { labels: ["h2-color", "h2-bg"], fg: "markdown-h2-color", bg: "markdown-h2-background" },
+      { labels: ["h3-color", "h3-bg"], fg: "markdown-h3-color", bg: "markdown-h3-background" },
+      { labels: ["h4-color", "h4-bg"], fg: "markdown-h4-color", bg: "markdown-h4-background" },
+      { labels: ["h5-color", "h5-bg"], fg: "markdown-h5-color", bg: "markdown-h5-background" },
+      { labels: ["h6-color", "h6-bg"], fg: "markdown-h6-color", bg: "markdown-h6-background" },
     ],
   },
   {
     title: "Primary / Secondary Backgrounds",
     entries: [
-      { label: "primary-bg", color: "primary-background" },
-      { label: "secondary-bg", color: "secondary-background" },
+      { labels: ["primary-background"], color: "primary-background" },
+      { labels: ["secondary-background"], color: "secondary-background" },
     ],
   },
 ];
 
-const SWATCH_PAD = 2;
 const GAP = 2;
 
 function resolveRgba(
@@ -254,35 +255,42 @@ function buildPaletteLegend(width: number): string[] {
   for (const group of PALETTE_GROUPS) {
     lines.push(`${DIM}  ${group.title}${RESET}`);
 
-    const maxLabelLen = Math.max(...group.entries.map((e) => e.label.length));
-    const colWidth = maxLabelLen + SWATCH_PAD + GAP;
-    const cols = Math.max(1, Math.floor(width / colWidth));
+    // Each entry renders as: [swatch DEMO_TEXT] label1 label2
+    // Column width = swatch width + max labels text + gap
+    const swatchVisible = DEMO_TEXT.length + 2; // spaces around demo text
+    const maxLabelsLen = Math.max(
+      ...group.entries.map((e) => e.labels.join("  ").length),
+    );
+    const entryWidth = swatchVisible + 1 + maxLabelsLen + GAP;
+    const cols = Math.max(1, Math.floor(width / entryWidth));
 
     for (let rowStart = 0; rowStart < group.entries.length; rowStart += cols) {
       const row = group.entries.slice(rowStart, rowStart + cols);
       let line = "";
       for (const entry of row) {
-        const padded = entry.label.padEnd(maxLabelLen);
-
         if (isPair(entry)) {
           const fgRgba = resolveRgba(palette, entry.fg);
           const bgRgba = resolveRgba(palette, entry.bg);
           if (!fgRgba || !bgRgba) {
-            line += `${DIM} ${padded} ${RESET}${" ".repeat(GAP)}`;
+            line += `${DIM}[${DEMO_TEXT}] ${entry.labels.join("  ")}${RESET}${" ".repeat(GAP)}`;
             continue;
           }
           const bgHex = colorToHex(bgRgba);
           const fgHex = colorToHex(fgRgba);
-          line += `${hexToAnsiBg(bgHex)}${hexToAnsiFg(fgHex)} ${padded} ${RESET}${" ".repeat(GAP)}`;
+          const swatch = `${hexToAnsiBg(bgHex)}${hexToAnsiFg(fgHex)} ${DEMO_TEXT} ${RESET}`;
+          const labels = entry.labels.join("  ").padEnd(maxLabelsLen);
+          line += `${swatch} ${DIM}${labels}${RESET}${" ".repeat(GAP)}`;
         } else {
           const rgba = resolveRgba(palette, entry.color);
           if (!rgba) {
-            line += `${DIM} ${padded} ${RESET}${" ".repeat(GAP)}`;
+            line += `${DIM}[${DEMO_TEXT}] ${entry.labels.join("  ")}${RESET}${" ".repeat(GAP)}`;
             continue;
           }
           const hex = colorToHex(rgba);
           const fg = contrastFg(rgba);
-          line += `${hexToAnsiBg(hex)}${hexToAnsiFg(fg)} ${padded} ${RESET}${" ".repeat(GAP)}`;
+          const swatch = `${hexToAnsiBg(hex)}${hexToAnsiFg(fg)} ${DEMO_TEXT} ${RESET}`;
+          const labels = entry.labels.join("  ").padEnd(maxLabelsLen);
+          line += `${swatch} ${DIM}${labels}${RESET}${" ".repeat(GAP)}`;
         }
       }
       lines.push(line);
