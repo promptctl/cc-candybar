@@ -81,6 +81,8 @@ export {
   resolveThemeColors,
   listAvailableThemes,
   semanticMapping,
+  mappingFromHueStep,
+  rotateHue,
 } from "./themes";
 export type {
   CascadeConfig,

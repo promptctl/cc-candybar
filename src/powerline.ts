@@ -873,6 +873,7 @@ export class PowerlineRenderer {
       themeMapping: this.config.themeMapping as
         | Record<string, SegmentOverride>
         | undefined,
+      hueStep: this.config.hueStep,
       customColors: this.config.theme === "custom"
         ? this.config.colors?.custom
         : undefined,
