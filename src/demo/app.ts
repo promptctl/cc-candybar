@@ -432,7 +432,7 @@ function buildConfig(): PowerlineConfig {
       colorCompatibility: "truecolor",
     },
     themeMapping: MAPPING_PRESETS[mappingIdx]!.overrides ?? undefined,
-    hueStep: hueStep || undefined,
+    hueStep,
   };
 }
 
