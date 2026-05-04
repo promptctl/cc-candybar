@@ -35,7 +35,7 @@ describe("config", () => {
     it("should merge project config over defaults", () => {
       const projectConfig = { theme: "dark" };
       mockFs.existsSync.mockImplementation(
-        (p) => p === path.join("/project", ".claude-powerline.json"),
+        (p) => p === path.join("/project", ".cc-candybar.json"),
       );
       mockFs.readFileSync.mockReturnValue(JSON.stringify(projectConfig));
 
@@ -162,13 +162,13 @@ describe("config", () => {
 
   describe("environment variables", () => {
     beforeEach(() => {
-      delete process.env.CLAUDE_POWERLINE_THEME;
-      delete process.env.CLAUDE_POWERLINE_STYLE;
+      delete process.env.CC_CANDYBAR_THEME;
+      delete process.env.CC_CANDYBAR_STYLE;
     });
 
     it("should preserve display lines when setting style via environment", () => {
       mockFs.existsSync.mockReturnValue(false);
-      process.env.CLAUDE_POWERLINE_STYLE = "powerline";
+      process.env.CC_CANDYBAR_STYLE = "powerline";
       const config = loadConfig();
       expect(config.display.style).toBe("powerline");
       expect(config.display.lines).toHaveLength(
@@ -178,7 +178,7 @@ describe("config", () => {
 
     it("should handle capsule style from environment", () => {
       mockFs.existsSync.mockReturnValue(false);
-      process.env.CLAUDE_POWERLINE_STYLE = "capsule";
+      process.env.CC_CANDYBAR_STYLE = "capsule";
       const config = loadConfig();
       expect(config.display.style).toBe("capsule");
       expect(config.display.lines).toHaveLength(
@@ -189,7 +189,7 @@ describe("config", () => {
     it("should handle invalid style from environment", () => {
       const consoleSpy = jest.spyOn(console, "warn").mockImplementation();
       mockFs.existsSync.mockReturnValue(false);
-      process.env.CLAUDE_POWERLINE_STYLE = "invalid";
+      process.env.CC_CANDYBAR_STYLE = "invalid";
       const config = loadConfig();
       expect(config.display.style).toBe("minimal");
       expect(consoleSpy).toHaveBeenCalledWith(
@@ -201,19 +201,19 @@ describe("config", () => {
 
   describe("configuration precedence", () => {
     beforeEach(() => {
-      delete process.env.CLAUDE_POWERLINE_THEME;
-      delete process.env.CLAUDE_POWERLINE_STYLE;
+      delete process.env.CC_CANDYBAR_THEME;
+      delete process.env.CC_CANDYBAR_STYLE;
     });
 
     it("should prioritize CLI over environment over file", () => {
       mockFs.existsSync.mockImplementation(
-        (p) => p === path.join("/project", ".claude-powerline.json"),
+        (p) => p === path.join("/project", ".cc-candybar.json"),
       );
       mockFs.readFileSync.mockReturnValue(
         JSON.stringify({ theme: "light", display: { style: "minimal" } }),
       );
-      process.env.CLAUDE_POWERLINE_THEME = "nord";
-      process.env.CLAUDE_POWERLINE_STYLE = "powerline";
+      process.env.CC_CANDYBAR_THEME = "nord";
+      process.env.CC_CANDYBAR_STYLE = "powerline";
 
       const config = loadConfigFromCLI([
         "node",
@@ -228,14 +228,14 @@ describe("config", () => {
 
   describe("invalid config file values", () => {
     beforeEach(() => {
-      delete process.env.CLAUDE_POWERLINE_THEME;
-      delete process.env.CLAUDE_POWERLINE_STYLE;
+      delete process.env.CC_CANDYBAR_THEME;
+      delete process.env.CC_CANDYBAR_STYLE;
     });
 
     it("should fallback invalid theme in config file to dark", () => {
       const consoleSpy = jest.spyOn(console, "warn").mockImplementation();
       mockFs.existsSync.mockImplementation(
-        (p) => p === path.join("/project", ".claude-powerline.json"),
+        (p) => p === path.join("/project", ".cc-candybar.json"),
       );
       mockFs.readFileSync.mockReturnValue(
         JSON.stringify({ theme: "invalid-theme" }),
@@ -252,7 +252,7 @@ describe("config", () => {
     it("should fallback invalid style in config file to minimal", () => {
       const consoleSpy = jest.spyOn(console, "warn").mockImplementation();
       mockFs.existsSync.mockImplementation(
-        (p) => p === path.join("/project", ".claude-powerline.json"),
+        (p) => p === path.join("/project", ".cc-candybar.json"),
       );
       mockFs.readFileSync.mockReturnValue(
         JSON.stringify({ display: { style: "invalid-style" } }),
@@ -268,7 +268,7 @@ describe("config", () => {
 
     it("should accept capsule style in config file", () => {
       mockFs.existsSync.mockImplementation(
-        (p) => p === path.join("/project", ".claude-powerline.json"),
+        (p) => p === path.join("/project", ".cc-candybar.json"),
       );
       mockFs.readFileSync.mockReturnValue(
         JSON.stringify({ display: { style: "capsule" } }),
@@ -294,7 +294,7 @@ describe("config", () => {
 
     function loadWithGrid(tui: any) {
       mockFs.existsSync.mockImplementation(
-        (p) => p === path.join("/project", ".claude-powerline.json"),
+        (p) => p === path.join("/project", ".cc-candybar.json"),
       );
       mockFs.readFileSync.mockReturnValue(
         JSON.stringify({ display: { style: "tui", tui } }),

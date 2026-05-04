@@ -109,7 +109,7 @@ export function runDaemon(): void {
 // daemon during development. unref() so this timer doesn't hold the process alive.
 function armBinaryWatch(): void {
   // Watch the resolved entry point, not the bin shim — npm run build updates
-  // dist/index.mjs but the bin/claude-powerline shim never changes.
+  // dist/index.mjs but the bin/cc-candybar shim never changes.
   const entryUrl = import.meta.url;
   const targets: string[] = [];
   if (entryUrl.startsWith("file://")) {

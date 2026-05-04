@@ -24,7 +24,7 @@ jobs:
         id: fetch-pricing
         run: |
           curl -s -H "Accept: application/json" \
-               -H "User-Agent: claude-powerline-updater" \
+               -H "User-Agent: cc-candybar-updater" \
                "https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json" \
                -o litellm-pricing.json
           

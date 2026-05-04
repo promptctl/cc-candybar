@@ -1,5 +1,5 @@
 /**
- * Browser-safe entry point for claude-powerline.
+ * Browser-safe entry point for cc-candybar.
  *
  * Exports all rendering modules, themes, types, and utilities needed
  * to generate statusline output without any Node.js built-in modules.

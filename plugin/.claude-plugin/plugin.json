@@ -1,11 +1,11 @@
 {
-  "name": "claude-powerline",
+  "name": "cc-candybar",
   "version": "1.0.0",
-  "description": "Claude Powerline statusline setup wizard",
+  "description": "CCCandybar statusline setup wizard",
   "author": {
-    "name": "Owloops"
+    "name": "promptctl"
   },
-  "repository": "https://github.com/Owloops/claude-powerline",
+  "repository": "https://github.com/promptctl/cc-candybar",
   "license": "MIT",
   "keywords": ["powerline", "statusline", "claude-code", "setup"]
 }

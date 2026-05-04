@@ -1,7 +1,7 @@
 {
-  "name": "@promptctl/claude-powerline",
+  "name": "@promptctl/cc-candybar",
   "version": "0.2.3",
-  "description": "Powerline statusline for Claude Code — fork of @owloops/claude-powerline with CLI override flags (--layout, --set, --show, --display, --segment) so the entire config can live in settings.json without a separate config file.",
+  "description": "Powerline statusline for Claude Code — fork of @owloops/claude-powerline evolved into CCCandybar with CLI override flags (--layout, --set, --show, --display, --segment) so the entire config can live in settings.json without a separate config file.",
   "type": "module",
   "main": "./dist/index.mjs",
   "module": "./dist/index.mjs",
@@ -13,7 +13,7 @@
     }
   },
   "bin": {
-    "claude-powerline": "./bin/claude-powerline"
+    "cc-candybar": "./bin/cc-candybar"
   },
   "scripts": {
     "build": "tsdown",
@@ -38,13 +38,13 @@
   ],
   "author": "Brandon Fryslie",
   "license": "MIT",
-  "homepage": "https://github.com/promptctl/claude-powerline#readme",
+  "homepage": "https://github.com/promptctl/cc-candybar#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/promptctl/claude-powerline.git"
+    "url": "git+https://github.com/promptctl/cc-candybar.git"
   },
   "bugs": {
-    "url": "https://github.com/promptctl/claude-powerline/issues"
+    "url": "https://github.com/promptctl/cc-candybar/issues"
   },
   "engines": {
     "node": ">=18.0.0"

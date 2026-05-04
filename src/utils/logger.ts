@@ -1,5 +1,5 @@
 export function debug(message: string, ...args: unknown[]): void {
-  if (process.env.CLAUDE_POWERLINE_DEBUG) {
+  if (process.env.CC_CANDYBAR_DEBUG) {
     console.error(`[DEBUG] ${message}`, ...args);
   }
 }
