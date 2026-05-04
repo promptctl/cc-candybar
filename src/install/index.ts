@@ -13,12 +13,12 @@ declare const __PACKAGE_VERSION__: string;
 const PACKAGE_VERSION =
   typeof __PACKAGE_VERSION__ !== "undefined" ? __PACKAGE_VERSION__ : "dev";
 
-const PACKAGE_NAME = "@promptctl/claude-powerline";
+const PACKAGE_NAME = "@promptctl/cc-candybar";
 const URL_SCHEME = "cpwl";
-const BUNDLE_ID = "com.claudepowerline.url-handler";
-const APP_NAME = "ClaudePowerlineURLHandler";
+const BUNDLE_ID = "com.cccandybar.url-handler";
+const APP_NAME = "CCCandybarURLHandler";
 
-// [LAW:one-source-of-truth] These are the renderer flags `claude-powerline
+// [LAW:one-source-of-truth] These are the renderer flags `cc-candybar
 // install` writes into ~/.claude/settings.json when invoked with no args.
 // To override, pass renderer flags after `install`.
 const DEFAULT_INSTALL_ARGS: readonly string[] = [
@@ -85,7 +85,7 @@ function supportDir(): string {
     os.homedir(),
     "Library",
     "Application Support",
-    "ClaudePowerline",
+    "CCCandybar",
   );
 }
 
@@ -101,7 +101,7 @@ function appleScriptSource(
   // [LAW:no-shared-mutable-globals] Bake absolute paths into the AppleScript
   // so click-time invocation doesn't depend on PATH, pnpm dlx cache state, or
   // a global npm install. The script path is a stable copy under
-  // ~/Library/Application Support/ClaudePowerline that we own. NODE_PATH
+  // ~/Library/Application Support/CCCandybar that we own. NODE_PATH
   // points at the project's node_modules so the handler can resolve deps
   // (rich-js etc.) without being co-located with a package.json.
   const escNode = nodePath.replace(/"/g, '\\"');
@@ -117,7 +117,7 @@ function appleScriptSource(
 // [LAW:one-source-of-truth] The bundle that contains *this* function is
 // the thing we need to copy to a stable location. Two invocation paths
 // reach us:
-//   - via the bin shim: process.argv[1] = ".../bin/claude-powerline" which
+//   - via the bin shim: process.argv[1] = ".../bin/cc-candybar" which
 //     does `import '../dist/index.mjs'`. Copying the shim itself would
 //     break — its relative import wouldn't resolve from the new location.
 //     So resolve to the sibling dist/index.mjs.

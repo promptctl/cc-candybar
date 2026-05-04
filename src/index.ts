@@ -13,15 +13,15 @@ import { spawnDaemonDetached } from "./daemon/spawn";
 
 function showHelpText(): void {
   console.log(`
-claude-powerline - Beautiful powerline statusline for Claude Code
+cc-candybar - Beautiful powerline statusline for Claude Code
 
-Usage: claude-powerline [options]
+Usage: cc-candybar [options]
 
 Standalone Commands:
   -h, --help               Show this help
 
 Debugging:
-  CLAUDE_POWERLINE_DEBUG=1 Enable debug logging for troubleshooting
+  CC_CANDYBAR_DEBUG=1 Enable debug logging for troubleshooting
 
 Claude Code Options (for settings.json):
   --theme=THEME            Set theme: dark, light, nord, tokyo-night, rose-pine, custom
@@ -57,7 +57,7 @@ Subcommands (macOS):
                            Brandon's default config; pass renderer flags to
                            override.
   install-url-handler      Just create + register the URL handler app
-                           (~/Applications/ClaudePowerlineURLHandler.app).
+                           (~/Applications/CCCandybarURLHandler.app).
   url-handle URL           Internal — invoked by the URL handler app on
                            cmd-click. Parses cpwl://<verb>/<value> and
                            dispatches (currently: copy to clipboard).
@@ -79,7 +79,7 @@ Subcommands (macOS):
                            string. Unknown short prefixes fall through as
                            literal dotted paths.
 
-See example config at: https://github.com/Owloops/claude-powerline/blob/main/.claude-powerline.json
+See example config at: https://github.com/promptctl/cc-candybar/blob/main/.cc-candybar.json
 
 `);
 }
@@ -122,21 +122,21 @@ async function main(): Promise<void> {
     if (process.stdin.isTTY === true) {
       console.error(`Error: This tool requires input from Claude Code
 
-claude-powerline is designed to be used as a Claude Code statusLine command.
+cc-candybar is designed to be used as a Claude Code statusLine command.
 It reads hook data from stdin and outputs formatted statusline.
 
 Add to ~/.claude/settings.json:
 {
   "statusLine": {
     "type": "command",
-    "command": "claude-powerline --style=powerline"
+    "command": "cc-candybar --style=powerline"
   }
 }
 
 Run with --help for more options.
 
 To test output manually:
-echo '{"session_id":"test-session","workspace":{"project_dir":"/path/to/project"},"model":{"id":"claude-sonnet-4-5","display_name":"Claude"}}' | claude-powerline --style=powerline`);
+echo '{"session_id":"test-session","workspace":{"project_dir":"/path/to/project"},"model":{"id":"claude-sonnet-4-5","display_name":"Claude"}}' | cc-candybar --style=powerline`);
       process.exit(1);
     }
 

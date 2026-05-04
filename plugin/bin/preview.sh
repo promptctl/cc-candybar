@@ -101,7 +101,7 @@ test_binary() {
 }
 
 find_binary() {
-    local npm_bin="${PLUGIN_ROOT}/../bin/claude-powerline"
+    local npm_bin="${PLUGIN_ROOT}/../bin/cc-candybar"
     local dist_file="${PLUGIN_ROOT}/../dist/index.mjs"
     if [[ -f "${npm_bin}" ]] && [[ -f "${dist_file}" ]] && test_binary "${npm_bin}"; then
         printf '%s' "${npm_bin}"
@@ -109,7 +109,7 @@ find_binary() {
     fi
 
     local path_bin
-    if path_bin="$(command -v claude-powerline 2>/dev/null)" && test_binary "${path_bin}"; then
+    if path_bin="$(command -v cc-candybar 2>/dev/null)" && test_binary "${path_bin}"; then
         printf '%s' "${path_bin}"
         return 0
     fi
@@ -143,7 +143,7 @@ run_preview() {
     tmp_config="$(make_temp_config "${preview_theme}" "${preview_style}" "${preview_charset}")"
 
     if [[ "${BIN}" == "npx" ]]; then
-        printf '%s' "${SAMPLE_JSON}" | FORCE_COLOR=3 npx -y @owloops/claude-powerline@latest \
+        printf '%s' "${SAMPLE_JSON}" | FORCE_COLOR=3 npx -y @promptctl/cc-candybar@latest \
             --config="${tmp_config}"
     else
         printf '%s' "${SAMPLE_JSON}" | FORCE_COLOR=3 "${BIN}" \
@@ -156,7 +156,7 @@ run_preview_config() {
     local sample_data="$2"
 
     if [[ "${BIN}" == "npx" ]]; then
-        printf '%s' "${sample_data}" | FORCE_COLOR=3 npx -y @owloops/claude-powerline@latest \
+        printf '%s' "${sample_data}" | FORCE_COLOR=3 npx -y @promptctl/cc-candybar@latest \
             --config="${config_file}"
     else
         printf '%s' "${sample_data}" | FORCE_COLOR=3 "${BIN}" \

@@ -22,7 +22,7 @@ describe("install — clobber protection", () => {
     const p = tmpSettingsPath();
     updateClaudeSettings(DEFAULT_INSTALL_ARGS, false, p);
     expect(readCommand(p)).toMatch(
-      /pnpm dlx @promptctl\/claude-powerline@/,
+      /pnpm dlx @promptctl\/cc-candybar@/,
     );
   });
 
@@ -81,7 +81,7 @@ describe("install — clobber protection", () => {
 
     updateClaudeSettings(DEFAULT_INSTALL_ARGS, true, p);
     expect(readCommand(p)).toMatch(
-      /pnpm dlx @promptctl\/claude-powerline@/,
+      /pnpm dlx @promptctl\/cc-candybar@/,
     );
   });
 
@@ -92,7 +92,7 @@ describe("install — clobber protection", () => {
 
     updateClaudeSettings(DEFAULT_INSTALL_ARGS, false, p);
     expect(readCommand(p)).toMatch(
-      /pnpm dlx @promptctl\/claude-powerline@/,
+      /pnpm dlx @promptctl\/cc-candybar@/,
     );
   });
 
@@ -103,7 +103,7 @@ describe("install — clobber protection", () => {
 
     updateClaudeSettings(DEFAULT_INSTALL_ARGS, false, p);
     expect(readCommand(p)).toMatch(
-      /pnpm dlx @promptctl\/claude-powerline@/,
+      /pnpm dlx @promptctl\/cc-candybar@/,
     );
   });
 });

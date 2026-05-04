@@ -49,14 +49,14 @@ describe("Integration Tests", () => {
     hook_event_name: "Status",
     session_id: "test-session-123",
     transcript_path: "/path/to/transcript.json",
-    cwd: "/Users/test/claude-powerline",
+    cwd: "/Users/test/cc-candybar",
     model: {
       id: "claude-opus-4",
       display_name: "Claude Opus",
     },
     workspace: {
-      current_dir: "/Users/test/claude-powerline",
-      project_dir: "/Users/test/claude-powerline",
+      current_dir: "/Users/test/cc-candybar",
+      project_dir: "/Users/test/cc-candybar",
     },
   };
 
@@ -80,7 +80,7 @@ describe("Integration Tests", () => {
     const renderer = new PowerlineRenderer(config);
     const result = await renderer.generateStatusline(mockHookData);
 
-    expect(result).toContain("claude-powerline");
+    expect(result).toContain("cc-candybar");
     expect(result).toContain("1.6K tokens");
     expect(result).toContain("Claude Opus");
     expect(result).not.toContain("undefined");
@@ -126,7 +126,7 @@ describe("Integration Tests", () => {
     const result = await renderer.generateStatusline(mockHookData);
 
     expect(result).toBeTruthy();
-    expect(result).toContain("claude-powerline");
+    expect(result).toContain("cc-candybar");
   });
 
   it("should handle empty segment configuration gracefully", async () => {

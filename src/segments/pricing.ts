@@ -138,7 +138,7 @@ export class PricingService {
   private static executionCache: Record<string, ModelPricing> | null = null;
   private static modelPricingCache = new Map<string, ModelPricing>();
   private static readonly GITHUB_PRICING_URL =
-    "https://raw.githubusercontent.com/Owloops/claude-powerline/main/pricing.json";
+    "https://raw.githubusercontent.com/promptctl/cc-candybar/main/pricing.json";
 
   private static async loadDiskCache(): Promise<Record<
     string,
@@ -170,7 +170,7 @@ export class PricingService {
           hostname: parsedUrl.hostname,
           path: parsedUrl.pathname,
           headers: {
-            "User-Agent": "claude-powerline",
+            "User-Agent": "cc-candybar",
             "Cache-Control": "no-cache",
           },
           timeout: 5000,

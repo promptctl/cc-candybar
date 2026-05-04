@@ -67,7 +67,7 @@ describe("install — locateBundledDist", () => {
   });
 
   it("resolves to sibling dist/index.mjs for bin shim", () => {
-    expect(locateBundledDist("/usr/local/bin/claude-powerline")).toBe(
+    expect(locateBundledDist("/usr/local/bin/cc-candybar")).toBe(
       "/usr/local/dist/index.mjs",
     );
   });
@@ -75,10 +75,10 @@ describe("install — locateBundledDist", () => {
   it("handles npm @scope/pkg layout", () => {
     expect(
       locateBundledDist(
-        "/Users/x/.pnpm/store/v3/@promptctl+claude-powerline@0.2.0/bin/claude-powerline",
+        "/Users/x/.pnpm/store/v3/@promptctl+cc-candybar@0.2.0/bin/cc-candybar",
       ),
     ).toBe(
-      "/Users/x/.pnpm/store/v3/@promptctl+claude-powerline@0.2.0/dist/index.mjs",
+      "/Users/x/.pnpm/store/v3/@promptctl+cc-candybar@0.2.0/dist/index.mjs",
     );
   });
 
@@ -118,7 +118,7 @@ describe("install — buildStatusLineCommand", () => {
     // falls back to "dev". We assert the shape and the version-pinning, not
     // a specific version string.
     expect(cmd).toMatch(
-      /^pnpm dlx @promptctl\/claude-powerline@[^\s]+ --style=powerline --layout 'directory git \| model'$/,
+      /^pnpm dlx @promptctl\/cc-candybar@[^\s]+ --style=powerline --layout 'directory git \| model'$/,
     );
     // Critically: must NOT use @latest (would defeat pnpm dlx cache busting).
     expect(cmd).not.toContain("@latest");
@@ -126,7 +126,7 @@ describe("install — buildStatusLineCommand", () => {
 
   it("produces a stable string from DEFAULT_INSTALL_ARGS", () => {
     const cmd = buildStatusLineCommand(DEFAULT_INSTALL_ARGS);
-    expect(cmd).toMatch(/^pnpm dlx @promptctl\/claude-powerline@[^\s]+ /);
+    expect(cmd).toMatch(/^pnpm dlx @promptctl\/cc-candybar@[^\s]+ /);
     expect(cmd).not.toContain("@latest");
     expect(cmd).toContain("--style=powerline");
     expect(cmd).toContain(

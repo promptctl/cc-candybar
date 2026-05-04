@@ -16,7 +16,7 @@ export async function runDaemonStats(args: readonly string[]): Promise<void> {
   const stats = await fetchStats().catch((e: Error) => {
     process.stderr.write(`daemon-stats: ${e.message}\n`);
     process.stderr.write(
-      "Hint: daemon may not be running. Run `claude-powerline` once to spawn it.\n",
+      "Hint: daemon may not be running. Run `cc-candybar` once to spawn it.\n",
     );
     process.exit(1);
   });
@@ -91,7 +91,7 @@ function fmtUptime(sec: number): string {
 
 export function formatStats(s: StatsSnapshot): string {
   const lines: string[] = [];
-  lines.push(`claude-powerline daemon stats`);
+  lines.push(`cc-candybar daemon stats`);
   lines.push(``);
   lines.push(`process`);
   lines.push(`  pid           ${s.pid}`);

@@ -1,23 +1,23 @@
 {
-  "name": "claude-powerline",
+  "name": "cc-candybar",
   "owner": {
-    "name": "Owloops"
+    "name": "promptctl"
   },
   "metadata": {
-    "description": "Claude Powerline statusline setup wizard",
+    "description": "CCCandybar statusline setup wizard",
     "version": "1.0.0"
   },
   "plugins": [
     {
-      "name": "claude-powerline",
+      "name": "cc-candybar",
       "source": "./plugin",
       "description": "Interactive setup wizard for theme, style, segment, and budget configuration",
       "version": "1.0.0",
       "author": {
-        "name": "Owloops"
+        "name": "promptctl"
       },
-      "homepage": "https://github.com/Owloops/claude-powerline",
-      "repository": "https://github.com/Owloops/claude-powerline",
+      "homepage": "https://github.com/promptctl/cc-candybar",
+      "repository": "https://github.com/promptctl/cc-candybar",
       "keywords": [
         "powerline",
         "statusline",

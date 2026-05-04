@@ -181,10 +181,10 @@ function findConfigFile(
   const effectiveCwd = cwd ?? process.cwd();
 
   const locations = [
-    ...(projectDir ? [path.join(projectDir, ".claude-powerline.json")] : []),
-    path.join(effectiveCwd, ".claude-powerline.json"),
-    path.join(os.homedir(), ".claude", "claude-powerline.json"),
-    path.join(os.homedir(), ".config", "claude-powerline", "config.json"),
+    ...(projectDir ? [path.join(projectDir, ".cc-candybar.json")] : []),
+    path.join(effectiveCwd, ".cc-candybar.json"),
+    path.join(os.homedir(), ".claude", "cc-candybar.json"),
+    path.join(os.homedir(), ".config", "cc-candybar", "config.json"),
   ];
 
   return locations.find(fs.existsSync) || null;
@@ -205,12 +205,12 @@ function loadEnvConfig(): Partial<PowerlineConfig> {
   const config: Partial<PowerlineConfig> = {};
   const display: Partial<DisplayConfig> = {};
 
-  const theme = process.env.CLAUDE_POWERLINE_THEME;
+  const theme = process.env.CC_CANDYBAR_THEME;
   if (theme && isValidTheme(theme)) {
     config.theme = theme;
   }
 
-  const style = process.env.CLAUDE_POWERLINE_STYLE;
+  const style = process.env.CC_CANDYBAR_STYLE;
   if (style) {
     if (isValidStyle(style)) {
       display.style = style;
@@ -230,7 +230,7 @@ function loadEnvConfig(): Partial<PowerlineConfig> {
 }
 
 function getConfigPathFromEnv(): string | undefined {
-  return process.env.CLAUDE_POWERLINE_CONFIG;
+  return process.env.CC_CANDYBAR_CONFIG;
 }
 
 type SegmentName = keyof LineConfig["segments"];
