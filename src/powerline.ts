@@ -22,6 +22,7 @@ import type {
   ToolbarSegmentConfig,
 } from "./segments";
 import type { ToolbarStateReader } from "./daemon/toolbar-state";
+import type { ThemeStateReader } from "./daemon/theme-state";
 import { formatModelName, shortenModelName } from "./utils/formatters";
 import type { BlockInfo } from "./segments/block";
 import type { TodayInfo } from "./segments/today";
@@ -44,6 +45,12 @@ import {
   MetricsProvider,
   SegmentRenderer,
 } from "./segments";
+import {
+  wrapOsc8,
+  resolveToolbarExpr,
+  interpolateToolbarText,
+  type ToolbarContext,
+} from "./segments/renderer";
 import { BlockProvider } from "./segments/block";
 import { TodayProvider } from "./segments/today";
 import {
@@ -160,6 +167,7 @@ export class PowerlineRenderer {
   private _metricsProvider?: MetricsProvider;
   private _segmentRenderer?: SegmentRenderer;
   private _toolbarState?: ToolbarStateReader;
+  private _themeState?: ThemeStateReader;
 
   constructor(
     private readonly config: PowerlineConfig,
@@ -167,6 +175,7 @@ export class PowerlineRenderer {
       gitService?: GitService;
       usageProvider?: UsageProvider;
       toolbarState?: ToolbarStateReader;
+      themeState?: ThemeStateReader;
     },
   ) {
     this.symbols = this.initializeSymbols();
@@ -175,6 +184,7 @@ export class PowerlineRenderer {
     if (deps?.gitService) this._gitService = deps.gitService;
     if (deps?.usageProvider) this._usageProvider = deps.usageProvider;
     if (deps?.toolbarState) this._toolbarState = deps.toolbarState;
+    if (deps?.themeState) this._themeState = deps.themeState;
   }
 
   private get usageProvider(): UsageProvider {
@@ -273,7 +283,7 @@ export class PowerlineRenderer {
       : null;
 
     if (this.config.display.autoWrap) {
-      return this.generateAutoWrapStatusline(
+      const output = await this.generateAutoWrapStatusline(
         hookData,
         usageInfo,
         blockInfo,
@@ -281,6 +291,7 @@ export class PowerlineRenderer {
         contextInfo,
         metricsInfo,
       );
+      return this.maybeAppendPanelLine(output, hookData);
     }
 
     const lines = await Promise.all(
@@ -297,7 +308,8 @@ export class PowerlineRenderer {
       ),
     );
 
-    return lines.filter((line) => line.length > 0).join("\n");
+    const output = lines.filter((line) => line.length > 0).join("\n");
+    return this.maybeAppendPanelLine(output, hookData);
   }
 
   private async generateAutoWrapStatusline(
@@ -852,6 +864,71 @@ export class PowerlineRenderer {
     };
   }
 
+  private maybeAppendPanelLine(
+    output: string,
+    hookData: ClaudeHookData,
+  ): string {
+    const panel = this.config.panel;
+    const expanded = this._toolbarState?.isExpanded(hookData.session_id ?? "");
+    if (!panel?.items?.length || !expanded) return output;
+
+    const panelLine = this.renderPanelLine(hookData);
+    if (!panelLine) return output;
+    return output + "\n" + panelLine;
+  }
+
+  private renderPanelLine(hookData: ClaudeHookData): string | null {
+    const panel = this.config.panel;
+    if (!panel?.items?.length) return null;
+
+    const colors = this.getThemeColors();
+    const effectiveTheme =
+      this._themeState?.getThemeOverride() ?? this.config.theme;
+    const effectiveStyle =
+      this._themeState?.getStyleOverride() ?? this.config.style ?? "surface";
+
+    const sep = panel.separator ?? " ";
+    const parts: string[] = [];
+
+    for (const item of panel.items) {
+      const ctx: ToolbarContext = {
+        sessionId: hookData.session_id ?? "",
+        transcriptPath: hookData.transcript_path,
+        projectDir: hookData.workspace?.project_dir,
+        currentDir: hookData.workspace?.current_dir || hookData.cwd,
+        modelName: formatModelName(hookData.model?.display_name || "Claude"),
+        modelShort: shortenModelName(
+          formatModelName(hookData.model?.display_name || "Claude"),
+        ),
+        hookData: hookData as unknown as Record<string, unknown>,
+        currentTheme: effectiveTheme,
+        currentStyle: effectiveStyle,
+      };
+
+      const resolved = item.expr
+        ? resolveToolbarExpr(item.expr, ctx) ?? ""
+        : "";
+      const visible = interpolateToolbarText(item.text, ctx);
+      const scheme = item.scheme ?? "cpwl";
+      const url = `${scheme}://${item.verb}/${encodeURIComponent(resolved)}`;
+      parts.push(wrapOsc8(visible, url));
+    }
+
+    if (parts.length === 0) return null;
+    const text = parts.join(sep);
+
+    const segment: RenderedSegment = {
+      type: "panel",
+      text,
+      bgColor: colors.sessionBg,
+      fgColor: colors.sessionFg,
+      bgHex: colors.hex?.sessionBg,
+      fgHex: colors.hex?.sessionFg,
+    };
+
+    return this.buildLineFromSegments([segment], colors);
+  }
+
   private getThemeColors(): PowerlineColors {
     const colorMode = this.config.display.colorCompatibility || "auto";
     const resolved = colorMode === "auto" ? getColorSupport() : colorMode;
@@ -866,11 +943,13 @@ export class PowerlineRenderer {
 
     const theme = this.config.theme === "custom" && this.config.colors?.custom
       ? "textual-dark"
-      : this.config.theme;
+      : this._themeState?.getThemeOverride() ?? this.config.theme;
+
+    const style = this._themeState?.getStyleOverride() ?? this.config.style;
 
     return resolveThemeColors({
       theme,
-      style: this.config.style,
+      style,
       themeMapping: this.config.themeMapping as
         | Record<string, SegmentOverride>
         | undefined,

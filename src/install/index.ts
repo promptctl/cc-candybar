@@ -279,6 +279,8 @@ async function runUrlHandleAsync(parsed: ParsedUrl): Promise<void> {
     copy: copyToClipboard,
     "open-vscode": openInVscode,
     "toolbar-toggle": toggleToolbarExpanded,
+    "theme-cycle": () => {},
+    "style-cycle": () => {},
   };
   const handler = handlers[parsed.verb];
   if (!handler) {

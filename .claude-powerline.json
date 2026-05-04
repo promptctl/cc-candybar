@@ -1,5 +1,6 @@
 {
-  "theme": "custom",
+  "theme": "monokai",
+  "style": "muted",
   "display": {
     "padding": 1,
     "style": "capsule",
@@ -69,58 +70,6 @@
       }
     ]
   },
-  "colors": {
-    "custom": {
-      "directory": {
-        "bg": "#2a2a2a",
-        "fg": "#e0e0e0"
-      },
-      "git": {
-        "bg": "#3a3a3a",
-        "fg": "#d0d0d0"
-      },
-      "model": {
-        "bg": "#4a4a4a",
-        "fg": "#c0c0c0"
-      },
-      "session": {
-        "bg": "#5a5a5a",
-        "fg": "#b0b0b0"
-      },
-      "block": {
-        "bg": "#404040",
-        "fg": "#cccccc"
-      },
-      "today": {
-        "bg": "#303030",
-        "fg": "#dddddd"
-      },
-      "tmux": {
-        "bg": "#8a8a8a",
-        "fg": "#2a2a2a"
-      },
-      "context": {
-        "bg": "#6a6a6a",
-        "fg": "#ffffff"
-      },
-      "contextWarning": {
-        "bg": "#92400e",
-        "fg": "#fbbf24"
-      },
-      "contextCritical": {
-        "bg": "#991b1b",
-        "fg": "#fca5a5"
-      },
-      "metrics": {
-        "bg": "#565656",
-        "fg": "#e5e5e5"
-      },
-      "version": {
-        "bg": "#7a7a7a",
-        "fg": "#f0f0f0"
-      }
-    }
-  },
   "budget": {
     "session": {
       "warningThreshold": 80
@@ -134,6 +83,12 @@
       "type": "tokens",
       "warningThreshold": 80
     }
+  },
+  "panel": {
+    "items": [
+      { "text": "🎨 ${theme}", "verb": "theme-cycle", "expr": "session.id" },
+      { "text": "🖌 ${style}", "verb": "style-cycle", "expr": "session.id" }
+    ]
   },
   "modelContextLimits": {
     "sonnet": 200000

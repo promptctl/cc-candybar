@@ -74,6 +74,18 @@ export interface SegmentColorOverride {
   palette?: string;
 }
 
+export interface PanelItemConfig {
+  text: string;
+  verb: string;
+  expr: string;
+  scheme?: string;
+}
+
+export interface PanelConfig {
+  items: PanelItemConfig[];
+  separator?: string;
+}
+
 export interface PowerlineConfig {
   theme: string;
   style?: string;
@@ -83,6 +95,7 @@ export interface PowerlineConfig {
   };
   themeMapping?: Record<string, SegmentColorOverride>;
   hueStep?: number;
+  panel?: PanelConfig;
   budget?: BudgetConfig;
   modelContextLimits?: Record<string, number>;
 }

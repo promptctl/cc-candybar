@@ -1084,6 +1084,8 @@ export interface ToolbarContext {
   modelShort?: string;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   hookData?: Record<string, any>;
+  currentTheme?: string;
+  currentStyle?: string;
 }
 
 const TOOLBAR_RESOLVERS: Record<
@@ -1103,6 +1105,8 @@ const TOOLBAR_RESOLVERS: Record<
   currentDir: (c) => c.currentDir,
   "model.name": (c) => c.modelName,
   "model.short": (c) => c.modelShort,
+  theme: (c) => c.currentTheme,
+  style: (c) => c.currentStyle,
 };
 
 export function resolveToolbarExpr(
