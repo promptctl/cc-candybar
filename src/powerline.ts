@@ -21,8 +21,7 @@ import type {
   WeeklySegmentConfig,
   ToolbarSegmentConfig,
 } from "./segments";
-import type { ToolbarStateReader } from "./daemon/toolbar-state";
-import type { ThemeStateReader } from "./daemon/theme-state";
+import type { SessionStateReader } from "./daemon/session-state";
 import { formatModelName, shortenModelName } from "./utils/formatters";
 import type { BlockInfo } from "./segments/block";
 import type { TodayInfo } from "./segments/today";
@@ -166,16 +165,14 @@ export class PowerlineRenderer {
   private _tmuxService?: TmuxService;
   private _metricsProvider?: MetricsProvider;
   private _segmentRenderer?: SegmentRenderer;
-  private _toolbarState?: ToolbarStateReader;
-  private _themeState?: ThemeStateReader;
+  private _sessionState?: SessionStateReader;
 
   constructor(
     private readonly config: PowerlineConfig,
     deps?: {
       gitService?: GitService;
       usageProvider?: UsageProvider;
-      toolbarState?: ToolbarStateReader;
-      themeState?: ThemeStateReader;
+      sessionState?: SessionStateReader;
     },
   ) {
     this.symbols = this.initializeSymbols();
@@ -183,8 +180,7 @@ export class PowerlineRenderer {
     // cached service implementations without the renderer knowing.
     if (deps?.gitService) this._gitService = deps.gitService;
     if (deps?.usageProvider) this._usageProvider = deps.usageProvider;
-    if (deps?.toolbarState) this._toolbarState = deps.toolbarState;
-    if (deps?.themeState) this._themeState = deps.themeState;
+    if (deps?.sessionState) this._sessionState = deps.sessionState;
   }
 
   private get usageProvider(): UsageProvider {
@@ -241,7 +237,7 @@ export class PowerlineRenderer {
       this._segmentRenderer = new SegmentRenderer(
         this.config,
         this.symbols,
-        this._toolbarState,
+        this._sessionState,
       );
     }
     return this._segmentRenderer;
@@ -320,7 +316,7 @@ export class PowerlineRenderer {
     contextInfo: ContextInfo | null,
     metricsInfo: MetricsInfo | null,
   ): Promise<string> {
-    const colors = this.getThemeColors();
+    const colors = this.getThemeColors(hookData.session_id ?? "");
     const currentDir = hookData.workspace?.current_dir || hookData.cwd || "/";
     const terminalWidth = getTerminalWidth();
 
@@ -384,7 +380,7 @@ export class PowerlineRenderer {
   private async generateTuiStatusline(
     hookData: ClaudeHookData,
   ): Promise<string> {
-    const colors = this.getThemeColors();
+    const colors = this.getThemeColors(hookData.session_id ?? "");
     const terminalWidth = getTerminalWidth();
     const currentDir = hookData.workspace?.current_dir || hookData.cwd || "/";
     const charset = this.config.display.charset || "unicode";
@@ -509,7 +505,7 @@ export class PowerlineRenderer {
     contextInfo: ContextInfo | null,
     metricsInfo: MetricsInfo | null,
   ): Promise<string> {
-    const colors = this.getThemeColors();
+    const colors = this.getThemeColors(hookData.session_id ?? "");
     const currentDir = hookData.workspace?.current_dir || hookData.cwd || "/";
 
     const segments = Object.entries(lineConfig.segments)
@@ -872,8 +868,8 @@ export class PowerlineRenderer {
     if (!panel?.items?.length) return output;
     // [LAW:dataflow-not-control-flow] Panel is visible when items exist;
     // toolbar-toggle collapses it (explicitly hidden). Default = visible.
-    const collapsed = this._toolbarState?.isExpanded(hookData.session_id ?? "") ?? false;
-    if (collapsed) return output;
+    const expanded = this._sessionState?.get(hookData.session_id ?? "", "toolbar-expanded");
+    if (expanded) return output;
 
     const panelLine = this.renderPanelLine(hookData);
     if (!panelLine) return output;
@@ -884,11 +880,12 @@ export class PowerlineRenderer {
     const panel = this.config.panel;
     if (!panel?.items?.length) return null;
 
-    const colors = this.getThemeColors();
+    const sessionId = hookData.session_id ?? "";
+    const colors = this.getThemeColors(sessionId);
     const effectiveTheme =
-      this._themeState?.getThemeOverride() ?? this.config.theme;
+      this._sessionState?.get(sessionId, "theme") ?? this.config.theme;
     const effectiveStyle =
-      this._themeState?.getStyleOverride() ?? this.config.style ?? "surface";
+      this._sessionState?.get(sessionId, "style") ?? this.config.style ?? "surface";
 
     const sep = panel.separator ?? " ";
     const parts: string[] = [];
@@ -932,7 +929,7 @@ export class PowerlineRenderer {
     return this.buildLineFromSegments([segment], colors);
   }
 
-  private getThemeColors(): PowerlineColors {
+  private getThemeColors(sessionId: string): PowerlineColors {
     const colorMode = this.config.display.colorCompatibility || "auto";
     const resolved = colorMode === "auto" ? getColorSupport() : colorMode;
     const colorSupport =
@@ -946,9 +943,9 @@ export class PowerlineRenderer {
 
     const theme = this.config.theme === "custom" && this.config.colors?.custom
       ? "textual-dark"
-      : this._themeState?.getThemeOverride() ?? this.config.theme;
+      : this._sessionState?.get(sessionId, "theme") ?? this.config.theme;
 
-    const style = this._themeState?.getStyleOverride() ?? this.config.style;
+    const style = this._sessionState?.get(sessionId, "style") ?? this.config.style;
 
     return resolveThemeColors({
       theme,

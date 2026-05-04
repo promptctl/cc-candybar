@@ -10,7 +10,7 @@ import type {
   MetricsInfo,
 } from ".";
 import type { TodayInfo } from "./today";
-import type { ToolbarStateReader } from "../daemon/toolbar-state";
+import type { SessionStateReader } from "../daemon/session-state";
 
 import {
   formatModelName,
@@ -303,7 +303,7 @@ export class SegmentRenderer {
   constructor(
     private readonly config: PowerlineConfig,
     private readonly symbols: PowerlineSymbols,
-    private readonly toolbarState?: ToolbarStateReader,
+    private readonly sessionState?: SessionStateReader,
   ) {}
 
   renderDirectory(
@@ -1044,7 +1044,7 @@ export class SegmentRenderer {
     if (!items || items.length === 0) return null;
     const sep = config.separator ?? " ";
 
-    const expanded = isToolbarExpanded(ctx.sessionId, this.toolbarState);
+    const expanded = isToolbarExpanded(ctx.sessionId, this.sessionState);
     const parts: string[] = [];
     for (const item of items) {
       if (item.extra && !expanded) continue;
@@ -1193,14 +1193,14 @@ export function parseToolbarDsl(raw: string): ToolbarItem[] {
 }
 
 // Per-session toolbar collapse/expand state. When the daemon provides an
-// in-memory ToolbarStateReader, it is authoritative (the daemon owns mutations
+// in-memory SessionStateReader, it is authoritative (the daemon owns mutations
 // via click handlers). File fallback is for non-daemon renders only.
 function isToolbarExpanded(
   sessionId: string | undefined,
-  state?: ToolbarStateReader,
+  state?: SessionStateReader,
 ): boolean {
   if (!sessionId) return false;
-  if (state) return state.isExpanded(sessionId);
+  if (state) return !!state.get(sessionId, "toolbar-expanded");
   const home = globalThis.process?.env?.HOME;
   if (!home) return false;
   try {

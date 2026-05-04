@@ -1,13 +1,13 @@
 import { RenderCache } from "../src/daemon/cache/render";
 import { GitService } from "../src/segments/git";
 import { UsageProvider } from "../src/segments/session";
-import { ToolbarState } from "../src/daemon/toolbar-state";
+import { SessionState } from "../src/daemon/session-state";
 
 function makeDeps() {
   return {
     gitService: new GitService(),
     usageProvider: new UsageProvider(),
-    toolbarState: new ToolbarState(),
+    sessionState: new SessionState(),
   };
 }
 
