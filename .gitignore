@@ -12,5 +12,5 @@ coverage/
 # SEA build artifacts
 dist-sea/
 *.blob
-claude-powerline-sea-*
+cc-candybar-sea-*
 demo-recording/

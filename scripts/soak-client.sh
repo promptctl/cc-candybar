@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Per-client loop for soak.sh. Picks a random repo each iteration, generates
 # synthetic hookData with a fixed sessionId (so usageCache is exercised under
-# its real key), pipes it to claude-powerline, saves output, sleeps 1-5s.
+# its real key), pipes it to cc-candybar, saves output, sleeps 1-5s.
 #
 # Usage: soak-client.sh REPOS_FILE SESSION_ID OUT_DIR CLIENT_ID
 #

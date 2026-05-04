@@ -54,8 +54,8 @@ main() {
     generate_gif scripts/screenshot-themes.tape
     generate_gif scripts/screenshot-styles.tape
 
-    extract_frame "${IMAGES}/themes-all.gif" "${IMAGES}/claude-powerline-themes.png" 105 300
-    extract_frame "${IMAGES}/styles-all.gif" "${IMAGES}/claude-powerline-styles.png" 100 380
+    extract_frame "${IMAGES}/themes-all.gif" "${IMAGES}/cc-candybar-themes.png" 105 300
+    extract_frame "${IMAGES}/styles-all.gif" "${IMAGES}/cc-candybar-styles.png" 100 380
 
     rm -f "${IMAGES}/themes-all.gif" "${IMAGES}/styles-all.gif"
 

@@ -1,6 +1,6 @@
 ---
-name: powerline
-description: Claude Powerline statusline setup wizard
+name: candybar
+description: CC Candybar statusline setup wizard
 allowed-tools:
   - Bash
   - Read
@@ -10,18 +10,18 @@ allowed-tools:
   - Glob
 ---
 
-# Claude Powerline Setup Wizard
+# CC Candybar Setup Wizard
 
-You are running an interactive setup wizard to configure the claude-powerline statusline for Claude Code. Follow these steps in order, using AskUserQuestion for each decision point.
+You are running an interactive setup wizard to configure the cc-candybar statusline for Claude Code. Follow these steps in order, using AskUserQuestion for each decision point.
 
 ## Important Notes
 
 - Do not skip steps or combine questions.
 - Always wait for the user's response before moving to the next step.
 - Track the user's choices in variables throughout the wizard.
-- The final config is written as JSON to `~/.claude/claude-powerline.json`.
+- The final config is written as JSON to `~/.claude/cc-candybar.json`.
 - Do NOT use the Agent tool or Explore subagents. All information you need is in this document.
-- Do NOT read source code from the claude-powerline package. Use only the instructions below.
+- Do NOT read source code from the cc-candybar package. Use only the instructions below.
 - IMPORTANT: After running any Bash or Read tool, repeat the key output as text in your response. Some users have a collapsed UI mode where tool outputs require a click to expand. Always relay important results (like version numbers, previews, or file contents) in your text so the user can see them without expanding.
 
 ## Step 1: Check Node.js
@@ -39,7 +39,7 @@ Tell the user the detected version in your text response.
 Display:
 
 ````markdown
-Claude Powerline requires **Node.js 18+** to run.
+CC Candybar requires **Node.js 18+** to run.
 
 Install it from https://nodejs.org or via your package manager:
 
@@ -295,16 +295,16 @@ Ask the user about their daily budget for cost tracking:
 ### Check for existing config
 
 ```bash
-test -f ~/.claude/claude-powerline.json && echo "exists" || echo "not_found"
+test -f ~/.claude/cc-candybar.json && echo "exists" || echo "not_found"
 ```
 
 If it exists, ask:
 
-- **Question**: "Found existing ~/.claude/claude-powerline.json. What should I do?"
+- **Question**: "Found existing ~/.claude/cc-candybar.json. What should I do?"
 - **Header**: "Existing Config"
 - **Options**:
   - "Replace it" -> Continue
-  - "Back it up first" -> Run `cp ~/.claude/claude-powerline.json ~/.claude/claude-powerline.json.bak` then continue
+  - "Back it up first" -> Run `cp ~/.claude/cc-candybar.json ~/.claude/cc-candybar.json.bak` then continue
   - "Keep it and exit" -> Exit the wizard
 
 ### Build and write the config
@@ -331,7 +331,7 @@ ${CLAUDE_PLUGIN_ROOT}/templates/<template-file>
 
 1. **Handle "No budget"**: If the user chose "No budget" in Step 7, remove the entire `"amount": "replace:TODAY_BUDGET",` line (including the trailing comma) from the budget section. If Step 7 was skipped (essential preset, or TUI compact/standard), do not modify the budget section.
 
-1. **Write the result** to `~/.claude/claude-powerline.json` using the Write tool. Do NOT read or merge with any existing config.
+1. **Write the result** to `~/.claude/cc-candybar.json` using the Write tool. Do NOT read or merge with any existing config.
 
 ## Step 9: Update settings.json
 
@@ -341,7 +341,7 @@ Read `~/.claude/settings.json` if it exists. Add or update ONLY the `statusLine`
 {
   "statusLine": {
     "type": "command",
-    "command": "npx -y @owloops/claude-powerline@latest"
+    "command": "npx -y @promptctl/cc-candybar@latest"
   }
 }
 ```
@@ -374,15 +374,15 @@ Display:
 Setup complete.
 
 **Files created/updated:**
-- `~/.claude/claude-powerline.json` (powerline config)
+- `~/.claude/cc-candybar.json` (candybar config)
 - `~/.claude/settings.json` (claude settings)
 
 **What now:**
 1. Restart Claude Code if the statusline does not appear.
-2. Run `/powerline` any time to reconfigure.
-3. Edit `~/.claude/claude-powerline.json` by hand for advanced options.
+2. Run `/candybar` any time to reconfigure.
+3. Edit `~/.claude/cc-candybar.json` by hand for advanced options.
 
-Documentation: https://github.com/Owloops/claude-powerline
+Documentation: https://github.com/promptctl/cc-candybar
 ````
 
 **If the user chose TUI style**, also display:
@@ -390,7 +390,7 @@ Documentation: https://github.com/Owloops/claude-powerline
 ````markdown
 **Customizing your TUI grid layout:**
 
-Edit `display.tui` in `~/.claude/claude-powerline.json` to fine-tune:
+Edit `display.tui` in `~/.claude/cc-candybar.json` to fine-tune:
 
 - **Box style** — Add `"box": "rounded"` to change borders. Presets: `rounded`, `square`, `heavy`, `double`, `dashed`, `heavy-dashed`, `mixed`, `ascii`, `invisible`
 - **Title/footer** — Edit `title.left`, `title.right`, `footer.left`, `footer.right` using `{segment.part}` tokens (e.g. `{model.icon}`, `{dir}`, `{weekly.pct}`)
