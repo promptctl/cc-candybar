@@ -80,14 +80,19 @@ export type { TuiPanelOptions } from "./tui/renderer";
 export {
   resolveThemeColors,
   listAvailableThemes,
-  semanticMapping,
-  mappingFromHueStep,
+  buildPaletteMapping,
+  STYLE_ORDER,
+  STYLE_PRESETS,
+  DEFAULT_STYLE,
+  SEMANTIC_VARIANTS,
   rotateHue,
 } from "./themes";
 export type {
   CascadeConfig,
   SegmentColors,
   PaletteMapping,
+  StylePreset,
+  SemanticVariant,
 } from "./themes";
 
 // --- Constants ---

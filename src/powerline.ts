@@ -870,6 +870,7 @@ export class PowerlineRenderer {
 
     return resolveThemeColors({
       theme,
+      style: this.config.style,
       themeMapping: this.config.themeMapping as
         | Record<string, SegmentOverride>
         | undefined,

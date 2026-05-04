@@ -76,6 +76,7 @@ export interface SegmentColorOverride {
 
 export interface PowerlineConfig {
   theme: string;
+  style?: string;
   display: DisplayConfig;
   colors?: {
     custom: ColorTheme;
