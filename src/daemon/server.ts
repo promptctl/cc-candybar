@@ -3,6 +3,7 @@ import net from "node:net";
 import os from "node:os";
 import path from "node:path";
 import process from "node:process";
+import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
 import { daemonDir, pidPath, socketPath } from "./paths";
 import { dlog, closeLog } from "./log";
@@ -96,29 +97,44 @@ export function runDaemon(): void {
 
 // --- binary-mtime self-restart ---
 //
-// If the daemon's source binary changes on disk (rebuild, upgrade, edit), exit
-// at the next sample so the next client respawns from the fresh code. Cheap
-// (one statSync/min) and avoids the user having to manually kill the daemon
-// during development. unref() so this timer doesn't hold the process alive.
+// If the daemon's compiled output changes on disk (rebuild, upgrade, edit),
+// exit at the next sample so the next client respawns from the fresh code.
+// Cheap (one statSync/min) and avoids the user having to manually kill the
+// daemon during development. unref() so this timer doesn't hold the process alive.
 function armBinaryWatch(): void {
-  const target = process.argv[1];
-  if (!target) return;
-  let originalMtime: number;
-  try {
-    originalMtime = fs.statSync(target).mtimeMs;
-  } catch {
-    return;
+  // Watch the resolved entry point, not the bin shim — npm run build updates
+  // dist/index.mjs but the bin/claude-powerline shim never changes.
+  const entryUrl = import.meta.url;
+  const targets: string[] = [];
+  if (entryUrl.startsWith("file://")) {
+    targets.push(fileURLToPath(entryUrl));
   }
-  const timer = setInterval(() => {
+  // Also watch argv[1] as fallback (covers global installs, symlinks, etc.)
+  if (process.argv[1]) targets.push(process.argv[1]!);
+
+  const originalMtimes = new Map<string, number>();
+  for (const t of targets) {
     try {
-      const nowMtime = fs.statSync(target).mtimeMs;
-      if (nowMtime !== originalMtime) {
-        dlog("info", `binary mtime changed (${target}); shutting down`);
-        clearInterval(timer);
-        shutdown(0);
+      originalMtimes.set(t, fs.statSync(t).mtimeMs);
+    } catch {
+      // File may not exist yet — skip it.
+    }
+  }
+  if (originalMtimes.size === 0) return;
+
+  const timer = setInterval(() => {
+    for (const [t, originalMtime] of originalMtimes) {
+      try {
+        const nowMtime = fs.statSync(t).mtimeMs;
+        if (nowMtime !== originalMtime) {
+          dlog("info", `binary mtime changed (${t}); shutting down`);
+          clearInterval(timer);
+          shutdown(0);
+          return;
+        }
+      } catch (e) {
+        dlog("warn", `bin stat failed: ${(e as Error).message}`);
       }
-    } catch (e) {
-      dlog("warn", `bin stat failed: ${(e as Error).message}`);
     }
   }, BIN_CHECK_INTERVAL_MS);
   timer.unref();
