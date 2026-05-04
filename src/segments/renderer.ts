@@ -141,14 +141,14 @@ export interface ToolbarItem {
   // Visible label. Supports `${expr}` interpolations resolved against the
   // toolbar context (e.g. `${session.id:8}`, `📂`).
   text: string;
-  // Click verb dispatched by the cpwl:// handler (e.g. "copy", "open-vscode",
+  // Click verb dispatched by the cc-candybar:// handler (e.g. "copy", "open-vscode",
   // "open-url", "toolbar-toggle"). Adding a verb means adding a row in the
   // dispatch table — the toolbar itself doesn't care which verbs exist.
   verb: string;
   // Resolver expression for the value passed to the verb. Empty string is
   // valid (for action verbs like toolbar-toggle that ignore the value).
   expr: string;
-  // Optional override scheme (defaults to "cpwl").
+  // Optional override scheme (defaults to "cc-candybar").
   scheme?: string;
   // Items prefixed with `?` in the DSL are "extras" — only rendered when
   // ~/.claude/.toolbar-expanded exists (toggled via the toolbar-toggle verb).
@@ -1033,7 +1033,7 @@ export class SegmentRenderer {
         value = resolved;
       }
       const visible = interpolateToolbarText(item.text, ctx);
-      const scheme = item.scheme ?? "cpwl";
+      const scheme = item.scheme ?? "cc-candybar";
       const url = `${scheme}://${item.verb}/${encodeURIComponent(value)}`;
       parts.push(wrapOsc8(visible, url));
     }

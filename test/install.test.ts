@@ -8,15 +8,15 @@ import {
 const { shellEscape, buildStatusLineCommand, DEFAULT_INSTALL_ARGS } = __test__;
 
 describe("install — parseHandlerUrl", () => {
-  it("treats cpwl://<value> as verb=copy", () => {
-    expect(parseHandlerUrl("cpwl://abc-123")).toEqual({
+  it("treats cc-candybar://<value> as verb=copy", () => {
+    expect(parseHandlerUrl("cc-candybar://abc-123")).toEqual({
       verb: "copy",
       value: "abc-123",
     });
   });
 
   it("parses explicit verb", () => {
-    expect(parseHandlerUrl("cpwl://copy/abc-123")).toEqual({
+    expect(parseHandlerUrl("cc-candybar://copy/abc-123")).toEqual({
       verb: "copy",
       value: "abc-123",
     });
@@ -24,25 +24,25 @@ describe("install — parseHandlerUrl", () => {
 
   it("preserves case in the value", () => {
     // new URL() lowercases hosts; manual parse must not.
-    expect(parseHandlerUrl("cpwl://AbC-DeF").value).toBe("AbC-DeF");
+    expect(parseHandlerUrl("cc-candybar://AbC-DeF").value).toBe("AbC-DeF");
   });
 
   it("decodes percent-escaped value", () => {
-    expect(parseHandlerUrl("cpwl://hello%20world")).toEqual({
+    expect(parseHandlerUrl("cc-candybar://hello%20world")).toEqual({
       verb: "copy",
       value: "hello world",
     });
-    expect(parseHandlerUrl("cpwl://copy/hello%20world").value).toBe(
+    expect(parseHandlerUrl("cc-candybar://copy/hello%20world").value).toBe(
       "hello world",
     );
   });
 
   it("preserves slashes inside the value (verb form)", () => {
-    expect(parseHandlerUrl("cpwl://copy/a/b/c").value).toBe("a/b/c");
+    expect(parseHandlerUrl("cc-candybar://copy/a/b/c").value).toBe("a/b/c");
   });
 
   it("rejects mismatched scheme", () => {
-    expect(() => parseHandlerUrl("http://abc")).toThrow(/expected cpwl/);
+    expect(() => parseHandlerUrl("http://abc")).toThrow(/expected cc-candybar/);
   });
 
   it("respects custom scheme parameter", () => {
@@ -150,20 +150,20 @@ describe("install — buildStatusLineCommand", () => {
 
 describe("renderer — wrapOsc8 / buildClickUrl", () => {
   it("wraps visible text in an OSC 8 hyperlink", () => {
-    expect(wrapOsc8("hi", "cpwl://copy/abc")).toBe(
-      "\u001b]8;;cpwl://copy/abc\u001b\\hi\u001b]8;;\u001b\\",
+    expect(wrapOsc8("hi", "cc-candybar://copy/abc")).toBe(
+      "\u001b]8;;cc-candybar://copy/abc\u001b\\hi\u001b]8;;\u001b\\",
     );
   });
 
   it("URL-encodes the value in buildClickUrl", () => {
-    expect(buildClickUrl("cpwl", "copy", "a b/c?d")).toBe(
-      "cpwl://copy/a%20b%2Fc%3Fd",
+    expect(buildClickUrl("cc-candybar", "copy", "a b/c?d")).toBe(
+      "cc-candybar://copy/a%20b%2Fc%3Fd",
     );
   });
 
   it("includes the verb in the URL", () => {
-    expect(buildClickUrl("cpwl", "open-vscode", "/tmp/foo")).toBe(
-      "cpwl://open-vscode/%2Ftmp%2Ffoo",
+    expect(buildClickUrl("cc-candybar", "open-vscode", "/tmp/foo")).toBe(
+      "cc-candybar://open-vscode/%2Ftmp%2Ffoo",
     );
   });
 });
@@ -182,51 +182,51 @@ describe("renderer — applyClickActions", () => {
   it("first action without glyph wraps the visible text", () => {
     const got = applyClickActions("hi", {
       kind: "url",
-      scheme: "cpwl",
+      scheme: "cc-candybar",
       actions: [{ verb: "copy", source: "sessionId" }],
     }, ctx);
-    expect(got).toBe("\u001b]8;;cpwl://copy/abc-123\u001b\\hi\u001b]8;;\u001b\\");
+    expect(got).toBe("\u001b]8;;cc-candybar://copy/abc-123\u001b\\hi\u001b]8;;\u001b\\");
   });
 
   it("appends one OSC 8-wrapped glyph per extra action", () => {
     const got = applyClickActions("hi", {
       kind: "url",
-      scheme: "cpwl",
+      scheme: "cc-candybar",
       actions: [
         { verb: "copy", source: "sessionId" },
         { verb: "open-vscode", source: "transcriptPath", glyph: "📄" },
         { verb: "open-vscode", source: "projectDir", glyph: "📂" },
       ],
     }, ctx);
-    expect(got).toContain("cpwl://copy/abc-123");
+    expect(got).toContain("cc-candybar://copy/abc-123");
     expect(got).toContain(
-      "cpwl://open-vscode/" + encodeURIComponent("/tmp/log.jsonl"),
+      "cc-candybar://open-vscode/" + encodeURIComponent("/tmp/log.jsonl"),
     );
     expect(got).toContain(
-      "cpwl://open-vscode/" + encodeURIComponent("/tmp/proj"),
+      "cc-candybar://open-vscode/" + encodeURIComponent("/tmp/proj"),
     );
     expect(got).toContain("📄");
     expect(got).toContain("📂");
-    expect(got.startsWith("\u001b]8;;cpwl://copy/abc-123")).toBe(true);
+    expect(got.startsWith("\u001b]8;;cc-candybar://copy/abc-123")).toBe(true);
   });
 
   it("silently drops actions whose source is missing", () => {
     const got = applyClickActions("hi", {
       kind: "url",
-      scheme: "cpwl",
+      scheme: "cc-candybar",
       actions: [
         { verb: "copy", source: "sessionId" },
         { verb: "open-vscode", source: "projectDir", glyph: "📂" },
       ],
     }, { sessionId: "abc-123" });
-    expect(got).toContain("cpwl://copy/abc-123");
+    expect(got).toContain("cc-candybar://copy/abc-123");
     expect(got).not.toContain("📂");
   });
 
   it("only one action without a glyph wraps main text", () => {
     const got = applyClickActions("hi", {
       kind: "url",
-      scheme: "cpwl",
+      scheme: "cc-candybar",
       actions: [
         { verb: "copy", source: "sessionId" },
         // Second no-glyph entry is a misconfiguration; should be ignored,
@@ -234,7 +234,7 @@ describe("renderer — applyClickActions", () => {
         { verb: "open-vscode", source: "projectDir" },
       ],
     }, ctx);
-    expect(got).toContain("cpwl://copy/abc-123");
-    expect(got).not.toContain("cpwl://open-vscode");
+    expect(got).toContain("cc-candybar://copy/abc-123");
+    expect(got).not.toContain("cc-candybar://open-vscode");
   });
 });

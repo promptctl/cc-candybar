@@ -31,7 +31,7 @@ pnpm dlx @promptctl/claude-powerline@latest install
 
 That single command:
 
-1. Builds `~/Applications/ClaudePowerlineURLHandler.app` and registers the `cpwl://` URL scheme with macOS Launch Services.
+1. Builds `~/Applications/ClaudePowerlineURLHandler.app` and registers the `cc-candybar://` URL scheme with macOS Launch Services.
 2. Copies the runtime into `~/Library/Application Support/ClaudePowerline/url-handler.mjs` (stable path independent of pnpm cache).
 3. Writes the statusline renderer command into `~/.claude/settings.json`.
 
