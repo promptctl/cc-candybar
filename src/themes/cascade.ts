@@ -13,8 +13,8 @@ import {
 import { RESET_CODE } from "../utils/constants";
 import { rotateHue } from "./oklch.js";
 import {
-  semanticMapping,
-  mappingFromHueStep,
+  buildPaletteMapping,
+  DEFAULT_STYLE,
   type PaletteMapping,
   type SegmentColors,
 } from "./default-mapping.js";
@@ -132,6 +132,7 @@ function customThemeToOverrides(
 
 export interface CascadeConfig {
   theme: string;
+  style?: string;
   themeMapping?: Record<string, SegmentOverride>;
   hueStep?: number;
   customColors?: ColorTheme;
@@ -147,11 +148,11 @@ export function resolveThemeColors(config: CascadeConfig): PowerlineColors {
     throw new Error(`Unknown theme palette: "${config.theme}"`);
   }
 
-  // Select mapping: hueStep generates one, otherwise use semantic default
-  let mapping: PaletteMapping =
-    config.hueStep != null
-      ? mappingFromHueStep(config.hueStep)
-      : semanticMapping;
+  // Build mapping from style preset + optional hue rotation
+  let mapping = buildPaletteMapping(
+    config.style ?? DEFAULT_STYLE,
+    config.hueStep,
+  );
 
   // Merge custom theme colors (backward compat with colors.custom)
   if (config.customColors) {
@@ -301,9 +302,6 @@ export function resolveThemeColors(config: CascadeConfig): PowerlineColors {
 export function listAvailableThemes(): string[] {
   const registryNames = listThemePalettes();
   const allNames = new Set<string>(registryNames as readonly string[]);
-  for (const alias of Object.keys(THEME_ALIASES)) {
-    allNames.add(alias);
-  }
   allNames.add("custom");
   return [...allNames].sort();
 }

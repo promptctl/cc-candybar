@@ -1,13 +1,24 @@
 /**
- * Default mapping from segment names to Textual palette variables.
+ * Semantic variant assignments and style presets.
  *
- * All segments use the same base (primary bg, foreground fg).
- * Variety comes from hueStep at resolution time, which rotates
- * the base color by position — not from hardcoded per-segment offsets.
+ * Each segment maps to a semantic variant (primary, secondary, accent, etc.).
+ * A style preset transforms variants into actual palette variable names:
+ *   muted:  `${variant}-muted` / `text-${variant}`
+ *   surface: surface-bg map / `foreground`
+ *   button: `${variant}` / `button-color-foreground`
+ *   hue:    `${variant}` / `foreground`  (variety from OKLCH hue rotation)
  *
- * contextWarning and contextCritical use warning/error directly —
- * these are semantically fixed colors that must not rotate.
+ * contextWarning and contextCritical always use raw warning/error —
+ * these are semantically fixed colors that must not transform.
  */
+
+export type SemanticVariant =
+  | "primary"
+  | "secondary"
+  | "accent"
+  | "success"
+  | "warning"
+  | "error";
 
 export interface SegmentColors {
   bg: string;
@@ -17,29 +28,78 @@ export interface SegmentColors {
 
 export type PaletteMapping = Record<string, SegmentColors>;
 
-export const semanticMapping: PaletteMapping = {
-  directory:       { bg: "primary", fg: "foreground" },
-  git:             { bg: "primary", fg: "foreground" },
-  gitTaculous:     { bg: "primary", fg: "foreground" },
-  model:           { bg: "primary", fg: "foreground" },
-  session:         { bg: "primary", fg: "foreground" },
-  block:           { bg: "primary", fg: "foreground" },
-  today:           { bg: "primary", fg: "foreground" },
-  tmux:            { bg: "primary", fg: "foreground" },
-  context:         { bg: "primary", fg: "foreground" },
-  contextWarning:  { bg: "warning", fg: "foreground" },
-  contextCritical: { bg: "error",   fg: "foreground" },
-  metrics:         { bg: "primary", fg: "foreground" },
-  version:         { bg: "primary", fg: "foreground" },
-  env:             { bg: "primary", fg: "foreground" },
-  weekly:          { bg: "primary", fg: "foreground" },
-  toolbar:         { bg: "primary", fg: "foreground" },
+/**
+ * Variant assignment per segment — determines each segment's semantic role.
+ * Segments that share a variant get the same base color; style provides variety.
+ */
+export const SEMANTIC_VARIANTS: Record<string, SemanticVariant> = {
+  directory:       "primary",
+  git:             "secondary",
+  gitTaculous:     "secondary",
+  model:           "accent",
+  session:         "success",
+  block:           "error",
+  today:           "primary",
+  tmux:            "secondary",
+  context:         "warning",
+  contextWarning:  "warning",
+  contextCritical: "error",
+  metrics:         "accent",
+  version:         "success",
+  env:             "warning",
+  weekly:          "error",
+  toolbar:         "primary",
 };
 
-/**
- * Segment names in canonical order — used by hueStep to assign
- * auto-incremented offsets.
- */
+/** Segments with fixed semantic colors — no style transform, no hue rotation. */
+const SEMANTIC_SEGMENTS = new Set(["contextWarning", "contextCritical"]);
+
+// --- Style presets ---
+
+const SURFACE_BG: Record<SemanticVariant, string> = {
+  primary:   "surface",
+  secondary: "surface-active",
+  accent:    "panel",
+  success:   "surface",
+  warning:   "surface-active",
+  error:     "panel",
+};
+
+export interface StylePreset {
+  name: string;
+  resolve(variant: SemanticVariant): SegmentColors;
+}
+
+export const STYLE_PRESETS: Record<string, StylePreset> = {
+  surface: {
+    name: "Surface",
+    resolve: (v) => ({ bg: SURFACE_BG[v], fg: "foreground" }),
+  },
+  muted: {
+    name: "Muted + Text",
+    resolve: (v) => ({ bg: `${v}-muted`, fg: `text-${v}` }),
+  },
+  button: {
+    name: "Button",
+    resolve: (v) => ({ bg: v, fg: "button-color-foreground" }),
+  },
+  hue: {
+    name: "Hue Rotation",
+    resolve: (v) => ({ bg: v, fg: "foreground" }),
+  },
+};
+
+export const STYLE_ORDER: readonly string[] = [
+  "surface",
+  "muted",
+  "button",
+  "hue",
+];
+
+export const DEFAULT_STYLE = "surface";
+
+// --- Segment order (for hue rotation indexing) ---
+
 export const SEGMENT_ORDER: readonly string[] = [
   "directory",
   "git",
@@ -60,21 +120,32 @@ export const SEGMENT_ORDER: readonly string[] = [
 ];
 
 /**
- * Build a mapping with auto-incremented hue offsets from a step value.
- * contextWarning and contextCritical keep their non-rotated warning/error vars.
+ * Build a PaletteMapping from a style preset + optional hue rotation.
+ * Semantic segments (contextWarning, contextCritical) always use raw
+ * warning/error with button-color-foreground, bypassing style and hue.
  */
-export function mappingFromHueStep(step: number): PaletteMapping {
-  const result: PaletteMapping = {};
+export function buildPaletteMapping(
+  style: string,
+  hueStep?: number,
+): PaletteMapping {
+  const preset = STYLE_PRESETS[style] ?? STYLE_PRESETS["surface"]!;
+  const mapping: PaletteMapping = {};
   let hueIndex = 0;
-  for (const name of SEGMENT_ORDER) {
-    if (name === "contextWarning") {
-      result[name] = { bg: "warning", fg: "foreground" };
-    } else if (name === "contextCritical") {
-      result[name] = { bg: "error", fg: "foreground" };
-    } else {
-      result[name] = { bg: "primary", fg: "foreground", hue: hueIndex * step };
-      hueIndex++;
-    }
+
+  for (const seg of SEGMENT_ORDER) {
+    const variant = SEMANTIC_VARIANTS[seg] ?? "primary";
+    const isSemantic = SEMANTIC_SEGMENTS.has(seg);
+
+    const base: SegmentColors = isSemantic
+      ? { bg: variant, fg: "button-color-foreground" }
+      : preset.resolve(variant);
+
+    const applyHue = !isSemantic && hueStep;
+    const hue = applyHue ? hueIndex * hueStep : undefined;
+    if (applyHue) hueIndex++;
+
+    mapping[seg] = hue != null ? { ...base, hue } : base;
   }
-  return result;
+
+  return mapping;
 }

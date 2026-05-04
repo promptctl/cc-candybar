@@ -7,7 +7,12 @@ import {
 import { getColorSupport } from "../src/utils/color-support";
 import { resolveThemeColors, listAvailableThemes } from "../src/themes";
 import { rotateHue, rgbaToOklch } from "../src/themes/oklch";
-import { mappingFromHueStep, semanticMapping } from "../src/themes/default-mapping";
+import {
+  buildPaletteMapping,
+  SEMANTIC_VARIANTS,
+  STYLE_ORDER,
+  STYLE_PRESETS,
+} from "../src/themes/default-mapping";
 import { ColorRgba } from "rich-js";
 
 describe("Colors", () => {
@@ -92,14 +97,14 @@ describe("Colors", () => {
   });
 
   describe("Theme Cascade", () => {
-    it("should list available themes including old aliases", () => {
+    it("should list available themes (excludes dark/light aliases)", () => {
       const themes = listAvailableThemes();
-      expect(themes).toContain("dark");
-      expect(themes).toContain("light");
       expect(themes).toContain("nord");
       expect(themes).toContain("gruvbox");
       expect(themes).toContain("custom");
-      expect(themes.length).toBeGreaterThanOrEqual(18);
+      expect(themes).not.toContain("dark");
+      expect(themes).not.toContain("light");
+      expect(themes.length).toBeGreaterThanOrEqual(16);
     });
 
     it("should resolve theme colors for gruvbox", () => {
@@ -126,14 +131,19 @@ describe("Colors", () => {
       }
     });
 
-    it("should produce uniform bg colors without hueStep", () => {
+    it("should produce distinct bg colors per segment with surface style", () => {
       const colors = resolveThemeColors({
         theme: "gruvbox",
+        style: "surface",
         colorSupport: "truecolor",
       });
-      // Default mapping is uniform — all segments use primary
-      expect(colors.hex!.modeBg).toBe(colors.hex!.gitBg);
-      expect(colors.hex!.modeBg).toBe(colors.hex!.modelBg);
+      const bgs = new Set([
+        colors.hex!.modeBg,
+        colors.hex!.gitBg,
+        colors.hex!.modelBg,
+        colors.hex!.sessionBg,
+      ]);
+      expect(bgs.size).toBeGreaterThanOrEqual(2);
     });
 
     it("should produce distinct bg colors with hueStep", () => {
@@ -172,7 +182,6 @@ describe("Colors", () => {
         colorSupport: "truecolor",
         hueStep: 60,
       });
-      // With hueStep=60, segments should have different hues
       const bgs = [
         colors.hex!.modeBg,
         colors.hex!.gitBg,
@@ -262,7 +271,7 @@ describe("Colors", () => {
     });
   });
 
-  describe("Default Mapping", () => {
+  describe("Semantic Variants & Style Presets", () => {
     it("should have entries for all standard segments", () => {
       const segments = [
         "directory", "git", "gitTaculous", "model", "session",
@@ -270,16 +279,43 @@ describe("Colors", () => {
         "contextCritical", "metrics", "version", "env", "weekly",
       ];
       for (const seg of segments) {
-        expect(semanticMapping[seg]).toBeDefined();
-        expect(semanticMapping[seg]!.bg).toBeTruthy();
+        expect(SEMANTIC_VARIANTS[seg]).toBeDefined();
       }
     });
 
-    it("should produce a valid mapping from hueStep", () => {
-      const mapping = mappingFromHueStep(45);
-      expect(Object.keys(mapping).length).toBeGreaterThan(10);
-      expect(mapping.contextWarning!.bg).toBe("warning");
-      expect(mapping.contextCritical!.bg).toBe("error");
+    it("should produce a valid mapping from any style", () => {
+      for (const style of STYLE_ORDER) {
+        const mapping = buildPaletteMapping(style);
+        expect(Object.keys(mapping).length).toBeGreaterThan(10);
+        expect(mapping.contextWarning!.bg).toBe("warning");
+        expect(mapping.contextCritical!.bg).toBe("error");
+      }
+    });
+
+    it("should apply correct bg/fg pattern per style", () => {
+      const surface = buildPaletteMapping("surface");
+      expect(surface.directory!.bg).toBe("surface");
+      expect(surface.directory!.fg).toBe("foreground");
+
+      const muted = buildPaletteMapping("muted");
+      expect(muted.directory!.bg).toBe("primary-muted");
+      expect(muted.directory!.fg).toBe("text-primary");
+
+      const button = buildPaletteMapping("button");
+      expect(button.directory!.bg).toBe("primary");
+      expect(button.directory!.fg).toBe("button-color-foreground");
+    });
+
+    it("should apply hueStep to non-semantic segments only", () => {
+      const mapping = buildPaletteMapping("surface", 45);
+      expect(mapping.directory!.hue).toBe(0);
+      expect(mapping.git!.hue).toBe(45);
+      expect(mapping.contextWarning!.hue).toBeUndefined();
+      expect(mapping.contextCritical!.hue).toBeUndefined();
+    });
+
+    it("should include all four styles in STYLE_ORDER", () => {
+      expect(STYLE_ORDER).toEqual(["surface", "muted", "button", "hue"]);
     });
   });
 });

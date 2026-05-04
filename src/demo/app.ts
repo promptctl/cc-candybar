@@ -1,86 +1,12 @@
 import process from "node:process";
 import { listAvailableThemes } from "../themes/index.js";
 import { getThemePalette } from "../themes/palette-registry.js";
+import { STYLE_ORDER, STYLE_PRESETS } from "../themes/default-mapping.js";
 import type { ColorRgba } from "rich-js";
-import type { SegmentOverride } from "../themes/cascade.js";
 import { PowerlineRenderer } from "../powerline.js";
 import type { ClaudeHookData } from "../utils/claude.js";
 import { DEFAULT_CONFIG } from "../config/defaults.js";
 import type { PowerlineConfig } from "../config/loader.js";
-
-// --- Mapping presets ---
-
-type MappingPreset = {
-  name: string;
-  overrides: Record<string, SegmentOverride> | null;
-};
-
-const MAPPING_PRESETS: MappingPreset[] = [
-  {
-    name: "Hue Rotation",
-    overrides: null,
-  },
-  {
-    name: "Button",
-    overrides: {
-      directory:       { bg: "primary",   fg: "button-color-foreground" },
-      git:             { bg: "secondary", fg: "button-color-foreground" },
-      gitTaculous:     { bg: "secondary", fg: "button-color-foreground" },
-      model:           { bg: "accent",    fg: "button-color-foreground" },
-      session:         { bg: "success",   fg: "button-color-foreground" },
-      context:         { bg: "panel",     fg: "foreground" },
-      contextWarning:  { bg: "warning",   fg: "button-color-foreground" },
-      contextCritical: { bg: "error",     fg: "button-color-foreground" },
-      block:           { bg: "boost",     fg: "button-color-foreground" },
-      today:           { bg: "primary",   fg: "button-color-foreground" },
-      tmux:            { bg: "secondary", fg: "button-color-foreground" },
-      metrics:         { bg: "accent",    fg: "button-color-foreground" },
-      version:         { bg: "success",   fg: "button-color-foreground" },
-      env:             { bg: "panel",     fg: "foreground" },
-      weekly:          { bg: "boost",     fg: "button-color-foreground" },
-    },
-  },
-  {
-    name: "Muted + Text",
-    overrides: {
-      directory:       { bg: "primary-muted",   fg: "text-primary" },
-      git:             { bg: "secondary-muted", fg: "text-secondary" },
-      gitTaculous:     { bg: "secondary-muted", fg: "text-secondary" },
-      model:           { bg: "accent-muted",    fg: "text-accent" },
-      session:         { bg: "success-muted",   fg: "text-success" },
-      context:         { bg: "warning-muted",   fg: "text-warning" },
-      contextWarning:  { bg: "warning",         fg: "button-color-foreground" },
-      contextCritical: { bg: "error",           fg: "button-color-foreground" },
-      block:           { bg: "error-muted",     fg: "text-error" },
-      today:           { bg: "primary-muted",   fg: "text-primary" },
-      tmux:            { bg: "secondary-muted", fg: "text-secondary" },
-      metrics:         { bg: "accent-muted",    fg: "text-accent" },
-      version:         { bg: "success-muted",   fg: "text-success" },
-      env:             { bg: "warning-muted",   fg: "text-warning" },
-      weekly:          { bg: "error-muted",     fg: "text-error" },
-    },
-  },
-  {
-    name: "Surface",
-    overrides: {
-      directory:       { bg: "surface",         fg: "foreground" },
-      git:             { bg: "surface-active",  fg: "foreground" },
-      gitTaculous:     { bg: "surface-active",  fg: "foreground" },
-      model:           { bg: "panel",           fg: "foreground" },
-      session:         { bg: "surface",         fg: "foreground" },
-      context:         { bg: "surface-active",  fg: "foreground" },
-      contextWarning:  { bg: "warning",         fg: "button-color-foreground" },
-      contextCritical: { bg: "error",           fg: "button-color-foreground" },
-      block:           { bg: "panel",           fg: "foreground" },
-      today:           { bg: "surface",         fg: "foreground" },
-      tmux:            { bg: "surface-active",  fg: "foreground" },
-      metrics:         { bg: "panel",           fg: "foreground" },
-      version:         { bg: "surface",         fg: "foreground" },
-      env:             { bg: "surface-active",  fg: "foreground" },
-      weekly:          { bg: "panel",           fg: "foreground" },
-    },
-  },
-];
 
 // --- Mock hook data ---
 
@@ -200,7 +126,7 @@ let themeIdx = themes.indexOf("gruvbox");
 if (themeIdx === -1) themeIdx = 0;
 let sampleIdx = 0;
 let styleIdx = 0;
-let mappingIdx = 0;
+let colorStyleIdx = 0;
 let hueStep = 0;
 const HUE_STEP_INCREMENT = 5;
 let needsRender = true;
@@ -426,12 +352,12 @@ function buildConfig(): PowerlineConfig {
   return {
     ...DEFAULT_CONFIG,
     theme: themes[themeIdx]!,
+    style: STYLE_ORDER[colorStyleIdx],
     display: {
       ...DEFAULT_CONFIG.display,
       style: styles[styleIdx]!,
       colorCompatibility: "truecolor",
     },
-    themeMapping: MAPPING_PRESETS[mappingIdx]!.overrides ?? undefined,
     hueStep,
   };
 }
@@ -452,7 +378,7 @@ async function render(): Promise<void> {
 
   const theme = themes[themeIdx]!;
   const style = styles[styleIdx]!;
-  const preset = MAPPING_PRESETS[mappingIdx]!;
+  const preset = STYLE_PRESETS[STYLE_ORDER[colorStyleIdx]!]!;
   const sample = MOCK_HOOK_SAMPLES[sampleIdx]!;
   const hueLabel = `${hueStep}°`;
 
@@ -494,15 +420,15 @@ async function render(): Promise<void> {
 
   // Controls
   lines.push(`${BG_DARK}${" ".repeat(innerWidth)}${RESET}`);
-  const mappingLabel = `Mapping: [m] ${preset.name} (${mappingIdx + 1}/${MAPPING_PRESETS.length})`;
+  const mappingLabel = `Style: [m] ${preset.name} (${colorStyleIdx + 1}/${STYLE_ORDER.length})`;
   const themeLabel = `Theme: [←/→] ${theme}`;
-  const styleLabel = `Style: [s] ${style}`;
+  const layoutLabel = `Layout: [s] ${style}`;
   const sampleLabel = `Sample: [↑/↓] ${sampleIdx + 1}/${MOCK_HOOK_SAMPLES.length}`;
   const hueLine = `Hue: [,/.] ${hueLabel}`;
   const quitLabel = "[q] Quit";
 
   lines.push(
-    `${BG_PANEL} ${mappingLabel}    ${themeLabel}    ${styleLabel}${RESET}`,
+    `${BG_PANEL} ${mappingLabel}    ${themeLabel}    ${layoutLabel}${RESET}`,
   );
   lines.push(
     `${BG_PANEL} ${sampleLabel}    ${hueLine}${" ".repeat(Math.max(1, innerWidth - stripAnsi(sampleLabel) - stripAnsi(hueLine) - quitLabel.length - 6))}${quitLabel} ${RESET}`,
@@ -526,8 +452,8 @@ function handleInput(data: Buffer): void {
   if (bytes.length === 1) {
     const ch = bytes[0]!;
     if (ch === 113) { cleanup(); process.exit(0); }
-    if (ch === 109) { mappingIdx = (mappingIdx + 1) % MAPPING_PRESETS.length; needsRender = true; }
-    if (ch === 77) { mappingIdx = (mappingIdx - 1 + MAPPING_PRESETS.length) % MAPPING_PRESETS.length; needsRender = true; }
+    if (ch === 109) { colorStyleIdx = (colorStyleIdx + 1) % STYLE_ORDER.length; needsRender = true; }
+    if (ch === 77) { colorStyleIdx = (colorStyleIdx - 1 + STYLE_ORDER.length) % STYLE_ORDER.length; needsRender = true; }
     if (ch === 115) { styleIdx = (styleIdx + 1) % styles.length; needsRender = true; }
     if (ch === 48) { hueStep = 0; needsRender = true; }
     if (ch === 43 || ch === 93 || ch === 46) { hueStep += HUE_STEP_INCREMENT; needsRender = true; }
