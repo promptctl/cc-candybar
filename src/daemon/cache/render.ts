@@ -2,16 +2,14 @@ import { PowerlineRenderer } from "../../powerline";
 import { loadConfigFromCLI } from "../../config/loader";
 import type { GitService } from "../../segments/git";
 import type { UsageProvider } from "../../segments/session";
-import type { ToolbarStateReader } from "../toolbar-state";
-import type { ThemeStateReader } from "../theme-state";
+import type { SessionStateReader } from "../session-state";
 
 const MAX_ENTRIES = 16;
 
 export interface RenderDeps {
   gitService: GitService;
   usageProvider: UsageProvider;
-  toolbarState: ToolbarStateReader;
-  themeState: ThemeStateReader;
+  sessionState: SessionStateReader;
 }
 
 interface CacheEntry {
@@ -51,8 +49,7 @@ export class RenderCache {
     const renderer = new PowerlineRenderer(config, {
       gitService: this.deps.gitService,
       usageProvider: this.deps.usageProvider,
-      toolbarState: this.deps.toolbarState,
-      themeState: this.deps.themeState,
+      sessionState: this.deps.sessionState,
     });
     const entry: CacheEntry = { config, renderer };
 
@@ -64,10 +61,6 @@ export class RenderCache {
     }
 
     return entry;
-  }
-
-  clearAll(): void {
-    this.entries.clear();
   }
 
   get size(): number {

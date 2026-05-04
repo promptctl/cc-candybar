@@ -19,8 +19,7 @@ import { RenderCache } from "./cache/render";
 import { WatcherRegistry } from "./cache/watchers";
 import { RuntimeStats } from "./stats";
 import { makeLimits, realLimitsDeps, type LimitsHandle } from "./limits";
-import { ToolbarState } from "./toolbar-state";
-import { ThemeState } from "./theme-state";
+import { SessionState } from "./session-state";
 import { listAvailableThemes } from "../themes/cascade.js";
 import { STYLE_ORDER } from "../themes/default-mapping.js";
 
@@ -30,13 +29,11 @@ const stats = new RuntimeStats();
 const watcherRegistry = new WatcherRegistry({ counters: stats });
 const gitService = new CachedGitService({ watchers: watcherRegistry });
 const usageProvider = new CachedUsageProvider();
-const toolbarState = new ToolbarState();
-const themeState = new ThemeState();
+const sessionState = new SessionState();
 const renderCache = new RenderCache({
   gitService,
   usageProvider,
-  toolbarState,
-  themeState,
+  sessionState,
 });
 
 const IDLE_SHUTDOWN_MS = 30 * 60 * 1000;
@@ -467,8 +464,11 @@ function clickOpenVscode(target: string): void {
 function clickToolbarToggle(sessionId: string): void {
   if (!sessionId) return;
   if (sessionId.includes("/") || sessionId.includes("..")) return;
-  // Update in-memory state (authoritative) + file (persistence for cold start).
-  toolbarState.toggle(sessionId);
+  // [LAW:one-source-of-truth] In-memory SessionState is authoritative. File is
+  // persistence for cold start (non-daemon renders read it directly).
+  const expanded = sessionState.get(sessionId, "toolbar-expanded");
+  if (expanded) sessionState.clear(sessionId, "toolbar-expanded");
+  else sessionState.set(sessionId, "toolbar-expanded", "1");
   const dir = path.join(os.homedir(), ".claude", ".toolbar-state");
   const flagPath = path.join(dir, sessionId);
   try {
@@ -483,23 +483,24 @@ function clickToolbarToggle(sessionId: string): void {
   }
 }
 
-function clickThemeCycle(_value: string): void {
+// [LAW:dataflow-not-control-flow] Theme/style state is per-session. The value
+// parameter is the session ID (passed via cpwl://theme-cycle/<sessionId>). No
+// clearAll() needed — the renderer reads state dynamically per render.
+function clickThemeCycle(sessionId: string): void {
   const themes = listAvailableThemes().filter((t) => t !== "custom");
-  const current = themeState.getThemeOverride();
+  const current = sessionState.get(sessionId, "theme");
   const idx = current ? themes.indexOf(current) : -1;
   const next = themes[(idx + 1) % themes.length] ?? themes[0]!;
-  themeState.setTheme(next);
-  renderCache.clearAll();
-  dlog("info", `theme-cycle: ${current ?? "(default)"} → ${next}`);
+  sessionState.set(sessionId, "theme", next);
+  dlog("info", `theme-cycle: ${current ?? "(default)"} → ${next} (session=${sessionId})`);
 }
 
-function clickStyleCycle(_value: string): void {
-  const current = themeState.getStyleOverride();
+function clickStyleCycle(sessionId: string): void {
+  const current = sessionState.get(sessionId, "style");
   const idx = current ? STYLE_ORDER.indexOf(current) : -1;
   const next = STYLE_ORDER[(idx + 1) % STYLE_ORDER.length] ?? STYLE_ORDER[0]!;
-  themeState.setStyle(next);
-  renderCache.clearAll();
-  dlog("info", `style-cycle: ${current ?? "(default)"} → ${next}`);
+  sessionState.set(sessionId, "style", next);
+  dlog("info", `style-cycle: ${current ?? "(default)"} → ${next} (session=${sessionId})`);
 }
 
 // Suppress "unused path import" — kept for clarity if we add directory ops.

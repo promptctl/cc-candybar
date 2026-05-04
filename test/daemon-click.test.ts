@@ -5,39 +5,63 @@ import os from "node:os";
 import { PROTOCOL_VERSION, encodeFrame, makeFrameReader } from "../src/daemon/protocol";
 import type { Response } from "../src/daemon/protocol";
 import { socketPath } from "../src/daemon/paths";
-import { ToolbarState } from "../src/daemon/toolbar-state";
+import { SessionState } from "../src/daemon/session-state";
 
-// --- ToolbarState unit tests ---
+// --- SessionState unit tests ---
 
-describe("ToolbarState", () => {
-  test("starts with nothing expanded", () => {
-    const state = new ToolbarState();
-    expect(state.isExpanded("abc-123")).toBe(false);
+describe("SessionState", () => {
+  test("get returns null for unknown session/key", () => {
+    const state = new SessionState();
+    expect(state.get("abc-123", "theme")).toBeNull();
   });
 
-  test("toggle adds and removes a session", () => {
-    const state = new ToolbarState();
-    state.toggle("abc-123");
-    expect(state.isExpanded("abc-123")).toBe(true);
-    state.toggle("abc-123");
-    expect(state.isExpanded("abc-123")).toBe(false);
+  test("set/get round-trips a value", () => {
+    const state = new SessionState();
+    state.set("abc-123", "theme", "ocean");
+    expect(state.get("abc-123", "theme")).toBe("ocean");
   });
 
   test("different sessions are independent", () => {
-    const state = new ToolbarState();
-    state.toggle("session-a");
-    expect(state.isExpanded("session-a")).toBe(true);
-    expect(state.isExpanded("session-b")).toBe(false);
+    const state = new SessionState();
+    state.set("session-a", "theme", "ocean");
+    state.set("session-b", "theme", "ember");
+    expect(state.get("session-a", "theme")).toBe("ocean");
+    expect(state.get("session-b", "theme")).toBe("ember");
   });
 
-  test("size tracks expanded count", () => {
-    const state = new ToolbarState();
-    expect(state.size).toBe(0);
-    state.toggle("a");
-    state.toggle("b");
-    expect(state.size).toBe(2);
-    state.toggle("a");
-    expect(state.size).toBe(1);
+  test("clear removes a key", () => {
+    const state = new SessionState();
+    state.set("abc-123", "theme", "ocean");
+    state.clear("abc-123", "theme");
+    expect(state.get("abc-123", "theme")).toBeNull();
+  });
+
+  test("multiple keys per session are independent", () => {
+    const state = new SessionState();
+    state.set("abc-123", "theme", "ocean");
+    state.set("abc-123", "style", "surface");
+    expect(state.get("abc-123", "theme")).toBe("ocean");
+    expect(state.get("abc-123", "style")).toBe("surface");
+  });
+
+  test("prune removes sessions not in the active set", () => {
+    const state = new SessionState();
+    state.set("a", "theme", "ocean");
+    state.set("b", "theme", "ember");
+    state.set("c", "theme", "forest");
+    state.prune(new Set(["a", "c"]));
+    expect(state.get("a", "theme")).toBe("ocean");
+    expect(state.get("b", "theme")).toBeNull();
+    expect(state.get("c", "theme")).toBe("forest");
+  });
+
+  test("toolbar-expanded key works for toggle semantics", () => {
+    const state = new SessionState();
+    expect(state.get("s1", "toolbar-expanded")).toBeNull();
+    state.set("s1", "toolbar-expanded", "1");
+    expect(state.get("s1", "toolbar-expanded")).toBe("1");
+    state.clear("s1", "toolbar-expanded");
+    expect(state.get("s1", "toolbar-expanded")).toBeNull();
   });
 });
 
@@ -102,27 +126,27 @@ describe("statusline binary render isolation", () => {
   });
 });
 
-// --- Toolbar toggle integration ---
+// --- Toolbar toggle dataflow ---
 // Verify the dataflow: toolbar-toggle click updates daemon state, next render
 // sees the change without re-reading from disk.
 
 describe("toolbar toggle dataflow", () => {
-  test("toggle via ToolbarState reflects in isExpanded without disk I/O", () => {
-    // [LAW:one-source-of-truth] The ToolbarState is the daemon's in-memory
+  test("toggle via SessionState reflects in get without disk I/O", () => {
+    // [LAW:one-source-of-truth] The SessionState is the daemon's in-memory
     // source of truth. No file reads needed.
-    const state = new ToolbarState();
+    const state = new SessionState();
     const sessionId = "toggle-test-session";
 
     // Initially not expanded.
-    expect(state.isExpanded(sessionId)).toBe(false);
+    expect(state.get(sessionId, "toolbar-expanded")).toBeNull();
 
-    // Toggle → expanded.
-    state.toggle(sessionId);
-    expect(state.isExpanded(sessionId)).toBe(true);
+    // Set → expanded.
+    state.set(sessionId, "toolbar-expanded", "1");
+    expect(state.get(sessionId, "toolbar-expanded")).toBe("1");
 
-    // Toggle again → collapsed.
-    state.toggle(sessionId);
-    expect(state.isExpanded(sessionId)).toBe(false);
+    // Clear → collapsed.
+    state.clear(sessionId, "toolbar-expanded");
+    expect(state.get(sessionId, "toolbar-expanded")).toBeNull();
   });
 });
 
@@ -136,7 +160,7 @@ function sendToTestServer(req: unknown): Promise<Response> {
           const parsed = frame as { kind: string; verb?: string; v: number };
           // Mimic daemon's click dispatch logic for test purposes.
           if (parsed.kind === "click") {
-            const knownVerbs = ["copy", "open-vscode", "toolbar-toggle"];
+            const knownVerbs = ["copy", "open-vscode", "toolbar-toggle", "theme-cycle", "style-cycle"];
             if (!knownVerbs.includes(parsed.verb ?? "")) {
               sock.write(
                 encodeFrame({
