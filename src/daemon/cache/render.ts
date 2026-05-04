@@ -3,6 +3,7 @@ import { loadConfigFromCLI } from "../../config/loader";
 import type { GitService } from "../../segments/git";
 import type { UsageProvider } from "../../segments/session";
 import type { ToolbarStateReader } from "../toolbar-state";
+import type { ThemeStateReader } from "../theme-state";
 
 const MAX_ENTRIES = 16;
 
@@ -10,6 +11,7 @@ export interface RenderDeps {
   gitService: GitService;
   usageProvider: UsageProvider;
   toolbarState: ToolbarStateReader;
+  themeState: ThemeStateReader;
 }
 
 interface CacheEntry {
@@ -50,6 +52,7 @@ export class RenderCache {
       gitService: this.deps.gitService,
       usageProvider: this.deps.usageProvider,
       toolbarState: this.deps.toolbarState,
+      themeState: this.deps.themeState,
     });
     const entry: CacheEntry = { config, renderer };
 
@@ -61,6 +64,10 @@ export class RenderCache {
     }
 
     return entry;
+  }
+
+  clearAll(): void {
+    this.entries.clear();
   }
 
   get size(): number {

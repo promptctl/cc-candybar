@@ -20,6 +20,9 @@ import { WatcherRegistry } from "./cache/watchers";
 import { RuntimeStats } from "./stats";
 import { makeLimits, realLimitsDeps, type LimitsHandle } from "./limits";
 import { ToolbarState } from "./toolbar-state";
+import { ThemeState } from "./theme-state";
+import { listAvailableThemes } from "../themes/cascade.js";
+import { STYLE_ORDER } from "../themes/default-mapping.js";
 
 // [LAW:one-source-of-truth] one cache instance per daemon process — multiple
 // instances would defeat the share-across-sessions invariant.
@@ -28,7 +31,13 @@ const watcherRegistry = new WatcherRegistry({ counters: stats });
 const gitService = new CachedGitService({ watchers: watcherRegistry });
 const usageProvider = new CachedUsageProvider();
 const toolbarState = new ToolbarState();
-const renderCache = new RenderCache({ gitService, usageProvider, toolbarState });
+const themeState = new ThemeState();
+const renderCache = new RenderCache({
+  gitService,
+  usageProvider,
+  toolbarState,
+  themeState,
+});
 
 const IDLE_SHUTDOWN_MS = 30 * 60 * 1000;
 const REQUEST_TIMEOUT_MS = 200;
@@ -416,6 +425,8 @@ const clickHandlers: Record<string, (value: string) => void> = {
   copy: clickCopy,
   "open-vscode": clickOpenVscode,
   "toolbar-toggle": clickToolbarToggle,
+  "theme-cycle": clickThemeCycle,
+  "style-cycle": clickStyleCycle,
 };
 
 function handleClick(verb: string, value: string): Response {
@@ -470,6 +481,25 @@ function clickToolbarToggle(sessionId: string): void {
   } catch (e) {
     dlog("warn", `toolbar-toggle file write failed: ${(e as Error).message}`);
   }
+}
+
+function clickThemeCycle(_value: string): void {
+  const themes = listAvailableThemes().filter((t) => t !== "custom");
+  const current = themeState.getThemeOverride();
+  const idx = current ? themes.indexOf(current) : -1;
+  const next = themes[(idx + 1) % themes.length] ?? themes[0]!;
+  themeState.setTheme(next);
+  renderCache.clearAll();
+  dlog("info", `theme-cycle: ${current ?? "(default)"} → ${next}`);
+}
+
+function clickStyleCycle(_value: string): void {
+  const current = themeState.getStyleOverride();
+  const idx = current ? STYLE_ORDER.indexOf(current) : -1;
+  const next = STYLE_ORDER[(idx + 1) % STYLE_ORDER.length] ?? STYLE_ORDER[0]!;
+  themeState.setStyle(next);
+  renderCache.clearAll();
+  dlog("info", `style-cycle: ${current ?? "(default)"} → ${next}`);
 }
 
 // Suppress "unused path import" — kept for clarity if we add directory ops.
