@@ -869,8 +869,11 @@ export class PowerlineRenderer {
     hookData: ClaudeHookData,
   ): string {
     const panel = this.config.panel;
-    const expanded = this._toolbarState?.isExpanded(hookData.session_id ?? "");
-    if (!panel?.items?.length || !expanded) return output;
+    if (!panel?.items?.length) return output;
+    // [LAW:dataflow-not-control-flow] Panel is visible when items exist;
+    // toolbar-toggle collapses it (explicitly hidden). Default = visible.
+    const collapsed = this._toolbarState?.isExpanded(hookData.session_id ?? "") ?? false;
+    if (collapsed) return output;
 
     const panelLine = this.renderPanelLine(hookData);
     if (!panelLine) return output;

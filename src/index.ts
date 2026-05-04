@@ -107,8 +107,8 @@ async function main(): Promise<void> {
       process.exit(0);
     }
     if (subcommand === "url-handle") {
-      runUrlHandle(process.argv[3]);
-      process.exit(0);
+      await runUrlHandle(process.argv[3]);
+      return;
     }
     if (subcommand === "daemon") {
       runDaemon();
