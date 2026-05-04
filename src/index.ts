@@ -54,14 +54,14 @@ Claude Code Options (for settings.json):
                              --set segment.sessionId.length=8
 Subcommands (macOS):
   install [args...]        One-shot setup. Creates the URL handler app, registers
-                           the cpwl:// scheme, and writes the renderer command
+                           the cc-candybar:// scheme, and writes the renderer command
                            into ~/.claude/settings.json. With no args, uses
                            Brandon's default config; pass renderer flags to
                            override.
   install-url-handler      Just create + register the URL handler app
                            (~/Applications/ClaudePowerlineURLHandler.app).
   url-handle URL           Internal — invoked by the URL handler app on
-                           cmd-click. Parses cpwl://<verb>/<value> and
+                           cmd-click. Parses cc-candybar://<verb>/<value> and
                            dispatches (currently: copy to clipboard).
   daemon-stats [--json]    Query the running daemon for runtime stats:
                            uptime, RSS, cache hit rates, watcher count,
