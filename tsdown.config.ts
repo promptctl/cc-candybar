@@ -14,6 +14,9 @@ export default defineConfig([
 		clean: true,
 		minify: true,
 		nodeProtocol: true,
+		// Bundle all npm deps (rich-js etc.) into the output so the
+		// standalone URL handler copy can run without node_modules.
+		noExternal: [/./],
 		define,
 	},
 	{

@@ -93,16 +93,23 @@ function stableScriptPath(): string {
   return path.join(supportDir(), "url-handler.mjs");
 }
 
-function appleScriptSource(nodePath: string, scriptPath: string): string {
+function appleScriptSource(
+  nodePath: string,
+  scriptPath: string,
+  nodeModulesPath: string,
+): string {
   // [LAW:no-shared-mutable-globals] Bake absolute paths into the AppleScript
   // so click-time invocation doesn't depend on PATH, pnpm dlx cache state, or
   // a global npm install. The script path is a stable copy under
-  // ~/Library/Application Support/ClaudePowerline that we own.
+  // ~/Library/Application Support/ClaudePowerline that we own. NODE_PATH
+  // points at the project's node_modules so the handler can resolve deps
+  // (rich-js etc.) without being co-located with a package.json.
   const escNode = nodePath.replace(/"/g, '\\"');
   const escScript = scriptPath.replace(/"/g, '\\"');
+  const escModules = nodeModulesPath.replace(/"/g, '\\"');
   return [
     "on open location L",
-    `\tdo shell script "'${escNode}' '${escScript}' url-handle " & quoted form of L`,
+    `\tdo shell script "NODE_PATH='${escModules}' '${escNode}' '${escScript}' url-handle " & quoted form of L`,
     "end open location",
   ].join("\n");
 }
@@ -169,6 +176,17 @@ export function runInstallUrlHandler(): void {
   const stableScript = copyDistToStableLocation();
   process.stdout.write(`Copied dist to ${stableScript}\n`);
 
+  // [LAW:one-source-of-truth] Derive node_modules from the source dist path
+  // (dist/index.mjs → ../node_modules). The stable copy lives elsewhere but
+  // needs the same node_modules to resolve deps at click time.
+  const sourceDist = locateBundledDist(process.argv[1]);
+  const nodeModules = path.join(path.dirname(sourceDist), "..", "node_modules");
+  if (!fs.existsSync(nodeModules)) {
+    throw new Error(
+      `install-url-handler: node_modules not found at ${nodeModules}. Install deps first.`,
+    );
+  }
+
   const bundle = appBundlePath();
   fs.mkdirSync(path.dirname(bundle), { recursive: true });
 
@@ -180,7 +198,7 @@ export function runInstallUrlHandler(): void {
   process.stdout.write(`Building ${bundle}\n`);
   execFileSync(
     "/usr/bin/osacompile",
-    ["-o", bundle, "-e", appleScriptSource(process.execPath, stableScript)],
+    ["-o", bundle, "-e", appleScriptSource(process.execPath, stableScript, nodeModules)],
     { stdio: ["ignore", "inherit", "inherit"] },
   );
 
@@ -240,7 +258,7 @@ export function parseHandlerUrl(
   };
 }
 
-export function runUrlHandle(rawUrl: string | undefined): void {
+export async function runUrlHandle(rawUrl: string | undefined): Promise<void> {
   if (!rawUrl) {
     process.stderr.write("url-handle: missing URL argument.\n");
     process.exit(1);
@@ -259,7 +277,7 @@ export function runUrlHandle(rawUrl: string | undefined): void {
   // [LAW:dataflow-not-control-flow] Route through daemon first; local fallback
   // only when daemon is unreachable. Same pattern as render path: daemon-first
   // with graceful degradation.
-  void runUrlHandleAsync(parsed);
+  await runUrlHandleAsync(parsed);
 }
 
 async function runUrlHandleAsync(parsed: ParsedUrl): Promise<void> {
