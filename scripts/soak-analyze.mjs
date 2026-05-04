@@ -94,7 +94,7 @@ for (const seg of segments) {
 }
 
 const out = [];
-out.push("claude-powerline daemon soak summary");
+out.push("cc-candybar daemon soak summary");
 out.push("");
 out.push(`samples:           ${rows.length}`);
 out.push(`segments (pids):   ${segments.length}`);

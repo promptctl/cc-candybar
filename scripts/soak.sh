@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 24h soak test harness for the claude-powerline daemon.
+# 24h soak test harness for the cc-candybar daemon.
 #
 # Spawns N concurrent client loops against a shared daemon, samples RSS over
 # time, and at the end reports pass/fail against:
@@ -10,7 +10,7 @@
 #   scripts/soak.sh [--duration=SEC] [--clients=N] [--out=DIR] [--skip-build]
 #                   [--sample-interval=SEC]
 #
-# Defaults: 24h, 30 clients, /tmp/claude-powerline-soak-<ts>, build first,
+# Defaults: 24h, 30 clients, /tmp/cc-candybar-soak-<ts>, build first,
 # 60s RSS sampling.
 #
 # Verifying leak detection (acceptance criterion):
@@ -52,7 +52,7 @@ for arg in "$@"; do
 done
 
 if [[ -z "$OUT_DIR" ]]; then
-  OUT_DIR="/tmp/claude-powerline-soak-$(date -u +%Y%m%dT%H%M%SZ)"
+  OUT_DIR="/tmp/cc-candybar-soak-$(date -u +%Y%m%dT%H%M%SZ)"
 fi
 mkdir -p "$OUT_DIR"
 readonly OUT_DIR
