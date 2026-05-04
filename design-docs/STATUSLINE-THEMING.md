@@ -31,7 +31,7 @@ The redesign separates three concerns that today's monolithic `ColorTheme` confl
                               │
                               ▼
 ┌──────────────────────────────────────────────────────────────────────┐
-│  2. PALETTE MAPPING (policy — lives in claude-powerline)             │
+│  2. PALETTE MAPPING (policy — lives in cc-candybar)                   │
 │  Per-segment rule: which palette variable each segment uses          │
 │  e.g., directory.bg = "primary-background"                           │
 │       git.bg       = "success-muted"                                 │
@@ -79,7 +79,7 @@ function getPalette(name: string): Palette | null;
 function listPalettes(): readonly string[];
 ```
 
-### Layer 2 — PaletteMapping (claude-powerline)
+### Layer 2 — PaletteMapping (cc-candybar)
 
 ```typescript
 interface SegmentColors {
@@ -216,7 +216,7 @@ This work is **on hold pending**:
 - `rich-render-to-string-dag` — renderToString stateless emission (rich-js)
 - `rich-markup-tag-plugins-cqf` — markup tag plugins (rich-js)
 
-Once those land in rich-js, claude-powerline's renderer can be rebuilt on top of them. At that point, the theming redesign becomes the natural next step — the new renderer will need to assign per-segment styles, and a Palette-driven mapping is how it does that.
+Once those land in rich-js, cc-candybar's renderer can be rebuilt on top of them. At that point, the theming redesign becomes the natural next step — the new renderer will need to assign per-segment styles, and a Palette-driven mapping is how it does that.
 
 ## Reference
 

@@ -72,7 +72,7 @@ These are sketches. Pick one or hybridize.
 
 ## Tradeoffs / open questions
 
-- **Is daemon-required acceptable?** The daemon is now the default rendering path but the bare command still works (statusline command currently `node bin/claude-powerline …`, no daemon dependency). If we make state daemon-required, we cut off non-daemon users. If we make state disk-based, the daemon path becomes a cache rather than the source of truth.
+- **Is daemon-required acceptable?** The daemon is now the default rendering path but the bare command still works (statusline command currently `node bin/cc-candybar …`, no daemon dependency). If we make state daemon-required, we cut off non-daemon users. If we make state disk-based, the daemon path becomes a cache rather than the source of truth.
 - **What's the session ID lifecycle?** A session ends when Claude Code exits. We don't get a notification. TTL sweeping on disk works; in-memory state ties to daemon lifetime which has its own (planned) self-shutdown rhythm.
 - **Cross-session shared state.** Some future state (theme override?) might be account-wide, not per-session. The abstraction should be `{ scope: "session" | "global", key }`, not session-only.
 - **Per-(session, project) scope.** The profile switcher might want per-project, not per-session, defaults. State scoping needs to be data, not hardcoded.

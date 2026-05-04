@@ -274,15 +274,15 @@ request:  { kind: "debug", what: "vars" | "segments" | "config" }
 response: { ok: true, data: ... }
 ```
 
-Backs the `claude-powerline vars` introspection command and similar.
+Backs the `cc-candybar vars` introspection command and similar.
 
 The render request stays as today: `{ kind: "render", payload }` → `{ ok, output: string }`.
 
 ## Config format
 
-JSON5 (`.claude-powerline.json5`). Allows comments, trailing commas, single quotes, multi-line strings via backtick — the things JSON forbids that make handwriting templates bearable.
+JSON5 (`.cc-candybar.json5`). Allows comments, trailing commas, single quotes, multi-line strings via backtick — the things JSON forbids that make handwriting templates bearable.
 
-The daemon detects the file extension and parses accordingly. The legacy strict-JSON `.claude-powerline.json` continues to load via the same parser (JSON5 is a superset of JSON).
+The daemon detects the file extension and parses accordingly. The legacy strict-JSON `.cc-candybar.json` continues to load via the same parser (JSON5 is a superset of JSON).
 
 Top-level shape:
 
@@ -383,8 +383,8 @@ Dependency-ordered. Each chunk ships independently with tests. Tickets to be fil
 
 ### Chunk 10 — Tooling
 - JSON Schema export for editor autocomplete.
-- `claude-powerline lint <config>` validator command.
-- `claude-powerline vars` debug CLI (already in chunk 8 as `debug vars`).
+- `cc-candybar lint <config>` validator command.
+- `cc-candybar vars` debug CLI (already in chunk 8 as `debug vars`).
 
 ## Cross-cutting dependencies
 
