@@ -28,9 +28,9 @@ pnpm dlx @promptctl/cc-candybar@latest install
 
 That single command:
 
-1. Builds `~/Applications/CCCandybarURLHandler.app` and registers the `cpwl://` URL scheme.
-2. Copies the runtime into `~/Library/Application Support/CCCandybar/url-handler.mjs`.
-3. Writes the statusline command into `~/.claude/settings.json`.
+1. Builds `~/Applications/CCCandybarURLHandler.app` and registers the `cc-candybar://` URL scheme with macOS Launch Services.
+2. Copies the runtime into `~/Library/Application Support/CCCandybar/url-handler.mjs` (stable path independent of pnpm cache).
+3. Writes the statusline renderer command into `~/.claude/settings.json`.
 
 Restart Claude Code. The statusline appears, and cmd-clicking the sessionId copies the full id to your clipboard.
 

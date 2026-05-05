@@ -14,7 +14,7 @@ const PACKAGE_VERSION =
   typeof __PACKAGE_VERSION__ !== "undefined" ? __PACKAGE_VERSION__ : "dev";
 
 const PACKAGE_NAME = "@promptctl/cc-candybar";
-const URL_SCHEME = "cpwl";
+const URL_SCHEME = "cc-candybar";
 const BUNDLE_ID = "com.cccandybar.url-handler";
 const APP_NAME = "CCCandybarURLHandler";
 
@@ -34,7 +34,7 @@ const DEFAULT_INSTALL_ARGS: readonly string[] = [
     "block.type=weighted",
     "sessionId.length=8",
     "sessionId.clickAction.kind=url",
-    "sessionId.clickAction.scheme=cpwl",
+    "sessionId.clickAction.scheme=cc-candybar",
     // First action wraps the visible session id text (no glyph): copy.
     "sessionId.clickAction.actions.0.verb=copy",
     "sessionId.clickAction.actions.0.source=sessionId",
@@ -238,7 +238,7 @@ interface ParsedUrl {
 
 // [LAW:dataflow-not-control-flow] Parse the URL into a {verb, value} pair
 // without using `new URL`, which lowercases hosts (would mangle case-sensitive
-// session ids). Format: cpwl://<verb>/<value> | cpwl://<value> (verb=copy).
+// session ids). Format: cc-candybar://<verb>/<value> | cc-candybar://<value> (verb=copy).
 export function parseHandlerUrl(
   rawUrl: string,
   scheme: string = URL_SCHEME,
@@ -320,7 +320,7 @@ function copyToClipboard(text: string): void {
 }
 
 // Toggle the per-session flag at ~/.claude/.toolbar-state/<sessionId>.
-// The value is the session id (passed via the cpwl:// URL by the toolbar
+// The value is the session id (passed via the cc-candybar:// URL by the toolbar
 // item, e.g. `▸{toolbar-toggle(session.id)}`). Renderer reads this on the
 // next refresh to decide whether to show `?`-prefixed extras for that session.
 function toggleToolbarExpanded(sessionId: string): void {
