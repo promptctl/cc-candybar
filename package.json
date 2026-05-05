@@ -80,6 +80,7 @@
     "typescript": "^5.0.0"
   },
   "dependencies": {
+    "mobx": "^6.15.0",
     "rich-js": "file:../rich-js"
   }
 }
