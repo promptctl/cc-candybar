@@ -909,7 +909,7 @@ export class PowerlineRenderer {
         ? resolveToolbarExpr(item.expr, ctx) ?? ""
         : "";
       const visible = interpolateToolbarText(item.text, ctx);
-      const scheme = item.scheme ?? "cpwl";
+      const scheme = item.scheme ?? "cc-candybar";
       const url = `${scheme}://${item.verb}/${encodeURIComponent(resolved)}`;
       parts.push(wrapOsc8(visible, url));
     }
