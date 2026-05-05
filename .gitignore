@@ -14,3 +14,4 @@ dist-sea/
 *.blob
 cc-candybar-sea-*
 demo-recording/
+.claude/worktrees/
