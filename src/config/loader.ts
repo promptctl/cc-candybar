@@ -165,7 +165,23 @@ function deepMerge<T extends Record<string, any>>(
   return result;
 }
 
-function findConfigFile(
+// Resolve the config-file path the daemon should watch for live-reload, given
+// the same args/projectDir/cwd inputs as loadConfigStrict. Use this when you
+// need the path *without* loading (e.g. to keep watching a file even after a
+// parse error).
+export function resolveConfigPathFromArgs(
+  args: string[],
+  projectDir?: string,
+  cwd?: string,
+): string | null {
+  const rawConfigPath = getArgValue(args, "--config") || getConfigPathFromEnv();
+  const configPath = rawConfigPath?.startsWith("~")
+    ? rawConfigPath.replace("~", os.homedir())
+    : rawConfigPath;
+  return findConfigFile(configPath, projectDir, cwd);
+}
+
+export function findConfigFile(
   customPath?: string,
   projectDir?: string,
   cwd?: string,
@@ -691,11 +707,17 @@ function validateGridConfig(tui: TuiGridConfig): string | null {
   return null; // valid
 }
 
-export function loadConfig(
+// [LAW:no-silent-fallbacks] JSON parse failures throw so the daemon can
+// surface them to the user instead of silently degrading to defaults.
+// `configFilePath` is the resolved config location (or null), so the daemon
+// can watch it for live-reload. Cosmetic clamps (invalid theme/style/charset
+// names) still warn-and-fallback — those don't destroy the user's intent,
+// parse errors do.
+export function loadConfigStrict(
   args: string[] = process.argv,
   projectDir?: string,
   cwd?: string,
-): PowerlineConfig {
+): { config: PowerlineConfig; configFilePath: string | null } {
   let config: PowerlineConfig = JSON.parse(JSON.stringify(DEFAULT_CONFIG));
 
   const rawConfigPath = getArgValue(args, "--config") || getConfigPathFromEnv();
@@ -705,14 +727,8 @@ export function loadConfig(
 
   const configFile = findConfigFile(configPath, projectDir, cwd);
   if (configFile) {
-    try {
-      const fileConfig = loadConfigFile(configFile);
-      config = deepMerge(config, fileConfig);
-    } catch (err) {
-      console.warn(
-        `Warning: ${err instanceof Error ? err.message : String(err)}`,
-      );
-    }
+    const fileConfig = loadConfigFile(configFile);
+    config = deepMerge(config, fileConfig);
   }
 
   if (config.display?.style && !isValidStyle(config.display.style)) {
@@ -774,7 +790,6 @@ export function loadConfig(
     }
   }
 
-  // Validate grid config if present
   if (config.display?.tui) {
     const error = validateGridConfig(config.display.tui);
     if (error) {
@@ -785,6 +800,51 @@ export function loadConfig(
     }
   }
 
+  return { config, configFilePath: configFile };
+}
+
+// Legacy CLI-path entry point — swallows parse errors as warnings and degrades
+// to defaults (preserving prior behavior for non-daemon callers).
+export function loadConfig(
+  args: string[] = process.argv,
+  projectDir?: string,
+  cwd?: string,
+): PowerlineConfig {
+  try {
+    return loadConfigStrict(args, projectDir, cwd).config;
+  } catch (err) {
+    console.warn(
+      `Warning: ${err instanceof Error ? err.message : String(err)}`,
+    );
+    // Re-run without the failing file by passing a path that won't exist.
+    // Simpler: replicate the no-file branch directly.
+    return loadConfigStrictNoFile(args);
+  }
+}
+
+// Fallback path used only when loadConfigStrict threw on the file. Skips file
+// resolution entirely so we never re-throw on the same input.
+function loadConfigStrictNoFile(args: string[]): PowerlineConfig {
+  let config: PowerlineConfig = JSON.parse(JSON.stringify(DEFAULT_CONFIG));
+  const envConfig = loadEnvConfig();
+  config = deepMerge(config, envConfig);
+  const cliOverrides = parseCLIOverrides(args);
+  config = deepMerge(config, cliOverrides);
+  const layoutArg = getArgValue(args, "--layout");
+  if (layoutArg !== undefined) {
+    config.display.lines = parseLayout(layoutArg);
+  }
+  applyOverrideFlags(config, args);
+  const toolbarArg = getArgValue(args, "--toolbar");
+  if (toolbarArg !== undefined) {
+    const items = parseToolbarDsl(toolbarArg);
+    for (const line of config.display.lines) {
+      if (line.segments.toolbar) {
+        line.segments.toolbar.items = items;
+        line.segments.toolbar.enabled = true;
+      }
+    }
+  }
   return config;
 }
 
