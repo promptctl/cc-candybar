@@ -34,6 +34,7 @@ const renderCache = new RenderCache({
   gitService,
   usageProvider,
   sessionState,
+  watchers: watcherRegistry,
 });
 
 const IDLE_SHUTDOWN_MS = 30 * 60 * 1000;
@@ -388,18 +389,20 @@ async function handleRequest(req: Request): Promise<Response> {
       // [LAW:dataflow-not-control-flow] thread the *request's* cwd, not the
       // daemon's process.cwd(), so config resolution depends only on request
       // data — the daemon's own working directory must not influence output.
-      const { renderer } = renderCache.getOrCreate(
-        req.args,
-        projectDir,
-        req.cwd,
-      );
-      const output = await renderer.generateStatusline(req.hookData);
+      const entry = renderCache.getOrCreate(req.args, projectDir, req.cwd);
+      // [LAW:dataflow-not-control-flow] Three states fall out of one rule:
+      // body = renderer ? render(it) : "" ; output = body + (error ? icon : "")
+      // No special-case branches — same composition every render.
+      const body = entry.renderer
+        ? await entry.renderer.generateStatusline(req.hookData)
+        : "";
+      const output = composeWithError(body, entry.lastError);
       const ms = Date.now() - t0;
       const g = gitService.getStats();
       const u = usageProvider.getStats();
       dlog(
         "info",
-        `render sid=${req.hookData.session_id ?? "?"} took=${ms}ms git=${g.size}/${g.hits}h/${g.misses}m usage=${u.size}/${u.hits}h/${u.misses}m`,
+        `render sid=${req.hookData.session_id ?? "?"} took=${ms}ms git=${g.size}/${g.hits}h/${g.misses}m usage=${u.size}/${u.hits}h/${u.misses}m err=${entry.lastError ? "Y" : "N"}`,
       );
       return { ok: true, output: output + "\n" };
     } catch (e) {
@@ -415,6 +418,29 @@ async function handleRequest(req: Request): Promise<Response> {
   return { ok: false, error: "unknown kind", code: "BAD_REQUEST" };
 }
 
+// --- error-icon composition ---
+//
+// [LAW:no-silent-fallbacks] Bad config can't quietly degrade output. We
+// either render the user's actual bar (parse OK), the bar plus a warning
+// (reload failed but a prior valid config exists), or *only* the warning
+// (startup-error: never had a valid config). Either way the failure is
+// visible at the point of impact.
+const ERROR_ICON_FG = "\x1b[38;2;255;255;255m";
+const ERROR_ICON_BG = "\x1b[48;2;200;40;40m";
+const ANSI_RESET = "\x1b[0m";
+const OSC8_OPEN = "\x1b]8;;";
+const OSC8_CLOSE = "\x1b]8;;\x1b\\";
+const ST = "\x1b\\";
+
+function composeWithError(body: string, error: string | null): string {
+  if (!error) return body;
+  const url = `cc-candybar://show-config-error/${encodeURIComponent(error)}`;
+  const link = `${OSC8_OPEN}${url}${ST}${ERROR_ICON_BG}${ERROR_ICON_FG} ⚠ config error ${ANSI_RESET}${OSC8_CLOSE}`;
+  // No body → emit the icon alone (startup-error case). Body present →
+  // prepend on its own line so it's visible regardless of bar width.
+  return body ? `${link}\n${body}` : link;
+}
+
 // --- click verb dispatch ---
 // [LAW:dataflow-not-control-flow] Verb dispatch table — each entry maps a verb
 // to a handler. Adding a verb means adding a row, not branching deeper.
@@ -424,6 +450,7 @@ const clickHandlers: Record<string, (value: string) => void> = {
   "toolbar-toggle": clickToolbarToggle,
   "theme-cycle": clickThemeCycle,
   "style-cycle": clickStyleCycle,
+  "show-config-error": clickShowConfigError,
 };
 
 function handleClick(verb: string, value: string): Response {
@@ -448,6 +475,12 @@ function clickCopy(text: string): void {
   if (result.status !== 0) {
     throw new Error(`pbcopy failed (status ${result.status})`);
   }
+}
+
+// Click on the ⚠ in the bar copies the parse error to clipboard. Behavior
+// can grow later (e.g. open the offending file at the parse-error line).
+function clickShowConfigError(encodedMessage: string): void {
+  clickCopy(encodedMessage);
 }
 
 function clickOpenVscode(target: string): void {

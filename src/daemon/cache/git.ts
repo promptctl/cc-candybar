@@ -140,8 +140,19 @@ export class CachedGitService extends GitService {
     // release its watcher refcount cleanly).
     this.dropEntry(key);
 
-    const watcher = this.watchers.acquire(repoRoot, () =>
-      this.invalidateRepo(repoRoot),
+    // Files/dirs inside .git that meaningfully change what we'd render.
+    // Working-tree changes are picked up by `git status` itself the next time
+    // the cache misses.
+    const watcher = this.watchers.acquire(
+      `git:${repoRoot}`,
+      {
+        files: [
+          path.join(repoRoot, ".git/HEAD"),
+          path.join(repoRoot, ".git/index"),
+        ],
+        dirs: [{ path: path.join(repoRoot, ".git/refs/heads") }],
+      },
+      () => this.invalidateRepo(repoRoot),
     );
     this.entries.set(key, {
       info,
