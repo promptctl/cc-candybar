@@ -10,7 +10,10 @@ export default {
     "^(\\.{1,2}/.*)\\.js$": "$1",
   },
   transformIgnorePatterns: [
-    "node_modules/(?!(rich-js|string-width|strip-ansi|ansi-regex|emoji-regex|get-east-asian-width|eastasianwidth)/)",
+    // pnpm reroutes file: deps through node_modules/.pnpm/<spec>/node_modules/<pkg>,
+    // so the same set of ESM packages must be allow-listed under both the
+    // direct path and the .pnpm/ shadow.
+    "node_modules/(?!(\\.pnpm/)?(rich-js|string-width|strip-ansi|ansi-regex|emoji-regex|get-east-asian-width|eastasianwidth)(@|/))",
   ],
   transform: {
     "^.+\\.(t|j)sx?$": [

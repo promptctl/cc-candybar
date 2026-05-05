@@ -37,7 +37,7 @@ export class GitService {
 
   private async execGitAsync(
     command: string,
-    options: { cwd: string; encoding: string; timeout: number },
+    options: { cwd: string; encoding: BufferEncoding; timeout: number },
   ): Promise<{ stdout: string }> {
     return execAsync(command, {
       ...options,
