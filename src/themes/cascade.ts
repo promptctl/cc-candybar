@@ -8,7 +8,6 @@ import {
   hexToAnsi,
   hexTo256Ansi,
   hexToBasicAnsi,
-  hexColorDistance,
 } from "../utils/colors";
 import { RESET_CODE } from "../utils/constants";
 import { rotateHue } from "./oklch.js";
@@ -137,8 +136,6 @@ export interface CascadeConfig {
   hueStep?: number;
   customColors?: ColorTheme;
   colorSupport: "none" | "ansi" | "ansi256" | "truecolor";
-  isTui?: boolean;
-  isLightTheme?: boolean;
 }
 
 export function resolveThemeColors(config: CascadeConfig): PowerlineColors {
@@ -188,10 +185,6 @@ export function resolveThemeColors(config: CascadeConfig): PowerlineColors {
     return r;
   };
 
-  const isTui = config.isTui ?? false;
-  const terminalRef =
-    config.isLightTheme ?? palette.dark === false ? "#f0f0f0" : "#1e1e1e";
-
   const dir = get("directory");
   const git = get("git");
   const model = get("model");
@@ -207,90 +200,68 @@ export function resolveThemeColors(config: CascadeConfig): PowerlineColors {
   const env = get("env");
   const weekly = get("weekly");
 
-  const tuiFgFix = (seg: ResolvedSegment): { fgHex: string } => {
-    if (isTui && hexColorDistance(seg.fgHex, terminalRef) < 60) {
-      return { fgHex: seg.bgHex };
-    }
-    return { fgHex: seg.fgHex };
-  };
-
-  const dirFg = tuiFgFix(dir);
-  const gitFg = tuiFgFix(git);
-  const modelFg = tuiFgFix(model);
-  const sessionFg = tuiFgFix(session);
-  const blockFg = tuiFgFix(block);
-  const todayFg = tuiFgFix(today);
-  const tmuxFg = tuiFgFix(tmux);
-  const contextFg = tuiFgFix(context);
-  const contextWarningFg = tuiFgFix(contextWarning);
-  const contextCriticalFg = tuiFgFix(contextCritical);
-  const metricsFg = tuiFgFix(metrics);
-  const versionFg = tuiFgFix(version);
-  const envFg = tuiFgFix(env);
-  const weeklyFg = tuiFgFix(weekly);
-
   const hex: PowerlineHexColors = {
     modeBg: dir.bgHex,
-    modeFg: dirFg.fgHex,
+    modeFg: dir.fgHex,
     gitBg: git.bgHex,
-    gitFg: gitFg.fgHex,
+    gitFg: git.fgHex,
     modelBg: model.bgHex,
-    modelFg: modelFg.fgHex,
+    modelFg: model.fgHex,
     sessionBg: session.bgHex,
-    sessionFg: sessionFg.fgHex,
+    sessionFg: session.fgHex,
     blockBg: block.bgHex,
-    blockFg: blockFg.fgHex,
+    blockFg: block.fgHex,
     todayBg: today.bgHex,
-    todayFg: todayFg.fgHex,
+    todayFg: today.fgHex,
     tmuxBg: tmux.bgHex,
-    tmuxFg: tmuxFg.fgHex,
+    tmuxFg: tmux.fgHex,
     contextBg: context.bgHex,
-    contextFg: contextFg.fgHex,
+    contextFg: context.fgHex,
     contextWarningBg: contextWarning.bgHex,
-    contextWarningFg: contextWarningFg.fgHex,
+    contextWarningFg: contextWarning.fgHex,
     contextCriticalBg: contextCritical.bgHex,
-    contextCriticalFg: contextCriticalFg.fgHex,
+    contextCriticalFg: contextCritical.fgHex,
     metricsBg: metrics.bgHex,
-    metricsFg: metricsFg.fgHex,
+    metricsFg: metrics.fgHex,
     versionBg: version.bgHex,
-    versionFg: versionFg.fgHex,
+    versionFg: version.fgHex,
     envBg: env.bgHex,
-    envFg: envFg.fgHex,
+    envFg: env.fgHex,
     weeklyBg: weekly.bgHex,
-    weeklyFg: weeklyFg.fgHex,
+    weeklyFg: weekly.fgHex,
     partFg: {},
   };
 
   return {
     reset: config.colorSupport === "none" ? "" : RESET_CODE,
     modeBg: convertHex(dir.bgHex, true),
-    modeFg: convertHex(dirFg.fgHex, false),
+    modeFg: convertHex(dir.fgHex, false),
     gitBg: convertHex(git.bgHex, true),
-    gitFg: convertHex(gitFg.fgHex, false),
+    gitFg: convertHex(git.fgHex, false),
     modelBg: convertHex(model.bgHex, true),
-    modelFg: convertHex(modelFg.fgHex, false),
+    modelFg: convertHex(model.fgHex, false),
     sessionBg: convertHex(session.bgHex, true),
-    sessionFg: convertHex(sessionFg.fgHex, false),
+    sessionFg: convertHex(session.fgHex, false),
     blockBg: convertHex(block.bgHex, true),
-    blockFg: convertHex(blockFg.fgHex, false),
+    blockFg: convertHex(block.fgHex, false),
     todayBg: convertHex(today.bgHex, true),
-    todayFg: convertHex(todayFg.fgHex, false),
+    todayFg: convertHex(today.fgHex, false),
     tmuxBg: convertHex(tmux.bgHex, true),
-    tmuxFg: convertHex(tmuxFg.fgHex, false),
+    tmuxFg: convertHex(tmux.fgHex, false),
     contextBg: convertHex(context.bgHex, true),
-    contextFg: convertHex(contextFg.fgHex, false),
+    contextFg: convertHex(context.fgHex, false),
     contextWarningBg: convertHex(contextWarning.bgHex, true),
-    contextWarningFg: convertHex(contextWarningFg.fgHex, false),
+    contextWarningFg: convertHex(contextWarning.fgHex, false),
     contextCriticalBg: convertHex(contextCritical.bgHex, true),
-    contextCriticalFg: convertHex(contextCriticalFg.fgHex, false),
+    contextCriticalFg: convertHex(contextCritical.fgHex, false),
     metricsBg: convertHex(metrics.bgHex, true),
-    metricsFg: convertHex(metricsFg.fgHex, false),
+    metricsFg: convertHex(metrics.fgHex, false),
     versionBg: convertHex(version.bgHex, true),
-    versionFg: convertHex(versionFg.fgHex, false),
+    versionFg: convertHex(version.fgHex, false),
     envBg: convertHex(env.bgHex, true),
-    envFg: convertHex(envFg.fgHex, false),
+    envFg: convertHex(env.fgHex, false),
     weeklyBg: convertHex(weekly.bgHex, true),
-    weeklyFg: convertHex(weeklyFg.fgHex, false),
+    weeklyFg: convertHex(weekly.fgHex, false),
     partFg: {},
     hex,
   };

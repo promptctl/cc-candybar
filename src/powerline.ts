@@ -25,7 +25,6 @@ import type { SessionStateReader } from "./daemon/session-state";
 import { formatModelName, shortenModelName } from "./utils/formatters";
 import type { BlockInfo } from "./segments/block";
 import type { TodayInfo } from "./segments/today";
-import type { TuiData } from "./tui";
 
 import { resolveThemeColors } from "./themes";
 import {
@@ -52,14 +51,8 @@ import {
 } from "./segments/renderer";
 import { BlockProvider } from "./segments/block";
 import { TodayProvider } from "./segments/today";
-import {
-  SYMBOLS,
-  TEXT_SYMBOLS,
-  BOX_CHARS,
-  BOX_CHARS_TEXT,
-} from "./utils/constants";
-import { getTerminalWidth, getRawTerminalWidth } from "./utils/terminal-width";
-import { renderTuiPanel } from "./tui";
+import { SYMBOLS, TEXT_SYMBOLS } from "./utils/constants";
+import { getTerminalWidth } from "./utils/terminal-width";
 import { openSync, readSync, closeSync, statSync } from "node:fs";
 
 const CACHE_TTL_MS = 60 * 60 * 1000; // Anthropic prompt cache: 1h
@@ -250,10 +243,6 @@ export class PowerlineRenderer {
   }
 
   async generateStatusline(hookData: ClaudeHookData): Promise<string> {
-    if (this.config.display.style === "tui") {
-      return this.generateTuiStatusline(hookData);
-    }
-
     const usageInfo = this.needsSegmentInfo("session")
       ? await this.usageProvider.getUsageInfo(hookData.session_id, hookData)
       : null;
@@ -375,83 +364,6 @@ export class PowerlineRenderer {
     }
 
     return outputLines.join("\n");
-  }
-
-  private async generateTuiStatusline(
-    hookData: ClaudeHookData,
-  ): Promise<string> {
-    const colors = this.getThemeColors(hookData.session_id ?? "");
-    const terminalWidth = getTerminalWidth();
-    const currentDir = hookData.workspace?.current_dir || hookData.cwd || "/";
-    const charset = this.config.display.charset || "unicode";
-    const boxChars = charset === "text" ? BOX_CHARS_TEXT : BOX_CHARS;
-    const contextSegmentConfig = this.config.display.lines
-      .map((line) => line.segments.context)
-      .find((c) => c?.enabled) as ContextSegmentConfig | undefined;
-    const autocompactBuffer = contextSegmentConfig?.autocompactBuffer ?? 33000;
-
-    const results = await Promise.allSettled([
-      this.usageProvider.getUsageInfo(hookData.session_id, hookData),
-      this.blockProvider.getActiveBlockInfo(hookData),
-      this.todayProvider.getTodayInfo(),
-      this.contextProvider.getContextInfo(hookData, autocompactBuffer),
-      this.metricsProvider.getMetricsInfo(hookData.session_id, hookData),
-      this.gitService.getGitInfo(
-        currentDir,
-        {
-          showSha: false,
-          showWorkingTree: true,
-          showOperation: false,
-          showTag: false,
-          showTimeSinceCommit: false,
-          showStashCount: false,
-          showUpstream: false,
-          showRepoName: false,
-        },
-        hookData.workspace?.project_dir,
-      ),
-      this.tmuxService.getSessionId(),
-    ]);
-    const val = <T>(r: PromiseSettledResult<T>) =>
-      r.status === "fulfilled" ? r.value : null;
-    const [
-      usageInfo,
-      blockInfo,
-      todayInfo,
-      contextInfo,
-      metricsInfo,
-      gitInfo,
-      tmuxSessionId,
-    ] = [
-      val(results[0]!),
-      val(results[1]!),
-      val(results[2]!),
-      val(results[3]!),
-      val(results[4]!),
-      val(results[5]!),
-      val(results[6]!),
-    ] as const;
-
-    const tuiData: TuiData = {
-      hookData,
-      usageInfo,
-      blockInfo,
-      todayInfo,
-      contextInfo,
-      metricsInfo,
-      gitInfo,
-      tmuxSessionId,
-      colors,
-    };
-
-    return renderTuiPanel(
-      tuiData,
-      boxChars,
-      colors.reset,
-      terminalWidth,
-      this.config,
-      { rawTerminalWidth: getRawTerminalWidth() },
-    );
   }
 
   // [LAW:single-enforcer] One place resolves config.display.style →
@@ -958,7 +870,6 @@ export class PowerlineRenderer {
         ? this.config.colors?.custom
         : undefined,
       colorSupport,
-      isTui: this.config.display.style === "tui",
     });
   }
 }
