@@ -1,6 +1,15 @@
 # Statusline Theming Redesign
 
-**Status**: ON HOLD. Pending the rich-js architectural primitives below. Resume design when the Strip+Joiner, FlexStrip, renderToString, and markup-tag-plugin tickets land.
+**Status: SUPERSEDED (2026-05-05).** The work this document scoped was absorbed into `PROPOSAL-segment-dsl.md` ("Theming integration" section) when the renderer-rewrite epic (`brandon-richjs-renderer-rewrite-bwr`) was closed in favor of the application-wide DSL rewrite. The three-layer model (Palette / Mapping / Cascade) survives; the implementation home moved.
+
+Tracking tickets:
+- `brandon-segment-dsl-segment-render-wd5.3` — Template `bg`/`fg` + palette resolver + auto-contrast context
+- `brandon-segment-dsl-segment-render-wd5.4` — `hueStep` threading through palette resolution
+- `brandon-segment-dsl-config-3rq.2` — Per-segment palette switch in config schema
+
+Stale content below this line. Read for historical context only — the recommendations on TUI parity, palette location, and variant-state tinting are no longer authoritative. The DSL proposal is the source of truth.
+
+---
 
 ## Why we're rewriting
 

@@ -152,10 +152,10 @@ segments: {
   },
   toolbar: {
     template: `
-      [link cpwl://copy/{{ .session.id }}]#{{ .session.id | trunc 8 }}[/]
-      [link cpwl://toolbar-toggle/]≫[/]
+      [link cc-candybar://copy/{{ .session.id }}]#{{ .session.id | trunc 8 }}[/]
+      [link cc-candybar://toolbar-toggle/]≫[/]
       {{ if .toolbarExpanded }}
-        [link cpwl://set-profile/compact]
+        [link cc-candybar://set-profile/compact]
           {{ if eq .profile "compact" }}[green]{{ else }}[gray]{{ end }}compact[/]
         [/]
       {{ end }}
@@ -172,7 +172,7 @@ Field reference:
 | `width` | `"auto"` \| int | `"auto"` | fixed width pads/truncates |
 | `justify` | `"left"` \| `"center"` \| `"right"` | `"left"` | only meaningful when `width` is fixed |
 | `truncate` | `"right"` \| `"left"` \| `"middle"` | `"right"` | overflow strategy when fixed-width |
-| `bg`, `fg` | color spec | from globals | rich-js color spec |
+| `bg`, `fg` | template → color spec | from globals | go-template (same engine as `template:`) that evaluates to a rich-js color spec; static strings are a degenerate template with no interpolations |
 | `when` | template predicate | always true | the only way to hide |
 | `vars` | variable sub-block | empty | namespaced declarations |
 
@@ -253,6 +253,42 @@ A closed, named subset:
 | `has` / `hasPrefix` / `hasSuffix` / `contains` | Substring tests |
 
 The list is closed; extension is a code change. Chunk 7 (built-in library migration) may surface a need to add one or two; that's expected and budgeted.
+
+## Theming integration
+
+Theming was originally scoped under `brandon-richjs-renderer-rewrite-bwr.3` as a parallel epic. That ticket closed as superseded — the work absorbs into chunks 5 and 6 of this proposal. Three cooperating pieces:
+
+### Three-layer model (unchanged from the prior theming spec)
+
+1. **Palette** (data) — Textual-style hex map of ~150 named semantic variables (`primary`, `accent`, `error`, `panel`, `surface`, `auto NN%` resolver, etc.). Lives in rich-js (`THEMES` data + `Palette` + `PaletteResolver`); already imported into cc-candybar via `src/themes/palette-registry.ts`.
+2. **Mapping** (policy) — per-segment `bg`/`fg` template that evaluates to a palette spec string. Lives in the DSL config (default mapping ships in the default config; user overrides per the cascade rules).
+3. **Cascade** (override) — config loader merges default palette → globals.palette → per-segment palette; merges default mapping → user mapping → per-segment overrides. See chunk 6 child ticket for the per-segment palette switch.
+
+### `bg` / `fg` are templates, not static strings
+
+Per the field-reference table in **Segment system**: `bg` and `fg` are full go-templates evaluated per-render against the same MobX-tracked variable store as `template:`. The result is a palette spec that the resolver turns into a color. This collapses the legacy three-way `context` / `contextWarning` / `contextCritical` segment split into one segment with a state-dependent bg, and obviates segment-internal variant-state color tinting entirely.
+
+```json5
+context: {
+  bg: "{{ if gt .context.percent 90 }}error{{ else if gt .context.percent 75 }}warning{{ else }}info{{ end }}",
+  fg: "auto 60%",
+  template: "{{ .context.percent }}%",
+}
+```
+
+### Auto-contrast resolver context
+
+The fg template's resolved spec (e.g., `"auto 60%"`) is resolved against the segment's resolved bg as `{ against: <bg hex> }` per-call. No stateful resolver, no precomputation. This is per-segment, per-render — small constant cost.
+
+### `hueStep` (per-segment hue rotation)
+
+`globals.hueStep` (degrees) gives the statusline visual variation across segments. The renderer assigns each segment a position-based `hueIndex`; the resolver receives `hueIndex * hueStep` as a rotation parameter and applies it (in OKLCH space) to non-semantic palette colors. Semantic specs (`error`, `warning`, `success`, `info`) are exempt from rotation. Default `hueStep: 0` (no rotation). Existing implementation: `src/themes/oklch.ts` + `src/themes/cascade.ts` — moves into the new resolver.
+
+### What this replaces
+
+- `src/themes/index.ts` flat `ColorTheme` / `PowerlineColors` / `PowerlineHexColors` types — gone (templates over palette specs replace them).
+- `src/utils/colors.ts` `hexToAnsi` / `hexTo256Ansi` / `hexToBasicAnsi` / `extractBgToFg` — gone (rich-js `Color.downgrade(colorSystem)` replaces all four).
+- `getThemeColors()` in `src/powerline.ts` — gone (resolver runs at render time, not as a precomputed flat struct).
 
 ## Daemon protocol
 
@@ -368,6 +404,7 @@ Dependency-ordered. Each chunk ships independently with tests. Tickets to be fil
 ### Chunk 7 — Built-in variable & segment library + delete legacy
 - Ship the standard library as the default config: input fields, git fields, time/env, the existing built-in segments (cwd, branch, model, sessionId, toolbar, claude-usage, …).
 - **Delete the TypeScript-coded segment classes** — `src/segments/*.ts`, `parseToolbarDsl`, `TOOLBAR_RESOLVERS`, `wrapOsc8`, `interpolateToolbarText`, `applyClickActions`'s OSC 8 hand-rolling.
+- **Consolidate panel → toolbar.** The `panel?: PanelConfig` field added in commit `625275f` (May 3) is functionally a duplicate of the toolbar segment — both render OSC8-clickable items via `cc-candybar://` URLs, just on different rows. Both die here; the unified DSL toolbar segment replaces them. Specifically delete: `panel?: PanelConfig` field in `src/config/loader.ts:84-87,98`, `PanelConfig` and `PanelItemConfig` interfaces, `maybeAppendPanelLine` and `renderPanelLine` in `src/powerline.ts:863-930`, the `panel:` block from any sample config. The toolbar concept persists; the legacy 'panel' name does not.
 - Tests: byte-identical output for golden samples before vs after migration; the existing test suite passes (tests rewritten as needed).
 
 ### Chunk 8 — Daemon protocol additions (`click` + `debug`)
@@ -410,8 +447,8 @@ Dependency-ordered. Each chunk ships independently with tests. Tickets to be fil
 
 ## Out of scope
 
-- The `cpwl://` URL contract (unchanged; verb handlers continue to read it).
-- Theming / palette work (lands separately under `brandon-richjs-renderer-rewrite-bwr.3`; slots into `bg` / `fg` fields without DSL changes).
+- The `cc-candybar://` URL contract (unchanged; verb handlers continue to read it).
+- Theming / palette work (consumed inside chunk 5 — see "Theming integration" section below; not a separate epic anymore. Was previously scoped under `brandon-richjs-renderer-rewrite-bwr.3`; that ticket closed as superseded 2026-05-05.).
 - Multi-line statuslines (segments are single-line by constraint; the wrap layer is rich-js's FlexStrip, unchanged).
 - Per-(session, project) state scoping (`state.<key>` variables don't care about scoping at this layer).
 - Cross-machine / cross-account state.
