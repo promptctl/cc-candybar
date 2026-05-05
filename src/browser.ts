@@ -52,28 +52,9 @@ export type {
   BarDisplayStyle,
 } from "./segments/renderer";
 
-export type {
-  TuiData,
-  BoxChars,
-  TuiGridConfig,
-  TuiGridBreakpoint,
-  TuiTitleConfig,
-  TuiFooterConfig,
-  SegmentTemplate,
-  SegmentName,
-  AlignValue,
-  LayoutMode,
-  SymbolSet,
-  RenderCtx,
-  JustifyValue,
-  GridCell,
-} from "./tui/types";
-
 // --- Rendering ---
 
 export { SegmentRenderer } from "./segments/renderer";
-export { renderTuiPanel } from "./tui/renderer";
-export type { TuiPanelOptions } from "./tui/renderer";
 
 // --- Themes ---
 
@@ -101,9 +82,6 @@ export {
   SYMBOLS,
   TEXT_SYMBOLS,
   RESET_CODE,
-  BOX_CHARS,
-  BOX_CHARS_TEXT,
-  BOX_PRESETS,
 } from "./utils/constants";
 
 // --- Pure utilities ---
@@ -134,66 +112,6 @@ export {
 } from "./utils/formatters";
 export { getBudgetStatus } from "./utils/budget";
 
-// --- TUI components ---
-
-export {
-  contentRow,
-  bottomBorder,
-  divider,
-  spreadEven,
-  spreadTwo,
-  colorize,
-  truncateAnsi,
-  padRight,
-  padLeft,
-  padCenter,
-} from "./tui/primitives";
-export {
-  buildTitleBar,
-  buildContextLine,
-  buildContextBar,
-  buildBlockBar,
-  buildWeeklyBar,
-  resolveSegments,
-  composeTemplate,
-  resolveTitleToken,
-  collectMetricSegments,
-  collectActivityParts,
-  collectWorkspaceParts,
-  collectFooterParts,
-} from "./tui/sections";
-export {
-  renderWideMetrics,
-  renderWideBottom,
-  renderMediumMetrics,
-  renderMediumBottom,
-  renderNarrowMetrics,
-  renderNarrowBottom,
-} from "./tui/layouts";
-
-// --- TUI grid helpers ---
-
-export {
-  parseAreas,
-  cullMatrix,
-  calculateColumnWidths,
-  selectBreakpoint,
-  solveFitContentLayout,
-  renderGrid,
-  DIVIDER,
-  EMPTY_CELL,
-  LATE_RESOLVE_SEGMENTS,
-} from "./tui/grid";
-export type { GridResult } from "./tui/grid";
-
 // --- Config defaults ---
 
 export { DEFAULT_CONFIG } from "./config/defaults";
-
-// --- Segment ref validation ---
-
-export {
-  isValidSegmentRef,
-  VALID_SEGMENT_NAMES,
-  SEGMENT_PARTS,
-} from "./tui/types";
