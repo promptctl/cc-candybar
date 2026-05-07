@@ -48,32 +48,76 @@ fn main() {
 
     if should_dispatch_to_node(&argv) {
         exec_node_fallback(&argv);
-        // exec_node_fallback returns only on error.
         eprintln!("cc-candybar: failed to exec node fallback");
         std::process::exit(1);
     }
 
-    match render(&argv) {
-        Ok(output) => {
-            let _ = io::stdout().write_all(output.as_bytes());
-            std::process::exit(0);
-        }
+    // Parse stdin once up-front. We need session_id for the per-session
+    // last-render cache (daemon-miss fallback shows stale data, not blank).
+    let parsed = match parse_stdin() {
+        Ok(p) => p,
         Err(RenderError::BadInput(msg)) => {
-            // Stdin wasn't valid JSON — misconfiguration, not a daemon
-            // miss. Don't spawn a daemon for this; surface the error so it's
-            // visible. Matches src/index.ts:158 behavior.
             eprintln!("cc-candybar: {msg}");
             std::process::exit(1);
         }
+        Err(e) => {
+            eprintln!("cc-candybar: {e:?}");
+            std::process::exit(1);
+        }
+    };
+
+    match render(&argv, &parsed.hook_data) {
+        Ok(output) => {
+            let _ = io::stdout().write_all(output.as_bytes());
+            // Persist for the next daemon-miss. Best-effort: if disk is
+            // full or perms are wrong, the user just gets a blink later
+            // instead of a stale frame — same as today's behavior.
+            if let Some(sid) = parsed.session_id.as_deref() {
+                let _ = write_last_render(sid, &output);
+            }
+            std::process::exit(0);
+        }
         Err(_reason) => {
-            // Daemon unreachable / errored / timed out. Match src/index.ts:
-            // spawn a detached daemon, emit empty output, exit 0. The next
-            // statusline refresh will hit the warm daemon.
+            // Daemon unreachable / errored / timed out. Spawn a detached
+            // daemon for the next refresh, then output the most recent
+            // successful render for THIS session (if we have one) instead
+            // of a blank "\n". A stale frame for ~1s during daemon
+            // restart is much better UX than the statusline blanking.
             spawn_detached_daemon();
-            let _ = io::stdout().write_all(b"\n");
+            let stale = parsed
+                .session_id
+                .as_deref()
+                .and_then(|sid| read_last_render(sid));
+            let bytes = stale.as_deref().map(str::as_bytes).unwrap_or(b"\n");
+            let _ = io::stdout().write_all(bytes);
             std::process::exit(0);
         }
     }
+}
+
+struct ParsedInput {
+    hook_data: serde_json::Value,
+    session_id: Option<String>,
+}
+
+fn parse_stdin() -> Result<ParsedInput, RenderError> {
+    let mut buf = Vec::with_capacity(4096);
+    io::stdin().read_to_end(&mut buf)?;
+    if buf.is_empty() {
+        return Err(RenderError::BadInput(
+            "no input on stdin (this tool reads hook data from Claude Code)".into(),
+        ));
+    }
+    let hook_data: serde_json::Value = serde_json::from_slice(&buf)
+        .map_err(|e| RenderError::BadInput(format!("stdin not JSON: {e}")))?;
+    let session_id = hook_data
+        .get("session_id")
+        .and_then(|v| v.as_str())
+        .map(str::to_owned);
+    Ok(ParsedInput {
+        hook_data,
+        session_id,
+    })
 }
 
 // --- argv dispatch -------------------------------------------------------
@@ -141,23 +185,9 @@ impl From<io::Error> for RenderError {
     }
 }
 
-fn render(argv: &[String]) -> Result<String, RenderError> {
+fn render(argv: &[String], hook_data: &serde_json::Value) -> Result<String, RenderError> {
     let deadline = Instant::now() + TOTAL_BUDGET;
-
-    // Read stdin (small JSON blob from Claude Code).
-    let mut stdin_bytes = Vec::with_capacity(4096);
-    io::stdin().read_to_end(&mut stdin_bytes)?;
-    if stdin_bytes.is_empty() {
-        return Err(RenderError::BadInput(
-            "no input on stdin (this tool reads hook data from Claude Code)".into(),
-        ));
-    }
-    let hook_data: serde_json::Value = serde_json::from_slice(&stdin_bytes)
-        .map_err(|e| RenderError::BadInput(format!("stdin not JSON: {e}")))?;
-
-    let cwd = env::current_dir()?
-        .to_string_lossy()
-        .into_owned();
+    let cwd = env::current_dir()?.to_string_lossy().into_owned();
 
     let request = serde_json::json!({
         "v": PROTOCOL_VERSION,
@@ -205,11 +235,63 @@ fn remaining(deadline: Instant) -> Result<Duration, RenderError> {
 }
 
 fn socket_path() -> PathBuf {
+    daemon_dir().join("socket")
+}
+
+fn daemon_dir() -> PathBuf {
     let home = env::var_os("HOME").unwrap_or_else(|| OsString::from("/"));
-    Path::new(&home)
-        .join(".claude")
-        .join("powerline")
-        .join("socket")
+    Path::new(&home).join(".claude").join("powerline")
+}
+
+// --- per-session last-render cache ---------------------------------------
+//
+// On every successful render we drop the output bytes at
+// ~/.claude/powerline/last-render/<sid>. On a daemon-miss, we read it back
+// and emit it instead of a blank "\n". A stale frame for ~1s during a
+// daemon restart is dramatically better UX than the statusline blanking.
+//
+// Atomicity: write to a sibling tmp file then rename. A torn cache file
+// would render as garbled ANSI for one frame; rename is cheap insurance.
+
+fn last_render_dir() -> PathBuf {
+    daemon_dir().join("last-render")
+}
+
+// Allow only [a-zA-Z0-9_-]. Claude session IDs are UUIDs, so this is the
+// identity function in practice; the sanitizer exists so a malformed
+// session_id can't traverse out of the cache directory.
+fn safe_session_id(sid: &str) -> Option<String> {
+    if sid.is_empty() || sid.len() > 128 {
+        return None;
+    }
+    if sid
+        .bytes()
+        .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
+    {
+        Some(sid.to_owned())
+    } else {
+        None
+    }
+}
+
+fn write_last_render(sid: &str, output: &str) -> io::Result<()> {
+    let safe = match safe_session_id(sid) {
+        Some(s) => s,
+        None => return Ok(()), // skip — never error the user-visible path
+    };
+    let dir = last_render_dir();
+    std::fs::create_dir_all(&dir)?;
+    let final_path = dir.join(&safe);
+    let tmp_path = dir.join(format!("{safe}.tmp.{}", std::process::id()));
+    std::fs::write(&tmp_path, output.as_bytes())?;
+    std::fs::rename(&tmp_path, &final_path)?;
+    Ok(())
+}
+
+fn read_last_render(sid: &str) -> Option<String> {
+    let safe = safe_session_id(sid)?;
+    let path = last_render_dir().join(&safe);
+    std::fs::read_to_string(&path).ok()
 }
 
 // --- framing -------------------------------------------------------------
