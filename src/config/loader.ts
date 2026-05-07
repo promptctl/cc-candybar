@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import { DEFAULT_CONFIG } from "./defaults";
+import { configDir } from "../daemon/paths";
 import type { ColorTheme } from "../themes";
 import { listAvailableThemes } from "../themes/cascade.js";
 import type {
@@ -194,8 +195,7 @@ export function findConfigFile(
   const locations = [
     ...(projectDir ? [path.join(projectDir, ".cc-candybar.json")] : []),
     path.join(effectiveCwd, ".cc-candybar.json"),
-    path.join(os.homedir(), ".claude", "cc-candybar.json"),
-    path.join(os.homedir(), ".config", "cc-candybar", "config.json"),
+    path.join(configDir(), "config.json"),
   ];
 
   return locations.find(fs.existsSync) || null;

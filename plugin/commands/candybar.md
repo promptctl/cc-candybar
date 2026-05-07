@@ -19,7 +19,7 @@ You are running an interactive setup wizard to configure the cc-candybar statusl
 - Do not skip steps or combine questions.
 - Always wait for the user's response before moving to the next step.
 - Track the user's choices in variables throughout the wizard.
-- The final config is written as JSON to `~/.claude/cc-candybar.json`.
+- The final config is written as JSON to `~/.config/cc-candybar/config.json`.
 - Do NOT use the Agent tool or Explore subagents. All information you need is in this document.
 - Do NOT read source code from the cc-candybar package. Use only the instructions below.
 - IMPORTANT: After running any Bash or Read tool, repeat the key output as text in your response. Some users have a collapsed UI mode where tool outputs require a click to expand. Always relay important results (like version numbers, previews, or file contents) in your text so the user can see them without expanding.
@@ -295,16 +295,16 @@ Ask the user about their daily budget for cost tracking:
 ### Check for existing config
 
 ```bash
-test -f ~/.claude/cc-candybar.json && echo "exists" || echo "not_found"
+test -f ~/.config/cc-candybar/config.json && echo "exists" || echo "not_found"
 ```
 
 If it exists, ask:
 
-- **Question**: "Found existing ~/.claude/cc-candybar.json. What should I do?"
+- **Question**: "Found existing ~/.config/cc-candybar/config.json. What should I do?"
 - **Header**: "Existing Config"
 - **Options**:
   - "Replace it" -> Continue
-  - "Back it up first" -> Run `cp ~/.claude/cc-candybar.json ~/.claude/cc-candybar.json.bak` then continue
+  - "Back it up first" -> Run `cp ~/.config/cc-candybar/config.json ~/.config/cc-candybar/config.json.bak` then continue
   - "Keep it and exit" -> Exit the wizard
 
 ### Build and write the config
@@ -331,7 +331,7 @@ ${CLAUDE_PLUGIN_ROOT}/templates/<template-file>
 
 1. **Handle "No budget"**: If the user chose "No budget" in Step 7, remove the entire `"amount": "replace:TODAY_BUDGET",` line (including the trailing comma) from the budget section. If Step 7 was skipped (essential preset, or TUI compact/standard), do not modify the budget section.
 
-1. **Write the result** to `~/.claude/cc-candybar.json` using the Write tool. Do NOT read or merge with any existing config.
+1. **Write the result** to `~/.config/cc-candybar/config.json` using the Write tool. Do NOT read or merge with any existing config.
 
 ## Step 9: Update settings.json
 
@@ -374,13 +374,13 @@ Display:
 Setup complete.
 
 **Files created/updated:**
-- `~/.claude/cc-candybar.json` (candybar config)
+- `~/.config/cc-candybar/config.json` (candybar config)
 - `~/.claude/settings.json` (claude settings)
 
 **What now:**
 1. Restart Claude Code if the statusline does not appear.
 2. Run `/candybar` any time to reconfigure.
-3. Edit `~/.claude/cc-candybar.json` by hand for advanced options.
+3. Edit `~/.config/cc-candybar/config.json` by hand for advanced options.
 
 Documentation: https://github.com/promptctl/cc-candybar
 ````
@@ -390,7 +390,7 @@ Documentation: https://github.com/promptctl/cc-candybar
 ````markdown
 **Customizing your TUI grid layout:**
 
-Edit `display.tui` in `~/.claude/cc-candybar.json` to fine-tune:
+Edit `display.tui` in `~/.config/cc-candybar/config.json` to fine-tune:
 
 - **Box style** — Add `"box": "rounded"` to change borders. Presets: `rounded`, `square`, `heavy`, `double`, `dashed`, `heavy-dashed`, `mixed`, `ascii`, `invisible`
 - **Title/footer** — Edit `title.left`, `title.right`, `footer.left`, `footer.right` using `{segment.part}` tokens (e.g. `{model.icon}`, `{dir}`, `{weekly.pct}`)

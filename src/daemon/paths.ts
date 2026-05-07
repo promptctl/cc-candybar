@@ -28,6 +28,11 @@ export function cacheDir(): string {
   return path.join(base, "cc-candybar");
 }
 
+export function configDir(): string {
+  const base = xdgEnv("XDG_CONFIG_HOME") ?? path.join(os.homedir(), ".config");
+  return path.join(base, "cc-candybar");
+}
+
 // `daemonDir` kept as the canonical name for the runtime root so existing
 // callers (limits.ts, server.ts) don't need to learn a new term. It now
 // resolves under $XDG_STATE_HOME/cc-candybar instead of ~/.claude/powerline.
