@@ -1,7 +1,7 @@
 import type { PowerlineConfig } from "./loader";
 
 export const DEFAULT_CONFIG: PowerlineConfig = {
-  theme: "dark",
+  theme: "dracula",
   display: {
     style: "minimal",
     charset: "unicode",
