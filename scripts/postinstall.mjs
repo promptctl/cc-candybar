@@ -41,9 +41,9 @@ exit 1
 
 function main() {
   // Source-repo guard: if we're installing inside the cc-candybar repo
-  // itself (npm install on a checkout), don't touch bin/cc-candybar — the
-  // checked-in placeholder is what dev work uses, and `pnpm build:rust`
-  // produces the real binary at rust-client/target/release/.
+  // itself (npm install on a checkout), don't touch bin/cc-candybar. Devs
+  // stage the native binary there with `just install-rust`; we don't want
+  // postinstall clobbering it. bin/cc-candybar is gitignored in source.
   if (existsSync(join(ROOT, "rust-client", "Cargo.toml"))) {
     return;
   }
