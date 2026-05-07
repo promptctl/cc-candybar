@@ -1,10 +1,10 @@
 import fs from "node:fs";
 import path from "node:path";
-import { homedir } from "node:os";
 import { createHash } from "node:crypto";
 import { debug } from "./logger";
+import { cacheDir } from "../daemon/paths";
 
-const CACHE_DIR = path.join(homedir(), ".claude", "powerline", "git");
+const CACHE_DIR = path.join(cacheDir(), "git");
 const TTL_MS = 1500;
 
 interface CacheEntry<T> {
