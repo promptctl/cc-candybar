@@ -152,9 +152,9 @@ Edit `~/.claude/settings.json` directly. Pin the version — don't use `@latest`
 
 If you prefer a standalone config file, CCCandybar reads (in priority order):
 
-- `./.claude-powerline.json` — project-specific
-- `~/.claude/claude-powerline.json` — user config
-- `~/.config/claude-powerline/config.json` — XDG standard
+- `<projectDir>/.cc-candybar.json` — per-project, wins over user config
+- `<cwd>/.cc-candybar.json` — fallback when there's no project root
+- `$XDG_CONFIG_HOME/cc-candybar/config.json` — user config (default `~/.config/cc-candybar/config.json`)
 
 Config files hot-reload — no restart needed.
 
