@@ -29,6 +29,7 @@
     "demo": "tsx src/demo/app.ts",
     "benchmark:timing": "scripts/benchmark_timing.sh",
     "check:protocol": "node scripts/check-protocol.mjs",
+    "prepack": "node scripts/write-bin-placeholder.mjs",
     "postinstall": "node scripts/postinstall.mjs",
     "prepublishOnly": "npm run lint && npm run typecheck && npm run check:protocol && npm run build"
   },
