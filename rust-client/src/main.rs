@@ -246,15 +246,28 @@ fn daemon_dir() -> PathBuf {
 // --- per-session last-render cache ---------------------------------------
 //
 // On every successful render we drop the output bytes at
-// ~/.claude/powerline/last-render/<sid>. On a daemon-miss, we read it back
-// and emit it instead of a blank "\n". A stale frame for ~1s during a
-// daemon restart is dramatically better UX than the statusline blanking.
+// $XDG_CACHE_HOME/cc-candybar/last-render/<sid> (default ~/.cache/cc-candybar/...).
+// On a daemon-miss, we read it back and emit it instead of a blank "\n".
+// A stale frame for ~1s during a daemon restart is dramatically better UX
+// than the statusline blanking.
+//
+// Per XDG Base Directory spec, regenerable caches live under
+// $XDG_CACHE_HOME, separate from the daemon's runtime state (socket,
+// pidfile, log) which stays at ~/.claude/powerline/.
 //
 // Atomicity: write to a sibling tmp file then rename. A torn cache file
 // would render as garbled ANSI for one frame; rename is cheap insurance.
 
 fn last_render_dir() -> PathBuf {
-    daemon_dir().join("last-render")
+    cache_dir().join("last-render")
+}
+
+fn cache_dir() -> PathBuf {
+    if let Some(xdg) = env::var_os("XDG_CACHE_HOME").filter(|s| !s.is_empty()) {
+        return Path::new(&xdg).join("cc-candybar");
+    }
+    let home = env::var_os("HOME").unwrap_or_else(|| OsString::from("/"));
+    Path::new(&home).join(".cache").join("cc-candybar")
 }
 
 // Allow only [a-zA-Z0-9_-]. Claude session IDs are UUIDs, so this is the
