@@ -1,6 +1,5 @@
 import fs from "node:fs";
 import path from "node:path";
-import { homedir } from "node:os";
 import { createHash } from "node:crypto";
 import { setTimeout } from "node:timers/promises";
 import { debug } from "./logger";
@@ -9,6 +8,7 @@ import {
   findProjectPaths,
   getFileModificationDate,
 } from "./claude";
+import { cacheDir } from "../daemon/paths";
 
 interface ErrnoError extends Error {
   code?: string;
@@ -20,11 +20,7 @@ export interface CacheEntry<T> {
 }
 
 export class CacheManager {
-  private static readonly CACHE_DIR = path.join(
-    homedir(),
-    ".claude",
-    "powerline",
-  );
+  private static readonly CACHE_DIR = cacheDir();
   private static readonly USAGE_CACHE_DIR = path.join(this.CACHE_DIR, "usage");
   private static readonly LOCKS_DIR = path.join(this.CACHE_DIR, "locks");
 

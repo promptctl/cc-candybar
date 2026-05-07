@@ -234,13 +234,21 @@ fn remaining(deadline: Instant) -> Result<Duration, RenderError> {
         .ok_or(RenderError::Timeout)
 }
 
+// Socket and other daemon runtime files live under $XDG_STATE_HOME/cc-candybar
+// (default ~/.local/state/cc-candybar). Caches go under $XDG_CACHE_HOME
+// (default ~/.cache/cc-candybar). Both must agree with src/daemon/paths.ts —
+// if these drift, the client can't find the daemon's socket.
+
 fn socket_path() -> PathBuf {
-    daemon_dir().join("socket")
+    state_dir().join("socket")
 }
 
-fn daemon_dir() -> PathBuf {
+fn state_dir() -> PathBuf {
+    if let Some(xdg) = env::var_os("XDG_STATE_HOME").filter(|s| !s.is_empty()) {
+        return Path::new(&xdg).join("cc-candybar");
+    }
     let home = env::var_os("HOME").unwrap_or_else(|| OsString::from("/"));
-    Path::new(&home).join(".claude").join("powerline")
+    Path::new(&home).join(".local").join("state").join("cc-candybar")
 }
 
 // --- per-session last-render cache ---------------------------------------
