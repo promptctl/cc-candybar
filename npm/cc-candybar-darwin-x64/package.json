@@ -1,0 +1,16 @@
+{
+  "name": "@promptctl/cc-candybar-darwin-x64",
+  "version": "0.0.0-PLACEHOLDER",
+  "description": "Prebuilt native render-path binary for cc-candybar (darwin/x64).",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/promptctl/cc-candybar.git"
+  },
+  "os": ["darwin"],
+  "cpu": ["x64"],
+  "files": ["bin"],
+  "publishConfig": {
+    "access": "public"
+  }
+}

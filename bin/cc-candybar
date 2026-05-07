@@ -1,2 +1,8 @@
-#!/usr/bin/env node
-import '../dist/index.mjs'
+#!/bin/sh
+# Placeholder — replaced by scripts/postinstall.mjs at install time with the
+# prebuilt native binary from the matching @promptctl/cc-candybar-<platform>
+# optional dependency. If you see this message, postinstall did not run.
+echo "cc-candybar: postinstall did not run; native binary not installed." >&2
+echo "Reinstall the package (npm/pnpm). If the problem persists, please" >&2
+echo "open an issue at https://github.com/promptctl/cc-candybar/issues." >&2
+exit 1
