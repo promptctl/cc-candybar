@@ -17,6 +17,7 @@
   },
   "scripts": {
     "build": "tsdown",
+    "build:rust": "cd rust-client && cargo build --release",
     "dev": "tsdown --watch",
     "typecheck": "tsc --noEmit",
     "start": "node dist/index.mjs",
@@ -27,7 +28,9 @@
     "test:coverage": "jest --coverage",
     "demo": "tsx src/demo/app.ts",
     "benchmark:timing": "scripts/benchmark_timing.sh",
-    "prepublishOnly": "npm run lint && npm run typecheck && npm run build"
+    "check:protocol": "node scripts/check-protocol.mjs",
+    "postinstall": "node scripts/postinstall.mjs",
+    "prepublishOnly": "npm run lint && npm run typecheck && npm run check:protocol && npm run build"
   },
   "keywords": [
     "claude",
@@ -63,6 +66,7 @@
   "devDependencies": {
     "@eslint/js": "^9.33.0",
     "@semantic-release/changelog": "^6.0.3",
+    "@semantic-release/exec": "^7.0.3",
     "@semantic-release/git": "^10.0.1",
     "@types/jest": "^30.0.0",
     "@types/node": "^20.0.0",
@@ -82,5 +86,11 @@
   "dependencies": {
     "mobx": "^6.15.0",
     "rich-js": "file:../rich-js"
+  },
+  "optionalDependencies": {
+    "@promptctl/cc-candybar-darwin-arm64": "0.0.0-PLACEHOLDER",
+    "@promptctl/cc-candybar-darwin-x64": "0.0.0-PLACEHOLDER",
+    "@promptctl/cc-candybar-linux-x64": "0.0.0-PLACEHOLDER",
+    "@promptctl/cc-candybar-linux-arm64": "0.0.0-PLACEHOLDER"
   }
 }

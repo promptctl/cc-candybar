@@ -15,3 +15,9 @@ dist-sea/
 cc-candybar-sea-*
 demo-recording/
 .claude/worktrees/
+
+# Rust client build artifacts (Cargo.lock IS committed — reproducible builds)
+rust-client/target/
+
+# Per-platform package binaries — populated only by CI / release.mjs
+npm/*/bin/
