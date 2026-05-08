@@ -21,8 +21,11 @@ const APP_NAME = "CCCandybarURLHandler";
 // [LAW:one-source-of-truth] These are the renderer flags `cc-candybar
 // install` writes into ~/.claude/settings.json when invoked with no args.
 // To override, pass renderer flags after `install`.
+//
+// Note: theme/style/display.style are intentionally absent so the user
+// inherits DEFAULT_CONFIG ("random" for all three) — installs get a fresh
+// per-session look out of the box. Pass --style=<name> to lock it.
 const DEFAULT_INSTALL_ARGS: readonly string[] = [
-  "--style=powerline",
   "--layout",
   "directory git | model context block weekly sessionId",
   "--display",
