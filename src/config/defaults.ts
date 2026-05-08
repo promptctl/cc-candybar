@@ -1,9 +1,13 @@
 import type { PowerlineConfig } from "./loader";
 
 export const DEFAULT_CONFIG: PowerlineConfig = {
-  theme: "dracula",
+  // [LAW:dataflow-not-control-flow] "random" is a value, not a special case;
+  // resolveSession{Theme,Style,DisplayStyle} expand it per-session at render
+  // and cache the pick in SessionState so it's stable for that session.
+  theme: "random",
+  style: "random",
   display: {
-    style: "minimal",
+    style: "random",
     charset: "unicode",
     colorCompatibility: "auto",
     autoWrap: true,

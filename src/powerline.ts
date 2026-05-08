@@ -21,7 +21,12 @@ import type {
   WeeklySegmentConfig,
   ToolbarSegmentConfig,
 } from "./segments";
-import type { SessionStateReader } from "./daemon/session-state";
+import type { SessionStateRW } from "./daemon/session-state";
+import {
+  resolveSessionTheme,
+  resolveSessionStyle,
+  resolveSessionDisplayStyle,
+} from "./themes/session-random";
 import { formatModelName, shortenModelName } from "./utils/formatters";
 import type { BlockInfo } from "./segments/block";
 import type { TodayInfo } from "./segments/today";
@@ -148,8 +153,23 @@ interface RenderedSegment {
   fgHex?: string;
 }
 
+// [LAW:dataflow-not-control-flow] Per-render context. Resolved once at the top
+// of generateStatusline, threaded through every render method. Holds every
+// per-session value derived from sessionId — symbols, segment renderer,
+// theme colors, the resolved display style — so downstream methods see the
+// same uniform shape whether sessionA picked dracula+capsule or sessionB
+// picked nord+powerline.
+interface RenderCtx {
+  sessionId: string;
+  theme: string;
+  style: string;
+  displayStyle: "minimal" | "powerline" | "capsule";
+  symbols: PowerlineSymbols;
+  segmentRenderer: SegmentRenderer;
+  colors: PowerlineColors;
+}
+
 export class PowerlineRenderer {
-  private readonly symbols: PowerlineSymbols;
   private _usageProvider?: UsageProvider;
   private _blockProvider?: BlockProvider;
   private _todayProvider?: TodayProvider;
@@ -157,18 +177,24 @@ export class PowerlineRenderer {
   private _gitService?: GitService;
   private _tmuxService?: TmuxService;
   private _metricsProvider?: MetricsProvider;
-  private _segmentRenderer?: SegmentRenderer;
-  private _sessionState?: SessionStateReader;
+  // [LAW:one-source-of-truth] (symbols, segmentRenderer) are derived from
+  // (displayStyle, charset). Cache by displayStyle so concurrent sessions
+  // with different per-session displayStyle don't trample each other and
+  // we don't rebuild a SegmentRenderer per render. At most 3 entries.
+  private readonly _byDisplayStyle = new Map<
+    string,
+    { symbols: PowerlineSymbols; segmentRenderer: SegmentRenderer }
+  >();
+  private _sessionState?: SessionStateRW;
 
   constructor(
     private readonly config: PowerlineConfig,
     deps?: {
       gitService?: GitService;
       usageProvider?: UsageProvider;
-      sessionState?: SessionStateReader;
+      sessionState?: SessionStateRW;
     },
   ) {
-    this.symbols = this.initializeSymbols();
     // [LAW:locality-or-seam] dependency injection lets the daemon swap in
     // cached service implementations without the renderer knowing.
     if (deps?.gitService) this._gitService = deps.gitService;
@@ -225,15 +251,52 @@ export class PowerlineRenderer {
     return this._metricsProvider;
   }
 
-  private get segmentRenderer(): SegmentRenderer {
-    if (!this._segmentRenderer) {
-      this._segmentRenderer = new SegmentRenderer(
+  private getRenderTriple(displayStyle: "minimal" | "powerline" | "capsule"): {
+    symbols: PowerlineSymbols;
+    segmentRenderer: SegmentRenderer;
+  } {
+    let cached = this._byDisplayStyle.get(displayStyle);
+    if (!cached) {
+      const symbols = this.initializeSymbols(displayStyle);
+      const segmentRenderer = new SegmentRenderer(
         this.config,
-        this.symbols,
+        symbols,
         this._sessionState,
       );
+      cached = { symbols, segmentRenderer };
+      this._byDisplayStyle.set(displayStyle, cached);
     }
-    return this._segmentRenderer;
+    return cached;
+  }
+
+  private buildCtx(hookData: ClaudeHookData): RenderCtx {
+    const sessionId = hookData.session_id ?? "";
+    const theme = resolveSessionTheme(
+      sessionId,
+      this.config.theme,
+      this._sessionState,
+    );
+    const style = resolveSessionStyle(
+      sessionId,
+      this.config.style,
+      this._sessionState,
+    );
+    const displayStyle = resolveSessionDisplayStyle(
+      sessionId,
+      this.config.display.style,
+      this._sessionState,
+    );
+    const { symbols, segmentRenderer } = this.getRenderTriple(displayStyle);
+    const colors = this.computeThemeColors(theme, style);
+    return {
+      sessionId,
+      theme,
+      style,
+      displayStyle,
+      symbols,
+      segmentRenderer,
+      colors,
+    };
   }
 
   private needsSegmentInfo(segmentType: keyof LineConfig["segments"]): boolean {
@@ -243,6 +306,8 @@ export class PowerlineRenderer {
   }
 
   async generateStatusline(hookData: ClaudeHookData): Promise<string> {
+    const ctx = this.buildCtx(hookData);
+
     const usageInfo = this.needsSegmentInfo("session")
       ? await this.usageProvider.getUsageInfo(hookData.session_id, hookData)
       : null;
@@ -275,8 +340,9 @@ export class PowerlineRenderer {
         todayInfo,
         contextInfo,
         metricsInfo,
+        ctx,
       );
-      return this.maybeAppendPanelLine(output, hookData);
+      return this.maybeAppendPanelLine(output, hookData, ctx);
     }
 
     const lines = await Promise.all(
@@ -289,12 +355,13 @@ export class PowerlineRenderer {
           todayInfo,
           contextInfo,
           metricsInfo,
+          ctx,
         ),
       ),
     );
 
     const output = lines.filter((line) => line.length > 0).join("\n");
-    return this.maybeAppendPanelLine(output, hookData);
+    return this.maybeAppendPanelLine(output, hookData, ctx);
   }
 
   private async generateAutoWrapStatusline(
@@ -304,8 +371,8 @@ export class PowerlineRenderer {
     todayInfo: TodayInfo | null,
     contextInfo: ContextInfo | null,
     metricsInfo: MetricsInfo | null,
+    ctx: RenderCtx,
   ): Promise<string> {
-    const colors = this.getThemeColors(hookData.session_id ?? "");
     const currentDir = hookData.workspace?.current_dir || hookData.cwd || "/";
     const terminalWidth = getTerminalWidth();
 
@@ -332,7 +399,7 @@ export class PowerlineRenderer {
           todayInfo,
           contextInfo,
           metricsInfo,
-          colors,
+          ctx,
           currentDir,
         );
 
@@ -359,25 +426,30 @@ export class PowerlineRenderer {
           ? terminalWidth
           : Number.MAX_SAFE_INTEGER;
       outputLines.push(
-        this.buildFlexLineFromSegments(renderedSegments, effectiveWidth),
+        this.buildFlexLineFromSegments(
+          renderedSegments,
+          effectiveWidth,
+          ctx.displayStyle,
+        ),
       );
     }
 
     return outputLines.join("\n");
   }
 
-  // [LAW:single-enforcer] One place resolves config.display.style →
-  // StripStyle and config.display.colorCompatibility → rich-js color spec.
-  // Both buildLineStrip and buildFlexStripLines callers funnel through here.
-  private resolveStripOptions(): {
+  // [LAW:single-enforcer] One place resolves displayStyle → StripStyle and
+  // config.display.colorCompatibility → rich-js color spec. displayStyle is
+  // a per-session value (resolved upstream), not the raw config field.
+  private resolveStripOptions(
+    displayStyle: "minimal" | "powerline" | "capsule",
+  ): {
     style: StripStyle;
     colorCompatibility: "truecolor" | "256" | "ansi" | "none";
   } {
-    const style = this.config.display.style;
     const stripStyle: StripStyle =
-      style === "capsule"
+      displayStyle === "capsule"
         ? "capsule"
-        : style === "minimal"
+        : displayStyle === "minimal"
           ? "plain"
           : "powerline";
     // [LAW:single-enforcer] Use powerline's getColorSupport() as the single
@@ -393,17 +465,18 @@ export class PowerlineRenderer {
 
   private buildLineFromSegments(
     segments: RenderedSegment[],
-    _colors: PowerlineColors,
+    displayStyle: "minimal" | "powerline" | "capsule",
   ): string {
-    return buildLineStrip(segments, this.resolveStripOptions());
+    return buildLineStrip(segments, this.resolveStripOptions(displayStyle));
   }
 
   private buildFlexLineFromSegments(
     segments: RenderedSegment[],
     width: number,
+    displayStyle: "minimal" | "powerline" | "capsule",
   ): string {
     return buildFlexStripLines(segments, {
-      ...this.resolveStripOptions(),
+      ...this.resolveStripOptions(displayStyle),
       width,
     });
   }
@@ -416,8 +489,8 @@ export class PowerlineRenderer {
     todayInfo: TodayInfo | null,
     contextInfo: ContextInfo | null,
     metricsInfo: MetricsInfo | null,
+    ctx: RenderCtx,
   ): Promise<string> {
-    const colors = this.getThemeColors(hookData.session_id ?? "");
     const currentDir = hookData.workspace?.current_dir || hookData.cwd || "/";
 
     const segments = Object.entries(lineConfig.segments)
@@ -437,7 +510,7 @@ export class PowerlineRenderer {
         todayInfo,
         contextInfo,
         metricsInfo,
-        colors,
+        ctx,
         currentDir,
       );
 
@@ -453,7 +526,7 @@ export class PowerlineRenderer {
       }
     }
 
-    return this.buildLineFromSegments(renderedSegments, colors);
+    return this.buildLineFromSegments(renderedSegments, ctx.displayStyle);
   }
 
   private async renderSegment(
@@ -464,18 +537,19 @@ export class PowerlineRenderer {
     todayInfo: TodayInfo | null,
     contextInfo: ContextInfo | null,
     metricsInfo: MetricsInfo | null,
-    colors: PowerlineColors,
+    ctx: RenderCtx,
     currentDir: string,
   ) {
+    const colors = ctx.colors;
     if (segment.type === "directory") {
-      return this.segmentRenderer.renderDirectory(
+      return ctx.segmentRenderer.renderDirectory(
         hookData,
         colors,
         segment.config as DirectorySegmentConfig,
       );
     }
     if (segment.type === "model") {
-      return this.segmentRenderer.renderModel(
+      return ctx.segmentRenderer.renderModel(
         hookData,
         colors,
         segment.config as ModelSegmentConfig,
@@ -488,6 +562,7 @@ export class PowerlineRenderer {
         hookData,
         colors,
         currentDir,
+        ctx,
       );
     }
 
@@ -497,6 +572,7 @@ export class PowerlineRenderer {
         hookData,
         colors,
         currentDir,
+        ctx,
       );
     }
 
@@ -505,12 +581,13 @@ export class PowerlineRenderer {
         segment.config as UsageSegmentConfig,
         usageInfo,
         colors,
+        ctx,
       );
     }
 
     if (segment.type === "sessionId") {
       return hookData.session_id
-        ? this.segmentRenderer.renderSessionId(
+        ? ctx.segmentRenderer.renderSessionId(
             hookData.session_id,
             colors,
             segment.config as SessionIdSegmentConfig,
@@ -532,6 +609,7 @@ export class PowerlineRenderer {
         contextInfo,
         colors,
         hookData,
+        ctx,
       );
     }
 
@@ -541,6 +619,7 @@ export class PowerlineRenderer {
         metricsInfo,
         blockInfo,
         colors,
+        ctx,
       );
     }
 
@@ -549,6 +628,7 @@ export class PowerlineRenderer {
         segment.config as BlockSegmentConfig,
         blockInfo,
         colors,
+        ctx,
       );
     }
 
@@ -557,6 +637,7 @@ export class PowerlineRenderer {
         segment.config as TodaySegmentConfig,
         todayInfo,
         colors,
+        ctx,
       );
     }
 
@@ -565,18 +646,19 @@ export class PowerlineRenderer {
         segment.config as VersionSegmentConfig,
         hookData,
         colors,
+        ctx,
       );
     }
 
     if (segment.type === "env") {
-      return this.segmentRenderer.renderEnv(
+      return ctx.segmentRenderer.renderEnv(
         colors,
         segment.config as EnvSegmentConfig,
       );
     }
 
     if (segment.type === "weekly") {
-      return this.segmentRenderer.renderWeekly(
+      return ctx.segmentRenderer.renderWeekly(
         hookData,
         colors,
         segment.config as WeeklySegmentConfig,
@@ -586,7 +668,7 @@ export class PowerlineRenderer {
     if (segment.type === "toolbar") {
       const rawName = hookData.model?.display_name || "Claude";
       const formatted = formatModelName(rawName);
-      return this.segmentRenderer.renderToolbar(
+      return ctx.segmentRenderer.renderToolbar(
         segment.config as ToolbarSegmentConfig,
         colors,
         {
@@ -609,6 +691,7 @@ export class PowerlineRenderer {
     hookData: ClaudeHookData,
     colors: PowerlineColors,
     currentDir: string,
+    ctx: RenderCtx,
   ) {
     if (!this.needsSegmentInfo("git")) return null;
 
@@ -628,7 +711,7 @@ export class PowerlineRenderer {
     );
 
     return gitInfo
-      ? this.segmentRenderer.renderGit(gitInfo, colors, config)
+      ? ctx.segmentRenderer.renderGit(gitInfo, colors, config)
       : null;
   }
 
@@ -637,6 +720,7 @@ export class PowerlineRenderer {
     hookData: ClaudeHookData,
     colors: PowerlineColors,
     currentDir: string,
+    ctx: RenderCtx,
   ) {
     if (!this.needsSegmentInfo("gitTaculous")) return null;
 
@@ -656,7 +740,7 @@ export class PowerlineRenderer {
     );
 
     return gitInfo
-      ? this.segmentRenderer.renderGitTaculous(gitInfo, colors, config)
+      ? ctx.segmentRenderer.renderGitTaculous(gitInfo, colors, config)
       : null;
   }
 
@@ -664,25 +748,34 @@ export class PowerlineRenderer {
     config: UsageSegmentConfig,
     usageInfo: UsageInfo | null,
     colors: PowerlineColors,
+    ctx: RenderCtx,
   ) {
     if (!usageInfo) return null;
-    return this.segmentRenderer.renderSession(usageInfo, colors, config);
+    return ctx.segmentRenderer.renderSession(usageInfo, colors, config);
   }
 
   private async renderTmuxSegment(colors: PowerlineColors) {
     if (!this.needsSegmentInfo("tmux")) return null;
+    // tmux segment uses raw symbols + colors; SegmentRenderer forwards to a
+    // helper that doesn't depend on display.style symbols, so we use any
+    // cached SegmentRenderer (default to "minimal") — the rendered output
+    // doesn't differ across endpoints styles for tmux.
     const tmuxSessionId = await this.tmuxService.getSessionId();
-    return this.segmentRenderer.renderTmux(tmuxSessionId, colors);
+    return this.getRenderTriple("minimal").segmentRenderer.renderTmux(
+      tmuxSessionId,
+      colors,
+    );
   }
 
   private renderContextSegment(
     config: ContextSegmentConfig,
     contextInfo: ContextInfo | null,
     colors: PowerlineColors,
-    hookData?: ClaudeHookData,
+    hookData: ClaudeHookData | undefined,
+    ctx: RenderCtx,
   ) {
     if (!this.needsSegmentInfo("context")) return null;
-    const seg = this.segmentRenderer.renderContext(contextInfo, colors, config);
+    const seg = ctx.segmentRenderer.renderContext(contextInfo, colors, config);
     if (!seg || !hookData?.transcript_path) return seg;
     const warmth = computeCacheWarmth(hookData.transcript_path, seg.fgColor);
     if (warmth) seg.text = `${seg.text} ${warmth}`;
@@ -694,42 +787,47 @@ export class PowerlineRenderer {
     metricsInfo: MetricsInfo | null,
     _blockInfo: BlockInfo | null,
     colors: PowerlineColors,
+    ctx: RenderCtx,
   ) {
-    return this.segmentRenderer.renderMetrics(metricsInfo, colors, config);
+    return ctx.segmentRenderer.renderMetrics(metricsInfo, colors, config);
   }
 
   private renderBlockSegment(
     config: BlockSegmentConfig,
     blockInfo: BlockInfo | null,
     colors: PowerlineColors,
+    ctx: RenderCtx,
   ) {
     if (!blockInfo) return null;
-    return this.segmentRenderer.renderBlock(blockInfo, colors, config);
+    return ctx.segmentRenderer.renderBlock(blockInfo, colors, config);
   }
 
   private renderTodaySegment(
     config: TodaySegmentConfig,
     todayInfo: TodayInfo | null,
     colors: PowerlineColors,
+    ctx: RenderCtx,
   ) {
     if (!todayInfo) return null;
     const todayType = config?.type || "cost";
-    return this.segmentRenderer.renderToday(todayInfo, colors, todayType);
+    return ctx.segmentRenderer.renderToday(todayInfo, colors, todayType);
   }
 
   private renderVersionSegment(
     config: VersionSegmentConfig,
     hookData: ClaudeHookData,
     colors: PowerlineColors,
+    ctx: RenderCtx,
   ) {
-    return this.segmentRenderer.renderVersion(hookData, colors, config);
+    return ctx.segmentRenderer.renderVersion(hookData, colors, config);
   }
 
-  private initializeSymbols(): PowerlineSymbols {
-    const style = this.config.display.style;
+  private initializeSymbols(
+    displayStyle: "minimal" | "powerline" | "capsule",
+  ): PowerlineSymbols {
     const charset = this.config.display.charset || "unicode";
-    const isMinimalStyle = style === "minimal";
-    const isCapsuleStyle = style === "capsule";
+    const isMinimalStyle = displayStyle === "minimal";
+    const isCapsuleStyle = displayStyle === "capsule";
     const symbolSet = charset === "text" ? TEXT_SYMBOLS : SYMBOLS;
 
     return {
@@ -775,6 +873,7 @@ export class PowerlineRenderer {
   private maybeAppendPanelLine(
     output: string,
     hookData: ClaudeHookData,
+    ctx: RenderCtx,
   ): string {
     const panel = this.config.panel;
     if (!panel?.items?.length) return output;
@@ -783,27 +882,24 @@ export class PowerlineRenderer {
     const expanded = this._sessionState?.get(hookData.session_id ?? "", "toolbar-expanded");
     if (expanded) return output;
 
-    const panelLine = this.renderPanelLine(hookData);
+    const panelLine = this.renderPanelLine(hookData, ctx);
     if (!panelLine) return output;
     return output + "\n" + panelLine;
   }
 
-  private renderPanelLine(hookData: ClaudeHookData): string | null {
+  private renderPanelLine(
+    hookData: ClaudeHookData,
+    ctx: RenderCtx,
+  ): string | null {
     const panel = this.config.panel;
     if (!panel?.items?.length) return null;
 
-    const sessionId = hookData.session_id ?? "";
-    const colors = this.getThemeColors(sessionId);
-    const effectiveTheme =
-      this._sessionState?.get(sessionId, "theme") ?? this.config.theme;
-    const effectiveStyle =
-      this._sessionState?.get(sessionId, "style") ?? this.config.style ?? "surface";
-
+    const colors = ctx.colors;
     const sep = panel.separator ?? " ";
     const parts: string[] = [];
 
     for (const item of panel.items) {
-      const ctx: ToolbarContext = {
+      const tctx: ToolbarContext = {
         sessionId: hookData.session_id ?? "",
         transcriptPath: hookData.transcript_path,
         projectDir: hookData.workspace?.project_dir,
@@ -813,14 +909,14 @@ export class PowerlineRenderer {
           formatModelName(hookData.model?.display_name || "Claude"),
         ),
         hookData: hookData as unknown as Record<string, unknown>,
-        currentTheme: effectiveTheme,
-        currentStyle: effectiveStyle,
+        currentTheme: ctx.theme,
+        currentStyle: ctx.style,
       };
 
       const resolved = item.expr
-        ? resolveToolbarExpr(item.expr, ctx) ?? ""
+        ? resolveToolbarExpr(item.expr, tctx) ?? ""
         : "";
-      const visible = interpolateToolbarText(item.text, ctx);
+      const visible = interpolateToolbarText(item.text, tctx);
       const scheme = item.scheme ?? "cc-candybar";
       const url = `${scheme}://${item.verb}/${encodeURIComponent(resolved)}`;
       parts.push(wrapOsc8(visible, url));
@@ -838,10 +934,13 @@ export class PowerlineRenderer {
       fgHex: colors.hex?.sessionFg,
     };
 
-    return this.buildLineFromSegments([segment], colors);
+    return this.buildLineFromSegments([segment], ctx.displayStyle);
   }
 
-  private getThemeColors(sessionId: string): PowerlineColors {
+  // [LAW:single-enforcer] Builds PowerlineColors from a session-resolved
+  // (theme, style) pair. Caller (buildCtx) handles random expansion before
+  // we ever get here, so this function sees only concrete values.
+  private computeThemeColors(theme: string, style: string): PowerlineColors {
     const colorMode = this.config.display.colorCompatibility || "auto";
     const resolved = colorMode === "auto" ? getColorSupport() : colorMode;
     const colorSupport =
@@ -853,14 +952,13 @@ export class PowerlineRenderer {
             ? "ansi" as const
             : "truecolor" as const;
 
-    const theme = this.config.theme === "custom" && this.config.colors?.custom
-      ? "textual-dark"
-      : this._sessionState?.get(sessionId, "theme") ?? this.config.theme;
-
-    const style = this._sessionState?.get(sessionId, "style") ?? this.config.style;
+    const effectiveTheme =
+      this.config.theme === "custom" && this.config.colors?.custom
+        ? "textual-dark"
+        : theme;
 
     return resolveThemeColors({
-      theme,
+      theme: effectiveTheme,
       style,
       themeMapping: this.config.themeMapping as
         | Record<string, SegmentOverride>

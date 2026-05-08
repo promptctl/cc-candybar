@@ -19,9 +19,9 @@ describe("config", () => {
 
   describe("DEFAULT_CONFIG", () => {
     it("should have valid structure", () => {
-      expect(DEFAULT_CONFIG.theme).toBe("dark");
+      expect(DEFAULT_CONFIG.theme).toBe("random");
       expect(DEFAULT_CONFIG.display.lines).toHaveLength(1);
-      expect(DEFAULT_CONFIG.display.style).toBe("minimal");
+      expect(DEFAULT_CONFIG.display.style).toBe("random");
       expect(DEFAULT_CONFIG.budget?.session).toBeDefined();
     });
   });
@@ -159,20 +159,17 @@ describe("config", () => {
       expect(config.theme).toBe("gruvbox");
     });
 
-    it("should resolve theme=random from config file to a concrete palette", () => {
+    it("should accept theme=random as a valid config value (resolution is per-session)", () => {
       mockFs.existsSync.mockImplementation(
         (p) => p === path.join("/project", ".cc-candybar.json"),
       );
       mockFs.readFileSync.mockReturnValue(JSON.stringify({ theme: "random" }));
 
       const config = loadConfig();
-      expect(config.theme).not.toBe("random");
-      expect(config.theme).not.toBe("custom");
-      expect(typeof config.theme).toBe("string");
-      expect((config.theme as string).length).toBeGreaterThan(0);
+      expect(config.theme).toBe("random");
     });
 
-    it("should resolve theme=random from CLI override", () => {
+    it("should accept theme=random from CLI override", () => {
       mockFs.existsSync.mockReturnValue(false);
       const config = loadConfigFromCLI([
         "node",
@@ -180,8 +177,7 @@ describe("config", () => {
         "--theme",
         "random",
       ]);
-      expect(config.theme).not.toBe("random");
-      expect(config.theme).not.toBe("custom");
+      expect(config.theme).toBe("random");
     });
   });
 

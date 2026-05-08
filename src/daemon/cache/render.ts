@@ -7,7 +7,7 @@ import {
 } from "../../config/loader";
 import type { GitService } from "../../segments/git";
 import type { UsageProvider } from "../../segments/session";
-import type { SessionStateReader } from "../session-state";
+import type { SessionStateRW } from "../session-state";
 import type { WatcherRegistry, WatcherHandle } from "./watchers";
 import { dlog } from "../log";
 
@@ -19,7 +19,7 @@ const MAX_ENTRIES = 256;
 export interface RenderDeps {
   gitService: GitService;
   usageProvider: UsageProvider;
-  sessionState: SessionStateReader;
+  sessionState: SessionStateRW;
   watchers: WatcherRegistry;
 }
 
