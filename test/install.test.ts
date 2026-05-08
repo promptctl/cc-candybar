@@ -128,12 +128,17 @@ describe("install — buildStatusLineCommand", () => {
     const cmd = buildStatusLineCommand(DEFAULT_INSTALL_ARGS);
     expect(cmd).toMatch(/^pnpm dlx @promptctl\/cc-candybar@[^\s]+ /);
     expect(cmd).not.toContain("@latest");
-    expect(cmd).toContain("--style=powerline");
+    // theme/style/display.style intentionally absent — inherit DEFAULT_CONFIG
+    // ("random" for all three) so installs get per-session variation by default.
+    expect(cmd).not.toContain("--style=");
+    expect(cmd).not.toContain("--theme=");
     expect(cmd).toContain(
-      "'directory git | model context block weekly sessionId'",
+      "'directory git | model context block weekly sessionId tray'",
     );
+    // Tray segment carries the toolbar-toggle button (▸).
+    expect(cmd).toContain("--tray '▸{toolbar-toggle(session.id)}'");
     expect(cmd).toContain("--show git=workingTree,upstream,timeSinceCommit");
-    // Three click actions: copy (default), open jsonl, open project dir.
+    // Three click actions on sessionId: copy (default), open jsonl, open project dir.
     expect(cmd).toContain("sessionId.clickAction.kind=url");
     expect(cmd).toContain("sessionId.clickAction.actions.0.verb=copy");
     expect(cmd).toContain(

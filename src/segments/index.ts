@@ -24,4 +24,5 @@ export type {
   EnvSegmentConfig,
   WeeklySegmentConfig,
   ToolbarSegmentConfig,
+  TraySegmentConfig,
 } from "./renderer";

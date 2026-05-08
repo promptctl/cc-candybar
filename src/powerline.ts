@@ -20,6 +20,7 @@ import type {
   EnvSegmentConfig,
   WeeklySegmentConfig,
   ToolbarSegmentConfig,
+  TraySegmentConfig,
 } from "./segments";
 import type { SessionStateRW } from "./daemon/session-state";
 import {
@@ -670,6 +671,24 @@ export class PowerlineRenderer {
       const formatted = formatModelName(rawName);
       return ctx.segmentRenderer.renderToolbar(
         segment.config as ToolbarSegmentConfig,
+        colors,
+        {
+          sessionId: hookData.session_id ?? "",
+          transcriptPath: hookData.transcript_path,
+          projectDir: hookData.workspace?.project_dir,
+          currentDir: hookData.workspace?.current_dir || hookData.cwd,
+          modelName: formatted,
+          modelShort: shortenModelName(formatted),
+          hookData: hookData as unknown as Record<string, unknown>,
+        },
+      );
+    }
+
+    if (segment.type === "tray") {
+      const rawName = hookData.model?.display_name || "Claude";
+      const formatted = formatModelName(rawName);
+      return ctx.segmentRenderer.renderTray(
+        segment.config as TraySegmentConfig,
         colors,
         {
           sessionId: hookData.session_id ?? "",

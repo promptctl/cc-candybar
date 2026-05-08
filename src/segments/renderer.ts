@@ -161,6 +161,15 @@ export interface ToolbarSegmentConfig extends SegmentConfig {
   separator?: string;
 }
 
+// [LAW:one-type-per-behavior] Tray items use the same shape as ToolbarItem.
+// The behavioral split: tray items are always visible (no `?` extras gating)
+// because tray is system-tray-like — buttons + status/notification icons
+// that should always be on screen. Toolbar keeps its extras drawer model.
+export interface TraySegmentConfig extends SegmentConfig {
+  items?: ToolbarItem[];
+  separator?: string;
+}
+
 export type AnySegmentConfig =
   | SegmentConfig
   | DirectorySegmentConfig
@@ -176,7 +185,8 @@ export type AnySegmentConfig =
   | SessionIdSegmentConfig
   | EnvSegmentConfig
   | WeeklySegmentConfig
-  | ToolbarSegmentConfig;
+  | ToolbarSegmentConfig
+  | TraySegmentConfig;
 
 export interface PowerlineSymbols {
   right: string;
@@ -1050,6 +1060,43 @@ export class SegmentRenderer {
       if (item.extra && !expanded) continue;
       // Empty expr → action verb (e.g. toolbar-toggle); use empty value.
       // Non-empty expr that fails to resolve → hide this item (data-driven).
+      let value: string;
+      if (item.expr === "") {
+        value = "";
+      } else {
+        const resolved = resolveToolbarExpr(item.expr, ctx);
+        if (resolved === undefined || resolved === "") continue;
+        value = resolved;
+      }
+      const visible = interpolateToolbarText(item.text, ctx);
+      const scheme = item.scheme ?? "cc-candybar";
+      const url = `${scheme}://${item.verb}/${encodeURIComponent(value)}`;
+      parts.push(wrapOsc8(visible, url));
+    }
+    if (parts.length === 0) return null;
+    return {
+      text: parts.join(sep),
+      bgColor: colors.sessionBg,
+      fgColor: colors.sessionFg, bgHex: colors.hex?.sessionBg, fgHex: colors.hex?.sessionFg,
+    };
+  }
+
+  // [LAW:dataflow-not-control-flow] Tray rendering is the toolbar render with
+  // one knob flipped — extras gating is unconditionally off. Items always
+  // show; the `extra` flag on TrayItem (if any) is ignored. This keeps the
+  // render loop identical so future tray features (notification badges,
+  // status icons) plug into the same DSL.
+  renderTray(
+    config: TraySegmentConfig,
+    colors: PowerlineColors,
+    ctx: ToolbarContext,
+  ): SegmentData | null {
+    const items = config.items;
+    if (!items || items.length === 0) return null;
+    const sep = config.separator ?? " ";
+
+    const parts: string[] = [];
+    for (const item of items) {
       let value: string;
       if (item.expr === "") {
         value = "";
