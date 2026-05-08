@@ -265,17 +265,36 @@ export function createUniqueHash(entry: ParsedEntry): string | null {
 
 const STREAMING_THRESHOLD_BYTES = 1024 * 1024;
 
-const parseCache = new Map<string, ParsedEntry[]>();
+// [LAW:no-shared-mutable-globals] Bounded LRU — single owner, hard cap, documented invariants.
+// Key: filePath. Value: last-seen mtime+size for freshness check plus parsed entries.
+// Files larger than PARSE_CACHE_SKIP_BYTES are streamed and not retained (too expensive).
+const PARSE_CACHE_MAX = 16;
+const PARSE_CACHE_SKIP_BYTES = 5 * 1024 * 1024;
+
+interface ParseCacheEntry {
+  mtime: number;
+  size: number;
+  entries: ParsedEntry[];
+}
+
+const parseCache = new Map<string, ParseCacheEntry>();
+
+export function clearParseCache(): void {
+  parseCache.clear();
+}
 
 export async function parseJsonlFile(filePath: string): Promise<ParsedEntry[]> {
   try {
     const stats = await stat(filePath);
     const fileSizeBytes = stats.size;
-    const cacheKey = `${filePath}:${stats.mtimeMs}:${fileSizeBytes}`;
-    const cached = parseCache.get(cacheKey);
-    if (cached) {
+
+    const cached = parseCache.get(filePath);
+    if (cached && cached.mtime === stats.mtimeMs && cached.size === fileSizeBytes) {
       debug(`[parse-cache] hit ${filePath}`);
-      return cached;
+      // LRU: move to most-recently-used end via delete+reinsert
+      parseCache.delete(filePath);
+      parseCache.set(filePath, cached);
+      return cached.entries;
     }
 
     let entries: ParsedEntry[];
@@ -289,7 +308,19 @@ export async function parseJsonlFile(filePath: string): Promise<ParsedEntry[]> {
     }
 
     debug(`Parsed ${entries.length} entries from ${filePath}`);
-    parseCache.set(cacheKey, entries);
+
+    // Large files are already streamed — retaining parsed entries pins memory. Skip cache.
+    if (fileSizeBytes > PARSE_CACHE_SKIP_BYTES) {
+      return entries;
+    }
+
+    // Evict stale entry for this path (mtime changed) before measuring capacity.
+    parseCache.delete(filePath);
+    // Evict LRU entry if at cap.
+    if (parseCache.size >= PARSE_CACHE_MAX) {
+      parseCache.delete(parseCache.keys().next().value!);
+    }
+    parseCache.set(filePath, { mtime: stats.mtimeMs, size: fileSizeBytes, entries });
     return entries;
   } catch (error) {
     debug(`Failed to read file ${filePath}:`, error);
