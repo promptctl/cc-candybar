@@ -158,6 +158,31 @@ describe("config", () => {
       ]);
       expect(config.theme).toBe("gruvbox");
     });
+
+    it("should resolve theme=random from config file to a concrete palette", () => {
+      mockFs.existsSync.mockImplementation(
+        (p) => p === path.join("/project", ".cc-candybar.json"),
+      );
+      mockFs.readFileSync.mockReturnValue(JSON.stringify({ theme: "random" }));
+
+      const config = loadConfig();
+      expect(config.theme).not.toBe("random");
+      expect(config.theme).not.toBe("custom");
+      expect(typeof config.theme).toBe("string");
+      expect((config.theme as string).length).toBeGreaterThan(0);
+    });
+
+    it("should resolve theme=random from CLI override", () => {
+      mockFs.existsSync.mockReturnValue(false);
+      const config = loadConfigFromCLI([
+        "node",
+        "script",
+        "--theme",
+        "random",
+      ]);
+      expect(config.theme).not.toBe("random");
+      expect(config.theme).not.toBe("custom");
+    });
   });
 
   describe("environment variables", () => {

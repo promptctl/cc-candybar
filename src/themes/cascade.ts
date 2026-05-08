@@ -277,4 +277,13 @@ export function listAvailableThemes(): string[] {
   return [...allNames].sort();
 }
 
+// [LAW:one-source-of-truth] Random theme pool is derived from the same registry
+// that listAvailableThemes() exposes; "custom" is excluded because it requires
+// colors.custom to be defined and would otherwise silently fall back.
+export function pickRandomTheme(): string {
+  const themes = listAvailableThemes().filter((t) => t !== "custom");
+  const idx = Math.floor(Math.random() * themes.length);
+  return themes[idx]!;
+}
+
 export { resolvePaletteName };

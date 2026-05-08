@@ -4,7 +4,7 @@ import os from "node:os";
 import { DEFAULT_CONFIG } from "./defaults";
 import { configDir } from "../daemon/paths";
 import type { ColorTheme } from "../themes";
-import { listAvailableThemes } from "../themes/cascade.js";
+import { listAvailableThemes, pickRandomTheme } from "../themes/cascade.js";
 import type {
   SegmentConfig,
   DirectorySegmentConfig,
@@ -97,7 +97,9 @@ export interface PowerlineConfig {
   modelContextLimits?: Record<string, number>;
 }
 
-const VALID_THEMES = new Set<string>([...listAvailableThemes()]);
+// [LAW:types-are-the-program] "random" is a sentinel that the validator must
+// admit, then the loader resolves to a concrete palette name before render.
+const VALID_THEMES = new Set<string>([...listAvailableThemes(), "random"]);
 
 function isValidTheme(theme: string): boolean {
   return VALID_THEMES.has(theme);
@@ -641,6 +643,12 @@ export function loadConfigStrict(
     }
   }
 
+  // [LAW:single-enforcer] "random" is expanded once, at the config boundary,
+  // so every downstream consumer sees a concrete palette name.
+  if (config.theme === "random") {
+    config.theme = pickRandomTheme();
+  }
+
   return { config, configFilePath: configFile };
 }
 
@@ -685,6 +693,9 @@ function loadConfigStrictNoFile(args: string[]): PowerlineConfig {
         line.segments.toolbar.enabled = true;
       }
     }
+  }
+  if (config.theme === "random") {
+    config.theme = pickRandomTheme();
   }
   return config;
 }
