@@ -27,7 +27,11 @@ const APP_NAME = "CCCandybarURLHandler";
 // per-session look out of the box. Pass --style=<name> to lock it.
 const DEFAULT_INSTALL_ARGS: readonly string[] = [
   "--layout",
-  "directory git | model context block weekly sessionId",
+  "directory git | model context block weekly sessionId tray",
+  "--tray",
+  // ▸ toggles the panel (3rd row). Future tray items: notification icons,
+  // status indicators, more menu-expand buttons.
+  "▸{toolbar-toggle(session.id)}",
   "--display",
   "autoWrap=false",
   "--show",

@@ -20,6 +20,7 @@ import type {
   EnvSegmentConfig,
   WeeklySegmentConfig,
   ToolbarSegmentConfig,
+  TraySegmentConfig,
 } from "../segments/renderer";
 import { parseToolbarDsl } from "../segments/renderer";
 
@@ -40,6 +41,7 @@ export interface LineConfig {
     env?: EnvSegmentConfig;
     weekly?: WeeklySegmentConfig;
     toolbar?: ToolbarSegmentConfig;
+    tray?: TraySegmentConfig;
   };
 }
 
@@ -265,6 +267,7 @@ const VALID_SEGMENT_NAMES: ReadonlySet<string> = new Set([
   "env",
   "weekly",
   "toolbar",
+  "tray",
 ]);
 
 function parseLayout(raw: string): LineConfig[] {
@@ -623,28 +626,39 @@ export function loadConfigStrict(
 
   applyOverrideFlags(config, args);
 
-  // [LAW:dataflow-not-control-flow] --toolbar 'EXPR' parses the inline DSL
-  // into ToolbarItem[] and writes it onto every line that already has a
-  // toolbar segment in the layout. The DSL is the source of truth for items.
-  const toolbarArg = getArgValue(args, "--toolbar");
-  if (toolbarArg !== undefined) {
-    const items = parseToolbarDsl(toolbarArg);
-    let attached = false;
-    for (const line of config.display.lines) {
-      if (line.segments.toolbar) {
-        line.segments.toolbar.items = items;
-        line.segments.toolbar.enabled = true;
-        attached = true;
-      }
-    }
-    if (!attached) {
-      process.stderr.write(
-        `Warning: --toolbar provided but no "toolbar" segment in layout (use --layout '... toolbar ...').\n`,
-      );
-    }
-  }
+  // [LAW:dataflow-not-control-flow] --toolbar / --tray 'EXPR' parse the same
+  // inline DSL (item shape is identical) and write onto the corresponding
+  // segment in the layout. The DSL is the source of truth for items.
+  attachInlineDslItems(config, args, "--toolbar", "toolbar");
+  attachInlineDslItems(config, args, "--tray", "tray");
 
   return { config, configFilePath: configFile };
+}
+
+function attachInlineDslItems(
+  config: PowerlineConfig,
+  args: string[],
+  flag: "--toolbar" | "--tray",
+  segmentName: "toolbar" | "tray",
+): void {
+  const raw = getArgValue(args, flag);
+  if (raw === undefined) return;
+  const items = parseToolbarDsl(raw);
+  let attached = false;
+  for (const line of config.display.lines) {
+    const segs = line.segments;
+    const existing = segs[segmentName];
+    if (existing) {
+      existing.items = items;
+      existing.enabled = true;
+      attached = true;
+    }
+  }
+  if (!attached) {
+    process.stderr.write(
+      `Warning: ${flag} provided but no "${segmentName}" segment in layout (use --layout '... ${segmentName} ...').\n`,
+    );
+  }
 }
 
 // Legacy CLI-path entry point — swallows parse errors as warnings and degrades
@@ -679,16 +693,8 @@ function loadConfigStrictNoFile(args: string[]): PowerlineConfig {
     config.display.lines = parseLayout(layoutArg);
   }
   applyOverrideFlags(config, args);
-  const toolbarArg = getArgValue(args, "--toolbar");
-  if (toolbarArg !== undefined) {
-    const items = parseToolbarDsl(toolbarArg);
-    for (const line of config.display.lines) {
-      if (line.segments.toolbar) {
-        line.segments.toolbar.items = items;
-        line.segments.toolbar.enabled = true;
-      }
-    }
-  }
+  attachInlineDslItems(config, args, "--toolbar", "toolbar");
+  attachInlineDslItems(config, args, "--tray", "tray");
   return config;
 }
 

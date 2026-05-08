@@ -55,6 +55,7 @@ export const DEFAULT_CONFIG: PowerlineConfig = {
           tmux: { enabled: false },
           sessionId: { enabled: false, showIdLabel: true },
           toolbar: { enabled: false, items: [] },
+          tray: { enabled: false, items: [] },
           context: {
             enabled: true,
             showPercentageOnly: false,
