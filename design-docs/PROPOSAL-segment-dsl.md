@@ -21,9 +21,9 @@ This proposal replaces all of them with **one DSL** — a typed, declarative, da
 This proposal assumes two prior tickets have landed:
 
 - **`brandon-daemon-architecture-5hs.11` (P0)** — daemon-only rendering. The statusline binary is a stdin→socket→stdout shim. All work happens in the daemon. Without this, the reactive cache lives in a process with the wrong lifetime and every variable's value diverges between processes.
-- **`~/code/go-template-js` shipped (or vendored)** — the shared template engine. Generic over output type T, parses standard Go-template syntax (`text/template/parse`-shaped AST), provides a closed sprig subset, and lets consumers register custom function bindings. Tracked in its own lit project (28 tickets across `parser`/`evaluator`/`sprig`/`api`/`conformance`). Both rich-js and cc-candybar consume it: rich-js registers style functions (`bold`, `red`, `link`, `on`, …); cc-candybar registers domain functions (`branch`, `gitDirty`, …) and the sprig-style operators it uses. Without this, segment templates have no engine to evaluate against.
+- **`@promptctl/go-template-js` shipped (or vendored)** — the shared template engine. Generic over output type T, parses standard Go-template syntax (`text/template/parse`-shaped AST), provides a closed sprig subset, and lets consumers register custom function bindings. Tracked in its own lit project (28 tickets across `parser`/`evaluator`/`sprig`/`api`/`conformance`). Both rich-js and cc-candybar consume it: rich-js registers style functions (`bold`, `red`, `link`, `on`, …); cc-candybar registers domain functions (`branch`, `gitDirty`, …) and the sprig-style operators it uses. Without this, segment templates have no engine to evaluate against.
 
-> **Redesign note (2026-05-07).** A previous version of this proposal listed a *third* precondition — `brandon-review-toolbar-proposals-3e1.1`, a rich-js markup parser for `[bold]…[/]` / `[link <url>]…[/]` BBCode-style markup, used as a second grammar interleaved with `{{ … }}`. That two-grammar plan is **gone**. The redesign collapses both grammars into one: pure go-template syntax, with style operations expressed as template-function calls (`{{ bold (basename .cwd) }}`) rather than bracket markup. The closed engine (`go-template-js`) covers both rich-js's styling needs and cc-candybar's templating needs with a single parser, a single AST, a single error-message dialect, and a single Go port path. The original markup-parser ticket and chunk 4 (`brandon-segment-dsl-markup-integration-wom`) are closed obsolete.
+> **Redesign note (2026-05-07).** A previous version of this proposal listed a *third* precondition — `brandon-review-toolbar-proposals-3e1.1`, a rich-js markup parser for `[bold]…[/]` / `[link <url>]…[/]` BBCode-style markup, used as a second grammar interleaved with `{{ … }}`. That two-grammar plan is **gone**. The redesign collapses both grammars into one: pure go-template syntax, with style operations expressed as template-function calls (`{{ bold (basename .cwd) }}`) rather than bracket markup. The closed engine (`@promptctl/go-template-js`) covers both rich-js's styling needs and cc-candybar's templating needs with a single parser, a single AST, a single error-message dialect, and a single Go port path. The original markup-parser ticket and chunk 4 (`brandon-segment-dsl-markup-integration-wom`) are closed obsolete.
 
 The chunk plan below treats both as gates.
 
@@ -194,7 +194,7 @@ A single segment's template may produce **multiple rich-js cells** when it conta
 
 ### Compilation
 
-At config load (and on hot reload), each segment's template parses (via `go-template-js`) to a standard go-template AST: text nodes, action nodes (interpolation/pipeline), if nodes, identifier and field nodes, function-call nodes. The cc-candybar evaluator walks this AST and produces a list of typed styled fragments. The walk is wrapped in a MobX `computed` whose tracked dependencies are exactly the variables it references. A segment's cell-list invalidates iff a referenced variable invalidates.
+At config load (and on hot reload), each segment's template parses (via `@promptctl/go-template-js`) to a standard go-template AST: text nodes, action nodes (interpolation/pipeline), if nodes, identifier and field nodes, function-call nodes. The cc-candybar evaluator walks this AST and produces a list of typed styled fragments. The walk is wrapped in a MobX `computed` whose tracked dependencies are exactly the variables it references. A segment's cell-list invalidates iff a referenced variable invalidates.
 
 ### Render
 
@@ -221,9 +221,9 @@ Style operations (`bold`, `red`, `link`, `on`, `rgb`, …) are template function
 
 The exact rich-js function set lives with rich-js. cc-candybar's binding glue (chunk 2) registers cc-candybar's domain functions on top of the same engine instance.
 
-## Template engine — `go-template-js` (consumed)
+## Template engine — `@promptctl/go-template-js` (consumed)
 
-The engine is a separate package: **`~/code/go-template-js`**. Standard Go-template syntax (parses with the `text/template/parse`-shaped AST), generic over output type T (cc-candybar uses `T = StyledFragment[]`), with a closed sprig subset and a function-registration API for consumers. It has its own lit project (28 tickets across `parser`/`evaluator`/`sprig`/`api`/`conformance`); cc-candybar's chunk 2 is the consumer-side binding work, not the engine itself.
+The engine is a separate package: **`@promptctl/go-template-js`**. Standard Go-template syntax (parses with the `text/template/parse`-shaped AST), generic over output type T (cc-candybar uses `T = StyledFragment[]`), with a closed sprig subset and a function-registration API for consumers. It has its own lit project (28 tickets across `parser`/`evaluator`/`sprig`/`api`/`conformance`); cc-candybar's chunk 2 is the consumer-side binding work, not the engine itself.
 
 The user-facing template syntax is a subset of standard Go template — what `text/template/parse` accepts. cc-candybar's chunk 2 binds the function registry; the engine handles parsing and evaluation.
 
@@ -248,7 +248,7 @@ The user-facing template syntax is a subset of standard Go template — what `te
 
 The functions a cc-candybar segment template can call come from two sources, registered into the same engine instance:
 
-1. **Sprig subset** — provided by `go-template-js`. Closed list. (See go-template-js's `sprig` topic for the canonical inventory.)
+1. **Sprig subset** — provided by `@promptctl/go-template-js`. Closed list. (See go-template-js's `sprig` topic for the canonical inventory.)
 2. **cc-candybar domain bindings** — registered by chunk 2 of this program. Closed list:
 
 | Function | Behavior |
@@ -377,8 +377,8 @@ Dependency-ordered. Each chunk ships independently with tests. Tickets to be fil
 ### Chunk 0a — Daemon-only architecture (PRECONDITION)
 **Existing ticket: `brandon-daemon-architecture-5hs.11`** (P0).
 
-### Chunk 0b — `go-template-js` shipped (PRECONDITION)
-The shared template engine. Tracked in `~/code/go-template-js`'s own lit project (28 tickets). Must be published to npm or vendored before cc-candybar's chunk 2 binding work can land. rich-js's style-function binding module also depends on it.
+### Chunk 0b — `@promptctl/go-template-js` shipped (PRECONDITION)
+The shared template engine. Tracked in `@promptctl/go-template-js`'s own lit project (28 tickets). Must be published to npm or vendored before cc-candybar's chunk 2 binding work can land. rich-js's style-function binding module also depends on it.
 
 > Previously this chunk was "rich-js markup parser" (`brandon-review-toolbar-proposals-3e1.1` — closed obsolete). The redesign collapses both grammars into go-template-js.
 
@@ -388,13 +388,13 @@ The shared template engine. Tracked in `~/code/go-template-js`'s own lit project
 - Cache policies: `never`, per-render.
 - Tests: dependency tracking, type checking, default fallbacks, MobX invalidation under various dep patterns.
 
-### Chunk 2 — Consume `go-template-js` + register cc-candybar function bindings
-- Add `go-template-js` as a dependency (or vendor).
+### Chunk 2 — Consume `@promptctl/go-template-js` + register cc-candybar function bindings
+- Add `@promptctl/go-template-js` as a dependency (or vendor).
 - Construct an `Engine<StyledFragment[]>` (or whatever T the proposal settles on) instance with cc-candybar's domain functions registered.
 - Variable-resolver glue: bridge chunk 1's MobX store to the engine's `.field` lookup. Dotted accesses (`.session.id`) route to `store.read('session.id')`.
 - Tests: 20+ golden cases covering each construct via the engine; pipeline chains; variable resolution; error cases (unknown variable, type mismatch in cast).
 
-> Previously this chunk was "port a go-template subset + sprig-subset filter library here." Superseded — the engine is `go-template-js`. Style functions (`bold`, `red`, `link`) are registered by rich-js's binding, not by this chunk.
+> Previously this chunk was "port a go-template subset + sprig-subset filter library here." Superseded — the engine is `@promptctl/go-template-js`. Style functions (`bold`, `red`, `link`) are registered by rich-js's binding, not by this chunk.
 
 ### Chunk 3 — `shell` / `file` / `template` / `time` / `git` source kinds
 - Plug onto chunk 1.
@@ -404,7 +404,7 @@ The shared template engine. Tracked in `~/code/go-template-js`'s own lit project
 - Tests: shell command failure → default; regex no-match → default; file watch trigger → invalidation; time TTL.
 
 ### Chunk 4 — *(removed by redesign)*
-Previously: "Combined parser interleaving `{{ ... }}` and `[style]...[/]`." The two-grammar plan is gone; there is one grammar (go-template via `go-template-js`). Tickets `brandon-segment-dsl-markup-integration-wom` and `.1` closed obsolete. Chunk numbering preserved for downstream-ticket-id stability.
+Previously: "Combined parser interleaving `{{ ... }}` and `[style]...[/]`." The two-grammar plan is gone; there is one grammar (go-template via `@promptctl/go-template-js`). Tickets `brandon-segment-dsl-markup-integration-wom` and `.1` closed obsolete. Chunk numbering preserved for downstream-ticket-id stability.
 
 ### Chunk 5 — Segment compiler & renderer
 - Segment AST (from go-template-js) + MobX store → list of rich-js `StripCell`s with `Style`s.
