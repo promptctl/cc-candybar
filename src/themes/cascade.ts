@@ -277,13 +277,18 @@ export function listAvailableThemes(): string[] {
   return [...allNames].sort();
 }
 
-// [LAW:one-source-of-truth] Random theme pool is derived from the same registry
-// that listAvailableThemes() exposes; "custom" is excluded because it requires
-// colors.custom to be defined and would otherwise silently fall back.
+// [LAW:one-source-of-truth] Random pools derive from the same registries the
+// rest of the system uses (palette registry, STYLE_ORDER, display strip styles).
+// "custom" is excluded because it requires colors.custom to be defined.
 export function pickRandomTheme(): string {
   const themes = listAvailableThemes().filter((t) => t !== "custom");
-  const idx = Math.floor(Math.random() * themes.length);
-  return themes[idx]!;
+  return themes[Math.floor(Math.random() * themes.length)]!;
 }
+
+export const DISPLAY_STYLES: readonly ("minimal" | "powerline" | "capsule")[] = [
+  "minimal",
+  "powerline",
+  "capsule",
+];
 
 export { resolvePaletteName };

@@ -4,7 +4,7 @@ import os from "node:os";
 import { DEFAULT_CONFIG } from "./defaults";
 import { configDir } from "../daemon/paths";
 import type { ColorTheme } from "../themes";
-import { listAvailableThemes, pickRandomTheme } from "../themes/cascade.js";
+import { listAvailableThemes } from "../themes/cascade.js";
 import type {
   SegmentConfig,
   DirectorySegmentConfig,
@@ -45,7 +45,7 @@ export interface LineConfig {
 
 export interface DisplayConfig {
   lines: LineConfig[];
-  style?: "minimal" | "powerline" | "capsule";
+  style?: "minimal" | "powerline" | "capsule" | "random";
   charset?: "unicode" | "text";
   colorCompatibility?: "auto" | "ansi" | "ansi256" | "truecolor";
   autoWrap?: boolean;
@@ -97,8 +97,8 @@ export interface PowerlineConfig {
   modelContextLimits?: Record<string, number>;
 }
 
-// [LAW:types-are-the-program] "random" is a sentinel that the validator must
-// admit, then the loader resolves to a concrete palette name before render.
+// [LAW:types-are-the-program] "random" is a sentinel that validators admit
+// and resolveSession{Theme,Style,DisplayStyle} expand per-session at render.
 const VALID_THEMES = new Set<string>([...listAvailableThemes(), "random"]);
 
 function isValidTheme(theme: string): boolean {
@@ -107,11 +107,12 @@ function isValidTheme(theme: string): boolean {
 
 function isValidStyle(
   style: string,
-): style is "minimal" | "powerline" | "capsule" {
+): style is "minimal" | "powerline" | "capsule" | "random" {
   return (
     style === "minimal" ||
     style === "powerline" ||
-    style === "capsule"
+    style === "capsule" ||
+    style === "random"
   );
 }
 
@@ -643,12 +644,6 @@ export function loadConfigStrict(
     }
   }
 
-  // [LAW:single-enforcer] "random" is expanded once, at the config boundary,
-  // so every downstream consumer sees a concrete palette name.
-  if (config.theme === "random") {
-    config.theme = pickRandomTheme();
-  }
-
   return { config, configFilePath: configFile };
 }
 
@@ -693,9 +688,6 @@ function loadConfigStrictNoFile(args: string[]): PowerlineConfig {
         line.segments.toolbar.enabled = true;
       }
     }
-  }
-  if (config.theme === "random") {
-    config.theme = pickRandomTheme();
   }
   return config;
 }

@@ -6,7 +6,14 @@ export interface SessionStateReader {
   get(sessionId: string, key: string): string | null;
 }
 
-export class SessionState implements SessionStateReader {
+// [LAW:locality-or-seam] Renderer needs to *cache* per-session random picks
+// so subsequent renders are stable. Writing them back into the same store
+// theme-cycle uses keeps state in one place — no parallel cache to drift.
+export interface SessionStateRW extends SessionStateReader {
+  set(sessionId: string, key: string, value: string): void;
+}
+
+export class SessionState implements SessionStateReader, SessionStateRW {
   private sessions = new Map<string, Map<string, string>>();
 
   get(sessionId: string, key: string): string | null {
