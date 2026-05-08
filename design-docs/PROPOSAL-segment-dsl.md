@@ -21,7 +21,9 @@ This proposal replaces all of them with **one DSL** — a typed, declarative, da
 This proposal assumes two prior tickets have landed:
 
 - **`brandon-daemon-architecture-5hs.11` (P0)** — daemon-only rendering. The statusline binary is a stdin→socket→stdout shim. All work happens in the daemon. Without this, the reactive cache lives in a process with the wrong lifetime and every variable's value diverges between processes.
-- **`brandon-review-toolbar-proposals-3e1.1`** — rich-js gains a markup parser (`[bold]…[/]`, `[link <url>]…[/]`, with nesting). Without this, segment templates cannot carry style markup.
+- **`~/code/go-template-js` shipped (or vendored)** — the shared template engine. Generic over output type T, parses standard Go-template syntax (`text/template/parse`-shaped AST), provides a closed sprig subset, and lets consumers register custom function bindings. Tracked in its own lit project (28 tickets across `parser`/`evaluator`/`sprig`/`api`/`conformance`). Both rich-js and cc-candybar consume it: rich-js registers style functions (`bold`, `red`, `link`, `on`, …); cc-candybar registers domain functions (`branch`, `gitDirty`, …) and the sprig-style operators it uses. Without this, segment templates have no engine to evaluate against.
+
+> **Redesign note (2026-05-07).** A previous version of this proposal listed a *third* precondition — `brandon-review-toolbar-proposals-3e1.1`, a rich-js markup parser for `[bold]…[/]` / `[link <url>]…[/]` BBCode-style markup, used as a second grammar interleaved with `{{ … }}`. That two-grammar plan is **gone**. The redesign collapses both grammars into one: pure go-template syntax, with style operations expressed as template-function calls (`{{ bold (basename .cwd) }}`) rather than bracket markup. The closed engine (`go-template-js`) covers both rich-js's styling needs and cc-candybar's templating needs with a single parser, a single AST, a single error-message dialect, and a single Go port path. The original markup-parser ticket and chunk 4 (`brandon-segment-dsl-markup-integration-wom`) are closed obsolete.
 
 The chunk plan below treats both as gates.
 
@@ -42,7 +44,7 @@ The chunk plan below treats both as gates.
 ├─────────────────────────────────────────────────────────────────┤
 │  Segments (the styling layer)                                   │
 │   • single-line, no endpoints, no shell                         │
-│   • template = go-template + rich-js style markup, woven        │
+│   • template = pure go-template; styling = function calls       │
 │   • layout: width (auto | int), justify, truncate, bg, fg       │
 │   • visibility: when (predicate); the only way to hide          │
 │   • optional segment-scoped vars sub-block (namespacing only,   │
@@ -142,22 +144,24 @@ All variables are global to the daemon's MobX store. **No template-level locals.
 ```json5
 segments: {
   cwd: {
-    template: "[bold]{{ .cwd | basename }}[/]",
+    template: "{{ bold (basename .cwd) }}",
     // width: "auto", justify: "left", truncate: "right",
     // bg / fg from globals
   },
   branch: {
-    template: "{{ .branch }}{{ if .git.dirty }} [red]●[/]{{ end }}",
+    template: "{{ .branch }}{{ if .git.dirty }} {{ red \"●\" }}{{ end }}",
     when: "{{ ne .branch \"\" }}",
   },
   toolbar: {
     template: `
-      [link cc-candybar://copy/{{ .session.id }}]#{{ .session.id | trunc 8 }}[/]
-      [link cc-candybar://toolbar-toggle/]≫[/]
+      {{ link (printf "cc-candybar://copy/%s" .session.id) (printf "#%s" (trunc 8 .session.id)) }}
+      {{ link "cc-candybar://toolbar-toggle/" "≫" }}
       {{ if .toolbarExpanded }}
-        [link cc-candybar://set-profile/compact]
-          {{ if eq .profile "compact" }}[green]{{ else }}[gray]{{ end }}compact[/]
-        [/]
+        {{ if eq .profile "compact" }}
+          {{ link "cc-candybar://set-profile/compact" (green "compact") }}
+        {{ else }}
+          {{ link "cc-candybar://set-profile/compact" (gray "compact") }}
+        {{ end }}
       {{ end }}
     `,  // illustrative; multi-line via JSON5 backtick or YAML block scalar
   },
@@ -168,7 +172,7 @@ Field reference:
 
 | Field | Type | Default | Notes |
 |---|---|---|---|
-| `template` | string | required | go-template + style markup |
+| `template` | string | required | pure go-template; styling via function calls (`bold`, `red`, `link`, …) registered by rich-js |
 | `width` | `"auto"` \| int | `"auto"` | fixed width pads/truncates |
 | `justify` | `"left"` \| `"center"` \| `"right"` | `"left"` | only meaningful when `width` is fixed |
 | `truncate` | `"right"` \| `"left"` \| `"middle"` | `"right"` | overflow strategy when fixed-width |
@@ -178,19 +182,19 @@ Field reference:
 
 ### Template
 
-The template string is **go-template + style markup** woven together. The parser interleaves both grammars — markup tags can wrap interpolations, interpolations can produce text inside markup spans, conditionals can switch markup spans:
+The template string is **pure go-template syntax** — one grammar, parsed once. Styling is expressed through **template-function calls** registered by rich-js, not through a second markup grammar:
 
 - `{{ .var }}` — variable interpolation.
-- `{{ .var | filter1 arg | filter2 }}` — filter pipeline.
+- `{{ .var | filter1 arg | filter2 }}` — filter pipeline (last-arg semantics, standard go-template).
 - `{{ if expr }}…{{ else }}…{{ end }}` — conditional.
-- `[bold]…[/]`, `[red]…[/]`, `[link <url>]…[/]` — style markup (rich-js parser).
-- Markup nests; closing tag `[/]` matches most-recent open. Mismatched tags fail at parse time.
+- `{{ bold "x" }}`, `{{ red "x" }}`, `{{ link "url" "label" }}` — style functions provided by rich-js's binding into the shared engine. Each takes argument(s) and returns a typed styled fragment; nesting is plain function composition (`{{ link "url" (bold "label") }}`).
+- Functions are arity-checked at parse time; unknown functions fail at parse time with a useful error.
 
-A single segment's template may produce **multiple rich-js cells** when it contains multiple top-level `[link …]…[/]` spans separated by literal text — each link span becomes its own cell with its own `Style({ link })`. This is what makes the toolbar a normal segment instead of a special concept.
+A single segment's template may produce **multiple rich-js cells** when it contains multiple top-level `link` calls separated by literal text or by other top-level expressions — each top-level `link` becomes its own cell with its own `Style({ link })`. This is what makes the toolbar a normal segment instead of a special concept.
 
 ### Compilation
 
-At config load (and on hot reload), each segment's template parses to a typed AST: literal-text-nodes, variable-interpolation-nodes, conditional-nodes, style-markup-nodes. The AST is wrapped in a MobX `computed` whose tracked dependencies are exactly the variables it references. A segment's cell-list invalidates iff a referenced variable invalidates.
+At config load (and on hot reload), each segment's template parses (via `go-template-js`) to a standard go-template AST: text nodes, action nodes (interpolation/pipeline), if nodes, identifier and field nodes, function-call nodes. The cc-candybar evaluator walks this AST and produces a list of typed styled fragments. The walk is wrapped in a MobX `computed` whose tracked dependencies are exactly the variables it references. A segment's cell-list invalidates iff a referenced variable invalidates.
 
 ### Render
 
@@ -208,21 +212,28 @@ At render time, the daemon:
 - **No endpoints.** The renderer's Joiner draws powerline arrows. Templates do not.
 - **No direct shell.** All dynamic data flows through `shell`-kind variables, which the daemon executes once and caches.
 
-## Style markup
+## Style functions
 
-Lives in rich-js (blocked on `brandon-review-toolbar-proposals-3e1.1`). The DSL imports the parser; the markup grammar is rich-js's, not ours. The DSL's contribution is *interleaving* markup with go-template syntax in one combined parser pass.
+Style operations (`bold`, `red`, `link`, `on`, `rgb`, …) are template functions registered by **rich-js** into the shared engine — not a separate markup grammar. cc-candybar imports rich-js's binding module alongside its own. Two consequences:
 
-## Template engine — go-template subset
+- **One parser, one AST, one error dialect.** No grammar interleaving; no two-grammar nesting rules; no BBCode-style close-tag matcher.
+- **Style-as-function composes via standard go-template.** Nesting is `(red (bold "x"))`. Conditionals around styles are normal `{{ if … }}{{ red … }}{{ else }}{{ gray … }}{{ end }}` blocks. There is no special "switch markup span" form to spec or test.
 
-We port a subset. The Go `text/template` grammar is small; a faithful subset is feasible to own.
+The exact rich-js function set lives with rich-js. cc-candybar's binding glue (chunk 2) registers cc-candybar's domain functions on top of the same engine instance.
 
-**Supported:**
+## Template engine — `go-template-js` (consumed)
+
+The engine is a separate package: **`~/code/go-template-js`**. Standard Go-template syntax (parses with the `text/template/parse`-shaped AST), generic over output type T (cc-candybar uses `T = StyledFragment[]`), with a closed sprig subset and a function-registration API for consumers. It has its own lit project (28 tickets across `parser`/`evaluator`/`sprig`/`api`/`conformance`); cc-candybar's chunk 2 is the consumer-side binding work, not the engine itself.
+
+The user-facing template syntax is a subset of standard Go template — what `text/template/parse` accepts. cc-candybar's chunk 2 binds the function registry; the engine handles parsing and evaluation.
+
+**Supported (via go-template-js):**
 - `{{ .field }}` and `{{ .field.path }}` — variable / nested-field reference.
-- `{{ .field | filter arg arg }}` — filter pipeline.
+- `{{ .field | fn arg arg }}` — pipeline (last-arg semantics).
 - `{{ if expr }}…{{ end }}`, `{{ if expr }}…{{ else }}…{{ end }}`.
 - `{{ /* comment */ }}`.
 - Literals: strings (`"..."`), numbers, booleans.
-- Boolean exprs via filters: `{{ if eq .x "compact" }}`, `{{ if and (eq .a 1) (gt .b 2) }}`.
+- Boolean exprs via funcs: `{{ if eq .x "compact" }}`, `{{ if and (eq .a 1) (gt .b 2) }}`.
 
 **Deferred (until a real need surfaces):**
 - `{{ range }}` / iteration.
@@ -231,13 +242,16 @@ We port a subset. The Go `text/template` grammar is small; a faithful subset is 
 
 **Rejected:**
 - Template-level variable assignment (`{{ $x := … }}`). Use the `vars` sub-block.
-- Custom function definitions inside templates.
+- User-authored custom function definitions inside templates. (Functions are registered in code by rich-js / cc-candybar.)
 
-## Filter library — sprig subset
+## Function library — sprig subset + cc-candybar bindings
 
-A closed, named subset:
+The functions a cc-candybar segment template can call come from two sources, registered into the same engine instance:
 
-| Filter | Behavior |
+1. **Sprig subset** — provided by `go-template-js`. Closed list. (See go-template-js's `sprig` topic for the canonical inventory.)
+2. **cc-candybar domain bindings** — registered by chunk 2 of this program. Closed list:
+
+| Function | Behavior |
 |---|---|
 | `trunc N` | First N chars (or last if N<0) |
 | `default V` | Replace empty with V |
@@ -252,7 +266,9 @@ A closed, named subset:
 | `and` / `or` / `not` | Boolean (var-arity) |
 | `has` / `hasPrefix` / `hasSuffix` / `contains` | Substring tests |
 
-The list is closed; extension is a code change. Chunk 7 (built-in library migration) may surface a need to add one or two; that's expected and budgeted.
+Some of these may already exist in go-template-js's sprig subset; in that case cc-candybar's binding either re-exports or skips. The list is closed; extension is a code change. Chunk 7 (built-in library migration) may surface a need to add one or two; that's expected and budgeted.
+
+**Style functions** (`bold`, `red`, `link`, …) are *not* in this table — they are registered by rich-js's binding, not cc-candybar's.
 
 ## Theming integration
 
@@ -361,8 +377,10 @@ Dependency-ordered. Each chunk ships independently with tests. Tickets to be fil
 ### Chunk 0a — Daemon-only architecture (PRECONDITION)
 **Existing ticket: `brandon-daemon-architecture-5hs.11`** (P0).
 
-### Chunk 0b — rich-js markup parser (PRECONDITION)
-**Existing ticket: `brandon-review-toolbar-proposals-3e1.1`**.
+### Chunk 0b — `go-template-js` shipped (PRECONDITION)
+The shared template engine. Tracked in `~/code/go-template-js`'s own lit project (28 tickets). Must be published to npm or vendored before cc-candybar's chunk 2 binding work can land. rich-js's style-function binding module also depends on it.
+
+> Previously this chunk was "rich-js markup parser" (`brandon-review-toolbar-proposals-3e1.1` — closed obsolete). The redesign collapses both grammars into go-template-js.
 
 ### Chunk 1 — MobX-backed variable graph (foundations)
 - Daemon-resident MobX store; variable types; type-checked filter casts.
@@ -370,10 +388,13 @@ Dependency-ordered. Each chunk ships independently with tests. Tickets to be fil
 - Cache policies: `never`, per-render.
 - Tests: dependency tracking, type checking, default fallbacks, MobX invalidation under various dep patterns.
 
-### Chunk 2 — Go-template subset port + sprig-subset filters
-- Parser and evaluator for the subset above.
-- Filter library (closed set).
-- Tests: golden parse-tree round-trips; evaluation against fixture variable contexts; useful error messages on unbalanced/unknown syntax.
+### Chunk 2 — Consume `go-template-js` + register cc-candybar function bindings
+- Add `go-template-js` as a dependency (or vendor).
+- Construct an `Engine<StyledFragment[]>` (or whatever T the proposal settles on) instance with cc-candybar's domain functions registered.
+- Variable-resolver glue: bridge chunk 1's MobX store to the engine's `.field` lookup. Dotted accesses (`.session.id`) route to `store.read('session.id')`.
+- Tests: 20+ golden cases covering each construct via the engine; pipeline chains; variable resolution; error cases (unknown variable, type mismatch in cast).
+
+> Previously this chunk was "port a go-template subset + sprig-subset filter library here." Superseded — the engine is `go-template-js`. Style functions (`bold`, `red`, `link`) are registered by rich-js's binding, not by this chunk.
 
 ### Chunk 3 — `shell` / `file` / `template` / `time` / `git` source kinds
 - Plug onto chunk 1.
@@ -382,16 +403,15 @@ Dependency-ordered. Each chunk ships independently with tests. Tickets to be fil
 - One TTL sweep timer per TTL bucket.
 - Tests: shell command failure → default; regex no-match → default; file watch trigger → invalidation; time TTL.
 
-### Chunk 4 — rich-js style-markup integration
-- Once chunk 0b lands, wire its parser into the segment template parser.
-- Combined parser for `{{ ... }}` + `[style]...[/]` interleaved.
-- Tests: combined templates parse to expected mixed AST; nested styles; link with URL containing `]`; conditionals around markup spans.
+### Chunk 4 — *(removed by redesign)*
+Previously: "Combined parser interleaving `{{ ... }}` and `[style]...[/]`." The two-grammar plan is gone; there is one grammar (go-template via `go-template-js`). Tickets `brandon-segment-dsl-markup-integration-wom` and `.1` closed obsolete. Chunk numbering preserved for downstream-ticket-id stability.
 
 ### Chunk 5 — Segment compiler & renderer
-- Segment AST + MobX store → list of rich-js `StripCell`s with `Style`s.
+- Segment AST (from go-template-js) + MobX store → list of rich-js `StripCell`s with `Style`s.
+- Multi-cell from one segment: each top-level `link` function call becomes its own cell with its own `Style({ link })`. Adjacent literal text and inline style functions wrap into the surrounding cell.
 - Apply `width` / `justify` / `truncate`.
 - Apply globals defaults.
-- `when` predicate evaluator (reuses chunk-2 engine).
+- `when` predicate evaluator (reuses the chunk-2 engine instance).
 - Tests: width handling, justify alignment, multiple cells from one segment (toolbar shape), overflow truncation, `when` hides correctly.
 
 ### Chunk 6 — Top-level config loader (JSON5) + validator
@@ -426,24 +446,28 @@ Dependency-ordered. Each chunk ships independently with tests. Tickets to be fil
 ## Cross-cutting dependencies
 
 ```
-[chunk 0a:   daemon-only]    ─┐
-                              ├─→  everything below
-[chunk 0b:   markup parser] ─┘
+[chunk 0a:   daemon-only]      ─┐
+                                ├─→  everything below
+[chunk 0b:   go-template-js]  ─┘
 
-[chunk 1: MobX vars]  ─→  [chunk 2: template engine]
+[chunk 1: MobX vars]  ─→  [chunk 2: engine bindings]
                                   │
-                                  ▼
-            [chunk 3: more sources] ─→ [chunk 4: markup integ] ─→ [chunk 5: segment render]
-                                                                          │
-                                                                          ▼
-                                                          [chunk 6: config loader]
-                                                                          │
-                                                                          ▼
-                                                  [chunk 7: built-in lib + delete legacy]
-                                                                          │
-                                                                          ▼
+                                  ├──────────────┐
+                                  ▼              ▼
+                          [chunk 3: sources]  [chunk 5: segment render]
+                                  │                    │
+                                  └──────────┬─────────┘
+                                             ▼
+                                  [chunk 6: config loader]
+                                             │
+                                             ▼
+                                  [chunk 7: built-in lib + delete legacy]
+                                             │
+                                             ▼
                               [chunk 8: protocol] ─→ [chunk 9: hot reload] ─→ [chunk 10: tooling]
 ```
+
+> Chunk 4 is gone (see the chunk-plan section). Chunk 5 now depends on chunks 2 and 3 directly.
 
 ## Out of scope
 
