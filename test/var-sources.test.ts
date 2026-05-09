@@ -1,7 +1,12 @@
 import fs from "fs";
 import os from "os";
 import path from "path";
-import { VariableStore, SourceRegistry, parseDuration } from "../src/var-system";
+import {
+  VariableStore,
+  SourceRegistry,
+  parseDuration,
+  formatGoTime,
+} from "../src/var-system";
 
 // Helper: fresh pair so tests are fully isolated.
 function make(defaultEmptyValue?: string) {
@@ -856,6 +861,294 @@ describe("SourceRegistry — dispose", () => {
 
       fs.writeFileSync(f, "v2");
       await settle(350);
+      expect(store.read("val")).toBe("v1");
+    } finally {
+      cleanup();
+    }
+  });
+});
+
+// ─── formatGoTime ─────────────────────────────────────────────────────────────
+
+describe("formatGoTime", () => {
+  // Fixed reference date: 2024-03-15 09:07:05 (Friday)
+  const ref = new Date(2024, 2 /* March */, 15, 9, 7, 5);
+
+  it.each([
+    ["2006-01-02", "2024-03-15"],
+    ["15:04:05", "09:07:05"],
+    ["15:04", "09:07"],
+    ["Jan 2, 2006", "Mar 15, 2024"],
+    ["January 2006", "March 2024"],
+    ["Mon Jan 2", "Fri Mar 15"],
+    ["Monday", "Friday"],
+    ["3:04 PM", "9:07 AM"],
+    ["3:04 pm", "9:07 am"],
+    ["06", "24"],
+    ["1/2/06", "3/15/24"],
+  ] as const)('layout "%s" → "%s"', (layout, expected) => {
+    expect(formatGoTime(layout, ref)).toBe(expected);
+  });
+
+  it("passes through non-token characters unchanged", () => {
+    expect(formatGoTime("Time: 15:04:05!", ref)).toBe("Time: 09:07:05!");
+  });
+
+  it("PM marker for hour >= 12", () => {
+    const afternoon = new Date(2024, 0, 1, 14, 30, 0);
+    expect(formatGoTime("3:04 PM", afternoon)).toBe("2:30 PM");
+  });
+
+  it("hour 0 renders as 12 in 12h format", () => {
+    const midnight = new Date(2024, 0, 1, 0, 0, 0);
+    expect(formatGoTime("3:04 PM", midnight)).toBe("12:00 AM");
+  });
+});
+
+// ─── template source kind ─────────────────────────────────────────────────────
+
+describe("SourceRegistry — template: basic", () => {
+  it("evaluates a static template literal", () => {
+    const { store, registry } = make();
+    registry.declareLiteral("greeting", "hello");
+    registry.declareTemplate("msg", `{{ .greeting }} world`);
+    expect(store.read("msg")).toBe("hello world");
+    registry.dispose();
+  });
+
+  it("type is always 'string'", () => {
+    const { store, registry } = make();
+    registry.declareLiteral("x", "val");
+    registry.declareTemplate("t", "{{ .x }}");
+    expect(store.getType("t")).toBe("string");
+    registry.dispose();
+  });
+
+  it("auto-invalidates when a box dependency changes", () => {
+    const store = new VariableStore();
+    const registry = new SourceRegistry(store);
+    store.defineBox("name", "string", "Alice");
+    registry.declareTemplate("greeting", `Hello, {{ .name }}!`);
+
+    expect(store.read("greeting")).toBe("Hello, Alice!");
+    store.setBox("name", "Bob");
+    expect(store.read("greeting")).toBe("Hello, Bob!");
+    registry.dispose();
+  });
+
+  it("auto-invalidates transitively (template reading a template)", () => {
+    const store = new VariableStore();
+    const registry = new SourceRegistry(store);
+    store.defineBox("base", "string", "foo");
+    registry.declareTemplate("mid", `{{ .base }}-mid`);
+    registry.declareTemplate("top", `{{ .mid }}-top`);
+
+    expect(store.read("top")).toBe("foo-mid-top");
+    store.setBox("base", "bar");
+    expect(store.read("top")).toBe("bar-mid-top");
+    registry.dispose();
+  });
+
+  it("records no last_error on success", () => {
+    const store = new VariableStore();
+    const registry = new SourceRegistry(store);
+    store.defineBox("x", "string", "ok");
+    registry.declareTemplate("t", "{{ .x }}");
+    store.read("t");
+    expect(registry.getLastError("t")).toBeUndefined();
+    registry.dispose();
+  });
+
+  it("varDefault returned when template evaluation fails (missing variable)", () => {
+    const store = new VariableStore();
+    const registry = new SourceRegistry(store);
+    registry.declareTemplate("t", "{{ .nonexistent }}", { varDefault: "fallback" });
+    expect(store.read("t")).toBe("fallback");
+    expect(registry.getLastError("t")).toBeDefined();
+    registry.dispose();
+  });
+
+  it("defaultEmptyValue returned when template fails and no varDefault", () => {
+    const store = new VariableStore();
+    const registry = new SourceRegistry(store, "(none)");
+    registry.declareTemplate("t", "{{ .nonexistent }}");
+    expect(store.read("t")).toBe("(none)");
+    registry.dispose();
+  });
+});
+
+describe("SourceRegistry — template: cycle detection", () => {
+  it("self-referencing template records a last_error at declaration", () => {
+    const store = new VariableStore();
+    const registry = new SourceRegistry(store);
+    registry.declareTemplate("self", "{{ .self }}");
+    expect(registry.getLastError("self")).toBeDefined();
+    registry.dispose();
+  });
+
+  it("self-referencing template returns fallback, not unhandled throw", () => {
+    const store = new VariableStore();
+    const registry = new SourceRegistry(store, "(cycle)");
+    registry.declareTemplate("self", "{{ .self }}");
+    expect(() => store.read("self")).not.toThrow();
+    expect(store.read("self")).toBe("(cycle)");
+    registry.dispose();
+  });
+});
+
+// ─── time source kind ─────────────────────────────────────────────────────────
+
+describe("SourceRegistry — time: basic", () => {
+  it("initialises box with a formatted time string", () => {
+    const { store, registry } = make();
+    registry.declareTime("t", { format: "2006-01-02", ttlMs: 60_000 });
+    const val = store.read("t") as string;
+    expect(val).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    registry.dispose();
+  });
+
+  it("type is always 'string'", () => {
+    const { store, registry } = make();
+    registry.declareTime("t", { format: "15:04", ttlMs: 60_000 });
+    expect(store.getType("t")).toBe("string");
+    registry.dispose();
+  });
+
+  it("TTL fires and box value is refreshed", async () => {
+    const { store, registry } = make();
+    registry.declareTime("t", { format: "15:04:05", ttlMs: 60 });
+    await settle(200);
+    expect(store.read("t")).toMatch(/^\d{2}:\d{2}:\d{2}$/);
+    registry.dispose();
+  });
+
+  it("default TTL is 1 second — no throw when ttlMs is omitted", () => {
+    const { registry } = make();
+    expect(() =>
+      registry.declareTime("t", { format: "15:04:05" }),
+    ).not.toThrow();
+    registry.dispose();
+  });
+
+  it("dispose stops TTL timer from firing", async () => {
+    const store = new VariableStore();
+    const registry = new SourceRegistry(store);
+    registry.declareTime("t", { format: "15:04:05", ttlMs: 60 });
+    await settle(100);
+    const snapshot = store.read("t");
+    registry.dispose();
+    // After dispose the timer must stop; no unhandled timer callbacks.
+    await settle(200);
+    // Value in the store stays at whatever it was when disposed.
+    expect(store.read("t")).toBe(snapshot);
+  });
+});
+
+// ─── depends_on cache policy ──────────────────────────────────────────────────
+
+describe("SourceRegistry — depends_on cache policy", () => {
+  it("triggers shell re-run when a named dependency changes", async () => {
+    const { dir, cleanup } = makeTmpDir();
+    try {
+      const dataFile = path.join(dir, "data");
+      fs.writeFileSync(dataFile, "v1");
+
+      const store = new VariableStore();
+      const registry = new SourceRegistry(store);
+      store.defineBox("trigger", "string", "a");
+      registry.declareShell("val", `cat ${dataFile}`, {
+        cache: { kind: "depends_on", varNames: ["trigger"] },
+      });
+
+      await settle(150);
+      expect(store.read("val")).toBe("v1");
+
+      fs.writeFileSync(dataFile, "v2");
+      store.setBox("trigger", "b");
+      await settle(250);
+
+      expect(store.read("val")).toBe("v2");
+      registry.dispose();
+    } finally {
+      cleanup();
+    }
+  });
+
+  it("does NOT re-run shell when dependency value is unchanged", async () => {
+    const { dir, cleanup } = makeTmpDir();
+    try {
+      const dataFile = path.join(dir, "data");
+      fs.writeFileSync(dataFile, "v1");
+
+      const store = new VariableStore();
+      const registry = new SourceRegistry(store);
+      store.defineBox("trigger", "string", "a");
+      registry.declareShell("val", `cat ${dataFile}`, {
+        cache: { kind: "depends_on", varNames: ["trigger"] },
+      });
+
+      await settle(150);
+      expect(store.read("val")).toBe("v1");
+
+      fs.writeFileSync(dataFile, "v2");
+      store.setBox("trigger", "a"); // same value — reaction data unchanged → no re-run
+      await settle(250);
+
+      expect(store.read("val")).toBe("v1");
+      registry.dispose();
+    } finally {
+      cleanup();
+    }
+  });
+
+  it("multiple deps: triggers when any one changes", async () => {
+    const { dir, cleanup } = makeTmpDir();
+    try {
+      const dataFile = path.join(dir, "data");
+      fs.writeFileSync(dataFile, "v1");
+
+      const store = new VariableStore();
+      const registry = new SourceRegistry(store);
+      store.defineBox("a", "string", "x");
+      store.defineBox("b", "string", "y");
+      registry.declareShell("val", `cat ${dataFile}`, {
+        cache: { kind: "depends_on", varNames: ["a", "b"] },
+      });
+
+      await settle(150);
+      expect(store.read("val")).toBe("v1");
+
+      fs.writeFileSync(dataFile, "v2");
+      store.setBox("b", "z"); // only "b" changes
+      await settle(250);
+
+      expect(store.read("val")).toBe("v2");
+      registry.dispose();
+    } finally {
+      cleanup();
+    }
+  });
+
+  it("dispose stops depends_on from firing further updates", async () => {
+    const { dir, cleanup } = makeTmpDir();
+    try {
+      const dataFile = path.join(dir, "data");
+      fs.writeFileSync(dataFile, "v1");
+
+      const store = new VariableStore();
+      const registry = new SourceRegistry(store);
+      store.defineBox("trigger", "string", "a");
+      registry.declareShell("val", `cat ${dataFile}`, {
+        cache: { kind: "depends_on", varNames: ["trigger"] },
+      });
+
+      await settle(150);
+      registry.dispose();
+
+      fs.writeFileSync(dataFile, "v2");
+      store.setBox("trigger", "b"); // reaction must NOT fire after dispose
+      await settle(250);
+
       expect(store.read("val")).toBe("v1");
     } finally {
       cleanup();

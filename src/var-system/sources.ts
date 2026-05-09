@@ -35,6 +35,7 @@ export type CachePolicy =
   | { readonly kind: "ttl"; readonly durationMs: number }
   | { readonly kind: "watch_file"; readonly path: string }
   | { readonly kind: "key"; readonly template: string }
+  | { readonly kind: "depends_on"; readonly varNames: readonly string[] }
   | { readonly kind: "never" };
 
 // Parse a duration string to milliseconds.  Accepted units: ms, s, m, h.
@@ -69,6 +70,19 @@ export interface FileOptions {
   readonly readMode?: "whole" | "first-line";
   readonly regex?: string;
   readonly cache: CachePolicy;
+  readonly varDefault?: string;
+}
+
+export interface TemplateOptions {
+  readonly varDefault?: string;
+}
+
+export interface TimeOptions {
+  // Go reference-time layout string (e.g. "15:04:05", "2006-01-02").
+  // Reference time: Mon Jan 2 15:04:05 MST 2006
+  readonly format: string;
+  // Refresh interval.  Defaults to 1 000 ms.
+  readonly ttlMs?: number;
   readonly varDefault?: string;
 }
 
@@ -124,6 +138,111 @@ async function readFileContent(
 
   // whole (default): newlines → spaces, trailing whitespace stripped
   return { content: raw.replace(/\n/g, " ").trim() };
+}
+
+// ─── Go reference-time formatter ─────────────────────────────────────────────
+
+const MONTHS_FULL = [
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December",
+] as const;
+const MONTHS_SHORT = [
+  "Jan",
+  "Feb",
+  "Mar",
+  "Apr",
+  "May",
+  "Jun",
+  "Jul",
+  "Aug",
+  "Sep",
+  "Oct",
+  "Nov",
+  "Dec",
+] as const;
+const WEEKDAYS_FULL = [
+  "Sunday",
+  "Monday",
+  "Tuesday",
+  "Wednesday",
+  "Thursday",
+  "Friday",
+  "Saturday",
+] as const;
+const WEEKDAYS_SHORT = [
+  "Sun",
+  "Mon",
+  "Tue",
+  "Wed",
+  "Thu",
+  "Fri",
+  "Sat",
+] as const;
+
+// [LAW:single-enforcer] One Go-reference-time formatter shared by all time
+// source kinds.  Tokens are matched longest-first in a single left-to-right
+// pass so overlapping prefixes ("January" before "Jan") never conflict.
+//
+// Reference time components:
+//   2006 → 4-digit year       06 → 2-digit year
+//   January / Jan → month     01 → 2-digit month   1 → 1/2-digit month
+//   Monday / Mon → weekday
+//   02 → 2-digit day          2 → 1/2-digit day
+//   15 → 24h hour (00-23)     3 → 12h hour (1-12)
+//   04 → 2-digit minute       4 → minute
+//   05 → 2-digit second       5 → second
+//   PM / pm → AM/PM marker
+export function formatGoTime(layout: string, d: Date): string {
+  type Token = readonly [string, (d: Date) => string];
+  const tokens: readonly Token[] = [
+    ["2006", (d) => String(d.getFullYear())],
+    ["January", (d) => MONTHS_FULL[d.getMonth()]!],
+    ["Monday", (d) => WEEKDAYS_FULL[d.getDay()]!],
+    ["Jan", (d) => MONTHS_SHORT[d.getMonth()]!],
+    ["Mon", (d) => WEEKDAYS_SHORT[d.getDay()]!],
+    ["15", (d) => String(d.getHours()).padStart(2, "0")],
+    ["06", (d) => String(d.getFullYear() % 100).padStart(2, "0")],
+    ["01", (d) => String(d.getMonth() + 1).padStart(2, "0")],
+    ["02", (d) => String(d.getDate()).padStart(2, "0")],
+    ["04", (d) => String(d.getMinutes()).padStart(2, "0")],
+    ["05", (d) => String(d.getSeconds()).padStart(2, "0")],
+    ["PM", (d) => (d.getHours() < 12 ? "AM" : "PM")],
+    ["pm", (d) => (d.getHours() < 12 ? "am" : "pm")],
+    ["1", (d) => String(d.getMonth() + 1)],
+    ["2", (d) => String(d.getDate())],
+    ["3", (d) => String(d.getHours() % 12 || 12)],
+    ["4", (d) => String(d.getMinutes())],
+    ["5", (d) => String(d.getSeconds())],
+  ];
+
+  let result = "";
+  let i = 0;
+  while (i < layout.length) {
+    let consumed = false;
+    for (const [token, fn] of tokens) {
+      if (layout.startsWith(token, i)) {
+        result += fn(d);
+        i += token.length;
+        consumed = true;
+        break;
+      }
+    }
+    if (!consumed) {
+      result += layout[i];
+      i++;
+    }
+  }
+  return result;
 }
 
 // ─── WatchManager ─────────────────────────────────────────────────────────────
@@ -376,6 +495,72 @@ export class SourceRegistry {
     this.registerCachePolicy(name, opts.cache, update);
   }
 
+  // template: a variable whose value is derived by evaluating a go-template
+  // against the current variable store.  MobX auto-tracks every store.read()
+  // made during evaluation — no explicit dep declarations needed.
+  // [LAW:dataflow-not-control-flow] defineComputed registers a MobX computed;
+  // the invalidation graph builds itself from the template's read pattern.
+  declareTemplate(
+    name: string,
+    template: string,
+    opts: TemplateOptions = {},
+  ): void {
+    // Parse once at declaration time — parse() is expensive; evaluate() is cheap.
+    // A ParseError propagates here so invalid templates fail at config load, not
+    // at the first render.
+    const parsedTpl = this.engine.parse(template);
+    this.store.defineComputed(name, "string", (_read) => {
+      const scope = buildScope(this.store);
+      try {
+        const result = (parsedTpl.evaluate(scope) as RichText[])
+          .map((f) => f.plain)
+          .join("");
+        this.lastErrors.delete(name);
+        return result;
+      } catch (e) {
+        // [LAW:no-defensive-null-guards] Template eval failures (including
+        // MobX cycle detection) surface as last_error; the box still holds
+        // a safe fallback rather than propagating the throw to the renderer.
+        this.recordError(name, e instanceof Error ? e.message : String(e));
+        return this.stringInitial(opts.varDefault);
+      }
+    });
+    // Force eager evaluation so any cycle is detected here (at config load)
+    // rather than silently at the first render.  MobX keepAlive computeds are
+    // otherwise lazy.
+    this.store.read(name);
+  }
+
+  // time: current wall-clock time formatted with a Go reference-time layout.
+  // Box initialises to the current time; the TTL timer refreshes it.
+  // [LAW:dataflow-not-control-flow] Box always holds a valid formatted string.
+  declareTime(name: string, opts: TimeOptions): void {
+    const ttlMs = opts.ttlMs ?? 1_000;
+    const format = (d: Date): string => {
+      try {
+        return formatGoTime(opts.format, d);
+      } catch {
+        return this.stringInitial(opts.varDefault);
+      }
+    };
+    this.store.defineBox(name, "string", format(new Date()));
+    const update = (): void => {
+      try {
+        this.store.setBox(name, formatGoTime(opts.format, new Date()));
+        this.lastErrors.delete(name);
+      } catch (e) {
+        this.applyFallback(
+          name,
+          "string",
+          opts.varDefault,
+          e instanceof Error ? e.message : String(e),
+        );
+      }
+    };
+    const unsub = this.ttlMgr.subscribe(ttlMs, update);
+    this.cleanups.push(unsub);
+  }
+
   // ─── Render-cycle driver ──────────────────────────────────────────────────
 
   // Called at the start of each render request. Pushes all input-kind boxes in
@@ -474,6 +659,19 @@ export class SourceRegistry {
             return "";
           }
         }, update);
+        this.cleanups.push(disposer);
+        break;
+      }
+
+      case "depends_on": {
+        // [LAW:dataflow-not-control-flow] reaction re-runs update whenever
+        // any named variable changes.  Variability lives in the dep values,
+        // not in whether the update executes — the update always runs when
+        // the joined snapshot changes.
+        const disposer: IReactionDisposer = reaction(
+          () => policy.varNames.map((n) => String(this.store.read(n))).join(","),
+          update,
+        );
         this.cleanups.push(disposer);
         break;
       }
