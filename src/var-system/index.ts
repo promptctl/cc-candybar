@@ -16,5 +16,7 @@ export {
   type FileOptions,
   type TemplateOptions,
   type TimeOptions,
+  type GitField,
+  type GitOptions,
   type LastError,
 } from "./sources";

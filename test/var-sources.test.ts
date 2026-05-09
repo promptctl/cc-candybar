@@ -1,6 +1,7 @@
 import fs from "fs";
 import os from "os";
 import path from "path";
+import { execSync } from "child_process";
 import {
   VariableStore,
   SourceRegistry,
@@ -1153,5 +1154,298 @@ describe("SourceRegistry — depends_on cache policy", () => {
     } finally {
       cleanup();
     }
+  });
+});
+
+// ─── git source kind ──────────────────────────────────────────────────────────
+
+// Set up a minimal real git repo for git-source-kind tests.
+async function makeGitRepo(): Promise<{ dir: string; cleanup: () => void }> {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "cc-candybar-git-test-"));
+  const run = (cmd: string): void => {
+    execSync(cmd, { cwd: dir, stdio: "pipe" });
+  };
+  run("git init");
+  run('git config user.email "test@test.com"');
+  run('git config user.name "Test"');
+  try {
+    run("git checkout -b main");
+  } catch {
+    // Some git versions auto-set the branch name from config; ignore.
+  }
+  fs.writeFileSync(path.join(dir, "README.md"), "init\n");
+  run("git add README.md");
+  run('git commit -m "init"');
+  return { dir, cleanup: () => fs.rmSync(dir, { recursive: true, force: true }) };
+}
+
+function settleGit(ms = 350): Promise<void> {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
+describe("SourceRegistry — git: field types", () => {
+  it("branch: type is string", async () => {
+    const { dir, cleanup } = await makeGitRepo();
+    try {
+      const { store, registry } = make();
+      registry.declareGit("b", { field: "branch", cwd: dir });
+      await settleGit();
+      expect(store.getType("b")).toBe("string");
+      registry.dispose();
+    } finally { cleanup(); }
+  });
+
+  it("sha: type is string", async () => {
+    const { dir, cleanup } = await makeGitRepo();
+    try {
+      const { store, registry } = make();
+      registry.declareGit("s", { field: "sha", cwd: dir });
+      await settleGit();
+      expect(store.getType("s")).toBe("string");
+      registry.dispose();
+    } finally { cleanup(); }
+  });
+
+  it("dirty: type is boolean", async () => {
+    const { dir, cleanup } = await makeGitRepo();
+    try {
+      const { store, registry } = make();
+      registry.declareGit("d", { field: "dirty", cwd: dir });
+      await settleGit();
+      expect(store.getType("d")).toBe("boolean");
+      registry.dispose();
+    } finally { cleanup(); }
+  });
+
+  it("ahead: type is number", async () => {
+    const { dir, cleanup } = await makeGitRepo();
+    try {
+      const { store, registry } = make();
+      registry.declareGit("a", { field: "ahead", cwd: dir });
+      await settleGit();
+      expect(store.getType("a")).toBe("number");
+      registry.dispose();
+    } finally { cleanup(); }
+  });
+
+  it("behind: type is number", async () => {
+    const { dir, cleanup } = await makeGitRepo();
+    try {
+      const { store, registry } = make();
+      registry.declareGit("bh", { field: "behind", cwd: dir });
+      await settleGit();
+      expect(store.getType("bh")).toBe("number");
+      registry.dispose();
+    } finally { cleanup(); }
+  });
+
+  it("stash: type is number", async () => {
+    const { dir, cleanup } = await makeGitRepo();
+    try {
+      const { store, registry } = make();
+      registry.declareGit("st", { field: "stash", cwd: dir });
+      await settleGit();
+      expect(store.getType("st")).toBe("number");
+      registry.dispose();
+    } finally { cleanup(); }
+  });
+});
+
+describe("SourceRegistry — git: field values", () => {
+  it("branch returns the current branch name", async () => {
+    const { dir, cleanup } = await makeGitRepo();
+    try {
+      const { store, registry } = make();
+      registry.declareGit("branch", { field: "branch", cwd: dir });
+      await settleGit();
+      expect(store.read("branch")).toBe("main");
+      registry.dispose();
+    } finally { cleanup(); }
+  });
+
+  it("sha returns a 7-character hex string", async () => {
+    const { dir, cleanup } = await makeGitRepo();
+    try {
+      const { store, registry } = make();
+      registry.declareGit("sha", { field: "sha", cwd: dir });
+      await settleGit();
+      expect(store.read("sha")).toMatch(/^[0-9a-f]{7}$/);
+      registry.dispose();
+    } finally { cleanup(); }
+  });
+
+  it("dirty returns false for a clean repo", async () => {
+    const { dir, cleanup } = await makeGitRepo();
+    try {
+      const { store, registry } = make();
+      registry.declareGit("dirty", { field: "dirty", cwd: dir });
+      await settleGit();
+      expect(store.read("dirty")).toBe(false);
+      registry.dispose();
+    } finally { cleanup(); }
+  });
+
+  it("dirty returns true when working tree has uncommitted changes", async () => {
+    const { dir, cleanup } = await makeGitRepo();
+    try {
+      fs.writeFileSync(path.join(dir, "untracked.txt"), "dirt\n");
+      const { store, registry } = make();
+      registry.declareGit("dirty", { field: "dirty", cwd: dir });
+      await settleGit();
+      expect(store.read("dirty")).toBe(true);
+      registry.dispose();
+    } finally { cleanup(); }
+  });
+
+  it("ahead and behind return 0 when there is no upstream", async () => {
+    const { dir, cleanup } = await makeGitRepo();
+    try {
+      const { store, registry } = make();
+      registry.declareGit("ah", { field: "ahead", cwd: dir });
+      registry.declareGit("bh", { field: "behind", cwd: dir });
+      await settleGit();
+      expect(store.read("ah")).toBe(0);
+      expect(store.read("bh")).toBe(0);
+      registry.dispose();
+    } finally { cleanup(); }
+  });
+
+  it("stash returns 0 when there are no stash entries", async () => {
+    const { dir, cleanup } = await makeGitRepo();
+    try {
+      const { store, registry } = make();
+      registry.declareGit("st", { field: "stash", cwd: dir });
+      await settleGit();
+      expect(store.read("st")).toBe(0);
+      registry.dispose();
+    } finally { cleanup(); }
+  });
+
+  it("stash returns the stash entry count", async () => {
+    const { dir, cleanup } = await makeGitRepo();
+    try {
+      fs.writeFileSync(path.join(dir, "tmp.txt"), "stash me\n");
+      execSync("git add tmp.txt", { cwd: dir, stdio: "pipe" });
+      execSync("git stash", { cwd: dir, stdio: "pipe" });
+      const { store, registry } = make();
+      registry.declareGit("st", { field: "stash", cwd: dir });
+      await settleGit();
+      expect(store.read("st")).toBe(1);
+      registry.dispose();
+    } finally { cleanup(); }
+  });
+});
+
+describe("SourceRegistry — git: failure fallback", () => {
+  it("falls back to varDefault when cwd is not a git repo", async () => {
+    const { dir, cleanup } = makeTmpDir();
+    try {
+      const { store, registry } = make();
+      registry.declareGit("branch", {
+        field: "branch",
+        cwd: dir,
+        varDefault: "no-repo",
+      });
+      await settleGit();
+      expect(store.read("branch")).toBe("no-repo");
+      registry.dispose();
+    } finally { cleanup(); }
+  });
+
+  it("falls back to typed zeros when not a git repo and no varDefault", async () => {
+    const { dir, cleanup } = makeTmpDir();
+    try {
+      const { store, registry } = make();
+      registry.declareGit("dirty", { field: "dirty", cwd: dir });
+      registry.declareGit("ahead", { field: "ahead", cwd: dir });
+      registry.declareGit("branch", { field: "branch", cwd: dir });
+      await settleGit();
+      expect(store.read("dirty")).toBe(false);
+      expect(store.read("ahead")).toBe(0);
+      expect(store.read("branch")).toBe("");
+      registry.dispose();
+    } finally { cleanup(); }
+  });
+});
+
+describe("SourceRegistry — git: watch trigger invalidation", () => {
+  it("updates branch when .git/HEAD changes (checkout new branch)", async () => {
+    const { dir, cleanup } = await makeGitRepo();
+    try {
+      const { store, registry } = make();
+      registry.declareGit("branch", { field: "branch", cwd: dir });
+      await settleGit();
+      expect(store.read("branch")).toBe("main");
+
+      execSync("git checkout -b new-feature", { cwd: dir, stdio: "pipe" });
+      await settleGit(500);
+
+      expect(store.read("branch")).toBe("new-feature");
+      registry.dispose();
+    } finally { cleanup(); }
+  });
+
+  it("updates dirty when .git/index changes (staging a file)", async () => {
+    const { dir, cleanup } = await makeGitRepo();
+    try {
+      const { store, registry } = make();
+      registry.declareGit("dirty", { field: "dirty", cwd: dir });
+      await settleGit();
+      expect(store.read("dirty")).toBe(false);
+
+      fs.writeFileSync(path.join(dir, "new.txt"), "content\n");
+      execSync("git add new.txt", { cwd: dir, stdio: "pipe" });
+      await settleGit(500);
+
+      expect(store.read("dirty")).toBe(true);
+      registry.dispose();
+    } finally { cleanup(); }
+  });
+});
+
+describe("SourceRegistry — git: shared poller per cwd", () => {
+  it("multiple git fields for the same cwd all update after one trigger", async () => {
+    const { dir, cleanup } = await makeGitRepo();
+    try {
+      const { store, registry } = make();
+      registry.declareGit("branch", { field: "branch", cwd: dir });
+      registry.declareGit("dirty", { field: "dirty", cwd: dir });
+      registry.declareGit("sha", { field: "sha", cwd: dir });
+      await settleGit();
+
+      const sha1 = store.read("sha") as string;
+      expect(store.read("branch")).toBe("main");
+      expect(store.read("dirty")).toBe(false);
+      expect(sha1).toMatch(/^[0-9a-f]{7}$/);
+
+      // New commit updates .git/HEAD — all fields should refresh together.
+      fs.writeFileSync(path.join(dir, "second.txt"), "second\n");
+      execSync("git add second.txt", { cwd: dir, stdio: "pipe" });
+      execSync('git commit -m "second"', { cwd: dir, stdio: "pipe" });
+      await settleGit(500);
+
+      const sha2 = store.read("sha") as string;
+      expect(sha2).toMatch(/^[0-9a-f]{7}$/);
+      expect(sha2).not.toBe(sha1);
+      expect(store.read("dirty")).toBe(false);
+      registry.dispose();
+    } finally { cleanup(); }
+  });
+
+  it("dispose stops git poller updates", async () => {
+    const { dir, cleanup } = await makeGitRepo();
+    try {
+      const { store, registry } = make();
+      registry.declareGit("branch", { field: "branch", cwd: dir });
+      await settleGit();
+      expect(store.read("branch")).toBe("main");
+
+      registry.dispose();
+
+      execSync("git checkout -b after-dispose", { cwd: dir, stdio: "pipe" });
+      await settleGit(500);
+
+      expect(store.read("branch")).toBe("main");
+    } finally { cleanup(); }
   });
 });
