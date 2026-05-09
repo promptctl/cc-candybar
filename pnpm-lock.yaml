@@ -687,6 +687,10 @@ packages:
     resolution: {integrity: sha512-h104Kh26rR8tm+a3Qkc5S4VLYint3FE48as7+/5oCEcKR2idC/pF1G6AhIXKI+eHPJa/3J9i5z0Al47IeGHPkA==}
     engines: {node: '>=12'}
 
+  '@promptctl/go-template-js@0.1.1':
+    resolution: {integrity: sha512-1byySemUUj9s7HpIpoR9W5m20ukZyAak8y599XFPIMYZXSpvII5xL4N2YiNEZsGoP1B73Eq5g1gy9LwTLJWBIA==}
+    engines: {node: '>=20'}
+
   '@quansync/fs@1.0.0':
     resolution: {integrity: sha512-4TJ3DFtlf1L5LDMaM6CanJ/0lckGNtJcMjQ1NAV6zDmA0tEHKZtxNKin8EgPaVX1YzljbxckyT2tJrpQKAtngQ==}
 
@@ -2646,7 +2650,7 @@ packages:
 
   rich-js@file:../rich-js:
     resolution: {directory: ../rich-js, type: directory}
-    engines: {node: '>=18'}
+    engines: {node: '>=20'}
 
   rolldown-plugin-dts@0.23.2:
     resolution: {integrity: sha512-PbSqLawLgZBGcOGT3yqWBGn4cX+wh2nt5FuBGdcMHyOhoukmjbhYAl8NT9sE4U38Cm9tqLOIQeOrvzeayM0DLQ==}
@@ -3854,6 +3858,8 @@ snapshots:
       '@pnpm/config.env-replace': 1.1.0
       '@pnpm/network.ca-file': 1.0.2
       config-chain: 1.1.13
+
+  '@promptctl/go-template-js@0.1.1': {}
 
   '@quansync/fs@1.0.0':
     dependencies:
@@ -5877,6 +5883,7 @@ snapshots:
 
   rich-js@file:../rich-js:
     dependencies:
+      '@promptctl/go-template-js': 0.1.1
       mobx: 6.15.1
       string-width: 8.2.1
       strip-ansi: 7.2.0
