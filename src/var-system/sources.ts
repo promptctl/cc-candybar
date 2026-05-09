@@ -8,6 +8,12 @@
 // - SourceRegistry: source-kind semantics (path resolution, fallback chain,
 //   last_error tracking)
 
+import { spawn } from "child_process";
+import { readFile as fsReadFile } from "fs/promises";
+import { watch as fsWatch, type FSWatcher } from "fs";
+import { setInterval, clearInterval } from "timers";
+import { reaction, type IReactionDisposer } from "mobx";
+import type { RichText } from "rich-js";
 import {
   typeOf,
   toString,
@@ -15,8 +21,207 @@ import {
   toBool,
   type VarType,
   type VarValue,
-} from "./types";
-import type { VariableStore } from "./store";
+} from "./types.js";
+import type { VariableStore } from "./store.js";
+import { createCcCandybarEngine } from "../template-engine/engine.js";
+import { buildScope } from "../template-engine/scope.js";
+
+// ─── CachePolicy ─────────────────────────────────────────────────────────────
+
+// [LAW:one-type-per-behavior] One discriminated union covers all cache policies.
+// The config layer normalises external string representations (e.g. ttl:"5s")
+// before calling declareShell / declareFile.
+export type CachePolicy =
+  | { readonly kind: "ttl"; readonly durationMs: number }
+  | { readonly kind: "watch_file"; readonly path: string }
+  | { readonly kind: "key"; readonly template: string }
+  | { readonly kind: "never" };
+
+// Parse a duration string to milliseconds.  Accepted units: ms, s, m, h.
+export function parseDuration(s: string): number {
+  const m = /^(\d+(?:\.\d+)?)(ms|s|m|h)$/.exec(s);
+  if (!m) throw new RangeError(`Invalid duration: "${s}"`);
+  const v = parseFloat(m[1]!);
+  switch (m[2]) {
+    case "ms":
+      return v;
+    case "s":
+      return v * 1_000;
+    case "m":
+      return v * 60_000;
+    case "h":
+      return v * 3_600_000;
+    default:
+      throw new RangeError(`Unexpected duration unit: "${m[2]}"`);
+  }
+}
+
+// ─── Source-kind option bags ──────────────────────────────────────────────────
+
+export interface ShellOptions {
+  readonly regex?: string;
+  readonly cache: CachePolicy;
+  readonly varDefault?: string;
+}
+
+export interface FileOptions {
+  // Ignored when regex is set (regex implies whole-file scan).
+  readonly readMode?: "whole" | "first-line";
+  readonly regex?: string;
+  readonly cache: CachePolicy;
+  readonly varDefault?: string;
+}
+
+// ─── Private infrastructure ───────────────────────────────────────────────────
+
+// Execute command in /bin/sh; resolve with stdout (raw) and exit code.
+// [LAW:no-defensive-null-guards] Errors surface as exitCode=1 + empty stdout
+// rather than throwing — the caller owns the fallback chain.
+async function execShell(
+  command: string,
+): Promise<{ stdout: string; exitCode: number }> {
+  return new Promise((resolve) => {
+    const child = spawn("/bin/sh", ["-c", command], {
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    let out = "";
+    child.stdout.on("data", (buf: Buffer) => {
+      out += buf.toString("utf8");
+    });
+    child.on("close", (code) => resolve({ stdout: out, exitCode: code ?? 1 }));
+    child.on("error", () => resolve({ stdout: "", exitCode: 1 }));
+  });
+}
+
+interface FileResult {
+  content?: string;
+  error?: string;
+}
+
+// Read a file and extract the relevant text fragment.
+// Returns {error} on I/O failure or regex no-match; {content} on success.
+async function readFileContent(
+  filePath: string,
+  readMode: "whole" | "first-line" | undefined,
+  regex: string | undefined,
+): Promise<FileResult> {
+  let raw: string;
+  try {
+    raw = await fsReadFile(filePath, "utf8");
+  } catch {
+    return { error: `file unreadable: ${filePath}` };
+  }
+
+  if (regex !== undefined) {
+    const m = new RegExp(regex).exec(raw);
+    if (!m?.[1]) return { error: `regex no-match in "${filePath}"` };
+    return { content: m[1].replace(/\n/g, " ") };
+  }
+
+  if (readMode === "first-line") {
+    return { content: (raw.split("\n")[0] ?? "").trim() };
+  }
+
+  // whole (default): newlines → spaces, trailing whitespace stripped
+  return { content: raw.replace(/\n/g, " ").trim() };
+}
+
+// ─── WatchManager ─────────────────────────────────────────────────────────────
+
+// [LAW:single-enforcer] One fs.watch handle per path regardless of subscriber
+// count.  Multiple shell/file variables can share one watcher on the same path.
+class WatchManager {
+  private readonly watchers = new Map<
+    string,
+    { watcher: FSWatcher; callbacks: Set<() => void> }
+  >();
+
+  subscribe(filePath: string, callback: () => void): () => void {
+    let entry = this.watchers.get(filePath);
+    if (!entry) {
+      const callbacks = new Set<() => void>();
+      let watcher: FSWatcher;
+      try {
+        watcher = fsWatch(filePath, () => {
+          for (const cb of callbacks) cb();
+        });
+      } catch {
+        // File may not exist yet; silently skip watch setup.
+        return () => {};
+      }
+      entry = { watcher, callbacks };
+      this.watchers.set(filePath, entry);
+    }
+    entry.callbacks.add(callback);
+    return () => this.unsubscribe(filePath, callback);
+  }
+
+  private unsubscribe(filePath: string, callback: () => void): void {
+    const entry = this.watchers.get(filePath);
+    if (!entry) return;
+    entry.callbacks.delete(callback);
+    if (entry.callbacks.size === 0) {
+      entry.watcher.close();
+      this.watchers.delete(filePath);
+    }
+  }
+
+  dispose(): void {
+    for (const { watcher } of this.watchers.values()) watcher.close();
+    this.watchers.clear();
+  }
+
+  size(): number {
+    return this.watchers.size;
+  }
+}
+
+// ─── TtlBucketManager ────────────────────────────────────────────────────────
+
+// [LAW:single-enforcer] One setInterval per unique TTL duration, shared by all
+// variables with that TTL.  Multiple variables at the same interval fire on
+// one timer tick rather than N separate timers.
+class TtlBucketManager {
+  private readonly buckets = new Map<
+    number,
+    { timer: ReturnType<typeof setInterval>; callbacks: Set<() => void> }
+  >();
+
+  subscribe(durationMs: number, callback: () => void): () => void {
+    let entry = this.buckets.get(durationMs);
+    if (!entry) {
+      const callbacks = new Set<() => void>();
+      const timer = setInterval(() => {
+        for (const cb of callbacks) cb();
+      }, durationMs);
+      entry = { timer, callbacks };
+      this.buckets.set(durationMs, entry);
+    }
+    entry.callbacks.add(callback);
+    return () => this.unsubscribe(durationMs, callback);
+  }
+
+  private unsubscribe(durationMs: number, callback: () => void): void {
+    const entry = this.buckets.get(durationMs);
+    if (!entry) return;
+    entry.callbacks.delete(callback);
+    if (entry.callbacks.size === 0) {
+      clearInterval(entry.timer);
+      this.buckets.delete(durationMs);
+    }
+  }
+
+  dispose(): void {
+    for (const { timer } of this.buckets.values()) clearInterval(timer);
+    this.buckets.clear();
+  }
+
+  bucketCount(): number {
+    return this.buckets.size;
+  }
+}
+
+// ─── Shared metadata ──────────────────────────────────────────────────────────
 
 export interface LastError {
   readonly timestamp: number; // Date.now() epoch ms
@@ -27,6 +232,8 @@ interface InputMeta {
   readonly path: string;
   readonly varDefault: VarValue | undefined;
 }
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 
 // Recursively resolves a dotted path through a plain object.
 // Returns undefined if any segment is absent or the traversed value is not an object.
@@ -66,6 +273,8 @@ function zeroValue(type: VarType): VarValue {
   return "";
 }
 
+// ─── SourceRegistry ───────────────────────────────────────────────────────────
+
 // [LAW:single-enforcer] One SourceRegistry per daemon, sharing one
 // VariableStore. Multiple registries on the same store would produce
 // duplicate box definitions for input-kind variables.
@@ -74,12 +283,27 @@ export class SourceRegistry {
   private readonly inputMetas = new Map<string, InputMeta>();
   private readonly lastErrors = new Map<string, LastError>();
 
+  // Infrastructure for shell/file source kinds:
+  private readonly watchMgr = new WatchManager();
+  private readonly ttlMgr = new TtlBucketManager();
+  // Collects all cleanup callbacks (TTL unsubscribes, watch unsubscribes,
+  // MobX reaction disposers) so dispose() tears everything down in one call.
+  private readonly cleanups: Array<() => void> = [];
+  // Guards against concurrent executions of the same async source.
+  private readonly inFlight = new Set<string>();
+  // Shared engine instance — parse() is expensive; the engine is reused for
+  // all key: template compilations.
+  // [LAW:one-source-of-truth] One engine per registry, not one per variable.
+  private readonly engine = createCcCandybarEngine();
+
   // defaultEmptyValue is the global fallback of last resort — the config-level
   // `default_empty_value` from the proposal. Defaults to empty string.
   constructor(
     private readonly store: VariableStore,
     private readonly defaultEmptyValue: VarValue = "",
   ) {}
+
+  // ─── Synchronous source kinds ─────────────────────────────────────────────
 
   // literal: type inferred from value; box written once at declaration and never again.
   declareLiteral(name: string, value: VarValue): void {
@@ -96,7 +320,8 @@ export class SourceRegistry {
   ): void {
     // [LAW:dataflow-not-control-flow] Initialize to the fallback value so the
     // box always holds a valid typed value — even before the first render push.
-    const initial = varDefault !== undefined ? varDefault : this.defaultFor(type);
+    const initial =
+      varDefault !== undefined ? varDefault : this.defaultFor(type);
     this.store.defineBox(name, type, initial);
     this.inputMetas.set(name, { path, varDefault });
   }
@@ -119,6 +344,39 @@ export class SourceRegistry {
     this.store.defineBox(name, "string", fallback);
     this.recordError(name, `env var "${envVar}" is not set`);
   }
+
+  // ─── Async source kinds ───────────────────────────────────────────────────
+
+  // shell: spawn command in /bin/sh; capture stdout; optional regex group-1 extract;
+  // newlines → spaces. Box initialises to fallback; async execution fills it in.
+  // [LAW:dataflow-not-control-flow] Box always holds a valid value; the cache
+  // policy drives when it is refreshed, not whether the box exists.
+  declareShell(name: string, command: string, opts: ShellOptions): void {
+    this.store.defineBox(name, "string", this.stringInitial(opts.varDefault));
+    const update = () =>
+      void this.updateFromShell(name, command, opts.regex, opts.varDefault);
+    update(); // initial run
+    this.registerCachePolicy(name, opts.cache, update);
+  }
+
+  // file: read file at path; whole / first-line / regex group-1 extract; newlines → spaces.
+  // Box initialises to fallback; async read fills it in.
+  // [LAW:dataflow-not-control-flow] Same invariant as declareShell.
+  declareFile(name: string, filePath: string, opts: FileOptions): void {
+    this.store.defineBox(name, "string", this.stringInitial(opts.varDefault));
+    const update = () =>
+      void this.updateFromFile(
+        name,
+        filePath,
+        opts.readMode,
+        opts.regex,
+        opts.varDefault,
+      );
+    update(); // initial run
+    this.registerCachePolicy(name, opts.cache, update);
+  }
+
+  // ─── Render-cycle driver ──────────────────────────────────────────────────
 
   // Called at the start of each render request. Pushes all input-kind boxes in
   // a single runInAction so their dependents invalidate exactly once.
@@ -153,10 +411,135 @@ export class SourceRegistry {
     });
   }
 
+  // ─── Diagnostics ─────────────────────────────────────────────────────────
+
   // Returns the recorded error for a variable, or undefined if the last
   // resolution succeeded (or the variable has never been resolved).
   getLastError(name: string): LastError | undefined {
     return this.lastErrors.get(name);
+  }
+
+  // ─── Lifecycle ────────────────────────────────────────────────────────────
+
+  // Tear down all TTL timers, fs watchers, and MobX reactions registered by
+  // async source kinds.  Call when the registry is no longer needed (e.g. on
+  // daemon shutdown or config hot-reload).
+  dispose(): void {
+    for (const cleanup of this.cleanups) cleanup();
+    this.cleanups.length = 0;
+    this.watchMgr.dispose();
+    this.ttlMgr.dispose();
+  }
+
+  // ─── Private helpers ──────────────────────────────────────────────────────
+
+  // [LAW:single-enforcer] One place that maps every CachePolicy kind to its
+  // trigger mechanism.  Adding a new policy kind means adding one case here.
+  private registerCachePolicy(
+    name: string,
+    policy: CachePolicy,
+    update: () => void,
+  ): void {
+    switch (policy.kind) {
+      case "never":
+        // Initial run in declare* is the only execution.
+        break;
+
+      case "ttl": {
+        const unsub = this.ttlMgr.subscribe(policy.durationMs, update);
+        this.cleanups.push(unsub);
+        break;
+      }
+
+      case "watch_file": {
+        const unsub = this.watchMgr.subscribe(policy.path, update);
+        this.cleanups.push(unsub);
+        break;
+      }
+
+      case "key": {
+        // Parse template once; reaction re-evaluates it whenever any
+        // variable it reads changes.  If the rendered key string changes,
+        // the source is recomputed.
+        // [LAW:dataflow-not-control-flow] The key template is the sole
+        // selector — no manual dep declarations, no conditional checks.
+        const parsedKey = this.engine.parse(policy.template);
+        const disposer: IReactionDisposer = reaction(() => {
+          const scope = buildScope(this.store);
+          try {
+            return (parsedKey.evaluate(scope) as RichText[])
+              .map((f) => f.plain)
+              .join("");
+          } catch {
+            return "";
+          }
+        }, update);
+        this.cleanups.push(disposer);
+        break;
+      }
+    }
+  }
+
+  private async updateFromShell(
+    name: string,
+    command: string,
+    regex: string | undefined,
+    varDefault: string | undefined,
+  ): Promise<void> {
+    if (this.inFlight.has(name)) return;
+    this.inFlight.add(name);
+    try {
+      const { stdout, exitCode } = await execShell(command);
+      if (exitCode !== 0) {
+        this.applyFallback(
+          name,
+          "string",
+          varDefault,
+          `shell "${command}" exited with code ${exitCode}`,
+        );
+        return;
+      }
+      if (regex !== undefined) {
+        const m = new RegExp(regex).exec(stdout);
+        if (!m?.[1]) {
+          this.applyFallback(
+            name,
+            "string",
+            varDefault,
+            `regex no-match in output of "${command}"`,
+          );
+          return;
+        }
+        this.store.setBox(name, m[1].replace(/\n/g, " "));
+      } else {
+        this.store.setBox(name, stdout.replace(/\n/g, " ").trim());
+      }
+      this.lastErrors.delete(name);
+    } finally {
+      this.inFlight.delete(name);
+    }
+  }
+
+  private async updateFromFile(
+    name: string,
+    filePath: string,
+    readMode: "whole" | "first-line" | undefined,
+    regex: string | undefined,
+    varDefault: string | undefined,
+  ): Promise<void> {
+    if (this.inFlight.has(name)) return;
+    this.inFlight.add(name);
+    try {
+      const result = await readFileContent(filePath, readMode, regex);
+      if (result.error !== undefined) {
+        this.applyFallback(name, "string", varDefault, result.error);
+        return;
+      }
+      this.store.setBox(name, result.content ?? "");
+      this.lastErrors.delete(name);
+    } finally {
+      this.inFlight.delete(name);
+    }
   }
 
   // Failure chain: per-variable default → defaultEmptyValue coerced to type → zero.
@@ -188,6 +571,14 @@ export class SourceRegistry {
     } catch {
       return zeroValue(type);
     }
+  }
+
+  // Initial string value for shell/file boxes before the first async run.
+  private stringInitial(varDefault: string | undefined): string {
+    if (varDefault !== undefined) return varDefault;
+    if (typeof this.defaultEmptyValue === "string")
+      return this.defaultEmptyValue;
+    return "";
   }
 
   private recordError(name: string, message: string): void {
