@@ -2,12 +2,14 @@ import { RenderCache } from "../src/daemon/cache/render";
 import { GitService } from "../src/segments/git";
 import { UsageProvider } from "../src/segments/session";
 import { SessionState } from "../src/daemon/session-state";
+import { WatcherRegistry } from "../src/daemon/cache/watchers";
 
 function makeDeps() {
   return {
     gitService: new GitService(),
     usageProvider: new UsageProvider(),
     sessionState: new SessionState(),
+    watchers: new WatcherRegistry(),
   };
 }
 
@@ -17,7 +19,7 @@ describe("RenderCache", () => {
     const a = cache.getOrCreate(["--style=powerline"], undefined, undefined);
     const b = cache.getOrCreate(["--style=powerline"], undefined, undefined);
     expect(a.renderer).toBe(b.renderer);
-    expect(a.config).toBe(b.config);
+    expect(a.lastValidConfig).toBe(b.lastValidConfig);
   });
 
   test("different args returns different renderer", () => {
@@ -42,7 +44,7 @@ describe("RenderCache", () => {
   });
 
   test("evicts oldest entry when exceeding max (16)", () => {
-    const cache = new RenderCache(makeDeps());
+    const cache = new RenderCache(makeDeps(), { maxEntries: 16 });
     const first = cache.getOrCreate(["--style=powerline"], undefined, undefined);
     expect(cache.size).toBe(1);
 
@@ -63,7 +65,7 @@ describe("RenderCache", () => {
   });
 
   test("accessing an entry moves it to most-recent (LRU refresh)", () => {
-    const cache = new RenderCache(makeDeps());
+    const cache = new RenderCache(makeDeps(), { maxEntries: 16 });
     const stale = cache.getOrCreate(["stale"], undefined, undefined);
 
     // Fill 15 more (16 total, stale is oldest).

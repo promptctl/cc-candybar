@@ -21,6 +21,7 @@ describe("RuntimeStats.snapshot", () => {
         watchers: 2,
       },
       usageCache: { size: 10, hits: 50, misses: 5, sweeps: 1 },
+      renderCacheSize: 3,
       watchersActive: 2,
     });
 
@@ -59,6 +60,7 @@ describe("formatStats", () => {
       requests: { total: 100, errored: 2, timedOut: 1, inFlight: 0 },
       gitCache: { size: 5, hits: 80, misses: 20, invalidations: 3, watchers: 5 },
       usageCache: { size: 3, hits: 40, misses: 10, sweeps: 0 },
+      renderCache: { size: 4 },
       watchers: { active: 5, opened: 7, closed: 2, evicted: 0 },
       nextRestartReason: null,
     });
@@ -83,6 +85,7 @@ describe("formatStats", () => {
       requests: { total: 0, errored: 0, timedOut: 0, inFlight: 0 },
       gitCache: { size: 0, hits: 0, misses: 0, invalidations: 0, watchers: 0 },
       usageCache: { size: 0, hits: 0, misses: 0, sweeps: 0 },
+      renderCache: { size: 0 },
       watchers: { active: 0, opened: 0, closed: 0, evicted: 0 },
       nextRestartReason: null,
     });

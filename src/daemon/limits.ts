@@ -8,7 +8,15 @@ import { dlog } from "./log";
 // Three triggers (RSS, age, idle-from-server.ts) all funnel into the same
 // shutdown(0) path so cleanup is uniform.
 
-const DEFAULT_RSS_LIMIT = 200 * 1024 * 1024;
+// 512 MB: V8 pre-allocates heap pages speculatively (heapTotal ≫ heapUsed) and
+// GC pressure is RSS-invisible until the heap fills. With 9+ active sessions the
+// steady-state RSS is ~240 MB, so 200 MB triggered constant restarts. 512 MB
+// gives 2× headroom. If you need to tune this at runtime, set
+// CC_CANDYBAR_RSS_LIMIT_MB (in MiB).
+const DEFAULT_RSS_LIMIT =
+  (parseInt(process.env["CC_CANDYBAR_RSS_LIMIT_MB"] ?? "", 10) || 512) *
+  1024 *
+  1024;
 const DEFAULT_AGE_LIMIT = 24 * 60 * 60 * 1000;
 const DEFAULT_CHECK_INTERVAL = 60 * 1000;
 const HEAP_SNAPSHOT_KEEP = 3;

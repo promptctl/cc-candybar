@@ -386,7 +386,10 @@ fn spawn_detached_daemon() {
     let stderr_fd = Stdio::from(dev_null);
 
     let mut cmd = Command::new("node");
-    cmd.arg(script.as_os_str())
+    // Cap V8 old-generation at 400 MB so GC fires before RSS hits the 512 MB
+    // hard limit. Mirrors src/daemon/spawn.ts — keep the two in sync.
+    cmd.arg("--max-old-space-size=400")
+        .arg(script.as_os_str())
         .arg("daemon")
         .stdin(stdin_fd)
         .stdout(stdout_fd)

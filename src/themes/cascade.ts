@@ -19,6 +19,10 @@ const THEME_ALIASES: Record<string, string> = {
   light: "textual-light",
 };
 
+export function listThemeAliases(): readonly string[] {
+  return Object.keys(THEME_ALIASES);
+}
+
 function resolvePaletteName(name: string): string {
   return THEME_ALIASES[name] ?? name;
 }

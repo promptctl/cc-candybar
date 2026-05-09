@@ -26,10 +26,11 @@ describe("WatcherRegistry", () => {
     const repo = makeRepo();
     const reg = new WatcherRegistry();
     let fired = 0;
-    reg.acquire(repo, () => fired++);
+    const headPath = path.join(repo, ".git/HEAD");
+    reg.acquire(repo, { files: [headPath], dirs: [] }, () => fired++);
     await new Promise((r) => setTimeout(r, 50));
 
-    fs.writeFileSync(path.join(repo, ".git/HEAD"), "ref: refs/heads/x\n");
+    fs.writeFileSync(headPath, "ref: refs/heads/x\n");
     await new Promise((r) => setTimeout(r, 400));
 
     expect(fired).toBeGreaterThanOrEqual(1);
@@ -40,8 +41,8 @@ describe("WatcherRegistry", () => {
   test("refcount: release closes watchers when refcount hits zero", async () => {
     const repo = makeRepo();
     const reg = new WatcherRegistry();
-    const h1 = reg.acquire(repo, () => {});
-    const h2 = reg.acquire(repo, () => {});
+    const h1 = reg.acquire(repo, { files: [], dirs: [] }, () => {});
+    const h2 = reg.acquire(repo, { files: [], dirs: [] }, () => {});
     expect(reg.size()).toBe(1);
     h1.release();
     expect(reg.size()).toBe(1); // refcount still > 0
@@ -54,9 +55,9 @@ describe("WatcherRegistry", () => {
     const repos = [makeRepo(), makeRepo(), makeRepo()];
     const reg = new WatcherRegistry({ maxWatchers: 2 });
     const fired: string[] = [];
-    reg.acquire(repos[0]!, () => fired.push(repos[0]!));
-    reg.acquire(repos[1]!, () => fired.push(repos[1]!));
-    reg.acquire(repos[2]!, () => fired.push(repos[2]!));
+    reg.acquire(repos[0]!, { files: [], dirs: [] }, () => fired.push(repos[0]!));
+    reg.acquire(repos[1]!, { files: [], dirs: [] }, () => fired.push(repos[1]!));
+    reg.acquire(repos[2]!, { files: [], dirs: [] }, () => fired.push(repos[2]!));
 
     expect(reg.size()).toBe(2);
     expect(fired).toContain(repos[0]); // evicted slot fires its invalidate
@@ -67,7 +68,7 @@ describe("WatcherRegistry", () => {
   test("closeAll closes every watcher", () => {
     const repo = makeRepo();
     const reg = new WatcherRegistry();
-    reg.acquire(repo, () => {});
+    reg.acquire(repo, { files: [], dirs: [] }, () => {});
     expect(reg.size()).toBe(1);
     reg.closeAll();
     expect(reg.size()).toBe(0);

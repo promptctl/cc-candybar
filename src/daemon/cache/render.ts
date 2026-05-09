@@ -48,9 +48,11 @@ function cacheKey(args: string[], projectDir?: string, cwd?: string): string {
 export class RenderCache {
   private readonly entries = new Map<string, CacheEntry>();
   private readonly deps: RenderDeps;
+  private readonly maxEntries: number;
 
-  constructor(deps: RenderDeps) {
+  constructor(deps: RenderDeps, opts: { maxEntries?: number } = {}) {
     this.deps = deps;
+    this.maxEntries = opts.maxEntries ?? MAX_ENTRIES;
   }
 
   // [LAW:dataflow-not-control-flow] One uniform shape: every entry has the
@@ -84,7 +86,7 @@ export class RenderCache {
     this.reloadInto(entry);
     this.entries.set(key, entry);
 
-    if (this.entries.size > MAX_ENTRIES) {
+    if (this.entries.size > this.maxEntries) {
       const oldest = this.entries.keys().next().value;
       if (oldest !== undefined) {
         const evicted = this.entries.get(oldest);

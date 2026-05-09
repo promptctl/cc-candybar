@@ -9,7 +9,11 @@ export function spawnDaemonDetached(): void {
   const node = process.execPath;
   const script = process.argv[1];
   if (!script) return;
-  const child = spawn(node, [script, "daemon"], {
+  // Cap V8 old-generation at 400 MB so GC fires before RSS hits the limit
+  // (RSS includes V8 heap + code-space + external; 400 MB old-gen keeps total
+  // RSS well under the 512 MB hard limit). The Rust client mirrors this in
+  // rust-client/src/main.rs — keep the two in sync when changing this value.
+  const child = spawn(node, ["--max-old-space-size=400", script, "daemon"], {
     detached: true,
     stdio: "ignore",
     env: process.env,
