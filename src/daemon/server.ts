@@ -375,6 +375,7 @@ async function handleRequest(req: Request): Promise<Response> {
       stats: stats.snapshot({
         gitCache: gitService.getStats(),
         usageCache: usageProvider.getStats(),
+        renderCacheSize: renderCache.size,
         watchersActive: watcherRegistry.size(),
         nextRestartReason: limits?.describeNextRestart() ?? null,
       }),

@@ -4,7 +4,7 @@ import os from "node:os";
 import { DEFAULT_CONFIG } from "./defaults";
 import { configDir } from "../daemon/paths";
 import type { ColorTheme } from "../themes";
-import { listAvailableThemes } from "../themes/cascade.js";
+import { listAvailableThemes, listThemeAliases } from "../themes/cascade.js";
 import type {
   SegmentConfig,
   DirectorySegmentConfig,
@@ -101,7 +101,11 @@ export interface PowerlineConfig {
 
 // [LAW:types-are-the-program] "random" is a sentinel that validators admit
 // and resolveSession{Theme,Style,DisplayStyle} expand per-session at render.
-const VALID_THEMES = new Set<string>([...listAvailableThemes(), "random"]);
+const VALID_THEMES = new Set<string>([
+  ...listAvailableThemes(),
+  ...listThemeAliases(),
+  "random",
+]);
 
 function isValidTheme(theme: string): boolean {
   return VALID_THEMES.has(theme);

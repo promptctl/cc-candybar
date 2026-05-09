@@ -124,6 +124,8 @@ export function formatStats(s: StatsSnapshot): string {
   );
   lines.push(`  sweeps        ${s.usageCache.sweeps}`);
   lines.push(``);
+  lines.push(`renderCache`);
+  lines.push(`  size          ${s.renderCache.size}`);
   lines.push(`watchers`);
   lines.push(`  active        ${s.watchers.active}`);
   lines.push(`  opened        ${s.watchers.opened}`);

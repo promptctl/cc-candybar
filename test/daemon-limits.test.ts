@@ -55,7 +55,7 @@ describe("limits.checkRss", () => {
   test("over limit: writes snapshot then shuts down", () => {
     const rec = newRec();
     rec.fakeRss = 250 * 1024 * 1024;
-    const limits = makeLimits(makeDeps(rec));
+    const limits = makeLimits(makeDeps(rec, { rssLimitBytes: 200 * 1024 * 1024 }));
     expect(limits.checkRss()).toBe(true);
     expect(rec.snapshotsWritten).toHaveLength(1);
     expect(rec.shutdownCalls).toEqual([0]);
@@ -64,7 +64,7 @@ describe("limits.checkRss", () => {
   test("only triggers once even if RSS stays high", () => {
     const rec = newRec();
     rec.fakeRss = 250 * 1024 * 1024;
-    const limits = makeLimits(makeDeps(rec));
+    const limits = makeLimits(makeDeps(rec, { rssLimitBytes: 200 * 1024 * 1024 }));
     limits.checkRss();
     limits.checkRss();
     limits.checkRss();
@@ -100,7 +100,7 @@ describe("heap snapshot rotation", () => {
       "/d/heap-2026-02-01T00-00-00-000Z.heapsnapshot",
       "/d/heap-2026-03-01T00-00-00-000Z.heapsnapshot",
     ];
-    const limits = makeLimits(makeDeps(rec));
+    const limits = makeLimits(makeDeps(rec, { rssLimitBytes: 200 * 1024 * 1024 }));
     limits.checkRss();
     // After write+rotate: 4 existed (3 plus new one), keep=3, oldest removed.
     expect(rec.removed).toHaveLength(1);
@@ -118,7 +118,7 @@ describe("describeNextRestart", () => {
 
   test("flags rss approaching limit", () => {
     const rec = newRec();
-    rec.fakeRss = 180 * 1024 * 1024; // > 75% of 200MB
+    rec.fakeRss = 400 * 1024 * 1024; // > 75% of 512MB default
     const limits = makeLimits(makeDeps(rec));
     expect(limits.describeNextRestart()).toContain("rss");
   });
