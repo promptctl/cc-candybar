@@ -8,6 +8,9 @@ importers:
 
   .:
     dependencies:
+      '@promptctl/go-template-js':
+        specifier: file:../go-template-js
+        version: file:../go-template-js
       mobx:
         specifier: ^6.15.0
         version: 6.15.1
@@ -616,6 +619,10 @@ packages:
       '@emnapi/core': ^1.7.1
       '@emnapi/runtime': ^1.7.1
 
+  '@noble/hashes@2.2.0':
+    resolution: {integrity: sha512-IYqDGiTXab6FniAgnSdZwgWbomxpy9FtYvLKs7wCUs2a8RkITG+DFGO1DM9cr+E3/RgADRpFjrKVaJ1z6sjtEg==}
+    engines: {node: '>= 20.19.0'}
+
   '@octokit/auth-token@6.0.0':
     resolution: {integrity: sha512-P4YJBPdPSpWTQ1NU4XYdvHvXJJDxM6YwpS0FZHRgP7YFkdVxsWcpWGy/NVqlAA7PcPCnMacXlRm1y2PFZRWL/w==}
     engines: {node: '>= 20'}
@@ -689,6 +696,10 @@ packages:
 
   '@promptctl/go-template-js@0.1.1':
     resolution: {integrity: sha512-1byySemUUj9s7HpIpoR9W5m20ukZyAak8y599XFPIMYZXSpvII5xL4N2YiNEZsGoP1B73Eq5g1gy9LwTLJWBIA==}
+    engines: {node: '>=20'}
+
+  '@promptctl/go-template-js@file:../go-template-js':
+    resolution: {directory: ../go-template-js, type: directory}
     engines: {node: '>=20'}
 
   '@quansync/fs@1.0.0':
@@ -3780,6 +3791,8 @@ snapshots:
       '@tybys/wasm-util': 0.10.2
     optional: true
 
+  '@noble/hashes@2.2.0': {}
+
   '@octokit/auth-token@6.0.0': {}
 
   '@octokit/core@7.0.6':
@@ -3860,6 +3873,10 @@ snapshots:
       config-chain: 1.1.13
 
   '@promptctl/go-template-js@0.1.1': {}
+
+  '@promptctl/go-template-js@file:../go-template-js':
+    dependencies:
+      '@noble/hashes': 2.2.0
 
   '@quansync/fs@1.0.0':
     dependencies:

@@ -85,6 +85,7 @@
     "typescript": "^5.0.0"
   },
   "dependencies": {
+    "@promptctl/go-template-js": "file:../go-template-js",
     "mobx": "^6.15.0",
     "rich-js": "file:../rich-js"
   },
