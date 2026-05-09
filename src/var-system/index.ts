@@ -7,3 +7,4 @@ export {
   toNumber,
   toBool,
 } from "./types";
+export { SourceRegistry, type LastError } from "./sources";
