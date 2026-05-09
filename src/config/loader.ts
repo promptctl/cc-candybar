@@ -412,7 +412,6 @@ function resolveOverride(
   return [{ path: parts, value }];
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 // [LAW:dataflow-not-control-flow] Numeric path segments produce arrays;
 // non-numeric produce objects. Same loop, branch driven by the next key's
 // shape — lets dotted CLI overrides like `actions.0.verb` build arrays

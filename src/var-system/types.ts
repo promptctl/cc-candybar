@@ -13,7 +13,9 @@ export function typeOf(v: VarValue): VarType {
   // values arrive from user-authored templates and external sources, so
   // an unsupported runtime value must fail loudly here, not silently
   // downstream.
-  throw new TypeError(`Variable values must be string|number|boolean (got ${t})`);
+  throw new TypeError(
+    `Variable values must be string|number|boolean (got ${t})`,
+  );
 }
 
 // Cast helpers used by the filter pipeline (chunk 2 will consume these).
@@ -43,9 +45,13 @@ export function toBool(v: VarValue): boolean {
   if (typeof v === "boolean") return v;
   if (typeof v === "number") {
     if (v === 0 || v === 1) return v === 1;
-    throw new TypeError(`Cannot cast number ${v} to bool (only 0 and 1 are accepted)`);
+    throw new TypeError(
+      `Cannot cast number ${v} to bool (only 0 and 1 are accepted)`,
+    );
   }
   if (v === "true") return true;
   if (v === "false") return false;
-  throw new TypeError(`Cannot cast ${JSON.stringify(v)} to bool (expected "true" or "false")`);
+  throw new TypeError(
+    `Cannot cast ${JSON.stringify(v)} to bool (expected "true" or "false")`,
+  );
 }

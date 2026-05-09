@@ -33,22 +33,22 @@ export type PaletteMapping = Record<string, SegmentColors>;
  * Segments that share a variant get the same base color; style provides variety.
  */
 export const SEMANTIC_VARIANTS: Record<string, SemanticVariant> = {
-  directory:       "primary",
-  git:             "secondary",
-  gitTaculous:     "secondary",
-  model:           "accent",
-  session:         "success",
-  block:           "error",
-  today:           "primary",
-  tmux:            "secondary",
-  context:         "warning",
-  contextWarning:  "warning",
+  directory: "primary",
+  git: "secondary",
+  gitTaculous: "secondary",
+  model: "accent",
+  session: "success",
+  block: "error",
+  today: "primary",
+  tmux: "secondary",
+  context: "warning",
+  contextWarning: "warning",
   contextCritical: "error",
-  metrics:         "accent",
-  version:         "success",
-  env:             "warning",
-  weekly:          "error",
-  toolbar:         "primary",
+  metrics: "accent",
+  version: "success",
+  env: "warning",
+  weekly: "error",
+  toolbar: "primary",
 };
 
 /** Segments with fixed semantic colors — no style transform, no hue rotation. */
@@ -57,12 +57,12 @@ const SEMANTIC_SEGMENTS = new Set(["contextWarning", "contextCritical"]);
 // --- Style presets ---
 
 const SURFACE_BG: Record<SemanticVariant, string> = {
-  primary:   "surface",
+  primary: "surface",
   secondary: "surface-active",
-  accent:    "panel",
-  success:   "surface",
-  warning:   "surface-active",
-  error:     "panel",
+  accent: "panel",
+  success: "surface",
+  warning: "surface-active",
+  error: "panel",
 };
 
 export interface StylePreset {

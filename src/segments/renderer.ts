@@ -331,7 +331,9 @@ export class SegmentRenderer {
       return {
         text: basename,
         bgColor: colors.modeBg,
-        fgColor: colors.modeFg, bgHex: colors.hex?.modeBg, fgHex: colors.hex?.modeFg,
+        fgColor: colors.modeFg,
+        bgHex: colors.hex?.modeBg,
+        fgHex: colors.hex?.modeFg,
       };
     }
 
@@ -349,7 +351,9 @@ export class SegmentRenderer {
     return {
       text: dirName,
       bgColor: colors.modeBg,
-      fgColor: colors.modeFg, bgHex: colors.hex?.modeBg, fgHex: colors.hex?.modeFg,
+      fgColor: colors.modeFg,
+      bgHex: colors.hex?.modeBg,
+      fgHex: colors.hex?.modeFg,
     };
   }
 
@@ -438,7 +442,9 @@ export class SegmentRenderer {
     return {
       text: parts.join(" "),
       bgColor: colors.gitBg,
-      fgColor: colors.gitFg, bgHex: colors.hex?.gitBg, fgHex: colors.hex?.gitFg,
+      fgColor: colors.gitFg,
+      bgHex: colors.hex?.gitBg,
+      fgHex: colors.hex?.gitFg,
     };
   }
 
@@ -517,7 +523,9 @@ export class SegmentRenderer {
     return {
       text: parts.join(" "),
       bgColor: colors.gitBg,
-      fgColor: colors.gitFg, bgHex: colors.hex?.gitBg, fgHex: colors.hex?.gitFg,
+      fgColor: colors.gitFg,
+      bgHex: colors.hex?.gitBg,
+      fgHex: colors.hex?.gitFg,
     };
   }
 
@@ -536,7 +544,9 @@ export class SegmentRenderer {
     return {
       text,
       bgColor: colors.modelBg,
-      fgColor: colors.modelFg, bgHex: colors.hex?.modelBg, fgHex: colors.hex?.modelFg,
+      fgColor: colors.modelFg,
+      bgHex: colors.hex?.modelBg,
+      fgHex: colors.hex?.modelFg,
     };
   }
 
@@ -570,7 +580,9 @@ export class SegmentRenderer {
     return {
       text,
       bgColor: colors.sessionBg,
-      fgColor: colors.sessionFg, bgHex: colors.hex?.sessionBg, fgHex: colors.hex?.sessionFg,
+      fgColor: colors.sessionFg,
+      bgHex: colors.hex?.sessionBg,
+      fgHex: colors.hex?.sessionFg,
     };
   }
 
@@ -601,7 +613,9 @@ export class SegmentRenderer {
     return {
       text,
       bgColor: colors.sessionBg,
-      fgColor: colors.sessionFg, bgHex: colors.hex?.sessionBg, fgHex: colors.hex?.sessionFg,
+      fgColor: colors.sessionFg,
+      bgHex: colors.hex?.sessionBg,
+      fgHex: colors.hex?.sessionFg,
     };
   }
 
@@ -613,14 +627,18 @@ export class SegmentRenderer {
       return {
         text: `tmux:none`,
         bgColor: colors.tmuxBg,
-        fgColor: colors.tmuxFg, bgHex: colors.hex?.tmuxBg, fgHex: colors.hex?.tmuxFg,
+        fgColor: colors.tmuxFg,
+        bgHex: colors.hex?.tmuxBg,
+        fgHex: colors.hex?.tmuxFg,
       };
     }
 
     return {
       text: `tmux:${sessionId}`,
       bgColor: colors.tmuxBg,
-      fgColor: colors.tmuxFg, bgHex: colors.hex?.tmuxBg, fgHex: colors.hex?.tmuxFg,
+      fgColor: colors.tmuxFg,
+      bgHex: colors.hex?.tmuxBg,
+      fgHex: colors.hex?.tmuxFg,
     };
   }
 
@@ -643,13 +661,17 @@ export class SegmentRenderer {
         return {
           text: `${emptyBar} ${emptyPct}`,
           bgColor: colors.contextBg,
-          fgColor: colors.contextFg, bgHex: colors.hex?.contextBg, fgHex: colors.hex?.contextFg,
+          fgColor: colors.contextFg,
+          bgHex: colors.hex?.contextBg,
+          fgHex: colors.hex?.contextFg,
         };
       }
       return {
         text: `${this.symbols.context_time} 0 (${emptyPct})`,
         bgColor: colors.contextBg,
-        fgColor: colors.contextFg, bgHex: colors.hex?.contextBg, fgHex: colors.hex?.contextFg,
+        fgColor: colors.contextFg,
+        bgHex: colors.hex?.contextBg,
+        fgHex: colors.hex?.contextFg,
       };
     }
 
@@ -765,7 +787,9 @@ export class SegmentRenderer {
       return {
         text: `${this.symbols.metrics_response} new`,
         bgColor: colors.metricsBg,
-        fgColor: colors.metricsFg, bgHex: colors.hex?.metricsBg, fgHex: colors.hex?.metricsFg,
+        fgColor: colors.metricsFg,
+        bgHex: colors.hex?.metricsBg,
+        fgHex: colors.hex?.metricsFg,
       };
     }
 
@@ -831,14 +855,18 @@ export class SegmentRenderer {
       return {
         text: `${this.symbols.metrics_response} active`,
         bgColor: colors.metricsBg,
-        fgColor: colors.metricsFg, bgHex: colors.hex?.metricsBg, fgHex: colors.hex?.metricsFg,
+        fgColor: colors.metricsFg,
+        bgHex: colors.hex?.metricsBg,
+        fgHex: colors.hex?.metricsFg,
       };
     }
 
     return {
       text: parts.join(" "),
       bgColor: colors.metricsBg,
-      fgColor: colors.metricsFg, bgHex: colors.hex?.metricsBg, fgHex: colors.hex?.metricsFg,
+      fgColor: colors.metricsFg,
+      bgHex: colors.hex?.metricsBg,
+      fgHex: colors.hex?.metricsFg,
     };
   }
 
@@ -934,7 +962,9 @@ export class SegmentRenderer {
     return {
       text,
       bgColor: colors.todayBg,
-      fgColor: colors.todayFg, bgHex: colors.hex?.todayBg, fgHex: colors.hex?.todayFg,
+      fgColor: colors.todayFg,
+      bgHex: colors.hex?.todayBg,
+      fgHex: colors.hex?.todayFg,
     };
   }
 
@@ -1028,7 +1058,9 @@ export class SegmentRenderer {
     return {
       text: `${this.symbols.version} v${hookData.version}`,
       bgColor: colors.versionBg,
-      fgColor: colors.versionFg, bgHex: colors.hex?.versionBg, fgHex: colors.hex?.versionFg,
+      fgColor: colors.versionFg,
+      bgHex: colors.hex?.versionBg,
+      fgHex: colors.hex?.versionFg,
     };
   }
 
@@ -1042,7 +1074,13 @@ export class SegmentRenderer {
     const text = prefix
       ? `${this.symbols.env} ${prefix}: ${value}`
       : `${this.symbols.env} ${value}`;
-    return { text, bgColor: colors.envBg, fgColor: colors.envFg, bgHex: colors.hex?.envBg, fgHex: colors.hex?.envFg };
+    return {
+      text,
+      bgColor: colors.envBg,
+      fgColor: colors.envFg,
+      bgHex: colors.hex?.envBg,
+      fgHex: colors.hex?.envFg,
+    };
   }
 
   renderToolbar(
@@ -1077,7 +1115,9 @@ export class SegmentRenderer {
     return {
       text: parts.join(sep),
       bgColor: colors.sessionBg,
-      fgColor: colors.sessionFg, bgHex: colors.hex?.sessionBg, fgHex: colors.hex?.sessionFg,
+      fgColor: colors.sessionFg,
+      bgHex: colors.hex?.sessionBg,
+      fgHex: colors.hex?.sessionFg,
     };
   }
 
@@ -1114,7 +1154,9 @@ export class SegmentRenderer {
     return {
       text: parts.join(sep),
       bgColor: colors.sessionBg,
-      fgColor: colors.sessionFg, bgHex: colors.hex?.sessionBg, fgHex: colors.hex?.sessionFg,
+      fgColor: colors.sessionFg,
+      bgHex: colors.hex?.sessionBg,
+      fgHex: colors.hex?.sessionFg,
     };
   }
 }

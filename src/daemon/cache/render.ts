@@ -146,10 +146,7 @@ export class RenderCache {
     }
   }
 
-  private rebindWatcher(
-    entry: CacheEntry,
-    targetPath: string | null,
-  ): void {
+  private rebindWatcher(entry: CacheEntry, targetPath: string | null): void {
     if (entry.watcher) {
       entry.watcher.release();
       entry.watcher = null;

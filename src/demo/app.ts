@@ -10,7 +10,7 @@ import type { PowerlineConfig } from "../config/loader.js";
 
 // --- Mock hook data ---
 
-const MOCK_HOOK_SAMPLES: { name: string; data: ClaudeHookData }[] = [
+const MOCK_HOOK_SAMPLES: Array<{ name: string; data: ClaudeHookData }> = [
   {
     name: "Default Session",
     data: {
@@ -190,36 +190,100 @@ interface LegendEntry {
 
 const DEMO_TEXT = "The quick fox";
 
-const PALETTE_GROUPS: { title: string; entries: LegendEntry[] }[] = [
+const PALETTE_GROUPS: Array<{ title: string; entries: LegendEntry[] }> = [
   {
     title: "Foreground / Background",
     entries: [
-      { labels: ["foreground", "background"], fg: "foreground", bg: "background" },
-      { labels: ["foreground-muted", "background"], fg: "foreground-muted", bg: "background" },
-      { labels: ["foreground-disabled", "background"], fg: "foreground-disabled", bg: "background" },
+      {
+        labels: ["foreground", "background"],
+        fg: "foreground",
+        bg: "background",
+      },
+      {
+        labels: ["foreground-muted", "background"],
+        fg: "foreground-muted",
+        bg: "background",
+      },
+      {
+        labels: ["foreground-disabled", "background"],
+        fg: "foreground-disabled",
+        bg: "background",
+      },
     ],
   },
   {
     title: "Core (as Button backgrounds)",
     entries: [
-      { labels: ["button-color-fg", "primary"], fg: "button-color-foreground", bg: "primary" },
-      { labels: ["button-color-fg", "secondary"], fg: "button-color-foreground", bg: "secondary" },
-      { labels: ["button-color-fg", "accent"], fg: "button-color-foreground", bg: "accent" },
-      { labels: ["button-color-fg", "boost"], fg: "button-color-foreground", bg: "boost" },
-      { labels: ["button-color-fg", "success"], fg: "button-color-foreground", bg: "success" },
-      { labels: ["button-color-fg", "warning"], fg: "button-color-foreground", bg: "warning" },
-      { labels: ["button-color-fg", "error"], fg: "button-color-foreground", bg: "error" },
+      {
+        labels: ["button-color-fg", "primary"],
+        fg: "button-color-foreground",
+        bg: "primary",
+      },
+      {
+        labels: ["button-color-fg", "secondary"],
+        fg: "button-color-foreground",
+        bg: "secondary",
+      },
+      {
+        labels: ["button-color-fg", "accent"],
+        fg: "button-color-foreground",
+        bg: "accent",
+      },
+      {
+        labels: ["button-color-fg", "boost"],
+        fg: "button-color-foreground",
+        bg: "boost",
+      },
+      {
+        labels: ["button-color-fg", "success"],
+        fg: "button-color-foreground",
+        bg: "success",
+      },
+      {
+        labels: ["button-color-fg", "warning"],
+        fg: "button-color-foreground",
+        bg: "warning",
+      },
+      {
+        labels: ["button-color-fg", "error"],
+        fg: "button-color-foreground",
+        bg: "error",
+      },
     ],
   },
   {
     title: "Core Muted (as Label/flat Button backgrounds)",
     entries: [
-      { labels: ["text-primary", "primary-muted"], fg: "text-primary", bg: "primary-muted" },
-      { labels: ["text-secondary", "secondary-muted"], fg: "text-secondary", bg: "secondary-muted" },
-      { labels: ["text-accent", "accent-muted"], fg: "text-accent", bg: "accent-muted" },
-      { labels: ["text-success", "success-muted"], fg: "text-success", bg: "success-muted" },
-      { labels: ["text-warning", "warning-muted"], fg: "text-warning", bg: "warning-muted" },
-      { labels: ["text-error", "error-muted"], fg: "text-error", bg: "error-muted" },
+      {
+        labels: ["text-primary", "primary-muted"],
+        fg: "text-primary",
+        bg: "primary-muted",
+      },
+      {
+        labels: ["text-secondary", "secondary-muted"],
+        fg: "text-secondary",
+        bg: "secondary-muted",
+      },
+      {
+        labels: ["text-accent", "accent-muted"],
+        fg: "text-accent",
+        bg: "accent-muted",
+      },
+      {
+        labels: ["text-success", "success-muted"],
+        fg: "text-success",
+        bg: "success-muted",
+      },
+      {
+        labels: ["text-warning", "warning-muted"],
+        fg: "text-warning",
+        bg: "warning-muted",
+      },
+      {
+        labels: ["text-error", "error-muted"],
+        fg: "text-error",
+        bg: "error-muted",
+      },
     ],
   },
   {
@@ -227,80 +291,228 @@ const PALETTE_GROUPS: { title: string; entries: LegendEntry[] }[] = [
     entries: [
       { labels: ["foreground", "surface"], fg: "foreground", bg: "surface" },
       { labels: ["foreground", "panel"], fg: "foreground", bg: "panel" },
-      { labels: ["foreground", "surface-active"], fg: "foreground", bg: "surface-active" },
+      {
+        labels: ["foreground", "surface-active"],
+        fg: "foreground",
+        bg: "surface-active",
+      },
     ],
   },
   {
     title: "Text (foreground on background)",
     entries: [
       { labels: ["text", "background"], fg: "text", bg: "background" },
-      { labels: ["text-primary", "background"], fg: "text-primary", bg: "background" },
-      { labels: ["text-secondary", "background"], fg: "text-secondary", bg: "background" },
-      { labels: ["text-accent", "background"], fg: "text-accent", bg: "background" },
-      { labels: ["text-muted", "background"], fg: "text-muted", bg: "background" },
-      { labels: ["text-success", "background"], fg: "text-success", bg: "background" },
-      { labels: ["text-warning", "background"], fg: "text-warning", bg: "background" },
-      { labels: ["text-error", "background"], fg: "text-error", bg: "background" },
-      { labels: ["text-disabled", "background"], fg: "text-disabled", bg: "background" },
+      {
+        labels: ["text-primary", "background"],
+        fg: "text-primary",
+        bg: "background",
+      },
+      {
+        labels: ["text-secondary", "background"],
+        fg: "text-secondary",
+        bg: "background",
+      },
+      {
+        labels: ["text-accent", "background"],
+        fg: "text-accent",
+        bg: "background",
+      },
+      {
+        labels: ["text-muted", "background"],
+        fg: "text-muted",
+        bg: "background",
+      },
+      {
+        labels: ["text-success", "background"],
+        fg: "text-success",
+        bg: "background",
+      },
+      {
+        labels: ["text-warning", "background"],
+        fg: "text-warning",
+        bg: "background",
+      },
+      {
+        labels: ["text-error", "background"],
+        fg: "text-error",
+        bg: "background",
+      },
+      {
+        labels: ["text-disabled", "background"],
+        fg: "text-disabled",
+        bg: "background",
+      },
     ],
   },
   {
     title: "Buttons & Borders",
     entries: [
-      { labels: ["button-foreground", "surface"], fg: "button-foreground", bg: "surface" },
-      { labels: ["button-color-fg", "primary-background"], fg: "button-color-foreground", bg: "primary-background" },
-      { labels: ["button-color-fg", "secondary-background"], fg: "button-color-foreground", bg: "secondary-background" },
+      {
+        labels: ["button-foreground", "surface"],
+        fg: "button-foreground",
+        bg: "surface",
+      },
+      {
+        labels: ["button-color-fg", "primary-background"],
+        fg: "button-color-foreground",
+        bg: "primary-background",
+      },
+      {
+        labels: ["button-color-fg", "secondary-background"],
+        fg: "button-color-foreground",
+        bg: "secondary-background",
+      },
       { labels: ["foreground", "border"], fg: "foreground", bg: "border" },
-      { labels: ["foreground", "border-blurred"], fg: "foreground", bg: "border-blurred" },
+      {
+        labels: ["foreground", "border-blurred"],
+        fg: "foreground",
+        bg: "border-blurred",
+      },
     ],
   },
   {
     title: "Cursor & Input",
     entries: [
-      { labels: ["cursor-fg", "cursor-bg"], fg: "block-cursor-foreground", bg: "block-cursor-background" },
-      { labels: ["cursor-blurred-fg", "cursor-blurred-bg"], fg: "block-cursor-blurred-foreground", bg: "block-cursor-blurred-background" },
-      { labels: ["foreground", "block-hover-bg"], fg: "foreground", bg: "block-hover-background" },
-      { labels: ["input-cursor-fg", "input-cursor-bg"], fg: "input-cursor-foreground", bg: "input-cursor-background" },
-      { labels: ["foreground", "input-selection-bg"], fg: "foreground", bg: "input-selection-background" },
+      {
+        labels: ["cursor-fg", "cursor-bg"],
+        fg: "block-cursor-foreground",
+        bg: "block-cursor-background",
+      },
+      {
+        labels: ["cursor-blurred-fg", "cursor-blurred-bg"],
+        fg: "block-cursor-blurred-foreground",
+        bg: "block-cursor-blurred-background",
+      },
+      {
+        labels: ["foreground", "block-hover-bg"],
+        fg: "foreground",
+        bg: "block-hover-background",
+      },
+      {
+        labels: ["input-cursor-fg", "input-cursor-bg"],
+        fg: "input-cursor-foreground",
+        bg: "input-cursor-background",
+      },
+      {
+        labels: ["foreground", "input-selection-bg"],
+        fg: "foreground",
+        bg: "input-selection-background",
+      },
     ],
   },
   {
     title: "Links",
     entries: [
-      { labels: ["link-color", "link-bg"], fg: "link-color", bg: "link-background" },
-      { labels: ["link-color-hover", "link-bg-hover"], fg: "link-color-hover", bg: "link-background-hover" },
+      {
+        labels: ["link-color", "link-bg"],
+        fg: "link-color",
+        bg: "link-background",
+      },
+      {
+        labels: ["link-color-hover", "link-bg-hover"],
+        fg: "link-color-hover",
+        bg: "link-background-hover",
+      },
     ],
   },
   {
     title: "Scrollbar",
     entries: [
-      { labels: ["foreground", "scrollbar"], fg: "foreground", bg: "scrollbar" },
-      { labels: ["foreground", "scrollbar-hover"], fg: "foreground", bg: "scrollbar-hover" },
-      { labels: ["foreground", "scrollbar-active"], fg: "foreground", bg: "scrollbar-active" },
-      { labels: ["foreground", "scrollbar-bg"], fg: "foreground", bg: "scrollbar-background" },
-      { labels: ["foreground", "scrollbar-bg-hover"], fg: "foreground", bg: "scrollbar-background-hover" },
-      { labels: ["foreground", "scrollbar-bg-active"], fg: "foreground", bg: "scrollbar-background-active" },
-      { labels: ["foreground", "scrollbar-corner"], fg: "foreground", bg: "scrollbar-corner-color" },
+      {
+        labels: ["foreground", "scrollbar"],
+        fg: "foreground",
+        bg: "scrollbar",
+      },
+      {
+        labels: ["foreground", "scrollbar-hover"],
+        fg: "foreground",
+        bg: "scrollbar-hover",
+      },
+      {
+        labels: ["foreground", "scrollbar-active"],
+        fg: "foreground",
+        bg: "scrollbar-active",
+      },
+      {
+        labels: ["foreground", "scrollbar-bg"],
+        fg: "foreground",
+        bg: "scrollbar-background",
+      },
+      {
+        labels: ["foreground", "scrollbar-bg-hover"],
+        fg: "foreground",
+        bg: "scrollbar-background-hover",
+      },
+      {
+        labels: ["foreground", "scrollbar-bg-active"],
+        fg: "foreground",
+        bg: "scrollbar-background-active",
+      },
+      {
+        labels: ["foreground", "scrollbar-corner"],
+        fg: "foreground",
+        bg: "scrollbar-corner-color",
+      },
     ],
   },
   {
     title: "Footer",
     entries: [
-      { labels: ["footer-fg", "footer-bg"], fg: "footer-foreground", bg: "footer-background" },
-      { labels: ["footer-desc-fg", "footer-desc-bg"], fg: "footer-description-foreground", bg: "footer-description-background" },
-      { labels: ["foreground", "footer-item-bg"], fg: "foreground", bg: "footer-item-background" },
-      { labels: ["footer-key-fg", "footer-key-bg"], fg: "footer-key-foreground", bg: "footer-key-background" },
+      {
+        labels: ["footer-fg", "footer-bg"],
+        fg: "footer-foreground",
+        bg: "footer-background",
+      },
+      {
+        labels: ["footer-desc-fg", "footer-desc-bg"],
+        fg: "footer-description-foreground",
+        bg: "footer-description-background",
+      },
+      {
+        labels: ["foreground", "footer-item-bg"],
+        fg: "foreground",
+        bg: "footer-item-background",
+      },
+      {
+        labels: ["footer-key-fg", "footer-key-bg"],
+        fg: "footer-key-foreground",
+        bg: "footer-key-background",
+      },
     ],
   },
   {
     title: "Markdown Headings",
     entries: [
-      { labels: ["h1-color", "h1-bg"], fg: "markdown-h1-color", bg: "markdown-h1-background" },
-      { labels: ["h2-color", "h2-bg"], fg: "markdown-h2-color", bg: "markdown-h2-background" },
-      { labels: ["h3-color", "h3-bg"], fg: "markdown-h3-color", bg: "markdown-h3-background" },
-      { labels: ["h4-color", "h4-bg"], fg: "markdown-h4-color", bg: "markdown-h4-background" },
-      { labels: ["h5-color", "h5-bg"], fg: "markdown-h5-color", bg: "markdown-h5-background" },
-      { labels: ["h6-color", "h6-bg"], fg: "markdown-h6-color", bg: "markdown-h6-background" },
+      {
+        labels: ["h1-color", "h1-bg"],
+        fg: "markdown-h1-color",
+        bg: "markdown-h1-background",
+      },
+      {
+        labels: ["h2-color", "h2-bg"],
+        fg: "markdown-h2-color",
+        bg: "markdown-h2-background",
+      },
+      {
+        labels: ["h3-color", "h3-bg"],
+        fg: "markdown-h3-color",
+        bg: "markdown-h3-background",
+      },
+      {
+        labels: ["h4-color", "h4-bg"],
+        fg: "markdown-h4-color",
+        bg: "markdown-h4-background",
+      },
+      {
+        labels: ["h5-color", "h5-bg"],
+        fg: "markdown-h5-color",
+        bg: "markdown-h5-background",
+      },
+      {
+        labels: ["h6-color", "h6-bg"],
+        fg: "markdown-h6-color",
+        bg: "markdown-h6-background",
+      },
     ],
   },
 ];
@@ -451,21 +663,56 @@ function handleInput(data: Buffer): void {
 
   if (bytes.length === 1) {
     const ch = bytes[0]!;
-    if (ch === 113) { cleanup(); process.exit(0); }
-    if (ch === 109) { colorStyleIdx = (colorStyleIdx + 1) % STYLE_ORDER.length; needsRender = true; }
-    if (ch === 77) { colorStyleIdx = (colorStyleIdx - 1 + STYLE_ORDER.length) % STYLE_ORDER.length; needsRender = true; }
-    if (ch === 115) { styleIdx = (styleIdx + 1) % styles.length; needsRender = true; }
-    if (ch === 48) { hueStep = 0; needsRender = true; }
-    if (ch === 43 || ch === 93 || ch === 46) { hueStep += HUE_STEP_INCREMENT; needsRender = true; }
-    if (ch === 45 || ch === 91 || ch === 44) { hueStep = Math.max(0, hueStep - HUE_STEP_INCREMENT); needsRender = true; }
+    if (ch === 113) {
+      cleanup();
+      process.exit(0);
+    }
+    if (ch === 109) {
+      colorStyleIdx = (colorStyleIdx + 1) % STYLE_ORDER.length;
+      needsRender = true;
+    }
+    if (ch === 77) {
+      colorStyleIdx =
+        (colorStyleIdx - 1 + STYLE_ORDER.length) % STYLE_ORDER.length;
+      needsRender = true;
+    }
+    if (ch === 115) {
+      styleIdx = (styleIdx + 1) % styles.length;
+      needsRender = true;
+    }
+    if (ch === 48) {
+      hueStep = 0;
+      needsRender = true;
+    }
+    if (ch === 43 || ch === 93 || ch === 46) {
+      hueStep += HUE_STEP_INCREMENT;
+      needsRender = true;
+    }
+    if (ch === 45 || ch === 91 || ch === 44) {
+      hueStep = Math.max(0, hueStep - HUE_STEP_INCREMENT);
+      needsRender = true;
+    }
   }
 
   if (bytes.length === 3 && bytes[0] === 27 && bytes[1] === 91) {
     const dir = bytes[2]!;
-    if (dir === 67) { themeIdx = (themeIdx + 1) % themes.length; needsRender = true; }
-    if (dir === 68) { themeIdx = (themeIdx - 1 + themes.length) % themes.length; needsRender = true; }
-    if (dir === 65) { sampleIdx = (sampleIdx + 1) % MOCK_HOOK_SAMPLES.length; needsRender = true; }
-    if (dir === 66) { sampleIdx = (sampleIdx - 1 + MOCK_HOOK_SAMPLES.length) % MOCK_HOOK_SAMPLES.length; needsRender = true; }
+    if (dir === 67) {
+      themeIdx = (themeIdx + 1) % themes.length;
+      needsRender = true;
+    }
+    if (dir === 68) {
+      themeIdx = (themeIdx - 1 + themes.length) % themes.length;
+      needsRender = true;
+    }
+    if (dir === 65) {
+      sampleIdx = (sampleIdx + 1) % MOCK_HOOK_SAMPLES.length;
+      needsRender = true;
+    }
+    if (dir === 66) {
+      sampleIdx =
+        (sampleIdx - 1 + MOCK_HOOK_SAMPLES.length) % MOCK_HOOK_SAMPLES.length;
+      needsRender = true;
+    }
   }
 }
 

@@ -7,11 +7,7 @@ import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
 import { daemonDir, pidPath, socketPath } from "./paths";
 import { dlog, closeLog } from "./log";
-import {
-  PROTOCOL_VERSION,
-  encodeFrame,
-  makeFrameReader,
-} from "./protocol";
+import { PROTOCOL_VERSION, encodeFrame, makeFrameReader } from "./protocol";
 import type { Request, Response } from "./protocol";
 import { CachedGitService } from "./cache/git";
 import { CachedUsageProvider } from "./cache/usage";
@@ -343,7 +339,11 @@ function handleConnection(sock: net.Socket): void {
 }
 
 async function handleRequest(req: Request): Promise<Response> {
-  if (!req || typeof req !== "object" || typeof (req as Request).v !== "number") {
+  if (
+    !req ||
+    typeof req !== "object" ||
+    typeof (req as Request).v !== "number"
+  ) {
     return { ok: false, error: "malformed request", code: "BAD_REQUEST" };
   }
 
@@ -456,7 +456,11 @@ const clickHandlers: Record<string, (value: string) => void> = {
 function handleClick(verb: string, value: string): Response {
   const handler = clickHandlers[verb];
   if (!handler) {
-    return { ok: false, error: `unknown click verb: ${verb}`, code: "BAD_REQUEST" };
+    return {
+      ok: false,
+      error: `unknown click verb: ${verb}`,
+      code: "BAD_REQUEST",
+    };
   }
   try {
     handler(value);
@@ -490,7 +494,9 @@ function clickOpenVscode(target: string): void {
     target,
   ]);
   if (result.status !== 0) {
-    throw new Error(`open -a "Visual Studio Code" failed (status ${result.status})`);
+    throw new Error(
+      `open -a "Visual Studio Code" failed (status ${result.status})`,
+    );
   }
 }
 
@@ -525,7 +531,10 @@ function clickThemeCycle(sessionId: string): void {
   const idx = current ? themes.indexOf(current) : -1;
   const next = themes[(idx + 1) % themes.length] ?? themes[0]!;
   sessionState.set(sessionId, "theme", next);
-  dlog("info", `theme-cycle: ${current ?? "(default)"} → ${next} (session=${sessionId})`);
+  dlog(
+    "info",
+    `theme-cycle: ${current ?? "(default)"} → ${next} (session=${sessionId})`,
+  );
 }
 
 function clickStyleCycle(sessionId: string): void {
@@ -533,7 +542,10 @@ function clickStyleCycle(sessionId: string): void {
   const idx = current ? STYLE_ORDER.indexOf(current) : -1;
   const next = STYLE_ORDER[(idx + 1) % STYLE_ORDER.length] ?? STYLE_ORDER[0]!;
   sessionState.set(sessionId, "style", next);
-  dlog("info", `style-cycle: ${current ?? "(default)"} → ${next} (session=${sessionId})`);
+  dlog(
+    "info",
+    `style-cycle: ${current ?? "(default)"} → ${next} (session=${sessionId})`,
+  );
 }
 
 // Suppress "unused path import" — kept for clarity if we add directory ops.

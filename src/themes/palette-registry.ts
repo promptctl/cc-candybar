@@ -6,9 +6,7 @@ const cache = new Map<string, Palette>();
 
 function hexToColorRgba(hex: string): ColorRgba {
   const stripped = hex.startsWith("#") ? hex.slice(1) : hex;
-  return stripped.length <= 6
-    ? parseRgbHex(stripped)
-    : parseRgbaHex(stripped);
+  return stripped.length <= 6 ? parseRgbHex(stripped) : parseRgbaHex(stripped);
 }
 
 function paletteFromData(
