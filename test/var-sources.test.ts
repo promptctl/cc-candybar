@@ -1,4 +1,7 @@
-import { VariableStore, SourceRegistry } from "../src/var-system";
+import fs from "fs";
+import os from "os";
+import path from "path";
+import { VariableStore, SourceRegistry, parseDuration } from "../src/var-system";
 
 // Helper: fresh pair so tests are fully isolated.
 function make(defaultEmptyValue?: string) {
@@ -298,5 +301,564 @@ describe("SourceRegistry — input boxes as computed dependencies", () => {
     registry.declareLiteral("prefix", "cc-");
     store.defineComputed("label", "string", (read) => `${read("prefix")}candybar`);
     expect(store.read("label")).toBe("cc-candybar");
+  });
+});
+
+// ─── parseDuration ────────────────────────────────────────────────────────────
+
+describe("parseDuration", () => {
+  it.each([
+    ["100ms", 100],
+    ["1s", 1_000],
+    ["30s", 30_000],
+    ["2m", 120_000],
+    ["1h", 3_600_000],
+  ])("%s → %d ms", (s, ms) => {
+    expect(parseDuration(s)).toBe(ms);
+  });
+
+  it("rejects unknown unit", () => {
+    expect(() => parseDuration("5d")).toThrow(/Invalid duration/);
+  });
+
+  it("rejects bare number", () => {
+    expect(() => parseDuration("42")).toThrow(/Invalid duration/);
+  });
+});
+
+// ─── Shared temp-dir helper ───────────────────────────────────────────────────
+
+function makeTmpDir(): { dir: string; cleanup: () => void } {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "cc-candybar-test-"));
+  return { dir, cleanup: () => fs.rmSync(dir, { recursive: true, force: true }) };
+}
+
+// Wait for all microtasks + a small wall-clock window so async shell/file
+// operations have time to settle before asserting.
+function settle(ms = 150): Promise<void> {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
+// ─── shell — basic ────────────────────────────────────────────────────────────
+
+describe("SourceRegistry — shell: basic", () => {
+  it("populates box with command stdout (never policy)", async () => {
+    const { store, registry } = make();
+    registry.declareShell("val", 'echo "hello world"', { cache: { kind: "never" } });
+    await settle();
+    expect(store.read("val")).toBe("hello world");
+    registry.dispose();
+  });
+
+  it("replaces newlines with spaces in multi-line output", async () => {
+    const { store, registry } = make();
+    registry.declareShell("val", 'printf "a\\nb\\nc"', { cache: { kind: "never" } });
+    await settle();
+    expect(store.read("val")).toBe("a b c");
+    registry.dispose();
+  });
+
+  it("extracts regex group-1 from stdout", async () => {
+    const { store, registry } = make();
+    registry.declareShell("val", 'echo "load: 0.52 0.48 0.45"', {
+      regex: "load:\\s*([0-9.]+)",
+      cache: { kind: "never" },
+    });
+    await settle();
+    expect(store.read("val")).toBe("0.52");
+    registry.dispose();
+  });
+
+  it("shell failure → varDefault", async () => {
+    const { store, registry } = make();
+    registry.declareShell("val", "exit 1", {
+      varDefault: "fallback",
+      cache: { kind: "never" },
+    });
+    await settle();
+    expect(store.read("val")).toBe("fallback");
+    registry.dispose();
+  });
+
+  it("shell failure → records last_error", async () => {
+    const before = Date.now();
+    const { registry } = make();
+    registry.declareShell("val", "exit 2", { cache: { kind: "never" } });
+    await settle();
+    const err = registry.getLastError("val");
+    expect(err).toBeDefined();
+    expect(err!.message).toMatch(/exited with code/);
+    expect(err!.timestamp).toBeGreaterThanOrEqual(before);
+    registry.dispose();
+  });
+
+  it("shell failure → defaultEmptyValue when no varDefault", async () => {
+    const { store, registry } = make("(none)");
+    registry.declareShell("val", "exit 1", { cache: { kind: "never" } });
+    await settle();
+    expect(store.read("val")).toBe("(none)");
+    registry.dispose();
+  });
+
+  it("regex no-match → varDefault", async () => {
+    const { store, registry } = make();
+    registry.declareShell("val", 'echo "nothing here"', {
+      regex: "([0-9]+)",
+      varDefault: "—",
+      cache: { kind: "never" },
+    });
+    await settle();
+    expect(store.read("val")).toBe("—");
+    registry.dispose();
+  });
+
+  it("regex no-match → records last_error", async () => {
+    const { registry } = make();
+    registry.declareShell("val", 'echo "no digits"', {
+      regex: "([0-9]+)",
+      cache: { kind: "never" },
+    });
+    await settle();
+    const err = registry.getLastError("val");
+    expect(err).toBeDefined();
+    expect(err!.message).toMatch(/regex no-match/);
+    registry.dispose();
+  });
+
+  it("success clears previous last_error on re-run via TTL", async () => {
+    const { tmpDir, dataFile, cleanup } = (() => {
+      const { dir, cleanup } = makeTmpDir();
+      return { tmpDir: dir, dataFile: path.join(dir, "f"), cleanup };
+    })();
+    try {
+      fs.writeFileSync(dataFile, "bad");
+      const { store, registry } = make();
+      // First: failing command
+      registry.declareShell("val", `grep nonexistent ${dataFile}`, {
+        cache: { kind: "never" },
+      });
+      await settle();
+      expect(registry.getLastError("val")).toBeDefined();
+
+      // Can't re-run on "never" — use a separate variable to test error-clearing
+      const { store: store2, registry: registry2 } = make();
+      // Command that succeeds
+      registry2.declareShell("val", `echo "ok"`, { cache: { kind: "never" } });
+      await settle();
+      expect(registry2.getLastError("val")).toBeUndefined();
+      expect(store2.read("val")).toBe("ok");
+      registry.dispose();
+      registry2.dispose();
+    } finally {
+      cleanup();
+    }
+  });
+});
+
+// ─── shell — TTL cache policy ────────────────────────────────────────────────
+
+describe("SourceRegistry — shell: ttl cache policy", () => {
+  it("TTL fires and refreshes box with new command output", async () => {
+    const { dir, cleanup } = makeTmpDir();
+    try {
+      const f = path.join(dir, "v");
+      fs.writeFileSync(f, "v1");
+      const { store, registry } = make();
+      registry.declareShell("val", `cat ${f}`, { cache: { kind: "ttl", durationMs: 60 } });
+
+      await settle(100);
+      expect(store.read("val")).toBe("v1");
+
+      fs.writeFileSync(f, "v2");
+      await settle(150); // ≥ 1 TTL tick
+
+      expect(store.read("val")).toBe("v2");
+      registry.dispose();
+    } finally {
+      cleanup();
+    }
+  });
+
+  it("TTL bucket sweep: two vars at same interval both update", async () => {
+    const { dir, cleanup } = makeTmpDir();
+    try {
+      const f1 = path.join(dir, "f1");
+      const f2 = path.join(dir, "f2");
+      fs.writeFileSync(f1, "a1");
+      fs.writeFileSync(f2, "b1");
+      const { store, registry } = make();
+      registry.declareShell("v1", `cat ${f1}`, { cache: { kind: "ttl", durationMs: 60 } });
+      registry.declareShell("v2", `cat ${f2}`, { cache: { kind: "ttl", durationMs: 60 } });
+
+      await settle(100);
+      expect(store.read("v1")).toBe("a1");
+      expect(store.read("v2")).toBe("b1");
+
+      fs.writeFileSync(f1, "a2");
+      fs.writeFileSync(f2, "b2");
+      await settle(150);
+
+      expect(store.read("v1")).toBe("a2");
+      expect(store.read("v2")).toBe("b2");
+      registry.dispose();
+    } finally {
+      cleanup();
+    }
+  });
+
+  it("dispose stops TTL from firing further updates", async () => {
+    const { dir, cleanup } = makeTmpDir();
+    try {
+      const f = path.join(dir, "f");
+      fs.writeFileSync(f, "v1");
+      const { store, registry } = make();
+      registry.declareShell("val", `cat ${f}`, { cache: { kind: "ttl", durationMs: 60 } });
+
+      await settle(100);
+      expect(store.read("val")).toBe("v1");
+
+      registry.dispose();
+
+      fs.writeFileSync(f, "v2");
+      await settle(150); // timer should NOT fire after dispose
+
+      expect(store.read("val")).toBe("v1"); // unchanged
+    } finally {
+      cleanup();
+    }
+  });
+});
+
+// ─── shell — watch_file cache policy ─────────────────────────────────────────
+
+describe("SourceRegistry — shell: watch_file cache policy", () => {
+  it("file modification triggers box update", async () => {
+    const { dir, cleanup } = makeTmpDir();
+    try {
+      const watchedFile = path.join(dir, "watched");
+      const dataFile = path.join(dir, "data");
+      fs.writeFileSync(watchedFile, "x");
+      fs.writeFileSync(dataFile, "v1");
+      const { store, registry } = make();
+      registry.declareShell("val", `cat ${dataFile}`, {
+        cache: { kind: "watch_file", path: watchedFile },
+      });
+
+      await settle(100);
+      expect(store.read("val")).toBe("v1");
+
+      fs.writeFileSync(dataFile, "v2");
+      fs.writeFileSync(watchedFile, "x"); // trigger the watcher
+      await settle(250);
+
+      expect(store.read("val")).toBe("v2");
+      registry.dispose();
+    } finally {
+      cleanup();
+    }
+  });
+
+  it("multiple subscribers on one watch_file path both update", async () => {
+    const { dir, cleanup } = makeTmpDir();
+    try {
+      const watchedFile = path.join(dir, "watched");
+      const f1 = path.join(dir, "f1");
+      const f2 = path.join(dir, "f2");
+      fs.writeFileSync(watchedFile, "x");
+      fs.writeFileSync(f1, "a1");
+      fs.writeFileSync(f2, "b1");
+      const { store, registry } = make();
+      registry.declareShell("v1", `cat ${f1}`, {
+        cache: { kind: "watch_file", path: watchedFile },
+      });
+      registry.declareShell("v2", `cat ${f2}`, {
+        cache: { kind: "watch_file", path: watchedFile },
+      });
+
+      await settle(100);
+      expect(store.read("v1")).toBe("a1");
+      expect(store.read("v2")).toBe("b1");
+
+      fs.writeFileSync(f1, "a2");
+      fs.writeFileSync(f2, "b2");
+      fs.writeFileSync(watchedFile, "y");
+      await settle(250);
+
+      expect(store.read("v1")).toBe("a2");
+      expect(store.read("v2")).toBe("b2");
+      registry.dispose();
+    } finally {
+      cleanup();
+    }
+  });
+});
+
+// ─── shell — key: cache policy ────────────────────────────────────────────────
+
+describe("SourceRegistry — shell: key: cache policy", () => {
+  it("re-runs shell when key template result changes", async () => {
+    const { dir, cleanup } = makeTmpDir();
+    try {
+      const dataFile = path.join(dir, "data");
+      fs.writeFileSync(dataFile, "v1");
+
+      const store = new VariableStore();
+      const registry = new SourceRegistry(store);
+      // Put a box directly in the store — the key template will read it.
+      store.defineBox("trigger", "string", "a");
+      registry.declareShell("val", `cat ${dataFile}`, {
+        cache: { kind: "key", template: "{{ .trigger }}" },
+      });
+
+      await settle(150);
+      expect(store.read("val")).toBe("v1");
+
+      // Mutate the data and change the key — reaction fires, shell re-runs.
+      fs.writeFileSync(dataFile, "v2");
+      store.setBox("trigger", "b");
+      await settle(250);
+
+      expect(store.read("val")).toBe("v2");
+      registry.dispose();
+    } finally {
+      cleanup();
+    }
+  });
+
+  it("does NOT re-run shell when key is unchanged", async () => {
+    const { dir, cleanup } = makeTmpDir();
+    try {
+      const dataFile = path.join(dir, "data");
+      fs.writeFileSync(dataFile, "v1");
+
+      const store = new VariableStore();
+      const registry = new SourceRegistry(store);
+      store.defineBox("trigger", "string", "a");
+      registry.declareShell("val", `cat ${dataFile}`, {
+        cache: { kind: "key", template: "{{ .trigger }}" },
+      });
+
+      await settle(150);
+      expect(store.read("val")).toBe("v1");
+
+      // Change data file, but do NOT change the key.
+      fs.writeFileSync(dataFile, "v2");
+      // trigger stays "a" — key template still produces "a" — no re-run.
+      await settle(250);
+
+      expect(store.read("val")).toBe("v1");
+      registry.dispose();
+    } finally {
+      cleanup();
+    }
+  });
+});
+
+// ─── file — basic ─────────────────────────────────────────────────────────────
+
+describe("SourceRegistry — file: basic", () => {
+  it("whole mode: reads entire file, newlines→spaces", async () => {
+    const { dir, cleanup } = makeTmpDir();
+    try {
+      const f = path.join(dir, "f");
+      fs.writeFileSync(f, "line1\nline2\nline3");
+      const { store, registry } = make();
+      registry.declareFile("val", f, { cache: { kind: "never" } });
+      await settle();
+      expect(store.read("val")).toBe("line1 line2 line3");
+      registry.dispose();
+    } finally {
+      cleanup();
+    }
+  });
+
+  it("first-line mode: returns first line only", async () => {
+    const { dir, cleanup } = makeTmpDir();
+    try {
+      const f = path.join(dir, "f");
+      fs.writeFileSync(f, "ref: refs/heads/main\nother");
+      const { store, registry } = make();
+      registry.declareFile("val", f, { readMode: "first-line", cache: { kind: "never" } });
+      await settle();
+      expect(store.read("val")).toBe("ref: refs/heads/main");
+      registry.dispose();
+    } finally {
+      cleanup();
+    }
+  });
+
+  it("regex: extracts group-1 from file contents", async () => {
+    const { dir, cleanup } = makeTmpDir();
+    try {
+      const f = path.join(dir, "f");
+      fs.writeFileSync(f, "ref: refs/heads/feature-branch\n");
+      const { store, registry } = make();
+      registry.declareFile("val", f, {
+        regex: "refs/heads/(.+)",
+        cache: { kind: "never" },
+      });
+      await settle();
+      expect(store.read("val")).toBe("feature-branch");
+      registry.dispose();
+    } finally {
+      cleanup();
+    }
+  });
+
+  it("file missing → varDefault", async () => {
+    const { store, registry } = make();
+    registry.declareFile("val", "/nonexistent/path/xyz.txt", {
+      varDefault: "(missing)",
+      cache: { kind: "never" },
+    });
+    await settle();
+    expect(store.read("val")).toBe("(missing)");
+    registry.dispose();
+  });
+
+  it("file missing → records last_error", async () => {
+    const before = Date.now();
+    const { registry } = make();
+    registry.declareFile("val", "/nonexistent/path/xyz.txt", { cache: { kind: "never" } });
+    await settle();
+    const err = registry.getLastError("val");
+    expect(err).toBeDefined();
+    expect(err!.message).toMatch(/unreadable/);
+    expect(err!.timestamp).toBeGreaterThanOrEqual(before);
+    registry.dispose();
+  });
+
+  it("regex no-match → varDefault", async () => {
+    const { dir, cleanup } = makeTmpDir();
+    try {
+      const f = path.join(dir, "f");
+      fs.writeFileSync(f, "nothing to match");
+      const { store, registry } = make();
+      registry.declareFile("val", f, {
+        regex: "([0-9]+)",
+        varDefault: "—",
+        cache: { kind: "never" },
+      });
+      await settle();
+      expect(store.read("val")).toBe("—");
+      registry.dispose();
+    } finally {
+      cleanup();
+    }
+  });
+
+  it("regex no-match → records last_error", async () => {
+    const { dir, cleanup } = makeTmpDir();
+    try {
+      const f = path.join(dir, "f");
+      fs.writeFileSync(f, "no numbers");
+      const { registry } = make();
+      registry.declareFile("val", f, { regex: "([0-9]+)", cache: { kind: "never" } });
+      await settle();
+      expect(registry.getLastError("val")).toBeDefined();
+      expect(registry.getLastError("val")!.message).toMatch(/regex no-match/);
+      registry.dispose();
+    } finally {
+      cleanup();
+    }
+  });
+});
+
+// ─── file — watch_file cache policy (file watch trigger → invalidation) ───────
+
+describe("SourceRegistry — file: watch_file cache policy", () => {
+  it("file change triggers box update", async () => {
+    const { dir, cleanup } = makeTmpDir();
+    try {
+      const f = path.join(dir, "f");
+      fs.writeFileSync(f, "v1");
+      const { store, registry } = make();
+      registry.declareFile("val", f, { cache: { kind: "watch_file", path: f } });
+
+      await settle(100);
+      expect(store.read("val")).toBe("v1");
+
+      fs.writeFileSync(f, "v2");
+      await settle(350);
+
+      expect(store.read("val")).toBe("v2");
+      registry.dispose();
+    } finally {
+      cleanup();
+    }
+  });
+
+  it("multiple subscribers on one watch_file path: both file vars update", async () => {
+    const { dir, cleanup } = makeTmpDir();
+    try {
+      const watchedFile = path.join(dir, "watched");
+      const f1 = path.join(dir, "f1");
+      const f2 = path.join(dir, "f2");
+      fs.writeFileSync(watchedFile, "v1");
+      fs.writeFileSync(f1, "a1");
+      fs.writeFileSync(f2, "b1");
+      const { store, registry } = make();
+      // Both variables watch the same path (different source files)
+      registry.declareFile("v1", f1, { cache: { kind: "watch_file", path: watchedFile } });
+      registry.declareFile("v2", f2, { cache: { kind: "watch_file", path: watchedFile } });
+
+      await settle(100);
+      expect(store.read("v1")).toBe("a1");
+      expect(store.read("v2")).toBe("b1");
+
+      fs.writeFileSync(f1, "a2");
+      fs.writeFileSync(f2, "b2");
+      fs.writeFileSync(watchedFile, "v2"); // trigger both watchers
+      await settle(350);
+
+      expect(store.read("v1")).toBe("a2");
+      expect(store.read("v2")).toBe("b2");
+      registry.dispose();
+    } finally {
+      cleanup();
+    }
+  });
+});
+
+// ─── dispose ──────────────────────────────────────────────────────────────────
+
+describe("SourceRegistry — dispose", () => {
+  it("dispose stops TTL updates", async () => {
+    const { dir, cleanup } = makeTmpDir();
+    try {
+      const f = path.join(dir, "f");
+      fs.writeFileSync(f, "v1");
+      const { store, registry } = make();
+      registry.declareShell("val", `cat ${f}`, { cache: { kind: "ttl", durationMs: 60 } });
+
+      await settle(100);
+      registry.dispose();
+
+      fs.writeFileSync(f, "v2");
+      await settle(150);
+      // Timer was cleared — box stays at last value before dispose.
+      expect(store.read("val")).toBe("v1");
+    } finally {
+      cleanup();
+    }
+  });
+
+  it("dispose stops file watch updates", async () => {
+    const { dir, cleanup } = makeTmpDir();
+    try {
+      const f = path.join(dir, "f");
+      fs.writeFileSync(f, "v1");
+      const { store, registry } = make();
+      registry.declareFile("val", f, { cache: { kind: "watch_file", path: f } });
+
+      await settle(100);
+      registry.dispose();
+
+      fs.writeFileSync(f, "v2");
+      await settle(350);
+      expect(store.read("val")).toBe("v1");
+    } finally {
+      cleanup();
+    }
   });
 });

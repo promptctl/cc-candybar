@@ -7,4 +7,11 @@ export {
   toNumber,
   toBool,
 } from "./types";
-export { SourceRegistry, type LastError } from "./sources";
+export {
+  SourceRegistry,
+  parseDuration,
+  type CachePolicy,
+  type ShellOptions,
+  type FileOptions,
+  type LastError,
+} from "./sources";
