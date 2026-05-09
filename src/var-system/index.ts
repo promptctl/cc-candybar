@@ -10,8 +10,11 @@ export {
 export {
   SourceRegistry,
   parseDuration,
+  formatGoTime,
   type CachePolicy,
   type ShellOptions,
   type FileOptions,
+  type TemplateOptions,
+  type TimeOptions,
   type LastError,
 } from "./sources";
