@@ -1,14 +1,7 @@
-import {
-  Palette,
-  PaletteResolver,
-  type ColorRgba,
-} from "rich-js";
+import type { Palette } from "rich-js";
+import { PaletteResolver, type ColorRgba } from "rich-js";
 import { getThemePalette, listThemePalettes } from "./palette-registry.js";
-import {
-  hexToAnsi,
-  hexTo256Ansi,
-  hexToBasicAnsi,
-} from "../utils/colors";
+import { hexToAnsi, hexTo256Ansi, hexToBasicAnsi } from "../utils/colors";
 import { RESET_CODE } from "../utils/constants";
 import { rotateHue } from "./oklch.js";
 import {
@@ -153,7 +146,10 @@ export function resolveThemeColors(config: CascadeConfig): PowerlineColors {
 
   // Merge custom theme colors (backward compat with colors.custom)
   if (config.customColors) {
-    mapping = mergeOverrides(mapping, customThemeToOverrides(config.customColors));
+    mapping = mergeOverrides(
+      mapping,
+      customThemeToOverrides(config.customColors),
+    );
   }
 
   // Merge user overrides (highest priority)
@@ -285,10 +281,8 @@ export function pickRandomTheme(): string {
   return themes[Math.floor(Math.random() * themes.length)]!;
 }
 
-export const DISPLAY_STYLES: readonly ("minimal" | "powerline" | "capsule")[] = [
-  "minimal",
-  "powerline",
-  "capsule",
-];
+export const DISPLAY_STYLES: ReadonlyArray<
+  "minimal" | "powerline" | "capsule"
+> = ["minimal", "powerline", "capsule"];
 
 export { resolvePaletteName };

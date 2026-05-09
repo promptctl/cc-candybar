@@ -53,10 +53,12 @@ export class WatcherRegistry {
   private readonly counters?: WatcherCounters;
   private closed = false;
 
-  constructor(opts: {
-    maxWatchers?: number;
-    counters?: WatcherCounters;
-  } = {}) {
+  constructor(
+    opts: {
+      maxWatchers?: number;
+      counters?: WatcherCounters;
+    } = {},
+  ) {
     this.maxWatchers = opts.maxWatchers ?? DEFAULT_MAX_WATCHERS;
     this.counters = opts.counters;
   }
@@ -152,9 +154,7 @@ export class WatcherRegistry {
 
     for (const target of slot.targets.dirs) {
       try {
-        const filterSet = target.filenames
-          ? new Set(target.filenames)
-          : null;
+        const filterSet = target.filenames ? new Set(target.filenames) : null;
         const onDirEvent = (_evt: string, filename: string | null) => {
           // [LAW:dataflow-not-control-flow] Filter is a value (Set) — same
           // code path every event; the Set's .has() decides whether to fire.

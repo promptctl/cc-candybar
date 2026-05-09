@@ -898,7 +898,10 @@ export class PowerlineRenderer {
     if (!panel?.items?.length) return output;
     // [LAW:dataflow-not-control-flow] Panel is visible when items exist;
     // toolbar-toggle collapses it (explicitly hidden). Default = visible.
-    const expanded = this._sessionState?.get(hookData.session_id ?? "", "toolbar-expanded");
+    const expanded = this._sessionState?.get(
+      hookData.session_id ?? "",
+      "toolbar-expanded",
+    );
     if (expanded) return output;
 
     const panelLine = this.renderPanelLine(hookData, ctx);
@@ -933,7 +936,7 @@ export class PowerlineRenderer {
       };
 
       const resolved = item.expr
-        ? resolveToolbarExpr(item.expr, tctx) ?? ""
+        ? (resolveToolbarExpr(item.expr, tctx) ?? "")
         : "";
       const visible = interpolateToolbarText(item.text, tctx);
       const scheme = item.scheme ?? "cc-candybar";
@@ -964,12 +967,12 @@ export class PowerlineRenderer {
     const resolved = colorMode === "auto" ? getColorSupport() : colorMode;
     const colorSupport =
       resolved === "ansi256"
-        ? "ansi256" as const
+        ? ("ansi256" as const)
         : resolved === "none"
-          ? "none" as const
+          ? ("none" as const)
           : resolved === "ansi"
-            ? "ansi" as const
-            : "truecolor" as const;
+            ? ("ansi" as const)
+            : ("truecolor" as const);
 
     const effectiveTheme =
       this.config.theme === "custom" && this.config.colors?.custom
@@ -983,9 +986,8 @@ export class PowerlineRenderer {
         | Record<string, SegmentOverride>
         | undefined,
       hueStep: this.config.hueStep,
-      customColors: this.config.theme === "custom"
-        ? this.config.colors?.custom
-        : undefined,
+      customColors:
+        this.config.theme === "custom" ? this.config.colors?.custom : undefined,
       colorSupport,
     });
   }

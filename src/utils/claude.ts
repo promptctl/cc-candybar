@@ -289,7 +289,11 @@ export async function parseJsonlFile(filePath: string): Promise<ParsedEntry[]> {
     const fileSizeBytes = stats.size;
 
     const cached = parseCache.get(filePath);
-    if (cached && cached.mtime === stats.mtimeMs && cached.size === fileSizeBytes) {
+    if (
+      cached &&
+      cached.mtime === stats.mtimeMs &&
+      cached.size === fileSizeBytes
+    ) {
       debug(`[parse-cache] hit ${filePath}`);
       // LRU: move to most-recently-used end via delete+reinsert
       parseCache.delete(filePath);
@@ -320,7 +324,11 @@ export async function parseJsonlFile(filePath: string): Promise<ParsedEntry[]> {
     if (parseCache.size >= PARSE_CACHE_MAX) {
       parseCache.delete(parseCache.keys().next().value!);
     }
-    parseCache.set(filePath, { mtime: stats.mtimeMs, size: fileSizeBytes, entries });
+    parseCache.set(filePath, {
+      mtime: stats.mtimeMs,
+      size: fileSizeBytes,
+      entries,
+    });
     return entries;
   } catch (error) {
     debug(`Failed to read file ${filePath}:`, error);

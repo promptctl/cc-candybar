@@ -7,7 +7,12 @@ export {
 export type { CascadeConfig } from "./cascade.js";
 
 // Re-export mapping types for external use
-export type { SegmentColors, PaletteMapping, StylePreset, SemanticVariant } from "./default-mapping.js";
+export type {
+  SegmentColors,
+  PaletteMapping,
+  StylePreset,
+  SemanticVariant,
+} from "./default-mapping.js";
 export {
   SEMANTIC_VARIANTS,
   STYLE_PRESETS,

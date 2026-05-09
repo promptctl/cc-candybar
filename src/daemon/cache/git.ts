@@ -31,7 +31,7 @@ interface GitCacheEntry {
 type GitOptions = NonNullable<Parameters<GitService["getGitInfo"]>[1]>;
 
 function optionsKey(options: GitOptions): string {
-  const keys = Object.keys(options).sort() as (keyof GitOptions)[];
+  const keys = Object.keys(options).sort() as Array<keyof GitOptions>;
   const normalized: Record<string, unknown> = {};
   for (const k of keys) normalized[k as string] = options[k];
   return JSON.stringify(normalized);
@@ -65,13 +65,15 @@ export class CachedGitService extends GitService {
   private readonly ownsWatchers: boolean;
   private sanityTimer: NodeJS.Timeout | null = null;
 
-  constructor(opts: {
-    ttlMs?: number;
-    maxEntries?: number;
-    inner?: GitService;
-    watchers?: WatcherRegistry;
-    sanityIntervalMs?: number;
-  } = {}) {
+  constructor(
+    opts: {
+      ttlMs?: number;
+      maxEntries?: number;
+      inner?: GitService;
+      watchers?: WatcherRegistry;
+      sanityIntervalMs?: number;
+    } = {},
+  ) {
     super();
     this.inner = opts.inner ?? new GitService();
     this.ttlMs = opts.ttlMs ?? DEFAULT_TTL_MS;

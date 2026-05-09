@@ -78,11 +78,7 @@ export type {
 
 // --- Constants ---
 
-export {
-  SYMBOLS,
-  TEXT_SYMBOLS,
-  RESET_CODE,
-} from "./utils/constants";
+export { SYMBOLS, TEXT_SYMBOLS, RESET_CODE } from "./utils/constants";
 
 // --- Pure utilities ---
 

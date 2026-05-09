@@ -205,7 +205,12 @@ export function runInstallUrlHandler(): void {
   process.stdout.write(`Building ${bundle}\n`);
   execFileSync(
     "/usr/bin/osacompile",
-    ["-o", bundle, "-e", appleScriptSource(process.execPath, stableScript, nodeModules)],
+    [
+      "-o",
+      bundle,
+      "-e",
+      appleScriptSource(process.execPath, stableScript, nodeModules),
+    ],
     { stdio: ["ignore", "inherit", "inherit"] },
   );
 
@@ -410,7 +415,8 @@ function updateClaudeSettings(
   // our package prefix, we (or a prior version of us) wrote it. Any other
   // value is a user customization we must not silently destroy.
   const managedPrefix = `pnpm dlx ${PACKAGE_NAME}@`;
-  const isOurs = typeof existing === "string" && existing.startsWith(managedPrefix);
+  const isOurs =
+    typeof existing === "string" && existing.startsWith(managedPrefix);
 
   if (existing && !isOurs && !force) {
     process.stderr.write(

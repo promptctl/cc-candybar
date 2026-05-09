@@ -36,11 +36,13 @@ export class CachedUsageProvider extends UsageProvider {
   private sweeps = 0;
   private sweepTimer: NodeJS.Timeout | null = null;
 
-  constructor(opts: {
-    maxEntries?: number;
-    staleAgeMs?: number;
-    sweepIntervalMs?: number;
-  } = {}) {
+  constructor(
+    opts: {
+      maxEntries?: number;
+      staleAgeMs?: number;
+      sweepIntervalMs?: number;
+    } = {},
+  ) {
     super();
     this.maxEntries = opts.maxEntries ?? DEFAULT_MAX_ENTRIES;
     this.staleAgeMs = opts.staleAgeMs ?? DEFAULT_STALE_AGE_MS;

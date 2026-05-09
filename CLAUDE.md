@@ -132,3 +132,118 @@ Tests live in `test/`. Useful starting points by area:
 - Click/install: `test/install.test.ts`, `test/install-clobber.test.ts`.
 
 Test timeout is 30 s (some tests touch real fs / timing); prefer faking time and fs over real waits when adding new tests.
+
+## @promptctl/go-template-js API reference
+
+Local source: `~/code/go-template-js`. Published as `@promptctl/go-template-js`.
+
+### Core API
+
+```ts
+import { createEngine, sprigStrings, sprigDefaults, … } from "@promptctl/go-template-js";
+
+const engine = createEngine<T>({
+  fromString: (s: string) => T,        // required — lift text literals to T
+  toString?: (v: T) => string,         // optional — flatten T to string for "stringifiable" slots
+  funcs?: FuncMap,                     // optional — registered template functions
+  random?: () => number,               // optional — pass to sprigRandom()
+  clock?: () => Date,                  // optional — pass to sprigDatetime()
+});
+
+const tpl: Template<T> = engine.parse(source);     // parse once
+const frags: T[] = tpl.evaluate(scope);            // evaluate many times
+// or:
+const fn = engine.compile(source);                 // returns (scope) => T[]
+```
+
+**`evaluate(scope)`** — the scope object becomes `.` (dot). `$` is the root scope. Field access `.foo.bar` walks JS object properties, `Map.get()`. Missing fields throw `MissingFieldError`.
+
+**Parse once, evaluate many** — `engine.parse()` is expensive; `evaluate()` is cheap.
+
+**`Engine<T>` methods:** `parse(source) → Template<T>`, `compile(source) → (scope) → T[]`, `evaluate(template, scope) → T[]`
+
+### FuncMap composition
+
+```ts
+const funcs: FuncMap = {
+  ...sprigDefaults(),
+  ...sprigStrings(),
+  myFunc: {
+    fn: (s: string) => …,
+    argTypes: ["string"],        // one ArgType per positional param
+    returnType: "T",             // optional
+  },
+};
+```
+
+Go built-ins (`and`, `or`, `not`, `eq`, `ne`, `lt`, `le`, `gt`, `ge`, `len`, `index`, `slice`, `print`, `println`, `printf`, `call`) are always registered; consumer entries override on collision.
+
+### ArgType quick reference
+
+| ArgType | Accepts |
+|---|---|
+| `"string"` | JS string only — refuses typed T |
+| `"number"` | number or bigint |
+| `"bool"` | boolean |
+| `"T"` | opaque caller-defined T (anything non-string) |
+| `"ordered"` | string\|number\|bigint\|boolean; all slots must share a kind |
+| `"comparable"` | JSON-shaped values; deep-equal across multiple slots |
+| `"liftable"` | T or string (lifted to T via fromString before func body) |
+| `"stringifiable"` | string or anything engine.toString can flatten |
+| `"truthy"` | anything (truthiness context) |
+| `"reflective"` | anything (type-inspection context) |
+| `"value"` | anything (genuinely heterogeneous) |
+| `"serializable"` | anything JSON.stringify-encodable |
+| `"list"` | Array only (not string) |
+| `"dict"` | plain object only |
+| `"sized"` | string\|array\|Map\|Set\|plain object |
+| `"collection"` | string\|array\|Map\|plain object (for `index`) |
+| `"index-key"` | string\|number\|bigint |
+| `"sliceable"` | string\|array |
+| `"callable"` | function |
+
+Variadic trailing slot repeats by default. `argTypePattern: "alternating"` cycles through argTypes (used by `dict` for key/value alternation).
+
+### Sprig subset
+
+| Factory | Key functions |
+|---|---|
+| `sprigDefaults()` | `default`, `empty`, `coalesce`, `ternary`, `fromJson`, `toJson` |
+| `sprigStrings()` | `trim`, `trimPrefix`, `trimSuffix`, `upper`, `lower`, `title`, `repeat`, `substr`, `trunc`, `contains`, `hasPrefix`, `hasSuffix`, `replace`, `split`, `splitList`, `join`, `cat`, `indent`, `nospace`, `snakecase`, `camelcase`, `kebabcase`, `abbrev`, `plural` |
+| `sprigMath()` | `add`, `sub`, `mul`, `div`, `mod`, `min`, `max`, `floor`, `ceil`, `round`, `seq`, `until` |
+| `sprigLists()` | `list`, `first`, `last`, `rest`, `reverse`, `uniq`, `without`, `has`, `compact`, `concat`, `prepend`, `append`, `sortAlpha`, `all`, `any` |
+| `sprigDicts()` | `dict`, `get`, `set`, `unset`, `keys`, `values`, `pick`, `omit`, `hasKey`, `merge` |
+| `sprigRegex()` | `regexMatch`, `regexFind`, `regexFindAll`, `regexReplaceAll`, `regexSplit` (ECMAScript, not RE2) |
+| `sprigTypes()` | `kindOf`, `kindIs`, `typeOf`, `typeIs`, `deepEqual`, `deepCopy` |
+| `sprigConversions()` | `atoi`, `int`, `int64`, `float64`, `toString`, `toStrings` |
+| `sprigHash()` | `b64enc`, `b64dec`, `sha256sum`, `uuidv4` |
+| `sprigSemver()` | `semver`, `semverCompare` |
+| `sprigFlow()` | `fail` (throws FailError) |
+| `sprigRandom(rng?)` | `randInt`, `randAlpha`, `randAlphaNum`, `shuffle` |
+| `sprigDatetime(clock?)` | `now`, `date`, `dateInZone`, `dateModify`, `ago`, `unixEpoch` (Go reference-time format) |
+
+### Error types
+
+All extend `TemplateError { kind: ErrorKind; pos: Pos; source?: string }`:
+
+- `ParseError` — `{ expected?, found? }` — bad syntax
+- `FuncNotFoundError` — `{ funcName, suggestions[] }` — unknown function at eval time
+- `TypeMismatchError` — `{ funcName, argIndex (1-based), expected, receivedSummary }`
+- `MissingFieldError` — `{ path: string[] }` — dotted field not found on scope
+- `FailError` — thrown by `fail` builtin
+
+`ErrorKind` discriminator: `"ParseError" | "EvalError" | "FuncNotFoundError" | "TypeMismatchError" | "MissingFieldError" | "FailError"`
+
+### Variable scoping in templates
+
+- `:=` declares a new variable in current frame: `{{ $x := .foo }}`
+- `=` reassigns in the declaring frame: `{{ $x = newValue }}`
+- `range`, `with`, `if/else` each push a new scope frame
+
+### cc-candybar integration notes
+
+- `T = StyledFragment[]` (from rich-js) — `fromString` lifts text literals; `toString` flattens fragments back to string for sprig string ops.
+- Style functions (`bold`, `red`, `link`) are registered by rich-js's binding module, **not** here.
+- Variable resolver: dotted access `.session.id` → `store.read('session.id')` (pass a scope object built from `VariableStore.read`).
+- Cast bindings (`int`, `string`, `bool` in templates) should call `toNumber`, `toString`, `toBool` from `src/var-system/types.ts`.
+- Template module lives at `src/template-engine/` (new, chunk 2 work).
