@@ -50,12 +50,6 @@ function mergeThenConvert(joiners: RichText[], linkFragment: RichText): StripCel
   // Build a combined text: concatenate plain texts from joiners + link fragment.
   // Spans from the link fragment are offset by the joiner text length.
   const joinerText = joiners.map((j) => j.plain).join("");
-  const combined = new RichText(linkFragment.plain, {
-    style: linkFragment.style,
-  });
-  // Re-attach spans from the link fragment at the correct offset. We rebuild
-  // the combined RichText manually so the cell style stays the link fragment's
-  // dominant style (not diluted by joiner styles).
   const offset = joinerText.length;
   const allParts = buildPartsFromPrependedJoiners(
     joinerText,
