@@ -16,7 +16,7 @@ importers:
         version: 6.15.1
       rich-js:
         specifier: file:../rich-js
-        version: file:../rich-js
+        version: '@promptctl/rich-js@file:../rich-js'
     devDependencies:
       '@eslint/js':
         specifier: ^9.33.0
@@ -700,6 +700,10 @@ packages:
 
   '@promptctl/go-template-js@file:../go-template-js':
     resolution: {directory: ../go-template-js, type: directory}
+    engines: {node: '>=20.19.0'}
+
+  '@promptctl/rich-js@file:../rich-js':
+    resolution: {directory: ../rich-js, type: directory}
     engines: {node: '>=20'}
 
   '@quansync/fs@1.0.0':
@@ -2659,10 +2663,6 @@ packages:
   resolve-pkg-maps@1.0.0:
     resolution: {integrity: sha512-seS2Tj26TBVOC2NIc2rOe2y2ZO7efxITtLZcGSOnHHNOQ7CkiUBfw0Iw2ck6xkIhPwLhKNLS8BO+hEpngQlqzw==}
 
-  rich-js@file:../rich-js:
-    resolution: {directory: ../rich-js, type: directory}
-    engines: {node: '>=20'}
-
   rolldown-plugin-dts@0.23.2:
     resolution: {integrity: sha512-PbSqLawLgZBGcOGT3yqWBGn4cX+wh2nt5FuBGdcMHyOhoukmjbhYAl8NT9sE4U38Cm9tqLOIQeOrvzeayM0DLQ==}
     engines: {node: '>=20.19.0'}
@@ -3877,6 +3877,13 @@ snapshots:
   '@promptctl/go-template-js@file:../go-template-js':
     dependencies:
       '@noble/hashes': 2.2.0
+
+  '@promptctl/rich-js@file:../rich-js':
+    dependencies:
+      '@promptctl/go-template-js': 0.1.1
+      mobx: 6.15.1
+      string-width: 8.2.1
+      strip-ansi: 7.2.0
 
   '@quansync/fs@1.0.0':
     dependencies:
@@ -5897,13 +5904,6 @@ snapshots:
   resolve-from@5.0.0: {}
 
   resolve-pkg-maps@1.0.0: {}
-
-  rich-js@file:../rich-js:
-    dependencies:
-      '@promptctl/go-template-js': 0.1.1
-      mobx: 6.15.1
-      string-width: 8.2.1
-      strip-ansi: 7.2.0
 
   rolldown-plugin-dts@0.23.2(rolldown@1.0.0-rc.17)(typescript@5.9.3):
     dependencies:
