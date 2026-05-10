@@ -5,19 +5,13 @@ import { daemonDir } from "./paths";
 import { dlog } from "./log";
 
 // [LAW:single-enforcer] One module owns "when does the daemon plan to die".
-// Three triggers (RSS, age, idle-from-server.ts) all funnel into the same
-// shutdown(0) path so cleanup is uniform.
-
-// 512 MB: V8 pre-allocates heap pages speculatively (heapTotal ≫ heapUsed) and
-// GC pressure is RSS-invisible until the heap fills. With 9+ active sessions the
-// steady-state RSS is ~240 MB, so 200 MB triggered constant restarts. 512 MB
-// gives 2× headroom. If you need to tune this at runtime, set
-// CC_CANDYBAR_RSS_LIMIT_MB (in MiB).
+// Only the RSS trigger remains — idle and age limits were removed because they
+// interrupted active sessions. The RSS limit is a true anomaly backstop; normal
+// operation should never approach it now that transcript parsing is pruned.
 const DEFAULT_RSS_LIMIT =
   (parseInt(process.env["CC_CANDYBAR_RSS_LIMIT_MB"] ?? "", 10) || 512) *
   1024 *
   1024;
-const DEFAULT_AGE_LIMIT = 24 * 60 * 60 * 1000;
 const DEFAULT_CHECK_INTERVAL = 60 * 1000;
 const HEAP_SNAPSHOT_KEEP = 3;
 
@@ -30,20 +24,17 @@ export interface LimitsDeps {
   shutdown: (code: number) => void;
   startedAtMs: number;
   rssLimitBytes?: number;
-  ageLimitMs?: number;
   snapshotsKeep?: number;
 }
 
 export interface LimitsHandle {
   checkRss(): boolean;
-  checkAge(): boolean;
   describeNextRestart(): string | null;
   arm(intervalMs?: number): { disarm(): void };
 }
 
 export function makeLimits(deps: LimitsDeps): LimitsHandle {
   const rssLimit = deps.rssLimitBytes ?? DEFAULT_RSS_LIMIT;
-  const ageLimit = deps.ageLimitMs ?? DEFAULT_AGE_LIMIT;
   const keep = deps.snapshotsKeep ?? HEAP_SNAPSHOT_KEEP;
   let triggered = false;
 
@@ -71,26 +62,10 @@ export function makeLimits(deps: LimitsDeps): LimitsHandle {
     return true;
   }
 
-  function checkAge(): boolean {
-    if (triggered) return true;
-    const age = deps.now() - deps.startedAtMs;
-    if (age <= ageLimit) return false;
-    triggered = true;
-    dlog("info", `age ${age}ms > limit ${ageLimit}ms; shutting down`);
-    deps.shutdown(0);
-    return true;
-  }
-
   function describeNextRestart(): string | null {
     const rss = deps.rssBytes();
-    const age = deps.now() - deps.startedAtMs;
-    // Surface only when within 25% of either limit — otherwise the field is
-    // noise for healthy daemons.
     if (rss > rssLimit * 0.75) {
       return `rss ${rss} approaching limit ${rssLimit}`;
-    }
-    if (age > ageLimit * 0.75) {
-      return `age ${age}ms approaching limit ${ageLimit}ms`;
     }
     return null;
   }
@@ -99,8 +74,7 @@ export function makeLimits(deps: LimitsDeps): LimitsHandle {
     disarm(): void;
   } {
     const timer = setInterval(() => {
-      if (checkRss()) return; // already triggered shutdown
-      checkAge();
+      checkRss();
     }, intervalMs);
     timer.unref();
     return {
@@ -108,7 +82,7 @@ export function makeLimits(deps: LimitsDeps): LimitsHandle {
     };
   }
 
-  return { checkRss, checkAge, describeNextRestart, arm };
+  return { checkRss, describeNextRestart, arm };
 }
 
 function rotateSnapshots(

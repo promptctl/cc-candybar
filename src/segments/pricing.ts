@@ -402,10 +402,9 @@ export class PricingService {
   }
 
   static async calculateCostForEntry(
-    entry: Record<string, unknown>,
+    entry: import("../utils/claude.js").PrunedRaw,
   ): Promise<number> {
-    const message = entry.message as Record<string, unknown> | undefined;
-    const usage = message?.usage as Record<string, number> | undefined;
+    const usage = entry.message?.usage;
     if (!usage) {
       return 0;
     }
