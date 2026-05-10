@@ -7,6 +7,7 @@ export default {
   moduleNameMapper: {
     "^rich-js$": "<rootDir>/node_modules/rich-js/dist/index.js",
     "^rich-js/themes/data$": "<rootDir>/node_modules/rich-js/dist/themes/data/index.js",
+    "^rich-js/template-bindings$": "<rootDir>/node_modules/rich-js/dist/template-bindings/index.js",
     "^@promptctl/go-template-js$": "<rootDir>/node_modules/@promptctl/go-template-js/dist/index.js",
     "^(\\.{1,2}/.*)\\.js$": "$1",
   },
