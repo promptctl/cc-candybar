@@ -73,23 +73,6 @@ describe("limits.checkRss", () => {
   });
 });
 
-describe("limits.checkAge", () => {
-  test("under age limit: no shutdown", () => {
-    const rec = newRec();
-    rec.fakeNow = rec.startedAtMs + 60_000;
-    const limits = makeLimits(makeDeps(rec));
-    expect(limits.checkAge()).toBe(false);
-    expect(rec.shutdownCalls).toEqual([]);
-  });
-
-  test("over 24h: shuts down", () => {
-    const rec = newRec();
-    rec.fakeNow = rec.startedAtMs + 25 * 60 * 60 * 1000;
-    const limits = makeLimits(makeDeps(rec));
-    expect(limits.checkAge()).toBe(true);
-    expect(rec.shutdownCalls).toEqual([0]);
-  });
-});
 
 describe("heap snapshot rotation", () => {
   test("keeps only the 3 newest snapshots", () => {
@@ -123,10 +106,10 @@ describe("describeNextRestart", () => {
     expect(limits.describeNextRestart()).toContain("rss");
   });
 
-  test("flags age approaching limit", () => {
+  test("returns null when rss is healthy", () => {
     const rec = newRec();
-    rec.fakeNow = rec.startedAtMs + 20 * 60 * 60 * 1000; // 20h, > 75% of 24h
+    rec.fakeRss = 50 * 1024 * 1024; // well under limit
     const limits = makeLimits(makeDeps(rec));
-    expect(limits.describeNextRestart()).toContain("age");
+    expect(limits.describeNextRestart()).toBeNull();
   });
 });

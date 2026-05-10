@@ -228,33 +228,42 @@ export async function getFileModificationDate(
   }
 }
 
+type UsageCounts = {
+  input_tokens?: number;
+  output_tokens?: number;
+  cache_creation_input_tokens?: number;
+  cache_read_input_tokens?: number;
+};
+
+// [LAW:one-source-of-truth] The only fields ever read from raw are
+// model, message.{id,model,usage}, and requestId. Storing the full
+// parsed JSON (including content arrays with full message text) causes
+// hundreds of MB of V8 heap churn per transcript re-parse. raw is
+// pruned to this shape at parse time so the GC pressure is bounded.
+export type PrunedRaw = {
+  model?: string;
+  message?: { id?: string; model?: string; usage?: UsageCounts };
+  requestId?: string;
+};
+
 export interface ParsedEntry {
   timestamp: Date;
   message?: {
     id?: string;
-    usage?: {
-      input_tokens?: number;
-      output_tokens?: number;
-      cache_creation_input_tokens?: number;
-      cache_read_input_tokens?: number;
-    };
+    usage?: UsageCounts;
     model?: string;
   };
   costUSD?: number;
   isSidechain?: boolean;
-  raw: Record<string, unknown>;
+  raw: PrunedRaw;
 }
 
 export function createUniqueHash(entry: ParsedEntry): string | null {
-  const messageId =
-    entry.message?.id ||
-    (typeof entry.raw.message === "object" &&
-    entry.raw.message !== null &&
-    "id" in entry.raw.message
-      ? (entry.raw.message.id as string)
-      : undefined);
-  const requestId =
-    "requestId" in entry.raw ? (entry.raw.requestId as string) : undefined;
+  // Both message.id paths are now equivalent (makeEntry syncs them), but
+  // raw.message.id is kept as the canonical source to preserve call-site
+  // compatibility with callers that pass a PrunedRaw directly.
+  const messageId = entry.message?.id ?? entry.raw.message?.id;
+  const requestId = entry.raw.requestId;
 
   if (!messageId || !requestId) {
     return null;
@@ -336,6 +345,41 @@ export async function parseJsonlFile(filePath: string): Promise<ParsedEntry[]> {
   }
 }
 
+// Build a ParsedEntry from a full parsed JSONL line, retaining only the
+// fields actually used downstream. The full parsed object (which includes
+// message.content arrays with complete LLM response text) is discarded so
+// the GC can reclaim that memory promptly instead of pinning it via raw.
+// [LAW:one-source-of-truth] All callers go through here; no second parse path.
+function makeEntry(parsed: Record<string, unknown>): ParsedEntry | null {
+  if (!parsed.timestamp) return null;
+  const msg = parsed.message as Record<string, unknown> | undefined;
+  const usage = msg?.usage as UsageCounts | undefined;
+  return {
+    timestamp: new Date(parsed.timestamp as string),
+    message: msg
+      ? {
+          id: typeof msg.id === "string" ? msg.id : undefined,
+          model: typeof msg.model === "string" ? msg.model : undefined,
+          usage,
+        }
+      : undefined,
+    costUSD: typeof parsed.costUSD === "number" ? parsed.costUSD : undefined,
+    isSidechain: parsed.isSidechain === true,
+    raw: {
+      model: typeof parsed.model === "string" ? parsed.model : undefined,
+      message: msg
+        ? {
+            id: typeof msg.id === "string" ? msg.id : undefined,
+            model: typeof msg.model === "string" ? msg.model : undefined,
+            usage,
+          }
+        : undefined,
+      requestId:
+        typeof parsed.requestId === "string" ? parsed.requestId : undefined,
+    },
+  };
+}
+
 async function parseJsonlFileInMemory(
   filePath: string,
 ): Promise<ParsedEntry[]> {
@@ -348,18 +392,8 @@ async function parseJsonlFileInMemory(
 
   for (const line of lines) {
     try {
-      const raw = JSON.parse(line);
-      if (!raw.timestamp) continue;
-
-      const entry: ParsedEntry = {
-        timestamp: new Date(raw.timestamp),
-        message: raw.message,
-        costUSD: typeof raw.costUSD === "number" ? raw.costUSD : undefined,
-        isSidechain: raw.isSidechain === true,
-        raw,
-      };
-
-      entries.push(entry);
+      const entry = makeEntry(JSON.parse(line));
+      if (entry) entries.push(entry);
     } catch (parseError) {
       debug(`Failed to parse JSONL line: ${parseError}`);
       continue;
@@ -385,18 +419,8 @@ async function parseJsonlFileStreaming(
       if (!trimmedLine) return;
 
       try {
-        const raw = JSON.parse(trimmedLine);
-        if (!raw.timestamp) return;
-
-        const entry: ParsedEntry = {
-          timestamp: new Date(raw.timestamp),
-          message: raw.message,
-          costUSD: typeof raw.costUSD === "number" ? raw.costUSD : undefined,
-          isSidechain: raw.isSidechain === true,
-          raw,
-        };
-
-        entries.push(entry);
+        const entry = makeEntry(JSON.parse(trimmedLine));
+        if (entry) entries.push(entry);
       } catch (parseError) {
         debug(`Failed to parse JSONL line: ${parseError}`);
       }
