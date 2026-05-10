@@ -33,14 +33,13 @@ const renderCache = new RenderCache({
   watchers: watcherRegistry,
 });
 
-const IDLE_SHUTDOWN_MS = 30 * 60 * 1000;
 const REQUEST_TIMEOUT_MS = 200;
 const BIN_CHECK_INTERVAL_MS = 60 * 1000;
 
 // Daemon entry point. Acquires a single-instance mutex, listens on the Unix
-// socket, dispatches one request per connection, and shuts itself down when
-// idle. Any uncaught error in the process exits non-zero — the next client
-// will respawn a clean instance via spawnDaemonDetached().
+// socket, dispatches one request per connection. Any uncaught error in the
+// process exits non-zero — the next client will respawn a clean instance via
+// spawnDaemonDetached().
 export function runDaemon(): void {
   fs.mkdirSync(daemonDir(), { recursive: true });
 
@@ -92,7 +91,6 @@ export function runDaemon(): void {
       "info",
       `daemon up: pid=${process.pid} v=${PROTOCOL_VERSION} sock=${socketPath()}`,
     );
-    armIdleTimer();
     armBinaryWatch();
     armLimits();
   });
@@ -226,22 +224,7 @@ function releasePidfile(): void {
   pidfileHeld = false;
 }
 
-// --- idle shutdown ---
-
-let idleTimer: NodeJS.Timeout | null = null;
 let inFlight = 0;
-
-function armIdleTimer(): void {
-  if (idleTimer) clearTimeout(idleTimer);
-  idleTimer = setTimeout(() => {
-    if (inFlight === 0) {
-      dlog("info", `idle ${IDLE_SHUTDOWN_MS}ms — shutting down`);
-      shutdown(0);
-    } else {
-      armIdleTimer();
-    }
-  }, IDLE_SHUTDOWN_MS);
-}
 
 // --- shutdown ---
 
@@ -249,10 +232,6 @@ let shuttingDown = false;
 function shutdown(code: number): void {
   if (shuttingDown) return;
   shuttingDown = true;
-  if (idleTimer) {
-    clearTimeout(idleTimer);
-    idleTimer = null;
-  }
   try {
     fs.unlinkSync(socketPath());
   } catch {}
@@ -334,7 +313,6 @@ function handleConnection(sock: net.Socket): void {
     clearTimeout(timer);
     inFlight = Math.max(0, inFlight - 1);
     stats.inFlight = inFlight;
-    armIdleTimer();
   });
 }
 
