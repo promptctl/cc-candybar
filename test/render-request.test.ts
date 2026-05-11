@@ -47,6 +47,7 @@ const BASE_HOOK: ClaudeHookData = {
   workspace: {
     current_dir: "/Users/dev/projects/myapp",
     project_dir: "/Users/dev/projects/myapp",
+    added_dirs: [],
   },
 };
 
@@ -121,7 +122,7 @@ describe("directory segment", () => {
     const hook: ClaudeHookData = {
       ...BASE_HOOK,
       cwd: "/home/user/repos/dotfiles",
-      workspace: { current_dir: "/home/user/repos/dotfiles", project_dir: "/home/user/repos/dotfiles" },
+      workspace: { current_dir: "/home/user/repos/dotfiles", project_dir: "/home/user/repos/dotfiles", added_dirs: [] },
     };
     expect(plain(await render(hook, ["--layout=directory"]))).toContain("dotfiles");
   });

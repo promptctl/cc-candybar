@@ -21,6 +21,7 @@ describe("Metrics Provider", () => {
     workspace: {
       current_dir: "/test/workspace",
       project_dir: "/test/project",
+      added_dirs: [],
     },
     version: "1.0.0",
     cost: {

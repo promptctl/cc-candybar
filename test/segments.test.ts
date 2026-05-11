@@ -203,6 +203,7 @@ describe("Segment Time Logic", () => {
         workspace: {
           current_dir: "/home/user/repos/dotfiles",
           project_dir: "/home/user/repos/dotfiles",
+          added_dirs: [],
         },
       };
 
@@ -225,6 +226,7 @@ describe("Segment Time Logic", () => {
         workspace: {
           current_dir: "/mnt/c/Users/andyb/repos/dotfiles",
           project_dir: "/mnt/c/Users/andyb/repos/dotfiles",
+          added_dirs: [],
         },
       };
 
@@ -247,6 +249,7 @@ describe("Segment Time Logic", () => {
         workspace: {
           current_dir: "/home/user/repos/dotfiles/src/components",
           project_dir: "/home/user/repos/dotfiles",
+          added_dirs: [],
         },
       };
 
@@ -272,7 +275,7 @@ describe("Segment Time Logic", () => {
         transcript_path: "/tmp/test.json",
         cwd: "/test",
         model: { id: "claude-3-5-sonnet", display_name: "Claude" },
-        workspace: { current_dir: "/test", project_dir: "/test" },
+        workspace: { current_dir: "/test", project_dir: "/test", added_dirs: [] },
         version: "1.0.80",
       };
 
@@ -395,7 +398,7 @@ describe("Segment Time Logic", () => {
         transcript_path: "/tmp/test.json",
         cwd: "/test",
         model: { id: "claude-sonnet-4-6", display_name: "Sonnet" },
-        workspace: { current_dir: "/test", project_dir: "/test" },
+        workspace: { current_dir: "/test", project_dir: "/test", added_dirs: [] },
         rate_limits: {
           five_hour: {
             used_percentage: 42.5,
@@ -420,7 +423,7 @@ describe("Segment Time Logic", () => {
         transcript_path: "/tmp/test.json",
         cwd: "/test",
         model: { id: "claude-sonnet-4-6", display_name: "Sonnet" },
-        workspace: { current_dir: "/test", project_dir: "/test" },
+        workspace: { current_dir: "/test", project_dir: "/test", added_dirs: [] },
       };
 
       const blockProvider = new BlockProvider();
@@ -515,7 +518,7 @@ describe("Segment Time Logic", () => {
         transcript_path: "/tmp/test.json",
         cwd: "/test",
         model: { id: "claude-sonnet-4-6", display_name: "Sonnet" },
-        workspace: { current_dir: "/test", project_dir: "/test" },
+        workspace: { current_dir: "/test", project_dir: "/test", added_dirs: [] },
         rate_limits: {
           seven_day: {
             used_percentage: 41.2,
@@ -543,7 +546,7 @@ describe("Segment Time Logic", () => {
         transcript_path: "/tmp/test.json",
         cwd: "/test",
         model: { id: "claude-sonnet-4-6", display_name: "Sonnet" },
-        workspace: { current_dir: "/test", project_dir: "/test" },
+        workspace: { current_dir: "/test", project_dir: "/test", added_dirs: [] },
       };
 
       const result = renderer.renderWeekly(hookData, colors);

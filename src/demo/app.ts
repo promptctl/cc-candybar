@@ -22,6 +22,7 @@ const MOCK_HOOK_SAMPLES: Array<{ name: string; data: ClaudeHookData }> = [
       workspace: {
         current_dir: "/home/user/projects/my-app",
         project_dir: "/home/user/projects/my-app",
+        added_dirs: [],
       },
       version: "1.0.33",
       cost: {
@@ -57,6 +58,7 @@ const MOCK_HOOK_SAMPLES: Array<{ name: string; data: ClaudeHookData }> = [
       workspace: {
         current_dir: "/home/user/projects/big-monorepo",
         project_dir: "/home/user/projects/big-monorepo",
+        added_dirs: [],
       },
       cost: {
         total_cost_usd: 45.67,
@@ -91,6 +93,7 @@ const MOCK_HOOK_SAMPLES: Array<{ name: string; data: ClaudeHookData }> = [
       workspace: {
         current_dir: "/home/user/projects/legacy-refactor",
         project_dir: "/home/user/projects/legacy-refactor",
+        added_dirs: [],
       },
       version: "1.0.33",
       cost: {
