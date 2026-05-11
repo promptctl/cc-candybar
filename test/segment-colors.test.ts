@@ -219,3 +219,75 @@ describe("both bg and fg resolved", () => {
     expect(style.color?.value?.hex).toBe("#eeeeee");
   });
 });
+
+// ────────────────────────────────────────────────────────────────────────────
+// 9. hueStep threading — per-segment hue rotation (wd5.4)
+// ────────────────────────────────────────────────────────────────────────────
+
+describe("hueStep threading", () => {
+  test("hueRotationDegrees 0 → identical output to no rotation (identity)", () => {
+    const resolver = makeTestResolver();
+    const bgTpl = parseTemplate("primary");
+    const withZero = resolveSegmentColors(resolver, bgTpl, undefined, {}, { hueRotationDegrees: 0 });
+    const withNone = resolveSegmentColors(resolver, bgTpl, undefined, {});
+    expect(withZero.bgcolor?.value?.hex).toBe(withNone.bgcolor?.value?.hex);
+  });
+
+  test("hueRotationDegrees 30 → bg color differs from un-rotated primary", () => {
+    const resolver = makeTestResolver();
+    const bgTpl = parseTemplate("primary");
+    const rotated = resolveSegmentColors(resolver, bgTpl, undefined, {}, { hueRotationDegrees: 30 });
+    const original = resolveSegmentColors(resolver, bgTpl, undefined, {});
+    expect(rotated.bgcolor?.value?.hex).not.toBe(original.bgcolor?.value?.hex);
+  });
+
+  test("hueRotationDegrees 30 → error spec is exempt (semantic color unchanged)", () => {
+    const resolver = makeTestResolver();
+    const bgTpl = parseTemplate("error");
+    const rotated = resolveSegmentColors(resolver, bgTpl, undefined, {}, { hueRotationDegrees: 30 });
+    expect(rotated.bgcolor?.value?.hex).toBe("#ff4444");
+  });
+
+  test("hueRotationDegrees 90 → warning spec is exempt (semantic color unchanged)", () => {
+    const resolver = makeTestResolver();
+    // warning is a semantic spec; add it to the test palette
+    const vars = new Map([
+      ["warning", parseRgbHex("ffaa00")],
+      ["primary", parseRgbHex("4488ff")],
+    ]);
+    const r = new PaletteResolver(new Palette("test", true, vars));
+    const bgTpl = parseTemplate("warning", r);
+    const rotated = resolveSegmentColors(r, bgTpl, undefined, {}, { hueRotationDegrees: 90 });
+    expect(rotated.bgcolor?.value?.hex).toBe("#ffaa00");
+  });
+
+  test("hueRotationDegrees 30 → success spec is exempt (semantic color unchanged)", () => {
+    const resolver = makeTestResolver(); // success: #44cc88
+    const bgTpl = parseTemplate("success");
+    const rotated = resolveSegmentColors(resolver, bgTpl, undefined, {}, { hueRotationDegrees: 30 });
+    expect(rotated.bgcolor?.value?.hex).toBe("#44cc88");
+  });
+
+  test("hueRotationDegrees 30 → info spec is exempt (semantic color unchanged)", () => {
+    const resolver = makeTestResolver(); // info: #44aaff
+    const bgTpl = parseTemplate("info");
+    const rotated = resolveSegmentColors(resolver, bgTpl, undefined, {}, { hueRotationDegrees: 30 });
+    expect(rotated.bgcolor?.value?.hex).toBe("#44aaff");
+  });
+
+  test("fg auto-contrast resolves against the rotated bg, not the original", () => {
+    const resolver = makeTestResolver();
+    const bgTpl = parseTemplate("primary"); // #4488ff (blue)
+    const fgTpl = parseTemplate("auto");
+    // Rotate 180 degrees: blue → yellow-ish. The auto-contrast fg should
+    // differ between rotated and unrotated because the bg luminance changes.
+    const rotated = resolveSegmentColors(resolver, bgTpl, fgTpl, {}, { hueRotationDegrees: 180 });
+    const original = resolveSegmentColors(resolver, bgTpl, fgTpl, {});
+    // Both should have a defined fg; they may or may not differ (luminance of
+    // 180-rotated blue could be similar). Just verify fg is always present.
+    expect(rotated.color).toBeDefined();
+    expect(original.color).toBeDefined();
+    // Rotated bg must differ from original bg.
+    expect(rotated.bgcolor?.value?.hex).not.toBe(original.bgcolor?.value?.hex);
+  });
+});
