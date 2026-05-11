@@ -20,11 +20,13 @@ export interface ClaudeHookData {
   workspace: {
     current_dir: string;
     project_dir: string;
-    added_dirs?: string[];
+    // "Empty array if none have been added" — always present, not absent
+    added_dirs: string[];
+    // Absent when not inside a linked git worktree
     git_worktree?: string;
   };
 
-  // Optional per Anthropic schema
+  // Optional per Anthropic schema (listed under "Fields that may be absent")
   session_name?: string;
   version?: string;
   output_style?: {
@@ -41,9 +43,11 @@ export interface ClaudeHookData {
     total_input_tokens: number;
     total_output_tokens: number;
     context_window_size: number;
-    used_percentage?: number | null;
-    remaining_percentage?: number | null;
-    current_usage?: {
+    // Always present within context_window, but value may be null (schema: "Fields that may be null")
+    used_percentage: number | null;
+    remaining_percentage: number | null;
+    // Null before first API call and after /compact — present, not absent
+    current_usage: {
       input_tokens: number;
       output_tokens: number;
       cache_creation_input_tokens: number;

@@ -10,7 +10,7 @@ const VALID_HOOK = {
   transcript_path: "/tmp/abc123.jsonl",
   cwd: "/home/user/project",
   model: { id: "claude-sonnet-4-6", display_name: "Claude Sonnet" },
-  workspace: { current_dir: "/home/user/project", project_dir: "/home/user/project" },
+  workspace: { current_dir: "/home/user/project", project_dir: "/home/user/project", added_dirs: [] },
 };
 
 describe("validateHookData — required fields", () => {
