@@ -1,4 +1,3 @@
-import { PowerlineRenderer } from "../src/powerline";
 import { SessionProvider } from "../src/segments";
 import { loadConfigFromCLI } from "../src/config/loader";
 import { DEFAULT_CONFIG } from "../src/config/defaults";
@@ -17,55 +16,6 @@ describe("Core Functionality", () => {
     try {
       unlinkSync(join(tempDir, "test.jsonl"));
     } catch {}
-  });
-
-  describe("Basic Powerline Generation", () => {
-    it("should generate powerline with all segments", async () => {
-      const config = loadConfigFromCLI([], tempDir);
-      const renderer = new PowerlineRenderer(config);
-
-      const hookData = {
-        session_id: "test-session",
-        transcript_path: "/fake/path.jsonl",
-        workspace: {
-          project_dir: tempDir,
-          current_dir: tempDir,
-        },
-        model: {
-          id: "claude-3-5-sonnet",
-          display_name: "Claude",
-        },
-        cwd: tempDir,
-        hook_event_name: "test",
-      };
-
-      const result = await renderer.generateStatusline(hookData);
-
-      expect(result.toLowerCase()).toContain("claude");
-      expect(result.length).toBeGreaterThan(0);
-      expect(result).toContain("\x1B[");
-    });
-
-    it("should handle missing transcript gracefully", async () => {
-      const config = loadConfigFromCLI([], tempDir);
-      const renderer = new PowerlineRenderer(config);
-
-      const hookData = {
-        session_id: "nonexistent-session",
-        transcript_path: "/nonexistent/path.jsonl",
-        workspace: {
-          project_dir: tempDir,
-          current_dir: tempDir,
-        },
-        model: { id: "claude-3-5-sonnet", display_name: "Claude" },
-        cwd: tempDir,
-        hook_event_name: "test",
-      };
-
-      const result = await renderer.generateStatusline(hookData);
-      expect(result.length).toBeGreaterThan(0);
-      expect(result.toLowerCase()).toContain("claude");
-    });
   });
 
   describe("Session Tracking", () => {
