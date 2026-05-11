@@ -6,7 +6,10 @@ import { createInterface } from "node:readline";
 import { debug } from "./logger";
 
 export interface ClaudeHookData {
+  // cc-candybar internal — not part of Anthropic's schema
   hook_event_name: string;
+
+  // Always present per Anthropic schema
   session_id: string;
   transcript_path: string;
   cwd: string;
@@ -17,7 +20,12 @@ export interface ClaudeHookData {
   workspace: {
     current_dir: string;
     project_dir: string;
+    added_dirs?: string[];
+    git_worktree?: string;
   };
+
+  // Optional per Anthropic schema
+  session_name?: string;
   version?: string;
   output_style?: {
     name: string;
@@ -40,9 +48,15 @@ export interface ClaudeHookData {
       output_tokens: number;
       cache_creation_input_tokens: number;
       cache_read_input_tokens: number;
-    };
+    } | null;
   };
   exceeds_200k_tokens?: boolean;
+  effort?: {
+    level: string;
+  };
+  thinking?: {
+    enabled: boolean;
+  };
   rate_limits?: {
     five_hour?: {
       used_percentage: number;
@@ -52,6 +66,19 @@ export interface ClaudeHookData {
       used_percentage: number;
       resets_at: number;
     };
+  };
+  vim?: {
+    mode: string;
+  };
+  agent?: {
+    name: string;
+  };
+  worktree?: {
+    name: string;
+    path: string;
+    branch?: string;
+    original_cwd: string;
+    original_branch?: string;
   };
 }
 
