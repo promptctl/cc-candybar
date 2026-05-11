@@ -11,6 +11,13 @@ import { Style, ColorSpec, PaletteResolver } from "rich-js";
 import type { ColorRgba } from "rich-js";
 import type { RichText } from "rich-js";
 import type { Template } from "@promptctl/go-template-js";
+import { rotateHue } from "../themes/oklch.js";
+
+// Semantic palette specs exempt from hue rotation — same rule as the legacy
+// hue system in src/themes/default-mapping.ts (non-semantic only).
+// [LAW:one-source-of-truth] Defined once here; enforced unconditionally
+// by passing 0 degrees to rotateHue for semantic specs.
+const SEMANTIC_SPECS = new Set(["error", "warning", "success", "info"]);
 
 export class ColorSpecError extends Error {
   constructor(spec: string, role: "bg" | "fg") {
@@ -23,17 +30,23 @@ export class ColorSpecError extends Error {
  * Resolve per-segment bg and fg template strings into a Style for defaultStyle
  * injection in applySegmentLayout().
  *
- * Pipeline (wd5.3 ticket steps 1–5):
+ * Pipeline:
  *   1. Evaluate bgTemplate → plain text color-spec string.
  *   2. resolver.resolve(bgSpec) → ColorRgba.
+ *   2b. rotateHue(bgColor, hueRotationDegrees) for non-semantic specs (wd5.4).
  *   3. Evaluate fgTemplate → plain text color-spec string.
- *   4. resolver.resolve(fgSpec, { against: bgColor }) → ColorRgba.
+ *   4. resolver.resolve(fgSpec, { against: bgColor }) → ColorRgba (auto-contrast).
  *   5. Wrap as Style({ bgcolor, color }).
  *
  * Undefined template → that color is not set in the returned Style, so cells
  * fall through to their own style (or no color if they have none).
  *
  * Throws ColorSpecError if a non-empty spec string resolves to null.
+ *
+ * options.hueRotationDegrees — degrees of OKLCH hue shift to apply to the
+ * resolved bg color. 0 (default) is identity. Semantic specs (error, warning,
+ * success, info) are always exempt — their meaning must not drift with
+ * layout position. Fg auto-contrast resolves against the already-rotated bg.
  *
  * [LAW:dataflow-not-control-flow] Steps are ordered data transformations, not
  * guarded branches. The "no spec" case is represented as undefined, which flows
@@ -44,13 +57,21 @@ export function resolveSegmentColors(
   bgTemplate: Template<RichText> | undefined,
   fgTemplate: Template<RichText> | undefined,
   scope: object,
+  options?: { hueRotationDegrees?: number },
 ): Style {
   const bgSpec = evalToPlainText(bgTemplate, scope);
-  // [LAW:dataflow-not-control-flow] bgColor is a value (ColorRgba or undefined);
-  // it feeds fgSpec resolution as the auto-contrast context. Always computed.
-  const bgColor = bgSpec !== undefined ? resolveSpec(resolver, bgSpec, undefined, "bg") : undefined;
+  const rawBgColor =
+    bgSpec !== undefined ? resolveSpec(resolver, bgSpec, undefined, "bg") : undefined;
+  // [LAW:dataflow-not-control-flow] rotateHue always runs; degrees=0 is identity.
+  // Semantic specs receive 0 degrees so their fixed meaning is preserved.
+  const hueRotation = options?.hueRotationDegrees ?? 0;
+  const bgColor =
+    rawBgColor !== undefined
+      ? rotateHue(rawBgColor, SEMANTIC_SPECS.has(bgSpec!.trim()) ? 0 : hueRotation)
+      : undefined;
 
   const fgSpec = evalToPlainText(fgTemplate, scope);
+  // fgColor resolves against the rotated bgColor — auto-contrast stays in sync.
   const fgColor =
     fgSpec !== undefined ? resolveSpec(resolver, fgSpec, bgColor, "fg") : undefined;
 
