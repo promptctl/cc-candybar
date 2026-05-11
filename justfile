@@ -7,6 +7,7 @@ demo:
 # matrix-built artifacts.
 install-rust:
     cd rust-client && cargo build --release
+    mkdir -p bin
     cp rust-client/target/release/cc-candybar bin/cc-candybar
     chmod +x bin/cc-candybar
     @file bin/cc-candybar
