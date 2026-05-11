@@ -18,6 +18,7 @@ import { makeLimits, realLimitsDeps, type LimitsHandle } from "./limits";
 import { SessionState } from "./session-state";
 import { listAvailableThemes } from "../themes/cascade.js";
 import { STYLE_ORDER } from "../themes/default-mapping.js";
+import { validateHookData } from "../utils/schema-validator.js";
 
 // [LAW:one-source-of-truth] one cache instance per daemon process — multiple
 // instances would defeat the share-across-sessions invariant.
@@ -364,6 +365,18 @@ async function handleRequest(req: Request): Promise<Response> {
     stats.requestsTotal++;
     const t0 = Date.now();
     try {
+      // [LAW:single-enforcer] One trust-boundary check for incoming hookData.
+      // Divergences are logged, not thrown — rendering continues regardless.
+      const { report } = validateHookData(req.hookData as unknown);
+      for (const path of report.missingRequired) {
+        dlog("warn", `schema: required field '${path}' absent in hookData`);
+      }
+      for (const { path, expected, got } of report.typeMismatches) {
+        dlog("warn", `schema: field '${path}' expected ${expected}, got ${got}`);
+      }
+      for (const field of report.unknownTopLevelFields) {
+        dlog("info", `schema: unknown field '${field}' — Anthropic may have added it`);
+      }
       const projectDir = req.hookData.workspace?.project_dir;
       // [LAW:dataflow-not-control-flow] thread the *request's* cwd, not the
       // daemon's process.cwd(), so config resolution depends only on request
