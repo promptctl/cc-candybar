@@ -86,13 +86,14 @@
   },
   "dependencies": {
     "@promptctl/go-template-js": "file:../go-template-js",
+    "json5": "^2.2.3",
     "mobx": "^6.15.0",
     "rich-js": "file:../rich-js"
   },
   "optionalDependencies": {
     "@promptctl/cc-candybar-darwin-arm64": "0.0.0-PLACEHOLDER",
     "@promptctl/cc-candybar-darwin-x64": "0.0.0-PLACEHOLDER",
-    "@promptctl/cc-candybar-linux-x64": "0.0.0-PLACEHOLDER",
-    "@promptctl/cc-candybar-linux-arm64": "0.0.0-PLACEHOLDER"
+    "@promptctl/cc-candybar-linux-arm64": "0.0.0-PLACEHOLDER",
+    "@promptctl/cc-candybar-linux-x64": "0.0.0-PLACEHOLDER"
   }
 }

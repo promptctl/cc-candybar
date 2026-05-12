@@ -11,6 +11,9 @@ importers:
       '@promptctl/go-template-js':
         specifier: file:../go-template-js
         version: file:../go-template-js
+      json5:
+        specifier: ^2.2.3
+        version: 2.2.3
       mobx:
         specifier: ^6.15.0
         version: 6.15.1
