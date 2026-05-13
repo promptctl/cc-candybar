@@ -730,6 +730,8 @@ function validateLayout(
 // ─── Cross-references ────────────────────────────────────────────────────────
 
 function validateCrossReferences(ctx: ValidateCtx, cfg: DslConfig): void {
+  // Full set for depends_on validation (all names, bare + namespaced). depends_on
+  // takes explicit fully-qualified names, so cross-segment visibility is intentional.
   const allVarNames = new Set<string>(Object.keys(cfg.variables));
   for (const [segName, seg] of Object.entries(cfg.segments)) {
     if (seg.vars) {
@@ -745,22 +747,28 @@ function validateCrossReferences(ctx: ValidateCtx, cfg: DslConfig): void {
   }
 
   for (const [segName, seg] of Object.entries(cfg.segments)) {
-    if (seg.vars) {
-      for (const [vName, vDecl] of Object.entries(seg.vars)) {
-        checkVarRefs(
-          ctx,
-          `segments.${segName}.vars.${vName}`,
-          vDecl,
-          allVarNames,
-        );
+    // [LAW:single-enforcer] Per-segment scope: global vars + this segment's
+    // locals (bare + namespaced) + other segments' vars (namespaced ONLY).
+    // Matches runtime scope-proxy rules: own locals visible by bare name;
+    // cross-segment refs require the qualified segName.varName form.
+    const segScope = new Set<string>(Object.keys(cfg.variables));
+    for (const [otherSeg, otherSegDecl] of Object.entries(cfg.segments)) {
+      if (!otherSegDecl.vars) continue;
+      for (const vName of Object.keys(otherSegDecl.vars)) {
+        if (otherSeg === segName) segScope.add(vName); // own: bare form
+        segScope.add(`${otherSeg}.${vName}`);           // all: namespaced form
       }
     }
-    // Segment templates (template, bg, fg, when) all evaluate against the
-    // same scope, so the same rule applies.
+
+    if (seg.vars) {
+      for (const [vName, vDecl] of Object.entries(seg.vars)) {
+        checkVarRefs(ctx, `segments.${segName}.vars.${vName}`, vDecl, segScope);
+      }
+    }
     for (const field of ["template", "bg", "fg", "when"] as const) {
       const tpl = seg[field];
       if (typeof tpl !== "string") continue;
-      checkTemplateRefs(ctx, `segments.${segName}.${field}`, tpl, allVarNames);
+      checkTemplateRefs(ctx, `segments.${segName}.${field}`, tpl, segScope);
     }
   }
 
@@ -876,8 +884,15 @@ export function extractTemplateRefs(template: string): Set<string> {
 
 // ─── Cycle detection ─────────────────────────────────────────────────────────
 
+// Carries declaration metadata for each graph node so cycle errors report the
+// correct config path (variables.X vs segments.S.vars.X) and correct line.
+type NodeInfo = {
+  readonly declarationPath: string;
+  readonly linePathParts: readonly string[];
+};
+
 function validateNoCycles(ctx: ValidateCtx, cfg: DslConfig): void {
-  const graph = buildTemplateGraph(cfg);
+  const { graph, nodeInfo } = buildTemplateGraph(cfg);
 
   const WHITE = 0;
   const GRAY = 1;
@@ -900,10 +915,15 @@ function validateNoCycles(ctx: ValidateCtx, cfg: DslConfig): void {
       if (c === GRAY) {
         const cycleStart = stack.indexOf(next);
         const cycle = [...stack.slice(cycleStart), next];
+        const firstNode = cycle[0]!;
+        const info = nodeInfo.get(firstNode);
         ctx.issues.push({
-          path: `variables.${node}`,
+          path: info?.declarationPath ?? `variables.${firstNode}`,
           message: `Dependency cycle: ${cycle.join(" → ")}`,
-          line: findKeyLine(ctx.source, ["variables", cycle[0]!]),
+          line: findKeyLine(
+            ctx.source,
+            info?.linePathParts ?? ["variables", firstNode],
+          ),
         });
         return true;
       }
@@ -922,26 +942,57 @@ function validateNoCycles(ctx: ValidateCtx, cfg: DslConfig): void {
 //   3. any var with cache.depends_on: each listed name is Y (invalidation dep)
 // All three kinds can form infinite loops at runtime; a single DFS catches
 // mixed cycles that span multiple edge types.
-function buildTemplateGraph(cfg: DslConfig): Map<string, Set<string>> {
-  // [LAW:one-source-of-truth] Mirror validateCrossReferences' allVarNames
-  // logic exactly so the node set agrees with what cross-ref already validated.
+//
+// Segment vars use the namespaced form (segName.varName) as their sole graph
+// node — eliminates bare-name collisions when two segments both declare a var
+// named e.g. "local". Global vars keep their bare names.
+function buildTemplateGraph(cfg: DslConfig): {
+  graph: Map<string, Set<string>>;
+  nodeInfo: Map<string, NodeInfo>;
+} {
   const allVarNames = new Set<string>(Object.keys(cfg.variables));
+  const nodeInfo = new Map<string, NodeInfo>();
+
+  for (const name of Object.keys(cfg.variables)) {
+    nodeInfo.set(name, {
+      declarationPath: `variables.${name}`,
+      linePathParts: ["variables", name],
+    });
+  }
   for (const [segName, seg] of Object.entries(cfg.segments)) {
     if (!seg.vars) continue;
     for (const vName of Object.keys(seg.vars)) {
-      allVarNames.add(vName);
-      allVarNames.add(`${segName}.${vName}`);
+      const canonical = `${segName}.${vName}`;
+      allVarNames.add(canonical);
+      nodeInfo.set(canonical, {
+        declarationPath: `segments.${segName}.vars.${vName}`,
+        linePathParts: ["segments", segName, "vars", vName],
+      });
     }
   }
 
   const graph = new Map<string, Set<string>>();
   for (const name of allVarNames) graph.set(name, new Set());
 
-  const addTemplateEdges = (from: string, template: string): void => {
+  // segCtx resolves bare refs like `.local` to `${segCtx}.local` when that
+  // namespaced form is a declared var — matches how segment-local refs resolve
+  // at runtime (scope proxy walks own segment's vars first).
+  const addTemplateEdges = (
+    from: string,
+    template: string,
+    segCtx?: string,
+  ): void => {
     for (const ref of extractTemplateRefs(template)) {
       if (allVarNames.has(ref)) {
         graph.get(from)!.add(ref);
         continue;
+      }
+      if (segCtx) {
+        const namespaced = `${segCtx}.${ref}`;
+        if (allVarNames.has(namespaced)) {
+          graph.get(from)!.add(namespaced);
+          continue;
+        }
       }
       // Resolve "first identifier" — `.session.id` may indicate dependence on
       // `session` if that's the declared var (matches scope.ts proxy walk).
@@ -952,10 +1003,10 @@ function buildTemplateGraph(cfg: DslConfig): Map<string, Set<string>> {
     }
   };
 
-  const addVarEdges = (name: string, v: VariableDecl): void => {
-    if (v.kind === "template") addTemplateEdges(name, v.template);
+  const addVarEdges = (name: string, v: VariableDecl, segCtx?: string): void => {
+    if (v.kind === "template") addTemplateEdges(name, v.template, segCtx);
     if (v.kind !== "literal" && v.kind !== "input" && v.kind !== "env") {
-      if (v.cache && "key" in v.cache) addTemplateEdges(name, v.cache.key);
+      if (v.cache && "key" in v.cache) addTemplateEdges(name, v.cache.key, segCtx);
       if (v.cache && "depends_on" in v.cache) {
         for (const dep of v.cache.depends_on) {
           if (allVarNames.has(dep)) graph.get(name)!.add(dep);
@@ -970,12 +1021,11 @@ function buildTemplateGraph(cfg: DslConfig): Map<string, Set<string>> {
   for (const [segName, seg] of Object.entries(cfg.segments)) {
     if (!seg.vars) continue;
     for (const [vName, vDecl] of Object.entries(seg.vars)) {
-      addVarEdges(vName, vDecl);
+      addVarEdges(`${segName}.${vName}`, vDecl, segName);
     }
-    void segName;
   }
 
-  return graph;
+  return { graph, nodeInfo };
 }
 
 // ─── Validation helpers ──────────────────────────────────────────────────────

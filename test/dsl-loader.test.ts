@@ -620,6 +620,43 @@ describe("loadDslConfig — cross-references", () => {
     );
     expect(cfg.segments.s!.vars?.local!.kind).toBe("literal");
   });
+
+  test("segment-local var namespaced ref passes from same segment", () => {
+    const cfg = parseDslConfig(
+      FILE,
+      `{ segments: {
+        s: {
+          template: "{{ .s.local }}",
+          vars: { local: { kind: "literal", value: "hi" } }
+        }
+      }}`,
+    );
+    expect(cfg.segments.s!.vars?.local!.kind).toBe("literal");
+  });
+
+  test("bare ref to another segment's local is rejected", () => {
+    expectIssue(
+      `{ segments: {
+        a: { template: "x", vars: { shared: { kind: "literal", value: "1" } } },
+        b: { template: "{{ .shared }}" }
+      }}`,
+      {
+        path: "segments.b.template",
+        message: 'Template references unknown variable ".shared"',
+      },
+    );
+  });
+
+  test("namespaced ref to another segment's local passes", () => {
+    const cfg = parseDslConfig(
+      FILE,
+      `{ segments: {
+        a: { template: "x", vars: { val: { kind: "literal", value: "1" } } },
+        b: { template: "{{ .a.val }}" }
+      }}`,
+    );
+    expect(cfg.segments.b!.template).toBe("{{ .a.val }}");
+  });
 });
 
 // ─── Cycle detection ─────────────────────────────────────────────────────────

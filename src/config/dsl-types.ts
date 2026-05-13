@@ -160,9 +160,10 @@ export interface SegmentDecl {
   readonly bg?: string;
   readonly fg?: string;
   readonly when?: string;
-  // Per-segment vars sub-block — namespaced for clarity but lives in the
-  // same global MobX store at runtime. Convention: referenced as
-  // `.<segment>.<var>` in templates.
+  // Per-segment vars sub-block — lives in the same global MobX store at runtime
+  // but scoped to the owning segment's template context. Own-segment locals are
+  // reachable by bare name (`.local`) or namespaced form (`.<segment>.local`);
+  // from another segment's template, only the namespaced form is valid.
   readonly vars?: Readonly<Record<string, VariableDecl>>;
 }
 
