@@ -902,7 +902,7 @@ function validateNoCycles(ctx: ValidateCtx, cfg: DslConfig): void {
         const cycle = [...stack.slice(cycleStart), next];
         ctx.issues.push({
           path: `variables.${node}`,
-          message: `Cycle in template variables: ${cycle.join(" → ")}`,
+          message: `Dependency cycle: ${cycle.join(" → ")}`,
           line: findKeyLine(ctx.source, ["variables", cycle[0]!]),
         });
         return true;
@@ -915,50 +915,62 @@ function validateNoCycles(ctx: ValidateCtx, cfg: DslConfig): void {
   }
 }
 
-// Build adjacency: edges are X → Y when X is a template-kind variable and its
-// template references Y, AND Y is also a template-kind variable. Other refs
-// (.input vars, .git fields, etc.) don't participate — they cannot create
-// recursive value-dependency cycles at the *template* layer.
+// [LAW:types-are-the-program] Build the full variable dependency graph: edges
+// are X → Y for any of three edge kinds:
+//   1. template-kind vars: template string references Y (eval dependency)
+//   2. any var with cache.key: key template references Y (cache-key dependency)
+//   3. any var with cache.depends_on: each listed name is Y (invalidation dep)
+// All three kinds can form infinite loops at runtime; a single DFS catches
+// mixed cycles that span multiple edge types.
 function buildTemplateGraph(cfg: DslConfig): Map<string, Set<string>> {
-  const templateVarNames = new Set<string>();
-  for (const [name, v] of Object.entries(cfg.variables)) {
-    if (v.kind === "template") templateVarNames.add(name);
-  }
+  // [LAW:one-source-of-truth] Mirror validateCrossReferences' allVarNames
+  // logic exactly so the node set agrees with what cross-ref already validated.
+  const allVarNames = new Set<string>(Object.keys(cfg.variables));
   for (const [segName, seg] of Object.entries(cfg.segments)) {
     if (!seg.vars) continue;
-    for (const [vName, vDecl] of Object.entries(seg.vars)) {
-      if (vDecl.kind === "template") {
-        templateVarNames.add(vName);
-        templateVarNames.add(`${segName}.${vName}`);
-      }
+    for (const vName of Object.keys(seg.vars)) {
+      allVarNames.add(vName);
+      allVarNames.add(`${segName}.${vName}`);
     }
   }
 
   const graph = new Map<string, Set<string>>();
-  for (const name of templateVarNames) graph.set(name, new Set());
+  for (const name of allVarNames) graph.set(name, new Set());
 
-  const addEdges = (from: string, template: string): void => {
+  const addTemplateEdges = (from: string, template: string): void => {
     for (const ref of extractTemplateRefs(template)) {
-      if (templateVarNames.has(ref)) {
+      if (allVarNames.has(ref)) {
         graph.get(from)!.add(ref);
         continue;
       }
       // Resolve "first identifier" — `.session.id` may indicate dependence on
-      // `session` if that's the template var (matches scope.ts proxy walk).
+      // `session` if that's the declared var (matches scope.ts proxy walk).
       const head = ref.split(".")[0]!;
-      if (head !== ref && templateVarNames.has(head)) {
+      if (head !== ref && allVarNames.has(head)) {
         graph.get(from)!.add(head);
       }
     }
   };
 
+  const addVarEdges = (name: string, v: VariableDecl): void => {
+    if (v.kind === "template") addTemplateEdges(name, v.template);
+    if (v.kind !== "literal" && v.kind !== "input" && v.kind !== "env") {
+      if (v.cache && "key" in v.cache) addTemplateEdges(name, v.cache.key);
+      if (v.cache && "depends_on" in v.cache) {
+        for (const dep of v.cache.depends_on) {
+          if (allVarNames.has(dep)) graph.get(name)!.add(dep);
+        }
+      }
+    }
+  };
+
   for (const [name, v] of Object.entries(cfg.variables)) {
-    if (v.kind === "template") addEdges(name, v.template);
+    addVarEdges(name, v);
   }
   for (const [segName, seg] of Object.entries(cfg.segments)) {
     if (!seg.vars) continue;
     for (const [vName, vDecl] of Object.entries(seg.vars)) {
-      if (vDecl.kind === "template") addEdges(vName, vDecl.template);
+      addVarEdges(vName, vDecl);
     }
     void segName;
   }
