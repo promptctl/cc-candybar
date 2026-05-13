@@ -633,7 +633,7 @@ describe("loadDslConfig — cycle detection", () => {
       }}`,
       {
         path: /variables\.(a|b)/,
-        message: /Cycle in template variables: .*(a → b → a|b → a → b)/,
+        message: /Dependency cycle: .*(a → b → a|b → a → b)/,
       },
     );
   });
@@ -643,7 +643,7 @@ describe("loadDslConfig — cycle detection", () => {
       `{ variables: { a: { kind: "template", template: "{{ .a }}" } } }`,
       {
         path: "variables.a",
-        message: "Cycle in template variables: a → a",
+        message: "Dependency cycle: a → a",
       },
     );
   });
@@ -655,7 +655,7 @@ describe("loadDslConfig — cycle detection", () => {
         b: { kind: "template", template: "{{ .c }}" },
         c: { kind: "template", template: "{{ .a }}" }
       }}`,
-      { message: /Cycle in template variables/ },
+      { message: /Dependency cycle/ },
     );
   });
 
@@ -680,6 +680,79 @@ describe("loadDslConfig — cycle detection", () => {
       }}`,
     );
     expect(Object.keys(cfg.variables)).toEqual(["a", "b", "c"]);
+  });
+
+  // depends_on cycle tests
+  test("two-variable depends_on cycle is reported", () => {
+    expectIssue(
+      `{ variables: {
+        a: { kind: "shell", command: "echo a", cache: { depends_on: ["b"] } },
+        b: { kind: "shell", command: "echo b", cache: { depends_on: ["a"] } }
+      }}`,
+      {
+        path: /variables\.(a|b)/,
+        message: /Dependency cycle:.*(a → b → a|b → a → b)/,
+      },
+    );
+  });
+
+  test("self depends_on cycle is reported", () => {
+    expectIssue(
+      `{ variables: { a: { kind: "shell", command: "echo", cache: { depends_on: ["a"] } } } }`,
+      {
+        path: "variables.a",
+        message: "Dependency cycle: a → a",
+      },
+    );
+  });
+
+  test("DAG with depends_on does not false-positive", () => {
+    const cfg = parseDslConfig(
+      FILE,
+      `{ variables: {
+        a: { kind: "shell", command: "echo a", cache: { depends_on: ["b"] } },
+        b: { kind: "shell", command: "echo b", cache: { ttl: "30s" } }
+      }}`,
+    );
+    expect(Object.keys(cfg.variables)).toEqual(["a", "b"]);
+  });
+
+  // cache.key cycle tests
+  test("two-variable cache.key cycle is reported", () => {
+    expectIssue(
+      `{ variables: {
+        a: { kind: "shell", command: "echo a", cache: { key: "{{ .b }}" } },
+        b: { kind: "shell", command: "echo b", cache: { key: "{{ .a }}" } }
+      }}`,
+      {
+        path: /variables\.(a|b)/,
+        message: /Dependency cycle:.*(a → b → a|b → a → b)/,
+      },
+    );
+  });
+
+  test("self cache.key cycle is reported", () => {
+    expectIssue(
+      `{ variables: { a: { kind: "shell", command: "echo", cache: { key: "{{ .a }}" } } } }`,
+      {
+        path: "variables.a",
+        message: "Dependency cycle: a → a",
+      },
+    );
+  });
+
+  // mixed cycle: template var references shell var which depends_on the template var
+  test("mixed cycle (template → depends_on → template) is reported", () => {
+    expectIssue(
+      `{ variables: {
+        a: { kind: "template", template: "{{ .b }}" },
+        b: { kind: "shell", command: "echo b", cache: { depends_on: ["a"] } }
+      }}`,
+      {
+        path: /variables\.(a|b)/,
+        message: /Dependency cycle:.*(a → b → a|b → a → b)/,
+      },
+    );
   });
 });
 
