@@ -20,3 +20,9 @@ export {
   type GitOptions,
   type LastError,
 } from "./sources";
+export {
+  HOOK_DATA_FIELDS,
+  HOOK_DATA_NAMES,
+  declareHookDataInputs,
+  type HookDataField,
+} from "./hook-data-inputs";

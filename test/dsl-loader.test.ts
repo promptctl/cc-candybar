@@ -657,6 +657,83 @@ describe("loadDslConfig — cross-references", () => {
     );
     expect(cfg.segments.b!.template).toBe("{{ .a.val }}");
   });
+
+  // ─── Hook data auto-availability ─────────────────────────────────────────
+
+  test("hook data scalar field is available without declaration (session_id)", () => {
+    // session_id is a ClaudeHookData top-level field — no variables block needed.
+    const cfg = parseDslConfig(
+      FILE,
+      `{ segments: { s: { template: "{{ .session_id }}" } } }`,
+    );
+    expect(cfg.segments.s!.template).toContain("session_id");
+  });
+
+  test("hook data nested field is available without declaration (model.id)", () => {
+    const cfg = parseDslConfig(
+      FILE,
+      `{ segments: { s: { template: "{{ .model.id }}" } } }`,
+    );
+    expect(cfg.segments.s!.template).toContain("model.id");
+  });
+
+  test("hook data namespace prefix passes (.model when model.id is in scope)", () => {
+    // .model resolves as a prefix of model.id / model.display_name — the scope
+    // proxy returns a sub-proxy and the template engine navigates further.
+    const cfg = parseDslConfig(
+      FILE,
+      `{ segments: { s: { template: "{{ .model.display_name }}" } } }`,
+    );
+    expect(cfg.segments.s!.template).toContain("model.display_name");
+  });
+
+  test("deeply nested hook data field is available (rate_limits.five_hour.used_percentage)", () => {
+    const cfg = parseDslConfig(
+      FILE,
+      `{ segments: { s: { template: "{{ .rate_limits.five_hour.used_percentage }}" } } }`,
+    );
+    expect(cfg.segments.s!.template).toContain("rate_limits");
+  });
+
+  test("hook data field in template variable without declaration passes", () => {
+    const cfg = parseDslConfig(
+      FILE,
+      `{ variables: { label: { kind: "template", template: "{{ .model.id }}" } },
+         segments: { s: { template: "{{ .label }}" } } }`,
+    );
+    expect(cfg.variables.label!.kind).toBe("template");
+  });
+
+  test("depends_on can target a hook data field name", () => {
+    // session_id is auto-declared as an input box at runtime, so it's valid
+    // as a depends_on target.
+    const cfg = parseDslConfig(
+      FILE,
+      `{ variables: {
+        x: { kind: "shell", command: "echo hi", cache: { depends_on: ["session_id"] } }
+      }}`,
+    );
+    expect(cfg.variables.x!.kind).toBe("shell");
+  });
+
+  test("hook data cwd field is available without declaration", () => {
+    // cwd is both in ClaudeHookData and a common need — verify it needs no decl.
+    const cfg = parseDslConfig(
+      FILE,
+      `{ segments: { s: { template: "{{ .cwd }}" } } }`,
+    );
+    expect(cfg.segments.s!.template).toContain("cwd");
+  });
+
+  test("non-hook-data unknown variable is still rejected", () => {
+    expectIssue(
+      `{ segments: { s: { template: "{{ .totally_unknown_field }}" } } }`,
+      {
+        path: "segments.s.template",
+        message: 'Template references unknown variable ".totally_unknown_field"',
+      },
+    );
+  });
 });
 
 // ─── Cycle detection ─────────────────────────────────────────────────────────

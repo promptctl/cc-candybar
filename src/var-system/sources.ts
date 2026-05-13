@@ -795,6 +795,13 @@ export class SourceRegistry {
     });
   }
 
+  // Whether a variable with this name has been declared.  Used by
+  // declareHookDataInputs to skip auto-declaration for names already
+  // declared by the user.
+  has(name: string): boolean {
+    return this.store.has(name);
+  }
+
   // ─── Diagnostics ─────────────────────────────────────────────────────────
 
   // Returns the recorded error for a variable, or undefined if the last

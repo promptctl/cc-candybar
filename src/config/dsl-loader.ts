@@ -29,6 +29,7 @@ import {
   type TruncateMode,
   type VariableDecl,
 } from "./dsl-types.js";
+import { HOOK_DATA_NAMES } from "../var-system/hook-data-inputs.js";
 
 // ─── Public types ────────────────────────────────────────────────────────────
 
@@ -154,7 +155,7 @@ function validateTopLevel(
   }
 
   const globals = validateGlobals(ctx, raw.globals);
-  const variables = validateVariables(ctx, "variables", raw.variables);
+  const variables = validateVariables(ctx, ["variables"], raw.variables);
   const segments = validateSegments(ctx, raw.segments);
   const layout = validateLayout(ctx, raw.layout, segments);
 
@@ -235,23 +236,23 @@ function validateGlobals(ctx: ValidateCtx, raw: unknown): Globals {
 
 function validateVariables(
   ctx: ValidateCtx,
-  pathPrefix: string,
+  pathParts: string[],
   raw: unknown,
 ): Record<string, VariableDecl> {
+  const path = pathParts.join(".");
   if (raw === undefined) return {};
   if (!isPlainObject(raw)) {
     ctx.issues.push({
-      path: pathPrefix,
-      message: `${pathPrefix} must be an object, got ${describeType(raw)}`,
-      line: findKeyLine(ctx.source, pathPrefix.split(".")),
+      path,
+      message: `${path} must be an object, got ${describeType(raw)}`,
+      line: findKeyLine(ctx.source, pathParts),
     });
     return {};
   }
 
   const out: Record<string, VariableDecl> = {};
   for (const [name, decl] of Object.entries(raw)) {
-    const path = `${pathPrefix}.${name}`;
-    const parsed = validateVariable(ctx, path, decl);
+    const parsed = validateVariable(ctx, [...pathParts, name], decl);
     if (parsed !== null) out[name] = parsed;
   }
   return out;
@@ -259,14 +260,15 @@ function validateVariables(
 
 function validateVariable(
   ctx: ValidateCtx,
-  path: string,
+  pathParts: string[],
   raw: unknown,
 ): VariableDecl | null {
+  const path = pathParts.join(".");
   if (!isPlainObject(raw)) {
     ctx.issues.push({
       path,
       message: `${path} must be an object, got ${describeType(raw)}`,
-      line: findKeyLine(ctx.source, path.split(".")),
+      line: findKeyLine(ctx.source, pathParts),
     });
     return null;
   }
@@ -276,7 +278,7 @@ function validateVariable(
     ctx.issues.push({
       path: `${path}.kind`,
       message: `${path}.kind must be a string, got ${describeType(rawKind)}`,
-      line: findKeyLine(ctx.source, path.split(".")),
+      line: findKeyLine(ctx.source, pathParts),
     });
     return null;
   }
@@ -284,22 +286,23 @@ function validateVariable(
     ctx.issues.push({
       path: `${path}.kind`,
       message: `Unknown source kind "${rawKind}". Expected one of: ${SOURCE_KINDS.join(", ")}`,
-      line: findKeyLine(ctx.source, [...path.split("."), "kind"]),
+      line: findKeyLine(ctx.source, [...pathParts, "kind"]),
     });
     return null;
   }
 
   // Cache: required for shell/file/git; optional for template/time; n/a for
   // literal/input/env. Per-kind dispatch handles the requirement.
-  return validateVariableByKind(ctx, path, rawKind, raw);
+  return validateVariableByKind(ctx, pathParts, rawKind, raw);
 }
 
 function validateVariableByKind(
   ctx: ValidateCtx,
-  path: string,
+  pathParts: string[],
   kind: SourceKind,
   raw: Record<string, unknown>,
 ): VariableDecl | null {
+  const path = pathParts.join(".");
   switch (kind) {
     case "literal": {
       const value = raw.value;
@@ -311,46 +314,46 @@ function validateVariableByKind(
         ctx.issues.push({
           path: `${path}.value`,
           message: `literal value must be string|number|boolean, got ${describeType(value)}`,
-          line: findKeyLine(ctx.source, path.split(".")),
+          line: findKeyLine(ctx.source, pathParts),
         });
         return null;
       }
       return {
         kind: "literal",
         value,
-        ...optionalString(ctx, path, raw, "default"),
+        ...optionalString(ctx, pathParts, raw, "default"),
       };
     }
 
     case "input": {
-      const p = requireString(ctx, path, raw, "path");
+      const p = requireString(ctx, pathParts, raw, "path");
       if (p === null) return null;
       return {
         kind: "input",
         path: p,
-        ...optionalString(ctx, path, raw, "default"),
+        ...optionalString(ctx, pathParts, raw, "default"),
       };
     }
 
     case "env": {
-      const name = requireString(ctx, path, raw, "name");
+      const name = requireString(ctx, pathParts, raw, "name");
       if (name === null) return null;
       return {
         kind: "env",
         name,
-        ...optionalString(ctx, path, raw, "default"),
+        ...optionalString(ctx, pathParts, raw, "default"),
       };
     }
 
     case "file": {
-      const filePath = requireString(ctx, path, raw, "path");
-      const cache = requireCache(ctx, path, raw, kind);
-      const readMode = optionalEnum(ctx, path, raw, "readMode", [
+      const filePath = requireString(ctx, pathParts, raw, "path");
+      const cache = requireCache(ctx, pathParts, raw, kind);
+      const readMode = optionalEnum(ctx, pathParts, raw, "readMode", [
         "whole",
         "first-line",
       ] as const);
-      const regex = optionalStringField(ctx, path, raw, "regex");
-      const def = optionalStringField(ctx, path, raw, "default");
+      const regex = optionalStringField(ctx, pathParts, raw, "regex");
+      const def = optionalStringField(ctx, pathParts, raw, "default");
       if (filePath === null || cache === null) return null;
       return {
         kind: "file",
@@ -363,10 +366,10 @@ function validateVariableByKind(
     }
 
     case "shell": {
-      const command = requireString(ctx, path, raw, "command");
-      const cache = requireCache(ctx, path, raw, kind);
-      const regex = optionalStringField(ctx, path, raw, "regex");
-      const def = optionalStringField(ctx, path, raw, "default");
+      const command = requireString(ctx, pathParts, raw, "command");
+      const cache = requireCache(ctx, pathParts, raw, kind);
+      const regex = optionalStringField(ctx, pathParts, raw, "regex");
+      const def = optionalStringField(ctx, pathParts, raw, "default");
       if (command === null || cache === null) return null;
       return {
         kind: "shell",
@@ -378,10 +381,10 @@ function validateVariableByKind(
     }
 
     case "template": {
-      const template = requireString(ctx, path, raw, "template");
+      const template = requireString(ctx, pathParts, raw, "template");
       if (template === null) return null;
-      const cache = optionalCache(ctx, path, raw);
-      const def = optionalStringField(ctx, path, raw, "default");
+      const cache = optionalCache(ctx, pathParts, raw);
+      const def = optionalStringField(ctx, pathParts, raw, "default");
       return {
         kind: "template",
         template,
@@ -391,10 +394,10 @@ function validateVariableByKind(
     }
 
     case "time": {
-      const layout = requireString(ctx, path, raw, "layout");
+      const layout = requireString(ctx, pathParts, raw, "layout");
       if (layout === null) return null;
-      const cache = optionalCache(ctx, path, raw);
-      const def = optionalStringField(ctx, path, raw, "default");
+      const cache = optionalCache(ctx, pathParts, raw);
+      const def = optionalStringField(ctx, pathParts, raw, "default");
       return {
         kind: "time",
         layout,
@@ -412,12 +415,12 @@ function validateVariableByKind(
         ctx.issues.push({
           path: `${path}.field`,
           message: `git field must be one of: ${GIT_FIELDS.join(", ")}, got ${JSON.stringify(field)}`,
-          line: findKeyLine(ctx.source, [...path.split("."), "field"]),
+          line: findKeyLine(ctx.source, [...pathParts, "field"]),
         });
         return null;
       }
-      const cache = requireCache(ctx, path, raw, kind);
-      const def = optionalStringField(ctx, path, raw, "default");
+      const cache = requireCache(ctx, pathParts, raw, kind);
+      const def = optionalStringField(ctx, pathParts, raw, "default");
       if (cache === null) return null;
       return {
         kind: "git",
@@ -433,16 +436,17 @@ function validateVariableByKind(
 
 function requireCache(
   ctx: ValidateCtx,
-  path: string,
+  pathParts: string[],
   raw: Record<string, unknown>,
   kind: SourceKind,
 ): CacheDecl | null {
+  const path = pathParts.join(".");
   if (raw.cache === undefined) {
     if (SOURCES_REQUIRING_CACHE.includes(kind)) {
       ctx.issues.push({
         path: `${path}.cache`,
         message: `${kind} variables must declare a cache policy (one of: ${CACHE_KEYS.join(", ")})`,
-        line: findKeyLine(ctx.source, path.split(".")),
+        line: findKeyLine(ctx.source, pathParts),
       });
       return null;
     }
@@ -450,29 +454,30 @@ function requireCache(
     // because callers use optionalCache; keep narrow.
     return null;
   }
-  return validateCache(ctx, `${path}.cache`, raw.cache);
+  return validateCache(ctx, [...pathParts, "cache"], raw.cache);
 }
 
 function optionalCache(
   ctx: ValidateCtx,
-  path: string,
+  pathParts: string[],
   raw: Record<string, unknown>,
 ): CacheDecl | undefined {
   if (raw.cache === undefined) return undefined;
-  const c = validateCache(ctx, `${path}.cache`, raw.cache);
+  const c = validateCache(ctx, [...pathParts, "cache"], raw.cache);
   return c ?? undefined;
 }
 
 function validateCache(
   ctx: ValidateCtx,
-  path: string,
+  pathParts: string[],
   raw: unknown,
 ): CacheDecl | null {
+  const path = pathParts.join(".");
   if (!isPlainObject(raw)) {
     ctx.issues.push({
       path,
       message: `cache must be an object, got ${describeType(raw)}`,
-      line: findKeyLine(ctx.source, path.split(".")),
+      line: findKeyLine(ctx.source, pathParts),
     });
     return null;
   }
@@ -488,7 +493,7 @@ function validateCache(
     ctx.issues.push({
       path: `${path}.${k}`,
       message: `Unknown cache key "${k}". Expected exactly one of: ${CACHE_KEYS.join(", ")}`,
-      line: findKeyLine(ctx.source, [...path.split("."), k]),
+      line: findKeyLine(ctx.source, [...pathParts, k]),
     });
   }
 
@@ -496,7 +501,7 @@ function validateCache(
     ctx.issues.push({
       path,
       message: `cache must declare exactly one of: ${CACHE_KEYS.join(", ")}`,
-      line: findKeyLine(ctx.source, path.split(".")),
+      line: findKeyLine(ctx.source, pathParts),
     });
     return null;
   }
@@ -504,29 +509,30 @@ function validateCache(
     ctx.issues.push({
       path,
       message: `cache must declare exactly one of: ${CACHE_KEYS.join(", ")} (found: ${present.join(", ")})`,
-      line: findKeyLine(ctx.source, path.split(".")),
+      line: findKeyLine(ctx.source, pathParts),
     });
     return null;
   }
 
   const key = present[0]!;
   const value = raw[key];
-  return validateCacheVariant(ctx, `${path}.${key}`, key, value);
+  return validateCacheVariant(ctx, [...pathParts, key], key, value);
 }
 
 function validateCacheVariant(
   ctx: ValidateCtx,
-  path: string,
+  pathParts: string[],
   key: CacheKey,
   value: unknown,
 ): CacheDecl | null {
+  const path = pathParts.join(".");
   switch (key) {
     case "ttl":
       if (typeof value !== "string" || !isValidDuration(value)) {
         ctx.issues.push({
           path,
           message: `cache.ttl must be a duration string like "5s", "100ms", "2m", "1h"; got ${describeValue(value)}`,
-          line: findKeyLine(ctx.source, path.split(".")),
+          line: findKeyLine(ctx.source, pathParts),
         });
         return null;
       }
@@ -537,7 +543,7 @@ function validateCacheVariant(
         ctx.issues.push({
           path,
           message: `cache.watch_file must be a non-empty path string, got ${describeValue(value)}`,
-          line: findKeyLine(ctx.source, path.split(".")),
+          line: findKeyLine(ctx.source, pathParts),
         });
         return null;
       }
@@ -548,7 +554,7 @@ function validateCacheVariant(
         ctx.issues.push({
           path,
           message: `cache.depends_on must be an array of variable-name strings, got ${describeValue(value)}`,
-          line: findKeyLine(ctx.source, path.split(".")),
+          line: findKeyLine(ctx.source, pathParts),
         });
         return null;
       }
@@ -559,7 +565,7 @@ function validateCacheVariant(
         ctx.issues.push({
           path,
           message: `cache.key must be a non-empty template string, got ${describeValue(value)}`,
-          line: findKeyLine(ctx.source, path.split(".")),
+          line: findKeyLine(ctx.source, pathParts),
         });
         return null;
       }
@@ -570,7 +576,7 @@ function validateCacheVariant(
         ctx.issues.push({
           path,
           message: `cache.never must be the literal boolean true, got ${describeValue(value)}`,
-          line: findKeyLine(ctx.source, path.split(".")),
+          line: findKeyLine(ctx.source, pathParts),
         });
         return null;
       }
@@ -601,7 +607,7 @@ function validateSegments(
 
   const out: Record<string, SegmentDecl> = {};
   for (const [name, decl] of Object.entries(raw)) {
-    const parsed = validateSegment(ctx, `segments.${name}`, decl);
+    const parsed = validateSegment(ctx, ["segments", name], decl);
     if (parsed !== null) out[name] = parsed;
   }
   return out;
@@ -609,19 +615,20 @@ function validateSegments(
 
 function validateSegment(
   ctx: ValidateCtx,
-  path: string,
+  pathParts: string[],
   raw: unknown,
 ): SegmentDecl | null {
+  const path = pathParts.join(".");
   if (!isPlainObject(raw)) {
     ctx.issues.push({
       path,
       message: `${path} must be an object, got ${describeType(raw)}`,
-      line: findKeyLine(ctx.source, path.split(".")),
+      line: findKeyLine(ctx.source, pathParts),
     });
     return null;
   }
 
-  const template = requireString(ctx, path, raw, "template");
+  const template = requireString(ctx, pathParts, raw, "template");
   if (template === null) return null;
 
   const allowed = new Set([
@@ -639,7 +646,7 @@ function validateSegment(
       ctx.issues.push({
         path: `${path}.${key}`,
         message: `Unknown segment key "${key}". Expected one of: ${[...allowed].join(", ")}`,
-        line: findKeyLine(ctx.source, [...path.split("."), key]),
+        line: findKeyLine(ctx.source, [...pathParts, key]),
       });
     }
   }
@@ -659,28 +666,28 @@ function validateSegment(
       ctx.issues.push({
         path: `${path}.width`,
         message: `width must be "auto" or a positive integer, got ${describeValue(raw.width)}`,
-        line: findKeyLine(ctx.source, [...path.split("."), "width"]),
+        line: findKeyLine(ctx.source, [...pathParts, "width"]),
       });
     }
   }
 
-  const justify = optionalEnum(ctx, path, raw, "justify", JUSTIFY_MODES);
+  const justify = optionalEnum(ctx, pathParts, raw, "justify", JUSTIFY_MODES);
   if (justify !== undefined) seg.justify = justify as JustifyMode;
 
-  const truncate = optionalEnum(ctx, path, raw, "truncate", TRUNCATE_MODES);
+  const truncate = optionalEnum(ctx, pathParts, raw, "truncate", TRUNCATE_MODES);
   if (truncate !== undefined) seg.truncate = truncate as TruncateMode;
 
-  const bg = optionalStringField(ctx, path, raw, "bg");
+  const bg = optionalStringField(ctx, pathParts, raw, "bg");
   if (bg !== undefined) seg.bg = bg;
 
-  const fg = optionalStringField(ctx, path, raw, "fg");
+  const fg = optionalStringField(ctx, pathParts, raw, "fg");
   if (fg !== undefined) seg.fg = fg;
 
-  const when = optionalStringField(ctx, path, raw, "when");
+  const when = optionalStringField(ctx, pathParts, raw, "when");
   if (when !== undefined) seg.when = when;
 
   if (raw.vars !== undefined) {
-    seg.vars = validateVariables(ctx, `${path}.vars`, raw.vars);
+    seg.vars = validateVariables(ctx, [...pathParts, "vars"], raw.vars);
   }
 
   return seg;
@@ -730,8 +737,9 @@ function validateLayout(
 // ─── Cross-references ────────────────────────────────────────────────────────
 
 function validateCrossReferences(ctx: ValidateCtx, cfg: DslConfig): void {
-  // Full set for depends_on validation (all names, bare + namespaced). depends_on
-  // takes explicit fully-qualified names, so cross-segment visibility is intentional.
+  // Full set for depends_on validation (all names, bare + namespaced + hook data).
+  // depends_on takes explicit fully-qualified names, so cross-segment visibility
+  // and hook data visibility are both intentional here.
   const allVarNames = new Set<string>(Object.keys(cfg.variables));
   for (const [segName, seg] of Object.entries(cfg.segments)) {
     if (seg.vars) {
@@ -739,19 +747,23 @@ function validateCrossReferences(ctx: ValidateCtx, cfg: DslConfig): void {
       for (const v of Object.keys(seg.vars)) allVarNames.add(`${segName}.${v}`);
     }
   }
+  // [LAW:one-source-of-truth] Hook data fields are automatically in scope for
+  // all templates. The validator accepts refs to any HOOK_DATA_NAMES entry so
+  // users don't need to explicitly declare standard hook data fields.
+  for (const name of HOOK_DATA_NAMES) allVarNames.add(name);
 
-  // For each variable's template/cache.key, every dotted ref must exist
-  // (full path OR a prefix that matches an existing variable's namespace).
+  // For each variable's template/cache.key, every dotted ref must exist.
   for (const [name, v] of Object.entries(cfg.variables)) {
-    checkVarRefs(ctx, `variables.${name}`, v, allVarNames);
+    checkVarRefs(ctx, ["variables", name], v, allVarNames);
   }
 
   for (const [segName, seg] of Object.entries(cfg.segments)) {
-    // [LAW:single-enforcer] Per-segment scope: global vars + this segment's
-    // locals (bare + namespaced) + other segments' vars (namespaced ONLY).
+    // [LAW:single-enforcer] Per-segment scope: global vars + hook data fields +
+    // this segment's locals (bare + namespaced) + other segments' vars (namespaced ONLY).
     // Matches runtime scope-proxy rules: own locals visible by bare name;
     // cross-segment refs require the qualified segName.varName form.
     const segScope = new Set<string>(Object.keys(cfg.variables));
+    for (const name of HOOK_DATA_NAMES) segScope.add(name);
     for (const [otherSeg, otherSegDecl] of Object.entries(cfg.segments)) {
       if (!otherSegDecl.vars) continue;
       for (const vName of Object.keys(otherSegDecl.vars)) {
@@ -762,69 +774,61 @@ function validateCrossReferences(ctx: ValidateCtx, cfg: DslConfig): void {
 
     if (seg.vars) {
       for (const [vName, vDecl] of Object.entries(seg.vars)) {
-        checkVarRefs(ctx, `segments.${segName}.vars.${vName}`, vDecl, segScope);
+        checkVarRefs(ctx, ["segments", segName, "vars", vName], vDecl, segScope);
       }
     }
     for (const field of ["template", "bg", "fg", "when"] as const) {
       const tpl = seg[field];
       if (typeof tpl !== "string") continue;
-      checkTemplateRefs(ctx, `segments.${segName}.${field}`, tpl, segScope);
+      checkTemplateRefs(ctx, ["segments", segName, field], tpl, segScope);
     }
   }
 
-  // depends_on lists must point at declared variables.
+  // depends_on lists must point at declared variables or hook data fields.
   for (const [name, v] of Object.entries(cfg.variables)) {
-    checkDependsOn(ctx, `variables.${name}`, v, allVarNames);
+    checkDependsOn(ctx, ["variables", name], v, allVarNames);
   }
   for (const [segName, seg] of Object.entries(cfg.segments)) {
     if (!seg.vars) continue;
     for (const [vName, vDecl] of Object.entries(seg.vars)) {
-      checkDependsOn(
-        ctx,
-        `segments.${segName}.vars.${vName}`,
-        vDecl,
-        allVarNames,
-      );
+      checkDependsOn(ctx, ["segments", segName, "vars", vName], vDecl, allVarNames);
     }
   }
 }
 
 function checkVarRefs(
   ctx: ValidateCtx,
-  declPath: string,
+  declPathParts: string[],
   v: VariableDecl,
   allVars: Set<string>,
 ): void {
   if (v.kind === "template") {
-    checkTemplateRefs(ctx, `${declPath}.template`, v.template, allVars);
+    checkTemplateRefs(ctx, [...declPathParts, "template"], v.template, allVars);
   }
   if (v.kind !== "literal" && v.kind !== "input" && v.kind !== "env") {
     if (v.cache && "key" in v.cache) {
-      checkTemplateRefs(ctx, `${declPath}.cache.key`, v.cache.key, allVars);
+      checkTemplateRefs(ctx, [...declPathParts, "cache", "key"], v.cache.key, allVars);
     }
   }
 }
 
 function checkDependsOn(
   ctx: ValidateCtx,
-  declPath: string,
+  declPathParts: string[],
   v: VariableDecl,
   allVars: Set<string>,
 ): void {
   if (v.kind === "literal" || v.kind === "input" || v.kind === "env") return;
   if (!v.cache) return;
   if (!("depends_on" in v.cache)) return;
+  const declPath = declPathParts.join(".");
   for (let i = 0; i < v.cache.depends_on.length; i++) {
     const target = v.cache.depends_on[i]!;
     if (!allVars.has(target)) {
       ctx.issues.push({
         path: `${declPath}.cache.depends_on[${i}]`,
         message: `cache.depends_on references unknown variable "${target}"`,
-        line: findKeyLine(ctx.source, [
-          ...declPath.split("."),
-          "cache",
-          "depends_on",
-        ]),
+        line: findKeyLine(ctx.source, [...declPathParts, "cache", "depends_on"]),
       });
     }
   }
@@ -832,16 +836,17 @@ function checkDependsOn(
 
 function checkTemplateRefs(
   ctx: ValidateCtx,
-  declPath: string,
+  declPathParts: string[],
   template: string,
   allVars: Set<string>,
 ): void {
+  const declPath = declPathParts.join(".");
   for (const ref of extractTemplateRefs(template)) {
     if (refResolves(ref, allVars)) continue;
     ctx.issues.push({
       path: declPath,
       message: `Template references unknown variable ".${ref}"`,
-      line: findKeyLine(ctx.source, declPath.split(".")),
+      line: findKeyLine(ctx.source, declPathParts),
     });
   }
 }
@@ -943,6 +948,10 @@ function validateNoCycles(ctx: ValidateCtx, cfg: DslConfig): void {
 // All three kinds can form infinite loops at runtime; a single DFS catches
 // mixed cycles that span multiple edge types.
 //
+// Hook data fields are NOT graph nodes — they are input boxes (boxes that
+// receive per-render pushes, never computed). A template referencing
+// .session_id has no cycle risk through that ref.
+//
 // Segment vars use the namespaced form (segName.varName) as their sole graph
 // node — eliminates bare-name collisions when two segments both declare a var
 // named e.g. "local". Global vars keep their bare names.
@@ -971,6 +980,11 @@ function buildTemplateGraph(cfg: DslConfig): {
     }
   }
 
+  // Hook data names are valid refs but NOT nodes — they can't form cycles.
+  // Include them in the known-name set so addTemplateEdges doesn't try to
+  // resolve them as user-declared variable prefixes.
+  const allKnownNames = new Set<string>([...allVarNames, ...HOOK_DATA_NAMES]);
+
   const graph = new Map<string, Set<string>>();
   for (const name of allVarNames) graph.set(name, new Set());
 
@@ -983,14 +997,15 @@ function buildTemplateGraph(cfg: DslConfig): {
     segCtx?: string,
   ): void => {
     for (const ref of extractTemplateRefs(template)) {
-      if (allVarNames.has(ref)) {
-        graph.get(from)!.add(ref);
+      if (allKnownNames.has(ref)) {
+        // Only add an edge if the target is a user-declared variable (graph node).
+        if (allVarNames.has(ref)) graph.get(from)!.add(ref);
         continue;
       }
       if (segCtx) {
         const namespaced = `${segCtx}.${ref}`;
-        if (allVarNames.has(namespaced)) {
-          graph.get(from)!.add(namespaced);
+        if (allKnownNames.has(namespaced)) {
+          if (allVarNames.has(namespaced)) graph.get(from)!.add(namespaced);
           continue;
         }
       }
@@ -1032,16 +1047,17 @@ function buildTemplateGraph(cfg: DslConfig): {
 
 function requireString(
   ctx: ValidateCtx,
-  path: string,
+  pathParts: string[],
   raw: Record<string, unknown>,
   field: string,
 ): string | null {
+  const path = pathParts.join(".");
   const v = raw[field];
   if (typeof v !== "string") {
     ctx.issues.push({
       path: `${path}.${field}`,
       message: `${path}.${field} must be a string, got ${describeType(v)}`,
-      line: findKeyLine(ctx.source, [...path.split("."), field]),
+      line: findKeyLine(ctx.source, [...pathParts, field]),
     });
     return null;
   }
@@ -1050,27 +1066,28 @@ function requireString(
 
 function optionalString(
   ctx: ValidateCtx,
-  path: string,
+  pathParts: string[],
   raw: Record<string, unknown>,
   field: string,
 ): { default?: string } {
-  const v = optionalStringField(ctx, path, raw, field);
+  const v = optionalStringField(ctx, pathParts, raw, field);
   return v === undefined ? {} : { [field]: v };
 }
 
 function optionalStringField(
   ctx: ValidateCtx,
-  path: string,
+  pathParts: string[],
   raw: Record<string, unknown>,
   field: string,
 ): string | undefined {
+  const path = pathParts.join(".");
   const v = raw[field];
   if (v === undefined) return undefined;
   if (typeof v !== "string") {
     ctx.issues.push({
       path: `${path}.${field}`,
       message: `${path}.${field} must be a string, got ${describeType(v)}`,
-      line: findKeyLine(ctx.source, [...path.split("."), field]),
+      line: findKeyLine(ctx.source, [...pathParts, field]),
     });
     return undefined;
   }
@@ -1079,18 +1096,19 @@ function optionalStringField(
 
 function optionalEnum<T extends string>(
   ctx: ValidateCtx,
-  path: string,
+  pathParts: string[],
   raw: Record<string, unknown>,
   field: string,
   allowed: readonly T[],
 ): T | undefined {
+  const path = pathParts.join(".");
   const v = raw[field];
   if (v === undefined) return undefined;
   if (typeof v !== "string" || !(allowed as readonly string[]).includes(v)) {
     ctx.issues.push({
       path: `${path}.${field}`,
       message: `${path}.${field} must be one of: ${allowed.join(", ")}; got ${describeValue(v)}`,
-      line: findKeyLine(ctx.source, [...path.split("."), field]),
+      line: findKeyLine(ctx.source, [...pathParts, field]),
     });
     return undefined;
   }
@@ -1128,6 +1146,10 @@ type Mutable<T> = { -readonly [K in keyof T]: T[K] };
 //
 // This is "good enough" navigation, not a guarantee. Returns undefined if a
 // path part can't be located — the caller falls back to the logical path.
+//
+// [LAW:types-are-the-program] pathParts is string[] not string so callers
+// pass pre-split components: a variable named "session.id" is one atomic
+// part, never split into ["session", "id"].
 export function findKeyLine(
   source: string,
   pathParts: readonly string[],
