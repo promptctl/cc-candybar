@@ -7,7 +7,7 @@
 // writes in templates (e.g. `{{.model.id}}`), matching the payload path.
 // That makes the mapping maximally obvious: name === path for every entry.
 //
-// Arrays (workspace.added_dirs) are omitted — no VarType covers them.
+// workspace.added_dirs is included as type "array" (string[] in the payload).
 // Nullable leaf parents (context_window.current_usage, rate_limits.*) are
 // included; resolvePath returns undefined for a null parent, which triggers
 // applyFallback → typed zero.
@@ -34,8 +34,9 @@ export const HOOK_DATA_FIELDS: readonly HookDataField[] = [
   { name: "cwd",                  path: "cwd",                  type: "string" },
   { name: "model.id",             path: "model.id",             type: "string" },
   { name: "model.display_name",   path: "model.display_name",   type: "string" },
-  { name: "workspace.current_dir",path: "workspace.current_dir",type: "string" },
-  { name: "workspace.project_dir",path: "workspace.project_dir",type: "string" },
+  { name: "workspace.current_dir",  path: "workspace.current_dir",  type: "string" },
+  { name: "workspace.project_dir",  path: "workspace.project_dir",  type: "string" },
+  { name: "workspace.added_dirs",   path: "workspace.added_dirs",   type: "array"  },
 
   // ── Optional scalar fields ────────────────────────────────────────────────
   // Absent → resolvePath returns undefined → applyFallback → typed zero / ""

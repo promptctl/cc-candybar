@@ -535,11 +535,18 @@ function resolvePath(obj: unknown, path: string): unknown {
   return cur;
 }
 
-// Coerces an external primitive to a typed VarValue using the cast helpers
-// from types.ts. Throws for non-primitive runtypes or impossible casts.
+// Coerces an external value to a typed VarValue using the cast helpers
+// from types.ts. Throws for type mismatches or impossible casts.
 function coerceToType(raw: unknown, type: VarType): VarValue {
-  // [LAW:no-defensive-null-guards] Trust-boundary check: payload values must be
-  // primitives. Non-primitive means malformed input — fail loudly.
+  // [LAW:no-defensive-null-guards] Trust-boundary check: fail loudly on
+  // shape mismatches rather than silently coercing garbage downstream.
+  if (type === "array") {
+    if (!Array.isArray(raw))
+      throw new TypeError(
+        `Expected array from payload, got ${typeof raw}`,
+      );
+    return raw as readonly unknown[];
+  }
   if (
     typeof raw !== "string" &&
     typeof raw !== "number" &&
@@ -559,6 +566,7 @@ function coerceToType(raw: unknown, type: VarType): VarValue {
 function zeroValue(type: VarType): VarValue {
   if (type === "number") return 0;
   if (type === "boolean") return false;
+  if (type === "array") return [];
   return "";
 }
 
