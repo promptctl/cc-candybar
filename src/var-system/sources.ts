@@ -520,6 +520,11 @@ export interface LastError {
 interface InputMeta {
   readonly path: string;
   readonly varDefault: VarValue | undefined;
+  // When true, absence of the path in the payload is a normal state (not an
+  // error). Used for auto-declared hook-data fields that are only present on
+  // certain hook events. [LAW:types-are-the-program]: the distinction lives
+  // in the data, not in a separate code path.
+  readonly optional: boolean;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -541,11 +546,11 @@ function coerceToType(raw: unknown, type: VarType): VarValue {
   // [LAW:no-defensive-null-guards] Trust-boundary check: fail loudly on
   // shape mismatches rather than silently coercing garbage downstream.
   if (type === "array") {
-    if (!Array.isArray(raw))
+    if (!Array.isArray(raw) || !raw.every((e) => typeof e === "string"))
       throw new TypeError(
-        `Expected array from payload, got ${typeof raw}`,
+        `Expected string[] from payload, got ${Array.isArray(raw) ? "array with non-string elements" : typeof raw}`,
       );
-    return raw as readonly unknown[];
+    return raw as readonly string[];
   }
   if (
     typeof raw !== "string" &&
@@ -612,18 +617,21 @@ export class SourceRegistry {
 
   // input: per-render box; initial value from fallback chain (path not yet resolved).
   // At each render, applyInput resolves path against the payload and updates the box.
+  // optional=true suppresses last_error recording when the path is absent — use for
+  // auto-declared hook-data fields whose absence is a normal per-event state.
   declareInput(
     name: string,
     path: string,
     type: VarType,
     varDefault?: VarValue,
+    optional = false,
   ): void {
     // [LAW:dataflow-not-control-flow] Initialize to the fallback value so the
     // box always holds a valid typed value — even before the first render push.
     const initial =
       varDefault !== undefined ? varDefault : this.defaultFor(type);
     this.store.defineBox(name, type, initial);
-    this.inputMetas.set(name, { path, varDefault });
+    this.inputMetas.set(name, { path, varDefault, optional });
   }
 
   // env: resolved once at declaration from process.env; box written once, never again.
@@ -789,6 +797,7 @@ export class SourceRegistry {
               type,
               meta.varDefault,
               e instanceof Error ? e.message : String(e),
+              meta.optional,
             );
           }
         } else {
@@ -797,6 +806,7 @@ export class SourceRegistry {
             type,
             meta.varDefault,
             `input path "${meta.path}" not found in payload`,
+            meta.optional,
           );
         }
       }
@@ -958,13 +968,16 @@ export class SourceRegistry {
   // [LAW:no-defensive-null-guards] Each fallback level is deliberate; the zero
   // backstop is the only "silent" path and exists because the caller has already
   // recorded the error — downstream reads get a safe typed value, not an exception.
+  // optional=true suppresses error recording — used for hook-data fields whose
+  // absence is a normal per-event state, not a misconfiguration.
   private applyFallback(
     name: string,
     type: VarType,
     varDefault: VarValue | undefined,
     errorMessage: string,
+    optional = false,
   ): void {
-    this.recordError(name, errorMessage);
+    if (!optional) this.recordError(name, errorMessage);
     if (varDefault !== undefined) {
       this.store.setBox(name, varDefault);
       return;

@@ -97,7 +97,8 @@ export const HOOK_DATA_NAMES: ReadonlySet<string> = new Set(
 export function declareHookDataInputs(registry: SourceRegistry): void {
   for (const field of HOOK_DATA_FIELDS) {
     if (!registry.has(field.name)) {
-      registry.declareInput(field.name, field.path, field.type);
+      // optional=true: absent fields are a normal per-event state, not an error.
+      registry.declareInput(field.name, field.path, field.type, undefined, true);
     }
   }
 }
