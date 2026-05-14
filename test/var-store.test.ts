@@ -212,5 +212,22 @@ describe("type-checked cast helpers", () => {
       expect(typeOf(0)).toBe("number");
       expect(typeOf(false)).toBe("boolean");
     });
+    it("recognizes arrays", () => {
+      expect(typeOf([])).toBe("array");
+      expect(typeOf(["a", "b"])).toBe("array");
+    });
+  });
+
+  describe("array coercions", () => {
+    it("toString joins elements with comma", () => {
+      expect(toString(["a", "b", "c"])).toBe("a,b,c");
+      expect(toString([])).toBe("");
+    });
+    it("toNumber throws on arrays", () => {
+      expect(() => toNumber(["x"] as unknown as string)).toThrow(/Cannot cast array to number/);
+    });
+    it("toBool throws on arrays", () => {
+      expect(() => toBool(["x"] as unknown as string)).toThrow(/Cannot cast array to bool/);
+    });
   });
 });

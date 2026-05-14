@@ -8,7 +8,7 @@
 // string joins with comma; cast to number/boolean throws.
 
 export type VarType = "string" | "number" | "boolean" | "array";
-export type VarValue = string | number | boolean | readonly unknown[];
+export type VarValue = string | number | boolean | readonly string[];
 
 export function typeOf(v: VarValue): VarType {
   if (Array.isArray(v)) return "array";
