@@ -504,14 +504,22 @@ describe("loadDslConfig — layout", () => {
 // ─── Cross-reference validation ──────────────────────────────────────────────
 
 describe("loadDslConfig — cross-references", () => {
-  test("template references unknown variable is reported", () => {
-    expectIssue(
-      `{ segments: { cwd: { template: "{{ .nope }}" } } }`,
-      {
-        path: "segments.cwd.template",
-        message: 'Template references unknown variable ".nope"',
-      },
+  test("hook data field ref in segment template passes without declaration", () => {
+    // Refs that aren't declared user vars are assumed to be hook data fields —
+    // validated at runtime, not here.
+    const cfg = parseDslConfig(
+      FILE,
+      `{ segments: { s: { template: "{{ .session_id }}" } } }`,
     );
+    expect(cfg.segments.s!.template).toContain("session_id");
+  });
+
+  test("hook data nested field ref passes without declaration", () => {
+    const cfg = parseDslConfig(
+      FILE,
+      `{ segments: { s: { template: "{{ .model.id }}" } } }`,
+    );
+    expect(cfg.segments.s!.template).toContain("model.id");
   });
 
   test("template referencing declared variable passes", () => {
@@ -568,21 +576,14 @@ describe("loadDslConfig — cross-references", () => {
     expect(cfg.segments.s!.template).toContain("printf");
   });
 
-  test("bg/fg/when templates are validated too", () => {
-    expectIssue(
-      `{ segments: { s: { template: "x", bg: "{{ .missing }}" } } }`,
-      {
-        path: "segments.s.bg",
-        message: 'Template references unknown variable ".missing"',
-      },
+  test("bg/fg/when refs to undeclared names are accepted (may be hook data)", () => {
+    // Unknown refs in segment fields are not errors — they may be hook data fields.
+    const cfg = parseDslConfig(
+      FILE,
+      `{ segments: { s: { template: "x", bg: "{{ .session_id }}", when: "{{ ne .hook_event_name \\"\\" }}" } } }`,
     );
-    expectIssue(
-      `{ segments: { s: { template: "x", when: "{{ ne .missing \\"\\" }}" } } }`,
-      {
-        path: "segments.s.when",
-        message: 'Template references unknown variable ".missing"',
-      },
-    );
+    expect(cfg.segments.s!.bg).toContain("session_id");
+    expect(cfg.segments.s!.when).toContain("hook_event_name");
   });
 
   test("depends_on references unknown variable is reported", () => {
@@ -634,17 +635,17 @@ describe("loadDslConfig — cross-references", () => {
     expect(cfg.segments.s!.vars?.local!.kind).toBe("literal");
   });
 
-  test("bare ref to another segment's local is rejected", () => {
-    expectIssue(
+  test("bare ref to another segment's local is not flagged (may be hook data)", () => {
+    // Cannot distinguish cross-segment bare ref from hook data field at config
+    // time — runtime will surface the MissingFieldError if it's neither.
+    const cfg = parseDslConfig(
+      FILE,
       `{ segments: {
         a: { template: "x", vars: { shared: { kind: "literal", value: "1" } } },
         b: { template: "{{ .shared }}" }
       }}`,
-      {
-        path: "segments.b.template",
-        message: 'Template references unknown variable ".shared"',
-      },
     );
+    expect(cfg.segments.b!.template).toContain("shared");
   });
 
   test("namespaced ref to another segment's local passes", () => {

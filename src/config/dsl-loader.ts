@@ -768,7 +768,7 @@ function validateCrossReferences(ctx: ValidateCtx, cfg: DslConfig): void {
     for (const field of ["template", "bg", "fg", "when"] as const) {
       const tpl = seg[field];
       if (typeof tpl !== "string") continue;
-      checkTemplateRefs(ctx, `segments.${segName}.${field}`, tpl, segScope);
+      checkSegmentTemplateRefs(ctx, `segments.${segName}.${field}`, tpl, segScope);
     }
   }
 
@@ -843,6 +843,33 @@ function checkTemplateRefs(
       message: `Template references unknown variable ".${ref}"`,
       line: findKeyLine(ctx.source, declPath.split(".")),
     });
+  }
+}
+
+// Segment template validator.  Hook data is in scope at render time, so an
+// unknown ref is NOT necessarily an error — it may be a valid hook data field.
+// The only provably-wrong case: the ref's head IS a declared variable (a leaf
+// in the scope) but the full ref tries to navigate deeper into it.
+// [LAW:one-source-of-truth] No hook-data field list lives here — the hook data
+// object itself is the authority at runtime.
+function checkSegmentTemplateRefs(
+  ctx: ValidateCtx,
+  declPath: string,
+  template: string,
+  segScope: Set<string>,
+): void {
+  for (const ref of extractTemplateRefs(template)) {
+    if (refResolves(ref, segScope)) continue;
+    // Unknown ref — only flag if the head is a declared var (navigating into
+    // a scalar that won't support field access).  Otherwise assume hook data.
+    const head = ref.split(".")[0]!;
+    if (segScope.has(head)) {
+      ctx.issues.push({
+        path: declPath,
+        message: `Template references unknown variable ".${ref}"`,
+        line: findKeyLine(ctx.source, declPath.split(".")),
+      });
+    }
   }
 }
 

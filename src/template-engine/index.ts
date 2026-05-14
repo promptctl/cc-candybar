@@ -1,5 +1,5 @@
 export { createCcCandybarEngine } from "./engine.js";
-export { buildScope } from "./scope.js";
+export { buildScope, buildRenderScope } from "./scope.js";
 export { ccCandybarFuncs } from "./funcs.js";
 export { fragmentsToStripCells } from "./cells.js";
 export { evaluateWhen, applySegmentLayout } from "./layout.js";

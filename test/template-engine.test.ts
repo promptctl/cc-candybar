@@ -2,7 +2,7 @@
 // (fragment text, error types/messages), never internal AST shapes.
 
 import { createCcCandybarEngine } from "../src/template-engine/engine";
-import { buildScope } from "../src/template-engine/scope";
+import { buildScope, buildRenderScope } from "../src/template-engine/scope";
 import { ccCandybarFuncs } from "../src/template-engine/funcs";
 import { VariableStore } from "../src/var-system/store";
 import { MissingFieldError, ParseError } from "@promptctl/go-template-js";
@@ -290,5 +290,49 @@ describe("ccCandybarFuncs registry", () => {
     for (const [name, entry] of Object.entries(funcs)) {
       expect(Array.isArray(entry.argTypes)).toBe(true);
     }
+  });
+});
+
+// ────────────────────────────────────────────────────────────────
+// render scope (hook data as root)
+// ────────────────────────────────────────────────────────────────
+
+describe("buildRenderScope — hook data as template root", () => {
+  const engine = createCcCandybarEngine();
+  function evalRender(source: string, hookData: unknown, store = new VariableStore()): string {
+    return engine.parse(source).evaluate(buildRenderScope(hookData, store)).map((rt) => rt.plain).join("");
+  }
+
+  test("top-level hook data field is accessible", () => {
+    expect(evalRender("{{ .session_id }}", { session_id: "abc-123" })).toBe("abc-123");
+  });
+
+  test("nested hook data field is accessible", () => {
+    expect(evalRender("{{ .model.id }}", { model: { id: "claude-3" } })).toBe("claude-3");
+  });
+
+  test("user-declared store var shadows same-named hook data field", () => {
+    const store = new VariableStore();
+    store.defineBox("session_id", "string", "from-store");
+    expect(evalRender("{{ .session_id }}", { session_id: "from-hook" }, store)).toBe("from-store");
+  });
+
+  test("user-declared dotted store var shadows hook data namespace", () => {
+    const store = new VariableStore();
+    store.defineBox("model.id", "string", "overridden");
+    // "model" is now a store namespace prefix — sub-proxy covers it
+    expect(evalRender("{{ .model.id }}", { model: { id: "original" } }, store)).toBe("overridden");
+  });
+
+  test("array field in hook data is accessible via range", () => {
+    const result = evalRender(
+      `{{ range .dirs }}-{{ . }}{{ end }}`,
+      { dirs: ["a", "b", "c"] },
+    );
+    expect(result).toBe("-a-b-c");
+  });
+
+  test("missing hook data field returns empty (MissingFieldError from engine)", () => {
+    expect(() => evalRender("{{ .nope }}", {})).toThrow(/nope/);
   });
 });
