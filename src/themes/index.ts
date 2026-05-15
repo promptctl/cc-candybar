@@ -26,12 +26,16 @@ export { rotateHue } from "./oklch.js";
 
 // --- Backward-compat types (consumers still reference these) ---
 
+import type { ConfigValue } from "../config/loader";
+
 export interface SegmentColor {
+  [key: string]: ConfigValue;
   bg: string;
   fg: string;
 }
 
 export interface ColorTheme {
+  [key: string]: ConfigValue;
   directory: SegmentColor;
   git: SegmentColor;
   model: SegmentColor;

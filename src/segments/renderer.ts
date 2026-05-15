@@ -1,6 +1,6 @@
 import type { ClaudeHookData } from "../utils/claude";
 import type { PowerlineColors } from "../themes";
-import type { PowerlineConfig } from "../config/loader";
+import type { ConfigValue, PowerlineConfig } from "../config/loader";
 import type { BlockInfo } from "./block";
 import type {
   UsageInfo,
@@ -30,6 +30,7 @@ import fsSync from "node:fs";
 import pathSync from "node:path";
 
 export interface SegmentConfig {
+  [key: string]: ConfigValue;
   enabled: boolean;
 }
 
@@ -106,6 +107,7 @@ export interface VersionSegmentConfig extends SegmentConfig {}
 export type ClickActionSource = "sessionId" | "transcriptPath" | "projectDir";
 
 export interface ClickActionEntry {
+  [key: string]: ConfigValue;
   // Verb the URL handler will dispatch on (e.g. "copy", "open-vscode").
   verb: string;
   // Where in hookData the URL value comes from.
@@ -116,6 +118,7 @@ export interface ClickActionEntry {
 }
 
 export interface ClickActionUrl {
+  [key: string]: ConfigValue;
   kind: "url";
   scheme: string;
   actions: ClickActionEntry[];
@@ -139,6 +142,7 @@ export interface WeeklySegmentConfig extends SegmentConfig {
 }
 
 export interface ToolbarItem {
+  [key: string]: ConfigValue;
   // Visible label. Supports `${expr}` interpolations resolved against the
   // toolbar context (e.g. `${session.id:8}`, `📂`).
   text: string;
