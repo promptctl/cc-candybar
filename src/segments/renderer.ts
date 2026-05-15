@@ -1171,8 +1171,7 @@ export interface ToolbarContext {
   currentDir?: string;
   modelName?: string;
   modelShort?: string;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  hookData?: Record<string, any>;
+  hookData?: ClaudeHookData;
   currentTheme?: string;
   currentStyle?: string;
 }
@@ -1212,11 +1211,11 @@ export function resolveToolbarExpr(
   // hook.dotted.path — escape hatch into raw hook data
   if (trimmed.startsWith("hook.")) {
     const path = trimmed.slice(5).split(".");
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    let cur: any = ctx.hookData;
+    let cur: unknown = ctx.hookData;
     for (const key of path) {
-      if (cur == null) return undefined;
-      cur = cur[key];
+      if (cur === null || cur === undefined || typeof cur !== "object" || Array.isArray(cur)) return undefined;
+      // Runtime path traversal: cur is a non-null object; key set is not statically known.
+      cur = (cur as Record<string, unknown>)[key];
     }
     return cur == null ? undefined : String(cur);
   }

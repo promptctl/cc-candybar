@@ -57,7 +57,18 @@ export default [
         { default: "array-simple" },
       ],
       "@typescript-eslint/consistent-type-definitions": ["error", "interface"],
-      "@typescript-eslint/no-explicit-any": "warn",
+      "@typescript-eslint/no-explicit-any": "error",
+      "no-restricted-syntax": [
+        "error",
+        {
+          selector: "TSAsExpression > TSAsExpression",
+          message: "Chained type assertions (as X as Y) are forbidden — fix the upstream type instead.",
+        },
+        {
+          selector: "TSAsExpression[typeAnnotation.type='TSUnknownKeyword']",
+          message: "'as unknown' is forbidden — it exists only to enable chained casts.",
+        },
+      ],
     },
   },
   prettierConfig,

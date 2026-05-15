@@ -13,7 +13,9 @@
 // The engine's getField() uses `name in obj` before `obj[name]`, so every
 // proxy must define a `has` trap as well as `get`.
 
+import type { ClaudeHookData } from "../utils/claude.js";
 import type { VariableStore } from "../var-system/store.js";
+import { KNOWN_TOP_LEVEL } from "../utils/schema-validator.js";
 
 // Build the scope object the engine receives as `.` (dot).
 // Call once per render; the returned object is a read-only view of the store
@@ -28,7 +30,12 @@ export function buildScope(store: VariableStore): object {
 // [LAW:one-source-of-truth] Hook data is the single source of hook fields —
 // no parallel registry, no typed extraction.  The template engine traverses
 // nested hook data objects natively via JS property access.
-export function buildRenderScope(hookData: unknown, store: VariableStore): object {
+//
+// [LAW:single-enforcer] The proxy is the single place that decides which fields
+// are renderable and what absent optional fields resolve to. Known top-level
+// fields are always accessible (absent optionals → ""); unknown fields →
+// MissingFieldError from the engine.
+export function buildRenderScope(hookData: ClaudeHookData, store: VariableStore): object {
   const names = new Set(store.names());
   return new Proxy(Object.create(null) as object, {
     has(_, key: string | symbol): boolean {
@@ -37,8 +44,8 @@ export function buildRenderScope(hookData: unknown, store: VariableStore): objec
       if (names.has(key)) return true;
       const nsPrefix = `${key}.`;
       for (const n of names) if (n.startsWith(nsPrefix)) return true;
-      // Fall through: key exists in hook data.
-      return isObject(hookData) && key in (hookData as object);
+      // Known schema field → always renderable; absent optionals resolve to "".
+      return KNOWN_TOP_LEVEL.has(key);
     },
 
     get(_, key: string | symbol): unknown {
@@ -51,15 +58,13 @@ export function buildRenderScope(hookData: unknown, store: VariableStore): objec
       for (const n of names) {
         if (n.startsWith(nsPrefix)) return makeProxy(store, names, key);
       }
-      // Fall through: return hook data value.  The template engine traverses
-      // nested objects natively — no proxy needed for hook data children.
-      return isObject(hookData) ? (hookData as Record<string, unknown>)[key] : undefined;
+      // Known field: present value, or "" for absent optional top-level fields.
+      // The template engine traverses nested objects natively — no proxy needed
+      // for hook data children.
+      if (KNOWN_TOP_LEVEL.has(key)) return hookData[key] ?? "";
+      return undefined;
     },
   });
-}
-
-function isObject(v: unknown): v is Record<string, unknown> {
-  return v !== null && typeof v === "object" && !Array.isArray(v);
 }
 
 function makeProxy(

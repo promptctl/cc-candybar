@@ -367,7 +367,7 @@ async function handleRequest(req: Request): Promise<Response> {
     try {
       // [LAW:single-enforcer] One trust-boundary check for incoming hookData.
       // Divergences are logged, not thrown — rendering continues regardless.
-      const { report } = validateHookData(req.hookData as unknown);
+      const { report } = validateHookData(req.hookData);
       for (const path of report.missingRequired) {
         dlog("warn", `schema: required field '${path}' absent in hookData`);
       }

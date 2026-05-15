@@ -17,7 +17,7 @@ export interface ValidationReport {
 
 // Top-level keys Anthropic sends (plus hook_event_name, which cc-candybar adds).
 // Adding a new Anthropic field here suppresses the "unknown field" log for it.
-const KNOWN_TOP_LEVEL = new Set([
+export const KNOWN_TOP_LEVEL = new Set([
   "hook_event_name",       // cc-candybar internal
   "session_id",
   "session_name",

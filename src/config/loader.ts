@@ -422,14 +422,14 @@ function resolveOverride(
 // without a separate array-aware path syntax.
 const isArrayIndex = (s: string): boolean => /^(0|[1-9][0-9]*)$/.test(s);
 
-function writeAtPath(root: any, path: string[], value: unknown): void {
-  let cur = root;
+function writeAtPath(root: object, path: string[], value: unknown): void {
+  let cur = root as Record<string, unknown>;
   for (let i = 0; i < path.length - 1; i++) {
     const key = path[i]!;
     if (cur[key] === undefined || cur[key] === null) {
       cur[key] = isArrayIndex(path[i + 1]!) ? [] : {};
     }
-    cur = cur[key];
+    cur = cur[key] as Record<string, unknown>;
   }
   cur[path[path.length - 1]!] = value;
 }

@@ -6,6 +6,10 @@ import { createInterface } from "node:readline";
 import { debug } from "./logger";
 
 export interface ClaudeHookData {
+  // Anthropic may add fields; the index signature makes dynamic access safe
+  // and correctly models ClaudeHookData as an open record from an external source.
+  [key: string]: unknown;
+
   // cc-candybar internal — not part of Anthropic's schema
   hook_event_name: string;
 

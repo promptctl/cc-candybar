@@ -679,7 +679,7 @@ export class PowerlineRenderer {
           currentDir: hookData.workspace?.current_dir || hookData.cwd,
           modelName: formatted,
           modelShort: shortenModelName(formatted),
-          hookData: hookData as unknown as Record<string, unknown>,
+          hookData: hookData,
         },
       );
     }
@@ -697,7 +697,7 @@ export class PowerlineRenderer {
           currentDir: hookData.workspace?.current_dir || hookData.cwd,
           modelName: formatted,
           modelShort: shortenModelName(formatted),
-          hookData: hookData as unknown as Record<string, unknown>,
+          hookData: hookData,
         },
       );
     }
@@ -930,7 +930,7 @@ export class PowerlineRenderer {
         modelShort: shortenModelName(
           formatModelName(hookData.model?.display_name || "Claude"),
         ),
-        hookData: hookData as unknown as Record<string, unknown>,
+        hookData: hookData,
         currentTheme: ctx.theme,
         currentStyle: ctx.style,
       };

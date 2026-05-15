@@ -1,6 +1,7 @@
 // [LAW:behavior-not-structure] Tests assert template evaluation outcomes
 // (fragment text, error types/messages), never internal AST shapes.
 
+import type { ClaudeHookData } from "../src/utils/claude";
 import { createCcCandybarEngine } from "../src/template-engine/engine";
 import { buildScope, buildRenderScope } from "../src/template-engine/scope";
 import { ccCandybarFuncs } from "../src/template-engine/funcs";
@@ -299,8 +300,10 @@ describe("ccCandybarFuncs registry", () => {
 
 describe("buildRenderScope — hook data as template root", () => {
   const engine = createCcCandybarEngine();
-  function evalRender(source: string, hookData: unknown, store = new VariableStore()): string {
-    return engine.parse(source).evaluate(buildRenderScope(hookData, store)).map((rt) => rt.plain).join("");
+  // Casts to ClaudeHookData: tests intentionally pass partial objects to isolate
+  // specific fields; the proxy tolerates absent required fields for unit testing.
+  function evalRender(source: string, hookData: object, store = new VariableStore()): string {
+    return engine.parse(source).evaluate(buildRenderScope(hookData as ClaudeHookData, store)).map((rt) => rt.plain).join("");
   }
 
   test("top-level hook data field is accessible", () => {
@@ -324,15 +327,27 @@ describe("buildRenderScope — hook data as template root", () => {
     expect(evalRender("{{ .model.id }}", { model: { id: "original" } }, store)).toBe("overridden");
   });
 
-  test("array field in hook data is accessible via range", () => {
+  test("array nested under known field accessible via range", () => {
     const result = evalRender(
-      `{{ range .dirs }}-{{ . }}{{ end }}`,
-      { dirs: ["a", "b", "c"] },
+      `{{ range .workspace.added_dirs }}-{{ . }}{{ end }}`,
+      { workspace: { added_dirs: ["a", "b", "c"] } },
     );
     expect(result).toBe("-a-b-c");
   });
 
-  test("missing hook data field returns empty (MissingFieldError from engine)", () => {
-    expect(() => evalRender("{{ .nope }}", {})).toThrow(/nope/);
+  test("absent known optional field renders as empty string", () => {
+    expect(evalRender("{{ .session_name }}", {})).toBe("");
+  });
+
+  test("absent known optional field is falsy in a conditional", () => {
+    expect(evalRender('{{ if .session_name }}yes{{ else }}no{{ end }}', {})).toBe("no");
+  });
+
+  test("present optional field renders its value", () => {
+    expect(evalRender("{{ .session_name }}", { session_name: "my-session" })).toBe("my-session");
+  });
+
+  test("unknown field (not in schema) throws MissingFieldError", () => {
+    expect(() => evalRender("{{ .sailboat }}", {})).toThrow(MissingFieldError);
   });
 });
