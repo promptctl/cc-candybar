@@ -22,6 +22,7 @@ import type {
   ToolbarSegmentConfig,
   TraySegmentConfig,
 } from "../segments/renderer";
+import type { AnySegmentConfig } from "../segments/renderer";
 import { parseToolbarDsl } from "../segments/renderer";
 
 export interface LineConfig {
@@ -86,6 +87,9 @@ export interface PanelConfig {
 }
 
 export interface PowerlineConfig {
+  // Open for path-based mutation via --set CLI overrides; writeAtPath walks
+  // arbitrary runtime paths into this config and writes leaves.
+  [key: string]: unknown;
   theme: string;
   style?: string;
   display: DisplayConfig;
@@ -281,7 +285,7 @@ function parseLayout(raw: string): LineConfig[] {
   for (const line of DEFAULT_CONFIG.display.lines) {
     for (const [name, cfg] of Object.entries(line.segments)) {
       if (cfg !== undefined) {
-        (defaultsByName as Record<string, unknown>)[name] = cfg;
+        (defaultsByName as Record<string, AnySegmentConfig>)[name] = cfg;
       }
     }
   }
@@ -300,7 +304,7 @@ function parseLayout(raw: string): LineConfig[] {
 
       const cloned = seed ? JSON.parse(JSON.stringify(seed)) : {};
       cloned.enabled = true;
-      (segments as Record<string, unknown>)[name] = cloned;
+      (segments as Record<string, AnySegmentConfig>)[name] = cloned;
     }
     return { segments };
   });
@@ -356,7 +360,7 @@ function resolveOverride(
     const rest = parts.slice(2);
     const lines = config.display.lines;
     for (let i = 0; i < lines.length; i++) {
-      const segs = lines[i]!.segments as Record<string, unknown>;
+      const segs = lines[i]!.segments as Record<string, AnySegmentConfig>;
       if (segs && segs[segName] !== undefined) {
         return [
           {
@@ -419,8 +423,8 @@ function resolveOverride(
 // without a separate array-aware path syntax.
 const isArrayIndex = (s: string): boolean => /^(0|[1-9][0-9]*)$/.test(s);
 
-function writeAtPath(root: object, path: string[], value: unknown): void {
-  let cur = root as Record<string, unknown>;
+function writeAtPath(root: PowerlineConfig, path: string[], value: unknown): void {
+  let cur: Record<string, unknown> = root;
   for (let i = 0; i < path.length - 1; i++) {
     const key = path[i]!;
     if (cur[key] === undefined || cur[key] === null) {
