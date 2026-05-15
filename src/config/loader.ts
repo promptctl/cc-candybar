@@ -26,32 +26,27 @@ import type { AnySegmentConfig } from "../segments/renderer";
 import { parseToolbarDsl } from "../segments/renderer";
 
 export interface LineConfig {
-  [key: string]: ConfigValue;
-  segments: SegmentsMap;
-}
-
-export interface SegmentsMap {
-  [key: string]: ConfigValue;
-  directory?: DirectorySegmentConfig;
-  git?: GitSegmentConfig;
-  gitTaculous?: GitSegmentConfig;
-  model?: SegmentConfig;
-  session?: UsageSegmentConfig;
-  block?: BlockSegmentConfig;
-  today?: TodaySegmentConfig;
-  tmux?: TmuxSegmentConfig;
-  context?: ContextSegmentConfig;
-  metrics?: MetricsSegmentConfig;
-  version?: VersionSegmentConfig;
-  sessionId?: SessionIdSegmentConfig;
-  env?: EnvSegmentConfig;
-  weekly?: WeeklySegmentConfig;
-  toolbar?: ToolbarSegmentConfig;
-  tray?: TraySegmentConfig;
+  segments: {
+    directory?: DirectorySegmentConfig;
+    git?: GitSegmentConfig;
+    gitTaculous?: GitSegmentConfig;
+    model?: SegmentConfig;
+    session?: UsageSegmentConfig;
+    block?: BlockSegmentConfig;
+    today?: TodaySegmentConfig;
+    tmux?: TmuxSegmentConfig;
+    context?: ContextSegmentConfig;
+    metrics?: MetricsSegmentConfig;
+    version?: VersionSegmentConfig;
+    sessionId?: SessionIdSegmentConfig;
+    env?: EnvSegmentConfig;
+    weekly?: WeeklySegmentConfig;
+    toolbar?: ToolbarSegmentConfig;
+    tray?: TraySegmentConfig;
+  };
 }
 
 export interface DisplayConfig {
-  [key: string]: ConfigValue;
   lines: LineConfig[];
   style?: "minimal" | "powerline" | "capsule" | "random";
   charset?: "unicode" | "text";
@@ -61,21 +56,18 @@ export interface DisplayConfig {
 }
 
 export interface BudgetItemConfig {
-  [key: string]: ConfigValue;
   amount?: number;
   warningThreshold?: number;
   type?: "cost" | "tokens";
 }
 
 export interface BudgetConfig {
-  [key: string]: ConfigValue;
   session?: BudgetItemConfig;
   today?: BudgetItemConfig;
   block?: BudgetItemConfig;
 }
 
 export interface SegmentColorOverride {
-  [key: string]: ConfigValue;
   bg?: string;
   fg?: string;
   hue?: number;
@@ -83,7 +75,6 @@ export interface SegmentColorOverride {
 }
 
 export interface PanelItemConfig {
-  [key: string]: ConfigValue;
   text: string;
   verb: string;
   expr: string;
@@ -91,24 +82,20 @@ export interface PanelItemConfig {
 }
 
 export interface PanelConfig {
-  [key: string]: ConfigValue;
   items: PanelItemConfig[];
   separator?: string;
-}
-
-export interface ColorsConfig {
-  [key: string]: ConfigValue;
-  custom: ColorTheme;
 }
 
 export interface PowerlineConfig {
   // Open for path-based mutation via --set CLI overrides; writeAtPath walks
   // arbitrary runtime paths into this config and writes leaves.
-  [key: string]: ConfigValue;
+  [key: string]: unknown;
   theme: string;
   style?: string;
   display: DisplayConfig;
-  colors?: ColorsConfig;
+  colors?: {
+    custom: ColorTheme;
+  };
   themeMapping?: Record<string, SegmentColorOverride>;
   hueStep?: number;
   panel?: PanelConfig;
@@ -323,14 +310,7 @@ function parseLayout(raw: string): LineConfig[] {
   });
 }
 
-// Tree-shape types for CLI override mutation. ConfigLeaf is what --set can
-// produce; ConfigValue is anything that can sit at any node in the config tree;
-// ConfigBranch is any node that can be descended into.
-export type ConfigLeaf = string | number | boolean;
-export type ConfigValue = ConfigLeaf | undefined | null | ConfigBranch;
-export type ConfigBranch = { [key: string]: ConfigValue } | ConfigValue[];
-
-function parseSetValue(raw: string): ConfigLeaf {
+function parseSetValue(raw: string): unknown {
   if (raw === "true") return true;
   if (raw === "false") return false;
   if (/^-?\d+(?:\.\d+)?$/.test(raw)) return Number(raw);
@@ -363,12 +343,12 @@ function* iterateOverrideFlags(
 
 interface ResolvedOverride {
   path: string[];
-  value: ConfigLeaf;
+  value: unknown;
 }
 
 function resolveOverride(
   rawPath: string,
-  value: ConfigLeaf,
+  value: unknown,
   config: PowerlineConfig,
 ): ResolvedOverride[] {
   const parts = rawPath.split(".");
@@ -443,42 +423,22 @@ function resolveOverride(
 // without a separate array-aware path syntax.
 const isArrayIndex = (s: string): boolean => /^(0|[1-9][0-9]*)$/.test(s);
 
-function writeAtPath(root: ConfigBranch, path: string[], value: ConfigLeaf): void {
-  let cur: ConfigBranch = root;
+function writeAtPath(root: PowerlineConfig, path: string[], value: unknown): void {
+  let cur: Record<string, unknown> = root;
   for (let i = 0; i < path.length - 1; i++) {
     const key = path[i]!;
-    const cursor = descend(cur, key);
-    if (cursor === undefined || cursor === null) {
-      const created: ConfigBranch = isArrayIndex(path[i + 1]!) ? [] : {};
-      assign(cur, key, created);
-      cur = created;
-    } else if (typeof cursor !== "object") {
-      throw new Error(
-        `writeAtPath: cannot descend into non-object at ${path.slice(0, i + 1).join(".")}`,
-      );
-    } else {
-      cur = cursor;
+    if (cur[key] === undefined || cur[key] === null) {
+      cur[key] = isArrayIndex(path[i + 1]!) ? [] : {};
     }
+    cur = cur[key] as Record<string, unknown>;
   }
-  assign(cur, path[path.length - 1]!, value);
-}
-
-function descend(node: ConfigBranch, key: string): ConfigValue {
-  return Array.isArray(node) ? node[Number(key)] : node[key];
-}
-
-function assign(node: ConfigBranch, key: string, value: ConfigValue): void {
-  if (Array.isArray(node)) {
-    node[Number(key)] = value;
-  } else {
-    node[key] = value;
-  }
+  cur[path[path.length - 1]!] = value;
 }
 
 function writeResolved(
   config: PowerlineConfig,
   rawPath: string,
-  value: ConfigLeaf,
+  value: unknown,
 ): void {
   for (const ov of resolveOverride(rawPath, value, config)) {
     writeAtPath(config, ov.path, ov.value);
