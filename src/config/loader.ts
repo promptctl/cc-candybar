@@ -141,34 +141,81 @@ function getArgValue(args: string[], argName: string): string | undefined {
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function deepMerge<T extends Record<string, any>>(
-  target: T,
-  source: Partial<T>,
-): T {
-  const result = { ...target };
+function mergeConfig(
+  target: PowerlineConfig,
+  source: Partial<PowerlineConfig>,
+): PowerlineConfig {
+  return {
+    theme: source.theme ?? target.theme,
+    style: source.style ?? target.style,
+    display: source.display
+      ? mergeDisplay(target.display, source.display)
+      : target.display,
+    colors: source.colors ?? target.colors,
+    themeMapping: source.themeMapping
+      ? { ...target.themeMapping, ...source.themeMapping }
+      : target.themeMapping,
+    hueStep: source.hueStep ?? target.hueStep,
+    panel: source.panel ? mergePanel(target.panel, source.panel) : target.panel,
+    budget: source.budget
+      ? mergeBudget(target.budget, source.budget)
+      : target.budget,
+    modelContextLimits: source.modelContextLimits
+      ? { ...target.modelContextLimits, ...source.modelContextLimits }
+      : target.modelContextLimits,
+  };
+}
 
-  for (const key in source) {
-    const sourceValue = source[key];
-    if (sourceValue !== undefined) {
-      if (
-        typeof sourceValue === "object" &&
-        sourceValue !== null &&
-        !Array.isArray(sourceValue)
-      ) {
-        const targetValue = result[key] || {};
-        result[key] = deepMerge(
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          targetValue as Record<string, any>,
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          sourceValue as Record<string, any>,
-        ) as T[Extract<keyof T, string>];
-      } else {
-        result[key] = sourceValue as T[Extract<keyof T, string>];
-      }
-    }
-  }
+function mergeDisplay(
+  target: DisplayConfig,
+  source: Partial<DisplayConfig>,
+): DisplayConfig {
+  return {
+    lines: source.lines ?? target.lines,
+    style: source.style ?? target.style,
+    charset: source.charset ?? target.charset,
+    colorCompatibility: source.colorCompatibility ?? target.colorCompatibility,
+    autoWrap: source.autoWrap ?? target.autoWrap,
+    padding: source.padding ?? target.padding,
+  };
+}
 
-  return result;
+function mergePanel(
+  target: PanelConfig | undefined,
+  source: Partial<PanelConfig>,
+): PanelConfig {
+  return {
+    items: source.items ?? target?.items ?? [],
+    separator: source.separator ?? target?.separator,
+  };
+}
+
+function mergeBudget(
+  target: BudgetConfig | undefined,
+  source: Partial<BudgetConfig>,
+): BudgetConfig {
+  return {
+    session: source.session
+      ? mergeBudgetItem(target?.session, source.session)
+      : target?.session,
+    today: source.today
+      ? mergeBudgetItem(target?.today, source.today)
+      : target?.today,
+    block: source.block
+      ? mergeBudgetItem(target?.block, source.block)
+      : target?.block,
+  };
+}
+
+function mergeBudgetItem(
+  target: BudgetItemConfig | undefined,
+  source: Partial<BudgetItemConfig>,
+): BudgetItemConfig {
+  return {
+    amount: source.amount ?? target?.amount,
+    warningThreshold: source.warningThreshold ?? target?.warningThreshold,
+    type: source.type ?? target?.type,
+  };
 }
 
 // Resolve the config-file path the daemon should watch for live-reload, given
@@ -368,7 +415,7 @@ export function loadConfigStrict(
   const configFile = findConfigFile(configPath, projectDir, cwd);
   if (configFile) {
     const fileConfig = loadConfigFile(configFile);
-    config = deepMerge(config, fileConfig);
+    config = mergeConfig(config, fileConfig);
   }
 
   if (config.display?.style && !isValidStyle(config.display.style)) {
@@ -393,13 +440,13 @@ export function loadConfigStrict(
   }
 
   const envConfig = loadEnvConfig();
-  config = deepMerge(config, envConfig);
+  config = mergeConfig(config, envConfig);
 
   const cliOverrides = parseCLIOverrides(args);
-  config = deepMerge(config, cliOverrides);
+  config = mergeConfig(config, cliOverrides);
 
   // [LAW:dataflow-not-control-flow] --layout replaces display.lines wholesale
-  // (lines[] is an array — deepMerge replaces arrays — so the layout owns
+  // (lines[] is an array — mergeDisplay replaces arrays — so the layout owns
   // structure deterministically). --set then writes values into the resolved
   // structure.
   const layoutArg = getArgValue(args, "--layout");
@@ -466,9 +513,9 @@ export function loadConfig(
 function loadConfigStrictNoFile(args: string[]): PowerlineConfig {
   let config: PowerlineConfig = JSON.parse(JSON.stringify(DEFAULT_CONFIG));
   const envConfig = loadEnvConfig();
-  config = deepMerge(config, envConfig);
+  config = mergeConfig(config, envConfig);
   const cliOverrides = parseCLIOverrides(args);
-  config = deepMerge(config, cliOverrides);
+  config = mergeConfig(config, cliOverrides);
   const layoutArg = getArgValue(args, "--layout");
   if (layoutArg !== undefined) {
     config.display.lines = parseLayout(layoutArg);
