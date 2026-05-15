@@ -263,23 +263,25 @@ export async function getFileModificationDate(
   }
 }
 
-type UsageCounts = {
+interface UsageCounts {
   input_tokens?: number;
   output_tokens?: number;
   cache_creation_input_tokens?: number;
   cache_read_input_tokens?: number;
-};
+}
 
 // [LAW:one-source-of-truth] The only fields ever read from raw are
 // model, message.{id,model,usage}, and requestId. Storing the full
 // parsed JSON (including content arrays with full message text) causes
 // hundreds of MB of V8 heap churn per transcript re-parse. raw is
 // pruned to this shape at parse time so the GC pressure is bounded.
-export type PrunedRaw = {
+export interface PrunedRaw {
   model?: string;
+  // Legacy log format used model_id instead of model.
+  model_id?: string;
   message?: { id?: string; model?: string; usage?: UsageCounts };
   requestId?: string;
-};
+}
 
 export interface ParsedEntry {
   timestamp: Date;

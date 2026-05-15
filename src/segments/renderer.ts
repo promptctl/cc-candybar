@@ -1213,7 +1213,13 @@ export function resolveToolbarExpr(
     const path = trimmed.slice(5).split(".");
     let cur: unknown = ctx.hookData;
     for (const key of path) {
-      if (cur === null || cur === undefined || typeof cur !== "object" || Array.isArray(cur)) return undefined;
+      if (
+        cur === null ||
+        cur === undefined ||
+        typeof cur !== "object" ||
+        Array.isArray(cur)
+      )
+        return undefined;
       // Runtime path traversal: cur is a non-null object; key set is not statically known.
       cur = (cur as Record<string, unknown>)[key];
     }

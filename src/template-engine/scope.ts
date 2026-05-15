@@ -35,7 +35,10 @@ export function buildScope(store: VariableStore): object {
 // are renderable and what absent optional fields resolve to. Known top-level
 // fields are always accessible (absent optionals → ""); unknown fields →
 // MissingFieldError from the engine.
-export function buildRenderScope(hookData: ClaudeHookData, store: VariableStore): object {
+export function buildRenderScope(
+  hookData: ClaudeHookData,
+  store: VariableStore,
+): object {
   const names = new Set(store.names());
   return new Proxy(Object.create(null) as object, {
     has(_, key: string | symbol): boolean {

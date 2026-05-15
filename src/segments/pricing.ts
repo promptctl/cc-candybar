@@ -1,3 +1,4 @@
+import type { PrunedRaw } from "../utils/claude.js";
 import { debug } from "../utils/logger";
 import { get } from "node:https";
 import { URL } from "node:url";
@@ -402,7 +403,7 @@ export class PricingService {
   }
 
   static async calculateCostForEntry(
-    entry: import("../utils/claude.js").PrunedRaw,
+    entry: PrunedRaw,
   ): Promise<number> {
     const usage = entry.message?.usage;
     if (!usage) {
@@ -426,25 +427,17 @@ export class PricingService {
     return inputCost + outputCost + cacheCreationCost + cacheReadCost;
   }
 
-  private static extractModelId(entry: Record<string, unknown>): string {
-    if (entry.model && typeof entry.model === "string") {
+  private static extractModelId(entry: PrunedRaw): string {
+    if (entry.model) {
       return entry.model;
     }
 
-    const message = entry.message as Record<string, unknown> | undefined;
-    if (message?.model) {
-      const model = message.model;
-      if (typeof model === "string") {
-        return model;
-      }
-      const modelObj = model as Record<string, unknown> | undefined;
-      return (
-        (typeof modelObj?.id === "string" ? modelObj.id : null) ||
-        "claude-sonnet-4-5-20250929"
-      );
+    const msg = entry.message;
+    if (msg?.model) {
+      return msg.model;
     }
 
-    if (entry.model_id && typeof entry.model_id === "string") {
+    if (entry.model_id) {
       return entry.model_id;
     }
 
