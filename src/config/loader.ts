@@ -281,8 +281,7 @@ function parseLayout(raw: string): LineConfig[] {
   for (const line of DEFAULT_CONFIG.display.lines) {
     for (const [name, cfg] of Object.entries(line.segments)) {
       if (cfg !== undefined) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (defaultsByName as any)[name] = cfg;
+        (defaultsByName as Record<string, unknown>)[name] = cfg;
       }
     }
   }
@@ -301,8 +300,7 @@ function parseLayout(raw: string): LineConfig[] {
 
       const cloned = seed ? JSON.parse(JSON.stringify(seed)) : {};
       cloned.enabled = true;
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (segments as any)[name] = cloned;
+      (segments as Record<string, unknown>)[name] = cloned;
     }
     return { segments };
   });
@@ -358,8 +356,7 @@ function resolveOverride(
     const rest = parts.slice(2);
     const lines = config.display.lines;
     for (let i = 0; i < lines.length; i++) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const segs = lines[i]!.segments as any;
+      const segs = lines[i]!.segments as Record<string, unknown>;
       if (segs && segs[segName] !== undefined) {
         return [
           {
