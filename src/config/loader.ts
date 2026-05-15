@@ -87,9 +87,6 @@ export interface PanelConfig {
 }
 
 export interface PowerlineConfig {
-  // Open for path-based mutation via --set CLI overrides; writeAtPath walks
-  // arbitrary runtime paths into this config and writes leaves.
-  [key: string]: unknown;
   theme: string;
   style?: string;
   display: DisplayConfig;
@@ -310,224 +307,6 @@ function parseLayout(raw: string): LineConfig[] {
   });
 }
 
-function parseSetValue(raw: string): unknown {
-  if (raw === "true") return true;
-  if (raw === "false") return false;
-  if (/^-?\d+(?:\.\d+)?$/.test(raw)) return Number(raw);
-  return raw;
-}
-
-const OVERRIDE_FLAGS = ["set", "show", "display", "segment"] as const;
-type OverrideFlag = (typeof OVERRIDE_FLAGS)[number];
-
-function* iterateOverrideFlags(
-  args: string[],
-): Generator<{ kind: OverrideFlag; body: string }> {
-  for (let i = 0; i < args.length; i++) {
-    const arg = args[i];
-    if (arg === undefined) continue;
-    for (const kind of OVERRIDE_FLAGS) {
-      const flag = `--${kind}`;
-      if (arg === flag && i + 1 < args.length) {
-        yield { kind, body: args[i + 1]! };
-        i++;
-        break;
-      }
-      if (arg.startsWith(`${flag}=`)) {
-        yield { kind, body: arg.slice(flag.length + 1) };
-        break;
-      }
-    }
-  }
-}
-
-interface ResolvedOverride {
-  path: string[];
-  value: unknown;
-}
-
-function resolveOverride(
-  rawPath: string,
-  value: unknown,
-  config: PowerlineConfig,
-): ResolvedOverride[] {
-  const parts = rawPath.split(".");
-  const head = parts[0];
-
-  // segment.<name>.<...> → display.lines[k].segments.<name>.<...>
-  if (head === "segment" && parts.length >= 3) {
-    const segName = parts[1]!;
-    const rest = parts.slice(2);
-    const lines = config.display.lines;
-    for (let i = 0; i < lines.length; i++) {
-      const segs = lines[i]!.segments as Record<string, AnySegmentConfig>;
-      if (segs && segs[segName] !== undefined) {
-        return [
-          {
-            path: ["display", "lines", String(i), "segments", segName, ...rest],
-            value,
-          },
-        ];
-      }
-    }
-    process.stderr.write(
-      `Warning: --set ${rawPath} but segment "${segName}" is not in the layout (use --layout to include it).\n`,
-    );
-    return [];
-  }
-
-  // color.<name>="#bg/#fg" → bg+fg pair
-  if (head === "color" && parts.length === 2) {
-    const segName = parts[1]!;
-    if (typeof value !== "string" || !value.includes("/")) {
-      process.stderr.write(
-        `Warning: --set ${rawPath} expects "#bg/#fg" format, got "${String(value)}".\n`,
-      );
-      return [];
-    }
-    const slash = value.indexOf("/");
-    const bg = value.slice(0, slash);
-    const fg = value.slice(slash + 1);
-    return [
-      { path: ["colors", "custom", segName, "bg"], value: bg },
-      { path: ["colors", "custom", segName, "fg"], value: fg },
-    ];
-  }
-
-  // color.<name>.{bg,fg}=#hex
-  if (
-    head === "color" &&
-    parts.length === 3 &&
-    (parts[2] === "bg" || parts[2] === "fg")
-  ) {
-    return [{ path: ["colors", "custom", parts[1]!, parts[2]!], value }];
-  }
-
-  // budget.<name>.<key>
-  if (head === "budget" && parts.length === 3) {
-    return [{ path: ["budget", parts[1]!, parts[2]!], value }];
-  }
-
-  // modelLimit.<name> → modelContextLimits.<name>
-  if (head === "modelLimit" && parts.length === 2) {
-    return [{ path: ["modelContextLimits", parts[1]!], value }];
-  }
-
-  // literal dotted path
-  return [{ path: parts, value }];
-}
-
-// [LAW:dataflow-not-control-flow] Numeric path segments produce arrays;
-// non-numeric produce objects. Same loop, branch driven by the next key's
-// shape — lets dotted CLI overrides like `actions.0.verb` build arrays
-// without a separate array-aware path syntax.
-const isArrayIndex = (s: string): boolean => /^(0|[1-9][0-9]*)$/.test(s);
-
-function writeAtPath(root: PowerlineConfig, path: string[], value: unknown): void {
-  let cur: Record<string, unknown> = root;
-  for (let i = 0; i < path.length - 1; i++) {
-    const key = path[i]!;
-    if (cur[key] === undefined || cur[key] === null) {
-      cur[key] = isArrayIndex(path[i + 1]!) ? [] : {};
-    }
-    cur = cur[key] as Record<string, unknown>;
-  }
-  cur[path[path.length - 1]!] = value;
-}
-
-function writeResolved(
-  config: PowerlineConfig,
-  rawPath: string,
-  value: unknown,
-): void {
-  for (const ov of resolveOverride(rawPath, value, config)) {
-    writeAtPath(config, ov.path, ov.value);
-  }
-}
-
-function splitCsvPairs(body: string): string[] {
-  return body
-    .split(",")
-    .map((s) => s.trim())
-    .filter(Boolean);
-}
-
-// [LAW:one-type-per-behavior] --set, --show, --display, --segment are all
-// sugars for "write a config value via resolveOverride/writeAtPath". This
-// single dispatcher walks argv in order so last-in-args wins regardless of
-// which flag is used.
-function applyOverrideFlags(config: PowerlineConfig, args: string[]): void {
-  for (const { kind, body } of iterateOverrideFlags(args)) {
-    if (kind === "set") {
-      const eq = body.indexOf("=");
-      if (eq === -1) {
-        writeResolved(config, body, true);
-      } else {
-        writeResolved(
-          config,
-          body.slice(0, eq),
-          parseSetValue(body.slice(eq + 1)),
-        );
-      }
-      continue;
-    }
-
-    if (kind === "show") {
-      const eq = body.indexOf("=");
-      if (eq <= 0) {
-        process.stderr.write(
-          `Warning: --show ${body} expects "<segment>=<flag1,flag2,...>" format.\n`,
-        );
-        continue;
-      }
-      const segName = body.slice(0, eq);
-      for (const flag of splitCsvPairs(body.slice(eq + 1))) {
-        const field = `show${flag[0]!.toUpperCase()}${flag.slice(1)}`;
-        writeResolved(config, `segment.${segName}.${field}`, true);
-      }
-      continue;
-    }
-
-    if (kind === "display") {
-      for (const pair of splitCsvPairs(body)) {
-        const eq = pair.indexOf("=");
-        if (eq <= 0) {
-          process.stderr.write(
-            `Warning: --display ${pair} expects "<key>=<value>" (comma-separated for multiple).\n`,
-          );
-          continue;
-        }
-        const key = pair.slice(0, eq);
-        writeResolved(
-          config,
-          `display.${key}`,
-          parseSetValue(pair.slice(eq + 1)),
-        );
-      }
-      continue;
-    }
-
-    if (kind === "segment") {
-      for (const pair of splitCsvPairs(body)) {
-        const eq = pair.indexOf("=");
-        if (eq <= 0 || !pair.slice(0, eq).includes(".")) {
-          process.stderr.write(
-            `Warning: --segment ${pair} expects "<segName>.<field>=<value>" (comma-separated for multiple).\n`,
-          );
-          continue;
-        }
-        const lhs = pair.slice(0, eq);
-        writeResolved(
-          config,
-          `segment.${lhs}`,
-          parseSetValue(pair.slice(eq + 1)),
-        );
-      }
-      continue;
-    }
-  }
-}
-
 function parseCLIOverrides(args: string[]): Partial<PowerlineConfig> {
   const config: Partial<PowerlineConfig> = {};
   const display: Partial<DisplayConfig> = {};
@@ -628,8 +407,6 @@ export function loadConfigStrict(
     config.display.lines = parseLayout(layoutArg);
   }
 
-  applyOverrideFlags(config, args);
-
   // [LAW:dataflow-not-control-flow] --toolbar / --tray 'EXPR' parse the same
   // inline DSL (item shape is identical) and write onto the corresponding
   // segment in the layout. The DSL is the source of truth for items.
@@ -696,7 +473,6 @@ function loadConfigStrictNoFile(args: string[]): PowerlineConfig {
   if (layoutArg !== undefined) {
     config.display.lines = parseLayout(layoutArg);
   }
-  applyOverrideFlags(config, args);
   attachInlineDslItems(config, args, "--toolbar", "toolbar");
   attachInlineDslItems(config, args, "--tray", "tray");
   return config;

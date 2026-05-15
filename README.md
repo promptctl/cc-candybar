@@ -45,10 +45,6 @@ All flags go directly in the `settings.json` command — no config file required
 | `--charset` | `unicode` (default), `text` | `--charset=text` |
 | `--config` | Custom config file path | `--config=~/.candybar.json` |
 | `--layout` | Define lines and segment ordering inline | `--layout "directory git \| model session"` |
-| `--show` | Enable multiple `show*` booleans on a segment | `--show git=workingTree,upstream` |
-| `--display` | Set multiple `display.*` fields | `--display autoWrap=false,padding=1` |
-| `--segment` | Set multiple segment fields | `--segment block.type=weighted` |
-| `--set` | Universal escape hatch for any dotted config path | `--set color.git=#3a3a3a/#d0d0d0` |
 
 Override priority: CLI flags > environment variables > config files > defaults.
 
@@ -56,7 +52,7 @@ Override priority: CLI flags > environment variables > config files > defaults.
 pnpm dlx @promptctl/cc-candybar@latest install \
   --style=capsule \
   --layout 'directory model session' \
-  --show git=workingTree
+
 ```
 
 ## Architecture
@@ -163,7 +159,7 @@ Config files hot-reload — no restart needed.
 CCCandybar is a fork of `@owloops/claude-powerline` with these additions:
 
 - **Daemon architecture** — background process with git filesystem watchers, usage cache, and per-session state shared across concurrent sessions.
-- **CLI override flags** — `--layout`, `--show`, `--display`, `--segment`, `--set` let you configure everything inline in `settings.json` without a separate config file.
+- **CLI override flags** — `--layout`, `--theme`, `--style`, `--charset`, `--tray`, `--toolbar`, and `--config` let you override config at the command line without editing a config file.
 - **Session state store** — generic key/value per-session state, replacing separate theme/toolbar state types.
 - **OKLCH color math** — theme colors resolve through OKLCH for perceptual uniformity.
 

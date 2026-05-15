@@ -155,37 +155,6 @@ describe("sessionId segment", () => {
 // ─── session segment (cost / tokens) ─────────────────────────────────────────
 
 describe("session segment", () => {
-  test(
-    "shows cost from JSONL transcript (session.type=cost)",
-    withTranscript(
-      "cc000000-test-0000-0000-cost0001",
-      [{ input_tokens: 100, output_tokens: 50, costUSD: 0.07 }],
-      async (partial) => {
-        const hook: ClaudeHookData = { ...BASE_HOOK, ...partial };
-        const out = plain(
-          await render(hook, ["--layout=session", "--segment", "session.type=cost"]),
-        );
-        expect(out).toMatch(/\$0\.07/);
-      },
-    ),
-  );
-
-  test(
-    "shows token count from JSONL transcript (session.type=tokens)",
-    withTranscript(
-      "cc000000-test-0000-0000-tokens01",
-      [{ input_tokens: 1000, output_tokens: 500, costUSD: 0.03 }],
-      async (partial) => {
-        const hook: ClaudeHookData = { ...BASE_HOOK, ...partial };
-        const out = plain(
-          await render(hook, ["--layout=session", "--segment", "session.type=tokens"]),
-        );
-        // 1500 total tokens → formatted as "1.5K tokens"
-        expect(out).toMatch(/1[.,]?5K|1500/);
-      },
-    ),
-  );
-
   test("renders gracefully with no transcript", async () => {
     const out = await render(BASE_HOOK, ["--layout=session"]);
     expect(out.length).toBeGreaterThan(0);
@@ -241,16 +210,6 @@ describe("multi-line layouts", () => {
   test("two display lines ('|') produce a newline in output", async () => {
     const out = await render(BASE_HOOK, ["--layout=model | session"]);
     expect(out).toContain("\n");
-  });
-
-  test("autoWrap disabled joins all segments on one line", async () => {
-    const out = await render(BASE_HOOK, [
-      "--layout=model | session",
-      "--display",
-      "autoWrap=false",
-    ]);
-    // autoWrap=false → lines joined literally; exactly one newline between lines
-    expect(out.split("\n").length).toBeLessThanOrEqual(2);
   });
 
   test("a layout line whose only segment is absent produces no blank line", async () => {

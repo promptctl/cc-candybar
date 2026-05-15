@@ -137,7 +137,6 @@ describe("install — buildStatusLineCommand", () => {
     );
     // Tray segment carries the toolbar-toggle button (▸).
     expect(cmd).toContain("--tray '▸{toolbar-toggle(session.id)}'");
-    expect(cmd).toContain("--show git=workingTree,upstream,timeSinceCommit");
     // Three click actions on sessionId: copy (default), open jsonl, open project dir.
     expect(cmd).toContain("sessionId.clickAction.kind=url");
     expect(cmd).toContain("sessionId.clickAction.actions.0.verb=copy");
