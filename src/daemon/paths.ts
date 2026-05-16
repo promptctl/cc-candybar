@@ -48,6 +48,14 @@ export function pidPath(): string {
   return path.join(stateDir(), "pid");
 }
 
+// [LAW:single-enforcer] Caller-side spawn dedup. Held by a client *only* during
+// the spawn window — never for the daemon's lifetime. The actual one-daemon
+// invariant is enforced by atomic bind() on socketPath() inside the daemon.
+// This file is a thundering-herd optimization, not the load-bearing lock.
+export function spawnLockPath(): string {
+  return path.join(stateDir(), "spawn.lock");
+}
+
 export function logPath(): string {
   return path.join(stateDir(), "daemon.log");
 }

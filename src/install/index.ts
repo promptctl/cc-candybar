@@ -3,7 +3,7 @@ import path from "node:path";
 import os from "node:os";
 import { execFileSync, spawnSync } from "node:child_process";
 import { tryClickViaDaemon } from "../daemon/client";
-import { spawnDaemonDetached } from "../daemon/spawn";
+import { obtainDaemonKick } from "../daemon/acquire";
 
 // [LAW:one-source-of-truth] Replaced at build time by tsdown's `define` option
 // from package.json. The pinned version is what we write into settings.json so
@@ -299,8 +299,8 @@ async function runUrlHandleAsync(parsed: ParsedUrl): Promise<void> {
   }
 
   // Daemon unavailable — fall back to local handlers so user clicks never
-  // silently fail. Spawn daemon so the *next* click hits the daemon.
-  spawnDaemonDetached();
+  // silently fail. Synchronously kick a daemon so the *next* click hits one.
+  obtainDaemonKick();
 
   // [LAW:dataflow-not-control-flow] Verb dispatch table — each entry maps a
   // verb name to a handler that takes the parsed value. Adding a verb means
