@@ -4,6 +4,21 @@ import { GitService, type GitInfo } from "../../segments/git";
 import { debug } from "../../utils/logger";
 import { WatcherRegistry, type WatcherHandle } from "./watchers";
 
+// Logger callable for cache invalidation / eviction / subscriber-error
+// events. Daemon passes `dlog` so these land in daemon.log at the right
+// level for ops/debugging; non-daemon consumers (var-system in tests,
+// future library use) take the default debug-routed logger so var-system
+// module load never touches daemon log files.
+// [LAW:no-defensive-null-guards] Default is non-null; injection replaces
+// the implementation, never adds a "no logger" mode.
+export type GitProviderLogger = (
+  level: "info" | "warn" | "error",
+  message: string,
+) => void;
+
+const defaultProviderLogger: GitProviderLogger = (_level, message) =>
+  debug(message);
+
 // [LAW:one-source-of-truth] One provider for git data in the daemon. The
 // daemon is the sole owner; segments pull via getInfo() (per-render snapshot),
 // var-system pushes via subscribe() (MobX-driven reactivity). Both surfaces
@@ -135,6 +150,7 @@ export class GitDataProvider extends GitService {
   private readonly maxEntries: number;
   private readonly watchers: WatcherRegistry;
   private readonly ownsWatchers: boolean;
+  private readonly logger: GitProviderLogger;
   private sanityTimer: NodeJS.Timeout | null = null;
 
   constructor(
@@ -144,17 +160,24 @@ export class GitDataProvider extends GitService {
       inner?: GitService;
       watchers?: WatcherRegistry;
       sanityIntervalMs?: number;
+      // [LAW:single-enforcer] One injection point. Daemon passes `dlog`;
+      // non-daemon consumers leave the default (debug-routed, quiet
+      // unless CC_CANDYBAR_DEBUG is set).
+      logger?: GitProviderLogger;
     } = {},
   ) {
     super();
     this.inner = opts.inner ?? new GitService();
     this.ttlMs = opts.ttlMs ?? DEFAULT_TTL_MS;
     this.maxEntries = opts.maxEntries ?? DEFAULT_MAX_ENTRIES;
+    this.logger = opts.logger ?? defaultProviderLogger;
     if (opts.watchers) {
       this.watchers = opts.watchers;
       this.ownsWatchers = false;
     } else {
-      this.watchers = new WatcherRegistry();
+      // Auto-constructed registry shares the same logger so daemon ops see
+      // both cache and watcher events; var-system's default stays quiet.
+      this.watchers = new WatcherRegistry({ logger: this.logger });
       this.ownsWatchers = true;
     }
     const sanityMs = opts.sanityIntervalMs ?? SANITY_INTERVAL_MS;
@@ -359,7 +382,7 @@ export class GitDataProvider extends GitService {
     }
     if (dropped > 0) {
       this.invalidations += dropped;
-      debug(`gitCache invalidate ${repoRoot} dropped=${dropped}`);
+      this.logger("info", `gitCache invalidate ${repoRoot} dropped=${dropped}`);
     }
     this.refreshSubscribers(repoRoot);
   }
@@ -411,7 +434,10 @@ export class GitDataProvider extends GitService {
     try {
       cb(info);
     } catch (e) {
-      debug(`git subscriber threw: ${(e as Error).message ?? String(e)}`);
+      this.logger(
+        "warn",
+        `git subscriber threw: ${(e as Error).message ?? String(e)}`,
+      );
     }
   }
 
@@ -427,7 +453,7 @@ export class GitDataProvider extends GitService {
       const oldest = this.entries.keys().next().value;
       if (oldest === undefined) break;
       this.dropEntry(oldest);
-      debug(`gitCache evict ${oldest}`);
+      this.logger("info", `gitCache evict ${oldest}`);
     }
   }
 
