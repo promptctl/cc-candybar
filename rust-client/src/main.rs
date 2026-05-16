@@ -12,11 +12,14 @@
 //
 // Timeouts mirror src/daemon/client.ts: 50ms connect, 150ms total.
 //
-// On any daemon failure: obtain_daemon_kick() runs a flock-gated, fire-and-
-// forget acquire. The actual one-daemon invariant is enforced by atomic
-// bind() inside the daemon (see src/daemon/server.ts:bindOrAttachAndExit);
-// flock is the thundering-herd optimization that prevents N clients from
-// each forking a Node process when one suffices. Mirrors src/daemon/acquire.ts.
+// On any daemon failure: obtain_daemon_kick() runs a fire-and-forget acquire
+// gated by an existence-as-lock spawn.lock file (open with O_CREAT | O_EXCL,
+// release by unlink — same primitive Node uses in src/daemon/acquire.ts so
+// the two runtimes interoperate). The actual one-daemon invariant is
+// enforced by atomic bind() inside the daemon (see
+// src/daemon/server.ts:bindOrAttachAndExit); the spawn.lock is the
+// thundering-herd optimization that prevents N clients from each forking a
+// Node process when one suffices. Mirrors src/daemon/acquire.ts.
 
 use std::env;
 use std::ffi::OsString;
@@ -368,8 +371,9 @@ fn connect_with_timeout(path: &Path, timeout: Duration) -> io::Result<UnixStream
 //
 // [LAW:single-enforcer] One entry point on the Rust side for "obtain a
 // daemon." The atomic bind() inside the daemon is the load-bearing exclusion;
-// this flock on spawn.lock is a thundering-herd optimization that prevents N
-// concurrent clients from each forking a Node process when one would do.
+// the existence-as-lock spawn.lock (open with O_CREAT | O_EXCL, release by
+// unlink) is a thundering-herd optimization that prevents N concurrent
+// clients from each forking a Node process when one would do.
 //
 // [LAW:dataflow-not-control-flow] The caller does not get to choose whether
 // to spawn — it asks for a daemon, this function decides. The bind() inside

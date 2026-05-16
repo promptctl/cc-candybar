@@ -41,7 +41,8 @@ const BIN_CHECK_INTERVAL_MS = 60 * 1000;
 // single-instance enforcer (two daemons cannot both bind the same path; the
 // kernel makes duplicate-daemon unrepresentable). Listens for one request per
 // connection. Any uncaught error exits non-zero; the next client obtains a
-// fresh daemon via obtainDaemon() in src/daemon/acquire.ts.
+// fresh daemon via obtainDaemonKick() (fire-and-forget caller) or
+// obtainDaemon() (caller waits for readiness) in src/daemon/acquire.ts.
 export function runDaemon(): void {
   fs.mkdirSync(daemonDir(), { recursive: true });
 
