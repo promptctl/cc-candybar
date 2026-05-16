@@ -1,4 +1,9 @@
-import { launch, launchSync, setLaunchStats } from "../../src/proc/launch";
+import {
+  launch,
+  launchDetachedSync,
+  launchSync,
+  setLaunchStats,
+} from "../../src/proc/launch";
 import type { LaunchCategory } from "../../src/proc/launch";
 import type { LaunchStatsHandle } from "../../src/proc/stats-handle";
 
@@ -61,6 +66,21 @@ describe("launch (async)", () => {
     }
   });
 
+  it("reports signal (not timeout) when external SIGTERM kills a no-timeout child", async () => {
+    // Child kills itself with SIGTERM; no timeout was set, so the close
+    // must surface as "signal", not "timeout".
+    const r = await launch({
+      bin: "/bin/sh",
+      args: ["-c", "kill -TERM $$; sleep 1"],
+      category: "user-shell",
+    });
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.reason).toBe("signal");
+      expect(r.signal).toBe("SIGTERM");
+    }
+  });
+
   it("pipes stdinInput to the child", async () => {
     const r = await launch({
       bin: "/bin/cat",
@@ -111,9 +131,9 @@ describe("launchSync", () => {
   });
 });
 
-describe("launch (detached)", () => {
-  it("returns ok and does not wait for the child", async () => {
-    const r = await launch({
+describe("launchDetachedSync", () => {
+  it("returns ok synchronously and does not wait for the child", () => {
+    const r = launchDetachedSync({
       bin: "/bin/sh",
       args: ["-c", "sleep 5"],
       detached: true,
@@ -123,5 +143,31 @@ describe("launch (detached)", () => {
     if (r.ok) {
       expect(r.exitCode).toBeNull();
     }
+  });
+
+  it("returns spawn-error synchronously when the binary does not exist", () => {
+    const r = launchDetachedSync({
+      bin: "/nonexistent/daemon-x9k7",
+      detached: true,
+      category: "daemon-spawn",
+    });
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.reason).toBe("spawn-error");
+    }
+  });
+
+  it("meters detached launches through the stats handle", () => {
+    const { handle, starts, ends } = makeSpyHandle();
+    setLaunchStats(handle);
+    launchDetachedSync({
+      bin: "/bin/sh",
+      args: ["-c", "true"],
+      detached: true,
+      category: "daemon-spawn",
+    });
+    expect(starts).toEqual(["daemon-spawn"]);
+    expect(ends).toHaveLength(1);
+    expect(ends[0]?.category).toBe("daemon-spawn");
   });
 });
