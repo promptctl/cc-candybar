@@ -4,6 +4,11 @@ import { GitService, type GitInfo } from "../src/segments/git";
 class StubGitService extends GitService {
   public computeCalls: Array<{ workingDir: string; projectDir?: string }> = [];
   public resolveCalls: Array<{ workingDir: string; projectDir?: string }> = [];
+  public gitDirCalls: string[] = [];
+  // Per-workingDir override for resolveGitDir. Worktree tests use this to
+  // simulate the `.git`-is-a-file → resolved-gitDir indirection without
+  // setting up real worktree filesystems.
+  public gitDirByDir: Record<string, string> = {};
   public repoRootByDir: Record<string, string | null> = {};
   // Per-(workingDir, projectDir) override for resolveEffectiveGitDir. The
   // default behavior (when a key is absent) falls back to repoRootByDir.
@@ -19,6 +24,12 @@ class StubGitService extends GitService {
 
   override async findGitRoot(workingDir: string): Promise<string | null> {
     return this.repoRootByDir[workingDir] ?? null;
+  }
+
+  override resolveGitDir(workingDir: string): string {
+    this.gitDirCalls.push(workingDir);
+    if (workingDir in this.gitDirByDir) return this.gitDirByDir[workingDir]!;
+    return `${workingDir}/.git`;
   }
 
   override async resolveEffectiveGitDir(
@@ -168,6 +179,26 @@ describe("GitDataProvider", () => {
     expect(dirs).toEqual(["/repoA", "/repoB"]);
   });
 
+  test("worktree path resolves HEAD/index from .git file's gitdir target", async () => {
+    // In a worktree, repoRoot/.git is a *file* pointing at the real metadata
+    // dir under main-repo/.git/worktrees/. Watchers and mtime snapshots must
+    // follow that pointer or they silently no-op (the bug Copilot caught on
+    // PR #8 review pass 4).
+    const { svc, inner } = makeCache();
+    inner.repoRootByDir = { "/wt": "/wt" };
+    inner.gitDirByDir = { "/wt": "/main/.git/worktrees/wt" };
+
+    // Fetch + cache without crashing. The internal calls to watcherTargets /
+    // snapshotMtimes use the resolved gitDir, so synthetic "/main/.git/..."
+    // paths don't fail (statSync misses → mtime 0, fs.watch misses → no
+    // watcher, both bounded). The point is that the resolution path *runs*.
+    const r = await svc.getGitInfo("/wt", {});
+    expect(r).toMatchObject({ branch: "main" });
+
+    // Verify resolveGitDir was actually consulted for the worktree path.
+    expect(inner.gitDirCalls).toContain("/wt");
+  });
+
   test("concurrent cache misses on same key coalesce into one fetch", async () => {
     // Two parallel callers requesting the same key — without in-flight
     // coalescing, both observe "no entry yet" and both shell out, doubling
@@ -206,12 +237,14 @@ describe("GitDataProvider", () => {
   });
 });
 
-// Drain helper — subscribe()'s initial delivery happens after a chain of
-// awaits (gitDir resolution, fetch, in-flight tracker .finally) whose depth
-// is implementation-detail. `setImmediate` yields the event loop past every
-// queued microtask, so a single tick suffices regardless of chain length.
-async function tick(_times = 1): Promise<void> {
-  await new Promise<void>((r) => setImmediate(r));
+// Drain helper — subscribe()/refresh callbacks fire after a chain of awaits
+// (gitDir resolution, fetch, in-flight tracker .finally) whose depth is
+// implementation-detail. Each `setImmediate` yield drains a full round of
+// microtasks; some tests trigger nested async chains and need N rounds.
+async function tick(times = 1): Promise<void> {
+  for (let i = 0; i < times; i++) {
+    await new Promise<void>((r) => setImmediate(r));
+  }
 }
 
 describe("GitDataProvider.subscribe", () => {

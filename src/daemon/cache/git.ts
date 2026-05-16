@@ -76,29 +76,34 @@ function optionsKey(options: GitOptions): string {
   return JSON.stringify(normalized);
 }
 
-function snapshotMtimes(repoRoot: string): MtimeSnapshot {
+function snapshotMtimes(gitDir: string): MtimeSnapshot {
   // Missing files → 0; comparison still detects changes (0 → number).
   const stat = (rel: string): number => {
     try {
-      return fs.statSync(path.join(repoRoot, rel)).mtimeMs;
+      return fs.statSync(path.join(gitDir, rel)).mtimeMs;
     } catch {
       return 0;
     }
   };
-  return { head: stat(".git/HEAD"), index: stat(".git/index") };
+  return { head: stat("HEAD"), index: stat("index") };
 }
 
 function mtimeChanged(a: MtimeSnapshot, b: MtimeSnapshot): boolean {
   return a.head !== b.head || a.index !== b.index;
 }
 
-function watcherTargets(repoRoot: string) {
+// `gitDir` must be the *resolved* git directory (the value
+// `GitService.resolveGitDir(repoRoot)` returns). For a normal repo that's
+// `<repoRoot>/.git`; for a worktree it's the worktree-metadata dir nested
+// under the main repo's `.git/worktrees/`. Either way, `HEAD` and `index`
+// live directly inside `gitDir`, so the watchers find real files.
+function watcherTargets(gitDir: string) {
   return {
-    files: [
-      path.join(repoRoot, ".git/HEAD"),
-      path.join(repoRoot, ".git/index"),
-    ],
-    dirs: [{ path: path.join(repoRoot, ".git/refs/heads") }],
+    files: [path.join(gitDir, "HEAD"), path.join(gitDir, "index")],
+    // refs/heads/ exists in the main repo's gitDir, not under a worktree's
+    // metadata dir. fs.watch on a non-existent path is caught and skipped by
+    // WatcherRegistry, so passing this unconditionally is safe.
+    dirs: [{ path: path.join(gitDir, "refs/heads") }],
   };
 }
 
@@ -233,7 +238,11 @@ export class GitDataProvider extends GitService {
     now: number,
   ): Promise<GitInfo | null> {
     this.misses++;
-    const mtimeBefore = snapshotMtimes(repoRoot);
+    // [LAW:one-source-of-truth] gitDir is the watch+mtime identity for the
+    // repo. For worktrees this differs from repoRoot — keying watchers off
+    // <repoRoot>/.git/HEAD would silently fail there since .git is a file.
+    const gitDir = this.inner.resolveGitDir(repoRoot);
+    const mtimeBefore = snapshotMtimes(gitDir);
     // Pass repoRoot as workingDir, no projectDir: inner's gitDir resolution
     // lands on repoRoot via the sync isWorktree/isGitRepo checks — no extra
     // findGitRoot shell-out.
@@ -249,7 +258,7 @@ export class GitDataProvider extends GitService {
     // the cache misses.
     const watcher = this.watchers.acquire(
       `git:${repoRoot}`,
-      watcherTargets(repoRoot),
+      watcherTargets(gitDir),
       () => this.invalidateRepo(repoRoot),
     );
     this.entries.set(key, {
@@ -298,9 +307,10 @@ export class GitDataProvider extends GitService {
 
       let entry = this.subscribersByRepo.get(repoRoot);
       if (!entry) {
+        const gitDir = this.inner.resolveGitDir(repoRoot);
         const watcher = this.watchers.acquire(
           `git:${repoRoot}`,
-          watcherTargets(repoRoot),
+          watcherTargets(gitDir),
           () => this.invalidateRepo(repoRoot),
         );
         entry = {
@@ -423,13 +433,15 @@ export class GitDataProvider extends GitService {
 
   // [LAW:single-enforcer] Watchers are an optimization; this mtime walk is
   // the correctness backstop for filesystems where fs.watch silently no-ops
-  // (network mounts, some FUSE volumes).
+  // (network mounts, some FUSE volumes). Sample mtimes from the *resolved*
+  // gitDir so worktrees compare against real HEAD/index files.
   private runSanityCheck(): void {
     const seen = new Map<string, MtimeSnapshot>();
     for (const entry of this.entries.values()) {
       let current = seen.get(entry.repoRoot);
       if (!current) {
-        current = snapshotMtimes(entry.repoRoot);
+        const gitDir = this.inner.resolveGitDir(entry.repoRoot);
+        current = snapshotMtimes(gitDir);
         seen.set(entry.repoRoot, current);
       }
       if (mtimeChanged(entry.mtime, current)) {
