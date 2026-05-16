@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
-import { execFileSync, spawnSync } from "node:child_process";
+import { launchSync } from "../proc/launch";
 import { tryClickViaDaemon } from "../daemon/client";
 import { obtainDaemonKick } from "../daemon/acquire";
 
@@ -203,39 +203,55 @@ export function runInstallUrlHandler(): void {
   }
 
   process.stdout.write(`Building ${bundle}\n`);
-  execFileSync(
-    "/usr/bin/osacompile",
-    [
+  const osa = launchSync({
+    bin: "/usr/bin/osacompile",
+    args: [
       "-o",
       bundle,
       "-e",
       appleScriptSource(process.execPath, stableScript, nodeModules),
     ],
-    { stdio: ["ignore", "inherit", "inherit"] },
-  );
+    category: "install.plutil",
+  });
+  if (!osa.ok) {
+    process.stderr.write(osa.stderr);
+    throw new Error(`osacompile failed (${osa.reason})`);
+  }
 
   const plistPath = path.join(bundle, "Contents", "Info.plist");
 
   for (const { key } of infoPlistPatch()) {
     // plutil errors if the key already exists; pre-delete so the operation is
     // idempotent. Ignore failures (key may not exist on a fresh build).
-    spawnSync("/usr/bin/plutil", ["-remove", key, plistPath], {
-      stdio: "ignore",
+    launchSync({
+      bin: "/usr/bin/plutil",
+      args: ["-remove", key, plistPath],
+      category: "install.plutil",
     });
   }
 
   for (const { key, xml } of infoPlistPatch()) {
-    execFileSync("/usr/bin/plutil", ["-insert", key, "-xml", xml, plistPath], {
-      stdio: ["ignore", "inherit", "inherit"],
+    const r = launchSync({
+      bin: "/usr/bin/plutil",
+      args: ["-insert", key, "-xml", xml, plistPath],
+      category: "install.plutil",
     });
+    if (!r.ok) {
+      process.stderr.write(r.stderr);
+      throw new Error(`plutil -insert ${key} failed (${r.reason})`);
+    }
   }
 
   process.stdout.write(`Registering ${URL_SCHEME}:// with Launch Services\n`);
-  execFileSync(
-    "/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister",
-    ["-f", bundle],
-    { stdio: ["ignore", "inherit", "inherit"] },
-  );
+  const lsr = launchSync({
+    bin: "/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister",
+    args: ["-f", bundle],
+    category: "install.plutil",
+  });
+  if (!lsr.ok) {
+    process.stderr.write(lsr.stderr);
+    throw new Error(`lsregister failed (${lsr.reason})`);
+  }
 
   process.stdout.write(`✓ ${APP_NAME}.app installed and registered.\n`);
   process.stdout.write(
@@ -322,11 +338,13 @@ async function runUrlHandleAsync(parsed: ParsedUrl): Promise<void> {
 }
 
 function copyToClipboard(text: string): void {
-  const result = spawnSync("/usr/bin/pbcopy", [], { input: text });
-  if (result.status !== 0) {
-    process.stderr.write(
-      `url-handle: pbcopy failed (status ${result.status})\n`,
-    );
+  const result = launchSync({
+    bin: "/usr/bin/pbcopy",
+    stdinInput: text,
+    category: "install.pbcopy",
+  });
+  if (!result.ok) {
+    process.stderr.write(`url-handle: pbcopy failed (${result.reason})\n`);
     process.exit(1);
   }
 }
@@ -359,14 +377,14 @@ function openInVscode(target: string): void {
   // [LAW:no-shared-mutable-globals] /usr/bin/open is a stable system path; -a
   // delegates app resolution to Launch Services so we don't have to know
   // where `code` is on PATH at click time.
-  const result = spawnSync("/usr/bin/open", [
-    "-a",
-    "Visual Studio Code",
-    target,
-  ]);
-  if (result.status !== 0) {
+  const result = launchSync({
+    bin: "/usr/bin/open",
+    args: ["-a", "Visual Studio Code", target],
+    category: "install.open",
+  });
+  if (!result.ok) {
     process.stderr.write(
-      `url-handle: open -a "Visual Studio Code" failed (status ${result.status})\n`,
+      `url-handle: open -a "Visual Studio Code" failed (${result.reason})\n`,
     );
     process.exit(1);
   }
