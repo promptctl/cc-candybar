@@ -176,7 +176,8 @@ function probeSocket(sockPath: string): Promise<SocketAliveness> {
       // Anything else (EPERM, EACCES, EAGAIN, …) is ambiguous — assume the
       // daemon is alive to avoid destructive false negatives.
       const code = (err as NodeJS.ErrnoException).code;
-      const dead = code === "ECONNREFUSED" || code === "ENOENT" || code === "ENOTSOCK";
+      const dead =
+        code === "ECONNREFUSED" || code === "ENOENT" || code === "ENOTSOCK";
       done(dead ? "dead" : "unknown");
     });
     // 50ms is generous; localhost AF_UNIX connect is sub-ms when a listener
