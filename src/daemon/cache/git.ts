@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { GitService, type GitInfo } from "../../segments/git";
-import { dlog } from "../log";
+import { debug } from "../../utils/logger";
 import { WatcherRegistry, type WatcherHandle } from "./watchers";
 
 // [LAW:one-source-of-truth] One provider for git data in the daemon. The
@@ -105,6 +105,14 @@ function watcherTargets(repoRoot: string) {
 export class GitDataProvider extends GitService {
   private readonly entries = new Map<string, GitCacheEntry>();
   private readonly subscribersByRepo = new Map<string, RepoSubscribers>();
+  // [LAW:single-enforcer] Coalesce concurrent cache misses on the same key.
+  // Renders build lines in parallel (Promise.all in src/powerline.ts), so two
+  // line-renders requesting the same git data can both observe the cache as
+  // cold and would otherwise spawn duplicate `git` work — exactly the failure
+  // mode the daemon is meant to eliminate. The first miss installs a promise
+  // here; subsequent concurrent callers await the same promise and resolve in
+  // lockstep.
+  private readonly fetchInFlight = new Map<string, Promise<GitInfo | null>>();
   // [LAW:single-enforcer] Coalesce overlapping refreshes for the same repo.
   // `refreshing` holds the repoRoots whose refresh loop is currently
   // executing; `refreshAgain` is the trailing-edge flag: if a new
@@ -191,8 +199,8 @@ export class GitDataProvider extends GitService {
   // Cache+fetch helper that *already knows* the effective gitDir. Subscribe
   // and refresh use this directly so they don't pay an extra resolution per
   // call (which on the refresh-loop hot path was an extra `git rev-parse`
-  // per invalidation — finding #3 from PR #8 review).
-  private async getGitInfoForRoot(
+  // per invalidation — finding from PR #8 review pass 2).
+  private getGitInfoForRoot(
     repoRoot: string,
     options: GitOptions,
   ): Promise<GitInfo | null> {
@@ -204,9 +212,26 @@ export class GitDataProvider extends GitService {
       this.entries.delete(key);
       this.entries.set(key, existing);
       this.hits++;
-      return existing.info;
+      return Promise.resolve(existing.info);
     }
 
+    // Coalesce concurrent misses on the same key — see fetchInFlight comment.
+    const pending = this.fetchInFlight.get(key);
+    if (pending) return pending;
+
+    const promise = this.doFetch(repoRoot, key, options, now).finally(() => {
+      this.fetchInFlight.delete(key);
+    });
+    this.fetchInFlight.set(key, promise);
+    return promise;
+  }
+
+  private async doFetch(
+    repoRoot: string,
+    key: string,
+    options: GitOptions,
+    now: number,
+  ): Promise<GitInfo | null> {
     this.misses++;
     const mtimeBefore = snapshotMtimes(repoRoot);
     // Pass repoRoot as workingDir, no projectDir: inner's gitDir resolution
@@ -239,15 +264,17 @@ export class GitDataProvider extends GitService {
   }
 
   // [LAW:dataflow-not-control-flow] Push surface for var-system. The callback
-  // receives the current snapshot once (immediately after registration) and
-  // again after each invalidation — sharing the one cache + one watcher
+  // receives the current snapshot once (after the initial fetch completes)
+  // and again after each invalidation — sharing the one cache + one watcher
   // already managed by getInfo(). Multiple subscribers for the same repoRoot
   // share one fetch; the resolved repoRoot is the unit of sharing, not the
   // workingDir.
   //
-  // The initial delivery is asynchronous (it has to be — repoRoot resolution
-  // and the first git fetch are async). Subscribers see the first value on a
-  // microtask after subscribe() returns.
+  // Initial delivery is asynchronous: subscribe() returns immediately, but
+  // the callback fires *after* both gitDir resolution and the first fetch
+  // settle (the fetch can include a `git status` shell-out on a cold cache).
+  // It is **not** a same-tick or microtask delivery — consumers should not
+  // rely on the box value changing before the next render scheduling tick.
   subscribe(workingDir: string, callback: SubscribeCallback): () => void {
     let unsubscribed = false;
     let attached: { repoRoot: string; entry: RepoSubscribers } | null = null;
@@ -322,9 +349,7 @@ export class GitDataProvider extends GitService {
     }
     if (dropped > 0) {
       this.invalidations += dropped;
-      try {
-        dlog("info", `gitCache invalidate ${repoRoot} dropped=${dropped}`);
-      } catch {}
+      debug(`gitCache invalidate ${repoRoot} dropped=${dropped}`);
     }
     this.refreshSubscribers(repoRoot);
   }
@@ -376,12 +401,7 @@ export class GitDataProvider extends GitService {
     try {
       cb(info);
     } catch (e) {
-      try {
-        dlog(
-          "warn",
-          `git subscriber threw: ${(e as Error).message ?? String(e)}`,
-        );
-      } catch {}
+      debug(`git subscriber threw: ${(e as Error).message ?? String(e)}`);
     }
   }
 
@@ -397,9 +417,7 @@ export class GitDataProvider extends GitService {
       const oldest = this.entries.keys().next().value;
       if (oldest === undefined) break;
       this.dropEntry(oldest);
-      try {
-        dlog("info", `gitCache evict ${oldest}`);
-      } catch {}
+      debug(`gitCache evict ${oldest}`);
     }
   }
 
@@ -441,9 +459,12 @@ export class GitDataProvider extends GitService {
     this.subscribersByRepo.clear();
     // In-flight refreshes will observe the empty subscribers map on their
     // next iteration and exit naturally; the flags are cleared so a fresh
-    // provider with the same repoRoot starts clean.
+    // provider with the same repoRoot starts clean. In-flight fetches still
+    // resolve (we can't cancel a pending await on inner.getGitInfo) but the
+    // map is cleared so the next caller starts a fresh fetch.
     this.refreshing.clear();
     this.refreshAgain.clear();
+    this.fetchInFlight.clear();
     if (this.ownsWatchers) this.watchers.closeAll();
   }
 }

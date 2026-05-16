@@ -1,5 +1,5 @@
 import fs from "node:fs";
-import { dlog } from "../log";
+import { debug } from "../../utils/logger";
 
 // [LAW:single-enforcer] One registry owns *all* fs watchers for any consumer
 // (git cache, config cache, ...). Scattered watchers across modules would leak
@@ -134,7 +134,7 @@ export class WatcherRegistry {
         try {
           slot.onInvalidate();
         } catch (e) {
-          dlog("warn", `watcher invalidate threw: ${(e as Error).message}`);
+          debug(`watcher invalidate threw: ${(e as Error).message}`);
         }
       }, DEBOUNCE_MS);
       slot.debounceTimer.unref();
@@ -144,11 +144,11 @@ export class WatcherRegistry {
       try {
         const w = fs.watch(target, { persistent: false }, fire);
         w.on("error", (e) => {
-          dlog("warn", `watcher error ${target}: ${e.message}`);
+          debug(`watcher error ${target}: ${e.message}`);
         });
         slot.watchers.push(w);
       } catch (e) {
-        dlog("warn", `watch failed ${target}: ${(e as Error).message}`);
+        debug(`watch failed ${target}: ${(e as Error).message}`);
       }
     }
 
@@ -163,11 +163,11 @@ export class WatcherRegistry {
         };
         const w = fs.watch(target.path, { persistent: false }, onDirEvent);
         w.on("error", (e) => {
-          dlog("warn", `watcher error ${target.path}: ${e.message}`);
+          debug(`watcher error ${target.path}: ${e.message}`);
         });
         slot.watchers.push(w);
       } catch (e) {
-        dlog("warn", `watch failed ${target.path}: ${(e as Error).message}`);
+        debug(`watch failed ${target.path}: ${(e as Error).message}`);
       }
     }
   }
@@ -201,7 +201,7 @@ export class WatcherRegistry {
       try {
         slot.onInvalidate();
       } catch {}
-      dlog("info", `watcher LRU evict ${oldest}`);
+      debug(`watcher LRU evict ${oldest}`);
     }
   }
 
