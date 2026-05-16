@@ -377,6 +377,69 @@ describe("obtainDaemonKick (synchronous fire-and-forget)", () => {
     });
   });
 
+  test("overrides contended lock when older than KICK_CONTENDED_OVERRIDE_MS", async () => {
+    await withTempState(async () => {
+      jest.resetModules();
+      const { obtainDaemonKick } = await import("../src/daemon/acquire");
+      const { spawnLockPath, daemonDir } = await import("../src/daemon/paths");
+
+      fs.mkdirSync(daemonDir(), { recursive: true });
+      // Plant a lock file that looks like a crashed holder: file exists,
+      // mtime backdated 3s (past the 2s override threshold).
+      fs.writeFileSync(
+        spawnLockPath(),
+        JSON.stringify({ pid: 999999, ts: Date.now() - 3000 }),
+      );
+      const oldTime = new Date(Date.now() - 3000);
+      fs.utimesSync(spawnLockPath(), oldTime, oldTime);
+
+      const stderrSpy = jest
+        .spyOn(process.stderr, "write")
+        .mockImplementation(() => true);
+      try {
+        let spawned = 0;
+        obtainDaemonKick({
+          spawn: () => {
+            spawned++;
+            return true;
+          },
+        });
+        // The kick saw "contended" (file exists, mkdir-flag wx fails) but
+        // the file's age exceeded the override threshold → spawn anyway.
+        expect(spawned).toBe(1);
+        const warned = String(stderrSpy.mock.calls[0]?.[0] ?? "");
+        expect(warned).toMatch(/likely crashed holder/);
+      } finally {
+        stderrSpy.mockRestore();
+      }
+    });
+  });
+
+  test("respects contended lock when fresh (no override)", async () => {
+    await withTempState(async () => {
+      jest.resetModules();
+      const { obtainDaemonKick } = await import("../src/daemon/acquire");
+      const { spawnLockPath, daemonDir } = await import("../src/daemon/paths");
+
+      fs.mkdirSync(daemonDir(), { recursive: true });
+      // Fresh lock — current mtime.
+      fs.writeFileSync(
+        spawnLockPath(),
+        JSON.stringify({ pid: 999999, ts: Date.now() }),
+      );
+
+      let spawned = 0;
+      obtainDaemonKick({
+        spawn: () => {
+          spawned++;
+          return true;
+        },
+      });
+      // Fresh lock = legitimate contention with another caller. Do not spawn.
+      expect(spawned).toBe(0);
+    });
+  });
+
   test("completes synchronously — no microtask suspension", async () => {
     await withTempState(async () => {
       jest.resetModules();

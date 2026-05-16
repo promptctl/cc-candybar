@@ -184,20 +184,41 @@ async function spawnAndWaitForReady(
 // first await and never resume — process.exit would kill the process before
 // child_process.spawn ever runs. The lock+spawn must complete in synchronous
 // turn for the daemon to actually start.
+// If the spawn.lock has existed longer than this, the kick path assumes the
+// holder crashed mid-spawn and overrides to preserve availability.
+// Calibrated to be much larger than any legitimate hold:
+//   - A healthy kick holds for <10ms (fork + release).
+//   - obtainDaemon's lock-held path can hold up to spawnReadyTimeoutMs
+//     (1500ms default) while polling for the new daemon to bind.
+// 2s leaves a comfortable margin above the slowest legitimate holder while
+// still recovering from a crashed-mid-spawn holder well before STALE_LOCK_MS.
+const KICK_CONTENDED_OVERRIDE_MS = 2_000;
+
 export function obtainDaemonKick(opts: { spawn?: () => boolean } = {}): void {
   if (ensureStateDir() !== null) return;
   const spawnFn = opts.spawn ?? spawnDaemonDetachedReal;
   const lock = tryAcquireSpawnLock();
 
   // [LAW:dataflow-not-control-flow] Lock outcome is data, not control flow.
-  // - "contended": another caller is already spawning; trust them, return.
+  // - "contended": typically means another caller is in the spawn window;
+  //   trust them and return. BUT: if the lock has been held suspiciously
+  //   long, the holder is likely crashed mid-spawn — override and spawn
+  //   unlocked. bind() arbitrates any duplicates.
   // - "error": spawn-lock unavailable (broken state dir, perms). Per the
   //   architecture, spawn.lock is an *optimization* on top of bind()'s
   //   load-bearing exclusion — a lock error should NOT make this kick a
-  //   hard stop on availability. Fall through to an unlocked spawn; bind()
-  //   inside the daemon arbitrates any duplicates.
+  //   hard stop on availability. Fall through to an unlocked spawn.
   // - "held": normal path — spawn under the lock.
-  if (lock.kind === "contended") return;
+  if (lock.kind === "contended") {
+    const ageMs = spawnLockAgeMs();
+    if (ageMs !== null && ageMs > KICK_CONTENDED_OVERRIDE_MS) {
+      process.stderr.write(
+        `cc-candybar: spawn-lock held ${ageMs}ms (likely crashed holder) — spawning unlocked\n`,
+      );
+      safeSpawn(spawnFn);
+    }
+    return;
+  }
   if (lock.kind === "error") {
     process.stderr.write(
       `cc-candybar: spawn-lock unavailable (${lock.reason}) — spawning unlocked\n`,
@@ -209,6 +230,15 @@ export function obtainDaemonKick(opts: { spawn?: () => boolean } = {}): void {
     safeSpawn(spawnFn);
   } finally {
     releaseSpawnLock();
+  }
+}
+
+function spawnLockAgeMs(): number | null {
+  try {
+    const st = fs.statSync(spawnLockPath());
+    return Date.now() - st.mtimeMs;
+  } catch {
+    return null;
   }
 }
 

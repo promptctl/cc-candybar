@@ -131,26 +131,35 @@ async function handleAddressInUse(
   // [LAW:no-defensive-null-guards] If unlink fails (permissions, read-only
   // FS), the retry will hit EADDRINUSE again, exit 0, and leave the system
   // in the worst state: no daemon + stale socket blocking future starts.
-  // Surface the failure loudly instead.
+  // Surface unrecoverable failures loudly. ENOENT is fine — the goal was
+  // "make the path bindable" and a missing path already satisfies that.
   try {
     fs.unlinkSync(sockPath);
   } catch (e) {
-    dlog(
-      "error",
-      `cannot unlink stale socket ${sockPath}: ${(e as Error).message}`,
-    );
-    shutdown(1);
-    return;
+    if ((e as NodeJS.ErrnoException).code !== "ENOENT") {
+      dlog(
+        "error",
+        `cannot unlink stale socket ${sockPath}: ${(e as Error).message}`,
+      );
+      shutdown(1);
+      return;
+    }
   }
   bindOrAttachAndExit(server, sockPath, /* retried */ true);
 }
 
-function isSocketAlive(sockPath: string): Promise<boolean> {
+// [LAW:no-defensive-null-guards] Three-state outcome distinguishes
+// "definitely no listener" from "probably alive but slow." Callers that
+// might destroy state on "no listener" (the stale-socket unlink path) must
+// treat "unknown" as alive to avoid stomping on a slow live daemon.
+type SocketAliveness = "alive" | "dead" | "unknown";
+
+function probeSocket(sockPath: string): Promise<SocketAliveness> {
   return new Promise((resolve) => {
     const sock = net.connect(sockPath);
     let settled = false;
     let timer: ReturnType<typeof setTimeout> | null = null;
-    const done = (result: boolean): void => {
+    const done = (result: SocketAliveness): void => {
       if (settled) return;
       settled = true;
       if (timer) clearTimeout(timer);
@@ -158,13 +167,32 @@ function isSocketAlive(sockPath: string): Promise<boolean> {
       sock.destroy();
       resolve(result);
     };
-    sock.once("connect", () => done(true));
-    sock.once("error", () => done(false));
+    sock.once("connect", () => done("alive"));
+    sock.once("error", (err) => {
+      // Only these error codes definitively mean "no listener at this path":
+      //   ECONNREFUSED — socket file present, kernel rejected connect
+      //   ENOENT       — socket file absent
+      //   ENOTSOCK     — path exists but isn't a socket
+      // Anything else (EPERM, EACCES, EAGAIN, …) is ambiguous — assume the
+      // daemon is alive to avoid destructive false negatives.
+      const code = (err as NodeJS.ErrnoException).code;
+      const dead = code === "ECONNREFUSED" || code === "ENOENT" || code === "ENOTSOCK";
+      done(dead ? "dead" : "unknown");
+    });
     // 50ms is generous; localhost AF_UNIX connect is sub-ms when a listener
-    // exists. Anything slower implies "no listener" in practice.
-    timer = setTimeout(() => done(false), 50);
+    // exists. Timeout means "we couldn't tell" — treat as unknown so the
+    // stale-socket recovery path doesn't unlink a live (but slow) daemon's
+    // socket.
+    timer = setTimeout(() => done("unknown"), 50);
     timer.unref();
   });
+}
+
+// Convenience: callers that just want "is something listening" treat
+// "unknown" as alive (conservative — used by the EADDRINUSE attach branch).
+async function isSocketAlive(sockPath: string): Promise<boolean> {
+  const result = await probeSocket(sockPath);
+  return result !== "dead";
 }
 
 function onListening(sockPath: string): void {
