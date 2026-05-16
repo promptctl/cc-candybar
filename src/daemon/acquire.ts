@@ -34,12 +34,18 @@ interface ObtainOpts {
   connectTimeoutMs?: number;
   // How long to wait after spawning before giving up on the daemon coming up.
   spawnReadyTimeoutMs?: number;
+  // After this much continuous contention on spawn.lock without a daemon
+  // appearing, give up on the lock and spawn anyway. The bind() inside the
+  // daemon arbitrates duplicates, so a stuck lock degrades to bind-arbitrated
+  // contention instead of a multi-second availability gap. Default
+  // totalTimeoutMs / 2.
+  lockFallbackMs?: number;
   // Test hook: replace the actual spawn call. Returning false simulates
   // "spawn failed"; default spawns the real daemon.
   spawn?: () => boolean;
 }
 
-const DEFAULT_OPTS: Required<Omit<ObtainOpts, "spawn">> = {
+const DEFAULT_OPTS: Required<Omit<ObtainOpts, "spawn" | "lockFallbackMs">> = {
   totalTimeoutMs: 2000,
   connectTimeoutMs: 50,
   spawnReadyTimeoutMs: 1500,
@@ -51,6 +57,8 @@ export async function obtainDaemon(
   const settings = { ...DEFAULT_OPTS, ...opts };
   const spawnFn = opts.spawn ?? spawnDaemonDetachedReal;
   const deadline = Date.now() + settings.totalTimeoutMs;
+  const lockFallbackMs =
+    opts.lockFallbackMs ?? Math.floor(settings.totalTimeoutMs / 2);
 
   // [LAW:no-defensive-null-guards] obtainDaemon is typed Promise<ObtainResult>
   // — synchronous filesystem failures (read-only FS, permission denial) must
@@ -64,6 +72,7 @@ export async function obtainDaemon(
   }
 
   // No daemon yet. Try to win the spawn-lock so we are the one to bring it up.
+  const contentionStart = Date.now();
   while (Date.now() < deadline) {
     const lock = tryAcquireSpawnLock();
     if (lock.kind === "error") {
@@ -79,47 +88,84 @@ export async function obtainDaemon(
         if (await canConnect(socketPath(), settings.connectTimeoutMs)) {
           return { kind: "attached" };
         }
-        // [LAW:no-defensive-null-guards] obtainDaemon is typed
-        // Promise<ObtainResult>. A synchronous throw from child_process.spawn
-        // (ENOENT, invalid options) must become a typed failure, not a
-        // rejected promise that violates the non-throwing contract.
-        let didSpawn = false;
-        try {
-          didSpawn = spawnFn();
-        } catch (e) {
-          return {
-            kind: "failed",
-            reason: `spawn threw: ${(e as Error).message}`,
-          };
-        }
-        if (!didSpawn) {
-          return { kind: "failed", reason: "spawn returned false" };
-        }
-        // Poll for the new daemon to bind.
-        const readyDeadline = Math.min(
-          Date.now() + settings.spawnReadyTimeoutMs,
+        return await spawnAndWaitForReady(
+          spawnFn,
+          settings.spawnReadyTimeoutMs,
+          settings.connectTimeoutMs,
           deadline,
+          "",
         );
-        while (Date.now() < readyDeadline) {
-          if (await canConnect(socketPath(), settings.connectTimeoutMs)) {
-            return { kind: "started" };
-          }
-          await sleep(20);
-        }
-        return { kind: "failed", reason: "daemon did not bind in time" };
       } finally {
         releaseSpawnLock();
       }
     }
-    // Another caller is in the spawn window. Brief wait, then re-check for
-    // the socket they're bringing up — no need to take the lock ourselves.
+    // Lock contended. Another caller is in the spawn window — brief wait,
+    // then re-check for the socket they're bringing up.
     await sleep(20);
     if (await canConnect(socketPath(), settings.connectTimeoutMs)) {
       return { kind: "attached" };
     }
+    // [LAW:dataflow-not-control-flow] spawn.lock is an optimization; bind()
+    // is the load-bearing exclusion. If we've been contended past the
+    // fallback threshold (e.g. crashed lock holder, slow staleness reclaim),
+    // bypass the lock and let bind() inside the daemon arbitrate duplicates.
+    // Same shape as a fresh spawn — caller pays one extra Node startup cost
+    // in the worst case, which is the right trade for availability.
+    if (Date.now() - contentionStart > lockFallbackMs) {
+      return await spawnAndWaitForReady(
+        spawnFn,
+        settings.spawnReadyTimeoutMs,
+        settings.connectTimeoutMs,
+        deadline,
+        " (lock-fallback)",
+      );
+    }
   }
 
   return { kind: "failed", reason: "timeout obtaining daemon" };
+}
+
+// Spawn the daemon, then poll for it to bind. Returns the typed outcome.
+// Shared by the lock-held path and the lock-fallback path so they don't drift.
+async function spawnAndWaitForReady(
+  spawnFn: () => boolean,
+  spawnReadyTimeoutMs: number,
+  connectTimeoutMs: number,
+  outerDeadline: number,
+  reasonSuffix: string,
+): Promise<ObtainResult> {
+  // [LAW:no-defensive-null-guards] obtainDaemon is typed Promise<ObtainResult>.
+  // A synchronous throw from child_process.spawn (ENOENT, invalid options)
+  // must become a typed failure, not a rejected promise.
+  let didSpawn = false;
+  try {
+    didSpawn = spawnFn();
+  } catch (e) {
+    return {
+      kind: "failed",
+      reason: `spawn threw${reasonSuffix}: ${(e as Error).message}`,
+    };
+  }
+  if (!didSpawn) {
+    return {
+      kind: "failed",
+      reason: `spawn returned false${reasonSuffix}`,
+    };
+  }
+  const readyDeadline = Math.min(
+    Date.now() + spawnReadyTimeoutMs,
+    outerDeadline,
+  );
+  while (Date.now() < readyDeadline) {
+    if (await canConnect(socketPath(), connectTimeoutMs)) {
+      return { kind: "started" };
+    }
+    await sleep(20);
+  }
+  return {
+    kind: "failed",
+    reason: `daemon did not bind in time${reasonSuffix}`,
+  };
 }
 
 // Synchronous fire-and-forget kick — used for "daemon-miss" recovery where

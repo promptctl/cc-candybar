@@ -114,6 +114,19 @@ async function handleAddressInUse(
     dlog("info", "another daemon is listening on socket — exiting");
     process.exit(0);
   }
+  // Race-window guard: between our first `isSocketAlive` returning false and
+  // our `unlinkSync` running, another concurrent recoverer could unlink+bind
+  // the path. Without re-checking, our unlink would remove their *live*
+  // socket, leaving two daemons (one orphaned-but-listening, one freshly
+  // bound). Re-check immediately before unlink. If a live listener appeared
+  // between checks, exit instead of stomping on it.
+  if (await isSocketAlive(sockPath)) {
+    dlog(
+      "info",
+      "race: another daemon claimed the socket during recovery — exiting",
+    );
+    process.exit(0);
+  }
   dlog("warn", "stale socket from crashed daemon — unlinking and rebinding");
   // [LAW:no-defensive-null-guards] If unlink fails (permissions, read-only
   // FS), the retry will hit EADDRINUSE again, exit 0, and leave the system

@@ -153,6 +153,52 @@ describe("obtainDaemon (bind-based singleton)", () => {
     });
   });
 
+  test("falls back to spawning past lockFallbackMs when lock is stuck (availability)", async () => {
+    await withTempState(async () => {
+      jest.resetModules();
+      const { obtainDaemon } = await import("../src/daemon/acquire");
+      const { spawnLockPath, socketPath, daemonDir } = await import(
+        "../src/daemon/paths"
+      );
+
+      // Plant a fresh (non-stale) spawn.lock to simulate a crashed/stuck
+      // holder. The staleness reclaim won't fire because the file's mtime
+      // is current. Without the lock-fallback path, obtainDaemon would spin
+      // until totalTimeoutMs and return "timeout obtaining daemon".
+      fs.mkdirSync(daemonDir(), { recursive: true });
+      fs.writeFileSync(
+        spawnLockPath(),
+        JSON.stringify({ pid: 999999, ts: Date.now() }),
+      );
+
+      let spawned = 0;
+      let server: net.Server | null = null;
+      const result = await obtainDaemon({
+        spawn: () => {
+          spawned++;
+          // Simulate a daemon coming up.
+          startFakeDaemon(socketPath())
+            .then((s) => {
+              server = s;
+            })
+            .catch(() => {});
+          return true;
+        },
+        totalTimeoutMs: 1500,
+        lockFallbackMs: 200, // give up on lock after 200ms
+        spawnReadyTimeoutMs: 1000,
+      });
+
+      try {
+        // The fallback path bypassed the stuck lock and spawned anyway.
+        expect(spawned).toBe(1);
+        expect(result.kind).toBe("started");
+      } finally {
+        if (server) await closeServer(server);
+      }
+    });
+  });
+
   test("returns failed (not throws) when spawn fn throws synchronously", async () => {
     await withTempState(async () => {
       jest.resetModules();
