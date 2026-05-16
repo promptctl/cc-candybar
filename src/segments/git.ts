@@ -271,14 +271,23 @@ export class GitService {
   // HEAD/index live inside that metadata dir — watching `<workingDir>/.git/HEAD`
   // would fail (no such path) and the cache would never invalidate. Returning
   // the resolved gitDir lets the provider point watchers at real files.
+  //
+  // [LAW:no-defensive-null-guards] The try/catch is a trust-boundary guard,
+  // not a silent skip — fs races (file removed between existsSync and
+  // statSync), permission errors, or unreadable .git files fall back to the
+  // dotGit path so callers always get a string, never a throw.
   resolveGitDir(workingDir: string): string {
     const dotGit = path.join(workingDir, ".git");
-    if (fs.existsSync(dotGit) && fs.statSync(dotGit).isFile()) {
-      const content = fs.readFileSync(dotGit, "utf-8");
-      const match = content.match(/^gitdir:\s*(.+)$/m);
-      if (match?.[1]) {
-        return path.resolve(workingDir, match[1].trim());
+    try {
+      if (fs.existsSync(dotGit) && fs.statSync(dotGit).isFile()) {
+        const content = fs.readFileSync(dotGit, "utf-8");
+        const match = content.match(/^gitdir:\s*(.+)$/m);
+        if (match?.[1]) {
+          return path.resolve(workingDir, match[1].trim());
+        }
       }
+    } catch {
+      // Fall through to the dotGit fallback below.
     }
     return dotGit;
   }

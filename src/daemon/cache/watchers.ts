@@ -1,6 +1,19 @@
 import fs from "node:fs";
 import { debug } from "../../utils/logger";
 
+// Logger callable used for watcher lifecycle / failure events. Daemon
+// injects `dlog` (writes to daemon.log at the requested level); other
+// consumers (var-system tests, demo) take the default which routes
+// through `debug` — present-but-quiet unless CC_CANDYBAR_DEBUG is set.
+// [LAW:no-defensive-null-guards] Default is always non-null; injection
+// replaces the implementation, never adds a "no logger" mode.
+export type WatcherLogger = (
+  level: "info" | "warn" | "error",
+  message: string,
+) => void;
+
+const defaultLogger: WatcherLogger = (_level, message) => debug(message);
+
 // [LAW:single-enforcer] One registry owns *all* fs watchers for any consumer
 // (git cache, config cache, ...). Scattered watchers across modules would leak
 // FDs and miss cleanup at shutdown.
@@ -51,16 +64,23 @@ export class WatcherRegistry {
   private readonly slots = new Map<string, WatcherSlot>();
   private readonly maxWatchers: number;
   private readonly counters?: WatcherCounters;
+  private readonly logger: WatcherLogger;
   private closed = false;
 
   constructor(
     opts: {
       maxWatchers?: number;
       counters?: WatcherCounters;
+      // [LAW:single-enforcer] One injection point per consumer. The daemon
+      // passes `dlog` so watcher-failure events land in daemon.log; non-
+      // daemon consumers keep the default debug-routed logger and never
+      // touch daemon log files.
+      logger?: WatcherLogger;
     } = {},
   ) {
     this.maxWatchers = opts.maxWatchers ?? DEFAULT_MAX_WATCHERS;
     this.counters = opts.counters;
+    this.logger = opts.logger ?? defaultLogger;
   }
 
   // Acquire (or share) a watcher set keyed by `key`. Multiple acquires on the
@@ -134,7 +154,10 @@ export class WatcherRegistry {
         try {
           slot.onInvalidate();
         } catch (e) {
-          debug(`watcher invalidate threw: ${(e as Error).message}`);
+          this.logger(
+            "warn",
+            `watcher invalidate threw: ${(e as Error).message}`,
+          );
         }
       }, DEBOUNCE_MS);
       slot.debounceTimer.unref();
@@ -144,11 +167,11 @@ export class WatcherRegistry {
       try {
         const w = fs.watch(target, { persistent: false }, fire);
         w.on("error", (e) => {
-          debug(`watcher error ${target}: ${e.message}`);
+          this.logger("warn", `watcher error ${target}: ${e.message}`);
         });
         slot.watchers.push(w);
       } catch (e) {
-        debug(`watch failed ${target}: ${(e as Error).message}`);
+        this.logger("warn", `watch failed ${target}: ${(e as Error).message}`);
       }
     }
 
@@ -163,11 +186,14 @@ export class WatcherRegistry {
         };
         const w = fs.watch(target.path, { persistent: false }, onDirEvent);
         w.on("error", (e) => {
-          debug(`watcher error ${target.path}: ${e.message}`);
+          this.logger("warn", `watcher error ${target.path}: ${e.message}`);
         });
         slot.watchers.push(w);
       } catch (e) {
-        debug(`watch failed ${target.path}: ${(e as Error).message}`);
+        this.logger(
+          "warn",
+          `watch failed ${target.path}: ${(e as Error).message}`,
+        );
       }
     }
   }
@@ -201,7 +227,7 @@ export class WatcherRegistry {
       try {
         slot.onInvalidate();
       } catch {}
-      debug(`watcher LRU evict ${oldest}`);
+      this.logger("info", `watcher LRU evict ${oldest}`);
     }
   }
 
