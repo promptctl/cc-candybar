@@ -259,6 +259,13 @@ export async function getFileModificationDate(
   }
 }
 
+// [LAW:types-are-the-program] exception: kept as type-aliases (not
+// interfaces) so they're structurally assignable to `Record<string,
+// unknown>` at the `extractModelId` boundary in segments/pricing.ts.
+// Switching to `interface` removes the implicit index signature and
+// breaks typecheck. A proper fix tightens that boundary to take
+// `PrunedRaw` directly and is out of scope for the CI-fix branch.
+// eslint-disable-next-line @typescript-eslint/consistent-type-definitions
 type UsageCounts = {
   input_tokens?: number;
   output_tokens?: number;
@@ -271,6 +278,7 @@ type UsageCounts = {
 // parsed JSON (including content arrays with full message text) causes
 // hundreds of MB of V8 heap churn per transcript re-parse. raw is
 // pruned to this shape at parse time so the GC pressure is bounded.
+// eslint-disable-next-line @typescript-eslint/consistent-type-definitions
 export type PrunedRaw = {
   model?: string;
   message?: { id?: string; model?: string; usage?: UsageCounts };
