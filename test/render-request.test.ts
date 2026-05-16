@@ -21,13 +21,17 @@ import type { ClaudeHookData } from "../src/utils/claude";
 // that would pollute every assertion). DEFAULT_CONFIG + explicit args only.
 const NO_CONFIG_ARG = "--config=/tmp/cc-candybar-test-no-config.json";
 
-async function render(hookData: ClaudeHookData, args: string[]): Promise<string> {
+async function render(
+  hookData: ClaudeHookData,
+  args: string[],
+  options?: { termCols?: number },
+): Promise<string> {
   const config = loadConfigFromCLI(
     [NO_CONFIG_ARG, ...args],
     hookData.workspace.project_dir,
     hookData.cwd,
   );
-  return new PowerlineRenderer(config).generateStatusline(hookData);
+  return new PowerlineRenderer(config).generateStatusline(hookData, options);
 }
 
 function plain(s: string): string {
@@ -259,6 +263,47 @@ describe("multi-line layouts", () => {
     const out = await render(rest as ClaudeHookData, ["--layout=model | version"]);
     const visibleLines = out.split("\n").filter((l) => plain(l).trim().length > 0);
     expect(visibleLines.length).toBe(1);
+  });
+});
+
+// ─── termCols from the wire reaches autoWrap (kz8.4) ─────────────────────────
+
+describe("termCols (post-kz8.4 wire field)", () => {
+  // Picks two segments wide enough to force visibly different wrap behavior
+  // when squeezed. The point is to prove termCols reaches the renderer — not
+  // to assert pixel-exact layout, which is rich-js's territory.
+  const ARGS = ["--layout=directory model sessionId"];
+
+  test("narrow termCols wraps; wide termCols does not", async () => {
+    // Force a deterministic baseline (no $COLUMNS / stdout.columns ambient
+    // influence). The renderer's getTerminalWidth falls back to those if no
+    // hint is supplied, so we'd be testing the ambient env instead.
+    const savedCols = process.env.COLUMNS;
+    delete process.env.COLUMNS;
+    const savedStdoutCols = process.stdout.columns;
+    Object.defineProperty(process.stdout, "columns", {
+      configurable: true,
+      writable: true,
+      value: undefined,
+    });
+    try {
+      const narrow = await render(BASE_HOOK, ARGS, { termCols: 60 });
+      const wide = await render(BASE_HOOK, ARGS, { termCols: 500 });
+      // termCols=60 is below the natural width of three segments + reserve
+      // (45); the wide variant has slack. Compare line counts in the visible
+      // output — narrow must produce strictly more lines than wide.
+      const narrowLines = plain(narrow).split("\n").filter(Boolean).length;
+      const wideLines = plain(wide).split("\n").filter(Boolean).length;
+      expect(narrowLines).toBeGreaterThan(wideLines);
+    } finally {
+      if (savedCols === undefined) delete process.env.COLUMNS;
+      else process.env.COLUMNS = savedCols;
+      Object.defineProperty(process.stdout, "columns", {
+        configurable: true,
+        writable: true,
+        value: savedStdoutCols,
+      });
+    }
   });
 });
 
