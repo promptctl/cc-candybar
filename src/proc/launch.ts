@@ -28,6 +28,8 @@ export const LAUNCH_CATEGORIES = [
   "click.pbcopy",
   "click.open",
   "install.plutil",
+  "install.osacompile",
+  "install.lsregister",
   "install.pbcopy",
   "install.open",
   "daemon-spawn",
@@ -53,7 +55,13 @@ export type LaunchResult =
   | { ok: true; stdout: string; stderr: string; exitCode: number | null }
   | {
       ok: false;
-      reason: "timeout" | "spawn-error" | "non-zero";
+      // [LAW:one-type-per-behavior] Distinct termination causes get distinct
+      // tags so callers + stats can attribute correctly. "timeout" means the
+      // local timer fired; "signal" means the OS or external killer ended the
+      // child for some other reason (SIGKILL/SIGINT/SIGPIPE/SIGHUP/...);
+      // "non-zero" is a clean exit with a non-zero code; "spawn-error" is a
+      // failure before the child started.
+      reason: "timeout" | "signal" | "spawn-error" | "non-zero";
       stdout: string;
       stderr: string;
       exitCode: number | null;
@@ -74,7 +82,11 @@ export async function launch(opts: LaunchOpts): Promise<LaunchResult> {
   statsHandle?.onStart(opts.category);
 
   if (opts.detached) {
-    const result = launchDetached(opts);
+    // [LAW:one-type-per-behavior] Detached launches are synchronous in nature
+    // (fire-and-forget, no stdio to drain). Callers that need the typed
+    // outcome should call launchDetachedSync directly. We keep this branch as
+    // a thin async wrapper for parity but it is no richer than the sync form.
+    const result = launchDetachedSyncInner(opts);
     statsHandle?.onEnd(opts.category, Date.now() - t0);
     return result;
   }
@@ -105,6 +117,12 @@ export async function launch(opts: LaunchOpts): Promise<LaunchResult> {
     let stderr = "";
     let settled = false;
     let timer: NodeJS.Timeout | null = null;
+    // [LAW:dataflow-not-control-flow] Whether the close was caused by *our*
+    // timer is data we have to carry. The OS doesn't tell us why a child was
+    // signalled — without this flag, SIGKILL from the OOM killer, SIGINT
+    // propagated through the tty, SIGPIPE on a closed pipe, etc. all get
+    // misreported as "timeout".
+    let timedOut = false;
 
     const settle = (r: LaunchResult) => {
       if (settled) return;
@@ -136,21 +154,30 @@ export async function launch(opts: LaunchOpts): Promise<LaunchResult> {
     child.on("close", (code, signal) => {
       if (code === 0) {
         settle({ ok: true, stdout, stderr, exitCode: code });
-      } else {
-        settle({
-          ok: false,
-          reason: signal ? "timeout" : "non-zero",
-          stdout,
-          stderr,
-          exitCode: code,
-          signal,
-        });
+        return;
       }
+      const reason: "timeout" | "signal" | "non-zero" = signal
+        ? timedOut
+          ? "timeout"
+          : "signal"
+        : "non-zero";
+      settle({
+        ok: false,
+        reason,
+        stdout,
+        stderr,
+        exitCode: code,
+        signal,
+      });
     });
 
     if (opts.timeoutMs && opts.timeoutMs > 0) {
       timer = setTimeout(() => {
-        child.kill("SIGTERM");
+        timedOut = true;
+        // Guard against killing a child that has already settled (e.g. a
+        // very fast `/bin/true` that exited before the timer was scheduled).
+        // settle()'s `settled` flag is the single source of truth.
+        if (!settled) child.kill("SIGTERM");
         settle({
           ok: false,
           reason: "timeout",
@@ -214,9 +241,21 @@ export function launchSync(opts: LaunchOpts): LaunchResult {
       return { ok: true, stdout, stderr, exitCode: result.status };
     }
 
+    // [LAW:dataflow-not-control-flow] The reason data lives in the
+    // spawnSync result, not in the surrounding control flow. Node sets
+    // `result.signal` whenever the child died from a signal — including but
+    // not limited to the timeout's SIGTERM. We can only attribute "timeout"
+    // when a timeout was actually requested; otherwise the signal came from
+    // somewhere else (OOM killer, ctrl-C through the tty group, etc.).
+    const hasTimeout = opts.timeoutMs !== undefined && opts.timeoutMs > 0;
+    const reason: "timeout" | "signal" | "non-zero" = result.signal
+      ? hasTimeout && result.signal === "SIGTERM"
+        ? "timeout"
+        : "signal"
+      : "non-zero";
     return {
       ok: false,
-      reason: result.signal ? "timeout" : "non-zero",
+      reason,
       stdout,
       stderr,
       exitCode: result.status,
@@ -236,17 +275,31 @@ export function launchSync(opts: LaunchOpts): LaunchResult {
   }
 }
 
-function launchDetached(opts: LaunchOpts): LaunchResult {
+// [LAW:single-enforcer] The synchronous typed entrypoint for detached
+// (fire-and-forget) launches. Use this instead of `void launch({detached:true})`
+// — that pattern discards the spawn outcome and reports success on failure.
+// This function returns the typed result synchronously, and also meters
+// through the stats handle so detached spawns show up in daemon-stats.
+export function launchDetachedSync(opts: LaunchOpts): LaunchResult {
+  const t0 = Date.now();
+  statsHandle?.onStart(opts.category);
+  const result = launchDetachedSyncInner(opts);
+  statsHandle?.onEnd(opts.category, Date.now() - t0);
+  return result;
+}
+
+function launchDetachedSyncInner(opts: LaunchOpts): LaunchResult {
+  let child;
   try {
-    const child = spawn(opts.bin, opts.args ?? [], {
+    child = spawn(opts.bin, opts.args ?? [], {
       cwd: opts.cwd,
       env: opts.env,
       detached: true,
       stdio: "ignore",
     });
-    child.unref();
-    return { ok: true, stdout: "", stderr: "", exitCode: null };
   } catch (err) {
+    // spawn throws synchronously on some failure modes (invalid options,
+    // EACCES on some platforms).
     return {
       ok: false,
       reason: "spawn-error",
@@ -257,4 +310,25 @@ function launchDetached(opts: LaunchOpts): LaunchResult {
       error: err instanceof Error ? err.message : String(err),
     };
   }
+  // [LAW:no-silent-fallbacks] spawn() with ENOENT (e.g. missing binary) does
+  // *not* throw — it returns a ChildProcess with pid=undefined that emits
+  // 'error' asynchronously. Two things matter here:
+  //   1. The 'error' must have a listener or Node crashes the process.
+  //   2. The synchronous return must reflect that the spawn failed.
+  // We attach a no-op listener and use the synchronously-observable absence
+  // of a pid as the spawn-failure signal.
+  child.once("error", () => {});
+  if (child.pid === undefined) {
+    return {
+      ok: false,
+      reason: "spawn-error",
+      stdout: "",
+      stderr: "",
+      exitCode: null,
+      signal: null,
+      error: `spawn(${opts.bin}): no pid (binary not found or unexecutable)`,
+    };
+  }
+  child.unref();
+  return { ok: true, stdout: "", stderr: "", exitCode: null };
 }

@@ -2,14 +2,23 @@
 // watchers each receive a tiny handle they're allowed to bump, but the
 // canonical object lives here. Stats are read-only after serialization.
 
-import { LAUNCH_CATEGORIES, type LaunchCategory } from "../proc/launch";
+import type { LaunchCategory } from "../proc/launch";
 import type { LaunchStatsHandle } from "../proc/stats-handle";
 import { PROTOCOL_VERSION } from "./protocol";
 
 // Rolling window for "last minute" counts. Keep timestamps for each launch in
 // a ring buffer; eviction happens lazily on read.
+//
+// [LAW:dataflow-not-control-flow] The cap is a hard bound on how many
+// launches can be counted in any 60-second window. Bursts above
+// ROLLING_BUFFER_CAP / (ROLLING_WINDOW_MS/1000) launches/sec overwrite
+// timestamps that are still inside the window, causing `lastMinute` to
+// undercount. At 16384 entries / 60s = ~273 sustained launches/sec the
+// undercount only kicks in under pathological load (well past anything kz8
+// is trying to detect). Bump this cap rather than the comment if a future
+// workload ever sustains higher rates.
 const ROLLING_WINDOW_MS = 60_000;
-const ROLLING_BUFFER_CAP = 4096;
+const ROLLING_BUFFER_CAP = 16384;
 
 // Reservoir-sample histogram (16 entries) per category — sufficient for
 // rough p50/p99 without unbounded memory. Replacement uses a simple
@@ -116,8 +125,8 @@ export class RuntimeStats {
       this.rollingTimestamps.push(now);
       return;
     }
-    // Ring buffer once cap hit. Old entries get overwritten; "last minute"
-    // truth is preserved because eviction filters by timestamp on read.
+    // Ring buffer once cap hit. The overwritten slot may still be inside the
+    // 60s window — see the cap-rationale comment at ROLLING_BUFFER_CAP.
     this.rollingTimestamps[this.rollingHead] = now;
     this.rollingHead = (this.rollingHead + 1) % ROLLING_BUFFER_CAP;
   }
@@ -145,9 +154,13 @@ export class RuntimeStats {
       if (ts >= cutoff) lastMinute++;
     }
 
+    // [LAW:one-source-of-truth] Snapshot includes only categories that have
+    // actually executed — same shape as p50/p99 below. Consumers wanting the
+    // full closed list can read LAUNCH_CATEGORIES (exported from src/proc/launch)
+    // and treat missing keys as zero.
     const byCategory: Record<string, number> = {};
-    for (const cat of LAUNCH_CATEGORIES) {
-      byCategory[cat] = this.subprocessCount.get(cat) ?? 0;
+    for (const [cat, n] of this.subprocessCount) {
+      if (n > 0) byCategory[cat] = n;
     }
 
     const p50: Record<string, number> = {};
