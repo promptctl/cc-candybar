@@ -372,10 +372,16 @@ async function handleRequest(req: Request): Promise<Response> {
         dlog("warn", `schema: required field '${path}' absent in hookData`);
       }
       for (const { path, expected, got } of report.typeMismatches) {
-        dlog("warn", `schema: field '${path}' expected ${expected}, got ${got}`);
+        dlog(
+          "warn",
+          `schema: field '${path}' expected ${expected}, got ${got}`,
+        );
       }
       for (const field of report.unknownTopLevelFields) {
-        dlog("info", `schema: unknown field '${field}' — Anthropic may have added it`);
+        dlog(
+          "info",
+          `schema: unknown field '${field}' — Anthropic may have added it`,
+        );
       }
       const projectDir = req.hookData.workspace?.project_dir;
       // [LAW:dataflow-not-control-flow] thread the *request's* cwd, not the

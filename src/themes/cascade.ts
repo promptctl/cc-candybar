@@ -1,5 +1,5 @@
-import type { Palette } from "rich-js";
-import { PaletteResolver, type ColorRgba } from "rich-js";
+import type { Palette } from "@promptctl/rich-js";
+import { PaletteResolver, type ColorRgba } from "@promptctl/rich-js";
 import { getThemePalette, listThemePalettes } from "./palette-registry.js";
 import { hexToAnsi, hexTo256Ansi, hexToBasicAnsi } from "../utils/colors";
 import { RESET_CODE } from "../utils/constants";

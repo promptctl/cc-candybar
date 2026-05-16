@@ -1,4 +1,4 @@
-declare module "rich-js/themes/data" {
+declare module "@promptctl/rich-js/themes/data" {
   interface ThemePaletteData {
     readonly name: string;
     readonly dark: boolean;
@@ -8,8 +8,8 @@ declare module "rich-js/themes/data" {
   export const THEMES: Record<string, ThemePaletteData>;
 }
 
-declare module "rich-js/themes/registry" {
-  import type { Palette } from "rich-js";
+declare module "@promptctl/rich-js/themes/registry" {
+  import type { Palette } from "@promptctl/rich-js";
   export function listThemePalettes(): readonly string[];
   export function getThemePalette(name: string): Palette | null;
 }

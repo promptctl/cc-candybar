@@ -14,7 +14,7 @@ import { watch as fsWatch, type FSWatcher } from "fs";
 import { join as pathJoin } from "path";
 import { setInterval, clearInterval } from "timers";
 import { reaction, type IReactionDisposer } from "mobx";
-import type { RichText } from "rich-js";
+import type { RichText } from "@promptctl/rich-js";
 import {
   typeOf,
   toString,
@@ -89,7 +89,13 @@ export interface TimeOptions {
 
 // [LAW:one-type-per-behavior] Six git fields — each has a fixed inferred type.
 // branch/sha are strings; dirty is boolean; ahead/behind/stash are numbers.
-export type GitField = "branch" | "sha" | "dirty" | "ahead" | "behind" | "stash";
+export type GitField =
+  | "branch"
+  | "sha"
+  | "dirty"
+  | "ahead"
+  | "behind"
+  | "stash";
 
 export interface GitOptions {
   readonly field: GitField;
@@ -321,8 +327,9 @@ async function fetchGitSnapshot(cwd: string): Promise<GitSnapshot | null> {
   const branchLine = lines.find((l) => l.startsWith("## ")) ?? "";
   const branchRaw = branchLine.slice(3).split("...")[0] ?? "";
   // Detached HEAD: git emits "## HEAD (no branch)" — normalise to empty string.
-  const branch =
-    branchRaw.startsWith("HEAD (no branch)") ? "" : branchRaw.trim();
+  const branch = branchRaw.startsWith("HEAD (no branch)")
+    ? ""
+    : branchRaw.trim();
 
   // Any non-header, non-empty line = working tree has changes.
   const dirty = lines.some(
@@ -330,10 +337,9 @@ async function fetchGitSnapshot(cwd: string): Promise<GitSnapshot | null> {
   );
 
   const sha = shaR.exitCode === 0 ? shaR.stdout.trim() : "";
-  const ahead =
-    aheadR.exitCode === 0 ? (parseInt(aheadR.stdout.trim()) || 0) : 0;
+  const ahead = aheadR.exitCode === 0 ? parseInt(aheadR.stdout.trim()) || 0 : 0;
   const behind =
-    behindR.exitCode === 0 ? (parseInt(behindR.stdout.trim()) || 0) : 0;
+    behindR.exitCode === 0 ? parseInt(behindR.stdout.trim()) || 0 : 0;
   const stashText = stashR.exitCode === 0 ? stashR.stdout.trim() : "";
   const stash = stashText ? stashText.split("\n").length : 0;
 
@@ -388,7 +394,10 @@ class GitPoller {
       this.store.runInAction(() => {
         for (const [field, subs] of this.subscribers) {
           for (const { name, varDefault } of subs) {
-            this.store.setBox(name, this.resolveValue(snapshot, field, varDefault));
+            this.store.setBox(
+              name,
+              this.resolveValue(snapshot, field, varDefault),
+            );
           }
         }
       });
@@ -868,7 +877,8 @@ export class SourceRegistry {
         // not in whether the update executes — the update always runs when
         // the joined snapshot changes.
         const disposer: IReactionDisposer = reaction(
-          () => policy.varNames.map((n) => String(this.store.read(n))).join(","),
+          () =>
+            policy.varNames.map((n) => String(this.store.read(n))).join(","),
           update,
         );
         this.cleanups.push(disposer);

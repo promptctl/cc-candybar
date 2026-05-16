@@ -1,7 +1,7 @@
 // [LAW:behavior-not-structure] Tests assert observable output (cell count,
 // text content, total width, style fields) — never internal state.
 
-import { StripCell, Style, cellLen } from "rich-js";
+import { StripCell, Style, cellLen } from "@promptctl/rich-js";
 import { createCcCandybarEngine } from "../src/template-engine/engine";
 import { applySegmentLayout, evaluateWhen } from "../src/template-engine/layout";
 

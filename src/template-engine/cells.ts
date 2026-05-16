@@ -11,8 +11,8 @@
 //   5. Trailing joiner fragments (or entire output if no links) become their
 //      own plain cells, preserving their styles.
 
-import { RichText, StripCell, Style } from "rich-js";
-import type { Span, StripCellPart } from "rich-js";
+import { StripCell, Style } from "@promptctl/rich-js";
+import type { Span, StripCellPart, RichText } from "@promptctl/rich-js";
 
 // [LAW:single-enforcer] The only place that maps RichText[] → StripCell[].
 // All callers go through here; no second conversion path exists.
@@ -44,7 +44,10 @@ export function fragmentsToStripCells(fragments: RichText[]): StripCell[] {
 // Merge accumulated joiner fragments + a link-bearing fragment into one cell.
 // The link fragment's style governs the cell level (carries link, fg, bg, attrs).
 // Joiner text is prepended to the link fragment's text, sharing the cell style.
-function mergeThenConvert(joiners: RichText[], linkFragment: RichText): StripCell {
+function mergeThenConvert(
+  joiners: RichText[],
+  linkFragment: RichText,
+): StripCell {
   if (!joiners.length) return richTextToCell(linkFragment);
 
   // Build a combined text: concatenate plain texts from joiners + link fragment.
@@ -120,7 +123,10 @@ function spansToStripCellParts(
       // Strip bgcolor so we don't violate the StripCell single-style
       // invariant. Cell-level style governs bg; parts only carry fg/attrs.
       const partStyle = stripBgcolor(rawSpanStyle);
-      parts.push({ text: spanText, style: partStyle.isNull ? undefined : partStyle });
+      parts.push({
+        text: spanText,
+        style: partStyle.isNull ? undefined : partStyle,
+      });
     }
 
     cursor = Math.max(cursor, end);

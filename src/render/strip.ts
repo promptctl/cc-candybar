@@ -9,7 +9,7 @@ import {
   renderToString,
   type Joiner,
   type ColorSystemSpec,
-} from "rich-js";
+} from "@promptctl/rich-js";
 
 export interface RenderedSegmentLike {
   type: string;
