@@ -21,8 +21,9 @@ import {
   sprigStrings,
   sprigLists,
 } from "@promptctl/go-template-js";
-import { richTextFuncs, RichText, PaletteResolver } from "rich-js";
-import { paletteFuncs } from "rich-js/template-bindings";
+import type { PaletteResolver } from "@promptctl/rich-js";
+import { richTextFuncs, RichText } from "@promptctl/rich-js";
+import { paletteFuncs } from "@promptctl/rich-js/template-bindings";
 import { ccCandybarFuncs } from "./funcs.js";
 
 // [LAW:single-enforcer] fromString/toString are declared once here.
@@ -31,10 +32,16 @@ import { ccCandybarFuncs } from "./funcs.js";
 // resolver is provided — same engine instance, no second parse path.
 // [LAW:one-type-per-behavior] resolver? is a value, not a mode — one factory,
 // one engine shape; the data (resolver presence) governs what's registered.
-export function createCcCandybarEngine(resolver?: PaletteResolver): Engine<RichText> {
+export function createCcCandybarEngine(
+  resolver?: PaletteResolver,
+): Engine<RichText> {
   return createEngine<RichText>({
     fromString: (s) => new RichText(s),
     toString: (rt) => rt.plain,
+    // [LAW:no-defensive-null-guards] missing fields must throw at the boundary,
+    // not silently produce "<no value>". Callers (SourceRegistry, segments)
+    // depend on MissingFieldError to drive varDefault / defaultEmptyValue.
+    missingKey: "error",
     funcs: {
       ...sprigDefaults(),
       ...sprigStrings(),

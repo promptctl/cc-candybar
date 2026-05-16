@@ -2,7 +2,7 @@ import process from "node:process";
 import { listAvailableThemes } from "../themes/index.js";
 import { getThemePalette } from "../themes/palette-registry.js";
 import { STYLE_ORDER, STYLE_PRESETS } from "../themes/default-mapping.js";
-import type { ColorRgba } from "rich-js";
+import type { ColorRgba } from "@promptctl/rich-js";
 import { PowerlineRenderer } from "../powerline.js";
 import type { ClaudeHookData } from "../utils/claude.js";
 import { DEFAULT_CONFIG } from "../config/defaults.js";

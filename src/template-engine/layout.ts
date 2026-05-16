@@ -7,8 +7,8 @@
 // is not a branch that skips logic — it is a value that makes the step return
 // the input unchanged.
 
-import { StripCell, Style, cellLen, splitText } from "rich-js";
-import type { RichText } from "rich-js";
+import { StripCell, cellLen, splitText } from "@promptctl/rich-js";
+import type { RichText, Style } from "@promptctl/rich-js";
 import type { Template } from "@promptctl/go-template-js";
 
 export type JustifyMode = "left" | "center" | "right";
@@ -66,7 +66,13 @@ export function applySegmentLayout(
   cells: StripCell[],
   options: SegmentLayoutOptions,
 ): StripCell[] {
-  const { width, justify, truncate, defaultStyle, truncateMarker = "…" } = options;
+  const {
+    width,
+    justify,
+    truncate,
+    defaultStyle,
+    truncateMarker = "…",
+  } = options;
 
   // Step 1: apply default style.
   // defaultStyle.add(cellStyle) → cell wins for any field it explicitly sets.
