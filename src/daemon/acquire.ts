@@ -304,12 +304,16 @@ function tryAcquireSpawnLock(): LockOutcome {
     try {
       fs.unlinkSync(path);
     } catch (e) {
-      // Stale lock present but we can't remove it — same class of fatal as
-      // openSync failure. Don't spin pretending it's contention.
-      return {
-        kind: "error",
-        reason: `unlink stale spawn.lock: ${(e as Error).message}`,
-      };
+      // ENOENT means someone (the rightful holder, or another reclaimer)
+      // already removed the file — that's the desired post-condition, so
+      // continue to the retry. Other failures (EACCES, ENOSPC) are real.
+      const code = (e as NodeJS.ErrnoException).code;
+      if (code !== "ENOENT") {
+        return {
+          kind: "error",
+          reason: `unlink stale spawn.lock: ${(e as Error).message}`,
+        };
+      }
     }
   }
   return { kind: "contended" };

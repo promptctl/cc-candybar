@@ -256,6 +256,7 @@ describe("obtainDaemon (bind-based singleton)", () => {
     });
   });
 
+
   test("surfaces unrecoverable spawn-lock errors as failed (not spinning timeout)", async () => {
     await withTempState(async () => {
       jest.resetModules();
@@ -349,8 +350,10 @@ describe("obtainDaemonKick (synchronous fire-and-forget)", () => {
       fs.chmodSync(daemonDir(), 0o555);
 
       // Suppress the expected stderr "spawn-lock unavailable" warning
-      // during this test to keep test output clean.
-      const realStderrWrite = process.stderr.write.bind(process.stderr);
+      // during this test to keep test output clean. mockRestore() (in
+      // the finally) restores the original; no manual capture/reassignment
+      // needed (and reassigning a bound copy would replace the restored
+      // original with a wrapper, affecting later tests).
       const stderrSpy = jest
         .spyOn(process.stderr, "write")
         .mockImplementation((_b: unknown) => true);
@@ -371,7 +374,6 @@ describe("obtainDaemonKick (synchronous fire-and-forget)", () => {
         expect(warned).toMatch(/spawn-lock unavailable/);
       } finally {
         stderrSpy.mockRestore();
-        process.stderr.write = realStderrWrite;
         fs.chmodSync(daemonDir(), originalMode);
       }
     });
