@@ -2,7 +2,6 @@ import fs from "node:fs";
 import path from "node:path";
 import { launch } from "../proc/launch";
 import { debug } from "../utils/logger";
-import { withGitCache, GIT_CACHE_TTL_MS } from "../utils/git-cache";
 
 export interface GitInfo {
   branch: string;
@@ -57,6 +56,25 @@ export class GitService {
     return { stdout: result.stdout };
   }
 
+  // [LAW:locality-or-seam] Public so the daemon's GitDataProvider can key its
+  // cache + watcher on the *effective* git directory — the same directory the
+  // shell-runner will run git commands in. Caching on `findGitRoot(workingDir)`
+  // alone is wrong when `projectDir` is set and is itself a git repo: the
+  // shell-runner picks `projectDir` (see `computeGitInfo`'s gitDir resolution
+  // below), but a workingDir-keyed cache would store that data under a
+  // different key and wire invalidation to the wrong watcher. The contract:
+  // `resolveEffectiveGitDir(workingDir, projectDir)` returns exactly the
+  // directory `computeGitInfo` will use as `gitDir`. Both surfaces must agree.
+  async resolveEffectiveGitDir(
+    workingDir: string,
+    projectDir?: string,
+  ): Promise<string | null> {
+    if (this.isWorktree(workingDir)) return workingDir;
+    if (projectDir && this.isGitRepo(projectDir)) return projectDir;
+    if (this.isGitRepo(workingDir)) return workingDir;
+    return this.findGitRoot(workingDir);
+  }
+
   // [LAW:locality-or-seam] public so daemon-side caches can key on the
   // repoRoot they'd otherwise have to re-derive.
   async findGitRoot(workingDir: string): Promise<string | null> {
@@ -72,6 +90,10 @@ export class GitService {
     }
   }
 
+  // [LAW:one-source-of-truth] No inner cache here. The daemon-side
+  // GitDataProvider (src/daemon/cache/git.ts) is the single cache. Layering
+  // a per-process cache on top of an already-cached call would double the
+  // invalidation surface — exactly the trap that kz8.3 collapses.
   async getGitInfo(
     workingDir: string,
     options: {
@@ -86,10 +108,7 @@ export class GitService {
     } = {},
     projectDir?: string,
   ): Promise<GitInfo | null> {
-    const cacheKey = `${workingDir}|${projectDir ?? ""}|${JSON.stringify(options)}`;
-    return withGitCache(cacheKey, GIT_CACHE_TTL_MS, () =>
-      this.computeGitInfo(workingDir, options, projectDir),
-    );
+    return this.computeGitInfo(workingDir, options, projectDir);
   }
 
   private async computeGitInfo(
@@ -245,14 +264,30 @@ export class GitService {
     }
   }
 
-  private resolveGitDir(workingDir: string): string {
+  // [LAW:locality-or-seam] Public so the daemon-side provider can watch the
+  // real HEAD/index files even for git worktrees. For a regular repo this is
+  // `<workingDir>/.git`. For a worktree, `<workingDir>/.git` is a *file*
+  // containing `gitdir: <abs-path-to-worktree-metadata-dir>` and the actual
+  // HEAD/index live inside that metadata dir — watching `<workingDir>/.git/HEAD`
+  // would fail (no such path) and the cache would never invalidate. Returning
+  // the resolved gitDir lets the provider point watchers at real files.
+  //
+  // [LAW:no-defensive-null-guards] The try/catch is a trust-boundary guard,
+  // not a silent skip — fs races (file removed between existsSync and
+  // statSync), permission errors, or unreadable .git files fall back to the
+  // dotGit path so callers always get a string, never a throw.
+  resolveGitDir(workingDir: string): string {
     const dotGit = path.join(workingDir, ".git");
-    if (fs.existsSync(dotGit) && fs.statSync(dotGit).isFile()) {
-      const content = fs.readFileSync(dotGit, "utf-8");
-      const match = content.match(/^gitdir:\s*(.+)$/m);
-      if (match?.[1]) {
-        return path.resolve(workingDir, match[1].trim());
+    try {
+      if (fs.existsSync(dotGit) && fs.statSync(dotGit).isFile()) {
+        const content = fs.readFileSync(dotGit, "utf-8");
+        const match = content.match(/^gitdir:\s*(.+)$/m);
+        if (match?.[1]) {
+          return path.resolve(workingDir, match[1].trim());
+        }
       }
+    } catch {
+      // Fall through to the dotGit fallback below.
     }
     return dotGit;
   }

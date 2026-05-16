@@ -8,7 +8,7 @@ import { daemonDir, pidPath, socketPath } from "./paths";
 import { dlog, closeLog } from "./log";
 import { PROTOCOL_VERSION, encodeFrame, makeFrameReader } from "./protocol";
 import type { Request, Response } from "./protocol";
-import { CachedGitService } from "./cache/git";
+import { GitDataProvider } from "./cache/git";
 import { CachedUsageProvider } from "./cache/usage";
 import { RenderCache } from "./cache/render";
 import { WatcherRegistry } from "./cache/watchers";
@@ -27,8 +27,18 @@ const stats = new RuntimeStats();
 // Installing the metering handle here makes subprocess counts visible in
 // daemon-stats.
 setLaunchStats(stats.launchStats);
-const watcherRegistry = new WatcherRegistry({ counters: stats });
-const gitService = new CachedGitService({ watchers: watcherRegistry });
+// [LAW:single-enforcer] The daemon injects `dlog` into both registries so
+// cache + watcher lifecycle events land in daemon.log at the right level.
+// Non-daemon consumers (var-system tests, future library use) take the
+// default debug-routed loggers and never write to daemon log files.
+const watcherRegistry = new WatcherRegistry({
+  counters: stats,
+  logger: dlog,
+});
+const gitService = new GitDataProvider({
+  watchers: watcherRegistry,
+  logger: dlog,
+});
 const usageProvider = new CachedUsageProvider();
 const sessionState = new SessionState();
 const renderCache = new RenderCache({
