@@ -211,7 +211,7 @@ export function runInstallUrlHandler(): void {
       "-e",
       appleScriptSource(process.execPath, stableScript, nodeModules),
     ],
-    category: "install.plutil",
+    category: "install.osacompile",
   });
   if (!osa.ok) {
     process.stderr.write(osa.stderr);
@@ -246,7 +246,7 @@ export function runInstallUrlHandler(): void {
   const lsr = launchSync({
     bin: "/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister",
     args: ["-f", bundle],
-    category: "install.plutil",
+    category: "install.lsregister",
   });
   if (!lsr.ok) {
     process.stderr.write(lsr.stderr);

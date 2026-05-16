@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import net from "node:net";
-import { launch } from "../proc/launch";
+import { launchDetachedSync } from "../proc/launch";
 import process from "node:process";
 import { socketPath, spawnLockPath, daemonDir } from "./paths";
 
@@ -398,13 +398,16 @@ function spawnDaemonDetachedReal(): boolean {
   const node = process.execPath;
   const script = process.argv[1];
   if (!script) return false;
-  // Detached launches return synchronously after the spawn succeeds; the
-  // Promise resolves immediately (the OS now owns the process).
-  void launch({
+  // [LAW:no-silent-fallbacks] launchDetachedSync returns the typed outcome
+  // synchronously, so the spawn-failure case (ENOENT, EACCES, EAGAIN under
+  // process-table pressure) propagates as `false` instead of being silently
+  // reported as success. The previous `void launch({detached:true})` form
+  // discarded the Promise and unconditionally returned true.
+  const result = launchDetachedSync({
     bin: node,
     args: ["--max-old-space-size=400", script, "daemon"],
     detached: true,
     category: "daemon-spawn",
   });
-  return true;
+  return result.ok;
 }
