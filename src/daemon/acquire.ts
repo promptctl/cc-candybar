@@ -188,21 +188,41 @@ export function obtainDaemonKick(opts: { spawn?: () => boolean } = {}): void {
   if (ensureStateDir() !== null) return;
   const spawnFn = opts.spawn ?? spawnDaemonDetachedReal;
   const lock = tryAcquireSpawnLock();
-  if (lock.kind !== "held") return; // contention or error — give up silently
+
+  // [LAW:dataflow-not-control-flow] Lock outcome is data, not control flow.
+  // - "contended": another caller is already spawning; trust them, return.
+  // - "error": spawn-lock unavailable (broken state dir, perms). Per the
+  //   architecture, spawn.lock is an *optimization* on top of bind()'s
+  //   load-bearing exclusion — a lock error should NOT make this kick a
+  //   hard stop on availability. Fall through to an unlocked spawn; bind()
+  //   inside the daemon arbitrates any duplicates.
+  // - "held": normal path — spawn under the lock.
+  if (lock.kind === "contended") return;
+  if (lock.kind === "error") {
+    process.stderr.write(
+      `cc-candybar: spawn-lock unavailable (${lock.reason}) — spawning unlocked\n`,
+    );
+    safeSpawn(spawnFn);
+    return;
+  }
   try {
-    // [LAW:no-defensive-null-guards] Kick path is fire-and-forget; a spawn
-    // failure here is best-effort. Swallowing prevents an uncaught throw from
-    // crashing the calling process at the wrong moment (right before its own
-    // exit). It is logged via stderr for visibility.
-    try {
-      spawnFn();
-    } catch (e) {
-      process.stderr.write(
-        `cc-candybar: daemon spawn failed: ${(e as Error).message}\n`,
-      );
-    }
+    safeSpawn(spawnFn);
   } finally {
     releaseSpawnLock();
+  }
+}
+
+// [LAW:no-defensive-null-guards] Kick path is fire-and-forget; a spawn
+// failure here is best-effort. Swallowing prevents an uncaught throw from
+// crashing the calling process at the wrong moment (right before its own
+// exit). It is logged via stderr for visibility.
+function safeSpawn(spawnFn: () => boolean): void {
+  try {
+    spawnFn();
+  } catch (e) {
+    process.stderr.write(
+      `cc-candybar: daemon spawn failed: ${(e as Error).message}\n`,
+    );
   }
 }
 

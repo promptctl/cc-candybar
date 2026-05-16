@@ -335,6 +335,48 @@ describe("obtainDaemonKick (synchronous fire-and-forget)", () => {
     });
   });
 
+  test("spawns unlocked when lock acquisition errors (availability)", async () => {
+    await withTempState(async () => {
+      jest.resetModules();
+      const { obtainDaemonKick } = await import("../src/daemon/acquire");
+      const { daemonDir } = await import("../src/daemon/paths");
+
+      // Make daemonDir() read-only so openSync("wx") on spawn.lock fails
+      // with EACCES (not EEXIST). The kick must NOT treat this as a hard
+      // stop — bind() arbitrates, so we spawn anyway.
+      fs.mkdirSync(daemonDir(), { recursive: true });
+      const originalMode = fs.statSync(daemonDir()).mode;
+      fs.chmodSync(daemonDir(), 0o555);
+
+      // Suppress the expected stderr "spawn-lock unavailable" warning
+      // during this test to keep test output clean.
+      const realStderrWrite = process.stderr.write.bind(process.stderr);
+      const stderrSpy = jest
+        .spyOn(process.stderr, "write")
+        .mockImplementation((_b: unknown) => true);
+
+      try {
+        let spawned = 0;
+        obtainDaemonKick({
+          spawn: () => {
+            spawned++;
+            return true;
+          },
+        });
+        // Spawn fired despite lock-error — bind() will arbitrate.
+        expect(spawned).toBe(1);
+        // The stderr warning was emitted with the reason.
+        expect(stderrSpy).toHaveBeenCalled();
+        const warned = String(stderrSpy.mock.calls[0]?.[0]);
+        expect(warned).toMatch(/spawn-lock unavailable/);
+      } finally {
+        stderrSpy.mockRestore();
+        process.stderr.write = realStderrWrite;
+        fs.chmodSync(daemonDir(), originalMode);
+      }
+    });
+  });
+
   test("completes synchronously — no microtask suspension", async () => {
     await withTempState(async () => {
       jest.resetModules();
