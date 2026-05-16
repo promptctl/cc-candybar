@@ -483,15 +483,30 @@ describe("daemon startup (bind-based singleton)", () => {
     });
   });
 
-  test("stale socket file: connect fails (ECONNREFUSED), unlink+rebind succeeds", async () => {
+  test("stale socket file: connect surfaces ENOTSOCK/ECONNREFUSED, unlink+rebind succeeds", async () => {
     await withTempState(async () => {
       jest.resetModules();
       const { socketPath } = await import("../src/daemon/paths");
       fs.mkdirSync(path.dirname(socketPath()), { recursive: true });
 
-      // Plant a stale socket file (just a file, no listener — connect should
-      // either ECONNREFUSED or ENOTSOCK; rebind needs unlink first).
+      // Plant a stale socket file (just a plain file, no listener). Per the
+      // round-8 server.ts probeSocket, only ENOTSOCK/ECONNREFUSED/ENOENT
+      // count as "definitively dead" — verify the kernel returns one of
+      // those (so the stale-socket recovery path in handleAddressInUse will
+      // actually fire).
       fs.writeFileSync(socketPath(), "");
+
+      const connectErr: NodeJS.ErrnoException = await new Promise(
+        (resolve) => {
+          const sock = net.connect(socketPath());
+          sock.once("connect", () => {
+            sock.destroy();
+            resolve(new Error("unexpected connect success") as NodeJS.ErrnoException);
+          });
+          sock.once("error", (e) => resolve(e as NodeJS.ErrnoException));
+        },
+      );
+      expect(["ENOTSOCK", "ECONNREFUSED", "ENOENT"]).toContain(connectErr.code);
 
       // First bind attempt fails (EADDRINUSE).
       await expect(
