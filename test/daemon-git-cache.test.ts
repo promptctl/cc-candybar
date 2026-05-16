@@ -1,4 +1,4 @@
-import { CachedGitService } from "../src/daemon/cache/git";
+import { GitDataProvider } from "../src/daemon/cache/git";
 import { GitService, type GitInfo } from "../src/segments/git";
 
 class StubGitService extends GitService {
@@ -31,7 +31,7 @@ function makeCache(opts: { ttlMs?: number; maxEntries?: number } = {}) {
   const inner = new StubGitService();
   // sanityIntervalMs=0 disables the periodic check in unit tests; we drive
   // it manually via runSanityCheckNow().
-  const svc = new CachedGitService({ ...opts, inner, sanityIntervalMs: 0 });
+  const svc = new GitDataProvider({ ...opts, inner, sanityIntervalMs: 0 });
   return { svc, inner };
 }
 
@@ -40,7 +40,7 @@ afterEach(() => {
   // against the resulting throw; nothing to clean up here.
 });
 
-describe("CachedGitService", () => {
+describe("GitDataProvider", () => {
   test("two cwds in same repo share one cache entry", async () => {
     const { svc, inner } = makeCache();
     inner.repoRootByDir = { "/repo/a": "/repo", "/repo/b": "/repo" };
@@ -115,5 +115,88 @@ describe("CachedGitService", () => {
     const r1 = await svc.getGitInfo("/nowhere", {});
     expect(r1).toBeNull();
     expect(svc.getStats().size).toBe(0);
+  });
+});
+
+// Microtask drain helper — subscribe()'s initial delivery happens on a
+// microtask chain after findGitRoot + getGitInfo settle.
+async function tick(times = 4): Promise<void> {
+  for (let i = 0; i < times; i++) {
+    await Promise.resolve();
+  }
+}
+
+describe("GitDataProvider.subscribe", () => {
+  test("delivers initial snapshot once", async () => {
+    const { svc, inner } = makeCache();
+    inner.repoRootByDir = { "/repo": "/repo" };
+
+    const calls: Array<GitInfo | null> = [];
+    const unsub = svc.subscribe("/repo", (info) => calls.push(info));
+    await tick();
+
+    expect(calls).toHaveLength(1);
+    expect(calls[0]).toMatchObject({ branch: "main", status: "clean" });
+    unsub();
+  });
+
+  test("delivers null once for non-repo cwd; no watcher held", async () => {
+    const { svc, inner } = makeCache();
+    inner.repoRootByDir = { "/nowhere": null };
+
+    const calls: Array<GitInfo | null> = [];
+    const unsub = svc.subscribe("/nowhere", (info) => calls.push(info));
+    await tick();
+
+    expect(calls).toEqual([null]);
+    // No subscriber registered → no watcher acquired.
+    expect(svc.getStats().watchers).toBe(0);
+    unsub();
+  });
+
+  test("invalidateRepo refreshes subscribers", async () => {
+    const { svc, inner } = makeCache();
+    inner.repoRootByDir = { "/repo": "/repo" };
+
+    const calls: Array<GitInfo | null> = [];
+    const unsub = svc.subscribe("/repo", (info) => calls.push(info));
+    await tick();
+    expect(calls).toHaveLength(1);
+
+    inner.stubInfo = { ...inner.stubInfo, branch: "feature" };
+    svc.invalidateRepo("/repo");
+    await tick();
+
+    expect(calls).toHaveLength(2);
+    expect(calls[1]).toMatchObject({ branch: "feature" });
+    unsub();
+  });
+
+  test("multiple subscribers in same repo share one watcher slot", async () => {
+    const { svc, inner } = makeCache();
+    inner.repoRootByDir = { "/repo/a": "/repo", "/repo/b": "/repo" };
+
+    const unsubA = svc.subscribe("/repo/a", () => {});
+    const unsubB = svc.subscribe("/repo/b", () => {});
+    await tick();
+
+    // Both subscribers acquire the same key "git:/repo"; refcount = 2 inside
+    // one slot. The cache's getInfo path also acquires the same key — slot
+    // count, not refcount, is the right metric.
+    expect(svc.getStats().watchers).toBe(1);
+    unsubA();
+    unsubB();
+  });
+
+  test("unsubscribe before delivery suppresses the callback", async () => {
+    const { svc, inner } = makeCache();
+    inner.repoRootByDir = { "/repo": "/repo" };
+
+    const calls: Array<GitInfo | null> = [];
+    const unsub = svc.subscribe("/repo", (info) => calls.push(info));
+    unsub();
+    await tick();
+
+    expect(calls).toHaveLength(0);
   });
 });

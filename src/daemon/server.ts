@@ -8,7 +8,7 @@ import { daemonDir, pidPath, socketPath } from "./paths";
 import { dlog, closeLog } from "./log";
 import { PROTOCOL_VERSION, encodeFrame, makeFrameReader } from "./protocol";
 import type { Request, Response } from "./protocol";
-import { CachedGitService } from "./cache/git";
+import { GitDataProvider } from "./cache/git";
 import { CachedUsageProvider } from "./cache/usage";
 import { RenderCache } from "./cache/render";
 import { WatcherRegistry } from "./cache/watchers";
@@ -28,7 +28,7 @@ const stats = new RuntimeStats();
 // daemon-stats.
 setLaunchStats(stats.launchStats);
 const watcherRegistry = new WatcherRegistry({ counters: stats });
-const gitService = new CachedGitService({ watchers: watcherRegistry });
+const gitService = new GitDataProvider({ watchers: watcherRegistry });
 const usageProvider = new CachedUsageProvider();
 const sessionState = new SessionState();
 const renderCache = new RenderCache({
