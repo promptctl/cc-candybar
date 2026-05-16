@@ -388,6 +388,20 @@ fn connect_with_timeout(path: &Path, timeout: Duration) -> io::Result<UnixStream
 // Total work inside this fn is bounded by a few syscalls plus an optional
 // fork+execve.
 
+// Mirrors src/daemon/acquire.ts KICK_CONTENDED_OVERRIDE_MS. If the spawn.lock
+// has existed longer than this, the kick path assumes the holder crashed
+// mid-spawn and overrides — bind() inside the daemon arbitrates duplicates.
+const KICK_CONTENDED_OVERRIDE_MS: u128 = 2_000;
+
+// [LAW:one-type-per-behavior] Mirror of Node's LockOutcome — both runtimes
+// distinguish "held / contended / error" so a Rust kick and a Node kick
+// recover from the same failure modes at the same rates.
+enum LockOutcome {
+    Held(PathBuf),
+    Contended,
+    Error(String),
+}
+
 fn obtain_daemon_kick() {
     // Re-check first: a daemon may have come up between our render failure
     // and now. Cheap probe — if it's listening we have nothing to do.
@@ -395,27 +409,46 @@ fn obtain_daemon_kick() {
         return;
     }
 
-    let lock_path = match try_acquire_spawn_lock() {
-        Some(p) => p,
-        None => {
-            // Another client is already in the spawn window. Trust them to
-            // bring the daemon up; the next render will attach.
-            return;
+    match try_acquire_spawn_lock() {
+        LockOutcome::Held(lock_path) => {
+            // Re-check connect — a daemon may have come up between our
+            // first probe and our lock acquisition.
+            if !can_connect(&socket_path(), Duration::from_millis(20)) {
+                spawn_daemon_detached();
+            }
+            // [LAW:one-type-per-behavior] Release by unlinking — Node uses
+            // the same semantics so a Rust kick and a Node kick agree on
+            // lock state.
+            let _ = std::fs::remove_file(&lock_path);
         }
-    };
-
-    // We hold the spawn lock. Re-check connect — a daemon may have come up
-    // between our first probe and our lock acquisition.
-    if !can_connect(&socket_path(), Duration::from_millis(20)) {
-        spawn_daemon_detached();
+        LockOutcome::Contended => {
+            // [LAW:dataflow-not-control-flow] Typical contention means
+            // another caller is in the spawn window — trust them. BUT: if
+            // the lock has been held suspiciously long (crashed holder), the
+            // bind() inside the daemon can still arbitrate, so override.
+            if let Some(age_ms) = spawn_lock_age_ms() {
+                if age_ms > KICK_CONTENDED_OVERRIDE_MS {
+                    eprintln!(
+                        "cc-candybar: spawn-lock held {age_ms}ms (likely crashed holder) — spawning unlocked"
+                    );
+                    spawn_daemon_detached();
+                }
+            }
+        }
+        LockOutcome::Error(reason) => {
+            // [LAW:dataflow-not-control-flow] Lock error must not be a hard
+            // stop on availability — spawn.lock is an optimization, bind()
+            // is load-bearing. Mirror Node's obtainDaemonKick behavior.
+            eprintln!("cc-candybar: spawn-lock unavailable ({reason}) — spawning unlocked");
+            spawn_daemon_detached();
+        }
     }
+}
 
-    // [LAW:one-type-per-behavior] Release by unlinking the file. The Node
-    // mirror in src/daemon/acquire.ts uses the same semantics
-    // (open(path, O_CREAT | O_EXCL) → unlink to release). If we held the
-    // flock instead and left the file behind, Node callers would see EEXIST
-    // and incorrectly think the lock is held.
-    let _ = std::fs::remove_file(&lock_path);
+fn spawn_lock_age_ms() -> Option<u128> {
+    let path = state_dir().join("spawn.lock");
+    let modified = std::fs::metadata(&path).and_then(|m| m.modified()).ok()?;
+    modified.elapsed().ok().map(|d| d.as_millis())
 }
 
 // [LAW:one-type-per-behavior] Existence-as-lock semantics matching the Node
@@ -424,18 +457,20 @@ fn obtain_daemon_kick() {
 // staleness reclaim covers the case where a holder crashed before unlink.
 //
 // Staleness window matches Node's STALE_LOCK_MS (10s).
-fn try_acquire_spawn_lock() -> Option<PathBuf> {
+fn try_acquire_spawn_lock() -> LockOutcome {
     const STALE_LOCK: Duration = Duration::from_secs(10);
     let path = state_dir().join("spawn.lock");
     // Ensure state_dir exists; mkdir is idempotent.
     if let Some(parent) = path.parent() {
-        let _ = std::fs::create_dir_all(parent);
+        if let Err(e) = std::fs::create_dir_all(parent) {
+            return LockOutcome::Error(format!("create_dir_all: {e}"));
+        }
     }
     for _ in 0..2 {
         match File::options().create_new(true).write(true).open(&path) {
-            Ok(_f) => return Some(path),
+            Ok(_f) => return LockOutcome::Held(path),
             Err(e) if e.kind() == io::ErrorKind::AlreadyExists => {}
-            Err(_) => return None,
+            Err(e) => return LockOutcome::Error(format!("open spawn.lock: {e}")),
         }
         // File already exists. Check staleness; if stale, unlink and retry.
         let stale = std::fs::metadata(&path)
@@ -443,13 +478,17 @@ fn try_acquire_spawn_lock() -> Option<PathBuf> {
             .map(|t| t.elapsed().map(|d| d > STALE_LOCK).unwrap_or(false))
             .unwrap_or(false);
         if !stale {
-            return None;
+            return LockOutcome::Contended;
         }
-        if std::fs::remove_file(&path).is_err() {
-            return None;
+        if let Err(e) = std::fs::remove_file(&path) {
+            // ENOENT means a racer already reclaimed; that's the desired
+            // post-condition, so retry the openSync. Anything else is real.
+            if e.kind() != io::ErrorKind::NotFound {
+                return LockOutcome::Error(format!("unlink stale spawn.lock: {e}"));
+            }
         }
     }
-    None
+    LockOutcome::Contended
 }
 
 fn can_connect(sock: &Path, timeout: Duration) -> bool {
