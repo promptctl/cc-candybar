@@ -32,26 +32,18 @@ export class GitService {
     }
   }
 
-  // Run a git command via the launch primitive. All call sites pass simple
-  // space-separated arguments (no shell metacharacters), so split-on-whitespace
-  // is sufficient. Returns the same `{ stdout }` shape as the previous
-  // exec wrapper; throws on non-ok results so callers' existing try/catch
-  // logic continues to work unchanged.
+  // [LAW:types-are-the-program] args is a string[] so the boundary type
+  // forbids the only-space-free-arguments contract the prior whitespace-split
+  // implementation relied on. Future callsites that need to pass a path with
+  // spaces or a commit message simply pass it as one element; there is no
+  // re-splitting downstream that could mis-tokenize.
   private async execGitAsync(
-    command: string,
-    options: { cwd: string; encoding: BufferEncoding; timeout: number },
+    args: readonly string[],
+    options: { cwd: string; timeout: number },
   ): Promise<{ stdout: string }> {
-    const parts = command.split(/\s+/);
-    const bin = parts[0];
-    if (!bin || bin !== "git") {
-      throw new Error(
-        `execGitAsync expects "git ..." command, got: ${command}`,
-      );
-    }
-    const args = parts.slice(1);
     const result = await launch({
-      bin,
-      args,
+      bin: "git",
+      args: [...args],
       cwd: options.cwd,
       env: { ...process.env, GIT_OPTIONAL_LOCKS: "0" },
       timeoutMs: options.timeout,
@@ -69,9 +61,8 @@ export class GitService {
   // repoRoot they'd otherwise have to re-derive.
   async findGitRoot(workingDir: string): Promise<string | null> {
     try {
-      const result = await this.execGitAsync("git rev-parse --show-toplevel", {
+      const result = await this.execGitAsync(["rev-parse", "--show-toplevel"], {
         cwd: workingDir,
-        encoding: "utf8",
         timeout: 2000,
       });
       const gitRoot = result.stdout.trim();
@@ -242,11 +233,10 @@ export class GitService {
 
   private async getShaAsync(workingDir: string): Promise<string | null> {
     try {
-      const result = await this.execGitAsync("git rev-parse --short=7 HEAD", {
-        cwd: workingDir,
-        encoding: "utf8",
-        timeout: 2000,
-      });
+      const result = await this.execGitAsync(
+        ["rev-parse", "--short=7", "HEAD"],
+        { cwd: workingDir, timeout: 2000 },
+      );
       const sha = result.stdout.trim();
 
       return sha || null;
@@ -290,11 +280,10 @@ export class GitService {
 
   private async getNearestTagAsync(workingDir: string): Promise<string | null> {
     try {
-      const result = await this.execGitAsync("git describe --tags --abbrev=0", {
-        cwd: workingDir,
-        encoding: "utf8",
-        timeout: 2000,
-      });
+      const result = await this.execGitAsync(
+        ["describe", "--tags", "--abbrev=0"],
+        { cwd: workingDir, timeout: 2000 },
+      );
       const tag = result.stdout.trim();
 
       return tag || null;
@@ -307,9 +296,8 @@ export class GitService {
     workingDir: string,
   ): Promise<number | null> {
     try {
-      const result = await this.execGitAsync("git log -1 --format=%ct", {
+      const result = await this.execGitAsync(["log", "-1", "--format=%ct"], {
         cwd: workingDir,
-        encoding: "utf8",
         timeout: 2000,
       });
       const timestamp = result.stdout.trim();
@@ -326,9 +314,8 @@ export class GitService {
 
   private async getStashCountAsync(workingDir: string): Promise<number> {
     try {
-      const result = await this.execGitAsync("git stash list", {
+      const result = await this.execGitAsync(["stash", "list"], {
         cwd: workingDir,
-        encoding: "utf8",
         timeout: 2000,
       });
       const stashList = result.stdout.trim();
@@ -343,12 +330,8 @@ export class GitService {
   private async getUpstreamAsync(workingDir: string): Promise<string | null> {
     try {
       const result = await this.execGitAsync(
-        "git rev-parse --abbrev-ref @{u}",
-        {
-          cwd: workingDir,
-          encoding: "utf8",
-          timeout: 2000,
-        },
+        ["rev-parse", "--abbrev-ref", "@{u}"],
+        { cwd: workingDir, timeout: 2000 },
       );
       const upstream = result.stdout.trim();
 
@@ -361,12 +344,8 @@ export class GitService {
   private async getRepoNameAsync(workingDir: string): Promise<string | null> {
     try {
       const result = await this.execGitAsync(
-        "git config --get remote.origin.url",
-        {
-          cwd: workingDir,
-          encoding: "utf8",
-          timeout: 2000,
-        },
+        ["config", "--get", "remote.origin.url"],
+        { cwd: workingDir, timeout: 2000 },
       );
       const remoteUrl = result.stdout.trim();
 
@@ -403,9 +382,8 @@ export class GitService {
   }> {
     try {
       debug(`[GIT-EXEC] Running git status in ${workingDir}`);
-      const result = await this.execGitAsync("git status --porcelain -b", {
+      const result = await this.execGitAsync(["status", "--porcelain", "-b"], {
         cwd: workingDir,
-        encoding: "utf8",
         timeout: 2000,
       });
       const output = result.stdout;
@@ -474,9 +452,8 @@ export class GitService {
 
   private async getFallbackBranch(workingDir: string): Promise<string | null> {
     try {
-      const result = await this.execGitAsync("git branch --show-current", {
+      const result = await this.execGitAsync(["branch", "--show-current"], {
         cwd: workingDir,
-        encoding: "utf8",
         timeout: 2000,
       });
       const branch = result.stdout.trim();
@@ -486,12 +463,8 @@ export class GitService {
     } catch {
       try {
         const result = await this.execGitAsync(
-          "git symbolic-ref --short HEAD",
-          {
-            cwd: workingDir,
-            encoding: "utf8",
-            timeout: 2000,
-          },
+          ["symbolic-ref", "--short", "HEAD"],
+          { cwd: workingDir, timeout: 2000 },
         );
         const branch = result.stdout.trim();
         if (branch) {
@@ -511,14 +484,12 @@ export class GitService {
     try {
       debug(`[GIT-EXEC] Running git ahead/behind in ${workingDir}`);
       const [aheadResult, behindResult] = await Promise.all([
-        this.execGitAsync("git rev-list --count @{u}..HEAD", {
+        this.execGitAsync(["rev-list", "--count", "@{u}..HEAD"], {
           cwd: workingDir,
-          encoding: "utf8",
           timeout: 2000,
         }),
-        this.execGitAsync("git rev-list --count HEAD..@{u}", {
+        this.execGitAsync(["rev-list", "--count", "HEAD..@{u}"], {
           cwd: workingDir,
-          encoding: "utf8",
           timeout: 2000,
         }),
       ]);
