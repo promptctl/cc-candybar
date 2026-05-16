@@ -106,7 +106,7 @@ describe("launch (async)", () => {
 
 describe("launchSync", () => {
   it("captures stdout from a zero-exit binary", () => {
-    const r = launchSync({ bin: "/bin/echo", args: ["sync"], category: "terminal-width" });
+    const r = launchSync({ bin: "/bin/echo", args: ["sync"], category: "tmux" });
     expect(r.ok).toBe(true);
     if (r.ok) {
       expect(r.stdout.trim()).toBe("sync");
@@ -114,7 +114,7 @@ describe("launchSync", () => {
   });
 
   it("reports non-zero exits as data", () => {
-    const r = launchSync({ bin: "/bin/sh", args: ["-c", "exit 3"], category: "terminal-width" });
+    const r = launchSync({ bin: "/bin/sh", args: ["-c", "exit 3"], category: "tmux" });
     expect(r.ok).toBe(false);
     if (!r.ok) {
       expect(r.exitCode).toBe(3);
@@ -124,10 +124,10 @@ describe("launchSync", () => {
   it("meters via the stats handle", () => {
     const { handle, starts, ends } = makeSpyHandle();
     setLaunchStats(handle);
-    launchSync({ bin: "/bin/echo", args: ["m"], category: "terminal-width" });
-    expect(starts).toEqual(["terminal-width"]);
+    launchSync({ bin: "/bin/echo", args: ["m"], category: "tmux" });
+    expect(starts).toEqual(["tmux"]);
     expect(ends).toHaveLength(1);
-    expect(ends[0]?.category).toBe("terminal-width");
+    expect(ends[0]?.category).toBe("tmux");
   });
 });
 

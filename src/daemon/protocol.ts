@@ -4,7 +4,7 @@ import type { StatsSnapshot } from "./stats";
 
 // Bumped on any wire-format change. Clients send their version; daemon refuses
 // mismatches and shuts down so the next client respawns from current binary.
-export const PROTOCOL_VERSION = 2;
+export const PROTOCOL_VERSION = 3;
 
 export interface RenderRequest {
   v: number;
@@ -12,6 +12,10 @@ export interface RenderRequest {
   hookData: ClaudeHookData;
   args: string[];
   cwd: string;
+  // [LAW:single-enforcer] Terminal width is captured at the trust boundary
+  // (the client's env, where COLUMNS/ioctl are meaningful) and trusted by the
+  // daemon. Absence means the client couldn't determine it.
+  termCols?: number;
 }
 
 export interface ShutdownRequest {

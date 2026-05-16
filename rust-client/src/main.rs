@@ -35,7 +35,7 @@ use std::sync::mpsc;
 use std::thread;
 use std::time::{Duration, Instant};
 
-const PROTOCOL_VERSION: u32 = 2;
+const PROTOCOL_VERSION: u32 = 3;
 const CONNECT_TIMEOUT: Duration = Duration::from_millis(50);
 const TOTAL_BUDGET: Duration = Duration::from_millis(150);
 const MAX_FRAME_BYTES: u32 = 16 * 1024 * 1024;
@@ -189,14 +189,21 @@ impl From<io::Error> for RenderError {
 fn render(argv: &[String], hook_data: &serde_json::Value) -> Result<String, RenderError> {
     let deadline = Instant::now() + TOTAL_BUDGET;
     let cwd = env::current_dir()?.to_string_lossy().into_owned();
+    // [LAW:single-enforcer] Terminal width is captured here, in the client's
+    // live shell context, then trusted by the daemon. The daemon's own env
+    // reflects whichever shell launched it, not the active terminal.
+    let term_cols = detect_term_cols();
 
-    let request = serde_json::json!({
+    let mut request = serde_json::json!({
         "v": PROTOCOL_VERSION,
         "kind": "render",
         "hookData": hook_data,
         "args": argv,
         "cwd": cwd,
     });
+    if let Some(cols) = term_cols {
+        request["termCols"] = serde_json::Value::from(cols);
+    }
     let body = serde_json::to_vec(&request)
         .map_err(|e| RenderError::Protocol(format!("encode: {e}")))?;
 
@@ -226,6 +233,35 @@ fn render(argv: &[String], hook_data: &serde_json::Value) -> Result<String, Rend
         .and_then(|v| v.as_str())
         .ok_or_else(|| RenderError::Protocol("response missing output".into()))?;
     Ok(output.to_string())
+}
+
+// Pure terminal-width capture — no subprocess, no shell-out. Tries the env
+// first (set by Bash/Zsh and propagated to hook commands by Claude Code) and
+// falls back to TIOCGWINSZ on stderr (typically a TTY when run as a Claude
+// hook — stdin is the hook JSON pipe). Returns None when neither source has
+// a usable value; the daemon will treat absence as "unknown width" and let
+// its own pure lookup chain decide.
+fn detect_term_cols() -> Option<u32> {
+    if let Ok(s) = env::var("COLUMNS") {
+        if let Ok(n) = s.parse::<u32>() {
+            if n > 0 {
+                return Some(n);
+            }
+        }
+    }
+    // TIOCGWINSZ on stderr. stdin is a pipe (the hook JSON), but stderr is
+    // typically the parent terminal when launched as a Claude statusline hook.
+    let mut ws = libc::winsize {
+        ws_row: 0,
+        ws_col: 0,
+        ws_xpixel: 0,
+        ws_ypixel: 0,
+    };
+    let rc = unsafe { libc::ioctl(libc::STDERR_FILENO, libc::TIOCGWINSZ, &mut ws) };
+    if rc == 0 && ws.ws_col > 0 {
+        return Some(ws.ws_col as u32);
+    }
+    None
 }
 
 fn remaining(deadline: Instant) -> Result<Duration, RenderError> {
