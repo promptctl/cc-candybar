@@ -7,9 +7,10 @@ import { socketPath, spawnLockPath, daemonDir } from "./paths";
 // [LAW:single-enforcer] One primitive per runtime that owns the entire
 // "obtain a daemon" verb. Three previously-independent spawn sites
 // (src/index.ts:171, src/install/index.ts:303, rust-client's spawn fallback)
-// all collapse onto this one path. The Rust client has its own mirror at
-// rust-client/src/acquire.rs that uses real flock for the spawn dedup; both
-// runtimes agree on socketPath() and spawnLockPath().
+// all collapse onto this one path. The Rust client has its own mirror in the
+// `obtain-daemon primitive` section of rust-client/src/main.rs that uses
+// real libc::flock for the spawn dedup; both runtimes agree on socketPath()
+// and spawnLockPath().
 //
 // [LAW:dataflow-not-control-flow] Callers do not get to choose whether to
 // spawn. They request a daemon; this function returns one of three typed
@@ -60,7 +61,13 @@ export async function obtainDaemon(
   // No daemon yet. Try to win the spawn-lock so we are the one to bring it up.
   while (Date.now() < deadline) {
     const lock = tryAcquireSpawnLock();
-    if (lock === "held") {
+    if (lock.kind === "error") {
+      // [LAW:no-silent-fallbacks] Unrecoverable errors (EACCES, ENOTDIR,
+      // broken state dir) must not silently degrade into a contention loop
+      // + timeout. The caller gets an actionable reason.
+      return { kind: "failed", reason: `spawn-lock: ${lock.reason}` };
+    }
+    if (lock.kind === "held") {
       try {
         // Re-check: another caller may have spawned a daemon between our
         // initial connect and our lock acquisition.
@@ -129,7 +136,12 @@ const STALE_LOCK_MS = 10_000;
 
 let heldLock: { fd: number; path: string } | null = null;
 
-function tryAcquireSpawnLock(): "held" | "contended" {
+type LockOutcome =
+  | { kind: "held" }
+  | { kind: "contended" }
+  | { kind: "error"; reason: string };
+
+function tryAcquireSpawnLock(): LockOutcome {
   const path = spawnLockPath();
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
@@ -138,16 +150,31 @@ function tryAcquireSpawnLock(): "held" | "contended" {
         fs.writeSync(fd, JSON.stringify({ pid: process.pid, ts: Date.now() }));
       } catch {}
       heldLock = { fd, path };
-      return "held";
+      return { kind: "held" };
     } catch (e) {
-      if ((e as NodeJS.ErrnoException).code !== "EEXIST") return "contended";
+      const code = (e as NodeJS.ErrnoException).code;
+      if (code !== "EEXIST") {
+        // EACCES, ENOTDIR, ENOSPC, etc. are not contention — they are
+        // unrecoverable. Surface upward instead of pretending we lost a race.
+        return {
+          kind: "error",
+          reason: `openSync(${path}): ${code ?? (e as Error).message}`,
+        };
+      }
     }
-    if (!isLockStale(path)) return "contended";
+    if (!isLockStale(path)) return { kind: "contended" };
     try {
       fs.unlinkSync(path);
-    } catch {}
+    } catch (e) {
+      // Stale lock present but we can't remove it — same class of fatal as
+      // openSync failure. Don't spin pretending it's contention.
+      return {
+        kind: "error",
+        reason: `unlink stale spawn.lock: ${(e as Error).message}`,
+      };
+    }
   }
-  return "contended";
+  return { kind: "contended" };
 }
 
 function isLockStale(path: string): boolean {
@@ -197,8 +224,8 @@ function sleep(ms: number): Promise<void> {
 // ─── Default spawn implementation ───────────────────────────────────────────
 //
 // Cap V8 old-generation at 400 MB so GC fires before RSS hits the 512 MB hard
-// limit. The Rust client mirrors this in rust-client/src/acquire.rs — keep
-// the two in sync when changing this value.
+// limit. The Rust client mirrors this in rust-client/src/main.rs
+// (spawn_daemon_detached) — keep the two in sync when changing this value.
 function spawnDaemonDetachedReal(): boolean {
   const node = process.execPath;
   const script = process.argv[1];

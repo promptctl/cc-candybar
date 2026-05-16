@@ -166,6 +166,38 @@ describe("obtainDaemon (bind-based singleton)", () => {
       expect(result.kind).toBe("failed");
     });
   });
+
+  test("surfaces unrecoverable spawn-lock errors as failed (not spinning timeout)", async () => {
+    await withTempState(async () => {
+      jest.resetModules();
+      const { obtainDaemon } = await import("../src/daemon/acquire");
+      const { daemonDir } = await import("../src/daemon/paths");
+
+      // Create the state dir, then make it read-only so openSync("wx") on
+      // any file inside returns EACCES. This is the unrecoverable-error
+      // path: we must NOT treat it as contention and spin until the deadline.
+      fs.mkdirSync(daemonDir(), { recursive: true });
+      const originalMode = fs.statSync(daemonDir()).mode;
+      fs.chmodSync(daemonDir(), 0o555);
+      try {
+        const start = Date.now();
+        const result = await obtainDaemon({
+          spawn: () => true,
+          totalTimeoutMs: 2000,
+        });
+        const elapsed = Date.now() - start;
+
+        expect(result.kind).toBe("failed");
+        if (result.kind === "failed") {
+          expect(result.reason).toMatch(/spawn-lock/);
+        }
+        // Should return promptly, not spin until totalTimeoutMs.
+        expect(elapsed).toBeLessThan(500);
+      } finally {
+        fs.chmodSync(daemonDir(), originalMode);
+      }
+    });
+  });
 });
 
 describe("daemon startup (bind-based singleton)", () => {

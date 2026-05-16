@@ -114,16 +114,32 @@ async function handleAddressInUse(
     process.exit(0);
   }
   dlog("warn", "stale socket from crashed daemon — unlinking and rebinding");
+  // [LAW:no-defensive-null-guards] If unlink fails (permissions, read-only
+  // FS), the retry will hit EADDRINUSE again, exit 0, and leave the system
+  // in the worst state: no daemon + stale socket blocking future starts.
+  // Surface the failure loudly instead.
   try {
     fs.unlinkSync(sockPath);
-  } catch {}
+  } catch (e) {
+    dlog(
+      "error",
+      `cannot unlink stale socket ${sockPath}: ${(e as Error).message}`,
+    );
+    shutdown(1);
+    return;
+  }
   bindOrAttachAndExit(server, sockPath, /* retried */ true);
 }
 
 function isSocketAlive(sockPath: string): Promise<boolean> {
   return new Promise((resolve) => {
     const sock = net.connect(sockPath);
+    let settled = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
     const done = (result: boolean): void => {
+      if (settled) return;
+      settled = true;
+      if (timer) clearTimeout(timer);
       sock.removeAllListeners();
       sock.destroy();
       resolve(result);
@@ -132,7 +148,8 @@ function isSocketAlive(sockPath: string): Promise<boolean> {
     sock.once("error", () => done(false));
     // 50ms is generous; localhost AF_UNIX connect is sub-ms when a listener
     // exists. Anything slower implies "no listener" in practice.
-    setTimeout(() => done(false), 50).unref();
+    timer = setTimeout(() => done(false), 50);
+    timer.unref();
   });
 }
 
