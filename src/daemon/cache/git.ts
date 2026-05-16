@@ -7,14 +7,22 @@ import { WatcherRegistry, type WatcherHandle } from "./watchers";
 // [LAW:one-source-of-truth] One provider for git data in the daemon. The
 // daemon is the sole owner; segments pull via getInfo() (per-render snapshot),
 // var-system pushes via subscribe() (MobX-driven reactivity). Both surfaces
-// share one cache (keyed by repoRoot), one watcher set per repo, and one
-// launch category ("git"). Pre-kz8.3 there were three parallel fleets — see
-// the ticket epic for the inventory that this file replaces.
+// share one cache (keyed by *effective git directory*), one watcher set per
+// effective dir, and one launch category ("git"). Pre-kz8.3 there were three
+// parallel fleets — see the ticket epic for the inventory that this file
+// replaces.
+//
+// [LAW:one-source-of-truth] Cache key derives from `resolveEffectiveGitDir`,
+// which returns the exact directory the shell-runner will run git in (taking
+// `projectDir` and worktree-ness into account). Keying off only
+// `findGitRoot(workingDir)` would cache repo B's data under repo A's key
+// whenever `projectDir` overrides workingDir's repo — the bug Copilot caught
+// on first review of kz8.3.
 //
 // [LAW:single-enforcer] subscribe() is the only reactive entrypoint. When a
 // watcher fires (or the sanity-check mtime walk detects a missed event), the
-// provider re-fetches the core snapshot once per repo and notifies every
-// subscriber for that repo. No parallel poller, no parallel WatchManager.
+// provider re-fetches the core snapshot once per gitDir and notifies every
+// subscriber for that gitDir. No parallel poller, no parallel WatchManager.
 
 const DEFAULT_TTL_MS = 30_000;
 const DEFAULT_MAX_ENTRIES = 64;
@@ -51,10 +59,12 @@ type GitOptions = NonNullable<Parameters<GitService["getGitInfo"]>[1]>;
 type SubscribeCallback = (info: GitInfo | null) => void;
 
 interface RepoSubscribers {
-  // repoRoot is the cache key, but subscribers register with a working
-  // directory; we resolve to repoRoot once at subscribe-time and store the
-  // resolved working dir so the refresh fetch reuses it.
+  // The effective gitDir is the cache + watcher identity; subscribers
+  // register with a working directory but we resolve to gitDir once at
+  // subscribe-time and store both so the refresh path doesn't have to
+  // re-resolve on every invalidation.
   workingDir: string;
+  repoRoot: string;
   callbacks: Set<SubscribeCallback>;
   watcher: WatcherHandle;
 }
@@ -166,11 +176,26 @@ export class GitDataProvider extends GitService {
     options: GitOptions = {},
     projectDir?: string,
   ): Promise<GitInfo | null> {
-    const repoRoot = await this.inner.findGitRoot(workingDir);
-    if (!repoRoot) {
-      return this.inner.getGitInfo(workingDir, options, projectDir);
-    }
+    // [LAW:one-source-of-truth] Effective gitDir is the cache + watcher
+    // identity. Resolving once here means inner.getGitInfo sees workingDir =
+    // effectiveDir, projectDir = undefined: it lands on the same dir without
+    // re-running its own resolution branches.
+    const effectiveDir = await this.inner.resolveEffectiveGitDir(
+      workingDir,
+      projectDir,
+    );
+    if (!effectiveDir) return null;
+    return this.getGitInfoForRoot(effectiveDir, options);
+  }
 
+  // Cache+fetch helper that *already knows* the effective gitDir. Subscribe
+  // and refresh use this directly so they don't pay an extra resolution per
+  // call (which on the refresh-loop hot path was an extra `git rev-parse`
+  // per invalidation — finding #3 from PR #8 review).
+  private async getGitInfoForRoot(
+    repoRoot: string,
+    options: GitOptions,
+  ): Promise<GitInfo | null> {
     const key = `${repoRoot}|${optionsKey(options)}`;
     const now = Date.now();
 
@@ -184,7 +209,10 @@ export class GitDataProvider extends GitService {
 
     this.misses++;
     const mtimeBefore = snapshotMtimes(repoRoot);
-    const info = await this.inner.getGitInfo(workingDir, options, projectDir);
+    // Pass repoRoot as workingDir, no projectDir: inner's gitDir resolution
+    // lands on repoRoot via the sync isWorktree/isGitRepo checks — no extra
+    // findGitRoot shell-out.
+    const info = await this.inner.getGitInfo(repoRoot, options);
     if (!info) return null;
 
     // Drop any prior entry for this exact key before re-inserting (so we
@@ -225,7 +253,11 @@ export class GitDataProvider extends GitService {
     let attached: { repoRoot: string; entry: RepoSubscribers } | null = null;
 
     void (async () => {
-      const repoRoot = await this.inner.findGitRoot(workingDir);
+      // Resolve once at subscribe time using the same logic the pull surface
+      // uses. var-system's declareGit doesn't pass projectDir, but going
+      // through resolveEffectiveGitDir keeps the cache-key derivation
+      // identical for both surfaces — single source of truth.
+      const repoRoot = await this.inner.resolveEffectiveGitDir(workingDir);
       if (unsubscribed) return;
 
       if (!repoRoot) {
@@ -246,6 +278,7 @@ export class GitDataProvider extends GitService {
         );
         entry = {
           workingDir,
+          repoRoot,
           callbacks: new Set<SubscribeCallback>(),
           watcher,
         };
@@ -254,9 +287,10 @@ export class GitDataProvider extends GitService {
       entry.callbacks.add(callback);
       attached = { repoRoot, entry };
 
-      // Initial fetch: routes through getGitInfo so the cache is populated
-      // and any concurrent pull surface sees the same value.
-      const initial = await this.getGitInfo(workingDir, {
+      // Initial fetch: routes through getGitInfoForRoot using the already-
+      // resolved repoRoot — no second findGitRoot. Cache is shared with the
+      // pull surface so concurrent segment renders see the same value.
+      const initial = await this.getGitInfoForRoot(repoRoot, {
         ...SUBSCRIBE_OPTIONS,
       });
       if (unsubscribed) return;
@@ -316,7 +350,9 @@ export class GitDataProvider extends GitService {
         this.refreshAgain.delete(repoRoot);
         const entry = this.subscribersByRepo.get(repoRoot);
         if (!entry || entry.callbacks.size === 0) return;
-        const info = await this.getGitInfo(entry.workingDir, {
+        // Use the stored repoRoot — no findGitRoot per refresh, no chance of
+        // re-resolving to a different value under racing fs changes.
+        const info = await this.getGitInfoForRoot(repoRoot, {
           ...SUBSCRIBE_OPTIONS,
         });
         const current = this.subscribersByRepo.get(repoRoot);
