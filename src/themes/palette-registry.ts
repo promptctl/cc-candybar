@@ -1,6 +1,6 @@
-import { Palette, parseRgbHex, parseRgbaHex } from "rich-js";
-import type { ColorRgba } from "rich-js";
-import { THEMES } from "rich-js/themes/data";
+import { Palette, parseRgbHex, parseRgbaHex } from "@promptctl/rich-js";
+import type { ColorRgba } from "@promptctl/rich-js";
+import { THEMES } from "@promptctl/rich-js/themes/data";
 
 const cache = new Map<string, Palette>();
 

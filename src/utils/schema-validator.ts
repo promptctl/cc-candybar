@@ -18,7 +18,7 @@ export interface ValidationReport {
 // Top-level keys Anthropic sends (plus hook_event_name, which cc-candybar adds).
 // Adding a new Anthropic field here suppresses the "unknown field" log for it.
 const KNOWN_TOP_LEVEL = new Set([
-  "hook_event_name",       // cc-candybar internal
+  "hook_event_name", // cc-candybar internal
   "session_id",
   "session_name",
   "transcript_path",
@@ -40,7 +40,9 @@ const KNOWN_TOP_LEVEL = new Set([
 
 // Required fields: [dot-separated path, expected typeof result]
 // "object" means non-null, non-array object. Checked in declaration order.
-const REQUIRED_FIELDS: Array<[string, "string" | "number" | "boolean" | "object"]> = [
+const REQUIRED_FIELDS: Array<
+  [string, "string" | "number" | "boolean" | "object"]
+> = [
   ["session_id", "string"],
   ["transcript_path", "string"],
   ["cwd", "string"],
@@ -89,7 +91,11 @@ export function validateHookData(raw: unknown): {
           ? actualType !== "object"
           : actualType !== expectedType;
       if (mismatch) {
-        report.typeMismatches.push({ path, expected: expectedType, got: actualType });
+        report.typeMismatches.push({
+          path,
+          expected: expectedType,
+          got: actualType,
+        });
       }
     }
   }
@@ -106,7 +112,12 @@ export function validateHookData(raw: unknown): {
 function resolvePath(obj: Record<string, unknown>, dotPath: string): unknown {
   let cur: unknown = obj;
   for (const key of dotPath.split(".")) {
-    if (cur === null || cur === undefined || typeof cur !== "object" || Array.isArray(cur)) {
+    if (
+      cur === null ||
+      cur === undefined ||
+      typeof cur !== "object" ||
+      Array.isArray(cur)
+    ) {
       return undefined;
     }
     cur = (cur as Record<string, unknown>)[key];

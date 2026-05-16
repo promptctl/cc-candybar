@@ -7,9 +7,9 @@
 // whether steps run. Absent bg or fg → Style fields are undefined → Style.isNull
 // → applySegmentLayout passes cells through unchanged.
 
-import { Style, ColorSpec, PaletteResolver } from "rich-js";
-import type { ColorRgba } from "rich-js";
-import type { RichText } from "rich-js";
+import { Style, ColorSpec } from "@promptctl/rich-js";
+import type { ColorRgba, PaletteResolver } from "@promptctl/rich-js";
+import type { RichText } from "@promptctl/rich-js";
 import type { Template } from "@promptctl/go-template-js";
 import { rotateHue } from "../themes/oklch.js";
 
@@ -61,19 +61,26 @@ export function resolveSegmentColors(
 ): Style {
   const bgSpec = evalToPlainText(bgTemplate, scope);
   const rawBgColor =
-    bgSpec !== undefined ? resolveSpec(resolver, bgSpec, undefined, "bg") : undefined;
+    bgSpec !== undefined
+      ? resolveSpec(resolver, bgSpec, undefined, "bg")
+      : undefined;
   // [LAW:dataflow-not-control-flow] rotateHue always runs; degrees=0 is identity.
   // Semantic specs receive 0 degrees so their fixed meaning is preserved.
   const hueRotation = options?.hueRotationDegrees ?? 0;
   const bgColor =
     rawBgColor !== undefined
-      ? rotateHue(rawBgColor, SEMANTIC_SPECS.has(bgSpec!.trim()) ? 0 : hueRotation)
+      ? rotateHue(
+          rawBgColor,
+          SEMANTIC_SPECS.has(bgSpec!.trim()) ? 0 : hueRotation,
+        )
       : undefined;
 
   const fgSpec = evalToPlainText(fgTemplate, scope);
   // fgColor resolves against the rotated bgColor — auto-contrast stays in sync.
   const fgColor =
-    fgSpec !== undefined ? resolveSpec(resolver, fgSpec, bgColor, "fg") : undefined;
+    fgSpec !== undefined
+      ? resolveSpec(resolver, fgSpec, bgColor, "fg")
+      : undefined;
 
   return new Style({
     bgcolor: bgColor !== undefined ? ColorSpec.fromRgba(bgColor) : undefined,
@@ -88,7 +95,10 @@ function evalToPlainText(
   scope: object,
 ): string | undefined {
   if (template === undefined) return undefined;
-  return template.evaluate(scope).map((f) => f.plain).join("");
+  return template
+    .evaluate(scope)
+    .map((f) => f.plain)
+    .join("");
 }
 
 // Resolve a color spec string through the palette resolver.
@@ -102,7 +112,10 @@ function resolveSpec(
   against: ColorRgba | undefined,
   role: "bg" | "fg",
 ): ColorRgba {
-  const color = resolver.resolve(spec.trim(), against !== undefined ? { against } : undefined);
+  const color = resolver.resolve(
+    spec.trim(),
+    against !== undefined ? { against } : undefined,
+  );
   if (color === null) throw new ColorSpecError(spec, role);
   return color;
 }

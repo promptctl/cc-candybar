@@ -756,7 +756,7 @@ function validateCrossReferences(ctx: ValidateCtx, cfg: DslConfig): void {
       if (!otherSegDecl.vars) continue;
       for (const vName of Object.keys(otherSegDecl.vars)) {
         if (otherSeg === segName) segScope.add(vName); // own: bare form
-        segScope.add(`${otherSeg}.${vName}`);           // all: namespaced form
+        segScope.add(`${otherSeg}.${vName}`); // all: namespaced form
       }
     }
 
@@ -886,10 +886,10 @@ export function extractTemplateRefs(template: string): Set<string> {
 
 // Carries declaration metadata for each graph node so cycle errors report the
 // correct config path (variables.X vs segments.S.vars.X) and correct line.
-type NodeInfo = {
+interface NodeInfo {
   readonly declarationPath: string;
   readonly linePathParts: readonly string[];
-};
+}
 
 function validateNoCycles(ctx: ValidateCtx, cfg: DslConfig): void {
   const { graph, nodeInfo } = buildTemplateGraph(cfg);
@@ -1003,10 +1003,15 @@ function buildTemplateGraph(cfg: DslConfig): {
     }
   };
 
-  const addVarEdges = (name: string, v: VariableDecl, segCtx?: string): void => {
+  const addVarEdges = (
+    name: string,
+    v: VariableDecl,
+    segCtx?: string,
+  ): void => {
     if (v.kind === "template") addTemplateEdges(name, v.template, segCtx);
     if (v.kind !== "literal" && v.kind !== "input" && v.kind !== "env") {
-      if (v.cache && "key" in v.cache) addTemplateEdges(name, v.cache.key, segCtx);
+      if (v.cache && "key" in v.cache)
+        addTemplateEdges(name, v.cache.key, segCtx);
       if (v.cache && "depends_on" in v.cache) {
         for (const dep of v.cache.depends_on) {
           if (allVarNames.has(dep)) graph.get(name)!.add(dep);

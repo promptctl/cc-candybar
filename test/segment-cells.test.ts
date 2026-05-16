@@ -4,7 +4,7 @@
 
 import { createCcCandybarEngine } from "../src/template-engine/engine";
 import { fragmentsToStripCells } from "../src/template-engine/cells";
-import { RichText } from "rich-js";
+import { RichText } from "@promptctl/rich-js";
 
 // Helper: evaluate a template and convert to StripCells.
 function evalCells(source: string, scope: object = {}) {

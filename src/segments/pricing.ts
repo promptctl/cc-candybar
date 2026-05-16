@@ -2,6 +2,7 @@ import { debug } from "../utils/logger";
 import { get } from "node:https";
 import { URL } from "node:url";
 import { CacheManager } from "../utils/cache";
+import type { PrunedRaw } from "../utils/claude.js";
 
 export interface ModelPricing {
   name: string;
@@ -401,9 +402,7 @@ export class PricingService {
     );
   }
 
-  static async calculateCostForEntry(
-    entry: import("../utils/claude.js").PrunedRaw,
-  ): Promise<number> {
+  static async calculateCostForEntry(entry: PrunedRaw): Promise<number> {
     const usage = entry.message?.usage;
     if (!usage) {
       return 0;

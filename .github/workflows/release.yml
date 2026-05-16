@@ -14,49 +14,51 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: 'npm'
+          cache: 'pnpm'
 
       - name: Install dependencies
-        run: npm ci
+        run: pnpm install --frozen-lockfile
 
       - name: Lint
-        run: npm run lint
+        run: pnpm run lint
 
       - name: Build
-        run: npm run build
+        run: pnpm run build
 
       - name: Test
-        run: npm test
+        run: pnpm test
 
       - name: Protocol-version guard
-        run: npm run check:protocol
+        run: pnpm run check:protocol
 
   build-rust:
     name: Build native binary (${{ matrix.platform }})
-    runs-on: ${{ matrix.runner }}
-    # Native builds on actual hardware — no cross-compile dance, simplest CI
-    # surface to debug. GitHub provides arm64 runners for both macOS and
-    # Linux, so each platform builds on its own machine.
+    runs-on: ubuntu-latest
+    # All targets cross-compiled from Linux via cargo-zigbuild. Zig acts as
+    # the linker and ships a stub macOS SDK sufficient for binaries that
+    # only use libc + libSystem (this one does — see rust-client/Cargo.toml).
+    # No macOS runners involved.
     strategy:
       fail-fast: false
       matrix:
         include:
-          - platform: darwin-arm64
-            runner: macos-14
-            target: aarch64-apple-darwin
-          - platform: darwin-x64
-            runner: macos-13
-            target: x86_64-apple-darwin
           - platform: linux-x64
-            runner: ubuntu-latest
             target: x86_64-unknown-linux-gnu
           - platform: linux-arm64
-            runner: ubuntu-24.04-arm
             target: aarch64-unknown-linux-gnu
+          - platform: darwin-x64
+            target: x86_64-apple-darwin
+          - platform: darwin-arm64
+            target: aarch64-apple-darwin
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -65,6 +67,14 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
+
+      - name: Setup Zig
+        uses: mlugg/setup-zig@v1
+        with:
+          version: 0.13.0
+
+      - name: Install cargo-zigbuild
+        run: cargo install --locked cargo-zigbuild
 
       - name: Cache Cargo
         uses: actions/cache@v4
@@ -77,7 +87,7 @@ jobs:
 
       - name: Build release binary
         working-directory: rust-client
-        run: cargo build --release --target ${{ matrix.target }}
+        run: cargo zigbuild --release --target ${{ matrix.target }}
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -102,15 +112,20 @@ jobs:
           fetch-depth: 0
           token: ${{ secrets.GH_TOKEN }}
 
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: 'npm'
+          cache: 'pnpm'
           registry-url: 'https://registry.npmjs.org'
 
       - name: Install dependencies
-        run: npm ci
+        run: pnpm install --frozen-lockfile
 
       - name: Download all binary artifacts
         uses: actions/download-artifact@v4
@@ -130,7 +145,7 @@ jobs:
           done
 
       - name: Build TypeScript
-        run: npm run build
+        run: pnpm run build
 
       - name: Release
         env:
