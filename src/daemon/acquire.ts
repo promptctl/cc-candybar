@@ -245,10 +245,15 @@ function spawnLockAgeMs(): number | null {
 // [LAW:no-defensive-null-guards] Kick path is fire-and-forget; a spawn
 // failure here is best-effort. Swallowing prevents an uncaught throw from
 // crashing the calling process at the wrong moment (right before its own
-// exit). It is logged via stderr for visibility.
+// exit). Both failure modes (throw and false-return) are logged via stderr
+// so kick failures stay visible — silent failure is the worst outcome.
 function safeSpawn(spawnFn: () => boolean): void {
   try {
-    spawnFn();
+    if (!spawnFn()) {
+      process.stderr.write(
+        "cc-candybar: daemon spawn returned false (unable to resolve script path?)\n",
+      );
+    }
   } catch (e) {
     process.stderr.write(
       `cc-candybar: daemon spawn failed: ${(e as Error).message}\n`,
