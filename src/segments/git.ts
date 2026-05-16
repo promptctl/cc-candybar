@@ -264,7 +264,14 @@ export class GitService {
     }
   }
 
-  private resolveGitDir(workingDir: string): string {
+  // [LAW:locality-or-seam] Public so the daemon-side provider can watch the
+  // real HEAD/index files even for git worktrees. For a regular repo this is
+  // `<workingDir>/.git`. For a worktree, `<workingDir>/.git` is a *file*
+  // containing `gitdir: <abs-path-to-worktree-metadata-dir>` and the actual
+  // HEAD/index live inside that metadata dir — watching `<workingDir>/.git/HEAD`
+  // would fail (no such path) and the cache would never invalidate. Returning
+  // the resolved gitDir lets the provider point watchers at real files.
+  resolveGitDir(workingDir: string): string {
     const dotGit = path.join(workingDir, ".git");
     if (fs.existsSync(dotGit) && fs.statSync(dotGit).isFile()) {
       const content = fs.readFileSync(dotGit, "utf-8");
