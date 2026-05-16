@@ -9,17 +9,17 @@ importers:
   .:
     dependencies:
       '@promptctl/go-template-js':
-        specifier: file:../go-template-js
-        version: file:../go-template-js
+        specifier: ^0.3.0
+        version: 0.3.0
+      '@promptctl/rich-js':
+        specifier: ^0.2.0
+        version: 0.2.0
       json5:
         specifier: ^2.2.3
         version: 2.2.3
       mobx:
         specifier: ^6.15.0
         version: 6.15.1
-      rich-js:
-        specifier: file:../rich-js
-        version: '@promptctl/rich-js@file:../rich-js'
     devDependencies:
       '@eslint/js':
         specifier: ^9.33.0
@@ -701,12 +701,12 @@ packages:
     resolution: {integrity: sha512-1byySemUUj9s7HpIpoR9W5m20ukZyAak8y599XFPIMYZXSpvII5xL4N2YiNEZsGoP1B73Eq5g1gy9LwTLJWBIA==}
     engines: {node: '>=20'}
 
-  '@promptctl/go-template-js@file:../go-template-js':
-    resolution: {directory: ../go-template-js, type: directory}
+  '@promptctl/go-template-js@0.3.0':
+    resolution: {integrity: sha512-u6AlJSH137gfTIOUfpfvadixSoFV07JqeU6D2nyfKVE+2E0UCUCJvQ1KeKyuRA0/+r8Q3vIXYPbmVUQgOnE6Yg==}
     engines: {node: '>=20.19.0'}
 
-  '@promptctl/rich-js@file:../rich-js':
-    resolution: {directory: ../rich-js, type: directory}
+  '@promptctl/rich-js@0.2.0':
+    resolution: {integrity: sha512-tQYkOs9lVzDlmnR4RsF2OZW2p+ecdMMkyICTMFzNZCtA6K/55y2cR5g6t9nXwyaneWbBn5IyHCZkjd0+zueoxA==}
     engines: {node: '>=20'}
 
   '@quansync/fs@1.0.0':
@@ -3877,11 +3877,11 @@ snapshots:
 
   '@promptctl/go-template-js@0.1.1': {}
 
-  '@promptctl/go-template-js@file:../go-template-js':
+  '@promptctl/go-template-js@0.3.0':
     dependencies:
       '@noble/hashes': 2.2.0
 
-  '@promptctl/rich-js@file:../rich-js':
+  '@promptctl/rich-js@0.2.0':
     dependencies:
       '@promptctl/go-template-js': 0.1.1
       mobx: 6.15.1
