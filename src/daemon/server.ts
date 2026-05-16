@@ -37,17 +37,14 @@ const renderCache = new RenderCache({
 const REQUEST_TIMEOUT_MS = 200;
 const BIN_CHECK_INTERVAL_MS = 60 * 1000;
 
-// Daemon entry point. Acquires a single-instance mutex, listens on the Unix
-// socket, dispatches one request per connection. Any uncaught error in the
-// process exits non-zero — the next client will respawn a clean instance via
-// spawnDaemonDetached().
+// Daemon entry point. Tries to bind the Unix socket — atomic bind() is the
+// single-instance enforcer (two daemons cannot both bind the same path; the
+// kernel makes duplicate-daemon unrepresentable). Listens for one request per
+// connection. Any uncaught error exits non-zero; the next client obtains a
+// fresh daemon via obtainDaemonKick() (fire-and-forget caller) or
+// obtainDaemon() (caller waits for readiness) in src/daemon/acquire.ts.
 export function runDaemon(): void {
   fs.mkdirSync(daemonDir(), { recursive: true });
-
-  if (!acquirePidfile()) {
-    // Another daemon is already running; nothing to do.
-    process.exit(0);
-  }
 
   // Catch-alls log + exit so the supervisor (the next client) can restart us.
   // [LAW:no-defensive-null-guards] These are *trust boundaries* — we are
@@ -67,34 +64,151 @@ export function runDaemon(): void {
     });
   }
 
-  // Stale socket file from a crashed prior daemon. Safe to unlink because we
-  // hold the pidfile mutex; no live daemon can be bound to this path.
-  try {
-    fs.unlinkSync(socketPath());
-  } catch {}
-
   const server = net.createServer({ allowHalfOpen: false }, (sock) => {
     handleConnection(sock);
   });
 
-  server.on("error", (err) => {
-    dlog("error", `server error: ${err.message}`);
-    shutdown(1);
-  });
+  // [LAW:single-enforcer] The atomic bind() is the daemon-singleton enforcer.
+  // Two daemons cannot both bind the same Unix socket path; the kernel makes
+  // duplicate-daemon unrepresentable. The pidfile is diagnostic only — never
+  // load-bearing for exclusion.
+  bindOrAttachAndExit(server, socketPath(), /* retried */ false);
+}
 
-  server.listen(socketPath(), () => {
-    try {
-      fs.chmodSync(socketPath(), 0o600);
-    } catch (e) {
-      dlog("warn", `chmod socket failed: ${(e as Error).message}`);
+// [LAW:dataflow-not-control-flow] One operation ("bring this server up or
+// discover an existing one"). The bind result is the data that decides the
+// next step; callers do not get to choose whether to spawn.
+function bindOrAttachAndExit(
+  server: net.Server,
+  sockPath: string,
+  retried: boolean,
+): void {
+  server.removeAllListeners("error");
+  server.once("error", (err) => {
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code !== "EADDRINUSE") {
+      dlog("error", `server error: ${err.message}`);
+      shutdown(1);
+      return;
     }
+    if (retried) {
+      // Lost a rebind race with another duplicate. The kernel arbitrated; we
+      // are the loser. Exit cleanly so the winner serves.
+      dlog("info", "lost rebind race; another daemon is alive — exiting");
+      process.exit(0);
+      return;
+    }
+    void handleAddressInUse(server, sockPath);
+  });
+  server.listen(sockPath, () => onListening(sockPath));
+}
+
+async function handleAddressInUse(
+  server: net.Server,
+  sockPath: string,
+): Promise<void> {
+  // EADDRINUSE: either a live daemon (we are a duplicate — exit), or a stale
+  // socket file from a crashed prior daemon (unlink + rebind).
+  const alive = await isSocketAlive(sockPath);
+  if (alive) {
+    dlog("info", "another daemon is listening on socket — exiting");
+    process.exit(0);
+  }
+  // Race-window guard: between our first `isSocketAlive` returning false and
+  // our `unlinkSync` running, another concurrent recoverer could unlink+bind
+  // the path. Without re-checking, our unlink would remove their *live*
+  // socket, leaving two daemons (one orphaned-but-listening, one freshly
+  // bound). Re-check immediately before unlink. If a live listener appeared
+  // between checks, exit instead of stomping on it.
+  if (await isSocketAlive(sockPath)) {
     dlog(
       "info",
-      `daemon up: pid=${process.pid} v=${PROTOCOL_VERSION} sock=${socketPath()}`,
+      "race: another daemon claimed the socket during recovery — exiting",
     );
-    armBinaryWatch();
-    armLimits();
+    process.exit(0);
+  }
+  dlog("warn", "stale socket from crashed daemon — unlinking and rebinding");
+  // [LAW:no-defensive-null-guards] If unlink fails (permissions, read-only
+  // FS), the retry will hit EADDRINUSE again, exit 0, and leave the system
+  // in the worst state: no daemon + stale socket blocking future starts.
+  // Surface unrecoverable failures loudly. ENOENT is fine — the goal was
+  // "make the path bindable" and a missing path already satisfies that.
+  try {
+    fs.unlinkSync(sockPath);
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code !== "ENOENT") {
+      dlog(
+        "error",
+        `cannot unlink stale socket ${sockPath}: ${(e as Error).message}`,
+      );
+      shutdown(1);
+      return;
+    }
+  }
+  bindOrAttachAndExit(server, sockPath, /* retried */ true);
+}
+
+// [LAW:no-defensive-null-guards] Three-state outcome distinguishes
+// "definitely no listener" from "probably alive but slow." Callers that
+// might destroy state on "no listener" (the stale-socket unlink path) must
+// treat "unknown" as alive to avoid stomping on a slow live daemon.
+type SocketAliveness = "alive" | "dead" | "unknown";
+
+function probeSocket(sockPath: string): Promise<SocketAliveness> {
+  return new Promise((resolve) => {
+    const sock = net.connect(sockPath);
+    let settled = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const done = (result: SocketAliveness): void => {
+      if (settled) return;
+      settled = true;
+      if (timer) clearTimeout(timer);
+      sock.removeAllListeners();
+      sock.destroy();
+      resolve(result);
+    };
+    sock.once("connect", () => done("alive"));
+    sock.once("error", (err) => {
+      // Only these error codes definitively mean "no listener at this path":
+      //   ECONNREFUSED — socket file present, kernel rejected connect
+      //   ENOENT       — socket file absent
+      //   ENOTSOCK     — path exists but isn't a socket
+      // Anything else (EPERM, EACCES, EAGAIN, …) is ambiguous — assume the
+      // daemon is alive to avoid destructive false negatives.
+      const code = (err as NodeJS.ErrnoException).code;
+      const dead =
+        code === "ECONNREFUSED" || code === "ENOENT" || code === "ENOTSOCK";
+      done(dead ? "dead" : "unknown");
+    });
+    // 50ms is generous; localhost AF_UNIX connect is sub-ms when a listener
+    // exists. Timeout means "we couldn't tell" — treat as unknown so the
+    // stale-socket recovery path doesn't unlink a live (but slow) daemon's
+    // socket.
+    timer = setTimeout(() => done("unknown"), 50);
+    timer.unref();
   });
+}
+
+// Convenience: callers that just want "is something listening" treat
+// "unknown" as alive (conservative — used by the EADDRINUSE attach branch).
+async function isSocketAlive(sockPath: string): Promise<boolean> {
+  const result = await probeSocket(sockPath);
+  return result !== "dead";
+}
+
+function onListening(sockPath: string): void {
+  try {
+    fs.chmodSync(sockPath, 0o600);
+  } catch (e) {
+    dlog("warn", `chmod socket failed: ${(e as Error).message}`);
+  }
+  writePidfileDiagnostic();
+  dlog(
+    "info",
+    `daemon up: pid=${process.pid} v=${PROTOCOL_VERSION} sock=${sockPath}`,
+  );
+  armBinaryWatch();
+  armLimits();
 }
 
 // --- binary-mtime self-restart ---
@@ -151,78 +265,40 @@ function armLimits(): void {
   limits.arm();
 }
 
-// --- single-instance mutex ---
+// --- diagnostic pidfile ---
+//
+// [LAW:one-source-of-truth] The pidfile is *diagnostic only*. It records who
+// the running daemon is so `daemon-stats` can report it; it plays no role in
+// exclusion. Exclusion is the atomic bind() in bindOrAttachAndExit().
+//
+// Overwrite-on-write (no EEXIST check). If a stale pidfile exists from a
+// crashed prior daemon, we replace it. The bind() above already proved no
+// other daemon is alive.
 
-let pidfileHeld = false;
-
-function acquirePidfile(): boolean {
-  const target = pidPath();
-  // Try once; on EEXIST, decide whether the holder is alive.
-  for (let attempt = 0; attempt < 2; attempt++) {
-    try {
-      const fd = fs.openSync(target, "wx");
-      const payload = JSON.stringify({
-        pid: process.pid,
-        version: PROTOCOL_VERSION,
-        binPath: process.argv[1],
-        startedAt: new Date().toISOString(),
-      });
-      fs.writeSync(fd, payload);
-      fs.closeSync(fd);
-      pidfileHeld = true;
-      return true;
-    } catch (e) {
-      if ((e as NodeJS.ErrnoException).code !== "EEXIST") throw e;
-    }
-
-    // Pidfile exists. Read it, check if owner is alive.
-    let holderPid: number | null = null;
-    try {
-      const raw = fs.readFileSync(target, "utf8");
-      holderPid = JSON.parse(raw).pid ?? null;
-    } catch {
-      holderPid = null;
-    }
-
-    if (holderPid && isAlive(holderPid)) {
-      dlog(
-        "info",
-        `another daemon already running (pid=${holderPid}); exiting`,
-      );
-      return false;
-    }
-
-    // Stale. Unlink and retry once.
-    dlog(
-      "warn",
-      `stale pidfile (holder pid=${holderPid ?? "?"} not alive); unlinking`,
-    );
-    try {
-      fs.unlinkSync(target);
-    } catch {}
-  }
-  // Two failed attempts — give up rather than loop.
-  dlog("error", "failed to acquire pidfile after retry");
-  return false;
-}
-
-function isAlive(pid: number): boolean {
+function writePidfileDiagnostic(): void {
+  const payload = JSON.stringify({
+    pid: process.pid,
+    version: PROTOCOL_VERSION,
+    binPath: process.argv[1],
+    startedAt: new Date().toISOString(),
+  });
   try {
-    process.kill(pid, 0);
-    return true;
+    fs.writeFileSync(pidPath(), payload, { mode: 0o600 });
+    // [LAW:single-enforcer] writeFileSync's `mode` only applies when the file
+    // is created. If a stale pidfile from a prior run was left with broader
+    // permissions, the write above won't tighten them — chmod explicitly so
+    // 0600 is the invariant regardless of prior state.
+    fs.chmodSync(pidPath(), 0o600);
   } catch (e) {
-    // ESRCH = no such process; EPERM = exists but owned by another user (rare
-    // in single-user mode, but treat as alive to be safe).
-    return (e as NodeJS.ErrnoException).code === "EPERM";
+    // Diagnostic only — failure does not block the daemon from serving.
+    dlog("warn", `pidfile write failed: ${(e as Error).message}`);
   }
 }
 
-function releasePidfile(): void {
-  if (!pidfileHeld) return;
+function removePidfileDiagnostic(): void {
   try {
     fs.unlinkSync(pidPath());
   } catch {}
-  pidfileHeld = false;
 }
 
 let inFlight = 0;
@@ -251,7 +327,7 @@ function shutdown(code: number): void {
   } catch (e) {
     dlog("warn", `watcherRegistry close failed: ${(e as Error).message}`);
   }
-  releasePidfile();
+  removePidfileDiagnostic();
   closeLog();
   // [LAW:single-enforcer] Exactly one path out of the process. Backstop with
   // SIGKILL because we previously observed shut-down daemons staying alive in
