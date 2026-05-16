@@ -199,4 +199,78 @@ describe("GitDataProvider.subscribe", () => {
 
     expect(calls).toHaveLength(0);
   });
+
+  test("subscriber throwing in initial delivery does not crash", async () => {
+    const { svc, inner } = makeCache();
+    inner.repoRootByDir = { "/repo": "/repo" };
+
+    const goodCalls: Array<GitInfo | null> = [];
+    const unsubBad = svc.subscribe("/repo", () => {
+      throw new Error("bad subscriber");
+    });
+    const unsubGood = svc.subscribe("/repo", (info) => goodCalls.push(info));
+    await tick();
+
+    // The throwing subscriber must not prevent later notifications.
+    expect(goodCalls).toHaveLength(1);
+    expect(goodCalls[0]).toMatchObject({ branch: "main" });
+    unsubBad();
+    unsubGood();
+  });
+
+  test("subscriber throwing on null delivery does not crash", async () => {
+    const { svc, inner } = makeCache();
+    inner.repoRootByDir = { "/nowhere": null };
+
+    expect(() => {
+      const unsub = svc.subscribe("/nowhere", () => {
+        throw new Error("bad subscriber");
+      });
+      unsub();
+    }).not.toThrow();
+    await tick();
+  });
+
+  test("unsubscribe during invalidation prevents stale delivery", async () => {
+    const { svc, inner } = makeCache();
+    inner.repoRootByDir = { "/repo": "/repo" };
+
+    const calls: Array<GitInfo | null> = [];
+    const unsub = svc.subscribe("/repo", (info) => calls.push(info));
+    await tick();
+    expect(calls).toHaveLength(1); // initial
+
+    // Schedule invalidation; unsubscribe before the async refresh delivers.
+    inner.stubInfo = { ...inner.stubInfo, branch: "feature" };
+    svc.invalidateRepo("/repo");
+    unsub();
+    await tick();
+
+    expect(calls).toHaveLength(1); // no post-unsubscribe delivery
+  });
+
+  test("rapid invalidations coalesce into at most two refreshes", async () => {
+    const { svc, inner } = makeCache();
+    inner.repoRootByDir = { "/repo": "/repo" };
+
+    const calls: Array<GitInfo | null> = [];
+    const unsub = svc.subscribe("/repo", (info) => calls.push(info));
+    await tick();
+    expect(calls).toHaveLength(1); // initial
+    const initialComputeCalls = inner.computeCalls.length;
+
+    // Fire 10 invalidations synchronously. The first triggers a refresh; the
+    // rest collapse into one trailing-edge re-fetch via refreshAgain.
+    for (let i = 0; i < 10; i++) svc.invalidateRepo("/repo");
+    await tick(10);
+
+    // Subscribers see at most 2 additional deliveries (the leading edge fetch
+    // and the trailing-edge fetch). Without coalescing this would be 10.
+    expect(calls.length - 1).toBeLessThanOrEqual(2);
+    // Inner shell-outs also bounded — leading + trailing only.
+    expect(inner.computeCalls.length - initialComputeCalls).toBeLessThanOrEqual(
+      2,
+    );
+    unsub();
+  });
 });
