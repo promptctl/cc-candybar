@@ -267,7 +267,9 @@ describe("obtainDaemon (bind-based singleton)", () => {
       // any file inside returns EACCES. This is the unrecoverable-error
       // path: we must NOT treat it as contention and spin until the deadline.
       fs.mkdirSync(daemonDir(), { recursive: true });
-      const originalMode = fs.statSync(daemonDir()).mode;
+      // Mask off file-type bits; stat.mode includes them and chmodSync
+      // accepts permission bits only on some platforms.
+      const originalMode = fs.statSync(daemonDir()).mode & 0o7777;
       fs.chmodSync(daemonDir(), 0o555);
       try {
         const start = Date.now();
@@ -346,7 +348,9 @@ describe("obtainDaemonKick (synchronous fire-and-forget)", () => {
       // with EACCES (not EEXIST). The kick must NOT treat this as a hard
       // stop — bind() arbitrates, so we spawn anyway.
       fs.mkdirSync(daemonDir(), { recursive: true });
-      const originalMode = fs.statSync(daemonDir()).mode;
+      // Mask off file-type bits; stat.mode includes them and chmodSync
+      // accepts permission bits only on some platforms.
+      const originalMode = fs.statSync(daemonDir()).mode & 0o7777;
       fs.chmodSync(daemonDir(), 0o555);
 
       // Suppress the expected stderr "spawn-lock unavailable" warning
