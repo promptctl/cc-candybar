@@ -111,14 +111,27 @@ function mtimeChanged(a: MtimeSnapshot, b: MtimeSnapshot): boolean {
 // `GitService.resolveGitDir(repoRoot)` returns). For a normal repo that's
 // `<repoRoot>/.git`; for a worktree it's the worktree-metadata dir nested
 // under the main repo's `.git/worktrees/`. Either way, `HEAD` and `index`
-// live directly inside `gitDir`, so the watchers find real files.
+// live directly inside `gitDir`, so the file watchers find real files.
+//
+// `refs/heads/` only exists in the main repo's gitDir, not under a worktree's
+// metadata dir. WatcherRegistry would log a warn-level "watch failed" for
+// every worktree if we passed the target unconditionally (the injected dlog
+// surfaces what was previously silent). Check existence here and only include
+// the dir target when it's real — the file watchers on HEAD/index still cover
+// branch and index changes in the worktree case.
 function watcherTargets(gitDir: string) {
+  const dirs: Array<{ path: string }> = [];
+  const refsHeads = path.join(gitDir, "refs/heads");
+  try {
+    if (fs.statSync(refsHeads).isDirectory()) {
+      dirs.push({ path: refsHeads });
+    }
+  } catch {
+    // ENOENT (worktree case) or other fs error — skip the dir target.
+  }
   return {
     files: [path.join(gitDir, "HEAD"), path.join(gitDir, "index")],
-    // refs/heads/ exists in the main repo's gitDir, not under a worktree's
-    // metadata dir. fs.watch on a non-existent path is caught and skipped by
-    // WatcherRegistry, so passing this unconditionally is safe.
-    dirs: [{ path: path.join(gitDir, "refs/heads") }],
+    dirs,
   };
 }
 
