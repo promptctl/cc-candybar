@@ -23,7 +23,7 @@ use std::ffi::OsString;
 use std::fs::File;
 use std::io::{self, Read, Write};
 use std::os::fd::IntoRawFd;
-use std::os::unix::io::{AsRawFd, FromRawFd};
+use std::os::unix::io::FromRawFd;
 use std::os::unix::net::UnixStream;
 use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
@@ -389,8 +389,8 @@ fn obtain_daemon_kick() {
         return;
     }
 
-    let lock_file = match try_acquire_spawn_lock() {
-        Some(f) => f,
+    let lock_path = match try_acquire_spawn_lock() {
+        Some(p) => p,
         None => {
             // Another client is already in the spawn window. Trust them to
             // bring the daemon up; the next render will attach.
@@ -404,32 +404,46 @@ fn obtain_daemon_kick() {
         spawn_daemon_detached();
     }
 
-    // Lock auto-releases when lock_file drops at end of scope (close → flock
-    // LOCK_UN). The daemon inherits no fds from us aside from /dev/null.
-    drop(lock_file);
+    // [LAW:one-type-per-behavior] Release by unlinking the file. The Node
+    // mirror in src/daemon/acquire.ts uses the same semantics
+    // (open(path, O_CREAT | O_EXCL) → unlink to release). If we held the
+    // flock instead and left the file behind, Node callers would see EEXIST
+    // and incorrectly think the lock is held.
+    let _ = std::fs::remove_file(&lock_path);
 }
 
-fn try_acquire_spawn_lock() -> Option<File> {
+// [LAW:one-type-per-behavior] Existence-as-lock semantics matching the Node
+// mirror in src/daemon/acquire.ts: open(path, O_CREAT | O_EXCL) atomically
+// fails if the file already exists. Release by unlinking. Time-based
+// staleness reclaim covers the case where a holder crashed before unlink.
+//
+// Staleness window matches Node's STALE_LOCK_MS (10s).
+fn try_acquire_spawn_lock() -> Option<PathBuf> {
+    const STALE_LOCK: Duration = Duration::from_secs(10);
     let path = state_dir().join("spawn.lock");
     // Ensure state_dir exists; mkdir is idempotent.
     if let Some(parent) = path.parent() {
         let _ = std::fs::create_dir_all(parent);
     }
-    let f = File::options()
-        .create(true)
-        .read(true)
-        .write(true)
-        .truncate(false)
-        .open(&path)
-        .ok()?;
-    let fd = f.as_raw_fd();
-    // LOCK_EX | LOCK_NB: try-acquire exclusive; do not block.
-    let rc = unsafe { libc::flock(fd, libc::LOCK_EX | libc::LOCK_NB) };
-    if rc == 0 {
-        Some(f)
-    } else {
-        None
+    for _ in 0..2 {
+        match File::options().create_new(true).write(true).open(&path) {
+            Ok(_f) => return Some(path),
+            Err(e) if e.kind() == io::ErrorKind::AlreadyExists => {}
+            Err(_) => return None,
+        }
+        // File already exists. Check staleness; if stale, unlink and retry.
+        let stale = std::fs::metadata(&path)
+            .and_then(|m| m.modified())
+            .map(|t| t.elapsed().map(|d| d > STALE_LOCK).unwrap_or(false))
+            .unwrap_or(false);
+        if !stale {
+            return None;
+        }
+        if std::fs::remove_file(&path).is_err() {
+            return None;
+        }
     }
+    None
 }
 
 fn can_connect(sock: &Path, timeout: Duration) -> bool {

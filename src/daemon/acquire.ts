@@ -7,10 +7,11 @@ import { socketPath, spawnLockPath, daemonDir } from "./paths";
 // [LAW:single-enforcer] One primitive per runtime that owns the entire
 // "obtain a daemon" verb. Three previously-independent spawn sites
 // (src/index.ts:171, src/install/index.ts:303, rust-client's spawn fallback)
-// all collapse onto this one path. The Rust client has its own mirror in the
-// `obtain-daemon primitive` section of rust-client/src/main.rs that uses
-// real libc::flock for the spawn dedup; both runtimes agree on socketPath()
-// and spawnLockPath().
+// all collapse onto this one path. The Rust client mirrors this in the
+// `obtain-daemon primitive` section of rust-client/src/main.rs. Both
+// runtimes agree on socketPath() and spawnLockPath() *and* on the lock
+// mechanism: open(path, O_CREAT | O_EXCL) — existence == held; release by
+// unlinking. A Rust kick and a Node kick are mutually recognizable.
 //
 // [LAW:dataflow-not-control-flow] Callers do not get to choose whether to
 // spawn. They request a daemon; this function returns one of three typed
@@ -51,7 +52,11 @@ export async function obtainDaemon(
   const spawnFn = opts.spawn ?? spawnDaemonDetachedReal;
   const deadline = Date.now() + settings.totalTimeoutMs;
 
-  fs.mkdirSync(daemonDir(), { recursive: true });
+  // [LAW:no-defensive-null-guards] obtainDaemon is typed Promise<ObtainResult>
+  // — synchronous filesystem failures (read-only FS, permission denial) must
+  // become typed failure outcomes, not throws that surprise the caller.
+  const setupErr = ensureStateDir();
+  if (setupErr) return { kind: "failed", reason: setupErr };
 
   // Fast path: is a daemon already listening?
   if (await canConnect(socketPath(), settings.connectTimeoutMs)) {
@@ -104,18 +109,42 @@ export async function obtainDaemon(
   return { kind: "failed", reason: "timeout obtaining daemon" };
 }
 
-// Fire-and-forget version. Caller doesn't care about the outcome — used for
-// "daemon-miss" recovery where the current render is already lost and we just
-// want to warm the daemon for the next refresh. Mirrors the previous
-// spawnDaemonDetached() callers in src/index.ts and src/install/index.ts.
+// Synchronous fire-and-forget kick — used for "daemon-miss" recovery where
+// the current render is already lost and we just want to warm the daemon for
+// the next refresh. Mirrors the Rust client's obtain_daemon_kick at the same
+// shape: lock + spawn + release, all synchronous, no await.
 //
-// [LAW:dataflow-not-control-flow] This is still the same operation as
-// obtainDaemon — just with the result discarded. Callers do not skip the
-// dedup logic; they just don't wait.
-export function obtainDaemonAsync(opts: ObtainOpts = {}): void {
-  void obtainDaemon(opts).catch(() => {
-    // Any failure is best-effort; the next refresh will retry.
-  });
+// [LAW:one-type-per-behavior] This is the Node mirror of Rust's
+// obtain_daemon_kick in rust-client/src/main.rs. Both runtimes use the same
+// existence-as-lock semantics so a Rust kick and a Node kick are mutually
+// recognizable. The bind() inside the daemon arbitrates any duplicate spawns
+// that slip past the lock.
+//
+// Why synchronous: callers (src/index.ts, src/install/index.ts) call this
+// immediately before process.exit(). An async variant would suspend on the
+// first await and never resume — process.exit would kill the process before
+// child_process.spawn ever runs. The lock+spawn must complete in synchronous
+// turn for the daemon to actually start.
+export function obtainDaemonKick(opts: { spawn?: () => boolean } = {}): void {
+  if (ensureStateDir() !== null) return;
+  const spawnFn = opts.spawn ?? spawnDaemonDetachedReal;
+  const lock = tryAcquireSpawnLock();
+  if (lock.kind !== "held") return; // contention or error — give up silently
+  try {
+    // [LAW:no-defensive-null-guards] Kick path is fire-and-forget; a spawn
+    // failure here is best-effort. Swallowing prevents an uncaught throw from
+    // crashing the calling process at the wrong moment (right before its own
+    // exit). It is logged via stderr for visibility.
+    try {
+      spawnFn();
+    } catch (e) {
+      process.stderr.write(
+        `cc-candybar: daemon spawn failed: ${(e as Error).message}\n`,
+      );
+    }
+  } finally {
+    releaseSpawnLock();
+  }
 }
 
 // ─── Spawn-lock (Node side) ──────────────────────────────────────────────────
@@ -196,6 +225,20 @@ function releaseSpawnLock(): void {
   try {
     fs.unlinkSync(path);
   } catch {}
+}
+
+// ─── State-dir setup ────────────────────────────────────────────────────────
+
+// Returns null on success, or a reason string on unrecoverable failure. Used
+// by both obtainDaemon (which converts to a `failed` result) and
+// obtainDaemonKick (which silently gives up — there is no caller to report to).
+function ensureStateDir(): string | null {
+  try {
+    fs.mkdirSync(daemonDir(), { recursive: true });
+    return null;
+  } catch (e) {
+    return `mkdir ${daemonDir()}: ${(e as Error).message}`;
+  }
 }
 
 // ─── Connect probe ──────────────────────────────────────────────────────────

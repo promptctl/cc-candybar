@@ -9,7 +9,7 @@ import { runInstall, runInstallUrlHandler, runUrlHandle } from "./install";
 import { runDaemon } from "./daemon/server";
 import { tryRenderViaDaemon } from "./daemon/client";
 import { runDaemonStats } from "./daemon/client-stats";
-import { obtainDaemonAsync } from "./daemon/acquire";
+import { obtainDaemonKick } from "./daemon/acquire";
 
 function showHelpText(): void {
   console.log(`
@@ -167,8 +167,8 @@ echo '{"session_id":"test-session","workspace":{"project_dir":"/path/to/project"
       process.stdout.write(outcome.output);
       process.exit(0);
     }
-    debug(`daemon unavailable (${outcome.reason ?? "?"}) — obtaining daemon`);
-    obtainDaemonAsync();
+    debug(`daemon unavailable (${outcome.reason ?? "?"}) — kicking daemon`);
+    obtainDaemonKick();
     process.stdout.write("\n");
     process.exit(0);
   } catch (error) {

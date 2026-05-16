@@ -167,6 +167,29 @@ describe("obtainDaemon (bind-based singleton)", () => {
     });
   });
 
+  test("does not throw when state-dir setup fails — returns failed result", async () => {
+    await withTempState(async (stateDir) => {
+      jest.resetModules();
+      const { obtainDaemon } = await import("../src/daemon/acquire");
+
+      // Plant a *file* at the state-dir path. mkdirSync recursively will
+      // succeed for the parent but fail to make `cc-candybar` a directory.
+      // Forces the typed-failure path instead of propagating a throw.
+      const parent = path.dirname(stateDir);
+      fs.mkdirSync(parent, { recursive: true });
+      fs.writeFileSync(stateDir, "");
+
+      const result = await obtainDaemon({
+        spawn: () => true,
+        totalTimeoutMs: 200,
+      });
+      expect(result.kind).toBe("failed");
+      if (result.kind === "failed") {
+        expect(result.reason).toMatch(/mkdir/);
+      }
+    });
+  });
+
   test("surfaces unrecoverable spawn-lock errors as failed (not spinning timeout)", async () => {
     await withTempState(async () => {
       jest.resetModules();
@@ -196,6 +219,70 @@ describe("obtainDaemon (bind-based singleton)", () => {
       } finally {
         fs.chmodSync(daemonDir(), originalMode);
       }
+    });
+  });
+});
+
+describe("obtainDaemonKick (synchronous fire-and-forget)", () => {
+  test("invokes spawn synchronously when lock is acquired", async () => {
+    await withTempState(async () => {
+      jest.resetModules();
+      const { obtainDaemonKick } = await import("../src/daemon/acquire");
+      const { spawnLockPath } = await import("../src/daemon/paths");
+
+      let spawned = 0;
+      obtainDaemonKick({
+        spawn: () => {
+          spawned++;
+          return true;
+        },
+      });
+      // Spawn ran in the same synchronous turn.
+      expect(spawned).toBe(1);
+      // Lock was released by the time kick returned.
+      expect(fs.existsSync(spawnLockPath())).toBe(false);
+    });
+  });
+
+  test("does not spawn when lock is already held by another process", async () => {
+    await withTempState(async () => {
+      jest.resetModules();
+      const { obtainDaemonKick } = await import("../src/daemon/acquire");
+      const { spawnLockPath, daemonDir } = await import("../src/daemon/paths");
+
+      fs.mkdirSync(daemonDir(), { recursive: true });
+      // Plant a fresh lock (not stale) to simulate another caller in the
+      // spawn window.
+      fs.writeFileSync(
+        spawnLockPath(),
+        JSON.stringify({ pid: 999999, ts: Date.now() }),
+      );
+
+      let spawned = 0;
+      obtainDaemonKick({
+        spawn: () => {
+          spawned++;
+          return true;
+        },
+      });
+      expect(spawned).toBe(0);
+    });
+  });
+
+  test("completes synchronously — no microtask suspension", async () => {
+    await withTempState(async () => {
+      jest.resetModules();
+      const { obtainDaemonKick } = await import("../src/daemon/acquire");
+
+      let asyncRan = false;
+      void Promise.resolve().then(() => {
+        asyncRan = true;
+      });
+      // Kick must complete fully before any microtask gets a turn — this is
+      // the load-bearing property: it's called immediately before
+      // process.exit(0), so an async chain inside would never run.
+      obtainDaemonKick({ spawn: () => true });
+      expect(asyncRan).toBe(false);
     });
   });
 });
