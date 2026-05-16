@@ -4,7 +4,6 @@ import os from "node:os";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
-import { spawnSync } from "node:child_process";
 import { daemonDir, pidPath, socketPath } from "./paths";
 import { dlog, closeLog } from "./log";
 import { PROTOCOL_VERSION, encodeFrame, makeFrameReader } from "./protocol";
@@ -19,10 +18,15 @@ import { SessionState } from "./session-state";
 import { listAvailableThemes } from "../themes/cascade.js";
 import { STYLE_ORDER } from "../themes/default-mapping.js";
 import { validateHookData } from "../utils/schema-validator.js";
+import { launchSync, setLaunchStats } from "../proc/launch";
 
 // [LAW:one-source-of-truth] one cache instance per daemon process — multiple
 // instances would defeat the share-across-sessions invariant.
 const stats = new RuntimeStats();
+// [LAW:single-enforcer] Route all child_process spawns through src/proc/launch.
+// Installing the metering handle here makes subprocess counts visible in
+// daemon-stats.
+setLaunchStats(stats.launchStats);
 const watcherRegistry = new WatcherRegistry({ counters: stats });
 const gitService = new CachedGitService({ watchers: watcherRegistry });
 const usageProvider = new CachedUsageProvider();
@@ -549,9 +553,15 @@ function handleClick(verb: string, value: string): Response {
 }
 
 function clickCopy(text: string): void {
-  const result = spawnSync("/usr/bin/pbcopy", [], { input: text });
-  if (result.status !== 0) {
-    throw new Error(`pbcopy failed (status ${result.status})`);
+  const result = launchSync({
+    bin: "/usr/bin/pbcopy",
+    stdinInput: text,
+    category: "click.pbcopy",
+  });
+  if (!result.ok) {
+    throw new Error(
+      `pbcopy failed (${result.reason}, exit ${result.exitCode ?? "null"})`,
+    );
   }
 }
 
@@ -562,14 +572,14 @@ function clickShowConfigError(encodedMessage: string): void {
 }
 
 function clickOpenVscode(target: string): void {
-  const result = spawnSync("/usr/bin/open", [
-    "-a",
-    "Visual Studio Code",
-    target,
-  ]);
-  if (result.status !== 0) {
+  const result = launchSync({
+    bin: "/usr/bin/open",
+    args: ["-a", "Visual Studio Code", target],
+    category: "click.open",
+  });
+  if (!result.ok) {
     throw new Error(
-      `open -a "Visual Studio Code" failed (status ${result.status})`,
+      `open -a "Visual Studio Code" failed (${result.reason}, exit ${result.exitCode ?? "null"})`,
     );
   }
 }
