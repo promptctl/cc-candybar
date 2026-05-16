@@ -7,17 +7,24 @@ import path from "node:path";
 // race on `<state>/socket` or `<state>/spawn.lock`. We set the env var
 // *before* importing acquire/paths so the module reads the right dir.
 
-function withTempState<T>(fn: (stateDir: string) => Promise<T> | T): Promise<T> {
+async function withTempState<T>(
+  fn: (stateDir: string) => Promise<T> | T,
+): Promise<T> {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "cc-candybar-acquire-"));
   const prev = process.env.XDG_STATE_HOME;
   process.env.XDG_STATE_HOME = root;
-  return Promise.resolve(fn(path.join(root, "cc-candybar"))).finally(() => {
+  // async/try-finally — not Promise.resolve(fn()).finally(...) — because a
+  // synchronous throw from fn happens *before* Promise.resolve wraps it,
+  // bypassing the finally and leaking temp dirs + env state.
+  try {
+    return await fn(path.join(root, "cc-candybar"));
+  } finally {
     if (prev === undefined) delete process.env.XDG_STATE_HOME;
     else process.env.XDG_STATE_HOME = prev;
     try {
       fs.rmSync(root, { recursive: true, force: true });
     } catch {}
-  });
+  }
 }
 
 async function startFakeDaemon(sockPath: string): Promise<net.Server> {
