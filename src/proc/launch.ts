@@ -21,7 +21,6 @@ import type { LaunchStatsHandle } from "./stats-handle";
 // pattern. [LAW:no-mode-explosion]: no per-site escape hatch.
 export const LAUNCH_CATEGORIES = [
   "git",
-  "var-system.git",
   "user-shell",
   "tmux",
   "terminal-width",

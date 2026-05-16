@@ -1,9 +1,20 @@
-import { CachedGitService } from "../src/daemon/cache/git";
+import { GitDataProvider } from "../src/daemon/cache/git";
 import { GitService, type GitInfo } from "../src/segments/git";
 
 class StubGitService extends GitService {
   public computeCalls: Array<{ workingDir: string; projectDir?: string }> = [];
+  public resolveCalls: Array<{ workingDir: string; projectDir?: string }> = [];
+  public gitDirCalls: string[] = [];
+  // Per-workingDir override for resolveGitDir. Worktree tests use this to
+  // simulate the `.git`-is-a-file → resolved-gitDir indirection without
+  // setting up real worktree filesystems.
+  public gitDirByDir: Record<string, string> = {};
   public repoRootByDir: Record<string, string | null> = {};
+  // Per-(workingDir, projectDir) override for resolveEffectiveGitDir. The
+  // default behavior (when a key is absent) falls back to repoRootByDir.
+  // Tests that exercise projectDir-driven cache-key behavior populate this
+  // map directly.
+  public effectiveDirByKey: Record<string, string | null> = {};
   public stubInfo: GitInfo = {
     branch: "main",
     status: "clean",
@@ -12,6 +23,24 @@ class StubGitService extends GitService {
   };
 
   override async findGitRoot(workingDir: string): Promise<string | null> {
+    return this.repoRootByDir[workingDir] ?? null;
+  }
+
+  override resolveGitDir(workingDir: string): string {
+    this.gitDirCalls.push(workingDir);
+    if (workingDir in this.gitDirByDir) return this.gitDirByDir[workingDir]!;
+    return `${workingDir}/.git`;
+  }
+
+  override async resolveEffectiveGitDir(
+    workingDir: string,
+    projectDir?: string,
+  ): Promise<string | null> {
+    this.resolveCalls.push({ workingDir, projectDir });
+    const key = projectDir ? `${workingDir}|${projectDir}` : workingDir;
+    if (key in this.effectiveDirByKey) {
+      return this.effectiveDirByKey[key] ?? null;
+    }
     return this.repoRootByDir[workingDir] ?? null;
   }
 
@@ -31,7 +60,7 @@ function makeCache(opts: { ttlMs?: number; maxEntries?: number } = {}) {
   const inner = new StubGitService();
   // sanityIntervalMs=0 disables the periodic check in unit tests; we drive
   // it manually via runSanityCheckNow().
-  const svc = new CachedGitService({ ...opts, inner, sanityIntervalMs: 0 });
+  const svc = new GitDataProvider({ ...opts, inner, sanityIntervalMs: 0 });
   return { svc, inner };
 }
 
@@ -40,10 +69,17 @@ afterEach(() => {
   // against the resulting throw; nothing to clean up here.
 });
 
-describe("CachedGitService", () => {
+describe("GitDataProvider", () => {
   test("two cwds in same repo share one cache entry", async () => {
     const { svc, inner } = makeCache();
-    inner.repoRootByDir = { "/repo/a": "/repo", "/repo/b": "/repo" };
+    // After kz8.3 review fix, provider's inner.getGitInfo is invoked with the
+    // resolved repoRoot (not the cwd) so the inner doesn't re-walk findGitRoot.
+    // The stub's lookups expect to see the resolved key.
+    inner.repoRootByDir = {
+      "/repo/a": "/repo",
+      "/repo/b": "/repo",
+      "/repo": "/repo",
+    };
 
     await svc.getGitInfo("/repo/a", { showSha: false });
     await svc.getGitInfo("/repo/b", { showSha: false });
@@ -115,5 +151,267 @@ describe("CachedGitService", () => {
     const r1 = await svc.getGitInfo("/nowhere", {});
     expect(r1).toBeNull();
     expect(svc.getStats().size).toBe(0);
+  });
+
+  test("projectDir override keys cache on effective gitDir, not workingDir", async () => {
+    // workingDir=/cwd is in repoA, but a projectDir=/repoB override makes the
+    // effective gitDir /repoB. The cache key must follow the effective gitDir
+    // so repo B's data doesn't get cached under repo A's key (the pre-fix bug
+    // Copilot flagged on the second-pass review of kz8.3).
+    const { svc, inner } = makeCache();
+    inner.repoRootByDir = {
+      "/cwd": "/repoA",
+      "/repoA": "/repoA",
+      "/repoB": "/repoB",
+    };
+    inner.effectiveDirByKey = {
+      "/cwd|/repoB": "/repoB", // with projectDir, gitDir becomes /repoB
+      "/cwd": "/repoA", // without, gitDir is /repoA
+    };
+
+    await svc.getGitInfo("/cwd", {}, "/repoB");
+    await svc.getGitInfo("/cwd", {});
+
+    // Two distinct effective gitDirs → two cache entries, no contamination.
+    expect(svc.getStats().size).toBe(2);
+    // Inner shell-outs land on the resolved gitDirs, not the cwd.
+    const dirs = inner.computeCalls.map((c) => c.workingDir).sort();
+    expect(dirs).toEqual(["/repoA", "/repoB"]);
+  });
+
+  test("worktree path resolves HEAD/index from .git file's gitdir target", async () => {
+    // In a worktree, repoRoot/.git is a *file* pointing at the real metadata
+    // dir under main-repo/.git/worktrees/. Watchers and mtime snapshots must
+    // follow that pointer or they silently no-op (the bug Copilot caught on
+    // PR #8 review pass 4).
+    const { svc, inner } = makeCache();
+    inner.repoRootByDir = { "/wt": "/wt" };
+    inner.gitDirByDir = { "/wt": "/main/.git/worktrees/wt" };
+
+    // Fetch + cache without crashing. The internal calls to watcherTargets /
+    // snapshotMtimes use the resolved gitDir, so synthetic "/main/.git/..."
+    // paths don't fail (statSync misses → mtime 0, fs.watch misses → no
+    // watcher, both bounded). The point is that the resolution path *runs*.
+    const r = await svc.getGitInfo("/wt", {});
+    expect(r).toMatchObject({ branch: "main" });
+
+    // Verify resolveGitDir was actually consulted for the worktree path.
+    expect(inner.gitDirCalls).toContain("/wt");
+  });
+
+  test("concurrent cache misses on same key coalesce into one fetch", async () => {
+    // Two parallel callers requesting the same key — without in-flight
+    // coalescing, both observe "no entry yet" and both shell out, doubling
+    // the work the cache exists to eliminate (the race Copilot flagged on
+    // PR #8 review pass 3).
+    const { svc, inner } = makeCache();
+    inner.repoRootByDir = { "/repo": "/repo" };
+
+    const [r1, r2] = await Promise.all([
+      svc.getGitInfo("/repo", {}),
+      svc.getGitInfo("/repo", {}),
+    ]);
+
+    expect(r1).toMatchObject({ branch: "main" });
+    expect(r2).toBe(r1); // same object → same fetch
+    expect(inner.computeCalls).toHaveLength(1);
+    expect(svc.getStats()).toMatchObject({ size: 1, hits: 0, misses: 1 });
+  });
+
+  test("two cwds with same projectDir share one cache entry", async () => {
+    const { svc, inner } = makeCache();
+    inner.repoRootByDir = {
+      "/cwd-x": "/repoA",
+      "/cwd-y": "/repoA",
+      "/repoA": "/repoA",
+    };
+    inner.effectiveDirByKey = {
+      "/cwd-x|/repoA": "/repoA",
+      "/cwd-y|/repoA": "/repoA",
+    };
+
+    await svc.getGitInfo("/cwd-x", {}, "/repoA");
+    await svc.getGitInfo("/cwd-y", {}, "/repoA");
+
+    expect(svc.getStats()).toMatchObject({ size: 1, hits: 1, misses: 1 });
+  });
+});
+
+// Drain helper — subscribe()/refresh callbacks fire after a chain of awaits
+// (gitDir resolution, fetch, in-flight tracker .finally) whose depth is
+// implementation-detail. Each `setImmediate` yield drains a full round of
+// microtasks; some tests trigger nested async chains and need N rounds.
+async function tick(times = 1): Promise<void> {
+  for (let i = 0; i < times; i++) {
+    await new Promise<void>((r) => setImmediate(r));
+  }
+}
+
+describe("GitDataProvider.subscribe", () => {
+  test("delivers initial snapshot once", async () => {
+    const { svc, inner } = makeCache();
+    inner.repoRootByDir = { "/repo": "/repo" };
+
+    const calls: Array<GitInfo | null> = [];
+    const unsub = svc.subscribe("/repo", (info) => calls.push(info));
+    await tick();
+
+    expect(calls).toHaveLength(1);
+    expect(calls[0]).toMatchObject({ branch: "main", status: "clean" });
+    unsub();
+  });
+
+  test("delivers null once for non-repo cwd; no watcher held", async () => {
+    const { svc, inner } = makeCache();
+    inner.repoRootByDir = { "/nowhere": null };
+
+    const calls: Array<GitInfo | null> = [];
+    const unsub = svc.subscribe("/nowhere", (info) => calls.push(info));
+    await tick();
+
+    expect(calls).toEqual([null]);
+    // No subscriber registered → no watcher acquired.
+    expect(svc.getStats().watchers).toBe(0);
+    unsub();
+  });
+
+  test("invalidateRepo refreshes subscribers", async () => {
+    const { svc, inner } = makeCache();
+    inner.repoRootByDir = { "/repo": "/repo" };
+
+    const calls: Array<GitInfo | null> = [];
+    const unsub = svc.subscribe("/repo", (info) => calls.push(info));
+    await tick();
+    expect(calls).toHaveLength(1);
+
+    inner.stubInfo = { ...inner.stubInfo, branch: "feature" };
+    svc.invalidateRepo("/repo");
+    await tick();
+
+    expect(calls).toHaveLength(2);
+    expect(calls[1]).toMatchObject({ branch: "feature" });
+    unsub();
+  });
+
+  test("multiple subscribers in same repo share one watcher slot", async () => {
+    const { svc, inner } = makeCache();
+    inner.repoRootByDir = { "/repo/a": "/repo", "/repo/b": "/repo" };
+
+    const unsubA = svc.subscribe("/repo/a", () => {});
+    const unsubB = svc.subscribe("/repo/b", () => {});
+    await tick();
+
+    // Both subscribers acquire the same key "git:/repo"; refcount = 2 inside
+    // one slot. The cache's getInfo path also acquires the same key — slot
+    // count, not refcount, is the right metric.
+    expect(svc.getStats().watchers).toBe(1);
+    unsubA();
+    unsubB();
+  });
+
+  test("unsubscribe before delivery suppresses the callback", async () => {
+    const { svc, inner } = makeCache();
+    inner.repoRootByDir = { "/repo": "/repo" };
+
+    const calls: Array<GitInfo | null> = [];
+    const unsub = svc.subscribe("/repo", (info) => calls.push(info));
+    unsub();
+    await tick();
+
+    expect(calls).toHaveLength(0);
+  });
+
+  test("subscriber throwing in initial delivery does not crash", async () => {
+    const { svc, inner } = makeCache();
+    inner.repoRootByDir = { "/repo": "/repo" };
+
+    const goodCalls: Array<GitInfo | null> = [];
+    const unsubBad = svc.subscribe("/repo", () => {
+      throw new Error("bad subscriber");
+    });
+    const unsubGood = svc.subscribe("/repo", (info) => goodCalls.push(info));
+    await tick();
+
+    // The throwing subscriber must not prevent later notifications.
+    expect(goodCalls).toHaveLength(1);
+    expect(goodCalls[0]).toMatchObject({ branch: "main" });
+    unsubBad();
+    unsubGood();
+  });
+
+  test("subscriber throwing on null delivery does not crash", async () => {
+    const { svc, inner } = makeCache();
+    inner.repoRootByDir = { "/nowhere": null };
+
+    expect(() => {
+      const unsub = svc.subscribe("/nowhere", () => {
+        throw new Error("bad subscriber");
+      });
+      unsub();
+    }).not.toThrow();
+    await tick();
+  });
+
+  test("unsubscribe during invalidation prevents stale delivery", async () => {
+    const { svc, inner } = makeCache();
+    inner.repoRootByDir = { "/repo": "/repo" };
+
+    const calls: Array<GitInfo | null> = [];
+    const unsub = svc.subscribe("/repo", (info) => calls.push(info));
+    await tick();
+    expect(calls).toHaveLength(1); // initial
+
+    // Schedule invalidation; unsubscribe before the async refresh delivers.
+    inner.stubInfo = { ...inner.stubInfo, branch: "feature" };
+    svc.invalidateRepo("/repo");
+    unsub();
+    await tick();
+
+    expect(calls).toHaveLength(1); // no post-unsubscribe delivery
+  });
+
+  test("refresh path does not re-resolve repoRoot on invalidation", async () => {
+    const { svc, inner } = makeCache();
+    inner.repoRootByDir = { "/repo": "/repo" };
+
+    const unsub = svc.subscribe("/repo", () => {});
+    await tick();
+    // Subscribe resolves once.
+    expect(inner.resolveCalls.length).toBe(1);
+
+    // Invalidate a few times; the refresh loop should reuse the stored
+    // repoRoot — not call resolveEffectiveGitDir again per iteration.
+    svc.invalidateRepo("/repo");
+    svc.invalidateRepo("/repo");
+    await tick(10);
+
+    // Still 1 — refreshes used the stored repoRoot.
+    expect(inner.resolveCalls.length).toBe(1);
+    unsub();
+  });
+
+  test("rapid invalidations coalesce into at most two refreshes", async () => {
+    const { svc, inner } = makeCache();
+    inner.repoRootByDir = { "/repo": "/repo" };
+
+    const calls: Array<GitInfo | null> = [];
+    const unsub = svc.subscribe("/repo", (info) => calls.push(info));
+    await tick();
+    expect(calls).toHaveLength(1); // initial
+    const initialComputeCalls = inner.computeCalls.length;
+
+    // Fire 10 invalidations synchronously. The first triggers a refresh; the
+    // rest collapse into one trailing-edge re-fetch via refreshAgain.
+    for (let i = 0; i < 10; i++) svc.invalidateRepo("/repo");
+    await tick(10);
+
+    // Subscribers see at most 2 additional deliveries (the leading edge fetch
+    // and the trailing-edge fetch). Without coalescing this would be 10.
+    expect(calls.length - 1).toBeLessThanOrEqual(2);
+    // Inner shell-outs also bounded — leading + trailing only.
+    expect(inner.computeCalls.length - initialComputeCalls).toBeLessThanOrEqual(
+      2,
+    );
+    unsub();
   });
 });
