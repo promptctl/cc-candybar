@@ -669,8 +669,9 @@ export class SourceRegistry {
   // provider in turn collapses N subscribers in the same repo onto one
   // watcher + one cache entry.
   // [LAW:dataflow-not-control-flow] Box always holds a valid typed value;
-  // the provider's watcher (.git/HEAD, .git/index, .git/refs/heads) drives
-  // when the snapshot is refreshed.
+  // the provider's watcher (HEAD + index under the resolved gitDir, plus
+  // refs/heads/ when it exists — see src/daemon/cache/git.ts:watcherTargets)
+  // drives when the snapshot is refreshed.
   declareGit(name: string, opts: GitOptions): void {
     const type = GIT_FIELD_TYPE[opts.field];
     // Initialize to fallback; the async fetch will populate the real value.
