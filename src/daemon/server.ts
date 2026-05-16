@@ -242,6 +242,11 @@ function writePidfileDiagnostic(): void {
   });
   try {
     fs.writeFileSync(pidPath(), payload, { mode: 0o600 });
+    // [LAW:single-enforcer] writeFileSync's `mode` only applies when the file
+    // is created. If a stale pidfile from a prior run was left with broader
+    // permissions, the write above won't tighten them — chmod explicitly so
+    // 0600 is the invariant regardless of prior state.
+    fs.chmodSync(pidPath(), 0o600);
   } catch (e) {
     // Diagnostic only — failure does not block the daemon from serving.
     dlog("warn", `pidfile write failed: ${(e as Error).message}`);

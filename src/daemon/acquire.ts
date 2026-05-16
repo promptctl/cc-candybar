@@ -247,16 +247,19 @@ function canConnect(sockPath: string, timeoutMs: number): Promise<boolean> {
   return new Promise((resolve) => {
     const sock = net.connect(sockPath);
     let settled = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
     const done = (result: boolean): void => {
       if (settled) return;
       settled = true;
+      if (timer) clearTimeout(timer);
       sock.removeAllListeners();
       sock.destroy();
       resolve(result);
     };
     sock.once("connect", () => done(true));
     sock.once("error", () => done(false));
-    setTimeout(() => done(false), timeoutMs).unref();
+    timer = setTimeout(() => done(false), timeoutMs);
+    timer.unref();
   });
 }
 

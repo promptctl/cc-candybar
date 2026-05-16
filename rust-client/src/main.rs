@@ -382,9 +382,11 @@ fn connect_with_timeout(path: &Path, timeout: Duration) -> io::Result<UnixStream
 //
 // Fire-and-forget shape: the current render is already lost (we hit
 // obtain_daemon_kick on a render failure); we just want a daemon to be alive
-// for the next refresh. The lock auto-releases when the client process exits
-// (advisory locks vanish on close). Total work inside this fn is bounded by
-// a few syscalls plus an optional fork+execve.
+// for the next refresh. The lock is released by explicit remove_file at the
+// end of obtain_daemon_kick; if the client crashes mid-window, the time-based
+// staleness reclaim in try_acquire_spawn_lock unlinks files older than 10s.
+// Total work inside this fn is bounded by a few syscalls plus an optional
+// fork+execve.
 
 fn obtain_daemon_kick() {
     // Re-check first: a daemon may have come up between our render failure
