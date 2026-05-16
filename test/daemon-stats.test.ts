@@ -62,6 +62,14 @@ describe("formatStats", () => {
       usageCache: { size: 3, hits: 40, misses: 10, sweeps: 0 },
       renderCache: { size: 4 },
       watchers: { active: 5, opened: 7, closed: 2, evicted: 0 },
+      subprocesses: {
+        total: 0,
+        inFlight: 0,
+        lastMinute: 0,
+        byCategory: {},
+        p50DurationMs: {},
+        p99DurationMs: {},
+      },
       nextRestartReason: null,
     });
     expect(out).toContain("pid           1234");
@@ -87,6 +95,14 @@ describe("formatStats", () => {
       usageCache: { size: 0, hits: 0, misses: 0, sweeps: 0 },
       renderCache: { size: 0 },
       watchers: { active: 0, opened: 0, closed: 0, evicted: 0 },
+      subprocesses: {
+        total: 0,
+        inFlight: 0,
+        lastMinute: 0,
+        byCategory: {},
+        p50DurationMs: {},
+        p99DurationMs: {},
+      },
       nextRestartReason: null,
     });
     expect(out).toContain("hit rate      n/a");

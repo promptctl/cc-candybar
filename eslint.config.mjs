@@ -68,6 +68,33 @@ export default [
   },
   prettierConfig,
   {
+    // [LAW:single-enforcer] (kz8.2) src/proc/launch.ts is the only file
+    // allowed to import node:child_process directly. Every other spawn site
+    // routes through launch()/launchSync(). This rule keeps the invariant
+    // load-bearing — a future regression fails lint, not just a manual grep.
+    files: ["src/**/*.{ts,mts}"],
+    ignores: ["src/proc/**"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          paths: [
+            {
+              name: "child_process",
+              message:
+                "Import launch/launchSync from src/proc/launch instead. [LAW:single-enforcer] (kz8.2)",
+            },
+            {
+              name: "node:child_process",
+              message:
+                "Import launch/launchSync from src/proc/launch instead. [LAW:single-enforcer] (kz8.2)",
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
     ignores: [
       "node_modules/",
       "dist/",

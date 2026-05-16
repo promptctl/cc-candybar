@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import net from "node:net";
-import { spawn } from "node:child_process";
+import { launch } from "../proc/launch";
 import process from "node:process";
 import { socketPath, spawnLockPath, daemonDir } from "./paths";
 
@@ -390,15 +390,21 @@ function sleep(ms: number): Promise<void> {
 // Cap V8 old-generation at 400 MB so GC fires before RSS hits the 512 MB hard
 // limit. The Rust client mirrors this in rust-client/src/main.rs
 // (spawn_daemon_detached) — keep the two in sync when changing this value.
+//
+// [LAW:single-enforcer] Routes through src/proc/launch so daemon-spawn shows
+// up in subprocess metering (category "daemon-spawn"). The launch primitive
+// owns the only child_process import in this file.
 function spawnDaemonDetachedReal(): boolean {
   const node = process.execPath;
   const script = process.argv[1];
   if (!script) return false;
-  const child = spawn(node, ["--max-old-space-size=400", script, "daemon"], {
+  // Detached launches return synchronously after the spawn succeeds; the
+  // Promise resolves immediately (the OS now owns the process).
+  void launch({
+    bin: node,
+    args: ["--max-old-space-size=400", script, "daemon"],
     detached: true,
-    stdio: "ignore",
-    env: process.env,
+    category: "daemon-spawn",
   });
-  child.unref();
   return true;
 }
