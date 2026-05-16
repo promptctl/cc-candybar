@@ -13,7 +13,7 @@ import {
   STYLE_ORDER,
   STYLE_PRESETS,
 } from "../src/themes/default-mapping";
-import { ColorRgba } from "rich-js";
+import { ColorRgba } from "@promptctl/rich-js";
 
 describe("Colors", () => {
   describe("Core Color Functions", () => {

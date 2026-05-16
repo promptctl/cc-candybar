@@ -1,11 +1,11 @@
 // [LAW:behavior-not-structure] Tests assert observable output (resolved hex
 // values, Style fields, thrown errors) — never internal state.
 
-import { Palette, PaletteResolver, parseRgbHex, ColorSpec } from "rich-js";
+import { Palette, PaletteResolver, parseRgbHex, ColorSpec } from "@promptctl/rich-js";
 import { createCcCandybarEngine } from "../src/template-engine/engine";
 import { resolveSegmentColors, ColorSpecError } from "../src/template-engine/colors";
 import type { Template } from "@promptctl/go-template-js";
-import type { RichText } from "rich-js";
+import type { RichText } from "@promptctl/rich-js";
 
 // ─── Test palette + resolver ──────────────────────────────────────────────────
 

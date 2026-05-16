@@ -1,4 +1,4 @@
-import { ColorRgba } from "rich-js";
+import { ColorRgba } from "@promptctl/rich-js";
 
 // --- sRGB ↔ linear sRGB ---
 
@@ -37,7 +37,7 @@ const LMS_PRIME_TO_OKLAB: ReadonlyArray<readonly number[]> = [
 const OKLAB_TO_LMS_PRIME: ReadonlyArray<readonly number[]> = [
   [0.9999999984505198, 0.3963377921737679, 0.2158037580607588],
   [1.0000000086996028, -0.1055613423236564, -0.0638541747717059],
-  [1.0000000095444298, -0.0894841821008142, -1.2914855378510604],
+  [1.0000000095444297, -0.0894841821008142, -1.2914855378510604],
 ];
 
 function mulMatVec(
