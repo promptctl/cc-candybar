@@ -12,16 +12,18 @@
 //
 // Timeouts mirror src/daemon/client.ts: 50ms connect, 150ms total.
 //
-// On any daemon failure: spawn detached `node <root>/dist/index.mjs daemon`,
-// write "\n" to stdout, exit 0. Matches src/index.ts:166 daemon-miss
-// behavior so the next refresh hits a warm daemon.
+// On any daemon failure: obtain_daemon_kick() runs a flock-gated, fire-and-
+// forget acquire. The actual one-daemon invariant is enforced by atomic
+// bind() inside the daemon (see src/daemon/server.ts:bindOrAttachAndExit);
+// flock is the thundering-herd optimization that prevents N clients from
+// each forking a Node process when one suffices. Mirrors src/daemon/acquire.ts.
 
 use std::env;
 use std::ffi::OsString;
 use std::fs::File;
 use std::io::{self, Read, Write};
 use std::os::fd::IntoRawFd;
-use std::os::unix::io::FromRawFd;
+use std::os::unix::io::{AsRawFd, FromRawFd};
 use std::os::unix::net::UnixStream;
 use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
@@ -83,7 +85,7 @@ fn main() {
             // successful render for THIS session (if we have one) instead
             // of a blank "\n". A stale frame for ~1s during daemon
             // restart is much better UX than the statusline blanking.
-            spawn_detached_daemon();
+            obtain_daemon_kick();
             let stale = parsed
                 .session_id
                 .as_deref()
@@ -362,9 +364,79 @@ fn connect_with_timeout(path: &Path, timeout: Duration) -> io::Result<UnixStream
     }
 }
 
-// --- detached daemon spawn ----------------------------------------------
+// --- obtain-daemon primitive --------------------------------------------
+//
+// [LAW:single-enforcer] One entry point on the Rust side for "obtain a
+// daemon." The atomic bind() inside the daemon is the load-bearing exclusion;
+// this flock on spawn.lock is a thundering-herd optimization that prevents N
+// concurrent clients from each forking a Node process when one would do.
+//
+// [LAW:dataflow-not-control-flow] The caller does not get to choose whether
+// to spawn — it asks for a daemon, this function decides. The bind() inside
+// the daemon ensures that even if this function spawns "redundantly" the
+// duplicate daemon exits immediately at bind().
+//
+// Fire-and-forget shape: the current render is already lost (we hit
+// obtain_daemon_kick on a render failure); we just want a daemon to be alive
+// for the next refresh. The lock auto-releases when the client process exits
+// (advisory locks vanish on close). Total work inside this fn is bounded by
+// a few syscalls plus an optional fork+execve.
 
-fn spawn_detached_daemon() {
+fn obtain_daemon_kick() {
+    // Re-check first: a daemon may have come up between our render failure
+    // and now. Cheap probe — if it's listening we have nothing to do.
+    if can_connect(&socket_path(), Duration::from_millis(20)) {
+        return;
+    }
+
+    let lock_file = match try_acquire_spawn_lock() {
+        Some(f) => f,
+        None => {
+            // Another client is already in the spawn window. Trust them to
+            // bring the daemon up; the next render will attach.
+            return;
+        }
+    };
+
+    // We hold the spawn lock. Re-check connect — a daemon may have come up
+    // between our first probe and our lock acquisition.
+    if !can_connect(&socket_path(), Duration::from_millis(20)) {
+        spawn_daemon_detached();
+    }
+
+    // Lock auto-releases when lock_file drops at end of scope (close → flock
+    // LOCK_UN). The daemon inherits no fds from us aside from /dev/null.
+    drop(lock_file);
+}
+
+fn try_acquire_spawn_lock() -> Option<File> {
+    let path = state_dir().join("spawn.lock");
+    // Ensure state_dir exists; mkdir is idempotent.
+    if let Some(parent) = path.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    let f = File::options()
+        .create(true)
+        .read(true)
+        .write(true)
+        .truncate(false)
+        .open(&path)
+        .ok()?;
+    let fd = f.as_raw_fd();
+    // LOCK_EX | LOCK_NB: try-acquire exclusive; do not block.
+    let rc = unsafe { libc::flock(fd, libc::LOCK_EX | libc::LOCK_NB) };
+    if rc == 0 {
+        Some(f)
+    } else {
+        None
+    }
+}
+
+fn can_connect(sock: &Path, timeout: Duration) -> bool {
+    connect_with_timeout(sock, timeout).is_ok()
+}
+
+fn spawn_daemon_detached() {
     let script = match dist_index_path() {
         Some(p) => p,
         None => return,
@@ -387,7 +459,7 @@ fn spawn_detached_daemon() {
 
     let mut cmd = Command::new("node");
     // Cap V8 old-generation at 400 MB so GC fires before RSS hits the 512 MB
-    // hard limit. Mirrors src/daemon/spawn.ts — keep the two in sync.
+    // hard limit. Mirrors src/daemon/acquire.ts — keep the two in sync.
     cmd.arg("--max-old-space-size=400")
         .arg(script.as_os_str())
         .arg("daemon")

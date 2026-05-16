@@ -37,17 +37,13 @@ const renderCache = new RenderCache({
 const REQUEST_TIMEOUT_MS = 200;
 const BIN_CHECK_INTERVAL_MS = 60 * 1000;
 
-// Daemon entry point. Acquires a single-instance mutex, listens on the Unix
-// socket, dispatches one request per connection. Any uncaught error in the
-// process exits non-zero — the next client will respawn a clean instance via
-// spawnDaemonDetached().
+// Daemon entry point. Tries to bind the Unix socket — atomic bind() is the
+// single-instance enforcer (two daemons cannot both bind the same path; the
+// kernel makes duplicate-daemon unrepresentable). Listens for one request per
+// connection. Any uncaught error exits non-zero; the next client obtains a
+// fresh daemon via obtainDaemon() in src/daemon/acquire.ts.
 export function runDaemon(): void {
   fs.mkdirSync(daemonDir(), { recursive: true });
-
-  if (!acquirePidfile()) {
-    // Another daemon is already running; nothing to do.
-    process.exit(0);
-  }
 
   // Catch-alls log + exit so the supervisor (the next client) can restart us.
   // [LAW:no-defensive-null-guards] These are *trust boundaries* — we are
@@ -67,34 +63,92 @@ export function runDaemon(): void {
     });
   }
 
-  // Stale socket file from a crashed prior daemon. Safe to unlink because we
-  // hold the pidfile mutex; no live daemon can be bound to this path.
-  try {
-    fs.unlinkSync(socketPath());
-  } catch {}
-
   const server = net.createServer({ allowHalfOpen: false }, (sock) => {
     handleConnection(sock);
   });
 
-  server.on("error", (err) => {
-    dlog("error", `server error: ${err.message}`);
-    shutdown(1);
-  });
+  // [LAW:single-enforcer] The atomic bind() is the daemon-singleton enforcer.
+  // Two daemons cannot both bind the same Unix socket path; the kernel makes
+  // duplicate-daemon unrepresentable. The pidfile is diagnostic only — never
+  // load-bearing for exclusion.
+  bindOrAttachAndExit(server, socketPath(), /* retried */ false);
+}
 
-  server.listen(socketPath(), () => {
-    try {
-      fs.chmodSync(socketPath(), 0o600);
-    } catch (e) {
-      dlog("warn", `chmod socket failed: ${(e as Error).message}`);
+// [LAW:dataflow-not-control-flow] One operation ("bring this server up or
+// discover an existing one"). The bind result is the data that decides the
+// next step; callers do not get to choose whether to spawn.
+function bindOrAttachAndExit(
+  server: net.Server,
+  sockPath: string,
+  retried: boolean,
+): void {
+  server.removeAllListeners("error");
+  server.once("error", (err) => {
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code !== "EADDRINUSE") {
+      dlog("error", `server error: ${err.message}`);
+      shutdown(1);
+      return;
     }
-    dlog(
-      "info",
-      `daemon up: pid=${process.pid} v=${PROTOCOL_VERSION} sock=${socketPath()}`,
-    );
-    armBinaryWatch();
-    armLimits();
+    if (retried) {
+      // Lost a rebind race with another duplicate. The kernel arbitrated; we
+      // are the loser. Exit cleanly so the winner serves.
+      dlog("info", "lost rebind race; another daemon is alive — exiting");
+      process.exit(0);
+      return;
+    }
+    void handleAddressInUse(server, sockPath);
   });
+  server.listen(sockPath, () => onListening(sockPath));
+}
+
+async function handleAddressInUse(
+  server: net.Server,
+  sockPath: string,
+): Promise<void> {
+  // EADDRINUSE: either a live daemon (we are a duplicate — exit), or a stale
+  // socket file from a crashed prior daemon (unlink + rebind).
+  const alive = await isSocketAlive(sockPath);
+  if (alive) {
+    dlog("info", "another daemon is listening on socket — exiting");
+    process.exit(0);
+  }
+  dlog("warn", "stale socket from crashed daemon — unlinking and rebinding");
+  try {
+    fs.unlinkSync(sockPath);
+  } catch {}
+  bindOrAttachAndExit(server, sockPath, /* retried */ true);
+}
+
+function isSocketAlive(sockPath: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    const sock = net.connect(sockPath);
+    const done = (result: boolean): void => {
+      sock.removeAllListeners();
+      sock.destroy();
+      resolve(result);
+    };
+    sock.once("connect", () => done(true));
+    sock.once("error", () => done(false));
+    // 50ms is generous; localhost AF_UNIX connect is sub-ms when a listener
+    // exists. Anything slower implies "no listener" in practice.
+    setTimeout(() => done(false), 50).unref();
+  });
+}
+
+function onListening(sockPath: string): void {
+  try {
+    fs.chmodSync(sockPath, 0o600);
+  } catch (e) {
+    dlog("warn", `chmod socket failed: ${(e as Error).message}`);
+  }
+  writePidfileDiagnostic();
+  dlog(
+    "info",
+    `daemon up: pid=${process.pid} v=${PROTOCOL_VERSION} sock=${sockPath}`,
+  );
+  armBinaryWatch();
+  armLimits();
 }
 
 // --- binary-mtime self-restart ---
@@ -151,78 +205,35 @@ function armLimits(): void {
   limits.arm();
 }
 
-// --- single-instance mutex ---
+// --- diagnostic pidfile ---
+//
+// [LAW:one-source-of-truth] The pidfile is *diagnostic only*. It records who
+// the running daemon is so `daemon-stats` can report it; it plays no role in
+// exclusion. Exclusion is the atomic bind() in bindOrAttachAndExit().
+//
+// Overwrite-on-write (no EEXIST check). If a stale pidfile exists from a
+// crashed prior daemon, we replace it. The bind() above already proved no
+// other daemon is alive.
 
-let pidfileHeld = false;
-
-function acquirePidfile(): boolean {
-  const target = pidPath();
-  // Try once; on EEXIST, decide whether the holder is alive.
-  for (let attempt = 0; attempt < 2; attempt++) {
-    try {
-      const fd = fs.openSync(target, "wx");
-      const payload = JSON.stringify({
-        pid: process.pid,
-        version: PROTOCOL_VERSION,
-        binPath: process.argv[1],
-        startedAt: new Date().toISOString(),
-      });
-      fs.writeSync(fd, payload);
-      fs.closeSync(fd);
-      pidfileHeld = true;
-      return true;
-    } catch (e) {
-      if ((e as NodeJS.ErrnoException).code !== "EEXIST") throw e;
-    }
-
-    // Pidfile exists. Read it, check if owner is alive.
-    let holderPid: number | null = null;
-    try {
-      const raw = fs.readFileSync(target, "utf8");
-      holderPid = JSON.parse(raw).pid ?? null;
-    } catch {
-      holderPid = null;
-    }
-
-    if (holderPid && isAlive(holderPid)) {
-      dlog(
-        "info",
-        `another daemon already running (pid=${holderPid}); exiting`,
-      );
-      return false;
-    }
-
-    // Stale. Unlink and retry once.
-    dlog(
-      "warn",
-      `stale pidfile (holder pid=${holderPid ?? "?"} not alive); unlinking`,
-    );
-    try {
-      fs.unlinkSync(target);
-    } catch {}
-  }
-  // Two failed attempts — give up rather than loop.
-  dlog("error", "failed to acquire pidfile after retry");
-  return false;
-}
-
-function isAlive(pid: number): boolean {
+function writePidfileDiagnostic(): void {
+  const payload = JSON.stringify({
+    pid: process.pid,
+    version: PROTOCOL_VERSION,
+    binPath: process.argv[1],
+    startedAt: new Date().toISOString(),
+  });
   try {
-    process.kill(pid, 0);
-    return true;
+    fs.writeFileSync(pidPath(), payload, { mode: 0o600 });
   } catch (e) {
-    // ESRCH = no such process; EPERM = exists but owned by another user (rare
-    // in single-user mode, but treat as alive to be safe).
-    return (e as NodeJS.ErrnoException).code === "EPERM";
+    // Diagnostic only — failure does not block the daemon from serving.
+    dlog("warn", `pidfile write failed: ${(e as Error).message}`);
   }
 }
 
-function releasePidfile(): void {
-  if (!pidfileHeld) return;
+function removePidfileDiagnostic(): void {
   try {
     fs.unlinkSync(pidPath());
   } catch {}
-  pidfileHeld = false;
 }
 
 let inFlight = 0;
@@ -251,7 +262,7 @@ function shutdown(code: number): void {
   } catch (e) {
     dlog("warn", `watcherRegistry close failed: ${(e as Error).message}`);
   }
-  releasePidfile();
+  removePidfileDiagnostic();
   closeLog();
   // [LAW:single-enforcer] Exactly one path out of the process. Backstop with
   // SIGKILL because we previously observed shut-down daemons staying alive in
