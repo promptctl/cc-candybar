@@ -2,7 +2,6 @@ import fs from "node:fs";
 import path from "node:path";
 import { launch } from "../proc/launch";
 import { debug } from "../utils/logger";
-import { withGitCache, GIT_CACHE_TTL_MS } from "../utils/git-cache";
 
 export interface GitInfo {
   branch: string;
@@ -72,6 +71,10 @@ export class GitService {
     }
   }
 
+  // [LAW:one-source-of-truth] No inner cache here. The daemon-side
+  // GitDataProvider (src/daemon/cache/git.ts) is the single cache. Layering
+  // a per-process cache on top of an already-cached call would double the
+  // invalidation surface — exactly the trap that kz8.3 collapses.
   async getGitInfo(
     workingDir: string,
     options: {
@@ -86,10 +89,7 @@ export class GitService {
     } = {},
     projectDir?: string,
   ): Promise<GitInfo | null> {
-    const cacheKey = `${workingDir}|${projectDir ?? ""}|${JSON.stringify(options)}`;
-    return withGitCache(cacheKey, GIT_CACHE_TTL_MS, () =>
-      this.computeGitInfo(workingDir, options, projectDir),
-    );
+    return this.computeGitInfo(workingDir, options, projectDir);
   }
 
   private async computeGitInfo(

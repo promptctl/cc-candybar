@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { execSync } from "node:child_process";
 import { WatcherRegistry } from "../src/daemon/cache/watchers";
-import { CachedGitService } from "../src/daemon/cache/git";
+import { GitDataProvider } from "../src/daemon/cache/git";
 import { GitService, type GitInfo } from "../src/segments/git";
 
 function makeRepo(): string {
@@ -90,11 +90,11 @@ class StubInner extends GitService {
   }
 }
 
-describe("CachedGitService + watchers integration", () => {
+describe("GitDataProvider + watchers integration", () => {
   test("HEAD change invalidates the cache entry", async () => {
     const repo = makeRepo();
     const inner = new StubInner(repo);
-    const svc = new CachedGitService({ inner, sanityIntervalMs: 0 });
+    const svc = new GitDataProvider({ inner, sanityIntervalMs: 0 });
 
     await svc.getGitInfo(repo, {});
     await svc.getGitInfo(repo, {});
@@ -115,7 +115,7 @@ describe("CachedGitService + watchers integration", () => {
   test("sanity check catches missed events via mtime mismatch", async () => {
     const repo = makeRepo();
     const inner = new StubInner(repo);
-    const svc = new CachedGitService({ inner, sanityIntervalMs: 0 });
+    const svc = new GitDataProvider({ inner, sanityIntervalMs: 0 });
 
     await svc.getGitInfo(repo, {});
     expect(svc.getStats().size).toBe(1);
@@ -138,7 +138,7 @@ describe("CachedGitService + watchers integration", () => {
   test("close releases all watchers", async () => {
     const repo = makeRepo();
     const inner = new StubInner(repo);
-    const svc = new CachedGitService({ inner, sanityIntervalMs: 0 });
+    const svc = new GitDataProvider({ inner, sanityIntervalMs: 0 });
     await svc.getGitInfo(repo, {});
     expect(svc.getStats().watchers).toBe(1);
     svc.close();

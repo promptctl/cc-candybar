@@ -11,7 +11,6 @@
 import { launch } from "../proc/launch";
 import { readFile as fsReadFile } from "fs/promises";
 import { watch as fsWatch, type FSWatcher } from "fs";
-import { join as pathJoin } from "path";
 import { setInterval, clearInterval } from "timers";
 import { reaction, type IReactionDisposer } from "mobx";
 import type { RichText } from "@promptctl/rich-js";
@@ -26,6 +25,8 @@ import {
 import type { VariableStore } from "./store.js";
 import { createCcCandybarEngine } from "../template-engine/engine.js";
 import { buildScope } from "../template-engine/scope.js";
+import { GitDataProvider } from "../daemon/cache/git.js";
+import type { GitInfo } from "../segments/git.js";
 
 // ─── CachePolicy ─────────────────────────────────────────────────────────────
 
@@ -272,147 +273,48 @@ const GIT_FIELD_TYPE: Readonly<Record<GitField, VarType>> = {
   stash: "number",
 };
 
-// Typed snapshot of all six git fields — always fully populated.
-interface GitSnapshot {
-  readonly branch: string;
-  readonly sha: string;
-  readonly dirty: boolean;
-  readonly ahead: number;
-  readonly behind: number;
-  readonly stash: number;
-}
+// [LAW:one-source-of-truth] Git data flows through GitDataProvider. The
+// projection below is the only mapping from GitInfo (segments' shape) to
+// var-system's six-field model. Pre-kz8.3 var-system maintained its own
+// parallel fleet (execGit + fetchGitSnapshot + GitPoller + WatchManager
+// subscriptions); the provider now owns the cache, the watcher, and the
+// single launch category "git".
 
-// Invoke git with the given args in cwd.  Mirrors execShell but targets git
-// directly (no /bin/sh) and sets GIT_OPTIONAL_LOCKS to avoid lock contention.
-// [LAW:no-defensive-null-guards] Errors surface as exitCode ≠ 0; the caller
-// owns the fallback chain.
-async function execGit(
-  args: string[],
-  cwd: string,
-): Promise<{ stdout: string; exitCode: number }> {
-  const r = await launch({
-    bin: "git",
-    args,
-    cwd,
-    env: { ...process.env, GIT_OPTIONAL_LOCKS: "0" },
-    category: "var-system.git",
-  });
-  if (r.ok) return { stdout: r.stdout, exitCode: r.exitCode ?? 0 };
-  return { stdout: r.stdout, exitCode: r.exitCode ?? 1 };
-}
-
-// Fetch all six git fields for cwd in one batched set of parallel git calls.
-// Returns null when cwd is not inside a git repository.
-async function fetchGitSnapshot(cwd: string): Promise<GitSnapshot | null> {
-  const [statusR, shaR, aheadR, behindR, stashR] = await Promise.all([
-    execGit(["status", "--porcelain=v1", "-b"], cwd),
-    execGit(["rev-parse", "--short=7", "HEAD"], cwd),
-    execGit(["rev-list", "--count", "@{u}..HEAD"], cwd),
-    execGit(["rev-list", "--count", "HEAD..@{u}"], cwd),
-    execGit(["stash", "list"], cwd),
-  ]);
-
-  // Non-zero on `git status` means not a git repo or a fatal git error.
-  if (statusR.exitCode !== 0) return null;
-
-  const lines = statusR.stdout.split("\n");
-  const branchLine = lines.find((l) => l.startsWith("## ")) ?? "";
-  const branchRaw = branchLine.slice(3).split("...")[0] ?? "";
-  // Detached HEAD: git emits "## HEAD (no branch)" — normalise to empty string.
-  const branch = branchRaw.startsWith("HEAD (no branch)")
-    ? ""
-    : branchRaw.trim();
-
-  // Any non-header, non-empty line = working tree has changes.
-  const dirty = lines.some(
-    (l) => l.length > 0 && !l.startsWith("## ") && !l.startsWith("# "),
-  );
-
-  const sha = shaR.exitCode === 0 ? shaR.stdout.trim() : "";
-  const ahead = aheadR.exitCode === 0 ? parseInt(aheadR.stdout.trim()) || 0 : 0;
-  const behind =
-    behindR.exitCode === 0 ? parseInt(behindR.stdout.trim()) || 0 : 0;
-  const stashText = stashR.exitCode === 0 ? stashR.stdout.trim() : "";
-  const stash = stashText ? stashText.split("\n").length : 0;
-
-  return { branch, sha, dirty, ahead, behind, stash };
-}
-
-// [LAW:single-enforcer] One GitPoller per (SourceRegistry, cwd).  All git
-// boxes for the same directory share one atomic fetch — no duplicate git
-// invocations.  Watches .git/HEAD (branch/sha signal) and .git/index
-// (dirty/ahead/behind/stash signal); any change triggers a full re-fetch so
-// all fields stay mutually consistent.
-class GitPoller {
-  private readonly subscribers = new Map<
-    GitField,
-    Array<{ name: string; varDefault: VarValue | undefined }>
-  >();
-  private inFlight = false;
-
-  constructor(
-    private readonly cwd: string,
-    private readonly store: VariableStore,
-    private readonly defaultEmptyValue: VarValue,
-    watchMgr: WatchManager,
-    cleanups: Array<() => void>,
-  ) {
-    const refresh = (): void => void this.fetch();
-    cleanups.push(watchMgr.subscribe(pathJoin(cwd, ".git", "HEAD"), refresh));
-    cleanups.push(watchMgr.subscribe(pathJoin(cwd, ".git", "index"), refresh));
-    refresh(); // initial fetch
-  }
-
-  addSubscriber(
-    field: GitField,
-    name: string,
-    varDefault: VarValue | undefined,
-  ): void {
-    let list = this.subscribers.get(field);
-    if (!list) {
-      list = [];
-      this.subscribers.set(field, list);
-    }
-    list.push({ name, varDefault });
-  }
-
-  private async fetch(): Promise<void> {
-    if (this.inFlight) return;
-    this.inFlight = true;
-    try {
-      const snapshot = await fetchGitSnapshot(this.cwd);
-      // [LAW:dataflow-not-control-flow] All boxes update in one action —
-      // the snapshot value decides each box's content, not whether code runs.
-      this.store.runInAction(() => {
-        for (const [field, subs] of this.subscribers) {
-          for (const { name, varDefault } of subs) {
-            this.store.setBox(
-              name,
-              this.resolveValue(snapshot, field, varDefault),
-            );
-          }
-        }
-      });
-    } finally {
-      this.inFlight = false;
-    }
-  }
-
-  // Fallback chain mirrors applyFallback: snapshot → varDefault →
-  // coerce(defaultEmptyValue) → typed zero.
-  private resolveValue(
-    snapshot: GitSnapshot | null,
-    field: GitField,
-    varDefault: VarValue | undefined,
-  ): VarValue {
-    if (snapshot !== null) return snapshot[field] as VarValue;
+// Project a GitInfo snapshot down to a single var-system GitField value.
+// Returns the typed fallback when info is null (not a repo or unresolved).
+function projectGitField(
+  info: GitInfo | null,
+  field: GitField,
+  varDefault: VarValue | undefined,
+  defaultEmptyValue: VarValue,
+): VarValue {
+  if (info === null) {
     if (varDefault !== undefined) return varDefault;
     const type = GIT_FIELD_TYPE[field];
     try {
-      return coerceToType(this.defaultEmptyValue, type);
+      return coerceToType(defaultEmptyValue, type);
     } catch {
       return zeroValue(type);
     }
+  }
+  switch (field) {
+    case "branch":
+      // GitService emits the literal "detached" when HEAD is not on a
+      // branch; var-system's prior contract was empty string in that case.
+      // (Caveat: a branch literally named "detached" would also map to "" —
+      // preserving the pre-kz8.3 behavior, which had the same ambiguity in
+      // a different shape.)
+      return info.branch === "detached" ? "" : info.branch;
+    case "sha":
+      return info.sha ?? "";
+    case "dirty":
+      return info.status !== "clean";
+    case "ahead":
+      return info.ahead;
+    case "behind":
+      return info.behind;
+    case "stash":
+      return info.stashCount ?? 0;
   }
 }
 
@@ -576,9 +478,20 @@ export class SourceRegistry {
   // Infrastructure for shell/file/git source kinds:
   private readonly watchMgr = new WatchManager();
   private readonly ttlMgr = new TtlBucketManager();
-  // [LAW:single-enforcer] One GitPoller per cwd — shared across all git
-  // variables that target the same working directory.
-  private readonly gitPollers = new Map<string, GitPoller>();
+  // [LAW:single-enforcer] One subscription per cwd — every git variable
+  // pointing at the same working directory shares one GitDataProvider
+  // subscription, and the provider in turn shares one watcher + one cache
+  // entry across N subscribers in the same repo.
+  private readonly gitSubscriptions = new Map<
+    string,
+    {
+      fieldSubs: Map<
+        GitField,
+        Array<{ name: string; varDefault: VarValue | undefined }>
+      >;
+      unsubscribe: () => void;
+    }
+  >();
   // Collects all cleanup callbacks (TTL unsubscribes, watch unsubscribes,
   // MobX reaction disposers) so dispose() tears everything down in one call.
   private readonly cleanups: Array<() => void> = [];
@@ -589,12 +502,28 @@ export class SourceRegistry {
   // [LAW:one-source-of-truth] One engine per registry, not one per variable.
   private readonly engine = createCcCandybarEngine();
 
+  private readonly gitProvider: GitDataProvider;
+  private readonly ownsGitProvider: boolean;
+
   // defaultEmptyValue is the global fallback of last resort — the config-level
   // `default_empty_value` from the proposal. Defaults to empty string.
+  //
+  // gitProvider lets the daemon inject its shared instance; when omitted (e.g.
+  // in tests, or pre-daemon-wired runtimes), a private one is constructed so
+  // the registry remains self-contained.
   constructor(
     private readonly store: VariableStore,
     private readonly defaultEmptyValue: VarValue = "",
-  ) {}
+    gitProvider?: GitDataProvider,
+  ) {
+    if (gitProvider) {
+      this.gitProvider = gitProvider;
+      this.ownsGitProvider = false;
+    } else {
+      this.gitProvider = new GitDataProvider({ sanityIntervalMs: 0 });
+      this.ownsGitProvider = true;
+    }
+  }
 
   // ─── Synchronous source kinds ─────────────────────────────────────────────
 
@@ -735,11 +664,13 @@ export class SourceRegistry {
     this.cleanups.push(unsub);
   }
 
-  // git: first-class git fields backed by a shared GitPoller per cwd.
-  // All git boxes for the same cwd share one set of git invocations, updated
-  // atomically so all fields stay mutually consistent.
+  // git: first-class git fields delivered by the shared GitDataProvider.
+  // All git boxes for the same cwd ride one provider subscription; the
+  // provider in turn collapses N subscribers in the same repo onto one
+  // watcher + one cache entry.
   // [LAW:dataflow-not-control-flow] Box always holds a valid typed value;
-  // the watchers (.git/HEAD, .git/index) drive when it is refreshed.
+  // the provider's watcher (.git/HEAD, .git/index, .git/refs/heads) drives
+  // when the snapshot is refreshed.
   declareGit(name: string, opts: GitOptions): void {
     const type = GIT_FIELD_TYPE[opts.field];
     // Initialize to fallback; the async fetch will populate the real value.
@@ -747,18 +678,41 @@ export class SourceRegistry {
       opts.varDefault !== undefined ? opts.varDefault : zeroValue(type);
     this.store.defineBox(name, type, initial);
 
-    let poller = this.gitPollers.get(opts.cwd);
-    if (!poller) {
-      poller = new GitPoller(
-        opts.cwd,
-        this.store,
-        this.defaultEmptyValue,
-        this.watchMgr,
-        this.cleanups,
-      );
-      this.gitPollers.set(opts.cwd, poller);
+    let sub = this.gitSubscriptions.get(opts.cwd);
+    if (!sub) {
+      const fieldSubs = new Map<
+        GitField,
+        Array<{ name: string; varDefault: VarValue | undefined }>
+      >();
+      const unsubscribe = this.gitProvider.subscribe(opts.cwd, (info) => {
+        // [LAW:dataflow-not-control-flow] One runInAction per delivery; the
+        // snapshot value decides each box's content, not whether code runs.
+        this.store.runInAction(() => {
+          for (const [field, subs] of fieldSubs) {
+            for (const { name: subName, varDefault } of subs) {
+              this.store.setBox(
+                subName,
+                projectGitField(
+                  info,
+                  field,
+                  varDefault,
+                  this.defaultEmptyValue,
+                ),
+              );
+            }
+          }
+        });
+      });
+      sub = { fieldSubs, unsubscribe };
+      this.gitSubscriptions.set(opts.cwd, sub);
     }
-    poller.addSubscriber(opts.field, name, opts.varDefault);
+
+    let fieldList = sub.fieldSubs.get(opts.field);
+    if (!fieldList) {
+      fieldList = [];
+      sub.fieldSubs.set(opts.field, fieldList);
+    }
+    fieldList.push({ name, varDefault: opts.varDefault });
   }
 
   // ─── Render-cycle driver ──────────────────────────────────────────────────
@@ -806,14 +760,17 @@ export class SourceRegistry {
 
   // ─── Lifecycle ────────────────────────────────────────────────────────────
 
-  // Tear down all TTL timers, fs watchers, and MobX reactions registered by
-  // async source kinds.  Call when the registry is no longer needed (e.g. on
-  // daemon shutdown or config hot-reload).
+  // Tear down all TTL timers, fs watchers, MobX reactions, and git
+  // subscriptions registered by async source kinds.  Call when the registry
+  // is no longer needed (e.g. on daemon shutdown or config hot-reload).
   dispose(): void {
     for (const cleanup of this.cleanups) cleanup();
     this.cleanups.length = 0;
+    for (const sub of this.gitSubscriptions.values()) sub.unsubscribe();
+    this.gitSubscriptions.clear();
     this.watchMgr.dispose();
     this.ttlMgr.dispose();
+    if (this.ownsGitProvider) this.gitProvider.close();
   }
 
   // ─── Private helpers ──────────────────────────────────────────────────────
