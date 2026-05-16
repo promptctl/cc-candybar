@@ -3,7 +3,13 @@ import { GitService, type GitInfo } from "../src/segments/git";
 
 class StubGitService extends GitService {
   public computeCalls: Array<{ workingDir: string; projectDir?: string }> = [];
+  public resolveCalls: Array<{ workingDir: string; projectDir?: string }> = [];
   public repoRootByDir: Record<string, string | null> = {};
+  // Per-(workingDir, projectDir) override for resolveEffectiveGitDir. The
+  // default behavior (when a key is absent) falls back to repoRootByDir.
+  // Tests that exercise projectDir-driven cache-key behavior populate this
+  // map directly.
+  public effectiveDirByKey: Record<string, string | null> = {};
   public stubInfo: GitInfo = {
     branch: "main",
     status: "clean",
@@ -12,6 +18,18 @@ class StubGitService extends GitService {
   };
 
   override async findGitRoot(workingDir: string): Promise<string | null> {
+    return this.repoRootByDir[workingDir] ?? null;
+  }
+
+  override async resolveEffectiveGitDir(
+    workingDir: string,
+    projectDir?: string,
+  ): Promise<string | null> {
+    this.resolveCalls.push({ workingDir, projectDir });
+    const key = projectDir ? `${workingDir}|${projectDir}` : workingDir;
+    if (key in this.effectiveDirByKey) {
+      return this.effectiveDirByKey[key] ?? null;
+    }
     return this.repoRootByDir[workingDir] ?? null;
   }
 
@@ -43,7 +61,14 @@ afterEach(() => {
 describe("GitDataProvider", () => {
   test("two cwds in same repo share one cache entry", async () => {
     const { svc, inner } = makeCache();
-    inner.repoRootByDir = { "/repo/a": "/repo", "/repo/b": "/repo" };
+    // After kz8.3 review fix, provider's inner.getGitInfo is invoked with the
+    // resolved repoRoot (not the cwd) so the inner doesn't re-walk findGitRoot.
+    // The stub's lookups expect to see the resolved key.
+    inner.repoRootByDir = {
+      "/repo/a": "/repo",
+      "/repo/b": "/repo",
+      "/repo": "/repo",
+    };
 
     await svc.getGitInfo("/repo/a", { showSha: false });
     await svc.getGitInfo("/repo/b", { showSha: false });
@@ -115,6 +140,50 @@ describe("GitDataProvider", () => {
     const r1 = await svc.getGitInfo("/nowhere", {});
     expect(r1).toBeNull();
     expect(svc.getStats().size).toBe(0);
+  });
+
+  test("projectDir override keys cache on effective gitDir, not workingDir", async () => {
+    // workingDir=/cwd is in repoA, but a projectDir=/repoB override makes the
+    // effective gitDir /repoB. The cache key must follow the effective gitDir
+    // so repo B's data doesn't get cached under repo A's key (the pre-fix bug
+    // Copilot flagged on the second-pass review of kz8.3).
+    const { svc, inner } = makeCache();
+    inner.repoRootByDir = {
+      "/cwd": "/repoA",
+      "/repoA": "/repoA",
+      "/repoB": "/repoB",
+    };
+    inner.effectiveDirByKey = {
+      "/cwd|/repoB": "/repoB", // with projectDir, gitDir becomes /repoB
+      "/cwd": "/repoA", // without, gitDir is /repoA
+    };
+
+    await svc.getGitInfo("/cwd", {}, "/repoB");
+    await svc.getGitInfo("/cwd", {});
+
+    // Two distinct effective gitDirs → two cache entries, no contamination.
+    expect(svc.getStats().size).toBe(2);
+    // Inner shell-outs land on the resolved gitDirs, not the cwd.
+    const dirs = inner.computeCalls.map((c) => c.workingDir).sort();
+    expect(dirs).toEqual(["/repoA", "/repoB"]);
+  });
+
+  test("two cwds with same projectDir share one cache entry", async () => {
+    const { svc, inner } = makeCache();
+    inner.repoRootByDir = {
+      "/cwd-x": "/repoA",
+      "/cwd-y": "/repoA",
+      "/repoA": "/repoA",
+    };
+    inner.effectiveDirByKey = {
+      "/cwd-x|/repoA": "/repoA",
+      "/cwd-y|/repoA": "/repoA",
+    };
+
+    await svc.getGitInfo("/cwd-x", {}, "/repoA");
+    await svc.getGitInfo("/cwd-y", {}, "/repoA");
+
+    expect(svc.getStats()).toMatchObject({ size: 1, hits: 1, misses: 1 });
   });
 });
 
@@ -247,6 +316,26 @@ describe("GitDataProvider.subscribe", () => {
     await tick();
 
     expect(calls).toHaveLength(1); // no post-unsubscribe delivery
+  });
+
+  test("refresh path does not re-resolve repoRoot on invalidation", async () => {
+    const { svc, inner } = makeCache();
+    inner.repoRootByDir = { "/repo": "/repo" };
+
+    const unsub = svc.subscribe("/repo", () => {});
+    await tick();
+    // Subscribe resolves once.
+    expect(inner.resolveCalls.length).toBe(1);
+
+    // Invalidate a few times; the refresh loop should reuse the stored
+    // repoRoot — not call resolveEffectiveGitDir again per iteration.
+    svc.invalidateRepo("/repo");
+    svc.invalidateRepo("/repo");
+    await tick(10);
+
+    // Still 1 — refreshes used the stored repoRoot.
+    expect(inner.resolveCalls.length).toBe(1);
+    unsub();
   });
 
   test("rapid invalidations coalesce into at most two refreshes", async () => {

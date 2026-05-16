@@ -56,6 +56,25 @@ export class GitService {
     return { stdout: result.stdout };
   }
 
+  // [LAW:locality-or-seam] Public so the daemon's GitDataProvider can key its
+  // cache + watcher on the *effective* git directory — the same directory the
+  // shell-runner will run git commands in. Caching on `findGitRoot(workingDir)`
+  // alone is wrong when `projectDir` is set and is itself a git repo: the
+  // shell-runner picks `projectDir` (see `computeGitInfo`'s gitDir resolution
+  // below), but a workingDir-keyed cache would store that data under a
+  // different key and wire invalidation to the wrong watcher. The contract:
+  // `resolveEffectiveGitDir(workingDir, projectDir)` returns exactly the
+  // directory `computeGitInfo` will use as `gitDir`. Both surfaces must agree.
+  async resolveEffectiveGitDir(
+    workingDir: string,
+    projectDir?: string,
+  ): Promise<string | null> {
+    if (this.isWorktree(workingDir)) return workingDir;
+    if (projectDir && this.isGitRepo(projectDir)) return projectDir;
+    if (this.isGitRepo(workingDir)) return workingDir;
+    return this.findGitRoot(workingDir);
+  }
+
   // [LAW:locality-or-seam] public so daemon-side caches can key on the
   // repoRoot they'd otherwise have to re-derive.
   async findGitRoot(workingDir: string): Promise<string | null> {
