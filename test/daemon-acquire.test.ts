@@ -153,6 +153,26 @@ describe("obtainDaemon (bind-based singleton)", () => {
     });
   });
 
+  test("returns failed (not throws) when spawn fn throws synchronously", async () => {
+    await withTempState(async () => {
+      jest.resetModules();
+      const { obtainDaemon } = await import("../src/daemon/acquire");
+
+      const result = await obtainDaemon({
+        spawn: () => {
+          throw new Error("simulated ENOENT for node binary");
+        },
+        totalTimeoutMs: 500,
+        spawnReadyTimeoutMs: 100,
+      });
+      expect(result.kind).toBe("failed");
+      if (result.kind === "failed") {
+        expect(result.reason).toMatch(/spawn threw/);
+        expect(result.reason).toMatch(/ENOENT/);
+      }
+    });
+  });
+
   test("returns failed when spawn fn returns false", async () => {
     await withTempState(async () => {
       jest.resetModules();

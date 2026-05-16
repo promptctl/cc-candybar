@@ -79,7 +79,20 @@ export async function obtainDaemon(
         if (await canConnect(socketPath(), settings.connectTimeoutMs)) {
           return { kind: "attached" };
         }
-        if (!spawnFn()) {
+        // [LAW:no-defensive-null-guards] obtainDaemon is typed
+        // Promise<ObtainResult>. A synchronous throw from child_process.spawn
+        // (ENOENT, invalid options) must become a typed failure, not a
+        // rejected promise that violates the non-throwing contract.
+        let didSpawn = false;
+        try {
+          didSpawn = spawnFn();
+        } catch (e) {
+          return {
+            kind: "failed",
+            reason: `spawn threw: ${(e as Error).message}`,
+          };
+        }
+        if (!didSpawn) {
           return { kind: "failed", reason: "spawn returned false" };
         }
         // Poll for the new daemon to bind.
