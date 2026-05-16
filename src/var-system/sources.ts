@@ -8,7 +8,7 @@
 // - SourceRegistry: source-kind semantics (path resolution, fallback chain,
 //   last_error tracking)
 
-import { spawn } from "child_process";
+import { launch } from "../proc/launch";
 import { readFile as fsReadFile } from "fs/promises";
 import { watch as fsWatch, type FSWatcher } from "fs";
 import { join as pathJoin } from "path";
@@ -112,17 +112,13 @@ export interface GitOptions {
 async function execShell(
   command: string,
 ): Promise<{ stdout: string; exitCode: number }> {
-  return new Promise((resolve) => {
-    const child = spawn("/bin/sh", ["-c", command], {
-      stdio: ["ignore", "pipe", "pipe"],
-    });
-    let out = "";
-    child.stdout.on("data", (buf: Buffer) => {
-      out += buf.toString("utf8");
-    });
-    child.on("close", (code) => resolve({ stdout: out, exitCode: code ?? 1 }));
-    child.on("error", () => resolve({ stdout: "", exitCode: 1 }));
+  const r = await launch({
+    bin: "/bin/sh",
+    args: ["-c", command],
+    category: "user-shell",
   });
+  if (r.ok) return { stdout: r.stdout, exitCode: r.exitCode ?? 0 };
+  return { stdout: r.stdout, exitCode: r.exitCode ?? 1 };
 }
 
 interface FileResult {
@@ -294,19 +290,15 @@ async function execGit(
   args: string[],
   cwd: string,
 ): Promise<{ stdout: string; exitCode: number }> {
-  return new Promise((resolve) => {
-    const child = spawn("git", args, {
-      stdio: ["ignore", "pipe", "pipe"],
-      cwd,
-      env: { ...process.env, GIT_OPTIONAL_LOCKS: "0" },
-    });
-    let out = "";
-    child.stdout.on("data", (buf: Buffer) => {
-      out += buf.toString("utf8");
-    });
-    child.on("close", (code) => resolve({ stdout: out, exitCode: code ?? 1 }));
-    child.on("error", () => resolve({ stdout: "", exitCode: 1 }));
+  const r = await launch({
+    bin: "git",
+    args,
+    cwd,
+    env: { ...process.env, GIT_OPTIONAL_LOCKS: "0" },
+    category: "var-system.git",
   });
+  if (r.ok) return { stdout: r.stdout, exitCode: r.exitCode ?? 0 };
+  return { stdout: r.stdout, exitCode: r.exitCode ?? 1 };
 }
 
 // Fetch all six git fields for cwd in one batched set of parallel git calls.

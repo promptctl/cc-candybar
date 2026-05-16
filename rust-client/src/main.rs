@@ -21,6 +21,8 @@
 // thundering-herd optimization that prevents N clients from each forking a
 // Node process when one suffices. Mirrors src/daemon/acquire.ts.
 
+mod launch;
+
 use std::env;
 use std::ffi::OsString;
 use std::fs::File;
@@ -28,9 +30,7 @@ use std::io::{self, Read, Write};
 use std::os::fd::IntoRawFd;
 use std::os::unix::io::FromRawFd;
 use std::os::unix::net::UnixStream;
-use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
 use std::sync::mpsc;
 use std::thread;
 use std::time::{Duration, Instant};
@@ -154,13 +154,9 @@ fn exec_node_fallback(argv: &[String]) {
             std::process::exit(1);
         }
     };
-    let mut cmd = Command::new("node");
-    cmd.arg(script.as_os_str());
-    for a in argv.iter().skip(1) {
-        cmd.arg(a);
-    }
-    // execvp — replaces this process. Returns only on error.
-    let err = cmd.exec();
+    // [LAW:single-enforcer] All Command::new goes through launch.rs.
+    let argv_tail: Vec<String> = argv.iter().skip(1).cloned().collect();
+    let err = launch::exec_node_replace(&script, &argv_tail);
     eprintln!("cc-candybar: exec node failed: {err}");
 }
 
@@ -500,40 +496,6 @@ fn spawn_daemon_detached() {
         Some(p) => p,
         None => return,
     };
-    let dev_null = match File::options().read(true).write(true).open("/dev/null") {
-        Ok(f) => f,
-        Err(_) => return,
-    };
-    // Three independent fds (stdin/stdout/stderr) so closing one in the
-    // child doesn't take the others down.
-    let stdin_fd = match dev_null.try_clone() {
-        Ok(f) => Stdio::from(f),
-        Err(_) => return,
-    };
-    let stdout_fd = match dev_null.try_clone() {
-        Ok(f) => Stdio::from(f),
-        Err(_) => return,
-    };
-    let stderr_fd = Stdio::from(dev_null);
-
-    let mut cmd = Command::new("node");
-    // Cap V8 old-generation at 400 MB so GC fires before RSS hits the 512 MB
-    // hard limit. Mirrors src/daemon/acquire.ts — keep the two in sync.
-    cmd.arg("--max-old-space-size=400")
-        .arg(script.as_os_str())
-        .arg("daemon")
-        .stdin(stdin_fd)
-        .stdout(stdout_fd)
-        .stderr(stderr_fd);
-    unsafe {
-        cmd.pre_exec(|| {
-            // New session — detach from this process group so the daemon
-            // outlives us and isn't reaped when statusline shells exit.
-            if libc::setsid() == -1 {
-                return Err(io::Error::last_os_error());
-            }
-            Ok(())
-        });
-    }
-    let _ = cmd.spawn(); // do not wait; child runs detached
+    // [LAW:single-enforcer] All Command::new goes through launch.rs.
+    let _ = launch::spawn_node_detached_daemon(&script);
 }

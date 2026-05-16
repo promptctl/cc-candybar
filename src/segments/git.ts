@@ -1,11 +1,8 @@
-import { exec } from "node:child_process";
-import { promisify } from "node:util";
 import fs from "node:fs";
 import path from "node:path";
+import { launch } from "../proc/launch";
 import { debug } from "../utils/logger";
 import { withGitCache, GIT_CACHE_TTL_MS } from "../utils/git-cache";
-
-const execAsync = promisify(exec);
 
 export interface GitInfo {
   branch: string;
@@ -35,14 +32,37 @@ export class GitService {
     }
   }
 
+  // Run a git command via the launch primitive. All call sites pass simple
+  // space-separated arguments (no shell metacharacters), so split-on-whitespace
+  // is sufficient. Returns the same `{ stdout }` shape as the previous
+  // exec wrapper; throws on non-ok results so callers' existing try/catch
+  // logic continues to work unchanged.
   private async execGitAsync(
     command: string,
     options: { cwd: string; encoding: BufferEncoding; timeout: number },
   ): Promise<{ stdout: string }> {
-    return execAsync(command, {
-      ...options,
+    const parts = command.split(/\s+/);
+    const bin = parts[0];
+    if (!bin || bin !== "git") {
+      throw new Error(
+        `execGitAsync expects "git ..." command, got: ${command}`,
+      );
+    }
+    const args = parts.slice(1);
+    const result = await launch({
+      bin,
+      args,
+      cwd: options.cwd,
       env: { ...process.env, GIT_OPTIONAL_LOCKS: "0" },
+      timeoutMs: options.timeout,
+      category: "git",
     });
+    if (!result.ok) {
+      throw new Error(
+        `git ${args.join(" ")} failed (${result.reason}, exit ${result.exitCode ?? "null"})`,
+      );
+    }
+    return { stdout: result.stdout };
   }
 
   // [LAW:locality-or-seam] public so daemon-side caches can key on the

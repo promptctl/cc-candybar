@@ -131,6 +131,25 @@ export function formatStats(s: StatsSnapshot): string {
   lines.push(`  opened        ${s.watchers.opened}`);
   lines.push(`  closed        ${s.watchers.closed}`);
   lines.push(`  evicted       ${s.watchers.evicted}`);
+  lines.push(``);
+  lines.push(`subprocesses`);
+  lines.push(`  total         ${s.subprocesses.total}`);
+  lines.push(`  inFlight      ${s.subprocesses.inFlight}`);
+  lines.push(`  lastMinute    ${s.subprocesses.lastMinute}`);
+  // Only show categories that have non-zero counts — the closed enum has
+  // many entries that may stay 0 for the life of the daemon.
+  const activeCats = Object.entries(s.subprocesses.byCategory).filter(
+    ([, n]) => n > 0,
+  );
+  for (const [cat, n] of activeCats) {
+    const p50 = s.subprocesses.p50DurationMs[cat];
+    const p99 = s.subprocesses.p99DurationMs[cat];
+    const timing =
+      p50 !== undefined && p99 !== undefined
+        ? `  (p50 ${p50}ms · p99 ${p99}ms)`
+        : "";
+    lines.push(`  ${cat.padEnd(13)} ${n}${timing}`);
+  }
   if (s.nextRestartReason) {
     lines.push(``);
     lines.push(`nextRestart    ${s.nextRestartReason}`);
