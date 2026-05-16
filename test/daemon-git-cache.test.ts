@@ -168,6 +168,25 @@ describe("GitDataProvider", () => {
     expect(dirs).toEqual(["/repoA", "/repoB"]);
   });
 
+  test("concurrent cache misses on same key coalesce into one fetch", async () => {
+    // Two parallel callers requesting the same key — without in-flight
+    // coalescing, both observe "no entry yet" and both shell out, doubling
+    // the work the cache exists to eliminate (the race Copilot flagged on
+    // PR #8 review pass 3).
+    const { svc, inner } = makeCache();
+    inner.repoRootByDir = { "/repo": "/repo" };
+
+    const [r1, r2] = await Promise.all([
+      svc.getGitInfo("/repo", {}),
+      svc.getGitInfo("/repo", {}),
+    ]);
+
+    expect(r1).toMatchObject({ branch: "main" });
+    expect(r2).toBe(r1); // same object → same fetch
+    expect(inner.computeCalls).toHaveLength(1);
+    expect(svc.getStats()).toMatchObject({ size: 1, hits: 0, misses: 1 });
+  });
+
   test("two cwds with same projectDir share one cache entry", async () => {
     const { svc, inner } = makeCache();
     inner.repoRootByDir = {
@@ -187,12 +206,12 @@ describe("GitDataProvider", () => {
   });
 });
 
-// Microtask drain helper — subscribe()'s initial delivery happens on a
-// microtask chain after findGitRoot + getGitInfo settle.
-async function tick(times = 4): Promise<void> {
-  for (let i = 0; i < times; i++) {
-    await Promise.resolve();
-  }
+// Drain helper — subscribe()'s initial delivery happens after a chain of
+// awaits (gitDir resolution, fetch, in-flight tracker .finally) whose depth
+// is implementation-detail. `setImmediate` yields the event loop past every
+// queued microtask, so a single tick suffices regardless of chain length.
+async function tick(_times = 1): Promise<void> {
+  await new Promise<void>((r) => setImmediate(r));
 }
 
 describe("GitDataProvider.subscribe", () => {
