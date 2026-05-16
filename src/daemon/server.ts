@@ -482,7 +482,9 @@ async function handleRequest(req: Request): Promise<Response> {
       // body = renderer ? render(it) : "" ; output = body + (error ? icon : "")
       // No special-case branches — same composition every render.
       const body = entry.renderer
-        ? await entry.renderer.generateStatusline(req.hookData)
+        ? await entry.renderer.generateStatusline(req.hookData, {
+            termCols: req.termCols,
+          })
         : "";
       const output = composeWithError(body, entry.lastError);
       const ms = Date.now() - t0;
