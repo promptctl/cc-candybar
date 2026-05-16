@@ -95,6 +95,15 @@ function watcherTargets(repoRoot: string) {
 export class GitDataProvider extends GitService {
   private readonly entries = new Map<string, GitCacheEntry>();
   private readonly subscribersByRepo = new Map<string, RepoSubscribers>();
+  // [LAW:single-enforcer] Coalesce overlapping refreshes for the same repo.
+  // `refreshing` holds the repoRoots whose refresh loop is currently
+  // executing; `refreshAgain` is the trailing-edge flag: if a new
+  // invalidation arrives while a refresh is in flight, we set this flag and
+  // the loop will re-fetch once more before exiting. Without this,
+  // back-to-back invalidations (rapid commits, rebase) would fan back out
+  // into parallel `git status` calls — exactly the failure kz8.3 collapses.
+  private readonly refreshing = new Set<string>();
+  private readonly refreshAgain = new Set<string>();
   private hits = 0;
   private misses = 0;
   private invalidations = 0;
@@ -224,7 +233,7 @@ export class GitDataProvider extends GitService {
         // when the path later becomes a repo, the existing daemon-lifecycle
         // invariants don't try to detect that, and neither did the prior
         // GitPoller. Subscribers handle null by applying their fallback chain.
-        callback(null);
+        this.safeInvoke(callback, null);
         return;
       }
 
@@ -251,7 +260,7 @@ export class GitDataProvider extends GitService {
         ...SUBSCRIBE_OPTIONS,
       });
       if (unsubscribed) return;
-      callback(initial);
+      this.safeInvoke(callback, initial);
     })();
 
     return () => {
@@ -286,28 +295,58 @@ export class GitDataProvider extends GitService {
     this.refreshSubscribers(repoRoot);
   }
 
+  // [LAW:single-enforcer] Refreshes for one repo are serialized. If invalidation
+  // re-fires while the current refresh is awaiting `getGitInfo`, we set the
+  // trailing-edge flag and the loop re-runs once more; back-to-back
+  // invalidations collapse into at most two fetches, never N parallel ones.
   private refreshSubscribers(repoRoot: string): void {
+    if (this.refreshing.has(repoRoot)) {
+      this.refreshAgain.add(repoRoot);
+      return;
+    }
     const entry = this.subscribersByRepo.get(repoRoot);
     if (!entry || entry.callbacks.size === 0) return;
-    // Snapshot callbacks at fire-time so a subscriber unsubscribing during
-    // notification doesn't mutate the set we're iterating.
-    const callbacks = [...entry.callbacks];
-    const workingDir = entry.workingDir;
-    void (async () => {
-      const info = await this.getGitInfo(workingDir, { ...SUBSCRIBE_OPTIONS });
-      for (const cb of callbacks) {
-        try {
-          cb(info);
-        } catch (e) {
-          try {
-            dlog(
-              "warn",
-              `git subscriber threw: ${(e as Error).message ?? String(e)}`,
-            );
-          } catch {}
+    this.refreshing.add(repoRoot);
+    void this.doRefreshLoop(repoRoot);
+  }
+
+  private async doRefreshLoop(repoRoot: string): Promise<void> {
+    try {
+      do {
+        this.refreshAgain.delete(repoRoot);
+        const entry = this.subscribersByRepo.get(repoRoot);
+        if (!entry || entry.callbacks.size === 0) return;
+        const info = await this.getGitInfo(entry.workingDir, {
+          ...SUBSCRIBE_OPTIONS,
+        });
+        const current = this.subscribersByRepo.get(repoRoot);
+        if (!current || current.callbacks.size === 0) return;
+        // [LAW:dataflow-not-control-flow] Membership check at call time, not at
+        // snapshot time. A subscriber that unsubscribed during the await above
+        // (or during a prior cb invocation in this same iteration) must not
+        // receive this notification — has() reads the current truth.
+        for (const cb of [...current.callbacks]) {
+          if (!current.callbacks.has(cb)) continue;
+          this.safeInvoke(cb, info);
         }
-      }
-    })();
+      } while (this.refreshAgain.has(repoRoot));
+    } finally {
+      this.refreshing.delete(repoRoot);
+      this.refreshAgain.delete(repoRoot);
+    }
+  }
+
+  private safeInvoke(cb: SubscribeCallback, info: GitInfo | null): void {
+    try {
+      cb(info);
+    } catch (e) {
+      try {
+        dlog(
+          "warn",
+          `git subscriber threw: ${(e as Error).message ?? String(e)}`,
+        );
+      } catch {}
+    }
   }
 
   private dropEntry(key: string): void {
@@ -364,6 +403,11 @@ export class GitDataProvider extends GitService {
       entry.watcher.release();
     }
     this.subscribersByRepo.clear();
+    // In-flight refreshes will observe the empty subscribers map on their
+    // next iteration and exit naturally; the flags are cleared so a fresh
+    // provider with the same repoRoot starts clean.
+    this.refreshing.clear();
+    this.refreshAgain.clear();
     if (this.ownsWatchers) this.watchers.closeAll();
   }
 }
