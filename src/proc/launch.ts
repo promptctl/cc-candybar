@@ -195,9 +195,8 @@ export async function launch(opts: LaunchOpts): Promise<LaunchResult> {
   });
 }
 
-// Sync variant. For callers that genuinely cannot be async — the install path
-// (synchronous setup steps) and the daemon's click verbs (pbcopy/open) where
-// the handler returns immediately and the spawn must already be settled.
+// Sync variant. For callers that genuinely cannot be async — the spawn
+// outcome must be settled before the function returns.
 export function launchSync(opts: LaunchOpts): LaunchResult {
   const t0 = Date.now();
   statsHandle?.onStart(opts.category);
