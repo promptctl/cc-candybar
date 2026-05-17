@@ -44,8 +44,18 @@ export type Request =
 export type Response =
   | { ok: true; output: string }
   | { ok: true; stats: StatsSnapshot }
-  | { ok: false; error: string; code: ErrorCode };
+  // [LAW:types-are-the-program] `daemonV` is the daemon's own
+  // PROTOCOL_VERSION, echoed on every error response so the client can render
+  // a meaningful diagnostic on VERSION_MISMATCH without parsing the human
+  // message. Optional for back-compat: older daemons (or test stubs) that
+  // omit it are still parseable by current clients.
+  | { ok: false; error: string; code: ErrorCode; daemonV?: number };
 
+// [LAW:types-are-the-program] The wire-level discriminator splits failures
+// into two recovery classes: TIMEOUT is transient (the daemon is alive but
+// slow — a respawn or retry can recover), while the rest are semantic
+// refusals. The client encodes the kick-vs-no-kick decision off this code,
+// not off the error string.
 export type ErrorCode =
   | "VERSION_MISMATCH"
   | "TIMEOUT"

@@ -374,7 +374,12 @@ function handleConnection(sock: net.Socket): void {
   // (e.g. a hung git call) blocking subsequent connections.
   const timer = setTimeout(() => {
     stats.requestsTimedOut++;
-    respond({ ok: false, error: "request exceeded 200ms", code: "TIMEOUT" });
+    respond({
+      ok: false,
+      error: "request exceeded 200ms",
+      code: "TIMEOUT",
+      daemonV: PROTOCOL_VERSION,
+    });
   }, REQUEST_TIMEOUT_MS);
 
   const reader = makeFrameReader(
@@ -387,12 +392,18 @@ function handleConnection(sock: net.Socket): void {
             ok: false,
             error: String(err?.message || err),
             code: "RENDER_FAILED",
+            daemonV: PROTOCOL_VERSION,
           });
         });
     },
     (err) => {
       dlog("warn", `frame parse failed: ${err.message}`);
-      respond({ ok: false, error: err.message, code: "BAD_REQUEST" });
+      respond({
+        ok: false,
+        error: err.message,
+        code: "BAD_REQUEST",
+        daemonV: PROTOCOL_VERSION,
+      });
     },
   );
 
@@ -413,21 +424,40 @@ async function handleRequest(req: Request): Promise<Response> {
     typeof req !== "object" ||
     typeof (req as Request).v !== "number"
   ) {
-    return { ok: false, error: "malformed request", code: "BAD_REQUEST" };
+    return {
+      ok: false,
+      error: "malformed request",
+      code: "BAD_REQUEST",
+      daemonV: PROTOCOL_VERSION,
+    };
   }
 
   if (req.v !== PROTOCOL_VERSION) {
-    // Newer client connected — assume binary upgrade and exit so the next
-    // client respawns from the current binary.
-    dlog(
-      "info",
-      `version mismatch: client=${req.v} daemon=${PROTOCOL_VERSION}; shutting down`,
-    );
-    setTimeout(() => shutdown(0), 50);
+    // [LAW:types-are-the-program] The asymmetry is data, not control flow.
+    //   client > daemon: the *binary* probably upgraded under us. Exit so the
+    //     next client respawns from the current artifact.
+    //   client < daemon: the *client* is stale. Respawning daemon does not
+    //     help (the new daemon will have the same version). Stay up and
+    //     return VERSION_MISMATCH — the client is responsible for surfacing
+    //     the diagnostic and refusing to kick. Shutting down here was the
+    //     load-bearing half of the 452-corpse spiral (kz8.5).
+    if (req.v > PROTOCOL_VERSION) {
+      dlog(
+        "info",
+        `version mismatch: client=${req.v} > daemon=${PROTOCOL_VERSION}; binary likely upgraded — shutting down`,
+      );
+      setTimeout(() => shutdown(0), 50);
+    } else {
+      dlog(
+        "info",
+        `version mismatch: client=${req.v} < daemon=${PROTOCOL_VERSION}; client is stale — staying up`,
+      );
+    }
     return {
       ok: false,
       error: `protocol v${req.v} not supported (daemon at v${PROTOCOL_VERSION})`,
       code: "VERSION_MISMATCH",
+      daemonV: PROTOCOL_VERSION,
     };
   }
 
@@ -505,7 +535,12 @@ async function handleRequest(req: Request): Promise<Response> {
     return handleClick(req.verb, req.value);
   }
 
-  return { ok: false, error: "unknown kind", code: "BAD_REQUEST" };
+  return {
+    ok: false,
+    error: "unknown kind",
+    code: "BAD_REQUEST",
+    daemonV: PROTOCOL_VERSION,
+  };
 }
 
 // --- error-icon composition ---
@@ -550,6 +585,7 @@ function handleClick(verb: string, value: string): Response {
       ok: false,
       error: `unknown click verb: ${verb}`,
       code: "BAD_REQUEST",
+      daemonV: PROTOCOL_VERSION,
     };
   }
   try {
@@ -560,6 +596,7 @@ function handleClick(verb: string, value: string): Response {
       ok: false,
       error: String(e instanceof Error ? e.message : e),
       code: "RENDER_FAILED",
+      daemonV: PROTOCOL_VERSION,
     };
   }
 }
