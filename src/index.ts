@@ -188,14 +188,32 @@ echo '{"session_id":"test-session","workspace":{"project_dir":"/path/to/project"
       process.cwd(),
       detectTermCols(),
     );
-    if (outcome.ok && outcome.output !== undefined) {
-      process.stdout.write(outcome.output);
-      process.exit(0);
+    // [LAW:types-are-the-program] Three branches, one per outcome kind. The
+    // "kick on every failure" pattern was the load-bearing half of the
+    // 452-corpse spiral (kz8.5) — kicking on `permanent` failures keeps
+    // respawning a daemon that will refuse the next request identically.
+    switch (outcome.kind) {
+      case "ok":
+        process.stdout.write(outcome.output);
+        process.exit(0);
+      // eslint-disable-next-line no-fallthrough
+      case "transient":
+        debug(
+          `daemon unavailable (transient: ${outcome.cause}: ${outcome.message}) — kicking daemon`,
+        );
+        obtainDaemonKick();
+        process.stdout.write("\n");
+        process.exit(0);
+      // eslint-disable-next-line no-fallthrough
+      case "permanent":
+        // chunk 2 will replace the "\n" with a styled error glyph that
+        // names the cause. For now, emit "\n" — but do NOT kick.
+        debug(
+          `daemon refused request (permanent: ${outcome.cause}) — not kicking`,
+        );
+        process.stdout.write("\n");
+        process.exit(0);
     }
-    debug(`daemon unavailable (${outcome.reason ?? "?"}) — kicking daemon`);
-    obtainDaemonKick();
-    process.stdout.write("\n");
-    process.exit(0);
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     console.error("Error generating statusline:", errorMessage);
