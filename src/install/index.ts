@@ -310,13 +310,18 @@ export async function runUrlHandle(rawUrl: string | undefined): Promise<void> {
 
 async function runUrlHandleAsync(parsed: ParsedUrl): Promise<void> {
   const outcome = await tryClickViaDaemon(parsed.verb, parsed.value);
-  if (outcome.ok) {
+  if (outcome.kind === "ok") {
     process.exit(0);
   }
 
-  // Daemon unavailable — fall back to local handlers so user clicks never
-  // silently fail. Synchronously kick a daemon so the *next* click hits one.
-  obtainDaemonKick();
+  // [LAW:types-are-the-program] Only `transient` outcomes warrant a daemon
+  // kick — a `permanent` failure (BAD_REQUEST for an unknown verb,
+  // VERSION_MISMATCH against a future daemon, etc.) won't be cured by a
+  // respawn. Local handlers still run either way so the user's click never
+  // silently fails.
+  if (outcome.kind === "transient") {
+    obtainDaemonKick();
+  }
 
   // [LAW:dataflow-not-control-flow] Verb dispatch table — each entry maps a
   // verb name to a handler that takes the parsed value. Adding a verb means
