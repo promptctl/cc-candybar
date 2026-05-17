@@ -1,8 +1,9 @@
 // [LAW:single-enforcer] Terminal width has exactly one authoritative source:
 // the live client's shell context (env / ioctl), captured at the wire boundary
-// and threaded through as request data. This module no longer spawns
-// subprocesses — it is a pure resolver from (caller-supplied hint, ambient env,
-// stdout TTY) to "width with reserve applied, or null."
+// and threaded through as request data. This module is a pure resolver from
+// (caller-supplied hint, ambient env, stdout TTY) to "width with reserve
+// applied, or null." Subprocess-based fallbacks belong at the wire boundary,
+// not here.
 //
 // [LAW:dataflow-not-control-flow] The function always runs the same code path.
 // Variability lives in the inputs (hint set or not, env set or not, stdout a
