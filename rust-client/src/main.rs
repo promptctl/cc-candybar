@@ -23,6 +23,7 @@
 // thundering-herd optimization that prevents N clients from each forking a
 // Node process when one suffices. Mirrors src/daemon/acquire.ts.
 
+mod error_glyph;
 mod launch;
 
 use std::env;
@@ -98,11 +99,13 @@ fn main() {
             let _ = io::stdout().write_all(bytes);
             std::process::exit(0);
         }
-        RenderOutcome::Permanent(_cause) => {
-            // chunk 2 will emit a styled glyph naming the cause. For now,
-            // a bare newline keeps the statusline non-blank. Critically:
-            // no obtain_daemon_kick() — that's what loops on VERSION_MISMATCH.
-            let _ = io::stdout().write_all(b"\n");
+        RenderOutcome::Permanent(cause) => {
+            // [LAW:single-enforcer] Glyph formatting lives in error_glyph.rs
+            // for both runtimes — main.rs never builds this string inline.
+            // No obtain_daemon_kick() — kicking on permanent causes is what
+            // loops on VERSION_MISMATCH (the 452-corpse spiral).
+            let glyph = error_glyph::format_permanent_glyph(&cause);
+            let _ = io::stdout().write_all(glyph.as_bytes());
             std::process::exit(0);
         }
     }
@@ -203,7 +206,6 @@ pub enum TransientCause {
 }
 
 #[derive(Debug)]
-#[allow(dead_code)] // payload fields read only via Debug
 pub enum PermanentCause {
     VersionMismatch { client_v: u32, daemon_v: u32 },
     BadRequest(String),
