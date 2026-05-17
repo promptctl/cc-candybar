@@ -328,6 +328,19 @@ let shuttingDown = false;
 function shutdown(code: number): void {
   if (shuttingDown) return;
   shuttingDown = true;
+  // [LAW:single-enforcer] Arm the SIGKILL backstop FIRST, before any cleanup.
+  // Last night's 452-daemon incident: shut-down daemons logged "shutting
+  // down" but held the bound socket FD 42 minutes later — process.exit never
+  // fired. A synchronous hang inside a close() (fs.FSWatcher.close on a
+  // pathological inode, a swallowed-then-blocked log write, an event-loop
+  // handle libuv refused to drop) leaves cleanup mid-flight and exit
+  // unreachable. Arming the kill *before* the closes means the
+  // process-gone invariant — which the singleton mutex depends on — holds
+  // mechanically regardless of whether cleanup ever finishes. The timer is
+  // NOT unref'd: the whole point is for it to keep the loop alive until
+  // SIGKILL fires; .unref() would let process.exit's race opponents win by
+  // draining other handles first, exactly the failure mode we observed.
+  setTimeout(() => process.kill(process.pid, "SIGKILL"), 500);
   try {
     fs.unlinkSync(socketPath());
   } catch {}
@@ -348,14 +361,6 @@ function shutdown(code: number): void {
   }
   removePidfileDiagnostic();
   closeLog();
-  // [LAW:single-enforcer] Exactly one path out of the process. Backstop with
-  // SIGKILL because we previously observed shut-down daemons staying alive in
-  // uv__io_poll — something (event loop handle, swallowed exception in a
-  // post-end log write) was preventing process.exit from actually firing.
-  // The hard kill makes "shutdown was called" mechanically equivalent to
-  // "process is gone", which is the invariant the singleton mutex relies on.
-  const kill = setTimeout(() => process.kill(process.pid, "SIGKILL"), 500);
-  kill.unref();
   process.exit(code);
 }
 
