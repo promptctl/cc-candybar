@@ -10,6 +10,7 @@ import { runDaemon } from "./daemon/server";
 import { tryRenderViaDaemon } from "./daemon/client";
 import { runDaemonStats } from "./daemon/client-stats";
 import { obtainDaemonKick } from "./daemon/acquire";
+import { formatPermanentGlyph } from "./render/error-glyph";
 
 // Read terminal width from the live shell context (no subprocess). Returns
 // undefined when nothing reliable is available; the daemon falls back to its
@@ -202,12 +203,10 @@ echo '{"session_id":"test-session","workspace":{"project_dir":"/path/to/project"
         process.exit(0);
       // eslint-disable-next-line no-fallthrough
       case "permanent":
-        // chunk 2 will replace the "\n" with a styled error glyph that
-        // names the cause. For now, emit "\n" — but do NOT kick.
         debug(
           `daemon refused request (permanent: ${outcome.cause}) — not kicking`,
         );
-        process.stdout.write("\n");
+        process.stdout.write(formatPermanentGlyph(outcome));
         process.exit(0);
     }
   } catch (error) {
