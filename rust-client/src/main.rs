@@ -8,7 +8,9 @@
 //   - 4-byte big-endian length prefix
 //   - UTF-8 JSON body
 //   - 16 MiB cap
-//   - PROTOCOL_VERSION = 2
+// The protocol version is in the PROTOCOL_VERSION const below — single
+// source of truth, kept in lockstep with src/daemon/protocol.ts via
+// scripts/check-protocol.mjs.
 //
 // Timeouts mirror src/daemon/client.ts: 50ms connect, 150ms total.
 //
