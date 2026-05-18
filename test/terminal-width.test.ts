@@ -9,13 +9,15 @@ const RESERVE = 45;
 
 describe("getTerminalWidth (post-kz8.4: pure, no-spawn)", () => {
   let savedColumns: string | undefined;
-  let savedStderrColumns: number | undefined;
+  let savedStderrDescriptor: PropertyDescriptor | undefined;
 
   beforeEach(() => {
     savedColumns = process.env.COLUMNS;
-    savedStderrColumns = process.stderr.columns;
+    savedStderrDescriptor = Object.getOwnPropertyDescriptor(
+      process.stderr,
+      "columns",
+    );
     delete process.env.COLUMNS;
-    // process.stderr.columns is read-only in some Node versions; cast to override
     Object.defineProperty(process.stderr, "columns", {
       configurable: true,
       writable: true,
@@ -29,11 +31,11 @@ describe("getTerminalWidth (post-kz8.4: pure, no-spawn)", () => {
     } else {
       process.env.COLUMNS = savedColumns;
     }
-    Object.defineProperty(process.stderr, "columns", {
-      configurable: true,
-      writable: true,
-      value: savedStderrColumns,
-    });
+    if (savedStderrDescriptor) {
+      Object.defineProperty(process.stderr, "columns", savedStderrDescriptor);
+    } else {
+      delete (process.stderr as { columns?: number }).columns;
+    }
   });
 
   it("uses the explicit hint over ambient sources", () => {

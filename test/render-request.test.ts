@@ -282,7 +282,10 @@ describe("termCols (post-kz8.4 wire field)", () => {
     // ambient suppression must target the same stream the resolver reads.
     const savedCols = process.env.COLUMNS;
     delete process.env.COLUMNS;
-    const savedStderrCols = process.stderr.columns;
+    const savedStderrDescriptor = Object.getOwnPropertyDescriptor(
+      process.stderr,
+      "columns",
+    );
     Object.defineProperty(process.stderr, "columns", {
       configurable: true,
       writable: true,
@@ -300,11 +303,11 @@ describe("termCols (post-kz8.4 wire field)", () => {
     } finally {
       if (savedCols === undefined) delete process.env.COLUMNS;
       else process.env.COLUMNS = savedCols;
-      Object.defineProperty(process.stderr, "columns", {
-        configurable: true,
-        writable: true,
-        value: savedStderrCols,
-      });
+      if (savedStderrDescriptor) {
+        Object.defineProperty(process.stderr, "columns", savedStderrDescriptor);
+      } else {
+        delete (process.stderr as { columns?: number }).columns;
+      }
     }
   });
 });
