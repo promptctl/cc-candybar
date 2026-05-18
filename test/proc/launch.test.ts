@@ -30,7 +30,7 @@ afterEach(() => {
 
 describe("launch (async)", () => {
   it("captures stdout from a zero-exit binary", async () => {
-    const r = await launch({ bin: "/bin/echo", args: ["hi"], category: "tmux" });
+    const r = await launch({ bin: "/bin/echo", args: ["hi"], category: "user-shell" });
     expect(r.ok).toBe(true);
     if (r.ok) {
       expect(r.stdout.trim()).toBe("hi");
@@ -48,7 +48,7 @@ describe("launch (async)", () => {
   });
 
   it("reports spawn-error for a nonexistent binary", async () => {
-    const r = await launch({ bin: "/nonexistent/binary-x9k7", category: "tmux" });
+    const r = await launch({ bin: "/nonexistent/binary-x9k7", category: "user-shell" });
     expect(r.ok).toBe(false);
   });
 
@@ -106,7 +106,7 @@ describe("launch (async)", () => {
 
 describe("launchSync", () => {
   it("captures stdout from a zero-exit binary", () => {
-    const r = launchSync({ bin: "/bin/echo", args: ["sync"], category: "tmux" });
+    const r = launchSync({ bin: "/bin/echo", args: ["sync"], category: "user-shell" });
     expect(r.ok).toBe(true);
     if (r.ok) {
       expect(r.stdout.trim()).toBe("sync");
@@ -114,7 +114,7 @@ describe("launchSync", () => {
   });
 
   it("reports non-zero exits as data", () => {
-    const r = launchSync({ bin: "/bin/sh", args: ["-c", "exit 3"], category: "tmux" });
+    const r = launchSync({ bin: "/bin/sh", args: ["-c", "exit 3"], category: "user-shell" });
     expect(r.ok).toBe(false);
     if (!r.ok) {
       expect(r.exitCode).toBe(3);
@@ -124,10 +124,10 @@ describe("launchSync", () => {
   it("meters via the stats handle", () => {
     const { handle, starts, ends } = makeSpyHandle();
     setLaunchStats(handle);
-    launchSync({ bin: "/bin/echo", args: ["m"], category: "tmux" });
-    expect(starts).toEqual(["tmux"]);
+    launchSync({ bin: "/bin/echo", args: ["m"], category: "user-shell" });
+    expect(starts).toEqual(["user-shell"]);
     expect(ends).toHaveLength(1);
-    expect(ends[0]?.category).toBe("tmux");
+    expect(ends[0]?.category).toBe("user-shell");
   });
 });
 

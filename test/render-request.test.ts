@@ -275,13 +275,15 @@ describe("termCols (post-kz8.4 wire field)", () => {
   const ARGS = ["--layout=directory model sessionId"];
 
   test("narrow termCols wraps; wide termCols does not", async () => {
-    // Force a deterministic baseline (no $COLUMNS / stdout.columns ambient
+    // Force a deterministic baseline (no $COLUMNS / stderr.columns ambient
     // influence). The renderer's getTerminalWidth falls back to those if no
-    // hint is supplied, so we'd be testing the ambient env instead.
+    // hint is supplied, so we'd be testing the ambient env instead. stderr
+    // (not stdout) is the resolver's TTY-side fallback per 201e3d2 — the
+    // ambient suppression must target the same stream the resolver reads.
     const savedCols = process.env.COLUMNS;
     delete process.env.COLUMNS;
-    const savedStdoutCols = process.stdout.columns;
-    Object.defineProperty(process.stdout, "columns", {
+    const savedStderrCols = process.stderr.columns;
+    Object.defineProperty(process.stderr, "columns", {
       configurable: true,
       writable: true,
       value: undefined,
@@ -298,10 +300,10 @@ describe("termCols (post-kz8.4 wire field)", () => {
     } finally {
       if (savedCols === undefined) delete process.env.COLUMNS;
       else process.env.COLUMNS = savedCols;
-      Object.defineProperty(process.stdout, "columns", {
+      Object.defineProperty(process.stderr, "columns", {
         configurable: true,
         writable: true,
-        value: savedStdoutCols,
+        value: savedStderrCols,
       });
     }
   });
