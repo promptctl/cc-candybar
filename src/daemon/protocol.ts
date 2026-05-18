@@ -14,8 +14,27 @@ export interface RenderRequest {
   cwd: string;
   // [LAW:single-enforcer] Terminal width is captured at the trust boundary
   // (the client's env, where COLUMNS/ioctl are meaningful) and trusted by the
-  // daemon. Absence means the client couldn't determine it.
+  // daemon. Absence means the client couldn't determine it. The wire field is
+  // typed `number` but the wire is untrusted JSON — callers MUST run it
+  // through sanitizeTermCols at the receive boundary before using it.
   termCols?: number;
+}
+
+// [LAW:no-defensive-null-guards] exception: trust boundary. The wire is
+// untrusted JSON; downstream code treats termCols as an integer in a sane
+// range. Validate once here so the type's promise is true.
+//
+// Returns undefined for: non-number, NaN/Infinity, non-integer, ≤ 0, or
+// >= MAX_TERM_COLS. Caps at MAX_TERM_COLS rather than rejecting so a future
+// genuinely-huge terminal still renders (10000 is two orders of magnitude
+// above the largest plausible real terminal).
+const MAX_TERM_COLS = 10000;
+export function sanitizeTermCols(v: unknown): number | undefined {
+  if (typeof v !== "number") return undefined;
+  if (!Number.isFinite(v)) return undefined;
+  const n = Math.floor(v);
+  if (n <= 0) return undefined;
+  return n > MAX_TERM_COLS ? MAX_TERM_COLS : n;
 }
 
 export interface ShutdownRequest {
