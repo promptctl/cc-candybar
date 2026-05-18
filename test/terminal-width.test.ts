@@ -9,14 +9,14 @@ const RESERVE = 45;
 
 describe("getTerminalWidth (post-kz8.4: pure, no-spawn)", () => {
   let savedColumns: string | undefined;
-  let savedStdoutColumns: number | undefined;
+  let savedStderrColumns: number | undefined;
 
   beforeEach(() => {
     savedColumns = process.env.COLUMNS;
-    savedStdoutColumns = process.stdout.columns;
+    savedStderrColumns = process.stderr.columns;
     delete process.env.COLUMNS;
-    // process.stdout.columns is read-only in some Node versions; cast to override
-    Object.defineProperty(process.stdout, "columns", {
+    // process.stderr.columns is read-only in some Node versions; cast to override
+    Object.defineProperty(process.stderr, "columns", {
       configurable: true,
       writable: true,
       value: undefined,
@@ -29,16 +29,16 @@ describe("getTerminalWidth (post-kz8.4: pure, no-spawn)", () => {
     } else {
       process.env.COLUMNS = savedColumns;
     }
-    Object.defineProperty(process.stdout, "columns", {
+    Object.defineProperty(process.stderr, "columns", {
       configurable: true,
       writable: true,
-      value: savedStdoutColumns,
+      value: savedStderrColumns,
     });
   });
 
   it("uses the explicit hint over ambient sources", () => {
     process.env.COLUMNS = "60";
-    Object.defineProperty(process.stdout, "columns", {
+    Object.defineProperty(process.stderr, "columns", {
       configurable: true,
       writable: true,
       value: 70,
@@ -51,8 +51,10 @@ describe("getTerminalWidth (post-kz8.4: pure, no-spawn)", () => {
     expect(getTerminalWidth()).toBe(120 - RESERVE);
   });
 
-  it("falls back to process.stdout.columns when env is absent", () => {
-    Object.defineProperty(process.stdout, "columns", {
+  it("falls back to process.stderr.columns when env is absent", () => {
+    // stderr is the right TTY-side fallback in a Claude hook flow: stdout is
+    // the captured statusline pipe; stderr stays attached to the terminal.
+    Object.defineProperty(process.stderr, "columns", {
       configurable: true,
       writable: true,
       value: 90,
@@ -76,7 +78,7 @@ describe("getTerminalWidth (post-kz8.4: pure, no-spawn)", () => {
 
   it("ignores malformed COLUMNS env values", () => {
     process.env.COLUMNS = "not-a-number";
-    Object.defineProperty(process.stdout, "columns", {
+    Object.defineProperty(process.stderr, "columns", {
       configurable: true,
       writable: true,
       value: 80,
