@@ -24,10 +24,9 @@ export interface RenderRequest {
 // untrusted JSON; downstream code treats termCols as an integer in a sane
 // range. Validate once here so the type's promise is true.
 //
-// Returns undefined for: non-number, NaN/Infinity, non-integer, ≤ 0, or
-// >= MAX_TERM_COLS. Caps at MAX_TERM_COLS rather than rejecting so a future
-// genuinely-huge terminal still renders (10000 is two orders of magnitude
-// above the largest plausible real terminal).
+// Pathologically large values are capped (not rejected) so a future
+// genuinely-huge terminal still renders — 10000 is two orders of magnitude
+// above the largest plausible real terminal.
 const MAX_TERM_COLS = 10000;
 export function sanitizeTermCols(v: unknown): number | undefined {
   if (typeof v !== "number") return undefined;
