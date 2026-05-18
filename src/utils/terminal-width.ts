@@ -1,12 +1,14 @@
 // [LAW:single-enforcer] Terminal width has exactly one authoritative source:
 // the live client's shell context (env / ioctl), captured at the wire boundary
 // and threaded through as request data. This module is a pure resolver from
-// (caller-supplied hint, ambient env, stdout TTY) to "width with reserve
+// (caller-supplied hint, ambient env, stderr TTY) to "width with reserve
 // applied, or null." Subprocess-based fallbacks belong at the wire boundary,
-// not here.
+// not here. stderr (not stdout) is the TTY-side fallback: when this resolver
+// runs in a hook context, stdout is the captured statusline pipe while stderr
+// stays attached to the parent terminal.
 //
 // [LAW:dataflow-not-control-flow] The function always runs the same code path.
-// Variability lives in the inputs (hint set or not, env set or not, stdout a
+// Variability lives in the inputs (hint set or not, env set or not, stderr a
 // TTY or not), never in whether work runs.
 
 // @info Reserves characters for Claude Code's right-side UI messages
@@ -26,8 +28,8 @@ export function getTerminalWidth(termColsHint?: number): number | null {
     if (!isNaN(parsed) && parsed > 0) return applyReserve(parsed);
   }
 
-  if (process.stdout.columns && process.stdout.columns > 0) {
-    return applyReserve(process.stdout.columns);
+  if (process.stderr.columns && process.stderr.columns > 0) {
+    return applyReserve(process.stderr.columns);
   }
 
   return null;
