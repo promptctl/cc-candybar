@@ -15,13 +15,17 @@ import { obtainDaemonKick } from "./daemon/acquire";
 // undefined when nothing reliable is available; the daemon falls back to its
 // own pure lookup chain in that case. Always-COLUMNS-first because Bash
 // exports it on resize and Claude Code propagates it to hook commands.
+// stderr (not stdout) is the TTY-side fallback: when invoked as a Claude
+// statusline hook, stdin is the hook JSON pipe and stdout is the captured
+// statusline pipe, leaving stderr as the only stream still attached to the
+// parent terminal. Mirrors the Rust client's TIOCGWINSZ-on-STDERR_FILENO.
 function detectTermCols(): number | undefined {
   const env = process.env.COLUMNS;
   if (env) {
     const n = parseInt(env, 10);
     if (!isNaN(n) && n > 0) return n;
   }
-  const cols = process.stdout.columns;
+  const cols = process.stderr.columns;
   if (cols && cols > 0) return cols;
   return undefined;
 }
