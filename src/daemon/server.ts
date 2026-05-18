@@ -6,7 +6,12 @@ import process from "node:process";
 import { fileURLToPath } from "node:url";
 import { daemonDir, pidPath, socketPath } from "./paths";
 import { dlog, closeLog } from "./log";
-import { PROTOCOL_VERSION, encodeFrame, makeFrameReader } from "./protocol";
+import {
+  PROTOCOL_VERSION,
+  encodeFrame,
+  makeFrameReader,
+  sanitizeTermCols,
+} from "./protocol";
 import type { Request, Response } from "./protocol";
 import { GitDataProvider } from "./cache/git";
 import { CachedUsageProvider } from "./cache/usage";
@@ -478,12 +483,15 @@ async function handleRequest(req: Request): Promise<Response> {
       // daemon's process.cwd(), so config resolution depends only on request
       // data — the daemon's own working directory must not influence output.
       const entry = renderCache.getOrCreate(req.args, projectDir, req.cwd);
+      // [LAW:single-enforcer] Sanitize wire-supplied termCols here at the
+      // trust boundary so the renderer downstream can rely on its type.
+      const termCols = sanitizeTermCols(req.termCols);
       // [LAW:dataflow-not-control-flow] Three states fall out of one rule:
       // body = renderer ? render(it) : "" ; output = body + (error ? icon : "")
       // No special-case branches — same composition every render.
       const body = entry.renderer
         ? await entry.renderer.generateStatusline(req.hookData, {
-            termCols: req.termCols,
+            termCols,
           })
         : "";
       const output = composeWithError(body, entry.lastError);
