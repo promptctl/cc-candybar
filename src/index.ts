@@ -10,6 +10,7 @@ import { runDaemon } from "./daemon/server";
 import { tryRenderViaDaemon } from "./daemon/client";
 import { runDaemonStats } from "./daemon/client-stats";
 import { obtainDaemonKick } from "./daemon/acquire";
+import { planOutcome } from "./render/outcome-plan";
 
 // Read terminal width from the live shell context (no subprocess). Returns
 // undefined when nothing reliable is available; the daemon falls back to its
@@ -188,13 +189,21 @@ echo '{"session_id":"test-session","workspace":{"project_dir":"/path/to/project"
       process.cwd(),
       detectTermCols(),
     );
-    if (outcome.ok && outcome.output !== undefined) {
-      process.stdout.write(outcome.output);
-      process.exit(0);
+    // [LAW:types-are-the-program] Three variants, one per outcome kind. The
+    // "kick on every failure" pattern was the load-bearing half of the
+    // 452-corpse spiral (kz8.5) — kicking on `permanent` failures keeps
+    // respawning a daemon that will refuse the next request identically.
+    // [LAW:dataflow-not-control-flow] planOutcome maps each variant to a
+    // plan value (output, kick, debug); the side effects below run against
+    // the plan in fixed order. Variability lives in the data.
+    const plan = planOutcome(outcome);
+    if (plan.debug !== null) {
+      debug(plan.debug);
     }
-    debug(`daemon unavailable (${outcome.reason ?? "?"}) — kicking daemon`);
-    obtainDaemonKick();
-    process.stdout.write("\n");
+    if (plan.kick) {
+      obtainDaemonKick();
+    }
+    process.stdout.write(plan.output);
     process.exit(0);
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
