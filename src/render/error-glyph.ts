@@ -48,15 +48,24 @@ function describe(outcome: PermanentOutcome): string {
 
 // [LAW:single-enforcer] One sanitize-and-truncate boundary. Daemon error
 // strings come from arbitrary sources (parse-error text, .toString() output
-// of unknown exceptions) and may contain `\n` or `\r`. Without normalization
-// those leak into the statusline as multi-line glyphs that break the layout
-// the surrounding cc-candybar code assumes. Sanitization happens here, in
-// the same pass that enforces the code-point budget — no caller has to
-// remember to scrub messages before passing them in.
+// of unknown exceptions, daemon-side echoes of caller-supplied data like an
+// unknown click verb). Any control character that can disrupt the glyph's
+// single-line-styled-envelope shape must be neutralized here:
+//   - LF/CR/FF/VT break the "single line" property.
+//   - ESC and bare CSI introducers (any of the C0 controls really) can
+//     hijack ANSI styling — a daemon message containing "\x1b[0m" would
+//     end the glyph's red-background span early and let the rest of the
+//     terminal session inherit unstyled text. With BAD_REQUEST messages
+//     echoing user-supplied request fields, that's reachable from a
+//     crafted input even without a malicious daemon.
+// Replacing every C0 control (0x00..0x1F) and DEL (0x7F) with a space is
+// the simplest predicate that closes both classes; visible characters and
+// astral code points pass through unchanged.
 //
 // [LAW:one-type-per-behavior] Mirrors rust-client/src/error_glyph.rs's
-// truncate(): iterate by code point (matching `chars()`, astral-safe),
-// replace newline-class characters with single spaces, stop at the budget.
+// truncate(): same predicate (`char.is_ascii_control()` in Rust ≡
+// `code < 0x20 || code === 0x7f` here), same single-pass sanitize-and-
+// truncate shape, same ellipsis policy.
 function truncate(s: string): string {
   let out = "";
   let count = 0;
@@ -68,7 +77,8 @@ function truncate(s: string): string {
       // unicode flag matches a full code point, not a UTF-16 unit.
       return out.replace(/.$/u, "…");
     }
-    out += ch === "\n" || ch === "\r" ? " " : ch;
+    const code = ch.codePointAt(0) ?? 0;
+    out += code < 0x20 || code === 0x7f ? " " : ch;
     count++;
   }
   return out;

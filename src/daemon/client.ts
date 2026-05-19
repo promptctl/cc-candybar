@@ -114,12 +114,19 @@ export async function tryClickViaDaemon(
 
 // [LAW:single-enforcer] Narrowing primitives used everywhere we read a
 // field off the cast `resp`. Centralised so a future "validate the whole
-// frame" approach has one place to evolve from.
+// frame" approach has one place to evolve from. Each helper expresses an
+// exact type predicate; mixing semantics (e.g. "any finite number" with
+// "non-negative integer") would weaken the type [LAW:types-are-the-program].
 function asString(v: unknown, fallback: string): string {
   return typeof v === "string" ? v : fallback;
 }
-function asNumber(v: unknown, fallback: number): number {
-  return typeof v === "number" && Number.isFinite(v) ? v : fallback;
+
+// [LAW:one-type-per-behavior] Mirrors the Rust client's `as_u64()` semantics:
+// the only valid daemonV values are non-negative integers. Negatives and
+// fractional values fall back to 0 so both runtimes derive the same
+// PermanentOutcome from the same wire payload.
+function asProtocolVersion(v: unknown): number {
+  return typeof v === "number" && Number.isInteger(v) && v >= 0 ? v : 0;
 }
 
 function interpretResponse(resp: Response): ClientOutcome {
@@ -156,7 +163,7 @@ function interpretResponse(resp: Response): ClientOutcome {
         // Older daemons may not echo daemonV; non-number values from a
         // misbehaving stub also fall back to 0 (the renderer maps 0 to
         // "unknown" in the visible glyph).
-        daemonV: asNumber(raw.daemonV, 0),
+        daemonV: asProtocolVersion(raw.daemonV),
       };
     case "TIMEOUT":
       // Daemon is alive but didn't answer in time — same recovery as

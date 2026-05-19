@@ -419,6 +419,39 @@ describe("wire trust boundary: unknown error codes (kz8.5 followup)", () => {
     expect(typeof outcome.daemonV).toBe("number");
     expect(outcome.daemonV).toBe(0);
   });
+
+  // [LAW:one-type-per-behavior] Rust's serde_json `as_u64()` returns None
+  // for negative or fractional values, falling back to 0 in the Rust
+  // interpret_response. TS's asProtocolVersion narrowing must match so the
+  // two runtimes derive the same PermanentOutcome from the same wire
+  // payload. Without this, a daemon sending `daemonV: -1` or `daemonV:
+  // 3.14` would yield different ClientOutcome values across runtimes for
+  // the same input.
+  test("negative daemonV is replaced with 0 (matches Rust's as_u64 fallback)", async () => {
+    const outcome = await runWithStubDaemon({
+      ok: false,
+      code: "VERSION_MISMATCH",
+      error: "mismatch",
+      daemonV: -1,
+    });
+    if (outcome.kind !== "permanent" || outcome.cause !== "version_mismatch") {
+      throw new Error(`unexpected outcome shape: ${JSON.stringify(outcome)}`);
+    }
+    expect(outcome.daemonV).toBe(0);
+  });
+
+  test("fractional daemonV is replaced with 0 (matches Rust's as_u64 fallback)", async () => {
+    const outcome = await runWithStubDaemon({
+      ok: false,
+      code: "VERSION_MISMATCH",
+      error: "mismatch",
+      daemonV: 3.14,
+    });
+    if (outcome.kind !== "permanent" || outcome.cause !== "version_mismatch") {
+      throw new Error(`unexpected outcome shape: ${JSON.stringify(outcome)}`);
+    }
+    expect(outcome.daemonV).toBe(0);
+  });
 });
 
 // --- wire trust boundary: protocol-violation exceptions are PERMANENT ---
