@@ -26,7 +26,7 @@ import { planOutcome } from "../src/render/outcome-plan";
 // version-mismatch branch ---
 
 interface MismatchServer {
-  port: string;
+  sockPath: string;
   shutdownObserved: { triggered: boolean };
   close: () => Promise<void>;
 }
@@ -51,8 +51,9 @@ function spinUpMismatchServer(daemonV: number): Promise<MismatchServer> {
             return;
           }
           if (req.v !== daemonV) {
-            // [LAW:types-are-the-program] Mirrors server.ts:419 — only
-            // schedule shutdown when client is *newer*.
+            // [LAW:types-are-the-program] Mirrors the daemon's version-mismatch
+            // asymmetry: only schedule shutdown when the client is *newer* —
+            // never when it is older (that path is the spiral-breaker).
             if (req.v > daemonV) {
               shutdownObserved.triggered = true;
             }
@@ -83,7 +84,7 @@ function spinUpMismatchServer(daemonV: number): Promise<MismatchServer> {
     );
     server.listen(sockPath, () => {
       resolve({
-        port: sockPath,
+        sockPath,
         shutdownObserved,
         close: () =>
           new Promise((r) => {
@@ -139,7 +140,7 @@ describe("daemon version-mismatch trigger asymmetry (kz8.5 chunk 4)", () => {
     const server = await spinUpMismatchServer(daemonV);
     try {
       // Client claims an older protocol version (v=daemonV-1).
-      const resp = await sendRequest(server.port, {
+      const resp = await sendRequest(server.sockPath, {
         v: daemonV - 1,
         kind: "render",
       });
@@ -164,7 +165,7 @@ describe("daemon version-mismatch trigger asymmetry (kz8.5 chunk 4)", () => {
     try {
       // Client claims a newer protocol version — meaning the daemon binary
       // is stale relative to the freshly-installed client. Restart helps.
-      const resp = await sendRequest(server.port, {
+      const resp = await sendRequest(server.sockPath, {
         v: daemonV + 1,
         kind: "render",
       });
@@ -183,7 +184,7 @@ describe("daemon version-mismatch trigger asymmetry (kz8.5 chunk 4)", () => {
     const daemonV = PROTOCOL_VERSION;
     const server = await spinUpMismatchServer(daemonV);
     try {
-      const resp = await sendRequest(server.port, {
+      const resp = await sendRequest(server.sockPath, {
         v: daemonV,
         kind: "render",
       });

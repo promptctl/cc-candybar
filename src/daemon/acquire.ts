@@ -5,13 +5,12 @@ import process from "node:process";
 import { socketPath, spawnLockPath, daemonDir } from "./paths";
 
 // [LAW:single-enforcer] One primitive per runtime that owns the entire
-// "obtain a daemon" verb. Three previously-independent spawn sites
-// (src/index.ts:171, src/install/index.ts:303, rust-client's spawn fallback)
-// all collapse onto this one path. The Rust client mirrors this in the
-// `obtain-daemon primitive` section of rust-client/src/main.rs. Both
-// runtimes agree on socketPath() and spawnLockPath() *and* on the lock
-// mechanism: open(path, O_CREAT | O_EXCL) — existence == held; release by
-// unlinking. A Rust kick and a Node kick are mutually recognizable.
+// "obtain a daemon" verb. Every spawn site in the Node runtime now flows
+// through this one path; the Rust client mirrors it in its own
+// obtain-daemon primitive. Both runtimes agree on socketPath() and
+// spawnLockPath() *and* on the lock mechanism: open(path, O_CREAT | O_EXCL)
+// — existence == held; release by unlinking. A Rust kick and a Node kick
+// are mutually recognizable.
 //
 // [LAW:dataflow-not-control-flow] Callers do not get to choose whether to
 // spawn. They request a daemon; this function returns one of three typed

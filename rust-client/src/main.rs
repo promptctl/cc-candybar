@@ -16,12 +16,11 @@
 //
 // On any daemon failure: obtain_daemon_kick() runs a fire-and-forget acquire
 // gated by an existence-as-lock spawn.lock file (open with O_CREAT | O_EXCL,
-// release by unlink — same primitive Node uses in src/daemon/acquire.ts so
-// the two runtimes interoperate). The actual one-daemon invariant is
-// enforced by atomic bind() inside the daemon (see
-// src/daemon/server.ts:bindOrAttachAndExit); the spawn.lock is the
-// thundering-herd optimization that prevents N clients from each forking a
-// Node process when one suffices. Mirrors src/daemon/acquire.ts.
+// release by unlink — same primitive the Node runtime uses so the two
+// interoperate). The actual one-daemon invariant is enforced by atomic
+// bind() inside the daemon itself; the spawn.lock is the thundering-herd
+// optimization that prevents N clients from each forking a Node process
+// when one suffices.
 
 mod error_glyph;
 mod launch;

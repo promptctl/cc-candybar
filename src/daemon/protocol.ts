@@ -70,10 +70,14 @@ export type Response =
   | { ok: false; error: string; code: ErrorCode; daemonV?: number };
 
 // [LAW:types-are-the-program] The wire-level discriminator splits failures
-// into two recovery classes: TIMEOUT is transient (the daemon is alive but
-// slow — a respawn or retry can recover), while the rest are semantic
-// refusals. The client encodes the kick-vs-no-kick decision off this code,
-// not off the error string.
+// into two recovery classes: TIMEOUT is transient — the daemon is alive but
+// slow, so a respawn or retry has a real chance of recovering. Every other
+// code is permanent — respawning would hit the same response identically
+// (the daemon refuses the request for VERSION_MISMATCH or BAD_REQUEST, or
+// fails internally for RENDER_FAILED in a way the spawn loop cannot cure),
+// so the spiral-breaker contract requires the client NOT to kick. The
+// kick-vs-no-kick decision is encoded off this code, not off the error
+// string.
 export type ErrorCode =
   | "VERSION_MISMATCH"
   | "TIMEOUT"
