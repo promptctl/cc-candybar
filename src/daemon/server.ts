@@ -328,6 +328,29 @@ let shuttingDown = false;
 function shutdown(code: number): void {
   if (shuttingDown) return;
   shuttingDown = true;
+  // [LAW:single-enforcer] Arm the SIGKILL backstop FIRST, before any cleanup.
+  // The 452-daemon incident: shut-down daemons logged "shutting down" but
+  // held the bound socket FD 42 minutes later — process.exit() reached the
+  // call site but never completed because some active handle kept libuv's
+  // event loop alive past exit's teardown. The prior shape had `.unref()`
+  // on the SIGKILL timer, so the timer itself did NOT keep the loop alive
+  // — leaving the loop's only remaining live handles to win the race.
+  //
+  // What this timer guarantees: as long as the event loop can still run
+  // (handles that won't drop, async cleanup that schedules but never
+  // completes — the realistic failure modes for the incident class), the
+  // setTimeout callback fires within 500ms and SIGKILL terminates the
+  // process from outside the loop's bookkeeping. Critically the timer is
+  // NOT unref'd, so it is itself an active handle that keeps the loop
+  // alive long enough for itself to fire.
+  //
+  // What this timer cannot do: rescue a truly synchronous thread block
+  // (a C++ binding that never returns to JS, an infinite sync loop). No
+  // JS timer can fire while the main thread is blocked; only an external
+  // signal recovers that case. The realistic 452-corpse mode was async-
+  // handle retention, not a synchronous block, so the backstop is
+  // load-bearing for the observed failure pattern.
+  setTimeout(() => process.kill(process.pid, "SIGKILL"), 500);
   try {
     fs.unlinkSync(socketPath());
   } catch {}
@@ -348,14 +371,6 @@ function shutdown(code: number): void {
   }
   removePidfileDiagnostic();
   closeLog();
-  // [LAW:single-enforcer] Exactly one path out of the process. Backstop with
-  // SIGKILL because we previously observed shut-down daemons staying alive in
-  // uv__io_poll — something (event loop handle, swallowed exception in a
-  // post-end log write) was preventing process.exit from actually firing.
-  // The hard kill makes "shutdown was called" mechanically equivalent to
-  // "process is gone", which is the invariant the singleton mutex relies on.
-  const kill = setTimeout(() => process.kill(process.pid, "SIGKILL"), 500);
-  kill.unref();
   process.exit(code);
 }
 
@@ -379,7 +394,12 @@ function handleConnection(sock: net.Socket): void {
   // (e.g. a hung git call) blocking subsequent connections.
   const timer = setTimeout(() => {
     stats.requestsTimedOut++;
-    respond({ ok: false, error: "request exceeded 200ms", code: "TIMEOUT" });
+    respond({
+      ok: false,
+      error: "request exceeded 200ms",
+      code: "TIMEOUT",
+      daemonV: PROTOCOL_VERSION,
+    });
   }, REQUEST_TIMEOUT_MS);
 
   const reader = makeFrameReader(
@@ -392,12 +412,18 @@ function handleConnection(sock: net.Socket): void {
             ok: false,
             error: String(err?.message || err),
             code: "RENDER_FAILED",
+            daemonV: PROTOCOL_VERSION,
           });
         });
     },
     (err) => {
       dlog("warn", `frame parse failed: ${err.message}`);
-      respond({ ok: false, error: err.message, code: "BAD_REQUEST" });
+      respond({
+        ok: false,
+        error: err.message,
+        code: "BAD_REQUEST",
+        daemonV: PROTOCOL_VERSION,
+      });
     },
   );
 
@@ -418,21 +444,40 @@ async function handleRequest(req: Request): Promise<Response> {
     typeof req !== "object" ||
     typeof (req as Request).v !== "number"
   ) {
-    return { ok: false, error: "malformed request", code: "BAD_REQUEST" };
+    return {
+      ok: false,
+      error: "malformed request",
+      code: "BAD_REQUEST",
+      daemonV: PROTOCOL_VERSION,
+    };
   }
 
   if (req.v !== PROTOCOL_VERSION) {
-    // Newer client connected — assume binary upgrade and exit so the next
-    // client respawns from the current binary.
-    dlog(
-      "info",
-      `version mismatch: client=${req.v} daemon=${PROTOCOL_VERSION}; shutting down`,
-    );
-    setTimeout(() => shutdown(0), 50);
+    // [LAW:types-are-the-program] The asymmetry is data, not control flow.
+    //   client > daemon: the *binary* probably upgraded under us. Exit so the
+    //     next client respawns from the current artifact.
+    //   client < daemon: the *client* is stale. Respawning daemon does not
+    //     help (the new daemon will have the same version). Stay up and
+    //     return VERSION_MISMATCH — the client is responsible for surfacing
+    //     the diagnostic and refusing to kick. Shutting down here was the
+    //     load-bearing half of the 452-corpse spiral (kz8.5).
+    if (req.v > PROTOCOL_VERSION) {
+      dlog(
+        "info",
+        `version mismatch: client=${req.v} > daemon=${PROTOCOL_VERSION}; binary likely upgraded — shutting down`,
+      );
+      setTimeout(() => shutdown(0), 50);
+    } else {
+      dlog(
+        "info",
+        `version mismatch: client=${req.v} < daemon=${PROTOCOL_VERSION}; client is stale — staying up`,
+      );
+    }
     return {
       ok: false,
       error: `protocol v${req.v} not supported (daemon at v${PROTOCOL_VERSION})`,
       code: "VERSION_MISMATCH",
+      daemonV: PROTOCOL_VERSION,
     };
   }
 
@@ -513,7 +558,12 @@ async function handleRequest(req: Request): Promise<Response> {
     return handleClick(req.verb, req.value);
   }
 
-  return { ok: false, error: "unknown kind", code: "BAD_REQUEST" };
+  return {
+    ok: false,
+    error: "unknown kind",
+    code: "BAD_REQUEST",
+    daemonV: PROTOCOL_VERSION,
+  };
 }
 
 // --- error-icon composition ---
@@ -558,6 +608,7 @@ function handleClick(verb: string, value: string): Response {
       ok: false,
       error: `unknown click verb: ${verb}`,
       code: "BAD_REQUEST",
+      daemonV: PROTOCOL_VERSION,
     };
   }
   try {
@@ -568,6 +619,7 @@ function handleClick(verb: string, value: string): Response {
       ok: false,
       error: String(e instanceof Error ? e.message : e),
       code: "RENDER_FAILED",
+      daemonV: PROTOCOL_VERSION,
     };
   }
 }
