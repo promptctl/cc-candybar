@@ -193,10 +193,13 @@ echo '{"session_id":"test-session","workspace":{"project_dir":"/path/to/project"
     // "kick on every failure" pattern was the load-bearing half of the
     // 452-corpse spiral (kz8.5) — kicking on `permanent` failures keeps
     // respawning a daemon that will refuse the next request identically.
-    // [LAW:dataflow-not-control-flow] planOutcome maps each variant to two
-    // values (what to write, whether to kick); write/kick/exit then run
-    // unconditionally. Variability lives in the data, not in which exit() runs.
+    // [LAW:dataflow-not-control-flow] planOutcome maps each variant to a
+    // plan value (output, kick, debug); the side effects below run against
+    // the plan in fixed order. Variability lives in the data.
     const plan = planOutcome(outcome);
+    if (plan.debug !== null) {
+      debug(plan.debug);
+    }
     if (plan.kick) {
       obtainDaemonKick();
     }

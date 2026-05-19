@@ -393,13 +393,15 @@ describe("planOutcome decides kick vs. no-kick per variant (kz8.5 chunk 1+4)", (
   // trigger a kick, because the daemon will refuse the next request
   // identically and the spiral repeats.
 
-  test("ok outcome returns the daemon output and does not kick", () => {
+  test("ok outcome returns the daemon output, no kick, no debug message", () => {
     const plan = planOutcome({ kind: "ok", output: "rendered statusline\n" });
     expect(plan.kick).toBe(false);
     expect(plan.output).toBe("rendered statusline\n");
+    // The happy path carries no debug message — nothing for the caller to log.
+    expect(plan.debug).toBeNull();
   });
 
-  test("every transient cause kicks", () => {
+  test("every transient cause kicks and carries a debug message", () => {
     const transientCauses: TransientOutcome["cause"][] = [
       "unreachable",
       "timeout",
@@ -415,6 +417,10 @@ describe("planOutcome decides kick vs. no-kick per variant (kz8.5 chunk 1+4)", (
       // Empty-line output keeps the statusline non-blank without flicker
       // while the kick warms a fresh daemon for the next render tick.
       expect(plan.output).toBe("\n");
+      // The debug string is data, not a side effect — the caller decides
+      // whether to log it.
+      expect(plan.debug).toContain(`transient: ${cause}`);
+      expect(plan.debug).toContain("kicking daemon");
     }
   });
 
@@ -431,6 +437,9 @@ describe("planOutcome decides kick vs. no-kick per variant (kz8.5 chunk 1+4)", (
       // The output carries the diagnostic glyph rather than a blank line —
       // the user sees what went wrong directly in the statusline.
       expect(plan.output).toContain("⚠ cc-candybar:");
+      // The debug string spells out the cause and the no-kick decision.
+      expect(plan.debug).toContain(`permanent: ${outcome.cause}`);
+      expect(plan.debug).toContain("not kicking");
     }
   });
 });
