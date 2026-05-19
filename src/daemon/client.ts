@@ -26,6 +26,7 @@ export async function tryRenderViaDaemon(
   hookData: ClaudeHookData,
   args: string[],
   cwd: string,
+  termCols?: number,
 ): Promise<ClientOutcome> {
   let sock: net.Socket | null = null;
   try {
@@ -38,6 +39,7 @@ export async function tryRenderViaDaemon(
         hookData,
         args,
         cwd,
+        termCols,
       },
       TOTAL_BUDGET_MS,
     );

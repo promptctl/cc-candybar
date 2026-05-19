@@ -170,6 +170,14 @@ interface RenderCtx {
   colors: PowerlineColors;
 }
 
+// [LAW:single-enforcer] Per-render input that lives outside hookData (the
+// Anthropic schema) but is needed by the renderer. termCols enters at the
+// client and flows here unchanged; the renderer treats absence as "unknown
+// width" and falls back through getTerminalWidth's pure lookup chain.
+export interface RenderOptions {
+  termCols?: number;
+}
+
 export class PowerlineRenderer {
   private _usageProvider?: UsageProvider;
   private _blockProvider?: BlockProvider;
@@ -306,7 +314,10 @@ export class PowerlineRenderer {
     );
   }
 
-  async generateStatusline(hookData: ClaudeHookData): Promise<string> {
+  async generateStatusline(
+    hookData: ClaudeHookData,
+    options: RenderOptions = {},
+  ): Promise<string> {
     const ctx = this.buildCtx(hookData);
 
     const usageInfo = this.needsSegmentInfo("session")
@@ -342,6 +353,7 @@ export class PowerlineRenderer {
         contextInfo,
         metricsInfo,
         ctx,
+        options,
       );
       return this.maybeAppendPanelLine(output, hookData, ctx);
     }
@@ -373,9 +385,10 @@ export class PowerlineRenderer {
     contextInfo: ContextInfo | null,
     metricsInfo: MetricsInfo | null,
     ctx: RenderCtx,
+    options: RenderOptions,
   ): Promise<string> {
     const currentDir = hookData.workspace?.current_dir || hookData.cwd || "/";
-    const terminalWidth = getTerminalWidth();
+    const terminalWidth = getTerminalWidth(options.termCols);
 
     const outputLines: string[] = [];
 
