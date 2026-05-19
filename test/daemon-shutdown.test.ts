@@ -186,7 +186,13 @@ describe("daemon shutdown contract", () => {
       const resp = await sendShutdown(handle.sockPath);
       expect(resp).toEqual({ ok: true, output: "" });
 
-      const start = Date.now();
+      // [LAW:verifiable-goals] The budget is enforced by the timer below:
+      // if the daemon hasn't exited within SHUTDOWN_BUDGET_MS, Promise.race
+      // rejects with a focused error. A separate `expect(elapsed < BUDGET)`
+      // check on the resolved path would be redundant AND flaky — Date.now()
+      // is ms-granularity and includes post-exit scheduling overhead, so a
+      // run that exited just under budget can read as exactly the budget.
+      // The timer is the contract; no further wall-clock assertion is added.
       let budgetTimer: ReturnType<typeof setTimeout> | undefined;
       const { code, signal } = await Promise.race([
         waitForExit(handle.child).then((r) => {
@@ -207,8 +213,6 @@ describe("daemon shutdown contract", () => {
           },
         ),
       ]);
-      const elapsed = Date.now() - start;
-      expect(elapsed).toBeLessThan(SHUTDOWN_BUDGET_MS);
       // Either a clean exit (code 0) or the SIGKILL backstop fired
       // (signal SIGKILL). Either way the process is gone, which is the
       // load-bearing invariant. Anything else (code !== 0 from a clean
