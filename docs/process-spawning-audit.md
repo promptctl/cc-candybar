@@ -1,5 +1,17 @@
 # Process spawning audit
 
+> **Point-in-time incident artifact.** This audit was recorded during the
+> investigation of the May 2026 "452 daemon corpses" incident. It is a
+> snapshot of what was found, not a living spec — file paths and concept
+> names remain useful as orientation hints, but specific line numbers have
+> been intentionally stripped because they would otherwise rot the moment
+> the kz8.5 fixes (and any subsequent refactor) land. To pin the artifact
+> to the exact tree it was written against, see the original audit commit
+> in `git log -- docs/process-spawning-audit.md`. The structural findings
+> (F1-F8) and the root-cause narrative are the load-bearing content; treat
+> path-level references as starting points for a fresh `grep`, not as
+> authoritative locators.
+
 `★ Insight ─────────────────────────────────────`
 This codebase has a deliberately small spawn surface: every subprocess in the
 Node runtime flows through one boundary (`src/proc/launch.ts`), and every
@@ -32,11 +44,11 @@ Two faults compounding:
 1. **Stale Rust client binary**. `bin/cc-candybar` was built **May 11**, when
    the wire protocol was `PROTOCOL_VERSION = 2`. Commit `3d04efc` (kz8.4)
    bumped it to `3`. Every render from the stale Rust client sends `v=2`; the
-   daemon (`src/daemon/server.ts:419`) treats mismatch as "binary upgrade,
+   daemon (`src/daemon/server.ts`) treats mismatch as "binary upgrade,
    die so the next client respawns from current binary" and schedules
    `setTimeout(() => shutdown(0), 50)`.
 2. **`shutdown()` does not actually terminate the process.** `process.exit(0)`
-   in `src/daemon/server.ts:354` does not exit; the SIGKILL backstop on the
+   in `src/daemon/server.ts` does not exit; the SIGKILL backstop on the
    prior line (`kill.unref()`) is rendered impotent by the `unref()` call —
    it cannot fire because nothing keeps the loop alive long enough to schedule
    it. Result: each "shut down" daemon stays alive as a sleeping Node process
@@ -63,7 +75,7 @@ and the unrelated `scripts/release.mjs`).
 | `launchSync(opts)` | sync via `spawnSync`, same shape as `launch` | Only when caller genuinely cannot be async (e.g. install path, sync click handlers in daemon). |
 | `launchDetachedSync(opts)` | sync `spawn({detached:true, stdio:"ignore"})` + `unref()`, returns spawn-success-or-failure | Fire-and-forget daemon kicks. The synchronous typed return distinguishes "ENOENT" from "spawned" — replaces an earlier `void launch({detached:true})` form that discarded failure. |
 
-`LAUNCH_CATEGORIES` (closed list, `src/proc/launch.ts:22-34`):
+`LAUNCH_CATEGORIES` (closed list, `src/proc/launch.ts`):
 
 ```
 git, user-shell, tmux,
@@ -81,18 +93,18 @@ a new category here — that forces code review of the pattern.
 
 | Site | Category | Sync/Async | Detached? | Notes |
 |---|---|---|---|---|
-| `src/segments/git.ts:43` (`execGitAsync`) | `git` | async | no | Single helper used by every `git` segment query — branch, status, sha, tag, stash, upstream, repo-name, ahead/behind, fallback-branch, rev-list. Per-call timeout is 2000ms (but see **F4**). |
-| `src/segments/tmux.ts:13` (`getSessionId`) | `tmux` | async | no | `tmux display-message -p '#S'`. Skipped when `TMUX_PANE` is unset. 1000ms timeout. |
-| `src/var-system/sources.ts:116` (`execShell`) | `user-shell` | async | no | `/bin/sh -c <user-command>` for `declareShell` variables. **No timeout.** Currently unused at runtime (see **F6**). |
-| `src/daemon/server.ts:568` (`clickCopy`) | `click.pbcopy` | sync | no | Click verb `copy`: `/usr/bin/pbcopy <stdin>`. |
-| `src/daemon/server.ts:587` (`clickOpenVscode`) | `click.open` | sync | no | Click verb `open-vscode`: `/usr/bin/open -a "Visual Studio Code" <path>`. |
-| `src/install/index.ts:206` | `install.osacompile` | sync | no | `osacompile` builds the URL-handler `.app`. One-shot during `cc-candybar install`. |
-| `src/install/index.ts:226` | `install.plutil` | sync | no | `plutil -remove <key>` (pre-clear). |
-| `src/install/index.ts:234` | `install.plutil` | sync | no | `plutil -insert <key> -xml <xml>` (per Info.plist key). |
-| `src/install/index.ts:246` | `install.lsregister` | sync | no | `lsregister -f <bundle>` to register `cc-candybar://`. |
-| `src/install/index.ts:341` | `install.pbcopy` | sync | no | URL-handler-side `copy` verb (daemon-down fallback). |
-| `src/install/index.ts:380` | `install.open` | sync | no | URL-handler-side `open-vscode` verb (daemon-down fallback). |
-| `src/daemon/acquire.ts:406` (`spawnDaemonDetachedReal`) | `daemon-spawn` | sync | **yes** | The one place a daemon process is born. `node --max-old-space-size=400 <script> daemon`, `detached:true`, `stdio:"ignore"`. |
+| `src/segments/git.ts` (`execGitAsync`) | `git` | async | no | Single helper used by every `git` segment query — branch, status, sha, tag, stash, upstream, repo-name, ahead/behind, fallback-branch, rev-list. Per-call timeout is 2000ms (but see **F4**). |
+| `src/segments/tmux.ts` (`getSessionId`) | `tmux` | async | no | `tmux display-message -p '#S'`. Skipped when `TMUX_PANE` is unset. 1000ms timeout. |
+| `src/var-system/sources.ts` (`execShell`) | `user-shell` | async | no | `/bin/sh -c <user-command>` for `declareShell` variables. **No timeout.** Currently unused at runtime (see **F6**). |
+| `src/daemon/server.ts` (`clickCopy`) | `click.pbcopy` | sync | no | Click verb `copy`: `/usr/bin/pbcopy <stdin>`. |
+| `src/daemon/server.ts` (`clickOpenVscode`) | `click.open` | sync | no | Click verb `open-vscode`: `/usr/bin/open -a "Visual Studio Code" <path>`. |
+| `src/install/index.ts` | `install.osacompile` | sync | no | `osacompile` builds the URL-handler `.app`. One-shot during `cc-candybar install`. |
+| `src/install/index.ts` | `install.plutil` | sync | no | `plutil -remove <key>` (pre-clear). |
+| `src/install/index.ts` | `install.plutil` | sync | no | `plutil -insert <key> -xml <xml>` (per Info.plist key). |
+| `src/install/index.ts` | `install.lsregister` | sync | no | `lsregister -f <bundle>` to register `cc-candybar://`. |
+| `src/install/index.ts` | `install.pbcopy` | sync | no | URL-handler-side `copy` verb (daemon-down fallback). |
+| `src/install/index.ts` | `install.open` | sync | no | URL-handler-side `open-vscode` verb (daemon-down fallback). |
+| `src/daemon/acquire.ts` (`spawnDaemonDetachedReal`) | `daemon-spawn` | sync | **yes** | The one place a daemon process is born. `node --max-old-space-size=400 <script> daemon`, `detached:true`, `stdio:"ignore"`. |
 
 ### Daemon-launch script (`src/daemon/acquire.ts`)
 
@@ -110,7 +122,7 @@ existence-as-lock file: `open(O_CREAT | O_EXCL)`. Held only for the spawn
 window (typically <10ms for `kick`; up to `spawnReadyTimeoutMs` for the wait
 path). Staleness reclaim at 10s. **Crucially, this is an optimization, not
 the singleton invariant**: the kernel's atomic `bind(socketPath)` is the load-
-bearing exclusion (`src/daemon/server.ts:89`).
+bearing exclusion (`src/daemon/server.ts`).
 
 ### Daemon-side timers (not spawns, but adjacent)
 
@@ -121,7 +133,7 @@ These are timers that can drive subprocess work over time:
 | `src/daemon/server.ts:armBinaryWatch` (`BIN_CHECK_INTERVAL_MS = 60s`) | every 60s | `statSync` the daemon binary; if mtime changed → `shutdown(0)`. No spawn directly; but a rebuild that changes the bundle triggers the dies-and-respawns cycle. |
 | `src/daemon/limits.ts:arm` (`DEFAULT_CHECK_INTERVAL = 60s`) | every 60s | Sample RSS; if > 512MB (default; override via `CC_CANDYBAR_RSS_LIMIT_MB`) → heap snapshot + `shutdown(0)`. |
 | `src/daemon/cache/git.ts:runSanityCheck` (`SANITY_INTERVAL_MS = 5min`) | every 5min | mtime walk of cached `gitDir`s; invalidates entries where the watcher missed a change. Drives a refresh that may spawn `git` per active subscriber. |
-| `src/var-system/sources.ts:386` (TTL bucket) | per-bucket | One `setInterval` per unique TTL duration, shared across variables. Drives `declareShell` / `declareTime` / `declareFile` refreshes. **No `unref()`** — see **F8**. |
+| `src/var-system/sources.ts` (TTL bucket) | per-bucket | One `setInterval` per unique TTL duration, shared across variables. Drives `declareShell` / `declareTime` / `declareFile` refreshes. **No `unref()`** — see **F8**. |
 
 ---
 
@@ -173,7 +185,7 @@ Same as above; daemon serves from `GitDataProvider`'s cached snapshot. Still 1 p
    - `git rev-parse --abbrev-ref @{u}` (showUpstream)
    - `git config --get remote.origin.url` (showRepoName, when enabled)
 
-  That's **up to ~8 `git` subprocesses** for a fully-decorated cold render of one repo. **All have a 2000ms timeout**, but the daemon's per-request budget (`REQUEST_TIMEOUT_MS = 200ms`, `src/daemon/server.ts:51`) is much tighter — see **F4**.
+  That's **up to ~8 `git` subprocesses** for a fully-decorated cold render of one repo. **All have a 2000ms timeout**, but the daemon's per-request budget (`REQUEST_TIMEOUT_MS = 200ms`, `src/daemon/server.ts`) is much tighter — see **F4**.
 
 3. If `tmux` segment is enabled and `TMUX_PANE` is set: 1 `tmux display-message` (1s timeout).
 
@@ -195,7 +207,7 @@ Total: 1 Rust + 1 Node daemon = 2 processes; subsequent ticks return to the happ
 ### F1 — **Critical / live.** Stale Rust client → version-mismatch spawn loop
 
 **Where:** `bin/cc-candybar` (built May 11, protocol `v=2`) vs.
-`src/daemon/protocol.ts:7` (current `PROTOCOL_VERSION = 3`, bumped in commit
+`src/daemon/protocol.ts` (current `PROTOCOL_VERSION = 3`, bumped in commit
 `3d04efc`).
 
 **Effect:** Every render sends `v=2`; daemon detects mismatch, schedules
@@ -212,7 +224,7 @@ divergence is caught at the source.
 
 ### F2 — **Critical / structural.** `shutdown()` does not actually exit
 
-**Where:** `src/daemon/server.ts:322-355`.
+**Where:** `src/daemon/server.ts`.
 
 ```ts
 function shutdown(code: number): void {
@@ -246,7 +258,7 @@ old; each holds an `unix` fd on the (now-unlinked) socket path.
 
 ### F3 — **High / structural.** No idle / age shutdown; documentation drift
 
-**Where:** `src/daemon/limits.ts:9-10` ("Only the RSS trigger remains — idle
+**Where:** `src/daemon/limits.ts` ("Only the RSS trigger remains — idle
 and age limits were removed because they interrupted active sessions").
 
 **Effect:** The daemon lives forever modulo a 512MB RSS hit. `CLAUDE.md`
@@ -269,7 +281,7 @@ ever bypassed, and an idle limit puts an upper bound on the orphan count.
 
 ### F4 — **Medium / structural.** Per-request budget < per-subprocess timeout
 
-**Where:** `src/daemon/server.ts:51` (`REQUEST_TIMEOUT_MS = 200ms`) vs.
+**Where:** `src/daemon/server.ts` (`REQUEST_TIMEOUT_MS = 200ms`) vs.
 `src/segments/git.ts` (per-`git`-call timeout `2000ms`).
 
 **Effect:** When the daemon hits a cold git-cache for a slow repo (large
@@ -279,7 +291,7 @@ subprocesses keep running** to their own 2s timeout. Under heavy refresh
 (e.g. the F1 spawn loop, or a tight tool-use sequence in Claude Code), this
 can stack git subprocesses faster than they complete.
 
-The `fetchInFlight` map in `GitDataProvider` (`src/daemon/cache/git.ts:148`)
+The `fetchInFlight` map in `GitDataProvider` (`src/daemon/cache/git.ts`)
 coalesces concurrent misses **on the same cache key**, but two slightly
 different cache keys (e.g. different `options` for different segments in the
 same render) still each spawn their own fan-out. The dedupe is per-key, not
@@ -294,14 +306,14 @@ which options the various callers asked for.
 ### F5 — **Medium / structural.** Backstop SIGKILL unref vs intent
 
 Already covered in **F2** but worth calling out independently: the
-`kill.unref()` pattern appears in `src/daemon/server.ts:353` and is wrong
+`kill.unref()` pattern appears in `src/daemon/server.ts` and is wrong
 for *every* `setTimeout` that is a backstop rather than a normal scheduled
 work item. Audit other `setTimeout(...).unref()` call sites to confirm none
 of them are similarly load-bearing.
 
 ### F6 — **Low / dead-code surface.** `SourceRegistry` shell-source is unwired
 
-**Where:** `src/var-system/sources.ts:474` (`SourceRegistry` class with
+**Where:** `src/var-system/sources.ts` (`SourceRegistry` class with
 `declareShell` / `declareFile` / `declareTime` / `declareGit`).
 
 **Status:** Defined and unit-tested but **not currently consumed by the
@@ -309,7 +321,7 @@ daemon or any segment renderer** (grep for `new SourceRegistry` returns only
 the package internals). When this is wired up — and it will be, given the
 existing template-engine integration — the `declareShell` path will spawn
 `/bin/sh -c <user-cmd>` per TTL tick with **no timeout** (`execShell` in
-`sources.ts:113`). At the documented cadence (default `ttlMs: 1000` for
+`sources.ts`). At the documented cadence (default `ttlMs: 1000` for
 time-source, configurable for shell) and with no `inFlight` bound across
 different variables, this is a future spawn-storm waiting to be enabled.
 
@@ -319,7 +331,7 @@ refreshes so concurrent updates are bounded.
 
 ### F7 — **Low / sharp edge.** `pnpm dlx` in default install path
 
-**Where:** `src/install/index.ts:65-72` (`buildStatusLineCommand`).
+**Where:** `src/install/index.ts` (`buildStatusLineCommand`).
 
 **Effect:** The default `cc-candybar install` writes
 `pnpm dlx @promptctl/cc-candybar@<pinned> …` into `~/.claude/settings.json`.
@@ -345,7 +357,7 @@ the just-installed binary directly into `settings.json`.
 
 ### F8 — **Low.** Several `setInterval`s not `unref()`'d in `var-system`
 
-**Where:** `src/var-system/sources.ts:386` (TTL bucket), and possibly
+**Where:** `src/var-system/sources.ts` (TTL bucket), and possibly
 others.
 
 **Effect:** Currently unobservable because `SourceRegistry` isn't wired (**F6**).
@@ -364,7 +376,7 @@ When changing anything that adds, removes, or modifies a spawn site:
 - [ ] Does the call go through `src/proc/launch.ts` (Node) or
       `rust-client/src/launch.rs` (Rust)? If not, **stop and refactor first.**
 - [ ] Did you add a new `LaunchCategory` if this is a new kind of work?
-      `LAUNCH_CATEGORIES` is the closed list at `src/proc/launch.ts:22`.
+      `LAUNCH_CATEGORIES` is the closed list at `src/proc/launch.ts`.
 - [ ] Did you pass a `timeoutMs`? If not, justify in a comment with a
       `[LAW:no-silent-fallbacks]` exception marker.
 - [ ] If detached: are you using `launchDetachedSync` (typed return) and not
@@ -408,9 +420,9 @@ rm -f ~/.local/state/cc-candybar/socket ~/.local/state/cc-candybar/spawn.lock
 ## File-by-file index of every `child_process` import (Node) and `Command::new` (Rust)
 
 ```
-src/proc/launch.ts:14              import { spawn, spawnSync } from "node:child_process";
-scripts/release.mjs:22              import { execFileSync } from "node:child_process";  (build script, not runtime)
-rust-client/src/launch.rs:24       use std::process::{Command, Stdio};
+src/proc/launch.ts              import { spawn, spawnSync } from "node:child_process";
+scripts/release.mjs              import { execFileSync } from "node:child_process";  (build script, not runtime)
+rust-client/src/launch.rs       use std::process::{Command, Stdio};
 ```
 
 Three. Anywhere else in the repo that needs to start a subprocess is
