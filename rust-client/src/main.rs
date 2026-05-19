@@ -336,6 +336,13 @@ fn interpret_response(resp: serde_json::Value) -> RenderOutcome {
 // trust boundary with the kernel. Each known errno kind maps to a typed
 // cause; unknown kinds fall through to Io. We never silently bucket
 // these into a stringified failure that loses the recovery signal.
+//
+// [LAW:one-type-per-behavior] InvalidData/InvalidInput come from
+// write_frame/read_frame when the protocol layer detects an oversized
+// frame — that is a protocol violation, not a connection failure. The
+// daemon is alive and produced garbage; respawning would hit the same
+// response. Route to MalformedResponse so the recovery class matches the
+// TS mirror's `interpretException` for the equivalent protocol error.
 fn classify_io_error(e: io::Error) -> RenderOutcome {
     use io::ErrorKind::*;
     match e.kind() {
@@ -343,6 +350,9 @@ fn classify_io_error(e: io::Error) -> RenderOutcome {
             RenderOutcome::Transient(TransientCause::Unreachable(e.to_string()))
         }
         TimedOut | WouldBlock => RenderOutcome::Transient(TransientCause::Timeout),
+        InvalidData | InvalidInput => {
+            RenderOutcome::Permanent(PermanentCause::MalformedResponse(e.to_string()))
+        }
         _ => RenderOutcome::Transient(TransientCause::Io(e.to_string())),
     }
 }
@@ -656,4 +666,47 @@ fn spawn_daemon_detached() {
     };
     // [LAW:single-enforcer] All Command::new goes through launch.rs.
     let _ = launch::spawn_node_detached_daemon(&script);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io;
+
+    // [LAW:one-type-per-behavior] InvalidData/InvalidInput from the protocol
+    // layer (write_frame/read_frame emit them for oversized frames) are
+    // protocol violations, not connection failures. Pinning this mapping
+    // here keeps the recovery class aligned with the TS mirror's
+    // interpretException — a kick won't fix garbage on the wire.
+    #[test]
+    fn classify_io_error_routes_invalid_data_to_permanent() {
+        for kind in [io::ErrorKind::InvalidData, io::ErrorKind::InvalidInput] {
+            let outcome = classify_io_error(io::Error::new(kind, "frame too large: 99999999"));
+            match outcome {
+                RenderOutcome::Permanent(PermanentCause::MalformedResponse(msg)) => {
+                    assert!(
+                        msg.contains("frame too large"),
+                        "expected message to carry the protocol context, got: {msg:?}"
+                    );
+                }
+                other => panic!("expected Permanent(MalformedResponse), got: {other:?}"),
+            }
+        }
+    }
+
+    #[test]
+    fn classify_io_error_keeps_connection_errors_transient() {
+        let conn = classify_io_error(io::Error::from(io::ErrorKind::ConnectionRefused));
+        assert!(matches!(conn, RenderOutcome::Transient(TransientCause::Unreachable(_))));
+        let nf = classify_io_error(io::Error::from(io::ErrorKind::NotFound));
+        assert!(matches!(nf, RenderOutcome::Transient(TransientCause::Unreachable(_))));
+        let to = classify_io_error(io::Error::from(io::ErrorKind::TimedOut));
+        assert!(matches!(to, RenderOutcome::Transient(TransientCause::Timeout)));
+    }
+
+    #[test]
+    fn classify_io_error_default_is_transient_io() {
+        let other = classify_io_error(io::Error::new(io::ErrorKind::Other, "something"));
+        assert!(matches!(other, RenderOutcome::Transient(TransientCause::Io(_))));
+    }
 }

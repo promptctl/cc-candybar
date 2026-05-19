@@ -106,14 +106,37 @@ export async function tryClickViaDaemon(
 //
 // [LAW:no-defensive-null-guards] This function sits AT the trust boundary —
 // `resp` is `frame as Response`, an unchecked cast from socket JSON. The
-// default branch below is not defensive guarding against an internal bug;
-// it is the explicit handling for unknown wire codes (older daemon, future
-// daemon, test stub, corrupted frame). Mirrors rust-client/src/main.rs's
-// `_ => MalformedResponse(...)` so both runtimes converge on the same
-// observable behavior for any code the client doesn't recognize.
+// per-field type-narrowings and the default branch below are not defensive
+// guards against an internal bug; they are the explicit handling at the
+// wire edge for fields whose runtime types the JSON cast cannot enforce.
+// Every untrusted access flows through asString/asNumber so the downstream
+// ClientOutcome shape carries values of the declared types only.
+
+// [LAW:single-enforcer] Narrowing primitives used everywhere we read a
+// field off the cast `resp`. Centralised so a future "validate the whole
+// frame" approach has one place to evolve from.
+function asString(v: unknown, fallback: string): string {
+  return typeof v === "string" ? v : fallback;
+}
+function asNumber(v: unknown, fallback: number): number {
+  return typeof v === "number" && Number.isFinite(v) ? v : fallback;
+}
+
 function interpretResponse(resp: Response): ClientOutcome {
-  if (resp.ok) {
-    if ("output" in resp) return { kind: "ok", output: resp.output };
+  // Treat the cast `resp` as a bag of unknowns; each access is narrowed
+  // explicitly. The typed parameter still documents the *expected* shape
+  // for readers, but the runtime trusts only what it can verify per field.
+  const raw = resp as {
+    ok?: unknown;
+    output?: unknown;
+    error?: unknown;
+    code?: unknown;
+    daemonV?: unknown;
+  };
+  if (raw.ok === true) {
+    if (typeof raw.output === "string") {
+      return { kind: "ok", output: raw.output };
+    }
     // Stats response to a render/click call — not our shape. Treat as a
     // permanent malformed-response so the caller does NOT kick (the daemon
     // is up, just answered the wrong question).
@@ -123,61 +146,73 @@ function interpretResponse(resp: Response): ClientOutcome {
       message: "stats response to render/click",
     };
   }
-  switch (resp.code) {
+  const errorMessage = asString(raw.error, "(no error message)");
+  switch (raw.code) {
     case "VERSION_MISMATCH":
       return {
         kind: "permanent",
         cause: "version_mismatch",
         clientV: PROTOCOL_VERSION,
-        // Older daemons may not echo daemonV; fall back to "unknown
-        // newer/older" by reporting 0. The renderer (chunk 2) shows a
-        // useful message either way.
-        daemonV: resp.daemonV ?? 0,
+        // Older daemons may not echo daemonV; non-number values from a
+        // misbehaving stub also fall back to 0 (the renderer maps 0 to
+        // "unknown" in the visible glyph).
+        daemonV: asNumber(raw.daemonV, 0),
       };
     case "TIMEOUT":
       // Daemon is alive but didn't answer in time — same recovery as
       // unreachable: kick and emit stale/blank. This is the *only* non-ok
       // wire code that maps to transient.
-      return {
-        kind: "transient",
-        cause: "timeout",
-        message: resp.error,
-      };
+      return { kind: "transient", cause: "timeout", message: errorMessage };
     case "BAD_REQUEST":
-      return {
-        kind: "permanent",
-        cause: "bad_request",
-        message: resp.error,
-      };
+      return { kind: "permanent", cause: "bad_request", message: errorMessage };
     case "RENDER_FAILED":
       return {
         kind: "permanent",
         cause: "render_failed",
-        message: resp.error,
+        message: errorMessage,
       };
-    default: {
-      // `resp.code` is typed ErrorCode at compile time, but the JSON cast
-      // upstream means any string can arrive here at runtime. Coerce via
-      // String() to keep the message safe even if a malformed frame omits
-      // the field entirely. The user sees the unknown code in the glyph,
-      // which is exactly the diagnostic they need to debug a stub or a
-      // version skew the typed contract did not anticipate.
-      const code: unknown = (resp as { code?: unknown }).code;
+    default:
+      // Unknown wire code — mirrors rust-client's `_ => MalformedResponse(...)`
+      // so both runtimes converge on the same observable behavior for any
+      // code the client doesn't recognize. String() handles missing /
+      // non-string values without crashing.
       return {
         kind: "permanent",
         cause: "malformed_response",
-        message: `unknown error code: ${String(code)}`,
+        message: `unknown error code: ${String(raw.code)}`,
       };
-    }
   }
 }
 
-// [LAW:no-defensive-null-guards] Exceptions here come from the connect/IO
-// boundary — they are *trust-boundary* signals, not domain errors. Each
-// known exception kind maps to a transient cause; unknown exceptions
-// default to io_error.
-function interpretException(e: unknown): TransientOutcome {
+// Exceptions reaching this function come from two distinct classes:
+//   - Connect/IO/timeout failures — transient. A respawn or retry has a
+//     real chance of recovering (daemon dead, socket vanished, slow link).
+//   - Protocol violations from sendOne's reject path — permanent. The
+//     daemon is alive but produced garbage (oversized frame, JSON parse
+//     failure). Respawning would hit the same response identically; this
+//     is the same recovery class as a wire-level VERSION_MISMATCH, so we
+//     route through PermanentCause::MalformedResponse and the user sees
+//     a glyph naming the failure rather than a blank line plus a kick.
+//
+// [LAW:one-type-per-behavior] Mirrors rust-client's classify_io_error —
+// InvalidData/InvalidInput map to Permanent(MalformedResponse), everything
+// else stays transient. The two runtimes agree on the recovery class for
+// every observable wire failure.
+function interpretException(e: unknown): ClientOutcome {
   const message = e instanceof Error ? e.message : String(e);
+  // Protocol violations from makeFrameReader / sendOne. "frame too large"
+  // is emitted as a literal prefix by protocol.ts; JSON parse failures
+  // surface as SyntaxError with these characteristic message stems on
+  // modern V8. New parse-error wording would still be caught by the
+  // SyntaxError name check below.
+  if (
+    message.startsWith("frame too large:") ||
+    (e instanceof SyntaxError) ||
+    message.includes("Unexpected token") ||
+    message.includes("Unexpected end of JSON")
+  ) {
+    return { kind: "permanent", cause: "malformed_response", message };
+  }
   if (message === "CONNECT_TIMEOUT" || message === "TIMEOUT") {
     return { kind: "transient", cause: "timeout", message };
   }

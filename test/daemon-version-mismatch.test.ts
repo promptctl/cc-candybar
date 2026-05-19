@@ -381,6 +381,133 @@ describe("wire trust boundary: unknown error codes (kz8.5 followup)", () => {
     if (outcome.kind !== "permanent") return;
     expect(outcome.cause).toBe("malformed_response");
   });
+
+  // [LAW:types-are-the-program] The cast `frame as Response` cannot prevent a
+  // misbehaving daemon (or stub) from sending fields of the wrong runtime
+  // type. The trust boundary in interpretResponse() narrows each field
+  // explicitly; these tests pin that narrowing's behavior against adversarial
+  // shapes that would otherwise propagate `undefined` or wrong-typed values
+  // into ClientOutcome and crash downstream code (e.g. truncate() iterating
+  // a non-string message).
+
+  test("non-string error field is replaced with a safe fallback message", async () => {
+    const outcome = await runWithStubDaemon({
+      ok: false,
+      code: "RENDER_FAILED",
+      error: 42, // wrong type — daemon promised a string
+    });
+    expect(outcome.kind).toBe("permanent");
+    if (outcome.kind !== "permanent") return;
+    expect(outcome.cause).toBe("render_failed");
+    if (outcome.cause !== "render_failed") return;
+    // The fallback string is non-empty and safe to iterate / truncate.
+    expect(typeof outcome.message).toBe("string");
+    expect(outcome.message.length).toBeGreaterThan(0);
+  });
+
+  test("non-number daemonV is replaced with 0 (renders as 'unknown' in glyph)", async () => {
+    const outcome = await runWithStubDaemon({
+      ok: false,
+      code: "VERSION_MISMATCH",
+      error: "mismatch",
+      daemonV: "v9000", // wrong type — daemon promised a number
+    });
+    expect(outcome.kind).toBe("permanent");
+    if (outcome.kind !== "permanent") return;
+    expect(outcome.cause).toBe("version_mismatch");
+    if (outcome.cause !== "version_mismatch") return;
+    expect(typeof outcome.daemonV).toBe("number");
+    expect(outcome.daemonV).toBe(0);
+  });
+});
+
+// --- wire trust boundary: protocol-violation exceptions are PERMANENT ---
+//
+// [LAW:one-type-per-behavior] An exception from sendOne() can mean two very
+// different things: a connection failure (daemon dead, socket vanished — a
+// kick can recover) OR a protocol violation (the daemon responded with an
+// oversized frame, or JSON the parser couldn't decode — a kick CANNOT
+// recover, because the daemon is alive and will produce the same response
+// again). The Rust mirror's classify_io_error routes InvalidData/InvalidInput
+// to Permanent(MalformedResponse); TS's interpretException must do the same
+// for "frame too large" and JSON parse errors so the recovery class agrees
+// across runtimes.
+
+function spinUpRawBytesSocket(
+  sockPath: string,
+  responseBytes: Buffer,
+): Promise<net.Server> {
+  return new Promise((resolve) => {
+    const server = net.createServer((sock) => {
+      sock.once("data", () => {
+        sock.write(responseBytes);
+        sock.end();
+      });
+    });
+    server.listen(sockPath, () => resolve(server));
+  });
+}
+
+describe("wire trust boundary: protocol-violation exceptions are permanent", () => {
+  async function runWithRawBytes(bytes: Buffer): Promise<ClientOutcome> {
+    const tmpRoot = fs.mkdtempSync(
+      path.join(os.tmpdir(), "cc-candybar-proto-"),
+    );
+    const stateDir = path.join(tmpRoot, "cc-candybar");
+    fs.mkdirSync(stateDir, { recursive: true });
+    const sockPath = path.join(stateDir, "socket");
+    const server = await spinUpRawBytesSocket(sockPath, bytes);
+    const prevXdg = process.env.XDG_STATE_HOME;
+    process.env.XDG_STATE_HOME = tmpRoot;
+    try {
+      const { tryRenderViaDaemon } = await import("../src/daemon/client");
+      return await tryRenderViaDaemon(
+        {
+          session_id: "test-proto",
+          workspace: { project_dir: "/tmp" },
+          model: { id: "x", display_name: "X" },
+        } as never,
+        ["cc-candybar"],
+        "/tmp",
+      );
+    } finally {
+      if (prevXdg === undefined) {
+        delete process.env.XDG_STATE_HOME;
+      } else {
+        process.env.XDG_STATE_HOME = prevXdg;
+      }
+      await new Promise<void>((r) => server.close(() => r()));
+      try {
+        fs.rmSync(tmpRoot, { recursive: true, force: true });
+      } catch {
+        /* best-effort */
+      }
+    }
+  }
+
+  test("oversized frame from daemon produces permanent/malformed_response (no kick)", async () => {
+    // 4-byte length prefix declaring 17 MiB body (above the 16 MiB cap).
+    const oversizedLen = 17 * 1024 * 1024;
+    const lenPrefix = Buffer.alloc(4);
+    lenPrefix.writeUInt32BE(oversizedLen, 0);
+    const outcome = await runWithRawBytes(lenPrefix);
+    expect(outcome.kind).toBe("permanent");
+    if (outcome.kind !== "permanent") return;
+    expect(outcome.cause).toBe("malformed_response");
+    if (outcome.cause !== "malformed_response") return;
+    expect(outcome.message).toContain("frame too large");
+  });
+
+  test("garbage JSON body from daemon produces permanent/malformed_response", async () => {
+    // Length-prefixed frame whose body is not valid JSON.
+    const body = Buffer.from("definitely not json", "utf8");
+    const lenPrefix = Buffer.alloc(4);
+    lenPrefix.writeUInt32BE(body.length, 0);
+    const outcome = await runWithRawBytes(Buffer.concat([lenPrefix, body]));
+    expect(outcome.kind).toBe("permanent");
+    if (outcome.kind !== "permanent") return;
+    expect(outcome.cause).toBe("malformed_response");
+  });
 });
 
 // --- caller behavior: planOutcome decides kick vs. no-kick per variant ---
