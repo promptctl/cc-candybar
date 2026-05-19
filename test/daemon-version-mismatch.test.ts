@@ -8,7 +8,12 @@ import {
   makeFrameReader,
 } from "../src/daemon/protocol";
 import type { Response } from "../src/daemon/protocol";
-import type { ClientOutcome } from "../src/daemon/client";
+import type {
+  ClientOutcome,
+  PermanentOutcome,
+  TransientOutcome,
+} from "../src/daemon/client";
+import { planOutcome } from "../src/render/outcome-plan";
 
 // [LAW:behavior-not-structure] These tests assert the contract — what a
 // version-mismatched client sees and how the daemon responds — not the
@@ -279,28 +284,54 @@ describe("ClientOutcome typing (kz8.5 chunk 1)", () => {
   });
 });
 
-// --- caller behavior: src/index.ts does not kick on permanent ---
+// --- caller behavior: planOutcome decides kick vs. no-kick per variant ---
 
-describe("caller does not kick on permanent (kz8.5 chunk 1+4)", () => {
-  test("src/index.ts contains the discriminated-switch pattern", () => {
-    const indexSrc = fs.readFileSync(
-      path.join(__dirname, "../src/index.ts"),
-      "utf8",
-    );
-    // The caller now matches on outcome.kind, and the "permanent" branch
-    // explicitly does NOT call obtainDaemonKick().
-    expect(indexSrc).toContain('case "permanent"');
-    expect(indexSrc).toContain('case "transient"');
-    expect(indexSrc).toContain('case "ok"');
-    // The old indiscriminate "kick on every failure" pattern is gone.
-    expect(indexSrc).not.toContain("outcome.reason");
-    // Find the permanent branch and verify it does NOT call obtainDaemonKick.
-    const permIdx = indexSrc.indexOf('case "permanent"');
-    const nextCaseIdx = indexSrc.indexOf("case ", permIdx + 1);
-    const permBranch = indexSrc.slice(
-      permIdx,
-      nextCaseIdx === -1 ? undefined : nextCaseIdx,
-    );
-    expect(permBranch).not.toContain("obtainDaemonKick");
+describe("planOutcome decides kick vs. no-kick per variant (kz8.5 chunk 1+4)", () => {
+  // [LAW:behavior-not-structure] Assert the contract directly on the pure
+  // function: every transient variant kicks, every permanent variant does
+  // not, every ok variant passes the daemon's output through verbatim. This
+  // is the 452-corpse-spiral invariant — permanent failures must NEVER
+  // trigger a kick, because the daemon will refuse the next request
+  // identically and the spiral repeats.
+
+  test("ok outcome returns the daemon output and does not kick", () => {
+    const plan = planOutcome({ kind: "ok", output: "rendered statusline\n" });
+    expect(plan.kick).toBe(false);
+    expect(plan.output).toBe("rendered statusline\n");
+  });
+
+  test("every transient cause kicks", () => {
+    const transientCauses: TransientOutcome["cause"][] = [
+      "unreachable",
+      "timeout",
+      "io_error",
+    ];
+    for (const cause of transientCauses) {
+      const plan = planOutcome({
+        kind: "transient",
+        cause,
+        message: "anything",
+      });
+      expect(plan.kick).toBe(true);
+      // Empty-line output keeps the statusline non-blank without flicker
+      // while the kick warms a fresh daemon for the next render tick.
+      expect(plan.output).toBe("\n");
+    }
+  });
+
+  test("every permanent cause does NOT kick (the spiral-breaker)", () => {
+    const permanentOutcomes: PermanentOutcome[] = [
+      { kind: "permanent", cause: "version_mismatch", clientV: 3, daemonV: 4 },
+      { kind: "permanent", cause: "bad_request", message: "x" },
+      { kind: "permanent", cause: "render_failed", message: "x" },
+      { kind: "permanent", cause: "malformed_response", message: "x" },
+    ];
+    for (const outcome of permanentOutcomes) {
+      const plan = planOutcome(outcome);
+      expect(plan.kick).toBe(false);
+      // The output carries the diagnostic glyph rather than a blank line —
+      // the user sees what went wrong directly in the statusline.
+      expect(plan.output).toContain("⚠ cc-candybar:");
+    }
   });
 });
