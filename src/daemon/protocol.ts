@@ -62,13 +62,42 @@ export type Request =
 export type Response =
   | { ok: true; output: string }
   | { ok: true; stats: StatsSnapshot }
-  | { ok: false; error: string; code: ErrorCode };
+  // [LAW:types-are-the-program] `daemonV` is the daemon's own
+  // PROTOCOL_VERSION, echoed on every error response so the client can render
+  // a meaningful diagnostic on VERSION_MISMATCH without parsing the human
+  // message. Optional for back-compat: older daemons (or test stubs) that
+  // omit it are still parseable by current clients.
+  | { ok: false; error: string; code: ErrorCode; daemonV?: number };
 
+// [LAW:types-are-the-program] The wire-level discriminator splits failures
+// into two recovery classes: TIMEOUT is transient — the daemon is alive but
+// slow, so a respawn or retry has a real chance of recovering. Every other
+// code is permanent — respawning would hit the same response identically
+// (the daemon refuses the request for VERSION_MISMATCH or BAD_REQUEST, or
+// fails internally for RENDER_FAILED in a way the spawn loop cannot cure),
+// so the spiral-breaker contract requires the client NOT to kick. The
+// kick-vs-no-kick decision is encoded off this code, not off the error
+// string.
 export type ErrorCode =
   | "VERSION_MISMATCH"
   | "TIMEOUT"
   | "RENDER_FAILED"
   | "BAD_REQUEST";
+
+// [LAW:types-are-the-program] A typed error class for failures that originate
+// inside the wire-protocol layer (oversized frame, JSON decode failure).
+// Callers in src/daemon/client.ts can branch on `e instanceof ProtocolError`
+// to classify these as `permanent/malformed_response` — far more robust than
+// substring-matching against the message, which would silently drift if
+// Node's JSON.parse error wording changes. The class is small but
+// load-bearing: it makes the kick-vs-show-error decision a structural
+// property of the thrown value, not a property of its english string.
+export class ProtocolError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ProtocolError";
+  }
+}
 
 // 4-byte big-endian length prefix + UTF-8 JSON body. Length-prefix beats
 // newline-delimited because error messages may contain embedded newlines and
@@ -92,8 +121,11 @@ export function makeFrameReader(
     while (buf.length >= 4) {
       const len = buf.readUInt32BE(0);
       // Hard cap to defend against a runaway sender allocating gigabytes.
+      // [LAW:types-are-the-program] ProtocolError carries the discriminator
+      // structurally — interpretException routes on `instanceof`, not on a
+      // brittle string match against the message body.
       if (len > 16 * 1024 * 1024) {
-        onError(new Error(`frame too large: ${len}`));
+        onError(new ProtocolError(`frame too large: ${len}`));
         return;
       }
       if (buf.length < 4 + len) return;
@@ -102,7 +134,16 @@ export function makeFrameReader(
       try {
         onFrame(JSON.parse(body.toString("utf8")));
       } catch (e) {
-        onError(e instanceof Error ? e : new Error(String(e)));
+        // JSON.parse throws SyntaxError; wrap as ProtocolError so the
+        // recovery class is structurally typed (not message-matched).
+        // Preserve the original cause for diagnostic logging.
+        const wrapped = new ProtocolError(
+          e instanceof Error ? e.message : String(e),
+        );
+        if (e instanceof Error) {
+          wrapped.cause = e;
+        }
+        onError(wrapped);
         return;
       }
     }

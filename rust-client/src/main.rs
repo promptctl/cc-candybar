@@ -16,13 +16,13 @@
 //
 // On any daemon failure: obtain_daemon_kick() runs a fire-and-forget acquire
 // gated by an existence-as-lock spawn.lock file (open with O_CREAT | O_EXCL,
-// release by unlink — same primitive Node uses in src/daemon/acquire.ts so
-// the two runtimes interoperate). The actual one-daemon invariant is
-// enforced by atomic bind() inside the daemon (see
-// src/daemon/server.ts:bindOrAttachAndExit); the spawn.lock is the
-// thundering-herd optimization that prevents N clients from each forking a
-// Node process when one suffices. Mirrors src/daemon/acquire.ts.
+// release by unlink — same primitive the Node runtime uses so the two
+// interoperate). The actual one-daemon invariant is enforced by atomic
+// bind() inside the daemon itself; the spawn.lock is the thundering-herd
+// optimization that prevents N clients from each forking a Node process
+// when one suffices.
 
+mod error_glyph;
 mod launch;
 
 use std::env;
@@ -37,7 +37,7 @@ use std::sync::mpsc;
 use std::thread;
 use std::time::{Duration, Instant};
 
-const PROTOCOL_VERSION: u32 = 3;
+pub(crate) const PROTOCOL_VERSION: u32 = 3;
 const CONNECT_TIMEOUT: Duration = Duration::from_millis(50);
 const TOTAL_BUDGET: Duration = Duration::from_millis(150);
 const MAX_FRAME_BYTES: u32 = 16 * 1024 * 1024;
@@ -63,18 +63,22 @@ fn main() {
     // last-render cache (daemon-miss fallback shows stale data, not blank).
     let parsed = match parse_stdin() {
         Ok(p) => p,
-        Err(RenderError::BadInput(msg)) => {
+        Err(BadInput::Msg(msg)) => {
             eprintln!("cc-candybar: {msg}");
-            std::process::exit(1);
-        }
-        Err(e) => {
-            eprintln!("cc-candybar: {e:?}");
             std::process::exit(1);
         }
     };
 
+    // [LAW:types-are-the-program] The render outcome carries its own
+    // recovery semantics. Three branches:
+    //   Ok        — print and persist for stale-fallback.
+    //   Transient — kick a fresh daemon, emit stale frame or "\n".
+    //   Permanent — daemon refused our request; respawning will not help.
+    //               Emit a diagnostic and do NOT kick. Mirrors the Node
+    //               caller in src/index.ts. Kicking on every failure was
+    //               the load-bearing half of the 452-corpse spiral (kz8.5).
     match render(&argv, &parsed.hook_data) {
-        Ok(output) => {
+        RenderOutcome::Ok(output) => {
             let _ = io::stdout().write_all(output.as_bytes());
             // Persist for the next daemon-miss. Best-effort: if disk is
             // full or perms are wrong, the user just gets a blink later
@@ -84,12 +88,7 @@ fn main() {
             }
             std::process::exit(0);
         }
-        Err(_reason) => {
-            // Daemon unreachable / errored / timed out. Spawn a detached
-            // daemon for the next refresh, then output the most recent
-            // successful render for THIS session (if we have one) instead
-            // of a blank "\n". A stale frame for ~1s during daemon
-            // restart is much better UX than the statusline blanking.
+        RenderOutcome::Transient(_cause) => {
             obtain_daemon_kick();
             let stale = parsed
                 .session_id
@@ -97,6 +96,15 @@ fn main() {
                 .and_then(|sid| read_last_render(sid));
             let bytes = stale.as_deref().map(str::as_bytes).unwrap_or(b"\n");
             let _ = io::stdout().write_all(bytes);
+            std::process::exit(0);
+        }
+        RenderOutcome::Permanent(cause) => {
+            // [LAW:single-enforcer] Glyph formatting lives in error_glyph.rs
+            // for both runtimes — main.rs never builds this string inline.
+            // No obtain_daemon_kick() — kicking on permanent causes is what
+            // loops on VERSION_MISMATCH (the 452-corpse spiral).
+            let glyph = error_glyph::format_permanent_glyph(&cause);
+            let _ = io::stdout().write_all(glyph.as_bytes());
             std::process::exit(0);
         }
     }
@@ -107,16 +115,18 @@ struct ParsedInput {
     session_id: Option<String>,
 }
 
-fn parse_stdin() -> Result<ParsedInput, RenderError> {
+fn parse_stdin() -> Result<ParsedInput, BadInput> {
     let mut buf = Vec::with_capacity(4096);
-    io::stdin().read_to_end(&mut buf)?;
+    io::stdin()
+        .read_to_end(&mut buf)
+        .map_err(|e| BadInput::Msg(format!("stdin read: {e}")))?;
     if buf.is_empty() {
-        return Err(RenderError::BadInput(
+        return Err(BadInput::Msg(
             "no input on stdin (this tool reads hook data from Claude Code)".into(),
         ));
     }
     let hook_data: serde_json::Value = serde_json::from_slice(&buf)
-        .map_err(|e| RenderError::BadInput(format!("stdin not JSON: {e}")))?;
+        .map_err(|e| BadInput::Msg(format!("stdin not JSON: {e}")))?;
     let session_id = hook_data
         .get("session_id")
         .and_then(|v| v.as_str())
@@ -173,24 +183,48 @@ fn dist_index_path() -> Option<PathBuf> {
 
 // --- render path ---------------------------------------------------------
 
+// [LAW:types-are-the-program] Mirrors ClientOutcome in src/daemon/client.ts.
+// The variant *is* the recovery decision: Transient warrants a kick;
+// Permanent does not. Conflating them — which is what the previous shape
+// did, returning Result<String, _> with everything bucketed into a single
+// failure tag — was the load-bearing half of the 452-corpse spiral (kz8.5).
 #[derive(Debug)]
-#[allow(dead_code)] // payload fields read only via Debug for diagnostics
-enum RenderError {
-    BadInput(String),
-    Io(io::Error),
+#[allow(dead_code)] // payload fields read only via Debug
+pub enum RenderOutcome {
+    Ok(String),
+    Transient(TransientCause),
+    Permanent(PermanentCause),
+}
+
+#[derive(Debug)]
+#[allow(dead_code)] // payload strings read only via Debug
+pub enum TransientCause {
+    Unreachable(String),
     Timeout,
-    Protocol(String),
+    Io(String),
 }
 
-impl From<io::Error> for RenderError {
-    fn from(e: io::Error) -> Self {
-        RenderError::Io(e)
-    }
+#[derive(Debug)]
+pub enum PermanentCause {
+    VersionMismatch { client_v: u32, daemon_v: u32 },
+    BadRequest(String),
+    RenderFailed(String),
+    MalformedResponse(String),
 }
 
-fn render(argv: &[String], hook_data: &serde_json::Value) -> Result<String, RenderError> {
+// BadInput is a startup-time parse failure on stdin — it is *not* a render
+// outcome. It exits 1 in main() before any wire activity happens.
+#[derive(Debug)]
+enum BadInput {
+    Msg(String),
+}
+
+fn render(argv: &[String], hook_data: &serde_json::Value) -> RenderOutcome {
     let deadline = Instant::now() + TOTAL_BUDGET;
-    let cwd = env::current_dir()?.to_string_lossy().into_owned();
+    let cwd = match env::current_dir() {
+        Ok(p) => p.to_string_lossy().into_owned(),
+        Err(e) => return RenderOutcome::Transient(TransientCause::Io(e.to_string())),
+    };
     // [LAW:single-enforcer] Terminal width is captured here, in the client's
     // live shell context, then trusted by the daemon. The daemon's own env
     // reflects whichever shell launched it, not the active terminal.
@@ -206,35 +240,131 @@ fn render(argv: &[String], hook_data: &serde_json::Value) -> Result<String, Rend
     if let Some(cols) = term_cols {
         request["termCols"] = serde_json::Value::from(cols);
     }
-    let body = serde_json::to_vec(&request)
-        .map_err(|e| RenderError::Protocol(format!("encode: {e}")))?;
+    let body = match serde_json::to_vec(&request) {
+        Ok(b) => b,
+        // Encoding our own request failed — this is a programming error
+        // (non-serializable hook_data), not a daemon problem. Treat as
+        // Permanent so we don't loop on it.
+        Err(e) => {
+            return RenderOutcome::Permanent(PermanentCause::MalformedResponse(format!(
+                "encode request: {e}"
+            )));
+        }
+    };
 
     let socket = socket_path();
-    let mut sock = connect_with_timeout(&socket, CONNECT_TIMEOUT)
-        .map_err(|e| RenderError::Io(e))?;
+    let mut sock = match connect_with_timeout(&socket, CONNECT_TIMEOUT) {
+        Ok(s) => s,
+        Err(e) => return classify_io_error(e),
+    };
 
-    sock.set_write_timeout(Some(remaining(deadline)?))?;
-    write_frame(&mut sock, &body)?;
-
-    sock.set_read_timeout(Some(remaining(deadline)?))?;
-    let resp_body = read_frame(&mut sock)?;
-
-    let resp: serde_json::Value = serde_json::from_slice(&resp_body)
-        .map_err(|e| RenderError::Protocol(format!("decode: {e}")))?;
-
-    let ok = resp.get("ok").and_then(|v| v.as_bool()).unwrap_or(false);
-    if !ok {
-        let code = resp
-            .get("code")
-            .and_then(|v| v.as_str())
-            .unwrap_or("UNKNOWN");
-        return Err(RenderError::Protocol(format!("daemon error: {code}")));
+    if let Err(e) = remaining_or_io(deadline).and_then(|d| sock.set_write_timeout(Some(d))) {
+        return classify_io_error(e);
     }
-    let output = resp
-        .get("output")
+    if let Err(e) = write_frame(&mut sock, &body) {
+        return classify_io_error(e);
+    }
+
+    if let Err(e) = remaining_or_io(deadline).and_then(|d| sock.set_read_timeout(Some(d))) {
+        return classify_io_error(e);
+    }
+    let resp_body = match read_frame(&mut sock) {
+        Ok(b) => b,
+        Err(e) => return classify_io_error(e),
+    };
+
+    let resp: serde_json::Value = match serde_json::from_slice(&resp_body) {
+        Ok(v) => v,
+        Err(e) => {
+            return RenderOutcome::Permanent(PermanentCause::MalformedResponse(format!(
+                "decode response: {e}"
+            )));
+        }
+    };
+
+    interpret_response(resp)
+}
+
+// [LAW:types-are-the-program] One place that turns a wire-level response
+// into a typed outcome — mirrors interpretResponse() in src/daemon/client.ts.
+// Every non-ok wire code maps to exactly one variant; TIMEOUT is the only
+// one that becomes Transient because it is the only one a respawn can cure.
+fn interpret_response(resp: serde_json::Value) -> RenderOutcome {
+    let ok = resp.get("ok").and_then(|v| v.as_bool()).unwrap_or(false);
+    if ok {
+        return match resp.get("output").and_then(|v| v.as_str()) {
+            Some(output) => RenderOutcome::Ok(output.to_string()),
+            None => RenderOutcome::Permanent(PermanentCause::MalformedResponse(
+                "ok response missing output".into(),
+            )),
+        };
+    }
+    let code = resp
+        .get("code")
         .and_then(|v| v.as_str())
-        .ok_or_else(|| RenderError::Protocol("response missing output".into()))?;
-    Ok(output.to_string())
+        .unwrap_or("UNKNOWN");
+    let msg = resp
+        .get("error")
+        .and_then(|v| v.as_str())
+        .unwrap_or("(no error message)")
+        .to_string();
+    match code {
+        "VERSION_MISMATCH" => {
+            // Older daemons may not echo daemonV; fall back to 0 so the
+            // glyph (chunk 2) can render "client v3 ≠ daemon v?" rather
+            // than parse the human error string.
+            let daemon_v = resp
+                .get("daemonV")
+                .and_then(|v| v.as_u64())
+                .map(|n| n as u32)
+                .unwrap_or(0);
+            RenderOutcome::Permanent(PermanentCause::VersionMismatch {
+                client_v: PROTOCOL_VERSION,
+                daemon_v,
+            })
+        }
+        "TIMEOUT" => RenderOutcome::Transient(TransientCause::Timeout),
+        "BAD_REQUEST" => RenderOutcome::Permanent(PermanentCause::BadRequest(msg)),
+        "RENDER_FAILED" => RenderOutcome::Permanent(PermanentCause::RenderFailed(msg)),
+        _ => RenderOutcome::Permanent(PermanentCause::MalformedResponse(format!(
+            "unknown error code: {code}"
+        ))),
+    }
+}
+
+// [LAW:no-defensive-null-guards] Connect/read/write errors come from the
+// trust boundary with the kernel. Each known errno kind maps to a typed
+// cause; unknown kinds fall through to Io. We never silently bucket
+// these into a stringified failure that loses the recovery signal.
+//
+// [LAW:one-type-per-behavior] InvalidData/InvalidInput come from
+// write_frame/read_frame when the protocol layer detects an oversized
+// frame — that is a protocol violation, not a connection failure. The
+// daemon is alive and produced garbage; respawning would hit the same
+// response. Route to MalformedResponse so the recovery class matches the
+// TS mirror's `interpretException` for the equivalent protocol error.
+fn classify_io_error(e: io::Error) -> RenderOutcome {
+    use io::ErrorKind::*;
+    match e.kind() {
+        ConnectionRefused | NotFound => {
+            RenderOutcome::Transient(TransientCause::Unreachable(e.to_string()))
+        }
+        TimedOut | WouldBlock => RenderOutcome::Transient(TransientCause::Timeout),
+        InvalidData | InvalidInput => {
+            RenderOutcome::Permanent(PermanentCause::MalformedResponse(e.to_string()))
+        }
+        _ => RenderOutcome::Transient(TransientCause::Io(e.to_string())),
+    }
+}
+
+// Returns the remaining time before the deadline as a Duration, or an
+// io::Error with kind TimedOut so the caller's classify_io_error converts
+// it correctly. Replaces the old `remaining()` which used a custom error
+// type; this shape lets the deadline check share the IO error path.
+fn remaining_or_io(deadline: Instant) -> io::Result<Duration> {
+    deadline
+        .checked_duration_since(Instant::now())
+        .ok_or_else(|| io::Error::new(io::ErrorKind::TimedOut, "deadline exceeded"))
 }
 
 // Pure terminal-width capture — no subprocess, no shell-out. Tries the env
@@ -266,12 +396,6 @@ fn detect_term_cols() -> Option<u32> {
     None
 }
 
-fn remaining(deadline: Instant) -> Result<Duration, RenderError> {
-    deadline
-        .checked_duration_since(Instant::now())
-        .filter(|d| !d.is_zero())
-        .ok_or(RenderError::Timeout)
-}
 
 // Socket and other daemon runtime files live under $XDG_STATE_HOME/cc-candybar
 // (default ~/.local/state/cc-candybar). Caches go under $XDG_CACHE_HOME
@@ -356,10 +480,13 @@ fn read_last_render(sid: &str) -> Option<String> {
 
 // --- framing -------------------------------------------------------------
 
-fn write_frame<W: Write>(w: &mut W, body: &[u8]) -> Result<(), RenderError> {
+fn write_frame<W: Write>(w: &mut W, body: &[u8]) -> io::Result<()> {
     let len = body.len();
     if len > MAX_FRAME_BYTES as usize {
-        return Err(RenderError::Protocol(format!("frame too large: {len}")));
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("frame too large: {len}"),
+        ));
     }
     let header = (len as u32).to_be_bytes();
     w.write_all(&header)?;
@@ -368,12 +495,15 @@ fn write_frame<W: Write>(w: &mut W, body: &[u8]) -> Result<(), RenderError> {
     Ok(())
 }
 
-fn read_frame<R: Read>(r: &mut R) -> Result<Vec<u8>, RenderError> {
+fn read_frame<R: Read>(r: &mut R) -> io::Result<Vec<u8>> {
     let mut header = [0u8; 4];
     r.read_exact(&mut header)?;
     let len = u32::from_be_bytes(header);
     if len > MAX_FRAME_BYTES {
-        return Err(RenderError::Protocol(format!("frame too large: {len}")));
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("frame too large: {len}"),
+        ));
     }
     let mut body = vec![0u8; len as usize];
     r.read_exact(&mut body)?;
@@ -536,4 +666,47 @@ fn spawn_daemon_detached() {
     };
     // [LAW:single-enforcer] All Command::new goes through launch.rs.
     let _ = launch::spawn_node_detached_daemon(&script);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io;
+
+    // [LAW:one-type-per-behavior] InvalidData/InvalidInput from the protocol
+    // layer (write_frame/read_frame emit them for oversized frames) are
+    // protocol violations, not connection failures. Pinning this mapping
+    // here keeps the recovery class aligned with the TS mirror's
+    // interpretException — a kick won't fix garbage on the wire.
+    #[test]
+    fn classify_io_error_routes_invalid_data_to_permanent() {
+        for kind in [io::ErrorKind::InvalidData, io::ErrorKind::InvalidInput] {
+            let outcome = classify_io_error(io::Error::new(kind, "frame too large: 99999999"));
+            match outcome {
+                RenderOutcome::Permanent(PermanentCause::MalformedResponse(msg)) => {
+                    assert!(
+                        msg.contains("frame too large"),
+                        "expected message to carry the protocol context, got: {msg:?}"
+                    );
+                }
+                other => panic!("expected Permanent(MalformedResponse), got: {other:?}"),
+            }
+        }
+    }
+
+    #[test]
+    fn classify_io_error_keeps_connection_errors_transient() {
+        let conn = classify_io_error(io::Error::from(io::ErrorKind::ConnectionRefused));
+        assert!(matches!(conn, RenderOutcome::Transient(TransientCause::Unreachable(_))));
+        let nf = classify_io_error(io::Error::from(io::ErrorKind::NotFound));
+        assert!(matches!(nf, RenderOutcome::Transient(TransientCause::Unreachable(_))));
+        let to = classify_io_error(io::Error::from(io::ErrorKind::TimedOut));
+        assert!(matches!(to, RenderOutcome::Transient(TransientCause::Timeout)));
+    }
+
+    #[test]
+    fn classify_io_error_default_is_transient_io() {
+        let other = classify_io_error(io::Error::new(io::ErrorKind::Other, "something"));
+        assert!(matches!(other, RenderOutcome::Transient(TransientCause::Io(_))));
+    }
 }
