@@ -207,7 +207,7 @@ function interpretException(e: unknown): ClientOutcome {
   // SyntaxError name check below.
   if (
     message.startsWith("frame too large:") ||
-    (e instanceof SyntaxError) ||
+    e instanceof SyntaxError ||
     message.includes("Unexpected token") ||
     message.includes("Unexpected end of JSON")
   ) {
