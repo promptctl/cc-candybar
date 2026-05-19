@@ -23,7 +23,6 @@ export const LAUNCH_CATEGORIES = [
   "git",
   "user-shell",
   "tmux",
-  "terminal-width",
   "click.pbcopy",
   "click.open",
   "install.plutil",
@@ -196,9 +195,8 @@ export async function launch(opts: LaunchOpts): Promise<LaunchResult> {
   });
 }
 
-// Sync variant. Only for callers that genuinely cannot be async — currently
-// just `src/utils/terminal-width.ts`, called from the synchronous render-path.
-// kz8.4 deletes those sites; once gone, this function can go too.
+// Sync variant. For callers that genuinely cannot be async — the spawn
+// outcome must be settled before the function returns.
 export function launchSync(opts: LaunchOpts): LaunchResult {
   const t0 = Date.now();
   statsHandle?.onStart(opts.category);

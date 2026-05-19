@@ -11,6 +11,25 @@ import { tryRenderViaDaemon } from "./daemon/client";
 import { runDaemonStats } from "./daemon/client-stats";
 import { obtainDaemonKick } from "./daemon/acquire";
 
+// Read terminal width from the live shell context (no subprocess). Returns
+// undefined when nothing reliable is available; the daemon falls back to its
+// own pure lookup chain in that case. Always-COLUMNS-first because Bash
+// exports it on resize and Claude Code propagates it to hook commands.
+// stderr (not stdout) is the TTY-side fallback: when invoked as a Claude
+// statusline hook, stdin is the hook JSON pipe and stdout is the captured
+// statusline pipe, leaving stderr as the only stream still attached to the
+// parent terminal. Mirrors the Rust client's TIOCGWINSZ-on-STDERR_FILENO.
+function detectTermCols(): number | undefined {
+  const env = process.env.COLUMNS;
+  if (env) {
+    const n = parseInt(env, 10);
+    if (!isNaN(n) && n > 0) return n;
+  }
+  const cols = process.stderr.columns;
+  if (cols && cols > 0) return cols;
+  return undefined;
+}
+
 function showHelpText(): void {
   console.log(`
 cc-candybar - Beautiful powerline statusline for Claude Code
@@ -158,10 +177,16 @@ echo '{"session_id":"test-session","workspace":{"project_dir":"/path/to/project"
     // no shared gitService/usageProvider, no per-session state, no warm
     // caches). On daemon miss we spawn detached and emit empty output; the
     // next status-line refresh hits the warm daemon and renders for real.
+    //
+    // [LAW:single-enforcer] Terminal width is captured here, in the user's
+    // shell environment, then trusted by the daemon. The daemon's own env
+    // reflects whichever shell launched it minutes/hours ago, so it can't
+    // measure the active terminal — only the live client can.
     const outcome = await tryRenderViaDaemon(
       hookData,
       process.argv,
       process.cwd(),
+      detectTermCols(),
     );
     if (outcome.ok && outcome.output !== undefined) {
       process.stdout.write(outcome.output);
