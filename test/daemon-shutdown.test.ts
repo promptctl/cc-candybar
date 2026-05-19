@@ -62,14 +62,18 @@ async function spawnDaemon(): Promise<DaemonHandle> {
   child.stdout?.on("data", () => {});
   child.stderr?.on("data", () => {});
 
-  // Wait for the daemon to bind. The kernel makes the socket appear
-  // synchronously inside the bind() call, so a simple poll on the socket
-  // file is sufficient — once it exists, the listener is up.
+  // [LAW:verifiable-goals] The readiness check has to assert the *load-bearing*
+  // property — the daemon actually serves connections — not a proxy that can
+  // hold while the property doesn't. The socket file appears synchronously
+  // inside bind(), but bind() succeeding doesn't prove the accept() loop is
+  // running. A successful connect() round-trip does. If we let "file exists"
+  // pass as readiness, a daemon that bound but hung before accepting would
+  // let the test proceed and hang downstream on its first request.
   const deadline = Date.now() + 5000;
-  while (Date.now() < deadline) {
+  let alive = false;
+  while (!alive && Date.now() < deadline) {
     if (fs.existsSync(sockPath)) {
-      // Confirm by probing: connect should succeed.
-      const alive = await new Promise<boolean>((resolve) => {
+      alive = await new Promise<boolean>((resolve) => {
         const s = net.connect(sockPath);
         s.once("connect", () => {
           s.destroy();
@@ -77,13 +81,17 @@ async function spawnDaemon(): Promise<DaemonHandle> {
         });
         s.once("error", () => resolve(false));
       });
-      if (alive) break;
     }
-    await new Promise((r) => setTimeout(r, 25));
+    if (!alive) {
+      await new Promise((r) => setTimeout(r, 25));
+    }
   }
-  if (!fs.existsSync(sockPath)) {
+  if (!alive) {
     child.kill("SIGKILL");
-    throw new Error("daemon did not bind socket within 5000ms");
+    throw new Error(
+      "daemon did not accept connections within 5000ms (socket file" +
+        ` ${fs.existsSync(sockPath) ? "exists" : "absent"})`,
+    );
   }
 
   return {
@@ -113,25 +121,38 @@ async function spawnDaemon(): Promise<DaemonHandle> {
   };
 }
 
+// [LAW:verifiable-goals] Per-call timeout (not relying on Jest's global) so a
+// hung daemon produces a focused failure with the right message, not a 30s
+// global-timeout aborting the whole suite. The budget matches the contract:
+// the test's outer guarantee is "process exits within SHUTDOWN_BUDGET_MS";
+// the response round-trip is part of that envelope, so REPLY_BUDGET_MS uses
+// the same number rather than a separate magic number.
+const REPLY_BUDGET_MS = SHUTDOWN_BUDGET_MS;
+
 function sendShutdown(sockPath: string): Promise<Response> {
   return new Promise((resolve, reject) => {
     const sock = net.connect(sockPath);
+    const timer = setTimeout(() => {
+      sock.destroy();
+      reject(
+        new Error(
+          `shutdown response did not arrive within ${REPLY_BUDGET_MS}ms`,
+        ),
+      );
+    }, REPLY_BUDGET_MS);
+    const finish = (action: () => void): void => {
+      clearTimeout(timer);
+      sock.destroy();
+      action();
+    };
     const reader = makeFrameReader(
-      (frame) => {
-        sock.destroy();
-        resolve(frame as Response);
-      },
-      (err) => {
-        sock.destroy();
-        reject(err);
-      },
+      (frame) => finish(() => resolve(frame as Response)),
+      (err) => finish(() => reject(err)),
     );
     sock.on("data", reader);
-    sock.once("error", reject);
+    sock.once("error", (err) => finish(() => reject(err)));
     sock.once("connect", () => {
-      sock.write(
-        encodeFrame({ v: PROTOCOL_VERSION, kind: "shutdown" }),
-      );
+      sock.write(encodeFrame({ v: PROTOCOL_VERSION, kind: "shutdown" }));
     });
   });
 }
