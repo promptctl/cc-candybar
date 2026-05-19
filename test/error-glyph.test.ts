@@ -99,6 +99,37 @@ describe("formatPermanentGlyph (kz8.5 ch.2)", () => {
     expect(body.length).toBeLessThan(100);
   });
 
+  // [LAW:one-type-per-behavior] The single-line glyph contract documented in
+  // src/render/error-glyph.ts and rust-client/src/error_glyph.rs requires no
+  // embedded newlines mid-string. The current corpus uses inputs without
+  // newlines, so the contract was previously asserted but unverified for the
+  // adversarial case where a daemon error string contains \n or \r. Both
+  // newline classes are sanitized to spaces at the same boundary that
+  // enforces the code-point budget.
+  test("embedded newlines in daemon error string are sanitized to spaces", () => {
+    // `\n` and `\r` each become one space, so `\r\n` becomes two spaces.
+    // The load-bearing contract is "no embedded newline/CR in the output";
+    // the count of inserted spaces is incidental.
+    const cases: Array<[string, string]> = [
+      ["line1\nline2\nline3", "line1 line2 line3"],
+      ["line1\rline2\rline3", "line1 line2 line3"],
+      ["line1\r\nline2\r\nline3", "line1  line2  line3"],
+    ];
+    for (const [message, expectedSubstr] of cases) {
+      const glyph = formatPermanentGlyph({
+        kind: "permanent",
+        cause: "render_failed",
+        message,
+      });
+      // Exactly one \n total — the trailing one from the ANSI reset tail.
+      expect(glyph.split("\n").length).toBe(2);
+      expect(glyph.endsWith(TAIL)).toBe(true);
+      const body = glyph.slice(OPEN.length, -TAIL.length);
+      expect(body).not.toMatch(/[\n\r]/);
+      expect(body).toContain(expectedSubstr);
+    }
+  });
+
   // [LAW:one-type-per-behavior] Truncation must count Unicode scalar values,
   // not UTF-16 code units. Astral characters (each 2 UTF-16 units / 1 code
   // point) would otherwise truncate at a different boundary than the Rust

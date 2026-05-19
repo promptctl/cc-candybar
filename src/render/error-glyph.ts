@@ -46,13 +46,30 @@ function describe(outcome: PermanentOutcome): string {
   }
 }
 
-// [LAW:one-type-per-behavior] Truncate by Unicode code point, mirroring the
-// Rust side's `s.chars().take(...)`. `s.length`/`s.slice()` operate on UTF-16
-// code units and would split surrogate pairs on astral input (emoji, etc.),
-// producing output that diverges from Rust's. Iterating via the spread operator
-// yields one entry per code point, matching `chars()` semantics.
+// [LAW:single-enforcer] One sanitize-and-truncate boundary. Daemon error
+// strings come from arbitrary sources (parse-error text, .toString() output
+// of unknown exceptions) and may contain `\n` or `\r`. Without normalization
+// those leak into the statusline as multi-line glyphs that break the layout
+// the surrounding cc-candybar code assumes. Sanitization happens here, in
+// the same pass that enforces the code-point budget — no caller has to
+// remember to scrub messages before passing them in.
+//
+// [LAW:one-type-per-behavior] Mirrors rust-client/src/error_glyph.rs's
+// truncate(): iterate by code point (matching `chars()`, astral-safe),
+// replace newline-class characters with single spaces, stop at the budget.
 function truncate(s: string): string {
-  const points = [...s];
-  if (points.length <= MAX_MESSAGE_LEN) return s;
-  return `${points.slice(0, MAX_MESSAGE_LEN - 1).join("")}…`;
+  let out = "";
+  let count = 0;
+  for (const ch of s) {
+    if (count === MAX_MESSAGE_LEN) {
+      // We already wrote MAX_MESSAGE_LEN code points and the input has at
+      // least one more — replace the last code point with the ellipsis so
+      // the visible length stays at MAX_MESSAGE_LEN. /.$/u with the
+      // unicode flag matches a full code point, not a UTF-16 unit.
+      return out.replace(/.$/u, "…");
+    }
+    out += ch === "\n" || ch === "\r" ? " " : ch;
+    count++;
+  }
+  return out;
 }

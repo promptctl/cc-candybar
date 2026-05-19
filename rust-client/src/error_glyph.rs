@@ -50,15 +50,27 @@ fn describe(cause: &PermanentCause) -> String {
     }
 }
 
-// Truncate by character count (not bytes) so multibyte UTF-8 in daemon error
-// strings doesn't slice mid-codepoint and produce invalid UTF-8.
+// [LAW:single-enforcer] One sanitize-and-truncate boundary. Daemon error
+// strings can contain '\n' or '\r' (parse errors, serialized exceptions);
+// without normalization those leak into the statusline as multi-line glyphs.
+// Sanitize and truncate by Unicode scalar values in one pass — matches the
+// TS mirror at src/render/error-glyph.ts and avoids the previous shape's
+// two-pass `chars().count()` + `chars().take()` traversal.
 fn truncate(s: &str) -> String {
-    let char_count = s.chars().count();
-    if char_count <= MAX_MESSAGE_LEN {
-        return s.to_string();
+    let mut out = String::new();
+    let mut count: usize = 0;
+    for ch in s.chars() {
+        if count == MAX_MESSAGE_LEN {
+            // Already at budget — replace the last code point we wrote
+            // with the ellipsis so visible length stays at the budget.
+            out.pop();
+            out.push('…');
+            return out;
+        }
+        let safe = if ch == '\n' || ch == '\r' { ' ' } else { ch };
+        out.push(safe);
+        count += 1;
     }
-    let mut out: String = s.chars().take(MAX_MESSAGE_LEN - 1).collect();
-    out.push('…');
     out
 }
 
@@ -111,6 +123,34 @@ mod tests {
             g.ends_with(&expected_tail),
             "got: {g:?}, expected to end with: {expected_tail:?}"
         );
+    }
+
+    // [LAW:one-type-per-behavior] Newline-sanitization coverage symmetric to
+    // the TS side. The single-line glyph contract requires no embedded
+    // newlines mid-string; both runtimes sanitize \n and \r to spaces at the
+    // truncate boundary. This test pins that behavior — a regression that
+    // drops the sanitization would let multi-line glyphs reach the
+    // statusline and break the layout.
+    #[test]
+    fn truncate_sanitizes_embedded_newlines() {
+        // `\n` and `\r` each become one space, so `\r\n` becomes two spaces.
+        // The load-bearing contract is "no embedded newline/CR in the output";
+        // the count of inserted spaces is incidental.
+        let cases: [(&str, &str); 3] = [
+            ("line1\nline2\nline3", "line1 line2 line3"),
+            ("line1\rline2\rline3", "line1 line2 line3"),
+            ("line1\r\nline2\r\nline3", "line1  line2  line3"),
+        ];
+        for (input, expected_substr) in cases {
+            let g = format_permanent_glyph(&PermanentCause::RenderFailed(input.to_string()));
+            // Exactly one trailing newline (the ANSI reset tail).
+            assert_eq!(g.matches('\n').count(), 1, "embedded \\n leaked for: {input:?}");
+            assert_eq!(g.matches('\r').count(), 0, "embedded \\r leaked for: {input:?}");
+            assert!(
+                g.contains(expected_substr),
+                "expected to contain {expected_substr:?} for input {input:?}, got: {g:?}"
+            );
+        }
     }
 
     // [LAW:one-type-per-behavior] Astral-character coverage symmetric to the
