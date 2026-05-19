@@ -62,6 +62,33 @@ async function spawnDaemon(): Promise<DaemonHandle> {
   child.stdout?.on("data", () => {});
   child.stderr?.on("data", () => {});
 
+  // [LAW:single-enforcer] One cleanup primitive that closes the child and
+  // removes every tempdir we created. Called from both the success-path
+  // (returned as handle.cleanup, invoked by the test's finally) and the
+  // failure-path below — without this, a failed readiness probe used to
+  // leak three tmpdirs per run (state/cache/config) and CI runners
+  // accumulated them on every flake.
+  const cleanup = (): void => {
+    if (child.exitCode === null && child.signalCode === null) {
+      try {
+        child.kill("SIGKILL");
+      } catch {}
+    }
+    try {
+      fs.rmSync(stateRoot, { recursive: true, force: true });
+    } catch {}
+    if (env.XDG_CACHE_HOME) {
+      try {
+        fs.rmSync(env.XDG_CACHE_HOME, { recursive: true, force: true });
+      } catch {}
+    }
+    if (env.XDG_CONFIG_HOME) {
+      try {
+        fs.rmSync(env.XDG_CONFIG_HOME, { recursive: true, force: true });
+      } catch {}
+    }
+  };
+
   // [LAW:verifiable-goals] The readiness check has to assert the *load-bearing*
   // property — the daemon actually serves connections — not a proxy that can
   // hold while the property doesn't. The socket file appears synchronously
@@ -87,38 +114,14 @@ async function spawnDaemon(): Promise<DaemonHandle> {
     }
   }
   if (!alive) {
-    child.kill("SIGKILL");
+    cleanup();
     throw new Error(
       "daemon did not accept connections within 5000ms (socket file" +
         ` ${fs.existsSync(sockPath) ? "exists" : "absent"})`,
     );
   }
 
-  return {
-    child,
-    sockPath,
-    stateDir,
-    cleanup: () => {
-      if (child.exitCode === null && child.signalCode === null) {
-        try {
-          child.kill("SIGKILL");
-        } catch {}
-      }
-      try {
-        fs.rmSync(stateRoot, { recursive: true, force: true });
-      } catch {}
-      if (env.XDG_CACHE_HOME) {
-        try {
-          fs.rmSync(env.XDG_CACHE_HOME, { recursive: true, force: true });
-        } catch {}
-      }
-      if (env.XDG_CONFIG_HOME) {
-        try {
-          fs.rmSync(env.XDG_CONFIG_HOME, { recursive: true, force: true });
-        } catch {}
-      }
-    },
-  };
+  return { child, sockPath, stateDir, cleanup };
 }
 
 // [LAW:verifiable-goals] Per-call timeout (not relying on Jest's global) so a

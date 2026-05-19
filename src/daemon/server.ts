@@ -329,17 +329,27 @@ function shutdown(code: number): void {
   if (shuttingDown) return;
   shuttingDown = true;
   // [LAW:single-enforcer] Arm the SIGKILL backstop FIRST, before any cleanup.
-  // Last night's 452-daemon incident: shut-down daemons logged "shutting
-  // down" but held the bound socket FD 42 minutes later — process.exit never
-  // fired. A synchronous hang inside a close() (fs.FSWatcher.close on a
-  // pathological inode, a swallowed-then-blocked log write, an event-loop
-  // handle libuv refused to drop) leaves cleanup mid-flight and exit
-  // unreachable. Arming the kill *before* the closes means the
-  // process-gone invariant — which the singleton mutex depends on — holds
-  // mechanically regardless of whether cleanup ever finishes. The timer is
-  // NOT unref'd: the whole point is for it to keep the loop alive until
-  // SIGKILL fires; .unref() would let process.exit's race opponents win by
-  // draining other handles first, exactly the failure mode we observed.
+  // The 452-daemon incident: shut-down daemons logged "shutting down" but
+  // held the bound socket FD 42 minutes later — process.exit() reached the
+  // call site but never completed because some active handle kept libuv's
+  // event loop alive past exit's teardown. The prior shape had `.unref()`
+  // on the SIGKILL timer, so the timer itself did NOT keep the loop alive
+  // — leaving the loop's only remaining live handles to win the race.
+  //
+  // What this timer guarantees: as long as the event loop can still run
+  // (handles that won't drop, async cleanup that schedules but never
+  // completes — the realistic failure modes for the incident class), the
+  // setTimeout callback fires within 500ms and SIGKILL terminates the
+  // process from outside the loop's bookkeeping. Critically the timer is
+  // NOT unref'd, so it is itself an active handle that keeps the loop
+  // alive long enough for itself to fire.
+  //
+  // What this timer cannot do: rescue a truly synchronous thread block
+  // (a C++ binding that never returns to JS, an infinite sync loop). No
+  // JS timer can fire while the main thread is blocked; only an external
+  // signal recovers that case. The realistic 452-corpse mode was async-
+  // handle retention, not a synchronous block, so the backstop is
+  // load-bearing for the observed failure pattern.
   setTimeout(() => process.kill(process.pid, "SIGKILL"), 500);
   try {
     fs.unlinkSync(socketPath());
