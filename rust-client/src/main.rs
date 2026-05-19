@@ -37,7 +37,7 @@ use std::sync::mpsc;
 use std::thread;
 use std::time::{Duration, Instant};
 
-const PROTOCOL_VERSION: u32 = 3;
+pub(crate) const PROTOCOL_VERSION: u32 = 3;
 const CONNECT_TIMEOUT: Duration = Duration::from_millis(50);
 const TOTAL_BUDGET: Duration = Duration::from_millis(150);
 const MAX_FRAME_BYTES: u32 = 16 * 1024 * 1024;

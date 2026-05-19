@@ -81,25 +81,34 @@ mod tests {
     const OPEN: &str = "\x1b[48;2;200;40;40m\x1b[38;2;255;255;255m";
     const TAIL: &str = "\x1b[0m\n";
 
+    // [LAW:one-source-of-truth] Fixtures derive both versions from the
+    // canonical PROTOCOL_VERSION constant rather than embedding the current
+    // numbers as literals. Expected strings are built via format! against
+    // the same source. A PROTOCOL_VERSION bump in main.rs flows through here
+    // automatically — no test edit required.
+    use crate::PROTOCOL_VERSION;
+    const CLIENT_V: u32 = PROTOCOL_VERSION;
+    const OTHER_V: u32 = PROTOCOL_VERSION + 1;
+
     #[test]
     fn version_mismatch_known_daemon_v() {
         let g = format_permanent_glyph(&PermanentCause::VersionMismatch {
-            client_v: 3,
-            daemon_v: 4,
+            client_v: CLIENT_V,
+            daemon_v: OTHER_V,
         });
         assert_eq!(
             g,
-            format!("{OPEN}⚠ cc-candybar: protocol mismatch (client v3 ≠ daemon v4){TAIL}")
+            format!("{OPEN}⚠ cc-candybar: protocol mismatch (client v{CLIENT_V} ≠ daemon v{OTHER_V}){TAIL}")
         );
     }
 
     #[test]
     fn version_mismatch_unknown_daemon_v() {
         let g = format_permanent_glyph(&PermanentCause::VersionMismatch {
-            client_v: 3,
+            client_v: CLIENT_V,
             daemon_v: 0,
         });
-        assert!(g.contains("client v3 ≠ daemon unknown"));
+        assert!(g.contains(&format!("client v{CLIENT_V} ≠ daemon unknown")));
     }
 
     #[test]
@@ -183,8 +192,8 @@ mod tests {
     #[test]
     fn glyph_is_single_line() {
         let g = format_permanent_glyph(&PermanentCause::VersionMismatch {
-            client_v: 3,
-            daemon_v: 4,
+            client_v: CLIENT_V,
+            daemon_v: OTHER_V,
         });
         // Exactly one trailing newline; no embedded newlines mid-string.
         assert_eq!(g.matches('\n').count(), 1);
@@ -195,8 +204,8 @@ mod tests {
     fn glyph_starts_with_prefix() {
         for cause in [
             PermanentCause::VersionMismatch {
-                client_v: 3,
-                daemon_v: 4,
+                client_v: CLIENT_V,
+                daemon_v: OTHER_V,
             },
             PermanentCause::BadRequest("x".into()),
             PermanentCause::RenderFailed("x".into()),

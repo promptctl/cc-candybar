@@ -15,9 +15,21 @@ const OPEN = "\x1b[48;2;200;40;40m\x1b[38;2;255;255;255m";
 const TAIL = "\x1b[0m\n";
 const PREFIX = "⚠ cc-candybar: ";
 
+// [LAW:one-source-of-truth] Fixtures derive both versions from the canonical
+// PROTOCOL_VERSION imported at the top of this file. Expected strings are
+// built via template literals against the same source. A PROTOCOL_VERSION
+// bump in src/daemon/protocol.ts flows through here automatically.
+const CLIENT_V = PROTOCOL_VERSION;
+const OTHER_V = PROTOCOL_VERSION + 1;
+
 describe("formatPermanentGlyph (kz8.5 ch.2)", () => {
   const allCauses: PermanentOutcome[] = [
-    { kind: "permanent", cause: "version_mismatch", clientV: 3, daemonV: 4 },
+    {
+      kind: "permanent",
+      cause: "version_mismatch",
+      clientV: CLIENT_V,
+      daemonV: OTHER_V,
+    },
     { kind: "permanent", cause: "bad_request", message: "nope" },
     { kind: "permanent", cause: "render_failed", message: "boom" },
     { kind: "permanent", cause: "malformed_response", message: "garbage" },
@@ -38,21 +50,23 @@ describe("formatPermanentGlyph (kz8.5 ch.2)", () => {
     const glyph = formatPermanentGlyph({
       kind: "permanent",
       cause: "version_mismatch",
-      clientV: 3,
-      daemonV: 4,
+      clientV: CLIENT_V,
+      daemonV: OTHER_V,
     });
-    expect(glyph).toContain("protocol mismatch (client v3 ≠ daemon v4)");
+    expect(glyph).toContain(
+      `protocol mismatch (client v${CLIENT_V} ≠ daemon v${OTHER_V})`,
+    );
   });
 
   test("version_mismatch with daemonV=0 renders as 'unknown' (older daemons)", () => {
     const glyph = formatPermanentGlyph({
       kind: "permanent",
       cause: "version_mismatch",
-      clientV: 3,
+      clientV: CLIENT_V,
       daemonV: 0,
     });
-    expect(glyph).toContain("client v3 ≠ daemon unknown");
-    expect(glyph).not.toContain("v0");
+    expect(glyph).toContain(`client v${CLIENT_V} ≠ daemon unknown`);
+    expect(glyph).not.toContain("daemon v0");
   });
 
   test("bad_request message is included verbatim when short", () => {
