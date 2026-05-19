@@ -284,6 +284,104 @@ describe("ClientOutcome typing (kz8.5 chunk 1)", () => {
   });
 });
 
+// --- wire trust boundary: unknown error codes do NOT return undefined ---
+//
+// [LAW:types-are-the-program] interpretResponse() declares it returns
+// ClientOutcome, but `resp` is `frame as Response` — an unchecked cast from
+// socket JSON. A daemon (or a stub, or a future build) that sends an error
+// code the client doesn't recognize must not cause the function to silently
+// fall off the bottom and return undefined. The default branch maps unknown
+// codes to `permanent/malformed_response` with the unknown code preserved in
+// the message — explicit failure, mirrored on the Rust side. This test
+// exercises that boundary against a stubbed daemon, since interpretResponse
+// itself is intentionally private to client.ts.
+
+function spinUpRawCodeSocket(
+  sockPath: string,
+  response: object,
+): Promise<net.Server> {
+  return new Promise((resolve) => {
+    const server = net.createServer((sock) => {
+      const reader = makeFrameReader(
+        () => {
+          sock.write(encodeFrame(response));
+          sock.end();
+        },
+        () => {
+          /* parse error ignored on daemon side */
+        },
+      );
+      sock.on("data", reader);
+    });
+    server.listen(sockPath, () => resolve(server));
+  });
+}
+
+describe("wire trust boundary: unknown error codes (kz8.5 followup)", () => {
+  async function runWithStubDaemon(
+    response: object,
+  ): Promise<ClientOutcome> {
+    const tmpRoot = fs.mkdtempSync(
+      path.join(os.tmpdir(), "cc-candybar-trust-"),
+    );
+    const stateDir = path.join(tmpRoot, "cc-candybar");
+    fs.mkdirSync(stateDir, { recursive: true });
+    const sockPath = path.join(stateDir, "socket");
+
+    const server = await spinUpRawCodeSocket(sockPath, response);
+    const prevXdg = process.env.XDG_STATE_HOME;
+    process.env.XDG_STATE_HOME = tmpRoot;
+    try {
+      const { tryRenderViaDaemon } = await import("../src/daemon/client");
+      return await tryRenderViaDaemon(
+        {
+          session_id: "test-trust-boundary",
+          workspace: { project_dir: "/tmp" },
+          model: { id: "x", display_name: "X" },
+        } as never,
+        ["cc-candybar"],
+        "/tmp",
+      );
+    } finally {
+      if (prevXdg === undefined) {
+        delete process.env.XDG_STATE_HOME;
+      } else {
+        process.env.XDG_STATE_HOME = prevXdg;
+      }
+      await new Promise<void>((r) => server.close(() => r()));
+      try {
+        fs.rmSync(tmpRoot, { recursive: true, force: true });
+      } catch {
+        /* best-effort */
+      }
+    }
+  }
+
+  test("unknown error code yields permanent/malformed_response with the code in the message", async () => {
+    const outcome = await runWithStubDaemon({
+      ok: false,
+      error: "something happened",
+      code: "MYSTERIOUS_FOO",
+      daemonV: PROTOCOL_VERSION,
+    });
+    expect(outcome.kind).toBe("permanent");
+    if (outcome.kind !== "permanent") return;
+    expect(outcome.cause).toBe("malformed_response");
+    if (outcome.cause !== "malformed_response") return;
+    expect(outcome.message).toContain("MYSTERIOUS_FOO");
+  });
+
+  test("missing code field yields permanent/malformed_response (does not crash)", async () => {
+    const outcome = await runWithStubDaemon({
+      ok: false,
+      error: "no code field at all",
+    });
+    expect(outcome.kind).toBe("permanent");
+    if (outcome.kind !== "permanent") return;
+    expect(outcome.cause).toBe("malformed_response");
+  });
+});
+
 // --- caller behavior: planOutcome decides kick vs. no-kick per variant ---
 
 describe("planOutcome decides kick vs. no-kick per variant (kz8.5 chunk 1+4)", () => {

@@ -103,6 +103,14 @@ export async function tryClickViaDaemon(
 // [LAW:types-are-the-program] One place that turns a wire-level Response
 // into a typed ClientOutcome. Every caller of tryRender/tryClick goes through
 // this, so the kick-vs-show-error decision has a single source of truth.
+//
+// [LAW:no-defensive-null-guards] This function sits AT the trust boundary —
+// `resp` is `frame as Response`, an unchecked cast from socket JSON. The
+// default branch below is not defensive guarding against an internal bug;
+// it is the explicit handling for unknown wire codes (older daemon, future
+// daemon, test stub, corrupted frame). Mirrors rust-client/src/main.rs's
+// `_ => MalformedResponse(...)` so both runtimes converge on the same
+// observable behavior for any code the client doesn't recognize.
 function interpretResponse(resp: Response): ClientOutcome {
   if (resp.ok) {
     if ("output" in resp) return { kind: "ok", output: resp.output };
@@ -147,6 +155,20 @@ function interpretResponse(resp: Response): ClientOutcome {
         cause: "render_failed",
         message: resp.error,
       };
+    default: {
+      // `resp.code` is typed ErrorCode at compile time, but the JSON cast
+      // upstream means any string can arrive here at runtime. Coerce via
+      // String() to keep the message safe even if a malformed frame omits
+      // the field entirely. The user sees the unknown code in the glyph,
+      // which is exactly the diagnostic they need to debug a stub or a
+      // version skew the typed contract did not anticipate.
+      const code: unknown = (resp as { code?: unknown }).code;
+      return {
+        kind: "permanent",
+        cause: "malformed_response",
+        message: `unknown error code: ${String(code)}`,
+      };
+    }
   }
 }
 
