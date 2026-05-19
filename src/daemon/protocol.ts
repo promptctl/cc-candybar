@@ -84,6 +84,21 @@ export type ErrorCode =
   | "RENDER_FAILED"
   | "BAD_REQUEST";
 
+// [LAW:types-are-the-program] A typed error class for failures that originate
+// inside the wire-protocol layer (oversized frame, JSON decode failure).
+// Callers in src/daemon/client.ts can branch on `e instanceof ProtocolError`
+// to classify these as `permanent/malformed_response` — far more robust than
+// substring-matching against the message, which would silently drift if
+// Node's JSON.parse error wording changes. The class is small but
+// load-bearing: it makes the kick-vs-show-error decision a structural
+// property of the thrown value, not a property of its english string.
+export class ProtocolError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ProtocolError";
+  }
+}
+
 // 4-byte big-endian length prefix + UTF-8 JSON body. Length-prefix beats
 // newline-delimited because error messages may contain embedded newlines and
 // we'd rather not parse them out of-band.
@@ -106,8 +121,11 @@ export function makeFrameReader(
     while (buf.length >= 4) {
       const len = buf.readUInt32BE(0);
       // Hard cap to defend against a runaway sender allocating gigabytes.
+      // [LAW:types-are-the-program] ProtocolError carries the discriminator
+      // structurally — interpretException routes on `instanceof`, not on a
+      // brittle string match against the message body.
       if (len > 16 * 1024 * 1024) {
-        onError(new Error(`frame too large: ${len}`));
+        onError(new ProtocolError(`frame too large: ${len}`));
         return;
       }
       if (buf.length < 4 + len) return;
@@ -116,7 +134,16 @@ export function makeFrameReader(
       try {
         onFrame(JSON.parse(body.toString("utf8")));
       } catch (e) {
-        onError(e instanceof Error ? e : new Error(String(e)));
+        // JSON.parse throws SyntaxError; wrap as ProtocolError so the
+        // recovery class is structurally typed (not message-matched).
+        // Preserve the original cause for diagnostic logging.
+        const wrapped = new ProtocolError(
+          e instanceof Error ? e.message : String(e),
+        );
+        if (e instanceof Error) {
+          wrapped.cause = e;
+        }
+        onError(wrapped);
         return;
       }
     }

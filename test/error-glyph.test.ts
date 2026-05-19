@@ -126,28 +126,35 @@ describe("formatPermanentGlyph (kz8.5 ch.2)", () => {
   // the entire C0 range + DEL to spaces at the same boundary that handles
   // LF/CR. This test pins the specific attack shape — an `\x1b[0m` mid-
   // message MUST NOT survive the truncate pass.
-  test("ESC and other C0 controls in daemon error string are sanitized to spaces", () => {
-    const escapeInjection = "verb=danger\x1b[0m injected\x1b[31m text";
+  test("control characters (C0, DEL, and C1/8-bit CSI) are sanitized to spaces", () => {
+    // 0x1B = ESC (7-bit CSI introducer), 0x9B = 8-bit CSI (some terminals
+    // interpret this directly without needing ESC). The sanitizer must
+    // neutralize BOTH so a daemon-echoed payload can't reach the terminal
+    // via either path. 0x07 (BEL) and 0x7F (DEL) included as extra coverage
+    // across the C0 range plus DEL.
+    const escapeInjection =
+      "verb=danger\x1b[0m injected\x1b[31m text\x9b[0mbypass\x07\x7f end";
     const glyph = formatPermanentGlyph({
       kind: "permanent",
       cause: "bad_request",
       message: escapeInjection,
     });
-    // No raw ESC, BEL, NUL, VT, FF, or DEL in the output body.
     const body = glyph.slice(OPEN.length, -TAIL.length);
     for (let i = 0; i < body.length; i++) {
       const code = body.charCodeAt(i);
-      // Visible ASCII + extended Unicode allowed; everything else (the C0
-      // range and DEL) is treated as a control and must have been replaced.
-      const isControl = code < 0x20 || code === 0x7f;
+      // Unicode Cc class = C0 (0x00..=0x1F) + DEL (0x7F) + C1 (0x80..=0x9F).
+      // Every code point in this class must have been replaced.
+      const isControl =
+        code < 0x20 || code === 0x7f || (code >= 0x80 && code <= 0x9f);
       expect(isControl).toBe(false);
     }
-    // Particularly: the styled glyph envelope (OPEN…TAIL) is intact.
+    // The styled glyph envelope (OPEN…TAIL) is intact.
     expect(glyph.startsWith(OPEN)).toBe(true);
     expect(glyph.endsWith(TAIL)).toBe(true);
-    // The visible text retains the safe parts of the message.
+    // Safe text retained.
     expect(body).toContain("verb=danger");
     expect(body).toContain("injected");
+    expect(body).toContain("bypass");
   });
 
   test("embedded newlines in daemon error string are sanitized to spaces", () => {

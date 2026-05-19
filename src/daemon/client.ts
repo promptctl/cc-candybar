@@ -1,7 +1,7 @@
 import net from "node:net";
 import type { ClaudeHookData } from "../utils/claude";
 import { socketPath } from "./paths";
-import { PROTOCOL_VERSION, sendOne } from "./protocol";
+import { PROTOCOL_VERSION, ProtocolError, sendOne } from "./protocol";
 import type { Response } from "./protocol";
 
 const CONNECT_TIMEOUT_MS = 50;
@@ -201,25 +201,24 @@ function interpretResponse(resp: Response): ClientOutcome {
 //     route through PermanentCause::MalformedResponse and the user sees
 //     a glyph naming the failure rather than a blank line plus a kick.
 //
+// [LAW:types-are-the-program] The protocol-violation discriminator is
+// carried structurally by `ProtocolError` (exported from protocol.ts) —
+// not by substring-matching the error message, which would silently drift
+// if Node's JSON.parse wording changes across versions/locales. The
+// `e instanceof SyntaxError` fallback covers a residual case where a
+// JSON.parse happened to escape `makeFrameReader`'s wrapping (defense in
+// depth, not the primary path).
+//
 // [LAW:one-type-per-behavior] Mirrors rust-client's classify_io_error —
 // InvalidData/InvalidInput map to Permanent(MalformedResponse), everything
 // else stays transient. The two runtimes agree on the recovery class for
 // every observable wire failure.
 function interpretException(e: unknown): ClientOutcome {
-  const message = e instanceof Error ? e.message : String(e);
-  // Protocol violations from makeFrameReader / sendOne. "frame too large"
-  // is emitted as a literal prefix by protocol.ts; JSON parse failures
-  // surface as SyntaxError with these characteristic message stems on
-  // modern V8. New parse-error wording would still be caught by the
-  // SyntaxError name check below.
-  if (
-    message.startsWith("frame too large:") ||
-    e instanceof SyntaxError ||
-    message.includes("Unexpected token") ||
-    message.includes("Unexpected end of JSON")
-  ) {
+  if (e instanceof ProtocolError || e instanceof SyntaxError) {
+    const message = e instanceof Error ? e.message : String(e);
     return { kind: "permanent", cause: "malformed_response", message };
   }
+  const message = e instanceof Error ? e.message : String(e);
   if (message === "CONNECT_TIMEOUT" || message === "TIMEOUT") {
     return { kind: "transient", cause: "timeout", message };
   }

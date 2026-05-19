@@ -52,18 +52,19 @@ fn describe(cause: &PermanentCause) -> String {
 
 // [LAW:single-enforcer] One sanitize-and-truncate boundary. Daemon error
 // strings can contain control characters that break either the glyph's
-// single-line property (LF/CR/FF/VT) or its ANSI envelope (ESC and other
-// C0 controls — a crafted message containing "\x1b[0m" would prematurely
-// end the styled span). With BAD_REQUEST messages echoing caller-supplied
-// data (e.g. an unknown click verb), that vector is reachable without a
-// malicious daemon. `char::is_ascii_control()` matches the entire C0 range
-// (0x00..=0x1F) plus DEL (0x7F) — replacing each with a single space
-// closes both classes.
+// single-line property (LF/CR/FF/VT) or its ANSI envelope (ESC at U+001B,
+// 8-bit CSI at U+009B, and other Cc-class characters that terminals
+// interpret as escape introducers). With BAD_REQUEST messages echoing
+// caller-supplied data (e.g. an unknown click verb), that vector is
+// reachable without a malicious daemon. `char::is_control()` matches the
+// entire Unicode Cc set (C0: 0x00..=0x1F, DEL: 0x7F, C1: 0x80..=0x9F),
+// closing both bypass classes — including the 8-bit CSI which
+// `is_ascii_control()` would have missed.
 //
 // [LAW:one-type-per-behavior] Matches the TS mirror at
-// src/render/error-glyph.ts (`code < 0x20 || code === 0x7f` is the
-// byte-equivalent predicate to `is_ascii_control()`). Same single-pass
-// sanitize-and-truncate shape, same ellipsis policy.
+// src/render/error-glyph.ts (its `isControlChar` predicate covers the
+// exact same code-point set). Same single-pass sanitize-and-truncate
+// shape, same ellipsis policy.
 fn truncate(s: &str) -> String {
     let mut out = String::new();
     let mut count: usize = 0;
@@ -75,7 +76,7 @@ fn truncate(s: &str) -> String {
             out.push('…');
             return out;
         }
-        let safe = if ch.is_ascii_control() { ' ' } else { ch };
+        let safe = if ch.is_control() { ' ' } else { ch };
         out.push(safe);
         count += 1;
     }
@@ -148,18 +149,22 @@ mod tests {
     // range plus DEL must be neutralized at this boundary so the styling
     // contract holds against adversarial input.
     #[test]
-    fn truncate_sanitizes_c0_controls_including_esc() {
-        let injection = "verb=danger\x1b[0m injected\x1b[31m text";
+    fn truncate_sanitizes_control_chars_c0_del_and_c1() {
+        // 0x1B = ESC (7-bit CSI introducer); 0x9B = 8-bit CSI (some
+        // terminals interpret this directly without ESC). 0x07 (BEL) and
+        // 0x7F (DEL) round out coverage across the Cc class.
+        let injection = "verb=danger\u{1B}[0m injected\u{1B}[31m text\u{9B}[0mbypass\u{07}\u{7F} end";
         let g = format_permanent_glyph(&PermanentCause::BadRequest(injection.to_string()));
         // OPEN/TAIL envelope intact.
         assert!(g.starts_with(OPEN), "OPEN envelope broken: {g:?}");
         assert!(g.ends_with(TAIL), "TAIL envelope broken: {g:?}");
-        // No raw control characters in the body. Strip the envelope before
-        // scanning — OPEN/TAIL legitimately contain ESC for the ANSI codes.
+        // No raw control characters in the body — Unicode Cc class is
+        // covered by `is_control()` (C0 + DEL + C1). Strip the envelope
+        // first because OPEN/TAIL legitimately contain ESC.
         let body = &g[OPEN.len()..g.len() - TAIL.len()];
         for ch in body.chars() {
             assert!(
-                !ch.is_ascii_control(),
+                !ch.is_control(),
                 "control character leaked into body: U+{:04X} in {g:?}",
                 ch as u32
             );
@@ -167,6 +172,7 @@ mod tests {
         // Safe parts of the message survive.
         assert!(body.contains("verb=danger"), "lost safe content: {g:?}");
         assert!(body.contains("injected"), "lost safe content: {g:?}");
+        assert!(body.contains("bypass"), "lost safe content after C1: {g:?}");
     }
 
     // [LAW:one-type-per-behavior] Newline-sanitization coverage symmetric to

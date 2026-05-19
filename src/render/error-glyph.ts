@@ -52,20 +52,26 @@ function describe(outcome: PermanentOutcome): string {
 // unknown click verb). Any control character that can disrupt the glyph's
 // single-line-styled-envelope shape must be neutralized here:
 //   - LF/CR/FF/VT break the "single line" property.
-//   - ESC and bare CSI introducers (any of the C0 controls really) can
-//     hijack ANSI styling — a daemon message containing "\x1b[0m" would
-//     end the glyph's red-background span early and let the rest of the
-//     terminal session inherit unstyled text. With BAD_REQUEST messages
-//     echoing user-supplied request fields, that's reachable from a
-//     crafted input even without a malicious daemon.
-// Replacing every C0 control (0x00..0x1F) and DEL (0x7F) with a space is
-// the simplest predicate that closes both classes; visible characters and
-// astral code points pass through unchanged.
+//   - ESC (U+001B), 8-bit CSI (U+009B), and the wider Cc class can hijack
+//     ANSI styling — a daemon message containing "\x1b[0m" would end the
+//     glyph's red-background span early and let the rest of the terminal
+//     session inherit unstyled text. U+009B is interpreted as CSI directly
+//     by some terminals in 8-bit mode, so sanitizing only the C0 range
+//     would leave that bypass open. With BAD_REQUEST messages echoing
+//     user-supplied request fields, that's reachable from a crafted input
+//     even without a malicious daemon.
+// Replacing every Unicode "Cc" (control) character with a single space is
+// the smallest predicate that closes both bypass classes — covers C0
+// (0x00..0x1F), DEL (0x7F), and C1 (0x80..0x9F). Visible characters and
+// the rest of Unicode pass through unchanged.
 //
 // [LAW:one-type-per-behavior] Mirrors rust-client/src/error_glyph.rs's
-// truncate(): same predicate (`char.is_ascii_control()` in Rust ≡
-// `code < 0x20 || code === 0x7f` here), same single-pass sanitize-and-
-// truncate shape, same ellipsis policy.
+// truncate(): `char::is_control()` over there matches the exact same
+// Unicode Cc set, so the two runtimes neutralize the same byte classes.
+function isControlChar(code: number): boolean {
+  return code < 0x20 || code === 0x7f || (code >= 0x80 && code <= 0x9f);
+}
+
 function truncate(s: string): string {
   let out = "";
   let count = 0;
@@ -77,8 +83,7 @@ function truncate(s: string): string {
       // unicode flag matches a full code point, not a UTF-16 unit.
       return out.replace(/.$/u, "…");
     }
-    const code = ch.codePointAt(0) ?? 0;
-    out += code < 0x20 || code === 0x7f ? " " : ch;
+    out += isControlChar(ch.codePointAt(0) ?? 0) ? " " : ch;
     count++;
   }
   return out;
