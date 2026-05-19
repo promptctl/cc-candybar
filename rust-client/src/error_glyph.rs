@@ -113,6 +113,23 @@ mod tests {
         );
     }
 
+    // [LAW:one-type-per-behavior] Astral-character coverage symmetric to the
+    // TS side. Rust's `chars().take(...)` already counts Unicode scalar values;
+    // this test pins that contract against the same input the TS test uses, so
+    // a future change that drops the `chars()` primitive on either side breaks
+    // its own suite rather than silently diverging from the mirror.
+    #[test]
+    fn render_failed_truncates_at_code_point_boundary() {
+        let rockets = "🚀".repeat(100); // 100 code points, 400 UTF-8 bytes
+        let g = format_permanent_glyph(&PermanentCause::RenderFailed(rockets));
+        // 59 rockets + ellipsis after the "render failed: " label.
+        let expected_tail = format!("{}…{TAIL}", "🚀".repeat(59));
+        assert!(
+            g.ends_with(&expected_tail),
+            "got: {g:?}, expected to end with: {expected_tail:?}"
+        );
+    }
+
     #[test]
     fn malformed_response_keeps_short_message_unchanged() {
         let g = format_permanent_glyph(&PermanentCause::MalformedResponse(

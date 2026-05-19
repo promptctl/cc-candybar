@@ -46,7 +46,13 @@ function describe(outcome: PermanentOutcome): string {
   }
 }
 
+// [LAW:one-type-per-behavior] Truncate by Unicode code point, mirroring the
+// Rust side's `s.chars().take(...)`. `s.length`/`s.slice()` operate on UTF-16
+// code units and would split surrogate pairs on astral input (emoji, etc.),
+// producing output that diverges from Rust's. Iterating via the spread operator
+// yields one entry per code point, matching `chars()` semantics.
 function truncate(s: string): string {
-  if (s.length <= MAX_MESSAGE_LEN) return s;
-  return `${s.slice(0, MAX_MESSAGE_LEN - 1)}…`;
+  const points = [...s];
+  if (points.length <= MAX_MESSAGE_LEN) return s;
+  return `${points.slice(0, MAX_MESSAGE_LEN - 1).join("")}…`;
 }

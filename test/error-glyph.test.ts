@@ -98,6 +98,41 @@ describe("formatPermanentGlyph (kz8.5 ch.2)", () => {
     const body = glyph.slice(OPEN.length, -TAIL.length);
     expect(body.length).toBeLessThan(100);
   });
+
+  // [LAW:one-type-per-behavior] Truncation must count Unicode scalar values,
+  // not UTF-16 code units. Astral characters (each 2 UTF-16 units / 1 code
+  // point) would otherwise truncate at a different boundary than the Rust
+  // mirror, and the byte-identical contract this module advertises would only
+  // hold for ASCII input. Rocket (U+1F680) is a single emoji that exercises
+  // surrogate-pair handling specifically.
+  test("truncation counts code points, not UTF-16 units (astral-safe)", () => {
+    const rockets = "🚀".repeat(100); // 100 code points, 200 UTF-16 units
+    const glyph = formatPermanentGlyph({
+      kind: "permanent",
+      cause: "render_failed",
+      message: rockets,
+    });
+    const body = glyph.slice(OPEN.length + PREFIX.length, -TAIL.length);
+    // After "render failed: " prefix in the body, the message is truncated
+    // to exactly MAX_MESSAGE_LEN code points (59 rockets + ellipsis).
+    const message = body.slice("render failed: ".length);
+    expect([...message].length).toBe(60);
+    expect(message.endsWith("…")).toBe(true);
+    // Critically, no lone surrogate ever appears in the output.
+    for (let i = 0; i < glyph.length; i++) {
+      const code = glyph.charCodeAt(i);
+      const isHigh = code >= 0xd800 && code <= 0xdbff;
+      const isLow = code >= 0xdc00 && code <= 0xdfff;
+      if (isHigh) {
+        const next = glyph.charCodeAt(i + 1);
+        expect(next >= 0xdc00 && next <= 0xdfff).toBe(true);
+      }
+      if (isLow) {
+        const prev = glyph.charCodeAt(i - 1);
+        expect(prev >= 0xd800 && prev <= 0xdbff).toBe(true);
+      }
+    }
+  });
 });
 
 // --- end-to-end: stubbed daemon → tryRenderViaDaemon → formatPermanentGlyph ---
