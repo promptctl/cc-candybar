@@ -35,8 +35,10 @@ export const LAUNCH_CATEGORIES = [
 
 export type LaunchCategory = (typeof LAUNCH_CATEGORIES)[number];
 
-// [LAW:single-enforcer] Per-category minimum interval between successful
-// spawn-starts. Sparse map: categories without entries have no rate limit.
+// [LAW:single-enforcer] Per-category minimum interval between spawn attempts
+// (start timestamps). The limiter records on attempt, not on success — a
+// failed spawn still arms the timer so a broken binary can't be retried in a
+// tight loop. Sparse map: categories without entries have no rate limit.
 // [LAW:no-mode-explosion] Bounds are constants here, not config knobs — the
 // caps protect the host from misbehaving renderers/templates and don't need
 // user tuning. Bump these if a legitimate workload starts hitting them.
@@ -48,8 +50,10 @@ const RATE_LIMITS: Partial<Record<LaunchCategory, number>> = {
   "click.open": 1000,
 };
 
-// [LAW:one-source-of-truth] Last-start timestamp per category — the data the
-// rate-limit decision reads. Module-scope state is acceptable here because
+// [LAW:one-source-of-truth] Last-attempt timestamp per category — the data
+// the rate-limit decision reads. Recorded for every attempted spawn (success
+// or spawn-error); rate-limit rejections do NOT update this, because no
+// spawn was attempted. Module-scope state is acceptable here because
 // `launch.ts` is itself the single enforcer; nothing else mutates this.
 const lastStartAt = new Map<LaunchCategory, number>();
 
