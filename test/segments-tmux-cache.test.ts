@@ -91,44 +91,51 @@ describe("TmuxService — cache", () => {
 
   it(
     "different ($TMUX) sockets each get their own cache entry",
-    withEnv({ TMUX_PANE: "%0" }, async () => {
-      const { handle, starts } = spyStats();
-      setLaunchStats(handle);
-      const svc = new TmuxService();
+    // [LAW:single-enforcer] All keys mutated inside MUST appear in withEnv's
+    // env argument so they get snapshot-and-restored. Otherwise a test
+    // mutating process.env.TMUX leaks into later tests.
+    withEnv(
+      { TMUX_PANE: "%0", TMUX: "/private/tmp/tmux-501/socket-a,1,0" },
+      async () => {
+        const { handle, starts } = spyStats();
+        setLaunchStats(handle);
+        const svc = new TmuxService();
 
-      process.env.TMUX = "/private/tmp/tmux-501/socket-a,1,0";
-      await svc.getSessionId();
-      const afterA = starts.filter((c) => c === "tmux").length;
+        await svc.getSessionId();
+        const afterA = starts.filter((c) => c === "tmux").length;
 
-      process.env.TMUX = "/private/tmp/tmux-501/socket-b,2,0";
-      await svc.getSessionId();
-      const afterB = starts.filter((c) => c === "tmux").length;
+        process.env.TMUX = "/private/tmp/tmux-501/socket-b,2,0";
+        await svc.getSessionId();
+        const afterB = starts.filter((c) => c === "tmux").length;
 
-      // Switching sockets must trigger a fresh spawn — cache key changed.
-      expect(afterB).toBeGreaterThan(afterA);
-    }),
+        // Switching sockets must trigger a fresh spawn — cache key changed.
+        expect(afterB).toBeGreaterThan(afterA);
+      },
+    ),
   );
 
   it(
     "same socket with different client-pid suffix hits the same cache entry",
-    withEnv({ TMUX_PANE: "%0" }, async () => {
-      const { handle, starts } = spyStats();
-      setLaunchStats(handle);
-      const svc = new TmuxService();
+    withEnv(
+      { TMUX_PANE: "%0", TMUX: "/private/tmp/tmux-501/default,111,0" },
+      async () => {
+        const { handle, starts } = spyStats();
+        setLaunchStats(handle);
+        const svc = new TmuxService();
 
-      // $TMUX format is "<socket>,<client-pid>,<session-num>". Two clients
-      // attached to the same tmux server have the same socket but different
-      // pid/session suffixes. The cache key is the socket prefix only.
-      process.env.TMUX = "/private/tmp/tmux-501/default,111,0";
-      await svc.getSessionId();
-      const afterFirst = starts.filter((c) => c === "tmux").length;
+        // $TMUX format is "<socket>,<client-pid>,<session-num>". Two clients
+        // attached to the same tmux server have the same socket but different
+        // pid/session suffixes. The cache key is the socket prefix only.
+        await svc.getSessionId();
+        const afterFirst = starts.filter((c) => c === "tmux").length;
 
-      process.env.TMUX = "/private/tmp/tmux-501/default,222,1";
-      await svc.getSessionId();
-      const afterSecond = starts.filter((c) => c === "tmux").length;
+        process.env.TMUX = "/private/tmp/tmux-501/default,222,1";
+        await svc.getSessionId();
+        const afterSecond = starts.filter((c) => c === "tmux").length;
 
-      expect(afterSecond).toBe(afterFirst);
-    }),
+        expect(afterSecond).toBe(afterFirst);
+      },
+    ),
   );
 
   it(

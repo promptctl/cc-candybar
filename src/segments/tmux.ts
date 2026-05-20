@@ -12,9 +12,11 @@ import { debug } from "../utils/logger";
 // Variability lives in the cached values (string | null = "definitively no
 // session"), not in whether the spawn happens.
 //
-// Value type: `string` (resolved session id), `null` (resolution attempted
-// and reported no session — definitively no answer, do not retry), or
-// `undefined` (not yet attempted — the next call will spawn).
+// Value type: `string` (resolved session id), `null` (do not retry — the
+// previous resolution either reported an empty session id, or the spawn
+// itself failed; both outcomes are durable for the daemon's lifetime since
+// retrying every render would burn subprocesses without changing the
+// answer), or `undefined` (not yet attempted — the next call will spawn).
 const sessionIdCache = new Map<string, string | null>();
 
 // [LAW:one-source-of-truth] One place that extracts the socket-path prefix
