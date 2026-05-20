@@ -7,7 +7,18 @@ import {
   SourceRegistry,
   parseDuration,
   formatGoTime,
+  MIN_SHELL_TTL_MS,
 } from "../src/var-system";
+
+// [LAW:one-source-of-truth] Tests pin to the production constant so a future
+// MIN_SHELL_TTL_MS bump doesn't silently desync test timings.
+//
+// [LAW:dataflow-not-control-flow] Real subprocess timing can't be advanced
+// by fake timers (the OS does the spawning, not the test runner), so these
+// TTL tests are unavoidably real-time. The buffer accounts for setInterval
+// drift + the cat-subprocess round trip.
+const TTL_TICK_BUFFER_MS = 200;
+const TTL_TICK_WAIT_MS = MIN_SHELL_TTL_MS + TTL_TICK_BUFFER_MS;
 
 // Helper: fresh pair so tests are fully isolated.
 function make(defaultEmptyValue?: string) {
@@ -472,8 +483,8 @@ describe("SourceRegistry — shell: TTL floor", () => {
       const f = path.join(dir, "v");
       fs.writeFileSync(f, "v1");
       const { store, registry } = make();
-      // Request 50ms — well below the 500ms floor. The floor must clamp the
-      // effective TTL, so a 250ms settle window must NOT see the refresh.
+      // Request 50ms — well below the floor. The floor must clamp the
+      // effective TTL, so a sub-floor settle window must NOT see the refresh.
       registry.declareShell("val", `cat ${f}`, {
         cache: { kind: "ttl", durationMs: 50 },
       });
@@ -482,13 +493,13 @@ describe("SourceRegistry — shell: TTL floor", () => {
       expect(store.read("val")).toBe("v1");
 
       fs.writeFileSync(f, "v2");
-      await settle(250); // far less than the 500ms floor
-      // Box must still hold the pre-clamp value — the TTL has not yet fired
-      // even though the user's requested 50ms has elapsed many times over.
+      // Sleep less than MIN_SHELL_TTL_MS — refresh has NOT fired yet even
+      // though the user's requested 50ms has elapsed many times over.
+      await settle(Math.max(50, MIN_SHELL_TTL_MS - 250));
       expect(store.read("val")).toBe("v1");
 
-      // Wait through the floor — refresh now fires.
-      await settle(450);
+      // Sleep enough to cross the floor (plus buffer) — refresh now fires.
+      await settle(TTL_TICK_WAIT_MS);
       expect(store.read("val")).toBe("v2");
       registry.dispose();
     } finally {
@@ -506,15 +517,17 @@ describe("SourceRegistry — shell: ttl cache policy", () => {
       const f = path.join(dir, "v");
       fs.writeFileSync(f, "v1");
       const { store, registry } = make();
-      // [LAW:single-enforcer] Shell TTLs are floored at MIN_SHELL_TTL_MS
-      // (500ms). Tests use 500ms (the minimum) and settle ≥ 600ms.
-      registry.declareShell("val", `cat ${f}`, { cache: { kind: "ttl", durationMs: 500 } });
+      // [LAW:single-enforcer] Shell TTLs are floored at MIN_SHELL_TTL_MS.
+      // Tests use that exact value and wait MIN_SHELL_TTL_MS+buffer for a tick.
+      registry.declareShell("val", `cat ${f}`, {
+        cache: { kind: "ttl", durationMs: MIN_SHELL_TTL_MS },
+      });
 
       await settle(100);
       expect(store.read("val")).toBe("v1");
 
       fs.writeFileSync(f, "v2");
-      await settle(700); // ≥ 1 TTL tick
+      await settle(TTL_TICK_WAIT_MS); // ≥ 1 TTL tick
 
       expect(store.read("val")).toBe("v2");
       registry.dispose();
@@ -531,8 +544,12 @@ describe("SourceRegistry — shell: ttl cache policy", () => {
       fs.writeFileSync(f1, "a1");
       fs.writeFileSync(f2, "b1");
       const { store, registry } = make();
-      registry.declareShell("v1", `cat ${f1}`, { cache: { kind: "ttl", durationMs: 500 } });
-      registry.declareShell("v2", `cat ${f2}`, { cache: { kind: "ttl", durationMs: 500 } });
+      registry.declareShell("v1", `cat ${f1}`, {
+        cache: { kind: "ttl", durationMs: MIN_SHELL_TTL_MS },
+      });
+      registry.declareShell("v2", `cat ${f2}`, {
+        cache: { kind: "ttl", durationMs: MIN_SHELL_TTL_MS },
+      });
 
       await settle(100);
       expect(store.read("v1")).toBe("a1");
@@ -540,7 +557,7 @@ describe("SourceRegistry — shell: ttl cache policy", () => {
 
       fs.writeFileSync(f1, "a2");
       fs.writeFileSync(f2, "b2");
-      await settle(700);
+      await settle(TTL_TICK_WAIT_MS);
 
       expect(store.read("v1")).toBe("a2");
       expect(store.read("v2")).toBe("b2");
@@ -556,7 +573,9 @@ describe("SourceRegistry — shell: ttl cache policy", () => {
       const f = path.join(dir, "f");
       fs.writeFileSync(f, "v1");
       const { store, registry } = make();
-      registry.declareShell("val", `cat ${f}`, { cache: { kind: "ttl", durationMs: 500 } });
+      registry.declareShell("val", `cat ${f}`, {
+        cache: { kind: "ttl", durationMs: MIN_SHELL_TTL_MS },
+      });
 
       await settle(100);
       expect(store.read("val")).toBe("v1");
@@ -564,7 +583,7 @@ describe("SourceRegistry — shell: ttl cache policy", () => {
       registry.dispose();
 
       fs.writeFileSync(f, "v2");
-      await settle(700); // timer should NOT fire after dispose
+      await settle(TTL_TICK_WAIT_MS); // timer should NOT fire after dispose
 
       expect(store.read("val")).toBe("v1"); // unchanged
     } finally {
@@ -873,13 +892,15 @@ describe("SourceRegistry — dispose", () => {
       const f = path.join(dir, "f");
       fs.writeFileSync(f, "v1");
       const { store, registry } = make();
-      registry.declareShell("val", `cat ${f}`, { cache: { kind: "ttl", durationMs: 500 } });
+      registry.declareShell("val", `cat ${f}`, {
+        cache: { kind: "ttl", durationMs: MIN_SHELL_TTL_MS },
+      });
 
       await settle(100);
       registry.dispose();
 
       fs.writeFileSync(f, "v2");
-      await settle(700);
+      await settle(TTL_TICK_WAIT_MS);
       // Timer was cleared — box stays at last value before dispose.
       expect(store.read("val")).toBe("v1");
     } finally {
