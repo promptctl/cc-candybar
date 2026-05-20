@@ -110,6 +110,28 @@ describe("TmuxService — cache", () => {
   );
 
   it(
+    "same socket with different client-pid suffix hits the same cache entry",
+    withEnv({ TMUX_PANE: "%0" }, async () => {
+      const { handle, starts } = spyStats();
+      setLaunchStats(handle);
+      const svc = new TmuxService();
+
+      // $TMUX format is "<socket>,<client-pid>,<session-num>". Two clients
+      // attached to the same tmux server have the same socket but different
+      // pid/session suffixes. The cache key is the socket prefix only.
+      process.env.TMUX = "/private/tmp/tmux-501/default,111,0";
+      await svc.getSessionId();
+      const afterFirst = starts.filter((c) => c === "tmux").length;
+
+      process.env.TMUX = "/private/tmp/tmux-501/default,222,1";
+      await svc.getSessionId();
+      const afterSecond = starts.filter((c) => c === "tmux").length;
+
+      expect(afterSecond).toBe(afterFirst);
+    }),
+  );
+
+  it(
     "two TmuxService instances share the module-level cache",
     withEnv(
       { TMUX_PANE: "%0", TMUX: "/private/tmp/tmux-501/shared,7,0" },
