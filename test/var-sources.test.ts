@@ -461,6 +461,42 @@ describe("SourceRegistry — shell: basic", () => {
   });
 });
 
+// ─── shell — TTL floor ───────────────────────────────────────────────────────
+
+// [LAW:single-enforcer] declareShell clamps user-requested TTLs at the floor
+// to prevent unbounded subprocess churn from a misconfigured `ttl: 50ms`.
+describe("SourceRegistry — shell: TTL floor", () => {
+  it("TTL below floor is clamped (no refresh within sub-floor window)", async () => {
+    const { dir, cleanup } = makeTmpDir();
+    try {
+      const f = path.join(dir, "v");
+      fs.writeFileSync(f, "v1");
+      const { store, registry } = make();
+      // Request 50ms — well below the 500ms floor. The floor must clamp the
+      // effective TTL, so a 250ms settle window must NOT see the refresh.
+      registry.declareShell("val", `cat ${f}`, {
+        cache: { kind: "ttl", durationMs: 50 },
+      });
+
+      await settle(100);
+      expect(store.read("val")).toBe("v1");
+
+      fs.writeFileSync(f, "v2");
+      await settle(250); // far less than the 500ms floor
+      // Box must still hold the pre-clamp value — the TTL has not yet fired
+      // even though the user's requested 50ms has elapsed many times over.
+      expect(store.read("val")).toBe("v1");
+
+      // Wait through the floor — refresh now fires.
+      await settle(450);
+      expect(store.read("val")).toBe("v2");
+      registry.dispose();
+    } finally {
+      cleanup();
+    }
+  });
+});
+
 // ─── shell — TTL cache policy ────────────────────────────────────────────────
 
 describe("SourceRegistry — shell: ttl cache policy", () => {
@@ -470,13 +506,15 @@ describe("SourceRegistry — shell: ttl cache policy", () => {
       const f = path.join(dir, "v");
       fs.writeFileSync(f, "v1");
       const { store, registry } = make();
-      registry.declareShell("val", `cat ${f}`, { cache: { kind: "ttl", durationMs: 60 } });
+      // [LAW:single-enforcer] Shell TTLs are floored at MIN_SHELL_TTL_MS
+      // (500ms). Tests use 500ms (the minimum) and settle ≥ 600ms.
+      registry.declareShell("val", `cat ${f}`, { cache: { kind: "ttl", durationMs: 500 } });
 
       await settle(100);
       expect(store.read("val")).toBe("v1");
 
       fs.writeFileSync(f, "v2");
-      await settle(150); // ≥ 1 TTL tick
+      await settle(700); // ≥ 1 TTL tick
 
       expect(store.read("val")).toBe("v2");
       registry.dispose();
@@ -493,8 +531,8 @@ describe("SourceRegistry — shell: ttl cache policy", () => {
       fs.writeFileSync(f1, "a1");
       fs.writeFileSync(f2, "b1");
       const { store, registry } = make();
-      registry.declareShell("v1", `cat ${f1}`, { cache: { kind: "ttl", durationMs: 60 } });
-      registry.declareShell("v2", `cat ${f2}`, { cache: { kind: "ttl", durationMs: 60 } });
+      registry.declareShell("v1", `cat ${f1}`, { cache: { kind: "ttl", durationMs: 500 } });
+      registry.declareShell("v2", `cat ${f2}`, { cache: { kind: "ttl", durationMs: 500 } });
 
       await settle(100);
       expect(store.read("v1")).toBe("a1");
@@ -502,7 +540,7 @@ describe("SourceRegistry — shell: ttl cache policy", () => {
 
       fs.writeFileSync(f1, "a2");
       fs.writeFileSync(f2, "b2");
-      await settle(150);
+      await settle(700);
 
       expect(store.read("v1")).toBe("a2");
       expect(store.read("v2")).toBe("b2");
@@ -518,7 +556,7 @@ describe("SourceRegistry — shell: ttl cache policy", () => {
       const f = path.join(dir, "f");
       fs.writeFileSync(f, "v1");
       const { store, registry } = make();
-      registry.declareShell("val", `cat ${f}`, { cache: { kind: "ttl", durationMs: 60 } });
+      registry.declareShell("val", `cat ${f}`, { cache: { kind: "ttl", durationMs: 500 } });
 
       await settle(100);
       expect(store.read("val")).toBe("v1");
@@ -526,7 +564,7 @@ describe("SourceRegistry — shell: ttl cache policy", () => {
       registry.dispose();
 
       fs.writeFileSync(f, "v2");
-      await settle(150); // timer should NOT fire after dispose
+      await settle(700); // timer should NOT fire after dispose
 
       expect(store.read("val")).toBe("v1"); // unchanged
     } finally {
@@ -835,13 +873,13 @@ describe("SourceRegistry — dispose", () => {
       const f = path.join(dir, "f");
       fs.writeFileSync(f, "v1");
       const { store, registry } = make();
-      registry.declareShell("val", `cat ${f}`, { cache: { kind: "ttl", durationMs: 60 } });
+      registry.declareShell("val", `cat ${f}`, { cache: { kind: "ttl", durationMs: 500 } });
 
       await settle(100);
       registry.dispose();
 
       fs.writeFileSync(f, "v2");
-      await settle(150);
+      await settle(700);
       // Timer was cleared — box stays at last value before dispose.
       expect(store.read("val")).toBe("v1");
     } finally {

@@ -630,7 +630,15 @@ function clickCopy(text: string): void {
     stdinInput: text,
     category: "click.pbcopy",
   });
+  // [LAW:dataflow-not-control-flow] Rate-limiting is one possible `!ok` data
+  // outcome among many; treat it like the others except don't propagate a
+  // user-visible error — the click is acknowledged (the handler returns) and
+  // the rejection is logged. Other failure reasons are genuine errors.
   if (!result.ok) {
+    if (result.reason === "rate-limited") {
+      dlog("warn", `click.pbcopy rate-limited: ${result.error ?? ""}`);
+      return;
+    }
     throw new Error(
       `pbcopy failed (${result.reason}, exit ${result.exitCode ?? "null"})`,
     );
@@ -650,6 +658,10 @@ function clickOpenVscode(target: string): void {
     category: "click.open",
   });
   if (!result.ok) {
+    if (result.reason === "rate-limited") {
+      dlog("warn", `click.open rate-limited: ${result.error ?? ""}`);
+      return;
+    }
     throw new Error(
       `open -a "Visual Studio Code" failed (${result.reason}, exit ${result.exitCode ?? "null"})`,
     );
