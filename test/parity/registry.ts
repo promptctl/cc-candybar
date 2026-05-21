@@ -9,6 +9,7 @@
 // render closure — and the test loop is uniform. The status *value* selects
 // which assertion runs; there is no per-segment branching in the harness.
 
+import type { SegmentName } from "../../src/config/loader";
 import type { LegacyRender, DslBinding } from "./harness";
 import {
   HOOK_DATA,
@@ -37,7 +38,12 @@ export interface SegmentParityEntry {
   dsl?: DslBinding;
 }
 
-export const PARITY_REGISTRY: Record<string, SegmentParityEntry> = {
+// [LAW:types-are-the-program] Keyed on SegmentName, so a missing or extra
+// segment is a compile error — the exhaustiveness the runtime completeness test
+// asserts is now also proven by the type. (A plain annotation, not `satisfies`,
+// because consumers need the wide SegmentParityEntry element type — `.status`
+// and `.dsl` — not the narrowed all-"legacy-only" literal.)
+export const PARITY_REGISTRY: Record<SegmentName, SegmentParityEntry> = {
   directory: {
     status: "legacy-only",
     legacy: (r, c) =>
