@@ -77,7 +77,14 @@ export const PARITY_REGISTRY: Record<SegmentName, SegmentParityEntry> = {
       }),
   },
   model: {
-    status: "dsl-parity",
+    // [LAW:dataflow-not-control-flow] dsl-pending, not dsl-parity: the
+    // declaration is attached and byte-parity for friendly display names, but
+    // legacy renderModel runs formatModelName, which strips decorations Claude
+    // commonly sends (e.g. "Opus 4.7 (1M context)" → "Opus 4.7"). That
+    // regex normalization is unreachable in the DSL function set (gap bzh.5), so
+    // model is NOT yet a safe replacement — keeping it out of dsl-parity blocks
+    // bzh.2 from deleting renderModel until bzh.5 lands formatModel.
+    status: "dsl-pending",
     legacy: (r, c) => r.renderModel(HOOK_DATA, c, { enabled: true }),
     dsl: DSL_BINDINGS.model,
   },
