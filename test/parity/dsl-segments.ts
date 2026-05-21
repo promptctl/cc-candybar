@@ -57,7 +57,13 @@ const GIT_TEMPLATE =
   GIT_STATUS +
   ' ';
 
-export const DSL_BINDINGS: Partial<Record<SegmentName, DslBinding>> = {
+// [LAW:types-are-the-program] `satisfies` (not an annotation) keeps the
+// constraint — keys must be SegmentNames, values must be DslBinding — while
+// preserving the literal's keys as non-optional. So a registry entry that
+// references DSL_BINDINGS.<seg> gets a guaranteed DslBinding (never
+// `| undefined`), and a typo'd or missing key is a compile error rather than a
+// silently-skipped parity assertion in the harness.
+export const DSL_BINDINGS = {
   directory: {
     decl: {
       template: ' {{ trimPrefix "/" (trimPrefix .project_dir .current_dir) }} ',
@@ -142,4 +148,4 @@ export const DSL_BINDINGS: Partial<Record<SegmentName, DslBinding>> = {
       s.defineBox("git.status", "string", GIT_INFO.status);
     }),
   },
-};
+} satisfies Partial<Record<SegmentName, DslBinding>>;
