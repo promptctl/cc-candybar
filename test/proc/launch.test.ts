@@ -138,7 +138,6 @@ describe("launchDetachedSync", () => {
     const r = launchDetachedSync({
       bin: "/bin/sh",
       args: ["-c", "sleep 5"],
-      detached: true,
       category: "daemon-spawn",
     });
     expect(r.ok).toBe(true);
@@ -150,7 +149,6 @@ describe("launchDetachedSync", () => {
   it("returns spawn-error synchronously when the binary does not exist", () => {
     const r = launchDetachedSync({
       bin: "/nonexistent/daemon-x9k7",
-      detached: true,
       category: "daemon-spawn",
     });
     expect(r.ok).toBe(false);
@@ -165,7 +163,6 @@ describe("launchDetachedSync", () => {
     launchDetachedSync({
       bin: "/bin/sh",
       args: ["-c", "true"],
-      detached: true,
       category: "daemon-spawn",
     });
     expect(starts).toEqual(["daemon-spawn"]);

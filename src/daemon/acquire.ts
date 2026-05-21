@@ -405,7 +405,6 @@ function spawnDaemonDetachedReal(): boolean {
   const result = launchDetachedSync({
     bin: node,
     args: ["--max-old-space-size=400", script, "daemon"],
-    detached: true,
     category: "daemon-spawn",
   });
   return result.ok;
