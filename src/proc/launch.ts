@@ -10,6 +10,16 @@
 // [LAW:dataflow-not-control-flow] Categories flow through one boundary as
 // data; the body is the same code path for every category. The metering layer
 // reads the category off the request, not off the call site.
+//
+// [LAW:types-are-the-program] (kz8.6) Process lifetime is encoded in the
+// operation, not in a flag. `launch`/`launchSync` are *waited*: the child is
+// reaped before the caller resumes, so it cannot outlive its frame.
+// `launchDetachedSync` is the *orphan*: it detaches and unrefs, deliberately
+// outliving its caller — the daemon-handoff escape hatch, used only by the
+// daemon-acquisition path. There is no `detached: boolean` flag on `LaunchOpts`
+// ([LAW:no-mode-explosion]); the two lifetimes are two functions with two
+// return contracts, so an unwaited helper that survives a render frame is
+// unrepresentable here rather than forbidden by convention.
 
 import { spawn, spawnSync } from "node:child_process";
 import type { ChildProcess, StdioOptions } from "node:child_process";
@@ -91,10 +101,6 @@ export interface LaunchOpts {
   env?: NodeJS.ProcessEnv;
   timeoutMs?: number;
   stdinInput?: string | Buffer;
-  // Detached + unref'd. The launcher does not wait or read stdio; caller
-  // gets `{ ok: true, exitCode: null, stdout: "", stderr: "" }` if the
-  // spawn succeeded (the OS now owns the process).
-  detached?: boolean;
   category: LaunchCategory;
 }
 
@@ -159,16 +165,6 @@ export async function launch(opts: LaunchOpts): Promise<LaunchResult> {
   recordStart(opts.category);
   const t0 = Date.now();
   statsHandle?.onStart(opts.category);
-
-  if (opts.detached) {
-    // [LAW:one-type-per-behavior] Detached launches are synchronous in nature
-    // (fire-and-forget, no stdio to drain). Callers that need the typed
-    // outcome should call launchDetachedSync directly. We keep this branch as
-    // a thin async wrapper for parity but it is no richer than the sync form.
-    const result = launchDetachedSyncInner(opts);
-    statsHandle?.onEnd(opts.category, Date.now() - t0);
-    return result;
-  }
 
   return new Promise<LaunchResult>((resolve) => {
     let child: ChildProcess;
@@ -362,11 +358,12 @@ export function launchSync(opts: LaunchOpts): LaunchResult {
   }
 }
 
-// [LAW:single-enforcer] The synchronous typed entrypoint for detached
-// (fire-and-forget) launches. Use this instead of `void launch({detached:true})`
-// — that pattern discards the spawn outcome and reports success on failure.
-// This function returns the typed result synchronously, and also meters
-// through the stats handle so detached spawns show up in daemon-stats.
+// [LAW:single-enforcer] The one orphan operation: a detached, unref'd,
+// fire-and-forget launch that deliberately outlives its caller. This is the
+// only Node-side launch with that lifetime; everything else waits. It returns
+// the typed spawn outcome synchronously (so a failed spawn surfaces as
+// `ok: false` rather than a discarded Promise reporting success), and meters
+// through the stats handle so orphan spawns still show up in daemon-stats.
 export function launchDetachedSync(opts: LaunchOpts): LaunchResult {
   const gate = checkRateLimit(opts.category);
   if (!gate.allowed) {
