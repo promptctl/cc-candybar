@@ -27,19 +27,27 @@ function seeded(seed: (s: VariableStore) => void): () => VariableStore {
   };
 }
 
-// collapseHome reads $HOME (then $USERPROFILE) — the same source the legacy
-// formatter reads, so a current_dir under $HOME collapses identically.
-const HOME = process.env.HOME ?? process.env.USERPROFILE ?? "";
+// $HOME (then $USERPROFILE) — the source legacy collapseHome reads. Read at
+// store-creation time, not import time, so a test that mutates env before
+// building the store is reflected.
+function homeDir(): string {
+  return process.env.HOME ?? process.env.USERPROFILE ?? "";
+}
 
 // Faithful "full"-style directory display, mirroring renderDirectory +
-// getDisplayDirectoryName: (1) under $HOME → "~"+remainder; (2) else under
-// project_dir → project-relative path, falling back to the project basename
-// when current_dir === project_dir; (3) else the full current_dir. The
-// project-relative path is recomputed inline rather than bound once because the
-// DSL rejects template-level `:=` (proposal: use the vars sub-block).
+// getDisplayDirectoryName: (1) under a non-empty $HOME → "~"+remainder; (2) else
+// under project_dir → project-relative path, falling back to the project
+// basename only when the relative path is empty (current_dir === project_dir+"/");
+// (3) else the full current_dir. The project-relative path is recomputed inline
+// rather than bound once because the DSL rejects template-level `:=` (proposal:
+// use the vars sub-block).
+//
+// The `ne .home ""` guard mirrors legacy's `if (home && …)`: hasPrefix with an
+// empty prefix is vacuously true, so without the guard an unset $HOME would
+// collapse every path to "~<path>".
 const DIR_REL = 'trimPrefix "/" (trimPrefix .project_dir .current_dir)';
 const DIR_TEMPLATE =
-  " {{ if hasPrefix .home .current_dir }}~{{ trimPrefix .home .current_dir }}" +
+  " {{ if and (ne .home \"\") (hasPrefix .home .current_dir) }}~{{ trimPrefix .home .current_dir }}" +
   "{{ else }}" +
   "{{ if and (ne .project_dir .current_dir) (hasPrefix .project_dir .current_dir) }}" +
   `{{ ternary (${DIR_REL}) (basename .project_dir) (ne (${DIR_REL}) "") }}` +
@@ -87,7 +95,7 @@ export const DSL_BINDINGS = {
     store: seeded((s) => {
       s.defineBox("current_dir", "string", HOOK_DATA.workspace.current_dir);
       s.defineBox("project_dir", "string", HOOK_DATA.workspace.project_dir);
-      s.defineBox("home", "string", HOME);
+      s.defineBox("home", "string", homeDir());
     }),
   },
 
