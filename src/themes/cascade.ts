@@ -267,6 +267,16 @@ export function resolveThemeColors(config: CascadeConfig): PowerlineColors {
   };
 }
 
+// [LAW:one-source-of-truth] The set of names that resolve to a concrete
+// Palette is exactly registry names ∪ aliases — the same inputs
+// resolvePaletteName + getThemePalette accept. "custom" and "random" are
+// deliberately absent: neither names a concrete palette (custom needs inline
+// colors; random is a per-session sentinel). Config validators that gate a
+// palette PULL (DSL `palette:` field) must reuse this, not re-derive it.
+export function listResolvablePaletteNames(): readonly string[] {
+  return [...listThemePalettes(), ...listThemeAliases()];
+}
+
 /**
  * List all available theme names (aliases + registry names).
  */

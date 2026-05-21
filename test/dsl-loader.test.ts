@@ -8,6 +8,7 @@
 import {
   ConfigError,
   parseDslConfig,
+  effectiveSegmentPalette,
   extractTemplateRefs,
   findKeyLine,
 } from "../src/config/dsl-loader";
@@ -466,6 +467,113 @@ describe("loadDslConfig — segments", () => {
       fg: "auto 60%",
       when: "{{ gt .context_percent 0 }}",
     });
+  });
+});
+
+// ─── Per-segment palette switch (3rq.2) ──────────────────────────────────────
+
+describe("loadDslConfig — palette switch", () => {
+  // Inject a tiny set so validation behavior is independent of registry
+  // contents; "real" names (gruvbox/monokai/nord) exercise the default path.
+  const ALLOWED = new Set(["gruvbox", "monokai", "solar"]);
+
+  test("globals.palette is preserved when a known name", () => {
+    const cfg = parseDslConfig(
+      FILE,
+      `{ globals: { palette: "gruvbox" }, segments: { cwd: { template: "t" } } }`,
+    );
+    expect(cfg.globals.palette).toBe("gruvbox");
+  });
+
+  test("per-segment palette is preserved when a known name", () => {
+    const cfg = parseDslConfig(
+      FILE,
+      `{ globals: { palette: "gruvbox" }, segments: {
+        cwd: { template: "t" },
+        toolbar: { template: "u", palette: "monokai" },
+      } }`,
+    );
+    expect(cfg.segments.cwd!.palette).toBeUndefined();
+    expect(cfg.segments.toolbar!.palette).toBe("monokai");
+  });
+
+  test("unknown globals palette fails loudly at load", () => {
+    expectIssue(`{ globals: { palette: "nope" } }`, {
+      path: "globals.palette",
+      message: 'Unknown palette "nope"',
+    });
+  });
+
+  test("unknown per-segment palette fails loudly at load", () => {
+    expectIssue(`{ segments: { x: { template: "t", palette: "nope" } } }`, {
+      path: "segments.x.palette",
+      message: 'Unknown palette "nope"',
+    });
+  });
+
+  test("unknown palette issue carries a source line", () => {
+    const err = expectError(
+      `{\n  globals: {\n    palette: "nope",\n  },\n}`,
+    );
+    const issue = err.issues.find((i) => i.path === "globals.palette");
+    expect(issue?.line).toBe(3);
+  });
+
+  test("palette must be a string", () => {
+    expectIssue(`{ globals: { palette: 7 } }`, {
+      path: "globals.palette",
+      message: "globals.palette must be a string",
+    });
+  });
+
+  test("injected allowed set overrides the default registry", () => {
+    // A name in the injected set passes even though it is not a real theme.
+    const ok = parseDslConfig(
+      FILE,
+      `{ globals: { palette: "solar" } }`,
+      ALLOWED,
+    );
+    expect(ok.globals.palette).toBe("solar");
+
+    // A real theme name fails when the injected set excludes it — proving the
+    // injected set is authoritative, not merely additive.
+    const err = (() => {
+      try {
+        parseDslConfig(FILE, `{ globals: { palette: "nord" } }`, ALLOWED);
+      } catch (e) {
+        if (e instanceof ConfigError) return e;
+        throw e;
+      }
+      throw new Error("expected ConfigError");
+    })();
+    expect(err.issues.some((i) => i.path === "globals.palette")).toBe(true);
+  });
+});
+
+describe("effectiveSegmentPalette — cascade order", () => {
+  test("no palette anywhere → undefined (inherit active palette)", () => {
+    expect(effectiveSegmentPalette({}, { template: "t" })).toBeUndefined();
+  });
+
+  test("globals palette applies to a segment with no override", () => {
+    expect(
+      effectiveSegmentPalette({ palette: "gruvbox" }, { template: "t" }),
+    ).toBe("gruvbox");
+  });
+
+  test("per-segment palette overrides globals (last write wins)", () => {
+    expect(
+      effectiveSegmentPalette(
+        { palette: "gruvbox" },
+        { template: "t", palette: "monokai" },
+      ),
+    ).toBe("monokai");
+  });
+
+  test("per-segment palette applies with no globals base", () => {
+    expect(
+      effectiveSegmentPalette({}, { template: "t", palette: "monokai" }),
+    ).toBe("monokai");
   });
 });
 
