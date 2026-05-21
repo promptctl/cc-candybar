@@ -141,6 +141,32 @@ describe("fragmentsToStripCells — direct fragment input", () => {
     expect(cells[0]!.text).toBe("hello");
   });
 
+  test("a run of adjacent plain fragments coalesces into one cell", () => {
+    // The natural symbol+value+padding shape — " {{ .sym }} {{ .v }} " —
+    // evaluates to several plain fragments. They must form ONE powerline cell,
+    // not one cell per fragment (which would cap-separate a single segment).
+    const cells = fragmentsToStripCells([
+      new RichText(" "),
+      new RichText("hello"),
+      new RichText(" "),
+    ]);
+    expect(cells).toHaveLength(1);
+    expect(cells[0]!.text).toBe(" hello ");
+    expect(cells[0]!.style.link).toBeUndefined();
+  });
+
+  test("plain run preserves a styled fragment's fg as a part overlay", () => {
+    const styled = new RichText("err", { style: "red" });
+    const cells = fragmentsToStripCells([
+      new RichText("status: "),
+      styled,
+    ]);
+    expect(cells).toHaveLength(1);
+    expect(cells[0]!.text).toBe("status: err");
+    // No single dominant style across the run → cell-level style stays null.
+    expect(cells[0]!.style.isNull).toBe(true);
+  });
+
   test("span with bgcolor does not propagate bgcolor to cell part", () => {
     // Build a RichText carrying a link (so it becomes a cell) with a span
     // that has both fg (red) and bgcolor (blue). The StripCell must be

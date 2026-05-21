@@ -8,8 +8,8 @@
 //   2. fragment.style.link truthy → emit as StripCell.
 //   3. Otherwise → accumulate as joiner (inter-cell styled text).
 //   4. Leading joiner fragments before a link cell are prepended to that cell.
-//   5. Trailing joiner fragments (or entire output if no links) become their
-//      own plain cells, preserving their styles.
+//   5. The trailing joiner run (or the entire output if no links) coalesces
+//      into ONE cell, preserving each fragment's spans/styles.
 
 import { StripCell, Style } from "@promptctl/rich-js";
 import type { Span, StripCellPart, RichText } from "@promptctl/rich-js";
@@ -32,13 +32,55 @@ export function fragmentsToStripCells(fragments: RichText[]): StripCell[] {
     }
   }
 
-  // Trailing joiners (or entire output when no link fragments exist): each
-  // joiner fragment becomes its own StripCell, preserving its style.
-  for (const j of joiners) {
-    if (j.plain) cells.push(richTextToCell(j));
-  }
+  // [LAW:one-type-per-behavior] A run of adjacent non-link fragments is ONE
+  // cell — a "cell" is a powerline unit, not a styling run. Plain fragments
+  // continue the current cell; only a link fragment starts a new one. Earlier
+  // runs are absorbed into the link they precede (mergeThenConvert); this is
+  // the terminal run, which has no following link to absorb it.
+  const trailing = coalescePlainRun(joiners);
+  if (trailing) cells.push(trailing);
 
   return cells;
+}
+
+// Merge a run of adjacent non-link fragments into a single cell.
+//
+// A single fragment defines the cell's dominant style, so its bgcolor survives
+// at cell level (the only place a bg is joiner-visible). Multiple fragments
+// have no single dominant style: each fragment's fg/attrs become part-level
+// overlays — bgcolor stripped, since parts may not carry bg per the StripCell
+// single-style invariant — and the cell-level style is null. A run with no
+// plain text produces no cell.
+function coalescePlainRun(run: RichText[]): StripCell | null {
+  if (run.length === 1) {
+    const only = run[0]!;
+    return only.plain ? richTextToCell(only) : null;
+  }
+
+  const parts: StripCellPart[] = [];
+  let text = "";
+  let anyStyle = false;
+
+  for (const frag of run) {
+    if (!frag.plain) continue;
+    text += frag.plain;
+    const base = stripBgcolor(frag.style);
+    const fragParts: StripCellPart[] = frag.spans.length
+      ? spansToStripCellParts(frag.plain, frag.spans, 0)
+      : [{ text: frag.plain }];
+
+    for (const part of fragParts) {
+      // Inner span style (if any) wins over the fragment's wrapping style.
+      const merged = part.style ? base.add(part.style) : base;
+      const style = merged.isNull ? undefined : merged;
+      if (style) anyStyle = true;
+      parts.push({ text: part.text, style });
+    }
+  }
+
+  if (!text) return null;
+  // No styling anywhere → a plain cell, byte-identical to the single-cell path.
+  return anyStyle ? new StripCell(parts) : new StripCell(text);
 }
 
 // Merge accumulated joiner fragments + a link-bearing fragment into one cell.
