@@ -3,6 +3,7 @@ import {
   launchDetachedSync,
   launchSync,
   setLaunchStats,
+  __resetRateLimitsForTest,
 } from "../../src/proc/launch";
 import type { LaunchCategory } from "../../src/proc/launch";
 import type { LaunchStatsHandle } from "../../src/proc/stats-handle";
@@ -26,6 +27,7 @@ function makeSpyHandle(): {
 
 afterEach(() => {
   setLaunchStats(null);
+  __resetRateLimitsForTest();
 });
 
 describe("launch (async)", () => {
@@ -169,5 +171,110 @@ describe("launchDetachedSync", () => {
     expect(starts).toEqual(["daemon-spawn"]);
     expect(ends).toHaveLength(1);
     expect(ends[0]?.category).toBe("daemon-spawn");
+  });
+});
+
+// [LAW:single-enforcer] Per-category rate-limit lives at the launch primitive;
+// these tests pin the behavior at that boundary so callers can rely on it.
+// [LAW:dataflow-not-control-flow] Rejection is a typed LaunchResult variant,
+// not an exception, so callers stay on the same code path as other failures.
+describe("launch — per-category rate-limit", () => {
+  it("rejects a second click.pbcopy spawn inside the min interval", () => {
+    const first = launchSync({
+      bin: "/bin/echo",
+      args: ["x"],
+      category: "click.pbcopy",
+    });
+    expect(first.ok).toBe(true);
+
+    const second = launchSync({
+      bin: "/bin/echo",
+      args: ["y"],
+      category: "click.pbcopy",
+    });
+    expect(second.ok).toBe(false);
+    if (!second.ok) {
+      expect(second.reason).toBe("rate-limited");
+      expect(second.error ?? "").toContain("click.pbcopy");
+    }
+  });
+
+  it("rate-limits click.open the same way", () => {
+    const first = launchSync({
+      bin: "/bin/echo",
+      args: ["x"],
+      category: "click.open",
+    });
+    expect(first.ok).toBe(true);
+
+    const second = launchSync({
+      bin: "/bin/echo",
+      args: ["y"],
+      category: "click.open",
+    });
+    expect(second.ok).toBe(false);
+    if (!second.ok) expect(second.reason).toBe("rate-limited");
+  });
+
+  it("does not rate-limit categories without a configured policy", () => {
+    const first = launchSync({
+      bin: "/bin/echo",
+      args: ["x"],
+      category: "user-shell",
+    });
+    const second = launchSync({
+      bin: "/bin/echo",
+      args: ["y"],
+      category: "user-shell",
+    });
+    expect(first.ok).toBe(true);
+    expect(second.ok).toBe(true);
+  });
+
+  it("rate-limit applies to async launch as well as sync", async () => {
+    const first = await launch({
+      bin: "/bin/echo",
+      args: ["x"],
+      category: "click.pbcopy",
+    });
+    expect(first.ok).toBe(true);
+    const second = await launch({
+      bin: "/bin/echo",
+      args: ["y"],
+      category: "click.pbcopy",
+    });
+    expect(second.ok).toBe(false);
+    if (!second.ok) expect(second.reason).toBe("rate-limited");
+  });
+
+  it("rate-limited rejection does NOT record stats (no spawn happened)", () => {
+    const { handle, starts, ends } = makeSpyHandle();
+    setLaunchStats(handle);
+    launchSync({ bin: "/bin/echo", args: ["x"], category: "click.pbcopy" });
+    launchSync({ bin: "/bin/echo", args: ["y"], category: "click.pbcopy" });
+    // Only the first spawn went through onStart/onEnd. The second is data,
+    // not a process, and must not pollute the histograms or per-category
+    // counts.
+    expect(starts).toEqual(["click.pbcopy"]);
+    expect(ends).toHaveLength(1);
+  });
+
+  it("rate-limited rejection happens BEFORE the binary is invoked", () => {
+    // First call against a missing binary records a normal spawn-error and
+    // arms the rate-limit timer. Second call must short-circuit with
+    // "rate-limited" — proving the gate runs before spawn-error attribution.
+    const first = launchSync({
+      bin: "/nonexistent/binary-rate-x9k7",
+      category: "click.pbcopy",
+    });
+    expect(first.ok).toBe(false);
+    if (!first.ok) expect(first.reason).toBe("spawn-error");
+
+    const second = launchSync({
+      bin: "/nonexistent/binary-rate-x9k7",
+      category: "click.pbcopy",
+    });
+    expect(second.ok).toBe(false);
+    if (!second.ok) expect(second.reason).toBe("rate-limited");
   });
 });

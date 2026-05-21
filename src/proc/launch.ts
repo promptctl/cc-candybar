@@ -35,6 +35,55 @@ export const LAUNCH_CATEGORIES = [
 
 export type LaunchCategory = (typeof LAUNCH_CATEGORIES)[number];
 
+// [LAW:single-enforcer] Per-category minimum interval between spawn attempts
+// (start timestamps). The limiter records on attempt, not on success — a
+// failed spawn still arms the timer so a broken binary can't be retried in a
+// tight loop. Sparse map: categories without entries have no rate limit.
+// [LAW:no-mode-explosion] Bounds are constants here, not config knobs — the
+// caps protect the host from misbehaving renderers/templates and don't need
+// user tuning. Bump these if a legitimate workload starts hitting them.
+const RATE_LIMITS: Partial<Record<LaunchCategory, number>> = {
+  // Click verbs: a misbehaving template emitting many clickable links + a
+  // user rapid-clicking = unbounded helpers. One spawn per second is enough
+  // for any human click cadence.
+  "click.pbcopy": 1000,
+  "click.open": 1000,
+};
+
+// [LAW:one-source-of-truth] Last-attempt timestamp per category — the data
+// the rate-limit decision reads. Recorded for every attempted spawn (success
+// or spawn-error); rate-limit rejections do NOT update this, because no
+// spawn was attempted. Module-scope state is acceptable here because
+// `launch.ts` is itself the single enforcer; nothing else mutates this.
+const lastStartAt = new Map<LaunchCategory, number>();
+
+// [LAW:dataflow-not-control-flow] The rate-limit decision is a pure function
+// of (category, now, last-start, policy). Same code path every call; the
+// result type carries which branch fired.
+function checkRateLimit(
+  category: LaunchCategory,
+):
+  | { allowed: true }
+  | { allowed: false; minIntervalMs: number; sinceLastMs: number } {
+  const minIntervalMs = RATE_LIMITS[category];
+  if (minIntervalMs === undefined) return { allowed: true };
+  const last = lastStartAt.get(category);
+  if (last === undefined) return { allowed: true };
+  const sinceLastMs = Date.now() - last;
+  if (sinceLastMs >= minIntervalMs) return { allowed: true };
+  return { allowed: false, minIntervalMs, sinceLastMs };
+}
+
+function recordStart(category: LaunchCategory): void {
+  lastStartAt.set(category, Date.now());
+}
+
+// Exposed for tests only — resets the rate-limit tracker so each test starts
+// from a clean state.
+export function __resetRateLimitsForTest(): void {
+  lastStartAt.clear();
+}
+
 export interface LaunchOpts {
   bin: string;
   args?: string[];
@@ -58,14 +107,37 @@ export type LaunchResult =
       // local timer fired; "signal" means the OS or external killer ended the
       // child for some other reason (SIGKILL/SIGINT/SIGPIPE/SIGHUP/...);
       // "non-zero" is a clean exit with a non-zero code; "spawn-error" is a
-      // failure before the child started.
-      reason: "timeout" | "signal" | "spawn-error" | "non-zero";
+      // failure before the child started; "rate-limited" means the primitive
+      // refused to spawn because the per-category minimum interval was not
+      // yet elapsed — no child process was launched.
+      reason:
+        | "timeout"
+        | "signal"
+        | "spawn-error"
+        | "non-zero"
+        | "rate-limited";
       stdout: string;
       stderr: string;
       exitCode: number | null;
       signal: NodeJS.Signals | null;
       error?: string;
     };
+
+function rateLimitedResult(
+  category: LaunchCategory,
+  minIntervalMs: number,
+  sinceLastMs: number,
+): LaunchResult {
+  return {
+    ok: false,
+    reason: "rate-limited",
+    stdout: "",
+    stderr: "",
+    exitCode: null,
+    signal: null,
+    error: `rate-limited: ${category} min interval ${minIntervalMs}ms, last start ${sinceLastMs}ms ago`,
+  };
+}
 
 let statsHandle: LaunchStatsHandle | null = null;
 
@@ -76,6 +148,15 @@ export function setLaunchStats(handle: LaunchStatsHandle | null): void {
 }
 
 export async function launch(opts: LaunchOpts): Promise<LaunchResult> {
+  const gate = checkRateLimit(opts.category);
+  if (!gate.allowed) {
+    return rateLimitedResult(
+      opts.category,
+      gate.minIntervalMs,
+      gate.sinceLastMs,
+    );
+  }
+  recordStart(opts.category);
   const t0 = Date.now();
   statsHandle?.onStart(opts.category);
 
@@ -198,6 +279,15 @@ export async function launch(opts: LaunchOpts): Promise<LaunchResult> {
 // Sync variant. For callers that genuinely cannot be async — the spawn
 // outcome must be settled before the function returns.
 export function launchSync(opts: LaunchOpts): LaunchResult {
+  const gate = checkRateLimit(opts.category);
+  if (!gate.allowed) {
+    return rateLimitedResult(
+      opts.category,
+      gate.minIntervalMs,
+      gate.sinceLastMs,
+    );
+  }
+  recordStart(opts.category);
   const t0 = Date.now();
   statsHandle?.onStart(opts.category);
 
@@ -278,6 +368,15 @@ export function launchSync(opts: LaunchOpts): LaunchResult {
 // This function returns the typed result synchronously, and also meters
 // through the stats handle so detached spawns show up in daemon-stats.
 export function launchDetachedSync(opts: LaunchOpts): LaunchResult {
+  const gate = checkRateLimit(opts.category);
+  if (!gate.allowed) {
+    return rateLimitedResult(
+      opts.category,
+      gate.minIntervalMs,
+      gate.sinceLastMs,
+    );
+  }
+  recordStart(opts.category);
   const t0 = Date.now();
   statsHandle?.onStart(opts.category);
   const result = launchDetachedSyncInner(opts);

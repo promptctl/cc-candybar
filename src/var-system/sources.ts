@@ -9,6 +9,7 @@
 //   last_error tracking)
 
 import { launch } from "../proc/launch";
+import { debug } from "../utils/logger";
 import { readFile as fsReadFile } from "fs/promises";
 import { watch as fsWatch, type FSWatcher } from "fs";
 import { setInterval, clearInterval } from "timers";
@@ -39,6 +40,28 @@ export type CachePolicy =
   | { readonly kind: "key"; readonly template: string }
   | { readonly kind: "depends_on"; readonly varNames: readonly string[] }
   | { readonly kind: "never" };
+
+// [LAW:single-enforcer] Minimum allowed TTL for user-shell sources. User
+// config can request shorter values; declareShell clamps to this floor and
+// emits a debug warning. The floor exists to prevent unbounded subprocess
+// churn from a misconfigured `ttl: 50ms` against a 200ms command (which would
+// silently overlap and stack up). [LAW:no-mode-explosion] not a config knob.
+export const MIN_SHELL_TTL_MS = 500;
+
+// [LAW:single-enforcer] Apply the shell-source TTL floor at declare-time.
+// If the policy is anything other than `ttl`, the input is returned unchanged
+// — the floor only applies to time-driven shell refresh. If `ttl.durationMs`
+// is already at or above MIN_SHELL_TTL_MS, the input is returned unchanged.
+// [LAW:dataflow-not-control-flow] Same code path every call; the result is a
+// function of the input policy + floor constant.
+function clampShellCache(name: string, policy: CachePolicy): CachePolicy {
+  if (policy.kind !== "ttl") return policy;
+  if (policy.durationMs >= MIN_SHELL_TTL_MS) return policy;
+  debug(
+    `declareShell "${name}": ttl ${policy.durationMs}ms below floor ${MIN_SHELL_TTL_MS}ms; clamping`,
+  );
+  return { kind: "ttl", durationMs: MIN_SHELL_TTL_MS };
+}
 
 // Parse a duration string to milliseconds.  Accepted units: ms, s, m, h.
 export function parseDuration(s: string): number {
@@ -574,11 +597,12 @@ export class SourceRegistry {
   // [LAW:dataflow-not-control-flow] Box always holds a valid value; the cache
   // policy drives when it is refreshed, not whether the box exists.
   declareShell(name: string, command: string, opts: ShellOptions): void {
+    const cache = clampShellCache(name, opts.cache);
     this.store.defineBox(name, "string", this.stringInitial(opts.varDefault));
     const update = () =>
       void this.updateFromShell(name, command, opts.regex, opts.varDefault);
     update(); // initial run
-    this.registerCachePolicy(name, opts.cache, update);
+    this.registerCachePolicy(name, cache, update);
   }
 
   // file: read file at path; whole / first-line / regex group-1 extract; newlines → spaces.
