@@ -255,7 +255,10 @@ function getConfigPathFromEnv(): string | undefined {
 
 type SegmentName = keyof LineConfig["segments"];
 
-const VALID_SEGMENT_NAMES: ReadonlySet<string> = new Set([
+// [LAW:one-source-of-truth] The canonical set of built-in segment names.
+// `--layout` validates against it; the parity registry asserts it covers
+// exactly this set. Adding a segment means adding it here, once.
+export const VALID_SEGMENT_NAMES: ReadonlySet<string> = new Set([
   "directory",
   "git",
   "gitTaculous",
