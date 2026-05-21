@@ -253,11 +253,17 @@ function getConfigPathFromEnv(): string | undefined {
   return process.env.CC_CANDYBAR_CONFIG;
 }
 
-type SegmentName = keyof LineConfig["segments"];
+// [LAW:one-source-of-truth] The segment-name union derives from LineConfig's
+// own keys — the authoritative enumeration. Consumers (the parity registry,
+// theme mapping) import this rather than re-listing names.
+export type SegmentName = keyof LineConfig["segments"];
 
 // [LAW:one-source-of-truth] The canonical set of built-in segment names.
 // `--layout` validates against it; the parity registry asserts it covers
 // exactly this set. Adding a segment means adding it here, once.
+// Typed ReadonlySet<string> (not ReadonlySet<SegmentName>) on purpose: this is
+// the trust boundary for untrusted `--layout` input, so `.has(userString)` must
+// accept an arbitrary string. Narrowing it would only push an unsafe cast here.
 export const VALID_SEGMENT_NAMES: ReadonlySet<string> = new Set([
   "directory",
   "git",
