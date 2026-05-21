@@ -24,6 +24,11 @@ export interface Globals {
   readonly default_separator?: string;
   readonly default_truncate_marker?: string;
   readonly hueStep?: number;
+  // [LAW:one-source-of-truth] A palette NAME, not a resolved Palette: DslConfig
+  // is the JSON-shape mirror, so the name is the authoritative datum and the
+  // renderer owns name→Palette resolution. Base of the cascade; a per-segment
+  // `palette` overrides it (see effectiveSegmentPalette in the loader).
+  readonly palette?: string;
 }
 
 // [LAW:one-type-per-behavior] One discriminated union covers every source
@@ -160,6 +165,9 @@ export interface SegmentDecl {
   readonly bg?: string;
   readonly fg?: string;
   readonly when?: string;
+  // [LAW:one-source-of-truth] Per-segment palette override (a NAME). Overrides
+  // globals.palette for this segment only; undefined = inherit the cascade base.
+  readonly palette?: string;
   // Per-segment vars sub-block — lives in the same global MobX store at runtime
   // but scoped to the owning segment's template context. Own-segment locals are
   // reachable by bare name (`.local`) or namespaced form (`.<segment>.local`);

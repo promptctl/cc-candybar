@@ -29,6 +29,7 @@ import {
   type TruncateMode,
   type VariableDecl,
 } from "./dsl-types.js";
+import { listResolvablePaletteNames } from "../themes/cascade.js";
 
 // ─── Public types ────────────────────────────────────────────────────────────
 
@@ -66,23 +67,38 @@ export class ConfigError extends Error {
  *
  * Throws ConfigError aggregating every problem found.
  */
-export function loadDslConfig(filePath: string): DslConfig {
+export function loadDslConfig(
+  filePath: string,
+  allowedPalettes?: ReadonlySet<string>,
+): DslConfig {
   const source = fs.readFileSync(filePath, "utf-8");
-  return parseDslConfig(filePath, source);
+  return parseDslConfig(filePath, source, allowedPalettes);
 }
 
 /**
  * Same as loadDslConfig but takes the source text directly. Useful in tests
  * (no fs mocking required).
+ *
+ * `allowedPalettes` is the set of palette names a `palette:` field may name.
+ * It defaults to every name that resolves to a concrete Palette, so production
+ * always validates loudly against the real registry. Tests inject a custom set
+ * to exercise validation without depending on registry contents.
+ * [LAW:no-defensive-null-guards] A defaulted real-registry set is not a silent
+ * fallback — the default IS the production behavior (validate against reality),
+ * not a "skip validation if absent" escape hatch.
  */
-export function parseDslConfig(filePath: string, source: string): DslConfig {
+export function parseDslConfig(
+  filePath: string,
+  source: string,
+  allowedPalettes: ReadonlySet<string> = new Set(listResolvablePaletteNames()),
+): DslConfig {
   // ── Stage 1: JSON5 syntax. A parse error here is single, immediate, and
   // carries line/col from the json5 package — no point continuing to other
   // passes that need a parsed structure to inspect.
   const raw = parseJson5OrThrow(filePath, source);
 
   const issues: ConfigIssue[] = [];
-  const ctx: ValidateCtx = { source, issues };
+  const ctx: ValidateCtx = { source, issues, allowedPalettes };
 
   // ── Stage 2: top-level shape + per-record shape.
   if (!isPlainObject(raw)) {
@@ -111,11 +127,37 @@ export function parseDslConfig(filePath: string, source: string): DslConfig {
   return topLevel;
 }
 
+// ─── Palette cascade ─────────────────────────────────────────────────────────
+
+/**
+ * Resolve a segment's effective palette name from the cascade:
+ *   default → globals.palette → segment.palette   (last write wins).
+ *
+ * Returns the name the renderer should pull this segment's colors from, or
+ * undefined to inherit the active/default palette (which lives outside the DSL
+ * config, set by the top-level theme). Both inputs were validated at load, so
+ * any non-undefined result is guaranteed to resolve to a real Palette.
+ *
+ * [LAW:single-enforcer] The cascade precedence is defined here once. Consumers
+ * call this rather than re-deriving `segment.palette ?? globals.palette`, so
+ * the precedence cannot drift between callsites.
+ * [LAW:one-source-of-truth] The effective palette is a derivation, not stored
+ * state — globals.palette and segment.palette remain the only authoritative
+ * inputs, so there is nothing to keep in sync.
+ */
+export function effectiveSegmentPalette(
+  globals: Globals,
+  segment: SegmentDecl,
+): string | undefined {
+  return segment.palette ?? globals.palette;
+}
+
 // ─── Internals ───────────────────────────────────────────────────────────────
 
 interface ValidateCtx {
   readonly source: string;
   readonly issues: ConfigIssue[];
+  readonly allowedPalettes: ReadonlySet<string>;
 }
 
 interface Json5Error extends Error {
@@ -184,6 +226,7 @@ function validateGlobals(ctx: ValidateCtx, raw: unknown): Globals {
     "default_separator",
     "default_truncate_marker",
     "hueStep",
+    "palette",
   ]);
 
   for (const key of Object.keys(raw)) {
@@ -227,6 +270,9 @@ function validateGlobals(ctx: ValidateCtx, raw: unknown): Globals {
       out.hueStep = raw.hueStep;
     }
   }
+
+  const palette = validatePaletteName(ctx, "globals", raw);
+  if (palette !== undefined) out.palette = palette;
 
   return out;
 }
@@ -633,6 +679,7 @@ function validateSegment(
     "fg",
     "when",
     "vars",
+    "palette",
   ]);
   for (const key of Object.keys(raw)) {
     if (!allowed.has(key)) {
@@ -678,6 +725,9 @@ function validateSegment(
 
   const when = optionalStringField(ctx, path, raw, "when");
   if (when !== undefined) seg.when = when;
+
+  const palette = validatePaletteName(ctx, path, raw);
+  if (palette !== undefined) seg.palette = palette;
 
   if (raw.vars !== undefined) {
     seg.vars = validateVariables(ctx, `${path}.vars`, raw.vars);
@@ -1076,6 +1126,27 @@ function optionalStringField(
       path: `${path}.${field}`,
       message: `${path}.${field} must be a string, got ${describeType(v)}`,
       line: findKeyLine(ctx.source, [...path.split("."), field]),
+    });
+    return undefined;
+  }
+  return v;
+}
+
+// [LAW:single-enforcer] One place validates a palette NAME, shared by globals
+// and per-segment. An unknown name is a hard error, never a silent fallback —
+// the renderer must never receive a name that won't resolve to a Palette.
+function validatePaletteName(
+  ctx: ValidateCtx,
+  path: string,
+  raw: Record<string, unknown>,
+): string | undefined {
+  const v = optionalStringField(ctx, path, raw, "palette");
+  if (v === undefined) return undefined;
+  if (!ctx.allowedPalettes.has(v)) {
+    ctx.issues.push({
+      path: `${path}.palette`,
+      message: `Unknown palette "${v}". Expected one of: ${[...ctx.allowedPalettes].sort().join(", ")}`,
+      line: findKeyLine(ctx.source, [...path.split("."), "palette"]),
     });
     return undefined;
   }
