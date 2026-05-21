@@ -4,7 +4,24 @@
 
 import { createCcCandybarEngine } from "../src/template-engine/engine";
 import { fragmentsToStripCells } from "../src/template-engine/cells";
-import { RichText } from "@promptctl/rich-js";
+import { renderStripCells } from "../src/render/strip";
+import { RichText, StripCell } from "@promptctl/rich-js";
+
+// Render cells to a truecolor ANSI string so tests assert observable output
+// (SGR escapes), not internal style placement. [LAW:behavior-not-structure]
+function renderCells(cells: readonly StripCell[]): string {
+  return renderStripCells(cells, { style: "plain", colorCompatibility: "truecolor" });
+}
+
+// CSI prefix of an ANSI SGR sequence (ESC + "[").
+const SGR = "\x1b[";
+
+// Strip ANSI SGR escapes so a test can assert the visible text independently of
+// where styling is applied.
+function stripAnsi(s: string): string {
+  // eslint-disable-next-line no-control-regex
+  return s.replace(/\x1b\[[0-9;]*m/g, "");
+}
 
 // Helper: evaluate a template and convert to StripCells.
 function evalCells(source: string, scope: object = {}) {
@@ -139,6 +156,61 @@ describe("fragmentsToStripCells — direct fragment input", () => {
     const cells = fragmentsToStripCells([new RichText("hello")]);
     expect(cells).toHaveLength(1);
     expect(cells[0]!.text).toBe("hello");
+  });
+
+  test("a run of adjacent plain fragments coalesces into one cell", () => {
+    // The natural symbol+value+padding shape — " {{ .sym }} {{ .v }} " —
+    // evaluates to several plain fragments. They must form ONE powerline cell,
+    // not one cell per fragment (which would cap-separate a single segment).
+    const cells = fragmentsToStripCells([
+      new RichText(" "),
+      new RichText("hello"),
+      new RichText(" "),
+    ]);
+    expect(cells).toHaveLength(1);
+    expect(cells[0]!.text).toBe(" hello ");
+    expect(cells[0]!.style.link).toBeUndefined();
+  });
+
+  test("plain run preserves a styled fragment's fg in rendered output", () => {
+    const cells = fragmentsToStripCells([
+      new RichText("status: "),
+      new RichText("err", { style: "red" }),
+    ]);
+    expect(cells).toHaveLength(1);
+    expect(cells[0]!.text).toBe("status: err");
+
+    // Behavioral proof: the red fg actually survives to ANSI output. A flatten
+    // to an unstyled plain cell would emit no SGR escape and fail this.
+    const rendered = renderCells(cells);
+    expect(rendered).toContain(SGR);
+    // Visible text (escapes removed) is intact and unduplicated.
+    expect(stripAnsi(rendered)).toBe("status: err");
+  });
+
+  test("adjacent fragments sharing a background coalesce, keeping the bg", () => {
+    // Same bg on both → one cell. The background is joiner-visible, so it must
+    // survive at cell level rather than being stripped to nothing.
+    const cells = fragmentsToStripCells([
+      new RichText("a", { style: "on blue" }),
+      new RichText("b", { style: "on blue" }),
+    ]);
+    expect(cells).toHaveLength(1);
+    expect(cells[0]!.text).toBe("ab");
+    expect(cells[0]!.style.bgcolor).toBeDefined();
+  });
+
+  test("a background change is a cell boundary", () => {
+    // Divergent backgrounds cannot share one cell (single-style invariant), so
+    // the run splits — each background becomes its own powerline cell.
+    const cells = fragmentsToStripCells([
+      new RichText("a", { style: "on red" }),
+      new RichText("b", { style: "on blue" }),
+    ]);
+    expect(cells).toHaveLength(2);
+    expect(cells[0]!.text).toBe("a");
+    expect(cells[1]!.text).toBe("b");
+    expect(cells[0]!.style.bgcolor).not.toBe(cells[1]!.style.bgcolor);
   });
 
   test("span with bgcolor does not propagate bgcolor to cell part", () => {
