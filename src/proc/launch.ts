@@ -153,6 +153,13 @@ export function setLaunchStats(handle: LaunchStatsHandle | null): void {
   statsHandle = handle;
 }
 
+// [LAW:types-are-the-program] Grace between SIGTERM and SIGKILL on the timeout
+// path. The lifetime invariant ("waited — child reaped before the caller
+// resumes") requires that a child which ignores SIGTERM is still gone before we
+// resolve. SIGTERM lets well-behaved children flush/clean up; SIGKILL is the
+// backstop so the promise cannot resolve while the child is still alive.
+const TIMEOUT_KILL_GRACE_MS = 250;
+
 export async function launch(opts: LaunchOpts): Promise<LaunchResult> {
   const gate = checkRateLimit(opts.category);
   if (!gate.allowed) {
@@ -192,6 +199,7 @@ export async function launch(opts: LaunchOpts): Promise<LaunchResult> {
     let stderr = "";
     let settled = false;
     let timer: NodeJS.Timeout | null = null;
+    let killTimer: NodeJS.Timeout | null = null;
     // [LAW:dataflow-not-control-flow] Whether the close was caused by *our*
     // timer is data we have to carry. The OS doesn't tell us why a child was
     // signalled — without this flag, SIGKILL from the OOM killer, SIGINT
@@ -203,6 +211,7 @@ export async function launch(opts: LaunchOpts): Promise<LaunchResult> {
       if (settled) return;
       settled = true;
       if (timer) clearTimeout(timer);
+      if (killTimer) clearTimeout(killTimer);
       statsHandle?.onEnd(opts.category, Date.now() - t0);
       resolve(r);
     };
@@ -227,15 +236,26 @@ export async function launch(opts: LaunchOpts): Promise<LaunchResult> {
     });
 
     child.on("close", (code, signal) => {
+      // [LAW:types-are-the-program] We resolve here, on the *actual* exit —
+      // including the timeout path. Once `timedOut` is set the deadline has
+      // elapsed, so the outcome is "timeout" regardless of which signal
+      // (SIGTERM or the escalated SIGKILL) finally ended the child.
+      if (timedOut) {
+        settle({
+          ok: false,
+          reason: "timeout",
+          stdout,
+          stderr,
+          exitCode: code,
+          signal,
+        });
+        return;
+      }
       if (code === 0) {
         settle({ ok: true, stdout, stderr, exitCode: code });
         return;
       }
-      const reason: "timeout" | "signal" | "non-zero" = signal
-        ? timedOut
-          ? "timeout"
-          : "signal"
-        : "non-zero";
+      const reason: "signal" | "non-zero" = signal ? "signal" : "non-zero";
       settle({
         ok: false,
         reason,
@@ -249,18 +269,14 @@ export async function launch(opts: LaunchOpts): Promise<LaunchResult> {
     if (opts.timeoutMs && opts.timeoutMs > 0) {
       timer = setTimeout(() => {
         timedOut = true;
-        // Guard against killing a child that has already settled (e.g. a
-        // very fast `/bin/true` that exited before the timer was scheduled).
-        // settle()'s `settled` flag is the single source of truth.
-        if (!settled) child.kill("SIGTERM");
-        settle({
-          ok: false,
-          reason: "timeout",
-          stdout,
-          stderr,
-          exitCode: null,
-          signal: "SIGTERM",
-        });
+        // [LAW:types-are-the-program] Do NOT settle here. We signal and let
+        // the `close` handler resolve once the child is actually gone, so the
+        // promise never resolves while the child is still alive. SIGTERM
+        // first; SIGKILL after a grace period if the child ignores it.
+        child.kill("SIGTERM");
+        killTimer = setTimeout(() => {
+          child.kill("SIGKILL");
+        }, TIMEOUT_KILL_GRACE_MS);
       }, opts.timeoutMs);
     }
 

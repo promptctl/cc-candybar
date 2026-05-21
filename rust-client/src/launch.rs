@@ -117,11 +117,14 @@ mod tests {
     #[test]
     fn command_new_lives_only_in_launch_rs() {
         let src_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
+        // Exact path, not basename: a future `src/foo/launch.rs` must NOT be
+        // exempt — only *this* file owns Command construction.
+        let this_file = src_dir.join("launch.rs");
         let mut files = Vec::new();
         rs_files(&src_dir, &mut files);
         let offenders: Vec<String> = files
             .iter()
-            .filter(|p| p.file_name().and_then(|n| n.to_str()) != Some("launch.rs"))
+            .filter(|p| **p != this_file)
             .filter(|p| {
                 fs::read_to_string(p)
                     .expect("read source")

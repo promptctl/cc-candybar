@@ -68,6 +68,24 @@ describe("launch (async)", () => {
     }
   });
 
+  it("escalates to SIGKILL and waits for death when the child ignores SIGTERM", async () => {
+    // The child traps SIGTERM, so a bare SIGTERM would leave it running past
+    // the frame. The promise must still resolve (not hang) and only after the
+    // child is actually reaped — proving the timeout path upholds the
+    // "no helper outlives its frame" invariant.
+    const r = await launch({
+      bin: "/bin/sh",
+      args: ["-c", "trap '' TERM; sleep 5"],
+      timeoutMs: 50,
+      category: "user-shell",
+    });
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.reason).toBe("timeout");
+      expect(r.signal).toBe("SIGKILL");
+    }
+  });
+
   it("reports signal (not timeout) when external SIGTERM kills a no-timeout child", async () => {
     // Child kills itself with SIGTERM; no timeout was set, so the close
     // must surface as "signal", not "timeout".
