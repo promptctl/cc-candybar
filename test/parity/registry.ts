@@ -83,7 +83,8 @@ export const PARITY_REGISTRY: Record<SegmentName, SegmentParityEntry> = {
     // commonly sends (e.g. "Opus 4.7 (1M context)" → "Opus 4.7"). That
     // regex normalization is unreachable in the DSL function set (gap bzh.5), so
     // model is NOT yet a safe replacement — keeping it out of dsl-parity blocks
-    // bzh.2 from deleting renderModel until bzh.5 lands formatModel.
+    // bzh.2 from deleting renderModel until bzh.5 lands a DSL primitive wrapping
+    // formatModelName (src/utils/formatters.ts).
     status: "dsl-pending",
     legacy: (r, c) => r.renderModel(HOOK_DATA, c, { enabled: true }),
     dsl: DSL_BINDINGS.model,
