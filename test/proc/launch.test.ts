@@ -69,14 +69,16 @@ describe("launch (async)", () => {
   });
 
   it("escalates to SIGKILL and waits for death when the child ignores SIGTERM", async () => {
-    // The child traps SIGTERM, so a bare SIGTERM would leave it running past
-    // the frame. The promise must still resolve (not hang) and only after the
-    // child is actually reaped — proving the timeout path upholds the
-    // "no helper outlives its frame" invariant.
+    // A single process (no child to orphan) that ignores SIGTERM, so a bare
+    // SIGTERM leaves it running and the launcher must escalate to SIGKILL. The
+    // promise must still resolve (not hang) and only after the child is reaped
+    // — proving the timeout path upholds the "no helper outlives its frame"
+    // invariant. Timeout is generous so node registers the handler before we
+    // signal; otherwise default SIGTERM termination would race the handler.
     const r = await launch({
-      bin: "/bin/sh",
-      args: ["-c", "trap '' TERM; sleep 5"],
-      timeoutMs: 50,
+      bin: process.execPath,
+      args: ["-e", "process.on('SIGTERM', () => {}); setInterval(() => {}, 1000);"],
+      timeoutMs: 300,
       category: "user-shell",
     });
     expect(r.ok).toBe(false);
