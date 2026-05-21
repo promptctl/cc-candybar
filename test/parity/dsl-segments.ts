@@ -110,8 +110,8 @@ export const DSL_BINDINGS = {
     // canonicalizes raw IDs like "claude-sonnet-4-6" → "Sonnet 4.6"). That
     // normalization is NOT expressible in the DSL function set (no regex), so it
     // is filed as a capability gap (bzh.5), not faked by seeding a pre-formatted
-    // value. For friendly display names (the common case + this fixture) the two
-    // are byte-identical.
+    // value. Byte-identical for friendly names (this fixture), but Claude does
+    // send decorated names, so the registry marks model dsl-pending — see there.
     decl: {
       template: " ✱ {{ .model.display_name }} ",
       bg: "panel",
