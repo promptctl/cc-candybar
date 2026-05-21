@@ -20,7 +20,7 @@ export interface RenderedSegmentLike {
 
 export type StripStyle = "powerline" | "capsule" | "plain";
 
-interface BuildLineOptions {
+export interface BuildLineOptions {
   style: StripStyle;
   colorCompatibility: ColorSystemSpec;
   separator?: string;
@@ -48,6 +48,25 @@ function toStripCell(seg: RenderedSegmentLike): StripCell {
 }
 
 /**
+ * [LAW:single-enforcer] The one place StripCells become an ANSI byte string.
+ * Every render path (legacy SegmentData via buildLineStrip, DSL StripCell[] via
+ * the template-engine pipeline, the parity harness) renders through here, so
+ * "byte-identical output" is a real theorem rather than two serializers that
+ * could drift.
+ */
+export function renderStripCells(
+  cells: readonly StripCell[],
+  options: BuildLineOptions,
+): string {
+  if (cells.length === 0) return "";
+  const joiner = pickJoiner(options.style, options.separator);
+  const strip = new Strip([...cells], joiner);
+  return renderToString(strip, {
+    colorSystem: options.colorCompatibility,
+  });
+}
+
+/**
  * Renders a row of segments into a single ANSI-encoded line using rich-js
  * Strip + Joiner + renderToString. Replaces the old hand-rolled
  * formatSegment / buildLineFromSegments path.
@@ -56,13 +75,7 @@ export function buildLineStrip(
   segments: readonly RenderedSegmentLike[],
   options: BuildLineOptions,
 ): string {
-  if (segments.length === 0) return "";
-  const cells = segments.map(toStripCell);
-  const joiner = pickJoiner(options.style, options.separator);
-  const strip = new Strip(cells, joiner);
-  return renderToString(strip, {
-    colorSystem: options.colorCompatibility,
-  });
+  return renderStripCells(segments.map(toStripCell), options);
 }
 
 /**
