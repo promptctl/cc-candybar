@@ -27,6 +27,24 @@ function seeded(seed: (s: VariableStore) => void): () => VariableStore {
   };
 }
 
+// collapseHome reads $HOME (then $USERPROFILE) — the same source the legacy
+// formatter reads, so a current_dir under $HOME collapses identically.
+const HOME = process.env.HOME ?? process.env.USERPROFILE ?? "";
+
+// Faithful "full"-style directory display, mirroring renderDirectory +
+// getDisplayDirectoryName: (1) under $HOME → "~"+remainder; (2) else under
+// project_dir → project-relative path, falling back to the project basename
+// when current_dir === project_dir; (3) else the full current_dir. The
+// project-relative path is recomputed inline rather than bound once because the
+// DSL rejects template-level `:=` (proposal: use the vars sub-block).
+const DIR_REL = 'trimPrefix "/" (trimPrefix .project_dir .current_dir)';
+const DIR_TEMPLATE =
+  " {{ if hasPrefix .home .current_dir }}~{{ trimPrefix .home .current_dir }}" +
+  "{{ else }}" +
+  "{{ if and (ne .project_dir .current_dir) (hasPrefix .project_dir .current_dir) }}" +
+  `{{ ternary (${DIR_REL}) (basename .project_dir) (ne (${DIR_REL}) "") }}` +
+  "{{ else }}{{ .current_dir }}{{ end }}{{ end }} ";
+
 // Git working-tree counts have no clean DSL form without range/join: each count
 // is conditionally present and the survivors join with single spaces. The
 // leading-space-then-trim idiom expresses it — every present count contributes
@@ -65,14 +83,11 @@ const GIT_TEMPLATE =
 // silently-skipped parity assertion in the harness.
 export const DSL_BINDINGS = {
   directory: {
-    decl: {
-      template: ' {{ trimPrefix "/" (trimPrefix .project_dir .current_dir) }} ',
-      bg: "surface",
-      fg: "foreground",
-    },
+    decl: { template: DIR_TEMPLATE, bg: "surface", fg: "foreground" },
     store: seeded((s) => {
       s.defineBox("current_dir", "string", HOOK_DATA.workspace.current_dir);
       s.defineBox("project_dir", "string", HOOK_DATA.workspace.project_dir);
+      s.defineBox("home", "string", HOME);
     }),
   },
 
@@ -110,10 +125,14 @@ export const DSL_BINDINGS = {
   },
 
   env: {
+    // [LAW:dataflow-not-control-flow] Legacy renderEnv returns null when the
+    // var is unset; the DSL hides via `when` (a value), not a body guard. The
+    // fixture sets the var, so the segment still renders and matches golden.
     decl: {
       template: " ⚙ ENV: {{ .env.value }} ",
       bg: "surface-active",
       fg: "foreground",
+      when: '{{ ne .env.value "" }}',
     },
     store: seeded((s) => {
       s.defineBox("env.value", "string", process.env[ENV_VAR] ?? "");
