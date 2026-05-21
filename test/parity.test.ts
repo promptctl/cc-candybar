@@ -18,7 +18,6 @@ import {
   writeGolden,
   UPDATE_GOLDEN,
   type GoldenMap,
-  type SegmentBytes,
 } from "./parity/harness";
 import {
   makeRenderer,
@@ -98,7 +97,7 @@ assertions("segment parity", () => {
       (provesParity ? test : test.skip)(
         "DSL declaration is byte-identical to golden",
         () => {
-          const bytes = dslSegmentBytes(dsl!, dsl!.store(), resolver);
+          const bytes = dslSegmentBytes(dsl!, resolver);
           expect(bytes).toEqual(golden[name]);
         },
       );
@@ -120,15 +119,15 @@ describe("byte-differ", () => {
   const decl = { template: " {{ .label }} " };
 
   test("identical declaration + store → equal bytes", () => {
-    const a = dslSegmentBytes({ decl, store: () => storeWith("main") }, storeWith("main"), resolver);
-    const b = dslSegmentBytes({ decl, store: () => storeWith("main") }, storeWith("main"), resolver);
+    const a = dslSegmentBytes({ decl, store: () => storeWith("main") }, resolver);
+    const b = dslSegmentBytes({ decl, store: () => storeWith("main") }, resolver);
     expect(a).toEqual(b);
     expect((a as string).length).toBeGreaterThan(0);
   });
 
   test("deliberate mismatch → unequal bytes (loud)", () => {
-    const a = dslSegmentBytes({ decl, store: () => storeWith("main") }, storeWith("main"), resolver);
-    const b = dslSegmentBytes({ decl, store: () => storeWith("feature") }, storeWith("feature"), resolver);
+    const a = dslSegmentBytes({ decl, store: () => storeWith("main") }, resolver);
+    const b = dslSegmentBytes({ decl, store: () => storeWith("feature") }, resolver);
     expect(a).not.toEqual(b);
   });
 
@@ -151,7 +150,6 @@ describe("byte-differ", () => {
     store.defineBox("t", "string", "hello");
     const dsl = dslSegmentBytes(
       { decl: { template: '{{ printf " %s " .t }}' }, store: () => store },
-      store,
       resolver,
     );
     expect(dsl).toEqual(legacy);

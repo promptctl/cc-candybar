@@ -10,14 +10,13 @@
 import { readFileSync, writeFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 
-import { StripCell, Style } from "@promptctl/rich-js";
 import type { PaletteResolver } from "@promptctl/rich-js";
 import type { SegmentRenderer } from "../../src/segments";
 import type { PowerlineColors } from "../../src/themes";
 import type { SegmentDecl } from "../../src/config/dsl-types";
 import type { VariableStore } from "../../src/var-system/store";
 
-import { renderStripCells } from "../../src/render/strip";
+import { buildLineStrip, renderStripCells } from "../../src/render/strip";
 import {
   createCcCandybarEngine,
   buildScope,
@@ -48,6 +47,10 @@ export interface DslBinding {
 
 // ─── Byte producers ──────────────────────────────────────────────────────────
 
+// [LAW:one-source-of-truth] The legacy bytes are produced by the *production*
+// buildLineStrip — the same cell-padding + style lowering the daemon uses — so
+// the golden cannot drift from real output if that lowering ever changes. No
+// replica of toStripCell lives here.
 export function legacySegmentBytes(
   render: LegacyRender,
   renderer: SegmentRenderer,
@@ -55,40 +58,35 @@ export function legacySegmentBytes(
 ): SegmentBytes {
   const data = render(renderer, colors);
   if (data === null) return null;
-  return renderStripCells(
-    [toLegacyCell(data.text, data.bgHex, data.fgHex)],
+  return buildLineStrip(
+    [{ type: "segment", text: data.text, bgHex: data.bgHex, fgHex: data.fgHex }],
     STRIP_OPTS,
-  );
-}
-
-// Mirror src/render/strip.ts toStripCell: one space of padding each side, bg/fg
-// from the resolved hex. Imported indirectly via buildLineStrip would also work,
-// but constructing the cell here keeps the legacy and DSL paths symmetric (both
-// hand renderStripCells a StripCell[]).
-function toLegacyCell(text: string, bgHex?: string, fgHex?: string): StripCell {
-  return new StripCell(
-    ` ${text} `,
-    new Style({ bgcolor: bgHex || undefined, color: fgHex || undefined }),
   );
 }
 
 export function dslSegmentBytes(
   binding: DslBinding,
-  store: VariableStore,
   resolver: PaletteResolver,
 ): SegmentBytes {
+  // [LAW:one-source-of-truth] The binding owns its store; the caller cannot pass
+  // a divergent one.
   const { decl } = binding;
+  const store = binding.store();
   const engine = createCcCandybarEngine(resolver);
   const scope = buildScope(store);
 
-  const whenTpl = decl.when ? engine.parse(decl.when) : undefined;
+  // [LAW:no-silent-fallbacks] Optional fields are tested for presence with
+  // `!== undefined`, not truthiness — an explicit empty spec (bg: "" / fg: "" /
+  // when: "") is a real value that must flow into the engine and fail loudly,
+  // not be silently treated as "unset".
+  const whenTpl = decl.when !== undefined ? engine.parse(decl.when) : undefined;
   if (!evaluateWhen(whenTpl, scope)) return null;
 
   const fragments = engine.parse(decl.template).evaluate(scope);
   const cells = fragmentsToStripCells(fragments);
 
-  const bgTpl = decl.bg ? engine.parse(decl.bg) : undefined;
-  const fgTpl = decl.fg ? engine.parse(decl.fg) : undefined;
+  const bgTpl = decl.bg !== undefined ? engine.parse(decl.bg) : undefined;
+  const fgTpl = decl.fg !== undefined ? engine.parse(decl.fg) : undefined;
   const defaultStyle = resolveSegmentColors(resolver, bgTpl, fgTpl, scope);
 
   const laidOut = applySegmentLayout(cells, {
@@ -103,6 +101,11 @@ export function dslSegmentBytes(
 
 // ─── Golden store (committed canonical bytes) ────────────────────────────────
 
+// Anchored at the package root via process.cwd(). Module-relative resolution
+// (import.meta.url) is not usable here: test/ is excluded from the tsconfig that
+// grants module:esnext, so ts-jest type-checks test files as CommonJS and
+// rejects import.meta (TS1343), while __dirname is undefined at ESM runtime.
+// `pnpm test` always runs jest from the package root, so cwd is stable.
 const GOLDEN_PATH = join(process.cwd(), "test", "parity", "golden.json");
 
 export type GoldenMap = Record<string, SegmentBytes>;
