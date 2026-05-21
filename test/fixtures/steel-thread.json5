@@ -1,0 +1,33 @@
+// Minimal DSL config for the bzh.7 steel-thread integration test.
+// Two segments (directory + sessionId) exercise:
+//   (a) the Joiner between two segments, and
+//   (b) per-segment palette switching via 3rq.2 (sessionId uses 'gruvbox').
+// Variables are declared as input/env kinds so the test drives them through
+// registerDslConfig + applyInput — no hand-seeded store.
+{
+  globals: {},
+  variables: {
+    current_dir: { kind: 'input', path: 'workspace.current_dir', default: '' },
+    project_dir: { kind: 'input', path: 'workspace.project_dir', default: '' },
+    home: { kind: 'env', name: 'HOME', default: '' },
+    'session.id': { kind: 'input', path: 'session_id', default: '' },
+  },
+  segments: {
+    directory: {
+      // Faithful full-style directory: home-collapse → project-relative → absolute.
+      // ne .home "" guard: hasPrefix with empty prefix is vacuously true, so the
+      // guard prevents an unset HOME from collapsing every path to "~<path>".
+      template: ' {{ if and (ne .home "") (hasPrefix .home .current_dir) }}~{{ trimPrefix .home .current_dir }}{{ else }}{{ if and (ne .project_dir .current_dir) (hasPrefix .project_dir .current_dir) }}{{ ternary (trimPrefix "/" (trimPrefix .project_dir .current_dir)) (basename .project_dir) (ne (trimPrefix "/" (trimPrefix .project_dir .current_dir)) "") }}{{ else }}{{ .current_dir }}{{ end }}{{ end }} ',
+      bg: 'surface',
+      fg: 'foreground',
+    },
+    sessionId: {
+      template: ' ⌗{{ trunc 8 .session.id }} ',
+      bg: 'surface',
+      fg: 'foreground',
+      // Different palette: exercises effectiveSegmentPalette (3rq.2) in the spine.
+      palette: 'gruvbox',
+    },
+  },
+  layout: ['directory', 'sessionId'],
+}
