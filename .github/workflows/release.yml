@@ -40,6 +40,9 @@ jobs:
       - name: Protocol-version guard
         run: pnpm run check:protocol
 
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
       - name: Rust tests (spawn-boundary guard)
         run: cargo test --manifest-path rust-client/Cargo.toml
 
