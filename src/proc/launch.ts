@@ -273,10 +273,18 @@ export async function launch(opts: LaunchOpts): Promise<LaunchResult> {
         // the `close` handler resolve once the child is actually gone, so the
         // promise never resolves while the child is still alive. SIGTERM
         // first; SIGKILL after a grace period if the child ignores it.
-        child.kill("SIGTERM");
-        killTimer = setTimeout(() => {
-          child.kill("SIGKILL");
-        }, TIMEOUT_KILL_GRACE_MS);
+        //
+        // [LAW:dataflow-not-control-flow] `child.pid` is undefined when the
+        // spawn failed asynchronously (ENOENT) — there is no process to signal
+        // and the `error` event settles that case. kill() on a pid-less child
+        // signals the wrong target (verified: it can terminate the caller), so
+        // escalation is gated on the pid actually existing.
+        if (child.pid !== undefined) {
+          child.kill("SIGTERM");
+          killTimer = setTimeout(() => {
+            child.kill("SIGKILL");
+          }, TIMEOUT_KILL_GRACE_MS);
+        }
       }, opts.timeoutMs);
     }
 

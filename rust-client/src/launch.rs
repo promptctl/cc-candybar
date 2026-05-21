@@ -131,11 +131,21 @@ mod tests {
                 // `Command::new(` catches every direct construction: the
                 // qualified spellings (`std::process::Command::new(`,
                 // `process::Command::new(`) all *end in* this substring, so an
-                // unanchored match covers them. `process::Command` additionally
-                // catches a `use` that pulls the type into scope under any alias
-                // (`use std::process::Command as Cmd;` then `Cmd::new(`) — the
-                // one construction route the call-site match alone would miss.
-                body.contains("Command::new(") || body.contains("process::Command")
+                // unanchored match covers them.
+                if body.contains("Command::new(") {
+                    return true;
+                }
+                // `process::Command` additionally catches a `use` that pulls the
+                // type into scope under any alias (`use std::process::Command as
+                // Cmd;` then `Cmd::new(`) — the one construction route the
+                // call-site match alone would miss. Require a non-identifier
+                // char right after `Command` so this does NOT match the
+                // unrelated `std::os::unix::process::CommandExt`.
+                let needle = "process::Command";
+                body.match_indices(needle).any(|(i, _)| {
+                    let next = body[i + needle.len()..].chars().next();
+                    !matches!(next, Some(c) if c.is_alphanumeric() || c == '_')
+                })
             })
             .map(|p| p.display().to_string())
             .collect();
