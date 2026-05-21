@@ -23,7 +23,9 @@
 // daemon-handoff escape hatch, the *only* spawn permitted to outlive its
 // caller). A future regression that wanted to spawn an unwaited helper would
 // have to add a third operation — which the guard test below forbids by
-// asserting `Command::new(` appears only in this file. [LAW:single-enforcer]
+// asserting no Command construction (a `Command::new(` call or a
+// `process::Command` import under any alias) appears outside this file.
+// [LAW:single-enforcer]
 //
 // No metering: the client process is single-frame and short-lived. Daemon
 // metering of subprocess churn lives in the Node runtime.
@@ -109,13 +111,12 @@ mod tests {
     // [LAW:single-enforcer] (kz8.6) The Rust mirror of the ESLint
     // no-restricted-imports guard that pins child_process to src/proc/launch.ts.
     // `std::process::Command` may be constructed only in launch.rs; any other
-    // file growing a `Command::new(` is a new unaudited spawn site, and — since
-    // this module is the only place that knows the two sanctioned lifetimes — a
-    // likely frame-outliving helper. Reading the real source keeps the guard
-    // from drifting from reality. (Matches `Command::new(` with the paren so the
-    // prose `// All Command::new goes through launch.rs` comments don't trip it.)
+    // file growing a Command construction is a new unaudited spawn site, and —
+    // since this module is the only place that knows the two sanctioned
+    // lifetimes — a likely frame-outliving helper. Reading the real source
+    // keeps the guard from drifting from reality.
     #[test]
-    fn command_new_lives_only_in_launch_rs() {
+    fn command_construction_lives_only_in_launch_rs() {
         let src_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
         // Exact path, not basename: a future `src/foo/launch.rs` must NOT be
         // exempt — only *this* file owns Command construction.
@@ -126,16 +127,22 @@ mod tests {
             .iter()
             .filter(|p| **p != this_file)
             .filter(|p| {
-                fs::read_to_string(p)
-                    .expect("read source")
-                    .contains("Command::new(")
+                let body = fs::read_to_string(p).expect("read source");
+                // `Command::new(` catches every direct construction: the
+                // qualified spellings (`std::process::Command::new(`,
+                // `process::Command::new(`) all *end in* this substring, so an
+                // unanchored match covers them. `process::Command` additionally
+                // catches a `use` that pulls the type into scope under any alias
+                // (`use std::process::Command as Cmd;` then `Cmd::new(`) — the
+                // one construction route the call-site match alone would miss.
+                body.contains("Command::new(") || body.contains("process::Command")
             })
             .map(|p| p.display().to_string())
             .collect();
         assert!(
             offenders.is_empty(),
-            "Command::new( found outside launch.rs: {offenders:?}. Route every \
-             spawn through launch.rs (exec_node_replace / \
+            "Command construction found outside launch.rs: {offenders:?}. Route \
+             every spawn through launch.rs (exec_node_replace / \
              spawn_node_detached_daemon). [LAW:single-enforcer]"
         );
     }
