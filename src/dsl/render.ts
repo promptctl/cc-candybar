@@ -45,14 +45,17 @@ import {
 
 // ─── Compiled segment shape ───────────────────────────────────────────────────
 
-// Pre-parsed templates for one segment. Built once at registration time;
-// renderDslLine evaluates them per render. [LAW:one-source-of-truth] the
-// compiled form is the authoritative runtime shape for a segment's templates.
+// Pre-parsed templates and pre-resolved palette for one segment. Built once at
+// registration time; renderDslLine only evaluates. [LAW:one-source-of-truth]
+// the compiled form is the authoritative runtime shape for a segment.
 export interface CompiledSegment {
   readonly when?: Template<RichText>;
   readonly template: Template<RichText>;
   readonly bg?: Template<RichText>;
   readonly fg?: Template<RichText>;
+  // Pre-resolved from effectiveSegmentPalette at registration time; undefined
+  // means "use the basePalette passed to renderDslLine".
+  readonly paletteResolver?: PaletteResolver;
 }
 
 // Pre-compiled templates for every segment in a DslConfig, keyed by segment
@@ -211,15 +214,19 @@ export function registerDslConfig(
     }
   }
 
-  // Pre-parse all segment templates once. renderDslLine calls evaluate()
-  // only — parse() never runs in the hot render path.
+  // Pre-parse all segment templates and pre-resolve per-segment palettes once.
+  // renderDslLine calls evaluate() only — parse() and palette resolution never
+  // run in the hot render path.
   const compiled: Record<string, CompiledSegment> = {};
   for (const [segName, seg] of Object.entries(config.segments)) {
+    const paletteName = effectiveSegmentPalette(config.globals, seg);
     compiled[segName] = {
       when: seg.when !== undefined ? _compileEngine.parse(seg.when) : undefined,
       template: _compileEngine.parse(seg.template),
       bg: seg.bg !== undefined ? _compileEngine.parse(seg.bg) : undefined,
       fg: seg.fg !== undefined ? _compileEngine.parse(seg.fg) : undefined,
+      paletteResolver:
+        paletteName !== undefined ? resolverForPalette(paletteName) : undefined,
     };
   }
   return compiled;
@@ -251,7 +258,7 @@ function resolverForPalette(name: string): PaletteResolver {
  *   1. Push payload into input boxes (registry.applyInput).
  *   2. Walk config.layout in order; skip segments whose `when` evaluates false.
  *   3. Per segment: evaluate pre-compiled template → fragments → StripCells.
- *   4. Resolve effectiveSegmentPalette (3rq.2) → per-segment PaletteResolver.
+ *   4. Per-segment PaletteResolver pre-resolved at registration (3rq.2) or basePalette.
  *   5. Resolve bg/fg → defaultStyle; apply width/justify/truncate.
  *   6. Concatenate all StripCells; join via powerline Joiner → ANSI string.
  *
@@ -296,10 +303,8 @@ export function renderDslLine(
     const fragments = segCompiled.template.evaluate(scope);
     const cells = fragmentsToStripCells(fragments);
 
-    // Step 4: per-segment palette (3rq.2).
-    const paletteName = effectiveSegmentPalette(config.globals, seg);
-    const resolver =
-      paletteName !== undefined ? resolverForPalette(paletteName) : basePalette;
+    // Step 4: per-segment palette (3rq.2) — pre-resolved at registration time.
+    const resolver = segCompiled.paletteResolver ?? basePalette;
 
     // Step 5: colors + layout.
     const defaultStyle = resolveSegmentColors(
