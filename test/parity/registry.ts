@@ -11,6 +11,7 @@
 
 import type { SegmentName } from "../../src/config/loader";
 import type { LegacyRender, DslBinding } from "./harness";
+import { DSL_BINDINGS } from "./dsl-segments";
 import {
   HOOK_DATA,
   GIT_INFO,
@@ -46,12 +47,13 @@ export interface SegmentParityEntry {
 // and `.dsl` — not the narrowed all-"legacy-only" literal.)
 export const PARITY_REGISTRY: Record<SegmentName, SegmentParityEntry> = {
   directory: {
-    status: "legacy-only",
+    status: "dsl-parity",
     legacy: (r, c) =>
       r.renderDirectory(HOOK_DATA, c, { enabled: true, style: "full" }),
+    dsl: DSL_BINDINGS.directory,
   },
   git: {
-    status: "legacy-only",
+    status: "dsl-parity",
     legacy: (r, c) =>
       r.renderGit(GIT_INFO, c, {
         enabled: true,
@@ -61,6 +63,7 @@ export const PARITY_REGISTRY: Record<SegmentName, SegmentParityEntry> = {
         showStashCount: true,
         showRepoName: true,
       }),
+    dsl: DSL_BINDINGS.git,
   },
   gitTaculous: {
     status: "legacy-only",
@@ -74,8 +77,9 @@ export const PARITY_REGISTRY: Record<SegmentName, SegmentParityEntry> = {
       }),
   },
   model: {
-    status: "legacy-only",
+    status: "dsl-parity",
     legacy: (r, c) => r.renderModel(HOOK_DATA, c, { enabled: true }),
+    dsl: DSL_BINDINGS.model,
   },
   session: {
     status: "legacy-only",
@@ -96,8 +100,9 @@ export const PARITY_REGISTRY: Record<SegmentName, SegmentParityEntry> = {
     legacy: (r, c) => r.renderToday(TODAY_INFO, c, "both"),
   },
   tmux: {
-    status: "legacy-only",
+    status: "dsl-parity",
     legacy: (r, c) => r.renderTmux(TMUX_SESSION_ID, c),
+    dsl: DSL_BINDINGS.tmux,
   },
   context: {
     status: "legacy-only",
@@ -118,11 +123,12 @@ export const PARITY_REGISTRY: Record<SegmentName, SegmentParityEntry> = {
       }),
   },
   version: {
-    status: "legacy-only",
+    status: "dsl-parity",
     legacy: (r, c) => r.renderVersion(HOOK_DATA, c, { enabled: true }),
+    dsl: DSL_BINDINGS.version,
   },
   sessionId: {
-    status: "legacy-only",
+    status: "dsl-parity",
     legacy: (r, c) =>
       r.renderSessionId(
         SESSION_ID,
@@ -133,11 +139,13 @@ export const PARITY_REGISTRY: Record<SegmentName, SegmentParityEntry> = {
           projectDir: HOOK_DATA.workspace.project_dir,
         },
       ),
+    dsl: DSL_BINDINGS.sessionId,
   },
   env: {
-    status: "legacy-only",
+    status: "dsl-parity",
     legacy: (r, c) =>
       r.renderEnv(c, { enabled: true, variable: ENV_VAR, prefix: "ENV" }),
+    dsl: DSL_BINDINGS.env,
   },
   weekly: {
     status: "legacy-only",
