@@ -65,13 +65,17 @@ const GIT_WORKTREE =
   ' (ternary (printf " ?%v" .git.untracked) "" (gt .git.untracked 0))' +
   ' (ternary (printf " !%v" .git.conflicts) "" (gt .git.conflicts 0)) | trim }}){{ end }}';
 
-// Status icon: dirty → ●, conflicts → ⚠, else clean ✓. Nested if (no else-if).
+// Status icon, in legacy's precedence order: conflicts → ⚠, dirty → ●, else
+// clean ✓. status is a single enum value so the arms are mutually exclusive;
+// the order mirrors renderGit for clarity. Nested if (the engine has no else-if).
 const GIT_STATUS =
-  '{{ if eq .git.status "dirty" }}●{{ else }}' +
-  '{{ if eq .git.status "conflicts" }}⚠{{ else }}✓{{ end }}{{ end }}';
+  '{{ if eq .git.status "conflicts" }}⚠{{ else }}' +
+  '{{ if eq .git.status "dirty" }}●{{ else }}✓{{ end }}{{ end }}';
 
+// repoName is optional in GitInfo; render it (plus its trailing space) only when
+// present, matching renderGit's showRepoName && repoName guard.
 const GIT_TEMPLATE =
-  ' {{ .git.repoName }} ⎇ {{ .git.branch }}' +
+  ' {{ if ne .git.repoName "" }}{{ .git.repoName }} {{ end }}⎇ {{ .git.branch }}' +
   '{{ if .git.sha }} ♯ {{ .git.sha }}{{ end }}' +
   '{{ if or (gt .git.ahead 0) (gt .git.behind 0) }}' +
   ' {{ if gt .git.ahead 0 }}↑{{ .git.ahead }}{{ end }}' +
@@ -100,6 +104,14 @@ export const DSL_BINDINGS = {
   },
 
   model: {
+    // Reads the human-friendly model.display_name directly — the legitimate DSL
+    // form for "show the model name". Legacy renderModel additionally runs
+    // formatModelName (regex-based: strips "(1M context)"-style decorations,
+    // canonicalizes raw IDs like "claude-sonnet-4-6" → "Sonnet 4.6"). That
+    // normalization is NOT expressible in the DSL function set (no regex), so it
+    // is filed as a capability gap (bzh.5), not faked by seeding a pre-formatted
+    // value. For friendly display names (the common case + this fixture) the two
+    // are byte-identical.
     decl: {
       template: " ✱ {{ .model.display_name }} ",
       bg: "panel",
@@ -122,13 +134,16 @@ export const DSL_BINDINGS = {
   },
 
   version: {
+    // [LAW:dataflow-not-control-flow] renderVersion returns null when version is
+    // absent; the DSL hides via `when`. Fixture provides version, so it renders.
     decl: {
       template: " ◈ v{{ .version }} ",
       bg: "surface",
       fg: "foreground",
+      when: '{{ ne .version "" }}',
     },
     store: seeded((s) => {
-      s.defineBox("version", "string", HOOK_DATA.version!);
+      s.defineBox("version", "string", HOOK_DATA.version ?? "");
     }),
   },
 
@@ -148,8 +163,10 @@ export const DSL_BINDINGS = {
   },
 
   tmux: {
+    // renderTmux shows "tmux:none" (not absence) for an empty session id; the
+    // `default "none"` filter reproduces that. Fixture has a session id.
     decl: {
-      template: " tmux:{{ .tmux.session }} ",
+      template: ' tmux:{{ .tmux.session | default "none" }} ',
       bg: "surface-active",
       fg: "foreground",
     },
@@ -160,18 +177,22 @@ export const DSL_BINDINGS = {
 
   git: {
     decl: { template: GIT_TEMPLATE, bg: "surface-active", fg: "foreground" },
+    // Optional GitInfo fields seed to safe defaults ("" / 0); the template's
+    // presence/`gt` guards decide what renders, mirroring how renderGit tolerates
+    // unresolved fields. No non-null assertions on values that are legitimately
+    // optional in production.
     store: seeded((s) => {
-      s.defineBox("git.repoName", "string", GIT_INFO.repoName!);
+      s.defineBox("git.repoName", "string", GIT_INFO.repoName ?? "");
       s.defineBox("git.branch", "string", GIT_INFO.branch);
-      s.defineBox("git.sha", "string", GIT_INFO.sha!);
+      s.defineBox("git.sha", "string", GIT_INFO.sha ?? "");
       s.defineBox("git.ahead", "number", GIT_INFO.ahead);
       s.defineBox("git.behind", "number", GIT_INFO.behind);
-      s.defineBox("git.staged", "number", GIT_INFO.staged!);
-      s.defineBox("git.unstaged", "number", GIT_INFO.unstaged!);
-      s.defineBox("git.untracked", "number", GIT_INFO.untracked!);
-      s.defineBox("git.conflicts", "number", GIT_INFO.conflicts!);
-      s.defineBox("git.upstream", "string", GIT_INFO.upstream!);
-      s.defineBox("git.stash", "number", GIT_INFO.stashCount!);
+      s.defineBox("git.staged", "number", GIT_INFO.staged ?? 0);
+      s.defineBox("git.unstaged", "number", GIT_INFO.unstaged ?? 0);
+      s.defineBox("git.untracked", "number", GIT_INFO.untracked ?? 0);
+      s.defineBox("git.conflicts", "number", GIT_INFO.conflicts ?? 0);
+      s.defineBox("git.upstream", "string", GIT_INFO.upstream ?? "");
+      s.defineBox("git.stash", "number", GIT_INFO.stashCount ?? 0);
       s.defineBox("git.status", "string", GIT_INFO.status);
     }),
   },
