@@ -10,6 +10,16 @@
 // [LAW:dataflow-not-control-flow] Categories flow through one boundary as
 // data; the body is the same code path for every category. The metering layer
 // reads the category off the request, not off the call site.
+//
+// [LAW:types-are-the-program] (kz8.6) Process lifetime is encoded in the
+// operation, not in a flag. `launch`/`launchSync` are *waited*: the child is
+// reaped before the caller resumes, so it cannot outlive its frame.
+// `launchDetachedSync` is the *orphan*: it detaches and unrefs, deliberately
+// outliving its caller — the daemon-handoff escape hatch, used only by the
+// daemon-acquisition path. There is no `detached: boolean` flag on `LaunchOpts`
+// ([LAW:no-mode-explosion]); the two lifetimes are two functions with two
+// return contracts, so an unwaited helper that survives a render frame is
+// unrepresentable here rather than forbidden by convention.
 
 import { spawn, spawnSync } from "node:child_process";
 import type { ChildProcess, StdioOptions } from "node:child_process";
@@ -91,10 +101,6 @@ export interface LaunchOpts {
   env?: NodeJS.ProcessEnv;
   timeoutMs?: number;
   stdinInput?: string | Buffer;
-  // Detached + unref'd. The launcher does not wait or read stdio; caller
-  // gets `{ ok: true, exitCode: null, stdout: "", stderr: "" }` if the
-  // spawn succeeded (the OS now owns the process).
-  detached?: boolean;
   category: LaunchCategory;
 }
 
@@ -147,6 +153,13 @@ export function setLaunchStats(handle: LaunchStatsHandle | null): void {
   statsHandle = handle;
 }
 
+// [LAW:types-are-the-program] Grace between SIGTERM and SIGKILL on the timeout
+// path. The lifetime invariant ("waited — child reaped before the caller
+// resumes") requires that a child which ignores SIGTERM is still gone before we
+// resolve. SIGTERM lets well-behaved children flush/clean up; SIGKILL is the
+// backstop so the promise cannot resolve while the child is still alive.
+const TIMEOUT_KILL_GRACE_MS = 250;
+
 export async function launch(opts: LaunchOpts): Promise<LaunchResult> {
   const gate = checkRateLimit(opts.category);
   if (!gate.allowed) {
@@ -159,16 +172,6 @@ export async function launch(opts: LaunchOpts): Promise<LaunchResult> {
   recordStart(opts.category);
   const t0 = Date.now();
   statsHandle?.onStart(opts.category);
-
-  if (opts.detached) {
-    // [LAW:one-type-per-behavior] Detached launches are synchronous in nature
-    // (fire-and-forget, no stdio to drain). Callers that need the typed
-    // outcome should call launchDetachedSync directly. We keep this branch as
-    // a thin async wrapper for parity but it is no richer than the sync form.
-    const result = launchDetachedSyncInner(opts);
-    statsHandle?.onEnd(opts.category, Date.now() - t0);
-    return result;
-  }
 
   return new Promise<LaunchResult>((resolve) => {
     let child: ChildProcess;
@@ -196,6 +199,7 @@ export async function launch(opts: LaunchOpts): Promise<LaunchResult> {
     let stderr = "";
     let settled = false;
     let timer: NodeJS.Timeout | null = null;
+    let killTimer: NodeJS.Timeout | null = null;
     // [LAW:dataflow-not-control-flow] Whether the close was caused by *our*
     // timer is data we have to carry. The OS doesn't tell us why a child was
     // signalled — without this flag, SIGKILL from the OOM killer, SIGINT
@@ -207,6 +211,7 @@ export async function launch(opts: LaunchOpts): Promise<LaunchResult> {
       if (settled) return;
       settled = true;
       if (timer) clearTimeout(timer);
+      if (killTimer) clearTimeout(killTimer);
       statsHandle?.onEnd(opts.category, Date.now() - t0);
       resolve(r);
     };
@@ -231,15 +236,26 @@ export async function launch(opts: LaunchOpts): Promise<LaunchResult> {
     });
 
     child.on("close", (code, signal) => {
+      // [LAW:types-are-the-program] We resolve here, on the *actual* exit —
+      // including the timeout path. Once `timedOut` is set the deadline has
+      // elapsed, so the outcome is "timeout" regardless of which signal
+      // (SIGTERM or the escalated SIGKILL) finally ended the child.
+      if (timedOut) {
+        settle({
+          ok: false,
+          reason: "timeout",
+          stdout,
+          stderr,
+          exitCode: code,
+          signal,
+        });
+        return;
+      }
       if (code === 0) {
         settle({ ok: true, stdout, stderr, exitCode: code });
         return;
       }
-      const reason: "timeout" | "signal" | "non-zero" = signal
-        ? timedOut
-          ? "timeout"
-          : "signal"
-        : "non-zero";
+      const reason: "signal" | "non-zero" = signal ? "signal" : "non-zero";
       settle({
         ok: false,
         reason,
@@ -253,18 +269,22 @@ export async function launch(opts: LaunchOpts): Promise<LaunchResult> {
     if (opts.timeoutMs && opts.timeoutMs > 0) {
       timer = setTimeout(() => {
         timedOut = true;
-        // Guard against killing a child that has already settled (e.g. a
-        // very fast `/bin/true` that exited before the timer was scheduled).
-        // settle()'s `settled` flag is the single source of truth.
-        if (!settled) child.kill("SIGTERM");
-        settle({
-          ok: false,
-          reason: "timeout",
-          stdout,
-          stderr,
-          exitCode: null,
-          signal: "SIGTERM",
-        });
+        // [LAW:types-are-the-program] Do NOT settle here. We signal and let
+        // the `close` handler resolve once the child is actually gone, so the
+        // promise never resolves while the child is still alive. SIGTERM
+        // first; SIGKILL after a grace period if the child ignores it.
+        //
+        // [LAW:dataflow-not-control-flow] `child.pid` is undefined when the
+        // spawn failed asynchronously (ENOENT) — there is no process to signal
+        // and the `error` event settles that case. kill() on a pid-less child
+        // signals the wrong target (verified: it can terminate the caller), so
+        // escalation is gated on the pid actually existing.
+        if (child.pid !== undefined) {
+          child.kill("SIGTERM");
+          killTimer = setTimeout(() => {
+            child.kill("SIGKILL");
+          }, TIMEOUT_KILL_GRACE_MS);
+        }
       }, opts.timeoutMs);
     }
 
@@ -362,11 +382,12 @@ export function launchSync(opts: LaunchOpts): LaunchResult {
   }
 }
 
-// [LAW:single-enforcer] The synchronous typed entrypoint for detached
-// (fire-and-forget) launches. Use this instead of `void launch({detached:true})`
-// — that pattern discards the spawn outcome and reports success on failure.
-// This function returns the typed result synchronously, and also meters
-// through the stats handle so detached spawns show up in daemon-stats.
+// [LAW:single-enforcer] The one orphan operation: a detached, unref'd,
+// fire-and-forget launch that deliberately outlives its caller. This is the
+// only Node-side launch with that lifetime; everything else waits. It returns
+// the typed spawn outcome synchronously (so a failed spawn surfaces as
+// `ok: false` rather than a discarded Promise reporting success), and meters
+// through the stats handle so orphan spawns still show up in daemon-stats.
 export function launchDetachedSync(opts: LaunchOpts): LaunchResult {
   const gate = checkRateLimit(opts.category);
   if (!gate.allowed) {

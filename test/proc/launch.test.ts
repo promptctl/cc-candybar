@@ -68,6 +68,26 @@ describe("launch (async)", () => {
     }
   });
 
+  it("escalates to SIGKILL and waits for death when the child ignores SIGTERM", async () => {
+    // A single process (no child to orphan) that ignores SIGTERM, so a bare
+    // SIGTERM leaves it running and the launcher must escalate to SIGKILL. The
+    // promise must still resolve (not hang) and only after the child is reaped
+    // — proving the timeout path upholds the "no helper outlives its frame"
+    // invariant. Timeout is generous so node registers the handler before we
+    // signal; otherwise default SIGTERM termination would race the handler.
+    const r = await launch({
+      bin: process.execPath,
+      args: ["-e", "process.on('SIGTERM', () => {}); setInterval(() => {}, 1000);"],
+      timeoutMs: 300,
+      category: "user-shell",
+    });
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.reason).toBe("timeout");
+      expect(r.signal).toBe("SIGKILL");
+    }
+  });
+
   it("reports signal (not timeout) when external SIGTERM kills a no-timeout child", async () => {
     // Child kills itself with SIGTERM; no timeout was set, so the close
     // must surface as "signal", not "timeout".
@@ -138,7 +158,6 @@ describe("launchDetachedSync", () => {
     const r = launchDetachedSync({
       bin: "/bin/sh",
       args: ["-c", "sleep 5"],
-      detached: true,
       category: "daemon-spawn",
     });
     expect(r.ok).toBe(true);
@@ -150,7 +169,6 @@ describe("launchDetachedSync", () => {
   it("returns spawn-error synchronously when the binary does not exist", () => {
     const r = launchDetachedSync({
       bin: "/nonexistent/daemon-x9k7",
-      detached: true,
       category: "daemon-spawn",
     });
     expect(r.ok).toBe(false);
@@ -165,7 +183,6 @@ describe("launchDetachedSync", () => {
     launchDetachedSync({
       bin: "/bin/sh",
       args: ["-c", "true"],
-      detached: true,
       category: "daemon-spawn",
     });
     expect(starts).toEqual(["daemon-spawn"]);
