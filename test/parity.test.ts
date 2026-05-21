@@ -135,21 +135,20 @@ describe("byte-differ", () => {
   // and a DSL declaration that reproduces it land on identical bytes through
   // the shared serializer. This is the existence proof that parity is reachable.
   //
-  // Two requirements this proof documents for bzh.1:
-  //   • the DSL must reproduce the one-space-each-side padding the legacy strip
-  //     adds inside each cell — hence the leading/trailing spaces here;
-  //   • the template must yield a SINGLE fragment, because fragmentsToStripCells
-  //     emits one StripCell per plain fragment and the PowerlineJoiner then caps
-  //     between them. `printf` collapses " %s " to one fragment; the natural
-  //     form " {{ .t }} " fans out to three cells (leading-space, value,
-  //     trailing-space) and does NOT converge. That fan-out is a real
-  //     expressiveness gap, captured as a follow-up for the migration tier.
+  // The one requirement this proof documents for bzh.1: the DSL must reproduce
+  // the one-space-each-side padding the legacy strip adds inside each cell —
+  // hence the leading/trailing spaces in the template.
+  //
+  // The natural form " {{ .t }} " evaluates to three plain fragments
+  // (leading-space, value, trailing-space); fragmentsToStripCells coalesces
+  // that run into ONE cell, so it converges with the legacy single cell. (bzh.4
+  // closed the fan-out that previously forced a single-fragment `printf` form.)
   test("legacy producer and DSL producer can converge on identical bytes", () => {
     const legacy = legacySegmentBytes(() => ({ text: "hello" }), renderer, colors);
     const store = new VariableStore();
     store.defineBox("t", "string", "hello");
     const dsl = dslSegmentBytes(
-      { decl: { template: '{{ printf " %s " .t }}' }, store: () => store },
+      { decl: { template: " {{ .t }} " }, store: () => store },
       resolver,
     );
     expect(dsl).toEqual(legacy);
