@@ -53,8 +53,8 @@ describe("DSL render spine (bzh.7 steel thread)", () => {
     const config = parseDslConfig("<test>", FIXTURE_SOURCE, ALLOWED_PALETTES);
     const store = new VariableStore();
     const registry = new SourceRegistry(store);
-    registerDslConfig(config, store, registry, { cwd });
-    return { config, store, registry };
+    const compiled = registerDslConfig(config, store, registry, { cwd });
+    return { config, compiled, store, registry };
   }
 
   test("parseDslConfig accepts the committed fixture", () => {
@@ -74,12 +74,13 @@ describe("DSL render spine (bzh.7 steel thread)", () => {
   });
 
   test("renderDslLine returns a non-empty ANSI string", () => {
-    const { config, store, registry } = buildRuntime(
+    const { config, compiled, store, registry } = buildRuntime(
       HOOK_DATA.workspace.current_dir,
     );
     const basePalette = new PaletteResolver(getThemePalette("textual-dark")!);
     const result = renderDslLine(
       config,
+      compiled,
       store,
       registry,
       HOOK_DATA,
@@ -91,12 +92,12 @@ describe("DSL render spine (bzh.7 steel thread)", () => {
   });
 
   test("renderDslLine drives payload through applyInput (input vars reflect payload)", () => {
-    const { config, store, registry } = buildRuntime(
+    const { config, compiled, store, registry } = buildRuntime(
       HOOK_DATA.workspace.current_dir,
     );
     const basePalette = new PaletteResolver(getThemePalette("textual-dark")!);
 
-    renderDslLine(config, store, registry, HOOK_DATA, basePalette, OPTS);
+    renderDslLine(config, compiled, store, registry, HOOK_DATA, basePalette, OPTS);
 
     // After the first render, input boxes must hold the payload values.
     expect(store.read("current_dir")).toBe(HOOK_DATA.workspace.current_dir);
@@ -105,13 +106,13 @@ describe("DSL render spine (bzh.7 steel thread)", () => {
   });
 
   test("renderDslLine produces byte-identical output on repeated calls with the same payload", () => {
-    const { config, store, registry } = buildRuntime(
+    const { config, compiled, store, registry } = buildRuntime(
       HOOK_DATA.workspace.current_dir,
     );
     const basePalette = new PaletteResolver(getThemePalette("textual-dark")!);
 
-    const a = renderDslLine(config, store, registry, HOOK_DATA, basePalette, OPTS);
-    const b = renderDslLine(config, store, registry, HOOK_DATA, basePalette, OPTS);
+    const a = renderDslLine(config, compiled, store, registry, HOOK_DATA, basePalette, OPTS);
+    const b = renderDslLine(config, compiled, store, registry, HOOK_DATA, basePalette, OPTS);
     expect(a).toBe(b);
   });
 
@@ -120,12 +121,13 @@ describe("DSL render spine (bzh.7 steel thread)", () => {
   // changes — fails loudly here. This is the "assembled-line fixture" that
   // grows monotonically as more segments reach dsl-parity.
   test("renderDslLine produces exact committed bytes (spine correctness)", () => {
-    const { config, store, registry } = buildRuntime(
+    const { config, compiled, store, registry } = buildRuntime(
       HOOK_DATA.workspace.current_dir,
     );
     const basePalette = new PaletteResolver(getThemePalette("textual-dark")!);
     const result = renderDslLine(
       config,
+      compiled,
       store,
       registry,
       HOOK_DATA,
@@ -139,12 +141,12 @@ describe("DSL render spine (bzh.7 steel thread)", () => {
     // Build two runtimes: one with the fixture (sessionId → gruvbox palette),
     // one with a modified fixture that inherits the base palette for sessionId.
     // Different palettes must produce different ANSI bytes.
-    const withGroovePalette = (() => {
-      const { config, store, registry } = buildRuntime(
+    const withGruvboxPalette = (() => {
+      const { config, compiled, store, registry } = buildRuntime(
         HOOK_DATA.workspace.current_dir,
       );
       const basePalette = new PaletteResolver(getThemePalette("textual-dark")!);
-      return renderDslLine(config, store, registry, HOOK_DATA, basePalette, OPTS);
+      return renderDslLine(config, compiled, store, registry, HOOK_DATA, basePalette, OPTS);
     })();
 
     // Override: same fixture but sessionId uses the base palette (textual-dark).
@@ -160,13 +162,13 @@ describe("DSL render spine (bzh.7 steel thread)", () => {
       );
       const store = new VariableStore();
       const registry = new SourceRegistry(store);
-      registerDslConfig(config, store, registry, {
+      const compiled = registerDslConfig(config, store, registry, {
         cwd: HOOK_DATA.workspace.current_dir,
       });
       const basePalette = new PaletteResolver(getThemePalette("textual-dark")!);
-      return renderDslLine(config, store, registry, HOOK_DATA, basePalette, OPTS);
+      return renderDslLine(config, compiled, store, registry, HOOK_DATA, basePalette, OPTS);
     })();
 
-    expect(withGroovePalette).not.toBe(withBasePaletteOnly);
+    expect(withGruvboxPalette).not.toBe(withBasePaletteOnly);
   });
 });

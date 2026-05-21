@@ -4,13 +4,19 @@
 //
 // [LAW:one-source-of-truth] registerDslConfig is the single JSON-shape →
 // runtime translation. Every VariableDecl kind maps to exactly one
-// SourceRegistry.declare* call here.
+// SourceRegistry.declare* call here, and template pre-compilation happens
+// exactly once (at registration, not per render).
 //
 // [LAW:dataflow-not-control-flow] Both functions execute unconditionally;
 // the input values (kind discriminators, layout length, palette presence)
 // govern output, not whether operations run.
 
-import { PaletteResolver, type StripCell } from "@promptctl/rich-js";
+import {
+  PaletteResolver,
+  type StripCell,
+  type RichText,
+} from "@promptctl/rich-js";
+import type { Template } from "@promptctl/go-template-js";
 import type {
   DslConfig,
   VariableDecl,
@@ -36,6 +42,22 @@ import {
   applySegmentLayout,
   resolveSegmentColors,
 } from "../template-engine/index.js";
+
+// ─── Compiled segment shape ───────────────────────────────────────────────────
+
+// Pre-parsed templates for one segment. Built once at registration time;
+// renderDslLine evaluates them per render. [LAW:one-source-of-truth] the
+// compiled form is the authoritative runtime shape for a segment's templates.
+export interface CompiledSegment {
+  readonly when?: Template<RichText>;
+  readonly template: Template<RichText>;
+  readonly bg?: Template<RichText>;
+  readonly fg?: Template<RichText>;
+}
+
+// Pre-compiled templates for every segment in a DslConfig, keyed by segment
+// name. Returned by registerDslConfig; consumed by renderDslLine.
+export type CompiledSegments = Readonly<Record<string, CompiledSegment>>;
 
 // ─── CacheDecl → CachePolicy ─────────────────────────────────────────────────
 
@@ -103,6 +125,13 @@ function declareOne(
       break;
 
     case "time": {
+      // Only `ttl` is honored for the refresh interval; other CacheDecl
+      // variants (watch_file, depends_on, key, never) are not mapped because
+      // declareTime has no "disable refresh" mode — it always registers a TTL
+      // timer. A future extension may add a `never`-mode that snapshots the
+      // current time at declaration and never refreshes. Until then, non-ttl
+      // cache declarations on time vars are treated as "use the default 1s TTL"
+      // and the loader should be tightened to disallow them (follow-up ticket).
       const ttlMs =
         decl.cache && "ttl" in decl.cache
           ? parseDuration(decl.cache.ttl)
@@ -127,42 +156,73 @@ function declareOne(
 
 // ─── registerDslConfig ────────────────────────────────────────────────────────
 
+// [LAW:one-source-of-truth] One engine instance for all template compilation.
+// Engine creation is expensive; sharing one instance means parse() amortizes
+// the startup cost across all segment templates. The engine is resolver-less
+// because built-in segment templates do not call palette functions in their
+// bodies — colors are set via the bg/fg fields evaluated in resolveSegmentColors.
+// Palette functions in template bodies ({{ primary "..." }}) are a future
+// extension that would require a per-palette engine instance.
+const _compileEngine = createCcCandybarEngine();
+
 /**
- * Translate a validated DslConfig into the live VariableStore + SourceRegistry.
+ * Translate a validated DslConfig into the live VariableStore + SourceRegistry
+ * and pre-parse all segment templates.
  *
  * Walks config.variables (global vars) and each segment's vars sub-block
  * (namespaced as segName.varName) and calls the matching SourceRegistry
- * declare* method for each VariableDecl.
+ * declare* method for each VariableDecl. Also pre-parses every segment's
+ * when/template/bg/fg strings once — renderDslLine only evaluates.
  *
- * Call once per config (at startup or hot-reload). The daemon calls this; the
- * render loop calls renderDslLine.
+ * Call once per config (at startup or hot-reload). The daemon calls this;
+ * the render loop calls renderDslLine with the returned CompiledSegments.
  *
  * [LAW:one-source-of-truth] THE JSON-shape→runtime translation. No other
  * module re-derives this mapping.
  * [LAW:dataflow-not-control-flow] The kind discriminator in declareOne selects
  * the declare* call; no special-casing beyond the closed source-kind set.
+ *
+ * NOTE on segment-local vars: segment vars are stored under the namespaced key
+ * segName.varName in the store. Templates must reference them via the namespaced
+ * form (.segName.varName). Bare-name access (.varName from within the owning
+ * segment's template) is NOT currently supported at runtime — the scope proxy
+ * only resolves keys present in the store. The loader's cross-ref validator
+ * allows bare-name refs for validation purposes but the runtime does not yet
+ * implement the aliasing. Use namespaced form until a per-segment scope proxy
+ * is added (planned follow-up).
  */
 export function registerDslConfig(
   config: DslConfig,
   store: VariableStore,
   registry: SourceRegistry,
   opts?: { cwd?: string },
-): void {
+): CompiledSegments {
   const cwd = opts?.cwd ?? process.cwd();
 
   for (const [name, decl] of Object.entries(config.variables)) {
     declareOne(registry, name, decl, cwd);
   }
 
-  // Segment-local vars live under the namespaced key segName.varName in the
-  // store. The scope proxy resolves .varName as a bare prefix when the
-  // segment's own template evaluates — see buildScope for the traversal logic.
+  // Segment-local vars stored under namespaced key segName.varName.
   for (const [segName, seg] of Object.entries(config.segments)) {
     if (!seg.vars) continue;
     for (const [varName, decl] of Object.entries(seg.vars)) {
       declareOne(registry, `${segName}.${varName}`, decl, cwd);
     }
   }
+
+  // Pre-parse all segment templates once. renderDslLine calls evaluate()
+  // only — parse() never runs in the hot render path.
+  const compiled: Record<string, CompiledSegment> = {};
+  for (const [segName, seg] of Object.entries(config.segments)) {
+    compiled[segName] = {
+      when: seg.when !== undefined ? _compileEngine.parse(seg.when) : undefined,
+      template: _compileEngine.parse(seg.template),
+      bg: seg.bg !== undefined ? _compileEngine.parse(seg.bg) : undefined,
+      fg: seg.fg !== undefined ? _compileEngine.parse(seg.fg) : undefined,
+    };
+  }
+  return compiled;
 }
 
 // ─── Per-segment palette resolution ──────────────────────────────────────────
@@ -190,7 +250,7 @@ function resolverForPalette(name: string): PaletteResolver {
  * PROPOSAL 'Render' steps 1-6:
  *   1. Push payload into input boxes (registry.applyInput).
  *   2. Walk config.layout in order; skip segments whose `when` evaluates false.
- *   3. Per segment: evaluate template → fragments → StripCells.
+ *   3. Per segment: evaluate pre-compiled template → fragments → StripCells.
  *   4. Resolve effectiveSegmentPalette (3rq.2) → per-segment PaletteResolver.
  *   5. Resolve bg/fg → defaultStyle; apply width/justify/truncate.
  *   6. Concatenate all StripCells; join via powerline Joiner → ANSI string.
@@ -198,10 +258,11 @@ function resolverForPalette(name: string): PaletteResolver {
  * [LAW:single-enforcer] The daemon (bzh.2) calls this verbatim — no alternate
  * render path. The test and the daemon share ONE render path.
  * [LAW:dataflow-not-control-flow] layout is data; N segments is more data,
- * not more code. The engine runs once per render; the scope proxy is built once.
+ * not more code. The scope proxy is built once; templates are only evaluated.
  */
 export function renderDslLine(
   config: DslConfig,
+  compiled: CompiledSegments,
   store: VariableStore,
   registry: SourceRegistry,
   payload: unknown,
@@ -211,10 +272,6 @@ export function renderDslLine(
   // Step 1: push payload into input boxes.
   registry.applyInput(payload);
 
-  // One engine instance for the full line. Template body evaluation does not
-  // use palette functions (bg/fg use resolveSegmentColors, not template
-  // palette funcs), so a resolver-less engine is correct for the render body.
-  const engine = createCcCandybarEngine();
   const scope = buildScope(store);
   const hueStep = config.globals.hueStep ?? 0;
 
@@ -223,18 +280,20 @@ export function renderDslLine(
   for (let i = 0; i < config.layout.length; i++) {
     const segName = config.layout[i]!;
     const seg = config.segments[segName];
-    // [LAW:no-defensive-null-guards] seg is always defined — the loader
-    // validates every layout entry against segments. A missing seg here is
-    // a loader bug, not a user error; loud failure is correct.
-    if (!seg)
+    const segCompiled = compiled[segName];
+    // [LAW:no-defensive-null-guards] seg + segCompiled are always defined —
+    // the loader validates every layout entry against segments, and
+    // registerDslConfig compiles every declared segment. A missing entry here
+    // is a caller bug (renderDslLine called with a mismatched compiled object).
+    if (!seg || !segCompiled) {
       throw new Error(`Layout entry "${segName}" has no matching segment`);
+    }
 
     // Step 2: when predicate — skip hidden segments.
-    const whenTpl = seg.when !== undefined ? engine.parse(seg.when) : undefined;
-    if (!evaluateWhen(whenTpl, scope)) continue;
+    if (!evaluateWhen(segCompiled.when, scope)) continue;
 
-    // Step 3: template → StripCells.
-    const fragments = engine.parse(seg.template).evaluate(scope);
+    // Step 3: evaluate pre-compiled template → StripCells.
+    const fragments = segCompiled.template.evaluate(scope);
     const cells = fragmentsToStripCells(fragments);
 
     // Step 4: per-segment palette (3rq.2).
@@ -243,11 +302,13 @@ export function renderDslLine(
       paletteName !== undefined ? resolverForPalette(paletteName) : basePalette;
 
     // Step 5: colors + layout.
-    const bgTpl = seg.bg !== undefined ? engine.parse(seg.bg) : undefined;
-    const fgTpl = seg.fg !== undefined ? engine.parse(seg.fg) : undefined;
-    const defaultStyle = resolveSegmentColors(resolver, bgTpl, fgTpl, scope, {
-      hueRotationDegrees: i * hueStep,
-    });
+    const defaultStyle = resolveSegmentColors(
+      resolver,
+      segCompiled.bg,
+      segCompiled.fg,
+      scope,
+      { hueRotationDegrees: i * hueStep },
+    );
 
     const laidOut = applySegmentLayout(cells, {
       width: seg.width ?? "auto",
