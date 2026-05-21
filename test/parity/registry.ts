@@ -33,8 +33,9 @@ export interface SegmentParityEntry {
   status: ParityStatus;
   // Produces the legacy SegmentData for this segment from the fixed fixture.
   legacy: LegacyRender;
-  // The DSL counterpart — present (and asserted byte-identical) only once a
-  // segment reaches "dsl-pending"/"dsl-parity".
+  // The DSL counterpart. Attached once a segment reaches "dsl-pending" (a
+  // declaration exists but is not yet byte-parity); the test asserts it is
+  // byte-identical to golden only at "dsl-parity".
   dsl?: DslBinding;
 }
 
