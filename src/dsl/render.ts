@@ -75,7 +75,10 @@ function toCachePolicy(cache: CacheDecl): CachePolicy {
   if ("depends_on" in cache)
     return { kind: "depends_on", varNames: cache.depends_on };
   if ("key" in cache) return { kind: "key", template: cache.key };
-  return { kind: "never" };
+  if ("never" in cache) return { kind: "never" };
+  throw new Error(
+    `Unknown CacheDecl discriminator — loader invariant violated: ${JSON.stringify(cache)}`,
+  );
 }
 
 // ─── Single variable declaration ──────────────────────────────────────────────
