@@ -182,8 +182,11 @@ const _compileEngine = createCcCandybarEngine();
  *
  * HOT-RELOAD: pass a fresh VariableStore + SourceRegistry on each call.
  * defineBox/defineComputed throws if a variable name is already declared in
- * the same store — there is no reset or un-declare path. Callers must discard
- * the old store/registry pair and construct new instances before calling again.
+ * the same store — there is no reset or un-declare path. Callers must call
+ * registry.dispose() on the old registry (to stop timers, watchers, and git
+ * subscriptions) and then construct new store/registry instances before calling
+ * again. Dropping the old registry without dispose() leaks resources and may
+ * keep the process alive.
  *
  * [LAW:one-source-of-truth] THE JSON-shape→runtime translation. No other
  * module re-derives this mapping.
@@ -222,7 +225,12 @@ export function registerDslConfig(
   // Pre-parse all segment templates and pre-resolve per-segment palettes once.
   // renderDslLine calls evaluate() only — parse() and palette resolution never
   // run in the hot render path.
-  const compiled: Record<string, CompiledSegment> = {};
+  // [LAW:no-defensive-null-guards] Object.create(null) — segment names come from
+  // user config; a null-prototype object prevents __proto__/constructor/prototype
+  // from being treated as segment data.
+  const compiled: Record<string, CompiledSegment> = Object.create(
+    null,
+  ) as Record<string, CompiledSegment>;
   for (const [segName, seg] of Object.entries(config.segments)) {
     const paletteName = effectiveSegmentPalette(config.globals, seg);
     const parseField = (src: string, field: string) => {
