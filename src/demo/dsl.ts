@@ -45,12 +45,6 @@ const config = parseDslConfig(
   new Set(listResolvablePaletteNames()),
 );
 
-// A fresh store + registry for this run. (A hot-reloading daemon would
-// dispose() the old pair and build new ones — see registerDslConfig's docs.)
-const store = new VariableStore();
-const registry = new SourceRegistry(store);
-const compiled = registerDslConfig(config, registry, { cwd: process.cwd() });
-
 // One Claude Code status-line hook event, faked. The `input` vars in the
 // config (cwd, model, session) read their values out of this object.
 const payload = {
@@ -68,28 +62,40 @@ const basePalette = new PaletteResolver(
   getThemePalette(config.globals.palette ?? "textual-dark")!,
 );
 
-process.stdout.write(
-  `\n  DSL demo — ${configPath}\n` +
-    `  rendered through registerDslConfig + renderDslLine (the daemon's spine)\n` +
-    `  watch the git branch segment appear and the clock tick:\n\n`,
-);
+// A fresh store + registry for this run. (A hot-reloading daemon would
+// dispose() the old pair and build new ones — see registerDslConfig's docs.)
+// registerDslConfig wires the time/shell sources' timers and watchers onto the
+// registry, so dispose() must run even if registration or rendering throws —
+// otherwise those handles keep the process alive. try/finally guarantees it.
+const store = new VariableStore();
+const registry = new SourceRegistry(store);
+try {
+  const compiled = registerDslConfig(config, registry, { cwd: process.cwd() });
 
-for (let frame = 0; frame < FRAMES; frame++) {
-  const line = renderDslLine(
-    config,
-    compiled,
-    store,
-    registry,
-    payload,
-    basePalette,
-    {
-      style: "powerline",
-      colorCompatibility: "truecolor",
-    },
+  process.stdout.write(
+    `\n  DSL demo — ${configPath}\n` +
+      `  rendered through registerDslConfig + renderDslLine (the daemon's spine)\n` +
+      `  watch the git branch segment appear and the clock tick:\n\n`,
   );
-  process.stdout.write(`  ${line}\n`);
-  if (frame < FRAMES - 1) await sleep(FRAME_INTERVAL_MS);
-}
 
-process.stdout.write("\n");
-registry.dispose();
+  for (let frame = 0; frame < FRAMES; frame++) {
+    const line = renderDslLine(
+      config,
+      compiled,
+      store,
+      registry,
+      payload,
+      basePalette,
+      {
+        style: "powerline",
+        colorCompatibility: "truecolor",
+      },
+    );
+    process.stdout.write(`  ${line}\n`);
+    if (frame < FRAMES - 1) await sleep(FRAME_INTERVAL_MS);
+  }
+
+  process.stdout.write("\n");
+} finally {
+  registry.dispose();
+}
