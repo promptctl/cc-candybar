@@ -180,6 +180,11 @@ const _compileEngine = createCcCandybarEngine();
  * Call once per config (at startup or hot-reload). The daemon calls this;
  * the render loop calls renderDslLine with the returned CompiledSegments.
  *
+ * HOT-RELOAD: pass a fresh VariableStore + SourceRegistry on each call.
+ * defineBox/defineComputed throws if a variable name is already declared in
+ * the same store — there is no reset or un-declare path. Callers must discard
+ * the old store/registry pair and construct new instances before calling again.
+ *
  * [LAW:one-source-of-truth] THE JSON-shape→runtime translation. No other
  * module re-derives this mapping.
  * [LAW:dataflow-not-control-flow] The kind discriminator in declareOne selects
@@ -220,11 +225,21 @@ export function registerDslConfig(
   const compiled: Record<string, CompiledSegment> = {};
   for (const [segName, seg] of Object.entries(config.segments)) {
     const paletteName = effectiveSegmentPalette(config.globals, seg);
+    const parseField = (src: string, field: string) => {
+      try {
+        return _compileEngine.parse(src);
+      } catch (e) {
+        throw new Error(
+          `Template parse error in segments.${segName}.${field}: ${(e as Error).message}`,
+          { cause: e },
+        );
+      }
+    };
     compiled[segName] = {
-      when: seg.when !== undefined ? _compileEngine.parse(seg.when) : undefined,
-      template: _compileEngine.parse(seg.template),
-      bg: seg.bg !== undefined ? _compileEngine.parse(seg.bg) : undefined,
-      fg: seg.fg !== undefined ? _compileEngine.parse(seg.fg) : undefined,
+      when: seg.when !== undefined ? parseField(seg.when, "when") : undefined,
+      template: parseField(seg.template, "template"),
+      bg: seg.bg !== undefined ? parseField(seg.bg, "bg") : undefined,
+      fg: seg.fg !== undefined ? parseField(seg.fg, "fg") : undefined,
       paletteResolver:
         paletteName !== undefined ? resolverForPalette(paletteName) : undefined,
     };
