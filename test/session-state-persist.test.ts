@@ -33,6 +33,15 @@ describe("SessionState disk persistence", () => {
     return ss;
   };
 
+  it("ephemeral until useStorage(): construction reads no file, then binds disk", () => {
+    writeFileSync(file, JSON.stringify({ s1: { theme: "nord" } }));
+    const ss = new SessionState(); // ephemeral default — must not touch disk
+    expect(ss.get("s1", "theme")).toBeNull();
+    ss.useStorage(new FileSessionStorage(file, 0));
+    ss.flush();
+    expect(ss.get("s1", "theme")).toBe("nord"); // now loaded from disk
+  });
+
   it("survives a daemon restart: a fresh instance reads identical values", () => {
     const first = new SessionState(new FileSessionStorage(file, 0));
     first.set("s1", "theme", "dracula");

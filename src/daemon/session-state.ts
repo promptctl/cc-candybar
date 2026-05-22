@@ -52,13 +52,30 @@ export class SessionState implements SessionStateReader, SessionStateRW {
   // [LAW:types-are-the-program] Insertion order is recency order: the store
   // cannot hold more than maxSessions, so "bounded on disk" is structural, not
   // dependent on an external prune caller.
-  private readonly sessions: Map<string, Map<string, string>>;
+  private sessions: Map<string, Map<string, string>>;
+  private storage: SessionStorage;
 
   constructor(
-    private readonly storage: SessionStorage = EPHEMERAL_STORAGE,
+    storage: SessionStorage = EPHEMERAL_STORAGE,
     private readonly maxSessions: number = DEFAULT_MAX_SESSIONS,
   ) {
-    this.sessions = hydrate(storage.load());
+    this.storage = storage;
+    this.sessions = new Map();
+    this.hydrateFromStorage();
+  }
+
+  // [LAW:single-enforcer] Bind a persistence backend after construction. Only
+  // the daemon process calls this (with the disk-backed storage), so importers
+  // that merely load this module — the CLI relay, subcommands — keep the
+  // ephemeral default and never read or write the state file. Must run before
+  // the daemon serves requests, since it replaces in-memory state with disk.
+  useStorage(storage: SessionStorage): void {
+    this.storage = storage;
+    this.hydrateFromStorage();
+  }
+
+  private hydrateFromStorage(): void {
+    this.sessions = hydrate(this.storage.load());
     this.evictOldest();
     // [LAW:dataflow-not-control-flow] The disk mirror always reflects the built
     // in-memory state. An over-cap file trimmed by evictOldest is written back

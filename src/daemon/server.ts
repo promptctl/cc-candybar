@@ -46,9 +46,10 @@ const gitService = new GitDataProvider({
   logger: dlog,
 });
 const usageProvider = new CachedUsageProvider();
-const sessionState = new SessionState(
-  new FileSessionStorage(sessionStatePath(), 500, dlog),
-);
+// [LAW:locality-or-seam] Constructed ephemeral so importing this module (CLI
+// relay, subcommands) does no disk I/O. The daemon binds the file-backed
+// storage in runDaemon(), making it the sole reader/writer of the state file.
+const sessionState = new SessionState();
 const renderCache = new RenderCache({
   gitService,
   usageProvider,
@@ -67,6 +68,12 @@ const BIN_CHECK_INTERVAL_MS = 60 * 1000;
 // obtainDaemon() (caller waits for readiness) in src/daemon/acquire.ts.
 export function runDaemon(): void {
   fs.mkdirSync(daemonDir(), { recursive: true });
+
+  // Bind disk persistence now that we know we are the daemon process — load
+  // prior session state and become the sole writer of the state file.
+  sessionState.useStorage(
+    new FileSessionStorage(sessionStatePath(), 500, dlog),
+  );
 
   // Catch-alls log + exit so the supervisor (the next client) can restart us.
   // [LAW:no-defensive-null-guards] These are *trust boundaries* — we are
