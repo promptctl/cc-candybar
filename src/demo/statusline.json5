@@ -1,0 +1,86 @@
+// Demo DSL statusline — a runnable example of the segment DSL.
+//
+//   Run it:   pnpm demo:dsl
+//   Hack it:  edit a template / palette / layout entry below and re-run.
+//             No rebuild — the config IS the program.
+//
+// This file is rendered by the SAME two functions the daemon calls
+// (registerDslConfig + renderDslLine in src/dsl/render.ts). There is no
+// demo-only render path — what you see here is what production produces.
+{
+  globals: {
+    // Base palette for every segment that doesn't pull its own (see `branch`).
+    palette: 'textual-dark',
+    // Rotate each segment's hue by 14° so adjacent segments stay distinct.
+    hueStep: 14,
+  },
+
+  // ── Variables: where each segment's data comes from ──────────────────────
+  // Every `kind` maps to one runtime source. Templates reference these by name
+  // with a leading dot (`.user`, `.cwd`, …). A referenced-but-undeclared name
+  // is a load-time error, not a silent blank.
+  variables: {
+    // env  — read straight from the process environment.
+    user: { kind: 'env', name: 'USER', default: 'anon' },
+
+    // input — pulled from the JSON payload Claude Code sends each render tick.
+    cwd:     { kind: 'input', path: 'workspace.current_dir', default: '?' },
+    model:   { kind: 'input', path: 'model.display_name',    default: '' },
+    session: { kind: 'input', path: 'session_id',            default: '' },
+
+    // template — derived from other vars; recomputed reactively when they move.
+    sid:  { kind: 'template', template: '{{ trunc 8 .session }}' },
+    here: { kind: 'template', template: '{{ basename .cwd }}' },
+
+    // shell — run a command, cache the result for a TTL window. Populates
+    // asynchronously: until the command returns, `.branch` is the default ''.
+    branch: { kind: 'shell', command: 'git branch --show-current', cache: { ttl: '5s' }, default: '' },
+
+    // time — the system clock, formatted with a Go reference-time layout.
+    clock: { kind: 'time', layout: '15:04:05', cache: { ttl: '1s' } },
+
+    // (file, git, and literal kinds exist too — omitted here to stay minimal.)
+  },
+
+  // ── Segments: how each piece of data is drawn ────────────────────────────
+  // `bg`/`fg` are palette spec strings. `fg: 'auto'` picks a readable foreground
+  // for the segment's background. `when` hides a segment when it evaluates false.
+  segments: {
+    user: {
+      template: ' {{ .user }} ',
+      bg: 'primary',
+      fg: 'auto',
+    },
+    directory: {
+      template: ' {{ .here }} ',
+      bg: 'surface',
+      fg: 'foreground',
+    },
+    branch: {
+      template: ' {{ .branch }} ',
+      bg: 'accent',
+      fg: 'auto',
+      when: 'ne .branch ""',   // hidden entirely outside a git repo
+      palette: 'gruvbox',      // this segment pulls its OWN palette (per-segment switch)
+    },
+    model: {
+      template: ' {{ .model }} ',
+      bg: 'secondary',
+      fg: 'auto',
+      when: 'ne .model ""',
+    },
+    session: {
+      template: ' ⌗{{ .sid }} ',
+      bg: 'surface',
+      fg: 'foreground',
+    },
+    clock: {
+      template: ' {{ .clock }} ',
+      bg: 'primary',
+      fg: 'auto',
+    },
+  },
+
+  // ── Layout: the order segments are joined left-to-right ──────────────────
+  layout: ['user', 'directory', 'branch', 'model', 'session', 'clock'],
+}
