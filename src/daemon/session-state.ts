@@ -113,10 +113,14 @@ export class SessionState implements SessionStateReader, SessionStateRW {
   }
 
   private evictOldest(): void {
-    const overflow = this.sessions.size - this.maxSessions;
+    let overflow = this.sessions.size - this.maxSessions;
     if (overflow <= 0) return;
-    for (const id of [...this.sessions.keys()].slice(0, overflow)) {
+    // Delete the oldest keys in insertion order. Cost is proportional to the
+    // number of evictions, not the total loaded set — deleting an already-
+    // yielded key mid-iteration is well-defined for a Map.
+    for (const id of this.sessions.keys()) {
       this.sessions.delete(id);
+      if (--overflow === 0) break;
     }
   }
 

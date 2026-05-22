@@ -61,7 +61,7 @@ describe("SessionState disk persistence", () => {
     expect(reborn.get("s2", "theme")).toBeNull();
   });
 
-  it("debounces: no write until flush, then one atomic file", () => {
+  it("debounces: no write before the window elapses, then one atomic file", () => {
     jest.useFakeTimers();
     try {
       const ss = new SessionState(new FileSessionStorage(file, 500));
