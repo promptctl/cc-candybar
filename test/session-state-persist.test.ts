@@ -24,6 +24,15 @@ describe("SessionState disk persistence", () => {
     rmSync(dir, { recursive: true, force: true });
   });
 
+  // Reader instance: load from disk, then flush so the constructor's
+  // write-back fires synchronously rather than leaving a debounced timer that
+  // could touch the filesystem after the temp dir is cleaned up.
+  const restore = () => {
+    const ss = new SessionState(new FileSessionStorage(file, 0));
+    ss.flush();
+    return ss;
+  };
+
   it("survives a daemon restart: a fresh instance reads identical values", () => {
     const first = new SessionState(new FileSessionStorage(file, 0));
     first.set("s1", "theme", "dracula");
@@ -31,7 +40,7 @@ describe("SessionState disk persistence", () => {
     first.set("s2", "toolbar-expanded", "1");
     first.flush();
 
-    const reborn = new SessionState(new FileSessionStorage(file));
+    const reborn = restore();
     expect(reborn.get("s1", "theme")).toBe("dracula");
     expect(reborn.get("s1", "displayStyle")).toBe("capsule");
     expect(reborn.get("s2", "toolbar-expanded")).toBe("1");
@@ -44,7 +53,7 @@ describe("SessionState disk persistence", () => {
     first.clear("s1", "toolbar-expanded");
     first.flush();
 
-    const reborn = new SessionState(new FileSessionStorage(file));
+    const reborn = restore();
     expect(reborn.get("s1", "toolbar-expanded")).toBeNull();
   });
 
@@ -56,7 +65,7 @@ describe("SessionState disk persistence", () => {
     first.prune(new Set(["s1"]));
     first.flush();
 
-    const reborn = new SessionState(new FileSessionStorage(file));
+    const reborn = restore();
     expect(reborn.get("s1", "theme")).toBe("nord");
     expect(reborn.get("s2", "theme")).toBeNull();
   });
@@ -83,23 +92,23 @@ describe("SessionState disk persistence", () => {
 
   it("corrupt file hydrates to empty state, not a throw", () => {
     writeFileSync(file, "{ not valid json");
-    const ss = new SessionState(new FileSessionStorage(file));
+    const ss = restore();
     expect(ss.get("s1", "theme")).toBeNull();
   });
 
   it("wrong-shape file hydrates to empty state", () => {
     writeFileSync(file, JSON.stringify({ s1: { theme: 42 } }));
-    const ss = new SessionState(new FileSessionStorage(file));
+    const ss = restore();
     expect(ss.get("s1", "theme")).toBeNull();
   });
 
   it("missing file hydrates to empty state", () => {
-    const ss = new SessionState(new FileSessionStorage(file));
+    const ss = restore();
     expect(ss.get("s1", "theme")).toBeNull();
   });
 
   it("bounds the store: oldest idle session is evicted past the cap", () => {
-    const ss = new SessionState(new FileSessionStorage(file, 0), 2);
+    const ss = new SessionState(undefined, 2);
     ss.set("a", "theme", "1");
     ss.set("b", "theme", "2");
     ss.set("c", "theme", "3"); // pushes "a" out
@@ -109,7 +118,7 @@ describe("SessionState disk persistence", () => {
   });
 
   it("get-promotion protects an actively-read session from eviction", () => {
-    const ss = new SessionState(new FileSessionStorage(file, 0), 2);
+    const ss = new SessionState(undefined, 2);
     ss.set("a", "theme", "1");
     ss.set("b", "theme", "2");
     ss.get("a", "theme"); // promote "a" to most-recent
@@ -143,7 +152,7 @@ describe("SessionState disk persistence", () => {
   });
 
   it("clear() promotes a surviving session so it isn't evicted early", () => {
-    const ss = new SessionState(new FileSessionStorage(file, 0), 2);
+    const ss = new SessionState(undefined, 2);
     ss.set("a", "theme", "1");
     ss.set("a", "style", "x");
     ss.set("b", "theme", "2"); // order: a, b
@@ -183,7 +192,7 @@ describe("SessionState disk persistence", () => {
     // Object.prototype untouched — no pollution.
     expect(({} as Record<string, unknown>)["theme"]).toBeUndefined();
     // The malicious key survives as ordinary stored data.
-    const reborn = new SessionState(new FileSessionStorage(file));
+    const reborn = restore();
     expect(reborn.get("__proto__", "theme")).toBe("evil");
   });
 });
