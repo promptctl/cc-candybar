@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
-import { daemonDir, pidPath, socketPath } from "./paths";
+import { daemonDir, pidPath, socketPath, sessionStatePath } from "./paths";
 import { dlog, closeLog } from "./log";
 import {
   PROTOCOL_VERSION,
@@ -20,6 +20,7 @@ import { WatcherRegistry } from "./cache/watchers";
 import { RuntimeStats } from "./stats";
 import { makeLimits, realLimitsDeps, type LimitsHandle } from "./limits";
 import { SessionState } from "./session-state";
+import { FileSessionStorage } from "./session-state-file";
 import { listAvailableThemes } from "../themes/cascade.js";
 import { STYLE_ORDER } from "../themes/default-mapping.js";
 import { validateHookData } from "../utils/schema-validator.js";
@@ -45,7 +46,9 @@ const gitService = new GitDataProvider({
   logger: dlog,
 });
 const usageProvider = new CachedUsageProvider();
-const sessionState = new SessionState();
+const sessionState = new SessionState(
+  new FileSessionStorage(sessionStatePath()),
+);
 const renderCache = new RenderCache({
   gitService,
   usageProvider,
@@ -368,6 +371,11 @@ function shutdown(code: number): void {
     watcherRegistry.closeAll();
   } catch (e) {
     dlog("warn", `watcherRegistry close failed: ${(e as Error).message}`);
+  }
+  try {
+    sessionState.flush();
+  } catch (e) {
+    dlog("warn", `sessionState flush failed: ${(e as Error).message}`);
   }
   removePidfileDiagnostic();
   closeLog();

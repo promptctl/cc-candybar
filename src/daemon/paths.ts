@@ -48,6 +48,10 @@ export function pidPath(): string {
   return path.join(stateDir(), "pid");
 }
 
+export function sessionStatePath(): string {
+  return path.join(stateDir(), "session-state.json");
+}
+
 // [LAW:single-enforcer] Caller-side spawn dedup. Held by a client *only* during
 // the spawn window — never for the daemon's lifetime. The actual one-daemon
 // invariant is enforced by atomic bind() on socketPath() inside the daemon.
