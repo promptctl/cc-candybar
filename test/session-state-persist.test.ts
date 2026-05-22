@@ -141,6 +141,33 @@ describe("SessionState disk persistence", () => {
     expect(Object.keys(onDisk)).toHaveLength(0);
   });
 
+  it("clear() promotes a surviving session so it isn't evicted early", () => {
+    const ss = new SessionState(new FileSessionStorage(file, 0), 2);
+    ss.set("a", "theme", "1");
+    ss.set("a", "style", "x");
+    ss.set("b", "theme", "2"); // order: a, b
+    ss.clear("a", "style"); // "a" survives (still has theme) → promoted to b, a
+    ss.set("c", "theme", "3"); // evicts the now-oldest "b", not "a"
+    expect(ss.get("a", "theme")).toBe("1");
+    expect(ss.get("b", "theme")).toBeNull();
+  });
+
+  it("a failed write keeps pending and retries on the next flush", () => {
+    // Parent of the target is a regular file, so mkdir/write/rename fails.
+    const blocker = join(dir, "blocker");
+    writeFileSync(blocker, "");
+    const badPath = join(blocker, "session-state.json");
+    const ss = new SessionState(new FileSessionStorage(badPath, 0));
+    ss.set("s1", "theme", "nord");
+    ss.flush(); // write fails; snapshot must NOT be dropped
+    expect(existsSync(badPath)).toBe(false);
+    // Make the path writable, then flush again — the retained snapshot lands.
+    rmSync(blocker);
+    ss.flush();
+    const onDisk = JSON.parse(readFileSync(badPath, "utf8"));
+    expect(onDisk.s1.theme).toBe("nord");
+  });
+
   it("a __proto__ sessionId does not pollute Object.prototype and round-trips as data", () => {
     const ss = new SessionState(new FileSessionStorage(file, 0));
     ss.set("__proto__", "theme", "evil");

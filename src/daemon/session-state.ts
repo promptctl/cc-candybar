@@ -86,10 +86,15 @@ export class SessionState implements SessionStateReader, SessionStateRW {
 
   clear(sessionId: string, key: string): void {
     const session = this.sessions.get(sessionId);
-    session?.delete(key);
-    // An emptied session is a non-state — drop it so it neither occupies a cap
-    // slot nor persists as a `{ "sid": {} }` husk. [LAW:one-source-of-truth]
-    if (session?.size === 0) this.sessions.delete(sessionId);
+    if (session) {
+      session.delete(key);
+      // An emptied session is a non-state — drop it so it neither occupies a
+      // cap slot nor persists as a `{ "sid": {} }` husk. [LAW:one-source-of-truth]
+      // A surviving session is promoted: every interaction is a recency signal,
+      // uniform with get()/set(). [LAW:one-type-per-behavior]
+      if (session.size === 0) this.sessions.delete(sessionId);
+      else this.touch(sessionId, session);
+    }
     this.persist();
   }
 
