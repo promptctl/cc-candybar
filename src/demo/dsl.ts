@@ -1,0 +1,95 @@
+// Minimal end-to-end demo of the segment DSL render spine.
+//
+//   pnpm demo:dsl                       # renders src/demo/statusline.json5
+//   pnpm demo:dsl path/to/other.json5   # renders any DSL config
+//
+// [LAW:single-enforcer] This renders through registerDslConfig + renderDslLine
+// — the exact spine the daemon calls. There is no demo-only render path; what
+// prints here is what production produces.
+//
+// [LAW:dataflow-not-control-flow] The body is straight-line: read config →
+// register → render frames → dispose. The config file and payload are data;
+// swapping either changes the output without changing this code. Rendering N
+// frames over time is not branching — it lets the asynchronous sources (shell,
+// time) populate the store and shows the line come alive, exactly as the daemon
+// re-renders on each status-line tick.
+
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { dirname, join } from "node:path";
+import process from "node:process";
+import { setTimeout as sleep } from "node:timers/promises";
+
+import { PaletteResolver } from "@promptctl/rich-js";
+
+import { parseDslConfig } from "../config/dsl-loader.js";
+import { VariableStore } from "../var-system/store.js";
+import { SourceRegistry } from "../var-system/sources.js";
+import { getThemePalette } from "../themes/palette-registry.js";
+import { listResolvablePaletteNames } from "../themes/cascade.js";
+import { registerDslConfig, renderDslLine } from "../dsl/render.js";
+
+const FRAMES = 4;
+const FRAME_INTERVAL_MS = 450;
+
+const here = dirname(fileURLToPath(import.meta.url));
+const configPath = process.argv[2] ?? join(here, "statusline.json5");
+const source = readFileSync(configPath, "utf-8");
+
+// [LAW:one-source-of-truth] The palette names the loader accepts are exactly
+// the names the renderer can resolve — both derive from the same registry, so
+// we hand the loader the live set rather than a hand-maintained copy.
+const config = parseDslConfig(
+  configPath,
+  source,
+  new Set(listResolvablePaletteNames()),
+);
+
+// A fresh store + registry for this run. (A hot-reloading daemon would
+// dispose() the old pair and build new ones — see registerDslConfig's docs.)
+const store = new VariableStore();
+const registry = new SourceRegistry(store);
+const compiled = registerDslConfig(config, registry, { cwd: process.cwd() });
+
+// One Claude Code status-line hook event, faked. The `input` vars in the
+// config (cwd, model, session) read their values out of this object.
+const payload = {
+  hook_event_name: "Status",
+  session_id: "demo0a1b-2c3d-4e5f-6a7b-8c9d0e1f2a3b",
+  cwd: process.cwd(),
+  model: { id: "claude-opus-4-7", display_name: "Opus 4.7" },
+  workspace: {
+    current_dir: process.cwd(),
+    project_dir: process.cwd(),
+  },
+};
+
+const basePalette = new PaletteResolver(
+  getThemePalette(config.globals.palette ?? "textual-dark")!,
+);
+
+process.stdout.write(
+  `\n  DSL demo — ${configPath}\n` +
+    `  rendered through registerDslConfig + renderDslLine (the daemon's spine)\n` +
+    `  watch the git branch segment appear and the clock tick:\n\n`,
+);
+
+for (let frame = 0; frame < FRAMES; frame++) {
+  const line = renderDslLine(
+    config,
+    compiled,
+    store,
+    registry,
+    payload,
+    basePalette,
+    {
+      style: "powerline",
+      colorCompatibility: "truecolor",
+    },
+  );
+  process.stdout.write(`  ${line}\n`);
+  if (frame < FRAMES - 1) await sleep(FRAME_INTERVAL_MS);
+}
+
+process.stdout.write("\n");
+registry.dispose();
