@@ -207,7 +207,6 @@ const _compileEngine = createCcCandybarEngine();
  */
 export function registerDslConfig(
   config: DslConfig,
-  store: VariableStore,
   registry: SourceRegistry,
   opts?: { cwd?: string },
 ): CompiledSegments {

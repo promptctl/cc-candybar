@@ -53,7 +53,7 @@ describe("DSL render spine (bzh.7 steel thread)", () => {
     const config = parseDslConfig("<test>", FIXTURE_SOURCE, ALLOWED_PALETTES);
     const store = new VariableStore();
     const registry = new SourceRegistry(store);
-    const compiled = registerDslConfig(config, store, registry, { cwd });
+    const compiled = registerDslConfig(config, registry, { cwd });
     return { config, compiled, store, registry };
   }
 
@@ -162,7 +162,7 @@ describe("DSL render spine (bzh.7 steel thread)", () => {
       );
       const store = new VariableStore();
       const registry = new SourceRegistry(store);
-      const compiled = registerDslConfig(config, store, registry, {
+      const compiled = registerDslConfig(config, registry, {
         cwd: HOOK_DATA.workspace.current_dir,
       });
       const basePalette = new PaletteResolver(getThemePalette("textual-dark")!);
