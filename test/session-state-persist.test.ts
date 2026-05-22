@@ -4,6 +4,7 @@ import {
   writeFileSync,
   readFileSync,
   existsSync,
+  statSync,
 } from "fs";
 import { join } from "path";
 import { tmpdir } from "os";
@@ -166,6 +167,13 @@ describe("SessionState disk persistence", () => {
     ss.flush();
     const onDisk = JSON.parse(readFileSync(badPath, "utf8"));
     expect(onDisk.s1.theme).toBe("nord");
+  });
+
+  it("writes the state file with owner-only (no group/other) permissions", () => {
+    const ss = new SessionState(new FileSessionStorage(file, 0));
+    ss.set("s1", "theme", "nord");
+    ss.flush();
+    expect(statSync(file).mode & 0o077).toBe(0);
   });
 
   it("a __proto__ sessionId does not pollute Object.prototype and round-trips as data", () => {
