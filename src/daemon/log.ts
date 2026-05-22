@@ -44,6 +44,14 @@ function rotate(): void {
   bytesWritten = 0;
 }
 
+// [LAW:locality-or-seam] The logging capability daemon components depend on.
+// `dlog` is the daemon's implementation (writes to daemon.log); consumers that
+// inject a different impl (a quiet default in tests) take this shape.
+export type DaemonLogger = (
+  level: "info" | "warn" | "error",
+  msg: string,
+) => void;
+
 export function dlog(level: "info" | "warn" | "error", msg: string): void {
   const line = `${new Date().toISOString()} [${level}] ${msg}\n`;
   const buf = Buffer.from(line, "utf8");

@@ -60,6 +60,10 @@ export class SessionState implements SessionStateReader, SessionStateRW {
   ) {
     this.sessions = hydrate(storage.load());
     this.evictOldest();
+    // [LAW:dataflow-not-control-flow] The disk mirror always reflects the built
+    // in-memory state. An over-cap file trimmed by evictOldest is written back
+    // here, so the on-disk bound holds even if no mutation ever follows.
+    this.persist();
   }
 
   get(sessionId: string, key: string): string | null {
@@ -80,7 +84,11 @@ export class SessionState implements SessionStateReader, SessionStateRW {
   }
 
   clear(sessionId: string, key: string): void {
-    this.sessions.get(sessionId)?.delete(key);
+    const session = this.sessions.get(sessionId);
+    session?.delete(key);
+    // An emptied session is a non-state — drop it so it neither occupies a cap
+    // slot nor persists as a `{ "sid": {} }` husk. [LAW:one-source-of-truth]
+    if (session?.size === 0) this.sessions.delete(sessionId);
     this.persist();
   }
 
@@ -117,7 +125,11 @@ export class SessionState implements SessionStateReader, SessionStateRW {
   }
 
   private serialize(): SessionSnapshot {
-    const snapshot: SessionSnapshot = {};
+    // [LAW:types-are-the-program] sessionIds are external (hook JSON / click
+    // URLs). A null-prototype root makes "__proto__"/"constructor" ordinary
+    // own keys instead of prototype-mutation vectors — pollution is
+    // unrepresentable rather than guarded against.
+    const snapshot = Object.create(null) as SessionSnapshot;
     for (const [sessionId, kv] of this.sessions) {
       snapshot[sessionId] = Object.fromEntries(kv);
     }

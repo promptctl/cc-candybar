@@ -1,4 +1,10 @@
-import { mkdtempSync, rmSync, writeFileSync, existsSync } from "fs";
+import {
+  mkdtempSync,
+  rmSync,
+  writeFileSync,
+  readFileSync,
+  existsSync,
+} from "fs";
 import { join } from "path";
 import { tmpdir } from "os";
 import { SessionState } from "../src/daemon/session-state";
@@ -111,15 +117,38 @@ describe("SessionState disk persistence", () => {
     expect(ss.get("b", "theme")).toBeNull();
   });
 
-  it("over-cap file is trimmed on hydrate", () => {
+  it("over-cap file is trimmed on hydrate and the trim is persisted to disk", () => {
     writeFileSync(
       file,
       JSON.stringify({ a: { t: "1" }, b: { t: "2" }, c: { t: "3" } }),
     );
-    const ss = new SessionState(new FileSessionStorage(file), 2);
-    // Oldest (first-in-file) dropped; the two most-recent survive.
+    const ss = new SessionState(new FileSessionStorage(file, 0), 2);
+    ss.flush(); // force the constructor-scheduled write-back
+    // Oldest (first-in-file) dropped; the two most-recent survive — and the
+    // bound is enforced on disk without any post-restart mutation.
     expect(ss.get("a", "t")).toBeNull();
-    expect(ss.get("b", "t")).toBe("2");
-    expect(ss.get("c", "t")).toBe("3");
+    const onDisk = JSON.parse(readFileSync(file, "utf8"));
+    expect(Object.keys(onDisk).sort()).toEqual(["b", "c"]);
+  });
+
+  it("clear() of the last key removes the session entirely (no empty husk)", () => {
+    const ss = new SessionState(new FileSessionStorage(file, 0));
+    ss.set("s1", "toolbar-expanded", "1");
+    ss.clear("s1", "toolbar-expanded");
+    ss.flush();
+    const onDisk = JSON.parse(readFileSync(file, "utf8"));
+    expect(onDisk.s1).toBeUndefined();
+    expect(Object.keys(onDisk)).toHaveLength(0);
+  });
+
+  it("a __proto__ sessionId does not pollute Object.prototype and round-trips as data", () => {
+    const ss = new SessionState(new FileSessionStorage(file, 0));
+    ss.set("__proto__", "theme", "evil");
+    ss.flush();
+    // Object.prototype untouched — no pollution.
+    expect(({} as Record<string, unknown>)["theme"]).toBeUndefined();
+    // The malicious key survives as ordinary stored data.
+    const reborn = new SessionState(new FileSessionStorage(file));
+    expect(reborn.get("__proto__", "theme")).toBe("evil");
   });
 });

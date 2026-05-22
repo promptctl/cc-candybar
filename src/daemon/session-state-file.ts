@@ -1,7 +1,14 @@
 import fs from "node:fs";
 import path from "node:path";
-import { dlog } from "./log";
+import { debug } from "../utils/logger";
+import type { DaemonLogger } from "./log";
 import type { SessionSnapshot, SessionStorage } from "./session-state";
+
+// [LAW:locality-or-seam] Logging is injected, not hard-wired to daemon.log.
+// The daemon passes `dlog`; tests and non-daemon callers take this quiet
+// default, which stays silent unless CC_CANDYBAR_DEBUG is set — so unit tests
+// never open the real daemon log stream.
+const quietLogger: DaemonLogger = (_level, message) => debug(message);
 
 // [LAW:no-silent-fallbacks] Corrupt/missing file → empty state is the *defined*
 // recovery, not a hidden fallback to different data: an empty store re-rolls
@@ -32,22 +39,36 @@ export class FileSessionStorage implements SessionStorage {
   constructor(
     private readonly filePath: string,
     private readonly debounceMs: number = 500,
+    private readonly logger: DaemonLogger = quietLogger,
   ) {}
 
   load(): SessionSnapshot {
     let raw: string;
     try {
       raw = fs.readFileSync(this.filePath, "utf8");
-    } catch {
+    } catch (e) {
+      // [LAW:no-silent-fallbacks] A missing file is the expected first-boot
+      // recovery (silent → empty). Any other read failure (EACCES, EIO) is an
+      // anomaly worth surfacing before recovering to empty.
+      const code = (e as NodeJS.ErrnoException).code;
+      if (code !== "ENOENT") {
+        this.logger(
+          "warn",
+          `session-state read failed (${code}); starting empty`,
+        );
+      }
       return {};
     }
     try {
       const parsed: unknown = JSON.parse(raw);
       if (isSnapshot(parsed)) return parsed;
-      dlog("warn", `session-state load: unexpected shape, starting empty`);
+      this.logger(
+        "warn",
+        `session-state load: unexpected shape, starting empty`,
+      );
       return {};
     } catch {
-      dlog("warn", `session-state load: corrupt JSON, starting empty`);
+      this.logger("warn", `session-state load: corrupt JSON, starting empty`);
       return {};
     }
   }
@@ -73,7 +94,7 @@ export class FileSessionStorage implements SessionStorage {
       fs.writeFileSync(tmp, JSON.stringify(snapshot));
       fs.renameSync(tmp, this.filePath);
     } catch (e) {
-      dlog("warn", `session-state save failed: ${(e as Error).message}`);
+      this.logger("warn", `session-state save failed: ${(e as Error).message}`);
     }
   }
 }
