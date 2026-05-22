@@ -87,12 +87,16 @@ export class FileSessionStorage implements SessionStorage {
     }
     if (this.pending === null) return;
     const snapshot = this.pending;
-    this.pending = null;
     try {
       fs.mkdirSync(path.dirname(this.filePath), { recursive: true });
       const tmp = `${this.filePath}.tmp`;
       fs.writeFileSync(tmp, JSON.stringify(snapshot));
       fs.renameSync(tmp, this.filePath);
+      // [LAW:one-source-of-truth] `pending` is "state not yet durably written".
+      // Clear it only once the rename lands, so a transient EIO/ENOSPC leaves
+      // the snapshot for a later flush (e.g. shutdown) to retry rather than
+      // silently dropping the last known state.
+      this.pending = null;
     } catch (e) {
       this.logger("warn", `session-state save failed: ${(e as Error).message}`);
     }
