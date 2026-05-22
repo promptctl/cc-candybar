@@ -91,7 +91,7 @@ describe("SessionState disk persistence", () => {
       expect(existsSync(file)).toBe(true);
       expect(existsSync(`${file}.tmp`)).toBe(false);
 
-      const reborn = new SessionState(new FileSessionStorage(file));
+      const reborn = restore();
       expect(reborn.get("s1", "theme")).toBe("nord");
       expect(reborn.get("s1", "style")).toBe("muted");
     } finally {
