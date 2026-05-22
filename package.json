@@ -27,6 +27,7 @@
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
     "demo": "tsx src/demo/app.ts",
+    "demo:dsl": "tsx src/demo/dsl.ts",
     "benchmark:timing": "scripts/benchmark_timing.sh",
     "check:protocol": "node scripts/check-protocol.mjs",
     "prepack": "node scripts/write-bin-placeholder.mjs",
