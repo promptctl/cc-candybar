@@ -69,8 +69,9 @@ export class SessionState implements SessionStateReader, SessionStateRW {
   get(sessionId: string, key: string): string | null {
     const session = this.sessions.get(sessionId);
     if (!session) return null;
-    // [LAW:dataflow-not-control-flow] Read promotes recency in-memory only —
-    // recency is never persisted, so reads never trigger a disk write.
+    // [LAW:dataflow-not-control-flow] A read promotes recency but never
+    // triggers a disk write itself; the reordered insertion order only reaches
+    // disk if a later mutation persists.
     this.touch(sessionId, session);
     return session.get(key) ?? null;
   }
