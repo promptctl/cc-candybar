@@ -47,7 +47,7 @@ const gitService = new GitDataProvider({
 });
 const usageProvider = new CachedUsageProvider();
 const sessionState = new SessionState(
-  new FileSessionStorage(sessionStatePath()),
+  new FileSessionStorage(sessionStatePath(), 500, dlog),
 );
 const renderCache = new RenderCache({
   gitService,
