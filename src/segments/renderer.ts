@@ -26,8 +26,6 @@ import {
   minutesUntilReset,
 } from "../utils/formatters";
 import { getBudgetStatus } from "../utils/budget";
-import fsSync from "node:fs";
-import pathSync from "node:path";
 
 export interface SegmentConfig {
   enabled: boolean;
@@ -1281,22 +1279,16 @@ export function parseToolbarDsl(raw: string): ToolbarItem[] {
   return items;
 }
 
-// Per-session toolbar collapse/expand state. When the daemon provides an
-// in-memory SessionStateReader, it is authoritative (the daemon owns mutations
-// via click handlers). File fallback is for non-daemon renders only.
+// [LAW:one-source-of-truth] SessionState is THE per-session store; the daemon
+// passes its singleton into the renderer. There is no non-daemon render path
+// (precondition: 5hs.11 daemon-only architecture) so there is no file
+// fallback — silent fallbacks would diverge from the daemon's truth at
+// exactly the moment something is wrong.
 function isToolbarExpanded(
   sessionId: string | undefined,
   state?: SessionStateReader,
 ): boolean {
   if (!sessionId) return false;
-  if (state) return !!state.get(sessionId, "toolbar-expanded");
-  const home = globalThis.process?.env?.HOME;
-  if (!home) return false;
-  try {
-    return fsSync.existsSync(
-      pathSync.join(home, ".claude", ".toolbar-state", sessionId),
-    );
-  } catch {
-    return false;
-  }
+  if (!state) return false;
+  return !!state.get(sessionId, "toolbar-expanded");
 }
