@@ -1,7 +1,5 @@
 import fs from "node:fs";
 import net from "node:net";
-import os from "node:os";
-import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 import { daemonDir, pidPath, socketPath, sessionStatePath } from "./paths";
@@ -21,10 +19,9 @@ import { RuntimeStats } from "./stats";
 import { makeLimits, realLimitsDeps, type LimitsHandle } from "./limits";
 import { SessionState } from "./session-state";
 import { FileSessionStorage } from "./session-state-file";
-import { listAvailableThemes } from "../themes/cascade.js";
-import { STYLE_ORDER } from "../themes/default-mapping.js";
+import { VERBS, BadVerbArgs } from "./verbs";
 import { validateHookData } from "../utils/schema-validator.js";
-import { launchSync, setLaunchStats } from "../proc/launch";
+import { setLaunchStats } from "../proc/launch";
 
 // [LAW:one-source-of-truth] one cache instance per daemon process — multiple
 // instances would defeat the share-across-sessions invariant.
@@ -605,19 +602,18 @@ function composeWithError(body: string, error: string | null): string {
 }
 
 // --- click verb dispatch ---
-// [LAW:dataflow-not-control-flow] Verb dispatch table — each entry maps a verb
-// to a handler. Adding a verb means adding a row, not branching deeper.
-const clickHandlers: Record<string, (value: string) => void> = {
-  copy: clickCopy,
-  "open-vscode": clickOpenVscode,
-  "toolbar-toggle": clickToolbarToggle,
-  "theme-cycle": clickThemeCycle,
-  "style-cycle": clickStyleCycle,
-  "show-config-error": clickShowConfigError,
-};
+// [LAW:dataflow-not-control-flow] The dispatcher is a table lookup. The verb
+// table (src/daemon/verbs/index.ts) is the single canonical list of supported
+// verbs — handlers live there, the dispatcher only routes.
+//
+// [LAW:types-are-the-program] The error class on the throw determines the
+// response code: BadVerbArgs (invalid input shape) becomes BAD_REQUEST; any
+// other Error (operational failure) becomes RENDER_FAILED. No string matching.
+
+const verbCtx = { sessionState, dlog };
 
 function handleClick(verb: string, value: string): Response {
-  const handler = clickHandlers[verb];
+  const handler = VERBS[verb];
   if (!handler) {
     return {
       ok: false,
@@ -627,109 +623,15 @@ function handleClick(verb: string, value: string): Response {
     };
   }
   try {
-    handler(value);
+    handler(value, verbCtx);
     return { ok: true, output: "" };
   } catch (e) {
+    const code = e instanceof BadVerbArgs ? "BAD_REQUEST" : "RENDER_FAILED";
     return {
       ok: false,
       error: String(e instanceof Error ? e.message : e),
-      code: "RENDER_FAILED",
+      code,
       daemonV: PROTOCOL_VERSION,
     };
   }
 }
-
-function clickCopy(text: string): void {
-  const result = launchSync({
-    bin: "/usr/bin/pbcopy",
-    stdinInput: text,
-    category: "click.pbcopy",
-  });
-  // [LAW:dataflow-not-control-flow] Rate-limiting is one possible `!ok` data
-  // outcome among many; treat it like the others except don't propagate a
-  // user-visible error — the click is acknowledged (the handler returns) and
-  // the rejection is logged. Other failure reasons are genuine errors.
-  if (!result.ok) {
-    if (result.reason === "rate-limited") {
-      dlog("warn", `click.pbcopy rate-limited: ${result.error ?? ""}`);
-      return;
-    }
-    throw new Error(
-      `pbcopy failed (${result.reason}, exit ${result.exitCode ?? "null"})`,
-    );
-  }
-}
-
-// Click on the ⚠ in the bar copies the parse error to clipboard. Behavior
-// can grow later (e.g. open the offending file at the parse-error line).
-function clickShowConfigError(encodedMessage: string): void {
-  clickCopy(encodedMessage);
-}
-
-function clickOpenVscode(target: string): void {
-  const result = launchSync({
-    bin: "/usr/bin/open",
-    args: ["-a", "Visual Studio Code", target],
-    category: "click.open",
-  });
-  if (!result.ok) {
-    if (result.reason === "rate-limited") {
-      dlog("warn", `click.open rate-limited: ${result.error ?? ""}`);
-      return;
-    }
-    throw new Error(
-      `open -a "Visual Studio Code" failed (${result.reason}, exit ${result.exitCode ?? "null"})`,
-    );
-  }
-}
-
-function clickToolbarToggle(sessionId: string): void {
-  if (!sessionId) return;
-  if (sessionId.includes("/") || sessionId.includes("..")) return;
-  // [LAW:one-source-of-truth] In-memory SessionState is authoritative. File is
-  // persistence for cold start (non-daemon renders read it directly).
-  const expanded = sessionState.get(sessionId, "toolbar-expanded");
-  if (expanded) sessionState.clear(sessionId, "toolbar-expanded");
-  else sessionState.set(sessionId, "toolbar-expanded", "1");
-  const dir = path.join(os.homedir(), ".claude", ".toolbar-state");
-  const flagPath = path.join(dir, sessionId);
-  try {
-    if (fs.existsSync(flagPath)) {
-      fs.unlinkSync(flagPath);
-    } else {
-      fs.mkdirSync(dir, { recursive: true });
-      fs.writeFileSync(flagPath, "");
-    }
-  } catch (e) {
-    dlog("warn", `toolbar-toggle file write failed: ${(e as Error).message}`);
-  }
-}
-
-// [LAW:dataflow-not-control-flow] Theme/style state is per-session. The value
-// parameter is the session ID (passed via cpwl://theme-cycle/<sessionId>). No
-// clearAll() needed — the renderer reads state dynamically per render.
-function clickThemeCycle(sessionId: string): void {
-  const themes = listAvailableThemes().filter((t) => t !== "custom");
-  const current = sessionState.get(sessionId, "theme");
-  const idx = current ? themes.indexOf(current) : -1;
-  const next = themes[(idx + 1) % themes.length] ?? themes[0]!;
-  sessionState.set(sessionId, "theme", next);
-  dlog(
-    "info",
-    `theme-cycle: ${current ?? "(default)"} → ${next} (session=${sessionId})`,
-  );
-}
-
-function clickStyleCycle(sessionId: string): void {
-  const current = sessionState.get(sessionId, "style");
-  const idx = current ? STYLE_ORDER.indexOf(current) : -1;
-  const next = STYLE_ORDER[(idx + 1) % STYLE_ORDER.length] ?? STYLE_ORDER[0]!;
-  sessionState.set(sessionId, "style", next);
-  dlog(
-    "info",
-    `style-cycle: ${current ?? "(default)"} → ${next} (session=${sessionId})`,
-  );
-}
-
-// Suppress "unused path import" — kept for clarity if we add directory ops.
-void path;
