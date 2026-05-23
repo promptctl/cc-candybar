@@ -18,6 +18,7 @@ import {
   SOURCES_REQUIRING_CACHE,
   SOURCE_KINDS,
   TRUNCATE_MODES,
+  hasCacheField,
   type CacheDecl,
   type CacheKey,
   type DslConfig,
@@ -472,6 +473,24 @@ function validateVariableByKind(
         ...(def !== undefined && { default: def }),
       };
     }
+
+    case "state": {
+      const key = requireString(ctx, path, raw, "key");
+      if (key === null) return null;
+      const sessionIdVar = optionalStringField(
+        ctx,
+        path,
+        raw,
+        "sessionIdVar",
+      );
+      const def = optionalStringField(ctx, path, raw, "default");
+      return {
+        kind: "state",
+        key,
+        ...(sessionIdVar !== undefined && { sessionIdVar }),
+        ...(def !== undefined && { default: def }),
+      };
+    }
   }
 }
 
@@ -848,7 +867,7 @@ function checkVarRefs(
   if (v.kind === "template") {
     checkTemplateRefs(ctx, `${declPath}.template`, v.template, allVars);
   }
-  if (v.kind !== "literal" && v.kind !== "input" && v.kind !== "env") {
+  if (hasCacheField(v)) {
     if (v.cache && "key" in v.cache) {
       checkTemplateRefs(ctx, `${declPath}.cache.key`, v.cache.key, allVars);
     }
@@ -861,7 +880,7 @@ function checkDependsOn(
   v: VariableDecl,
   allVars: Set<string>,
 ): void {
-  if (v.kind === "literal" || v.kind === "input" || v.kind === "env") return;
+  if (!hasCacheField(v)) return;
   if (!v.cache) return;
   if (!("depends_on" in v.cache)) return;
   for (let i = 0; i < v.cache.depends_on.length; i++) {
@@ -1059,7 +1078,7 @@ function buildTemplateGraph(cfg: DslConfig): {
     segCtx?: string,
   ): void => {
     if (v.kind === "template") addTemplateEdges(name, v.template, segCtx);
-    if (v.kind !== "literal" && v.kind !== "input" && v.kind !== "env") {
+    if (hasCacheField(v)) {
       if (v.cache && "key" in v.cache)
         addTemplateEdges(name, v.cache.key, segCtx);
       if (v.cache && "depends_on" in v.cache) {

@@ -157,6 +157,16 @@ function declareOne(
         varDefault: decl.default,
       });
       break;
+
+    case "state":
+      registry.declareState(name, {
+        key: decl.key,
+        ...(decl.sessionIdVar !== undefined && {
+          sessionIdVar: decl.sessionIdVar,
+        }),
+        ...(decl.default !== undefined && { varDefault: decl.default }),
+      });
+      break;
   }
 }
 
