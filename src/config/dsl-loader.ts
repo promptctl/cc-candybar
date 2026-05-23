@@ -855,10 +855,21 @@ function validateCrossReferences(ctx: ValidateCtx, cfg: DslConfig): void {
   // depends_on / template-ref existence checks above — surface a missing
   // anchor at load time so the user fixes the config from a config-file
   // error message, not from a render-time ReferenceError.
-  if (hasStateKind(cfg) && !allVarNames.has("session.id")) {
+  //
+  // [LAW:types-are-the-program] Check against `cfg.variables` directly, not
+  // `allVarNames`: a segment-local declaration named "session.id" registers
+  // at runtime as `<seg>.session.id` and does NOT satisfy declareState's
+  // read of the global `session.id` box. The accept/reject table for this
+  // predicate is "GLOBAL session.id declared" — `allVarNames` (which
+  // includes bare segment-local names by construction, for depends_on
+  // scope) is the wrong set.
+  if (
+    hasStateKind(cfg) &&
+    !Object.prototype.hasOwnProperty.call(cfg.variables, "session.id")
+  ) {
     ctx.issues.push({
       path: "variables.session.id",
-      message: `state-kind variables require a "session.id" variable to be declared (any kind whose value is a session id string, conventionally { kind: "input", path: "session_id" })`,
+      message: `state-kind variables require a global "session.id" variable (segment-local declarations do not satisfy this — declareState reads the global box; conventionally { kind: "input", path: "session_id" })`,
       line: findKeyLine(ctx.source, ["variables"]),
     });
   }

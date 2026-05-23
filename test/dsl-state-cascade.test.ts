@@ -113,6 +113,19 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
     );
   });
 
+  test('set-theme rejects the "custom" sentinel (not a renderable theme)', () => {
+    // [LAW:one-source-of-truth] The verb validates against
+    // listResolvablePaletteNames — the set of names that actually resolve
+    // to a Palette. "custom" is a sentinel that instructs the cascade to
+    // read inline colors; persisting it as a session theme would render
+    // empty/broken at the next refresh.
+    const { sessionState } = buildRuntime();
+    const ctx = { sessionState, dlog: () => {} };
+    expect(() => VERBS["set-theme"]!(`${SESSION_ID}/custom`, ctx)).toThrow(
+      /unknown theme/,
+    );
+  });
+
   test("parseDslConfig rejects a state-kind var with no session.id anchor", () => {
     // [LAW:verifiable-goals] A config that uses state-kind vars without
     // declaring session.id has to fail at LOAD time. The runtime would
@@ -134,7 +147,37 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
         }`,
         ALLOWED_PALETTES,
       ),
-    ).toThrow(/state-kind variables require a "session.id" variable/);
+    ).toThrow(/global "session\.id" variable/);
+  });
+
+  test("parseDslConfig requires session.id GLOBALLY (segment-local doesn't satisfy)", () => {
+    // [LAW:types-are-the-program] declareState reads the global session.id
+    // box at runtime. A segment-local declaration named "session.id"
+    // registers as "<seg>.session.id" — same string, different box. The
+    // load-time check must reject this case, not silently accept it.
+    expect(() =>
+      parseDslConfig(
+        "<test>",
+        `{
+          globals: {},
+          variables: {
+            theme: { kind: 'state', key: 'theme' },
+          },
+          segments: {
+            s: {
+              template: '{{ .theme }}',
+              bg: 'surface',
+              fg: 'foreground',
+              vars: {
+                'session.id': { kind: 'input', path: 'session_id', default: '' },
+              },
+            },
+          },
+          layout: ['s'],
+        }`,
+        ALLOWED_PALETTES,
+      ),
+    ).toThrow(/global "session\.id" variable/);
   });
 
   test("toolbar-toggle click verb cascades through state binding", () => {
