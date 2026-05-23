@@ -849,6 +849,32 @@ function validateCrossReferences(ctx: ValidateCtx, cfg: DslConfig): void {
       );
     }
   }
+
+  // [LAW:verifiable-goals] state-kind variables have an implicit dependency
+  // on the canonical session-id input variable. Same shape as the
+  // depends_on / template-ref existence checks above — surface a missing
+  // anchor at load time so the user fixes the config from a config-file
+  // error message, not from a render-time ReferenceError.
+  if (hasStateKind(cfg) && !allVarNames.has("session.id")) {
+    ctx.issues.push({
+      path: "variables.session.id",
+      message: `state-kind variables require a "session.id" variable to be declared (any kind whose value is a session id string, conventionally { kind: "input", path: "session_id" })`,
+      line: findKeyLine(ctx.source, ["variables"]),
+    });
+  }
+}
+
+function hasStateKind(cfg: DslConfig): boolean {
+  for (const v of Object.values(cfg.variables)) {
+    if (v.kind === "state") return true;
+  }
+  for (const seg of Object.values(cfg.segments)) {
+    if (!seg.vars) continue;
+    for (const v of Object.values(seg.vars)) {
+      if (v.kind === "state") return true;
+    }
+  }
+  return false;
 }
 
 function checkVarRefs(

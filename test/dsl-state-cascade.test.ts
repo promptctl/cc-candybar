@@ -113,6 +113,30 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
     );
   });
 
+  test("parseDslConfig rejects a state-kind var with no session.id anchor", () => {
+    // [LAW:verifiable-goals] A config that uses state-kind vars without
+    // declaring session.id has to fail at LOAD time. The runtime would
+    // otherwise throw "Unknown variable session.id" on the next render —
+    // which is observable only when a render lands, not when the file is
+    // loaded — and that violates "machine-verifiable at the earliest point."
+    expect(() =>
+      parseDslConfig(
+        "<test>",
+        `{
+          globals: {},
+          variables: {
+            theme: { kind: 'state', key: 'theme' },
+          },
+          segments: {
+            s: { template: '{{ .theme }}', bg: 'surface', fg: 'foreground' },
+          },
+          layout: ['s'],
+        }`,
+        ALLOWED_PALETTES,
+      ),
+    ).toThrow(/state-kind variables require a "session.id" variable/);
+  });
+
   test("toolbar-toggle click verb cascades through state binding", () => {
     // Same pattern with a different verb / key — exercises the toggle
     // semantics (set on first click, clear on second).
