@@ -9,6 +9,7 @@ import {
   formatGoTime,
   MIN_SHELL_TTL_MS,
 } from "../src/var-system";
+import { SessionState } from "../src/daemon/session-state";
 
 // [LAW:one-source-of-truth] Tests pin to the production constant so a future
 // MIN_SHELL_TTL_MS bump doesn't silently desync test timings.
@@ -1506,5 +1507,84 @@ describe("SourceRegistry — git: shared poller per cwd", () => {
 
       expect(store.read("branch")).toBe("main");
     } finally { cleanup(); }
+  });
+});
+
+describe("SourceRegistry — state: read-through to SessionState", () => {
+  // Build a registry with a real SessionState injected. The state-kind
+  // variable reads SessionState[session.id][key]; the cascade through the
+  // MobX dep graph is what bzh.7 + vhi.1 rely on for verb→render reactivity.
+
+  function makeWithState() {
+    const sessionState = new SessionState();
+    const store = new VariableStore();
+    const registry = new SourceRegistry(store, "", undefined, sessionState);
+    // session.id is the conventional source for "which session am I in" —
+    // input boxes refresh per render via applyInput.
+    registry.declareInput("session.id", "session_id", "string");
+    return { store, registry, sessionState };
+  }
+
+  test("returns default when SessionState has no entry for the key", () => {
+    const { store, registry } = makeWithState();
+    registry.declareState("toolbarExpanded", { key: "toolbar-expanded" });
+    registry.applyInput({ session_id: "s1" });
+    expect(store.read("toolbarExpanded")).toBe("");
+  });
+
+  test("returns SessionState value when present", () => {
+    const { store, registry, sessionState } = makeWithState();
+    sessionState.set("s1", "toolbar-expanded", "1");
+    registry.declareState("toolbarExpanded", { key: "toolbar-expanded" });
+    registry.applyInput({ session_id: "s1" });
+    expect(store.read("toolbarExpanded")).toBe("1");
+  });
+
+  test("varDefault wins when SessionState key is absent", () => {
+    const { store, registry } = makeWithState();
+    registry.declareState("theme", { key: "theme", varDefault: "ocean" });
+    registry.applyInput({ session_id: "s1" });
+    expect(store.read("theme")).toBe("ocean");
+  });
+
+  test("set() on SessionState invalidates the computed (verb → render cascade)", () => {
+    // This is the cascade the click-verb path relies on: a verb writes
+    // SessionState; the next render reads through the same MobX graph and
+    // sees the new value without re-reading disk.
+    const { store, registry, sessionState } = makeWithState();
+    registry.declareState("theme", { key: "theme" });
+    registry.applyInput({ session_id: "s1" });
+    expect(store.read("theme")).toBe("");
+
+    sessionState.set("s1", "theme", "ember");
+    expect(store.read("theme")).toBe("ember");
+
+    sessionState.clear("s1", "theme");
+    expect(store.read("theme")).toBe("");
+  });
+
+  test("different sessionIds yield different state (no cross-session leakage)", () => {
+    const { store, registry, sessionState } = makeWithState();
+    sessionState.set("a", "theme", "ocean");
+    sessionState.set("b", "theme", "ember");
+    registry.declareState("theme", { key: "theme" });
+
+    registry.applyInput({ session_id: "a" });
+    expect(store.read("theme")).toBe("ocean");
+
+    registry.applyInput({ session_id: "b" });
+    expect(store.read("theme")).toBe("ember");
+  });
+
+  test("declareState without SessionState injection fails loudly", () => {
+    // [LAW:no-silent-fallbacks] If the registry was constructed without a
+    // SessionState, declareState refuses rather than silently returning
+    // empty — that would be a footgun where renders look fine until a
+    // verb fires and "nothing happens."
+    const store = new VariableStore();
+    const registry = new SourceRegistry(store);
+    expect(() =>
+      registry.declareState("theme", { key: "theme" }),
+    ).toThrow(/state-kind variables require a SessionState/);
   });
 });
