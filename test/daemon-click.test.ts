@@ -6,6 +6,7 @@ import { PROTOCOL_VERSION, encodeFrame, makeFrameReader } from "../src/daemon/pr
 import type { Response } from "../src/daemon/protocol";
 import { socketPath } from "../src/daemon/paths";
 import { SessionState } from "../src/daemon/session-state";
+import { VERB_NAMES } from "../src/daemon/verbs";
 
 // --- SessionState unit tests ---
 
@@ -160,8 +161,9 @@ function sendToTestServer(req: unknown): Promise<Response> {
           const parsed = frame as { kind: string; verb?: string; v: number };
           // Mimic daemon's click dispatch logic for test purposes.
           if (parsed.kind === "click") {
-            const knownVerbs = ["copy", "open-vscode", "toolbar-toggle", "theme-cycle", "style-cycle"];
-            if (!knownVerbs.includes(parsed.verb ?? "")) {
+            // [LAW:one-source-of-truth] Use the registry directly so the test
+            // and the daemon cannot disagree about which verbs are valid.
+            if (!VERB_NAMES.includes(parsed.verb ?? "")) {
               sock.write(
                 encodeFrame({
                   ok: false,

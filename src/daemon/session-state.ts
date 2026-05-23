@@ -8,9 +8,10 @@ export interface SessionStateReader {
 
 // [LAW:locality-or-seam] Renderer needs to *cache* per-session random picks
 // so subsequent renders are stable. Writing them back into the same store
-// theme-cycle uses keeps state in one place — no parallel cache to drift.
+// click verbs use keeps state in one place — no parallel cache to drift.
 export interface SessionStateRW extends SessionStateReader {
   set(sessionId: string, key: string, value: string): void;
+  clear(sessionId: string, key: string): void;
 }
 
 // Flat, JSON-shaped mirror of the store: sessionId → key → value. This is the
