@@ -19,7 +19,7 @@
 //   cc-candybar://<verb>/<value>   where <value> may itself contain `/`.
 
 import { launchSync } from "../../proc/launch";
-import { listAvailableThemes } from "../../themes/cascade";
+import { listResolvablePaletteNames } from "../../themes/cascade";
 import { STYLE_ORDER } from "../../themes/default-mapping";
 import type { SessionStateRW } from "../session-state";
 
@@ -137,7 +137,12 @@ const setTheme: VerbHandler = (value, ctx) => {
   const { sessionId, rest: themeName } = splitSessionAndRest(value);
   const sid = requireSessionId(sessionId);
   if (!themeName) throw new BadVerbArgs("set-theme: theme name is required");
-  const themes = listAvailableThemes();
+  // [LAW:one-source-of-truth] listResolvablePaletteNames is THE set whose
+  // members resolve to a concrete Palette. listAvailableThemes is broader
+  // — it includes the "custom" sentinel (read inline colors) which is not
+  // a renderable theme name; accepting "custom" here would persist an
+  // unrenderable value into SessionState and break the next render.
+  const themes = listResolvablePaletteNames();
   if (!themes.includes(themeName))
     throw new BadVerbArgs(
       `set-theme: unknown theme "${themeName}" (have: ${themes.join(", ")})`,
