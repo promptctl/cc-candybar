@@ -114,9 +114,10 @@ const openVscode: VerbHandler = (target, ctx) => {
   }
 };
 
-// Click on the ⚠ in the bar copies the parse error to clipboard.
-const showConfigError: VerbHandler = (encodedMessage, ctx) =>
-  copy(encodedMessage, ctx);
+// Click on the ⚠ in the bar copies the parse error to clipboard. The value
+// arrives already URL-decoded by parseHandlerUrl on the client; downstream
+// treats it as a plain string.
+const showConfigError: VerbHandler = (message, ctx) => copy(message, ctx);
 
 // [LAW:one-source-of-truth] SessionState is the canonical store for
 // toolbar-expanded state (eir merge). Toggle via set/clear; the file-backed

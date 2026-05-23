@@ -477,12 +477,10 @@ function validateVariableByKind(
     case "state": {
       const key = requireString(ctx, path, raw, "key");
       if (key === null) return null;
-      const sessionIdVar = optionalStringField(ctx, path, raw, "sessionIdVar");
       const def = optionalStringField(ctx, path, raw, "default");
       return {
         kind: "state",
         key,
-        ...(sessionIdVar !== undefined && { sessionIdVar }),
         ...(def !== undefined && { default: def }),
       };
     }

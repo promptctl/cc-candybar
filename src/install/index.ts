@@ -3,6 +3,7 @@ import path from "node:path";
 import os from "node:os";
 import { launchSync } from "../proc/launch";
 import { tryClickViaDaemon } from "../daemon/client";
+import type { PermanentOutcome } from "../daemon/client";
 import { obtainDaemonKick } from "../daemon/acquire";
 
 // [LAW:one-source-of-truth] Replaced at build time by tsdown's `define` option
@@ -329,11 +330,29 @@ export async function runUrlHandle(rawUrl: string | undefined): Promise<void> {
     process.exit(1);
   }
 
-  // Permanent outcome: surface the daemon's reasoning verbatim.
-  process.stderr.write(
-    `url-handle: daemon rejected click (${outcome.cause}: ${"message" in outcome ? outcome.message : ""})\n`,
-  );
+  // [LAW:dataflow-not-control-flow] Format each permanent cause from its
+  // own typed payload, not by probing for "message" on a generic outcome.
+  // The PermanentOutcome union already discriminates by `cause`; the switch
+  // mirrors that discriminator one-to-one and pulls the right fields.
+  process.stderr.write(formatPermanent(outcome) + "\n");
   process.exit(1);
+}
+
+// [LAW:single-enforcer] One place that turns a PermanentOutcome into a
+// human-readable diagnostic. Each cause carries its own payload (version
+// mismatch carries the protocol numbers; everything else carries a
+// message); the formatter consumes exactly the fields the cause defines.
+function formatPermanent(outcome: PermanentOutcome): string {
+  switch (outcome.cause) {
+    case "version_mismatch":
+      return `url-handle: daemon rejected click (version mismatch: client v${outcome.clientV} ≠ daemon v${outcome.daemonV})`;
+    case "bad_request":
+      return `url-handle: daemon rejected click (bad request: ${outcome.message})`;
+    case "render_failed":
+      return `url-handle: daemon rejected click (handler failed: ${outcome.message})`;
+    case "malformed_response":
+      return `url-handle: daemon rejected click (malformed response: ${outcome.message})`;
+  }
 }
 
 export function runInstall(rendererArgs: string[]): void {

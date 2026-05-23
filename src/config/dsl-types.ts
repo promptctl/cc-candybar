@@ -108,13 +108,15 @@ export interface GitVarDecl {
 // variable's downstream computeds automatically. Persistence rides for free
 // on SessionState's disk backing.
 //
-// The variable resolves to SessionState[<sessionIdVar's value>][key]. By
-// default sessionIdVar = "session.id" — the conventional name DSL configs
-// declare as the input variable carrying the hook's session_id.
+// The session id is resolved from the conventional `session.id` variable —
+// that name is the canonical anchor for "which session am I in," declared
+// once by DSL configs as an input variable carrying hook_data.session_id.
+// [LAW:no-mode-explosion] No per-decl override knob: a single canonical
+// session-id source keeps every state var's resolution uniform and removes
+// an axis along which configs could drift from each other.
 export interface StateVarDecl {
   readonly kind: "state";
   readonly key: string;
-  readonly sessionIdVar?: string;
   readonly default?: string;
 }
 
