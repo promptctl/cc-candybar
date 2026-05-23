@@ -131,14 +131,19 @@ export interface GitOptions {
 
 // [LAW:one-source-of-truth] state vars read through to SessionState; the
 // reactive contract is owned by SessionState's internal atom. The computed
-// reads sessionIdVar's value and dispatches through SessionStateReader.get.
+// reads the canonical session-id variable (SESSION_ID_VAR_NAME) and
+// dispatches through SessionStateReader.get.
 export interface StateOptions {
   readonly key: string;
-  // Defaults to "session.id" — the conventional DSL input variable carrying
-  // the hook payload's session_id.
-  readonly sessionIdVar?: string;
   readonly varDefault?: string;
 }
+
+// [LAW:one-source-of-truth] The conventional name DSL configs use for the
+// hook payload's session_id input variable. State-kind variables resolve
+// "which session am I in" from this name — no per-decl override.
+// [LAW:no-mode-explosion] One axis of variability less; configs cannot
+// drift on which variable carries the session id.
+export const SESSION_ID_VAR_NAME = "session.id";
 
 // ─── Private infrastructure ───────────────────────────────────────────────────
 
@@ -764,11 +769,11 @@ export class SourceRegistry {
   }
 
   // state: read-through to SessionState. The computed reads two deps — the
-  // session-id variable (typically `session.id`, refreshed per render from
-  // input) and SessionState itself (MobX-tracked via its internal atom). A
-  // click verb that mutates SessionState invalidates this computed; a
-  // sessionId change (per-render) also invalidates it. Persistence rides on
-  // SessionState's disk backing — no extra wiring needed.
+  // canonical session-id input variable (SESSION_ID_VAR_NAME, refreshed per
+  // render from input) and SessionState itself (MobX-tracked via its
+  // internal atom). A click verb that mutates SessionState invalidates this
+  // computed; a sessionId change (per-render) also invalidates it.
+  // Persistence rides on SessionState's disk backing — no extra wiring.
   //
   // [LAW:dataflow-not-control-flow] Same body every evaluation; values
   // determine the result, never whether code runs.
@@ -779,12 +784,17 @@ export class SourceRegistry {
           `state-kind variables require a SessionState (the daemon provides one; tests must supply one)`,
       );
     }
-    const sessionIdVar = opts.sessionIdVar ?? "session.id";
     const sessionState = this.sessionState;
     const fallback = opts.varDefault ?? this.stringInitial(undefined);
     this.store.defineComputed(name, "string", (read) => {
-      const sessionId = String(read(sessionIdVar));
-      if (!sessionId) return fallback;
+      // [LAW:types-are-the-program] By convention session.id is declared as
+      // a string-typed input variable. The var-system's type discipline
+      // (assertType in store.ts) enforces that at declaration; we read its
+      // value as a string here. A user who redeclares session.id as a
+      // non-string variable receives empty state lookups — the failure
+      // mode is loud-by-absence rather than silently coerced.
+      const sessionId = read(SESSION_ID_VAR_NAME);
+      if (typeof sessionId !== "string" || !sessionId) return fallback;
       const value = sessionState.get(sessionId, opts.key);
       return value !== null ? value : fallback;
     });
