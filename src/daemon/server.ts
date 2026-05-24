@@ -22,6 +22,8 @@ import { FileSessionStorage } from "./session-state-file";
 import { VERBS, BadVerbArgs } from "./verbs";
 import { validateHookData } from "../utils/schema-validator.js";
 import { setLaunchStats } from "../proc/launch";
+import { buildDebugSnapshot, type DaemonDslState } from "./debug";
+import { isDebugWhat } from "./debug-types";
 
 // [LAW:one-source-of-truth] one cache instance per daemon process — multiple
 // instances would defeat the share-across-sessions invariant.
@@ -53,6 +55,19 @@ const renderCache = new RenderCache({
   sessionState,
   watchers: watcherRegistry,
 });
+
+// [LAW:one-source-of-truth] The daemon owns at most one DSL state bundle
+// (variable store + source registry + parsed config + compiled segments).
+// vhi.2 defines this slot and the introspection contract; bzh.2 will
+// populate it once the daemon flips from the legacy renderer to renderDslLine.
+// Until then it stays null and debug responses are empty by construction —
+// not by special-case branching, by the data being absent.
+//
+// Declared `const` today because it is never reassigned in this module; bzh.2
+// will either introduce a setter or convert this to `let`. The single
+// canonical handle is the design contract — *how* it becomes populated is
+// the change bzh.2 owns.
+const dslState: DaemonDslState | null = null;
 
 const REQUEST_TIMEOUT_MS = 200;
 const BIN_CHECK_INTERVAL_MS = 60 * 1000;
@@ -568,6 +583,25 @@ async function handleRequest(req: Request): Promise<Response> {
 
   if (req.kind === "click") {
     return handleClick(req.verb, req.value);
+  }
+
+  if (req.kind === "debug") {
+    // [LAW:single-enforcer] One trust-boundary check at the wire edge —
+    // `what` is untrusted JSON. isDebugWhat narrows it to the discriminated
+    // union the introspector consumes; an invalid value short-circuits
+    // here, not deep inside buildDebugSnapshot.
+    if (!isDebugWhat(req.what)) {
+      return {
+        ok: false,
+        error: `unknown debug 'what': ${String(req.what)}`,
+        code: "BAD_REQUEST",
+        daemonV: PROTOCOL_VERSION,
+      };
+    }
+    // [LAW:dataflow-not-control-flow] The dispatcher always runs the same
+    // call. Variability lives in dslState (null vs populated) and `what`
+    // (the projection selector inside buildDebugSnapshot).
+    return { ok: true, debug: buildDebugSnapshot(req.what, dslState) };
   }
 
   return {

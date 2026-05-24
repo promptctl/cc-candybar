@@ -23,11 +23,20 @@ export interface VarNode {
   readonly type: VarType;
   readonly kind: "box" | "computed";
   read(): VarValue;
+  // [LAW:types-are-the-program] Age is a property of the node, not of an
+  // external bookkeeping layer — duplicating it in a side map would let the
+  // two diverge. `number` for box nodes (epoch ms of last set, including the
+  // initial-value set at construction); `null` for computed nodes, whose
+  // freshness is governed by MobX invalidation, not a single timestamp.
+  lastUpdatedMs(): number | null;
 }
 
 class BoxNode implements VarNode {
   readonly kind = "box" as const;
   private readonly cell: IObservableValue<VarValue>;
+  // [LAW:single-enforcer] One write path (`set`) updates both the value and
+  // the timestamp; introspection reads from the same place renderers do.
+  private lastSetAt: number;
 
   constructor(
     readonly name: string,
@@ -36,6 +45,7 @@ class BoxNode implements VarNode {
   ) {
     assertType(name, type, initial, "initial value");
     this.cell = observable.box(initial, { deep: false });
+    this.lastSetAt = Date.now();
   }
 
   read(): VarValue {
@@ -45,6 +55,11 @@ class BoxNode implements VarNode {
   set(value: VarValue): void {
     assertType(this.name, this.type, value, "set value");
     this.cell.set(value);
+    this.lastSetAt = Date.now();
+  }
+
+  lastUpdatedMs(): number {
+    return this.lastSetAt;
   }
 }
 
@@ -75,6 +90,14 @@ class ComputedNode implements VarNode {
 
   read(): VarValue {
     return this.cell.get();
+  }
+
+  lastUpdatedMs(): null {
+    // [LAW:no-defensive-null-guards] Computed nodes have no single
+    // "updated" moment — the cache is valid until a tracked dep changes.
+    // Returning null is structurally distinct from "updated at 0," so a
+    // consumer can render "—" for computed and a real age for boxes.
+    return null;
   }
 }
 
@@ -156,6 +179,15 @@ export class VariableStore {
 
   getKind(name: string): "box" | "computed" {
     return this.requireNode(name).kind;
+  }
+
+  // [LAW:locality-or-seam] Introspection (src/daemon/debug.ts) needs the
+  // whole node — type, kind, lastUpdatedMs — without bouncing through three
+  // accessor methods that each repeat the requireNode lookup. The returned
+  // VarNode is read-only by interface (no set/define), so exposing it
+  // does not widen the mutation surface.
+  getNode(name: string): VarNode {
+    return this.requireNode(name);
   }
 
   names(): string[] {
