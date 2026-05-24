@@ -123,16 +123,25 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
     const dispose = autorun(() => {
       observed.push(String(store.read("theme")));
     });
-    expect(observed).toEqual(["(unset)"]);
+    // [LAW:no-defensive-null-guards] try/finally is not defensive — it is
+    // the type-level guarantee that the autorun cannot outlive this test
+    // even when the assertions throw (which is the *point* of a regression
+    // test: when a fault is reintroduced, expectations fail here, and a
+    // dangling reaction in the global MobX scheduler would then leak into
+    // subsequent tests). Same shape as a using-block / RAII guard.
+    try {
+      expect(observed).toEqual(["(unset)"]);
 
-    const ctx = { sessionState, dlog: () => {} };
-    VERBS["set-theme"]!(`${SESSION_ID}/nord`, ctx);
+      const ctx = { sessionState, dlog: () => {} };
+      VERBS["set-theme"]!(`${SESSION_ID}/nord`, ctx);
 
-    // Exactly one additional fire — proves the dep graph propagated the
-    // change rather than the autorun being scheduled for an unrelated
-    // reason or the observation count drifting.
-    expect(observed).toEqual(["(unset)", "nord"]);
-    dispose();
+      // Exactly one additional fire — proves the dep graph propagated the
+      // change rather than the autorun being scheduled for an unrelated
+      // reason or the observation count drifting.
+      expect(observed).toEqual(["(unset)", "nord"]);
+    } finally {
+      dispose();
+    }
   });
 
   test("two state vars: mutation propagates only to its dependent observer", () => {
@@ -177,27 +186,32 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
     const disposeExp = autorun(() => {
       expandedObs.push(String(store.read("expanded")));
     });
-    expect(themeObs).toEqual(["(unset)"]);
-    expect(expandedObs).toEqual([""]);
+    // [LAW:no-defensive-null-guards] try/finally is the type-level
+    // guarantee that both autoruns are disposed even when the
+    // assertions throw — see the same note on the test above.
+    try {
+      expect(themeObs).toEqual(["(unset)"]);
+      expect(expandedObs).toEqual([""]);
 
-    const ctx = { sessionState, dlog: () => {} };
-    VERBS["set-theme"]!(`${SESSION_ID}/nord`, ctx);
+      const ctx = { sessionState, dlog: () => {} };
+      VERBS["set-theme"]!(`${SESSION_ID}/nord`, ctx);
 
-    // Watched key advanced — cascade reached the right computed.
-    expect(themeObs).toEqual(["(unset)", "nord"]);
-    // Unrelated key: the atom invalidated the `expanded` computed too
-    // (coarse-grained reactivity), but it re-derived to the same fallback
-    // "" — MobX's value comparer suppresses propagation to this observer.
-    expect(expandedObs).toEqual([""]);
+      // Watched key advanced — cascade reached the right computed.
+      expect(themeObs).toEqual(["(unset)", "nord"]);
+      // Unrelated key: the atom invalidated the `expanded` computed too
+      // (coarse-grained reactivity), but it re-derived to the same fallback
+      // "" — MobX's value comparer suppresses propagation to this observer.
+      expect(expandedObs).toEqual([""]);
 
-    // Sanity: a mutation to the OTHER state key fires the expanded
-    // observer (cascade is not over-suppressed).
-    sessionState.set(SESSION_ID, "toolbar-expanded", "1");
-    expect(expandedObs).toEqual(["", "1"]);
-    expect(themeObs).toEqual(["(unset)", "nord"]);
-
-    disposeTheme();
-    disposeExp();
+      // Sanity: a mutation to the OTHER state key fires the expanded
+      // observer (cascade is not over-suppressed).
+      sessionState.set(SESSION_ID, "toolbar-expanded", "1");
+      expect(expandedObs).toEqual(["", "1"]);
+      expect(themeObs).toEqual(["(unset)", "nord"]);
+    } finally {
+      disposeTheme();
+      disposeExp();
+    }
   });
 
   test("set-theme rejects an unknown theme name (BadVerbArgs)", () => {
