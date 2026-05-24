@@ -18,6 +18,7 @@ import {
   SOURCES_REQUIRING_CACHE,
   SOURCE_KINDS,
   TRUNCATE_MODES,
+  hasCacheField,
   type CacheDecl,
   type CacheKey,
   type DslConfig,
@@ -472,6 +473,17 @@ function validateVariableByKind(
         ...(def !== undefined && { default: def }),
       };
     }
+
+    case "state": {
+      const key = requireString(ctx, path, raw, "key");
+      if (key === null) return null;
+      const def = optionalStringField(ctx, path, raw, "default");
+      return {
+        kind: "state",
+        key,
+        ...(def !== undefined && { default: def }),
+      };
+    }
   }
 }
 
@@ -837,6 +849,43 @@ function validateCrossReferences(ctx: ValidateCtx, cfg: DslConfig): void {
       );
     }
   }
+
+  // [LAW:verifiable-goals] state-kind variables have an implicit dependency
+  // on the canonical session-id input variable. Same shape as the
+  // depends_on / template-ref existence checks above — surface a missing
+  // anchor at load time so the user fixes the config from a config-file
+  // error message, not from a render-time ReferenceError.
+  //
+  // [LAW:types-are-the-program] Check against `cfg.variables` directly, not
+  // `allVarNames`: a segment-local declaration named "session.id" registers
+  // at runtime as `<seg>.session.id` and does NOT satisfy declareState's
+  // read of the global `session.id` box. The accept/reject table for this
+  // predicate is "GLOBAL session.id declared" — `allVarNames` (which
+  // includes bare segment-local names by construction, for depends_on
+  // scope) is the wrong set.
+  if (
+    hasStateKind(cfg) &&
+    !Object.prototype.hasOwnProperty.call(cfg.variables, "session.id")
+  ) {
+    ctx.issues.push({
+      path: "variables.session.id",
+      message: `state-kind variables require a global "session.id" variable (segment-local declarations do not satisfy this — declareState reads the global box; conventionally { kind: "input", path: "session_id" })`,
+      line: findKeyLine(ctx.source, ["variables"]),
+    });
+  }
+}
+
+function hasStateKind(cfg: DslConfig): boolean {
+  for (const v of Object.values(cfg.variables)) {
+    if (v.kind === "state") return true;
+  }
+  for (const seg of Object.values(cfg.segments)) {
+    if (!seg.vars) continue;
+    for (const v of Object.values(seg.vars)) {
+      if (v.kind === "state") return true;
+    }
+  }
+  return false;
 }
 
 function checkVarRefs(
@@ -848,7 +897,7 @@ function checkVarRefs(
   if (v.kind === "template") {
     checkTemplateRefs(ctx, `${declPath}.template`, v.template, allVars);
   }
-  if (v.kind !== "literal" && v.kind !== "input" && v.kind !== "env") {
+  if (hasCacheField(v)) {
     if (v.cache && "key" in v.cache) {
       checkTemplateRefs(ctx, `${declPath}.cache.key`, v.cache.key, allVars);
     }
@@ -861,7 +910,7 @@ function checkDependsOn(
   v: VariableDecl,
   allVars: Set<string>,
 ): void {
-  if (v.kind === "literal" || v.kind === "input" || v.kind === "env") return;
+  if (!hasCacheField(v)) return;
   if (!v.cache) return;
   if (!("depends_on" in v.cache)) return;
   for (let i = 0; i < v.cache.depends_on.length; i++) {
@@ -1059,7 +1108,7 @@ function buildTemplateGraph(cfg: DslConfig): {
     segCtx?: string,
   ): void => {
     if (v.kind === "template") addTemplateEdges(name, v.template, segCtx);
-    if (v.kind !== "literal" && v.kind !== "input" && v.kind !== "env") {
+    if (hasCacheField(v)) {
       if (v.cache && "key" in v.cache)
         addTemplateEdges(name, v.cache.key, segCtx);
       if (v.cache && "depends_on" in v.cache) {

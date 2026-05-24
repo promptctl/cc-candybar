@@ -3,6 +3,7 @@ import path from "node:path";
 import os from "node:os";
 import { launchSync } from "../proc/launch";
 import { tryClickViaDaemon } from "../daemon/client";
+import type { PermanentOutcome } from "../daemon/client";
 import { obtainDaemonKick } from "../daemon/acquire";
 
 // [LAW:one-source-of-truth] Replaced at build time by tsdown's `define` option
@@ -286,6 +287,17 @@ export function parseHandlerUrl(
   };
 }
 
+// [LAW:single-enforcer] url-handle is a thin IPC shim: parse the URL, send
+// the click request to the daemon, exit. There is NO in-process verb
+// dispatch and NO direct disk mutation. The daemon is the only writer of
+// click-side state ([LAW:one-source-of-truth] for SessionState); kicking a
+// daemon on a transient failure is the only recovery, and it's
+// fire-and-forget so the next click hits a warm daemon.
+//
+// A `permanent` daemon outcome (BAD_REQUEST for an unknown verb,
+// VERSION_MISMATCH against a future daemon) exits non-zero with the daemon's
+// error message so the failure is visible — never silently swallowed by a
+// local fallback that would diverge from the daemon's truth.
 export async function runUrlHandle(rawUrl: string | undefined): Promise<void> {
   if (!rawUrl) {
     process.stderr.write("url-handle: missing URL argument.\n");
@@ -302,96 +314,44 @@ export async function runUrlHandle(rawUrl: string | undefined): Promise<void> {
     process.exit(1);
   }
 
-  // [LAW:dataflow-not-control-flow] Route through daemon first; local fallback
-  // only when daemon is unreachable. Same pattern as render path: daemon-first
-  // with graceful degradation.
-  await runUrlHandleAsync(parsed);
-}
-
-async function runUrlHandleAsync(parsed: ParsedUrl): Promise<void> {
   const outcome = await tryClickViaDaemon(parsed.verb, parsed.value);
   if (outcome.kind === "ok") {
     process.exit(0);
   }
 
-  // [LAW:types-are-the-program] Only `transient` outcomes warrant a daemon
-  // kick — a `permanent` failure (BAD_REQUEST for an unknown verb,
-  // VERSION_MISMATCH against a future daemon, etc.) won't be cured by a
-  // respawn. Local handlers still run either way so the user's click never
-  // silently fails.
   if (outcome.kind === "transient") {
+    // [LAW:dataflow-not-control-flow] Fire-and-forget kick; the user's click
+    // is lost (the daemon couldn't service it), but the next click hits a
+    // warm daemon. Mirrors the render-path's transient recovery.
     obtainDaemonKick();
-  }
-
-  // [LAW:dataflow-not-control-flow] Verb dispatch table — each entry maps a
-  // verb name to a handler that takes the parsed value. Adding a verb means
-  // adding a row, not branching deeper.
-  const handlers: Record<string, (value: string) => void> = {
-    copy: copyToClipboard,
-    "open-vscode": openInVscode,
-    "toolbar-toggle": toggleToolbarExpanded,
-    "theme-cycle": () => {},
-    "style-cycle": () => {},
-  };
-  const handler = handlers[parsed.verb];
-  if (!handler) {
-    process.stderr.write(`url-handle: unknown verb "${parsed.verb}"\n`);
-    process.exit(1);
-  }
-  handler(parsed.value);
-  process.exit(0);
-}
-
-function copyToClipboard(text: string): void {
-  const result = launchSync({
-    bin: "/usr/bin/pbcopy",
-    stdinInput: text,
-    category: "install.pbcopy",
-  });
-  if (!result.ok) {
-    process.stderr.write(`url-handle: pbcopy failed (${result.reason})\n`);
-    process.exit(1);
-  }
-}
-
-// Toggle the per-session flag at ~/.claude/.toolbar-state/<sessionId>.
-// The value is the session id (passed via the cc-candybar:// URL by the toolbar
-// item, e.g. `▸{toolbar-toggle(session.id)}`). Renderer reads this on the
-// next refresh to decide whether to show `?`-prefixed extras for that session.
-function toggleToolbarExpanded(sessionId: string): void {
-  if (!sessionId) {
-    process.stderr.write("toolbar-toggle: empty session id (ignored)\n");
-    return;
-  }
-  // Reject path traversal — sessionId comes from a URL, treat as untrusted.
-  if (sessionId.includes("/") || sessionId.includes("..")) {
-    process.stderr.write(`toolbar-toggle: invalid session id "${sessionId}"\n`);
-    return;
-  }
-  const dir = path.join(os.homedir(), ".claude", ".toolbar-state");
-  const flagPath = path.join(dir, sessionId);
-  if (fs.existsSync(flagPath)) {
-    fs.unlinkSync(flagPath);
-  } else {
-    fs.mkdirSync(dir, { recursive: true });
-    fs.writeFileSync(flagPath, "");
-  }
-}
-
-function openInVscode(target: string): void {
-  // [LAW:no-shared-mutable-globals] /usr/bin/open is a stable system path; -a
-  // delegates app resolution to Launch Services so we don't have to know
-  // where `code` is on PATH at click time.
-  const result = launchSync({
-    bin: "/usr/bin/open",
-    args: ["-a", "Visual Studio Code", target],
-    category: "install.open",
-  });
-  if (!result.ok) {
     process.stderr.write(
-      `url-handle: open -a "Visual Studio Code" failed (${result.reason})\n`,
+      `url-handle: daemon unavailable (${outcome.cause}: ${outcome.message})\n`,
     );
     process.exit(1);
+  }
+
+  // [LAW:dataflow-not-control-flow] Format each permanent cause from its
+  // own typed payload, not by probing for "message" on a generic outcome.
+  // The PermanentOutcome union already discriminates by `cause`; the switch
+  // mirrors that discriminator one-to-one and pulls the right fields.
+  process.stderr.write(formatPermanent(outcome) + "\n");
+  process.exit(1);
+}
+
+// [LAW:single-enforcer] One place that turns a PermanentOutcome into a
+// human-readable diagnostic. Each cause carries its own payload (version
+// mismatch carries the protocol numbers; everything else carries a
+// message); the formatter consumes exactly the fields the cause defines.
+function formatPermanent(outcome: PermanentOutcome): string {
+  switch (outcome.cause) {
+    case "version_mismatch":
+      return `url-handle: daemon rejected click (version mismatch: client v${outcome.clientV} ≠ daemon v${outcome.daemonV})`;
+    case "bad_request":
+      return `url-handle: daemon rejected click (bad request: ${outcome.message})`;
+    case "render_failed":
+      return `url-handle: daemon rejected click (handler failed: ${outcome.message})`;
+    case "malformed_response":
+      return `url-handle: daemon rejected click (malformed response: ${outcome.message})`;
   }
 }
 

@@ -1,6 +1,20 @@
 // [LAW:one-type-per-behavior] One generic store for all per-session state.
 // Adding a new per-session value is just picking a string key — no new class,
 // no DI wiring, no cache invalidation.
+//
+// [LAW:single-enforcer] Reads are MobX-tracked through a single internal atom.
+// Every get() reports observed; every set/clear/prune reports changed. A DSL
+// computed that reads SessionState via this object will re-evaluate whenever
+// any (sessionId, key) pair mutates — coarse-grained on purpose, since
+// session-state mutations are rare (clicks) and computeds are cheap. The
+// alternative — per-key atoms — would be lower-cardinality reactivity at the
+// cost of a much wider API surface; we don't need it.
+//
+// Outside a reactive context (the common case: ad-hoc gets from the segments
+// renderer), atom.reportObserved is a no-op. Tests that construct SessionState
+// without any observer see no change in behavior.
+
+import { createAtom, type IAtom, runInAction } from "mobx";
 
 export interface SessionStateReader {
   get(sessionId: string, key: string): string | null;
@@ -8,9 +22,10 @@ export interface SessionStateReader {
 
 // [LAW:locality-or-seam] Renderer needs to *cache* per-session random picks
 // so subsequent renders are stable. Writing them back into the same store
-// theme-cycle uses keeps state in one place — no parallel cache to drift.
+// click verbs use keeps state in one place — no parallel cache to drift.
 export interface SessionStateRW extends SessionStateReader {
   set(sessionId: string, key: string, value: string): void;
+  clear(sessionId: string, key: string): void;
 }
 
 // Flat, JSON-shaped mirror of the store: sessionId → key → value. This is the
@@ -54,6 +69,10 @@ export class SessionState implements SessionStateReader, SessionStateRW {
   // dependent on an external prune caller.
   private sessions: Map<string, Map<string, string>>;
   private storage: SessionStorage;
+  // [LAW:single-enforcer] One atom; every read reports observed against it,
+  // every mutation reports changed. Coarse-grained reactivity is correct for
+  // session-state's load — mutations are rare and computeds are cheap.
+  private readonly atom: IAtom = createAtom("SessionState");
 
   constructor(
     storage: SessionStorage = EPHEMERAL_STORAGE,
@@ -84,6 +103,9 @@ export class SessionState implements SessionStateReader, SessionStateRW {
   }
 
   get(sessionId: string, key: string): string | null {
+    // [LAW:single-enforcer] reportObserved is the reactive-dep registration —
+    // outside a tracking context (the common direct-read case) it is a no-op.
+    this.atom.reportObserved();
     const session = this.sessions.get(sessionId);
     if (!session) return null;
     // [LAW:dataflow-not-control-flow] A read promotes recency but never
@@ -94,33 +116,42 @@ export class SessionState implements SessionStateReader, SessionStateRW {
   }
 
   set(sessionId: string, key: string, value: string): void {
-    const session = this.sessions.get(sessionId) ?? new Map<string, string>();
-    session.set(key, value);
-    this.touch(sessionId, session);
-    this.evictOldest();
-    this.persist();
+    runInAction(() => {
+      const session = this.sessions.get(sessionId) ?? new Map<string, string>();
+      session.set(key, value);
+      this.touch(sessionId, session);
+      this.evictOldest();
+      this.persist();
+      this.atom.reportChanged();
+    });
   }
 
   clear(sessionId: string, key: string): void {
-    const session = this.sessions.get(sessionId);
-    if (session) {
-      session.delete(key);
-      // An emptied session is a non-state — drop it so it neither occupies a
-      // cap slot nor persists as a `{ "sid": {} }` husk. [LAW:one-source-of-truth]
-      // A surviving session is promoted: every interaction is a recency signal,
-      // uniform with get()/set(). [LAW:one-type-per-behavior]
-      if (session.size === 0) this.sessions.delete(sessionId);
-      else this.touch(sessionId, session);
-    }
-    this.persist();
+    runInAction(() => {
+      const session = this.sessions.get(sessionId);
+      if (session) {
+        session.delete(key);
+        // An emptied session is a non-state — drop it so it neither occupies a
+        // cap slot nor persists as a `{ "sid": {} }` husk. [LAW:one-source-of-truth]
+        // A surviving session is promoted: every interaction is a recency signal,
+        // uniform with get()/set(). [LAW:one-type-per-behavior]
+        if (session.size === 0) this.sessions.delete(sessionId);
+        else this.touch(sessionId, session);
+      }
+      this.persist();
+      this.atom.reportChanged();
+    });
   }
 
   // [LAW:one-source-of-truth] Drop state for sessions that no longer exist.
   prune(activeSessionIds: Set<string>): void {
-    for (const id of this.sessions.keys()) {
-      if (!activeSessionIds.has(id)) this.sessions.delete(id);
-    }
-    this.persist();
+    runInAction(() => {
+      for (const id of this.sessions.keys()) {
+        if (!activeSessionIds.has(id)) this.sessions.delete(id);
+      }
+      this.persist();
+      this.atom.reportChanged();
+    });
   }
 
   // Move-to-end: re-inserting at the tail makes this the most-recently-used.
