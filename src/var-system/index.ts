@@ -19,5 +19,6 @@ export {
   type TimeOptions,
   type GitField,
   type GitOptions,
+  type StateOptions,
   type LastError,
 } from "./sources";

@@ -28,6 +28,7 @@ import { createCcCandybarEngine } from "../template-engine/engine.js";
 import { buildScope } from "../template-engine/scope.js";
 import { GitDataProvider } from "../daemon/cache/git.js";
 import type { GitInfo } from "../segments/git.js";
+import type { SessionStateReader } from "../daemon/session-state.js";
 
 // ─── CachePolicy ─────────────────────────────────────────────────────────────
 
@@ -127,6 +128,22 @@ export interface GitOptions {
   readonly cwd: string;
   readonly varDefault?: VarValue;
 }
+
+// [LAW:one-source-of-truth] state vars read through to SessionState; the
+// reactive contract is owned by SessionState's internal atom. The computed
+// reads the canonical session-id variable (SESSION_ID_VAR_NAME) and
+// dispatches through SessionStateReader.get.
+export interface StateOptions {
+  readonly key: string;
+  readonly varDefault?: string;
+}
+
+// [LAW:one-source-of-truth] The conventional name DSL configs use for the
+// hook payload's session_id input variable. State-kind variables resolve
+// "which session am I in" from this name — no per-decl override.
+// [LAW:no-mode-explosion] One axis of variability less; configs cannot
+// drift on which variable carries the session id.
+export const SESSION_ID_VAR_NAME = "session.id";
 
 // ─── Private infrastructure ───────────────────────────────────────────────────
 
@@ -527,6 +544,11 @@ export class SourceRegistry {
 
   private readonly gitProvider: GitDataProvider;
   private readonly ownsGitProvider: boolean;
+  // [LAW:locality-or-seam] sessionState is injected (not constructed here)
+  // so tests can substitute a fake and the daemon shares its singleton.
+  // Absent in non-daemon contexts; declareState() rejects loudly in that case
+  // rather than silently returning empty strings.
+  private readonly sessionState: SessionStateReader | undefined;
 
   // defaultEmptyValue is the global fallback of last resort — the config-level
   // `default_empty_value` from the proposal. Defaults to empty string.
@@ -534,10 +556,15 @@ export class SourceRegistry {
   // gitProvider lets the daemon inject its shared instance; when omitted (e.g.
   // in tests, or pre-daemon-wired runtimes), a private one is constructed so
   // the registry remains self-contained.
+  //
+  // sessionState lets the daemon inject its singleton so state-kind variables
+  // share one MobX atom and one disk-persistence layer with the click verbs.
+  // Omitted in tests that don't exercise state vars.
   constructor(
     private readonly store: VariableStore,
     private readonly defaultEmptyValue: VarValue = "",
     gitProvider?: GitDataProvider,
+    sessionState?: SessionStateReader,
   ) {
     if (gitProvider) {
       this.gitProvider = gitProvider;
@@ -546,6 +573,7 @@ export class SourceRegistry {
       this.gitProvider = new GitDataProvider({ sanityIntervalMs: 0 });
       this.ownsGitProvider = true;
     }
+    this.sessionState = sessionState;
   }
 
   // ─── Synchronous source kinds ─────────────────────────────────────────────
@@ -738,6 +766,38 @@ export class SourceRegistry {
       sub.fieldSubs.set(opts.field, fieldList);
     }
     fieldList.push({ name, varDefault: opts.varDefault });
+  }
+
+  // state: read-through to SessionState. The computed reads two deps — the
+  // canonical session-id input variable (SESSION_ID_VAR_NAME, refreshed per
+  // render from input) and SessionState itself (MobX-tracked via its
+  // internal atom). A click verb that mutates SessionState invalidates this
+  // computed; a sessionId change (per-render) also invalidates it.
+  // Persistence rides on SessionState's disk backing — no extra wiring.
+  //
+  // [LAW:dataflow-not-control-flow] Same body every evaluation; values
+  // determine the result, never whether code runs.
+  declareState(name: string, opts: StateOptions): void {
+    if (!this.sessionState) {
+      throw new Error(
+        `declareState("${name}"): SourceRegistry was constructed without a SessionState — ` +
+          `state-kind variables require a SessionState (the daemon provides one; tests must supply one)`,
+      );
+    }
+    const sessionState = this.sessionState;
+    const fallback = opts.varDefault ?? this.stringInitial(undefined);
+    this.store.defineComputed(name, "string", (read) => {
+      // [LAW:types-are-the-program] By convention session.id is declared as
+      // a string-typed input variable. The var-system's type discipline
+      // (assertType in store.ts) enforces that at declaration; we read its
+      // value as a string here. A user who redeclares session.id as a
+      // non-string variable receives empty state lookups — the failure
+      // mode is loud-by-absence rather than silently coerced.
+      const sessionId = read(SESSION_ID_VAR_NAME);
+      if (typeof sessionId !== "string" || !sessionId) return fallback;
+      const value = sessionState.get(sessionId, opts.key);
+      return value !== null ? value : fallback;
+    });
   }
 
   // ─── Render-cycle driver ──────────────────────────────────────────────────
