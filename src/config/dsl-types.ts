@@ -42,7 +42,8 @@ export type VariableDecl =
   | ShellVarDecl
   | TemplateVarDecl
   | TimeVarDecl
-  | GitVarDecl;
+  | GitVarDecl
+  | StateVarDecl;
 
 export interface LiteralVarDecl {
   readonly kind: "literal";
@@ -100,6 +101,25 @@ export interface GitVarDecl {
   readonly default?: string;
 }
 
+// [LAW:one-source-of-truth] A `state` variable reads through to the daemon's
+// SessionState (the canonical store for per-session toggles, random picks,
+// click-mutated values). Reactivity is wired by SessionState's internal MobX
+// atom — a click verb that writes into SessionState invalidates this
+// variable's downstream computeds automatically. Persistence rides for free
+// on SessionState's disk backing.
+//
+// The session id is resolved from the conventional `session.id` variable —
+// that name is the canonical anchor for "which session am I in," declared
+// once by DSL configs as an input variable carrying hook_data.session_id.
+// [LAW:no-mode-explosion] No per-decl override knob: a single canonical
+// session-id source keeps every state var's resolution uniform and removes
+// an axis along which configs could drift from each other.
+export interface StateVarDecl {
+  readonly kind: "state";
+  readonly key: string;
+  readonly default?: string;
+}
+
 export type GitField =
   | "branch"
   | "sha"
@@ -137,8 +157,30 @@ export const SOURCE_KINDS = [
   "template",
   "time",
   "git",
+  "state",
 ] as const;
 export type SourceKind = (typeof SOURCE_KINDS)[number];
+
+// [LAW:one-source-of-truth] The "which kinds have a cache field" predicate
+// lives here once. The loader's cross-ref and cycle validators narrow via
+// this guard instead of repeating the kind list (`!== "literal" && !==
+// "input" && ...`) at every site — adding a new no-cache kind only requires
+// updating the union and this guard.
+export type VariableDeclWithCache =
+  | FileVarDecl
+  | ShellVarDecl
+  | TemplateVarDecl
+  | TimeVarDecl
+  | GitVarDecl;
+
+export function hasCacheField(v: VariableDecl): v is VariableDeclWithCache {
+  return (
+    v.kind !== "literal" &&
+    v.kind !== "input" &&
+    v.kind !== "env" &&
+    v.kind !== "state"
+  );
+}
 
 export const GIT_FIELDS: readonly GitField[] = [
   "branch",
