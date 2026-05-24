@@ -17,7 +17,14 @@
 import type { SegmentName } from "../../src/config/loader";
 import type { DslBinding } from "./harness";
 import { VariableStore } from "../../src/var-system/store";
-import { HOOK_DATA, GIT_INFO, SESSION_ID, TMUX_SESSION_ID, ENV_VAR } from "./fixtures";
+import {
+  HOOK_DATA,
+  GIT_INFO,
+  SESSION_ID,
+  TMUX_SESSION_ID,
+  ENV_VAR,
+  THEME,
+} from "./fixtures";
 
 function seeded(seed: (s: VariableStore) => void): () => VariableStore {
   return () => {
@@ -194,6 +201,54 @@ export const DSL_BINDINGS = {
       s.defineBox("git.upstream", "string", GIT_INFO.upstream ?? "");
       s.defineBox("git.stash", "number", GIT_INFO.stashCount ?? 0);
       s.defineBox("git.status", "string", GIT_INFO.status);
+    }),
+  },
+
+  // [LAW:single-enforcer] The toolbar binding emits OSC8-clickable items
+  // through the canonical `link` template function (registered by rich-js).
+  // Each top-level link is a separate cell with style.link set; cells.ts
+  // splits at link boundaries and the rich-js serializer wraps each cell
+  // in its OSC8 escape. Legacy renderToolbar pre-bakes OSC8 escape bytes
+  // into a single segment's text via wrapOsc8; both producers end at
+  // renderStripCells, and byte-parity verifies the multi-cell path emits
+  // the same sequence the embedded form does.
+  //
+  // [LAW:dataflow-not-control-flow] The toolbar fixture has only non-extra
+  // items (no `?` prefix), so the toolbar-expanded gate is data the test
+  // does not exercise. A larger fixture (with extras) would gate via
+  // `{{ if .toolbar.expanded }}…{{ end }}` reading the state.<key> var.
+  //
+  // URL encoding mirrors legacy: encodeURIComponent on every value.
+  // session.id:8 in legacy maps to `trunc 8 .session.id`.
+  toolbar: {
+    decl: {
+      template:
+        ' {{ link (printf "cc-candybar://open-vscode/%s" (urlEncode .current_dir)) "\u{1F4C2}" }}' +
+        ' {{ link (printf "cc-candybar://copy/%s" (urlEncode (trunc 8 .session.id))) "⎘" }} ',
+      bg: "surface",
+      fg: "foreground",
+    },
+    store: seeded((s) => {
+      s.defineBox("session.id", "string", SESSION_ID);
+      s.defineBox("current_dir", "string", HOOK_DATA.workspace.current_dir);
+    }),
+  },
+
+  // [LAW:one-type-per-behavior] Tray is the toolbar with extras-gating
+  // unconditionally off (see renderTray's comment). The DSL declaration
+  // is therefore structurally identical to toolbar's; only the URL verbs
+  // and visible glyphs differ.
+  tray: {
+    decl: {
+      template:
+        ' {{ link (printf "cc-candybar://open-url/%s" (urlEncode .theme)) "\u{1F514}" }}' +
+        ' {{ link (printf "cc-candybar://copy/%s" (urlEncode (trunc 8 .session.id))) "⚙" }} ',
+      bg: "surface",
+      fg: "foreground",
+    },
+    store: seeded((s) => {
+      s.defineBox("session.id", "string", SESSION_ID);
+      s.defineBox("theme", "string", THEME);
     }),
   },
 } satisfies Partial<Record<SegmentName, DslBinding>>;

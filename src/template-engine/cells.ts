@@ -3,13 +3,18 @@
 // it becomes a cell or joiner content. No control-flow branching on "are
 // there any cells" — variability lives entirely in the data.
 //
-// Cell-splitting algorithm per rich-js spec/template-bindings.md:
+// Cell-splitting algorithm:
 //   1. Iterate RichText[] left-to-right.
-//   2. fragment.style.link truthy → emit as StripCell.
-//   3. Otherwise → accumulate as joiner (inter-cell styled text).
-//   4. Leading joiner fragments before a link cell are prepended to that cell.
-//   5. The trailing joiner run (or the entire output if no links) coalesces
-//      into cells, split at background-color changes — see coalescePlainRun.
+//   2. fragment.style.link truthy → flush pending joiner run, emit fragment
+//      as its own StripCell.
+//   3. Otherwise → accumulate as joiner.
+//   4. End of input → flush final joiner run.
+// Joiner runs are flushed through coalescePlainRun (splits at bg changes).
+//
+// [LAW:types-are-the-program] A StripCell with style.link is the type asserting
+// "my entire content is clickable". Joiners — unlinked plain text — are never
+// absorbed into a link cell, because that would make the claim false for the
+// joiner range. Joiners always form their own cells.
 
 import { StripCell, Style } from "@promptctl/rich-js";
 import type { Span, StripCellPart, RichText } from "@promptctl/rich-js";
@@ -25,17 +30,14 @@ export function fragmentsToStripCells(fragments: RichText[]): StripCell[] {
 
   for (const fragment of fragments) {
     if (fragment.style.link) {
-      cells.push(mergeThenConvert(joiners, fragment));
+      cells.push(...coalescePlainRun(joiners));
       joiners = [];
+      cells.push(richTextToCell(fragment));
     } else {
       joiners.push(fragment);
     }
   }
 
-  // [LAW:one-type-per-behavior] Plain fragments continue the current cell;
-  // only a background change (or a link) starts a new one. Earlier runs are
-  // absorbed into the link they precede (mergeThenConvert); this is the
-  // terminal run, which has no following link to absorb it.
   cells.push(...coalescePlainRun(joiners));
 
   return cells;
@@ -109,33 +111,7 @@ function groupToCell(group: RichText[]): StripCell | null {
     : new StripCell(text, cellStyle);
 }
 
-// Merge accumulated joiner fragments + a link-bearing fragment into one cell.
-// The link fragment's style governs the cell level (carries link, fg, bg, attrs).
-// Joiner text is prepended to the link fragment's text, sharing the cell style.
-function mergeThenConvert(
-  joiners: RichText[],
-  linkFragment: RichText,
-): StripCell {
-  if (!joiners.length) return richTextToCell(linkFragment);
-
-  // Build a combined text: concatenate plain texts from joiners + link fragment.
-  // Spans from the link fragment are offset by the joiner text length.
-  const joinerText = joiners.map((j) => j.plain).join("");
-  const offset = joinerText.length;
-  const allParts = buildPartsFromPrependedJoiners(
-    joinerText,
-    linkFragment.plain,
-    linkFragment.spans,
-    offset,
-  );
-
-  if (!allParts.length || (allParts.length === 1 && !allParts[0]!.style)) {
-    return new StripCell(joinerText + linkFragment.plain, linkFragment.style);
-  }
-  return new StripCell(allParts, linkFragment.style);
-}
-
-// Convert a single RichText (no link) to a StripCell.
+// Convert a single RichText fragment to a StripCell.
 function richTextToCell(fragment: RichText): StripCell {
   const cellStyle = fragment.style;
   const plain = fragment.plain;
@@ -147,20 +123,6 @@ function richTextToCell(fragment: RichText): StripCell {
 
   const parts = spansToStripCellParts(plain, spans, 0);
   return new StripCell(parts, cellStyle);
-}
-
-// Build StripCellPart[] for a merged (joiner + link-fragment) cell.
-// joinerText is plain and unstyled; link-fragment spans are shifted by `offset`.
-function buildPartsFromPrependedJoiners(
-  joinerText: string,
-  linkPlain: string,
-  linkSpans: readonly Span[],
-  offset: number,
-): StripCellPart[] {
-  const combined = joinerText + linkPlain;
-  if (!linkSpans.length) return [{ text: combined }];
-
-  return spansToStripCellParts(combined, linkSpans, offset);
 }
 
 // Decompose text + spans (offset-adjusted) into StripCellPart[].

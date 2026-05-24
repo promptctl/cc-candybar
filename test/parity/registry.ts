@@ -161,7 +161,7 @@ export const PARITY_REGISTRY: Record<SegmentName, SegmentParityEntry> = {
       r.renderWeekly(HOOK_DATA, c, { enabled: true, displayStyle: "text" }),
   },
   toolbar: {
-    status: "legacy-only",
+    status: "dsl-parity",
     legacy: (r, c) =>
       r.renderToolbar(
         {
@@ -175,9 +175,10 @@ export const PARITY_REGISTRY: Record<SegmentName, SegmentParityEntry> = {
         c,
         TOOLBAR_CTX,
       ),
+    dsl: DSL_BINDINGS.toolbar,
   },
   tray: {
-    status: "legacy-only",
+    status: "dsl-parity",
     legacy: (r, c) =>
       r.renderTray(
         {
@@ -191,5 +192,6 @@ export const PARITY_REGISTRY: Record<SegmentName, SegmentParityEntry> = {
         c,
         TOOLBAR_CTX,
       ),
+    dsl: DSL_BINDINGS.tray,
   },
 };

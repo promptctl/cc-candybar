@@ -7,7 +7,7 @@
 // is not a branch that skips logic — it is a value that makes the step return
 // the input unchanged.
 
-import { StripCell, cellLen, splitText } from "@promptctl/rich-js";
+import { StripCell, cellLen, splitText, asCellCol } from "@promptctl/rich-js";
 import type { RichText, Style } from "@promptctl/rich-js";
 import type { Template } from "@promptctl/go-template-js";
 
@@ -143,7 +143,7 @@ function keepFromLeft(cells: StripCell[], budget: number): StripCell[] {
       result.push(cell);
       remaining -= w;
     } else {
-      const [left] = splitText(cell.text, remaining);
+      const [left] = splitText(cell.text, asCellCol(remaining));
       if (left) result.push(new StripCell(left, cell.style));
       remaining = 0;
     }
@@ -169,7 +169,7 @@ function keepFromRight(cells: StripCell[], budget: number): StripCell[] {
       remaining -= w;
     } else {
       // Take the right `remaining` columns: split at (w - remaining) from left.
-      const [, right] = splitText(cell.text, w - remaining);
+      const [, right] = splitText(cell.text, asCellCol(w - remaining));
       if (right) result.unshift(new StripCell(right, cell.style));
       remaining = 0;
     }
