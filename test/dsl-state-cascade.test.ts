@@ -8,6 +8,7 @@
 // src/daemon/verbs/index.ts directly. That is the same handler the daemon
 // invokes for a wire-level click; no duplication.
 
+import { autorun } from "mobx";
 import { PaletteResolver } from "@promptctl/rich-js";
 import { parseDslConfig } from "../src/config/dsl-loader";
 import { VariableStore } from "../src/var-system/store";
@@ -100,6 +101,117 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
 
     VERBS["set-theme"]!(`${SESSION_ID}/dracula`, ctx);
     expect(render()).toContain("theme=dracula");
+  });
+
+  test("cascade triggers a reactive observer, not just a fresh render-time read", () => {
+    // [LAW:behavior-not-structure] The "set-theme click verb propagates"
+    // test above asserts the rendered string carries the new value — true
+    // whenever renderDslLine sees the new value at next read, which can
+    // happen via two different mechanisms:
+    //   (a) atom.reportChanged() invalidated the computed; the next read
+    //       re-derives through the dep graph (the intended contract); or
+    //   (b) the computed's keepAlive cache was bypassed for some other
+    //       reason (e.g. an unobserved-computed re-derive on access).
+    // Wrapping store.read("theme") in an `autorun` forces (a) to be the
+    // only path that can produce a second observation: autoruns fire only
+    // when a tracked dep invalidates. If SessionState.set ever stops
+    // calling atom.reportChanged(), this test stalls at one observation.
+    const { store, registry, sessionState } = buildRuntime();
+    registry.applyInput(HOOK_DATA);
+
+    const observed: string[] = [];
+    const dispose = autorun(() => {
+      observed.push(String(store.read("theme")));
+    });
+    // [LAW:no-defensive-null-guards] try/finally is not defensive — it is
+    // the type-level guarantee that the autorun cannot outlive this test
+    // even when the assertions throw (which is the *point* of a regression
+    // test: when a fault is reintroduced, expectations fail here, and a
+    // dangling reaction in the global MobX scheduler would then leak into
+    // subsequent tests). Same shape as a using-block / RAII guard.
+    try {
+      expect(observed).toEqual(["(unset)"]);
+
+      const ctx = { sessionState, dlog: () => {} };
+      VERBS["set-theme"]!(`${SESSION_ID}/nord`, ctx);
+
+      // Exactly one additional fire — proves the dep graph propagated the
+      // change rather than the autorun being scheduled for an unrelated
+      // reason or the observation count drifting.
+      expect(observed).toEqual(["(unset)", "nord"]);
+    } finally {
+      dispose();
+    }
+  });
+
+  test("two state vars: mutation propagates only to its dependent observer", () => {
+    // [LAW:behavior-not-structure] Pins both directions of the coarse-atom
+    // trade-off documented in session-state.ts:
+    //   - cascade reach: a mutation to one key must still reach computeds
+    //     that read that key (the atom can't be too narrow).
+    //   - memo suppression: a mutation to one key must NOT re-fire
+    //     observers of unrelated computeds whose derived value is unchanged
+    //     (MobX's value-equality comparer on computed results is what makes
+    //     the coarse atom acceptable in the first place).
+    // The single-segment / single-state-var fixture above can't separate
+    // those: it has no second observer to misbehave. This test adds one.
+    const config = parseDslConfig(
+      "<test>",
+      `{
+        globals: {},
+        variables: {
+          'session.id': { kind: 'input', path: 'session_id', default: '' },
+          theme: { kind: 'state', key: 'theme', default: '(unset)' },
+          expanded: { kind: 'state', key: 'toolbar-expanded', default: '' },
+        },
+        segments: {
+          themeSeg: { template: '{{ .theme }}', bg: 'surface', fg: 'foreground' },
+          tbSeg: { template: '{{ .expanded }}', bg: 'surface', fg: 'foreground' },
+        },
+        layout: ['themeSeg', 'tbSeg'],
+      }`,
+      ALLOWED_PALETTES,
+    );
+    const sessionState = new SessionState();
+    const store = new VariableStore();
+    const registry = new SourceRegistry(store, "", undefined, sessionState);
+    registerDslConfig(config, registry);
+    registry.applyInput(HOOK_DATA);
+
+    const themeObs: string[] = [];
+    const expandedObs: string[] = [];
+    const disposeTheme = autorun(() => {
+      themeObs.push(String(store.read("theme")));
+    });
+    const disposeExp = autorun(() => {
+      expandedObs.push(String(store.read("expanded")));
+    });
+    // [LAW:no-defensive-null-guards] try/finally is the type-level
+    // guarantee that both autoruns are disposed even when the
+    // assertions throw — see the same note on the test above.
+    try {
+      expect(themeObs).toEqual(["(unset)"]);
+      expect(expandedObs).toEqual([""]);
+
+      const ctx = { sessionState, dlog: () => {} };
+      VERBS["set-theme"]!(`${SESSION_ID}/nord`, ctx);
+
+      // Watched key advanced — cascade reached the right computed.
+      expect(themeObs).toEqual(["(unset)", "nord"]);
+      // Unrelated key: the atom invalidated the `expanded` computed too
+      // (coarse-grained reactivity), but it re-derived to the same fallback
+      // "" — MobX's value comparer suppresses propagation to this observer.
+      expect(expandedObs).toEqual([""]);
+
+      // Sanity: a mutation to the OTHER state key fires the expanded
+      // observer (cascade is not over-suppressed).
+      sessionState.set(SESSION_ID, "toolbar-expanded", "1");
+      expect(expandedObs).toEqual(["", "1"]);
+      expect(themeObs).toEqual(["(unset)", "nord"]);
+    } finally {
+      disposeTheme();
+      disposeExp();
+    }
   });
 
   test("set-theme rejects an unknown theme name (BadVerbArgs)", () => {
