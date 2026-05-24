@@ -59,11 +59,18 @@ describe("single-cell segments", () => {
 // ────────────────────────────────────────────────────────────────
 
 describe("multi-cell toolbar shape", () => {
-  test("two top-level link calls produce two cells", () => {
+  test("two top-level link calls with a joiner between produce link + plain + link", () => {
+    // The inter-link space is unlinked plain text; it becomes its own cell rather
+    // than being absorbed into either neighbour. Same reasoning as the
+    // "leading joiner" test below.
     const cells = evalCells('{{ link "http://a" "A" }} {{ link "http://b" "B" }}');
-    expect(cells).toHaveLength(2);
+    expect(cells).toHaveLength(3);
     expect(cells[0]!.style.link).toBe("http://a");
-    expect(cells[1]!.style.link).toBe("http://b");
+    expect(cells[0]!.text).toBe("A");
+    expect(cells[1]!.style.link).toBeUndefined();
+    expect(cells[1]!.text).toBe(" ");
+    expect(cells[2]!.style.link).toBe("http://b");
+    expect(cells[2]!.text).toBe("B");
   });
 
   test("link cell text is correct", () => {
@@ -73,22 +80,33 @@ describe("multi-cell toolbar shape", () => {
     expect(cells[0]!.style.link).toBe("http://x");
   });
 
-  test("three link calls produce three cells", () => {
+  test("three link calls separated by joiners produce link/plain/link/plain/link", () => {
+    // Five cells, not three: the inter-link spaces are plain cells. The link
+    // boundary is determined by the fragment's style.link, not by what's
+    // adjacent to it.
     const cells = evalCells(
       '{{ link "u1" "A" }} {{ link "u2" "B" }} {{ link "u3" "C" }}'
     );
-    expect(cells).toHaveLength(3);
+    expect(cells).toHaveLength(5);
     expect(cells[0]!.style.link).toBe("u1");
-    expect(cells[1]!.style.link).toBe("u2");
-    expect(cells[2]!.style.link).toBe("u3");
+    expect(cells[1]!.style.link).toBeUndefined();
+    expect(cells[2]!.style.link).toBe("u2");
+    expect(cells[3]!.style.link).toBeUndefined();
+    expect(cells[4]!.style.link).toBe("u3");
   });
 
-  test("leading joiner text prepends to first link cell", () => {
-    // Joiner text before the first link is prepended to the link cell text.
+  test("leading joiner becomes its own plain cell, separate from the link", () => {
+    // [LAW:types-are-the-program] A StripCell with style.link asserts "my whole
+    // content is clickable". Unlinked prefix text must NOT be absorbed into the
+    // link cell — that would make the type's claim false (and would render the
+    // prefix clickable when the template never said so). The joiner becomes its
+    // own plain cell, the link is its own cell.
     const cells = evalCells('prefix {{ link "u" "item" }}');
-    expect(cells).toHaveLength(1);
-    expect(cells[0]!.text).toBe("prefix item");
-    expect(cells[0]!.style.link).toBe("u");
+    expect(cells).toHaveLength(2);
+    expect(cells[0]!.text).toBe("prefix ");
+    expect(cells[0]!.style.link).toBeUndefined();
+    expect(cells[1]!.text).toBe("item");
+    expect(cells[1]!.style.link).toBe("u");
   });
 
   test("trailing plain text after last link becomes its own plain cell", () => {

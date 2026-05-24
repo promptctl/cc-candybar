@@ -166,6 +166,34 @@ describe("path functions", () => {
 });
 
 // ────────────────────────────────────────────────────────────────
+// 4b. URL-encoding (cc-candybar custom)
+// ────────────────────────────────────────────────────────────────
+
+// [LAW:single-enforcer] urlEncode mirrors encodeURIComponent — the same
+// function the legacy SegmentRenderer.renderToolbar uses when constructing
+// cc-candybar:// click URLs. Templates that build URLs from path-shaped
+// values (`.cwd`, `.session.id`, etc.) need this to produce URLs that
+// byte-match the legacy form. Surfaced by the chunk-7 toolbar/tray DSL
+// migration (lit brandon-segment-dsl-protocol-vhi.3).
+describe("urlEncode", () => {
+  test("encodes path separators and reserved characters", () => {
+    expect(evalText('{{ urlEncode "/work/acme/src" }}', {})).toBe(
+      "%2Fwork%2Facme%2Fsrc",
+    );
+  });
+
+  test("passes alphanumeric strings through unchanged", () => {
+    expect(evalText('{{ urlEncode "0a1b2c3d" }}', {})).toBe("0a1b2c3d");
+  });
+
+  test("piped from field", () => {
+    expect(
+      evalText("{{ urlEncode .cwd }}", { cwd: "/home/user space/x" }),
+    ).toBe("%2Fhome%2Fuser%20space%2Fx");
+  });
+});
+
+// ────────────────────────────────────────────────────────────────
 // 5. Cast functions (int / string / bool)
 // ────────────────────────────────────────────────────────────────
 
@@ -282,7 +310,14 @@ describe("error cases", () => {
 describe("ccCandybarFuncs registry", () => {
   test("registers exactly the expected names", () => {
     const funcs = ccCandybarFuncs();
-    expect(Object.keys(funcs).sort()).toEqual(["basename", "bool", "dirname", "int", "string"]);
+    expect(Object.keys(funcs).sort()).toEqual([
+      "basename",
+      "bool",
+      "dirname",
+      "int",
+      "string",
+      "urlEncode",
+    ]);
   });
 
   test("all entries have argTypes array", () => {
