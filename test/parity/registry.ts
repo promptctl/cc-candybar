@@ -160,6 +160,13 @@ export const PARITY_REGISTRY: Record<SegmentName, SegmentParityEntry> = {
     legacy: (r, c) =>
       r.renderWeekly(HOOK_DATA, c, { enabled: true, displayStyle: "text" }),
   },
+  // [LAW:single-enforcer] Status stays "legacy-only" (parity assertion skipped)
+  // until rich-js ticket `rich-strip-render-d5z` (tree-based SGR coalescing)
+  // lands. The DSL binding is wired and the declaration is correct; byte-parity
+  // fails today because rich-js emits per-cell SGR pairs around multi-cell link
+  // segments and auto-increments OSC8 `id=N`, producing structurally different
+  // bytes than legacy renderToolbar/renderTray's single embedded-OSC8 cell.
+  // Flipping to "dsl-parity" becomes a one-line change once rich-js coalesces.
   toolbar: {
     status: "legacy-only",
     legacy: (r, c) =>
@@ -175,6 +182,7 @@ export const PARITY_REGISTRY: Record<SegmentName, SegmentParityEntry> = {
         c,
         TOOLBAR_CTX,
       ),
+    dsl: DSL_BINDINGS.toolbar,
   },
   tray: {
     status: "legacy-only",
@@ -191,5 +199,6 @@ export const PARITY_REGISTRY: Record<SegmentName, SegmentParityEntry> = {
         c,
         TOOLBAR_CTX,
       ),
+    dsl: DSL_BINDINGS.tray,
   },
 };
