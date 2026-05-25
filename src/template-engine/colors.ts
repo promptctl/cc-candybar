@@ -5,7 +5,8 @@
 // [LAW:dataflow-not-control-flow] Steps execute unconditionally; the option
 // values (undefined template = no spec) are what decides the output, not
 // whether steps run. Absent bg or fg → Style fields are undefined → Style.isNull
-// → applySegmentLayout passes cells through unchanged.
+// → fragmentsToStripCells's baseStyle merge is a no-op, cells flow through
+// unchanged.
 
 import { Style, ColorSpec } from "@promptctl/rich-js";
 import type { ColorRgba, PaletteResolver } from "@promptctl/rich-js";
@@ -27,8 +28,8 @@ export class ColorSpecError extends Error {
 }
 
 /**
- * Resolve per-segment bg and fg template strings into a Style for defaultStyle
- * injection in applySegmentLayout().
+ * Resolve per-segment bg and fg template strings into a Style for baseStyle
+ * injection in fragmentsToStripCells().
  *
  * Pipeline:
  *   1. Evaluate bgTemplate → plain text color-spec string.

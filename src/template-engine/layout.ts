@@ -1,11 +1,20 @@
-// [LAW:single-enforcer] All per-segment layout enforcement — width/justify/
-// truncate and the bg/fg default-style cascade — runs through applySegmentLayout.
-// No second path; two paths would silently drift.
+// [LAW:single-enforcer] All per-segment width/justify/truncate enforcement
+// runs through applySegmentLayout. No second path; two paths would silently
+// drift.
 //
 // [LAW:dataflow-not-control-flow] Every step is unconditional; option values
 // (width, justify, truncate) are the data that drives the output. "auto" width
 // is not a branch that skips logic — it is a value that makes the step return
 // the input unchanged.
+//
+// The bg/fg default-style cascade is applied at cell construction time in
+// `fragmentsToStripCells(fragments, baseStyle)`, not by rebuilding cells here.
+// But layout ALSO synthesizes new cells (pad spaces for justify, truncate
+// marker glyph) — those new cells need the same segment baseStyle so the
+// PowerlineJoiner sees one continuous bg run across the segment and the marker
+// glyph is rendered in segment fg, not as an unstyled gap. `baseStyle` flows
+// into layout for that single, narrow purpose: filling cells layout itself
+// creates. Existing cells flow through with their own style intact.
 
 import { StripCell, cellLen, splitText, asCellCol } from "@promptctl/rich-js";
 import type { RichText, Style } from "@promptctl/rich-js";
@@ -21,19 +30,16 @@ export interface SegmentLayoutOptions {
   justify: JustifyMode;
   /** Overflow strategy when content exceeds a fixed width. Ignored when "auto". */
   truncate: TruncateMode;
-  /**
-   * Base style applied beneath each cell's own style.
-   * Build from resolved global/segment bg+fg defaults:
-   *   Style.fromColor(resolvedFg, resolvedBg)
-   * Cell-level style wins per Style.add() semantics (cell fields override base).
-   *
-   * Note: cells with internal span structure (StripCellPart[]) lose those spans
-   * when a new StripCell is constructed here because parts are private on
-   * StripCell. Plain-text cells (no parts) are fully preserved.
-   */
-  defaultStyle?: Style;
   /** Glyph appended/prepended/inserted at the overflow cut point. Default "…". */
   truncateMarker?: string;
+  /**
+   * Style for cells layout itself synthesizes — padding spaces and the
+   * truncate marker. Existing cells flow through with their own style; this
+   * fills only the new ones. Pass the same resolved segment baseStyle used
+   * for `fragmentsToStripCells(fragments, baseStyle)` so the PowerlineJoiner
+   * sees one continuous bg run across the whole segment.
+   */
+  baseStyle?: Style;
 }
 
 /**
@@ -58,38 +64,29 @@ export function evaluateWhen(
  * fragmentsToStripCells().
  *
  * Steps (always executed in order; values govern output, not whether steps run):
- *   1. Merge defaultStyle beneath each cell's own style.
- *   2. "auto" width → return styled cells as-is.
- *   3. Fixed width → truncate on overflow or pad for justification.
+ *   1. "auto" width → return cells as-is.
+ *   2. Fixed width → truncate on overflow or pad for justification.
+ *
+ * Existing cells flow through with their own style (baked in upstream by
+ * `fragmentsToStripCells(fragments, baseStyle)`). New cells synthesized here
+ * (pad spaces, truncate marker) inherit `options.baseStyle` so the segment's
+ * bg/fg is continuous across them.
  */
 export function applySegmentLayout(
   cells: StripCell[],
   options: SegmentLayoutOptions,
 ): StripCell[] {
-  const {
-    width,
-    justify,
-    truncate,
-    defaultStyle,
-    truncateMarker = "…",
-  } = options;
+  const { width, justify, truncate, truncateMarker = "…", baseStyle } = options;
 
-  // Step 1: apply default style.
-  // defaultStyle.add(cellStyle) → cell wins for any field it explicitly sets.
-  const styled =
-    defaultStyle !== undefined && !defaultStyle.isNull
-      ? cells.map((c) => new StripCell(c.text, defaultStyle.add(c.style)))
-      : cells;
+  // Step 1: "auto" — content-sized, no constraint.
+  if (width === "auto") return cells;
 
-  // Step 2: "auto" — content-sized, no constraint.
-  if (width === "auto") return styled;
-
-  // Step 3: fixed width — measure, then truncate or pad.
-  const total = totalCellWidth(styled);
+  // Step 2: fixed width — measure, then truncate or pad.
+  const total = totalCellWidth(cells);
 
   return total > width
-    ? truncateCells(styled, width, truncate, truncateMarker)
-    : padCells(styled, width, justify, total);
+    ? truncateCells(cells, width, truncate, truncateMarker, baseStyle)
+    : padCells(cells, width, justify, total, baseStyle);
 }
 
 // ─── Width measurement ───────────────────────────────────────────────────────
@@ -105,10 +102,11 @@ function truncateCells(
   targetWidth: number,
   mode: TruncateMode,
   marker: string,
+  baseStyle: Style | undefined,
 ): StripCell[] {
   const markerWidth = cellLen(marker);
   const budget = Math.max(0, targetWidth - markerWidth);
-  const markerCell = new StripCell(marker);
+  const markerCell = new StripCell(marker, baseStyle);
 
   if (mode === "right") {
     return [...keepFromLeft(cells, budget), markerCell];
@@ -131,6 +129,19 @@ function truncateCells(
 /**
  * Take cells from the left, up to `budget` terminal columns.
  * The boundary cell's text is sliced via splitText() if it partially fits.
+ *
+ * [LAW:types-are-the-program] Known limitation: when the boundary cell is
+ * parts-based (heterogeneous per-part fg/attrs under a shared cell-level
+ * bg — only gitTaculous-shaped segments today), the slice rebuilds as
+ * `new StripCell(splitText(cell.text), cell.style)`, where `cell.style`
+ * carries only the cell-level bgcolor. Per-part fg/attrs are dropped on
+ * the cut. rich-js's StripCell does not expose `_parts` publicly, so
+ * slicing parts directly is not available. `groupToCell` already collapses
+ * uniform-style multi-fragment groups to single-text cells (the common
+ * case), so this affects ONLY segments that have *genuinely heterogeneous*
+ * fg AND a fixed width that triggers truncation through a styled run —
+ * no current segment configures that combination. Behavior is pinned by
+ * `test/segment-layout.test.ts` (truncation through parts-based cell).
  */
 function keepFromLeft(cells: StripCell[], budget: number): StripCell[] {
   let remaining = budget;
@@ -155,6 +166,9 @@ function keepFromLeft(cells: StripCell[], budget: number): StripCell[] {
 /**
  * Take cells from the right, up to `budget` terminal columns.
  * The boundary cell's text is sliced via splitText() if it partially fits.
+ *
+ * Same parts-based-cell limitation as keepFromLeft applies on the right
+ * boundary; see that function's comment for details.
  */
 function keepFromRight(cells: StripCell[], budget: number): StripCell[] {
   let remaining = budget;
@@ -185,11 +199,12 @@ function padCells(
   targetWidth: number,
   justify: JustifyMode,
   currentWidth: number,
+  baseStyle: Style | undefined,
 ): StripCell[] {
   const padAmount = targetWidth - currentWidth;
   if (padAmount <= 0) return cells;
 
-  const pad = (n: number) => new StripCell(" ".repeat(n));
+  const pad = (n: number) => new StripCell(" ".repeat(n), baseStyle);
 
   if (justify === "left") return [...cells, pad(padAmount)];
   if (justify === "right") return [pad(padAmount), ...cells];

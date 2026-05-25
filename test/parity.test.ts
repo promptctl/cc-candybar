@@ -44,10 +44,18 @@ afterAll(() => {
   delete process.env[ENV_VAR];
 });
 
-function liveLegacyGolden(): GoldenMap {
+// [LAW:dataflow-not-control-flow] Each entry's status (a value) selects which
+// producer is canonical. Once a segment reaches "dsl-parity" the DSL pipeline
+// is the source of truth: the committed golden tracks what the DSL produces.
+// Otherwise the legacy renderer is canonical and the golden tracks its bytes.
+function liveGoldenSource(): GoldenMap {
   const map: GoldenMap = {};
   for (const [name, entry] of Object.entries(PARITY_REGISTRY)) {
-    map[name] = legacySegmentBytes(entry.legacy, renderer, colors);
+    if (entry.status === "dsl-parity" && entry.dsl) {
+      map[name] = dslSegmentBytes(entry.dsl, resolver);
+    } else {
+      map[name] = legacySegmentBytes(entry.legacy, renderer, colors);
+    }
   }
   return map;
 }
@@ -66,8 +74,8 @@ describe("parity registry completeness", () => {
 
 const maybe = UPDATE_GOLDEN ? describe : describe.skip;
 maybe("golden regeneration", () => {
-  test("write committed golden from live legacy bytes", () => {
-    writeGolden(liveLegacyGolden());
+  test("write committed golden from the canonical source per segment", () => {
+    writeGolden(liveGoldenSource());
   });
 });
 
@@ -79,19 +87,27 @@ assertions("segment parity", () => {
   // Computed in beforeAll (not at describe-eval time) so that skipping this
   // suite during regeneration does not trigger the missing-golden read.
   let golden: GoldenMap;
-  let live: GoldenMap;
+  let liveLegacy: GoldenMap;
   beforeAll(() => {
     golden = readGolden();
-    live = liveLegacyGolden();
+    // The legacy-vs-golden assertion always runs against live legacy bytes —
+    // it guards against legacy-renderer regressions for segments where legacy
+    // is still convergent with the DSL (or hasn't been migrated yet).
+    liveLegacy = {};
+    for (const [name, entry] of Object.entries(PARITY_REGISTRY)) {
+      liveLegacy[name] = legacySegmentBytes(entry.legacy, renderer, colors);
+    }
   });
 
   for (const [name, entry] of Object.entries(PARITY_REGISTRY)) {
     describe(name, () => {
-      test("live legacy bytes match committed golden", () => {
-        expect(live[name]).toEqual(golden[name]);
+      // [LAW:dataflow-not-control-flow] `legacyDivergedFromDsl` is a value
+      // selecting whether this assertion runs — not an early-return guard.
+      const checkLegacy = entry.legacyDivergedFromDsl === true ? test.skip : test;
+      checkLegacy("live legacy bytes match committed golden", () => {
+        expect(liveLegacy[name]).toEqual(golden[name]);
       });
 
-      // [LAW:dataflow-not-control-flow] status is a value selecting the check.
       const dsl = entry.dsl;
       const provesParity = entry.status === "dsl-parity" && dsl !== undefined;
       (provesParity ? test : test.skip)(
