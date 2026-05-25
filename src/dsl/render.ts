@@ -289,9 +289,11 @@ function resolverForPalette(name: string): PaletteResolver {
  * PROPOSAL 'Render' steps 1-6:
  *   1. Push payload into input boxes (registry.applyInput).
  *   2. Walk config.layout in order; skip segments whose `when` evaluates false.
- *   3. Per segment: evaluate pre-compiled template → fragments → StripCells.
- *   4. Per-segment PaletteResolver pre-resolved at registration (3rq.2) or basePalette.
- *   5. Resolve bg/fg → defaultStyle; apply width/justify/truncate.
+ *   3. Per-segment PaletteResolver pre-resolved at registration (3rq.2) or basePalette.
+ *   4. Resolve bg/fg → baseStyle (layered under each fragment so per-fragment fg
+ *      becomes a cell part rather than being lost to a cell-level rebuild).
+ *   5. Evaluate pre-compiled template → fragments → StripCells with baseStyle baked in.
+ *      Apply width/justify/truncate.
  *   6. Concatenate all StripCells; join via powerline Joiner → ANSI string.
  *
  * [LAW:single-enforcer] The daemon (bzh.2) calls this verbatim — no alternate
@@ -331,15 +333,13 @@ export function renderDslLine(
     // Step 2: when predicate — skip hidden segments.
     if (!evaluateWhen(segCompiled.when, scope)) continue;
 
-    // Step 3: evaluate pre-compiled template → StripCells.
-    const fragments = segCompiled.template.evaluate(scope);
-    const cells = fragmentsToStripCells(fragments);
-
-    // Step 4: per-segment palette (3rq.2) — pre-resolved at registration time.
+    // Step 3: per-segment palette (3rq.2) — pre-resolved at registration time.
     const resolver = segCompiled.paletteResolver ?? basePalette;
 
-    // Step 5: colors + layout.
-    const defaultStyle = resolveSegmentColors(
+    // Step 4: resolve segment bg/fg first — they flow into cell construction
+    // as a base style on every fragment, so per-fragment fg (e.g. inline
+    // `{{ red ... }}`) survives the cell-level bg merge as a part.
+    const baseStyle = resolveSegmentColors(
       resolver,
       segCompiled.bg,
       segCompiled.fg,
@@ -347,11 +347,14 @@ export function renderDslLine(
       { hueRotationDegrees: i * hueStep },
     );
 
+    // Step 5: evaluate pre-compiled template → StripCells with baseStyle baked in.
+    const fragments = segCompiled.template.evaluate(scope);
+    const cells = fragmentsToStripCells(fragments, baseStyle);
+
     const laidOut = applySegmentLayout(cells, {
       width: seg.width ?? "auto",
       justify: seg.justify ?? "left",
       truncate: seg.truncate ?? "right",
-      defaultStyle,
     });
 
     allCells.push(...laidOut);

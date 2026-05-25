@@ -228,6 +228,68 @@ export const DSL_BINDINGS = {
     }),
   },
 
+  // gitTaculous — p10k-style git layout with inline fg colors per status flag.
+  //
+  // [LAW:dataflow-not-control-flow] Each conditional chunk is gated by a value
+  // (`gt .git.staged 0`, `ne .git.repoName ""`), not a side-effect; the same
+  // template runs for every input. The flag-block contains the styled
+  // fragments back-to-back ({{ green "S" }}{{ red "U" }} — no separator),
+  // matching legacy renderGitTaculous's `flags.join("")`.
+  //
+  // ## Byte-parity scope (decided in bzh.6, after probing rich-js's serializer)
+  // Legacy `renderGitTaculous` embeds RAW inline ANSI escapes (`\x1b[32m`,
+  // `\x1b[<gitFg>m`) directly in the text payload — no `\x1b[0m` resets,
+  // no bg re-emit between fg switches. rich-js's structured serializer instead
+  // closes each SGR-codes group with `\x1b[0m` and reopens with the full
+  // merged style on every fg change. So a byte-clean DSL template
+  // (`{{ green "S" }}`) can match legacy *visually* but not *byte-for-byte*
+  // through the standard pipeline.
+  //
+  // The bzh.6 decision: land the structural fix (per-fragment fg under segment
+  // bg, see `fragmentsToStripCells(fragments, baseStyle)`) and re-baseline this
+  // segment's golden to the post-migration bytes. The harness still enforces
+  // byte parity — just to a golden captured AFTER the DSL takes over, not
+  // before. The legacy bytes for this segment are preserved in git history at
+  // the pre-bzh.6 golden if reference is ever needed.
+  gitTaculous: {
+    decl: {
+      template:
+        " (git)" +
+        '{{ if ne .git.repoName "" }} {{ .git.repoName }}{{ end }}' +
+        '{{ if ne .git.sha "" }} {{ .git.sha }}{{ end }}' +
+        "{{ if or (gt .git.staged 0) (gt .git.unstaged 0) (gt .git.untracked 0) (gt .git.conflicts 0) }} " +
+        '{{ if gt .git.staged 0 }}{{ green "S" }}{{ end }}' +
+        '{{ if or (gt .git.unstaged 0) (gt .git.untracked 0) }}{{ red "U" }}{{ end }}' +
+        '{{ if gt .git.conflicts 0 }}{{ red (printf "!%v" .git.conflicts) }}{{ end }}' +
+        "{{ end }}" +
+        " ⎇ {{ .git.branch }}" +
+        '{{ if ne .git.upstream "" }} [{{ .git.upstream }}' +
+        "{{ if or (gt .git.ahead 0) (gt .git.behind 0) }} " +
+        '{{ if gt .git.ahead 0 }}{{ green (printf "+%v" .git.ahead) }}{{ end }}' +
+        "{{ if and (gt .git.ahead 0) (gt .git.behind 0) }}/{{ end }}" +
+        '{{ if gt .git.behind 0 }}{{ red (printf "-%v" .git.behind) }}{{ end }}' +
+        "{{ end }}]{{ end }} ",
+      bg: "surface-active",
+      fg: "foreground",
+    },
+    // Same fixture seeds as `git` above — gitTaculous reads the same GitInfo
+    // shape, just with a different presentation. The harness builds two stores
+    // because each binding is its own evaluation unit; the underlying data is
+    // identical.
+    store: seeded((s) => {
+      s.defineBox("git.repoName", "string", GIT_INFO.repoName ?? "");
+      s.defineBox("git.branch", "string", GIT_INFO.branch);
+      s.defineBox("git.sha", "string", GIT_INFO.sha ?? "");
+      s.defineBox("git.ahead", "number", GIT_INFO.ahead);
+      s.defineBox("git.behind", "number", GIT_INFO.behind);
+      s.defineBox("git.staged", "number", GIT_INFO.staged ?? 0);
+      s.defineBox("git.unstaged", "number", GIT_INFO.unstaged ?? 0);
+      s.defineBox("git.untracked", "number", GIT_INFO.untracked ?? 0);
+      s.defineBox("git.conflicts", "number", GIT_INFO.conflicts ?? 0);
+      s.defineBox("git.upstream", "string", GIT_INFO.upstream ?? "");
+    }),
+  },
+
   // [LAW:single-enforcer] The toolbar binding emits OSC8-clickable items
   // through the canonical `link` template function (registered by rich-js).
   // Each top-level link is a separate cell with style.link set; cells.ts

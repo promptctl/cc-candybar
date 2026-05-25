@@ -1,14 +1,21 @@
-// [LAW:single-enforcer] All per-segment layout enforcement — width/justify/
-// truncate and the bg/fg default-style cascade — runs through applySegmentLayout.
-// No second path; two paths would silently drift.
+// [LAW:single-enforcer] All per-segment width/justify/truncate enforcement
+// runs through applySegmentLayout. No second path; two paths would silently
+// drift.
 //
 // [LAW:dataflow-not-control-flow] Every step is unconditional; option values
 // (width, justify, truncate) are the data that drives the output. "auto" width
 // is not a branch that skips logic — it is a value that makes the step return
 // the input unchanged.
+//
+// The bg/fg default-style cascade does NOT live here. It is applied at cell
+// construction time in `fragmentsToStripCells(fragments, baseStyle)`. Merging at
+// the cell layer was structurally wrong: rebuilding cells via
+// `new StripCell(c.text, merged)` dropped per-fragment fg (parts) because
+// `_parts` is private on rich-js's StripCell. Moving the merge upstream — onto
+// fragments before they become cells — preserves parts by construction.
 
 import { StripCell, cellLen, splitText, asCellCol } from "@promptctl/rich-js";
-import type { RichText, Style } from "@promptctl/rich-js";
+import type { RichText } from "@promptctl/rich-js";
 import type { Template } from "@promptctl/go-template-js";
 
 export type JustifyMode = "left" | "center" | "right";
@@ -21,17 +28,6 @@ export interface SegmentLayoutOptions {
   justify: JustifyMode;
   /** Overflow strategy when content exceeds a fixed width. Ignored when "auto". */
   truncate: TruncateMode;
-  /**
-   * Base style applied beneath each cell's own style.
-   * Build from resolved global/segment bg+fg defaults:
-   *   Style.fromColor(resolvedFg, resolvedBg)
-   * Cell-level style wins per Style.add() semantics (cell fields override base).
-   *
-   * Note: cells with internal span structure (StripCellPart[]) lose those spans
-   * when a new StripCell is constructed here because parts are private on
-   * StripCell. Plain-text cells (no parts) are fully preserved.
-   */
-  defaultStyle?: Style;
   /** Glyph appended/prepended/inserted at the overflow cut point. Default "…". */
   truncateMarker?: string;
 }
@@ -58,38 +54,27 @@ export function evaluateWhen(
  * fragmentsToStripCells().
  *
  * Steps (always executed in order; values govern output, not whether steps run):
- *   1. Merge defaultStyle beneath each cell's own style.
- *   2. "auto" width → return styled cells as-is.
- *   3. Fixed width → truncate on overflow or pad for justification.
+ *   1. "auto" width → return cells as-is.
+ *   2. Fixed width → truncate on overflow or pad for justification.
+ *
+ * Defaults (bg/fg) are baked into cells by fragmentsToStripCells's `baseStyle`
+ * parameter — by the time cells reach this function their style is final.
  */
 export function applySegmentLayout(
   cells: StripCell[],
   options: SegmentLayoutOptions,
 ): StripCell[] {
-  const {
-    width,
-    justify,
-    truncate,
-    defaultStyle,
-    truncateMarker = "…",
-  } = options;
+  const { width, justify, truncate, truncateMarker = "…" } = options;
 
-  // Step 1: apply default style.
-  // defaultStyle.add(cellStyle) → cell wins for any field it explicitly sets.
-  const styled =
-    defaultStyle !== undefined && !defaultStyle.isNull
-      ? cells.map((c) => new StripCell(c.text, defaultStyle.add(c.style)))
-      : cells;
+  // Step 1: "auto" — content-sized, no constraint.
+  if (width === "auto") return cells;
 
-  // Step 2: "auto" — content-sized, no constraint.
-  if (width === "auto") return styled;
-
-  // Step 3: fixed width — measure, then truncate or pad.
-  const total = totalCellWidth(styled);
+  // Step 2: fixed width — measure, then truncate or pad.
+  const total = totalCellWidth(cells);
 
   return total > width
-    ? truncateCells(styled, width, truncate, truncateMarker)
-    : padCells(styled, width, justify, total);
+    ? truncateCells(cells, width, truncate, truncateMarker)
+    : padCells(cells, width, justify, total);
 }
 
 // ─── Width measurement ───────────────────────────────────────────────────────

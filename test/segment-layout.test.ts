@@ -1,14 +1,14 @@
 // [LAW:behavior-not-structure] Tests assert observable output (cell count,
 // text content, total width, style fields) — never internal state.
 
-import { StripCell, Style, cellLen } from "@promptctl/rich-js";
+import { StripCell, cellLen } from "@promptctl/rich-js";
 import { createCcCandybarEngine } from "../src/template-engine/engine";
 import { applySegmentLayout, evaluateWhen } from "../src/template-engine/layout";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-function cell(text: string, style?: Style): StripCell {
-  return style ? new StripCell(text, style) : new StripCell(text);
+function cell(text: string): StripCell {
+  return new StripCell(text);
 }
 
 function totalWidth(cells: StripCell[]): number {
@@ -281,66 +281,7 @@ describe("multi-cell truncation", () => {
 });
 
 // ────────────────────────────────────────────────────────────────────────────
-// 7. Default-style cascade (bg/fg fallthrough)
-// ────────────────────────────────────────────────────────────────────────────
-
-describe("bg/fg default-style cascade", () => {
-  test("unstyled cell inherits defaultStyle bg", () => {
-    const defaultStyle = new Style({ bgcolor: "blue" });
-    const cells = [cell("text")];
-    const result = applySegmentLayout(cells, {
-      ...autoOptions,
-      defaultStyle,
-    });
-    expect(result[0]!.style.bgcolor).toBeDefined();
-  });
-
-  test("styled cell's own bg wins over default", () => {
-    const defaultStyle = new Style({ bgcolor: "blue" });
-    const cellStyle = new Style({ bgcolor: "red" });
-    const cells = [cell("text", cellStyle)];
-    const result = applySegmentLayout(cells, {
-      ...autoOptions,
-      defaultStyle,
-    });
-    // Cell's own bg (red) wins over default (blue)
-    expect(result[0]!.style.bgcolor?.toString()).toBe(cellStyle.bgcolor?.toString());
-  });
-
-  test("null defaultStyle → cells unchanged", () => {
-    const cells = [cell("text")];
-    const result = applySegmentLayout(cells, {
-      ...autoOptions,
-      defaultStyle: new Style(),
-    });
-    expect(result[0]!.style.isNull).toBe(true);
-  });
-
-  test("no defaultStyle → cells unchanged", () => {
-    const cells = [cell("text")];
-    const result = applySegmentLayout(cells, autoOptions);
-    expect(result[0]!.style.isNull).toBe(true);
-  });
-
-  test("default fg applied to cell without fg", () => {
-    const defaultStyle = new Style({ color: "white" });
-    const cells = [cell("text")];
-    const result = applySegmentLayout(cells, { ...autoOptions, defaultStyle });
-    expect(result[0]!.style.color).toBeDefined();
-  });
-
-  test("cell's own fg wins over default fg", () => {
-    const defaultStyle = new Style({ color: "white" });
-    const cellStyle = new Style({ color: "red" });
-    const cells = [cell("text", cellStyle)];
-    const result = applySegmentLayout(cells, { ...autoOptions, defaultStyle });
-    // Cell's red fg wins over default white
-    expect(result[0]!.style.color?.toString()).toBe(cellStyle.color?.toString());
-  });
-});
-
-// ────────────────────────────────────────────────────────────────────────────
-// 8. Custom truncate marker
+// 7. Custom truncate marker
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("custom truncate marker", () => {

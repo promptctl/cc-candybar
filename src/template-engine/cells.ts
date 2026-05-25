@@ -21,14 +21,33 @@ import type { Span, StripCellPart, RichText } from "@promptctl/rich-js";
 
 // [LAW:single-enforcer] The only place that maps RichText[] → StripCell[].
 // All callers go through here; no second conversion path exists.
-export function fragmentsToStripCells(fragments: RichText[]): StripCell[] {
+//
+// [LAW:types-are-the-program] `baseStyle` is the segment-level default (typically
+// the resolved bg + fg). It flows in as data on every fragment via
+// `baseStyle.add(fragment.style)` so the fragment's own style wins on overlap.
+// Applying it HERE — before grouping — preserves per-fragment fg as cell parts:
+// every fragment becomes a part with its own (possibly merged) fg, sharing the
+// cell-level bg. Applying it AFTER cells exist would force `new StripCell(text,
+// merged)` and drop parts, because `_parts` is private to rich-js's StripCell.
+export function fragmentsToStripCells(
+  fragments: RichText[],
+  baseStyle?: Style,
+): StripCell[] {
+  // [LAW:dataflow-not-control-flow] The base merge is unconditional in shape:
+  // when baseStyle has no contribution, the merge is identity. The fragments
+  // walk is the same code path either way.
+  const effective =
+    baseStyle !== undefined && !baseStyle.isNull
+      ? fragments.map((f) => withBaseStyle(f, baseStyle))
+      : fragments;
+
   const cells: StripCell[] = [];
   // [LAW:dataflow-not-control-flow] Accumulate full RichText (not just plain
   // text) so joiner styling survives — style is data on the fragment, not a
   // side-channel that can be re-attached from the text string alone.
   let joiners: RichText[] = [];
 
-  for (const fragment of fragments) {
+  for (const fragment of effective) {
     if (fragment.style.link) {
       cells.push(...coalescePlainRun(joiners));
       joiners = [];
@@ -41,6 +60,15 @@ export function fragmentsToStripCells(fragments: RichText[]): StripCell[] {
   cells.push(...coalescePlainRun(joiners));
 
   return cells;
+}
+
+// Layer baseStyle beneath fragment.style — same merge semantics rich-js's
+// `applyStyleToFragment` uses for nested style calls: `base.add(overlay)` keeps
+// every field the overlay sets and falls through to base for unset fields.
+function withBaseStyle(f: RichText, base: Style): RichText {
+  const copy = f.copy();
+  copy.style = base.add(f.style);
+  return copy;
 }
 
 // Convert a run of adjacent non-link fragments into cells.

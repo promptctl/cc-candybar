@@ -5,7 +5,7 @@
 import { createCcCandybarEngine } from "../src/template-engine/engine";
 import { fragmentsToStripCells } from "../src/template-engine/cells";
 import { renderStripCells } from "../src/render/strip";
-import { RichText, StripCell } from "@promptctl/rich-js";
+import { RichText, StripCell, Style } from "@promptctl/rich-js";
 
 // Render cells to a truecolor ANSI string so tests assert observable output
 // (SGR escapes), not internal style placement. [LAW:behavior-not-structure]
@@ -240,5 +240,96 @@ describe("fragmentsToStripCells — direct fragment input", () => {
     const cells = fragmentsToStripCells([rt]);
     expect(cells).toHaveLength(1);
     expect(cells[0]!.style.link).toBe("http://x");
+  });
+});
+
+// ────────────────────────────────────────────────────────────────
+// 5. baseStyle merge — segment bg/fg layered under fragments
+//
+// Replaces the former "default-style cascade" tests that lived under
+// applySegmentLayout: the merge now happens at cell construction time
+// (so per-fragment fg becomes a part rather than being lost to a
+// later cell-level rebuild). The assertions here mirror those guarantees.
+// ────────────────────────────────────────────────────────────────
+
+describe("baseStyle merge — fragment style wins on overlap", () => {
+  test("unstyled fragment inherits baseStyle bg", () => {
+    const baseStyle = new Style({ bgcolor: "blue" });
+    const cells = fragmentsToStripCells([new RichText("text")], baseStyle);
+    expect(cells[0]!.style.bgcolor?.name).toBe("blue");
+  });
+
+  test("fragment's own bg wins over baseStyle bg", () => {
+    const baseStyle = new Style({ bgcolor: "blue" });
+    const cells = fragmentsToStripCells(
+      [new RichText("text", { style: "on red" })],
+      baseStyle,
+    );
+    // A divergent bg must NOT be overridden by the segment default.
+    expect(cells[0]!.style.bgcolor?.name).toBe("red");
+  });
+
+  test("null baseStyle → fragments flow through unchanged", () => {
+    const cells = fragmentsToStripCells([new RichText("text")], new Style());
+    expect(cells[0]!.style.isNull).toBe(true);
+  });
+
+  test("no baseStyle → fragments flow through unchanged", () => {
+    const cells = fragmentsToStripCells([new RichText("text")]);
+    expect(cells[0]!.style.isNull).toBe(true);
+  });
+
+  test("baseStyle fg applied to fragment without fg", () => {
+    const baseStyle = new Style({ color: "white" });
+    const cells = fragmentsToStripCells([new RichText("text")], baseStyle);
+    expect(cells[0]!.style.color?.name).toBe("white");
+  });
+
+  test("fragment's own fg wins over baseStyle fg", () => {
+    const baseStyle = new Style({ color: "white" });
+    const cells = fragmentsToStripCells(
+      [new RichText("text", { style: "red" })],
+      baseStyle,
+    );
+    expect(cells[0]!.style.color?.name).toBe("red");
+  });
+});
+
+describe("baseStyle merge preserves per-fragment fg as cell parts", () => {
+  // This is the gitTaculous-shaped case the structural fix targets: multiple
+  // fragments with their own fg, under a shared segment bg, must coalesce into
+  // ONE cell (single bg) while each fragment's fg survives as a part. The OLD
+  // layout-time merge would rebuild as `new StripCell(text, mergedStyle)` and
+  // drop parts; the new cell-time merge keeps them.
+  test("fragments with per-fragment fg under a shared bg form one cell with N parts", () => {
+    const baseStyle = new Style({ bgcolor: "blue" });
+    const cells = fragmentsToStripCells(
+      [
+        new RichText(" prefix "),
+        new RichText("S", { style: "green" }),
+        new RichText("U", { style: "red" }),
+        new RichText(" suffix "),
+      ],
+      baseStyle,
+    );
+    // All fragments share the same bg (from baseStyle) → one cell.
+    expect(cells).toHaveLength(1);
+    // Cell-level bg survived.
+    expect(cells[0]!.style.bgcolor?.name).toBe("blue");
+
+    // The per-fragment fg must reach the ANSI output as distinct SGR groups —
+    // not collapsed into one fg. The serializer wraps each SGR-codes group
+    // separately, so the rendered string must contain at least 3 distinct
+    // SGR open sequences (one for the baseline-fg run, one for green, one for
+    // red — plus possibly more for transitions back to baseline).
+    const rendered = renderStripCells(cells, {
+      style: "plain",
+      colorCompatibility: "truecolor",
+    });
+    expect(stripAnsi(rendered)).toBe(" prefix SU suffix ");
+    // At least three SGR opens (green segment + red segment + a baseline) means
+    // the parts survived as distinct foregrounds.
+    const sgrOpens = rendered.match(/\x1b\[[0-9;]+m/g) ?? [];
+    expect(sgrOpens.length).toBeGreaterThanOrEqual(3);
   });
 });
