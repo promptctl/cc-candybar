@@ -43,16 +43,18 @@ function evalText(source: string, scope: object = {}): string {
 describe("num() bigint range guard", () => {
   test("accepts bigint within safe-integer range (round-trips)", () => {
     // Engine encodes Go-template numeric literals as bigint when ambiguous;
-    // values inside ±2^53 are safe to collapse. 1_000_000_000n → "1.0B tokens"
-    // (well, formatTokens does M/K — so 1e9 → "1000.0M tokens"). Just assert
-    // it doesn't throw and produces the same string as the source formatter.
+    // values inside ±Number.MAX_SAFE_INTEGER (2^53 − 1) are safe to collapse.
+    // 1_000_000_000n → formatTokens does M/K, so 1e9 → "1000.0M tokens". Just
+    // assert it doesn't throw and produces the same string as the source
+    // formatter.
     const tpl = createCcCandybarEngine().parse("{{ formatTokens 1000000000 }}");
     expect(() => tpl.evaluate({})).not.toThrow();
   });
 
   test("rejects bigint above MAX_SAFE_INTEGER with informative TypeError", () => {
-    // 2^53 + 1 is the smallest positive bigint that loses precision in Number.
-    // Template literal forces engine to bigint encoding for the over-2^53 range.
+    // Number.MAX_SAFE_INTEGER + 1n is the smallest positive bigint that loses
+    // precision in Number. Template literal forces engine to bigint encoding
+    // for values above the safe-integer range.
     const huge = String(BigInt(Number.MAX_SAFE_INTEGER) + 1n);
     const tpl = createCcCandybarEngine().parse(`{{ formatTokens ${huge} }}`);
     expect(() => tpl.evaluate({})).toThrow(TypeError);

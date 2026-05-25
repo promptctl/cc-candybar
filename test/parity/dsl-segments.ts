@@ -297,9 +297,14 @@ export const DSL_BINDINGS = {
       bg: "surface",
       fg: "foreground",
     },
+    // [LAW:no-defensive-null-guards] No `?? 0` coalesce: USAGE_INFO is
+    // `satisfies UsageInfo` (see fixtures.ts) so .session.cost / .session.tokens
+    // narrow to `number` here. Production callers where cost/tokens can legitimately
+    // be null need presence-boolean gating in the template — separate concern,
+    // tracked in brandon-segment-dsl-migration-bzh.8.
     store: seeded((s) => {
-      s.defineBox("session.cost", "number", USAGE_INFO.session.cost ?? 0);
-      s.defineBox("session.tokens", "number", USAGE_INFO.session.tokens ?? 0);
+      s.defineBox("session.cost", "number", USAGE_INFO.session.cost);
+      s.defineBox("session.tokens", "number", USAGE_INFO.session.tokens);
     }),
   },
 
@@ -315,9 +320,13 @@ export const DSL_BINDINGS = {
       bg: "surface",
       fg: "foreground",
     },
+    // [LAW:no-defensive-null-guards] No `?? 0` coalesce on today.cost/.tokens:
+    // TODAY_INFO is `satisfies TodayInfo` so the literal narrows to `number`
+    // here. Production where cost/tokens can be null is a separate
+    // expressiveness concern, tracked in brandon-segment-dsl-migration-bzh.8.
     store: seeded((s) => {
-      s.defineBox("today.cost", "number", TODAY_INFO.cost ?? 0);
-      s.defineBox("today.tokens", "number", TODAY_INFO.tokens ?? 0);
+      s.defineBox("today.cost", "number", TODAY_INFO.cost);
+      s.defineBox("today.tokens", "number", TODAY_INFO.tokens);
       // [LAW:one-source-of-truth] Budget knobs come from PowerlineConfig
       // .budget.today in production. The DSL binding seeds them as scalars
       // (var-system is flat-scalar) but reads from DEFAULT_CONFIG so the
@@ -421,9 +430,15 @@ export const DSL_BINDINGS = {
   // metrics — all six parts (last-response, response, duration, messages,
   // lines-added, lines-removed) enabled. The fixture's MetricsInfo has all
   // non-null/positive values, so a static template renders byte-identical;
-  // a user config that disables a part would need a more expressive
-  // declaration — out of scope for the bzh.5 unblock. Variant=accent →
-  // "panel" bg + "foreground" fg under the surface preset.
+  // a user config that disables a part, OR a null field (no data yet), would
+  // need a more expressive declaration: per-part show-booleans + template
+  // conditionals to mirror legacy renderMetrics' null/zero gating, plus a
+  // segment-level "new"/"active" fallback. Tracked in
+  // brandon-segment-dsl-migration-bzh.8. Variant=accent → "panel" bg +
+  // "foreground" fg under the surface preset.
+  //
+  // [LAW:no-defensive-null-guards] No `?? 0` coalesce: METRICS_INFO is
+  // `satisfies MetricsInfo` so the literal's non-null types are preserved.
   metrics: {
     decl: {
       template:
@@ -440,33 +455,17 @@ export const DSL_BINDINGS = {
       s.defineBox(
         "metrics.lastResponseTime",
         "number",
-        METRICS_INFO.lastResponseTime ?? 0,
+        METRICS_INFO.lastResponseTime,
       );
-      s.defineBox(
-        "metrics.responseTime",
-        "number",
-        METRICS_INFO.responseTime ?? 0,
-      );
+      s.defineBox("metrics.responseTime", "number", METRICS_INFO.responseTime);
       s.defineBox(
         "metrics.sessionDuration",
         "number",
-        METRICS_INFO.sessionDuration ?? 0,
+        METRICS_INFO.sessionDuration,
       );
-      s.defineBox(
-        "metrics.messageCount",
-        "number",
-        METRICS_INFO.messageCount ?? 0,
-      );
-      s.defineBox(
-        "metrics.linesAdded",
-        "number",
-        METRICS_INFO.linesAdded ?? 0,
-      );
-      s.defineBox(
-        "metrics.linesRemoved",
-        "number",
-        METRICS_INFO.linesRemoved ?? 0,
-      );
+      s.defineBox("metrics.messageCount", "number", METRICS_INFO.messageCount);
+      s.defineBox("metrics.linesAdded", "number", METRICS_INFO.linesAdded);
+      s.defineBox("metrics.linesRemoved", "number", METRICS_INFO.linesRemoved);
     }),
   },
 } satisfies Partial<Record<SegmentName, DslBinding>>;
