@@ -155,6 +155,19 @@ export function formatTokenCount(tokens: number | null): string {
   return formatTokens(tokens).replace(" tokens", "");
 }
 
+// [LAW:one-source-of-truth] Locale-grouped integer rendering. Callers that
+// want "50,000" instead of "50000" go through this rather than calling
+// toLocaleString() ad-hoc — the legacy context segment used the latter
+// pattern inline, and the DSL formatter (template-engine/funcs.ts)
+// delegates here so the two producers agree by construction.
+//
+// No locale argument: the default-locale behaviour is exactly what the
+// legacy renderer did (`n.toLocaleString()`), so byte-parity holds with
+// whatever locale the host process picks at startup.
+export function formatInteger(n: number): string {
+  return n.toLocaleString();
+}
+
 export function formatBurnRate(rate: number | null | undefined): string {
   if (rate === null || rate === undefined || rate <= 0) return "";
   return rate < 1 ? `${(rate * 100).toFixed(0)}c/h` : `$${rate.toFixed(2)}/h`;
