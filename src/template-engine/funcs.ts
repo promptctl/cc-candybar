@@ -29,8 +29,28 @@ import { getBudgetStatus } from "../utils/budget.js";
 // both number and bigint (per @promptctl/go-template-js); the underlying
 // formatters take a JS number, so collapse bigint here. [LAW:single-enforcer]
 // every formatter wrapper goes through this — no per-wrapper bigint check.
+//
+// [LAW:no-silent-fallbacks] A bigint outside JS's safe-integer range cannot
+// round-trip through Number without silent precision loss (53-bit mantissa)
+// or overflow to ±Infinity. Either would feed wrong values into formatCost /
+// formatTokens / formatDuration and produce confidently-wrong output. Throw
+// at the conversion boundary so the failure surfaces where the conversion
+// happens, not deep inside a formatter doing math on a corrupted number.
 function num(v: number | bigint): number {
-  return typeof v === "bigint" ? Number(v) : v;
+  if (typeof v === "bigint") {
+    if (
+      v > BigInt(Number.MAX_SAFE_INTEGER) ||
+      v < BigInt(Number.MIN_SAFE_INTEGER)
+    ) {
+      throw new TypeError(
+        `Numeric argument ${v}n is outside JS safe-integer range; ` +
+          `Number(v) would lose precision or overflow. ` +
+          `Pass a value within ±2^53 or use a string-based formatter.`,
+      );
+    }
+    return Number(v);
+  }
+  return v;
 }
 
 // cc-candybar-specific functions not already covered by sprig or Go builtins.

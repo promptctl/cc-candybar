@@ -17,6 +17,7 @@
 import type { SegmentName } from "../../src/config/loader";
 import type { DslBinding } from "./harness";
 import { VariableStore } from "../../src/var-system/store";
+import { DEFAULT_CONFIG } from "../../src/config/defaults";
 import {
   HOOK_DATA,
   GIT_INFO,
@@ -317,11 +318,22 @@ export const DSL_BINDINGS = {
     store: seeded((s) => {
       s.defineBox("today.cost", "number", TODAY_INFO.cost ?? 0);
       s.defineBox("today.tokens", "number", TODAY_INFO.tokens ?? 0);
-      // Budget knobs come from PowerlineConfig.budget.today in production.
-      // The DSL binding seeds them as scalars so the template doesn't have
-      // to dereference a nested config object (var-system is flat-scalar).
-      s.defineBox("today.budget.amount", "number", 50);
-      s.defineBox("today.budget.warningThreshold", "number", 80);
+      // [LAW:one-source-of-truth] Budget knobs come from PowerlineConfig
+      // .budget.today in production. The DSL binding seeds them as scalars
+      // (var-system is flat-scalar) but reads from DEFAULT_CONFIG so the
+      // fixture moves in lockstep if defaults change — no second literal copy
+      // to drift. The `satisfies PowerlineConfig` annotation on DEFAULT_CONFIG
+      // narrows these fields to non-optional, so no `!` laundering is needed.
+      s.defineBox(
+        "today.budget.amount",
+        "number",
+        DEFAULT_CONFIG.budget.today.amount,
+      );
+      s.defineBox(
+        "today.budget.warningThreshold",
+        "number",
+        DEFAULT_CONFIG.budget.today.warningThreshold,
+      );
     }),
   },
 

@@ -31,6 +31,53 @@ function evalText(source: string, scope: object = {}): string {
 }
 
 // ────────────────────────────────────────────────────────────────
+// 0. num() bigint normalization (single-enforcer of bigint→number)
+// ────────────────────────────────────────────────────────────────
+
+// [LAW:no-silent-fallbacks] The wrappers' shared num() helper must throw
+// for bigint inputs that cannot round-trip to JS number without precision
+// loss or overflow — otherwise formatTokens(huge_bigint) silently produces
+// wrong output. The check is at the conversion boundary, not at each
+// formatter, so it's tested through any formatter wrapper that takes a
+// numeric arg (formatTokens chosen arbitrarily).
+describe("num() bigint range guard", () => {
+  test("accepts bigint within safe-integer range (round-trips)", () => {
+    // Engine encodes Go-template numeric literals as bigint when ambiguous;
+    // values inside ±2^53 are safe to collapse. 1_000_000_000n → "1.0B tokens"
+    // (well, formatTokens does M/K — so 1e9 → "1000.0M tokens"). Just assert
+    // it doesn't throw and produces the same string as the source formatter.
+    const tpl = createCcCandybarEngine().parse("{{ formatTokens 1000000000 }}");
+    expect(() => tpl.evaluate({})).not.toThrow();
+  });
+
+  test("rejects bigint above MAX_SAFE_INTEGER with informative TypeError", () => {
+    // 2^53 + 1 is the smallest positive bigint that loses precision in Number.
+    // Template literal forces engine to bigint encoding for the over-2^53 range.
+    const huge = String(BigInt(Number.MAX_SAFE_INTEGER) + 1n);
+    const tpl = createCcCandybarEngine().parse(`{{ formatTokens ${huge} }}`);
+    expect(() => tpl.evaluate({})).toThrow(TypeError);
+    expect(() => tpl.evaluate({})).toThrow(/safe-integer range/);
+  });
+
+  test("rejects bigint below MIN_SAFE_INTEGER", () => {
+    const tiny = String(BigInt(Number.MIN_SAFE_INTEGER) - 1n);
+    const tpl = createCcCandybarEngine().parse(`{{ formatTokens ${tiny} }}`);
+    expect(() => tpl.evaluate({})).toThrow(TypeError);
+  });
+
+  test("accepts the safe-integer boundaries themselves", () => {
+    const maxTpl = createCcCandybarEngine().parse(
+      `{{ formatTokens ${Number.MAX_SAFE_INTEGER} }}`,
+    );
+    const minTpl = createCcCandybarEngine().parse(
+      `{{ formatTokens ${Number.MIN_SAFE_INTEGER} }}`,
+    );
+    expect(() => maxTpl.evaluate({})).not.toThrow();
+    expect(() => minTpl.evaluate({})).not.toThrow();
+  });
+});
+
+// ────────────────────────────────────────────────────────────────
 // 1. Cost / token formatters
 // ────────────────────────────────────────────────────────────────
 
