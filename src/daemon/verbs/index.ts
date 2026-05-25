@@ -171,14 +171,25 @@ const setState: VerbHandler = (rawValue, ctx) => {
 // [LAW:one-source-of-truth] The verb table is THE list of supported click
 // verbs. Order is alphabetical for diff-stability — the daemon does not
 // care about order, but human readers do.
-export const VERBS: Readonly<Record<string, VerbHandler>> = Object.freeze({
-  copy,
-  "open-vscode": openVscode,
-  "set-state": setState,
-  "show-config-error": showConfigError,
-  "toolbar-toggle": toolbarToggle,
-});
+//
+// [LAW:types-are-the-program] `ReadonlyMap` is the dispatch type whose
+// lookup is `(verb) → VerbHandler | undefined` with no prototype chain.
+// The wire-level `verb` field is untrusted input; a `__proto__` or
+// `constructor` value over a plain object would be a truthy hit on
+// Object.prototype that then throws on invocation (RENDER_FAILED instead
+// of BAD_REQUEST). Map makes the wrong dispatch unrepresentable, matching
+// the in-memory dispatching pattern in src/daemon/session-state.ts.
+export const VERBS: ReadonlyMap<string, VerbHandler> = new Map<
+  string,
+  VerbHandler
+>([
+  ["copy", copy],
+  ["open-vscode", openVscode],
+  ["set-state", setState],
+  ["show-config-error", showConfigError],
+  ["toolbar-toggle", toolbarToggle],
+]);
 
-export const VERB_NAMES: readonly string[] = Object.freeze(
-  Object.keys(VERBS),
-) as readonly string[];
+export const VERB_NAMES: readonly string[] = Object.freeze([
+  ...VERBS.keys(),
+]) as readonly string[];

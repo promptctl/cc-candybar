@@ -89,18 +89,30 @@ const validateBoolean: KeyValidator = (raw) => {
 
 // [LAW:one-source-of-truth] THE list of state keys the click protocol can
 // write. Alphabetical for diff-stability — order is not load-bearing.
-export const STATE_VALIDATORS: Readonly<Record<string, KeyValidator>> =
-  Object.freeze({
-    style: validateStyle,
-    theme: validateTheme,
-    "toolbar-expanded": validateBoolean,
-  });
+//
+// [LAW:types-are-the-program] `ReadonlyMap` is the type whose lookup is
+// `(key) → KeyValidator | undefined` with NO prototype chain — keys like
+// `__proto__` or `constructor` from an untrusted wire URL are ordinary
+// non-members, not truthy hits on Object.prototype properties. Plain
+// object literals (`Record<string, T>`) admit those keys as truthy
+// lookups that then crash on invocation — RENDER_FAILED instead of the
+// intended BAD_REQUEST. Map makes that crash unrepresentable rather than
+// guarded against, matching the in-memory dispatching pattern already
+// used in src/daemon/session-state.ts.
+export const STATE_VALIDATORS: ReadonlyMap<string, KeyValidator> = new Map<
+  string,
+  KeyValidator
+>([
+  ["style", validateStyle],
+  ["theme", validateTheme],
+  ["toolbar-expanded", validateBoolean],
+]);
 
 // Exported for error messages (the BAD_REQUEST surfaces this list so the
 // caller learns the writable schema without a separate API call).
-export const STATE_KEYS: readonly string[] = Object.freeze(
-  Object.keys(STATE_VALIDATORS),
-) as readonly string[];
+export const STATE_KEYS: readonly string[] = Object.freeze([
+  ...STATE_VALIDATORS.keys(),
+]) as readonly string[];
 
 // [LAW:dataflow-not-control-flow] Single entry point for validation: the
 // caller hands over (key, value), this returns a uniform ValidateResult
@@ -110,7 +122,7 @@ export function validateStateWrite(
   key: string,
   rawValue: string,
 ): ValidateResult {
-  const validator = STATE_VALIDATORS[key];
+  const validator = STATE_VALIDATORS.get(key);
   if (!validator) {
     return {
       ok: false,

@@ -6,7 +6,7 @@ import { PROTOCOL_VERSION, encodeFrame, makeFrameReader } from "../src/daemon/pr
 import type { Response } from "../src/daemon/protocol";
 import { socketPath } from "../src/daemon/paths";
 import { SessionState } from "../src/daemon/session-state";
-import { VERB_NAMES } from "../src/daemon/verbs";
+import { VERBS, VERB_NAMES } from "../src/daemon/verbs";
 
 // --- SessionState unit tests ---
 
@@ -97,6 +97,22 @@ describe("click protocol", () => {
     if (!resp.ok) {
       expect(resp.code).toBe("BAD_REQUEST");
       expect(resp.error).toContain("unknown click verb");
+    }
+  });
+
+  test("VERBS lookup is prototype-pollution-safe", () => {
+    // [LAW:types-are-the-program] VERBS is a ReadonlyMap, not a plain
+    // object — wire-level untrusted verb names like `__proto__` and
+    // `constructor` are non-members, not truthy hits on Object.prototype.
+    // A future revert to `Readonly<Record<string, VerbHandler>>` would
+    // let those names return prototype functions, bypass the `!handler`
+    // check in handleClick, then crash on `handler(value, ctx)` as
+    // RENDER_FAILED instead of the intended BAD_REQUEST.
+    // [LAW:behavior-not-structure] Pins the safety guarantee at lookup,
+    // so the regression reads as "verb table leaks Object.prototype"
+    // rather than as a type-only diff a reviewer might wave through.
+    for (const poison of ["__proto__", "constructor", "toString", "hasOwnProperty"]) {
+      expect(VERBS.get(poison)).toBeUndefined();
     }
   });
 });

@@ -96,10 +96,10 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
     const ctx = { sessionState, dlog: () => {} };
     // set-state value shape: "<sessionId>/<key>/<value>" — key must be
     // a registered state key and value must satisfy its validator.
-    VERBS["set-state"]!(`${SESSION_ID}/theme/nord`, ctx);
+    VERBS.get("set-state")!(`${SESSION_ID}/theme/nord`, ctx);
     expect(render()).toContain("theme=nord");
 
-    VERBS["set-state"]!(`${SESSION_ID}/theme/dracula`, ctx);
+    VERBS.get("set-state")!(`${SESSION_ID}/theme/dracula`, ctx);
     expect(render()).toContain("theme=dracula");
   });
 
@@ -133,7 +133,7 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
       expect(observed).toEqual(["(unset)"]);
 
       const ctx = { sessionState, dlog: () => {} };
-      VERBS["set-state"]!(`${SESSION_ID}/theme/nord`, ctx);
+      VERBS.get("set-state")!(`${SESSION_ID}/theme/nord`, ctx);
 
       // Exactly one additional fire — proves the dep graph propagated the
       // change rather than the autorun being scheduled for an unrelated
@@ -194,7 +194,7 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
       expect(expandedObs).toEqual([""]);
 
       const ctx = { sessionState, dlog: () => {} };
-      VERBS["set-state"]!(`${SESSION_ID}/theme/nord`, ctx);
+      VERBS.get("set-state")!(`${SESSION_ID}/theme/nord`, ctx);
 
       // Watched key advanced — cascade reached the right computed.
       expect(themeObs).toEqual(["(unset)", "nord"]);
@@ -221,7 +221,7 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
     const { sessionState } = buildRuntime();
     const ctx = { sessionState, dlog: () => {} };
     expect(() =>
-      VERBS["set-state"]!(`${SESSION_ID}/theme/not-a-theme`, ctx),
+      VERBS.get("set-state")!(`${SESSION_ID}/theme/not-a-theme`, ctx),
     ).toThrow(/unknown theme/);
   });
 
@@ -234,7 +234,7 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
     const { sessionState } = buildRuntime();
     const ctx = { sessionState, dlog: () => {} };
     expect(() =>
-      VERBS["set-state"]!(`${SESSION_ID}/theme/custom`, ctx),
+      VERBS.get("set-state")!(`${SESSION_ID}/theme/custom`, ctx),
     ).toThrow(/unknown theme/);
   });
 
@@ -246,7 +246,7 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
     const { sessionState } = buildRuntime();
     const ctx = { sessionState, dlog: () => {} };
     expect(() =>
-      VERBS["set-state"]!(`${SESSION_ID}/not-a-real-key/whatever`, ctx),
+      VERBS.get("set-state")!(`${SESSION_ID}/not-a-real-key/whatever`, ctx),
     ).toThrow(/unknown state key "not-a-real-key" \(have: .*theme.*\)/);
   });
 
@@ -255,7 +255,7 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
     // separate named verb before this epic.
     const { sessionState } = buildRuntime();
     const ctx = { sessionState, dlog: () => {} };
-    VERBS["set-state"]!(`${SESSION_ID}/style/muted`, ctx);
+    VERBS.get("set-state")!(`${SESSION_ID}/style/muted`, ctx);
     expect(sessionState.get(SESSION_ID, "style")).toBe("muted");
   });
 
@@ -263,7 +263,7 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
     const { sessionState } = buildRuntime();
     const ctx = { sessionState, dlog: () => {} };
     expect(() =>
-      VERBS["set-state"]!(`${SESSION_ID}/style/not-a-style`, ctx),
+      VERBS.get("set-state")!(`${SESSION_ID}/style/not-a-style`, ctx),
     ).toThrow(/unknown style "not-a-style" \(have: .*muted.*\)/);
   });
 
@@ -275,16 +275,16 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
     const { sessionState } = buildRuntime();
     const ctx = { sessionState, dlog: () => {} };
 
-    VERBS["set-state"]!(`${SESSION_ID}/toolbar-expanded/true`, ctx);
+    VERBS.get("set-state")!(`${SESSION_ID}/toolbar-expanded/true`, ctx);
     expect(sessionState.get(SESSION_ID, "toolbar-expanded")).toBe("1");
 
-    VERBS["set-state"]!(`${SESSION_ID}/toolbar-expanded/false`, ctx);
+    VERBS.get("set-state")!(`${SESSION_ID}/toolbar-expanded/false`, ctx);
     expect(sessionState.get(SESSION_ID, "toolbar-expanded")).toBe("");
 
-    VERBS["set-state"]!(`${SESSION_ID}/toolbar-expanded/1`, ctx);
+    VERBS.get("set-state")!(`${SESSION_ID}/toolbar-expanded/1`, ctx);
     expect(sessionState.get(SESSION_ID, "toolbar-expanded")).toBe("1");
 
-    VERBS["set-state"]!(`${SESSION_ID}/toolbar-expanded/0`, ctx);
+    VERBS.get("set-state")!(`${SESSION_ID}/toolbar-expanded/0`, ctx);
     expect(sessionState.get(SESSION_ID, "toolbar-expanded")).toBe("");
   });
 
@@ -292,7 +292,7 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
     const { sessionState } = buildRuntime();
     const ctx = { sessionState, dlog: () => {} };
     expect(() =>
-      VERBS["set-state"]!(`${SESSION_ID}/toolbar-expanded/maybe`, ctx),
+      VERBS.get("set-state")!(`${SESSION_ID}/toolbar-expanded/maybe`, ctx),
     ).toThrow(/expected boolean-ish/);
   });
 
@@ -305,13 +305,36 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
     const ctx = { sessionState, dlog: () => {} };
 
     // Just the session id (no key/value).
-    expect(() => VERBS["set-state"]!(`${SESSION_ID}`, ctx)).toThrow(
+    expect(() => VERBS.get("set-state")!(`${SESSION_ID}`, ctx)).toThrow(
       /<key>\/<value> is required/,
     );
     // Key but no value separator.
-    expect(() => VERBS["set-state"]!(`${SESSION_ID}/theme`, ctx)).toThrow(
+    expect(() => VERBS.get("set-state")!(`${SESSION_ID}/theme`, ctx)).toThrow(
       /missing value after key "theme"/,
     );
+  });
+
+  test("set-state rejects prototype-poison keys with a clean BAD_REQUEST", () => {
+    // [LAW:types-are-the-program] The registry is a ReadonlyMap, not a
+    // plain object — so wire-level `__proto__` / `constructor` are
+    // ordinary non-members, not truthy hits on Object.prototype. The
+    // verb's "unknown state key" path catches them; the alternative
+    // (registry as Record<string, T>) would let `validateStateWrite`
+    // return Object.prototype as a truthy "validator", which then throws
+    // a TypeError on invocation — RENDER_FAILED instead of BAD_REQUEST.
+    // [LAW:behavior-not-structure] This test asserts the rejection
+    // behavior, so a future revert from Map to a plain object regresses
+    // here loudly even though the type alone makes the bad state
+    // unrepresentable today.
+    const { sessionState } = buildRuntime();
+    const ctx = { sessionState, dlog: () => {} };
+    for (const poison of ["__proto__", "constructor", "toString"]) {
+      expect(() =>
+        VERBS.get("set-state")!(`${SESSION_ID}/${poison}/whatever`, ctx),
+      ).toThrow(
+        new RegExp(`unknown state key "${poison.replace(/\$/g, "\\$")}"`),
+      );
+    }
   });
 
   test("set-state preserves slashes inside the value (no further splitting)", () => {
@@ -327,7 +350,7 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
     const { sessionState } = buildRuntime();
     const ctx = { sessionState, dlog: () => {} };
     expect(() =>
-      VERBS["set-state"]!(`${SESSION_ID}/theme/a/b/c`, ctx),
+      VERBS.get("set-state")!(`${SESSION_ID}/theme/a/b/c`, ctx),
     ).toThrow(/unknown theme "a\/b\/c"/);
   });
 
@@ -423,9 +446,9 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
     const ctx = { sessionState, dlog: () => {} };
 
     expect(render()).toContain("tb=[]");
-    VERBS["toolbar-toggle"]!(SESSION_ID, ctx);
+    VERBS.get("toolbar-toggle")!(SESSION_ID, ctx);
     expect(render()).toContain("tb=[1]");
-    VERBS["toolbar-toggle"]!(SESSION_ID, ctx);
+    VERBS.get("toolbar-toggle")!(SESSION_ID, ctx);
     expect(render()).toContain("tb=[]");
   });
 });

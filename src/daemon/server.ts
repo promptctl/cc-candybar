@@ -651,7 +651,7 @@ function composeWithError(body: string, error: string | null): string {
 const verbCtx = { sessionState, dlog };
 
 function handleClick(verb: string, value: string): Response {
-  const handler = VERBS[verb];
+  const handler = VERBS.get(verb);
   if (!handler) {
     return {
       ok: false,
