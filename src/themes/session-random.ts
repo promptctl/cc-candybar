@@ -1,12 +1,12 @@
 // [LAW:single-enforcer] One place resolves the "random" sentinel into a
 // concrete value, keyed by sessionId so the random pick is *stable for the
-// life of that session* (pick once; clicks like set-theme overwrite it).
+// life of that session* (pick once; clicks like set-state overwrite it).
 // Each setting (theme / style / endpoints) flows through the same pattern:
 // read sessionState → if cached return it → if config says "random" pick
 // + cache → otherwise return config value as-is.
 //
-// The cache is sessionState itself: that means a) the set-theme/set-style
-// click verbs continue to work (they overwrite the same key), and b) the
+// The cache is sessionState itself: that means a) the set-state click
+// verb continues to work (it overwrites the same key), and b) the
 // dataflow is uniform — no parallel "random cache" to keep in sync with
 // sessionState.
 

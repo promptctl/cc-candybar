@@ -595,8 +595,8 @@ async function handleRequest(req: Request): Promise<Response> {
         ok: false,
         // [LAW:errors-context-in-errors] Include the allowed values so a
         // CLI consumer (or operator) sees what is supported without
-        // grep — same pattern as set-theme/set-style verb errors in
-        // src/daemon/verbs/index.ts.
+        // grep — same pattern as the set-state verb's unknown-key error
+        // in src/daemon/verbs/state-validators.ts.
         error: `unknown debug 'what': ${String(req.what)} (have: ${DEBUG_WHATS.join(", ")})`,
         code: "BAD_REQUEST",
         daemonV: PROTOCOL_VERSION,
@@ -651,7 +651,7 @@ function composeWithError(body: string, error: string | null): string {
 const verbCtx = { sessionState, dlog };
 
 function handleClick(verb: string, value: string): Response {
-  const handler = VERBS[verb];
+  const handler = VERBS.get(verb);
   if (!handler) {
     return {
       ok: false,
