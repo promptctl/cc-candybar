@@ -71,13 +71,23 @@ describe("state-validators registry contract", () => {
       ["true", "1"],
       ["0", ""],
       ["false", ""],
-      ["", ""],
     ];
     for (const [input, normalized] of expected) {
       const result = validateStateWrite("toolbar-expanded", input);
       expect(result.ok).toBe(true);
       if (result.ok) expect(result.value).toBe(normalized);
     }
+  });
+
+  test("toolbar-expanded validator rejects the empty string (no silent guess)", () => {
+    // [LAW:no-silent-fallbacks] Empty value on the wire is structurally
+    // ambiguous (did the operator mean "0", or did they forget to provide
+    // a value?). Accepting it would be a silent semantic guess; the
+    // validator rejects it explicitly so the operator sees the malformed
+    // input rather than a quietly-applied default.
+    const result = validateStateWrite("toolbar-expanded", "");
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.reason).toMatch(/expected boolean-ish/);
   });
 
   test("unknown key rejection lists the registered keys", () => {
@@ -96,15 +106,23 @@ describe("state-validators registry contract", () => {
     // result is either {ok:true, value} or {ok:false, reason}, with no
     // third state. If the union ever grows another arm, this test fails
     // at the exhaustiveness check.
-    const sample: ValidateResult = validateStateWrite("theme", "textual-dark");
+    //
+    // [LAW:locality-or-seam] The sample theme is derived from the live
+    // palette registry so this test depends only on what it asserts
+    // (the union shape) — not on any particular theme name. A palette
+    // rename or alias change leaves this test undisturbed; the
+    // "accepts every resolvable palette" test above owns the registry-
+    // ↔-validator bridge.
+    const [aPaletteName] = listResolvablePaletteNames();
+    expect(aPaletteName).toBeDefined();
+    const sample: ValidateResult = validateStateWrite("theme", aPaletteName!);
     if (sample.ok) {
       expect(typeof sample.value).toBe("string");
     } else {
-      // [LAW:no-defensive-null-guards] The branch is exhaustive — if
-      // theme validation of a real palette name returned ok:false, the
-      // theme registry diverged from what the validator accepts, which
-      // is exactly what the "accepts every resolvable palette" test
-      // above is responsible for catching. Failing both is a feature.
+      // The branch is exhaustive — if theme validation of a real palette
+      // name returned ok:false, the theme registry diverged from what
+      // the validator accepts, which the "accepts every resolvable
+      // palette" test above is responsible for catching.
       expect(typeof sample.reason).toBe("string");
     }
   });

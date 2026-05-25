@@ -68,16 +68,25 @@ const validateStyle: KeyValidator = (raw) => {
   return { ok: true, value: raw };
 };
 
-// [LAW:dataflow-not-control-flow] Boolean-ish accepts four canonical
-// inputs and normalizes to two canonical outputs: truthy → "1", falsy →
-// "" (empty). The empty string is the same sentinel `toolbar-toggle`
-// produces via `clear()` for the next render — readers treat both as
-// "off" because the DSL state binding's default fires on null/empty.
-// Centralizing this canonical pair here means any future widget that
-// writes a boolean state key gets the same on/off contract by registry
-// row, not by re-deriving it inline.
+// [LAW:dataflow-not-control-flow] Boolean-ish accepts exactly four
+// canonical inputs and normalizes to two canonical outputs: truthy
+// ("1"/"true") → "1", falsy ("0"/"false") → "" (empty). The empty
+// falsy sentinel matches what `toolbar-toggle` produces via `clear()`
+// for the next render — readers treat both as "off" because the DSL
+// state binding's default fires on null/empty. Centralizing this
+// canonical pair here means any future widget that writes a boolean
+// state key gets the same on/off contract by registry row, not by
+// re-deriving it inline.
+//
+// [LAW:no-silent-fallbacks] The empty string as INPUT is rejected, not
+// silently mapped to falsy. An empty value on the wire is structurally
+// ambiguous (did the operator mean "0", or did they forget to provide
+// a value?); accepting it would be a silent semantic guess. Each of
+// the comment, the accepted-input set, and the rejection message names
+// the same four inputs — [LAW:one-source-of-truth] kept by construction
+// instead of by maintenance.
 const BOOLEAN_TRUTHY = new Set(["1", "true"]);
-const BOOLEAN_FALSY = new Set(["0", "false", ""]);
+const BOOLEAN_FALSY = new Set(["0", "false"]);
 const validateBoolean: KeyValidator = (raw) => {
   if (BOOLEAN_TRUTHY.has(raw)) return { ok: true, value: "1" };
   if (BOOLEAN_FALSY.has(raw)) return { ok: true, value: "" };
