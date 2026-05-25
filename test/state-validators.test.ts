@@ -101,11 +101,15 @@ describe("state-validators registry contract", () => {
     }
   });
 
-  test("ValidateResult discriminant is exhaustive", () => {
-    // [LAW:types-are-the-program] Pin the discriminated-union shape: a
-    // result is either {ok:true, value} or {ok:false, reason}, with no
-    // third state. If the union ever grows another arm, this test fails
-    // at the exhaustiveness check.
+  test("ValidateResult discriminant is exhaustive (type-level)", () => {
+    // [LAW:types-are-the-program] Exhaustiveness is a COMPILE-TIME
+    // theorem about the union, not a runtime branch coverage check.
+    // The `_exhaustive: never = s` assignment fails `pnpm typecheck`
+    // (not Jest runtime) if ValidateResult grows an arm beyond
+    // {ok:true,value} | {ok:false,reason} — because TS narrows `s` to
+    // `never` only when both ok-arms are returned from above. Adding
+    // a third arm (e.g. {ok:"pending", token}) leaves `s` non-never
+    // at the assignment site, which the build rejects.
     //
     // [LAW:locality-or-seam] The sample theme is derived from the live
     // palette registry so this test depends only on what it asserts
@@ -113,17 +117,21 @@ describe("state-validators registry contract", () => {
     // rename or alias change leaves this test undisturbed; the
     // "accepts every resolvable palette" test above owns the registry-
     // ↔-validator bridge.
+    const checkShape = (s: ValidateResult): void => {
+      if (s.ok) {
+        expect(typeof s.value).toBe("string");
+        return;
+      }
+      if (!s.ok) {
+        expect(typeof s.reason).toBe("string");
+        return;
+      }
+      const _exhaustive: never = s;
+      void _exhaustive;
+    };
     const [aPaletteName] = listResolvablePaletteNames();
     expect(aPaletteName).toBeDefined();
-    const sample: ValidateResult = validateStateWrite("theme", aPaletteName!);
-    if (sample.ok) {
-      expect(typeof sample.value).toBe("string");
-    } else {
-      // The branch is exhaustive — if theme validation of a real palette
-      // name returned ok:false, the theme registry diverged from what
-      // the validator accepts, which the "accepts every resolvable
-      // palette" test above is responsible for catching.
-      expect(typeof sample.reason).toBe("string");
-    }
+    checkShape(validateStateWrite("theme", aPaletteName!));
+    checkShape(validateStateWrite("not-a-key", "x"));
   });
 });

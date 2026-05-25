@@ -45,13 +45,23 @@ export type KeyValidator = (rawValue: string) => ValidateResult;
 // includes the "custom" sentinel (read inline colors) which is not a
 // renderable theme name; accepting "custom" here would persist an
 // unrenderable value into SessionState and break the next render.
+//
+// [LAW:single-enforcer] Each validator's accepted-set is one constant
+// lookup structure — a Set for O(1) `has` (matching the BOOLEAN_*
+// validators below). The theme registry (rich-js THEMES) and STYLE_ORDER
+// are module-init-static, so caching at module load is correct by
+// construction; the (list, set) pair is built from the same source so
+// the error-message ordering and the lookup membership cannot drift.
+const RESOLVABLE_THEMES_LIST: readonly string[] = listResolvablePaletteNames();
+const RESOLVABLE_THEMES: ReadonlySet<string> = new Set(RESOLVABLE_THEMES_LIST);
+const RESOLVABLE_STYLES: ReadonlySet<string> = new Set(STYLE_ORDER);
+
 const validateTheme: KeyValidator = (raw) => {
   if (!raw) return { ok: false, reason: "theme name is required" };
-  const themes = listResolvablePaletteNames();
-  if (!themes.includes(raw)) {
+  if (!RESOLVABLE_THEMES.has(raw)) {
     return {
       ok: false,
-      reason: `unknown theme "${raw}" (have: ${themes.join(", ")})`,
+      reason: `unknown theme "${raw}" (have: ${RESOLVABLE_THEMES_LIST.join(", ")})`,
     };
   }
   return { ok: true, value: raw };
@@ -59,7 +69,7 @@ const validateTheme: KeyValidator = (raw) => {
 
 const validateStyle: KeyValidator = (raw) => {
   if (!raw) return { ok: false, reason: "style name is required" };
-  if (!STYLE_ORDER.includes(raw)) {
+  if (!RESOLVABLE_STYLES.has(raw)) {
     return {
       ok: false,
       reason: `unknown style "${raw}" (have: ${STYLE_ORDER.join(", ")})`,
