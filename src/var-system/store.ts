@@ -181,13 +181,28 @@ export class VariableStore {
     return this.requireNode(name).kind;
   }
 
-  // [LAW:locality-or-seam] Introspection (src/daemon/debug.ts) needs the
-  // whole node — type, kind, lastUpdatedMs — without bouncing through three
-  // accessor methods that each repeat the requireNode lookup. The returned
-  // VarNode is read-only by interface (no set/define), so exposing it
-  // does not widen the mutation surface.
+  // [LAW:types-are-the-program] Introspection (src/daemon/debug.ts) needs
+  // the whole node — type, kind, lastUpdatedMs — in one lookup, but
+  // returning the BoxNode directly would leak `.set` structurally even
+  // though VarNode does not advertise it. The returned wrapper is a fresh
+  // object exposing only the VarNode surface — `.set` is unreachable at
+  // any level (no structural escape, no plain-JS reach-through). The
+  // mutation path remains gated behind `setBox`, which wraps in
+  // runInAction to satisfy MobX strict-mode.
+  //
+  // [LAW:single-enforcer] One requireNode call per consumer-row — the
+  // round-1 dedup fix in introspectVars relies on the caller getting both
+  // type/kind and a read() in one go without paying for a second
+  // requireNode. The wrapper preserves that.
   getNode(name: string): VarNode {
-    return this.requireNode(name);
+    const node = this.requireNode(name);
+    return {
+      name: node.name,
+      type: node.type,
+      kind: node.kind,
+      read: () => node.read(),
+      lastUpdatedMs: () => node.lastUpdatedMs(),
+    };
   }
 
   names(): string[] {

@@ -152,6 +152,41 @@ describe("VariableStore — introspection", () => {
 
     expect(store.names().sort()).toEqual(["derived", "seed"]);
   });
+
+  // [LAW:types-are-the-program] The VarNode returned by getNode is the
+  // read-only view of a variable. A BoxNode's `.set` must NOT be reachable
+  // through the returned wrapper at any level (no structural escape, no
+  // plain-JS reach-through), so introspection consumers cannot accidentally
+  // bypass setBox + runInAction.
+  it("getNode returns a wrapper whose mutation surface is unreachable", () => {
+    const store = new VariableStore();
+    store.defineBox("seed", "number", 7);
+    const node = store.getNode("seed");
+
+    // The advertised surface works.
+    expect(node.name).toBe("seed");
+    expect(node.kind).toBe("box");
+    expect(node.type).toBe("number");
+    expect(node.read()).toBe(7);
+    expect(node.lastUpdatedMs()).toBeGreaterThan(0);
+
+    // .set must not exist on the wrapper — no key, no accessor, no path.
+    // Cast to record-of-unknown to assert at runtime (the wrapper hides
+    // .set; reaching for it as `unknown` returns undefined).
+    expect((node as unknown as Record<string, unknown>).set).toBeUndefined();
+  });
+
+  it("getNode's wrapper read() reflects subsequent setBox", () => {
+    // The wrapper is bound to the underlying node, so values change as
+    // the store mutates — it isn't a frozen snapshot.
+    const store = new VariableStore();
+    store.defineBox("seed", "number", 7);
+    const node = store.getNode("seed");
+    expect(node.read()).toBe(7);
+
+    store.setBox("seed", 42);
+    expect(node.read()).toBe(42);
+  });
 });
 
 describe("type-checked cast helpers", () => {
