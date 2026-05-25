@@ -312,6 +312,12 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
     expect(() => VERBS.get("set-state")!(`${SESSION_ID}/theme`, ctx)).toThrow(
       /missing value after key "theme"/,
     );
+    // Empty key (extra leading slash). Structurally distinct from the
+    // unknown-key validator rejection — the operator's mistake was a
+    // missing key segment, not a typo on the key name.
+    expect(() => VERBS.get("set-state")!(`${SESSION_ID}//ocean`, ctx)).toThrow(
+      /empty key \(expected <sessionId>\/<key>\/<value>\)/,
+    );
   });
 
   test("set-state rejects prototype-poison keys with a clean BAD_REQUEST", () => {

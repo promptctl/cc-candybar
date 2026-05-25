@@ -158,6 +158,16 @@ const setState: VerbHandler = (rawValue, ctx) => {
     throw new BadVerbArgs(
       `set-state: missing value after key "${keyAndValue}" (expected <key>/<value>)`,
     );
+  // [LAW:types-are-the-program] Each structurally distinct rejection
+  // category gets its own diagnostic — an empty key (e.g. wire shape
+  // `<sid>//<value>`) is a structural error (missing key segment), not a
+  // semantic one (validator rejection of an unknown key). Routing it to
+  // the unknown-key validator message ("unknown state key \"\"") would
+  // mislead the operator about where their mistake was. Catch it here.
+  if (slash === 0)
+    throw new BadVerbArgs(
+      `set-state: empty key (expected <sessionId>/<key>/<value>)`,
+    );
   const key = keyAndValue.slice(0, slash);
   const incoming = keyAndValue.slice(slash + 1);
   const result = validateStateWrite(key, incoming);
