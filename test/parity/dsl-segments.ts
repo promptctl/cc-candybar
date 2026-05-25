@@ -17,6 +17,7 @@
 import type { SegmentName } from "../../src/config/loader";
 import type { DslBinding } from "./harness";
 import { VariableStore } from "../../src/var-system/store";
+import { DEFAULT_CONFIG } from "../../src/config/defaults";
 import {
   HOOK_DATA,
   GIT_INFO,
@@ -24,6 +25,11 @@ import {
   TMUX_SESSION_ID,
   ENV_VAR,
   THEME,
+  USAGE_INFO,
+  CONTEXT_INFO,
+  METRICS_INFO,
+  BLOCK_INFO,
+  TODAY_INFO,
 } from "./fixtures";
 
 function seeded(seed: (s: VariableStore) => void): () => VariableStore {
@@ -94,6 +100,26 @@ const GIT_TEMPLATE =
   GIT_STATUS +
   ' ';
 
+// [LAW:dataflow-not-control-flow] block and weekly share the same threshold
+// cascade (80 = critical, 50 = warning, else default), differing only in the
+// numeric variable that feeds the cascade. The bg/fg templates are factored
+// to take a literal variable name so each segment's binding stays a single
+// declaration — no clever runtime string surgery, just two named builders.
+function blockLikeBg(pctRef: string): string {
+  return (
+    `{{ if ge (round ${pctRef}) 80 }}error` +
+    `{{ else }}{{ if ge (round ${pctRef}) 50 }}warning` +
+    `{{ else }}panel{{ end }}{{ end }}`
+  );
+}
+
+function blockLikeFg(pctRef: string): string {
+  return (
+    `{{ if ge (round ${pctRef}) 50 }}button-color-foreground` +
+    `{{ else }}foreground{{ end }}`
+  );
+}
+
 // [LAW:types-are-the-program] `satisfies` (not an annotation) keeps the
 // constraint — keys must be SegmentNames, values must be DslBinding — while
 // preserving the literal's keys as non-optional. So a registry entry that
@@ -111,16 +137,14 @@ export const DSL_BINDINGS = {
   },
 
   model: {
-    // Reads the human-friendly model.display_name directly — the legitimate DSL
-    // form for "show the model name". Legacy renderModel additionally runs
-    // formatModelName (regex-based: strips "(1M context)"-style decorations,
-    // canonicalizes raw IDs like "claude-sonnet-4-6" → "Sonnet 4.6"). That
-    // normalization is NOT expressible in the DSL function set (no regex), so it
-    // is filed as a capability gap (bzh.5), not faked by seeding a pre-formatted
-    // value. Byte-identical for friendly names (this fixture), but Claude does
-    // send decorated names, so the registry marks model dsl-pending — see there.
+    // [LAW:one-source-of-truth] formatModelName (regex-based: strips
+    // "(1M context)"-style decorations, canonicalizes raw IDs like
+    // "claude-sonnet-4-6" → "Sonnet 4.6") is now wrapped by formatterFuncs
+    // (chunk-7 bzh.5), so the DSL can express the same normalization the
+    // legacy renderModel runs. Byte-identical to legacy for raw IDs AND
+    // friendly names — model flips to dsl-parity in the registry.
     decl: {
-      template: " ✱ {{ .model.display_name }} ",
+      template: " ✱ {{ formatModelName .model.display_name }} ",
       bg: "panel",
       fg: "foreground",
     },
@@ -249,6 +273,199 @@ export const DSL_BINDINGS = {
     store: seeded((s) => {
       s.defineBox("session.id", "string", SESSION_ID);
       s.defineBox("theme", "string", THEME);
+    }),
+  },
+
+  // ─── chunk-7 bzh.5: usage / cost / time / locale family ─────────────
+  // [LAW:one-source-of-truth] These bindings use formatterFuncs wrappers
+  // (formatCost, formatTokens, round, formatLongTimeRemaining,
+  // minutesUntilReset, formatInteger, formatResponseTime, formatDuration,
+  // budgetStatus) — none re-implement formatting in template syntax.
+  // Drift between DSL and legacy is impossible: both end at the same JS
+  // function in src/utils/formatters.ts.
+
+  // session — cost+tokens. Default config has no session budget.amount,
+  // so the legacy formatUsageWithBudget appends "" (no suffix). The DSL
+  // template omits budgetStatus entirely rather than calling it with a
+  // zero-budget arg — both produce the same bytes for this fixture; if
+  // a user config sets session.budget.amount, the template can grow a
+  // budgetStatus call without changing this fixture.
+  session: {
+    decl: {
+      template:
+        " § {{ formatCost .session.cost }} ({{ formatTokens .session.tokens }}) ",
+      bg: "surface",
+      fg: "foreground",
+    },
+    // [LAW:no-defensive-null-guards] No `?? 0` coalesce: USAGE_INFO is
+    // `satisfies UsageInfo` (see fixtures.ts) so .session.cost / .session.tokens
+    // narrow to `number` here. Production callers where cost/tokens can legitimately
+    // be null need presence-boolean gating in the template — separate concern,
+    // tracked in brandon-segment-dsl-migration-bzh.8.
+    store: seeded((s) => {
+      s.defineBox("session.cost", "number", USAGE_INFO.session.cost);
+      s.defineBox("session.tokens", "number", USAGE_INFO.session.tokens);
+    }),
+  },
+
+  // today — cost+tokens with budget suffix. The fixture's DEFAULT_CONFIG
+  // today.budget has amount=50, warningThreshold=80; cost=4.56 → "$4.56
+  // (234.6K tokens) 9%". budgetStatus returns "" when budget=0, so the
+  // template safely composes even when the user disables the budget.
+  today: {
+    decl: {
+      template:
+        " ☉ {{ formatCost .today.cost }} ({{ formatTokens .today.tokens }})" +
+        "{{ budgetStatus .today.cost .today.budget.amount .today.budget.warningThreshold }} ",
+      bg: "surface",
+      fg: "foreground",
+    },
+    // [LAW:no-defensive-null-guards] No `?? 0` coalesce on today.cost/.tokens:
+    // TODAY_INFO is `satisfies TodayInfo` so the literal narrows to `number`
+    // here. Production where cost/tokens can be null is a separate
+    // expressiveness concern, tracked in brandon-segment-dsl-migration-bzh.8.
+    store: seeded((s) => {
+      s.defineBox("today.cost", "number", TODAY_INFO.cost);
+      s.defineBox("today.tokens", "number", TODAY_INFO.tokens);
+      // [LAW:one-source-of-truth] Budget knobs come from PowerlineConfig
+      // .budget.today in production. The DSL binding seeds them as scalars
+      // (var-system is flat-scalar) but reads from DEFAULT_CONFIG so the
+      // fixture moves in lockstep if defaults change — no second literal copy
+      // to drift. The `satisfies PowerlineConfig` annotation on DEFAULT_CONFIG
+      // narrows these fields to non-optional, so no `!` laundering is needed.
+      s.defineBox(
+        "today.budget.amount",
+        "number",
+        DEFAULT_CONFIG.budget.today.amount,
+      );
+      s.defineBox(
+        "today.budget.warningThreshold",
+        "number",
+        DEFAULT_CONFIG.budget.today.warningThreshold,
+      );
+    }),
+  },
+
+  // block — rounded pct + long-time-remaining, color-cascading on pct.
+  // [LAW:dataflow-not-control-flow] Color thresholds are encoded in the
+  // bg/fg template strings (which evaluate to palette spec names), not in
+  // application code. The same data (round pct) decides text AND color;
+  // no parallel branch for "compute color separately".
+  // Palette mapping for fixture pct=55: warningThreshold=80, 50 <= pct < 80
+  // → "warning" bg + "button-color-foreground" fg (matches legacy
+  // contextWarningBg / contextWarningFg).
+  block: {
+    decl: {
+      template:
+        " ◱ {{ round .block.nativeUtilization }}% " +
+        "({{ formatLongTimeRemaining .block.timeRemaining }}) ",
+      bg: blockLikeBg(".block.nativeUtilization"),
+      fg: blockLikeFg(".block.nativeUtilization"),
+    },
+    store: seeded((s) => {
+      s.defineBox(
+        "block.nativeUtilization",
+        "number",
+        BLOCK_INFO.nativeUtilization,
+      );
+      s.defineBox("block.timeRemaining", "number", BLOCK_INFO.timeRemaining);
+    }),
+  },
+
+  // weekly — like block but resetsAt is epoch seconds, so the time chain
+  // is `formatLongTimeRemaining (minutesUntilReset .resetsAt)` — exactly
+  // the legacy composition. The legacy weekly thresholds are hardcoded
+  // (80 critical, 50 warning), matching block's defaults — same BG/FG
+  // template constants.
+  weekly: {
+    decl: {
+      template:
+        " ◑ {{ round .weekly.percentage }}% " +
+        "({{ formatLongTimeRemaining (minutesUntilReset .weekly.resetsAt) }}) ",
+      bg: blockLikeBg(".weekly.percentage"),
+      fg: blockLikeFg(".weekly.percentage"),
+    },
+    store: seeded((s) => {
+      s.defineBox(
+        "weekly.percentage",
+        "number",
+        HOOK_DATA.rate_limits!.seven_day!.used_percentage,
+      );
+      s.defineBox(
+        "weekly.resetsAt",
+        "number",
+        HOOK_DATA.rate_limits!.seven_day!.resets_at,
+      );
+    }),
+  },
+
+  // context — locale-grouped totalTokens + remaining-percentage, cascading
+  // color on contextLeftPercentage. Color thresholds are INVERTED relative
+  // to block/weekly: low "left" is critical (running out of context), high
+  // "left" is normal. Default style for fixture's contextLeft=70 → context
+  // segment colors ("surface-active" / "foreground"), matching variant=
+  // warning under the surface preset.
+  context: {
+    decl: {
+      template:
+        " ◔ {{ formatInteger .context.totalTokens }} ({{ .context.contextLeft }}%) ",
+      bg:
+        "{{ if le .context.contextLeft 20 }}error" +
+        "{{ else }}{{ if le .context.contextLeft 40 }}warning" +
+        "{{ else }}surface-active{{ end }}{{ end }}",
+      fg:
+        "{{ if le .context.contextLeft 40 }}button-color-foreground" +
+        "{{ else }}foreground{{ end }}",
+    },
+    store: seeded((s) => {
+      s.defineBox("context.totalTokens", "number", CONTEXT_INFO.totalTokens);
+      s.defineBox(
+        "context.contextLeft",
+        "number",
+        CONTEXT_INFO.contextLeftPercentage,
+      );
+    }),
+  },
+
+  // metrics — all six parts (last-response, response, duration, messages,
+  // lines-added, lines-removed) enabled. The fixture's MetricsInfo has all
+  // non-null/positive values, so a static template renders byte-identical;
+  // a user config that disables a part, OR a null field (no data yet), would
+  // need a more expressive declaration: per-part show-booleans + template
+  // conditionals to mirror legacy renderMetrics' null/zero gating, plus a
+  // segment-level "new"/"active" fallback. Tracked in
+  // brandon-segment-dsl-migration-bzh.8. Variant=accent → "panel" bg +
+  // "foreground" fg under the surface preset.
+  //
+  // [LAW:no-defensive-null-guards] No `?? 0` coalesce: METRICS_INFO is
+  // `satisfies MetricsInfo` so the literal's non-null types are preserved.
+  metrics: {
+    decl: {
+      template:
+        " Δ {{ formatResponseTime .metrics.lastResponseTime }}" +
+        " ⧖ {{ formatResponseTime .metrics.responseTime }}" +
+        " ⧗ {{ formatDuration .metrics.sessionDuration }}" +
+        " ◆ {{ .metrics.messageCount }}" +
+        " + {{ .metrics.linesAdded }}" +
+        " - {{ .metrics.linesRemoved }} ",
+      bg: "panel",
+      fg: "foreground",
+    },
+    store: seeded((s) => {
+      s.defineBox(
+        "metrics.lastResponseTime",
+        "number",
+        METRICS_INFO.lastResponseTime,
+      );
+      s.defineBox("metrics.responseTime", "number", METRICS_INFO.responseTime);
+      s.defineBox(
+        "metrics.sessionDuration",
+        "number",
+        METRICS_INFO.sessionDuration,
+      );
+      s.defineBox("metrics.messageCount", "number", METRICS_INFO.messageCount);
+      s.defineBox("metrics.linesAdded", "number", METRICS_INFO.linesAdded);
+      s.defineBox("metrics.linesRemoved", "number", METRICS_INFO.linesRemoved);
     }),
   },
 } satisfies Partial<Record<SegmentName, DslBinding>>;

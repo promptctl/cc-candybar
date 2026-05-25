@@ -12,7 +12,10 @@
 //  • sprigLists: has (membership test: `has "v" $list`).
 //  • richTextFuncs: bold, italic, red, green, … (styling from rich-js).
 //  • paletteFuncs (when resolver provided): primary, accent, palette, paletteOver, auto.
-//  • ccCandybarFuncs: basename, dirname, int, string, bool.
+//  • ccCandybarFuncs: basename, dirname, int, string, bool, urlEncode.
+//  • formatterFuncs: formatCost, formatTokens, formatTokenCount, formatDuration,
+//    formatLongTimeRemaining, formatResponseTime, minutesUntilReset,
+//    formatInteger, round, budgetStatus, formatModelName, shortenModelName.
 
 import {
   createEngine,
@@ -24,7 +27,7 @@ import {
 import type { PaletteResolver } from "@promptctl/rich-js";
 import { richTextFuncs, RichText } from "@promptctl/rich-js";
 import { paletteFuncs } from "@promptctl/rich-js/template-bindings";
-import { ccCandybarFuncs } from "./funcs.js";
+import { ccCandybarFuncs, formatterFuncs } from "./funcs.js";
 
 // [LAW:single-enforcer] fromString/toString are declared once here.
 // richTextFuncs() provides style functions (bold, red, link, …).
@@ -50,6 +53,10 @@ export function createCcCandybarEngine(
       ...(resolver !== undefined ? paletteFuncs(resolver) : {}),
       // Domain-specific overrides last (wins on collision with sprig aliases).
       ...ccCandybarFuncs(),
+      // [LAW:one-source-of-truth] formatter wrappers delegate to
+      // src/utils/formatters.ts (and src/utils/budget.ts); no name collides
+      // with sprig or ccCandybarFuncs.
+      ...formatterFuncs(),
     },
   });
 }

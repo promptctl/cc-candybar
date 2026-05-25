@@ -1,6 +1,14 @@
 import type { PowerlineConfig } from "./loader";
 
-export const DEFAULT_CONFIG: PowerlineConfig = {
+// [LAW:types-are-the-program] `satisfies` (not an annotation): the literal's
+// narrow type is preserved so consumers reading DEFAULT_CONFIG see the keys
+// that are actually present (e.g. DEFAULT_CONFIG.budget.today.amount is
+// `number`, not `number | undefined`). PowerlineConfig optionality reflects
+// what *user configs* may omit; DEFAULT_CONFIG itself omits nothing, so the
+// type should not pretend it does. Eliminates `!` non-null laundering at
+// every callsite that reads canonical default values (e.g. the parity
+// fixture for today's budget knobs).
+export const DEFAULT_CONFIG = {
   // [LAW:dataflow-not-control-flow] "random" is a value, not a special case;
   // resolveSession{Theme,Style,DisplayStyle} expand it per-session at render
   // and cache the pick in SessionState so it's stable for that session.
@@ -93,4 +101,4 @@ export const DEFAULT_CONFIG: PowerlineConfig = {
     sonnet: 200000,
     opus: 200000,
   },
-};
+} satisfies PowerlineConfig;
