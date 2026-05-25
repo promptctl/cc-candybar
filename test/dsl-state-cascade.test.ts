@@ -87,24 +87,24 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
     expect(render()).toContain("theme=ocean");
   });
 
-  test("set-theme click verb propagates to the next render", () => {
+  test("set-state click verb propagates to the next render", () => {
     // The actual ticket verification: dispatch the verb through the same
     // registry the daemon uses; assert the next render reflects the change.
     const { sessionState, render } = buildRuntime();
     expect(render()).toContain("theme=(unset)");
 
     const ctx = { sessionState, dlog: () => {} };
-    // set-theme value shape: "<sessionId>/<themeName>" — themeName must
-    // exist in the live theme registry (verbs validate against it).
-    VERBS["set-theme"]!(`${SESSION_ID}/nord`, ctx);
+    // set-state value shape: "<sessionId>/<key>/<value>" — key must be
+    // a registered state key and value must satisfy its validator.
+    VERBS["set-state"]!(`${SESSION_ID}/theme/nord`, ctx);
     expect(render()).toContain("theme=nord");
 
-    VERBS["set-theme"]!(`${SESSION_ID}/dracula`, ctx);
+    VERBS["set-state"]!(`${SESSION_ID}/theme/dracula`, ctx);
     expect(render()).toContain("theme=dracula");
   });
 
   test("cascade triggers a reactive observer, not just a fresh render-time read", () => {
-    // [LAW:behavior-not-structure] The "set-theme click verb propagates"
+    // [LAW:behavior-not-structure] The "set-state click verb propagates"
     // test above asserts the rendered string carries the new value — true
     // whenever renderDslLine sees the new value at next read, which can
     // happen via two different mechanisms:
@@ -133,7 +133,7 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
       expect(observed).toEqual(["(unset)"]);
 
       const ctx = { sessionState, dlog: () => {} };
-      VERBS["set-theme"]!(`${SESSION_ID}/nord`, ctx);
+      VERBS["set-state"]!(`${SESSION_ID}/theme/nord`, ctx);
 
       // Exactly one additional fire — proves the dep graph propagated the
       // change rather than the autorun being scheduled for an unrelated
@@ -194,7 +194,7 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
       expect(expandedObs).toEqual([""]);
 
       const ctx = { sessionState, dlog: () => {} };
-      VERBS["set-theme"]!(`${SESSION_ID}/nord`, ctx);
+      VERBS["set-state"]!(`${SESSION_ID}/theme/nord`, ctx);
 
       // Watched key advanced — cascade reached the right computed.
       expect(themeObs).toEqual(["(unset)", "nord"]);
@@ -214,28 +214,121 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
     }
   });
 
-  test("set-theme rejects an unknown theme name (BadVerbArgs)", () => {
+  test("set-state rejects an unknown theme value (BadVerbArgs)", () => {
     // Pinning the [LAW:no-silent-fallbacks] contract on the verb itself.
     // An unknown theme cannot quietly persist — the daemon's dispatcher
     // converts BadVerbArgs into a BAD_REQUEST wire response.
     const { sessionState } = buildRuntime();
     const ctx = { sessionState, dlog: () => {} };
-    expect(() => VERBS["set-theme"]!(`${SESSION_ID}/not-a-theme`, ctx)).toThrow(
-      /unknown theme/,
-    );
+    expect(() =>
+      VERBS["set-state"]!(`${SESSION_ID}/theme/not-a-theme`, ctx),
+    ).toThrow(/unknown theme/);
   });
 
-  test('set-theme rejects the "custom" sentinel (not a renderable theme)', () => {
-    // [LAW:one-source-of-truth] The verb validates against
+  test('set-state rejects the "custom" theme sentinel (not a renderable theme)', () => {
+    // [LAW:one-source-of-truth] The theme validator runs against
     // listResolvablePaletteNames — the set of names that actually resolve
     // to a Palette. "custom" is a sentinel that instructs the cascade to
     // read inline colors; persisting it as a session theme would render
     // empty/broken at the next refresh.
     const { sessionState } = buildRuntime();
     const ctx = { sessionState, dlog: () => {} };
-    expect(() => VERBS["set-theme"]!(`${SESSION_ID}/custom`, ctx)).toThrow(
-      /unknown theme/,
+    expect(() =>
+      VERBS["set-state"]!(`${SESSION_ID}/theme/custom`, ctx),
+    ).toThrow(/unknown theme/);
+  });
+
+  test("set-state rejects an unknown key with the registered-key list", () => {
+    // [LAW:no-silent-fallbacks] An unknown key is the registry telling the
+    // operator "this is not a writable surface" — the BAD_REQUEST surfaces
+    // exactly which keys ARE writable, so a typo or stale wire spec is
+    // self-diagnosing.
+    const { sessionState } = buildRuntime();
+    const ctx = { sessionState, dlog: () => {} };
+    expect(() =>
+      VERBS["set-state"]!(`${SESSION_ID}/not-a-real-key/whatever`, ctx),
+    ).toThrow(/unknown state key "not-a-real-key" \(have: .*theme.*\)/);
+  });
+
+  test("set-state writes the style key when given a registered style", () => {
+    // The set-state verb covers every registered key; the style key was a
+    // separate named verb before this epic.
+    const { sessionState } = buildRuntime();
+    const ctx = { sessionState, dlog: () => {} };
+    VERBS["set-state"]!(`${SESSION_ID}/style/muted`, ctx);
+    expect(sessionState.get(SESSION_ID, "style")).toBe("muted");
+  });
+
+  test("set-state rejects an unknown style value with the allowed-list", () => {
+    const { sessionState } = buildRuntime();
+    const ctx = { sessionState, dlog: () => {} };
+    expect(() =>
+      VERBS["set-state"]!(`${SESSION_ID}/style/not-a-style`, ctx),
+    ).toThrow(/unknown style "not-a-style" \(have: .*muted.*\)/);
+  });
+
+  test("set-state normalizes boolean-ish toolbar-expanded values", () => {
+    // [LAW:one-source-of-truth] The canonical truthy/falsy strings are
+    // owned by the boolean validator, not by each callsite. "1"/"true"
+    // collapse to "1"; "0"/"false" collapse to "" — the same sentinel
+    // the toolbar-toggle verb produces via clear() for the next render.
+    const { sessionState } = buildRuntime();
+    const ctx = { sessionState, dlog: () => {} };
+
+    VERBS["set-state"]!(`${SESSION_ID}/toolbar-expanded/true`, ctx);
+    expect(sessionState.get(SESSION_ID, "toolbar-expanded")).toBe("1");
+
+    VERBS["set-state"]!(`${SESSION_ID}/toolbar-expanded/false`, ctx);
+    expect(sessionState.get(SESSION_ID, "toolbar-expanded")).toBe("");
+
+    VERBS["set-state"]!(`${SESSION_ID}/toolbar-expanded/1`, ctx);
+    expect(sessionState.get(SESSION_ID, "toolbar-expanded")).toBe("1");
+
+    VERBS["set-state"]!(`${SESSION_ID}/toolbar-expanded/0`, ctx);
+    expect(sessionState.get(SESSION_ID, "toolbar-expanded")).toBe("");
+  });
+
+  test("set-state rejects non-boolean-ish toolbar-expanded values", () => {
+    const { sessionState } = buildRuntime();
+    const ctx = { sessionState, dlog: () => {} };
+    expect(() =>
+      VERBS["set-state"]!(`${SESSION_ID}/toolbar-expanded/maybe`, ctx),
+    ).toThrow(/expected boolean-ish/);
+  });
+
+  test("set-state rejects malformed wire input (missing key or value)", () => {
+    // [LAW:types-are-the-program] The wire shape <sid>/<key>/<value> has
+    // three required pieces. Each missing piece is a structurally distinct
+    // rejection so a malformed URL surfaces the right hint, not a generic
+    // "bad input" — the operator sees which slash they forgot.
+    const { sessionState } = buildRuntime();
+    const ctx = { sessionState, dlog: () => {} };
+
+    // Just the session id (no key/value).
+    expect(() => VERBS["set-state"]!(`${SESSION_ID}`, ctx)).toThrow(
+      /<key>\/<value> is required/,
     );
+    // Key but no value separator.
+    expect(() => VERBS["set-state"]!(`${SESSION_ID}/theme`, ctx)).toThrow(
+      /missing value after key "theme"/,
+    );
+  });
+
+  test("set-state preserves slashes inside the value (no further splitting)", () => {
+    // [LAW:dataflow-not-control-flow] The verb splits exactly twice (sid,
+    // key) — the remainder is the value verbatim. A future state key
+    // whose values may legitimately contain `/` (paths, URLs) gets that
+    // for free; the parser does not steal slashes from the value space.
+    // We exercise this via a temporary registry of one key — the live
+    // registry currently has no slash-bearing values, so we synthesize a
+    // fixture key by piggybacking on theme: the validator rejects "a/b"
+    // by content, but the verb must still SEE "a/b" as the value (not
+    // "a"). The rejection message proves the verb passed "a/b" through.
+    const { sessionState } = buildRuntime();
+    const ctx = { sessionState, dlog: () => {} };
+    expect(() =>
+      VERBS["set-state"]!(`${SESSION_ID}/theme/a/b/c`, ctx),
+    ).toThrow(/unknown theme "a\/b\/c"/);
   });
 
   test("parseDslConfig rejects a state-kind var with no session.id anchor", () => {

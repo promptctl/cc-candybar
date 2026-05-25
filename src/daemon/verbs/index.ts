@@ -12,16 +12,15 @@
 // click verbs in the daemon. Tests assert against this table directly so
 // the live registry and the test enumeration cannot drift.
 //
-// Multi-arg verbs (set-theme, set-style) carry their args as a single
-// slash-delimited `value` string on the wire — keeping ClickRequest
-// shape-stable at protocol v3 ({verb, value}). The per-verb handler
-// parses its own value into the typed args it needs. URL format mirrors:
+// Multi-arg verbs (set-state) carry their args as a single slash-delimited
+// `value` string on the wire — keeping ClickRequest shape-stable at
+// protocol v3 ({verb, value}). The per-verb handler parses its own value
+// into the typed args it needs. URL format mirrors:
 //   cc-candybar://<verb>/<value>   where <value> may itself contain `/`.
 
 import { launchSync } from "../../proc/launch";
-import { listResolvablePaletteNames } from "../../themes/cascade";
-import { STYLE_ORDER } from "../../themes/default-mapping";
 import type { SessionStateRW } from "../session-state";
+import { STATE_KEYS, validateStateWrite } from "./state-validators";
 
 export interface VerbContext {
   readonly sessionState: SessionStateRW;
@@ -129,38 +128,42 @@ const toolbarToggle: VerbHandler = (value, ctx) => {
   else ctx.sessionState.set(sessionId, "toolbar-expanded", "1");
 };
 
-// [LAW:dataflow-not-control-flow] Theme is data; the verb writes the
-// requested theme name into SessionState and the next render reads it via
-// the same store. No cycling logic — cycling is a DSL-config decision
-// (click → set-theme=<next-in-list>) per epic-vhi addendum.
-const setTheme: VerbHandler = (value, ctx) => {
-  const { sessionId, rest: themeName } = splitSessionAndRest(value);
+// [LAW:single-enforcer] One verb writes SessionState — for every
+// registered key. The per-key validator registry in ./state-validators.ts
+// is the single place that decides what is a legal value for a given key;
+// the body here is residue: split args, validate, write, log.
+//
+// [LAW:dataflow-not-control-flow] The key is data flowing across the
+// boundary, not a discriminator that selects between verb handlers. A new
+// state-writable key is a registry row, not a new verb.
+//
+// [LAW:types-are-the-program] The validator returns a discriminated
+// `ValidateResult`. The body cannot fabricate a value (the `ok: true`
+// branch's `value` is the only thing it may write) and cannot proceed on
+// `ok: false` (it throws BadVerbArgs with the reason verbatim). The
+// dispatcher in server.ts maps BadVerbArgs to BAD_REQUEST.
+//
+// Wire shape: cc-candybar://set-state/<sessionId>/<key>/<value>
+//   where <value> may itself contain `/` (no further splitting; the
+//   validator decides what's legal for the key).
+const setState: VerbHandler = (rawValue, ctx) => {
+  const { sessionId, rest: keyAndValue } = splitSessionAndRest(rawValue);
   const sid = requireSessionId(sessionId);
-  if (!themeName) throw new BadVerbArgs("set-theme: theme name is required");
-  // [LAW:one-source-of-truth] listResolvablePaletteNames is THE set whose
-  // members resolve to a concrete Palette. listAvailableThemes is broader
-  // — it includes the "custom" sentinel (read inline colors) which is not
-  // a renderable theme name; accepting "custom" here would persist an
-  // unrenderable value into SessionState and break the next render.
-  const themes = listResolvablePaletteNames();
-  if (!themes.includes(themeName))
+  if (!keyAndValue)
     throw new BadVerbArgs(
-      `set-theme: unknown theme "${themeName}" (have: ${themes.join(", ")})`,
+      `set-state: <key>/<value> is required (have keys: ${STATE_KEYS.join(", ")})`,
     );
-  ctx.sessionState.set(sid, "theme", themeName);
-  ctx.dlog("info", `set-theme: ${themeName} (session=${sid})`);
-};
-
-const setStyle: VerbHandler = (value, ctx) => {
-  const { sessionId, rest: styleName } = splitSessionAndRest(value);
-  const sid = requireSessionId(sessionId);
-  if (!styleName) throw new BadVerbArgs("set-style: style name is required");
-  if (!STYLE_ORDER.includes(styleName))
+  const slash = keyAndValue.indexOf("/");
+  if (slash === -1)
     throw new BadVerbArgs(
-      `set-style: unknown style "${styleName}" (have: ${STYLE_ORDER.join(", ")})`,
+      `set-state: missing value after key "${keyAndValue}" (expected <key>/<value>)`,
     );
-  ctx.sessionState.set(sid, "style", styleName);
-  ctx.dlog("info", `set-style: ${styleName} (session=${sid})`);
+  const key = keyAndValue.slice(0, slash);
+  const incoming = keyAndValue.slice(slash + 1);
+  const result = validateStateWrite(key, incoming);
+  if (!result.ok) throw new BadVerbArgs(`set-state: ${result.reason}`);
+  ctx.sessionState.set(sid, key, result.value);
+  ctx.dlog("info", `set-state: ${key}=${result.value} (session=${sid})`);
 };
 
 // ─── Registry ───────────────────────────────────────────────────────────────
@@ -171,8 +174,7 @@ const setStyle: VerbHandler = (value, ctx) => {
 export const VERBS: Readonly<Record<string, VerbHandler>> = Object.freeze({
   copy,
   "open-vscode": openVscode,
-  "set-style": setStyle,
-  "set-theme": setTheme,
+  "set-state": setState,
   "show-config-error": showConfigError,
   "toolbar-toggle": toolbarToggle,
 });
