@@ -23,11 +23,20 @@ export interface VarNode {
   readonly type: VarType;
   readonly kind: "box" | "computed";
   read(): VarValue;
+  // [LAW:types-are-the-program] Age is a property of the node, not of an
+  // external bookkeeping layer — duplicating it in a side map would let the
+  // two diverge. `number` for box nodes (epoch ms of last set, including the
+  // initial-value set at construction); `null` for computed nodes, whose
+  // freshness is governed by MobX invalidation, not a single timestamp.
+  lastUpdatedMs(): number | null;
 }
 
 class BoxNode implements VarNode {
   readonly kind = "box" as const;
   private readonly cell: IObservableValue<VarValue>;
+  // [LAW:single-enforcer] One write path (`set`) updates both the value and
+  // the timestamp; introspection reads from the same place renderers do.
+  private lastSetAt: number;
 
   constructor(
     readonly name: string,
@@ -36,6 +45,7 @@ class BoxNode implements VarNode {
   ) {
     assertType(name, type, initial, "initial value");
     this.cell = observable.box(initial, { deep: false });
+    this.lastSetAt = Date.now();
   }
 
   read(): VarValue {
@@ -45,6 +55,11 @@ class BoxNode implements VarNode {
   set(value: VarValue): void {
     assertType(this.name, this.type, value, "set value");
     this.cell.set(value);
+    this.lastSetAt = Date.now();
+  }
+
+  lastUpdatedMs(): number {
+    return this.lastSetAt;
   }
 }
 
@@ -75,6 +90,14 @@ class ComputedNode implements VarNode {
 
   read(): VarValue {
     return this.cell.get();
+  }
+
+  lastUpdatedMs(): null {
+    // [LAW:no-defensive-null-guards] Computed nodes have no single
+    // "updated" moment — the cache is valid until a tracked dep changes.
+    // Returning null is structurally distinct from "updated at 0," so a
+    // consumer can render "—" for computed and a real age for boxes.
+    return null;
   }
 }
 
@@ -156,6 +179,30 @@ export class VariableStore {
 
   getKind(name: string): "box" | "computed" {
     return this.requireNode(name).kind;
+  }
+
+  // [LAW:types-are-the-program] Introspection (src/daemon/debug.ts) needs
+  // the whole node — type, kind, lastUpdatedMs — in one lookup, but
+  // returning the BoxNode directly would leak `.set` structurally even
+  // though VarNode does not advertise it. The returned wrapper is a fresh
+  // object exposing only the VarNode surface — `.set` is unreachable at
+  // any level (no structural escape, no plain-JS reach-through). The
+  // mutation path remains gated behind `setBox`, which wraps in
+  // runInAction to satisfy MobX strict-mode.
+  //
+  // [LAW:single-enforcer] One requireNode call per consumer-row — the
+  // round-1 dedup fix in introspectVars relies on the caller getting both
+  // type/kind and a read() in one go without paying for a second
+  // requireNode. The wrapper preserves that.
+  getNode(name: string): VarNode {
+    const node = this.requireNode(name);
+    return {
+      name: node.name,
+      type: node.type,
+      kind: node.kind,
+      read: () => node.read(),
+      lastUpdatedMs: () => node.lastUpdatedMs(),
+    };
   }
 
   names(): string[] {

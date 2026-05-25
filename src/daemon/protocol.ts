@@ -1,9 +1,31 @@
 import type { Socket } from "node:net";
 import type { ClaudeHookData } from "../utils/claude";
 import type { StatsSnapshot } from "./stats";
+import type { DebugSnapshot, DebugWhat } from "./debug-types";
 
-// Bumped on any wire-format change. Clients send their version; daemon refuses
-// mismatches and shuts down so the next client respawns from current binary.
+// [LAW:types-are-the-program] PROTOCOL_VERSION encodes one thing:
+// "old-client × new-daemon (or vice versa) cannot communicate." It moves on
+// BREAKING changes only — never on additive ones. The two cases are
+// genuinely different theorems and the version field carries the stronger:
+// incompatibility, not growth.
+//
+// **Additive** (no bump):
+//   - Adding a new request `kind`. Old daemons reject the unknown kind via
+//     the existing BAD_REQUEST fallthrough; old clients never send it.
+//   - Adding a new optional field that older parsers ignore safely.
+//   - Adding a new response variant produced only in response to a new kind.
+//
+// **Breaking** (bump):
+//   - Changing the semantics or required shape of an existing kind.
+//   - Removing a kind or field old clients depend on.
+//   - Renaming a wire field.
+//
+// The 452-corpse precedent (kz8.5) makes this discipline load-bearing: every
+// bump forces every running statusbar through VERSION_MISMATCH until its
+// session restarts, because the spiral-breaker contract refuses to kick on a
+// permanent error. A bump for an additive change taxes every user with
+// blank-statusbar minutes for a feature their session doesn't even use.
+// Don't bump for growth.
 export const PROTOCOL_VERSION = 3;
 
 export interface RenderRequest {
@@ -53,15 +75,31 @@ export interface StatsRequest {
   kind: "stats";
 }
 
+// [LAW:types-are-the-program] The `what` discriminator carries the response
+// shape forward — a client requesting "vars" gets vars data, "segments" gets
+// segments data, "config" gets config data. No string-keyed lookup on the
+// client side; route by structure. See DebugSnapshot in ./debug-types.
+export interface DebugRequest {
+  v: number;
+  kind: "debug";
+  what: DebugWhat;
+}
+
 export type Request =
   | RenderRequest
   | ShutdownRequest
   | StatsRequest
-  | ClickRequest;
+  | ClickRequest
+  | DebugRequest;
 
 export type Response =
   | { ok: true; output: string }
   | { ok: true; stats: StatsSnapshot }
+  // [LAW:types-are-the-program] DebugSnapshot is itself a discriminated union
+  // on `what`, so the response type carries the requested kind through to the
+  // client. A `{ ok: true; debug: { what: "vars"; vars: [...] } }` shape is
+  // self-describing — the client doesn't need to remember which `what` it sent.
+  | { ok: true; debug: DebugSnapshot }
   // [LAW:types-are-the-program] `daemonV` is the daemon's own
   // PROTOCOL_VERSION, echoed on every error response so the client can render
   // a meaningful diagnostic on VERSION_MISMATCH without parsing the human
