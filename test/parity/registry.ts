@@ -77,35 +77,41 @@ export const PARITY_REGISTRY: Record<SegmentName, SegmentParityEntry> = {
       }),
   },
   model: {
-    // [LAW:dataflow-not-control-flow] dsl-pending, not dsl-parity: the
-    // declaration is attached and byte-parity for friendly display names, but
-    // legacy renderModel runs formatModelName, which strips decorations Claude
-    // commonly sends (e.g. "Opus 4.7 (1M context)" → "Opus 4.7"). That
-    // regex normalization is unreachable in the DSL function set (gap bzh.5), so
-    // model is NOT yet a safe replacement — keeping it out of dsl-parity blocks
-    // bzh.2 from deleting renderModel until bzh.5 lands a DSL primitive wrapping
-    // formatModelName (src/utils/formatters.ts).
-    status: "dsl-pending",
+    // [LAW:one-source-of-truth] bzh.5 landed formatterFuncs.formatModelName,
+    // wrapping src/utils/formatters.ts. The DSL declaration now runs the same
+    // regex normalization legacy renderModel runs, so byte-parity holds for
+    // raw IDs ("claude-sonnet-4-6") AND decorated names ("Opus 4.7 (1M
+    // context)") — not just friendly names. Safe to delete renderModel when
+    // bzh.2 fires.
+    status: "dsl-parity",
     legacy: (r, c) => r.renderModel(HOOK_DATA, c, { enabled: true }),
     dsl: DSL_BINDINGS.model,
   },
   session: {
-    status: "legacy-only",
+    // bzh.5: unblocked by formatterFuncs.formatCost + formatTokens.
+    status: "dsl-parity",
     legacy: (r, c) =>
       r.renderSession(USAGE_INFO, c, { enabled: true, type: "both" }),
+    dsl: DSL_BINDINGS.session,
   },
   block: {
-    status: "legacy-only",
+    // bzh.5: unblocked by formatterFuncs.round + formatLongTimeRemaining
+    // + threshold-cascade bg/fg templates.
+    status: "dsl-parity",
     legacy: (r, c) =>
       r.renderBlock(BLOCK_INFO, c, {
         enabled: true,
         type: "both",
         displayStyle: "text",
       }),
+    dsl: DSL_BINDINGS.block,
   },
   today: {
-    status: "legacy-only",
+    // bzh.5: unblocked by formatterFuncs.formatCost + formatTokens
+    // + budgetStatus (DEFAULT_CONFIG sets today.budget.amount=50).
+    status: "dsl-parity",
     legacy: (r, c) => r.renderToday(TODAY_INFO, c, "both"),
+    dsl: DSL_BINDINGS.today,
   },
   tmux: {
     status: "dsl-parity",
@@ -113,12 +119,19 @@ export const PARITY_REGISTRY: Record<SegmentName, SegmentParityEntry> = {
     dsl: DSL_BINDINGS.tmux,
   },
   context: {
-    status: "legacy-only",
+    // bzh.5: unblocked by formatterFuncs.formatInteger (locale-grouped
+    // "50,000") + threshold-cascade bg/fg templates (inverted: low "left"
+    // is critical, high is normal).
+    status: "dsl-parity",
     legacy: (r, c) =>
       r.renderContext(CONTEXT_INFO, c, { enabled: true, displayStyle: "text" }),
+    dsl: DSL_BINDINGS.context,
   },
   metrics: {
-    status: "legacy-only",
+    // bzh.5: unblocked by formatterFuncs.formatResponseTime + formatDuration.
+    // Static template for the all-parts-enabled fixture; per-part conditional
+    // gating is a followup if a config disables individual metrics.
+    status: "dsl-parity",
     legacy: (r, c) =>
       r.renderMetrics(METRICS_INFO, c, {
         enabled: true,
@@ -129,6 +142,7 @@ export const PARITY_REGISTRY: Record<SegmentName, SegmentParityEntry> = {
         showLinesAdded: true,
         showLinesRemoved: true,
       }),
+    dsl: DSL_BINDINGS.metrics,
   },
   version: {
     status: "dsl-parity",
@@ -156,9 +170,13 @@ export const PARITY_REGISTRY: Record<SegmentName, SegmentParityEntry> = {
     dsl: DSL_BINDINGS.env,
   },
   weekly: {
-    status: "legacy-only",
+    // bzh.5: unblocked by formatterFuncs.round + formatLongTimeRemaining
+    // + minutesUntilReset (epoch-seconds → minutes math the legacy chains)
+    // + threshold-cascade bg/fg templates (same as block).
+    status: "dsl-parity",
     legacy: (r, c) =>
       r.renderWeekly(HOOK_DATA, c, { enabled: true, displayStyle: "text" }),
+    dsl: DSL_BINDINGS.weekly,
   },
   toolbar: {
     status: "dsl-parity",

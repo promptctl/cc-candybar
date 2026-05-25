@@ -101,7 +101,21 @@ const TOKEN_BREAKDOWN = {
   cacheRead: 4000,
 };
 
-export const USAGE_INFO: UsageInfo = {
+// [LAW:types-are-the-program] Annotated with `satisfies T` (not `: T`) so the
+// literal's narrow type is preserved. UsageInfo/TodayInfo/MetricsInfo all type
+// their numeric value fields as `number | null` to model production paths where
+// the data source is unavailable; the parity fixture instantiates them all as
+// non-null. Without `satisfies`, consumers (the DSL bindings) see the wide
+// nullable type and have to coalesce defensively (`?? 0`) just to satisfy
+// TypeScript — exactly the [LAW:no-defensive-null-guards] pattern. Narrowing
+// the fixture's static type to its actual shape eliminates the guard.
+//
+// Null-source configs (production: a session with no usage data, a metrics
+// segment with no recorded responses) are a separate expressiveness concern:
+// the DSL var-system can't represent null directly, so future fixtures will
+// need presence-boolean gating or a `when` predicate. Tracked in
+// brandon-segment-dsl-migration-bzh.8.
+export const USAGE_INFO = {
   session: {
     cost: 1.2345,
     calculatedCost: 1.2,
@@ -109,37 +123,37 @@ export const USAGE_INFO: UsageInfo = {
     tokens: 123456,
     tokenBreakdown: TOKEN_BREAKDOWN,
   },
-};
+} satisfies UsageInfo;
 
-export const CONTEXT_INFO: ContextInfo = {
+export const CONTEXT_INFO = {
   totalTokens: 50000,
   percentage: 25,
   usablePercentage: 30,
   contextLeftPercentage: 70,
   maxTokens: 200000,
   usableTokens: 167000,
-};
+} satisfies ContextInfo;
 
-export const METRICS_INFO: MetricsInfo = {
+export const METRICS_INFO = {
   responseTime: 12.3,
   lastResponseTime: 5.6,
   sessionDuration: 3600,
   messageCount: 42,
   linesAdded: 120,
   linesRemoved: 30,
-};
+} satisfies MetricsInfo;
 
-export const BLOCK_INFO: BlockInfo = {
+export const BLOCK_INFO = {
   nativeUtilization: 55,
   timeRemaining: 90,
-};
+} satisfies BlockInfo;
 
-export const TODAY_INFO: TodayInfo = {
+export const TODAY_INFO = {
   cost: 4.56,
   tokens: 234567,
   tokenBreakdown: TOKEN_BREAKDOWN,
   date: "2026-05-21",
-};
+} satisfies TodayInfo;
 
 export const TMUX_SESSION_ID = "main:1";
 

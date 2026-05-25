@@ -24,6 +24,7 @@ import {
   formatLongTimeRemaining,
   collapseHome,
   minutesUntilReset,
+  formatInteger,
 } from "../utils/formatters";
 import { getBudgetStatus } from "../utils/budget";
 
@@ -709,14 +710,14 @@ export class SegmentRenderer {
 
       const text = config?.showPercentageOnly
         ? `${bar} ${pct}%`
-        : `${bar} ${contextInfo.totalTokens.toLocaleString()} (${pct}%)`;
+        : `${bar} ${formatInteger(contextInfo.totalTokens)} (${pct}%)`;
 
       return { text, bgColor, fgColor, bgHex, fgHex };
     }
 
     const text = config?.showPercentageOnly
       ? `${this.symbols.context_time} ${pct}%`
-      : `${this.symbols.context_time} ${contextInfo.totalTokens.toLocaleString()} (${pct}%)`;
+      : `${this.symbols.context_time} ${formatInteger(contextInfo.totalTokens)} (${pct}%)`;
 
     return { text, bgColor, fgColor, bgHex, fgHex };
   }
