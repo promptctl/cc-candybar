@@ -83,58 +83,38 @@ export function introspectVars(
   for (const name of names) {
     const node = store.getNode(name);
     const err = registry.getLastError(name);
+    // [LAW:no-defensive-null-guards] No try/catch around store.read: every
+    // SourceRegistry-declared variable either holds a typed fallback
+    // (declareShell/declareFile/declareGit/declareInput catch internally
+    // and write a fallback) or is a computed whose deriver also catches
+    // (declareTemplate). Cycles are detected eagerly at register time
+    // (declareTemplate's force-read). So a read-throw here would be a
+    // *programming* error, not a runtime condition the snapshot should
+    // mask. Letting it propagate keeps the failure loud at the source
+    // instead of laundering it as a synthesized lastError with an
+    // unstable Date.now() timestamp.
+    //
+    // [LAW:single-enforcer] lastError is sourced from SourceRegistry only.
+    // There is no second timestamp-producer that could drift from the
+    // registry's record.
     out.push({
       name,
       source: sourceByName.get(name) ?? null,
       type: node.type,
-      // [LAW:no-defensive-null-guards] store.read may throw for malformed
-      // computed bodies (template parse errors, cycle detection). The
-      // failure is data the snapshot exists to report — capture it as
-      // lastError + a typed-zero placeholder rather than letting the
-      // whole introspection fail.
-      ...projectValueAndError(store, name, err),
+      value: store.read(name),
+      lastError:
+        err !== undefined
+          ? { timestampMs: err.timestamp, message: err.message }
+          : null,
       ageMs: ageFromNode(node.lastUpdatedMs()),
     });
   }
   return out;
 }
 
-function projectValueAndError(
-  store: VariableStore,
-  name: string,
-  err: { timestamp: number; message: string } | undefined,
-): { value: VarSnapshot["value"]; lastError: VarSnapshot["lastError"] } {
-  try {
-    const value = store.read(name);
-    return {
-      value,
-      lastError:
-        err !== undefined
-          ? { timestampMs: err.timestamp, message: err.message }
-          : null,
-    };
-  } catch (e) {
-    // The read itself threw — surface it as lastError. Use a typed zero
-    // for the value so the wire stays valid; the consumer reads lastError
-    // to discover the real state.
-    const message = e instanceof Error ? e.message : String(e);
-    const type = store.getNode(name).type;
-    return {
-      value: zeroForType(type),
-      lastError: { timestampMs: Date.now(), message },
-    };
-  }
-}
-
 function ageFromNode(lastUpdatedMs: number | null): number | null {
   if (lastUpdatedMs === null) return null;
   return Math.max(0, Date.now() - lastUpdatedMs);
-}
-
-function zeroForType(type: VarSnapshot["type"]): VarSnapshot["value"] {
-  if (type === "number") return 0;
-  if (type === "boolean") return false;
-  return "";
 }
 
 // Build a name → SourceKind index from the DslConfig. Walks top-level

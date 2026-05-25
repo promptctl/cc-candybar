@@ -37,19 +37,27 @@ import { registerDslConfig } from "../src/dsl/render";
 
 // ─── Fixtures ────────────────────────────────────────────────────────────────
 
+// [LAW:verifiable-goals] The "unset env var" branch of declareEnv must be
+// exercised deterministically. Relying on `CC_CANDYBAR_DEBUG_TEST_UNSET_VAR_XYZ`
+// being absent in `process.env` was load-bearing on environment state; a CI
+// runner or developer who happens to export it would silently flip the
+// assertion. beforeEach/afterEach (below) own the env contract — they
+// guarantee the variable is unset for every test in this file and restore
+// any prior value on teardown.
+const UNSET_ENV_VAR = "CC_CANDYBAR_DEBUG_TEST_UNSET_VAR_XYZ";
+
 // A minimal DslConfig that exercises every snapshot field:
 //   - literal (no source-side state)
 //   - input (driven by applyInput payload, produces a value)
-//   - env (resolved at declare time, succeeds or records last_error)
+//   - env (resolved at declare time — UNSET_ENV_VAR is enforced absent so
+//     this records a lastError and uses the per-variable default)
 //   - template (computed node, depends on other vars)
-// The fixture deliberately includes an env var with a deterministically-unset
-// name so introspectVars surfaces its lastError.
 const TEST_CONFIG_SOURCE = `{
   globals: {},
   variables: {
     greeting: { kind: 'literal', value: 'hello' },
     'session.id': { kind: 'input', path: 'session_id', default: '' },
-    user_path: { kind: 'env', name: 'CC_CANDYBAR_DEBUG_TEST_UNSET_VAR_XYZ', default: '(unset)' },
+    user_path: { kind: 'env', name: '${UNSET_ENV_VAR}', default: '(unset)' },
     derived: { kind: 'template', template: '{{ .greeting }}, world' },
   },
   segments: {
@@ -67,6 +75,20 @@ const TEST_CONFIG_SOURCE = `{
   },
   layout: ['intro', 'plain'],
 }`;
+
+// [LAW:single-enforcer] env-state is managed at one place — these hooks —
+// not scattered across each test. `declareEnv` reads `process.env` at
+// registerDslConfig call time, so the env state is set *before* buildState
+// is invoked from within each test.
+let savedUnsetEnv: string | undefined;
+beforeEach(() => {
+  savedUnsetEnv = process.env[UNSET_ENV_VAR];
+  delete process.env[UNSET_ENV_VAR];
+});
+afterEach(() => {
+  if (savedUnsetEnv !== undefined) process.env[UNSET_ENV_VAR] = savedUnsetEnv;
+  else delete process.env[UNSET_ENV_VAR];
+});
 
 // Build a populated DaemonDslState from the test config + a known payload.
 function buildPopulatedState(): DaemonDslState {
@@ -176,9 +198,7 @@ describe("introspectVars with populated state", () => {
     // The env var with the unset name surfaces a lastError.
     const userPath = byName.get("user_path");
     expect(userPath?.lastError).not.toBeNull();
-    expect(userPath?.lastError?.message).toContain(
-      "CC_CANDYBAR_DEBUG_TEST_UNSET_VAR_XYZ",
-    );
+    expect(userPath?.lastError?.message).toContain(UNSET_ENV_VAR);
     expect(userPath?.lastError?.timestampMs).toBeGreaterThan(0);
     // Other vars resolved cleanly.
     expect(byName.get("greeting")?.lastError).toBeNull();

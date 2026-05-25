@@ -23,7 +23,7 @@ import { VERBS, BadVerbArgs } from "./verbs";
 import { validateHookData } from "../utils/schema-validator.js";
 import { setLaunchStats } from "../proc/launch";
 import { buildDebugSnapshot, type DaemonDslState } from "./debug";
-import { isDebugWhat } from "./debug-types";
+import { DEBUG_WHATS, isDebugWhat } from "./debug-types";
 
 // [LAW:one-source-of-truth] one cache instance per daemon process — multiple
 // instances would defeat the share-across-sessions invariant.
@@ -593,7 +593,11 @@ async function handleRequest(req: Request): Promise<Response> {
     if (!isDebugWhat(req.what)) {
       return {
         ok: false,
-        error: `unknown debug 'what': ${String(req.what)}`,
+        // [LAW:errors-context-in-errors] Include the allowed values so a
+        // CLI consumer (or operator) sees what is supported without
+        // grep — same pattern as set-theme/set-style verb errors in
+        // src/daemon/verbs/index.ts.
+        error: `unknown debug 'what': ${String(req.what)} (have: ${DEBUG_WHATS.join(", ")})`,
         code: "BAD_REQUEST",
         daemonV: PROTOCOL_VERSION,
       };
