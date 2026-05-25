@@ -82,18 +82,26 @@ export function dslSegmentBytes(
   const whenTpl = decl.when !== undefined ? engine.parse(decl.when) : undefined;
   if (!evaluateWhen(whenTpl, scope)) return null;
 
-  const fragments = engine.parse(decl.template).evaluate(scope);
-  const cells = fragmentsToStripCells(fragments);
-
   const bgTpl = decl.bg !== undefined ? engine.parse(decl.bg) : undefined;
   const fgTpl = decl.fg !== undefined ? engine.parse(decl.fg) : undefined;
-  const defaultStyle = resolveSegmentColors(resolver, bgTpl, fgTpl, scope);
+  const baseStyle = resolveSegmentColors(resolver, bgTpl, fgTpl, scope);
 
+  // baseStyle layers under each fragment's own style (fragment wins on overlap),
+  // so per-fragment fg (e.g. inline `{{ green "S" }}`) becomes a cell part with
+  // its own fg under the segment bg — without baseStyle bleeding into a later
+  // cell-rebuild that would drop parts.
+  const fragments = engine.parse(decl.template).evaluate(scope);
+  const cells = fragmentsToStripCells(fragments, baseStyle);
+
+  // baseStyle also flows into layout so any synthesized pad/marker cells
+  // for fixed-width segments inherit the segment bg+fg (Copilot finding on
+  // bzh.6: without this, fixed-width segments would lose continuity and the
+  // PowerlineJoiner would see a spurious bg transition into padding).
   const laidOut = applySegmentLayout(cells, {
     width: decl.width ?? "auto",
     justify: decl.justify ?? "left",
     truncate: decl.truncate ?? "right",
-    defaultStyle,
+    baseStyle,
   });
 
   return renderStripCells(laidOut, STRIP_OPTS);
