@@ -16,20 +16,15 @@
 import type { VarType, VarValue } from "../var-system/types";
 import type { DslConfig, SourceKind } from "../config/dsl-types";
 
-export type DebugWhat = "vars" | "segments" | "config";
-
-// [LAW:one-source-of-truth] Canonical enumeration. The wire validator and
-// any tooling that lists supported `what` values reads from here. Adding a
-// new `what` requires updating this array, the DebugSnapshot union below,
-// and the dispatcher in src/daemon/debug.ts — the type system enforces all
-// three (TypeScript exhaustiveness in the switch + this array's
-// `readonly DebugWhat[]` type ensures the array stays in sync with the
-// union).
-export const DEBUG_WHATS: readonly DebugWhat[] = Object.freeze([
-  "vars",
-  "segments",
-  "config",
-]);
+// [LAW:one-source-of-truth] DEBUG_WHATS is the canonical list; DebugWhat is
+// *derived* from it via indexed access on the `as const` tuple type. Adding
+// a new entry to the array automatically expands DebugWhat — and the switch
+// in buildDebugSnapshot (src/daemon/debug.ts) becomes non-exhaustive,
+// failing the typecheck until a new arm is added. The dispatcher arm and
+// the canonical list are kept in lockstep by the type system, not by
+// human discipline.
+export const DEBUG_WHATS = ["vars", "segments", "config"] as const;
+export type DebugWhat = (typeof DEBUG_WHATS)[number];
 
 // Wire-side type guard for an untrusted JSON value. Used by the daemon at
 // the request boundary; symmetrically usable by future CLI shims that

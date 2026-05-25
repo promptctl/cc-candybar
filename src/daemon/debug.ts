@@ -25,6 +25,7 @@
 import type { VariableStore } from "../var-system/store";
 import type { SourceRegistry } from "../var-system/sources";
 import type { DslConfig, SourceKind, VariableDecl } from "../config/dsl-types";
+import { extractTemplateRefs } from "../config/dsl-loader";
 import type { CompiledSegments } from "../dsl/render";
 import type {
   DebugSnapshot,
@@ -200,10 +201,14 @@ function orderedSegmentNames(config: DslConfig): readonly string[] {
   return out;
 }
 
-// [LAW:single-enforcer] One static-analysis pass extracts every dotted
-// path referenced inside `{{ ... }}` actions of a template source. The
-// regex finds candidate identifiers; we then intersect with the actual
-// declared-name set so the snapshot only reports names that exist.
+// [LAW:single-enforcer] Static analysis of which variables a segment
+// template references. Raw candidate extraction (find dotted paths inside
+// `{{ ... }}` actions, strip string literals so `{{ printf ".foo" }}`
+// does not falsely match a declared `foo`) is delegated to
+// extractTemplateRefs in src/config/dsl-loader.ts — that helper already
+// owns the template-ref parsing rules and is exercised by the loader's
+// cycle detector. Reusing it means a future improvement to the parser
+// (e.g. supporting `$x.field` variable references) lands here for free.
 //
 // Static analysis (not runtime evaluation) is the right tool here:
 // evaluation would couple introspection to a working store and would
@@ -211,48 +216,32 @@ function orderedSegmentNames(config: DslConfig): readonly string[] {
 // potentially-referenced name regardless of current state — which is
 // what an operator debugging "what does this segment depend on" needs.
 //
-// Candidates: contiguous `.identifier(.identifier)*` runs.  This catches
-// `.foo`, `.foo.bar`, `.git.branch`. Pipeline forms (`{{ .x | upper }}`)
-// are handled because the `.` precedes the identifier. False positives:
-// literal `.` inside string args (rare in real templates).  We tolerate
-// them — they won't survive the declared-names intersection.
+// This function adds the introspection-specific layers on top of the raw
+// extraction:
+//   1. Intersect with the declared-name set (only report names that exist).
+//   2. Ancestor credit: a candidate `.session.id.extra` resolves to the
+//      declared `session.id` if `extra` is not declared.
+//   3. Sort the result for deterministic snapshots.
 export function extractReferencedVars(
   template: string,
   declared: ReadonlySet<string>,
 ): readonly string[] {
   const found = new Set<string>();
-  // Match each `{{ ... }}` action and scan its body for dotted paths.
-  const actionRe = /\{\{(.*?)\}\}/gs;
-  // A dotted path starts at `.`, then identifier, then optional more
-  // .identifier segments. The (?<![A-Za-z_.\d]) negative lookbehind
-  // prevents matching `.5` (numeric literal) and rules out spurious
-  // mid-token dots (e.g. inside `1.5`).
-  const pathRe = /(?<![A-Za-z_.\d])\.([A-Za-z_][\w.]*)/g;
-  let m: RegExpExecArray | null;
-  while ((m = actionRe.exec(template)) !== null) {
-    const body = m[1]!;
-    let p: RegExpExecArray | null;
-    pathRe.lastIndex = 0;
-    while ((p = pathRe.exec(body)) !== null) {
-      const candidate = p[1]!;
-      // Match against every declared name as either an exact match or a
-      // namespace ancestor — `.git.branch` should resolve to the declared
-      // name `git.branch` even if the user only declared the leaf.
-      if (declared.has(candidate)) {
-        found.add(candidate);
-        continue;
-      }
-      // Drop trailing segments until we hit a declared name. Handles the
-      // user writing `.session.id.something_extra` where only `session.id`
-      // exists — we still credit it as a reference to `session.id`.
-      const parts = candidate.split(".");
-      while (parts.length > 1) {
-        parts.pop();
-        const prefix = parts.join(".");
-        if (declared.has(prefix)) {
-          found.add(prefix);
-          break;
-        }
+  for (const candidate of extractTemplateRefs(template)) {
+    if (declared.has(candidate)) {
+      found.add(candidate);
+      continue;
+    }
+    // Drop trailing segments until we hit a declared name. Handles
+    // `.session.id.something_extra` where only `session.id` is declared —
+    // still credit it as a reference to `session.id`.
+    const parts = candidate.split(".");
+    while (parts.length > 1) {
+      parts.pop();
+      const prefix = parts.join(".");
+      if (declared.has(prefix)) {
+        found.add(prefix);
+        break;
       }
     }
   }

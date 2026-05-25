@@ -327,6 +327,37 @@ describe("extractReferencedVars", () => {
       extractReferencedVars("{{ .greeting | upper }}", declared),
     ).toEqual(["greeting"]);
   });
+
+  // [LAW:single-enforcer] String literals must NOT produce false positives.
+  // The raw extractor (extractTemplateRefs in dsl-loader) strips string
+  // literals from `{{ ... }}` bodies before scanning for dotted paths, so
+  // a printf-style template containing a literal reference to a declared
+  // name does not get falsely credited as a real reference.
+  test("ignores dotted refs inside string literals", () => {
+    // `.greeting` appears inside a string literal — must NOT be reported.
+    expect(
+      extractReferencedVars(`{{ printf ".greeting" }}`, declared),
+    ).toEqual([]);
+    // Same with single-quoted and backtick literals.
+    expect(
+      extractReferencedVars(`{{ printf '.greeting' }}`, declared),
+    ).toEqual([]);
+    expect(
+      extractReferencedVars("{{ printf `.greeting` }}", declared),
+    ).toEqual([]);
+  });
+
+  test("real ref outside a string literal still wins", () => {
+    // The string contains a literal `.greeting`, but the action also reads
+    // a real `.session.id` outside the literal. Only the real one is
+    // reported.
+    expect(
+      extractReferencedVars(
+        `{{ printf ".greeting=%s" .session.id }}`,
+        declared,
+      ),
+    ).toEqual(["session.id"]);
+  });
 });
 
 // ─── Populated state: config ─────────────────────────────────────────────────
