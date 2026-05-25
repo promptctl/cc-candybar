@@ -378,22 +378,34 @@ describe("groupToCell — uniform-style collapse", () => {
     // shape and expect a different output.
     const baseStyle = new Style({ bgcolor: "blue", color: "white" });
 
-    // Same fragments → coalesced into one cell. Render and compare to a
-    // hand-rolled equivalent multi-part cell with the same fragments.
-    const cells = fragmentsToStripCells(
+    // Collapsed path: groupToCell takes the single-text shape because all
+    // parts share the same merged fg.
+    const collapsed = fragmentsToStripCells(
       [new RichText("a"), new RichText("b"), new RichText("c")],
       baseStyle,
     );
-    const collapsedBytes = renderStripCells(cells, {
-      style: "plain",
-      colorCompatibility: "truecolor",
-    });
+    // Hand-rolled parts-based equivalent: same text+styles, but stored as
+    // three StripCellParts with bg on the cell (per the single-style cell
+    // invariant — parts carry only fg/attrs).
+    const fgOnly = new Style({ color: "white" });
+    const bgOnly = new Style({ bgcolor: "blue" });
+    const partsBased = [
+      new StripCell(
+        [
+          { text: "a", style: fgOnly },
+          { text: "b", style: fgOnly },
+          { text: "c", style: fgOnly },
+        ],
+        bgOnly,
+      ),
+    ];
 
+    const collapsedBytes = renderCells(collapsed);
+    const partsBytes = renderCells(partsBased);
+
+    // The byte-equivalence the test name claims.
+    expect(collapsedBytes).toBe(partsBytes);
+    // Sanity: visible text is "abc" in both.
     expect(stripAnsi(collapsedBytes)).toBe("abc");
-    // Exactly ONE SGR open wrap (bg+fg coalesced for the whole run).
-    const sgrOpens = collapsedBytes.match(/\x1b\[[0-9;]+m/g) ?? [];
-    // Allow one open + one close (\x1b[0m); strict count varies by joiner
-    // shape, so just assert the visible text matches and the wrap exists.
-    expect(sgrOpens.length).toBeGreaterThanOrEqual(1);
   });
 });
