@@ -38,6 +38,14 @@ export interface SegmentParityEntry {
   // declaration exists but is not yet byte-parity); the test asserts it is
   // byte-identical to golden only at "dsl-parity".
   dsl?: DslBinding;
+  // [LAW:no-silent-fallbacks] Set when the legacy renderer cannot produce the
+  // same bytes the DSL pipeline produces — e.g. gitTaculous embeds raw inline
+  // ANSI escapes that rich-js's structured serializer can't reproduce
+  // verbatim. The committed golden tracks the DSL (canonical post-migration);
+  // the legacy renderer is kept for runtime backward-compat until bzh.2 deletes
+  // it, but is no longer asserted against golden. Surfacing the divergence as
+  // a typed flag (rather than skipping silently) keeps the gap visible.
+  legacyDivergedFromDsl?: boolean;
 }
 
 // [LAW:types-are-the-program] Keyed on SegmentName, so a missing or extra
@@ -66,7 +74,15 @@ export const PARITY_REGISTRY: Record<SegmentName, SegmentParityEntry> = {
     dsl: DSL_BINDINGS.git,
   },
   gitTaculous: {
-    status: "legacy-only",
+    // [LAW:one-source-of-truth] Migrated in bzh.6 to the per-fragment-fg
+    // pipeline (see src/template-engine/cells.ts's `baseStyle` parameter).
+    // The committed golden for this segment is POST-migration bytes — the
+    // legacy renderer embeds raw inline ANSI escapes (`\x1b[32m...\x1b[<fg>m`)
+    // which the structured rich-js serializer cannot reproduce verbatim
+    // (always emits `\x1b[0m` close + reopen between SGR-codes groups).
+    // Visual output is identical; byte stream is the DSL pipeline's natural
+    // form. Decision recorded in dsl-segments.ts's gitTaculous binding.
+    status: "dsl-parity",
     legacy: (r, c) =>
       r.renderGitTaculous(GIT_INFO, c, {
         enabled: true,
@@ -75,6 +91,8 @@ export const PARITY_REGISTRY: Record<SegmentName, SegmentParityEntry> = {
         showUpstream: true,
         showRepoName: true,
       }),
+    dsl: DSL_BINDINGS.gitTaculous,
+    legacyDivergedFromDsl: true,
   },
   model: {
     // [LAW:one-source-of-truth] bzh.5 landed formatterFuncs.formatModelName,
