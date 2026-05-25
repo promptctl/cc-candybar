@@ -348,6 +348,8 @@ export function renderDslLine(
     );
 
     // Step 5: evaluate pre-compiled template → StripCells with baseStyle baked in.
+    // Same baseStyle also flows into layout so synthesized pad/marker cells
+    // (fixed-width segments) keep the segment bg+fg continuous.
     const fragments = segCompiled.template.evaluate(scope);
     const cells = fragmentsToStripCells(fragments, baseStyle);
 
@@ -355,6 +357,7 @@ export function renderDslLine(
       width: seg.width ?? "auto",
       justify: seg.justify ?? "left",
       truncate: seg.truncate ?? "right",
+      baseStyle,
     });
 
     allCells.push(...laidOut);

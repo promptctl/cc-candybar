@@ -93,10 +93,15 @@ export function dslSegmentBytes(
   const fragments = engine.parse(decl.template).evaluate(scope);
   const cells = fragmentsToStripCells(fragments, baseStyle);
 
+  // baseStyle also flows into layout so any synthesized pad/marker cells
+  // for fixed-width segments inherit the segment bg+fg (Copilot finding on
+  // bzh.6: without this, fixed-width segments would lose continuity and the
+  // PowerlineJoiner would see a spurious bg transition into padding).
   const laidOut = applySegmentLayout(cells, {
     width: decl.width ?? "auto",
     justify: decl.justify ?? "left",
     truncate: decl.truncate ?? "right",
+    baseStyle,
   });
 
   return renderStripCells(laidOut, STRIP_OPTS);

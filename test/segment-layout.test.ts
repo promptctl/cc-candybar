@@ -1,7 +1,7 @@
 // [LAW:behavior-not-structure] Tests assert observable output (cell count,
 // text content, total width, style fields) — never internal state.
 
-import { StripCell, cellLen } from "@promptctl/rich-js";
+import { StripCell, Style, cellLen } from "@promptctl/rich-js";
 import { createCcCandybarEngine } from "../src/template-engine/engine";
 import { applySegmentLayout, evaluateWhen } from "../src/template-engine/layout";
 
@@ -303,5 +303,89 @@ describe("custom truncate marker", () => {
       truncate: "right",
     });
     expect(text(result).at(-1)).toBe("…");
+  });
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// 8. baseStyle inheritance on synthesized cells
+//
+// [LAW:single-enforcer] The segment's baseStyle is computed ONCE upstream and
+// flows here to fill cells layout itself synthesizes (pad spaces, truncate
+// marker). Without it, fixed-width segments would lose segment bg/fg on
+// padding/marker and the PowerlineJoiner would see a spurious bg transition
+// from main content into an unstyled pad cell — the visual gap a previous
+// version of this code produced.
+// ────────────────────────────────────────────────────────────────────────────
+
+describe("baseStyle inheritance on synthesized cells", () => {
+  test("pad cells inherit baseStyle (left justify, content shorter than width)", () => {
+    const baseStyle = new Style({ bgcolor: "blue", color: "white" });
+    const result = applySegmentLayout([new StripCell("hi", baseStyle)], {
+      width: 5,
+      justify: "left",
+      truncate: "right",
+      baseStyle,
+    });
+    // [content, pad] — pad cell's bg must match the segment bg, not be
+    // unstyled. Without this, the PowerlineJoiner sees a bg transition.
+    expect(result.length).toBeGreaterThanOrEqual(2);
+    const padCell = result[result.length - 1]!;
+    expect(padCell.text.trim()).toBe("");
+    expect(padCell.style.bgcolor?.name).toBe("blue");
+  });
+
+  test("pad cells inherit baseStyle (right justify)", () => {
+    const baseStyle = new Style({ bgcolor: "blue" });
+    const result = applySegmentLayout([new StripCell("hi", baseStyle)], {
+      width: 5,
+      justify: "right",
+      truncate: "right",
+      baseStyle,
+    });
+    const padCell = result[0]!;
+    expect(padCell.text.trim()).toBe("");
+    expect(padCell.style.bgcolor?.name).toBe("blue");
+  });
+
+  test("pad cells inherit baseStyle (center justify, both sides)", () => {
+    const baseStyle = new Style({ bgcolor: "blue" });
+    const result = applySegmentLayout([new StripCell("hi", baseStyle)], {
+      width: 6,
+      justify: "center",
+      truncate: "right",
+      baseStyle,
+    });
+    // [pad, content, pad] — both pad cells styled.
+    expect(result.length).toBe(3);
+    expect(result[0]!.style.bgcolor?.name).toBe("blue");
+    expect(result[2]!.style.bgcolor?.name).toBe("blue");
+  });
+
+  test("truncate marker cell inherits baseStyle", () => {
+    const baseStyle = new Style({ bgcolor: "blue", color: "white" });
+    const result = applySegmentLayout([new StripCell("hello world", baseStyle)], {
+      width: 5,
+      justify: "left",
+      truncate: "right",
+      baseStyle,
+    });
+    // Last cell is the marker.
+    const marker = result[result.length - 1]!;
+    expect(marker.text).toBe("…");
+    expect(marker.style.bgcolor?.name).toBe("blue");
+    expect(marker.style.color?.name).toBe("white");
+  });
+
+  test("no baseStyle → synthesized cells remain unstyled (legacy behavior)", () => {
+    // Backward-compat: callers that don't pass baseStyle get the old shape
+    // (synthesized cells with no style). This preserves test-only call sites
+    // that don't care about segment continuity.
+    const result = applySegmentLayout([new StripCell("hi")], {
+      width: 5,
+      justify: "left",
+      truncate: "right",
+    });
+    const padCell = result[result.length - 1]!;
+    expect(padCell.style.bgcolor).toBeUndefined();
   });
 });

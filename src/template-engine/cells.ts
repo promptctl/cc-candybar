@@ -114,7 +114,6 @@ function groupToCell(group: RichText[]): StripCell | null {
 
   const parts: StripCellPart[] = [];
   let text = "";
-  let anyStyle = false;
 
   for (const frag of group) {
     text += frag.plain;
@@ -127,16 +126,43 @@ function groupToCell(group: RichText[]): StripCell | null {
       // Inner span style (if any) wins over the fragment's wrapping style.
       const merged = part.style ? base.add(part.style) : base;
       const style = merged.isNull ? undefined : merged;
-      if (style) anyStyle = true;
       parts.push({ text: part.text, style });
     }
   }
 
-  // No fg/attrs anywhere → a plain cell (byte-identical to the single-cell path,
-  // carrying only the shared background).
-  return anyStyle
-    ? new StripCell(parts, cellStyle)
-    : new StripCell(text, cellStyle);
+  // [LAW:types-are-the-program] Choose the strongest cell shape the data
+  // admits. When every part shares the same style — the common case after a
+  // uniform baseStyle merge over a plain multi-fragment run — the single-text
+  // shape `(text, fullStyle)` is strictly stronger than `(parts, cellStyle)`:
+  // both produce identical bytes through rich-js (the serializer coalesces
+  // adjacent same-SGR Segments), but single-text survives layout-time slicing
+  // (`new StripCell(splitText(cell.text), cell.style)`) without losing per-part
+  // style. The parts shape is reserved for *genuinely heterogeneous* fg/attrs
+  // (e.g. gitTaculous's inline green/red flags), where it actually does work
+  // the single-text shape cannot.
+  if (allPartsShareStyle(parts)) {
+    const partStyle = parts[0]?.style;
+    const fullStyle = partStyle
+      ? cellStyle !== undefined
+        ? cellStyle.add(partStyle)
+        : partStyle
+      : cellStyle;
+    return new StripCell(text, fullStyle);
+  }
+
+  return new StripCell(parts, cellStyle);
+}
+
+// True when every part carries the same style (or every part is unstyled).
+// `Style.equals` is the canonical structural-equality check on rich-js styles.
+function allPartsShareStyle(parts: StripCellPart[]): boolean {
+  if (parts.length <= 1) return true;
+  const first = parts[0]!.style;
+  return parts.every((p) => {
+    if (p.style === first) return true;
+    if (p.style === undefined || first === undefined) return false;
+    return p.style.equals(first);
+  });
 }
 
 // Convert a single RichText fragment to a StripCell.

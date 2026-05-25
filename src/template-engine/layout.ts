@@ -7,15 +7,17 @@
 // is not a branch that skips logic — it is a value that makes the step return
 // the input unchanged.
 //
-// The bg/fg default-style cascade does NOT live here. It is applied at cell
-// construction time in `fragmentsToStripCells(fragments, baseStyle)`. Merging at
-// the cell layer was structurally wrong: rebuilding cells via
-// `new StripCell(c.text, merged)` dropped per-fragment fg (parts) because
-// `_parts` is private on rich-js's StripCell. Moving the merge upstream — onto
-// fragments before they become cells — preserves parts by construction.
+// The bg/fg default-style cascade is applied at cell construction time in
+// `fragmentsToStripCells(fragments, baseStyle)`, not by rebuilding cells here.
+// But layout ALSO synthesizes new cells (pad spaces for justify, truncate
+// marker glyph) — those new cells need the same segment baseStyle so the
+// PowerlineJoiner sees one continuous bg run across the segment and the marker
+// glyph is rendered in segment fg, not as an unstyled gap. `baseStyle` flows
+// into layout for that single, narrow purpose: filling cells layout itself
+// creates. Existing cells flow through with their own style intact.
 
 import { StripCell, cellLen, splitText, asCellCol } from "@promptctl/rich-js";
-import type { RichText } from "@promptctl/rich-js";
+import type { RichText, Style } from "@promptctl/rich-js";
 import type { Template } from "@promptctl/go-template-js";
 
 export type JustifyMode = "left" | "center" | "right";
@@ -30,6 +32,14 @@ export interface SegmentLayoutOptions {
   truncate: TruncateMode;
   /** Glyph appended/prepended/inserted at the overflow cut point. Default "…". */
   truncateMarker?: string;
+  /**
+   * Style for cells layout itself synthesizes — padding spaces and the
+   * truncate marker. Existing cells flow through with their own style; this
+   * fills only the new ones. Pass the same resolved segment baseStyle used
+   * for `fragmentsToStripCells(fragments, baseStyle)` so the PowerlineJoiner
+   * sees one continuous bg run across the whole segment.
+   */
+  baseStyle?: Style;
 }
 
 /**
@@ -57,14 +67,16 @@ export function evaluateWhen(
  *   1. "auto" width → return cells as-is.
  *   2. Fixed width → truncate on overflow or pad for justification.
  *
- * Defaults (bg/fg) are baked into cells by fragmentsToStripCells's `baseStyle`
- * parameter — by the time cells reach this function their style is final.
+ * Existing cells flow through with their own style (baked in upstream by
+ * `fragmentsToStripCells(fragments, baseStyle)`). New cells synthesized here
+ * (pad spaces, truncate marker) inherit `options.baseStyle` so the segment's
+ * bg/fg is continuous across them.
  */
 export function applySegmentLayout(
   cells: StripCell[],
   options: SegmentLayoutOptions,
 ): StripCell[] {
-  const { width, justify, truncate, truncateMarker = "…" } = options;
+  const { width, justify, truncate, truncateMarker = "…", baseStyle } = options;
 
   // Step 1: "auto" — content-sized, no constraint.
   if (width === "auto") return cells;
@@ -73,8 +85,8 @@ export function applySegmentLayout(
   const total = totalCellWidth(cells);
 
   return total > width
-    ? truncateCells(cells, width, truncate, truncateMarker)
-    : padCells(cells, width, justify, total);
+    ? truncateCells(cells, width, truncate, truncateMarker, baseStyle)
+    : padCells(cells, width, justify, total, baseStyle);
 }
 
 // ─── Width measurement ───────────────────────────────────────────────────────
@@ -90,10 +102,11 @@ function truncateCells(
   targetWidth: number,
   mode: TruncateMode,
   marker: string,
+  baseStyle: Style | undefined,
 ): StripCell[] {
   const markerWidth = cellLen(marker);
   const budget = Math.max(0, targetWidth - markerWidth);
-  const markerCell = new StripCell(marker);
+  const markerCell = new StripCell(marker, baseStyle);
 
   if (mode === "right") {
     return [...keepFromLeft(cells, budget), markerCell];
@@ -170,11 +183,12 @@ function padCells(
   targetWidth: number,
   justify: JustifyMode,
   currentWidth: number,
+  baseStyle: Style | undefined,
 ): StripCell[] {
   const padAmount = targetWidth - currentWidth;
   if (padAmount <= 0) return cells;
 
-  const pad = (n: number) => new StripCell(" ".repeat(n));
+  const pad = (n: number) => new StripCell(" ".repeat(n), baseStyle);
 
   if (justify === "left") return [...cells, pad(padAmount)];
   if (justify === "right") return [pad(padAmount), ...cells];
