@@ -43,9 +43,10 @@ function num(v: number | bigint): number {
       v < BigInt(Number.MIN_SAFE_INTEGER)
     ) {
       throw new TypeError(
-        `Numeric argument ${v}n is outside JS safe-integer range; ` +
+        `Numeric argument ${v}n is outside JS safe-integer range ` +
+          `(|v| > Number.MAX_SAFE_INTEGER = ${Number.MAX_SAFE_INTEGER}); ` +
           `Number(v) would lose precision or overflow. ` +
-          `Pass a value within ±2^53 or use a string-based formatter.`,
+          `Pass a value within ±Number.MAX_SAFE_INTEGER.`,
       );
     }
     return Number(v);
