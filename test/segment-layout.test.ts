@@ -1,9 +1,10 @@
 // [LAW:behavior-not-structure] Tests assert observable output (cell count,
 // text content, total width, style fields) — never internal state.
 
-import { StripCell, Style, cellLen } from "@promptctl/rich-js";
+import { StripCell, Style, cellLen, RichText } from "@promptctl/rich-js";
 import { createCcCandybarEngine } from "../src/template-engine/engine";
 import { applySegmentLayout, evaluateWhen } from "../src/template-engine/layout";
+import { fragmentsToStripCells } from "../src/template-engine/cells";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -387,5 +388,73 @@ describe("baseStyle inheritance on synthesized cells", () => {
     });
     const padCell = result[result.length - 1]!;
     expect(padCell.style.bgcolor).toBeUndefined();
+  });
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// 9. Known limitation: truncation through a parts-based cell loses per-part fg
+//
+// [LAW:types-are-the-program] StripCell's `_parts` is private in rich-js, so
+// the slice path (`new StripCell(splitText(cell.text), cell.style)`) cannot
+// preserve parts. groupToCell collapses uniform-style multi-fragment groups
+// to single-text cells (the common case), so the parts shape — and this
+// limitation — is reached ONLY for genuinely heterogeneous fg/attrs (e.g.
+// gitTaculous's inline green/red flags) AND a fixed width that truncates
+// THROUGH such a cell. No current segment configures that combination.
+// These tests pin the observable behavior so the limitation cannot regress
+// further (e.g. losing the cell-level bg too) without a failing test.
+// ────────────────────────────────────────────────────────────────────────────
+
+describe("truncation through a parts-based cell — known limitation", () => {
+  function buildHeterogeneousCell(): StripCell {
+    const baseStyle = new Style({ bgcolor: "blue", color: "white" });
+    const fragments = [
+      new RichText("normal "),
+      new RichText("ERR", { style: "red" }),
+      new RichText(" trailing"),
+    ];
+    const cells = fragmentsToStripCells(fragments, baseStyle);
+    // Sanity: a heterogeneous group must produce ONE parts-based cell, not
+    // a collapsed single-text cell. Otherwise we're not testing what we
+    // think we're testing.
+    expect(cells).toHaveLength(1);
+    expect(cells[0]!.style.color).toBeUndefined();
+    expect(cells[0]!.style.bgcolor?.name).toBe("blue");
+    return cells[0]!;
+  }
+
+  test("cell-level bg survives truncation slicing through a parts-based cell", () => {
+    const baseStyle = new Style({ bgcolor: "blue", color: "white" });
+    const cell = buildHeterogeneousCell();
+    // Total width "normal ERR trailing" = 19; cut to 5 (budget 4 + 1-col marker).
+    const result = applySegmentLayout([cell], {
+      width: 5,
+      justify: "left",
+      truncate: "right",
+      baseStyle,
+    });
+    // The boundary slice keeps cell.style — which has only bgcolor for a
+    // parts-based cell. Per-part fg (the red "ERR") is dropped if the cut
+    // falls inside it; for fragments that survive entirely, only their text
+    // remains on the boundary cell, not their per-fragment fg.
+    const boundary = result[0]!;
+    expect(boundary.style.bgcolor?.name).toBe("blue");
+    // Marker cell inherits baseStyle (already covered by section-8 tests).
+    const marker = result[result.length - 1]!;
+    expect(marker.text).toBe("…");
+    expect(marker.style.bgcolor?.name).toBe("blue");
+  });
+
+  test("auto-width segments are not affected (no truncation runs)", () => {
+    // Confirms the limitation is scoped to fixed-width + heterogeneous-fg.
+    // Auto-width passes cells through unchanged, so the parts shape survives.
+    const cell = buildHeterogeneousCell();
+    const result = applySegmentLayout([cell], {
+      width: "auto",
+      justify: "left",
+      truncate: "right",
+    });
+    expect(result).toHaveLength(1);
+    expect(result[0]).toBe(cell); // same reference — passed through
   });
 });

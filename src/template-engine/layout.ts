@@ -129,6 +129,19 @@ function truncateCells(
 /**
  * Take cells from the left, up to `budget` terminal columns.
  * The boundary cell's text is sliced via splitText() if it partially fits.
+ *
+ * [LAW:types-are-the-program] Known limitation: when the boundary cell is
+ * parts-based (heterogeneous per-part fg/attrs under a shared cell-level
+ * bg — only gitTaculous-shaped segments today), the slice rebuilds as
+ * `new StripCell(splitText(cell.text), cell.style)`, where `cell.style`
+ * carries only the cell-level bgcolor. Per-part fg/attrs are dropped on
+ * the cut. rich-js's StripCell does not expose `_parts` publicly, so
+ * slicing parts directly is not available. `groupToCell` already collapses
+ * uniform-style multi-fragment groups to single-text cells (the common
+ * case), so this affects ONLY segments that have *genuinely heterogeneous*
+ * fg AND a fixed width that triggers truncation through a styled run —
+ * no current segment configures that combination. Behavior is pinned by
+ * `test/segment-layout.test.ts` (truncation through parts-based cell).
  */
 function keepFromLeft(cells: StripCell[], budget: number): StripCell[] {
   let remaining = budget;
@@ -153,6 +166,9 @@ function keepFromLeft(cells: StripCell[], budget: number): StripCell[] {
 /**
  * Take cells from the right, up to `budget` terminal columns.
  * The boundary cell's text is sliced via splitText() if it partially fits.
+ *
+ * Same parts-based-cell limitation as keepFromLeft applies on the right
+ * boundary; see that function's comment for details.
  */
 function keepFromRight(cells: StripCell[], budget: number): StripCell[] {
   let remaining = budget;
