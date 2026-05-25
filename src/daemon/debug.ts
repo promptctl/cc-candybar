@@ -1,7 +1,11 @@
 // [LAW:single-enforcer] One module owns the projection from daemon DSL
 // state (VariableStore + SourceRegistry + DslConfig + CompiledSegments) to
-// the wire-level DebugSnapshot. The daemon dispatches without any switch
-// on `what` — buildDebugSnapshot is a table lookup.
+// the wire-level DebugSnapshot. buildDebugSnapshot dispatches via an
+// exhaustive switch on `what` — TypeScript enforces every DebugWhat arm
+// at compile time (the function's return-type narrowing fails if a case
+// is missing), so adding a new `what` requires one new arm here, one new
+// DEBUG_WHATS entry, and one new DebugSnapshot variant — the type system
+// keeps the three sites in lockstep.
 //
 // [LAW:one-source-of-truth] The introspector reads through the live
 // VariableStore (current values), SourceRegistry (lastErrors), VarNode
@@ -81,27 +85,32 @@ export function introspectVars(
 
   const out: VarSnapshot[] = [];
   for (const name of names) {
+    // [LAW:single-enforcer] One requireNode lookup per row. Reading the
+    // value through node.read() instead of store.read(name) avoids a
+    // second Map.get + requireNode round-trip in the inner loop and
+    // makes the per-row data dependency obvious: every field below
+    // comes from this one node.
     const node = store.getNode(name);
     const err = registry.getLastError(name);
-    // [LAW:no-defensive-null-guards] No try/catch around store.read: every
-    // SourceRegistry-declared variable either holds a typed fallback
-    // (declareShell/declareFile/declareGit/declareInput catch internally
-    // and write a fallback) or is a computed whose deriver also catches
-    // (declareTemplate). Cycles are detected eagerly at register time
-    // (declareTemplate's force-read). So a read-throw here would be a
-    // *programming* error, not a runtime condition the snapshot should
-    // mask. Letting it propagate keeps the failure loud at the source
-    // instead of laundering it as a synthesized lastError with an
-    // unstable Date.now() timestamp.
+    // [LAW:no-defensive-null-guards] No try/catch around node.read():
+    // every SourceRegistry-declared variable either holds a typed
+    // fallback (declareShell/declareFile/declareGit/declareInput catch
+    // internally and write a fallback) or is a computed whose deriver
+    // also catches (declareTemplate). Cycles are detected eagerly at
+    // register time (declareTemplate's force-read). So a read-throw
+    // here would be a *programming* error, not a runtime condition
+    // the snapshot should mask. Letting it propagate keeps the failure
+    // loud at the source instead of laundering it as a synthesized
+    // lastError with an unstable Date.now() timestamp.
     //
-    // [LAW:single-enforcer] lastError is sourced from SourceRegistry only.
-    // There is no second timestamp-producer that could drift from the
-    // registry's record.
+    // [LAW:single-enforcer] lastError is sourced from SourceRegistry
+    // only. There is no second timestamp-producer that could drift
+    // from the registry's record.
     out.push({
       name,
       source: sourceByName.get(name) ?? null,
       type: node.type,
-      value: store.read(name),
+      value: node.read(),
       lastError:
         err !== undefined
           ? { timestampMs: err.timestamp, message: err.message }
