@@ -13,7 +13,7 @@ import {
 import type { Request, Response } from "./protocol";
 import { GitDataProvider } from "./cache/git";
 import { CachedUsageProvider } from "./cache/usage";
-import { RenderCache, type DslRenderState } from "./cache/render";
+import { RenderCache } from "./cache/render";
 import { WatcherRegistry } from "./cache/watchers";
 import { RuntimeStats } from "./stats";
 import { makeLimits, realLimitsDeps, type LimitsHandle } from "./limits";
@@ -629,12 +629,15 @@ async function handleRequest(req: Request): Promise<Response> {
     }
     // [LAW:dataflow-not-control-flow] The debug projection samples whatever
     // DSL state the cache currently holds. With cache keys scoped on
-    // (args, projectDir, cwd) and the debug request carrying neither, we
-    // sample the first populated entry — sufficient for `debug vars`,
-    // `debug segments`, `debug config` against single-session workflows.
-    // A future debug-target selector would thread the same key through;
-    // until then, "the live state, whatever it is" is the contract.
-    const dbgEntry = firstPopulatedEntry(renderCache);
+    // (projectDir, cwd) and the debug request carrying neither, we sample
+    // the first populated existing entry — sufficient for `debug vars`,
+    // `debug segments`, `debug config` against the active workload.
+    // firstPopulatedState iterates existing entries only; it does NOT
+    // create a fresh one, so debug introspection never has the side effect
+    // of standing up a new (projectDir=undefined) cache entry tied to the
+    // daemon's own process.cwd(). A future debug-target selector would
+    // thread (projectDir, cwd) through the wire.
+    const dbgEntry = renderCache.firstPopulatedState();
     const dbgState =
       dbgEntry === null
         ? null
@@ -689,23 +692,6 @@ function composeWithError(body: string, error: string | null): string {
 // other Error (operational failure) becomes RENDER_FAILED. No string matching.
 
 const verbCtx = { sessionState, dlog };
-
-// [LAW:no-defensive-null-guards] One walk over the cache's entries map
-// returning the first populated DslRenderState. `RenderCache` doesn't
-// expose entries iteration directly; debug introspection uses this helper
-// so it doesn't have to know about cache internals beyond the public
-// `getOrCreate` shape. If/when a debug-target selector lands, this is the
-// site that gets the lookup-by-key replacement.
-function firstPopulatedEntry(cache: RenderCache): DslRenderState | null {
-  // The cache currently only allows entries to be reached by key. We poll
-  // for the canonical default key (empty args, undefined projectDir, cwd)
-  // which is what tests and the debug-CLI hit. If the entry doesn't exist
-  // yet, getOrCreate creates it via the standard DEFAULT_DSL_CONFIG path,
-  // which is exactly the right thing for `debug config` against a
-  // freshly-started daemon.
-  const entry = cache.getOrCreate([], undefined, undefined);
-  return entry.state;
-}
 
 // [LAW:single-enforcer] The payload-builder dependency bundle. One value
 // passed through every render — the data the daemon brings to each tick.

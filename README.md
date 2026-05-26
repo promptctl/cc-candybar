@@ -58,7 +58,7 @@ The file is a **complete** replacement for the bundled default — no merge laye
     user:      { template: ' {{ .user }} ',   bg: 'primary', fg: 'auto' },
     directory: { template: ' {{ basename .cwd }} ', bg: 'surface', fg: 'foreground' },
     branch:    { template: ' {{ .branch }} ', bg: 'accent',  fg: 'auto',
-                 when: 'ne .branch ""' },
+                 when: '{{ ne .branch "" }}' },
     clock:     { template: ' {{ .clock }} ',  bg: 'primary', fg: 'auto' },
   },
   layout: ['user', 'directory', 'branch', 'clock'],

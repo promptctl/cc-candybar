@@ -3,6 +3,7 @@ import { PaletteResolver } from "@promptctl/rich-js";
 import {
   loadDslConfig,
   resolveDslConfigPath,
+  dslConfigCandidatePaths,
   ConfigError,
 } from "../../config/dsl-loader.js";
 import { DEFAULT_DSL_CONFIG } from "../../config/default-dsl-config.js";
@@ -164,14 +165,9 @@ export class RenderCache {
           : err instanceof Error
             ? err.message
             : String(err);
-      // Watch the broken file for fixes so an in-place save recovers.
-      if (
-        resolvedPath !== entry.configFilePath ||
-        (entry.watcher === null && resolvedPath !== null)
-      ) {
-        entry.configFilePath = resolvedPath;
-        this.rebindWatcher(entry, resolvedPath);
-      }
+      // Watch the broken file (and its sibling candidates) so an in-place
+      // save OR a higher-precedence file appearing recovers.
+      this.refreshWatcher(entry, resolvedPath);
       return;
     }
 
@@ -199,13 +195,7 @@ export class RenderCache {
       registry.dispose();
       entry.lastError = err instanceof Error ? err.message : String(err);
       entry.state = null;
-      if (
-        resolvedPath !== entry.configFilePath ||
-        (entry.watcher === null && resolvedPath !== null)
-      ) {
-        entry.configFilePath = resolvedPath;
-        this.rebindWatcher(entry, resolvedPath);
-      }
+      this.refreshWatcher(entry, resolvedPath);
       return;
     }
 
@@ -232,11 +222,17 @@ export class RenderCache {
       basePalette: new PaletteResolver(palette),
     };
 
-    // Rebind watcher to the (possibly changed) resolved path.
-    if (resolvedPath !== entry.configFilePath) {
+    this.refreshWatcher(entry, resolvedPath);
+  }
+
+  // [LAW:single-enforcer] One watcher-rebind decision per reload. If the
+  // resolved path changed (including null↔non-null transitions), or no
+  // watcher is currently held, install a fresh watcher set keyed by the
+  // current resolved path (or `<none>` when nothing exists). The "watch all
+  // candidates when no file exists" behavior lives in rebindWatcher.
+  private refreshWatcher(entry: CacheEntry, resolvedPath: string | null): void {
+    if (resolvedPath !== entry.configFilePath || entry.watcher === null) {
       entry.configFilePath = resolvedPath;
-      this.rebindWatcher(entry, resolvedPath);
-    } else if (entry.watcher === null && resolvedPath !== null) {
       this.rebindWatcher(entry, resolvedPath);
     }
   }
@@ -246,40 +242,73 @@ export class RenderCache {
       entry.watcher.release();
       entry.watcher = null;
     }
-    if (!targetPath) return;
-    // [LAW:dataflow-not-control-flow] Watch BOTH the file and its parent
-    // directory. fs.watch on the file alone is bound to its inode — atomic-
-    // rename writes (sed -i, vim :w, most editors) replace the inode and
-    // leave the watcher bound to a dead one. The parent-dir watcher fires
-    // on rename-over-write because it sees the dirent change. After fire →
-    // reloadInto → rebindWatcher: a fresh file watcher binds to the new
-    // inode for the next in-place write.
-    const dir = path.dirname(targetPath);
-    const base = path.basename(targetPath);
+    // [LAW:dataflow-not-control-flow] Two outcomes from one rule:
+    //   resolved path exists → watch THAT file + its parent dir (catches
+    //     in-place writes and atomic-rename writes that replace the inode)
+    //   no resolved path     → watch EVERY candidate's parent dir so the
+    //     creation of any file in the resolution chain triggers reload.
+    // Either way the watcher set is built from a single list of (dir,
+    // filename-filter) tuples; the only variability is whether the
+    // currently-resolved file is also added to `files` for inode-level
+    // watching.
+    const candidates = dslConfigCandidatePaths(entry.projectDir, entry.cwd);
+    const dirSet = new Map<string, Set<string>>();
+    for (const candidate of candidates) {
+      const dir = path.dirname(candidate);
+      const base = path.basename(candidate);
+      if (!dirSet.has(dir)) dirSet.set(dir, new Set());
+      dirSet.get(dir)!.add(base);
+    }
+    const dirs = [...dirSet.entries()].map(([dirPath, names]) => ({
+      path: dirPath,
+      filenames: [...names],
+    }));
+
+    const key =
+      targetPath !== null
+        ? `config:${targetPath}`
+        : `config:<none>:${entry.projectDir ?? ""}:${entry.cwd ?? ""}`;
+
     entry.watcher = this.deps.watchers.acquire(
-      `config:${targetPath}`,
+      key,
       {
-        files: [targetPath],
-        dirs: [{ path: dir, filenames: [base] }],
+        files: targetPath !== null ? [targetPath] : [],
+        dirs,
       },
-      () => this.onConfigChanged(targetPath),
+      () => this.onConfigChanged(entry),
     );
   }
 
-  // Fan out a config-file change to every cache entry that resolved to it.
-  // Each entry re-runs resolveDslConfigPath so a project-local file change
-  // updates only sessions that resolved to it, while a global config change
-  // updates everyone who falls through to it.
-  private onConfigChanged(changedPath: string): void {
-    dlog("info", `config changed: ${changedPath} — reloading affected entries`);
-    for (const entry of this.entries.values()) {
-      if (entry.configFilePath === changedPath) {
-        this.reloadInto(entry);
-      }
-    }
+  // [LAW:single-enforcer] One reload dispatcher per cache entry. The
+  // watcher fires on any change in any candidate dir matching the
+  // CONFIG_FILENAME; the entry re-resolves its own resolution chain (so a
+  // higher-precedence file appearing supersedes a lower one) and reloads.
+  // We don't filter by which specific path changed because the
+  // (projectDir, cwd) tuple already scopes the entry's watcher set —
+  // sibling entries with different scopes don't share this watcher.
+  private onConfigChanged(entry: CacheEntry): void {
+    dlog(
+      "info",
+      `config change detected for entry projectDir=${entry.projectDir ?? "<none>"} cwd=${entry.cwd ?? "<none>"}`,
+    );
+    this.reloadInto(entry);
   }
 
   get size(): number {
     return this.entries.size;
+  }
+
+  // [LAW:single-enforcer] One read path for "any populated state" used by
+  // the debug protocol's introspection (`debug vars` / `segments` / `config`).
+  // Iterates existing entries — does NOT call getOrCreate, so debug
+  // introspection never has the side effect of creating a fresh cache entry
+  // (with its own SourceRegistry timers/watchers) tied to the daemon's own
+  // `process.cwd()`. Returns null when the cache has no successfully-loaded
+  // entry; debug responses are empty in that case by construction.
+  firstPopulatedState(): DslRenderState | null {
+    for (const entry of this.entries.values()) {
+      if (entry.state !== null) return entry.state;
+    }
+    return null;
   }
 }

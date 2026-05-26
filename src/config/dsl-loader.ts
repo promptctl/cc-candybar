@@ -64,6 +64,41 @@ export class ConfigError extends Error {
 const CONFIG_FILENAME = ".cc-candybar.json5";
 
 /**
+ * The full ordered list of candidate paths the DSL config could live at,
+ * for a given (projectDir, cwd). Returned regardless of which exist — the
+ * cache uses this to watch every candidate location so the creation of any
+ * file in the resolution chain triggers hot-reload.
+ *
+ * [LAW:single-enforcer] One enumerator; `resolveDslConfigPath` finds the
+ * first that exists, watchers listen on all of them, no second list.
+ */
+export function dslConfigCandidatePaths(
+  projectDir?: string,
+  cwd?: string,
+): readonly string[] {
+  const envPath = process.env.CC_CANDYBAR_CONFIG;
+  if (envPath) {
+    const expanded = envPath.startsWith("~")
+      ? envPath.replace("~", os.homedir())
+      : envPath;
+    // [LAW:dataflow-not-control-flow] When the env var sets the path, it's
+    // the *only* candidate — the precedence chain collapses to one entry.
+    // The watcher (and existence check) operate on that single path.
+    return [expanded];
+  }
+
+  const effectiveCwd = cwd ?? process.cwd();
+  const xdgConfigHome =
+    process.env.XDG_CONFIG_HOME ?? path.join(os.homedir(), ".config");
+
+  return [
+    ...(projectDir ? [path.join(projectDir, CONFIG_FILENAME)] : []),
+    path.join(effectiveCwd, CONFIG_FILENAME),
+    path.join(xdgConfigHome, "cc-candybar", "config.json5"),
+  ];
+}
+
+/**
  * Resolution order for the user's DSL config file:
  *   1. $CC_CANDYBAR_CONFIG env var (literal path, optional `~` expansion)
  *   2. `<projectDir>/.cc-candybar.json5`
@@ -77,32 +112,14 @@ const CONFIG_FILENAME = ".cc-candybar.json5";
  * `locations.find(fs.existsSync)`. Adding a layer is a new array entry, not a
  * new branch.
  *
- * [LAW:single-enforcer] One resolver. The daemon's cache reads this; tests
- * read this; no callsite re-derives the precedence.
+ * [LAW:single-enforcer] Built on top of `dslConfigCandidatePaths` — the
+ * precedence list lives in one place.
  */
 export function resolveDslConfigPath(
   projectDir?: string,
   cwd?: string,
 ): string | null {
-  const envPath = process.env.CC_CANDYBAR_CONFIG;
-  if (envPath) {
-    const expanded = envPath.startsWith("~")
-      ? envPath.replace("~", os.homedir())
-      : envPath;
-    return fs.existsSync(expanded) ? expanded : null;
-  }
-
-  const effectiveCwd = cwd ?? process.cwd();
-  const xdgConfigHome =
-    process.env.XDG_CONFIG_HOME ?? path.join(os.homedir(), ".config");
-
-  const locations = [
-    ...(projectDir ? [path.join(projectDir, CONFIG_FILENAME)] : []),
-    path.join(effectiveCwd, CONFIG_FILENAME),
-    path.join(xdgConfigHome, "cc-candybar", "config.json5"),
-  ];
-
-  return locations.find(fs.existsSync) ?? null;
+  return dslConfigCandidatePaths(projectDir, cwd).find(fs.existsSync) ?? null;
 }
 
 // ─── Entry point ─────────────────────────────────────────────────────────────
