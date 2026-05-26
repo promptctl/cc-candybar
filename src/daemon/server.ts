@@ -572,8 +572,13 @@ async function handleRequest(req: Request): Promise<Response> {
           req.hookData,
           payloadDeps,
           req.cwd,
+          entry.state.config,
         );
-        entry.state.registry.applyInput(payload);
+        // [LAW:single-enforcer] renderDslLine internally calls
+        // `registry.applyInput(payload)` as its first step (see step 1 in
+        // src/dsl/render.ts). The daemon must not pre-apply — doing so
+        // would run the MobX action twice per render and clear last_error
+        // diagnostics on the round trip.
         body = renderDslLine(
           entry.state.config,
           entry.state.compiled,
