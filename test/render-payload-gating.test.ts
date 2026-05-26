@@ -16,7 +16,6 @@ interface CallCounts {
   today: number;
   context: number;
   metrics: number;
-  block: number;
   tmux: number;
   theme: number;
 }
@@ -28,7 +27,6 @@ function buildMockDeps(): { deps: RenderPayloadDeps; counts: CallCounts } {
     today: 0,
     context: 0,
     metrics: 0,
-    block: 0,
     tmux: 0,
     theme: 0,
   };
@@ -76,12 +74,6 @@ function buildMockDeps(): { deps: RenderPayloadDeps; counts: CallCounts } {
           linesAdded: null,
           linesRemoved: null,
         };
-      },
-    },
-    blockProvider: {
-      getActiveBlockInfo: async () => {
-        counts.block++;
-        return null;
       },
     },
     tmuxService: {
@@ -173,7 +165,6 @@ describe("buildRenderPayload — layout-driven provider gating", () => {
     expect(counts.today).toBe(0);
     expect(counts.context).toBe(0);
     expect(counts.usage).toBe(0);
-    expect(counts.block).toBe(0);
   });
 
   test("adding a segment to layout brings its provider online", async () => {
@@ -192,7 +183,6 @@ describe("buildRenderPayload — layout-driven provider gating", () => {
     expect(counts.today).toBe(0);
     expect(counts.context).toBe(0);
     expect(counts.usage).toBe(0);
-    expect(counts.block).toBe(0);
   });
 
   test("namespace-only refs (e.g. {{ toJson .git }}) expand to all child paths", async () => {

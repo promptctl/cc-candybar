@@ -235,7 +235,8 @@ export const DEFAULT_DSL_CONFIG = {
     "today.budget.amount": { kind: "literal", value: 50 },
     "today.budget.warningThreshold": { kind: "literal", value: 80 },
 
-    // Block — daemon fetches via BlockProvider; resetsAt is raw epoch seconds
+    // Block — daemon projects directly from hookData.rate_limits.five_hour;
+    // resetsAt is raw epoch seconds
     // so the template can compose `minutesUntilReset .block.resetsAt` (the
     // same chain weekly uses, single composition point).
     "block.nativeUtilization": {

@@ -24,7 +24,6 @@ import type { UsageProvider } from "../segments/session.js";
 import type { TodayProvider } from "../segments/today.js";
 import type { ContextProvider } from "../segments/context.js";
 import type { MetricsProvider } from "../segments/metrics.js";
-import type { BlockProvider } from "../segments/block.js";
 import type { TmuxService } from "../segments/tmux.js";
 import type { GitDataProvider } from "./cache/git.js";
 import type { SessionStateRW } from "./session-state.js";
@@ -133,7 +132,6 @@ export interface RenderPayloadDeps {
   readonly todayProvider: TodayProvider;
   readonly contextProvider: ContextProvider;
   readonly metricsProvider: MetricsProvider;
-  readonly blockProvider: BlockProvider;
   readonly tmuxService: TmuxService;
   readonly sessionState: SessionStateRW;
 }
@@ -341,7 +339,7 @@ export async function buildRenderPayload(
   // the destructure shape).
   const nullP = <T>(): Promise<T | null> => Promise.resolve(null);
 
-  const [gitInfo, usage, today, context, metrics, blockInfo, tmuxSession] =
+  const [gitInfo, usage, today, context, metrics, tmuxSession] =
     await Promise.all([
       wants("git")
         ? deps.gitProvider
@@ -370,13 +368,15 @@ export async function buildRenderPayload(
             .getMetricsInfo(hookData.session_id, hookData)
             .catch(() => null)
         : nullP<Awaited<ReturnType<MetricsProvider["getMetricsInfo"]>>>(),
-      wants("block")
-        ? deps.blockProvider.getActiveBlockInfo(hookData).catch(() => null)
-        : nullP<Awaited<ReturnType<BlockProvider["getActiveBlockInfo"]>>>(),
       wants("tmux")
         ? deps.tmuxService.getSessionId().catch(() => null)
         : nullP<string>(),
     ]);
+  // [LAW:dataflow-not-control-flow] block.* reads straight from hookData
+  // alongside weekly. (The prior dedicated provider only re-derived
+  // `minutesUntilReset(resets_at)`, which the DSL template composes via
+  // the formatter func — a duplicate code path was retired.)
+  const fiveHour = hookData.rate_limits?.five_hour;
 
   // [LAW:one-source-of-truth] The theme variable surfaces the session's
   // resolved theme so the toolbar/tray DSL templates can encode it into
@@ -426,18 +426,17 @@ export async function buildRenderPayload(
     ...(theme !== undefined && { theme }),
     ...(sessionPayload !== undefined && { session: sessionPayload }),
     ...(todayPayload !== undefined && { today: todayPayload }),
-    ...(blockInfo !== null && {
-      block: {
-        nativeUtilization: blockInfo.nativeUtilization,
-        // [LAW:one-source-of-truth] Surface the raw `resets_at` epoch (not
-        // pre-computed minutes) so DSL templates compose `minutesUntilReset
-        // .block.resetsAt` — the same formatter the weekly segment uses.
-        // Pre-computing here would split "minutes until reset" into two
-        // paths (precomputed for block, template-computed for weekly), drift
-        // bait.
-        resetsAt: hookData.rate_limits?.five_hour?.resets_at ?? 0,
-      },
-    }),
+    ...(wants("block") &&
+      fiveHour !== undefined && {
+        block: {
+          // [LAW:one-source-of-truth] Both fields read straight from the
+          // hookData rate-limit window; the DSL composes minutesUntilReset
+          // against .block.resetsAt the same way weekly does. One
+          // projection rule, two segments.
+          nativeUtilization: fiveHour.used_percentage,
+          resetsAt: fiveHour.resets_at,
+        },
+      }),
     ...(hookData.rate_limits?.seven_day !== undefined && {
       weekly: {
         percentage: hookData.rate_limits.seven_day.used_percentage,

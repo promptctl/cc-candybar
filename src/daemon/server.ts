@@ -31,7 +31,6 @@ import { buildRenderPayload } from "./render-payload.js";
 import { TodayProvider } from "../segments/today.js";
 import { ContextProvider } from "../segments/context.js";
 import { MetricsProvider } from "../segments/metrics.js";
-import { BlockProvider } from "../segments/block.js";
 import { TmuxService } from "../segments/tmux.js";
 
 // [LAW:one-source-of-truth] one cache instance per daemon process — multiple
@@ -64,7 +63,6 @@ const sessionState = new SessionState();
 const todayProvider = new TodayProvider();
 const contextProvider = new ContextProvider();
 const metricsProvider = new MetricsProvider();
-const blockProvider = new BlockProvider();
 const tmuxService = new TmuxService();
 const renderCache = new RenderCache({
   gitService,
@@ -741,7 +739,6 @@ const payloadDeps = {
   todayProvider,
   contextProvider,
   metricsProvider,
-  blockProvider,
   tmuxService,
   sessionState,
 };
