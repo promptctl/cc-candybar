@@ -8,7 +8,7 @@
 // elsewhere; this file mocks the parent class via subclassing so we
 // observe call counts without spinning up real transcript files.
 
-import { writeFileSync, mkdtempSync, rmSync } from "node:fs";
+import { writeFileSync, mkdtempSync, rmSync, utimesSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -89,10 +89,11 @@ describe("CachedUsageProvider", () => {
       const hd = { transcript_path: transcript } as ClaudeHookData;
       await cache.getUsageInfo("session-A", hd);
       expect(computeCalls).toBe(1);
-      // Bump mtime — must wait a moment so the new mtime differs from
-      // the cached one at full second granularity on some filesystems.
-      await new Promise((r) => setTimeout(r, 1100));
-      writeFileSync(transcript, "extra");
+      // Bump mtime deterministically. `utimesSync` takes seconds for
+      // atime/mtime; jumping a full hour into the future guarantees
+      // mtimeMs differs at any filesystem granularity.
+      const future = Math.floor(Date.now() / 1000) + 3600;
+      utimesSync(transcript, future, future);
       await cache.getUsageInfo("session-A", hd);
       expect(computeCalls).toBe(2);
       expect(cache.getStats().misses).toBe(2);

@@ -1,3 +1,4 @@
+import fs from "node:fs";
 import path from "node:path";
 import { PaletteResolver, type StripCell } from "@promptctl/rich-js";
 import { buildNeededPrefixes } from "../render-payload.js";
@@ -294,10 +295,18 @@ export class RenderCache {
     // filename-filter) tuples; the only variability is whether the
     // currently-resolved file is also added to `files` for inode-level
     // watching.
+    // [LAW:dataflow-not-control-flow] fs.watch on a non-existent directory
+    // throws; on a fresh install $XDG_CONFIG_HOME/cc-candybar doesn't exist
+    // yet. Filter candidates to those whose parent directory exists *at
+    // this moment* — that's the bounded set of locations we can usefully
+    // watch. (A user creating the XDG dir later would only get hot-reload
+    // for the project-local / cwd locations until the daemon next builds
+    // an entry; this is a documented limitation, not a contract violation.)
     const candidates = dslConfigCandidatePaths(entry.projectDir, entry.cwd);
     const dirSet = new Map<string, Set<string>>();
     for (const candidate of candidates) {
       const dir = path.dirname(candidate);
+      if (!fs.existsSync(dir)) continue;
       const base = path.basename(candidate);
       if (!dirSet.has(dir)) dirSet.set(dir, new Set());
       dirSet.get(dir)!.add(base);

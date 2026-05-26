@@ -36,11 +36,23 @@ import type { DslConfig } from "./dsl-types.js";
 // else raw. Inline-recomputes the project-relative path because the DSL has no
 // template-level `:=` (a `kind: "template"` var would express it once, but adds
 // noise for a single use).
+//
+// Prefix checks are boundary-safe: a path is "under" a base iff it equals the
+// base OR starts with `base + "/"`. The naive `hasPrefix base path` is a
+// string match — it would treat `/home/alice` as a child of `/home/al`.
+// `(printf "%s/" base)` adds the separator so the prefix can only land at a
+// path boundary; the `eq` arm catches the exact-match case where the trailing
+// slash would over-match.
+//
+// Equal-paths case (current_dir === project_dir) DOES enter the project-
+// relative arm: DIR_REL evaluates to "" and the ternary picks basename
+// (project_dir), so the project root renders as `<repo-name>` instead of the
+// full absolute path. Same logic handles equal home & current_dir → just "~".
 const DIR_REL = 'trimPrefix "/" (trimPrefix .project_dir .current_dir)';
 const DIR_TEMPLATE =
-  ' {{ if and (ne .home "") (hasPrefix .home .current_dir) }}~{{ trimPrefix .home .current_dir }}' +
+  ' {{ if and (ne .home "") (or (eq .home .current_dir) (hasPrefix (printf "%s/" .home) .current_dir)) }}~{{ trimPrefix .home .current_dir }}' +
   "{{ else }}" +
-  "{{ if and (ne .project_dir .current_dir) (hasPrefix .project_dir .current_dir) }}" +
+  '{{ if or (eq .project_dir .current_dir) (hasPrefix (printf "%s/" .project_dir) .current_dir) }}' +
   `{{ ternary (${DIR_REL}) (basename .project_dir) (ne (${DIR_REL}) "") }}` +
   "{{ else }}{{ .current_dir }}{{ end }}{{ end }} ";
 
