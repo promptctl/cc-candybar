@@ -17,7 +17,8 @@
 // resolve falls back to the variable's declared default).
 
 import type { ClaudeHookData } from "../utils/claude.js";
-import type { DslConfig } from "../config/dsl-types.js";
+import type { DslConfig, VariableDecl } from "../config/dsl-types.js";
+import { extractTemplateRefs } from "../config/dsl-loader.js";
 import type { GitInfo } from "../segments/git.js";
 import type { UsageProvider } from "../segments/session.js";
 import type { TodayProvider } from "../segments/today.js";
@@ -148,36 +149,103 @@ const DEFAULT_AUTOCOMPACT_BUFFER = 33000;
 // ─── Config-driven provider gating ───────────────────────────────────────────
 //
 // [LAW:dataflow-not-control-flow] Whether a provider fires is selected by
-// the DslConfig's declared input paths, not by a hardcoded segment-enabled
-// boolean (as the legacy renderer used). If no `kind: "input"` variable
-// reads a path starting with `metrics.`, the metrics provider does not run
-// — the JSONL parse + `findTranscriptFile` walk simply do not happen. The
-// same rule covers every other prefix uniformly.
+// the active layout. Walk from `config.layout` → segments → their template
+// strings → referenced variable names → recursive expansion through
+// `template`-kind vars. The transitive closure tells us which input paths
+// are actually reachable from a rendered segment; providers feeding paths
+// outside that closure do not run.
 //
-// [LAW:single-enforcer] One predicate defines "needed" — adding a new
-// payload prefix means declaring an input var that references it; no other
-// flag, no second gate.
+// [LAW:single-enforcer] One reachability walk owns "is this provider
+// needed." A declared-but-unreachable input variable (the default config
+// declares every built-in variable for reference completeness) contributes
+// no work to the hot path.
 function buildNeededPrefixes(config: DslConfig): ReadonlySet<string> {
-  const needed = new Set<string>();
-  const scan = (decls: Readonly<Record<string, unknown>>): void => {
-    for (const decl of Object.values(decls)) {
-      if (
-        decl !== null &&
-        typeof decl === "object" &&
-        "kind" in decl &&
-        (decl as { kind: string }).kind === "input" &&
-        "path" in decl &&
-        typeof (decl as { path: unknown }).path === "string"
-      ) {
-        needed.add((decl as { path: string }).path);
+  // 1. Variable name → declaration index for fast lookup. Global vars first;
+  //    per-segment vars are namespaced `segName.varName` (same as runtime).
+  const allDecls = new Map<string, VariableDecl>();
+  for (const [name, decl] of Object.entries(config.variables)) {
+    allDecls.set(name, decl);
+  }
+  for (const [segName, seg] of Object.entries(config.segments)) {
+    if (!seg.vars) continue;
+    for (const [varName, decl] of Object.entries(seg.vars)) {
+      allDecls.set(`${segName}.${varName}`, decl);
+    }
+  }
+
+  // 2. BFS from layout segments. Frontier collects variable names referenced
+  //    by template/when/bg/fg/sub-vars; visited tracks vars whose own
+  //    `template`-kind body we've already followed.
+  const frontier: string[] = [];
+  const visited = new Set<string>();
+
+  for (const segName of config.layout) {
+    const seg = config.segments[segName];
+    if (!seg) continue;
+    for (const src of [seg.template, seg.when, seg.bg, seg.fg]) {
+      if (src) for (const ref of extractTemplateRefs(src)) frontier.push(ref);
+    }
+    if (seg.vars) {
+      for (const v of Object.values(seg.vars)) {
+        for (const ref of collectDeclRefs(v)) frontier.push(ref);
       }
     }
-  };
-  scan(config.variables);
-  for (const seg of Object.values(config.segments)) {
-    if (seg.vars) scan(seg.vars);
   }
-  return needed;
+
+  // 3. Walk the closure. A reference is the dotted form `a.b.c`; the input
+  //    declaration's `path` is the payload-side address we care about. For a
+  //    `template`-kind variable, the body's refs become new frontier items.
+  const inputPaths = new Set<string>();
+  while (frontier.length > 0) {
+    const ref = frontier.pop()!;
+    // The longest matching declaration name wins (e.g. `session.id` over
+    // `session`), which is the same lookup logic the scope proxy uses.
+    const decl = lookupDecl(allDecls, ref);
+    if (!decl) continue;
+    const declName = decl.name;
+    if (visited.has(declName)) continue;
+    visited.add(declName);
+
+    if (decl.value.kind === "input") {
+      inputPaths.add(decl.value.path);
+    } else if (decl.value.kind === "template") {
+      for (const r of extractTemplateRefs(decl.value.template)) {
+        frontier.push(r);
+      }
+    }
+    // Other kinds (literal/env/file/shell/time/git/state) declare their own
+    // box without reading a payload path — they need no provider gating
+    // because the daemon's payload builder is the only thing this gates.
+  }
+
+  return inputPaths;
+}
+
+// [LAW:single-enforcer] Mirror of the scope proxy's longest-prefix lookup —
+// a dotted reference resolves to the most specific declared variable.
+function lookupDecl(
+  decls: ReadonlyMap<string, VariableDecl>,
+  ref: string,
+): { name: string; value: VariableDecl } | undefined {
+  let candidate = ref;
+  while (candidate.length > 0) {
+    const decl = decls.get(candidate);
+    if (decl) return { name: candidate, value: decl };
+    const dot = candidate.lastIndexOf(".");
+    if (dot < 0) return undefined;
+    candidate = candidate.slice(0, dot);
+  }
+  return undefined;
+}
+
+// Variable-declaration body refs: only `template`-kind has a template body
+// inside the declaration itself. The other kinds reference no other vars at
+// declaration time.
+function collectDeclRefs(decl: VariableDecl): readonly string[] {
+  if (decl.kind === "template") {
+    return [...extractTemplateRefs(decl.template)];
+  }
+  return [];
 }
 
 function anyPathStartsWith(
@@ -214,8 +282,7 @@ export async function buildRenderPayload(
   config: DslConfig,
 ): Promise<RenderPayload> {
   const needed = buildNeededPrefixes(config);
-  const wants = (prefix: string): boolean =>
-    anyPathStartsWith(needed, prefix);
+  const wants = (prefix: string): boolean => anyPathStartsWith(needed, prefix);
 
   // [LAW:dataflow-not-control-flow] Each provider lane is the same shape:
   // either "needed → call provider with .catch(() => null)" or "not needed
@@ -346,7 +413,7 @@ function pickNonNull<T extends Readonly<Record<string, number | null>>>(
 ): { [K in keyof T]?: number } | undefined {
   const out: { [K in keyof T]?: number } = {};
   let any = false;
-  for (const k of Object.keys(src) as (keyof T)[]) {
+  for (const k of Object.keys(src) as Array<keyof T>) {
     const v = src[k];
     if (v !== null && v !== undefined) {
       out[k] = v;

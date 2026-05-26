@@ -13,7 +13,6 @@ import { SourceRegistry } from "../../var-system/sources.js";
 import { resolvePaletteName } from "../../themes/index.js";
 import { getThemePalette } from "../../themes/palette-registry.js";
 import type { GitDataProvider } from "./git.js";
-import type { CachedUsageProvider } from "./usage.js";
 import type { SessionStateRW } from "../session-state.js";
 import type { WatcherRegistry, WatcherHandle } from "./watchers.js";
 import { dlog } from "../log.js";
@@ -30,9 +29,14 @@ import { dlog } from "../log.js";
 // bounded by N × declarations-per-config.
 const MAX_ENTRIES = 256;
 
+// [LAW:single-enforcer] These are the cache-and-registry deps — git data
+// (for declareGit subscriptions), session state (for declareState atoms),
+// and the watcher registry (for hot-reload's config file watcher). Daemon-
+// owned data providers like UsageProvider/TodayProvider/etc. live in
+// `payloadDeps` (server.ts) and feed `buildRenderPayload`; they are not
+// part of cache identity or lifecycle.
 export interface RenderDeps {
   gitService: GitDataProvider;
-  usageProvider: CachedUsageProvider;
   sessionState: SessionStateRW;
   watchers: WatcherRegistry;
 }
@@ -66,9 +70,15 @@ export interface CacheEntry {
 }
 
 // [LAW:one-source-of-truth] Cache key includes every input that affects DSL
-// resolution. Null-separator avoids ambiguity from args with whitespace.
-function cacheKey(args: string[], projectDir?: string, cwd?: string): string {
-  return args.join("\0") + "\0" + (projectDir ?? "") + "\0" + (cwd ?? "");
+// resolution. Args is intentionally *excluded* — bzh.2 retired the CLI
+// override flag apparatus, so args no longer influence config resolution
+// or rendering. Including it would let a legacy client churn the LRU by
+// varying flags that the daemon now ignores, creating duplicate entries
+// (each with their own SourceRegistry timers/watchers) for the same
+// behavior. The signature still threads `args` (the wire protocol carries
+// it) but the value is dropped at the boundary.
+function cacheKey(projectDir?: string, cwd?: string): string {
+  return (projectDir ?? "") + "\0" + (cwd ?? "");
 }
 
 export class RenderCache {
@@ -90,7 +100,7 @@ export class RenderCache {
     projectDir: string | undefined,
     cwd: string | undefined,
   ): CacheEntry {
-    const key = cacheKey(args, projectDir, cwd);
+    const key = cacheKey(projectDir, cwd);
     const existing = this.entries.get(key);
     if (existing) {
       // Move to end (most recently used) for LRU eviction.

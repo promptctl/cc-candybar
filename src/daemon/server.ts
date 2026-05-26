@@ -66,7 +66,6 @@ const blockProvider = new BlockProvider();
 const tmuxService = new TmuxService();
 const renderCache = new RenderCache({
   gitService,
-  usageProvider,
   sessionState,
   watchers: watcherRegistry,
 });

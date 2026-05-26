@@ -136,13 +136,13 @@ export const DEFAULT_DSL_CONFIG = {
     // Per-session daemon state — surfaced for click-aware segments.
     theme: { kind: "input", path: "theme", default: "" },
 
-    // Tmux session id via the standard shell source.
-    "tmux.session": {
-      kind: "shell",
-      command: "tmux display-message -p '#S' 2>/dev/null",
-      cache: { ttl: "1h" },
-      default: "",
-    },
+    // Tmux session id flows through the daemon's augmented payload
+    // (TmuxService caches by socket and never re-spawns for the lifetime of
+    // the daemon, so this stays cheap). A `kind: "shell"` declaration would
+    // spawn the subprocess at every cache-entry creation regardless of
+    // whether the tmux segment is in the active layout — buildNeededPrefixes
+    // gates the input variant so unused segments cost nothing.
+    "tmux.session": { kind: "input", path: "tmux.session", default: "" },
 
     // Git — every field flows from the daemon's projected GitInfo payload.
     // The DSL's native `kind: "git"` source covers a 6-field subset
