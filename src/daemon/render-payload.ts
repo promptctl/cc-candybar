@@ -266,6 +266,38 @@ function anyPathStartsWith(
   return false;
 }
 
+// [LAW:dataflow-not-control-flow] Each `show*` flag is derived from a
+// specific declared input path; the closure tells us exactly which fields
+// the user's templates will read. Without this, GitService.getGitInfo
+// silently returns "" / 0 for fields whose `show*` flag isn't set (because
+// computing them requires extra git invocations), and a user who declares
+// `git.sha` or `git.staged` would see their template evaluate against
+// empty strings or zeros.
+function gitOptionsFromClosure(needed: ReadonlySet<string>): {
+  showSha?: boolean;
+  showWorkingTree?: boolean;
+  showStashCount?: boolean;
+  showUpstream?: boolean;
+  showRepoName?: boolean;
+} {
+  const has = (path: string): boolean => needed.has(path);
+  // `git.staged` / `git.unstaged` / `git.untracked` / `git.conflicts` all
+  // come from one `git status --porcelain` call — any one of them turning
+  // the flag on enables all four.
+  const wantsWorkingTree =
+    has("git.staged") ||
+    has("git.unstaged") ||
+    has("git.untracked") ||
+    has("git.conflicts");
+  return {
+    ...(has("git.sha") && { showSha: true }),
+    ...(wantsWorkingTree && { showWorkingTree: true }),
+    ...(has("git.stash") && { showStashCount: true }),
+    ...(has("git.upstream") && { showUpstream: true }),
+    ...(has("git.repoName") && { showRepoName: true }),
+  };
+}
+
 /**
  * Compose every render-time data source into the augmented payload that the
  * DSL applies to its input variables.
@@ -315,7 +347,7 @@ export async function buildRenderPayload(
         ? deps.gitProvider
             .getGitInfo(
               cwd ?? hookData.workspace?.current_dir,
-              {},
+              gitOptionsFromClosure(neededInputPaths),
               hookData.workspace?.project_dir,
             )
             .catch(() => null)

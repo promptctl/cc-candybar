@@ -20,7 +20,7 @@ import type { WatcherRegistry, WatcherHandle } from "./watchers.js";
 import { dlog } from "../log.js";
 
 // [LAW:one-source-of-truth] Each cache entry owns the live DSL state for a
-// (args, projectDir, cwd) tuple: the parsed config, the variable store +
+// (projectDir, cwd) tuple: the parsed config, the variable store +
 // registry it was registered against, the compiled segment closures, and
 // the resolved base palette. registerDslConfig + renderDslLine are the
 // single render path — the cache only holds state across calls.

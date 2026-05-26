@@ -130,8 +130,12 @@ export const DEFAULT_DSL_CONFIG = {
     "session.id": { kind: "input", path: "session_id", default: "" },
     version: { kind: "input", path: "version", default: "" },
 
-    // Env — `home` is resolved at registerDslConfig time, not per-render.
-    home: { kind: "env", name: "HOME", default: "" },
+    // home flows through the augmented payload (buildRenderPayload reads
+    // HOME, falling back to USERPROFILE on Windows where HOME is often
+    // unset). Sourcing via `kind: "input"` rather than `kind: "env",
+    // name: "HOME"` makes the directory `~` collapse work on every
+    // platform without per-platform config edits.
+    home: { kind: "input", path: "home", default: "" },
 
     // Per-session daemon state — surfaced for click-aware segments.
     theme: { kind: "input", path: "theme", default: "" },
