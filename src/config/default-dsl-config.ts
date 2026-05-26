@@ -150,9 +150,6 @@ export const DEFAULT_DSL_CONFIG = {
     // platform without per-platform config edits.
     home: { kind: "input", path: "home", default: "" },
 
-    // Per-session daemon state — surfaced for click-aware segments.
-    theme: { kind: "input", path: "theme", default: "" },
-
     // Tmux session id flows through the daemon's augmented payload
     // (TmuxService caches by socket and never re-spawns for the lifetime of
     // the daemon, so this stays cheap). A `kind: "shell"` declaration would
@@ -399,13 +396,6 @@ export const DEFAULT_DSL_CONFIG = {
       template:
         ' {{ link (printf "cc-candybar://open-vscode/%s" (urlEncode .current_dir)) "\u{1F4C2}" }}' +
         ' {{ link (printf "cc-candybar://copy/%s" (urlEncode (trunc 8 .session.id))) "⎘" }} ',
-      bg: "surface",
-      fg: "foreground",
-    },
-    tray: {
-      template:
-        ' {{ link (printf "cc-candybar://open-url/%s" (urlEncode .theme)) "\u{1F514}" }}' +
-        ' {{ link (printf "cc-candybar://copy/%s" (urlEncode (trunc 8 .session.id))) "⚙" }} ',
       bg: "surface",
       fg: "foreground",
     },
