@@ -134,14 +134,17 @@ describe("DSL render spine (bzh.7 steel thread)", () => {
     expect(a).toBe(b);
   });
 
-  test("perSegmentSink receives one entry per rendered (non-hidden) segment, cleared on each call", () => {
+  test("perSegmentSink receives one StripCell[] per rendered (non-hidden) segment, cleared on each call", () => {
     const { config, compiled, store, registry } = buildRuntime(
       HOOK_DATA.workspace.current_dir,
     );
     const basePalette = new PaletteResolver(getThemePalette("textual-dark")!);
-    const sink = new Map<string, string>();
+    const sink = new Map<
+      string,
+      readonly import("@promptctl/rich-js").StripCell[]
+    >();
     // Pre-seed with a stale entry to verify renderDslLine clears it.
-    sink.set("doesNotExist", "stale");
+    sink.set("doesNotExist", []);
 
     renderDslLine(
       config,
@@ -158,9 +161,9 @@ describe("DSL render spine (bzh.7 steel thread)", () => {
     expect(sink.has("doesNotExist")).toBe(false);
     // Every layout entry that wasn't `when`-hidden appears in the sink.
     expect(sink.size).toBeGreaterThan(0);
-    for (const [name, text] of sink) {
+    for (const [name, cells] of sink) {
       expect(config.layout).toContain(name);
-      expect(text.length).toBeGreaterThan(0);
+      expect(cells.length).toBeGreaterThan(0);
     }
   });
 

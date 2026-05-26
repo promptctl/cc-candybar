@@ -25,6 +25,8 @@ import { setLaunchStats } from "../proc/launch";
 import { buildDebugSnapshot } from "./debug";
 import { DEBUG_WHATS, isDebugWhat } from "./debug-types";
 import { renderDslLine } from "../dsl/render.js";
+import { renderStripCells } from "../render/strip.js";
+import type { StripCell } from "@promptctl/rich-js";
 import { buildRenderPayload } from "./render-payload.js";
 import { TodayProvider } from "../segments/today.js";
 import { ContextProvider } from "../segments/context.js";
@@ -571,7 +573,7 @@ async function handleRequest(req: Request): Promise<Response> {
           req.hookData,
           payloadDeps,
           req.cwd,
-          entry.state.config,
+          entry.state.neededInputPaths,
         );
         // [LAW:single-enforcer] renderDslLine internally calls
         // `registry.applyInput(payload)` as its first step (see step 1 in
@@ -585,16 +587,14 @@ async function handleRequest(req: Request): Promise<Response> {
           entry.state.registry,
           payload,
           entry.state.basePalette,
-          {
-            style: "powerline",
-            colorCompatibility: "truecolor",
-          },
-          // [LAW:single-enforcer] The per-segment ANSI text sink for the
+          RENDER_OPTS,
+          // [LAW:single-enforcer] The per-segment StripCell sink for the
           // `debug segments` projection. Its identity stays stable for the
           // cache entry's lifetime; renderDslLine clears + repopulates it
-          // in place, so the debug projection's read sees the latest
-          // render's output without coordinating with the render path.
-          entry.state.lastRenderBySegment,
+          // in place. Cells are cheap (already computed during the render);
+          // the per-segment ANSI serialization happens lazily inside the
+          // debug handler so normal renders pay no extra serializer cost.
+          entry.state.lastRenderCellsBySegment,
         );
       }
       const output = composeWithError(body, entry.lastError);
@@ -644,12 +644,13 @@ async function handleRequest(req: Request): Promise<Response> {
     // daemon's own process.cwd(). A future debug-target selector would
     // thread (projectDir, cwd) through the wire.
     const dbgEntry = renderCache.firstPopulatedState();
-    // [LAW:single-enforcer] The debug snapshot reads the SAME
-    // lastRenderBySegment map renderDslLine writes — no synthetic empty
-    // map, no debug-only sink. If the daemon has rendered through this
-    // entry, the projection shows real per-segment output; if it hasn't
-    // (entry was just created and no render has fired yet), the map is
-    // empty by construction.
+    // [LAW:dataflow-not-control-flow] Lazy per-segment serialization: the
+    // cache stores StripCell arrays (cheap, written by renderDslLine).
+    // The debug projection needs strings, so serialize only for the
+    // `segments` projection (`vars` and `config` don't need it) and only
+    // when this request actually fires. Normal renders pay no per-segment
+    // serializer cost — that work shifts to debug-request time, which is
+    // operator-driven and rare.
     const dbgState =
       dbgEntry === null
         ? null
@@ -658,7 +659,10 @@ async function handleRequest(req: Request): Promise<Response> {
             registry: dbgEntry.registry,
             config: dbgEntry.config,
             compiled: dbgEntry.compiled,
-            lastRenderBySegment: dbgEntry.lastRenderBySegment,
+            lastRenderBySegment:
+              req.what === "segments"
+                ? serializeSegmentCells(dbgEntry.lastRenderCellsBySegment)
+                : EMPTY_RENDER_MAP,
           };
     return { ok: true, debug: buildDebugSnapshot(req.what, dbgState) };
   }
@@ -704,6 +708,30 @@ function composeWithError(body: string, error: string | null): string {
 // other Error (operational failure) becomes RENDER_FAILED. No string matching.
 
 const verbCtx = { sessionState, dlog };
+
+// [LAW:single-enforcer] One options bundle for the render path AND the
+// lazy debug-side per-segment serializer. Both must agree on style +
+// color compatibility, otherwise the bytes the debug projection shows
+// could diverge from what the user sees in their terminal.
+const RENDER_OPTS = {
+  style: "powerline" as const,
+  colorCompatibility: "truecolor" as const,
+};
+
+// [LAW:no-defensive-null-guards] Reused empty map for the `vars` /
+// `config` debug projections — they don't read lastRenderBySegment but
+// the DaemonDslState type requires the field.
+const EMPTY_RENDER_MAP = new Map<string, string>();
+
+function serializeSegmentCells(
+  cells: ReadonlyMap<string, readonly StripCell[]>,
+): Map<string, string> {
+  const out = new Map<string, string>();
+  for (const [name, segCells] of cells) {
+    out.set(name, renderStripCells(segCells, RENDER_OPTS));
+  }
+  return out;
+}
 
 // [LAW:single-enforcer] The payload-builder dependency bundle. One value
 // passed through every render — the data the daemon brings to each tick.

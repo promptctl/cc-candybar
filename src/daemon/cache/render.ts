@@ -1,5 +1,6 @@
 import path from "node:path";
-import { PaletteResolver } from "@promptctl/rich-js";
+import { PaletteResolver, type StripCell } from "@promptctl/rich-js";
+import { buildNeededPrefixes } from "../render-payload.js";
 import {
   loadDslConfig,
   resolveDslConfigPath,
@@ -48,19 +49,26 @@ export interface RenderDeps {
 // failed and we never had a valid config) — the type makes any other
 // combination unrepresentable.
 //
-// `lastRenderBySegment` is the per-segment standalone ANSI text sink that
-// renderDslLine writes on each render. The map identity is stable for the
-// lifetime of the entry (renderDslLine clears + repopulates it in place),
-// so the debug projection holds a long-lived reference. A segment hidden
-// by `when` is absent from the map — its presence in the keys is the
-// "this segment rendered" signal.
+// `neededInputPaths` is the layout-reachable closure of input paths,
+// computed once at registration. The daemon's payload builder reads it
+// to gate provider invocation.
+//
+// `lastRenderCellsBySegment` is the per-segment StripCell sink that
+// renderDslLine writes on each render — pre-layout cells, NOT serialized
+// ANSI. Storing cells (not strings) keeps the hot path free of the
+// per-segment renderStripCells call: the debug projection serializes on
+// demand only when a `debug segments` request actually arrives. The map
+// identity is stable for the entry's lifetime; renderDslLine clears +
+// repopulates it in place. A segment hidden by `when` is absent from the
+// map — its presence in the keys is the "this segment rendered" signal.
 export interface DslRenderState {
   readonly config: DslConfig;
   readonly store: VariableStore;
   readonly registry: SourceRegistry;
   readonly compiled: CompiledSegments;
   readonly basePalette: PaletteResolver;
-  readonly lastRenderBySegment: Map<string, string>;
+  readonly neededInputPaths: ReadonlySet<string>;
+  readonly lastRenderCellsBySegment: Map<string, readonly StripCell[]>;
 }
 
 // [LAW:one-source-of-truth] Each entry tracks the last *valid* DSL state +
@@ -69,7 +77,6 @@ export interface DslRenderState {
 // with what we had". Errors are scoped to the cache key (which includes
 // cwd / projectDir) so a broken config in repo A cannot pollute repo B.
 export interface CacheEntry {
-  args: string[];
   projectDir: string | undefined;
   cwd: string | undefined;
   configFilePath: string | null;
@@ -109,6 +116,13 @@ export class RenderCache {
     projectDir: string | undefined,
     cwd: string | undefined,
   ): CacheEntry {
+    // [LAW:no-mode-explosion] `args` is still part of the wire protocol
+    // (RenderRequest carries it from legacy clients running pre-bzh.2
+    // settings.json scaffolding), but it influences nothing — neither
+    // resolution, nor rendering, nor cache identity. Accepting and
+    // discarding it preserves protocol back-compat without giving any
+    // surface to the dead variability.
+    void args;
     const key = cacheKey(projectDir, cwd);
     const existing = this.entries.get(key);
     if (existing) {
@@ -119,7 +133,6 @@ export class RenderCache {
     }
 
     const entry: CacheEntry = {
-      args,
       projectDir,
       cwd,
       configFilePath: null,
@@ -210,10 +223,14 @@ export class RenderCache {
     // every config's `kind: "git"` declarations route through one cache +
     // watcher pool (rather than each registry standing up its own). The
     // sessionState injection makes `kind: "state"` variables read/write the
-    // same per-session store the click verbs mutate.
+    // same per-session store the click verbs mutate. `default_empty_value`
+    // is honored from globals — it's the fallback used by input/env/etc.
+    // sources when neither the path resolves nor the declaration carries
+    // its own `default`. The loader validates it as a string; the registry
+    // default ("") matches the historical behavior when omitted.
     const registry = new SourceRegistry(
       store,
-      "",
+      config.globals.default_empty_value ?? "",
       this.deps.gitService,
       this.deps.sessionState,
     );
@@ -246,7 +263,8 @@ export class RenderCache {
       registry,
       compiled,
       basePalette: new PaletteResolver(palette),
-      lastRenderBySegment: new Map<string, string>(),
+      neededInputPaths: buildNeededPrefixes(config),
+      lastRenderCellsBySegment: new Map<string, readonly StripCell[]>(),
     };
   }
 

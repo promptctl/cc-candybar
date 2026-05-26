@@ -3,7 +3,10 @@
 // the contract by counting provider invocations against two configs that
 // differ only in `layout` — same declared variables, different layouts.
 
-import { buildRenderPayload } from "../src/daemon/render-payload";
+import {
+  buildRenderPayload,
+  buildNeededPrefixes,
+} from "../src/daemon/render-payload";
 import type { RenderPayloadDeps } from "../src/daemon/render-payload";
 import type { DslConfig } from "../src/config/dsl-types";
 
@@ -156,7 +159,12 @@ const CONFIG_WITH_METRICS: DslConfig = {
 describe("buildRenderPayload — layout-driven provider gating", () => {
   test("providers whose payload prefix is not reachable from layout do not fire", async () => {
     const { deps, counts } = buildMockDeps();
-    await buildRenderPayload(HOOK_DATA, deps, undefined, CONFIG_WITHOUT_METRICS);
+    await buildRenderPayload(
+      HOOK_DATA,
+      deps,
+      undefined,
+      buildNeededPrefixes(CONFIG_WITHOUT_METRICS),
+    );
     expect(counts.git).toBe(1);
     // No segment in layout reads metrics.* / tmux.* / today.* / etc., so
     // those providers are not invoked.
@@ -170,7 +178,12 @@ describe("buildRenderPayload — layout-driven provider gating", () => {
 
   test("adding a segment to layout brings its provider online", async () => {
     const { deps, counts } = buildMockDeps();
-    await buildRenderPayload(HOOK_DATA, deps, undefined, CONFIG_WITH_METRICS);
+    await buildRenderPayload(
+      HOOK_DATA,
+      deps,
+      undefined,
+      buildNeededPrefixes(CONFIG_WITH_METRICS),
+    );
     expect(counts.git).toBe(1);
     expect(counts.metrics).toBe(1);
     expect(counts.tmux).toBe(1);
@@ -180,5 +193,29 @@ describe("buildRenderPayload — layout-driven provider gating", () => {
     expect(counts.context).toBe(0);
     expect(counts.usage).toBe(0);
     expect(counts.block).toBe(0);
+  });
+
+  test("namespace-only refs (e.g. {{ toJson .git }}) expand to all child paths", async () => {
+    // Layout segment references the entire `.git` namespace, not a leaf.
+    // The scope proxy treats this as iterating the namespace; the gate
+    // must pull in every git.* declared input path, not just the literal
+    // `git` ref.
+    const config: DslConfig = {
+      globals: {},
+      variables: SHARED_VARIABLES,
+      segments: {
+        gitDump: {
+          template: " {{ toJson .git }} ",
+          bg: "surface",
+          fg: "foreground",
+        },
+      },
+      layout: ["gitDump"],
+    };
+    const needed = buildNeededPrefixes(config);
+    // The only declared `git.*` input is `git.branch`; it must be in
+    // the closure even though the template references `.git`, not
+    // `.git.branch`.
+    expect(needed.has("git.branch")).toBe(true);
   });
 });

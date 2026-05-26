@@ -158,8 +158,10 @@ const DEFAULT_AUTOCOMPACT_BUFFER = 33000;
 // [LAW:single-enforcer] One reachability walk owns "is this provider
 // needed." A declared-but-unreachable input variable (the default config
 // declares every built-in variable for reference completeness) contributes
-// no work to the hot path.
-function buildNeededPrefixes(config: DslConfig): ReadonlySet<string> {
+// no work to the hot path. Exported so the cache can compute the closure
+// once at registration time (config is stable per cache entry) and reuse
+// it across renders.
+export function buildNeededPrefixes(config: DslConfig): ReadonlySet<string> {
   // 1. Variable name → declaration index for fast lookup. Global vars first;
   //    per-segment vars are namespaced `segName.varName` (same as runtime).
   const allDecls = new Map<string, VariableDecl>();
@@ -192,50 +194,66 @@ function buildNeededPrefixes(config: DslConfig): ReadonlySet<string> {
     }
   }
 
-  // 3. Walk the closure. A reference is the dotted form `a.b.c`; the input
-  //    declaration's `path` is the payload-side address we care about. For a
-  //    `template`-kind variable, the body's refs become new frontier items.
+  // 3. Walk the closure. A ref is the dotted form `a.b.c`. Two cases:
+  //    - LEAF: `ref` exactly matches a declared variable. The scope proxy
+  //      treats this as the variable read.
+  //    - NAMESPACE: `ref` is a strict prefix of declared variable names
+  //      (e.g. `git` when only `git.branch`, `git.sha`, … are declared).
+  //      The scope proxy returns a nested proxy here, which the template
+  //      can iterate / stringify / pass to functions like `toJson`. A
+  //      namespace read implicitly reaches every leaf under it, so every
+  //      `<ref>.*` declaration becomes reachable.
+  //    Both cases collapse to "expand the ref to every matching declared
+  //    name." For template-kind matches, the body refs become new frontier
+  //    items; for input-kind matches, the path is added to the closure.
   const inputPaths = new Set<string>();
   while (frontier.length > 0) {
     const ref = frontier.pop()!;
-    // The longest matching declaration name wins (e.g. `session.id` over
-    // `session`), which is the same lookup logic the scope proxy uses.
-    const decl = lookupDecl(allDecls, ref);
-    if (!decl) continue;
-    const declName = decl.name;
-    if (visited.has(declName)) continue;
-    visited.add(declName);
-
-    if (decl.value.kind === "input") {
-      inputPaths.add(decl.value.path);
-    } else if (decl.value.kind === "template") {
-      for (const r of extractTemplateRefs(decl.value.template)) {
-        frontier.push(r);
+    for (const declName of expandRef(allDecls, ref)) {
+      if (visited.has(declName)) continue;
+      visited.add(declName);
+      const decl = allDecls.get(declName);
+      if (!decl) continue;
+      if (decl.kind === "input") {
+        inputPaths.add(decl.path);
+      } else if (decl.kind === "template") {
+        for (const r of extractTemplateRefs(decl.template)) {
+          frontier.push(r);
+        }
       }
+      // Other kinds (literal/env/file/shell/time/git/state) declare their
+      // own box without reading a payload path — they need no provider
+      // gating because the daemon's payload builder is the only thing
+      // this gates.
     }
-    // Other kinds (literal/env/file/shell/time/git/state) declare their own
-    // box without reading a payload path — they need no provider gating
-    // because the daemon's payload builder is the only thing this gates.
   }
 
   return inputPaths;
 }
 
-// [LAW:single-enforcer] Mirror of the scope proxy's longest-prefix lookup —
-// a dotted reference resolves to the most specific declared variable.
-function lookupDecl(
+// [LAW:single-enforcer] Mirror of the scope proxy's read semantics: a ref
+// resolves either to an exact variable (leaf) or to every variable under a
+// namespace prefix (`.git` matches `git.branch`, `git.sha`, …). Yields the
+// set of declared names the ref reaches.
+function expandRef(
   decls: ReadonlyMap<string, VariableDecl>,
   ref: string,
-): { name: string; value: VariableDecl } | undefined {
+): readonly string[] {
+  // Leaf — most specific declared name wins, mirroring lookupDecl's loop.
   let candidate = ref;
   while (candidate.length > 0) {
-    const decl = decls.get(candidate);
-    if (decl) return { name: candidate, value: decl };
+    if (decls.has(candidate)) return [candidate];
     const dot = candidate.lastIndexOf(".");
-    if (dot < 0) return undefined;
+    if (dot < 0) break;
     candidate = candidate.slice(0, dot);
   }
-  return undefined;
+  // Namespace — every name starting with `${ref}.` is reachable.
+  const ns = `${ref}.`;
+  const matches: string[] = [];
+  for (const name of decls.keys()) {
+    if (name.startsWith(ns)) matches.push(name);
+  }
+  return matches;
 }
 
 function anyPathStartsWith(
@@ -276,10 +294,13 @@ export async function buildRenderPayload(
   hookData: ClaudeHookData,
   deps: RenderPayloadDeps,
   cwd: string | undefined,
-  config: DslConfig,
+  // [LAW:single-enforcer] The cache pre-computes the closure once at
+  // registration; passing it in (rather than recomputing per render) keeps
+  // the hot path free of the BFS + extractTemplateRefs cost.
+  neededInputPaths: ReadonlySet<string>,
 ): Promise<RenderPayload> {
-  const needed = buildNeededPrefixes(config);
-  const wants = (prefix: string): boolean => anyPathStartsWith(needed, prefix);
+  const wants = (prefix: string): boolean =>
+    anyPathStartsWith(neededInputPaths, prefix);
 
   // [LAW:dataflow-not-control-flow] Each provider lane is the same shape:
   // either "needed → call provider with .catch(() => null)" or "not needed

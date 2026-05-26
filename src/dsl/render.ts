@@ -316,18 +316,19 @@ export function renderDslLine(
   payload: unknown,
   basePalette: PaletteResolver,
   opts: BuildLineOptions,
-  // [LAW:dataflow-not-control-flow] Optional per-segment-text sink. When
-  // present, each rendered segment's standalone ANSI text is written to
-  // this map under its segment name (the daemon's debug `segments`
-  // introspection reads it; the demo + tests pass nothing and the sink
-  // stays absent, no extra work). Hidden-by-when segments are NOT written
-  // — absence in the map is the explicit "this segment did not render"
-  // signal. The map is cleared before each render so stale segment names
-  // never survive a layout edit. Standalone bytes are not byte-identical
-  // to the segment's slice within the joined line (powerline joiners sit
-  // *between* segments and have no place in a one-segment render), but
-  // for the debug projection this is the natural per-segment shape.
-  perSegmentSink?: Map<string, string>,
+  // [LAW:dataflow-not-control-flow] Optional per-segment cell sink. When
+  // present, each rendered segment's StripCell array (post-layout, pre-
+  // serialization) is written to this map under its segment name. Storing
+  // cells (not pre-serialized strings) keeps the hot path's serializer
+  // work proportional to the joined line only — debug consumers serialize
+  // on demand. Hidden-by-when segments are absent from the map (presence
+  // = "this segment rendered"). The map is cleared before each render so
+  // stale segment names never survive a layout edit. Per-segment standalone
+  // serialization is not byte-identical to the segment's slice within the
+  // joined line (powerline joiners sit *between* segments and have no
+  // place in a one-segment render), but for debug visibility this is the
+  // natural per-segment shape.
+  perSegmentSink?: Map<string, readonly StripCell[]>,
 ): string {
   // Step 1: push payload into input boxes.
   registry.applyInput(payload);
@@ -381,7 +382,7 @@ export function renderDslLine(
     });
 
     if (perSegmentSink !== undefined) {
-      perSegmentSink.set(segName, renderStripCells(laidOut, opts));
+      perSegmentSink.set(segName, laidOut);
     }
 
     allCells.push(...laidOut);
