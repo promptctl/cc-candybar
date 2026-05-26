@@ -60,47 +60,47 @@ Wire format lives in `src/daemon/protocol.ts`. The Rust client mirrors it as a l
 - Caches owned by the daemon process (one each, not per-session):
   - `src/daemon/cache/git.ts` — git state, keyed by **repo root** (not cwd, not session), invalidated by fs watchers on `.git/HEAD` and `.git/index` mtimes.
   - `src/daemon/cache/usage.ts` — Claude usage/cost data parsed from transcript JSONLs.
-  - `src/daemon/cache/render.ts` — `PowerlineRenderer` instances, **keyed by `(args, projectDir, cwd)`**, LRU-capped at 256. Each entry watches its resolved config file for hot-reload.
-  - `src/daemon/session-state.ts` — per-session key/value store for stable random theme/style picks, toolbar state, etc.
+  - `src/daemon/cache/render.ts` — per `(args, projectDir, cwd)` tuple, holds the live DSL state: parsed `DslConfig`, `VariableStore`, `SourceRegistry` (with timers/watchers/git-subscriptions), `CompiledSegments`, and resolved `basePalette`. LRU-capped at 256. Each entry watches its resolved config file for hot-reload; `reloadInto` disposes the old `SourceRegistry` before constructing the new one (`[LAW:single-enforcer]` — the registry owns async handles).
+  - `src/daemon/session-state.ts` — per-session key/value store for click-driven state (currently active theme, toolbar-expanded, etc.).
 - Stats snapshot at `cc-candybar daemon-stats --json` — uptime, RSS, cache hit rates, watcher count, request totals.
 
-**Stale-cache gotcha:** because args are part of the render-cache key, args that ever differed from the current settings.json (e.g. an old long-running Claude Code session passing an old `--layout`) produce a separate cache entry that survives until eviction or daemon death. When debugging "why does this session render differently," check `daemon-stats` and consider that the daemon may need to die.
+### Config resolution (`src/config/dsl-loader.ts`)
 
-### Config resolution (`src/config/loader.ts`)
+`resolveDslConfigPath(projectDir, cwd)` picks the first existing path from this order:
 
-`loadConfigStrict(args, projectDir, cwd)` builds the effective `PowerlineConfig` by merging in this exact order:
+1. `$CC_CANDYBAR_CONFIG` (env var, literal path with `~` expansion)
+2. `<projectDir>/.cc-candybar.json5`
+3. `<cwd>/.cc-candybar.json5`
+4. `$XDG_CONFIG_HOME/cc-candybar/config.json5` (defaulting to `~/.config/cc-candybar/config.json5`)
 
-1. `DEFAULT_CONFIG` (in `src/config/defaults.ts`)
-2. First-existing config file from: `<projectDir>/.cc-candybar.json` → `<cwd>/.cc-candybar.json` → `$XDG_CONFIG_HOME/cc-candybar/config.json`
-3. Env vars (`CC_CANDYBAR_THEME`, `CC_CANDYBAR_STYLE`, …)
-4. CLI parsed values (`--theme`, `--style`, `--charset`)
-5. **`--layout` replaces `display.lines` wholesale** (arrays don't deep-merge — the layout owns line/segment structure deterministically)
-6. `applyOverrideFlags`: walks argv in order, dispatching `--set`, `--show`, `--display`, `--segment` (last-write-wins). Override priority is therefore: CLI > env > file > defaults.
+If none exist, `RenderCache.reloadInto` falls back to `DEFAULT_DSL_CONFIG` (`src/config/default-dsl-config.ts`) — the bundled standard library, covering every built-in segment. A user file is a **complete** replacement; there is no merge with defaults. JSON5 supports inline comments, so copying the demo (`src/demo/statusline.json5`) or the default-config TypeScript constant into `.cc-candybar.json5` is the customization path.
 
-Layout strings split on `|` into separate lines: `'directory git | model context | sessionId'` is three lines. With `display.autoWrap=true` (default) each line goes through `FlexStrip` and may visually wrap at terminal width; with `autoWrap=false`, lines are joined with `\n` literally and the terminal handles overflow.
+### Renderer (`src/dsl/render.ts`)
 
-`parseSetValue` autoparses `true`/`false`/numbers; bareword (no `=`) means `=true`. `--show seg=a,b` desugars to `--set segment.seg.showA=true --set segment.seg.showB=true`.
+`registerDslConfig(config, registry, opts)` is the one-shot setup: declares every variable into the `SourceRegistry`, pre-parses every segment's `when` / `template` / `bg` / `fg` strings, and pre-resolves per-segment palette specs. Returns `CompiledSegments`.
 
-### Renderer (`src/powerline.ts`, `src/segments/`, `src/render/strip.ts`)
+`renderDslLine(config, compiled, store, registry, payload, basePalette, opts)` is the per-render hot path: pushes payload into input boxes (`registry.applyInput`), walks `config.layout`, evaluates each segment's compiled templates, builds `StripCell`s with per-segment palette colors, and joins via the powerline `Joiner` into one ANSI line.
 
-`PowerlineRenderer.generateStatusline` picks between two render paths on `display.autoWrap`. Both iterate `display.lines` and call `renderSegment` per enabled segment. The auto-wrap path constructs a `FlexStrip` per line (`src/render/strip.ts`) which handles terminal-width-aware wrapping; the fixed-line path joins with `\n`.
+Both functions are called verbatim by the daemon — no parallel render path, no inline computation that diverges. The demo at `src/demo/dsl.ts` calls the same two functions.
 
-Segments live in `src/segments/` (`git`, `session`, `today`, `block`, `weekly`, `context`, `metrics`, `model`, `directory`, `tmux`, `version`, `sessionId`, `env`, `toolbar`, `tray`, `gitTaculous`). Add a new segment by:
+Segment data providers live in `src/segments/` (`git`, `session`, `today`, `block`, `weekly`, `context`, `metrics`, `tmux`, `pricing`). These produce structured data — `GitInfo`, `UsageInfo`, `BlockInfo`, etc. The daemon's `buildRenderPayload` (`src/daemon/render-payload.ts`) composes them into one augmented payload that the DSL's `kind: "input"` declarations read.
 
-1. Adding the data provider (if needed) under `src/segments/`.
-2. Adding the config type to `SegmentConfig` in `src/segments/renderer.ts` and exporting it from `src/segments/index.ts`.
-3. Adding rendering to `SegmentRenderer.render*` and dispatch in `PowerlineRenderer.renderSegment`.
-4. Adding the name to `VALID_SEGMENT_NAMES` in `src/config/loader.ts` so `--layout` accepts it.
-5. Adding a default entry to `DEFAULT_CONFIG.display.lines[0].segments` so the layout parser has something to seed from.
-6. Wiring colors in `src/themes/default-mapping.ts`.
+Add a new built-in segment by:
+
+1. Adding the data provider under `src/segments/` (if it needs daemon-side fetching). Project its shape into `RenderPayload` (`src/daemon/render-payload.ts`).
+2. Declaring the relevant input variables in `DEFAULT_DSL_CONFIG.variables` (`src/config/default-dsl-config.ts`), with `path` strings matching the payload shape.
+3. Declaring the segment in `DEFAULT_DSL_CONFIG.segments` with a `template`, `bg`/`fg` palette spec names, and (optionally) `when` for visibility gating.
+4. Optionally adding the segment name to `DEFAULT_DSL_CONFIG.layout` if it should render by default.
 
 ### Themes (`src/themes/`)
 
-Cascade defined in `src/themes/cascade.ts`. Color math uses **OKLCH** (`src/themes/oklch.ts`) for perceptual uniformity. `theme: "random"` and `style: "random"` are values, not special cases — `resolveSession{Theme,Style,DisplayStyle}` expand them per-session and cache the pick in `SessionState` so it stays stable for the life of that session (`[LAW:dataflow-not-control-flow]`).
+Cascade defined in `src/themes/cascade.ts`. Color math uses **OKLCH** (`src/themes/oklch.ts`) for perceptual uniformity. The DSL config picks a palette via `globals.palette` (a palette name validated by the loader against the resolver's name set); per-segment `palette:` overrides cascade on top. `effectiveSegmentPalette` (`src/config/dsl-loader.ts`) is the single point that defines the cascade precedence.
 
 ### Variable system (`src/var-system/`)
 
-MobX-backed store of named variables: `box` nodes for externally-driven values (input JSON, fs watchers, TTLs) and `computed` nodes for derivations (templates, click-action sources). MobX auto-tracks dependencies; the invalidation graph builds itself. **Don't add a parallel cache** — the store is the single source of truth (`[LAW:one-source-of-truth]`). Templates (`${var}` interpolation) and the toolbar/tray DSL both read through this store.
+MobX-backed store of named variables: `box` nodes for externally-driven values (input JSON, fs watchers, TTLs) and `computed` nodes for derivations (templates). MobX auto-tracks dependencies; the invalidation graph builds itself. **Don't add a parallel cache** — the store is the single source of truth (`[LAW:one-source-of-truth]`). The DSL template engine reads through this store.
+
+Source kinds (`SourceRegistry.declare*`): `literal`, `input`, `env`, `file`, `shell`, `template`, `time`, `git`, `state`. New kinds require a new union arm in `src/config/dsl-types.ts`, a loader case in `src/config/dsl-loader.ts`, a `declareOne` arm in `src/dsl/render.ts`, and the runtime implementation here.
 
 ### Click actions and the URL handler
 
@@ -118,18 +118,19 @@ The codebase cites laws inline (`[LAW:one-source-of-truth]`, `[LAW:dataflow-not-
 
 Recurring patterns enforced by these laws in this repo:
 
-- **One renderer (the daemon).** No inline render path in the CLI. No second cache. No "fallback" computation that diverges from the daemon's answer.
-- **Variability lives in data, not control flow.** Subcommand dispatch is keyed by `argv[2]`. `theme: "random"` is resolved by reading a value, not a special branch. The auto-wrap vs fixed-line choice is one boolean field.
-- **Errors are loud.** Bad config doesn't silently degrade — `composeWithError` (`src/daemon/server.ts`) renders a visible warning icon. JSON parse failures throw and surface through the daemon. Don't add silent `|| defaults` that hide a broken state.
+- **One render path: `renderDslLine`.** The daemon calls it verbatim; the demo calls it verbatim; tests call it verbatim. No parallel renderer, no "fallback" computation.
+- **One config shape: `DslConfig`.** No alternate input format, no merge layer. User file or bundled default; nothing in between.
+- **Variability lives in data, not control flow.** The augmented payload (`src/daemon/render-payload.ts`) carries every value the templates can read; segments hide/show via `when` predicates on values, not branches in code.
+- **Errors are loud.** Bad config doesn't silently degrade — `composeWithError` (`src/daemon/server.ts`) renders a visible warning icon. Don't add silent `|| defaults` that hide a broken state.
 
 ## Testing notes
 
 Tests live in `test/`. Useful starting points by area:
 
-- Daemon internals: `test/daemon-render-cache.test.ts`, `test/daemon-git-cache.test.ts`, `test/daemon-usage-cache.test.ts`, `test/daemon-watchers.test.ts`, `test/daemon-limits.test.ts`, `test/daemon-stats.test.ts`, `test/daemon-click.test.ts`.
-- Config merging: `test/config.test.ts`.
-- Rendering shapes: `test/strip-flex.test.ts`, `test/segments.test.ts`, `test/integration.test.ts`.
-- Click/install: `test/install.test.ts`, `test/install-clobber.test.ts`.
+- Daemon internals: `test/daemon-git-cache.test.ts`, `test/daemon-watchers.test.ts`, `test/daemon-limits.test.ts`, `test/daemon-stats.test.ts`, `test/daemon-click.test.ts`.
+- DSL spine: `test/dsl-spine.test.ts` (integration), `test/default-dsl-config.test.ts` (bundled default), `test/dsl-loader.test.ts` (validation).
+- Template engine: `test/template-engine.test.ts`.
+- Variables: `test/var-sources.test.ts`, `test/var-store.test.ts`.
 
 Test timeout is 30 s (some tests touch real fs / timing); prefer faking time and fs over real waits when adding new tests.
 

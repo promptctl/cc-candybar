@@ -19,43 +19,14 @@ const URL_SCHEME = "cc-candybar";
 const BUNDLE_ID = "com.cccandybar.url-handler";
 const APP_NAME = "CCCandybarURLHandler";
 
-// [LAW:one-source-of-truth] These are the renderer flags `cc-candybar
-// install` writes into ~/.claude/settings.json when invoked with no args.
-// To override, pass renderer flags after `install`.
-//
-// Note: theme/style/display.style are intentionally absent so the user
-// inherits DEFAULT_CONFIG ("random" for all three) — installs get a fresh
-// per-session look out of the box. Pass --style=<name> to lock it.
-const DEFAULT_INSTALL_ARGS: readonly string[] = [
-  "--layout",
-  "directory git | model context block weekly sessionId tray",
-  "--tray",
-  // ▸ toggles the panel (3rd row). Future tray items: notification icons,
-  // status indicators, more menu-expand buttons.
-  "▸{toolbar-toggle(session.id)}",
-  "--display",
-  "autoWrap=false",
-  "--show",
-  "git=workingTree,upstream,timeSinceCommit",
-  "--segment",
-  [
-    "block.type=weighted",
-    "sessionId.length=8",
-    "sessionId.clickAction.kind=url",
-    "sessionId.clickAction.scheme=cc-candybar",
-    // First action wraps the visible session id text (no glyph): copy.
-    "sessionId.clickAction.actions.0.verb=copy",
-    "sessionId.clickAction.actions.0.source=sessionId",
-    // Second action: open the session JSONL transcript in VSCode.
-    "sessionId.clickAction.actions.1.verb=open-vscode",
-    "sessionId.clickAction.actions.1.source=transcriptPath",
-    "sessionId.clickAction.actions.1.glyph=📄",
-    // Third action: open the project working directory in VSCode.
-    "sessionId.clickAction.actions.2.verb=open-vscode",
-    "sessionId.clickAction.actions.2.source=projectDir",
-    "sessionId.clickAction.actions.2.glyph=📂",
-  ].join(","),
-];
+// [LAW:one-source-of-truth] `install` writes no renderer flags into
+// ~/.claude/settings.json. The previous CLI override apparatus (--layout,
+// --tray, --display, --show, --segment) is gone (bzh.2). All authoring now
+// lives in `.cc-candybar.json5` (see resolveDslConfigPath); the install
+// command's job is just to wire the URL handler and the daemon entry. To
+// customize, users edit a config file at one of the resolution paths or
+// copy src/demo/statusline.json5 as a starting point.
+const DEFAULT_INSTALL_ARGS: readonly string[] = [];
 
 function shellEscape(arg: string): string {
   // Safe characters that don't need quoting in any reasonable shell.

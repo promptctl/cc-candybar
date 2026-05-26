@@ -1,46 +1,72 @@
 import path from "node:path";
-import { PowerlineRenderer } from "../../powerline";
+import { PaletteResolver } from "@promptctl/rich-js";
 import {
-  loadConfigStrict,
-  resolveConfigPathFromArgs,
-  type PowerlineConfig,
-} from "../../config/loader";
-import type { GitService } from "../../segments/git";
-import type { UsageProvider } from "../../segments/session";
-import type { SessionStateRW } from "../session-state";
-import type { WatcherRegistry, WatcherHandle } from "./watchers";
-import { dlog } from "../log";
+  loadDslConfig,
+  resolveDslConfigPath,
+  ConfigError,
+} from "../../config/dsl-loader.js";
+import { DEFAULT_DSL_CONFIG } from "../../config/default-dsl-config.js";
+import type { DslConfig } from "../../config/dsl-types.js";
+import { registerDslConfig, type CompiledSegments } from "../../dsl/render.js";
+import { VariableStore } from "../../var-system/store.js";
+import { SourceRegistry } from "../../var-system/sources.js";
+import { resolvePaletteName } from "../../themes/index.js";
+import { getThemePalette } from "../../themes/palette-registry.js";
+import type { GitDataProvider } from "./git.js";
+import type { CachedUsageProvider } from "./usage.js";
+import type { SessionStateRW } from "../session-state.js";
+import type { WatcherRegistry, WatcherHandle } from "./watchers.js";
+import { dlog } from "../log.js";
 
-// Capacity sized for "many concurrent sessions in many repos". Each entry is
-// a renderer + parsed config (~10-50KB), so 256 entries ≈ a few MB resident.
-// LRU evicts when over the cap.
+// [LAW:one-source-of-truth] Each cache entry owns the live DSL state for a
+// (args, projectDir, cwd) tuple: the parsed config, the variable store +
+// registry it was registered against, the compiled segment closures, and
+// the resolved base palette. registerDslConfig + renderDslLine are the
+// single render path — the cache only holds state across calls.
+//
+// Capacity sized for "many concurrent sessions in many repos". Each entry
+// holds a SourceRegistry (timers, watchers) so the hard cap doubles as a
+// resource ceiling: at 256 active entries, fs watchers and TTL timers are
+// bounded by N × declarations-per-config.
 const MAX_ENTRIES = 256;
 
 export interface RenderDeps {
-  gitService: GitService;
-  usageProvider: UsageProvider;
+  gitService: GitDataProvider;
+  usageProvider: CachedUsageProvider;
   sessionState: SessionStateRW;
   watchers: WatcherRegistry;
 }
 
-// [LAW:one-source-of-truth] Each entry tracks the last *valid* config + the
-// last error from a reload attempt. We never overwrite a valid config with
-// nothing — a parse error means "show the warning but keep rendering with
-// what we had". Errors are scoped to the cache key (which includes cwd /
-// projectDir) so a broken config in repo A cannot pollute repo B's render.
+// [LAW:types-are-the-program] The DSL render state for an entry is one
+// optionally-null bundle, not five independently-optional fields. Either
+// every field is populated (a render is possible) or all are null (parse
+// failed and we never had a valid config) — the type makes any other
+// combination unrepresentable.
+export interface DslRenderState {
+  readonly config: DslConfig;
+  readonly store: VariableStore;
+  readonly registry: SourceRegistry;
+  readonly compiled: CompiledSegments;
+  readonly basePalette: PaletteResolver;
+}
+
+// [LAW:one-source-of-truth] Each entry tracks the last *valid* DSL state +
+// the last error from a reload attempt. We never overwrite a valid state
+// with nothing — a parse error means "show the warning but keep rendering
+// with what we had". Errors are scoped to the cache key (which includes
+// cwd / projectDir) so a broken config in repo A cannot pollute repo B.
 export interface CacheEntry {
   args: string[];
   projectDir: string | undefined;
   cwd: string | undefined;
   configFilePath: string | null;
-  lastValidConfig: PowerlineConfig | null;
   lastError: string | null;
-  renderer: PowerlineRenderer | null;
+  state: DslRenderState | null;
   watcher: WatcherHandle | null;
 }
 
-// [LAW:one-source-of-truth] Cache key includes every input to loadConfigStrict.
-// Null-separator avoids ambiguity from args containing whitespace or pipes.
+// [LAW:one-source-of-truth] Cache key includes every input that affects DSL
+// resolution. Null-separator avoids ambiguity from args with whitespace.
 function cacheKey(args: string[], projectDir?: string, cwd?: string): string {
   return args.join("\0") + "\0" + (projectDir ?? "") + "\0" + (cwd ?? "");
 }
@@ -78,9 +104,8 @@ export class RenderCache {
       projectDir,
       cwd,
       configFilePath: null,
-      lastValidConfig: null,
       lastError: null,
-      renderer: null,
+      state: null,
       watcher: null,
     };
     this.reloadInto(entry);
@@ -90,6 +115,10 @@ export class RenderCache {
       const oldest = this.entries.keys().next().value;
       if (oldest !== undefined) {
         const evicted = this.entries.get(oldest);
+        // [LAW:single-enforcer] dispose the registry on eviction — it owns
+        // timers, fs watchers, and git subscriptions. Dropping the entry
+        // without dispose leaks every async handle the config declared.
+        evicted?.state?.registry.dispose();
         evicted?.watcher?.release();
         this.entries.delete(oldest);
       }
@@ -98,26 +127,34 @@ export class RenderCache {
     return entry;
   }
 
-  // Populate (or re-populate) `entry` from the current state of disk + args.
-  // - On parse success: replaces lastValidConfig + renderer, clears lastError
-  // - On parse failure: keeps the prior lastValidConfig + renderer, sets
-  //   lastError. First-time failures leave them null (startup-error case).
-  // Also (re)acquires a watcher on the resolved config file so subsequent
-  // edits trigger reload.
+  // Populate (or re-populate) `entry` from the current state of disk.
+  //
+  // - Parse success: dispose the prior state (if any), build fresh store +
+  //   registry + compiled, clear lastError.
+  // - Parse failure: keep the prior state, set lastError. First-time
+  //   failures leave state null (startup-error case).
+  //
+  // [LAW:single-enforcer] hot-reload contract: any reload that produces a
+  // new DslConfig disposes the old SourceRegistry before constructing a new
+  // one. The registry owns timers, watchers, MobX reactions, and git
+  // subscriptions — dropping it without dispose leaks every handle.
   private reloadInto(entry: CacheEntry): void {
-    let result: { config: PowerlineConfig; configFilePath: string | null };
+    const resolvedPath = resolveDslConfigPath(entry.projectDir, entry.cwd);
+
+    let config: DslConfig;
     try {
-      result = loadConfigStrict(entry.args, entry.projectDir, entry.cwd);
+      config =
+        resolvedPath !== null
+          ? loadDslConfig(resolvedPath)
+          : DEFAULT_DSL_CONFIG;
     } catch (err) {
-      entry.lastError = err instanceof Error ? err.message : String(err);
-      // Resolve the path independently so we can watch the broken file for
-      // fixes — without this, a startup-error entry has no watcher and would
-      // never recover. The parse error is *the* signal we want to react to.
-      const resolvedPath = resolveConfigPathFromArgs(
-        entry.args,
-        entry.projectDir,
-        entry.cwd,
-      );
+      entry.lastError =
+        err instanceof ConfigError
+          ? err.message
+          : err instanceof Error
+            ? err.message
+            : String(err);
+      // Watch the broken file for fixes so an in-place save recovers.
       if (
         resolvedPath !== entry.configFilePath ||
         (entry.watcher === null && resolvedPath !== null)
@@ -128,23 +165,69 @@ export class RenderCache {
       return;
     }
 
-    entry.lastError = null;
-    entry.lastValidConfig = result.config;
-    entry.renderer = new PowerlineRenderer(result.config, {
-      gitService: this.deps.gitService,
-      usageProvider: this.deps.usageProvider,
-      sessionState: this.deps.sessionState,
-    });
+    // [LAW:single-enforcer] Dispose before reassign — see contract above.
+    entry.state?.registry.dispose();
 
-    // If the resolved path changed (e.g. user created a higher-precedence
-    // file), rebind to the new path. If it didn't change, this is a no-op
-    // beyond bumping the watcher's LRU position.
-    if (result.configFilePath !== entry.configFilePath) {
-      entry.configFilePath = result.configFilePath;
-      this.rebindWatcher(entry, result.configFilePath);
-    } else if (entry.watcher === null && result.configFilePath !== null) {
-      // First successful load — establish the watcher.
-      this.rebindWatcher(entry, result.configFilePath);
+    const store = new VariableStore();
+    // [LAW:single-enforcer] Inject the daemon's shared GitDataProvider so
+    // every config's `kind: "git"` declarations route through one cache +
+    // watcher pool (rather than each registry standing up its own). The
+    // sessionState injection makes `kind: "state"` variables read/write the
+    // same per-session store the click verbs mutate.
+    const registry = new SourceRegistry(
+      store,
+      "",
+      this.deps.gitService,
+      this.deps.sessionState,
+    );
+    let compiled: CompiledSegments;
+    try {
+      compiled = registerDslConfig(config, registry, { cwd: entry.cwd });
+    } catch (err) {
+      // Registration can throw on template parse errors that slipped past
+      // the loader (rare — the loader pre-parses). Dispose and surface.
+      registry.dispose();
+      entry.lastError = err instanceof Error ? err.message : String(err);
+      entry.state = null;
+      if (
+        resolvedPath !== entry.configFilePath ||
+        (entry.watcher === null && resolvedPath !== null)
+      ) {
+        entry.configFilePath = resolvedPath;
+        this.rebindWatcher(entry, resolvedPath);
+      }
+      return;
+    }
+
+    const paletteName = resolvePaletteName(
+      config.globals.palette ?? "textual-dark",
+    );
+    const palette = getThemePalette(paletteName);
+    if (palette === null) {
+      // [LAW:single-enforcer] The loader validates palette names against the
+      // resolver's set; an unresolvable name here is registry/resolver drift,
+      // not user error.
+      registry.dispose();
+      entry.lastError = `Palette "${paletteName}" did not resolve in the theme registry`;
+      entry.state = null;
+      return;
+    }
+
+    entry.lastError = null;
+    entry.state = {
+      config,
+      store,
+      registry,
+      compiled,
+      basePalette: new PaletteResolver(palette),
+    };
+
+    // Rebind watcher to the (possibly changed) resolved path.
+    if (resolvedPath !== entry.configFilePath) {
+      entry.configFilePath = resolvedPath;
+      this.rebindWatcher(entry, resolvedPath);
+    } else if (entry.watcher === null && resolvedPath !== null) {
+      this.rebindWatcher(entry, resolvedPath);
     }
   }
 
@@ -158,10 +241,9 @@ export class RenderCache {
     // directory. fs.watch on the file alone is bound to its inode — atomic-
     // rename writes (sed -i, vim :w, most editors) replace the inode and
     // leave the watcher bound to a dead one. The parent-dir watcher fires
-    // on rename-over-write because it sees the dirent change. The filename
-    // filter avoids noise from siblings (e.g. ~/.claude/ has high churn).
-    // After fire → reloadInto → rebindWatcher: a fresh file watcher binds
-    // to the new inode for the next in-place write.
+    // on rename-over-write because it sees the dirent change. After fire →
+    // reloadInto → rebindWatcher: a fresh file watcher binds to the new
+    // inode for the next in-place write.
     const dir = path.dirname(targetPath);
     const base = path.basename(targetPath);
     entry.watcher = this.deps.watchers.acquire(
@@ -175,9 +257,9 @@ export class RenderCache {
   }
 
   // Fan out a config-file change to every cache entry that resolved to it.
-  // Each entry re-runs loadConfigStrict so a project-local file changing
-  // updates only sessions that resolved to that file, while a global
-  // ~/.claude/cc-candybar.json change updates everyone who falls through to it.
+  // Each entry re-runs resolveDslConfigPath so a project-local file change
+  // updates only sessions that resolved to it, while a global config change
+  // updates everyone who falls through to it.
   private onConfigChanged(changedPath: string): void {
     dlog("info", `config changed: ${changedPath} — reloading affected entries`);
     for (const entry of this.entries.values()) {

@@ -10,6 +10,8 @@
 // of guards.
 
 import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import JSON5 from "json5";
 import {
   CACHE_KEYS,
@@ -55,6 +57,52 @@ export class ConfigError extends Error {
     this.file = file;
     this.issues = issues;
   }
+}
+
+// ─── Config-file discovery ───────────────────────────────────────────────────
+
+const CONFIG_FILENAME = ".cc-candybar.json5";
+
+/**
+ * Resolution order for the user's DSL config file:
+ *   1. $CC_CANDYBAR_CONFIG env var (literal path, optional `~` expansion)
+ *   2. `<projectDir>/.cc-candybar.json5`
+ *   3. `<cwd>/.cc-candybar.json5`
+ *   4. `$XDG_CONFIG_HOME/cc-candybar/config.json5`
+ *      (defaulting to `~/.config/cc-candybar/config.json5`)
+ *
+ * Returns the first path that exists, or null if none do.
+ *
+ * [LAW:dataflow-not-control-flow] The locations array is data; the search is
+ * `locations.find(fs.existsSync)`. Adding a layer is a new array entry, not a
+ * new branch.
+ *
+ * [LAW:single-enforcer] One resolver. The daemon's cache reads this; tests
+ * read this; no callsite re-derives the precedence.
+ */
+export function resolveDslConfigPath(
+  projectDir?: string,
+  cwd?: string,
+): string | null {
+  const envPath = process.env.CC_CANDYBAR_CONFIG;
+  if (envPath) {
+    const expanded = envPath.startsWith("~")
+      ? envPath.replace("~", os.homedir())
+      : envPath;
+    return fs.existsSync(expanded) ? expanded : null;
+  }
+
+  const effectiveCwd = cwd ?? process.cwd();
+  const xdgConfigHome =
+    process.env.XDG_CONFIG_HOME ?? path.join(os.homedir(), ".config");
+
+  const locations = [
+    ...(projectDir ? [path.join(projectDir, CONFIG_FILENAME)] : []),
+    path.join(effectiveCwd, CONFIG_FILENAME),
+    path.join(xdgConfigHome, "cc-candybar", "config.json5"),
+  ];
+
+  return locations.find(fs.existsSync) ?? null;
 }
 
 // ─── Entry point ─────────────────────────────────────────────────────────────
@@ -372,10 +420,21 @@ function validateVariableByKind(
     case "input": {
       const p = requireString(ctx, path, raw, "path");
       if (p === null) return null;
+      // [LAW:types-are-the-program] Absent `type` keeps existing string-typed
+      // declarations behaving exactly as before — the daemon's augmented
+      // payload carries strings (`cwd`, `model`, `session_id`) at those paths,
+      // and the default at the loader is "string" not "any".
+      const t = optionalEnum(ctx, path, raw, "type", [
+        "string",
+        "number",
+        "boolean",
+      ] as const);
+      const def = optionalTypedDefault(ctx, path, raw, t ?? "string");
       return {
         kind: "input",
         path: p,
-        ...optionalString(ctx, path, raw, "default"),
+        ...(t !== undefined && { type: t }),
+        ...(def !== undefined && { default: def }),
       };
     }
 
@@ -1160,6 +1219,33 @@ function optionalString(
 ): { default?: string } {
   const v = optionalStringField(ctx, path, raw, field);
   return v === undefined ? {} : { [field]: v };
+}
+
+// [LAW:types-are-the-program] Input-var defaults must match the declared
+// `type` exactly — a string default on a number-typed input would silently
+// coerce or throw on first render. Reject the mismatch at load time so the
+// renderer can read `.default` as the declared type without re-checking.
+function optionalTypedDefault(
+  ctx: ValidateCtx,
+  path: string,
+  raw: Record<string, unknown>,
+  type: "string" | "number" | "boolean",
+): string | number | boolean | undefined {
+  const v = raw.default;
+  if (v === undefined) return undefined;
+  const ok =
+    (type === "string" && typeof v === "string") ||
+    (type === "number" && typeof v === "number") ||
+    (type === "boolean" && typeof v === "boolean");
+  if (!ok) {
+    ctx.issues.push({
+      path: `${path}.default`,
+      message: `default must be a ${type}, got ${describeType(v)}`,
+      line: findKeyLine(ctx.source, [...path.split("."), "default"]),
+    });
+    return undefined;
+  }
+  return v as string | number | boolean;
 }
 
 function optionalStringField(

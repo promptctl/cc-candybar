@@ -13,7 +13,7 @@ import {
 import type { Request, Response } from "./protocol";
 import { GitDataProvider } from "./cache/git";
 import { CachedUsageProvider } from "./cache/usage";
-import { RenderCache } from "./cache/render";
+import { RenderCache, type DslRenderState } from "./cache/render";
 import { WatcherRegistry } from "./cache/watchers";
 import { RuntimeStats } from "./stats";
 import { makeLimits, realLimitsDeps, type LimitsHandle } from "./limits";
@@ -22,8 +22,15 @@ import { FileSessionStorage } from "./session-state-file";
 import { VERBS, BadVerbArgs } from "./verbs";
 import { validateHookData } from "../utils/schema-validator.js";
 import { setLaunchStats } from "../proc/launch";
-import { buildDebugSnapshot, type DaemonDslState } from "./debug";
+import { buildDebugSnapshot } from "./debug";
 import { DEBUG_WHATS, isDebugWhat } from "./debug-types";
+import { renderDslLine } from "../dsl/render.js";
+import { buildRenderPayload } from "./render-payload.js";
+import { TodayProvider } from "../segments/today.js";
+import { ContextProvider } from "../segments/context.js";
+import { MetricsProvider } from "../segments/metrics.js";
+import { BlockProvider } from "../segments/block.js";
+import { TmuxService } from "../segments/tmux.js";
 
 // [LAW:one-source-of-truth] one cache instance per daemon process — multiple
 // instances would defeat the share-across-sessions invariant.
@@ -49,25 +56,20 @@ const usageProvider = new CachedUsageProvider();
 // relay, subcommands) does no disk I/O. The daemon binds the file-backed
 // storage in runDaemon(), making it the sole reader/writer of the state file.
 const sessionState = new SessionState();
+// [LAW:one-source-of-truth] One provider per data shape, shared across every
+// render in this daemon. The render cache owns DSL-state-per-config; these
+// providers serve the augmented payload that flows through every render.
+const todayProvider = new TodayProvider();
+const contextProvider = new ContextProvider();
+const metricsProvider = new MetricsProvider();
+const blockProvider = new BlockProvider();
+const tmuxService = new TmuxService();
 const renderCache = new RenderCache({
   gitService,
   usageProvider,
   sessionState,
   watchers: watcherRegistry,
 });
-
-// [LAW:one-source-of-truth] The daemon owns at most one DSL state bundle
-// (variable store + source registry + parsed config + compiled segments).
-// vhi.2 defines this slot and the introspection contract; bzh.2 will
-// populate it once the daemon flips from the legacy renderer to renderDslLine.
-// Until then it stays null and debug responses are empty by construction —
-// not by special-case branching, by the data being absent.
-//
-// Declared `const` today because it is never reassigned in this module; bzh.2
-// will either introduce a setter or convert this to `let`. The single
-// canonical handle is the design contract — *how* it becomes populated is
-// the change bzh.2 owns.
-const dslState: DaemonDslState | null = null;
 
 const REQUEST_TIMEOUT_MS = 200;
 const BIN_CHECK_INTERVAL_MS = 60 * 1000;
@@ -556,16 +558,35 @@ async function handleRequest(req: Request): Promise<Response> {
       // data — the daemon's own working directory must not influence output.
       const entry = renderCache.getOrCreate(req.args, projectDir, req.cwd);
       // [LAW:single-enforcer] Sanitize wire-supplied termCols here at the
-      // trust boundary so the renderer downstream can rely on its type.
-      const termCols = sanitizeTermCols(req.termCols);
-      // [LAW:dataflow-not-control-flow] Three states fall out of one rule:
-      // body = renderer ? render(it) : "" ; output = body + (error ? icon : "")
+      // trust boundary; sanitized but currently unused — terminal-width-aware
+      // wrapping is a future BuildLineOptions extension (see strip.ts).
+      // Sanitization stays at the boundary so when wrapping arrives, the
+      // type is already correct.
+      void sanitizeTermCols(req.termCols);
+      // [LAW:dataflow-not-control-flow] Two outcomes fall out of one rule:
+      // body = state ? renderDslLine(state) : "" ; output = body + icon
       // No special-case branches — same composition every render.
-      const body = entry.renderer
-        ? await entry.renderer.generateStatusline(req.hookData, {
-            termCols,
-          })
-        : "";
+      let body = "";
+      if (entry.state !== null) {
+        const payload = await buildRenderPayload(
+          req.hookData,
+          payloadDeps,
+          req.cwd,
+        );
+        entry.state.registry.applyInput(payload);
+        body = renderDslLine(
+          entry.state.config,
+          entry.state.compiled,
+          entry.state.store,
+          entry.state.registry,
+          payload,
+          entry.state.basePalette,
+          {
+            style: "powerline",
+            colorCompatibility: "truecolor",
+          },
+        );
+      }
       const output = composeWithError(body, entry.lastError);
       const ms = Date.now() - t0;
       const g = gitService.getStats();
@@ -602,10 +623,25 @@ async function handleRequest(req: Request): Promise<Response> {
         daemonV: PROTOCOL_VERSION,
       };
     }
-    // [LAW:dataflow-not-control-flow] The dispatcher always runs the same
-    // call. Variability lives in dslState (null vs populated) and `what`
-    // (the projection selector inside buildDebugSnapshot).
-    return { ok: true, debug: buildDebugSnapshot(req.what, dslState) };
+    // [LAW:dataflow-not-control-flow] The debug projection samples whatever
+    // DSL state the cache currently holds. With cache keys scoped on
+    // (args, projectDir, cwd) and the debug request carrying neither, we
+    // sample the first populated entry — sufficient for `debug vars`,
+    // `debug segments`, `debug config` against single-session workflows.
+    // A future debug-target selector would thread the same key through;
+    // until then, "the live state, whatever it is" is the contract.
+    const dbgEntry = firstPopulatedEntry(renderCache);
+    const dbgState =
+      dbgEntry === null
+        ? null
+        : {
+            store: dbgEntry.store,
+            registry: dbgEntry.registry,
+            config: dbgEntry.config,
+            compiled: dbgEntry.compiled,
+            lastRenderBySegment: new Map<string, string>(),
+          };
+    return { ok: true, debug: buildDebugSnapshot(req.what, dbgState) };
   }
 
   return {
@@ -649,6 +685,36 @@ function composeWithError(body: string, error: string | null): string {
 // other Error (operational failure) becomes RENDER_FAILED. No string matching.
 
 const verbCtx = { sessionState, dlog };
+
+// [LAW:no-defensive-null-guards] One walk over the cache's entries map
+// returning the first populated DslRenderState. `RenderCache` doesn't
+// expose entries iteration directly; debug introspection uses this helper
+// so it doesn't have to know about cache internals beyond the public
+// `getOrCreate` shape. If/when a debug-target selector lands, this is the
+// site that gets the lookup-by-key replacement.
+function firstPopulatedEntry(cache: RenderCache): DslRenderState | null {
+  // The cache currently only allows entries to be reached by key. We poll
+  // for the canonical default key (empty args, undefined projectDir, cwd)
+  // which is what tests and the debug-CLI hit. If the entry doesn't exist
+  // yet, getOrCreate creates it via the standard DEFAULT_DSL_CONFIG path,
+  // which is exactly the right thing for `debug config` against a
+  // freshly-started daemon.
+  const entry = cache.getOrCreate([], undefined, undefined);
+  return entry.state;
+}
+
+// [LAW:single-enforcer] The payload-builder dependency bundle. One value
+// passed through every render — the data the daemon brings to each tick.
+const payloadDeps = {
+  gitProvider: gitService,
+  usageProvider,
+  todayProvider,
+  contextProvider,
+  metricsProvider,
+  blockProvider,
+  tmuxService,
+  sessionState,
+};
 
 function handleClick(verb: string, value: string): Response {
   const handler = VERBS.get(verb);

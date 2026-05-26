@@ -16,7 +16,25 @@ import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import { getThemePalette } from "../src/themes/palette-registry";
 import { registerDslConfig, renderDslLine } from "../src/dsl/render";
-import { HOOK_DATA, SESSION_ID } from "./parity/fixtures";
+
+// [LAW:single-enforcer] Inlined fixture values formerly served by
+// `test/parity/fixtures.ts`. The parity infra was retired alongside the
+// legacy renderer (bzh.2), so this test holds its own minimal fixture
+// rather than importing from a module whose other consumers are gone.
+const SESSION_ID = "0a1b2c3d-4e5f-6789-abcd-ef1234567890";
+
+const HOOK_DATA = {
+  hook_event_name: "Status",
+  session_id: SESSION_ID,
+  transcript_path: "/tmp/fake-transcript.jsonl",
+  cwd: "/tmp/cwd",
+  model: { id: "claude-sonnet-4-6", display_name: "Claude Sonnet 4" },
+  workspace: {
+    current_dir: "/tmp/cwd/src",
+    project_dir: "/tmp/cwd",
+    added_dirs: [],
+  },
+} as const;
 
 // The two palette names used in the fixture. Injected into parseDslConfig so
 // validation does not depend on the filesystem — only the bundled registry.

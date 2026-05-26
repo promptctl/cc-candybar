@@ -1,5 +1,4 @@
 import type { ParsedEntry, ClaudeHookData } from "../utils/claude";
-import type { PowerlineConfig } from "../config/loader";
 
 import { debug } from "../utils/logger";
 import { parseJsonlFile } from "../utils/claude";
@@ -18,25 +17,31 @@ interface ContextUsageThresholds {
   MEDIUM: number;
 }
 
+// [LAW:one-source-of-truth] Model context-window limits. Hardcoded because
+// every model in this family is currently 200k; a future divergence
+// (different limit per model variant) is the moment to lift this back into
+// configuration. Today, baking it in keeps the provider config-free.
+const MODEL_CONTEXT_LIMITS: Readonly<Record<string, number>> = {
+  default: 200000,
+  sonnet: 200000,
+  opus: 200000,
+};
+
 export class ContextProvider {
   private readonly thresholds: ContextUsageThresholds = {
     LOW: 50,
     MEDIUM: 80,
   };
-  private readonly config: PowerlineConfig;
-
-  constructor(config: PowerlineConfig) {
-    this.config = config;
-  }
 
   getContextUsageThresholds(): ContextUsageThresholds {
     return this.thresholds;
   }
 
   private getContextLimit(modelId: string): number {
-    const modelLimits = this.config.modelContextLimits || { default: 200000 };
     const modelType = this.getModelType(modelId);
-    return modelLimits[modelType] || modelLimits.default || 200000;
+    return (
+      MODEL_CONTEXT_LIMITS[modelType] ?? MODEL_CONTEXT_LIMITS.default ?? 200000
+    );
   }
 
   private getModelType(modelId: string): string {

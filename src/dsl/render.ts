@@ -97,10 +97,17 @@ function declareOne(
       break;
 
     case "input":
-      // [LAW:types-are-the-program] Input vars are always "string": the DSL
-      // config has no type annotation for input fields, and all payload values
-      // coerce to string via toString(). Typed inputs are a future extension.
-      registry.declareInput(name, decl.path, "string", decl.default);
+      // [LAW:types-are-the-program] The loader validated that `decl.type` is
+      // one of "string"|"number"|"boolean" and that `decl.default` (if
+      // present) matches that type. Absent type defaults to "string" — every
+      // existing declaration that omits the field reads a string at the
+      // resolved payload path.
+      registry.declareInput(
+        name,
+        decl.path,
+        decl.type ?? "string",
+        decl.default,
+      );
       break;
 
     case "env":
