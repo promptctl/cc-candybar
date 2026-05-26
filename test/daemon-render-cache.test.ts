@@ -56,13 +56,24 @@ function mkConfigDir(): { dir: string; cleanup: () => void } {
 // multiple test suites run watchers in sequence; the timeout is high
 // enough that real failures (watcher not firing at all) still surface
 // as a clear timeout rather than a flake.
+//
+// [LAW:verifiable-goals] Throws on timeout so a never-true condition
+// fails loudly with a clear message — silent timeout would let watcher
+// regressions silently pass.
 async function waitFor(
   cond: () => boolean,
-  { timeoutMs = 15000, intervalMs = 50 } = {},
+  {
+    timeoutMs = 15000,
+    intervalMs = 50,
+    label = "condition",
+  }: { timeoutMs?: number; intervalMs?: number; label?: string } = {},
 ): Promise<void> {
   const deadline = Date.now() + timeoutMs;
   while (!cond() && Date.now() < deadline) {
     await new Promise((r) => setTimeout(r, intervalMs));
+  }
+  if (!cond()) {
+    throw new Error(`waitFor timed out after ${timeoutMs}ms (${label})`);
   }
 }
 
@@ -152,7 +163,9 @@ describe("RenderCache", () => {
       // cache calls reloadInto, buildState throws (JSON5 parse error),
       // and the entry's `state` should be the SAME object as before.
       writeFileSync(cfg, "this is not JSON5 {{{ broken");
-      await waitFor(() => entry.lastError !== null);
+      await waitFor(() => entry.lastError !== null, {
+        label: "lastError populated after broken-config reload",
+      });
 
       expect(entry.lastError).not.toBeNull();
       expect(entry.state).toBe(goodState); // identity preserved
@@ -198,7 +211,9 @@ describe("RenderCache", () => {
         }),
       );
       // fs.watch is async and platform-debounced (50ms in our registry).
-      await waitFor(() => entry.configFilePath === cfg);
+      await waitFor(() => entry.configFilePath === cfg, {
+        label: `watcher should have observed new config file at ${cfg}`,
+      });
       expect(entry.configFilePath).toBe(cfg);
       expect(entry.state!.config.layout).toEqual(["only"]);
       // Sanity: was actually different from the default.
@@ -274,7 +289,9 @@ describe("RenderCache", () => {
       // a moment to register on the dir before the mutation.
       await new Promise((r) => setTimeout(r, 100));
       unlinkSync(cfgJson);
-      await waitFor(() => entry.lastWarning === null);
+      await waitFor(() => entry.lastWarning === null, {
+        label: "lastWarning should clear after removing the .json sibling",
+      });
       expect(entry.lastWarning).toBeNull();
       // The .json5 is still the resolved file; render state intact.
       expect(entry.configFilePath).toBe(cfgJson5);

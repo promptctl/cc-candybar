@@ -83,14 +83,13 @@ describe("DEFAULT_DSL_CONFIG", () => {
     }): string {
       const parsed = parseDslConfig("<default>", SERIALIZED);
       // Narrow the layout to `directory` so the rendered line is exactly
-      // that segment's text.
+      // that segment's text. `home` flows through the augmented payload
+      // (kind: "input", path: "home" in DEFAULT_DSL_CONFIG) — we set it
+      // on the payload object directly; no env-var mutation needed.
       const dirOnly = { ...parsed, layout: ["directory"] };
-      const savedHome = process.env.HOME;
-      process.env.HOME = opts.home;
       const store = new VariableStore();
       const registry = new SourceRegistry(store);
       try {
-        // Re-register with the HOME env override visible to declareEnv.
         const compiled = registerDslConfig(dirOnly, registry, {
           cwd: process.cwd(),
         });
@@ -129,8 +128,6 @@ describe("DEFAULT_DSL_CONFIG", () => {
         );
       } finally {
         registry.dispose();
-        if (savedHome === undefined) delete process.env.HOME;
-        else process.env.HOME = savedHome;
       }
     }
 

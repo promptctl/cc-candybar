@@ -121,7 +121,7 @@ Recurring patterns enforced by these laws in this repo:
 - **One render path: `renderDslLine`.** The daemon calls it verbatim; the demo calls it verbatim; tests call it verbatim. No parallel renderer, no "fallback" computation.
 - **One config shape: `DslConfig`.** No alternate input format, no merge layer. User file or bundled default; nothing in between.
 - **Variability lives in data, not control flow.** The augmented payload (`src/daemon/render-payload.ts`) carries every value the templates can read; segments hide/show via `when` predicates on values, not branches in code.
-- **Errors are loud.** Bad config doesn't silently degrade — `composeWithError` (`src/daemon/server.ts`) renders a visible warning icon. Don't add silent `|| defaults` that hide a broken state.
+- **Errors are loud.** Bad config doesn't silently degrade — `composeWithDiagnostics` (`src/daemon/server.ts`) renders visible icons for both fatal errors and advisory warnings (the `.json5` vs `.json` collision detector emits a warning, for example). Don't add silent `|| defaults` that hide a broken state.
 
 ## Testing notes
 
