@@ -60,7 +60,7 @@ Wire format lives in `src/daemon/protocol.ts`. The Rust client mirrors it as a l
 - Caches owned by the daemon process (one each, not per-session):
   - `src/daemon/cache/git.ts` — git state, keyed by **repo root** (not cwd, not session), invalidated by fs watchers on `.git/HEAD` and `.git/index` mtimes.
   - `src/daemon/cache/usage.ts` — Claude usage/cost data parsed from transcript JSONLs.
-  - `src/daemon/cache/render.ts` — per `(args, projectDir, cwd)` tuple, holds the live DSL state: parsed `DslConfig`, `VariableStore`, `SourceRegistry` (with timers/watchers/git-subscriptions), `CompiledSegments`, and resolved `basePalette`. LRU-capped at 256. Each entry watches its resolved config file for hot-reload; `reloadInto` disposes the old `SourceRegistry` before constructing the new one (`[LAW:single-enforcer]` — the registry owns async handles).
+  - `src/daemon/cache/render.ts` — per `(projectDir, cwd)` tuple, holds the live DSL state: parsed `DslConfig`, `VariableStore`, `SourceRegistry` (with timers/watchers/git-subscriptions), `CompiledSegments`, and resolved `basePalette`. LRU-capped at 256. Each entry watches every candidate config-file location (so creating one later triggers reload). `reloadInto` builds the new state into a local first and only swaps + disposes the old `SourceRegistry` on success, so a broken-config reload preserves last-known-good (`[LAW:single-enforcer]` — the registry owns async handles; dispose-before-swap is the contract).
   - `src/daemon/session-state.ts` — per-session key/value store for click-driven state (currently active theme, toolbar-expanded, etc.).
 - Stats snapshot at `cc-candybar daemon-stats --json` — uptime, RSS, cache hit rates, watcher count, request totals.
 

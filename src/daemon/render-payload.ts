@@ -262,12 +262,19 @@ function anyPathStartsWith(
  * Compose every render-time data source into the augmented payload that the
  * DSL applies to its input variables.
  *
- * Each provider runs only if the active DslConfig declares at least one
- * `kind: "input"` variable whose `path` reads from that provider's payload
- * prefix (e.g. `metrics.*`). All needed providers run concurrently via
- * `Promise.all`; each one's failure becomes a missing field (handled by the
- * DSL input fallback chain). No provider error propagates to the caller —
- * a single broken source must not blank the bar.
+ * Each provider runs only if its payload prefix sits in the closure
+ * computed by `buildNeededPrefixes(config)` — the set of `kind: "input"`
+ * paths transitively reachable from a segment in `config.layout`. Merely
+ * declaring an input variable does NOT trigger provider work; the variable
+ * must actually be referenced by a layout-rendered segment (directly, or
+ * via a chain of `template`-kind vars). The default config declares many
+ * unused inputs for reference completeness — switching one on is a layout
+ * edit, not a re-declaration.
+ *
+ * All needed providers run concurrently via `Promise.all`; each one's
+ * failure becomes a missing field (handled by the DSL input fallback
+ * chain). No provider error propagates to the caller — a single broken
+ * source must not blank the bar.
  *
  * [LAW:no-silent-fallbacks] Provider rejections are logged by the underlying
  * data-provider layer; an absent field is the explicit signal that the DSL

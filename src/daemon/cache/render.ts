@@ -152,12 +152,17 @@ export class RenderCache {
   private reloadInto(entry: CacheEntry): void {
     const resolvedPath = resolveDslConfigPath(entry.projectDir, entry.cwd);
 
-    let config: DslConfig;
+    // [LAW:dataflow-not-control-flow] One uniform shape: build the new
+    // state into locals first, dispose the old registry ONLY after every
+    // construction step has succeeded. A failure at any step — parse,
+    // registration, palette resolution — leaves `entry.state` and
+    // `entry.state.registry` untouched, so the daemon keeps rendering the
+    // last-known-good config plus a warning icon (composeWithError reads
+    // `entry.lastError`). The "[LAW:single-enforcer] dispose before swap"
+    // contract holds for the swap; the construction is upstream of it.
+    let newState: DslRenderState;
     try {
-      config =
-        resolvedPath !== null
-          ? loadDslConfig(resolvedPath)
-          : DEFAULT_DSL_CONFIG;
+      newState = this.buildState(entry, resolvedPath);
     } catch (err) {
       entry.lastError =
         err instanceof ConfigError
@@ -171,8 +176,26 @@ export class RenderCache {
       return;
     }
 
-    // [LAW:single-enforcer] Dispose before reassign — see contract above.
+    // [LAW:single-enforcer] Dispose-before-swap: the old registry owns
+    // timers, fs watchers, MobX reactions, and git subscriptions. Dropping
+    // the reference without dispose() would leak every handle.
     entry.state?.registry.dispose();
+    entry.lastError = null;
+    entry.state = newState;
+    this.refreshWatcher(entry, resolvedPath);
+  }
+
+  // [LAW:single-enforcer] Construct the full new state — parsed config,
+  // store, registry, compiled segments, palette — as one transaction. Any
+  // failure inside disposes the partially-built registry so we don't leak
+  // timers/watchers from a half-constructed reload, then rethrows so the
+  // caller (reloadInto) preserves the prior `entry.state` unchanged.
+  private buildState(
+    entry: CacheEntry,
+    resolvedPath: string | null,
+  ): DslRenderState {
+    const config: DslConfig =
+      resolvedPath !== null ? loadDslConfig(resolvedPath) : DEFAULT_DSL_CONFIG;
 
     const store = new VariableStore();
     // [LAW:single-enforcer] Inject the daemon's shared GitDataProvider so
@@ -186,17 +209,13 @@ export class RenderCache {
       this.deps.gitService,
       this.deps.sessionState,
     );
+
     let compiled: CompiledSegments;
     try {
       compiled = registerDslConfig(config, registry, { cwd: entry.cwd });
     } catch (err) {
-      // Registration can throw on template parse errors that slipped past
-      // the loader (rare — the loader pre-parses). Dispose and surface.
       registry.dispose();
-      entry.lastError = err instanceof Error ? err.message : String(err);
-      entry.state = null;
-      this.refreshWatcher(entry, resolvedPath);
-      return;
+      throw err;
     }
 
     const paletteName = resolvePaletteName(
@@ -204,25 +223,22 @@ export class RenderCache {
     );
     const palette = getThemePalette(paletteName);
     if (palette === null) {
-      // [LAW:single-enforcer] The loader validates palette names against the
-      // resolver's set; an unresolvable name here is registry/resolver drift,
-      // not user error.
+      // [LAW:single-enforcer] The loader validates palette names against
+      // the resolver's set; an unresolvable name here is registry/resolver
+      // drift, not user error.
       registry.dispose();
-      entry.lastError = `Palette "${paletteName}" did not resolve in the theme registry`;
-      entry.state = null;
-      return;
+      throw new Error(
+        `Palette "${paletteName}" did not resolve in the theme registry`,
+      );
     }
 
-    entry.lastError = null;
-    entry.state = {
+    return {
       config,
       store,
       registry,
       compiled,
       basePalette: new PaletteResolver(palette),
     };
-
-    this.refreshWatcher(entry, resolvedPath);
   }
 
   // [LAW:single-enforcer] One watcher-rebind decision per reload. If the
