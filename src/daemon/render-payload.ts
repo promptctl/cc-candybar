@@ -173,9 +173,14 @@ function buildNeededPrefixes(config: DslConfig): ReadonlySet<string> {
     }
   }
 
-  // 2. BFS from layout segments. Frontier collects variable names referenced
-  //    by template/when/bg/fg/sub-vars; visited tracks vars whose own
-  //    `template`-kind body we've already followed.
+  // 2. BFS from layout segments. Frontier seeds with refs from each
+  //    rendered segment's template/when/bg/fg ONLY — segment-local vars in
+  //    `seg.vars` are reached transitively via those refs (their declared
+  //    names appear in the templates that need them). Seeding from
+  //    `seg.vars` directly would mark unused per-segment template vars as
+  //    needed and pull in their providers without justification.
+  //    `visited` tracks vars whose own `template`-kind body we've already
+  //    followed.
   const frontier: string[] = [];
   const visited = new Set<string>();
 
@@ -184,11 +189,6 @@ function buildNeededPrefixes(config: DslConfig): ReadonlySet<string> {
     if (!seg) continue;
     for (const src of [seg.template, seg.when, seg.bg, seg.fg]) {
       if (src) for (const ref of extractTemplateRefs(src)) frontier.push(ref);
-    }
-    if (seg.vars) {
-      for (const v of Object.values(seg.vars)) {
-        for (const ref of collectDeclRefs(v)) frontier.push(ref);
-      }
     }
   }
 
@@ -236,16 +236,6 @@ function lookupDecl(
     candidate = candidate.slice(0, dot);
   }
   return undefined;
-}
-
-// Variable-declaration body refs: only `template`-kind has a template body
-// inside the declaration itself. The other kinds reference no other vars at
-// declaration time.
-function collectDeclRefs(decl: VariableDecl): readonly string[] {
-  if (decl.kind === "template") {
-    return [...extractTemplateRefs(decl.template)];
-  }
-  return [];
 }
 
 function anyPathStartsWith(

@@ -134,6 +134,36 @@ describe("DSL render spine (bzh.7 steel thread)", () => {
     expect(a).toBe(b);
   });
 
+  test("perSegmentSink receives one entry per rendered (non-hidden) segment, cleared on each call", () => {
+    const { config, compiled, store, registry } = buildRuntime(
+      HOOK_DATA.workspace.current_dir,
+    );
+    const basePalette = new PaletteResolver(getThemePalette("textual-dark")!);
+    const sink = new Map<string, string>();
+    // Pre-seed with a stale entry to verify renderDslLine clears it.
+    sink.set("doesNotExist", "stale");
+
+    renderDslLine(
+      config,
+      compiled,
+      store,
+      registry,
+      HOOK_DATA,
+      basePalette,
+      OPTS,
+      sink,
+    );
+
+    // Stale entry from a previous render must be gone.
+    expect(sink.has("doesNotExist")).toBe(false);
+    // Every layout entry that wasn't `when`-hidden appears in the sink.
+    expect(sink.size).toBeGreaterThan(0);
+    for (const [name, text] of sink) {
+      expect(config.layout).toContain(name);
+      expect(text.length).toBeGreaterThan(0);
+    }
+  });
+
   // [LAW:verifiable-goals] The exact bytes are committed as a snapshot.
   // Any byte drift — from template changes, palette changes, or render-path
   // changes — fails loudly here. This is the "assembled-line fixture" that

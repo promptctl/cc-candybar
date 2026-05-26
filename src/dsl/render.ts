@@ -316,6 +316,18 @@ export function renderDslLine(
   payload: unknown,
   basePalette: PaletteResolver,
   opts: BuildLineOptions,
+  // [LAW:dataflow-not-control-flow] Optional per-segment-text sink. When
+  // present, each rendered segment's standalone ANSI text is written to
+  // this map under its segment name (the daemon's debug `segments`
+  // introspection reads it; the demo + tests pass nothing and the sink
+  // stays absent, no extra work). Hidden-by-when segments are NOT written
+  // — absence in the map is the explicit "this segment did not render"
+  // signal. The map is cleared before each render so stale segment names
+  // never survive a layout edit. Standalone bytes are not byte-identical
+  // to the segment's slice within the joined line (powerline joiners sit
+  // *between* segments and have no place in a one-segment render), but
+  // for the debug projection this is the natural per-segment shape.
+  perSegmentSink?: Map<string, string>,
 ): string {
   // Step 1: push payload into input boxes.
   registry.applyInput(payload);
@@ -324,6 +336,7 @@ export function renderDslLine(
   const hueStep = config.globals.hueStep ?? 0;
 
   const allCells: StripCell[] = [];
+  perSegmentSink?.clear();
 
   for (let i = 0; i < config.layout.length; i++) {
     const segName = config.layout[i]!;
@@ -366,6 +379,10 @@ export function renderDslLine(
       truncate: seg.truncate ?? "right",
       baseStyle,
     });
+
+    if (perSegmentSink !== undefined) {
+      perSegmentSink.set(segName, renderStripCells(laidOut, opts));
+    }
 
     allCells.push(...laidOut);
   }

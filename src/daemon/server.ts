@@ -589,6 +589,12 @@ async function handleRequest(req: Request): Promise<Response> {
             style: "powerline",
             colorCompatibility: "truecolor",
           },
+          // [LAW:single-enforcer] The per-segment ANSI text sink for the
+          // `debug segments` projection. Its identity stays stable for the
+          // cache entry's lifetime; renderDslLine clears + repopulates it
+          // in place, so the debug projection's read sees the latest
+          // render's output without coordinating with the render path.
+          entry.state.lastRenderBySegment,
         );
       }
       const output = composeWithError(body, entry.lastError);
@@ -638,6 +644,12 @@ async function handleRequest(req: Request): Promise<Response> {
     // daemon's own process.cwd(). A future debug-target selector would
     // thread (projectDir, cwd) through the wire.
     const dbgEntry = renderCache.firstPopulatedState();
+    // [LAW:single-enforcer] The debug snapshot reads the SAME
+    // lastRenderBySegment map renderDslLine writes — no synthetic empty
+    // map, no debug-only sink. If the daemon has rendered through this
+    // entry, the projection shows real per-segment output; if it hasn't
+    // (entry was just created and no render has fired yet), the map is
+    // empty by construction.
     const dbgState =
       dbgEntry === null
         ? null
@@ -646,7 +658,7 @@ async function handleRequest(req: Request): Promise<Response> {
             registry: dbgEntry.registry,
             config: dbgEntry.config,
             compiled: dbgEntry.compiled,
-            lastRenderBySegment: new Map<string, string>(),
+            lastRenderBySegment: dbgEntry.lastRenderBySegment,
           };
     return { ok: true, debug: buildDebugSnapshot(req.what, dbgState) };
   }

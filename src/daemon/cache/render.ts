@@ -47,12 +47,20 @@ export interface RenderDeps {
 // every field is populated (a render is possible) or all are null (parse
 // failed and we never had a valid config) — the type makes any other
 // combination unrepresentable.
+//
+// `lastRenderBySegment` is the per-segment standalone ANSI text sink that
+// renderDslLine writes on each render. The map identity is stable for the
+// lifetime of the entry (renderDslLine clears + repopulates it in place),
+// so the debug projection holds a long-lived reference. A segment hidden
+// by `when` is absent from the map — its presence in the keys is the
+// "this segment rendered" signal.
 export interface DslRenderState {
   readonly config: DslConfig;
   readonly store: VariableStore;
   readonly registry: SourceRegistry;
   readonly compiled: CompiledSegments;
   readonly basePalette: PaletteResolver;
+  readonly lastRenderBySegment: Map<string, string>;
 }
 
 // [LAW:one-source-of-truth] Each entry tracks the last *valid* DSL state +
@@ -238,6 +246,7 @@ export class RenderCache {
       registry,
       compiled,
       basePalette: new PaletteResolver(palette),
+      lastRenderBySegment: new Map<string, string>(),
     };
   }
 
@@ -280,10 +289,14 @@ export class RenderCache {
       filenames: [...names],
     }));
 
-    const key =
-      targetPath !== null
-        ? `config:${targetPath}`
-        : `config:<none>:${entry.projectDir ?? ""}:${entry.cwd ?? ""}`;
+    // [LAW:single-enforcer] Watcher keys are per-cache-entry, not per-file.
+    // WatcherRegistry.acquire() is share-by-key — multiple entries that
+    // resolve to the same config file would otherwise share one watcher
+    // slot whose `onInvalidate` is overwritten by the last acquire, and
+    // earlier entries would never reload on file changes. Including
+    // (projectDir, cwd) in every key guarantees each entry owns its own
+    // watcher slot bound to its own reload callback.
+    const key = `config:${entry.projectDir ?? ""}:${entry.cwd ?? ""}:${targetPath ?? "<none>"}`;
 
     entry.watcher = this.deps.watchers.acquire(
       key,
