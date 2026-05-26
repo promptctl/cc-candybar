@@ -269,7 +269,10 @@ describe("RenderCache", () => {
       expect(entry.lastWarning).toContain(cfgJson);
 
       // Removing the duplicate clears the warning on next reload. The
-      // watcher fires on file deletion in the same dir.
+      // watcher fires on file deletion in the same dir. Same fs.watch
+      // warmup gotcha as the create-detection test — give the watcher
+      // a moment to register on the dir before the mutation.
+      await new Promise((r) => setTimeout(r, 100));
       unlinkSync(cfgJson);
       await waitFor(() => entry.lastWarning === null);
       expect(entry.lastWarning).toBeNull();
