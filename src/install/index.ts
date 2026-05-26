@@ -22,10 +22,11 @@ const APP_NAME = "CCCandybarURLHandler";
 // [LAW:one-source-of-truth] `install` writes no renderer flags into
 // ~/.claude/settings.json. The previous CLI override apparatus (--layout,
 // --tray, --display, --show, --segment) is gone (bzh.2). All authoring now
-// lives in `.cc-candybar.json5` (see resolveDslConfigPath); the install
-// command's job is just to wire the URL handler and the daemon entry. To
-// customize, users edit a config file at one of the resolution paths or
-// copy src/demo/statusline.json5 as a starting point.
+// lives in `.cc-candybar.json5` or `.cc-candybar.json` (see
+// resolveDslConfigPath — both extensions are accepted, .json5 preferred);
+// the install command's job is just to wire the URL handler and the daemon
+// entry. To customize, users edit a config file at one of the resolution
+// paths or copy src/demo/statusline.json5 as a starting point.
 const DEFAULT_INSTALL_ARGS: readonly string[] = [];
 
 function shellEscape(arg: string): string {

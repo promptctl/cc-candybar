@@ -6,6 +6,7 @@ import {
   loadDslConfig,
   resolveDslConfigPath,
   dslConfigCandidatePaths,
+  detectConfigCollisions,
   ConfigError,
 } from "../../config/dsl-loader.js";
 import { DEFAULT_DSL_CONFIG } from "../../config/default-dsl-config.js";
@@ -73,15 +74,23 @@ export interface DslRenderState {
 }
 
 // [LAW:one-source-of-truth] Each entry tracks the last *valid* DSL state +
-// the last error from a reload attempt. We never overwrite a valid state
-// with nothing — a parse error means "show the warning but keep rendering
-// with what we had". Errors are scoped to the cache key (which includes
-// cwd / projectDir) so a broken config in repo A cannot pollute repo B.
+// the last error AND last warning from a reload attempt. We never overwrite
+// a valid state with nothing — a parse error means "show the warning but
+// keep rendering with what we had". Errors are scoped to the cache key
+// (which includes cwd / projectDir) so a broken config in repo A cannot
+// pollute repo B.
+//
+// [LAW:one-type-per-behavior] error and warning are distinct severities, so
+// they get distinct channels. `lastError` is load-fatal (config didn't
+// parse / validate); `lastWarning` is advisory (e.g., extension collision —
+// load succeeded but something the user should know about). The render path
+// surfaces both through one diagnostics composer in src/daemon/server.ts.
 export interface CacheEntry {
   projectDir: string | undefined;
   cwd: string | undefined;
   configFilePath: string | null;
   lastError: string | null;
+  lastWarning: string | null;
   state: DslRenderState | null;
   watcher: WatcherHandle | null;
 }
@@ -138,6 +147,7 @@ export class RenderCache {
       cwd,
       configFilePath: null,
       lastError: null,
+      lastWarning: null,
       state: null,
       watcher: null,
     };
@@ -174,14 +184,23 @@ export class RenderCache {
   private reloadInto(entry: CacheEntry): void {
     const resolvedPath = resolveDslConfigPath(entry.projectDir, entry.cwd);
 
+    // [LAW:dataflow-not-control-flow] Collision detection runs every reload,
+    // independent of load success — even if the .json5 fails to parse, the
+    // user still wants to know they have a shadowed .json sibling. Pure
+    // file-existence checks, so cheap. The watcher already monitors every
+    // candidate path, so creating/removing a duplicate triggers reload and
+    // re-detection automatically; nothing else needs to invalidate this.
+    entry.lastWarning = detectConfigCollisions(entry.projectDir, entry.cwd);
+
     // [LAW:dataflow-not-control-flow] One uniform shape: build the new
     // state into locals first, dispose the old registry ONLY after every
     // construction step has succeeded. A failure at any step — parse,
     // registration, palette resolution — leaves `entry.state` and
     // `entry.state.registry` untouched, so the daemon keeps rendering the
-    // last-known-good config plus a warning icon (composeWithError reads
-    // `entry.lastError`). The "[LAW:single-enforcer] dispose before swap"
-    // contract holds for the swap; the construction is upstream of it.
+    // last-known-good config plus a warning icon (composeWithDiagnostics
+    // reads `entry.lastError` and `entry.lastWarning`). The
+    // "[LAW:single-enforcer] dispose before swap" contract holds for the
+    // swap; the construction is upstream of it.
     let newState: DslRenderState;
     try {
       newState = this.buildState(entry, resolvedPath);

@@ -69,11 +69,11 @@ Wire format lives in `src/daemon/protocol.ts`. The Rust client mirrors it as a l
 `resolveDslConfigPath(projectDir, cwd)` picks the first existing path from this order:
 
 1. `$CC_CANDYBAR_CONFIG` (env var, literal path with `~` expansion)
-2. `<projectDir>/.cc-candybar.json5`
-3. `<cwd>/.cc-candybar.json5`
-4. `$XDG_CONFIG_HOME/cc-candybar/config.json5` (defaulting to `~/.config/cc-candybar/config.json5`)
+2. `<projectDir>/.cc-candybar.json5` (then `.json` at the same location)
+3. `<cwd>/.cc-candybar.json5` (then `.json`)
+4. `$XDG_CONFIG_HOME/cc-candybar/config.json5` (then `.json`; defaults to `~/.config/cc-candybar/config.json5`)
 
-If none exist, `RenderCache.reloadInto` falls back to `DEFAULT_DSL_CONFIG` (`src/config/default-dsl-config.ts`) — the bundled standard library, covering every built-in segment. A user file is a **complete** replacement; there is no merge with defaults. JSON5 supports inline comments, so copying the demo (`src/demo/statusline.json5`) or the default-config TypeScript constant into `.cc-candybar.json5` is the customization path.
+Both `.json5` and `.json` are accepted (JSON ⊂ JSON5, same parser) — `.json5` wins when both exist at the same location, and `detectConfigCollisions` surfaces the shadowed sibling as a warning so the user removes the duplicate. If none exist, `RenderCache.reloadInto` falls back to `DEFAULT_DSL_CONFIG` (`src/config/default-dsl-config.ts`) — the bundled standard library, covering every built-in segment. A user file is a **complete** replacement; there is no merge with defaults. JSON5 supports inline comments, so copying the demo (`src/demo/statusline.json5`) or the default-config TypeScript constant into `.cc-candybar.json5` is the customization path.
 
 ### Renderer (`src/dsl/render.ts`)
 

@@ -4,12 +4,7 @@ import process from "node:process";
 import { fileURLToPath } from "node:url";
 import { daemonDir, pidPath, socketPath, sessionStatePath } from "./paths";
 import { dlog, closeLog } from "./log";
-import {
-  PROTOCOL_VERSION,
-  encodeFrame,
-  makeFrameReader,
-  sanitizeTermCols,
-} from "./protocol";
+import { PROTOCOL_VERSION, encodeFrame, makeFrameReader } from "./protocol";
 import type { Request, Response } from "./protocol";
 import { GitDataProvider } from "./cache/git";
 import { CachedUsageProvider } from "./cache/usage";
@@ -556,12 +551,11 @@ async function handleRequest(req: Request): Promise<Response> {
       // daemon's process.cwd(), so config resolution depends only on request
       // data — the daemon's own working directory must not influence output.
       const entry = renderCache.getOrCreate(req.args, projectDir, req.cwd);
-      // [LAW:single-enforcer] Sanitize wire-supplied termCols here at the
-      // trust boundary; sanitized but currently unused — terminal-width-aware
+      // termCols on the wire is unused today — terminal-width-aware
       // wrapping is a future BuildLineOptions extension (see strip.ts).
-      // Sanitization stays at the boundary so when wrapping arrives, the
-      // type is already correct.
-      void sanitizeTermCols(req.termCols);
+      // When that arrives, `const termCols = sanitizeTermCols(req.termCols)`
+      // sanitizes at the boundary; until then we accept the field on the
+      // wire (back-compat with clients that send it) and ignore it.
       // [LAW:dataflow-not-control-flow] Two outcomes fall out of one rule:
       // body = state ? renderDslLine(state) : "" ; output = body + icon
       // No special-case branches — same composition every render.
@@ -595,13 +589,17 @@ async function handleRequest(req: Request): Promise<Response> {
           entry.state.lastRenderCellsBySegment,
         );
       }
-      const output = composeWithError(body, entry.lastError);
+      const output = composeWithDiagnostics(
+        body,
+        entry.lastError,
+        entry.lastWarning,
+      );
       const ms = Date.now() - t0;
       const g = gitService.getStats();
       const u = usageProvider.getStats();
       dlog(
         "info",
-        `render sid=${req.hookData.session_id ?? "?"} took=${ms}ms git=${g.size}/${g.hits}h/${g.misses}m usage=${u.size}/${u.hits}h/${u.misses}m err=${entry.lastError ? "Y" : "N"}`,
+        `render sid=${req.hookData.session_id ?? "?"} took=${ms}ms git=${g.size}/${g.hits}h/${g.misses}m usage=${u.size}/${u.hits}h/${u.misses}m err=${entry.lastError ? "Y" : "N"} warn=${entry.lastWarning ? "Y" : "N"}`,
       );
       return { ok: true, output: output + "\n" };
     } catch (e) {
@@ -673,27 +671,80 @@ async function handleRequest(req: Request): Promise<Response> {
   };
 }
 
-// --- error-icon composition ---
+// --- diagnostics composition ---
 //
-// [LAW:no-silent-fallbacks] Bad config can't quietly degrade output. We
-// either render the user's actual bar (parse OK), the bar plus a warning
-// (reload failed but a prior valid config exists), or *only* the warning
-// (startup-error: never had a valid config). Either way the failure is
-// visible at the point of impact.
+// [LAW:no-silent-fallbacks] Bad config can't quietly degrade output. The
+// render pipeline carries two independent diagnostic channels:
+//   error   — load-fatal: parse/validation failed; bar is last-known-good
+//             or empty. Rendered red.
+//   warning — advisory: load succeeded but something needs attention (e.g.
+//             same-location .json5 + .json collision). Rendered amber.
+// Either way the failure is visible at the point of impact, and each
+// channel has its own click verb (show-config-error / show-config-warning)
+// so the operator can copy the message to clipboard for inspection.
+//
+// [LAW:one-type-per-behavior] Two severities → two channels. The
+// composer's signature carries both; severity is encoded in WHICH
+// argument is non-null, not in a string prefix or a tag inside the
+// message. The two icons render independently — both can show at once.
 const ERROR_ICON_FG = "\x1b[38;2;255;255;255m";
 const ERROR_ICON_BG = "\x1b[48;2;200;40;40m";
+const WARNING_ICON_FG = "\x1b[38;2;0;0;0m";
+const WARNING_ICON_BG = "\x1b[48;2;220;160;40m";
 const ANSI_RESET = "\x1b[0m";
 const OSC8_OPEN = "\x1b]8;;";
 const OSC8_CLOSE = "\x1b]8;;\x1b\\";
 const ST = "\x1b\\";
 
-function composeWithError(body: string, error: string | null): string {
-  if (!error) return body;
-  const url = `cc-candybar://show-config-error/${encodeURIComponent(error)}`;
-  const link = `${OSC8_OPEN}${url}${ST}${ERROR_ICON_BG}${ERROR_ICON_FG} ⚠ config error ${ANSI_RESET}${OSC8_CLOSE}`;
-  // No body → emit the icon alone (startup-error case). Body present →
-  // prepend on its own line so it's visible regardless of bar width.
-  return body ? `${link}\n${body}` : link;
+function makeDiagnosticLink(
+  verb: "show-config-error" | "show-config-warning",
+  message: string,
+  bg: string,
+  fg: string,
+  label: string,
+): string {
+  const url = `cc-candybar://${verb}/${encodeURIComponent(message)}`;
+  return `${OSC8_OPEN}${url}${ST}${bg}${fg} ${label} ${ANSI_RESET}${OSC8_CLOSE}`;
+}
+
+function composeWithDiagnostics(
+  body: string,
+  error: string | null,
+  warning: string | null,
+): string {
+  // [LAW:dataflow-not-control-flow] Diagnostics list is data; the
+  // composer walks it. Each non-null channel contributes one prefix line.
+  // Order is error-first (more severe), then warning, then body — so the
+  // operator's eye lands on the most critical message at the top.
+  const prefixes: string[] = [];
+  if (error) {
+    prefixes.push(
+      makeDiagnosticLink(
+        "show-config-error",
+        error,
+        ERROR_ICON_BG,
+        ERROR_ICON_FG,
+        "⚠ config error",
+      ),
+    );
+  }
+  if (warning) {
+    prefixes.push(
+      makeDiagnosticLink(
+        "show-config-warning",
+        warning,
+        WARNING_ICON_BG,
+        WARNING_ICON_FG,
+        "⚠ config warning",
+      ),
+    );
+  }
+  if (prefixes.length === 0) return body;
+  // No body → emit the diagnostic strip alone (startup-error case). Body
+  // present → prepend on its own line so it's visible regardless of bar
+  // width. Multiple diagnostics stack on their own lines.
+  const strip = prefixes.join("\n");
+  return body ? `${strip}\n${body}` : strip;
 }
 
 // --- click verb dispatch ---

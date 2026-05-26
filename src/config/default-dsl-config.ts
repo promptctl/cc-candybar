@@ -1,15 +1,16 @@
 // [LAW:one-source-of-truth] The bundled default DslConfig — the statusline
-// rendered when no `.cc-candybar.json5` is present at any resolution layer.
-// This is the canonical port of every built-in segment as a DSL declaration,
-// covering the surface previously expressed by the legacy renderer that was
-// retired in bzh.2.
+// rendered when no `.cc-candybar.json5` (or `.cc-candybar.json`) is present
+// at any resolution layer. This is the canonical port of every built-in
+// segment as a DSL declaration, covering the surface previously expressed
+// by the legacy renderer that was retired in bzh.2.
 //
 // [LAW:single-enforcer] One default. The daemon's render cache either loads
 // the user's DSL file or falls back to this constant — no merging, no
 // per-segment cascade. Customization is a complete config-file replacement;
 // JSON5 supports inline comments, so users can copy this file (or the
 // runnable demo at `src/demo/statusline.json5`) into `.cc-candybar.json5`
-// and edit.
+// and edit. The `.json` extension is also accepted (JSON ⊂ JSON5, same
+// parser); `.json5` is preferred when both exist at the same location.
 //
 // [LAW:dataflow-not-control-flow] Every segment is declared regardless of
 // whether the default `layout` includes it — `layout` is the value that

@@ -34,12 +34,14 @@ Restart Claude Code. The statusline appears with the bundled default layout (dir
 
 ## Customization
 
-Drop a `.cc-candybar.json5` at any of these locations (highest precedence first):
+Drop a `.cc-candybar.json5` (or `.cc-candybar.json` — both extensions are accepted) at any of these locations (highest precedence first):
 
 1. `$CC_CANDYBAR_CONFIG` (literal path, supports `~` expansion)
-2. `<project>/.cc-candybar.json5`
-3. `<cwd>/.cc-candybar.json5`
-4. `$XDG_CONFIG_HOME/cc-candybar/config.json5` (defaults to `~/.config/cc-candybar/config.json5`)
+2. `<project>/.cc-candybar.json5` (then `.json` at the same location)
+3. `<cwd>/.cc-candybar.json5` (then `.json`)
+4. `$XDG_CONFIG_HOME/cc-candybar/config.json5` (then `.json`; defaults to `~/.config/cc-candybar/config.json5`)
+
+JSON is a strict subset of JSON5, so the same parser handles both — `.json5` is the documented format (supports inline comments, trailing commas, unquoted keys), `.json` is the legacy/compat extension. When both exist at the same location, `.json5` wins and the bar shows a persistent warning so you can remove the shadowed duplicate.
 
 The file is a **complete** replacement for the bundled default — no merge layer. Start by copying `src/demo/statusline.json5` from the repo as a minimal example, or `src/config/default-dsl-config.ts` for the full standard library.
 

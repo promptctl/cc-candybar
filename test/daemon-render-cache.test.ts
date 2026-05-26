@@ -5,7 +5,7 @@
 // eviction. The legacy renderer's render-cache tests were deleted in
 // bzh.2; this is the new, smaller test set scoped to the DSL spine.
 
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -52,9 +52,13 @@ function mkConfigDir(): { dir: string; cleanup: () => void } {
 
 // Poll for a condition with timeouts that comfortably exceed
 // WatcherRegistry's 50ms debounce + macOS fs.watch's variable latency.
+// 15s is a generous bound — macOS FSEvents can briefly stall when
+// multiple test suites run watchers in sequence; the timeout is high
+// enough that real failures (watcher not firing at all) still surface
+// as a clear timeout rather than a flake.
 async function waitFor(
   cond: () => boolean,
-  { timeoutMs = 5000, intervalMs = 50 } = {},
+  { timeoutMs = 15000, intervalMs = 50 } = {},
 ): Promise<void> {
   const deadline = Date.now() + timeoutMs;
   while (!cond() && Date.now() < deadline) {
@@ -63,6 +67,30 @@ async function waitFor(
 }
 
 describe("RenderCache", () => {
+  // [LAW:single-enforcer] Isolate XDG_CONFIG_HOME and CC_CANDYBAR_CONFIG for
+  // every test in this file. dslConfigCandidatePaths consults both at call
+  // time; without isolation, tests would pick up the user's real config at
+  // `$HOME/.config/cc-candybar/config.{json5,json}` and fail in ways
+  // unrelated to what they're asserting. The override points at a fresh
+  // tmpdir scoped to this test suite so the XDG layer is empty by default.
+  let xdgIsolateDir: string;
+  let savedXdg: string | undefined;
+  let savedCfg: string | undefined;
+  beforeAll(() => {
+    xdgIsolateDir = mkdtempSync(join(tmpdir(), "cc-candybar-cache-xdg-"));
+    savedXdg = process.env.XDG_CONFIG_HOME;
+    savedCfg = process.env.CC_CANDYBAR_CONFIG;
+    process.env.XDG_CONFIG_HOME = xdgIsolateDir;
+    delete process.env.CC_CANDYBAR_CONFIG;
+  });
+  afterAll(() => {
+    if (savedXdg === undefined) delete process.env.XDG_CONFIG_HOME;
+    else process.env.XDG_CONFIG_HOME = savedXdg;
+    if (savedCfg === undefined) delete process.env.CC_CANDYBAR_CONFIG;
+    else process.env.CC_CANDYBAR_CONFIG = savedCfg;
+    rmSync(xdgIsolateDir, { recursive: true, force: true });
+  });
+
   test("cache identity ignores args", () => {
     const { cache, cleanups } = makeCache();
     try {
@@ -145,6 +173,13 @@ describe("RenderCache", () => {
       // The bundled default's layout is non-empty.
       const defaultLayoutLen = entry.state!.config.layout.length;
 
+      // Give fs.watch a moment to attach to the parent dir before we
+      // start writing into it. Without this, on macOS the writeFileSync
+      // can land in the brief window after `getOrCreate` returns but
+      // before the FSEvents subscription is actually active, and the
+      // change goes unseen.
+      await new Promise((r) => setTimeout(r, 100));
+
       // Create the project-local file. The watcher should fire.
       const cfg = join(dir, ".cc-candybar.json5");
       writeFileSync(
@@ -168,6 +203,79 @@ describe("RenderCache", () => {
       expect(entry.state!.config.layout).toEqual(["only"]);
       // Sanity: was actually different from the default.
       expect(entry.state!.config.layout.length).not.toBe(defaultLayoutLen);
+    } finally {
+      for (const fn of cleanups) fn();
+      cleanup();
+    }
+  });
+
+  test(".json extension is loaded by the cache (legacy compat)", () => {
+    const { dir, cleanup } = mkConfigDir();
+    const { cache, cleanups } = makeCache();
+    try {
+      // Write the config as .json (not .json5) — the same parser handles
+      // both because JSON ⊂ JSON5. Filename is the only difference.
+      const cfg = join(dir, ".cc-candybar.json");
+      writeFileSync(
+        cfg,
+        JSON.stringify({
+          globals: {},
+          variables: { x: { kind: "literal", value: "from-json" } },
+          segments: {
+            only: {
+              template: " {{ .x }} ",
+              bg: "surface",
+              fg: "foreground",
+            },
+          },
+          layout: ["only"],
+        }),
+      );
+      const entry = cache.getOrCreate([], dir, dir);
+      expect(entry.lastError).toBeNull();
+      expect(entry.configFilePath).toBe(cfg);
+      expect(entry.state!.config.layout).toEqual(["only"]);
+    } finally {
+      for (const fn of cleanups) fn();
+      cleanup();
+    }
+  });
+
+  test("lastWarning is set when .json5 and .json coexist at same location", async () => {
+    const { dir, cleanup } = mkConfigDir();
+    const { cache, cleanups } = makeCache();
+    try {
+      // Both files at the same location — .json5 wins on resolution, but
+      // detectConfigCollisions surfaces the duplicate.
+      const cfgJson5 = join(dir, ".cc-candybar.json5");
+      const cfgJson = join(dir, ".cc-candybar.json");
+      const validCfg = JSON.stringify({
+        globals: {},
+        variables: { x: { kind: "literal", value: "ok" } },
+        segments: {
+          s: { template: " {{ .x }} ", bg: "surface", fg: "foreground" },
+        },
+        layout: ["s"],
+      });
+      writeFileSync(cfgJson5, validCfg);
+      writeFileSync(cfgJson, validCfg);
+
+      const entry = cache.getOrCreate([], dir, dir);
+      // Load succeeded — .json5 won; warning is the advisory.
+      expect(entry.lastError).toBeNull();
+      expect(entry.configFilePath).toBe(cfgJson5);
+      expect(entry.lastWarning).not.toBeNull();
+      expect(entry.lastWarning).toContain(cfgJson5);
+      expect(entry.lastWarning).toContain(cfgJson);
+
+      // Removing the duplicate clears the warning on next reload. The
+      // watcher fires on file deletion in the same dir.
+      unlinkSync(cfgJson);
+      await waitFor(() => entry.lastWarning === null);
+      expect(entry.lastWarning).toBeNull();
+      // The .json5 is still the resolved file; render state intact.
+      expect(entry.configFilePath).toBe(cfgJson5);
+      expect(entry.lastError).toBeNull();
     } finally {
       for (const fn of cleanups) fn();
       cleanup();
