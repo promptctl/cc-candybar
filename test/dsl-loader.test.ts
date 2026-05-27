@@ -7,17 +7,17 @@
 
 import {
   ConfigError,
-  parseDslConfig,
   effectiveSegmentPalette,
   extractTemplateRefs,
   findKeyLine,
 } from "../src/config/dsl-loader";
+import { parseAndValidate } from "./helpers/parse-and-validate";
 
 const FILE = "/tmp/test.json5";
 
 function expectError(source: string): ConfigError {
   try {
-    parseDslConfig(FILE, source);
+    parseAndValidate(FILE, source);
   } catch (err) {
     if (err instanceof ConfigError) return err;
     throw err;
@@ -61,7 +61,7 @@ describe("loadDslConfig — JSON5 syntax", () => {
   });
 
   test("trailing comma + comments are accepted (JSON5 superset)", () => {
-    const cfg = parseDslConfig(
+    const cfg = parseAndValidate(
       FILE,
       `// a comment
 { globals: { default_bg: "blue", }, /* trailing comma OK */ }`,
@@ -78,7 +78,7 @@ describe("loadDslConfig — JSON5 syntax", () => {
 
 describe("loadDslConfig — top-level shape", () => {
   test("empty config is valid", () => {
-    const cfg = parseDslConfig(FILE, "{}");
+    const cfg = parseAndValidate(FILE, "{}");
     expect(cfg).toEqual({ globals: {}, variables: {}, segments: {}, layout: [] });
   });
 
@@ -122,7 +122,7 @@ describe("loadDslConfig — top-level shape", () => {
 
 describe("loadDslConfig — globals", () => {
   test("all string fields accepted", () => {
-    const cfg = parseDslConfig(
+    const cfg = parseAndValidate(
       FILE,
       `{ globals: {
         default_bg: "black", default_fg: "white",
@@ -174,7 +174,7 @@ describe("loadDslConfig — globals", () => {
 
 describe("loadDslConfig — variable source kinds", () => {
   test("literal: string/number/boolean values", () => {
-    const cfg = parseDslConfig(
+    const cfg = parseAndValidate(
       FILE,
       `{ variables: {
         a: { kind: "literal", value: "hi" },
@@ -199,7 +199,7 @@ describe("loadDslConfig — variable source kinds", () => {
       path: "variables.sid.path",
       message: "variables.sid.path must be a string",
     });
-    const ok = parseDslConfig(
+    const ok = parseAndValidate(
       FILE,
       `{ variables: { sid: { kind: "input", path: "session.id" } } }`,
     );
@@ -236,7 +236,7 @@ describe("loadDslConfig — variable source kinds", () => {
       path: "variables.x.cache",
       message: "shell variables must declare a cache policy",
     });
-    const ok = parseDslConfig(
+    const ok = parseAndValidate(
       FILE,
       `{ variables: { x: { kind: "shell", command: "uptime", cache: { ttl: "5s" } } } }`,
     );
@@ -252,7 +252,7 @@ describe("loadDslConfig — variable source kinds", () => {
       path: "variables.x.path",
       message: "variables.x.path must be a string",
     });
-    const ok = parseDslConfig(
+    const ok = parseAndValidate(
       FILE,
       `{ variables: { x: { kind: "file", path: "/etc/hostname", readMode: "first-line", cache: { watch_file: "/etc/hostname" } } } }`,
     );
@@ -279,7 +279,7 @@ describe("loadDslConfig — variable source kinds", () => {
       path: "variables.x.template",
       message: "variables.x.template must be a string",
     });
-    const ok = parseDslConfig(
+    const ok = parseAndValidate(
       FILE,
       `{ variables: { cwd_short: { kind: "template", template: "static" } } }`,
     );
@@ -312,7 +312,7 @@ describe("loadDslConfig — variable source kinds", () => {
       path: "variables.b.cache",
       message: "git variables must declare a cache policy",
     });
-    const ok = parseDslConfig(
+    const ok = parseAndValidate(
       FILE,
       `{ variables: { b: { kind: "git", field: "branch", cache: { watch_file: ".git/HEAD" }, default: "(detached)" } } }`,
     );
@@ -336,7 +336,7 @@ describe("loadDslConfig — cache policies", () => {
       path: "variables.x.cache.ttl",
       message: "cache.ttl must be a duration string",
     });
-    const ok = parseDslConfig(FILE, base(`{ ttl: "100ms" }`));
+    const ok = parseAndValidate(FILE, base(`{ ttl: "100ms" }`));
     expect(ok.variables.x).toEqual({
       kind: "shell",
       command: "echo",
@@ -367,7 +367,7 @@ describe("loadDslConfig — cache policies", () => {
       path: "variables.x.cache.never",
       message: "cache.never must be the literal boolean true",
     });
-    const ok = parseDslConfig(
+    const ok = parseAndValidate(
       FILE,
       `{ variables: { x: { kind: "template", template: "x", cache: { never: true } } } }`,
     );
@@ -419,7 +419,7 @@ describe("loadDslConfig — segments", () => {
       path: "segments.x.width",
       message: 'width must be "auto" or a positive integer',
     });
-    const ok = parseDslConfig(
+    const ok = parseAndValidate(
       FILE,
       `{ segments: { x: { template: "t", width: 12 }, y: { template: "u", width: "auto" } } }`,
     );
@@ -449,7 +449,7 @@ describe("loadDslConfig — segments", () => {
   });
 
   test("optional fields preserved when valid", () => {
-    const cfg = parseDslConfig(
+    const cfg = parseAndValidate(
       FILE,
       `{ segments: { context: {
         template: "{{ .context_percent }}%",
@@ -478,7 +478,7 @@ describe("loadDslConfig — palette switch", () => {
   const ALLOWED = new Set(["gruvbox", "monokai", "solar"]);
 
   test("globals.palette is preserved when a known name", () => {
-    const cfg = parseDslConfig(
+    const cfg = parseAndValidate(
       FILE,
       `{ globals: { palette: "gruvbox" }, segments: { cwd: { template: "t" } } }`,
     );
@@ -486,7 +486,7 @@ describe("loadDslConfig — palette switch", () => {
   });
 
   test("per-segment palette is preserved when a known name", () => {
-    const cfg = parseDslConfig(
+    const cfg = parseAndValidate(
       FILE,
       `{ globals: { palette: "gruvbox" }, segments: {
         cwd: { template: "t" },
@@ -528,7 +528,7 @@ describe("loadDslConfig — palette switch", () => {
 
   test("injected allowed set overrides the default registry", () => {
     // A name in the injected set passes even though it is not a real theme.
-    const ok = parseDslConfig(
+    const ok = parseAndValidate(
       FILE,
       `{ globals: { palette: "solar" } }`,
       ALLOWED,
@@ -539,7 +539,7 @@ describe("loadDslConfig — palette switch", () => {
     // injected set is authoritative, not merely additive.
     const err = (() => {
       try {
-        parseDslConfig(FILE, `{ globals: { palette: "nord" } }`, ALLOWED);
+        parseAndValidate(FILE, `{ globals: { palette: "nord" } }`, ALLOWED);
       } catch (e) {
         if (e instanceof ConfigError) return e;
         throw e;
@@ -601,7 +601,7 @@ describe("loadDslConfig — layout", () => {
   });
 
   test("valid layout passes through", () => {
-    const cfg = parseDslConfig(
+    const cfg = parseAndValidate(
       FILE,
       `{ segments: { a: { template: "x" }, b: { template: "y" } }, layout: ["a", "b", "a"] }`,
     );
@@ -623,7 +623,7 @@ describe("loadDslConfig — cross-references", () => {
   });
 
   test("template referencing declared variable passes", () => {
-    const cfg = parseDslConfig(
+    const cfg = parseAndValidate(
       FILE,
       `{ variables: { cwd: { kind: "input", path: "cwd" } },
          segments: { d: { template: "{{ .cwd }}" } } }`,
@@ -632,7 +632,7 @@ describe("loadDslConfig — cross-references", () => {
   });
 
   test("dotted ref resolves to namespace prefix (.session matches session.id)", () => {
-    const cfg = parseDslConfig(
+    const cfg = parseAndValidate(
       FILE,
       `{ variables: { "session.id": { kind: "input", path: "session.id" } },
          segments: { s: { template: "{{ .session.id }}" } } }`,
@@ -659,7 +659,7 @@ describe("loadDslConfig — cross-references", () => {
     // .session where only `session.id` is declared: scope proxy returns a
     // sub-proxy. Loader treats this as a valid ref because the rendering
     // failure (if any) is the template engine's job, not the loader's.
-    const cfg = parseDslConfig(
+    const cfg = parseAndValidate(
       FILE,
       `{ variables: { "session.id": { kind: "input", path: "session.id" } },
          segments: { s: { template: "{{ if .session }}x{{ end }}" } } }`,
@@ -669,7 +669,7 @@ describe("loadDslConfig — cross-references", () => {
 
   test("string literals inside templates are NOT scanned for refs", () => {
     // A literal ".foo.bar" inside quotes should not count as a reference.
-    const cfg = parseDslConfig(
+    const cfg = parseAndValidate(
       FILE,
       `{ segments: { s: { template: "{{ printf \\".foo.bar\\" }}" } } }`,
     );
@@ -706,7 +706,7 @@ describe("loadDslConfig — cross-references", () => {
   });
 
   test("depends_on across declared variables passes", () => {
-    const cfg = parseDslConfig(
+    const cfg = parseAndValidate(
       FILE,
       `{ variables: {
         branch: { kind: "git", field: "branch", cache: { watch_file: ".git/HEAD" } },
@@ -717,7 +717,7 @@ describe("loadDslConfig — cross-references", () => {
   });
 
   test("segment-local vars visible to that segment's template", () => {
-    const cfg = parseDslConfig(
+    const cfg = parseAndValidate(
       FILE,
       `{ segments: {
         s: {
@@ -730,7 +730,7 @@ describe("loadDslConfig — cross-references", () => {
   });
 
   test("segment-local var namespaced ref passes from same segment", () => {
-    const cfg = parseDslConfig(
+    const cfg = parseAndValidate(
       FILE,
       `{ segments: {
         s: {
@@ -756,7 +756,7 @@ describe("loadDslConfig — cross-references", () => {
   });
 
   test("namespaced ref to another segment's local passes", () => {
-    const cfg = parseDslConfig(
+    const cfg = parseAndValidate(
       FILE,
       `{ segments: {
         a: { template: "x", vars: { val: { kind: "literal", value: "1" } } },
@@ -805,7 +805,7 @@ describe("loadDslConfig — cycle detection", () => {
   });
 
   test("non-cycle through input-kind var is fine", () => {
-    const cfg = parseDslConfig(
+    const cfg = parseAndValidate(
       FILE,
       `{ variables: {
         cwd_short: { kind: "template", template: "{{ .cwd }}" },
@@ -816,7 +816,7 @@ describe("loadDslConfig — cycle detection", () => {
   });
 
   test("DAG (no cycle) passes", () => {
-    const cfg = parseDslConfig(
+    const cfg = parseAndValidate(
       FILE,
       `{ variables: {
         a: { kind: "template", template: "{{ .b }} {{ .c }}" },
@@ -852,7 +852,7 @@ describe("loadDslConfig — cycle detection", () => {
   });
 
   test("DAG with depends_on does not false-positive", () => {
-    const cfg = parseDslConfig(
+    const cfg = parseAndValidate(
       FILE,
       `{ variables: {
         a: { kind: "shell", command: "echo a", cache: { depends_on: ["b"] } },
@@ -988,7 +988,7 @@ describe("loadDslConfig — valid corpus", () => {
       },
       layout: ["cwd", "branch", "load"],
     }`;
-    const cfg = parseDslConfig(FILE, source);
+    const cfg = parseAndValidate(FILE, source);
     expect(cfg.globals.hueStep).toBe(8);
     expect(Object.keys(cfg.variables).sort()).toEqual([
       "branch", "constant", "cwd", "cwd_short", "home", "hostname",
@@ -998,7 +998,7 @@ describe("loadDslConfig — valid corpus", () => {
   });
 
   test("minimal valid config loads to canonical empty shape", () => {
-    expect(parseDslConfig(FILE, "{}")).toEqual({
+    expect(parseAndValidate(FILE, "{}")).toEqual({
       globals: {},
       variables: {},
       segments: {},

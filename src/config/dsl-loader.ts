@@ -1,13 +1,23 @@
-// [LAW:single-enforcer] loadDslConfig is the single entry point for the new
-// DSL config. No parallel parser, no per-caller validation pass. Anything
-// downstream that wants a DslConfig calls this and trusts the returned shape.
+// [LAW:one-type-per-behavior] Three primitives, three concerns:
 //
-// [LAW:dataflow-not-control-flow] Validation is a series of passes, each
-// accumulating issues into a list. We never short-circuit on the first error
-// — the user sees every problem at once (compiler-style). The only branch
-// is "any structural errors? then skip cross-ref/cycle passes (they assume
-// valid structures)" — and even that is a single gate, not a scattered set
-// of guards.
+//   parseDslConfig (text → RawDslConfig)
+//     JSON5 syntax + per-record structural validation. Preserves absence of
+//     top-level keys — `raw.layout === undefined` is distinct from `raw.layout
+//     === []`. Throws ConfigError on syntax / structural problems.
+//
+//   mergeWithDefault (RawDslConfig + DslConfig → DslConfig)
+//     Cascade: shallow merge globals fields, by-name merge variables and
+//     segments, wholesale layout replacement when present. Pure function.
+//
+//   validateConfig (DslConfig → ValidatedConfig)
+//     Cross-references + cycle detection on the merged shape. Sole producer
+//     of ValidatedConfig. Throws ConfigError on cross-ref / cycle problems.
+//
+// loadConfig (path|null → DslConfig) wires parse+merge for the daemon's
+// production path. validateConfig finishes the chain.
+//
+// [LAW:dataflow-not-control-flow] Validation passes accumulate issues into
+// a list; consumers see every problem at once (compiler-style).
 
 import fs from "node:fs";
 import os from "node:os";
@@ -27,11 +37,14 @@ import {
   type GitField,
   type Globals,
   type JustifyMode,
+  type RawDslConfig,
   type SegmentDecl,
   type SourceKind,
   type TruncateMode,
+  type ValidatedConfig,
   type VariableDecl,
 } from "./dsl-types.js";
+import { DEFAULT_DSL_CONFIG } from "./default-dsl-config.js";
 import { listResolvablePaletteNames } from "../themes/cascade.js";
 
 // ─── Public types ────────────────────────────────────────────────────────────
@@ -232,42 +245,109 @@ export function detectConfigCollisions(
   return `config-extension collision: ${lines.join("; ")} — remove the duplicate`;
 }
 
-// ─── Entry point ─────────────────────────────────────────────────────────────
+// ─── Three-stage pipeline ────────────────────────────────────────────────────
 
 /**
- * Load and validate a JSON5 DSL config file.
+ * Load a JSON5 DSL config file from disk and merge it with the bundled
+ * default. Returns the effective DslConfig.
  *
- * Returns a fully-validated DslConfig (every legal state representable, every
- * illegal state unrepresentable: closed source-kind set, exactly-one cache
- * key, no dangling cross-refs, no template cycles).
+ * `path = null` means "no user file exists" — returns the default unchanged
+ * (uniform merge against an empty raw, which is deep-equal to the default).
+ * No consumer branches on file presence; that branch lives inside loadConfig
+ * exactly once.
  *
- * Throws ConfigError aggregating every problem found.
+ * Throws ConfigError on JSON5 syntax / structural / per-record validation
+ * failures. Cross-references and cycles are validateConfig()'s job.
+ *
+ * [LAW:dataflow-not-control-flow] One function, one branch, same operations
+ * each call.
  */
-export function loadDslConfig(
-  filePath: string,
+export function loadConfig(
+  path: string | null,
+  dflt: DslConfig = DEFAULT_DSL_CONFIG,
   allowedPalettes?: ReadonlySet<string>,
 ): DslConfig {
-  const source = fs.readFileSync(filePath, "utf-8");
-  return parseDslConfig(filePath, source, allowedPalettes);
+  const raw: RawDslConfig =
+    path === null
+      ? {}
+      : parseDslConfig(path, fs.readFileSync(path, "utf-8"), allowedPalettes);
+  return mergeWithDefault(raw, dflt);
 }
 
 /**
- * Same as loadDslConfig but takes the source text directly. Useful in tests
- * (no fs mocking required).
+ * Promote a merged DslConfig to a ValidatedConfig by running cross-references
+ * and cycle detection. Sole producer of ValidatedConfig in the codebase — the
+ * phantom brand makes "the renderer never receives an unvalidated config" a
+ * compile-time invariant, not a runtime convention.
+ *
+ * Throws ConfigError aggregating every issue.
+ *
+ * [LAW:single-enforcer] One cast site, here, exclusive.
+ */
+export function validateConfig(
+  config: DslConfig,
+  filePath = "<config>",
+  source = "",
+  allowedPalettes: ReadonlySet<string> = new Set(listResolvablePaletteNames()),
+): ValidatedConfig {
+  const issues: ConfigIssue[] = [];
+  const ctx: ValidateCtx = { source, issues, allowedPalettes };
+  validateCrossReferences(ctx, config);
+  validateNoCycles(ctx, config);
+  if (issues.length > 0) {
+    throw new ConfigError(filePath, issues);
+  }
+  return config as ValidatedConfig;
+}
+
+/**
+ * Merge a RawDslConfig on top of a default DslConfig. Pure function.
+ *
+ *   globals    : shallow merge per field (user wins per-field)
+ *   variables  : merge by name (user wins per-name)
+ *   segments   : merge by name (user wins per-name)
+ *   layout     : user replaces wholesale when present and non-empty.
+ *                Both absent and `[]` fall back to the default — `[]` is
+ *                "user wrote nothing for this", same effective intent as
+ *                omitting the key.
+ *
+ * [LAW:one-source-of-truth] The single point that consults DEFAULT_DSL_CONFIG
+ * for missing keys. Adding a new merged top-level key is a new line here, not
+ * a new branch at consumers.
+ */
+export function mergeWithDefault(
+  raw: RawDslConfig,
+  dflt: DslConfig = DEFAULT_DSL_CONFIG,
+): DslConfig {
+  return {
+    globals: { ...dflt.globals, ...(raw.globals ?? {}) },
+    variables: { ...dflt.variables, ...(raw.variables ?? {}) },
+    segments: { ...dflt.segments, ...(raw.segments ?? {}) },
+    layout:
+      raw.layout !== undefined && raw.layout.length > 0
+        ? raw.layout
+        : dflt.layout,
+  };
+}
+
+/**
+ * Parse a JSON5 DSL config source into a RawDslConfig. JSON5 syntax + per-
+ * record structural validation. Cross-references and cycles are NOT checked
+ * here — they belong to validateConfig, which runs on the merged shape.
+ *
+ * Returned shape preserves absence: a user file with no `layout` key yields
+ * `raw.layout === undefined`, distinct from an explicit `layout: []`.
  *
  * `allowedPalettes` is the set of palette names a `palette:` field may name.
  * It defaults to every name that resolves to a concrete Palette, so production
  * always validates loudly against the real registry. Tests inject a custom set
  * to exercise validation without depending on registry contents.
- * [LAW:no-defensive-null-guards] A defaulted real-registry set is not a silent
- * fallback — the default IS the production behavior (validate against reality),
- * not a "skip validation if absent" escape hatch.
  */
 export function parseDslConfig(
   filePath: string,
   source: string,
   allowedPalettes: ReadonlySet<string> = new Set(listResolvablePaletteNames()),
-): DslConfig {
+): RawDslConfig {
   // ── Stage 1: JSON5 syntax. A parse error here is single, immediate, and
   // carries line/col from the json5 package — no point continuing to other
   // passes that need a parsed structure to inspect.
@@ -276,7 +356,8 @@ export function parseDslConfig(
   const issues: ConfigIssue[] = [];
   const ctx: ValidateCtx = { source, issues, allowedPalettes };
 
-  // ── Stage 2: top-level shape + per-record shape.
+  // ── Stage 2: top-level shape + per-record shape. Absence survives as
+  // `undefined` in the returned RawDslConfig.
   if (!isPlainObject(raw)) {
     throw new ConfigError(filePath, [
       {
@@ -287,14 +368,6 @@ export function parseDslConfig(
   }
 
   const topLevel = validateTopLevel(ctx, raw);
-
-  // ── Stage 3: cross-reference + cycle detection. Only meaningful if the
-  // structural validation produced something we can traverse. If structural
-  // errors exist, cross-ref errors would be noise on top of them.
-  if (issues.length === 0) {
-    validateCrossReferences(ctx, topLevel);
-    validateNoCycles(ctx, topLevel);
-  }
 
   if (issues.length > 0) {
     throw new ConfigError(filePath, issues);
@@ -357,10 +430,14 @@ function parseJson5OrThrow(filePath: string, source: string): unknown {
   }
 }
 
+// [LAW:types-are-the-program] Returns RawDslConfig — absence of a top-level
+// key survives the parse as `undefined`, distinct from explicit empty. The
+// merge step downstream decides what "absent" means policy-wise (currently:
+// inherit from default).
 function validateTopLevel(
   ctx: ValidateCtx,
   raw: Record<string, unknown>,
-): DslConfig {
+): RawDslConfig {
   for (const key of Object.keys(raw)) {
     if (!TOP_LEVEL_KEYS.has(key)) {
       ctx.issues.push({
@@ -371,12 +448,15 @@ function validateTopLevel(
     }
   }
 
-  const globals = validateGlobals(ctx, raw.globals);
-  const variables = validateVariables(ctx, "variables", raw.variables);
-  const segments = validateSegments(ctx, raw.segments);
-  const layout = validateLayout(ctx, raw.layout, segments);
-
-  return { globals, variables, segments, layout };
+  const out: Mutable<RawDslConfig> = {};
+  if (raw.globals !== undefined)
+    out.globals = validateGlobals(ctx, raw.globals);
+  if (raw.variables !== undefined)
+    out.variables = validateVariables(ctx, "variables", raw.variables);
+  if (raw.segments !== undefined)
+    out.segments = validateSegments(ctx, raw.segments);
+  if (raw.layout !== undefined) out.layout = validateLayout(ctx, raw.layout);
+  return out;
 }
 
 const TOP_LEVEL_KEYS = new Set(["globals", "variables", "segments", "layout"]);
@@ -936,11 +1016,11 @@ function validateSegment(
 
 // ─── Layout ──────────────────────────────────────────────────────────────────
 
-function validateLayout(
-  ctx: ValidateCtx,
-  raw: unknown,
-  segments: Record<string, SegmentDecl>,
-): string[] {
+// [LAW:locality-or-seam] Structural validation only — layout is an array of
+// strings. Whether each name resolves to a declared segment is a cross-ref
+// concern (validateCrossReferences), which runs on the MERGED config so a
+// user's layout can reference default-provided segments.
+function validateLayout(ctx: ValidateCtx, raw: unknown): string[] {
   if (raw === undefined) return [];
   if (!Array.isArray(raw)) {
     ctx.issues.push({
@@ -962,14 +1042,6 @@ function validateLayout(
       });
       continue;
     }
-    if (!Object.prototype.hasOwnProperty.call(segments, entry)) {
-      ctx.issues.push({
-        path: `layout[${i}]`,
-        message: `layout entry "${entry}" does not match any declared segment`,
-        line: findKeyLine(ctx.source, ["layout"]),
-      });
-      continue;
-    }
     out.push(entry);
   }
   return out;
@@ -978,6 +1050,22 @@ function validateLayout(
 // ─── Cross-references ────────────────────────────────────────────────────────
 
 function validateCrossReferences(ctx: ValidateCtx, cfg: DslConfig): void {
+  // [LAW:locality-or-seam] Layout entries reference segments. Cross-ref runs
+  // on the MERGED config so a user's layout can name default-provided
+  // segments without re-declaring them. Layout's own array-of-strings shape
+  // is enforced by validateLayout at parse time; "does name exist?" lives
+  // here, with the rest of the existence checks.
+  for (let i = 0; i < cfg.layout.length; i++) {
+    const entry = cfg.layout[i]!;
+    if (!Object.prototype.hasOwnProperty.call(cfg.segments, entry)) {
+      ctx.issues.push({
+        path: `layout[${i}]`,
+        message: `layout entry "${entry}" does not match any declared segment`,
+        line: findKeyLine(ctx.source, ["layout"]),
+      });
+    }
+  }
+
   // Full set for depends_on validation (all names, bare + namespaced). depends_on
   // takes explicit fully-qualified names, so cross-segment visibility is intentional.
   const allVarNames = new Set<string>(Object.keys(cfg.variables));

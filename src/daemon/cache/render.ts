@@ -3,14 +3,14 @@ import path from "node:path";
 import { PaletteResolver, type StripCell } from "@promptctl/rich-js";
 import { buildNeededPrefixes } from "../render-payload.js";
 import {
-  loadDslConfig,
+  loadConfig,
+  validateConfig,
   resolveDslConfigPath,
   dslConfigCandidatePaths,
   detectConfigCollisions,
   ConfigError,
 } from "../../config/dsl-loader.js";
-import { DEFAULT_DSL_CONFIG } from "../../config/default-dsl-config.js";
-import type { DslConfig } from "../../config/dsl-types.js";
+import type { ValidatedConfig } from "../../config/dsl-types.js";
 import { registerDslConfig, type CompiledSegments } from "../../dsl/render.js";
 import { VariableStore } from "../../var-system/store.js";
 import { SourceRegistry } from "../../var-system/sources.js";
@@ -64,7 +64,7 @@ export interface RenderDeps {
 // repopulates it in place. A segment hidden by `when` is absent from the
 // map — its presence in the keys is the "this segment rendered" signal.
 export interface DslRenderState {
-  readonly config: DslConfig;
+  readonly config: ValidatedConfig;
   readonly store: VariableStore;
   readonly registry: SourceRegistry;
   readonly compiled: CompiledSegments;
@@ -233,8 +233,14 @@ export class RenderCache {
     entry: CacheEntry,
     resolvedPath: string | null,
   ): DslRenderState {
-    const config: DslConfig =
-      resolvedPath !== null ? loadDslConfig(resolvedPath) : DEFAULT_DSL_CONFIG;
+    // [LAW:dataflow-not-control-flow][LAW:single-enforcer] Three primitives,
+    // straight-line composition. `loadConfig(null)` returns the bundled
+    // default (uniform merge against empty raw); `validateConfig` is the
+    // sole producer of `ValidatedConfig`. The renderer accepts only
+    // `ValidatedConfig`, so the compiler enforces the chain — there is no
+    // "skip validate" path that typechecks downstream.
+    const merged = loadConfig(resolvedPath);
+    const config = validateConfig(merged, resolvedPath ?? "<default>");
 
     const store = new VariableStore();
     // [LAW:single-enforcer] Inject the daemon's shared GitDataProvider so
