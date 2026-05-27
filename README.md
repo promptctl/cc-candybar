@@ -14,11 +14,9 @@
 
 ## What it is
 
-CCCandybar is a statusline renderer for [Claude Code](https://docs.anthropic.com/en/docs/claude-code). It shows session cost, context usage, git status, model info, rate-limit utilization, and more — styled as a powerline, capsule, minimal, or full TUI panel.
+CCCandybar is a statusline renderer for [Claude Code](https://docs.anthropic.com/en/docs/claude-code). It shows session cost, context usage, git status, model info, rate-limit utilization, and more, configured through a JSON5 DSL with hot-reloading.
 
 A background daemon caches git state, usage data, and per-session values across concurrent Claude Code sessions. The renderer connects to the daemon over a Unix socket, so every invocation is fast (~50ms budget) and stateful.
-
-Fork of [@owloops/claude-powerline](https://github.com/Owloops/claude-powerline), evolved with CLI override flags so the entire config lives in `settings.json` — no separate config file needed.
 
 ## Quick start (macOS)
 
@@ -32,32 +30,44 @@ That single command:
 2. Copies the runtime into `~/Library/Application Support/CCCandybar/url-handler.mjs` (stable path independent of pnpm cache).
 3. Writes the statusline renderer command into `~/.claude/settings.json`.
 
-Restart Claude Code. The statusline appears, and cmd-clicking the sessionId copies the full id to your clipboard.
+Restart Claude Code. The statusline appears with the bundled default layout (directory, git, model, session, today, context). Cmd-clicking clickable cells fires `cc-candybar://` URL verbs that the daemon dispatches.
 
-## CLI flags
+## Customization
 
-All flags go directly in the `settings.json` command — no config file required.
+Drop a `.cc-candybar.json5` (or `.cc-candybar.json` — both extensions are accepted) at any of these locations (highest precedence first):
 
-| Flag | Purpose | Example |
-|------|---------|---------|
-| `--theme` | `dark`, `light`, `nord`, `tokyo-night`, `rose-pine`, `gruvbox`, `custom` | `--theme=nord` |
-| `--style` | `minimal`, `powerline`, `capsule`, `tui` | `--style=capsule` |
-| `--charset` | `unicode` (default), `text` | `--charset=text` |
-| `--config` | Custom config file path | `--config=~/.candybar.json` |
-| `--layout` | Define lines and segment ordering inline | `--layout "directory git \| model session"` |
-| `--show` | Enable multiple `show*` booleans on a segment | `--show git=workingTree,upstream` |
-| `--display` | Set multiple `display.*` fields | `--display autoWrap=false,padding=1` |
-| `--segment` | Set multiple segment fields | `--segment block.type=weighted` |
-| `--set` | Universal escape hatch for any dotted config path | `--set color.git=#3a3a3a/#d0d0d0` |
+1. `$CC_CANDYBAR_CONFIG` (literal path, supports `~` expansion)
+2. `<project>/.cc-candybar.json5` (then `.json` at the same location)
+3. `<cwd>/.cc-candybar.json5` (then `.json`)
+4. `$XDG_CONFIG_HOME/cc-candybar/config.json5` (then `.json`; defaults to `~/.config/cc-candybar/config.json5`)
 
-Override priority: CLI flags > environment variables > config files > defaults.
+JSON is a strict subset of JSON5, so the same parser handles both — `.json5` is the documented format (supports inline comments, trailing commas, unquoted keys), `.json` is the legacy/compat extension. When both exist at the same location, `.json5` wins and the bar shows a persistent warning so you can remove the shadowed duplicate.
 
-```bash
-pnpm dlx @promptctl/cc-candybar@latest install \
-  --style=capsule \
-  --layout 'directory model session' \
-  --show git=workingTree
+The file is a **complete** replacement for the bundled default — no merge layer. Start by copying `src/demo/statusline.json5` from the repo as a minimal example, or `src/config/default-dsl-config.ts` for the full standard library.
+
+```json5
+// minimal example — user, directory, branch, model, session, clock
+{
+  globals: { palette: 'textual-dark', hueStep: 14 },
+  variables: {
+    user:    { kind: 'env', name: 'USER', default: 'anon' },
+    cwd:     { kind: 'input', path: 'workspace.current_dir', default: '?' },
+    branch:  { kind: 'shell', command: 'git branch --show-current',
+               cache: { ttl: '5s' }, default: '' },
+    clock:   { kind: 'time', layout: '15:04:05', cache: { ttl: '1s' } },
+  },
+  segments: {
+    user:      { template: ' {{ .user }} ',   bg: 'primary', fg: 'auto' },
+    directory: { template: ' {{ basename .cwd }} ', bg: 'surface', fg: 'foreground' },
+    branch:    { template: ' {{ .branch }} ', bg: 'accent',  fg: 'auto',
+                 when: '{{ ne .branch "" }}' },
+    clock:     { template: ' {{ .clock }} ',  bg: 'primary', fg: 'auto' },
+  },
+  layout: ['user', 'directory', 'branch', 'clock'],
+}
 ```
+
+Saving the file triggers a hot-reload of every active session.
 
 ## Architecture
 
@@ -95,45 +105,15 @@ pnpm dlx @promptctl/cc-candybar@latest install \
 | sessionId | Session identifier (cmd-click to copy) | `⌗` |
 | env | Arbitrary environment variable | `⚙` |
 
-Each segment supports multiple display styles (text, bar, blocks, dots, capped, geometric, etc.) and configurable budget thresholds with visual warnings.
+Each segment is a DSL declaration with a `template` (text + interpolation + style functions), a `bg`/`fg` palette spec, and optional `when` predicate. Templates compose freely — every formatter in the bundled function library (`formatCost`, `formatTokens`, `formatLongTimeRemaining`, `budgetStatus`, `link`, `urlEncode`, the sprig string/list/dict library, …) is available in every segment.
 
 ## Themes
 
-6 built-in themes: `dark`, `light`, `nord`, `tokyo-night`, `rose-pine`, `gruvbox`. Or create a custom theme with per-segment `bg`/`fg` colors:
-
-```json
-{
-  "theme": "custom",
-  "colors": {
-    "custom": {
-      "directory": { "bg": "#ff6600", "fg": "#ffffff" },
-      "git": { "bg": "#0066cc", "fg": "#ffffff" }
-    }
-  }
-}
-```
-
-## TUI panel mode
-
-Full CSS Grid-inspired layout with responsive breakpoints, column spanning, per-cell alignment, and custom box characters. See the old README's TUI section for the complete grid config reference.
-
-<details>
-<summary><strong>Styles</strong></summary>
-
-<img src="images/claude-powerline-styles.png" alt="CCCandybar Styles" width="700">
-
-</details>
-
-<details>
-<summary><strong>Themes</strong></summary>
-
-<img src="images/claude-powerline-themes.png" alt="CCCandybar Themes" width="700">
-
-</details>
+The DSL config picks a base palette via `globals.palette` (e.g. `textual-dark`, `gruvbox`). Each segment may override with its own `palette:` field, and `bg`/`fg` evaluate as palette spec names (`primary`, `surface`, `panel`, `accent`, `foreground`, `auto`, `warning`, `error`, …). Color math runs through OKLCH for perceptual uniformity; `hueStep` rotates adjacent segments to keep them visually distinct without authoring per-segment colors.
 
 ## Installation
 
-Requires Node.js 18+, Claude Code, and Git 2.0+. For best display, install a [Nerd Font](https://www.nerdfonts.com/) or use `--charset=text` for ASCII-only symbols.
+Requires Node.js 18+, Claude Code, and Git 2.0+. For best display, install a [Nerd Font](https://www.nerdfonts.com/) so the powerline glyphs render correctly.
 
 ### Manual setup
 
@@ -143,29 +123,14 @@ Edit `~/.claude/settings.json` directly. Pin the version — don't use `@latest`
 {
   "statusLine": {
     "type": "command",
-    "command": "pnpm dlx @promptctl/cc-candybar@0.2.3 --style=powerline"
+    "command": "pnpm dlx @promptctl/cc-candybar@0.2.3"
   }
 }
 ```
 
-### Config files
+### Config file
 
-If you prefer a standalone config file, CCCandybar reads (in priority order):
-
-- `<projectDir>/.cc-candybar.json` — per-project, wins over user config
-- `<cwd>/.cc-candybar.json` — fallback when there's no project root
-- `$XDG_CONFIG_HOME/cc-candybar/config.json` — user config (default `~/.config/cc-candybar/config.json`)
-
-Config files hot-reload — no restart needed.
-
-## What changed from claude-powerline
-
-CCCandybar is a fork of `@owloops/claude-powerline` with these additions:
-
-- **Daemon architecture** — background process with git filesystem watchers, usage cache, and per-session state shared across concurrent sessions.
-- **CLI override flags** — `--layout`, `--show`, `--display`, `--segment`, `--set` let you configure everything inline in `settings.json` without a separate config file.
-- **Session state store** — generic key/value per-session state, replacing separate theme/toolbar state types.
-- **OKLCH color math** — theme colors resolve through OKLCH for perceptual uniformity.
+Customization lives in `.cc-candybar.json5`. See the [Customization](#customization) section above for the resolution order. Saved edits hot-reload — no restart needed.
 
 ## Contributing
 

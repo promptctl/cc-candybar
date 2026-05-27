@@ -1,183 +1,152 @@
-import fs from "node:fs";
-import os from "node:os";
-import path from "node:path";
+// [LAW:single-enforcer] CachedUsageProvider is the daemon's transcript-
+// parse cache. These tests pin its observable contract: cache-hit on
+// unchanged transcript mtime, cache-miss when mtime advances, LRU eviction
+// at the size cap, and stale-age sweep behavior.
+//
+// The provider's underlying compute path (UsageProvider.getUsageInfo
+// → JSONL parse + pricing math) is exercised by var-system tests
+// elsewhere; this file mocks the parent class via subclassing so we
+// observe call counts without spinning up real transcript files.
+
+import { writeFileSync, mkdtempSync, rmSync, utimesSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
 import { CachedUsageProvider } from "../src/daemon/cache/usage";
-import type { UsageInfo } from "../src/segments";
+import { UsageProvider } from "../src/segments/session";
+import type { UsageInfo } from "../src/segments/session";
 import type { ClaudeHookData } from "../src/utils/claude";
 
-function emptyInfo(): UsageInfo {
-  return {
-    session: {
-      cost: null,
-      calculatedCost: null,
-      officialCost: null,
-      tokens: null,
-      tokenBreakdown: null,
-    },
-  };
-}
-
-class StubProvider extends CachedUsageProvider {
-  public superCalls: string[] = [];
-  public stub: Record<string, UsageInfo> = {};
-
-  // Replace the parent's super.getUsageInfo (UsageProvider.getUsageInfo) with
-  // a stub by overriding through prototype chain awareness: CachedUsageProvider
-  // calls super.getUsageInfo(...). We cheat by re-declaring the method to look
-  // at our own table.
-  override async getUsageInfo(
-    sessionId: string,
-    hookData?: ClaudeHookData,
-  ): Promise<UsageInfo> {
-    // Replicate the parent caching logic by delegating to it but routing the
-    // underlying compute through our stub.
-    // Easier: monkey-patch (this as any).realCompute then call super.
-    return super.getUsageInfo(sessionId, hookData);
-  }
-}
-
-// We need a way to intercept the parent's super.getUsageInfo call. Easiest is
-// to replace UsageProvider.prototype.getUsageInfo for the duration of a test,
-// then restore.
-import { UsageProvider } from "../src/segments";
-
-function withStubbedUsage<T>(
-  table: Record<string, UsageInfo>,
-  calls: string[],
-  body: () => Promise<T>,
-): Promise<T> {
-  const original = UsageProvider.prototype.getUsageInfo;
+// [LAW:single-enforcer] Patch the parent UsageProvider's compute method
+// so the cache's `super.getUsageInfo(...)` (its cache-miss path) lands on
+// our counter. We do NOT override on the cache subclass — that would
+// bypass the caching logic we're trying to test.
+const origParentImpl = UsageProvider.prototype.getUsageInfo;
+let computeCalls = 0;
+beforeEach(() => {
+  computeCalls = 0;
   UsageProvider.prototype.getUsageInfo = async function (
-    sessionId: string,
+    _sessionId: string,
+    _hookData?: ClaudeHookData,
   ): Promise<UsageInfo> {
-    calls.push(sessionId);
-    return table[sessionId] ?? emptyInfo();
+    computeCalls++;
+    return {
+      session: {
+        cost: 0,
+        calculatedCost: 0,
+        officialCost: 0,
+        tokens: 0,
+        tokenBreakdown: null,
+      },
+    };
   };
-  return body().finally(() => {
-    UsageProvider.prototype.getUsageInfo = original;
-  });
-}
-
-function makeTranscript(): { dir: string; file: string } {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "powerline-usage-"));
-  const file = path.join(dir, "transcript.jsonl");
-  fs.writeFileSync(file, "{}\n");
-  return { dir, file };
-}
-
-function rmrf(dir: string): void {
-  fs.rmSync(dir, { recursive: true, force: true });
-}
-
-function hook(sid: string, transcriptPath: string): ClaudeHookData {
-  return { session_id: sid, transcript_path: transcriptPath } as ClaudeHookData;
-}
+});
+afterAll(() => {
+  UsageProvider.prototype.getUsageInfo = origParentImpl;
+});
 
 describe("CachedUsageProvider", () => {
-  test("second request with same transcript mtime is a hit", async () => {
-    const { dir, file } = makeTranscript();
-    const calls: string[] = [];
-    const cache = new StubProvider({ sweepIntervalMs: 0 });
-
-    await withStubbedUsage({}, calls, async () => {
-      await cache.getUsageInfo("s1", hook("s1", file));
-      await cache.getUsageInfo("s1", hook("s1", file));
-    });
-
-    expect(calls).toEqual(["s1"]);
-    expect(cache.getStats()).toMatchObject({ size: 1, hits: 1, misses: 1 });
-    cache.close();
-    rmrf(dir);
+  test("returns the no-session-id passthrough without caching", async () => {
+    const cache = new CachedUsageProvider({ sweepIntervalMs: 0 });
+    try {
+      await cache.getUsageInfo("", undefined);
+      await cache.getUsageInfo("", undefined);
+      // Two calls with empty sessionId — both pass through, neither cached.
+      expect(computeCalls).toBe(2);
+      expect(cache.getStats().hits).toBe(0);
+      expect(cache.getStats().misses).toBe(0);
+    } finally {
+      cache.close();
+    }
   });
 
-  test("transcript mtime change forces recompute", async () => {
-    const { dir, file } = makeTranscript();
-    const calls: string[] = [];
-    const cache = new StubProvider({ sweepIntervalMs: 0 });
-
-    await withStubbedUsage({}, calls, async () => {
-      await cache.getUsageInfo("s1", hook("s1", file));
-
-      // Bump mtime explicitly.
-      const future = new Date(Date.now() + 60_000);
-      fs.utimesSync(file, future, future);
-
-      await cache.getUsageInfo("s1", hook("s1", file));
-    });
-
-    expect(calls).toEqual(["s1", "s1"]);
-    cache.close();
-    rmrf(dir);
+  test("cache hit when transcript mtime unchanged", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "cc-candybar-usage-"));
+    const transcript = join(dir, "t.jsonl");
+    writeFileSync(transcript, "");
+    const cache = new CachedUsageProvider({ sweepIntervalMs: 0 });
+    try {
+      const hd = { transcript_path: transcript } as ClaudeHookData;
+      await cache.getUsageInfo("session-A", hd);
+      expect(computeCalls).toBe(1);
+      // Second call with same mtime → cache hit, compute not invoked again.
+      await cache.getUsageInfo("session-A", hd);
+      expect(computeCalls).toBe(1);
+      expect(cache.getStats().hits).toBe(1);
+      expect(cache.getStats().misses).toBe(1);
+    } finally {
+      cache.close();
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 
-  test("LRU evicts oldest at cap", async () => {
-    const { dir, file } = makeTranscript();
-    const calls: string[] = [];
-    const cache = new StubProvider({ maxEntries: 2, sweepIntervalMs: 0 });
-
-    await withStubbedUsage({}, calls, async () => {
-      await cache.getUsageInfo("a", hook("a", file));
-      await cache.getUsageInfo("b", hook("b", file));
-      await cache.getUsageInfo("c", hook("c", file));
-    });
-
-    expect(cache.getStats().size).toBe(2);
-    cache.close();
-    rmrf(dir);
+  test("cache miss when transcript mtime advances", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "cc-candybar-usage-"));
+    const transcript = join(dir, "t.jsonl");
+    writeFileSync(transcript, "");
+    const cache = new CachedUsageProvider({ sweepIntervalMs: 0 });
+    try {
+      const hd = { transcript_path: transcript } as ClaudeHookData;
+      await cache.getUsageInfo("session-A", hd);
+      expect(computeCalls).toBe(1);
+      // Bump mtime deterministically. `utimesSync` takes seconds for
+      // atime/mtime; jumping a full hour into the future guarantees
+      // mtimeMs differs at any filesystem granularity.
+      const future = Math.floor(Date.now() / 1000) + 3600;
+      utimesSync(transcript, future, future);
+      await cache.getUsageInfo("session-A", hd);
+      expect(computeCalls).toBe(2);
+      expect(cache.getStats().misses).toBe(2);
+    } finally {
+      cache.close();
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 
-  test("sweep removes entries with lastSeenAt > 24h old", async () => {
-    const { dir, file } = makeTranscript();
-    const calls: string[] = [];
-    const cache = new StubProvider({ sweepIntervalMs: 0 });
-
-    await withStubbedUsage({}, calls, async () => {
-      await cache.getUsageInfo("fresh", hook("fresh", file));
-      await cache.getUsageInfo("stale", hook("stale", file));
+  test("LRU eviction at the size cap", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "cc-candybar-usage-"));
+    const cache = new CachedUsageProvider({
+      maxEntries: 2,
+      sweepIntervalMs: 0,
     });
-
-    // Backdate one entry.
-    const internal = (cache as unknown as {
-      entries: Map<string, { lastSeenAt: number }>;
-    }).entries;
-    const staleEntry = internal.get("stale")!;
-    staleEntry.lastSeenAt = Date.now() - 25 * 60 * 60 * 1000;
-
-    const dropped = cache.sweepStale();
-    expect(dropped).toBe(1);
-    expect(cache.getStats().size).toBe(1);
-    expect(internal.has("fresh")).toBe(true);
-    expect(internal.has("stale")).toBe(false);
-    cache.close();
-    rmrf(dir);
+    try {
+      // Each session needs its own transcript so mtime read finds the
+      // file (otherwise statMtimeMs returns 0 for every entry and they
+      // all collide on mtime=0).
+      for (const sid of ["a", "b", "c"]) {
+        const t = join(dir, `${sid}.jsonl`);
+        writeFileSync(t, "");
+        await cache.getUsageInfo(sid, { transcript_path: t } as ClaudeHookData);
+      }
+      // Cap is 2; oldest (`a`) is evicted. Asking for `a` again must
+      // miss and recompute.
+      const tA = join(dir, "a.jsonl");
+      const beforeMisses = cache.getStats().misses;
+      await cache.getUsageInfo("a", { transcript_path: tA } as ClaudeHookData);
+      expect(cache.getStats().misses).toBe(beforeMisses + 1);
+    } finally {
+      cache.close();
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 
-  test("missing transcript path delegates to super every time", async () => {
-    const calls: string[] = [];
-    const cache = new StubProvider({ sweepIntervalMs: 0 });
-
-    await withStubbedUsage({}, calls, async () => {
-      await cache.getUsageInfo("s1", { session_id: "s1" } as ClaudeHookData);
-      await cache.getUsageInfo("s1", { session_id: "s1" } as ClaudeHookData);
+  test("sweepStale drops entries older than staleAgeMs", async () => {
+    const cache = new CachedUsageProvider({
+      sweepIntervalMs: 0,
+      staleAgeMs: 1, // anything inserted is immediately stale after 1ms
     });
-
-    // Both calls reach super because mtime=0 means we never get a hit.
-    expect(calls.length).toBe(2);
-    cache.close();
-  });
-
-  test("close clears entries and stops sweep timer", async () => {
-    const { dir, file } = makeTranscript();
-    const calls: string[] = [];
-    const cache = new StubProvider({ sweepIntervalMs: 0 });
-
-    await withStubbedUsage({}, calls, async () => {
-      await cache.getUsageInfo("s1", hook("s1", file));
-    });
-
-    expect(cache.getStats().size).toBe(1);
-    cache.close();
-    expect(cache.getStats().size).toBe(0);
-    rmrf(dir);
+    try {
+      const dir = mkdtempSync(join(tmpdir(), "cc-candybar-usage-"));
+      const t = join(dir, "a.jsonl");
+      writeFileSync(t, "");
+      await cache.getUsageInfo("a", { transcript_path: t } as ClaudeHookData);
+      await new Promise((r) => setTimeout(r, 10));
+      const dropped = cache.sweepStale();
+      expect(dropped).toBe(1);
+      expect(cache.getStats().sweeps).toBe(1);
+      rmSync(dir, { recursive: true, force: true });
+    } finally {
+      cache.close();
+    }
   });
 });

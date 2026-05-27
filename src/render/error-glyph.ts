@@ -9,10 +9,11 @@
 // on which client is on the hot path.
 //
 // Style: red background, white foreground, ANSI reset at end. Mirrors the
-// daemon-side ⚠ glyph in src/daemon/server.ts (composeWithError) so the
-// cc-candybar diagnostic visual language is consistent. The constants live
-// here rather than imported from server.ts to avoid daemon→client coupling
-// (different render contexts; the appearance is policy, not shared state).
+// daemon-side ⚠ error glyph in src/daemon/server.ts (composeWithDiagnostics)
+// so the cc-candybar diagnostic visual language is consistent. The constants
+// live here rather than imported from server.ts to avoid daemon→client
+// coupling (different render contexts; the appearance is policy, not shared
+// state).
 
 import type { PermanentOutcome } from "../daemon/client";
 
