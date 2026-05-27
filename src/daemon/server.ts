@@ -2,6 +2,7 @@ import fs from "node:fs";
 import net from "node:net";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
+import path from "node:path";
 import { daemonDir, pidPath, socketPath, sessionStatePath } from "./paths";
 import { dlog, closeLog } from "./log";
 import { PROTOCOL_VERSION, encodeFrame, makeFrameReader } from "./protocol";
@@ -77,6 +78,10 @@ const BIN_CHECK_INTERVAL_MS = 60 * 1000;
 // obtainDaemon() (caller waits for readiness) in src/daemon/acquire.ts.
 export function runDaemon(): void {
   fs.mkdirSync(daemonDir(), { recursive: true });
+  // socketPath() is now independent of daemonDir() — ensure its parent exists
+  // (matters when CC_CANDYBAR_SOCKET points outside the XDG state tree, or
+  // when the HOME-based default differs from XDG_STATE_HOME).
+  fs.mkdirSync(path.dirname(socketPath()), { recursive: true });
 
   // Bind disk persistence now that we know we are the daemon process — load
   // prior session state and become the sole writer of the state file.

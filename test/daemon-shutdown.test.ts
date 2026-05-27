@@ -41,6 +41,9 @@ async function spawnDaemon(): Promise<DaemonHandle> {
 
   const env: NodeJS.ProcessEnv = {
     ...process.env,
+    // CC_CANDYBAR_SOCKET isolates the socket — socketPath() ignores
+    // XDG_STATE_HOME, so this is the required per-test override.
+    CC_CANDYBAR_SOCKET: sockPath,
     XDG_STATE_HOME: stateRoot,
     // Isolate cache + config so the test daemon doesn't see the developer's
     // real state. Each gets its own tempdir.

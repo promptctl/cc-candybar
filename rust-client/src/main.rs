@@ -397,13 +397,25 @@ fn detect_term_cols() -> Option<u32> {
 }
 
 
-// Socket and other daemon runtime files live under $XDG_STATE_HOME/cc-candybar
-// (default ~/.local/state/cc-candybar). Caches go under $XDG_CACHE_HOME
-// (default ~/.cache/cc-candybar). Both must agree with src/daemon/paths.ts —
-// if these drift, the client can't find the daemon's socket.
+// Path families — must agree with src/daemon/paths.ts or the client can't
+// find the daemon's socket.
+//
+// The socket path is independent of XDG_STATE_HOME (see socket_path()).
+// State files (spawn.lock) and caches (last-render) still use XDG roots.
 
+// [LAW:one-source-of-truth] CC_CANDYBAR_SOCKET is the only mechanism for
+// intentional multi-instance use. The default uses HOME directly so Claude
+// Code's per-session XDG_STATE_HOME cannot silently produce a different socket.
 fn socket_path() -> PathBuf {
-    state_dir().join("socket")
+    if let Some(s) = env::var_os("CC_CANDYBAR_SOCKET").filter(|s| !s.is_empty()) {
+        return PathBuf::from(s);
+    }
+    let home = env::var_os("HOME").unwrap_or_else(|| OsString::from("/"));
+    Path::new(&home)
+        .join(".local")
+        .join("state")
+        .join("cc-candybar")
+        .join("socket")
 }
 
 fn state_dir() -> PathBuf {

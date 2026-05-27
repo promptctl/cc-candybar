@@ -331,7 +331,9 @@ describe("wire trust boundary: unknown error codes (kz8.5 followup)", () => {
 
     const server = await spinUpRawCodeSocket(sockPath, response);
     const prevXdg = process.env.XDG_STATE_HOME;
+    const prevSock = process.env.CC_CANDYBAR_SOCKET;
     process.env.XDG_STATE_HOME = tmpRoot;
+    process.env.CC_CANDYBAR_SOCKET = sockPath;
     try {
       const { tryRenderViaDaemon } = await import("../src/daemon/client");
       return await tryRenderViaDaemon(
@@ -348,6 +350,11 @@ describe("wire trust boundary: unknown error codes (kz8.5 followup)", () => {
         delete process.env.XDG_STATE_HOME;
       } else {
         process.env.XDG_STATE_HOME = prevXdg;
+      }
+      if (prevSock === undefined) {
+        delete process.env.CC_CANDYBAR_SOCKET;
+      } else {
+        process.env.CC_CANDYBAR_SOCKET = prevSock;
       }
       await new Promise<void>((r) => server.close(() => r()));
       try {
@@ -491,7 +498,9 @@ describe("wire trust boundary: protocol-violation exceptions are permanent", () 
     const sockPath = path.join(stateDir, "socket");
     const server = await spinUpRawBytesSocket(sockPath, bytes);
     const prevXdg = process.env.XDG_STATE_HOME;
+    const prevSock = process.env.CC_CANDYBAR_SOCKET;
     process.env.XDG_STATE_HOME = tmpRoot;
+    process.env.CC_CANDYBAR_SOCKET = sockPath;
     try {
       const { tryRenderViaDaemon } = await import("../src/daemon/client");
       return await tryRenderViaDaemon(
@@ -508,6 +517,11 @@ describe("wire trust boundary: protocol-violation exceptions are permanent", () 
         delete process.env.XDG_STATE_HOME;
       } else {
         process.env.XDG_STATE_HOME = prevXdg;
+      }
+      if (prevSock === undefined) {
+        delete process.env.CC_CANDYBAR_SOCKET;
+      } else {
+        process.env.CC_CANDYBAR_SOCKET = prevSock;
       }
       await new Promise<void>((r) => server.close(() => r()));
       try {

@@ -2,15 +2,16 @@ import os from "node:os";
 import path from "node:path";
 
 // XDG Base Directory split:
-//   - daemon runtime (socket, pid, log, heap snapshots) → $XDG_STATE_HOME/cc-candybar
-//   - filesystem caches (git, usage, locks, last-render) → $XDG_CACHE_HOME/cc-candybar
+//   - daemon runtime (pid, log, heap snapshots, spawn.lock) → $XDG_STATE_HOME/cc-candybar
+//   - filesystem caches (git, usage, last-render) → $XDG_CACHE_HOME/cc-candybar
 //
 // Both default per the XDG spec ($HOME/.local/state and $HOME/.cache). Empty
 // env vars fall through to the defaults. The two roots are kept separate so
 // users can `rm -rf` either one without taking the other down.
 //
-// The Rust client mirrors this layout in rust-client/src/main.rs; both must
-// agree or the client can't find the daemon's socket.
+// The socket path is NOT derived from XDG_STATE_HOME — see socketPath() below.
+// The Rust client mirrors both path families in rust-client/src/main.rs; both
+// must agree or the client can't find the daemon's socket.
 
 function xdgEnv(name: string): string | undefined {
   const v = process.env[name];
@@ -40,8 +41,16 @@ export function daemonDir(): string {
   return stateDir();
 }
 
+// [LAW:one-source-of-truth] The socket IS the daemon's identity — same as
+// tmux's socket model. The path is independent of XDG_STATE_HOME so that
+// Claude Code's per-session environment (which may set XDG_STATE_HOME to an
+// isolated tmpdir) cannot silently spawn a separate daemon for each session.
+// CC_CANDYBAR_SOCKET is the explicit override for intentional isolation (tests,
+// dev, multiple intentional instances). No other mechanism changes this path.
 export function socketPath(): string {
-  return path.join(stateDir(), "socket");
+  const override = process.env.CC_CANDYBAR_SOCKET;
+  if (override) return override;
+  return path.join(os.homedir(), ".local", "state", "cc-candybar", "socket");
 }
 
 export function pidPath(): string {
