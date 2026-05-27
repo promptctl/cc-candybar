@@ -97,10 +97,17 @@ function declareOne(
       break;
 
     case "input":
-      // [LAW:types-are-the-program] Input vars are always "string": the DSL
-      // config has no type annotation for input fields, and all payload values
-      // coerce to string via toString(). Typed inputs are a future extension.
-      registry.declareInput(name, decl.path, "string", decl.default);
+      // [LAW:types-are-the-program] The loader validated that `decl.type` is
+      // one of "string"|"number"|"boolean" and that `decl.default` (if
+      // present) matches that type. Absent type defaults to "string" — every
+      // existing declaration that omits the field reads a string at the
+      // resolved payload path.
+      registry.declareInput(
+        name,
+        decl.path,
+        decl.type ?? "string",
+        decl.default,
+      );
       break;
 
     case "env":
@@ -309,6 +316,19 @@ export function renderDslLine(
   payload: unknown,
   basePalette: PaletteResolver,
   opts: BuildLineOptions,
+  // [LAW:dataflow-not-control-flow] Optional per-segment cell sink. When
+  // present, each rendered segment's StripCell array (post-layout, pre-
+  // serialization) is written to this map under its segment name. Storing
+  // cells (not pre-serialized strings) keeps the hot path's serializer
+  // work proportional to the joined line only — debug consumers serialize
+  // on demand. Hidden-by-when segments are absent from the map (presence
+  // = "this segment rendered"). The map is cleared before each render so
+  // stale segment names never survive a layout edit. Per-segment standalone
+  // serialization is not byte-identical to the segment's slice within the
+  // joined line (powerline joiners sit *between* segments and have no
+  // place in a one-segment render), but for debug visibility this is the
+  // natural per-segment shape.
+  perSegmentSink?: Map<string, readonly StripCell[]>,
 ): string {
   // Step 1: push payload into input boxes.
   registry.applyInput(payload);
@@ -317,6 +337,7 @@ export function renderDslLine(
   const hueStep = config.globals.hueStep ?? 0;
 
   const allCells: StripCell[] = [];
+  perSegmentSink?.clear();
 
   for (let i = 0; i < config.layout.length; i++) {
     const segName = config.layout[i]!;
@@ -359,6 +380,10 @@ export function renderDslLine(
       truncate: seg.truncate ?? "right",
       baseStyle,
     });
+
+    if (perSegmentSink !== undefined) {
+      perSegmentSink.set(segName, laidOut);
+    }
 
     allCells.push(...laidOut);
   }

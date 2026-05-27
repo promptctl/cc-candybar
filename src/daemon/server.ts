@@ -4,12 +4,7 @@ import process from "node:process";
 import { fileURLToPath } from "node:url";
 import { daemonDir, pidPath, socketPath, sessionStatePath } from "./paths";
 import { dlog, closeLog } from "./log";
-import {
-  PROTOCOL_VERSION,
-  encodeFrame,
-  makeFrameReader,
-  sanitizeTermCols,
-} from "./protocol";
+import { PROTOCOL_VERSION, encodeFrame, makeFrameReader } from "./protocol";
 import type { Request, Response } from "./protocol";
 import { GitDataProvider } from "./cache/git";
 import { CachedUsageProvider } from "./cache/usage";
@@ -22,8 +17,16 @@ import { FileSessionStorage } from "./session-state-file";
 import { VERBS, BadVerbArgs } from "./verbs";
 import { validateHookData } from "../utils/schema-validator.js";
 import { setLaunchStats } from "../proc/launch";
-import { buildDebugSnapshot, type DaemonDslState } from "./debug";
+import { buildDebugSnapshot } from "./debug";
 import { DEBUG_WHATS, isDebugWhat } from "./debug-types";
+import { renderDslLine } from "../dsl/render.js";
+import { renderStripCells } from "../render/strip.js";
+import type { StripCell } from "@promptctl/rich-js";
+import { buildRenderPayload } from "./render-payload.js";
+import { TodayProvider } from "../segments/today.js";
+import { ContextProvider } from "../segments/context.js";
+import { MetricsProvider } from "../segments/metrics.js";
+import { TmuxService } from "../segments/tmux.js";
 
 // [LAW:one-source-of-truth] one cache instance per daemon process — multiple
 // instances would defeat the share-across-sessions invariant.
@@ -49,25 +52,18 @@ const usageProvider = new CachedUsageProvider();
 // relay, subcommands) does no disk I/O. The daemon binds the file-backed
 // storage in runDaemon(), making it the sole reader/writer of the state file.
 const sessionState = new SessionState();
+// [LAW:one-source-of-truth] One provider per data shape, shared across every
+// render in this daemon. The render cache owns DSL-state-per-config; these
+// providers serve the augmented payload that flows through every render.
+const todayProvider = new TodayProvider();
+const contextProvider = new ContextProvider();
+const metricsProvider = new MetricsProvider();
+const tmuxService = new TmuxService();
 const renderCache = new RenderCache({
   gitService,
-  usageProvider,
   sessionState,
   watchers: watcherRegistry,
 });
-
-// [LAW:one-source-of-truth] The daemon owns at most one DSL state bundle
-// (variable store + source registry + parsed config + compiled segments).
-// vhi.2 defines this slot and the introspection contract; bzh.2 will
-// populate it once the daemon flips from the legacy renderer to renderDslLine.
-// Until then it stays null and debug responses are empty by construction —
-// not by special-case branching, by the data being absent.
-//
-// Declared `const` today because it is never reassigned in this module; bzh.2
-// will either introduce a setter or convert this to `let`. The single
-// canonical handle is the design contract — *how* it becomes populated is
-// the change bzh.2 owns.
-const dslState: DaemonDslState | null = null;
 
 const REQUEST_TIMEOUT_MS = 200;
 const BIN_CHECK_INTERVAL_MS = 60 * 1000;
@@ -555,24 +551,55 @@ async function handleRequest(req: Request): Promise<Response> {
       // daemon's process.cwd(), so config resolution depends only on request
       // data — the daemon's own working directory must not influence output.
       const entry = renderCache.getOrCreate(req.args, projectDir, req.cwd);
-      // [LAW:single-enforcer] Sanitize wire-supplied termCols here at the
-      // trust boundary so the renderer downstream can rely on its type.
-      const termCols = sanitizeTermCols(req.termCols);
-      // [LAW:dataflow-not-control-flow] Three states fall out of one rule:
-      // body = renderer ? render(it) : "" ; output = body + (error ? icon : "")
+      // termCols on the wire is unused today — terminal-width-aware
+      // wrapping is a future BuildLineOptions extension (see strip.ts).
+      // When that arrives, `const termCols = sanitizeTermCols(req.termCols)`
+      // sanitizes at the boundary; until then we accept the field on the
+      // wire (back-compat with clients that send it) and ignore it.
+      // [LAW:dataflow-not-control-flow] Two outcomes fall out of one rule:
+      // body = state ? renderDslLine(state) : "" ; output = body + icon
       // No special-case branches — same composition every render.
-      const body = entry.renderer
-        ? await entry.renderer.generateStatusline(req.hookData, {
-            termCols,
-          })
-        : "";
-      const output = composeWithError(body, entry.lastError);
+      let body = "";
+      if (entry.state !== null) {
+        const payload = await buildRenderPayload(
+          req.hookData,
+          payloadDeps,
+          req.cwd,
+          entry.state.neededInputPaths,
+        );
+        // [LAW:single-enforcer] renderDslLine internally calls
+        // `registry.applyInput(payload)` as its first step (see step 1 in
+        // src/dsl/render.ts). The daemon must not pre-apply — doing so
+        // would run the MobX action twice per render and clear last_error
+        // diagnostics on the round trip.
+        body = renderDslLine(
+          entry.state.config,
+          entry.state.compiled,
+          entry.state.store,
+          entry.state.registry,
+          payload,
+          entry.state.basePalette,
+          RENDER_OPTS,
+          // [LAW:single-enforcer] The per-segment StripCell sink for the
+          // `debug segments` projection. Its identity stays stable for the
+          // cache entry's lifetime; renderDslLine clears + repopulates it
+          // in place. Cells are cheap (already computed during the render);
+          // the per-segment ANSI serialization happens lazily inside the
+          // debug handler so normal renders pay no extra serializer cost.
+          entry.state.lastRenderCellsBySegment,
+        );
+      }
+      const output = composeWithDiagnostics(
+        body,
+        entry.lastError,
+        entry.lastWarning,
+      );
       const ms = Date.now() - t0;
       const g = gitService.getStats();
       const u = usageProvider.getStats();
       dlog(
         "info",
-        `render sid=${req.hookData.session_id ?? "?"} took=${ms}ms git=${g.size}/${g.hits}h/${g.misses}m usage=${u.size}/${u.hits}h/${u.misses}m err=${entry.lastError ? "Y" : "N"}`,
+        `render sid=${req.hookData.session_id ?? "?"} took=${ms}ms git=${g.size}/${g.hits}h/${g.misses}m usage=${u.size}/${u.hits}h/${u.misses}m err=${entry.lastError ? "Y" : "N"} warn=${entry.lastWarning ? "Y" : "N"}`,
       );
       return { ok: true, output: output + "\n" };
     } catch (e) {
@@ -602,10 +629,38 @@ async function handleRequest(req: Request): Promise<Response> {
         daemonV: PROTOCOL_VERSION,
       };
     }
-    // [LAW:dataflow-not-control-flow] The dispatcher always runs the same
-    // call. Variability lives in dslState (null vs populated) and `what`
-    // (the projection selector inside buildDebugSnapshot).
-    return { ok: true, debug: buildDebugSnapshot(req.what, dslState) };
+    // [LAW:dataflow-not-control-flow] The debug projection samples whatever
+    // DSL state the cache currently holds. With cache keys scoped on
+    // (projectDir, cwd) and the debug request carrying neither, we sample
+    // the first populated existing entry — sufficient for `debug vars`,
+    // `debug segments`, `debug config` against the active workload.
+    // firstPopulatedState iterates existing entries only; it does NOT
+    // create a fresh one, so debug introspection never has the side effect
+    // of standing up a new (projectDir=undefined) cache entry tied to the
+    // daemon's own process.cwd(). A future debug-target selector would
+    // thread (projectDir, cwd) through the wire.
+    const dbgEntry = renderCache.firstPopulatedState();
+    // [LAW:dataflow-not-control-flow] Lazy per-segment serialization: the
+    // cache stores StripCell arrays (cheap, written by renderDslLine).
+    // The debug projection needs strings, so serialize only for the
+    // `segments` projection (`vars` and `config` don't need it) and only
+    // when this request actually fires. Normal renders pay no per-segment
+    // serializer cost — that work shifts to debug-request time, which is
+    // operator-driven and rare.
+    const dbgState =
+      dbgEntry === null
+        ? null
+        : {
+            store: dbgEntry.store,
+            registry: dbgEntry.registry,
+            config: dbgEntry.config,
+            compiled: dbgEntry.compiled,
+            lastRenderBySegment:
+              req.what === "segments"
+                ? serializeSegmentCells(dbgEntry.lastRenderCellsBySegment)
+                : EMPTY_RENDER_MAP,
+          };
+    return { ok: true, debug: buildDebugSnapshot(req.what, dbgState) };
   }
 
   return {
@@ -616,27 +671,80 @@ async function handleRequest(req: Request): Promise<Response> {
   };
 }
 
-// --- error-icon composition ---
+// --- diagnostics composition ---
 //
-// [LAW:no-silent-fallbacks] Bad config can't quietly degrade output. We
-// either render the user's actual bar (parse OK), the bar plus a warning
-// (reload failed but a prior valid config exists), or *only* the warning
-// (startup-error: never had a valid config). Either way the failure is
-// visible at the point of impact.
+// [LAW:no-silent-fallbacks] Bad config can't quietly degrade output. The
+// render pipeline carries two independent diagnostic channels:
+//   error   — load-fatal: parse/validation failed; bar is last-known-good
+//             or empty. Rendered red.
+//   warning — advisory: load succeeded but something needs attention (e.g.
+//             same-location .json5 + .json collision). Rendered amber.
+// Either way the failure is visible at the point of impact, and each
+// channel has its own click verb (show-config-error / show-config-warning)
+// so the operator can copy the message to clipboard for inspection.
+//
+// [LAW:one-type-per-behavior] Two severities → two channels. The
+// composer's signature carries both; severity is encoded in WHICH
+// argument is non-null, not in a string prefix or a tag inside the
+// message. The two icons render independently — both can show at once.
 const ERROR_ICON_FG = "\x1b[38;2;255;255;255m";
 const ERROR_ICON_BG = "\x1b[48;2;200;40;40m";
+const WARNING_ICON_FG = "\x1b[38;2;0;0;0m";
+const WARNING_ICON_BG = "\x1b[48;2;220;160;40m";
 const ANSI_RESET = "\x1b[0m";
 const OSC8_OPEN = "\x1b]8;;";
 const OSC8_CLOSE = "\x1b]8;;\x1b\\";
 const ST = "\x1b\\";
 
-function composeWithError(body: string, error: string | null): string {
-  if (!error) return body;
-  const url = `cc-candybar://show-config-error/${encodeURIComponent(error)}`;
-  const link = `${OSC8_OPEN}${url}${ST}${ERROR_ICON_BG}${ERROR_ICON_FG} ⚠ config error ${ANSI_RESET}${OSC8_CLOSE}`;
-  // No body → emit the icon alone (startup-error case). Body present →
-  // prepend on its own line so it's visible regardless of bar width.
-  return body ? `${link}\n${body}` : link;
+function makeDiagnosticLink(
+  verb: "show-config-error" | "show-config-warning",
+  message: string,
+  bg: string,
+  fg: string,
+  label: string,
+): string {
+  const url = `cc-candybar://${verb}/${encodeURIComponent(message)}`;
+  return `${OSC8_OPEN}${url}${ST}${bg}${fg} ${label} ${ANSI_RESET}${OSC8_CLOSE}`;
+}
+
+function composeWithDiagnostics(
+  body: string,
+  error: string | null,
+  warning: string | null,
+): string {
+  // [LAW:dataflow-not-control-flow] Diagnostics list is data; the
+  // composer walks it. Each non-null channel contributes one prefix line.
+  // Order is error-first (more severe), then warning, then body — so the
+  // operator's eye lands on the most critical message at the top.
+  const prefixes: string[] = [];
+  if (error) {
+    prefixes.push(
+      makeDiagnosticLink(
+        "show-config-error",
+        error,
+        ERROR_ICON_BG,
+        ERROR_ICON_FG,
+        "⚠ config error",
+      ),
+    );
+  }
+  if (warning) {
+    prefixes.push(
+      makeDiagnosticLink(
+        "show-config-warning",
+        warning,
+        WARNING_ICON_BG,
+        WARNING_ICON_FG,
+        "⚠ config warning",
+      ),
+    );
+  }
+  if (prefixes.length === 0) return body;
+  // No body → emit the diagnostic strip alone (startup-error case). Body
+  // present → prepend on its own line so it's visible regardless of bar
+  // width. Multiple diagnostics stack on their own lines.
+  const strip = prefixes.join("\n");
+  return body ? `${strip}\n${body}` : strip;
 }
 
 // --- click verb dispatch ---
@@ -649,6 +757,42 @@ function composeWithError(body: string, error: string | null): string {
 // other Error (operational failure) becomes RENDER_FAILED. No string matching.
 
 const verbCtx = { sessionState, dlog };
+
+// [LAW:single-enforcer] One options bundle for the render path AND the
+// lazy debug-side per-segment serializer. Both must agree on style +
+// color compatibility, otherwise the bytes the debug projection shows
+// could diverge from what the user sees in their terminal.
+const RENDER_OPTS = {
+  style: "powerline" as const,
+  colorCompatibility: "truecolor" as const,
+};
+
+// [LAW:no-defensive-null-guards] Reused empty map for the `vars` /
+// `config` debug projections — they don't read lastRenderBySegment but
+// the DaemonDslState type requires the field.
+const EMPTY_RENDER_MAP = new Map<string, string>();
+
+function serializeSegmentCells(
+  cells: ReadonlyMap<string, readonly StripCell[]>,
+): Map<string, string> {
+  const out = new Map<string, string>();
+  for (const [name, segCells] of cells) {
+    out.set(name, renderStripCells(segCells, RENDER_OPTS));
+  }
+  return out;
+}
+
+// [LAW:single-enforcer] The payload-builder dependency bundle. One value
+// passed through every render — the data the daemon brings to each tick.
+const payloadDeps = {
+  gitProvider: gitService,
+  usageProvider,
+  todayProvider,
+  contextProvider,
+  metricsProvider,
+  tmuxService,
+  sessionState,
+};
 
 function handleClick(verb: string, value: string): Response {
   const handler = VERBS.get(verb);

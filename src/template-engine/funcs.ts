@@ -104,10 +104,9 @@ export function ccCandybarFuncs(): FuncMap {
 
 // [LAW:one-source-of-truth] Domain value formatters wrap src/utils/formatters.ts
 // (and src/utils/budget.ts) without re-deriving the formatting rules. DSL
-// templates that render usage/cost/time/locale-grouped values delegate here, so
-// the DSL and the legacy SegmentRenderer share one definition of "how to
-// display a token count" etc. — byte-parity holds by construction, not by
-// the DSL re-implementing the rule and getting lucky.
+// templates that render usage/cost/time/locale-grouped values delegate here,
+// so every cost/token/duration string in the bar passes through one
+// formatting definition — drift between segments is unrepresentable.
 //
 // [LAW:dataflow-not-control-flow] Each entry is a thin pure call; the wrapper
 // adds the engine FuncMap shape (argTypes + fn) and nothing else. No business

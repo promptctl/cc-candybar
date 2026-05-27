@@ -1,16 +1,12 @@
 {
   "name": "@promptctl/cc-candybar",
   "version": "0.2.3",
-  "description": "Powerline statusline for Claude Code — fork of @owloops/claude-powerline evolved into CCCandybar with CLI override flags (--layout, --set, --show, --display, --segment) so the entire config can live in settings.json without a separate config file.",
+  "description": "Statusline renderer for Claude Code — a JSON5-configurable DSL with daemon-cached data sources, byte-clean palette-aware composition, and OSC8 click verbs.",
   "type": "module",
   "main": "./dist/index.mjs",
   "module": "./dist/index.mjs",
   "exports": {
-    ".": "./dist/index.mjs",
-    "./browser": {
-      "types": "./dist/browser.d.ts",
-      "import": "./dist/browser.js"
-    }
+    ".": "./dist/index.mjs"
   },
   "bin": {
     "cc-candybar": "./bin/cc-candybar"
@@ -26,8 +22,7 @@
     "test": "jest",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
-    "demo": "tsx src/demo/app.ts",
-    "demo:dsl": "tsx src/demo/dsl.ts",
+    "demo": "tsx src/demo/dsl.ts",
     "benchmark:timing": "scripts/benchmark_timing.sh",
     "check:protocol": "node scripts/check-protocol.mjs",
     "prepack": "node scripts/write-bin-placeholder.mjs",

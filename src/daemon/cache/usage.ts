@@ -1,5 +1,5 @@
 import fs from "node:fs";
-import { UsageProvider, type UsageInfo } from "../../segments";
+import { UsageProvider, type UsageInfo } from "../../segments/session";
 import type { ClaudeHookData } from "../../utils/claude";
 import { dlog } from "../log";
 

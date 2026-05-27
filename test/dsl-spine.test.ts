@@ -16,7 +16,25 @@ import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import { getThemePalette } from "../src/themes/palette-registry";
 import { registerDslConfig, renderDslLine } from "../src/dsl/render";
-import { HOOK_DATA, SESSION_ID } from "./parity/fixtures";
+
+// [LAW:single-enforcer] Inlined fixture values formerly served by
+// `test/parity/fixtures.ts`. The parity infra was retired alongside the
+// legacy renderer (bzh.2), so this test holds its own minimal fixture
+// rather than importing from a module whose other consumers are gone.
+const SESSION_ID = "0a1b2c3d-4e5f-6789-abcd-ef1234567890";
+
+const HOOK_DATA = {
+  hook_event_name: "Status",
+  session_id: SESSION_ID,
+  transcript_path: "/tmp/fake-transcript.jsonl",
+  cwd: "/tmp/cwd",
+  model: { id: "claude-sonnet-4-6", display_name: "Claude Sonnet 4" },
+  workspace: {
+    current_dir: "/tmp/cwd/src",
+    project_dir: "/tmp/cwd",
+    added_dirs: [],
+  },
+} as const;
 
 // The two palette names used in the fixture. Injected into parseDslConfig so
 // validation does not depend on the filesystem — only the bundled registry.
@@ -114,6 +132,39 @@ describe("DSL render spine (bzh.7 steel thread)", () => {
     const a = renderDslLine(config, compiled, store, registry, HOOK_DATA, basePalette, OPTS);
     const b = renderDslLine(config, compiled, store, registry, HOOK_DATA, basePalette, OPTS);
     expect(a).toBe(b);
+  });
+
+  test("perSegmentSink receives one StripCell[] per rendered (non-hidden) segment, cleared on each call", () => {
+    const { config, compiled, store, registry } = buildRuntime(
+      HOOK_DATA.workspace.current_dir,
+    );
+    const basePalette = new PaletteResolver(getThemePalette("textual-dark")!);
+    const sink = new Map<
+      string,
+      readonly import("@promptctl/rich-js").StripCell[]
+    >();
+    // Pre-seed with a stale entry to verify renderDslLine clears it.
+    sink.set("doesNotExist", []);
+
+    renderDslLine(
+      config,
+      compiled,
+      store,
+      registry,
+      HOOK_DATA,
+      basePalette,
+      OPTS,
+      sink,
+    );
+
+    // Stale entry from a previous render must be gone.
+    expect(sink.has("doesNotExist")).toBe(false);
+    // Every layout entry that wasn't `when`-hidden appears in the sink.
+    expect(sink.size).toBeGreaterThan(0);
+    for (const [name, cells] of sink) {
+      expect(config.layout).toContain(name);
+      expect(cells.length).toBeGreaterThan(0);
+    }
   });
 
   // [LAW:verifiable-goals] The exact bytes are committed as a snapshot.
