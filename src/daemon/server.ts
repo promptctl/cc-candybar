@@ -3,6 +3,7 @@ import net from "node:net";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
+import { parseArgs } from "node:util";
 import { daemonDir, pidPath, socketPath, sessionStatePath } from "./paths";
 import { dlog, closeLog } from "./log";
 import { PROTOCOL_VERSION, encodeFrame, makeFrameReader } from "./protocol";
@@ -556,7 +557,8 @@ async function handleRequest(req: Request): Promise<Response> {
       // [LAW:dataflow-not-control-flow] thread the *request's* cwd, not the
       // daemon's process.cwd(), so config resolution depends only on request
       // data — the daemon's own working directory must not influence output.
-      const entry = renderCache.getOrCreate(req.args, projectDir, req.cwd);
+      const { cliConfig, unknownFlagsError } = parseRenderArgs(req.args);
+      const entry = renderCache.getOrCreate(projectDir, req.cwd, cliConfig);
       // termCols on the wire is unused today — terminal-width-aware
       // wrapping is a future BuildLineOptions extension (see strip.ts).
       // When that arrives, `const termCols = sanitizeTermCols(req.termCols)`
@@ -595,12 +597,8 @@ async function handleRequest(req: Request): Promise<Response> {
           entry.state.lastRenderCellsBySegment,
         );
       }
-      // [LAW:no-silent-fallbacks] CLI override flags (--layout, --segment,
-      // --display, --tray, etc.) were removed in bzh.2. Accepting them
-      // without signalling it hides misconfigured settings.json commands.
-      const deprecatedArgsError = detectDeprecatedRenderArgs(req.args);
       const combinedError =
-        [deprecatedArgsError, entry.lastError].filter(Boolean).join("\n") ||
+        [unknownFlagsError, entry.lastError].filter(Boolean).join("\n") ||
         null;
       const output = composeWithDiagnostics(
         body,
@@ -716,19 +714,31 @@ const OSC8_OPEN = "\x1b]8;;";
 const OSC8_CLOSE = "\x1b]8;;\x1b\\";
 const ST = "\x1b\\";
 
-// [LAW:no-silent-fallbacks] CLI override flags removed in bzh.2. The prefix
-// match (split on "=") handles both --flag and --flag=value forms.
-const DEPRECATED_RENDER_FLAGS = [
-  "--layout", "--tray", "--display", "--segment",
-  "--show", "--set", "--theme", "--style", "--charset", "--config",
-];
-
-function detectDeprecatedRenderArgs(args: string[]): string | null {
-  const found = [
-    ...new Set(args.map((a) => a.split("=")[0]).filter((a) => DEPRECATED_RENDER_FLAGS.includes(a))),
+// [LAW:no-silent-fallbacks] Parse render-path args with the standard util.
+// --config is the only valid render flag; anything else is an error.
+function parseRenderArgs(args: string[]): {
+  cliConfig: string | undefined;
+  unknownFlagsError: string | null;
+} {
+  const { values, tokens } = parseArgs({
+    args: args.slice(1), // skip binary path
+    options: { config: { type: "string" } },
+    strict: false,
+    tokens: true,
+    allowPositionals: true, // values of unknown flags are mis-classified as positionals
+  });
+  const unknown = [
+    ...new Set(
+      (tokens ?? [])
+        .filter((t) => t.kind === "option" && t.name !== "config")
+        .map((t) => `--${t.name}`),
+    ),
   ];
-  if (found.length === 0) return null;
-  return `Deprecated flags in statusLine command: ${found.join(", ")}\nRemove them from Claude Code settings.json — layout is now defined in .cc-candybar.json5`;
+  return {
+    cliConfig: values.config as string | undefined,
+    unknownFlagsError:
+      unknown.length > 0 ? `Unknown flags: ${unknown.join(", ")}` : null,
+  };
 }
 
 // Per-line visible budget and max rows for multi-line diagnostic blocks.

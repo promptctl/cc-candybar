@@ -84,26 +84,32 @@ const CONFIG_EXTENSIONS = ["json5", "json"] as const;
 export function dslConfigCandidatePaths(
   projectDir?: string,
   cwd?: string,
+  cliConfigPath?: string,
 ): readonly string[] {
+  // [LAW:enumeration-gap] Only the shell-standard home-expansion forms
+  // trigger replacement: bare `~`, `~/...`, or `~\...` on Windows. A
+  // string like `~alice/cfg` (POSIX named-home lookup) is NOT expanded —
+  // we have no way to resolve another user's home and a literal
+  // substitution would corrupt the path (`<homedir>alice/cfg`). Such
+  // paths pass through unchanged; if they don't exist as written, the
+  // watcher's parent-dir check will skip them and DEFAULT_DSL_CONFIG
+  // kicks in.
+  function expandHome(p: string): string {
+    return p === "~" || p.startsWith("~/") || p.startsWith("~\\")
+      ? os.homedir() + p.slice(1)
+      : p;
+  }
+
+  // CLI --config wins over everything — highest precedence.
+  if (cliConfigPath) {
+    return [expandHome(cliConfigPath)];
+  }
+
   const envPath = process.env.CC_CANDYBAR_CONFIG;
   if (envPath) {
-    // [LAW:enumeration-gap] Only the shell-standard home-expansion forms
-    // trigger replacement: bare `~`, `~/...`, or `~\...` on Windows. A
-    // string like `~alice/cfg` (POSIX named-home lookup) is NOT expanded —
-    // we have no way to resolve another user's home and a literal
-    // substitution would corrupt the path (`<homedir>alice/cfg`). Such
-    // paths pass through unchanged; if they don't exist as written, the
-    // watcher's parent-dir check will skip them and DEFAULT_DSL_CONFIG
-    // kicks in.
-    const expanded =
-      envPath === "~" || envPath.startsWith("~/") || envPath.startsWith("~\\")
-        ? os.homedir() + envPath.slice(1)
-        : envPath;
     // [LAW:dataflow-not-control-flow] When the env var sets the path, it's
     // the *only* candidate — the precedence chain collapses to one entry.
-    // The watcher (and existence check) operate on that single path. The
-    // user is responsible for the extension; we honor whatever they wrote.
-    return [expanded];
+    return [expandHome(envPath)];
   }
 
   const effectiveCwd = cwd ?? process.cwd();
@@ -149,8 +155,9 @@ export function dslConfigCandidatePaths(
 export function resolveDslConfigPath(
   projectDir?: string,
   cwd?: string,
+  cliConfigPath?: string,
 ): string | null {
-  return dslConfigCandidatePaths(projectDir, cwd).find(fs.existsSync) ?? null;
+  return dslConfigCandidatePaths(projectDir, cwd, cliConfigPath).find(fs.existsSync) ?? null;
 }
 
 /**

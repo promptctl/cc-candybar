@@ -88,6 +88,7 @@ export interface DslRenderState {
 export interface CacheEntry {
   projectDir: string | undefined;
   cwd: string | undefined;
+  cliConfig: string | undefined;
   configFilePath: string | null;
   lastError: string | null;
   lastWarning: string | null;
@@ -96,13 +97,9 @@ export interface CacheEntry {
 }
 
 // [LAW:one-source-of-truth] Cache key includes every input that affects DSL
-// resolution. Args is intentionally excluded — CLI override flags were
-// removed in bzh.2 and produce an error in the request handler if present
-// (detectDeprecatedRenderArgs in server.ts). They must not affect the cache
-// key or they would create duplicate entries (each with their own
-// SourceRegistry timers/watchers) for the same rendered output.
-function cacheKey(projectDir?: string, cwd?: string): string {
-  return (projectDir ?? "") + "\0" + (cwd ?? "");
+// resolution: projectDir, cwd, and the CLI --config path (if provided).
+function cacheKey(projectDir?: string, cwd?: string, cliConfig?: string): string {
+  return (projectDir ?? "") + "\0" + (cwd ?? "") + "\0" + (cliConfig ?? "");
 }
 
 export class RenderCache {
@@ -120,12 +117,11 @@ export class RenderCache {
   // the data; no special-case branches between "first load", "reload",
   // "reload-after-error".
   getOrCreate(
-    args: string[],
     projectDir: string | undefined,
     cwd: string | undefined,
+    cliConfig: string | undefined,
   ): CacheEntry {
-    void args; // validated + errored in server.ts detectDeprecatedRenderArgs
-    const key = cacheKey(projectDir, cwd);
+    const key = cacheKey(projectDir, cwd, cliConfig);
     const existing = this.entries.get(key);
     if (existing) {
       // Move to end (most recently used) for LRU eviction.
@@ -137,6 +133,7 @@ export class RenderCache {
     const entry: CacheEntry = {
       projectDir,
       cwd,
+      cliConfig,
       configFilePath: null,
       lastError: null,
       lastWarning: null,
@@ -174,7 +171,7 @@ export class RenderCache {
   // one. The registry owns timers, watchers, MobX reactions, and git
   // subscriptions — dropping it without dispose leaks every handle.
   private reloadInto(entry: CacheEntry): void {
-    const resolvedPath = resolveDslConfigPath(entry.projectDir, entry.cwd);
+    const resolvedPath = resolveDslConfigPath(entry.projectDir, entry.cwd, entry.cliConfig);
 
     // [LAW:dataflow-not-control-flow] Collision detection runs every reload,
     // independent of load success — even if the .json5 fails to parse, the
