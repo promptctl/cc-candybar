@@ -96,13 +96,11 @@ export interface CacheEntry {
 }
 
 // [LAW:one-source-of-truth] Cache key includes every input that affects DSL
-// resolution. Args is intentionally *excluded* — bzh.2 retired the CLI
-// override flag apparatus, so args no longer influence config resolution
-// or rendering. Including it would let a legacy client churn the LRU by
-// varying flags that the daemon now ignores, creating duplicate entries
-// (each with their own SourceRegistry timers/watchers) for the same
-// behavior. The signature still threads `args` (the wire protocol carries
-// it) but the value is dropped at the boundary.
+// resolution. Args is intentionally excluded — CLI override flags were
+// removed in bzh.2 and produce an error in the request handler if present
+// (detectDeprecatedRenderArgs in server.ts). They must not affect the cache
+// key or they would create duplicate entries (each with their own
+// SourceRegistry timers/watchers) for the same rendered output.
 function cacheKey(projectDir?: string, cwd?: string): string {
   return (projectDir ?? "") + "\0" + (cwd ?? "");
 }
@@ -126,13 +124,7 @@ export class RenderCache {
     projectDir: string | undefined,
     cwd: string | undefined,
   ): CacheEntry {
-    // [LAW:no-mode-explosion] `args` is still part of the wire protocol
-    // (RenderRequest carries it from legacy clients running pre-bzh.2
-    // settings.json scaffolding), but it influences nothing — neither
-    // resolution, nor rendering, nor cache identity. Accepting and
-    // discarding it preserves protocol back-compat without giving any
-    // surface to the dead variability.
-    void args;
+    void args; // validated + errored in server.ts detectDeprecatedRenderArgs
     const key = cacheKey(projectDir, cwd);
     const existing = this.entries.get(key);
     if (existing) {

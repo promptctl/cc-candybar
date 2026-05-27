@@ -595,9 +595,16 @@ async function handleRequest(req: Request): Promise<Response> {
           entry.state.lastRenderCellsBySegment,
         );
       }
+      // [LAW:no-silent-fallbacks] CLI override flags (--layout, --segment,
+      // --display, --tray, etc.) were removed in bzh.2. Accepting them
+      // without signalling it hides misconfigured settings.json commands.
+      const deprecatedArgsError = detectDeprecatedRenderArgs(req.args);
+      const combinedError =
+        [deprecatedArgsError, entry.lastError].filter(Boolean).join("\n") ||
+        null;
       const output = composeWithDiagnostics(
         body,
-        entry.lastError,
+        combinedError,
         entry.lastWarning,
       );
       const ms = Date.now() - t0;
@@ -708,6 +715,21 @@ const ANSI_RESET = "\x1b[0m";
 const OSC8_OPEN = "\x1b]8;;";
 const OSC8_CLOSE = "\x1b]8;;\x1b\\";
 const ST = "\x1b\\";
+
+// [LAW:no-silent-fallbacks] CLI override flags removed in bzh.2. The prefix
+// match (split on "=") handles both --flag and --flag=value forms.
+const DEPRECATED_RENDER_FLAGS = [
+  "--layout", "--tray", "--display", "--segment",
+  "--show", "--set", "--theme", "--style", "--charset", "--config",
+];
+
+function detectDeprecatedRenderArgs(args: string[]): string | null {
+  const found = [
+    ...new Set(args.map((a) => a.split("=")[0]).filter((a) => DEPRECATED_RENDER_FLAGS.includes(a))),
+  ];
+  if (found.length === 0) return null;
+  return `Deprecated flags in statusLine command: ${found.join(", ")}\nRemove them from Claude Code settings.json — layout is now defined in .cc-candybar.json5`;
+}
 
 // Per-line visible budget and max rows for multi-line diagnostic blocks.
 // Messages from the config validator (formatIssues) are already structured
