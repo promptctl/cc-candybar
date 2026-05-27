@@ -16,6 +16,7 @@
 // that mirror this shape; user configs MUST agree (a path that doesn't
 // resolve falls back to the variable's declared default).
 
+import path from "node:path";
 import type { ClaudeHookData } from "../utils/claude.js";
 import type { DslConfig, VariableDecl } from "../config/dsl-types.js";
 import { extractTemplateRefs } from "../config/dsl-loader.js";
@@ -389,7 +390,21 @@ export async function buildRenderPayload(
 
   // home is always available — it's a single env-var read, no I/O cost.
   // Letting the gate skip it would add a branch with no win.
-  const home = process.env.HOME ?? process.env.USERPROFILE;
+  // [LAW:single-enforcer] All path-shaped payload fields are normalized
+  // to forward-slash separators at this boundary. The DSL's directory
+  // template (and any user template that does prefix/relative-path math)
+  // assumes POSIX separators; without normalization, Windows hookData
+  // (current_dir = "C:\Users\Alice") would never match a forward-slash
+  // home prefix. Normalize *here*, not in the template — keeps DSL
+  // templates platform-agnostic by construction.
+  const home = posixify(process.env.HOME ?? process.env.USERPROFILE);
+  const workspace = hookData.workspace
+    ? {
+        ...hookData.workspace,
+        current_dir: posixify(hookData.workspace.current_dir) ?? "",
+        project_dir: posixify(hookData.workspace.project_dir) ?? "",
+      }
+    : hookData.workspace;
 
   // [LAW:types-are-the-program] Partial projections so absent provider data
   // travels as missing fields all the way to applyInput. Each provider's
@@ -420,6 +435,7 @@ export async function buildRenderPayload(
 
   return {
     ...hookData,
+    ...(workspace !== undefined && { workspace }),
     ...(home !== undefined && { home }),
     ...(gitInfo !== null && { git: projectGitInfo(gitInfo) }),
     ...(tmuxSession !== null && { tmux: { session: tmuxSession } }),
@@ -470,6 +486,20 @@ function pickNonNull<T extends Readonly<Record<string, number | null>>>(
     }
   }
   return any ? out : undefined;
+}
+
+// [LAW:single-enforcer] Convert backslash-separator path strings to
+// forward-slash separators so DSL templates can rely on POSIX path math
+// (prefix checks, trimPrefix) on every platform. Undefined and empty
+// inputs pass through unchanged. The function is platform-conditional
+// only on whether `\` *could* be a separator (it never can on POSIX, so
+// no harm in always converting — but the explicit guard avoids touching
+// strings on non-Windows callers where backslash is meaningful
+// inside path components).
+function posixify(s: string | undefined): string | undefined {
+  if (s === undefined || s.length === 0) return s;
+  if (path.sep !== "\\") return s;
+  return s.replace(/\\/g, "/");
 }
 
 // [LAW:types-are-the-program] Project the optional-rich GitInfo down to the

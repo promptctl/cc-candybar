@@ -87,9 +87,18 @@ export function dslConfigCandidatePaths(
 ): readonly string[] {
   const envPath = process.env.CC_CANDYBAR_CONFIG;
   if (envPath) {
-    const expanded = envPath.startsWith("~")
-      ? envPath.replace("~", os.homedir())
-      : envPath;
+    // [LAW:enumeration-gap] Only the shell-standard home-expansion forms
+    // trigger replacement: bare `~`, `~/...`, or `~\...` on Windows. A
+    // string like `~alice/cfg` (POSIX named-home lookup) is NOT expanded —
+    // we have no way to resolve another user's home and a literal
+    // substitution would corrupt the path (`<homedir>alice/cfg`). Such
+    // paths pass through unchanged; if they don't exist as written, the
+    // watcher's parent-dir check will skip them and DEFAULT_DSL_CONFIG
+    // kicks in.
+    const expanded =
+      envPath === "~" || envPath.startsWith("~/") || envPath.startsWith("~\\")
+        ? os.homedir() + envPath.slice(1)
+        : envPath;
     // [LAW:dataflow-not-control-flow] When the env var sets the path, it's
     // the *only* candidate — the precedence chain collapses to one entry.
     // The watcher (and existence check) operate on that single path. The
