@@ -403,19 +403,15 @@ fn detect_term_cols() -> Option<u32> {
 // The socket path is independent of XDG_STATE_HOME (see socket_path()).
 // State files (spawn.lock) and caches (last-render) still use XDG roots.
 
-// [LAW:one-source-of-truth] CC_CANDYBAR_SOCKET is the only mechanism for
-// intentional multi-instance use. The default uses HOME directly so Claude
-// Code's per-session XDG_STATE_HOME cannot silently produce a different socket.
+// [LAW:one-source-of-truth] Mirrors tmux's /tmp/tmux-<uid>/default model.
+// UID is kernel identity — not overridable by any env var. CC_CANDYBAR_SOCKET
+// is the only explicit override for intentional multi-instance use.
 fn socket_path() -> PathBuf {
     if let Some(s) = env::var_os("CC_CANDYBAR_SOCKET").filter(|s| !s.is_empty()) {
         return PathBuf::from(s);
     }
-    let home = env::var_os("HOME").unwrap_or_else(|| OsString::from("/"));
-    Path::new(&home)
-        .join(".local")
-        .join("state")
-        .join("cc-candybar")
-        .join("socket")
+    let uid = unsafe { libc::getuid() };
+    PathBuf::from(format!("/tmp/cc-candybar-{uid}/socket"))
 }
 
 fn state_dir() -> PathBuf {

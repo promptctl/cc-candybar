@@ -42,15 +42,16 @@ export function daemonDir(): string {
 }
 
 // [LAW:one-source-of-truth] The socket IS the daemon's identity — same as
-// tmux's socket model. The path is independent of XDG_STATE_HOME so that
-// Claude Code's per-session environment (which may set XDG_STATE_HOME to an
-// isolated tmpdir) cannot silently spawn a separate daemon for each session.
-// CC_CANDYBAR_SOCKET is the explicit override for intentional isolation (tests,
-// dev, multiple intentional instances). No other mechanism changes this path.
+// tmux's /tmp/tmux-<uid>/default model. UID is kernel identity: immutable,
+// not overridable by any env var. /tmp is guaranteed on every Unix host and
+// is cleared on reboot, which is fine — the daemon doesn't survive reboots.
+// CC_CANDYBAR_SOCKET is the only explicit override for intentional isolation
+// (tests, dev, multiple intentional instances).
 export function socketPath(): string {
   const override = process.env.CC_CANDYBAR_SOCKET;
   if (override) return override;
-  return path.join(os.homedir(), ".local", "state", "cc-candybar", "socket");
+  const uid = os.userInfo().uid;
+  return path.join("/tmp", `cc-candybar-${uid}`, "socket");
 }
 
 export function pidPath(): string {

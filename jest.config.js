@@ -1,4 +1,5 @@
 export default {
+  setupFiles: ["<rootDir>/test/setup.ts"],
   preset: "ts-jest/presets/default-esm",
   extensionsToTreatAsEsm: [".ts"],
   testEnvironment: "node",
