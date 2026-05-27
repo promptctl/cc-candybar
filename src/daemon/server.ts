@@ -704,15 +704,14 @@ const OSC8_OPEN = "\x1b]8;;";
 const OSC8_CLOSE = "\x1b]8;;\x1b\\";
 const ST = "\x1b\\";
 
-// Budget for the visible portion of each diagnostic line. Picked to fit
-// comfortably on a modern terminal (typical width ≥ 200 cols) while
-// showing substantial detail — file path + first issue summary for a
-// config error, full collision message for a warning. Soft-wraps on
-// narrower terminals; the full message is always available via click.
+// Per-line visible budget and max rows for multi-line diagnostic blocks.
+// Messages from the config validator (formatIssues) are already structured
+// as one line per issue, so splitting there is the natural unit of display.
 // [LAW:no-mode-explosion] Not user-configurable. Future tightening:
-// thread req.termCols through to here so the budget tracks the actual
-// terminal width instead of a static cap (see comment near line 554).
-const MAX_DIAGNOSTIC_LEN = 180;
+// thread req.termCols through to here so the per-line budget tracks actual
+// terminal width instead of a static cap.
+const MAX_DIAGNOSTIC_LINE_LEN = 120;
+const MAX_DIAGNOSTIC_LINES = 8;
 
 function makeDiagnosticLink(
   verb: "show-config-error" | "show-config-warning",
@@ -720,12 +719,25 @@ function makeDiagnosticLink(
   bg: string,
   fg: string,
 ): string {
-  // Full message rides in the OSC-8 URL (clipboard-copy on click), so
-  // truncation here loses nothing — it just decides what's visible at
-  // a glance.
+  // Full message in the OSC-8 URL (clipboard-copy on click) — truncation
+  // only affects what is visible, never what is accessible.
   const url = `cc-candybar://${verb}/${encodeURIComponent(message)}`;
-  const visible = sanitizeAndTruncate(message, MAX_DIAGNOSTIC_LEN);
-  return `${OSC8_OPEN}${url}${ST}${bg}${fg} ⚠ ${visible} ${ANSI_RESET}${OSC8_CLOSE}`;
+  // [LAW:dataflow-not-control-flow] Split on natural line boundaries from
+  // the source message (config validator emits one issue per line), sanitize
+  // each line individually, then render each as a separate styled row.
+  // This preserves structured multi-line output instead of collapsing N
+  // issues into a single truncated string the user cannot read.
+  const lines = message
+    .split(/\r\n|\r|\n/)
+    .map((l) => sanitizeAndTruncate(l, MAX_DIAGNOSTIC_LINE_LEN))
+    .filter(Boolean)
+    .slice(0, MAX_DIAGNOSTIC_LINES);
+  if (lines.length === 0) return "";
+  const first = `${OSC8_OPEN}${url}${ST}${bg}${fg} ⚠ ${lines[0]} ${ANSI_RESET}${OSC8_CLOSE}`;
+  const rest = lines
+    .slice(1)
+    .map((l) => `${OSC8_OPEN}${url}${ST}${bg}${fg}   ${l} ${ANSI_RESET}${OSC8_CLOSE}`);
+  return [first, ...rest].join("\n");
 }
 
 function composeWithDiagnostics(
@@ -734,9 +746,10 @@ function composeWithDiagnostics(
   warning: string | null,
 ): string {
   // [LAW:dataflow-not-control-flow] Diagnostics list is data; the
-  // composer walks it. Each non-null channel contributes one prefix line.
-  // Order is error-first (more severe), then warning, then body — so the
-  // operator's eye lands on the most critical message at the top.
+  // composer walks it. Each non-null channel contributes one or more prefix
+  // rows (makeDiagnosticLink returns a \n-joined multi-line block when the
+  // message has natural line breaks). Order is error-first (more severe),
+  // then warning, then body.
   const prefixes: string[] = [];
   if (error) {
     prefixes.push(
