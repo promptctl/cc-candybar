@@ -51,10 +51,19 @@ export interface LiteralVarDecl {
   readonly default?: string;
 }
 
+// [LAW:types-are-the-program] `type` carries the runtime kind of the value at
+// the resolved payload path. Number/bool are needed for the usage/cost/today
+// family — token counts, cost amounts, percentages — whose formatters
+// (`formatCost`, `formatTokens`, `round`, `budgetStatus`) take numeric inputs.
+// Absent `type` defaults to "string" at the loader, preserving the historical
+// behavior of every existing declaration. The default value's literal type
+// must match the declared type — a number default on a string-typed input
+// (or vice versa) is rejected at load time, not at first render.
 export interface InputVarDecl {
   readonly kind: "input";
   readonly path: string;
-  readonly default?: string;
+  readonly type?: "string" | "number" | "boolean";
+  readonly default?: string | number | boolean;
 }
 
 export interface EnvVarDecl {

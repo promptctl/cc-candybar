@@ -60,14 +60,14 @@
       template: ' {{ .branch }} ',
       bg: 'accent',
       fg: 'auto',
-      when: 'ne .branch ""',   // hidden entirely outside a git repo
+      when: '{{ ne .branch "" }}',   // hidden entirely outside a git repo
       palette: 'gruvbox',      // this segment pulls its OWN palette (per-segment switch)
     },
     model: {
       template: ' {{ .model }} ',
       bg: 'secondary',
       fg: 'auto',
-      when: 'ne .model ""',
+      when: '{{ ne .model "" }}',
     },
     session: {
       template: ' ⌗{{ .sid }} ',

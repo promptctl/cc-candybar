@@ -118,6 +118,13 @@ const openVscode: VerbHandler = (target, ctx) => {
 // treats it as a plain string.
 const showConfigError: VerbHandler = (message, ctx) => copy(message, ctx);
 
+// [LAW:one-type-per-behavior] Warnings (advisory diagnostics — e.g. config
+// extension collision) and errors (load-fatal) are surfaced as distinct
+// icons in the bar so the operator can tell them apart at a glance. The
+// click behavior is the same — copy the message — but the diagnostic
+// categories are kept in separate channels through the render pipeline.
+const showConfigWarning: VerbHandler = (message, ctx) => copy(message, ctx);
+
 // [LAW:one-source-of-truth] SessionState is the canonical store for
 // toolbar-expanded state (eir merge). Toggle via set/clear; the file-backed
 // storage owned by the daemon process persists the change automatically.
@@ -197,6 +204,7 @@ export const VERBS: ReadonlyMap<string, VerbHandler> = new Map<
   ["open-vscode", openVscode],
   ["set-state", setState],
   ["show-config-error", showConfigError],
+  ["show-config-warning", showConfigWarning],
   ["toolbar-toggle", toolbarToggle],
 ]);
 
