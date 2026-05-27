@@ -157,16 +157,21 @@ describe("formatPermanentGlyph (kz8.5 ch.2)", () => {
     expect(body).toContain("bypass");
   });
 
-  test("embedded newlines in daemon error string are sanitized to spaces", () => {
-    // `\n` and `\r` each become one space, so `\r\n` becomes two spaces.
-    // The load-bearing contract is "no embedded newline/CR in the output";
-    // the count of inserted spaces is incidental.
-    const cases: Array<[string, string]> = [
-      ["line1\nline2\nline3", "line1 line2 line3"],
-      ["line1\rline2\rline3", "line1 line2 line3"],
-      ["line1\r\nline2\r\nline3", "line1  line2  line3"],
+  test("embedded newlines in daemon error string are sanitized + collapsed to single spaces", () => {
+    // [LAW:behavior-not-structure] The load-bearing contract is "no embedded
+    // newline/CR/control-char in the output". The shared sanitizer now also
+    // collapses runs of whitespace to a single space (so the daemon-side
+    // diagnostic strip — which surfaces multi-line config errors with
+    // existing indentation — displays as a clean single line). The
+    // permanent-glyph path inherits that behavior; we assert what every
+    // caller cares about (no embedded line breaks, content preserved in
+    // order) rather than the exact count of separator spaces.
+    const cases: Array<[string, string[]]> = [
+      ["line1\nline2\nline3", ["line1", "line2", "line3"]],
+      ["line1\rline2\rline3", ["line1", "line2", "line3"]],
+      ["line1\r\nline2\r\nline3", ["line1", "line2", "line3"]],
     ];
-    for (const [message, expectedSubstr] of cases) {
+    for (const [message, parts] of cases) {
       const glyph = formatPermanentGlyph({
         kind: "permanent",
         cause: "render_failed",
@@ -177,7 +182,8 @@ describe("formatPermanentGlyph (kz8.5 ch.2)", () => {
       expect(glyph.endsWith(TAIL)).toBe(true);
       const body = glyph.slice(OPEN.length, -TAIL.length);
       expect(body).not.toMatch(/[\n\r]/);
-      expect(body).toContain(expectedSubstr);
+      // Each part appears, in order, separated by exactly one space.
+      expect(body).toContain(parts.join(" "));
     }
   });
 

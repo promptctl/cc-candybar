@@ -27,6 +27,7 @@ import { TodayProvider } from "../segments/today.js";
 import { ContextProvider } from "../segments/context.js";
 import { MetricsProvider } from "../segments/metrics.js";
 import { TmuxService } from "../segments/tmux.js";
+import { sanitizeAndTruncate } from "../render/diagnostic-text.js";
 
 // [LAW:one-source-of-truth] one cache instance per daemon process — multiple
 // instances would defeat the share-across-sessions invariant.
@@ -687,6 +688,13 @@ async function handleRequest(req: Request): Promise<Response> {
 // composer's signature carries both; severity is encoded in WHICH
 // argument is non-null, not in a string prefix or a tag inside the
 // message. The two icons render independently — both can show at once.
+//
+// [LAW:types-are-the-program] The diagnostic's visible text IS (a
+// projection of) the underlying message — not a constant label that hides
+// the content behind a click. The leading ⚠ + background color carry
+// severity; the rest of the cell is the actual error/warning, sanitized
+// and clipped to a single-line budget. A label divorced from the message
+// would be the type lying about what's in the channel.
 const ERROR_ICON_FG = "\x1b[38;2;255;255;255m";
 const ERROR_ICON_BG = "\x1b[48;2;200;40;40m";
 const WARNING_ICON_FG = "\x1b[38;2;0;0;0m";
@@ -696,15 +704,28 @@ const OSC8_OPEN = "\x1b]8;;";
 const OSC8_CLOSE = "\x1b]8;;\x1b\\";
 const ST = "\x1b\\";
 
+// Budget for the visible portion of each diagnostic line. Picked to fit
+// comfortably on a modern terminal (typical width ≥ 200 cols) while
+// showing substantial detail — file path + first issue summary for a
+// config error, full collision message for a warning. Soft-wraps on
+// narrower terminals; the full message is always available via click.
+// [LAW:no-mode-explosion] Not user-configurable. Future tightening:
+// thread req.termCols through to here so the budget tracks the actual
+// terminal width instead of a static cap (see comment near line 554).
+const MAX_DIAGNOSTIC_LEN = 180;
+
 function makeDiagnosticLink(
   verb: "show-config-error" | "show-config-warning",
   message: string,
   bg: string,
   fg: string,
-  label: string,
 ): string {
+  // Full message rides in the OSC-8 URL (clipboard-copy on click), so
+  // truncation here loses nothing — it just decides what's visible at
+  // a glance.
   const url = `cc-candybar://${verb}/${encodeURIComponent(message)}`;
-  return `${OSC8_OPEN}${url}${ST}${bg}${fg} ${label} ${ANSI_RESET}${OSC8_CLOSE}`;
+  const visible = sanitizeAndTruncate(message, MAX_DIAGNOSTIC_LEN);
+  return `${OSC8_OPEN}${url}${ST}${bg}${fg} ⚠ ${visible} ${ANSI_RESET}${OSC8_CLOSE}`;
 }
 
 function composeWithDiagnostics(
@@ -724,7 +745,6 @@ function composeWithDiagnostics(
         error,
         ERROR_ICON_BG,
         ERROR_ICON_FG,
-        "⚠ config error",
       ),
     );
   }
@@ -735,7 +755,6 @@ function composeWithDiagnostics(
         warning,
         WARNING_ICON_BG,
         WARNING_ICON_FG,
-        "⚠ config warning",
       ),
     );
   }
