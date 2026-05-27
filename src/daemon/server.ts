@@ -21,6 +21,7 @@ import { validateHookData } from "../utils/schema-validator.js";
 import { setLaunchStats } from "../proc/launch";
 import { buildDebugSnapshot } from "./debug";
 import { DEBUG_WHATS, isDebugWhat } from "./debug-types";
+import { expandHome } from "../config/dsl-loader.js";
 import { renderDslLine } from "../dsl/render.js";
 import { renderStripCells } from "../render/strip.js";
 import type { StripCell } from "@promptctl/rich-js";
@@ -536,29 +537,51 @@ async function handleRequest(req: Request): Promise<Response> {
     const t0 = Date.now();
     try {
       // [LAW:single-enforcer] One trust-boundary check for incoming hookData.
-      // Divergences are logged, not thrown — rendering continues regardless.
+      // The validator reports missing/wrong-typed required fields and unknown
+      // top-level keys. Required-field problems are *protocol* failures
+      // (Claude Code's schema guarantees these — their absence means the
+      // sender is broken or malicious); unknown fields are advisory (Anthropic
+      // may have added something).
       const { report } = validateHookData(req.hookData as unknown);
-      for (const path of report.missingRequired) {
-        dlog("warn", `schema: required field '${path}' absent in hookData`);
-      }
-      for (const { path, expected, got } of report.typeMismatches) {
-        dlog(
-          "warn",
-          `schema: field '${path}' expected ${expected}, got ${got}`,
-        );
-      }
       for (const field of report.unknownTopLevelFields) {
         dlog(
           "info",
           `schema: unknown field '${field}' — Anthropic may have added it`,
         );
       }
-      const projectDir = req.hookData.workspace?.project_dir;
+      // [LAW:no-silent-fallbacks][LAW:types-are-the-program] Gate hard on
+      // schema violations. Continuing with `workspace?.project_dir` would
+      // collapse "absent" into an empty-string cache key — silently sharing
+      // one entry across every malformed request — and downstream code would
+      // have to defend against an empty projectDir forever. Reject here so
+      // the types downstream carry the strongest true theorem: by the time
+      // a cache entry is built, projectDir/cwd are real non-empty strings.
+      const wireProblems: string[] = [];
+      for (const path of report.missingRequired) {
+        wireProblems.push(`missing required field '${path}'`);
+      }
+      for (const { path, expected, got } of report.typeMismatches) {
+        wireProblems.push(`field '${path}' expected ${expected}, got ${got}`);
+      }
+      if (req.cwd === "") {
+        wireProblems.push("request 'cwd' is empty");
+      }
+      if (wireProblems.length > 0) {
+        stats.requestsErrored++;
+        dlog("warn", `BAD_REQUEST: ${wireProblems.join("; ")}`);
+        return {
+          ok: false,
+          error: `malformed hookData: ${wireProblems.join("; ")}`,
+          code: "BAD_REQUEST",
+          daemonV: PROTOCOL_VERSION,
+        };
+      }
+      const projectDir = req.hookData.workspace.project_dir;
       // [LAW:dataflow-not-control-flow] thread the *request's* cwd, not the
       // daemon's process.cwd(), so config resolution depends only on request
       // data — the daemon's own working directory must not influence output.
-      const { cliConfig, unknownFlagsError } = parseRenderArgs(req.args);
-      const entry = renderCache.getOrCreate(projectDir, req.cwd, cliConfig);
+      const { configFile, unknownFlagsError } = parseRenderArgs(req.args);
+      const entry = renderCache.getOrCreate(projectDir, req.cwd, configFile);
       // termCols on the wire is unused today — terminal-width-aware
       // wrapping is a future BuildLineOptions extension (see strip.ts).
       // When that arrives, `const termCols = sanitizeTermCols(req.termCols)`
@@ -714,10 +737,19 @@ const OSC8_OPEN = "\x1b]8;;";
 const OSC8_CLOSE = "\x1b]8;;\x1b\\";
 const ST = "\x1b\\";
 
-// [LAW:no-silent-fallbacks] Parse render-path args with the standard util.
-// --config is the only valid render flag; anything else is an error.
+// [LAW:single-enforcer][LAW:no-silent-fallbacks] Parse render-path args with
+// the standard util at the trust boundary. `--config <path>` is the sole
+// valid render flag; every other flag is surfaced as a render-time
+// diagnostic icon (caller composes it alongside config errors). The
+// `--config` value is `~`-expanded here, so every consumer downstream
+// receives a literal path — no caller has to remember to expand it.
+//
+// `tokens: true, strict: false, allowPositionals: true` together let the
+// parser emit a token entry for every flag (known or unknown) without
+// throwing on unknown ones, and without mis-classifying their values as
+// positionals.
 function parseRenderArgs(args: string[]): {
-  cliConfig: string | undefined;
+  configFile: string | undefined;
   unknownFlagsError: string | null;
 } {
   const { values, tokens } = parseArgs({
@@ -725,17 +757,21 @@ function parseRenderArgs(args: string[]): {
     options: { config: { type: "string" } },
     strict: false,
     tokens: true,
-    allowPositionals: true, // values of unknown flags are mis-classified as positionals
+    allowPositionals: true,
   });
   const unknown = [
     ...new Set(
       (tokens ?? [])
-        .filter((t) => t.kind === "option" && t.name !== "config")
+        .filter(
+          (t): t is Extract<typeof t, { kind: "option" }> =>
+            t.kind === "option" && t.name !== "config",
+        )
         .map((t) => `--${t.name}`),
     ),
   ];
+  const rawConfig = values.config as string | undefined;
   return {
-    cliConfig: values.config as string | undefined,
+    configFile: rawConfig === undefined ? undefined : expandHome(rawConfig),
     unknownFlagsError:
       unknown.length > 0 ? `Unknown flags: ${unknown.join(", ")}` : null,
   };

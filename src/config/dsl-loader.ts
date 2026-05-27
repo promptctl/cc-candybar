@@ -68,11 +68,33 @@ export class ConfigError extends Error {
 // format > compatibility tail).
 const CONFIG_EXTENSIONS = ["json5", "json"] as const;
 
+// [LAW:single-enforcer] One implementation of `~`-prefix expansion, called at
+// each trust boundary that takes a user-supplied path. The CLI `--config`
+// value is expanded in `parseRenderArgs` (server.ts) before it ever reaches
+// here; `CC_CANDYBAR_CONFIG` is expanded below where the env var is read.
+// One function, one rule, two callers.
+//
+// [LAW:enumeration-gap] Only the shell-standard home-expansion forms trigger
+// replacement: bare `~`, `~/...`, or `~\...` on Windows. A string like
+// `~alice/cfg` (POSIX named-home lookup) is NOT expanded — we have no way
+// to resolve another user's home and a literal substitution would corrupt
+// the path (`<homedir>alice/cfg`).
+export function expandHome(p: string): string {
+  return p === "~" || p.startsWith("~/") || p.startsWith("~\\")
+    ? os.homedir() + p.slice(1)
+    : p;
+}
+
 /**
  * The full ordered list of candidate paths the DSL config could live at,
  * for a given (projectDir, cwd). Returned regardless of which exist — the
  * cache uses this to watch every candidate location so the creation of any
  * file in the resolution chain triggers hot-reload.
+ *
+ * `configFile` is the highest-precedence entry — the path resolved from the
+ * client's `--config` flag (already `~`-expanded at the trust boundary in
+ * server.ts). When present, it is the sole candidate and the rest of the
+ * precedence chain is bypassed.
  *
  * [LAW:single-enforcer] One enumerator; `resolveDslConfigPath` finds the
  * first that exists, watchers listen on all of them, no second list.
@@ -84,31 +106,20 @@ const CONFIG_EXTENSIONS = ["json5", "json"] as const;
 export function dslConfigCandidatePaths(
   projectDir?: string,
   cwd?: string,
-  cliConfigPath?: string,
+  configFile?: string,
 ): readonly string[] {
-  // [LAW:enumeration-gap] Only the shell-standard home-expansion forms
-  // trigger replacement: bare `~`, `~/...`, or `~\...` on Windows. A
-  // string like `~alice/cfg` (POSIX named-home lookup) is NOT expanded —
-  // we have no way to resolve another user's home and a literal
-  // substitution would corrupt the path (`<homedir>alice/cfg`). Such
-  // paths pass through unchanged; if they don't exist as written, the
-  // watcher's parent-dir check will skip them and DEFAULT_DSL_CONFIG
-  // kicks in.
-  function expandHome(p: string): string {
-    return p === "~" || p.startsWith("~/") || p.startsWith("~\\")
-      ? os.homedir() + p.slice(1)
-      : p;
-  }
-
-  // CLI --config wins over everything — highest precedence.
-  if (cliConfigPath) {
-    return [expandHome(cliConfigPath)];
+  // CLI --config wins over everything — highest precedence. Pre-expanded at
+  // the trust boundary; trust the type here.
+  if (configFile) {
+    return [configFile];
   }
 
   const envPath = process.env.CC_CANDYBAR_CONFIG;
   if (envPath) {
-    // [LAW:dataflow-not-control-flow] When the env var sets the path, it's
-    // the *only* candidate — the precedence chain collapses to one entry.
+    // [LAW:single-enforcer] env-var is a separate trust boundary; expand here
+    // where the env is read, with the shared `expandHome` helper. [LAW:
+    // dataflow-not-control-flow] When the env var sets the path, it's the
+    // *only* candidate — the precedence chain collapses to one entry.
     return [expandHome(envPath)];
   }
 
@@ -133,14 +144,15 @@ export function dslConfigCandidatePaths(
 
 /**
  * Resolution order for the user's DSL config file:
- *   1. $CC_CANDYBAR_CONFIG env var (literal path, optional `~` expansion)
- *   2. `<projectDir>/.cc-candybar.json5`
- *   3. `<projectDir>/.cc-candybar.json`
- *   4. `<cwd>/.cc-candybar.json5`
- *   5. `<cwd>/.cc-candybar.json`
- *   6. `$XDG_CONFIG_HOME/cc-candybar/config.json5`
+ *   1. `configFile` (the CLI `--config <path>` value, already `~`-expanded)
+ *   2. $CC_CANDYBAR_CONFIG env var (literal path, `~`-expanded here)
+ *   3. `<projectDir>/.cc-candybar.json5`
+ *   4. `<projectDir>/.cc-candybar.json`
+ *   5. `<cwd>/.cc-candybar.json5`
+ *   6. `<cwd>/.cc-candybar.json`
+ *   7. `$XDG_CONFIG_HOME/cc-candybar/config.json5`
  *      (defaulting to `~/.config/cc-candybar/config.json5`)
- *   7. `$XDG_CONFIG_HOME/cc-candybar/config.json`
+ *   8. `$XDG_CONFIG_HOME/cc-candybar/config.json`
  *
  * Returns the first path that exists, or null if none do.
  *
@@ -155,9 +167,9 @@ export function dslConfigCandidatePaths(
 export function resolveDslConfigPath(
   projectDir?: string,
   cwd?: string,
-  cliConfigPath?: string,
+  configFile?: string,
 ): string | null {
-  return dslConfigCandidatePaths(projectDir, cwd, cliConfigPath).find(fs.existsSync) ?? null;
+  return dslConfigCandidatePaths(projectDir, cwd, configFile).find(fs.existsSync) ?? null;
 }
 
 /**
