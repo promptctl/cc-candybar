@@ -2,9 +2,14 @@ import fs from "node:fs";
 import net from "node:net";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
-import path from "node:path";
 import { parseArgs } from "node:util";
-import { daemonDir, pidPath, socketPath, sessionStatePath } from "./paths";
+import {
+  daemonDir,
+  ensureSocketParentSafe,
+  pidPath,
+  socketPath,
+  sessionStatePath,
+} from "./paths";
 import { dlog, closeLog } from "./log";
 import { PROTOCOL_VERSION, encodeFrame, makeFrameReader } from "./protocol";
 import type { Request, Response } from "./protocol";
@@ -80,10 +85,15 @@ const BIN_CHECK_INTERVAL_MS = 60 * 1000;
 // obtainDaemon() (caller waits for readiness) in src/daemon/acquire.ts.
 export function runDaemon(): void {
   fs.mkdirSync(daemonDir(), { recursive: true });
-  // socketPath() is now independent of daemonDir() — ensure its parent exists
-  // (matters when CC_CANDYBAR_SOCKET points outside the XDG state tree, or
-  // when the HOME-based default differs from XDG_STATE_HOME).
-  fs.mkdirSync(path.dirname(socketPath()), { recursive: true });
+  // [LAW:single-enforcer] Verify the socket parent is uid==me + mode 0700 +
+  // not a symlink before we bind. Without this check, a same-host attacker
+  // could pre-create the predictable `/tmp/cc-candybar-<uid>` directory and
+  // squat the socket name. The check applies regardless of CC_CANDYBAR_SOCKET
+  // location — every bind path goes through the same trust precondition.
+  // No symmetric client-side check: the daemon is the sole creator, so a
+  // successful bind already proves the parent is trusted. Failure here surfaces
+  // as a daemon exit; the client falls back to the last cached render.
+  ensureSocketParentSafe(socketPath());
 
   // Bind disk persistence now that we know we are the daemon process — load
   // prior session state and become the sole writer of the state file.
@@ -621,8 +631,7 @@ async function handleRequest(req: Request): Promise<Response> {
         );
       }
       const combinedError =
-        [unknownFlagsError, entry.lastError].filter(Boolean).join("\n") ||
-        null;
+        [unknownFlagsError, entry.lastError].filter(Boolean).join("\n") || null;
       const output = composeWithDiagnostics(
         body,
         combinedError,
@@ -809,7 +818,10 @@ function makeDiagnosticLink(
   const first = `${OSC8_OPEN}${url}${ST}${bg}${fg} ⚠ ${lines[0]} ${ANSI_RESET}${OSC8_CLOSE}`;
   const rest = lines
     .slice(1)
-    .map((l) => `${OSC8_OPEN}${url}${ST}${bg}${fg}   ${l} ${ANSI_RESET}${OSC8_CLOSE}`);
+    .map(
+      (l) =>
+        `${OSC8_OPEN}${url}${ST}${bg}${fg}   ${l} ${ANSI_RESET}${OSC8_CLOSE}`,
+    );
   return [first, ...rest].join("\n");
 }
 

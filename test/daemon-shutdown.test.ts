@@ -36,7 +36,10 @@ async function spawnDaemon(): Promise<DaemonHandle> {
     path.join(os.tmpdir(), "cc-candybar-shutdown-"),
   );
   const stateDir = path.join(stateRoot, "cc-candybar");
-  fs.mkdirSync(stateDir, { recursive: true });
+  // [LAW:single-enforcer] Socket parent must satisfy ensureSocketParentSafe
+  // (uid==me + mode 0700). Pre-creating with default umask perms (0o755)
+  // would trip the daemon's bind-time refusal.
+  fs.mkdirSync(stateDir, { recursive: true, mode: 0o700 });
   const sockPath = path.join(stateDir, "socket");
 
   const env: NodeJS.ProcessEnv = {

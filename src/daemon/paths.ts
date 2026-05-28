@@ -1,3 +1,4 @@
+import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
@@ -52,6 +53,57 @@ export function socketPath(): string {
   if (override) return override;
   const uid = os.userInfo().uid;
   return path.join("/tmp", `cc-candybar-${uid}`, "socket");
+}
+
+// [LAW:single-enforcer] The daemon is the sole creator of the socket parent
+// directory. If we enforce "this dir is uid==me + mode 0700 + not a symlink"
+// at bind time, then by induction every successful bind happened under a
+// trusted parent — and any client reaching the socket via the canonical path
+// reached one our daemon owns. A foreign-uid or world-writable squat triggers
+// a refusal, turning a silent-MITM attempt into a visible daemon failure (the
+// client sees no response, the user sees the last cached render).
+//
+// Throws on any unsafe state; callers are expected to let the daemon exit.
+// [LAW:no-silent-fallbacks] do NOT auto-rmdir + recreate — a wrong-owner dir
+// is hostile state, not a recoverable error.
+export function ensureSocketParentSafe(sockPath: string): void {
+  const parent = path.dirname(sockPath);
+  // mkdir with mode 0o700; harmless if already exists (mode is not applied
+  // post-hoc — we verify it next).
+  fs.mkdirSync(parent, { recursive: true, mode: 0o700 });
+
+  const st = fs.lstatSync(parent);
+  if (st.isSymbolicLink()) {
+    throw new Error(`socket parent is a symlink: ${parent}`);
+  }
+  if (!st.isDirectory()) {
+    throw new Error(`socket parent is not a directory: ${parent}`);
+  }
+  const myUid = os.userInfo().uid;
+  // getuid is undefined on Windows; we don't ship there, but guard cheaply.
+  if (typeof myUid === "number" && st.uid !== myUid) {
+    throw new Error(
+      `socket parent is not owned by uid ${myUid}: ${parent} (owner uid=${st.uid})`,
+    );
+  }
+  // Reject any group/world bits — only the owner may traverse.
+  if ((st.mode & 0o077) !== 0) {
+    throw new Error(
+      `socket parent has unsafe permissions: ${parent} (mode=${(st.mode & 0o777).toString(8)}, expected 0700)`,
+    );
+  }
+  // If a stale socket file is a symlink, refuse — an attacker who briefly
+  // had write access to a previously-permissive dir could have planted a
+  // symlink even after we tighten perms.
+  try {
+    const sst = fs.lstatSync(sockPath);
+    if (sst.isSymbolicLink()) {
+      throw new Error(`socket path is a symlink: ${sockPath}`);
+    }
+  } catch (e) {
+    const code = (e as NodeJS.ErrnoException).code;
+    if (code !== "ENOENT") throw e;
+  }
 }
 
 export function pidPath(): string {
