@@ -182,7 +182,10 @@ export function resolveDslConfigPath(
   cwd?: string,
   configFile?: string,
 ): string | null {
-  return dslConfigCandidatePaths(projectDir, cwd, configFile).find(fs.existsSync) ?? null;
+  return (
+    dslConfigCandidatePaths(projectDir, cwd, configFile).find(fs.existsSync) ??
+    null
+  );
 }
 
 /**
@@ -306,10 +309,14 @@ export function validateConfig(
  *   globals    : shallow merge per field (user wins per-field)
  *   variables  : merge by name (user wins per-name)
  *   segments   : merge by name (user wins per-name)
- *   layout     : user replaces wholesale when present and non-empty.
- *                Both absent and `[]` fall back to the default — `[]` is
- *                "user wrote nothing for this", same effective intent as
- *                omitting the key.
+ *   layout     : user replaces wholesale when the key is present (including
+ *                explicit `[]`, which means "render no segments"). Only an
+ *                absent `layout` key falls back to the default.
+ *                [LAW:types-are-the-program] RawDslConfig.layout?: string[]
+ *                carries three states (absent / [] / non-empty); collapsing
+ *                [] into "absent" loses the user's ability to suppress all
+ *                default segments. The merge respects the discriminator the
+ *                type already encodes.
  *
  * [LAW:one-source-of-truth] The single point that consults DEFAULT_DSL_CONFIG
  * for missing keys. Adding a new merged top-level key is a new line here, not
@@ -323,10 +330,7 @@ export function mergeWithDefault(
     globals: { ...dflt.globals, ...(raw.globals ?? {}) },
     variables: { ...dflt.variables, ...(raw.variables ?? {}) },
     segments: { ...dflt.segments, ...(raw.segments ?? {}) },
-    layout:
-      raw.layout !== undefined && raw.layout.length > 0
-        ? raw.layout
-        : dflt.layout,
+    layout: raw.layout !== undefined ? raw.layout : dflt.layout,
   };
 }
 

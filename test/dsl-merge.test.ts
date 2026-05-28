@@ -80,8 +80,11 @@ describe("mergeWithDefault", () => {
     expect(mergeWithDefault({}, DFLT).layout).toEqual(["a", "b"]);
   });
 
-  test("layout: explicit [] → default layout (treated as absent)", () => {
-    expect(mergeWithDefault({ layout: [] }, DFLT).layout).toEqual(["a", "b"]);
+  test("layout: explicit [] → empty layout (user suppresses all default segments)", () => {
+    // [LAW:types-are-the-program] RawDslConfig.layout carries three states
+    // (absent / [] / non-empty). The merge respects that discriminator —
+    // explicit [] means "render no segments", distinct from absent.
+    expect(mergeWithDefault({ layout: [] }, DFLT).layout).toEqual([]);
   });
 
   test("default arg is DEFAULT_DSL_CONFIG when omitted (sanity)", () => {
