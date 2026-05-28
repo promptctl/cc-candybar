@@ -44,7 +44,7 @@ export interface DaemonDslState {
   readonly compiled: CompiledSegments;
   // [LAW:dataflow-not-control-flow] Per-segment last-render strings live in
   // the same state bundle the renderer mutates. Today (legacy renderer) it
-  // is empty; bzh.2 populates it from inside renderDslLine.
+  // is empty; bzh.2 populates it from inside renderDsl.
   readonly lastRenderBySegment: ReadonlyMap<string, string>;
 }
 
@@ -186,10 +186,12 @@ export function introspectSegments(
 function orderedSegmentNames(config: DslConfig): readonly string[] {
   const out: string[] = [];
   const seen = new Set<string>();
-  for (const name of config.layout) {
-    if (config.segments[name] && !seen.has(name)) {
-      out.push(name);
-      seen.add(name);
+  for (const row of config.layout) {
+    for (const name of row) {
+      if (config.segments[name] && !seen.has(name)) {
+        out.push(name);
+        seen.add(name);
+      }
     }
   }
   for (const name of Object.keys(config.segments)) {

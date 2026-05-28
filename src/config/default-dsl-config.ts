@@ -479,8 +479,10 @@ export const DEFAULT_DSL_CONFIG = {
     },
   },
 
-  // Default layout — matches the historical default-enabled segment list.
-  // Users opt segments in by editing this array; nothing else changes when
-  // they do, because every segment is already declared above.
-  layout: ["directory", "git", "model", "session", "today", "context"],
+  // Default layout — one row containing the historical default-enabled
+  // segment list. Single-line is the `[[...]]` degenerate case of multi-line;
+  // users adding rows opt in by extending this outer array. Nothing else
+  // changes when they do — every segment is already declared above, and the
+  // renderer walks rows uniformly.
+  layout: [["directory", "git", "model", "session", "today", "context"]],
 } satisfies DslConfig;

@@ -1,4 +1,4 @@
-// [LAW:single-enforcer] registerDslConfig + renderDslLine are THE two spine
+// [LAW:single-enforcer] registerDslConfig + renderDsl are THE two spine
 // functions the daemon calls verbatim. No parallel registration path, no
 // alternate render path. bzh.2 reuses these; it does not reimplement them.
 //
@@ -42,7 +42,7 @@ import {
 // ─── Compiled segment shape ───────────────────────────────────────────────────
 
 // Pre-parsed templates and pre-resolved palette for one segment. Built once at
-// registration time; renderDslLine only evaluates. [LAW:one-source-of-truth]
+// registration time; renderDsl only evaluates. [LAW:one-source-of-truth]
 // the compiled form is the authoritative runtime shape for a segment.
 export interface CompiledSegment {
   readonly when?: Template<RichText>;
@@ -50,12 +50,12 @@ export interface CompiledSegment {
   readonly bg?: Template<RichText>;
   readonly fg?: Template<RichText>;
   // Pre-resolved from effectiveSegmentPalette at registration time; undefined
-  // means "use the basePalette passed to renderDslLine".
+  // means "use the basePalette passed to renderDsl".
   readonly paletteResolver?: PaletteResolver;
 }
 
 // Pre-compiled templates for every segment in a DslConfig, keyed by segment
-// name. Returned by registerDslConfig; consumed by renderDslLine.
+// name. Returned by registerDslConfig; consumed by renderDsl.
 export type CompiledSegments = Readonly<Record<string, CompiledSegment>>;
 
 // ─── CacheDecl → CachePolicy ─────────────────────────────────────────────────
@@ -188,10 +188,10 @@ const _compileEngine = createCcCandybarEngine();
  * Walks config.variables (global vars) and each segment's vars sub-block
  * (namespaced as segName.varName) and calls the matching SourceRegistry
  * declare* method for each VariableDecl. Also pre-parses every segment's
- * when/template/bg/fg strings once — renderDslLine only evaluates.
+ * when/template/bg/fg strings once — renderDsl only evaluates.
  *
  * Call once per config (at startup or hot-reload). The daemon calls this;
- * the render loop calls renderDslLine with the returned CompiledSegments.
+ * the render loop calls renderDsl with the returned CompiledSegments.
  *
  * HOT-RELOAD: pass a fresh VariableStore + SourceRegistry on each call.
  * defineBox/defineComputed throws if a variable name is already declared in
@@ -235,7 +235,7 @@ export function registerDslConfig(
   }
 
   // Pre-parse all segment templates and pre-resolve per-segment palettes once.
-  // renderDslLine calls evaluate() only — parse() and palette resolution never
+  // renderDsl calls evaluate() only — parse() and palette resolution never
   // run in the hot render path.
   // [LAW:no-defensive-null-guards] Object.create(null) — segment names come from
   // user config; a null-prototype object prevents __proto__/constructor/prototype
@@ -284,28 +284,33 @@ function resolverForPalette(name: string): PaletteResolver {
   return new PaletteResolver(palette);
 }
 
-// ─── renderDslLine ────────────────────────────────────────────────────────────
+// ─── renderDsl ───────────────────────────────────────────────────────────────
 
 /**
- * Render one DSL layout line to an ANSI string.
+ * Render the DSL config to a (possibly multi-line) ANSI string.
  *
- * PROPOSAL 'Render' steps 1-6:
- *   1. Push payload into input boxes (registry.applyInput).
- *   2. Walk config.layout in order; skip segments whose `when` evaluates false.
- *   3. Per-segment PaletteResolver pre-resolved at registration (3rq.2) or basePalette.
- *   4. Resolve bg/fg → baseStyle (layered under each fragment so per-fragment fg
- *      becomes a cell part rather than being lost to a cell-level rebuild).
- *   5. Evaluate pre-compiled template → fragments → RichText cells with baseStyle
- *      layered under each fragment. Apply width/justify/truncate via
- *      RichText's own truncate/align (span-preserving by construction).
- *   6. Concatenate all cells; join via powerline Joiner → ANSI string.
+ * Pipeline:
+ *   1. Push payload into input boxes (registry.applyInput) — once per render.
+ *   2. Build the scope proxy — once per render.
+ *   3. For each row in `config.layout`:
+ *        a. Walk row segments; skip those whose `when` evaluates false.
+ *        b. Per-segment palette resolver, bg/fg → baseStyle, template
+ *           evaluation, applySegmentLayout — identical to single-row spine.
+ *        c. Concatenate the row's cells; render to a powerline ANSI strip.
+ *   4. Join rows with "\n".
  *
  * [LAW:single-enforcer] The daemon (bzh.2) calls this verbatim — no alternate
  * render path. The test and the daemon share ONE render path.
- * [LAW:dataflow-not-control-flow] layout is data; N segments is more data,
- * not more code. The scope proxy is built once; templates are only evaluated.
+ * [LAW:dataflow-not-control-flow] Both row count and per-row segment count are
+ * data; more rows is more iterations, not more code. The scope proxy is built
+ * once per render and shared across all rows (payload is the same).
+ *
+ * Hue rotation: the segment index used for `hueRotationDegrees` continues
+ * across rows. A user converting `[a,b,c,d,e]` into `[[a,b,c],[d,e]]` keeps
+ * the same per-segment colors; splitting at a row boundary preserves visual
+ * continuity for that case.
  */
-export function renderDslLine(
+export function renderDsl(
   config: ValidatedConfig,
   compiled: CompiledSegments,
   store: VariableStore,
@@ -319,7 +324,7 @@ export function renderDslLine(
   // cells (not pre-serialized strings) keeps the hot path's serializer
   // work proportional to the joined line only — debug consumers serialize
   // on demand. Hidden-by-when segments are absent from the map (presence
-  // = "this segment rendered"). The map is cleared before each render so
+  // = "this segment rendered"). The map is cleared before the first row so
   // stale segment names never survive a layout edit. Per-segment standalone
   // serialization is not byte-identical to the segment's slice within the
   // joined line (powerline joiners sit *between* segments and have no
@@ -327,65 +332,62 @@ export function renderDslLine(
   // natural per-segment shape.
   perSegmentSink?: Map<string, readonly RichText[]>,
 ): string {
-  // Step 1: push payload into input boxes.
   registry.applyInput(payload);
 
   const scope = buildScope(store);
   const hueStep = config.globals.hueStep ?? 0;
 
-  const allCells: RichText[] = [];
   perSegmentSink?.clear();
 
-  for (let i = 0; i < config.layout.length; i++) {
-    const segName = config.layout[i]!;
-    const seg = config.segments[segName];
-    const segCompiled = compiled[segName];
-    // [LAW:no-defensive-null-guards] seg + segCompiled are always defined —
-    // the loader validates every layout entry against segments, and
-    // registerDslConfig compiles every declared segment. A missing entry here
-    // is a caller bug (renderDslLine called with a mismatched compiled object).
-    if (!seg || !segCompiled) {
-      throw new Error(`Layout entry "${segName}" has no matching segment`);
+  const lines: string[] = [];
+  let segIndex = 0;
+  for (const row of config.layout) {
+    const rowCells: RichText[] = [];
+    for (const segName of row) {
+      const seg = config.segments[segName];
+      const segCompiled = compiled[segName];
+      // [LAW:no-defensive-null-guards] seg + segCompiled are always defined —
+      // the loader validates every layout entry against segments, and
+      // registerDslConfig compiles every declared segment. A missing entry
+      // here is a caller bug (renderDsl called with a mismatched compiled
+      // object).
+      if (!seg || !segCompiled) {
+        throw new Error(`Layout entry "${segName}" has no matching segment`);
+      }
+
+      const hueRotationDegrees = segIndex * hueStep;
+      segIndex++;
+
+      if (!evaluateWhen(segCompiled.when, scope)) continue;
+
+      const resolver = segCompiled.paletteResolver ?? basePalette;
+
+      const baseStyle = resolveSegmentColors(
+        resolver,
+        segCompiled.bg,
+        segCompiled.fg,
+        scope,
+        { hueRotationDegrees },
+      );
+
+      const fragments = segCompiled.template.evaluate(scope);
+      const cells = fragmentsToCells(fragments, baseStyle);
+
+      const laidOut = applySegmentLayout(cells, {
+        width: seg.width ?? "auto",
+        justify: seg.justify ?? "left",
+        truncate: seg.truncate ?? "right",
+        baseStyle,
+      });
+
+      if (perSegmentSink !== undefined) {
+        perSegmentSink.set(segName, laidOut);
+      }
+
+      rowCells.push(...laidOut);
     }
-
-    // Step 2: when predicate — skip hidden segments.
-    if (!evaluateWhen(segCompiled.when, scope)) continue;
-
-    // Step 3: per-segment palette (3rq.2) — pre-resolved at registration time.
-    const resolver = segCompiled.paletteResolver ?? basePalette;
-
-    // Step 4: resolve segment bg/fg first — they flow into cell construction
-    // as a base style on every fragment, so per-fragment fg (e.g. inline
-    // `{{ red ... }}`) survives the cell-level bg merge as a part.
-    const baseStyle = resolveSegmentColors(
-      resolver,
-      segCompiled.bg,
-      segCompiled.fg,
-      scope,
-      { hueRotationDegrees: i * hueStep },
-    );
-
-    // Step 5: evaluate pre-compiled template → RichText cells with baseStyle
-    // layered under each fragment. baseStyle also flows into layout so the
-    // merged RichText's wrapping style carries the segment bg+fg through any
-    // padding (justify) and the embedded marker (truncate).
-    const fragments = segCompiled.template.evaluate(scope);
-    const cells = fragmentsToCells(fragments, baseStyle);
-
-    const laidOut = applySegmentLayout(cells, {
-      width: seg.width ?? "auto",
-      justify: seg.justify ?? "left",
-      truncate: seg.truncate ?? "right",
-      baseStyle,
-    });
-
-    if (perSegmentSink !== undefined) {
-      perSegmentSink.set(segName, laidOut);
-    }
-
-    allCells.push(...laidOut);
+    lines.push(renderStripCells(rowCells, opts));
   }
 
-  // Step 6: join all cells into one ANSI line.
-  return renderStripCells(allCells, opts);
+  return lines.join("\n");
 }
