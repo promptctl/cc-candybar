@@ -38,7 +38,10 @@ import {
   DEFAULT_TERMINAL_WIDTH,
   type BuildLineOptions,
 } from "../render/strip.js";
-import { getTerminalWidth } from "../utils/terminal-width.js";
+import {
+  getTerminalWidth,
+  applyClaudeCodeReserve,
+} from "../utils/terminal-width.js";
 import type { RichText } from "@promptctl/rich-js";
 import { buildRenderPayload } from "./render-payload.js";
 import { TodayProvider } from "../segments/today.js";
@@ -614,12 +617,15 @@ async function handleRequest(req: Request): Promise<Response> {
       const entry = renderCache.getOrCreate(projectDir, req.cwd, configFile);
       // [LAW:single-enforcer] Width capture lives at the wire boundary —
       // sanitize the untrusted field, run the canonical resolver (which
-      // applies the Claude-Code-UI reserve), fall back to
+      // applies the Claude-Code-UI reserve), fall back to the reserved
       // DEFAULT_TERMINAL_WIDTH when the client gave us nothing usable.
-      // Downstream code never sees termCols directly.
+      // [LAW:one-source-of-truth] BOTH branches route raw cols through
+      // applyClaudeCodeReserve so `width` always means "usable cells
+      // post-reserve" — no semantic split between wire-supplied and
+      // fallback values. Downstream code never sees termCols directly.
       const width =
         getTerminalWidth(sanitizeTermCols(req.termCols)) ??
-        DEFAULT_TERMINAL_WIDTH;
+        applyClaudeCodeReserve(DEFAULT_TERMINAL_WIDTH);
       const renderOpts: BuildLineOptions = { ...RENDER_OPTS_BASE, width };
       // [LAW:dataflow-not-control-flow] Two outcomes fall out of one rule:
       // body = state ? renderDslLine(state) : "" ; output = body + icon
@@ -813,12 +819,12 @@ function parseRenderArgs(args: string[]): {
 // Per-line visible budget and max rows for multi-line diagnostic blocks.
 // Messages from the config validator (formatIssues) are already structured
 // as one line per issue, so splitting there is the natural unit of display.
-// [LAW:one-source-of-truth] The per-line cap is the same constant the
-// renderer uses as its no-width fallback — one source for "the width the
-// daemon assumes when the client didn't give us one." Per-request width
-// threading (so diagnostics also wrap to live terminal width) is a
-// follow-up; today's behavior is byte-equivalent to the prior hardcode.
-const MAX_DIAGNOSTIC_LINE_LEN = DEFAULT_TERMINAL_WIDTH;
+// Deliberately decoupled from DEFAULT_TERMINAL_WIDTH: that constant means
+// "raw terminal cols we assume" and is reserved-against before reaching the
+// renderer; this one is a direct visible-char cap on already-rendered
+// diagnostic text. They happen to share the value 120 today but have
+// different semantic intents.
+const MAX_DIAGNOSTIC_LINE_LEN = 120;
 const MAX_DIAGNOSTIC_LINES = 8;
 
 function makeDiagnosticLink(

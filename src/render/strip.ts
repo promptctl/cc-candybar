@@ -20,10 +20,11 @@ export interface RenderedSegmentLike {
 
 export type StripStyle = "powerline" | "capsule" | "plain";
 
-// [LAW:one-source-of-truth] Fallback when termCols is absent from the wire
-// (older client, env-stripped spawn). Matches the implicit default the
-// codebase already encoded as MAX_DIAGNOSTIC_LINE_LEN, so byte-equivalence
-// holds for the no-width path.
+// [LAW:one-source-of-truth] Raw terminal cols we assume when the wire
+// didn't give us one (older client, env-stripped spawn). RAW — not
+// post-reserve — so the Claude-Code-UI reserve applies uniformly across
+// wire and fallback paths (callers thread this through
+// applyClaudeCodeReserve from src/utils/terminal-width).
 export const DEFAULT_TERMINAL_WIDTH = 120;
 
 export interface BuildLineOptions {

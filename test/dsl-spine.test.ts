@@ -49,7 +49,7 @@ const FIXTURE_SOURCE = readFileSync(
 
 // Strip opts match the parity harness so bytes are comparable. Width is
 // Infinity so the committed snapshot stays a single line — wrap behavior
-// is tested in test/daemon-autowrap.test.ts.
+// is tested in test/strip-flex.test.ts (the renderStripCells wrap path).
 const OPTS = {
   style: "powerline" as const,
   colorCompatibility: "truecolor" as const,
