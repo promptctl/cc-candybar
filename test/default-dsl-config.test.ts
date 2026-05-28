@@ -9,7 +9,7 @@
 // (via parseDslConfig). Two boundaries, one truth.
 
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
-import { parseDslConfig } from "../src/config/dsl-loader";
+import { parseAndValidate } from "./helpers/parse-and-validate";
 import { registerDslConfig, renderDslLine } from "../src/dsl/render";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
@@ -20,7 +20,7 @@ const SERIALIZED = JSON.stringify(DEFAULT_DSL_CONFIG, null, 2);
 
 describe("DEFAULT_DSL_CONFIG", () => {
   test("loader round-trips the bundled default", () => {
-    const parsed = parseDslConfig("<default>", SERIALIZED);
+    const parsed = parseAndValidate("<default>", SERIALIZED);
     expect(Object.keys(parsed.variables).length).toBeGreaterThan(0);
     expect(Object.keys(parsed.segments).length).toBeGreaterThan(0);
     expect(parsed.layout.length).toBeGreaterThan(0);
@@ -33,7 +33,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
   });
 
   test("registerDslConfig + renderDslLine produce a non-empty line", () => {
-    const parsed = parseDslConfig("<default>", SERIALIZED);
+    const parsed = parseAndValidate("<default>", SERIALIZED);
     const store = new VariableStore();
     const registry = new SourceRegistry(store);
     try {
@@ -81,7 +81,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
       project_dir: string;
       current_dir: string;
     }): string {
-      const parsed = parseDslConfig("<default>", SERIALIZED);
+      const parsed = parseAndValidate("<default>", SERIALIZED);
       // Narrow the layout to `directory` so the rendered line is exactly
       // that segment's text. `home` flows through the augmented payload
       // (kind: "input", path: "home" in DEFAULT_DSL_CONFIG) — we set it

@@ -36,11 +36,17 @@ async function spawnDaemon(): Promise<DaemonHandle> {
     path.join(os.tmpdir(), "cc-candybar-shutdown-"),
   );
   const stateDir = path.join(stateRoot, "cc-candybar");
-  fs.mkdirSync(stateDir, { recursive: true });
+  // [LAW:single-enforcer] Socket parent must satisfy ensureSocketParentSafe
+  // (uid==me + mode 0700). Pre-creating with default umask perms (0o755)
+  // would trip the daemon's bind-time refusal.
+  fs.mkdirSync(stateDir, { recursive: true, mode: 0o700 });
   const sockPath = path.join(stateDir, "socket");
 
   const env: NodeJS.ProcessEnv = {
     ...process.env,
+    // CC_CANDYBAR_SOCKET isolates the socket — socketPath() ignores
+    // XDG_STATE_HOME, so this is the required per-test override.
+    CC_CANDYBAR_SOCKET: sockPath,
     XDG_STATE_HOME: stateRoot,
     // Isolate cache + config so the test daemon doesn't see the developer's
     // real state. Each gets its own tempdir.

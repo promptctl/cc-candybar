@@ -30,7 +30,7 @@ import {
   introspectVars,
   type DaemonDslState,
 } from "../src/daemon/debug";
-import { parseDslConfig } from "../src/config/dsl-loader";
+import { parseAndValidate } from "./helpers/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import { registerDslConfig } from "../src/dsl/render";
@@ -92,7 +92,7 @@ afterEach(() => {
 
 // Build a populated DaemonDslState from the test config + a known payload.
 function buildPopulatedState(): DaemonDslState {
-  const config = parseDslConfig(
+  const config = parseAndValidate(
     "<debug-test>",
     TEST_CONFIG_SOURCE,
     new Set<string>(), // no palette validation needed — segments don't set one

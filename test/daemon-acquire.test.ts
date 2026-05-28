@@ -3,24 +3,30 @@ import net from "node:net";
 import os from "node:os";
 import path from "node:path";
 
-// Each test creates its own XDG_STATE_HOME so concurrent test files cannot
-// race on `<state>/socket` or `<state>/spawn.lock`. We set the env var
-// *before* importing acquire/paths so the module reads the right dir.
+// Each test creates its own isolated state root. CC_CANDYBAR_SOCKET isolates
+// the socket so concurrent tests don't race on the same bind path; XDG_STATE_HOME
+// isolates spawn.lock. Both are needed; setting only XDG would leave the socket
+// pointed at the user's live daemon since socketPath() ignores XDG_STATE_HOME.
 
 async function withTempState<T>(
   fn: (stateDir: string) => Promise<T> | T,
 ): Promise<T> {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "cc-candybar-acquire-"));
-  const prev = process.env.XDG_STATE_HOME;
+  const sockPath = path.join(root, "cc-candybar", "socket");
+  const prevXdg = process.env.XDG_STATE_HOME;
+  const prevSock = process.env.CC_CANDYBAR_SOCKET;
   process.env.XDG_STATE_HOME = root;
+  process.env.CC_CANDYBAR_SOCKET = sockPath;
   // async/try-finally — not Promise.resolve(fn()).finally(...) — because a
   // synchronous throw from fn happens *before* Promise.resolve wraps it,
   // bypassing the finally and leaking temp dirs + env state.
   try {
     return await fn(path.join(root, "cc-candybar"));
   } finally {
-    if (prev === undefined) delete process.env.XDG_STATE_HOME;
-    else process.env.XDG_STATE_HOME = prev;
+    if (prevXdg === undefined) delete process.env.XDG_STATE_HOME;
+    else process.env.XDG_STATE_HOME = prevXdg;
+    if (prevSock === undefined) delete process.env.CC_CANDYBAR_SOCKET;
+    else process.env.CC_CANDYBAR_SOCKET = prevSock;
     try {
       fs.rmSync(root, { recursive: true, force: true });
     } catch {}
