@@ -87,9 +87,9 @@ describe("renderStripCells wrap behavior (via buildLineStrip adapter)", () => {
       });
       const rows = out.split("\n");
       expect(rows.length).toBeGreaterThan(1);
-      // PowerlineJoiner end-cap: every row ends with the arrow glyph "".
+      // PowerlineJoiner end-cap: every row ends with the arrow glyph U+E0B0.
       for (const row of rows) {
-        expect(row.endsWith("")).toBe(true);
+        expect(row.endsWith("\uE0B0")).toBe(true);
       }
     });
   });

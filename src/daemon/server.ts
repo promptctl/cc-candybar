@@ -38,10 +38,7 @@ import {
   DEFAULT_TERMINAL_WIDTH,
   type BuildLineOptions,
 } from "../render/strip.js";
-import {
-  getTerminalWidth,
-  applyClaudeCodeReserve,
-} from "../utils/terminal-width.js";
+import { applyClaudeCodeReserve } from "../utils/terminal-width.js";
 import type { RichText } from "@promptctl/rich-js";
 import { buildRenderPayload } from "./render-payload.js";
 import { TodayProvider } from "../segments/today.js";
@@ -615,18 +612,18 @@ async function handleRequest(req: Request): Promise<Response> {
       // data — the daemon's own working directory must not influence output.
       const { configFile, unknownFlagsError } = parseRenderArgs(req.args);
       const entry = renderCache.getOrCreate(projectDir, req.cwd, configFile);
-      // [LAW:single-enforcer] Width capture lives at the wire boundary —
-      // sanitize the untrusted field, run the canonical resolver (which
-      // applies the Claude-Code-UI reserve), fall back to the reserved
-      // DEFAULT_TERMINAL_WIDTH when the client gave us nothing usable.
-      // [LAW:one-source-of-truth] BOTH branches route raw cols through
-      // applyClaudeCodeReserve so `width` always means "usable cells
-      // post-reserve" — no semantic split between wire-supplied and
-      // fallback values. Downstream code never sees termCols directly.
+      // [LAW:single-enforcer] Width capture lives at the wire boundary.
+      // The client (Rust + TTY) is the only process that can see the real
+      // terminal; the daemon is detached. We do NOT consult getTerminalWidth's
+      // env/stderr fallbacks here — they would let the daemon's stale
+      // launch-time COLUMNS env shape rendering for a different terminal,
+      // which is exactly the wrong source.
+      // [LAW:one-source-of-truth] Both branches feed raw cols through
+      // applyClaudeCodeReserve, so `width` always means "usable cells
+      // post-reserve" with no semantic split between wire-supplied and
+      // fallback values.
       const termCols = sanitizeTermCols(req.termCols);
-      const width =
-        getTerminalWidth(termCols) ??
-        applyClaudeCodeReserve(DEFAULT_TERMINAL_WIDTH);
+      const width = applyClaudeCodeReserve(termCols ?? DEFAULT_TERMINAL_WIDTH);
       const renderOpts: BuildLineOptions = { ...RENDER_OPTS_BASE, width };
       // [LAW:dataflow-not-control-flow] Two outcomes fall out of one rule:
       // body = state ? renderDslLine(state) : "" ; output = body + icon
