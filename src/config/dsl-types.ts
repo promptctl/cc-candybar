@@ -10,12 +10,49 @@
 // src/var-system/sources.ts). The loader is the single point that translates
 // between the two; no other module should re-derive these shapes.
 
+// [LAW:types-are-the-program] Three stages, three names.
+//
+//   RawDslConfig    — the user-file shape. Every top-level key is optional
+//                     because "user didn't write this" is a representable,
+//                     distinct state from "user wrote an explicit empty."
+//                     Internal to the loader module; downstream consumers
+//                     never see it.
+//
+//   DslConfig       — the effective shape: the user's deltas merged on top
+//                     of DEFAULT_DSL_CONFIG. Every top-level key is required.
+//                     Output of `loadConfig`. Cross-refs and cycles have NOT
+//                     yet been checked at this stage.
+//
+//   ValidatedConfig — DslConfig + a phantom brand proving validateConfig()
+//                     has run. The renderer accepts only this type, so the
+//                     compiler structurally enforces "no unvalidated config
+//                     can reach rendering." The brand is module-scoped via
+//                     `unique symbol`, so the only construction site is
+//                     `validateConfig` itself.
+export interface RawDslConfig {
+  readonly globals?: Partial<Globals>;
+  readonly variables?: Readonly<Record<string, VariableDecl>>;
+  readonly segments?: Readonly<Record<string, SegmentDecl>>;
+  readonly layout?: readonly string[];
+}
+
 export interface DslConfig {
   readonly globals: Globals;
   readonly variables: Readonly<Record<string, VariableDecl>>;
   readonly segments: Readonly<Record<string, SegmentDecl>>;
   readonly layout: readonly string[];
 }
+
+// [LAW:single-enforcer] The brand symbol is `unique` and module-private —
+// nothing outside this file can construct a value carrying it. The only
+// production-path producer is validateConfig() in dsl-loader.ts (one
+// callsite of `config as ValidatedConfig`). Renderer signatures require
+// ValidatedConfig; the type system therefore proves the validation step
+// ran before any render path consumed the config.
+declare const __validated: unique symbol;
+export type ValidatedConfig = DslConfig & {
+  readonly [__validated]: true;
+};
 
 export interface Globals {
   readonly default_bg?: string;

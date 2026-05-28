@@ -1,0 +1,75 @@
+// [LAW:one-source-of-truth] The single sanitize-and-truncate primitive for
+// any diagnostic text we embed inside a single-line, ANSI-styled envelope.
+// Two callers today:
+//   - src/render/error-glyph.ts (permanent client-side glyph; budget 60)
+//   - src/daemon/server.ts composeWithDiagnostics (per-render diagnostic
+//     strip carrying the actual config error/warning message)
+// A third copy in the daemon would duplicate the security-critical
+// control-char neutralization rules; sharing the primitive guarantees the
+// rules cannot drift between callers.
+//
+// [LAW:types-are-the-program] Two functions, both pure (string, number)→
+// string|boolean. The contract is exactly: "make this text safe to splice
+// into a single-line ANSI-styled cell, clipped to maxLen visible code
+// points." Anything else is the caller's responsibility (which icon, which
+// colors, which click verb).
+
+const ELLIPSIS = "…";
+
+// [LAW:dataflow-not-control-flow] Every code point flows through the same
+// predicate. No special-case branches per kind of control; the Unicode Cc
+// class is the single discriminator that decides "this byte/code point
+// could hijack the envelope and must be neutralized."
+//
+// Why the C1 range matters (0x80..0x9F):
+//   ESC (U+001B) is the obvious ANSI-escape entry point, but some
+//   terminals interpret U+009B as 8-bit CSI directly — i.e. equivalent to
+//   ESC `[`. Sanitizing only the C0 range (≤0x1F + 0x7F) would leave the
+//   8-bit bypass open. With diagnostic messages echoing user-supplied
+//   data (config paths, key names, parse errors), that's reachable from
+//   crafted input even without a malicious daemon.
+//
+// Mirrors rust-client/src/error_glyph.rs's truncate(): `char::is_control()`
+// matches the exact same Unicode Cc set, so the TS and Rust runtimes
+// neutralize the same byte classes.
+export function isControlChar(code: number): boolean {
+  return code < 0x20 || code === 0x7f || (code >= 0x80 && code <= 0x9f);
+}
+
+// Sanitize control characters (→ single space) and clip to maxLen visible
+// code points, ending with an ellipsis if the input was longer. Runs of
+// whitespace (post-sanitize) collapse to a single space so multi-line
+// indented messages don't display as awkwardly-spaced single lines.
+//
+// [LAW:dataflow-not-control-flow] One pass over the input; the trailing
+// `.replace(/.$/u, ELLIPSIS)` is the only branch and only fires when we
+// hit the cap. The cap-then-ellipsis is the same pattern error-glyph used
+// pre-extraction (preserved byte-for-byte: visible length stays at maxLen
+// when truncation happens).
+export function sanitizeAndTruncate(text: string, maxLen: number): string {
+  // First pass: sanitize control chars to spaces. We do this before the
+  // length count because a control char and its replacement space are both
+  // one visible code point in the output — equal contributions to length.
+  let sanitized = "";
+  for (const ch of text) {
+    sanitized += isControlChar(ch.codePointAt(0) ?? 0) ? " " : ch;
+  }
+  // Collapse whitespace runs (introduced by newline→space + the existing
+  // indentation in multi-line error messages). One space conveys the same
+  // "this was a break in the source" information without wasting cells.
+  sanitized = sanitized.replace(/\s+/g, " ").trim();
+
+  // Truncate-with-ellipsis. The /.$/u regex matches a full code point
+  // (unicode flag), not a UTF-16 unit — important for emoji and other
+  // astral-plane chars in user-supplied paths.
+  let out = "";
+  let count = 0;
+  for (const ch of sanitized) {
+    if (count === maxLen) {
+      return out.replace(/.$/u, ELLIPSIS);
+    }
+    out += ch;
+    count++;
+  }
+  return out;
+}

@@ -3,14 +3,14 @@ import path from "node:path";
 import { PaletteResolver, type StripCell } from "@promptctl/rich-js";
 import { buildNeededPrefixes } from "../render-payload.js";
 import {
-  loadDslConfig,
+  loadConfig,
+  validateConfig,
   resolveDslConfigPath,
   dslConfigCandidatePaths,
   detectConfigCollisions,
   ConfigError,
 } from "../../config/dsl-loader.js";
-import { DEFAULT_DSL_CONFIG } from "../../config/default-dsl-config.js";
-import type { DslConfig } from "../../config/dsl-types.js";
+import type { ValidatedConfig } from "../../config/dsl-types.js";
 import { registerDslConfig, type CompiledSegments } from "../../dsl/render.js";
 import { VariableStore } from "../../var-system/store.js";
 import { SourceRegistry } from "../../var-system/sources.js";
@@ -64,7 +64,7 @@ export interface RenderDeps {
 // repopulates it in place. A segment hidden by `when` is absent from the
 // map — its presence in the keys is the "this segment rendered" signal.
 export interface DslRenderState {
-  readonly config: DslConfig;
+  readonly config: ValidatedConfig;
   readonly store: VariableStore;
   readonly registry: SourceRegistry;
   readonly compiled: CompiledSegments;
@@ -85,9 +85,17 @@ export interface DslRenderState {
 // parse / validate); `lastWarning` is advisory (e.g., extension collision —
 // load succeeded but something the user should know about). The render path
 // surfaces both through one diagnostics composer in src/daemon/server.ts.
+// [LAW:types-are-the-program] `projectDir` and `cwd` are required inputs to
+// every render request. The wire boundary in server.ts validates the
+// underlying hookData and returns BAD_REQUEST when either is absent, so by
+// the time a cache entry is built they are real non-empty paths. `configFile`
+// is the (`~`-expanded) value of the client's `--config` flag — present
+// when overriding the standard precedence chain, undefined otherwise. The
+// type carries the optionality where it actually exists.
 export interface CacheEntry {
-  projectDir: string | undefined;
-  cwd: string | undefined;
+  projectDir: string;
+  cwd: string;
+  configFile: string | undefined;
   configFilePath: string | null;
   lastError: string | null;
   lastWarning: string | null;
@@ -96,15 +104,15 @@ export interface CacheEntry {
 }
 
 // [LAW:one-source-of-truth] Cache key includes every input that affects DSL
-// resolution. Args is intentionally *excluded* — bzh.2 retired the CLI
-// override flag apparatus, so args no longer influence config resolution
-// or rendering. Including it would let a legacy client churn the LRU by
-// varying flags that the daemon now ignores, creating duplicate entries
-// (each with their own SourceRegistry timers/watchers) for the same
-// behavior. The signature still threads `args` (the wire protocol carries
-// it) but the value is dropped at the boundary.
-function cacheKey(projectDir?: string, cwd?: string): string {
-  return (projectDir ?? "") + "\0" + (cwd ?? "");
+// resolution: projectDir, cwd, and the resolved `--config` file (if provided).
+// `projectDir`/`cwd` are real strings by construction (validated upstream);
+// `configFile` collapses absent → empty in the key, distinct from any real path.
+function cacheKey(
+  projectDir: string,
+  cwd: string,
+  configFile: string | undefined,
+): string {
+  return projectDir + "\0" + cwd + "\0" + (configFile ?? "");
 }
 
 export class RenderCache {
@@ -122,18 +130,11 @@ export class RenderCache {
   // the data; no special-case branches between "first load", "reload",
   // "reload-after-error".
   getOrCreate(
-    args: string[],
-    projectDir: string | undefined,
-    cwd: string | undefined,
+    projectDir: string,
+    cwd: string,
+    configFile: string | undefined,
   ): CacheEntry {
-    // [LAW:no-mode-explosion] `args` is still part of the wire protocol
-    // (RenderRequest carries it from legacy clients running pre-bzh.2
-    // settings.json scaffolding), but it influences nothing — neither
-    // resolution, nor rendering, nor cache identity. Accepting and
-    // discarding it preserves protocol back-compat without giving any
-    // surface to the dead variability.
-    void args;
-    const key = cacheKey(projectDir, cwd);
+    const key = cacheKey(projectDir, cwd, configFile);
     const existing = this.entries.get(key);
     if (existing) {
       // Move to end (most recently used) for LRU eviction.
@@ -145,6 +146,7 @@ export class RenderCache {
     const entry: CacheEntry = {
       projectDir,
       cwd,
+      configFile,
       configFilePath: null,
       lastError: null,
       lastWarning: null,
@@ -182,7 +184,11 @@ export class RenderCache {
   // one. The registry owns timers, watchers, MobX reactions, and git
   // subscriptions — dropping it without dispose leaks every handle.
   private reloadInto(entry: CacheEntry): void {
-    const resolvedPath = resolveDslConfigPath(entry.projectDir, entry.cwd);
+    const resolvedPath = resolveDslConfigPath(
+      entry.projectDir,
+      entry.cwd,
+      entry.configFile,
+    );
 
     // [LAW:dataflow-not-control-flow] Collision detection runs every reload,
     // independent of load success — even if the .json5 fails to parse, the
@@ -235,8 +241,14 @@ export class RenderCache {
     entry: CacheEntry,
     resolvedPath: string | null,
   ): DslRenderState {
-    const config: DslConfig =
-      resolvedPath !== null ? loadDslConfig(resolvedPath) : DEFAULT_DSL_CONFIG;
+    // [LAW:dataflow-not-control-flow][LAW:single-enforcer] Three primitives,
+    // straight-line composition. `loadConfig(null)` returns the bundled
+    // default (uniform merge against empty raw); `validateConfig` is the
+    // sole producer of `ValidatedConfig`. The renderer accepts only
+    // `ValidatedConfig`, so the compiler enforces the chain — there is no
+    // "skip validate" path that typechecks downstream.
+    const merged = loadConfig(resolvedPath);
+    const config = validateConfig(merged, resolvedPath ?? "<default>");
 
     const store = new VariableStore();
     // [LAW:single-enforcer] Inject the daemon's shared GitDataProvider so
@@ -321,7 +333,15 @@ export class RenderCache {
     // watch. (A user creating the XDG dir later would only get hot-reload
     // for the project-local / cwd locations until the daemon next builds
     // an entry; this is a documented limitation, not a contract violation.)
-    const candidates = dslConfigCandidatePaths(entry.projectDir, entry.cwd);
+    // [LAW:single-enforcer] Same enumerator the resolver uses, so the watcher
+    // covers the exact same set of paths the next reload would consult — a
+    // `--config` override collapses to one candidate; absent, the precedence
+    // chain unfolds in full.
+    const candidates = dslConfigCandidatePaths(
+      entry.projectDir,
+      entry.cwd,
+      entry.configFile,
+    );
     const dirSet = new Map<string, Set<string>>();
     for (const candidate of candidates) {
       const dir = path.dirname(candidate);
@@ -340,9 +360,9 @@ export class RenderCache {
     // resolve to the same config file would otherwise share one watcher
     // slot whose `onInvalidate` is overwritten by the last acquire, and
     // earlier entries would never reload on file changes. Including
-    // (projectDir, cwd) in every key guarantees each entry owns its own
-    // watcher slot bound to its own reload callback.
-    const key = `config:${entry.projectDir ?? ""}:${entry.cwd ?? ""}:${targetPath ?? "<none>"}`;
+    // (projectDir, cwd, configFile) in every key guarantees each entry owns
+    // its own watcher slot bound to its own reload callback.
+    const key = `config:${entry.projectDir}:${entry.cwd}:${entry.configFile ?? ""}:${targetPath ?? "<none>"}`;
 
     entry.watcher = this.deps.watchers.acquire(
       key,
@@ -364,7 +384,7 @@ export class RenderCache {
   private onConfigChanged(entry: CacheEntry): void {
     dlog(
       "info",
-      `config change detected for entry projectDir=${entry.projectDir ?? "<none>"} cwd=${entry.cwd ?? "<none>"}`,
+      `config change detected for entry projectDir=${entry.projectDir} cwd=${entry.cwd}`,
     );
     this.reloadInto(entry);
   }
