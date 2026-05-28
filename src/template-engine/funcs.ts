@@ -15,6 +15,7 @@ import {
   formatCost,
   formatTokens,
   formatTokenCount,
+  formatTokenBreakdown,
   formatDuration,
   formatLongTimeRemaining,
   formatResponseTime,
@@ -130,6 +131,29 @@ export function formatterFuncs(): FuncMap {
     formatTokenCount: {
       fn: (n: number | bigint) => formatTokenCount(num(n)),
       argTypes: ["number"],
+    },
+    // [LAW:one-source-of-truth] The canonical breakdown formatter takes a
+    // struct {input, output, cacheCreation, cacheRead}; the var-system is
+    // flat scalar. Reconstruct the struct at the engine boundary and
+    // delegate — no formatting rules duplicated here.
+    // [LAW:types-are-the-program] Four numeric args match the four
+    // independent scalar fields. A struct-typed var-system entry would let
+    // the call be one arg, but adding a struct type to VarValue is a
+    // separate substrate change.
+    formatTokenBreakdown: {
+      fn: (
+        input: number | bigint,
+        output: number | bigint,
+        cacheCreation: number | bigint,
+        cacheRead: number | bigint,
+      ) =>
+        formatTokenBreakdown({
+          input: num(input),
+          output: num(output),
+          cacheCreation: num(cacheCreation),
+          cacheRead: num(cacheRead),
+        }),
+      argTypes: ["number", "number", "number", "number"],
     },
 
     // ─── Duration / time formatters ────────────────────────────────────

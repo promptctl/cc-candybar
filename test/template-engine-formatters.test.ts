@@ -14,6 +14,7 @@ import {
   formatCost,
   formatTokens,
   formatTokenCount,
+  formatTokenBreakdown,
   formatDuration,
   formatLongTimeRemaining,
   formatResponseTime,
@@ -110,6 +111,68 @@ describe("formatTokenCount wrapper", () => {
     );
     // Sanity: source ends without " tokens"
     expect(formatTokenCount(123456)).toBe("123.5K");
+  });
+});
+
+// [LAW:one-source-of-truth] formatTokenBreakdown's canonical impl takes a
+// struct; the engine boundary reconstructs it from four scalar args (the
+// var-system is flat-scalar). The wrapper's output must equal the canonical
+// impl's output for the corresponding struct — drift would mean two
+// breakdown formatters exist.
+describe("formatTokenBreakdown wrapper", () => {
+  test("matches source for typical breakdown shape", () => {
+    expect(
+      evalText("{{ formatTokenBreakdown .i .o .cc .cr }}", {
+        i: 1000,
+        o: 2000,
+        cc: 3000,
+        cr: 4000,
+      }),
+    ).toBe(
+      formatTokenBreakdown({
+        input: 1000,
+        output: 2000,
+        cacheCreation: 3000,
+        cacheRead: 4000,
+      }),
+    );
+  });
+
+  test("zero-valued parts collapse to '0 tokens' (delegates fully)", () => {
+    expect(
+      evalText("{{ formatTokenBreakdown .i .o .cc .cr }}", {
+        i: 0,
+        o: 0,
+        cc: 0,
+        cr: 0,
+      }),
+    ).toBe(
+      formatTokenBreakdown({
+        input: 0,
+        output: 0,
+        cacheCreation: 0,
+        cacheRead: 0,
+      }),
+    );
+  });
+
+  test("cache pair sums into a single 'cached' part", () => {
+    // 2000 + 5000 cached → "7.0K cached", combined with input + output.
+    expect(
+      evalText("{{ formatTokenBreakdown .i .o .cc .cr }}", {
+        i: 1000,
+        o: 2000,
+        cc: 2000,
+        cr: 5000,
+      }),
+    ).toBe(
+      formatTokenBreakdown({
+        input: 1000,
+        output: 2000,
+        cacheCreation: 2000,
+        cacheRead: 5000,
+      }),
+    );
   });
 });
 
@@ -289,6 +352,7 @@ describe("formatterFuncs registry", () => {
       "formatLongTimeRemaining",
       "formatModelName",
       "formatResponseTime",
+      "formatTokenBreakdown",
       "formatTokenCount",
       "formatTokens",
       "minutesUntilReset",
