@@ -180,4 +180,99 @@ describe("DEFAULT_DSL_CONFIG", () => {
       expect(visible).not.toContain("~");
     });
   });
+
+  // [LAW:dataflow-not-control-flow] The metrics segment renders parts
+  // independently — each `if .metrics.<field>` guard fires off its own
+  // value. Absent fields project through pickNonNull as missing keys and
+  // resolve via the var-system fallback to 0 (falsy), so the part is
+  // hidden without any per-field show-flag plumbing. The segment-level
+  // `when` is a weak any-present check that suppresses the whole cell
+  // when no metric has data.
+  describe("metrics per-part gating", () => {
+    function renderMetricsText(metrics: {
+      lastResponseTime?: number;
+      responseTime?: number;
+      sessionDuration?: number;
+      messageCount?: number;
+      linesAdded?: number;
+      linesRemoved?: number;
+    }): string {
+      const parsed = parseAndValidate("<default>", SERIALIZED);
+      const metricsOnly = { ...parsed, layout: ["metrics"] };
+      const store = new VariableStore();
+      const registry = new SourceRegistry(store);
+      try {
+        const compiled = registerDslConfig(metricsOnly, registry, {
+          cwd: process.cwd(),
+        });
+        const basePalette = new PaletteResolver(
+          getThemePalette(metricsOnly.globals.palette ?? "textual-dark")!,
+        );
+        const payload = {
+          hook_event_name: "Status",
+          session_id: "x",
+          cwd: "/tmp",
+          model: { id: "x", display_name: "x" },
+          workspace: { current_dir: "/tmp", project_dir: "/tmp", added_dirs: [] },
+          metrics,
+        };
+        const line = renderDslLine(
+          metricsOnly,
+          compiled,
+          store,
+          registry,
+          payload,
+          basePalette,
+          { style: "powerline", colorCompatibility: "truecolor" },
+        );
+        return line.replace(
+          // eslint-disable-next-line no-control-regex
+          /\x1b\[[0-9;]*m|\x1b\]8;;[^\x1b]*\x1b\\|[\u{E0B0}-\u{E0BC}]/gu,
+          "",
+        );
+      } finally {
+        registry.dispose();
+      }
+    }
+
+    test("subset of fields renders only their parts", () => {
+      const visible = renderMetricsText({
+        lastResponseTime: 1.5,
+        messageCount: 3,
+      });
+      expect(visible).toContain("Δ");
+      expect(visible).toContain("1.5s");
+      expect(visible).toContain("◆");
+      expect(visible).toContain("3");
+      // Absent dimensions: their part glyphs must NOT appear.
+      expect(visible).not.toContain("⧖");
+      expect(visible).not.toContain("⧗");
+      expect(visible).not.toContain("+");
+      expect(visible).not.toContain("-");
+    });
+
+    test("all fields present renders every part", () => {
+      const visible = renderMetricsText({
+        lastResponseTime: 1.5,
+        responseTime: 2,
+        sessionDuration: 90,
+        messageCount: 5,
+        linesAdded: 10,
+        linesRemoved: 4,
+      });
+      expect(visible).toContain("Δ");
+      expect(visible).toContain("⧖");
+      expect(visible).toContain("⧗");
+      expect(visible).toContain("◆");
+      expect(visible).toContain("+");
+      expect(visible).toContain("-");
+    });
+
+    test("no metrics fields renders no cell", () => {
+      const visible = renderMetricsText({});
+      // Empty when-suppressed segment → line is empty (no glyphs, no labels).
+      expect(visible).not.toContain("Δ");
+      expect(visible).not.toContain("◆");
+    });
+  });
 });

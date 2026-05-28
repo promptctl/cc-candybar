@@ -442,16 +442,28 @@ export const DEFAULT_DSL_CONFIG = {
       when: "{{ gt .context.totalTokens 0 }}",
     },
     metrics: {
+      // [LAW:dataflow-not-control-flow] Each part guards on its own value
+      // rather than gating the whole segment on a single dimension. With
+      // MetricsPayload's fields independently optional and pickNonNull
+      // dropping nulls (see src/daemon/render-payload.ts), an absent field
+      // resolves through the var-system fallback chain to 0 — the same
+      // falsy shape the per-part `if` test treats as hidden. The segment-
+      // level `when` survives as a weak any-present check so a payload
+      // with zero metrics data renders no cell at all (an empty template
+      // would otherwise produce a single-space bg-styled cell).
       template:
-        " Δ {{ formatResponseTime .metrics.lastResponseTime }}" +
-        " ⧖ {{ formatResponseTime .metrics.responseTime }}" +
-        " ⧗ {{ formatDuration .metrics.sessionDuration }}" +
-        " ◆ {{ .metrics.messageCount }}" +
-        " + {{ .metrics.linesAdded }}" +
-        " - {{ .metrics.linesRemoved }} ",
+        "{{ if .metrics.lastResponseTime }} Δ {{ formatResponseTime .metrics.lastResponseTime }}{{ end }}" +
+        "{{ if .metrics.responseTime }} ⧖ {{ formatResponseTime .metrics.responseTime }}{{ end }}" +
+        "{{ if .metrics.sessionDuration }} ⧗ {{ formatDuration .metrics.sessionDuration }}{{ end }}" +
+        "{{ if .metrics.messageCount }} ◆ {{ .metrics.messageCount }}{{ end }}" +
+        "{{ if .metrics.linesAdded }} + {{ .metrics.linesAdded }}{{ end }}" +
+        "{{ if .metrics.linesRemoved }} - {{ .metrics.linesRemoved }}{{ end }} ",
       bg: "panel",
       fg: "foreground",
-      when: "{{ gt .metrics.sessionDuration 0 }}",
+      when:
+        "{{ or .metrics.lastResponseTime .metrics.responseTime" +
+        " .metrics.sessionDuration .metrics.messageCount" +
+        " .metrics.linesAdded .metrics.linesRemoved }}",
     },
   },
 
