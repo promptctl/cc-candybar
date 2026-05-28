@@ -73,13 +73,13 @@ Wire format lives in `src/daemon/protocol.ts`. The Rust client mirrors it as a l
 3. `<cwd>/.cc-candybar.json5` (then `.json`)
 4. `$XDG_CONFIG_HOME/cc-candybar/config.json5` (then `.json`; defaults to `~/.config/cc-candybar/config.json5`)
 
-Both `.json5` and `.json` are accepted (JSON ⊂ JSON5, same parser) — `.json5` wins when both exist at the same location, and `detectConfigCollisions` surfaces the shadowed sibling as a warning so the user removes the duplicate. If none exist, `RenderCache.reloadInto` falls back to `DEFAULT_DSL_CONFIG` (`src/config/default-dsl-config.ts`) — the bundled standard library, covering every built-in segment. A user file is a **complete** replacement; there is no merge with defaults. JSON5 supports inline comments, so copying the demo (`src/demo/statusline.json5`) or the default-config TypeScript constant into `.cc-candybar.json5` is the customization path.
+Both `.json5` and `.json` are accepted (JSON ⊂ JSON5, same parser) — `.json5` wins when both exist at the same location, and `detectConfigCollisions` surfaces the shadowed sibling as a warning so the user removes the duplicate. If none exist, `RenderCache.reloadInto` falls back to `DEFAULT_DSL_CONFIG` (`src/config/default-dsl-config.ts`) — the bundled standard library, covering every built-in segment. **User files merge on top of the bundled default** (`mergeWithDefault` in `src/config/dsl-loader.ts`): `globals` shallow-merge per field, `variables` and `segments` merge by name with user winning per name, and `layout` (a 2D `string[][]`) replaces the default wholesale when present. So a user only needs to declare what differs — overriding one segment, one variable, or just the layout takes a few lines. JSON5 supports inline comments.
 
 ### Renderer (`src/dsl/render.ts`)
 
 `registerDslConfig(config, registry, opts)` is the one-shot setup: declares every variable into the `SourceRegistry`, pre-parses every segment's `when` / `template` / `bg` / `fg` strings, and pre-resolves per-segment palette specs. Returns `CompiledSegments`.
 
-`renderDslLine(config, compiled, store, registry, payload, basePalette, opts)` is the per-render hot path: pushes payload into input boxes (`registry.applyInput`), walks `config.layout`, evaluates each segment's compiled templates, builds `StripCell`s with per-segment palette colors, and joins via the powerline `Joiner` into one ANSI line.
+`renderDsl(config, compiled, store, registry, payload, basePalette, opts)` is the per-render hot path: pushes payload into input boxes (`registry.applyInput`), walks `config.layout` (a 2D `ReadonlyArray<readonly string[]>` — rows of segment names; single-line is the degenerate `[[…]]` case), evaluates each segment's compiled templates, builds `RichText` cells with per-segment palette colors, and joins each row via the powerline `Joiner` into an ANSI line; rows are joined with `\n`. `FlexStrip`'s width-based auto-wrap (bzh.10) still applies *within* each row as a soft overflow safety net.
 
 Both functions are called verbatim by the daemon — no parallel render path, no inline computation that diverges. The demo at `src/demo/dsl.ts` calls the same two functions.
 
@@ -118,8 +118,8 @@ The codebase cites laws inline (`[LAW:one-source-of-truth]`, `[LAW:dataflow-not-
 
 Recurring patterns enforced by these laws in this repo:
 
-- **One render path: `renderDslLine`.** The daemon calls it verbatim; the demo calls it verbatim; tests call it verbatim. No parallel renderer, no "fallback" computation.
-- **One config shape: `DslConfig`.** No alternate input format, no merge layer. User file or bundled default; nothing in between.
+- **One render path: `renderDsl`.** The daemon calls it verbatim; the demo calls it verbatim; tests call it verbatim. No parallel renderer, no "fallback" computation.
+- **One config shape: `DslConfig`.** No alternate input format. `loadConfig` merges the user file on top of `DEFAULT_DSL_CONFIG` (`mergeWithDefault`): `globals` shallow-merge per field, `variables`/`segments` merge by name (user wins), `layout` replaces wholesale when present — so a user file only needs to declare what differs from the bundled default.
 - **Variability lives in data, not control flow.** The augmented payload (`src/daemon/render-payload.ts`) carries every value the templates can read; segments hide/show via `when` predicates on values, not branches in code.
 - **Errors are loud.** Bad config doesn't silently degrade — `composeWithDiagnostics` (`src/daemon/server.ts`) renders visible icons for both fatal errors and advisory warnings (the `.json5` vs `.json` collision detector emits a warning, for example). Don't add silent `|| defaults` that hide a broken state.
 
