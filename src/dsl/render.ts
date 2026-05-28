@@ -11,11 +11,7 @@
 // the input values (kind discriminators, layout length, palette presence)
 // govern output, not whether operations run.
 
-import {
-  PaletteResolver,
-  type StripCell,
-  type RichText,
-} from "@promptctl/rich-js";
+import { PaletteResolver, type RichText } from "@promptctl/rich-js";
 import type { Template } from "@promptctl/go-template-js";
 import type {
   ValidatedConfig,
@@ -37,7 +33,7 @@ import { getThemePalette } from "../themes/palette-registry.js";
 import { buildScope } from "../template-engine/scope.js";
 import {
   createCcCandybarEngine,
-  fragmentsToStripCells,
+  fragmentsToCells,
   evaluateWhen,
   applySegmentLayout,
   resolveSegmentColors,
@@ -328,7 +324,7 @@ export function renderDslLine(
   // joined line (powerline joiners sit *between* segments and have no
   // place in a one-segment render), but for debug visibility this is the
   // natural per-segment shape.
-  perSegmentSink?: Map<string, readonly StripCell[]>,
+  perSegmentSink?: Map<string, readonly RichText[]>,
 ): string {
   // Step 1: push payload into input boxes.
   registry.applyInput(payload);
@@ -336,7 +332,7 @@ export function renderDslLine(
   const scope = buildScope(store);
   const hueStep = config.globals.hueStep ?? 0;
 
-  const allCells: StripCell[] = [];
+  const allCells: RichText[] = [];
   perSegmentSink?.clear();
 
   for (let i = 0; i < config.layout.length; i++) {
@@ -372,7 +368,7 @@ export function renderDslLine(
     // Same baseStyle also flows into layout so synthesized pad/marker cells
     // (fixed-width segments) keep the segment bg+fg continuous.
     const fragments = segCompiled.template.evaluate(scope);
-    const cells = fragmentsToStripCells(fragments, baseStyle);
+    const cells = fragmentsToCells(fragments, baseStyle);
 
     const laidOut = applySegmentLayout(cells, {
       width: seg.width ?? "auto",

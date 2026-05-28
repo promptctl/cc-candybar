@@ -82,7 +82,7 @@
   },
   "dependencies": {
     "@promptctl/go-template-js": "^0.3.0",
-    "@promptctl/rich-js": "^0.3.1",
+    "@promptctl/rich-js": "^0.4.0",
     "json5": "^2.2.3",
     "mobx": "^6.15.0"
   }

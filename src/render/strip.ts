@@ -1,6 +1,6 @@
 import {
   Strip,
-  StripCell,
+  RichText,
   Style,
   PowerlineJoiner,
   CapsuleJoiner,
@@ -36,7 +36,7 @@ function pickJoiner(style: StripStyle, separator?: string): Joiner {
   return new PowerlineJoiner();
 }
 
-function toStripCell(seg: RenderedSegmentLike): StripCell {
+function toCell(seg: RenderedSegmentLike): RichText {
   // Padding mirrors the legacy buildLineFromSegments: one space on each side
   // of the segment text. The joiners sit between cells; padding sits inside.
   const padded = ` ${seg.text} `;
@@ -44,18 +44,18 @@ function toStripCell(seg: RenderedSegmentLike): StripCell {
     bgcolor: seg.bgHex || undefined,
     color: seg.fgHex || undefined,
   });
-  return new StripCell(padded, style);
+  return new RichText(padded, { style, end: "", noWrap: true });
 }
 
 /**
- * [LAW:single-enforcer] The one place StripCells become an ANSI byte string.
- * Every render path (legacy SegmentData via buildLineStrip, DSL StripCell[] via
- * the template-engine pipeline, the parity harness) renders through here, so
- * "byte-identical output" is a real theorem rather than two serializers that
- * could drift.
+ * [LAW:single-enforcer] The one place RichText cells become an ANSI byte
+ * string. Every render path (legacy SegmentData via buildLineStrip, DSL
+ * RichText[] via the template-engine pipeline, the parity harness) renders
+ * through here, so "byte-identical output" is a real theorem rather than
+ * two serializers that could drift.
  */
 export function renderStripCells(
-  cells: readonly StripCell[],
+  cells: readonly RichText[],
   options: BuildLineOptions,
 ): string {
   if (cells.length === 0) return "";
@@ -75,7 +75,7 @@ export function buildLineStrip(
   segments: readonly RenderedSegmentLike[],
   options: BuildLineOptions,
 ): string {
-  return renderStripCells(segments.map(toStripCell), options);
+  return renderStripCells(segments.map(toCell), options);
 }
 
 /**
@@ -93,7 +93,7 @@ export function buildFlexStripLines(
   options: BuildLineOptions & { width: number },
 ): string {
   if (segments.length === 0) return "";
-  const cells = segments.map(toStripCell);
+  const cells = segments.map(toCell);
   const joiner = pickJoiner(options.style, options.separator);
   const flex = new FlexStrip(cells, { joiner });
   const out = renderToString(flex, {

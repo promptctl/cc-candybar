@@ -29,7 +29,7 @@ import { DEBUG_WHATS, isDebugWhat } from "./debug-types";
 import { expandHome } from "../config/dsl-loader.js";
 import { renderDslLine } from "../dsl/render.js";
 import { renderStripCells } from "../render/strip.js";
-import type { StripCell } from "@promptctl/rich-js";
+import type { RichText } from "@promptctl/rich-js";
 import { buildRenderPayload } from "./render-payload.js";
 import { TodayProvider } from "../segments/today.js";
 import { ContextProvider } from "../segments/context.js";
@@ -900,7 +900,7 @@ const RENDER_OPTS = {
 const EMPTY_RENDER_MAP = new Map<string, string>();
 
 function serializeSegmentCells(
-  cells: ReadonlyMap<string, readonly StripCell[]>,
+  cells: ReadonlyMap<string, readonly RichText[]>,
 ): Map<string, string> {
   const out = new Map<string, string>();
   for (const [name, segCells] of cells) {
