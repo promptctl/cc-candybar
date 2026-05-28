@@ -134,14 +134,14 @@ describe("DSL render spine (bzh.7 steel thread)", () => {
     expect(a).toBe(b);
   });
 
-  test("perSegmentSink receives one StripCell[] per rendered (non-hidden) segment, cleared on each call", () => {
+  test("perSegmentSink receives one RichText[] per rendered (non-hidden) segment, cleared on each call", () => {
     const { config, compiled, store, registry } = buildRuntime(
       HOOK_DATA.workspace.current_dir,
     );
     const basePalette = new PaletteResolver(getThemePalette("textual-dark")!);
     const sink = new Map<
       string,
-      readonly import("@promptctl/rich-js").StripCell[]
+      readonly import("@promptctl/rich-js").RichText[]
     >();
     // Pre-seed with a stale entry to verify renderDslLine clears it.
     sink.set("doesNotExist", []);

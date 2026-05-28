@@ -1,23 +1,28 @@
-// [LAW:behavior-not-structure] Tests assert observable output (cell count,
-// text content, total width, style fields) — never internal state.
+// [LAW:behavior-not-structure] Tests assert observable output (visible
+// text, total width, style fields at the boundaries) — never the internal
+// shape of how the layout result was assembled.
+//
+// [LAW:types-are-the-program] applySegmentLayout returns RichText[]. For
+// "auto" width it passes the input through; for fixed width it produces
+// one merged RichText sized exactly to `width`, with truncation/padding
+// already applied. Span-preserving across every op.
 
-import { StripCell, Style, cellLen, RichText } from "@promptctl/rich-js";
+import { Style, cellLen, RichText } from "@promptctl/rich-js";
 import { createCcCandybarEngine } from "../src/template-engine/engine";
 import { applySegmentLayout, evaluateWhen } from "../src/template-engine/layout";
-import { fragmentsToStripCells } from "../src/template-engine/cells";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-function cell(text: string): StripCell {
-  return new StripCell(text);
+function cell(text: string, style?: Style | string): RichText {
+  return new RichText(text, { style, end: "", noWrap: true });
 }
 
-function totalWidth(cells: StripCell[]): number {
-  return cells.reduce((sum, c) => sum + cellLen(c.text), 0);
+function totalWidth(cells: readonly RichText[]): number {
+  return cells.reduce((sum, c) => sum + cellLen(c.plain), 0);
 }
 
-function text(cells: StripCell[]): string[] {
-  return cells.map((c) => c.text);
+function texts(cells: readonly RichText[]): string[] {
+  return cells.map((c) => c.plain);
 }
 
 const autoOptions = {
@@ -70,14 +75,14 @@ describe("evaluateWhen", () => {
 });
 
 // ────────────────────────────────────────────────────────────────────────────
-// 2. applySegmentLayout — auto width (no constraint)
+// 2. Auto width — cells pass through
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("auto width — no layout constraint applied", () => {
   test("returns cells unchanged", () => {
     const cells = [cell("hello"), cell(" world")];
     const result = applySegmentLayout(cells, autoOptions);
-    expect(text(result)).toEqual(["hello", " world"]);
+    expect(texts(result)).toEqual(["hello", " world"]);
   });
 
   test("empty input returns empty", () => {
@@ -86,163 +91,108 @@ describe("auto width — no layout constraint applied", () => {
 });
 
 // ────────────────────────────────────────────────────────────────────────────
-// 3. Fixed width — exact fit (no truncation or padding needed)
+// 3. Fixed width — exact fit
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("fixed width — exact fit", () => {
-  test("cells that already fill the width are returned as-is", () => {
-    const cells = [cell("hello")]; // 5 chars
-    const result = applySegmentLayout(cells, {
+  test("content already fills the width", () => {
+    const result = applySegmentLayout([cell("hello")], {
       width: 5,
       justify: "left",
       truncate: "right",
     });
     expect(totalWidth(result)).toBe(5);
-    expect(text(result)).toEqual(["hello"]);
+    expect(result.map((c) => c.plain).join("")).toBe("hello");
   });
 });
 
 // ────────────────────────────────────────────────────────────────────────────
-// 4. Fixed width — padding / justification
+// 4. Justify
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("justify — left", () => {
-  test("adds trailing space to reach target width", () => {
-    const cells = [cell("hi")]; // 2 chars, target 5
-    const result = applySegmentLayout(cells, {
+  test("pads on the right to reach width", () => {
+    const result = applySegmentLayout([cell("hi")], {
       width: 5,
       justify: "left",
       truncate: "right",
     });
     expect(totalWidth(result)).toBe(5);
-    expect(text(result)[0]).toBe("hi");
-    expect(text(result)[text(result).length - 1]).toBe("   ");
+    expect(result[0]!.plain).toBe("hi   ");
   });
 });
 
 describe("justify — right", () => {
-  test("adds leading space to reach target width", () => {
-    const cells = [cell("hi")]; // 2 chars, target 5
-    const result = applySegmentLayout(cells, {
+  test("pads on the left to reach width", () => {
+    const result = applySegmentLayout([cell("hi")], {
       width: 5,
       justify: "right",
       truncate: "right",
     });
     expect(totalWidth(result)).toBe(5);
-    expect(text(result)[0]).toBe("   ");
-    expect(text(result)[1]).toBe("hi");
+    expect(result[0]!.plain).toBe("   hi");
   });
 });
 
 describe("justify — center", () => {
-  test("even padding: splits evenly", () => {
-    const cells = [cell("hi")]; // 2 chars, target 6, pad = 4
-    const result = applySegmentLayout(cells, {
+  test("pads on both sides; smaller half on left when odd", () => {
+    const result = applySegmentLayout([cell("hi")], {
       width: 6,
       justify: "center",
       truncate: "right",
     });
     expect(totalWidth(result)).toBe(6);
-    expect(text(result)[0]).toBe("  "); // left pad = floor(4/2) = 2
-    expect(text(result)[1]).toBe("hi");
-    expect(text(result)[2]).toBe("  "); // right pad = 2
+    expect(result[0]!.plain).toBe("  hi  ");
   });
 
-  test("odd padding: right side gets one extra space", () => {
-    const cells = [cell("hi")]; // 2 chars, target 5, pad = 3
-    const result = applySegmentLayout(cells, {
+  test("center odd: left pad gets smaller half", () => {
+    const result = applySegmentLayout([cell("hi")], {
       width: 5,
       justify: "center",
       truncate: "right",
     });
     expect(totalWidth(result)).toBe(5);
-    expect(text(result)[0]).toBe(" "); // left = floor(3/2) = 1
-    expect(text(result)[1]).toBe("hi");
-    expect(text(result)[2]).toBe("  "); // right = 2
+    expect(result[0]!.plain).toBe(" hi  ");
   });
 });
 
 // ────────────────────────────────────────────────────────────────────────────
-// 5. Fixed width — truncation
+// 5. Truncate — right (default marker "…")
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("truncate — right", () => {
-  test("keeps left portion, appends marker", () => {
-    const cells = [cell("hello world")]; // 11 chars, target 8 → budget 7
-    const result = applySegmentLayout(cells, {
-      width: 8,
+  test("keeps left, marker on right", () => {
+    const result = applySegmentLayout([cell("hello world")], {
+      width: 6,
       justify: "left",
       truncate: "right",
-      truncateMarker: "…",
     });
-    expect(totalWidth(result)).toBe(8);
-    const flat = text(result).join("");
-    expect(flat.endsWith("…")).toBe(true);
-    expect(flat.startsWith("hello w")).toBe(true);
-  });
-
-  test("marker is the last cell", () => {
-    const result = applySegmentLayout([cell("abcdef")], {
-      width: 4,
-      justify: "left",
-      truncate: "right",
-      truncateMarker: "…",
-    });
-    expect(text(result).at(-1)).toBe("…");
+    expect(totalWidth(result)).toBe(6);
+    expect(result[0]!.plain).toBe("hello…");
   });
 });
 
 describe("truncate — left", () => {
-  test("keeps right portion, prepends marker", () => {
-    const cells = [cell("hello world")]; // 11 chars, target 8 → budget 7
-    const result = applySegmentLayout(cells, {
-      width: 8,
+  test("marker on left, keeps right", () => {
+    const result = applySegmentLayout([cell("hello world")], {
+      width: 6,
       justify: "left",
       truncate: "left",
-      truncateMarker: "…",
     });
-    expect(totalWidth(result)).toBe(8);
-    const flat = text(result).join("");
-    expect(flat.startsWith("…")).toBe(true);
-    expect(flat.endsWith("o world")).toBe(true);
-  });
-
-  test("marker is the first cell", () => {
-    const result = applySegmentLayout([cell("abcdef")], {
-      width: 4,
-      justify: "left",
-      truncate: "left",
-      truncateMarker: "…",
-    });
-    expect(text(result)[0]).toBe("…");
+    expect(totalWidth(result)).toBe(6);
+    expect(result[0]!.plain).toBe("…world");
   });
 });
 
 describe("truncate — middle", () => {
-  test("keeps outer portions, inserts marker in the middle", () => {
-    const cells = [cell("hello world!")]; // 12 chars, target 7 → budget 6
-    const result = applySegmentLayout(cells, {
-      width: 7,
+  test("keeps halves; marker in the middle", () => {
+    const result = applySegmentLayout([cell("hello world!")], {
+      width: 6,
       justify: "left",
       truncate: "middle",
-      truncateMarker: "…",
     });
-    expect(totalWidth(result)).toBe(7);
-    const parts = text(result);
-    // marker must be in the middle, not first or last
-    const markerIdx = parts.indexOf("…");
-    expect(markerIdx).toBeGreaterThan(0);
-    expect(markerIdx).toBeLessThan(parts.length - 1);
-  });
-
-  test("total width matches target", () => {
-    const result = applySegmentLayout([cell("abcdefghijkl")], {
-      width: 9,
-      justify: "left",
-      truncate: "middle",
-      truncateMarker: "…",
-    });
-    expect(totalWidth(result)).toBe(9);
+    expect(totalWidth(result)).toBe(6);
+    expect(result[0]!.plain).toBe("he…ld!");
   });
 });
 
@@ -251,210 +201,123 @@ describe("truncate — middle", () => {
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("multi-cell truncation", () => {
-  test("right truncation spans multiple cells", () => {
-    const cells = [cell("abc"), cell("def"), cell("ghi")]; // 9 chars total
+  test("cells are concatenated before layout; result is one cell", () => {
+    const cells = [cell("hello"), cell(" world"), cell("!!")];
     const result = applySegmentLayout(cells, {
-      width: 5,
-      justify: "left",
-      truncate: "right",
-      truncateMarker: "…",
-    });
-    expect(totalWidth(result)).toBe(5);
-    expect(text(result).at(-1)).toBe("…");
-    // content before marker: "abcd" (4 chars)
-    const contentText = text(result).slice(0, -1).join("");
-    expect(contentText).toBe("abcd");
-  });
-
-  test("left truncation spans multiple cells", () => {
-    const cells = [cell("abc"), cell("def"), cell("ghi")]; // 9 chars total
-    const result = applySegmentLayout(cells, {
-      width: 5,
-      justify: "left",
-      truncate: "left",
-      truncateMarker: "…",
-    });
-    expect(totalWidth(result)).toBe(5);
-    expect(text(result)[0]).toBe("…");
-    const contentText = text(result).slice(1).join("");
-    expect(contentText).toBe("fghi");
-  });
-});
-
-// ────────────────────────────────────────────────────────────────────────────
-// 7. Custom truncate marker
-// ────────────────────────────────────────────────────────────────────────────
-
-describe("custom truncate marker", () => {
-  test("multi-char marker is accounted for in width budget", () => {
-    const result = applySegmentLayout([cell("hello world")], {
       width: 8,
-      justify: "left",
-      truncate: "right",
-      truncateMarker: ">>",
-    });
-    expect(totalWidth(result)).toBe(8);
-    expect(text(result).at(-1)).toBe(">>");
-  });
-
-  test("default marker is '…' (1 column)", () => {
-    const result = applySegmentLayout([cell("hello world")], {
-      width: 5,
-      justify: "left",
-      truncate: "right",
-    });
-    expect(text(result).at(-1)).toBe("…");
-  });
-});
-
-// ────────────────────────────────────────────────────────────────────────────
-// 8. baseStyle inheritance on synthesized cells
-//
-// [LAW:single-enforcer] The segment's baseStyle is computed ONCE upstream and
-// flows here to fill cells layout itself synthesizes (pad spaces, truncate
-// marker). Without it, fixed-width segments would lose segment bg/fg on
-// padding/marker and the PowerlineJoiner would see a spurious bg transition
-// from main content into an unstyled pad cell — the visual gap a previous
-// version of this code produced.
-// ────────────────────────────────────────────────────────────────────────────
-
-describe("baseStyle inheritance on synthesized cells", () => {
-  test("pad cells inherit baseStyle (left justify, content shorter than width)", () => {
-    const baseStyle = new Style({ bgcolor: "blue", color: "white" });
-    const result = applySegmentLayout([new StripCell("hi", baseStyle)], {
-      width: 5,
-      justify: "left",
-      truncate: "right",
-      baseStyle,
-    });
-    // [content, pad] — pad cell's bg must match the segment bg, not be
-    // unstyled. Without this, the PowerlineJoiner sees a bg transition.
-    expect(result.length).toBeGreaterThanOrEqual(2);
-    const padCell = result[result.length - 1]!;
-    expect(padCell.text.trim()).toBe("");
-    expect(padCell.style.bgcolor?.name).toBe("blue");
-  });
-
-  test("pad cells inherit baseStyle (right justify)", () => {
-    const baseStyle = new Style({ bgcolor: "blue" });
-    const result = applySegmentLayout([new StripCell("hi", baseStyle)], {
-      width: 5,
-      justify: "right",
-      truncate: "right",
-      baseStyle,
-    });
-    const padCell = result[0]!;
-    expect(padCell.text.trim()).toBe("");
-    expect(padCell.style.bgcolor?.name).toBe("blue");
-  });
-
-  test("pad cells inherit baseStyle (center justify, both sides)", () => {
-    const baseStyle = new Style({ bgcolor: "blue" });
-    const result = applySegmentLayout([new StripCell("hi", baseStyle)], {
-      width: 6,
-      justify: "center",
-      truncate: "right",
-      baseStyle,
-    });
-    // [pad, content, pad] — both pad cells styled.
-    expect(result.length).toBe(3);
-    expect(result[0]!.style.bgcolor?.name).toBe("blue");
-    expect(result[2]!.style.bgcolor?.name).toBe("blue");
-  });
-
-  test("truncate marker cell inherits baseStyle", () => {
-    const baseStyle = new Style({ bgcolor: "blue", color: "white" });
-    const result = applySegmentLayout([new StripCell("hello world", baseStyle)], {
-      width: 5,
-      justify: "left",
-      truncate: "right",
-      baseStyle,
-    });
-    // Last cell is the marker.
-    const marker = result[result.length - 1]!;
-    expect(marker.text).toBe("…");
-    expect(marker.style.bgcolor?.name).toBe("blue");
-    expect(marker.style.color?.name).toBe("white");
-  });
-
-  test("no baseStyle → synthesized cells remain unstyled (legacy behavior)", () => {
-    // Backward-compat: callers that don't pass baseStyle get the old shape
-    // (synthesized cells with no style). This preserves test-only call sites
-    // that don't care about segment continuity.
-    const result = applySegmentLayout([new StripCell("hi")], {
-      width: 5,
-      justify: "left",
-      truncate: "right",
-    });
-    const padCell = result[result.length - 1]!;
-    expect(padCell.style.bgcolor).toBeUndefined();
-  });
-});
-
-// ────────────────────────────────────────────────────────────────────────────
-// 9. Known limitation: truncation through a parts-based cell loses per-part fg
-//
-// [LAW:types-are-the-program] StripCell's `_parts` is private in rich-js, so
-// the slice path (`new StripCell(splitText(cell.text), cell.style)`) cannot
-// preserve parts. groupToCell collapses uniform-style multi-fragment groups
-// to single-text cells (the common case), so the parts shape — and this
-// limitation — is reached ONLY for genuinely heterogeneous fg/attrs (e.g.
-// gitTaculous's inline green/red flags) AND a fixed width that truncates
-// THROUGH such a cell. No current segment configures that combination.
-// These tests pin the observable behavior so the limitation cannot regress
-// further (e.g. losing the cell-level bg too) without a failing test.
-// ────────────────────────────────────────────────────────────────────────────
-
-describe("truncation through a parts-based cell — known limitation", () => {
-  function buildHeterogeneousCell(): StripCell {
-    const baseStyle = new Style({ bgcolor: "blue", color: "white" });
-    const fragments = [
-      new RichText("normal "),
-      new RichText("ERR", { style: "red" }),
-      new RichText(" trailing"),
-    ];
-    const cells = fragmentsToStripCells(fragments, baseStyle);
-    // Sanity: a heterogeneous group must produce ONE parts-based cell, not
-    // a collapsed single-text cell. Otherwise we're not testing what we
-    // think we're testing.
-    expect(cells).toHaveLength(1);
-    expect(cells[0]!.style.color).toBeUndefined();
-    expect(cells[0]!.style.bgcolor?.name).toBe("blue");
-    return cells[0]!;
-  }
-
-  test("cell-level bg survives truncation slicing through a parts-based cell", () => {
-    const baseStyle = new Style({ bgcolor: "blue", color: "white" });
-    const cell = buildHeterogeneousCell();
-    // Total width "normal ERR trailing" = 19; cut to 5 (budget 4 + 1-col marker).
-    const result = applySegmentLayout([cell], {
-      width: 5,
-      justify: "left",
-      truncate: "right",
-      baseStyle,
-    });
-    // The boundary slice keeps cell.style — which has only bgcolor for a
-    // parts-based cell. Per-part fg (the red "ERR") is dropped if the cut
-    // falls inside it; for fragments that survive entirely, only their text
-    // remains on the boundary cell, not their per-fragment fg.
-    const boundary = result[0]!;
-    expect(boundary.style.bgcolor?.name).toBe("blue");
-    // Marker cell inherits baseStyle (already covered by section-8 tests).
-    const marker = result[result.length - 1]!;
-    expect(marker.text).toBe("…");
-    expect(marker.style.bgcolor?.name).toBe("blue");
-  });
-
-  test("auto-width segments are not affected (no truncation runs)", () => {
-    // Confirms the limitation is scoped to fixed-width + heterogeneous-fg.
-    // Auto-width passes cells through unchanged, so the parts shape survives.
-    const cell = buildHeterogeneousCell();
-    const result = applySegmentLayout([cell], {
-      width: "auto",
       justify: "left",
       truncate: "right",
     });
     expect(result).toHaveLength(1);
-    expect(result[0]).toBe(cell); // same reference — passed through
+    expect(totalWidth(result)).toBe(8);
+    expect(result[0]!.plain).toBe("hello w…");
+  });
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// 7. Custom marker
+// ────────────────────────────────────────────────────────────────────────────
+
+describe("custom truncate marker", () => {
+  test("two-char marker on right", () => {
+    const result = applySegmentLayout([cell("hello world")], {
+      width: 7,
+      justify: "left",
+      truncate: "right",
+      truncateMarker: ">>",
+    });
+    expect(result[0]!.plain).toBe("hello>>");
+  });
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// 8. baseStyle on the merged cell
+// ────────────────────────────────────────────────────────────────────────────
+
+describe("baseStyle on the merged cell", () => {
+  test("padding inherits the cell's wrapping style (segment bg+fg continuous)", () => {
+    const baseStyle = new Style({ bgcolor: "blue", color: "white" });
+    const result = applySegmentLayout([cell("hi", baseStyle)], {
+      width: 5,
+      justify: "left",
+      truncate: "right",
+      baseStyle,
+    });
+    expect(result).toHaveLength(1);
+    expect(result[0]!.plain).toBe("hi   ");
+    // The cell-level style is the baseStyle, so padding chars (which have
+    // no span overlay) render with that style — making the segment bg+fg
+    // continuous across the padded gap.
+    expect(result[0]!.style.bgcolor?.name).toBe("blue");
+    expect(result[0]!.style.color?.name).toBe("white");
+    // Edges report the same baseStyle since the kept text fragment carries
+    // the same merged style.
+    expect(result[0]!.edgeStyle("left").bgcolor?.name).toBe("blue");
+    expect(result[0]!.edgeStyle("right").bgcolor?.name).toBe("blue");
+  });
+
+  test("truncation marker rides on the cell's wrapping style", () => {
+    const baseStyle = new Style({ bgcolor: "blue", color: "white" });
+    const result = applySegmentLayout([cell("hello world", baseStyle)], {
+      width: 6,
+      justify: "left",
+      truncate: "right",
+      baseStyle,
+    });
+    expect(result[0]!.plain).toBe("hello…");
+    expect(result[0]!.style.bgcolor?.name).toBe("blue");
+  });
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// 9. Truncation through heterogeneous-fg interior — bzh.9 limitation is gone
+// ────────────────────────────────────────────────────────────────────────────
+// [LAW:types-are-the-program] With RichText as the cell type, truncation
+// preserves spans by construction. The bzh.9 "parts-based cell loses per-
+// part fg through a cut" limitation cannot be expressed in this shape —
+// the slice path is RichText.truncate, which clips spans through the cut.
+
+describe("truncation preserves per-character styling through the cut", () => {
+  function heterogeneousCell(): RichText {
+    const r = new RichText("hello world", {
+      style: new Style({ bgcolor: "blue", color: "white" }),
+      end: "",
+      noWrap: true,
+    });
+    r.stylize("red", 6, 11); // "world" is red
+    return r;
+  }
+
+  test("right truncation keeps the spans that survive the cut", () => {
+    const cell = heterogeneousCell();
+    const result = applySegmentLayout([cell], {
+      width: 6,
+      justify: "left",
+      truncate: "right",
+    });
+    expect(result[0]!.plain).toBe("hello…");
+    // The "world" span was at chars 6..11; after truncation to width 6
+    // (keeping 5 chars + marker), all of "world" is dropped, so no red
+    // span survives — but the kept text retains its base styling.
+    expect(result[0]!.style.bgcolor?.name).toBe("blue");
+  });
+
+  test("left truncation keeps the right side spans", () => {
+    const cell = heterogeneousCell();
+    const result = applySegmentLayout([cell], {
+      width: 6,
+      justify: "left",
+      truncate: "left",
+    });
+    expect(result[0]!.plain).toBe("…world");
+    // The "world" span survives intact on the right.
+    const spans = result[0]!.spans;
+    const redSpan = spans.find((s) =>
+      typeof s.style === "string"
+        ? s.style.includes("red")
+        : s.style.color?.name === "red",
+    );
+    expect(redSpan).toBeDefined();
+    expect(result[0]!.plain.slice(redSpan!.start, redSpan!.end)).toBe("world");
   });
 });

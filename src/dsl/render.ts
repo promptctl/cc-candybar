@@ -11,11 +11,7 @@
 // the input values (kind discriminators, layout length, palette presence)
 // govern output, not whether operations run.
 
-import {
-  PaletteResolver,
-  type StripCell,
-  type RichText,
-} from "@promptctl/rich-js";
+import { PaletteResolver, type RichText } from "@promptctl/rich-js";
 import type { Template } from "@promptctl/go-template-js";
 import type {
   ValidatedConfig,
@@ -37,7 +33,7 @@ import { getThemePalette } from "../themes/palette-registry.js";
 import { buildScope } from "../template-engine/scope.js";
 import {
   createCcCandybarEngine,
-  fragmentsToStripCells,
+  fragmentsToCells,
   evaluateWhen,
   applySegmentLayout,
   resolveSegmentColors,
@@ -299,9 +295,10 @@ function resolverForPalette(name: string): PaletteResolver {
  *   3. Per-segment PaletteResolver pre-resolved at registration (3rq.2) or basePalette.
  *   4. Resolve bg/fg → baseStyle (layered under each fragment so per-fragment fg
  *      becomes a cell part rather than being lost to a cell-level rebuild).
- *   5. Evaluate pre-compiled template → fragments → StripCells with baseStyle baked in.
- *      Apply width/justify/truncate.
- *   6. Concatenate all StripCells; join via powerline Joiner → ANSI string.
+ *   5. Evaluate pre-compiled template → fragments → RichText cells with baseStyle
+ *      layered under each fragment. Apply width/justify/truncate via
+ *      RichText's own truncate/align (span-preserving by construction).
+ *   6. Concatenate all cells; join via powerline Joiner → ANSI string.
  *
  * [LAW:single-enforcer] The daemon (bzh.2) calls this verbatim — no alternate
  * render path. The test and the daemon share ONE render path.
@@ -317,7 +314,7 @@ export function renderDslLine(
   basePalette: PaletteResolver,
   opts: BuildLineOptions,
   // [LAW:dataflow-not-control-flow] Optional per-segment cell sink. When
-  // present, each rendered segment's StripCell array (post-layout, pre-
+  // present, each rendered segment's RichText array (post-layout, pre-
   // serialization) is written to this map under its segment name. Storing
   // cells (not pre-serialized strings) keeps the hot path's serializer
   // work proportional to the joined line only — debug consumers serialize
@@ -328,7 +325,7 @@ export function renderDslLine(
   // joined line (powerline joiners sit *between* segments and have no
   // place in a one-segment render), but for debug visibility this is the
   // natural per-segment shape.
-  perSegmentSink?: Map<string, readonly StripCell[]>,
+  perSegmentSink?: Map<string, readonly RichText[]>,
 ): string {
   // Step 1: push payload into input boxes.
   registry.applyInput(payload);
@@ -336,7 +333,7 @@ export function renderDslLine(
   const scope = buildScope(store);
   const hueStep = config.globals.hueStep ?? 0;
 
-  const allCells: StripCell[] = [];
+  const allCells: RichText[] = [];
   perSegmentSink?.clear();
 
   for (let i = 0; i < config.layout.length; i++) {
@@ -368,11 +365,12 @@ export function renderDslLine(
       { hueRotationDegrees: i * hueStep },
     );
 
-    // Step 5: evaluate pre-compiled template → StripCells with baseStyle baked in.
-    // Same baseStyle also flows into layout so synthesized pad/marker cells
-    // (fixed-width segments) keep the segment bg+fg continuous.
+    // Step 5: evaluate pre-compiled template → RichText cells with baseStyle
+    // layered under each fragment. baseStyle also flows into layout so the
+    // merged RichText's wrapping style carries the segment bg+fg through any
+    // padding (justify) and the embedded marker (truncate).
     const fragments = segCompiled.template.evaluate(scope);
-    const cells = fragmentsToStripCells(fragments, baseStyle);
+    const cells = fragmentsToCells(fragments, baseStyle);
 
     const laidOut = applySegmentLayout(cells, {
       width: seg.width ?? "auto",

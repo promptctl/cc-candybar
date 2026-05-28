@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { PaletteResolver, type StripCell } from "@promptctl/rich-js";
+import { PaletteResolver, type RichText } from "@promptctl/rich-js";
 import { buildNeededPrefixes } from "../render-payload.js";
 import {
   loadConfig,
@@ -70,7 +70,7 @@ export interface DslRenderState {
   readonly compiled: CompiledSegments;
   readonly basePalette: PaletteResolver;
   readonly neededInputPaths: ReadonlySet<string>;
-  readonly lastRenderCellsBySegment: Map<string, readonly StripCell[]>;
+  readonly lastRenderCellsBySegment: Map<string, readonly RichText[]>;
 }
 
 // [LAW:one-source-of-truth] Each entry tracks the last *valid* DSL state +
@@ -296,7 +296,7 @@ export class RenderCache {
       compiled,
       basePalette: new PaletteResolver(palette),
       neededInputPaths: buildNeededPrefixes(config),
-      lastRenderCellsBySegment: new Map<string, readonly StripCell[]>(),
+      lastRenderCellsBySegment: new Map<string, readonly RichText[]>(),
     };
   }
 
