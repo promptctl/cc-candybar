@@ -1,11 +1,11 @@
-import { buildFlexStripLines, buildLineStrip } from "../src/render/strip";
+import { buildLineStrip } from "../src/render/strip";
 
 const seg = (text: string) => ({ type: "x", text });
 
-describe("buildFlexStripLines wrap behavior", () => {
+describe("renderStripCells wrap behavior (via buildLineStrip adapter)", () => {
   describe("plain style", () => {
     it("very wide width keeps everything on one row", () => {
-      const out = buildFlexStripLines(
+      const out = buildLineStrip(
         [seg("alpha"), seg("beta"), seg("gamma")],
         { style: "plain", colorCompatibility: "none", width: 200 },
       );
@@ -18,7 +18,7 @@ describe("buildFlexStripLines wrap behavior", () => {
       // " alpha " (7) + " | " (3) + " beta " (6) + " | " (3) + " gamma " (7) = 26
       const oneLine = " alpha  |  beta  |  gamma ";
       expect(oneLine.length).toBe(26);
-      const out = buildFlexStripLines(
+      const out = buildLineStrip(
         [seg("alpha"), seg("beta"), seg("gamma")],
         { style: "plain", colorCompatibility: "none", width: oneLine.length },
       );
@@ -28,7 +28,7 @@ describe("buildFlexStripLines wrap behavior", () => {
 
     it("narrow width forces multi-row wrapping", () => {
       // 16 cells fits two segments + sep + leading/trailing pad but not all three.
-      const out = buildFlexStripLines(
+      const out = buildLineStrip(
         [seg("alpha"), seg("beta"), seg("gamma")],
         { style: "plain", colorCompatibility: "none", width: 16 },
       );
@@ -39,19 +39,22 @@ describe("buildFlexStripLines wrap behavior", () => {
       }
     });
 
-    it("output equals buildLineStrip for width that fits", () => {
-      const opts = {
+    it("infinite width is byte-equivalent to a finite width that fits", () => {
+      const base = {
         style: "plain" as const,
         colorCompatibility: "none" as const,
       };
       const segments = [seg("a"), seg("bb"), seg("ccc")];
-      const single = buildLineStrip(segments, opts);
-      const flex = buildFlexStripLines(segments, { ...opts, width: 200 });
-      expect(flex).toBe(single);
+      const unbounded = buildLineStrip(segments, {
+        ...base,
+        width: Number.POSITIVE_INFINITY,
+      });
+      const wideFinite = buildLineStrip(segments, { ...base, width: 200 });
+      expect(wideFinite).toBe(unbounded);
     });
 
     it("empty segment list yields empty string", () => {
-      const out = buildFlexStripLines([], {
+      const out = buildLineStrip([], {
         style: "plain",
         colorCompatibility: "none",
         width: 80,
@@ -60,12 +63,12 @@ describe("buildFlexStripLines wrap behavior", () => {
     });
 
     it("never emits a trailing newline", () => {
-      const wide = buildFlexStripLines([seg("a")], {
+      const wide = buildLineStrip([seg("a")], {
         style: "plain",
         colorCompatibility: "none",
         width: 80,
       });
-      const wrapped = buildFlexStripLines([seg("alpha"), seg("beta")], {
+      const wrapped = buildLineStrip([seg("alpha"), seg("beta")], {
         style: "plain",
         colorCompatibility: "none",
         width: 8,
@@ -77,16 +80,16 @@ describe("buildFlexStripLines wrap behavior", () => {
 
   describe("powerline style", () => {
     it("narrow width breaks across rows with arrow caps on every row", () => {
-      const out = buildFlexStripLines([seg("aaa"), seg("bbb"), seg("ccc")], {
+      const out = buildLineStrip([seg("aaa"), seg("bbb"), seg("ccc")], {
         style: "powerline",
         colorCompatibility: "none",
         width: 8,
       });
       const rows = out.split("\n");
       expect(rows.length).toBeGreaterThan(1);
-      // PowerlineJoiner end-cap: every row ends with the arrow glyph "".
+      // PowerlineJoiner end-cap: every row ends with the arrow glyph "".
       for (const row of rows) {
-        expect(row.endsWith("\ue0b0")).toBe(true);
+        expect(row.endsWith("")).toBe(true);
       }
     });
   });

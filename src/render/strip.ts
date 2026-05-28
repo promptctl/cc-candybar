@@ -20,10 +20,20 @@ export interface RenderedSegmentLike {
 
 export type StripStyle = "powerline" | "capsule" | "plain";
 
+// [LAW:one-source-of-truth] Fallback when termCols is absent from the wire
+// (older client, env-stripped spawn). Matches the implicit default the
+// codebase already encoded as MAX_DIAGNOSTIC_LINE_LEN, so byte-equivalence
+// holds for the no-width path.
+export const DEFAULT_TERMINAL_WIDTH = 120;
+
 export interface BuildLineOptions {
   style: StripStyle;
   colorCompatibility: ColorSystemSpec;
   separator?: string;
+  // [LAW:types-are-the-program] Every render carries a width. Finite values
+  // wrap via FlexStrip; Number.POSITIVE_INFINITY renders one unbounded line.
+  // Required (not optional) so callers cannot silently drop the wire's value.
+  width: number;
 }
 
 function pickJoiner(style: StripStyle, separator?: string): Joiner {
@@ -49,10 +59,15 @@ function toCell(seg: RenderedSegmentLike): RichText {
 
 /**
  * [LAW:single-enforcer] The one place RichText cells become an ANSI byte
- * string. Every render path (legacy SegmentData via buildLineStrip, DSL
- * RichText[] via the template-engine pipeline, the parity harness) renders
- * through here, so "byte-identical output" is a real theorem rather than
- * two serializers that could drift.
+ * string. Every render path (DSL RichText[] via the template-engine
+ * pipeline, buildLineStrip's input-shape adapter, debug per-segment
+ * serialization) flows through here. The wrap dispatch lives here too:
+ * finite width → FlexStrip (rich-js owns the wrap algebra); infinite
+ * width → Strip.
+ *
+ * [LAW:dataflow-not-control-flow] The dispatch is on the value, not on a
+ * flag. There is no `wrap: boolean` knob; presence of a finite width IS
+ * the decision.
  */
 export function renderStripCells(
   cells: readonly RichText[],
@@ -60,6 +75,14 @@ export function renderStripCells(
 ): string {
   if (cells.length === 0) return "";
   const joiner = pickJoiner(options.style, options.separator);
+  if (Number.isFinite(options.width)) {
+    const flex = new FlexStrip([...cells], { joiner });
+    const out = renderToString(flex, {
+      width: options.width,
+      colorSystem: options.colorCompatibility,
+    });
+    return out.endsWith("\n") ? out.slice(0, -1) : out;
+  }
   const strip = new Strip([...cells], joiner);
   return renderToString(strip, {
     colorSystem: options.colorCompatibility,
@@ -67,38 +90,13 @@ export function renderStripCells(
 }
 
 /**
- * Renders a row of segments into a single ANSI-encoded line using rich-js
- * Strip + Joiner + renderToString. Replaces the old hand-rolled
- * formatSegment / buildLineFromSegments path.
+ * Input-shape adapter for callers that hold RenderedSegmentLike[] rather
+ * than pre-constructed RichText cells. Wrap behavior is identical to
+ * renderStripCells — the cell construction is the only difference.
  */
 export function buildLineStrip(
   segments: readonly RenderedSegmentLike[],
   options: BuildLineOptions,
 ): string {
   return renderStripCells(segments.map(toCell), options);
-}
-
-/**
- * Renders a row of segments into one or more wrapped lines using rich-js
- * FlexStrip. Each wrapped row reuses the same Joiner — start-cap, mid-join,
- * and end-cap fire at every line boundary, so wrapped rows look identical
- * to natural endpoints. Replaces the manual currentLineWidth tracking in
- * generateAutoWrapStatusline / calculateSegmentWidth.
- *
- * Returned string has wrapped rows joined by `\n` with no trailing newline,
- * matching buildLineStrip's contract for the caller.
- */
-export function buildFlexStripLines(
-  segments: readonly RenderedSegmentLike[],
-  options: BuildLineOptions & { width: number },
-): string {
-  if (segments.length === 0) return "";
-  const cells = segments.map(toCell);
-  const joiner = pickJoiner(options.style, options.separator);
-  const flex = new FlexStrip(cells, { joiner });
-  const out = renderToString(flex, {
-    width: options.width,
-    colorSystem: options.colorCompatibility,
-  });
-  return out.endsWith("\n") ? out.slice(0, -1) : out;
 }

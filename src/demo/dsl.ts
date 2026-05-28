@@ -32,6 +32,7 @@ import { SourceRegistry } from "../var-system/sources.js";
 import { getThemePalette } from "../themes/palette-registry.js";
 import { listResolvablePaletteNames } from "../themes/cascade.js";
 import { registerDslConfig, renderDslLine } from "../dsl/render.js";
+import { DEFAULT_TERMINAL_WIDTH } from "../render/strip.js";
 
 const FRAMES = 4;
 const FRAME_INTERVAL_MS = 450;
@@ -95,6 +96,7 @@ try {
       {
         style: "powerline",
         colorCompatibility: "truecolor",
+        width: process.stdout.columns ?? DEFAULT_TERMINAL_WIDTH,
       },
     );
     process.stdout.write(`  ${line}\n`);

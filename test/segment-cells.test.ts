@@ -10,7 +10,11 @@ import { RichText, Style } from "@promptctl/rich-js";
 // Render cells to a truecolor ANSI string so tests assert observable output
 // (SGR escapes), not internal style placement. [LAW:behavior-not-structure]
 function renderCells(cells: readonly RichText[]): string {
-  return renderStripCells(cells, { style: "plain", colorCompatibility: "truecolor" });
+  return renderStripCells(cells, {
+    style: "plain",
+    colorCompatibility: "truecolor",
+    width: Number.POSITIVE_INFINITY,
+  });
 }
 
 // CSI prefix of an ANSI SGR sequence (ESC + "[").
@@ -325,6 +329,7 @@ describe("baseStyle merge preserves per-fragment fg as cell parts", () => {
     const rendered = renderStripCells(cells, {
       style: "plain",
       colorCompatibility: "truecolor",
+      width: Number.POSITIVE_INFINITY,
     });
     expect(stripAnsi(rendered)).toBe(" prefix SU suffix ");
     // At least three SGR opens (green segment + red segment + a baseline) means

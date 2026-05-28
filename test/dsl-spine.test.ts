@@ -47,10 +47,13 @@ const FIXTURE_SOURCE = readFileSync(
   "utf-8",
 );
 
-// Strip opts match the parity harness so bytes are comparable.
+// Strip opts match the parity harness so bytes are comparable. Width is
+// Infinity so the committed snapshot stays a single line — wrap behavior
+// is tested in test/daemon-autowrap.test.ts.
 const OPTS = {
   style: "powerline" as const,
   colorCompatibility: "truecolor" as const,
+  width: Number.POSITIVE_INFINITY,
 };
 
 // HOME is controlled so the directory template's home-collapse branch is
