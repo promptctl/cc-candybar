@@ -387,9 +387,19 @@ function shutdown(code: number): void {
   // handle retention, not a synchronous block, so the backstop is
   // load-bearing for the observed failure pattern.
   setTimeout(() => process.kill(process.pid, "SIGKILL"), 500);
-  try {
-    fs.unlinkSync(socketPath());
-  } catch {}
+  // [LAW:single-enforcer] The atomic bind() on the unix socket path is the
+  // ONLY mutex preventing duplicate daemons. The previous shape unlinked
+  // the socket file FIRST, then spent O(100ms) closing watchers, flushing
+  // session state, and tearing down log streams before process.exit().
+  // The unlink frees the path the instant it runs; the listening FD stays
+  // held only until process.exit. In between, Claude Code's next render
+  // tick can spawn a fresh daemon that bind()s the same path and starts
+  // serving while we are still finishing cleanup. Under OOM cycles the
+  // overlap compounds — 12 daemons stacked up in the wild was the
+  // observed symptom. Do NOT unlink here. The kernel releases the FD on
+  // process.exit; the stale path that remains is recovered by the
+  // existing handleAddressInUse logic on the next daemon's startup
+  // (probe → dead → unlink + rebind, ~50ms one-shot cost).
   try {
     gitService.close();
   } catch (e) {
