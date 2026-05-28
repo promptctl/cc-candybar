@@ -5,7 +5,7 @@
 //             No rebuild — the config IS the program.
 //
 // This file is rendered by the SAME two functions the daemon calls
-// (registerDslConfig + renderDslLine in src/dsl/render.ts). There is no
+// (registerDslConfig + renderDsl in src/dsl/render.ts). There is no
 // demo-only render path — what you see here is what production produces.
 {
   globals: {
@@ -81,6 +81,8 @@
     },
   },
 
-  // ── Layout: the order segments are joined left-to-right ──────────────────
-  layout: ['user', 'directory', 'branch', 'model', 'session', 'clock'],
+  // ── Layout: an array of rows. Each row is joined left-to-right; rows are
+  // joined with newlines. Single-row layout is the `[[…]]` degenerate case
+  // of multi-row.
+  layout: [['user', 'directory', 'branch', 'model', 'session', 'clock']],
 }

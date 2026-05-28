@@ -1,7 +1,7 @@
 // [LAW:verifiable-goals] vhi.1 acceptance: a click verb mutates SessionState;
 // the next DSL render reflects the change without re-reading disk. This test
 // drives the cascade end-to-end through the bzh.7 spine — registerDslConfig
-// + renderDslLine — so the verification matches the live render path the
+// + renderDsl — so the verification matches the live render path the
 // daemon uses, not a parallel test rig.
 //
 // [LAW:single-enforcer] The verb dispatch goes through the registry in
@@ -14,7 +14,7 @@ import { parseAndValidate } from "./helpers/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import { getThemePalette } from "../src/themes/palette-registry";
-import { registerDslConfig, renderDslLine } from "../src/dsl/render";
+import { registerDslConfig, renderDsl } from "../src/dsl/render";
 import { SessionState } from "../src/daemon/session-state";
 import { VERBS } from "../src/daemon/verbs";
 
@@ -41,7 +41,7 @@ const CONFIG_SRC = `{
       fg: 'foreground',
     },
   },
-  layout: ['themeSeg'],
+  layout: [['themeSeg']],
 }`;
 
 // Strip ANSI so assertions can pin on the rendered text alone — color codes
@@ -63,7 +63,7 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
     const basePalette = new PaletteResolver(getThemePalette("textual-dark")!);
     const render = () =>
       stripAnsi(
-        renderDslLine(
+        renderDsl(
           config,
           compiled,
           store,
@@ -107,7 +107,7 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
   test("cascade triggers a reactive observer, not just a fresh render-time read", () => {
     // [LAW:behavior-not-structure] The "set-state click verb propagates"
     // test above asserts the rendered string carries the new value — true
-    // whenever renderDslLine sees the new value at next read, which can
+    // whenever renderDsl sees the new value at next read, which can
     // happen via two different mechanisms:
     //   (a) atom.reportChanged() invalidated the computed; the next read
     //       re-derives through the dep graph (the intended contract); or
@@ -169,7 +169,7 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
           themeSeg: { template: '{{ .theme }}', bg: 'surface', fg: 'foreground' },
           tbSeg: { template: '{{ .expanded }}', bg: 'surface', fg: 'foreground' },
         },
-        layout: ['themeSeg', 'tbSeg'],
+        layout: [['themeSeg', 'tbSeg']],
       }`,
       ALLOWED_PALETTES,
     );
@@ -378,7 +378,7 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
           segments: {
             s: { template: '{{ .theme }}', bg: 'surface', fg: 'foreground' },
           },
-          layout: ['s'],
+          layout: [['s']],
         }`,
         ALLOWED_PALETTES,
       ),
@@ -408,7 +408,7 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
               },
             },
           },
-          layout: ['s'],
+          layout: [['s']],
         }`,
         ALLOWED_PALETTES,
       ),
@@ -429,7 +429,7 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
         segments: {
           tb: { template: ' tb=[{{ .expanded }}] ', bg: 'surface', fg: 'foreground' },
         },
-        layout: ['tb'],
+        layout: [['tb']],
       }`,
       ALLOWED_PALETTES,
     );
@@ -440,7 +440,7 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
     const basePalette = new PaletteResolver(getThemePalette("textual-dark")!);
     const render = () =>
       stripAnsi(
-        renderDslLine(
+        renderDsl(
           config,
           compiled,
           store,

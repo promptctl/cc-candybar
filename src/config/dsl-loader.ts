@@ -1021,32 +1021,67 @@ function validateSegment(
 // ─── Layout ──────────────────────────────────────────────────────────────────
 
 // [LAW:locality-or-seam] Structural validation only — layout is an array of
-// strings. Whether each name resolves to a declared segment is a cross-ref
-// concern (validateCrossReferences), which runs on the MERGED config so a
-// user's layout can reference default-provided segments.
-function validateLayout(ctx: ValidateCtx, raw: unknown): string[] {
+// rows, each row an array of segment names (strings). Whether each name
+// resolves to a declared segment is a cross-ref concern
+// (validateCrossReferences), which runs on the MERGED config so a user's
+// layout can reference default-provided segments.
+//
+// [LAW:types-are-the-program] Single-line is the degenerate `[[a, b, c]]`
+// case. A flat `string[]` (the pre-multiline-layout-ilg shape) is rejected
+// here with a migration-pointing message — no auto-wrap shim, because the
+// shim would silently convert "I forgot to wrap" into a working config and
+// hide the breaking change.
+function validateLayout(
+  ctx: ValidateCtx,
+  raw: unknown,
+): ReadonlyArray<readonly string[]> {
   if (raw === undefined) return [];
   if (!Array.isArray(raw)) {
     ctx.issues.push({
       path: "layout",
-      message: `layout must be an array of segment names, got ${describeType(raw)}`,
+      message: `layout must be an array of rows (each row an array of segment names), got ${describeType(raw)}`,
       line: findKeyLine(ctx.source, ["layout"]),
     });
     return [];
   }
 
-  const out: string[] = [];
-  for (let i = 0; i < raw.length; i++) {
-    const entry = raw[i];
-    if (typeof entry !== "string") {
+  const out: readonly string[][] = [];
+  for (let r = 0; r < raw.length; r++) {
+    const row = raw[r];
+    // Detect the legacy flat shape — strings at the outer level — and emit a
+    // migration-pointing error. [LAW:no-silent-fallbacks] Don't auto-wrap into
+    // `[[...]]`; a silent shim makes the breaking change invisible to users
+    // upgrading and to tests.
+    if (typeof row === "string") {
       ctx.issues.push({
-        path: `layout[${i}]`,
-        message: `layout entries must be strings (segment names), got ${describeType(entry)}`,
+        path: `layout[${r}]`,
+        message: `layout is now an array of rows; wrap your segment list in an outer [] (e.g. [["${row}", ...]]). Single-line layouts use one row.`,
         line: findKeyLine(ctx.source, ["layout"]),
       });
       continue;
     }
-    out.push(entry);
+    if (!Array.isArray(row)) {
+      ctx.issues.push({
+        path: `layout[${r}]`,
+        message: `layout row must be an array of segment names, got ${describeType(row)}`,
+        line: findKeyLine(ctx.source, ["layout"]),
+      });
+      continue;
+    }
+    const rowOut: string[] = [];
+    for (let c = 0; c < row.length; c++) {
+      const entry = row[c];
+      if (typeof entry !== "string") {
+        ctx.issues.push({
+          path: `layout[${r}][${c}]`,
+          message: `layout entries must be strings (segment names), got ${describeType(entry)}`,
+          line: findKeyLine(ctx.source, ["layout"]),
+        });
+        continue;
+      }
+      rowOut.push(entry);
+    }
+    (out as string[][]).push(rowOut);
   }
   return out;
 }
@@ -1056,17 +1091,20 @@ function validateLayout(ctx: ValidateCtx, raw: unknown): string[] {
 function validateCrossReferences(ctx: ValidateCtx, cfg: DslConfig): void {
   // [LAW:locality-or-seam] Layout entries reference segments. Cross-ref runs
   // on the MERGED config so a user's layout can name default-provided
-  // segments without re-declaring them. Layout's own array-of-strings shape
-  // is enforced by validateLayout at parse time; "does name exist?" lives
-  // here, with the rest of the existence checks.
-  for (let i = 0; i < cfg.layout.length; i++) {
-    const entry = cfg.layout[i]!;
-    if (!Object.prototype.hasOwnProperty.call(cfg.segments, entry)) {
-      ctx.issues.push({
-        path: `layout[${i}]`,
-        message: `layout entry "${entry}" does not match any declared segment`,
-        line: findKeyLine(ctx.source, ["layout"]),
-      });
+  // segments without re-declaring them. Layout's own 2D-array shape is
+  // enforced by validateLayout at parse time; "does name exist?" lives here,
+  // with the rest of the existence checks.
+  for (let r = 0; r < cfg.layout.length; r++) {
+    const row = cfg.layout[r]!;
+    for (let c = 0; c < row.length; c++) {
+      const entry = row[c]!;
+      if (!Object.prototype.hasOwnProperty.call(cfg.segments, entry)) {
+        ctx.issues.push({
+          path: `layout[${r}][${c}]`,
+          message: `layout entry "${entry}" does not match any declared segment`,
+          line: findKeyLine(ctx.source, ["layout"]),
+        });
+      }
     }
   }
 
