@@ -61,7 +61,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
         registry,
         payload,
         basePalette,
-        { style: "powerline", colorCompatibility: "truecolor" },
+        { style: "powerline", colorCompatibility: "truecolor", width: Number.POSITIVE_INFINITY },
       );
       // Hidden segments (no git repo, no usage data) drop out; the
       // directory and model segments remain, so the line is non-empty.
@@ -116,7 +116,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
           registry,
           payload,
           basePalette,
-          { style: "powerline", colorCompatibility: "truecolor" },
+          { style: "powerline", colorCompatibility: "truecolor", width: Number.POSITIVE_INFINITY },
         );
         // Strip ANSI escapes AND the Powerline joiner glyphs
         // (U+E0B0..U+E0BC range) so assertions can probe visible
@@ -223,7 +223,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
           registry,
           payload,
           basePalette,
-          { style: "powerline", colorCompatibility: "truecolor" },
+          { style: "powerline", colorCompatibility: "truecolor", width: Number.POSITIVE_INFINITY },
         );
         return line.replace(
           // eslint-disable-next-line no-control-regex
@@ -320,7 +320,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
             registry,
             payload,
             basePalette,
-            { style: "powerline", colorCompatibility: "truecolor" },
+            { style: "powerline", colorCompatibility: "truecolor", width: Number.POSITIVE_INFINITY },
           );
         } finally {
           registry.dispose();
