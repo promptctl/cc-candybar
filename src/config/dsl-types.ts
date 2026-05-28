@@ -29,18 +29,25 @@
 //                     can reach rendering." The brand is module-scoped via
 //                     `unique symbol`, so the only construction site is
 //                     `validateConfig` itself.
+// [LAW:types-are-the-program] `layout` is the strongest theorem we can write
+// about row/segment structure: an ordered list of rows, each row an ordered
+// list of segment names. Single-line config is the degenerate `N=1` case
+// (`[[a, b, c]]`); no separate "single-line" arm, no `null|undefined` flag.
+// A separator-sentinel form (e.g. `["a", "\n", "b"]`) would permit illegal
+// interleavings (`["\n", "\n"]`) at the type level; the 2D array makes those
+// unrepresentable. *Single-line is multi-line with size 1.*
 export interface RawDslConfig {
   readonly globals?: Partial<Globals>;
   readonly variables?: Readonly<Record<string, VariableDecl>>;
   readonly segments?: Readonly<Record<string, SegmentDecl>>;
-  readonly layout?: readonly string[];
+  readonly layout?: ReadonlyArray<readonly string[]>;
 }
 
 export interface DslConfig {
   readonly globals: Globals;
   readonly variables: Readonly<Record<string, VariableDecl>>;
   readonly segments: Readonly<Record<string, SegmentDecl>>;
-  readonly layout: readonly string[];
+  readonly layout: ReadonlyArray<readonly string[]>;
 }
 
 // [LAW:single-enforcer] The brand symbol is `unique` and module-private —

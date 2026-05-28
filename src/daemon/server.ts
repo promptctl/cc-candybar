@@ -32,7 +32,7 @@ import { setLaunchStats } from "../proc/launch";
 import { buildDebugSnapshot } from "./debug";
 import { DEBUG_WHATS, isDebugWhat } from "./debug-types";
 import { expandHome } from "../config/dsl-loader.js";
-import { renderDslLine } from "../dsl/render.js";
+import { renderDsl } from "../dsl/render.js";
 import {
   renderStripCells,
   DEFAULT_TERMINAL_WIDTH,
@@ -626,7 +626,7 @@ async function handleRequest(req: Request): Promise<Response> {
       const width = applyClaudeCodeReserve(termCols ?? DEFAULT_TERMINAL_WIDTH);
       const renderOpts: BuildLineOptions = { ...RENDER_OPTS_BASE, width };
       // [LAW:dataflow-not-control-flow] Two outcomes fall out of one rule:
-      // body = state ? renderDslLine(state) : "" ; output = body + icon
+      // body = state ? renderDsl(state) : "" ; output = body + icon
       // No special-case branches — same composition every render.
       let body = "";
       if (entry.state !== null) {
@@ -636,12 +636,12 @@ async function handleRequest(req: Request): Promise<Response> {
           req.cwd,
           entry.state.neededInputPaths,
         );
-        // [LAW:single-enforcer] renderDslLine internally calls
+        // [LAW:single-enforcer] renderDsl internally calls
         // `registry.applyInput(payload)` as its first step (see step 1 in
         // src/dsl/render.ts). The daemon must not pre-apply — doing so
         // would run the MobX action twice per render and clear last_error
         // diagnostics on the round trip.
-        body = renderDslLine(
+        body = renderDsl(
           entry.state.config,
           entry.state.compiled,
           entry.state.store,
@@ -651,7 +651,7 @@ async function handleRequest(req: Request): Promise<Response> {
           renderOpts,
           // [LAW:single-enforcer] The per-segment StripCell sink for the
           // `debug segments` projection. Its identity stays stable for the
-          // cache entry's lifetime; renderDslLine clears + repopulates it
+          // cache entry's lifetime; renderDsl clears + repopulates it
           // in place. Cells are cheap (already computed during the render);
           // the per-segment ANSI serialization happens lazily inside the
           // debug handler so normal renders pay no extra serializer cost.
@@ -712,7 +712,7 @@ async function handleRequest(req: Request): Promise<Response> {
     // thread (projectDir, cwd) through the wire.
     const dbgEntry = renderCache.firstPopulatedState();
     // [LAW:dataflow-not-control-flow] Lazy per-segment serialization: the
-    // cache stores StripCell arrays (cheap, written by renderDslLine).
+    // cache stores StripCell arrays (cheap, written by renderDsl).
     // The debug projection needs strings, so serialize only for the
     // `segments` projection (`vars` and `config` don't need it) and only
     // when this request actually fires. Normal renders pay no per-segment

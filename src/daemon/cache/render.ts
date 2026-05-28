@@ -24,7 +24,7 @@ import { dlog } from "../log.js";
 // [LAW:one-source-of-truth] Each cache entry owns the live DSL state for a
 // (projectDir, cwd) tuple: the parsed config, the variable store +
 // registry it was registered against, the compiled segment closures, and
-// the resolved base palette. registerDslConfig + renderDslLine are the
+// the resolved base palette. registerDslConfig + renderDsl are the
 // single render path — the cache only holds state across calls.
 //
 // Capacity sized for "many concurrent sessions in many repos". Each entry
@@ -56,11 +56,11 @@ export interface RenderDeps {
 // to gate provider invocation.
 //
 // `lastRenderCellsBySegment` is the per-segment StripCell sink that
-// renderDslLine writes on each render — pre-layout cells, NOT serialized
+// renderDsl writes on each render — pre-layout cells, NOT serialized
 // ANSI. Storing cells (not strings) keeps the hot path free of the
 // per-segment renderStripCells call: the debug projection serializes on
 // demand only when a `debug segments` request actually arrives. The map
-// identity is stable for the entry's lifetime; renderDslLine clears +
+// identity is stable for the entry's lifetime; renderDsl clears +
 // repopulates it in place. A segment hidden by `when` is absent from the
 // map — its presence in the keys is the "this segment rendered" signal.
 export interface DslRenderState {

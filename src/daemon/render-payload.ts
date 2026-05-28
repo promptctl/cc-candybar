@@ -1,7 +1,7 @@
 // [LAW:single-enforcer] The single place where the daemon assembles every
 // data field the DSL templates can read. The output of this function — the
 // `RenderPayload` — is fed verbatim to `registry.applyInput(...)` (inside
-// renderDslLine), and every `kind: "input"` variable in the default DSL
+// renderDsl), and every `kind: "input"` variable in the default DSL
 // config resolves its `path` against exactly this shape.
 //
 // [LAW:dataflow-not-control-flow] Variability lives in the values flowing
@@ -185,11 +185,13 @@ export function buildNeededPrefixes(config: DslConfig): ReadonlySet<string> {
   const frontier: string[] = [];
   const visited = new Set<string>();
 
-  for (const segName of config.layout) {
-    const seg = config.segments[segName];
-    if (!seg) continue;
-    for (const src of [seg.template, seg.when, seg.bg, seg.fg]) {
-      if (src) for (const ref of extractTemplateRefs(src)) frontier.push(ref);
+  for (const row of config.layout) {
+    for (const segName of row) {
+      const seg = config.segments[segName];
+      if (!seg) continue;
+      for (const src of [seg.template, seg.when, seg.bg, seg.fg]) {
+        if (src) for (const ref of extractTemplateRefs(src)) frontier.push(ref);
+      }
     }
   }
 

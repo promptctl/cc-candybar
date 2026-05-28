@@ -10,7 +10,7 @@
 
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { parseAndValidate } from "./helpers/parse-and-validate";
-import { registerDslConfig, renderDslLine } from "../src/dsl/render";
+import { registerDslConfig, renderDsl } from "../src/dsl/render";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import { PaletteResolver } from "@promptctl/rich-js";
@@ -27,12 +27,14 @@ describe("DEFAULT_DSL_CONFIG", () => {
   });
 
   test("every layout entry is a declared segment", () => {
-    for (const segName of DEFAULT_DSL_CONFIG.layout) {
-      expect(DEFAULT_DSL_CONFIG.segments).toHaveProperty(segName);
+    for (const row of DEFAULT_DSL_CONFIG.layout) {
+      for (const segName of row) {
+        expect(DEFAULT_DSL_CONFIG.segments).toHaveProperty(segName);
+      }
     }
   });
 
-  test("registerDslConfig + renderDslLine produce a non-empty line", () => {
+  test("registerDslConfig + renderDsl produce a non-empty line", () => {
     const parsed = parseAndValidate("<default>", SERIALIZED);
     const store = new VariableStore();
     const registry = new SourceRegistry(store);
@@ -54,7 +56,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
           added_dirs: [],
         },
       };
-      const line = renderDslLine(
+      const line = renderDsl(
         parsed,
         compiled,
         store,
@@ -86,7 +88,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
       // that segment's text. `home` flows through the augmented payload
       // (kind: "input", path: "home" in DEFAULT_DSL_CONFIG) — we set it
       // on the payload object directly; no env-var mutation needed.
-      const dirOnly = { ...parsed, layout: ["directory"] };
+      const dirOnly = { ...parsed, layout: [["directory"]] };
       const store = new VariableStore();
       const registry = new SourceRegistry(store);
       try {
@@ -109,7 +111,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
           },
           home: opts.home,
         };
-        const line = renderDslLine(
+        const line = renderDsl(
           dirOnly,
           compiled,
           store,
@@ -198,7 +200,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
       linesRemoved?: number;
     }): string {
       const parsed = parseAndValidate("<default>", SERIALIZED);
-      const metricsOnly = { ...parsed, layout: ["metrics"] };
+      const metricsOnly = { ...parsed, layout: [["metrics"]] };
       const store = new VariableStore();
       const registry = new SourceRegistry(store);
       try {
@@ -216,7 +218,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
           workspace: { current_dir: "/tmp", project_dir: "/tmp", added_dirs: [] },
           metrics,
         };
-        const line = renderDslLine(
+        const line = renderDsl(
           metricsOnly,
           compiled,
           store,
@@ -279,7 +281,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
         const parsed = parseAndValidate("<default>", SERIALIZED);
         const blockOnly = {
           ...parsed,
-          layout: ["block"],
+          layout: [["block"]],
           variables: {
             ...parsed.variables,
             "block.budget.warningThreshold": {
@@ -313,7 +315,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
               resetsAt: Math.floor(Date.now() / 1000) + 600,
             },
           };
-          return renderDslLine(
+          return renderDsl(
             blockOnly,
             compiled,
             store,

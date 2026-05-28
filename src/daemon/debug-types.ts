@@ -75,7 +75,7 @@ export interface SegmentSnapshot {
   readonly referencedVars: readonly string[];
   // The last rendered output for this segment, when the daemon has captured
   // one. null today — the daemon does not yet render through the DSL spine
-  // (see bzh.2). Populated when the daemon flips to renderDslLine.
+  // (see bzh.2). Populated when the daemon flips to renderDsl.
   readonly lastRender: string | null;
 }
 
