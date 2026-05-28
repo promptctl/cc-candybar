@@ -86,11 +86,15 @@ const GIT_TEMPLATE =
   " ";
 
 // [LAW:dataflow-not-control-flow] block and weekly share the same threshold
-// cascade (≥80 → error, ≥50 → warning, else panel) on a numeric ref. The
-// builders parameterize the variable name; same shape, different ref.
-function blockLikeBg(pctRef: string): string {
+// cascade (≥warningThreshold → error, ≥50 → warning, else panel) on a numeric
+// ref. The builders parameterize BOTH the percentage ref and the threshold
+// ref so each segment reads its own configured threshold from the var store
+// rather than the literal 80 baked into the template. User overrides flow
+// through the variables-merge-by-name cascade in mergeWithDefault — no new
+// override mechanism required.
+function blockLikeBg(pctRef: string, thresholdRef: string): string {
   return (
-    `{{ if ge (round ${pctRef}) 80 }}error` +
+    `{{ if ge (round ${pctRef}) ${thresholdRef} }}error` +
     `{{ else }}{{ if ge (round ${pctRef}) 50 }}warning` +
     `{{ else }}panel{{ end }}{{ end }}`
   );
@@ -261,6 +265,10 @@ export const DEFAULT_DSL_CONFIG = {
       type: "number",
       default: 0,
     },
+    // Budget knob — overridable per-config through the variables-merge-by-
+    // name cascade. Matches the legacy DEFAULT_CONFIG.budget.block.warning
+    // Threshold.
+    "block.budget.warningThreshold": { kind: "literal", value: 80 },
 
     // Weekly — direct projection of hookData.rate_limits.seven_day.
     "weekly.percentage": {
@@ -275,6 +283,7 @@ export const DEFAULT_DSL_CONFIG = {
       type: "number",
       default: 0,
     },
+    "weekly.budget.warningThreshold": { kind: "literal", value: 80 },
 
     // Context — daemon fetches via ContextProvider; contextLeftPercentage.
     "context.totalTokens": {
@@ -416,7 +425,10 @@ export const DEFAULT_DSL_CONFIG = {
       template:
         " ◱ {{ round .block.nativeUtilization }}% " +
         "({{ formatLongTimeRemaining (minutesUntilReset .block.resetsAt) }}) ",
-      bg: blockLikeBg(".block.nativeUtilization"),
+      bg: blockLikeBg(
+        ".block.nativeUtilization",
+        ".block.budget.warningThreshold",
+      ),
       fg: blockLikeFg(".block.nativeUtilization"),
       // Hide unless we have a five-hour-window snapshot.
       when: "{{ gt .block.resetsAt 0 }}",
@@ -425,7 +437,7 @@ export const DEFAULT_DSL_CONFIG = {
       template:
         " ◑ {{ round .weekly.percentage }}% " +
         "({{ formatLongTimeRemaining (minutesUntilReset .weekly.resetsAt) }}) ",
-      bg: blockLikeBg(".weekly.percentage"),
+      bg: blockLikeBg(".weekly.percentage", ".weekly.budget.warningThreshold"),
       fg: blockLikeFg(".weekly.percentage"),
       when: "{{ gt .weekly.resetsAt 0 }}",
     },

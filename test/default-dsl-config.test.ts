@@ -268,6 +268,70 @@ describe("DEFAULT_DSL_CONFIG", () => {
       expect(visible).toContain("-");
     });
 
+    test("config override of block.budget.warningThreshold flows through to bg classification", () => {
+      // [LAW:one-source-of-truth] The threshold lives in one place — the
+      // variable declaration — and a user file's override flows through
+      // mergeWithDefault's variables-by-name spread. Same percentage,
+      // different threshold → different bg classification → different
+      // ANSI bytes. If the template were still reading a literal 80
+      // these two renders would be byte-identical.
+      const renderBlock = (warningThreshold: number, util: number): string => {
+        const parsed = parseAndValidate("<default>", SERIALIZED);
+        const blockOnly = {
+          ...parsed,
+          layout: ["block"],
+          variables: {
+            ...parsed.variables,
+            "block.budget.warningThreshold": {
+              kind: "literal" as const,
+              value: warningThreshold,
+            },
+          },
+        };
+        const store = new VariableStore();
+        const registry = new SourceRegistry(store);
+        try {
+          const compiled = registerDslConfig(blockOnly, registry, {
+            cwd: process.cwd(),
+          });
+          const basePalette = new PaletteResolver(
+            getThemePalette(blockOnly.globals.palette ?? "textual-dark")!,
+          );
+          const payload = {
+            hook_event_name: "Status",
+            session_id: "x",
+            cwd: "/tmp",
+            model: { id: "x", display_name: "x" },
+            workspace: {
+              current_dir: "/tmp",
+              project_dir: "/tmp",
+              added_dirs: [],
+            },
+            block: {
+              nativeUtilization: util,
+              // resetsAt must be > 0 for the segment's `when` to fire.
+              resetsAt: Math.floor(Date.now() / 1000) + 600,
+            },
+          };
+          return renderDslLine(
+            blockOnly,
+            compiled,
+            store,
+            registry,
+            payload,
+            basePalette,
+            { style: "powerline", colorCompatibility: "truecolor" },
+          );
+        } finally {
+          registry.dispose();
+        }
+      };
+
+      const defaultThresh = renderBlock(80, 70); // 70 < 80 → warning
+      const tightThresh = renderBlock(50, 70); // 70 ≥ 50 → error
+      expect(defaultThresh).not.toEqual(tightThresh);
+    });
+
     test("no metrics fields renders no cell", () => {
       const visible = renderMetricsText({});
       // Empty when-suppressed segment → line is empty (no glyphs, no labels).
