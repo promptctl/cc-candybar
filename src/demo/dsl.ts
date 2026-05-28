@@ -32,6 +32,8 @@ import { SourceRegistry } from "../var-system/sources.js";
 import { getThemePalette } from "../themes/palette-registry.js";
 import { listResolvablePaletteNames } from "../themes/cascade.js";
 import { registerDslConfig, renderDslLine } from "../dsl/render.js";
+import { DEFAULT_TERMINAL_WIDTH } from "../render/strip.js";
+import { applyClaudeCodeReserve } from "../utils/terminal-width.js";
 
 const FRAMES = 4;
 const FRAME_INTERVAL_MS = 450;
@@ -95,6 +97,12 @@ try {
       {
         style: "powerline",
         colorCompatibility: "truecolor",
+        // [LAW:one-source-of-truth] Demo applies the same Claude-Code-UI
+        // reserve the daemon does so demo output matches the bytes a real
+        // statusline would emit at the same terminal width.
+        width: applyClaudeCodeReserve(
+          process.stdout.columns ?? DEFAULT_TERMINAL_WIDTH,
+        ),
       },
     );
     process.stdout.write(`  ${line}\n`);

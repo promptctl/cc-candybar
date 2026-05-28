@@ -11,7 +11,12 @@ import {
   sessionStatePath,
 } from "./paths";
 import { dlog, closeLog } from "./log";
-import { PROTOCOL_VERSION, encodeFrame, makeFrameReader } from "./protocol";
+import {
+  PROTOCOL_VERSION,
+  encodeFrame,
+  makeFrameReader,
+  sanitizeTermCols,
+} from "./protocol";
 import type { Request, Response } from "./protocol";
 import { GitDataProvider } from "./cache/git";
 import { CachedUsageProvider } from "./cache/usage";
@@ -28,7 +33,12 @@ import { buildDebugSnapshot } from "./debug";
 import { DEBUG_WHATS, isDebugWhat } from "./debug-types";
 import { expandHome } from "../config/dsl-loader.js";
 import { renderDslLine } from "../dsl/render.js";
-import { renderStripCells } from "../render/strip.js";
+import {
+  renderStripCells,
+  DEFAULT_TERMINAL_WIDTH,
+  type BuildLineOptions,
+} from "../render/strip.js";
+import { applyClaudeCodeReserve } from "../utils/terminal-width.js";
 import type { RichText } from "@promptctl/rich-js";
 import { buildRenderPayload } from "./render-payload.js";
 import { TodayProvider } from "../segments/today.js";
@@ -602,11 +612,19 @@ async function handleRequest(req: Request): Promise<Response> {
       // data — the daemon's own working directory must not influence output.
       const { configFile, unknownFlagsError } = parseRenderArgs(req.args);
       const entry = renderCache.getOrCreate(projectDir, req.cwd, configFile);
-      // termCols on the wire is unused today — terminal-width-aware
-      // wrapping is a future BuildLineOptions extension (see strip.ts).
-      // When that arrives, `const termCols = sanitizeTermCols(req.termCols)`
-      // sanitizes at the boundary; until then we accept the field on the
-      // wire (back-compat with clients that send it) and ignore it.
+      // [LAW:single-enforcer] Width capture lives at the wire boundary.
+      // The client (Rust + TTY) is the only process that can see the real
+      // terminal; the daemon is detached. We do NOT consult getTerminalWidth's
+      // env/stderr fallbacks here — they would let the daemon's stale
+      // launch-time COLUMNS env shape rendering for a different terminal,
+      // which is exactly the wrong source.
+      // [LAW:one-source-of-truth] Both branches feed raw cols through
+      // applyClaudeCodeReserve, so `width` always means "usable cells
+      // post-reserve" with no semantic split between wire-supplied and
+      // fallback values.
+      const termCols = sanitizeTermCols(req.termCols);
+      const width = applyClaudeCodeReserve(termCols ?? DEFAULT_TERMINAL_WIDTH);
+      const renderOpts: BuildLineOptions = { ...RENDER_OPTS_BASE, width };
       // [LAW:dataflow-not-control-flow] Two outcomes fall out of one rule:
       // body = state ? renderDslLine(state) : "" ; output = body + icon
       // No special-case branches — same composition every render.
@@ -630,7 +648,7 @@ async function handleRequest(req: Request): Promise<Response> {
           entry.state.registry,
           payload,
           entry.state.basePalette,
-          RENDER_OPTS,
+          renderOpts,
           // [LAW:single-enforcer] The per-segment StripCell sink for the
           // `debug segments` projection. Its identity stays stable for the
           // cache entry's lifetime; renderDslLine clears + repopulates it
@@ -652,7 +670,7 @@ async function handleRequest(req: Request): Promise<Response> {
       const u = usageProvider.getStats();
       dlog(
         "info",
-        `render sid=${req.hookData.session_id ?? "?"} took=${ms}ms git=${g.size}/${g.hits}h/${g.misses}m usage=${u.size}/${u.hits}h/${u.misses}m err=${entry.lastError ? "Y" : "N"} warn=${entry.lastWarning ? "Y" : "N"}`,
+        `render sid=${req.hookData.session_id ?? "?"} took=${ms}ms termCols=${termCols ?? "?"} width=${width} git=${g.size}/${g.hits}h/${g.misses}m usage=${u.size}/${u.hits}h/${u.misses}m err=${entry.lastError ? "Y" : "N"} warn=${entry.lastWarning ? "Y" : "N"}`,
       );
       return { ok: true, output: output + "\n" };
     } catch (e) {
@@ -799,9 +817,11 @@ function parseRenderArgs(args: string[]): {
 // Per-line visible budget and max rows for multi-line diagnostic blocks.
 // Messages from the config validator (formatIssues) are already structured
 // as one line per issue, so splitting there is the natural unit of display.
-// [LAW:no-mode-explosion] Not user-configurable. Future tightening:
-// thread req.termCols through to here so the per-line budget tracks actual
-// terminal width instead of a static cap.
+// Deliberately decoupled from DEFAULT_TERMINAL_WIDTH: that constant means
+// "raw terminal cols we assume" and is reserved-against before reaching the
+// renderer; this one is a direct visible-char cap on already-rendered
+// diagnostic text. They happen to share the value 120 today but have
+// different semantic intents.
 const MAX_DIAGNOSTIC_LINE_LEN = 120;
 const MAX_DIAGNOSTIC_LINES = 8;
 
@@ -885,13 +905,19 @@ function composeWithDiagnostics(
 
 const verbCtx = { sessionState, dlog };
 
-// [LAW:single-enforcer] One options bundle for the render path AND the
-// lazy debug-side per-segment serializer. Both must agree on style +
-// color compatibility, otherwise the bytes the debug projection shows
-// could diverge from what the user sees in their terminal.
-const RENDER_OPTS = {
+// [LAW:single-enforcer] Style + color compatibility shared by the render
+// path and the lazy debug-side per-segment serializer. Per-request `width`
+// is composed on top at the wire boundary (handleRequest("render")) and
+// passed through as renderOpts. Debug serialization composes its own
+// per-segment opts with width: Number.POSITIVE_INFINITY since each segment
+// is rendered standalone (wrap doesn't apply to a one-segment projection).
+const RENDER_OPTS_BASE = {
   style: "powerline" as const,
   colorCompatibility: "truecolor" as const,
+};
+const DEBUG_RENDER_OPTS: BuildLineOptions = {
+  ...RENDER_OPTS_BASE,
+  width: Number.POSITIVE_INFINITY,
 };
 
 // [LAW:no-defensive-null-guards] Reused empty map for the `vars` /
@@ -904,7 +930,7 @@ function serializeSegmentCells(
 ): Map<string, string> {
   const out = new Map<string, string>();
   for (const [name, segCells] of cells) {
-    out.set(name, renderStripCells(segCells, RENDER_OPTS));
+    out.set(name, renderStripCells(segCells, DEBUG_RENDER_OPTS));
   }
   return out;
 }

@@ -23,6 +23,7 @@ const ALLOWED_PALETTES = new Set(["textual-dark"]);
 const OPTS = {
   style: "powerline" as const,
   colorCompatibility: "truecolor" as const,
+  width: Number.POSITIVE_INFINITY,
 };
 
 // Minimal config — one input (session.id), one state-kind var bound to
