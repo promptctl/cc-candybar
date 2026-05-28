@@ -1045,7 +1045,10 @@ function validateLayout(
     return [];
   }
 
-  const out: readonly string[][] = [];
+  // Built as mutable; the return type widens it to ReadonlyArray<readonly
+  // string[]> at the boundary. Declaring it readonly internally would force
+  // an `as` cast on every push and obscure the actual mutation pattern.
+  const out: string[][] = [];
   for (let r = 0; r < raw.length; r++) {
     const row = raw[r];
     // Detect the legacy flat shape — strings at the outer level — and emit a
@@ -1081,7 +1084,7 @@ function validateLayout(
       }
       rowOut.push(entry);
     }
-    (out as string[][]).push(rowOut);
+    out.push(rowOut);
   }
   return out;
 }
