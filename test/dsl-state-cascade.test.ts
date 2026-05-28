@@ -10,7 +10,7 @@
 
 import { autorun } from "mobx";
 import { PaletteResolver } from "@promptctl/rich-js";
-import { parseDslConfig } from "../src/config/dsl-loader";
+import { parseAndValidate } from "./helpers/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import { getThemePalette } from "../src/themes/palette-registry";
@@ -54,7 +54,7 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
   const HOOK_DATA = { session_id: SESSION_ID };
 
   function buildRuntime() {
-    const config = parseDslConfig("<test>", CONFIG_SRC, ALLOWED_PALETTES);
+    const config = parseAndValidate("<test>", CONFIG_SRC, ALLOWED_PALETTES);
     const sessionState = new SessionState();
     const store = new VariableStore();
     const registry = new SourceRegistry(store, "", undefined, sessionState);
@@ -155,7 +155,7 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
     //     the coarse atom acceptable in the first place).
     // The single-segment / single-state-var fixture above can't separate
     // those: it has no second observer to misbehave. This test adds one.
-    const config = parseDslConfig(
+    const config = parseAndValidate(
       "<test>",
       `{
         globals: {},
@@ -367,7 +367,7 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
     // which is observable only when a render lands, not when the file is
     // loaded — and that violates "machine-verifiable at the earliest point."
     expect(() =>
-      parseDslConfig(
+      parseAndValidate(
         "<test>",
         `{
           globals: {},
@@ -390,7 +390,7 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
     // registers as "<seg>.session.id" — same string, different box. The
     // load-time check must reject this case, not silently accept it.
     expect(() =>
-      parseDslConfig(
+      parseAndValidate(
         "<test>",
         `{
           globals: {},
@@ -417,7 +417,7 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
   test("toolbar-toggle click verb cascades through state binding", () => {
     // Same pattern with a different verb / key — exercises the toggle
     // semantics (set on first click, clear on second).
-    const config = parseDslConfig(
+    const config = parseAndValidate(
       "<test>",
       `{
         globals: {},

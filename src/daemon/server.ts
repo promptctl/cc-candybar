@@ -2,7 +2,14 @@ import fs from "node:fs";
 import net from "node:net";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
-import { daemonDir, pidPath, socketPath, sessionStatePath } from "./paths";
+import { parseArgs } from "node:util";
+import {
+  daemonDir,
+  ensureSocketParentSafe,
+  pidPath,
+  socketPath,
+  sessionStatePath,
+} from "./paths";
 import { dlog, closeLog } from "./log";
 import { PROTOCOL_VERSION, encodeFrame, makeFrameReader } from "./protocol";
 import type { Request, Response } from "./protocol";
@@ -19,6 +26,7 @@ import { validateHookData } from "../utils/schema-validator.js";
 import { setLaunchStats } from "../proc/launch";
 import { buildDebugSnapshot } from "./debug";
 import { DEBUG_WHATS, isDebugWhat } from "./debug-types";
+import { expandHome } from "../config/dsl-loader.js";
 import { renderDslLine } from "../dsl/render.js";
 import { renderStripCells } from "../render/strip.js";
 import type { StripCell } from "@promptctl/rich-js";
@@ -27,6 +35,7 @@ import { TodayProvider } from "../segments/today.js";
 import { ContextProvider } from "../segments/context.js";
 import { MetricsProvider } from "../segments/metrics.js";
 import { TmuxService } from "../segments/tmux.js";
+import { sanitizeAndTruncate } from "../render/diagnostic-text.js";
 
 // [LAW:one-source-of-truth] one cache instance per daemon process — multiple
 // instances would defeat the share-across-sessions invariant.
@@ -76,6 +85,15 @@ const BIN_CHECK_INTERVAL_MS = 60 * 1000;
 // obtainDaemon() (caller waits for readiness) in src/daemon/acquire.ts.
 export function runDaemon(): void {
   fs.mkdirSync(daemonDir(), { recursive: true });
+  // [LAW:single-enforcer] Verify the socket parent is uid==me + mode 0700 +
+  // not a symlink before we bind. Without this check, a same-host attacker
+  // could pre-create the predictable `/tmp/cc-candybar-<uid>` directory and
+  // squat the socket name. The check applies regardless of CC_CANDYBAR_SOCKET
+  // location — every bind path goes through the same trust precondition.
+  // No symmetric client-side check: the daemon is the sole creator, so a
+  // successful bind already proves the parent is trusted. Failure here surfaces
+  // as a daemon exit; the client falls back to the last cached render.
+  ensureSocketParentSafe(socketPath());
 
   // Bind disk persistence now that we know we are the daemon process — load
   // prior session state and become the sole writer of the state file.
@@ -529,28 +547,51 @@ async function handleRequest(req: Request): Promise<Response> {
     const t0 = Date.now();
     try {
       // [LAW:single-enforcer] One trust-boundary check for incoming hookData.
-      // Divergences are logged, not thrown — rendering continues regardless.
+      // The validator reports missing/wrong-typed required fields and unknown
+      // top-level keys. Required-field problems are *protocol* failures
+      // (Claude Code's schema guarantees these — their absence means the
+      // sender is broken or malicious); unknown fields are advisory (Anthropic
+      // may have added something).
       const { report } = validateHookData(req.hookData as unknown);
-      for (const path of report.missingRequired) {
-        dlog("warn", `schema: required field '${path}' absent in hookData`);
-      }
-      for (const { path, expected, got } of report.typeMismatches) {
-        dlog(
-          "warn",
-          `schema: field '${path}' expected ${expected}, got ${got}`,
-        );
-      }
       for (const field of report.unknownTopLevelFields) {
         dlog(
           "info",
           `schema: unknown field '${field}' — Anthropic may have added it`,
         );
       }
-      const projectDir = req.hookData.workspace?.project_dir;
+      // [LAW:no-silent-fallbacks][LAW:types-are-the-program] Gate hard on
+      // schema violations. Continuing with `workspace?.project_dir` would
+      // collapse "absent" into an empty-string cache key — silently sharing
+      // one entry across every malformed request — and downstream code would
+      // have to defend against an empty projectDir forever. Reject here so
+      // the types downstream carry the strongest true theorem: by the time
+      // a cache entry is built, projectDir/cwd are real non-empty strings.
+      const wireProblems: string[] = [];
+      for (const path of report.missingRequired) {
+        wireProblems.push(`missing required field '${path}'`);
+      }
+      for (const { path, expected, got } of report.typeMismatches) {
+        wireProblems.push(`field '${path}' expected ${expected}, got ${got}`);
+      }
+      if (req.cwd === "") {
+        wireProblems.push("request 'cwd' is empty");
+      }
+      if (wireProblems.length > 0) {
+        stats.requestsErrored++;
+        dlog("warn", `BAD_REQUEST: ${wireProblems.join("; ")}`);
+        return {
+          ok: false,
+          error: `malformed hookData: ${wireProblems.join("; ")}`,
+          code: "BAD_REQUEST",
+          daemonV: PROTOCOL_VERSION,
+        };
+      }
+      const projectDir = req.hookData.workspace.project_dir;
       // [LAW:dataflow-not-control-flow] thread the *request's* cwd, not the
       // daemon's process.cwd(), so config resolution depends only on request
       // data — the daemon's own working directory must not influence output.
-      const entry = renderCache.getOrCreate(req.args, projectDir, req.cwd);
+      const { configFile, unknownFlagsError } = parseRenderArgs(req.args);
+      const entry = renderCache.getOrCreate(projectDir, req.cwd, configFile);
       // termCols on the wire is unused today — terminal-width-aware
       // wrapping is a future BuildLineOptions extension (see strip.ts).
       // When that arrives, `const termCols = sanitizeTermCols(req.termCols)`
@@ -589,9 +630,11 @@ async function handleRequest(req: Request): Promise<Response> {
           entry.state.lastRenderCellsBySegment,
         );
       }
+      const combinedError =
+        [unknownFlagsError, entry.lastError].filter(Boolean).join("\n") || null;
       const output = composeWithDiagnostics(
         body,
-        entry.lastError,
+        combinedError,
         entry.lastWarning,
       );
       const ms = Date.now() - t0;
@@ -687,6 +730,13 @@ async function handleRequest(req: Request): Promise<Response> {
 // composer's signature carries both; severity is encoded in WHICH
 // argument is non-null, not in a string prefix or a tag inside the
 // message. The two icons render independently — both can show at once.
+//
+// [LAW:types-are-the-program] The diagnostic's visible text IS (a
+// projection of) the underlying message — not a constant label that hides
+// the content behind a click. The leading ⚠ + background color carry
+// severity; the rest of the cell is the actual error/warning, sanitized
+// and clipped to a single-line budget. A label divorced from the message
+// would be the type lying about what's in the channel.
 const ERROR_ICON_FG = "\x1b[38;2;255;255;255m";
 const ERROR_ICON_BG = "\x1b[48;2;200;40;40m";
 const WARNING_ICON_FG = "\x1b[38;2;0;0;0m";
@@ -696,15 +746,83 @@ const OSC8_OPEN = "\x1b]8;;";
 const OSC8_CLOSE = "\x1b]8;;\x1b\\";
 const ST = "\x1b\\";
 
+// [LAW:single-enforcer][LAW:no-silent-fallbacks] Parse render-path args with
+// the standard util at the trust boundary. `--config <path>` is the sole
+// valid render flag; every other flag is surfaced as a render-time
+// diagnostic icon (caller composes it alongside config errors). The
+// `--config` value is `~`-expanded here, so every consumer downstream
+// receives a literal path — no caller has to remember to expand it.
+//
+// `tokens: true, strict: false, allowPositionals: true` together let the
+// parser emit a token entry for every flag (known or unknown) without
+// throwing on unknown ones, and without mis-classifying their values as
+// positionals.
+function parseRenderArgs(args: string[]): {
+  configFile: string | undefined;
+  unknownFlagsError: string | null;
+} {
+  const { values, tokens } = parseArgs({
+    args: args.slice(1), // skip binary path
+    options: { config: { type: "string" } },
+    strict: false,
+    tokens: true,
+    allowPositionals: true,
+  });
+  const unknown = [
+    ...new Set(
+      (tokens ?? [])
+        .filter(
+          (t): t is Extract<typeof t, { kind: "option" }> =>
+            t.kind === "option" && t.name !== "config",
+        )
+        .map((t) => `--${t.name}`),
+    ),
+  ];
+  const rawConfig = values.config as string | undefined;
+  return {
+    configFile: rawConfig === undefined ? undefined : expandHome(rawConfig),
+    unknownFlagsError:
+      unknown.length > 0 ? `Unknown flags: ${unknown.join(", ")}` : null,
+  };
+}
+
+// Per-line visible budget and max rows for multi-line diagnostic blocks.
+// Messages from the config validator (formatIssues) are already structured
+// as one line per issue, so splitting there is the natural unit of display.
+// [LAW:no-mode-explosion] Not user-configurable. Future tightening:
+// thread req.termCols through to here so the per-line budget tracks actual
+// terminal width instead of a static cap.
+const MAX_DIAGNOSTIC_LINE_LEN = 120;
+const MAX_DIAGNOSTIC_LINES = 8;
+
 function makeDiagnosticLink(
   verb: "show-config-error" | "show-config-warning",
   message: string,
   bg: string,
   fg: string,
-  label: string,
 ): string {
+  // Full message in the OSC-8 URL (clipboard-copy on click) — truncation
+  // only affects what is visible, never what is accessible.
   const url = `cc-candybar://${verb}/${encodeURIComponent(message)}`;
-  return `${OSC8_OPEN}${url}${ST}${bg}${fg} ${label} ${ANSI_RESET}${OSC8_CLOSE}`;
+  // [LAW:dataflow-not-control-flow] Split on natural line boundaries from
+  // the source message (config validator emits one issue per line), sanitize
+  // each line individually, then render each as a separate styled row.
+  // This preserves structured multi-line output instead of collapsing N
+  // issues into a single truncated string the user cannot read.
+  const lines = message
+    .split(/\r\n|\r|\n/)
+    .map((l) => sanitizeAndTruncate(l, MAX_DIAGNOSTIC_LINE_LEN))
+    .filter(Boolean)
+    .slice(0, MAX_DIAGNOSTIC_LINES);
+  if (lines.length === 0) return "";
+  const first = `${OSC8_OPEN}${url}${ST}${bg}${fg} ⚠ ${lines[0]} ${ANSI_RESET}${OSC8_CLOSE}`;
+  const rest = lines
+    .slice(1)
+    .map(
+      (l) =>
+        `${OSC8_OPEN}${url}${ST}${bg}${fg}   ${l} ${ANSI_RESET}${OSC8_CLOSE}`,
+    );
+  return [first, ...rest].join("\n");
 }
 
 function composeWithDiagnostics(
@@ -713,9 +831,10 @@ function composeWithDiagnostics(
   warning: string | null,
 ): string {
   // [LAW:dataflow-not-control-flow] Diagnostics list is data; the
-  // composer walks it. Each non-null channel contributes one prefix line.
-  // Order is error-first (more severe), then warning, then body — so the
-  // operator's eye lands on the most critical message at the top.
+  // composer walks it. Each non-null channel contributes one or more prefix
+  // rows (makeDiagnosticLink returns a \n-joined multi-line block when the
+  // message has natural line breaks). Order is error-first (more severe),
+  // then warning, then body.
   const prefixes: string[] = [];
   if (error) {
     prefixes.push(
@@ -724,7 +843,6 @@ function composeWithDiagnostics(
         error,
         ERROR_ICON_BG,
         ERROR_ICON_FG,
-        "⚠ config error",
       ),
     );
   }
@@ -735,7 +853,6 @@ function composeWithDiagnostics(
         warning,
         WARNING_ICON_BG,
         WARNING_ICON_FG,
-        "⚠ config warning",
       ),
     );
   }

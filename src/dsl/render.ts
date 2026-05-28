@@ -18,7 +18,7 @@ import {
 } from "@promptctl/rich-js";
 import type { Template } from "@promptctl/go-template-js";
 import type {
-  DslConfig,
+  ValidatedConfig,
   VariableDecl,
   CacheDecl,
 } from "../config/dsl-types.js";
@@ -220,7 +220,7 @@ const _compileEngine = createCcCandybarEngine();
  * is added (planned follow-up).
  */
 export function registerDslConfig(
-  config: DslConfig,
+  config: ValidatedConfig,
   registry: SourceRegistry,
   opts?: { cwd?: string },
 ): CompiledSegments {
@@ -309,7 +309,7 @@ function resolverForPalette(name: string): PaletteResolver {
  * not more code. The scope proxy is built once; templates are only evaluated.
  */
 export function renderDslLine(
-  config: DslConfig,
+  config: ValidatedConfig,
   compiled: CompiledSegments,
   store: VariableStore,
   registry: SourceRegistry,

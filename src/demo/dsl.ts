@@ -22,7 +22,11 @@ import { setTimeout as sleep } from "node:timers/promises";
 
 import { PaletteResolver } from "@promptctl/rich-js";
 
-import { parseDslConfig } from "../config/dsl-loader.js";
+import {
+  parseDslConfig,
+  mergeWithDefault,
+  validateConfig,
+} from "../config/dsl-loader.js";
 import { VariableStore } from "../var-system/store.js";
 import { SourceRegistry } from "../var-system/sources.js";
 import { getThemePalette } from "../themes/palette-registry.js";
@@ -39,11 +43,13 @@ const source = readFileSync(configPath, "utf-8");
 // [LAW:one-source-of-truth] The palette names the loader accepts are exactly
 // the names the renderer can resolve — both derive from the same registry, so
 // we hand the loader the live set rather than a hand-maintained copy.
-const config = parseDslConfig(
-  configPath,
-  source,
-  new Set(listResolvablePaletteNames()),
-);
+//
+// Full three-stage pipeline: parse → merge → validate. The renderer accepts
+// only `ValidatedConfig`, so the chain is type-enforced.
+const ALLOWED = new Set(listResolvablePaletteNames());
+const raw = parseDslConfig(configPath, source, ALLOWED);
+const merged = mergeWithDefault(raw);
+const config = validateConfig(merged, configPath, source, ALLOWED);
 
 // One Claude Code status-line hook event, faked. The `input` vars in the
 // config (cwd, model, session) read their values out of this object.

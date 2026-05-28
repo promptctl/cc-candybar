@@ -102,16 +102,23 @@ describe("RenderCache", () => {
     rmSync(xdgIsolateDir, { recursive: true, force: true });
   });
 
-  test("cache identity ignores args", () => {
+  test("cache identity is (projectDir, cwd, configFile)", () => {
     const { cache, cleanups } = makeCache();
     try {
-      // Three calls with different args, same projectDir+cwd → same entry.
-      const a = cache.getOrCreate([], "/x", "/x");
-      const b = cache.getOrCreate(["--style=foo"], "/x", "/x");
-      const c = cache.getOrCreate(["one", "two"], "/x", "/x");
+      // Same (projectDir, cwd, configFile=undefined) → same entry.
+      const a = cache.getOrCreate("/x", "/x", undefined);
+      const b = cache.getOrCreate("/x", "/x", undefined);
       expect(a).toBe(b);
-      expect(b).toBe(c);
       expect(cache.size).toBe(1);
+
+      // Distinct configFile values produce distinct entries — the CLI
+      // override is a real input to config resolution and must be part
+      // of the cache key.
+      const c = cache.getOrCreate("/x", "/x", "/tmp/alt.json5");
+      const d = cache.getOrCreate("/x", "/x", "/tmp/other.json5");
+      expect(c).not.toBe(a);
+      expect(d).not.toBe(c);
+      expect(cache.size).toBe(3);
     } finally {
       for (const fn of cleanups) fn();
     }
@@ -121,7 +128,7 @@ describe("RenderCache", () => {
     const { dir, cleanup } = mkConfigDir();
     const { cache, cleanups } = makeCache();
     try {
-      const entry = cache.getOrCreate([], dir, dir);
+      const entry = cache.getOrCreate(dir, dir, undefined);
       expect(entry.lastError).toBeNull();
       // No file means state was built from the bundled default — every
       // built-in segment is declared.
@@ -151,7 +158,7 @@ describe("RenderCache", () => {
           layout: ["s"],
         }),
       );
-      const entry = cache.getOrCreate([], dir, dir);
+      const entry = cache.getOrCreate(dir, dir, undefined);
       expect(entry.lastError).toBeNull();
       const goodState = entry.state;
       expect(goodState).not.toBeNull();
@@ -181,7 +188,7 @@ describe("RenderCache", () => {
     const { cache, cleanups } = makeCache();
     try {
       // First call: no file exists, falls back to default.
-      const entry = cache.getOrCreate([], dir, dir);
+      const entry = cache.getOrCreate(dir, dir, undefined);
       expect(entry.configFilePath).toBeNull();
       // The bundled default's layout is non-empty.
       const defaultLayoutLen = entry.state!.config.layout.length;
@@ -246,7 +253,7 @@ describe("RenderCache", () => {
           layout: ["only"],
         }),
       );
-      const entry = cache.getOrCreate([], dir, dir);
+      const entry = cache.getOrCreate(dir, dir, undefined);
       expect(entry.lastError).toBeNull();
       expect(entry.configFilePath).toBe(cfg);
       expect(entry.state!.config.layout).toEqual(["only"]);
@@ -275,7 +282,7 @@ describe("RenderCache", () => {
       writeFileSync(cfgJson5, validCfg);
       writeFileSync(cfgJson, validCfg);
 
-      const entry = cache.getOrCreate([], dir, dir);
+      const entry = cache.getOrCreate(dir, dir, undefined);
       // Load succeeded — .json5 won; warning is the advisory.
       expect(entry.lastError).toBeNull();
       expect(entry.configFilePath).toBe(cfgJson5);
@@ -308,7 +315,7 @@ describe("RenderCache", () => {
       // maxEntries=4. Insert 5 entries; the oldest gets evicted.
       const entries = [];
       for (let i = 0; i < 5; i++) {
-        const e = cache.getOrCreate([], `/p${i}`, `/p${i}`);
+        const e = cache.getOrCreate(`/p${i}`, `/p${i}`, undefined);
         entries.push(e);
       }
       expect(cache.size).toBe(4);
@@ -318,7 +325,7 @@ describe("RenderCache", () => {
       // again on an already-disposed registry would throw or no-op
       // depending on internals. We don't probe that here — just that the
       // entry's state is no longer reachable from the cache.
-      const survivor = cache.getOrCreate([], "/p0", "/p0");
+      const survivor = cache.getOrCreate("/p0", "/p0", undefined);
       expect(survivor).not.toBe(evicted);
     } finally {
       for (const fn of cleanups) fn();

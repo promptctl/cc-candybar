@@ -1,16 +1,18 @@
+import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
 // XDG Base Directory split:
-//   - daemon runtime (socket, pid, log, heap snapshots) → $XDG_STATE_HOME/cc-candybar
-//   - filesystem caches (git, usage, locks, last-render) → $XDG_CACHE_HOME/cc-candybar
+//   - daemon runtime (pid, log, heap snapshots, spawn.lock) → $XDG_STATE_HOME/cc-candybar
+//   - filesystem caches (git, usage, last-render) → $XDG_CACHE_HOME/cc-candybar
 //
 // Both default per the XDG spec ($HOME/.local/state and $HOME/.cache). Empty
 // env vars fall through to the defaults. The two roots are kept separate so
 // users can `rm -rf` either one without taking the other down.
 //
-// The Rust client mirrors this layout in rust-client/src/main.rs; both must
-// agree or the client can't find the daemon's socket.
+// The socket path is NOT derived from XDG_STATE_HOME — see socketPath() below.
+// The Rust client mirrors both path families in rust-client/src/main.rs; both
+// must agree or the client can't find the daemon's socket.
 
 function xdgEnv(name: string): string | undefined {
   const v = process.env[name];
@@ -40,8 +42,68 @@ export function daemonDir(): string {
   return stateDir();
 }
 
+// [LAW:one-source-of-truth] The socket IS the daemon's identity — same as
+// tmux's /tmp/tmux-<uid>/default model. UID is kernel identity: immutable,
+// not overridable by any env var. /tmp is guaranteed on every Unix host and
+// is cleared on reboot, which is fine — the daemon doesn't survive reboots.
+// CC_CANDYBAR_SOCKET is the only explicit override for intentional isolation
+// (tests, dev, multiple intentional instances).
 export function socketPath(): string {
-  return path.join(stateDir(), "socket");
+  const override = process.env.CC_CANDYBAR_SOCKET;
+  if (override) return override;
+  const uid = os.userInfo().uid;
+  return path.join("/tmp", `cc-candybar-${uid}`, "socket");
+}
+
+// [LAW:single-enforcer] The daemon is the sole creator of the socket parent
+// directory. If we enforce "this dir is uid==me + mode 0700 + not a symlink"
+// at bind time, then by induction every successful bind happened under a
+// trusted parent — and any client reaching the socket via the canonical path
+// reached one our daemon owns. A foreign-uid or world-writable squat triggers
+// a refusal, turning a silent-MITM attempt into a visible daemon failure (the
+// client sees no response, the user sees the last cached render).
+//
+// Throws on any unsafe state; callers are expected to let the daemon exit.
+// [LAW:no-silent-fallbacks] do NOT auto-rmdir + recreate — a wrong-owner dir
+// is hostile state, not a recoverable error.
+export function ensureSocketParentSafe(sockPath: string): void {
+  const parent = path.dirname(sockPath);
+  // mkdir with mode 0o700; harmless if already exists (mode is not applied
+  // post-hoc — we verify it next).
+  fs.mkdirSync(parent, { recursive: true, mode: 0o700 });
+
+  const st = fs.lstatSync(parent);
+  if (st.isSymbolicLink()) {
+    throw new Error(`socket parent is a symlink: ${parent}`);
+  }
+  if (!st.isDirectory()) {
+    throw new Error(`socket parent is not a directory: ${parent}`);
+  }
+  const myUid = os.userInfo().uid;
+  // getuid is undefined on Windows; we don't ship there, but guard cheaply.
+  if (typeof myUid === "number" && st.uid !== myUid) {
+    throw new Error(
+      `socket parent is not owned by uid ${myUid}: ${parent} (owner uid=${st.uid})`,
+    );
+  }
+  // Reject any group/world bits — only the owner may traverse.
+  if ((st.mode & 0o077) !== 0) {
+    throw new Error(
+      `socket parent has unsafe permissions: ${parent} (mode=${(st.mode & 0o777).toString(8)}, expected 0700)`,
+    );
+  }
+  // If a stale socket file is a symlink, refuse — an attacker who briefly
+  // had write access to a previously-permissive dir could have planted a
+  // symlink even after we tighten perms.
+  try {
+    const sst = fs.lstatSync(sockPath);
+    if (sst.isSymbolicLink()) {
+      throw new Error(`socket path is a symlink: ${sockPath}`);
+    }
+  } catch (e) {
+    const code = (e as NodeJS.ErrnoException).code;
+    if (code !== "ENOENT") throw e;
+  }
 }
 
 export function pidPath(): string {

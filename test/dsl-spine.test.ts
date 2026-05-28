@@ -11,7 +11,7 @@ import { join } from "node:path";
 
 import { PaletteResolver } from "@promptctl/rich-js";
 
-import { parseDslConfig } from "../src/config/dsl-loader";
+import { parseAndValidate } from "./helpers/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import { getThemePalette } from "../src/themes/palette-registry";
@@ -68,7 +68,7 @@ afterEach(() => {
 
 describe("DSL render spine (bzh.7 steel thread)", () => {
   function buildRuntime(cwd: string) {
-    const config = parseDslConfig("<test>", FIXTURE_SOURCE, ALLOWED_PALETTES);
+    const config = parseAndValidate("<test>", FIXTURE_SOURCE, ALLOWED_PALETTES);
     const store = new VariableStore();
     const registry = new SourceRegistry(store);
     const compiled = registerDslConfig(config, registry, { cwd });
@@ -78,7 +78,7 @@ describe("DSL render spine (bzh.7 steel thread)", () => {
   test("parseDslConfig accepts the committed fixture", () => {
     // Validates the fixture is syntactically correct and cross-reference-clean.
     expect(() =>
-      parseDslConfig("<test>", FIXTURE_SOURCE, ALLOWED_PALETTES),
+      parseAndValidate("<test>", FIXTURE_SOURCE, ALLOWED_PALETTES),
     ).not.toThrow();
   });
 
@@ -206,7 +206,7 @@ describe("DSL render spine (bzh.7 steel thread)", () => {
       "",
     );
     const withBasePaletteOnly = (() => {
-      const config = parseDslConfig(
+      const config = parseAndValidate(
         "<test>",
         noSegmentPaletteSource,
         new Set(["textual-dark"]),
