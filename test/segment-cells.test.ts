@@ -3,13 +3,13 @@
 // state of the conversion walk.
 
 import { createCcCandybarEngine } from "../src/template-engine/engine";
-import { fragmentsToStripCells } from "../src/template-engine/cells";
+import { fragmentsToCells } from "../src/template-engine/cells";
 import { renderStripCells } from "../src/render/strip";
-import { RichText, StripCell, Style } from "@promptctl/rich-js";
+import { RichText, Style } from "@promptctl/rich-js";
 
 // Render cells to a truecolor ANSI string so tests assert observable output
 // (SGR escapes), not internal style placement. [LAW:behavior-not-structure]
-function renderCells(cells: readonly StripCell[]): string {
+function renderCells(cells: readonly RichText[]): string {
   return renderStripCells(cells, { style: "plain", colorCompatibility: "truecolor" });
 }
 
@@ -27,7 +27,7 @@ function stripAnsi(s: string): string {
 function evalCells(source: string, scope: object = {}) {
   const engine = createCcCandybarEngine();
   const fragments = engine.parse(source).evaluate(scope);
-  return fragmentsToStripCells(fragments);
+  return fragmentsToCells(fragments);
 }
 
 // ────────────────────────────────────────────────────────────────
@@ -38,14 +38,14 @@ describe("single-cell segments", () => {
   test("plain text produces one cell with that text", () => {
     const cells = evalCells("hello world");
     expect(cells).toHaveLength(1);
-    expect(cells[0]!.text).toBe("hello world");
+    expect(cells[0]!.plain).toBe("hello world");
     expect(cells[0]!.style.link).toBeUndefined();
   });
 
   test("interpolated field produces one cell", () => {
     const cells = evalCells("{{ .branch }}", { branch: "main" });
     expect(cells).toHaveLength(1);
-    expect(cells[0]!.text).toBe("main");
+    expect(cells[0]!.plain).toBe("main");
   });
 
   test("empty template produces no cells", () => {
@@ -66,17 +66,17 @@ describe("multi-cell toolbar shape", () => {
     const cells = evalCells('{{ link "http://a" "A" }} {{ link "http://b" "B" }}');
     expect(cells).toHaveLength(3);
     expect(cells[0]!.style.link).toBe("http://a");
-    expect(cells[0]!.text).toBe("A");
+    expect(cells[0]!.plain).toBe("A");
     expect(cells[1]!.style.link).toBeUndefined();
-    expect(cells[1]!.text).toBe(" ");
+    expect(cells[1]!.plain).toBe(" ");
     expect(cells[2]!.style.link).toBe("http://b");
-    expect(cells[2]!.text).toBe("B");
+    expect(cells[2]!.plain).toBe("B");
   });
 
   test("link cell text is correct", () => {
     const cells = evalCells('{{ link "http://x" "click me" }}');
     expect(cells).toHaveLength(1);
-    expect(cells[0]!.text).toBe("click me");
+    expect(cells[0]!.plain).toBe("click me");
     expect(cells[0]!.style.link).toBe("http://x");
   });
 
@@ -103,9 +103,9 @@ describe("multi-cell toolbar shape", () => {
     // own plain cell, the link is its own cell.
     const cells = evalCells('prefix {{ link "u" "item" }}');
     expect(cells).toHaveLength(2);
-    expect(cells[0]!.text).toBe("prefix ");
+    expect(cells[0]!.plain).toBe("prefix ");
     expect(cells[0]!.style.link).toBeUndefined();
-    expect(cells[1]!.text).toBe("item");
+    expect(cells[1]!.plain).toBe("item");
     expect(cells[1]!.style.link).toBe("u");
   });
 
@@ -113,14 +113,14 @@ describe("multi-cell toolbar shape", () => {
     const cells = evalCells('{{ link "u" "item" }} suffix');
     expect(cells).toHaveLength(2);
     expect(cells[0]!.style.link).toBe("u");
-    expect(cells[1]!.text).toBe(" suffix");
+    expect(cells[1]!.plain).toBe(" suffix");
     expect(cells[1]!.style.link).toBeUndefined();
   });
 
   test("link with field interpolation in label", () => {
     const cells = evalCells('{{ link "http://go" .label }}', { label: "Go" });
     expect(cells).toHaveLength(1);
-    expect(cells[0]!.text).toBe("Go");
+    expect(cells[0]!.plain).toBe("Go");
     expect(cells[0]!.style.link).toBe("http://go");
   });
 });
@@ -134,14 +134,14 @@ describe("nested style functions inside one cell", () => {
     const cells = evalCells('{{ bold "hello" }}');
     expect(cells).toHaveLength(1);
     expect(cells[0]!.style.bold).toBe(true);
-    expect(cells[0]!.text).toBe("hello");
+    expect(cells[0]!.plain).toBe("hello");
   });
 
   test("red text produces cell with color set", () => {
     const cells = evalCells('{{ red "error" }}');
     expect(cells).toHaveLength(1);
     expect(cells[0]!.style.color).toBeDefined();
-    expect(cells[0]!.text).toBe("error");
+    expect(cells[0]!.plain).toBe("error");
   });
 
   test("nested: bold inside red — outer wins on color, bold carried", () => {
@@ -149,7 +149,7 @@ describe("nested style functions inside one cell", () => {
     expect(cells).toHaveLength(1);
     expect(cells[0]!.style.color).toBeDefined(); // red
     expect(cells[0]!.style.bold).toBe(true);
-    expect(cells[0]!.text).toBe("x");
+    expect(cells[0]!.plain).toBe("x");
   });
 
   test("styled fragment inside link call preserves styling", () => {
@@ -157,46 +157,46 @@ describe("nested style functions inside one cell", () => {
     expect(cells).toHaveLength(1);
     expect(cells[0]!.style.link).toBe("http://go");
     expect(cells[0]!.style.bold).toBe(true);
-    expect(cells[0]!.text).toBe("go!");
+    expect(cells[0]!.plain).toBe("go!");
   });
 });
 
 // ────────────────────────────────────────────────────────────────
-// 4. fragmentsToStripCells called directly with pre-built fragments
+// 4. fragmentsToCells called directly with pre-built fragments
 // ────────────────────────────────────────────────────────────────
 
-describe("fragmentsToStripCells — direct fragment input", () => {
+describe("fragmentsToCells — direct fragment input", () => {
   test("empty array produces empty cells", () => {
-    expect(fragmentsToStripCells([])).toHaveLength(0);
+    expect(fragmentsToCells([])).toHaveLength(0);
   });
 
   test("single unstyled RichText → single plain cell", () => {
-    const cells = fragmentsToStripCells([new RichText("hello")]);
+    const cells = fragmentsToCells([new RichText("hello")]);
     expect(cells).toHaveLength(1);
-    expect(cells[0]!.text).toBe("hello");
+    expect(cells[0]!.plain).toBe("hello");
   });
 
   test("a run of adjacent plain fragments coalesces into one cell", () => {
     // The natural symbol+value+padding shape — " {{ .sym }} {{ .v }} " —
     // evaluates to several plain fragments. They must form ONE powerline cell,
     // not one cell per fragment (which would cap-separate a single segment).
-    const cells = fragmentsToStripCells([
+    const cells = fragmentsToCells([
       new RichText(" "),
       new RichText("hello"),
       new RichText(" "),
     ]);
     expect(cells).toHaveLength(1);
-    expect(cells[0]!.text).toBe(" hello ");
+    expect(cells[0]!.plain).toBe(" hello ");
     expect(cells[0]!.style.link).toBeUndefined();
   });
 
   test("plain run preserves a styled fragment's fg in rendered output", () => {
-    const cells = fragmentsToStripCells([
+    const cells = fragmentsToCells([
       new RichText("status: "),
       new RichText("err", { style: "red" }),
     ]);
     expect(cells).toHaveLength(1);
-    expect(cells[0]!.text).toBe("status: err");
+    expect(cells[0]!.plain).toBe("status: err");
 
     // Behavioral proof: the red fg actually survives to ANSI output. A flatten
     // to an unstyled plain cell would emit no SGR escape and fail this.
@@ -206,29 +206,29 @@ describe("fragmentsToStripCells — direct fragment input", () => {
     expect(stripAnsi(rendered)).toBe("status: err");
   });
 
-  test("adjacent fragments sharing a background coalesce, keeping the bg", () => {
-    // Same bg on both → one cell. The background is joiner-visible, so it must
-    // survive at cell level rather than being stripped to nothing.
-    const cells = fragmentsToStripCells([
+  test("adjacent fragments sharing a background coalesce into one cell", () => {
+    const cells = fragmentsToCells([
       new RichText("a", { style: "on blue" }),
       new RichText("b", { style: "on blue" }),
     ]);
     expect(cells).toHaveLength(1);
-    expect(cells[0]!.text).toBe("ab");
-    expect(cells[0]!.style.bgcolor).toBeDefined();
+    expect(cells[0]!.plain).toBe("ab");
+    expect(cells[0]!.edgeStyle("left").bgcolor?.name).toBe("blue");
+    expect(cells[0]!.edgeStyle("right").bgcolor?.name).toBe("blue");
   });
 
-  test("a background change is a cell boundary", () => {
-    // Divergent backgrounds cannot share one cell (single-style invariant), so
-    // the run splits — each background becomes its own powerline cell.
-    const cells = fragmentsToStripCells([
+  test("fragments with varying bg stay in one cell; edges report the boundary bgs", () => {
+    // [LAW:locality-or-seam] With the edge-aware joiner protocol, varying-bg
+    // cells are first-class — the cell type does not enforce a single
+    // bg interior. Joiners read edgeStyle(side) at each boundary.
+    const cells = fragmentsToCells([
       new RichText("a", { style: "on red" }),
       new RichText("b", { style: "on blue" }),
     ]);
-    expect(cells).toHaveLength(2);
-    expect(cells[0]!.text).toBe("a");
-    expect(cells[1]!.text).toBe("b");
-    expect(cells[0]!.style.bgcolor).not.toBe(cells[1]!.style.bgcolor);
+    expect(cells).toHaveLength(1);
+    expect(cells[0]!.plain).toBe("ab");
+    expect(cells[0]!.edgeStyle("left").bgcolor?.name).toBe("red");
+    expect(cells[0]!.edgeStyle("right").bgcolor?.name).toBe("blue");
   });
 
   test("span with bgcolor does not propagate bgcolor to cell part", () => {
@@ -237,7 +237,7 @@ describe("fragmentsToStripCells — direct fragment input", () => {
     // constructed without throwing — i.e., we strip bgcolor from part styles.
     const rt = new RichText("hello", { style: "link http://x" });
     rt.stylize("red on blue"); // stylize(style, start?, end?)
-    const cells = fragmentsToStripCells([rt]);
+    const cells = fragmentsToCells([rt]);
     expect(cells).toHaveLength(1);
     expect(cells[0]!.style.link).toBe("http://x");
   });
@@ -255,13 +255,13 @@ describe("fragmentsToStripCells — direct fragment input", () => {
 describe("baseStyle merge — fragment style wins on overlap", () => {
   test("unstyled fragment inherits baseStyle bg", () => {
     const baseStyle = new Style({ bgcolor: "blue" });
-    const cells = fragmentsToStripCells([new RichText("text")], baseStyle);
+    const cells = fragmentsToCells([new RichText("text")], baseStyle);
     expect(cells[0]!.style.bgcolor?.name).toBe("blue");
   });
 
   test("fragment's own bg wins over baseStyle bg", () => {
     const baseStyle = new Style({ bgcolor: "blue" });
-    const cells = fragmentsToStripCells(
+    const cells = fragmentsToCells(
       [new RichText("text", { style: "on red" })],
       baseStyle,
     );
@@ -270,24 +270,24 @@ describe("baseStyle merge — fragment style wins on overlap", () => {
   });
 
   test("null baseStyle → fragments flow through unchanged", () => {
-    const cells = fragmentsToStripCells([new RichText("text")], new Style());
+    const cells = fragmentsToCells([new RichText("text")], new Style());
     expect(cells[0]!.style.isNull).toBe(true);
   });
 
   test("no baseStyle → fragments flow through unchanged", () => {
-    const cells = fragmentsToStripCells([new RichText("text")]);
+    const cells = fragmentsToCells([new RichText("text")]);
     expect(cells[0]!.style.isNull).toBe(true);
   });
 
   test("baseStyle fg applied to fragment without fg", () => {
     const baseStyle = new Style({ color: "white" });
-    const cells = fragmentsToStripCells([new RichText("text")], baseStyle);
+    const cells = fragmentsToCells([new RichText("text")], baseStyle);
     expect(cells[0]!.style.color?.name).toBe("white");
   });
 
   test("fragment's own fg wins over baseStyle fg", () => {
     const baseStyle = new Style({ color: "white" });
-    const cells = fragmentsToStripCells(
+    const cells = fragmentsToCells(
       [new RichText("text", { style: "red" })],
       baseStyle,
     );
@@ -303,7 +303,7 @@ describe("baseStyle merge preserves per-fragment fg as cell parts", () => {
   // drop parts; the new cell-time merge keeps them.
   test("fragments with per-fragment fg under a shared bg form one cell with N parts", () => {
     const baseStyle = new Style({ bgcolor: "blue" });
-    const cells = fragmentsToStripCells(
+    const cells = fragmentsToCells(
       [
         new RichText(" prefix "),
         new RichText("S", { style: "green" }),
@@ -334,78 +334,41 @@ describe("baseStyle merge preserves per-fragment fg as cell parts", () => {
   });
 });
 
-describe("groupToCell — uniform-style collapse", () => {
-  // [LAW:types-are-the-program] When all parts in a coalesced group share one
-  // style (the common case after a uniform baseStyle merge over plain
-  // fragments), the single-text shape is the strongest valid type. The parts
-  // shape is reserved for genuinely heterogeneous fg/attrs — picking it
-  // unconditionally would force every truncation slice through a parts-drop
-  // rebuild that loses style.
+describe("RichText cell shape — uniform-style collapse", () => {
+  // [LAW:types-are-the-program] One cell type, one shape: a RichText with
+  // a base style and zero or more span overlays. Uniform-style runs land
+  // as a single base style with no spans; heterogeneous runs land as spans
+  // over the base. Both shapes go through the same render path and the
+  // same layout primitives.
 
-  test("uniform-style multi-fragment group collapses to a single-text cell with full style", () => {
+  test("uniform-style multi-fragment group becomes one cell with the base style", () => {
     const baseStyle = new Style({ bgcolor: "blue", color: "white" });
-    const cells = fragmentsToStripCells(
+    const cells = fragmentsToCells(
       [new RichText(" "), new RichText("main"), new RichText(" ")],
       baseStyle,
     );
     expect(cells).toHaveLength(1);
-    expect(cells[0]!.text).toBe(" main ");
-    // Full style (bg + fg) on the cell — survives layout-time slicing.
+    expect(cells[0]!.plain).toBe(" main ");
     expect(cells[0]!.style.bgcolor?.name).toBe("blue");
     expect(cells[0]!.style.color?.name).toBe("white");
   });
 
-  test("heterogeneous fg in a coalesced group stays parts-based", () => {
+  test("heterogeneous fg coalesces into one cell with spans for the divergent fg", () => {
     const baseStyle = new Style({ bgcolor: "blue", color: "white" });
-    const cells = fragmentsToStripCells(
+    const cells = fragmentsToCells(
       [
         new RichText("ok"),
         new RichText("err", { style: "red" }),
       ],
       baseStyle,
     );
-    // Cell still has bg at cell-level; the divergent fg lives in parts.
     expect(cells).toHaveLength(1);
     expect(cells[0]!.style.bgcolor?.name).toBe("blue");
-    // Cell-level fg is undefined (mixed fg lives in parts).
-    expect(cells[0]!.style.color).toBeUndefined();
-  });
-
-  test("collapse + serializer coalesce produce identical bytes as parts-based", () => {
-    // The collapse is a STRENGTHENING — same bytes either way (rich-js
-    // coalesces adjacent same-SGR Segments under one wrap). This test pins
-    // that byte equivalence so future code can't silently drift the cell
-    // shape and expect a different output.
-    const baseStyle = new Style({ bgcolor: "blue", color: "white" });
-
-    // Collapsed path: groupToCell takes the single-text shape because all
-    // parts share the same merged fg.
-    const collapsed = fragmentsToStripCells(
-      [new RichText("a"), new RichText("b"), new RichText("c")],
-      baseStyle,
-    );
-    // Hand-rolled parts-based equivalent: same text+styles, but stored as
-    // three StripCellParts with bg on the cell (per the single-style cell
-    // invariant — parts carry only fg/attrs).
-    const fgOnly = new Style({ color: "white" });
-    const bgOnly = new Style({ bgcolor: "blue" });
-    const partsBased = [
-      new StripCell(
-        [
-          { text: "a", style: fgOnly },
-          { text: "b", style: fgOnly },
-          { text: "c", style: fgOnly },
-        ],
-        bgOnly,
-      ),
-    ];
-
-    const collapsedBytes = renderCells(collapsed);
-    const partsBytes = renderCells(partsBased);
-
-    // The byte-equivalence the test name claims.
-    expect(collapsedBytes).toBe(partsBytes);
-    // Sanity: visible text is "abc" in both.
-    expect(stripAnsi(collapsedBytes)).toBe("abc");
+    // Base fg cascades over the cell; "err" segment overrides via a span.
+    expect(cells[0]!.style.color?.name).toBe("white");
+    // Both edges still report the segment-level bg because spans without bg
+    // inherit the cell's bg via the joiner protocol.
+    expect(cells[0]!.edgeStyle("left").bgcolor?.name).toBe("blue");
+    expect(cells[0]!.edgeStyle("right").bgcolor?.name).toBe("blue");
   });
 });

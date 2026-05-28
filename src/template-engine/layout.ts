@@ -1,23 +1,22 @@
 // [LAW:single-enforcer] All per-segment width/justify/truncate enforcement
-// runs through applySegmentLayout. No second path; two paths would silently
-// drift.
+// runs through applySegmentLayout. RichText owns the slice/pad/truncate
+// primitives; this function chooses which to call from the segment-level
+// options. No second path exists.
 //
-// [LAW:dataflow-not-control-flow] Every step is unconditional; option values
-// (width, justify, truncate) are the data that drives the output. "auto" width
-// is not a branch that skips logic — it is a value that makes the step return
-// the input unchanged.
+// [LAW:dataflow-not-control-flow] Every step is unconditional in shape;
+// option values (width, justify, truncate) decide what the output is, not
+// whether the step runs. "auto" width is not a branch that skips logic —
+// it is a value that makes the function return the input unchanged.
 //
-// The bg/fg default-style cascade is applied at cell construction time in
-// `fragmentsToStripCells(fragments, baseStyle)`, not by rebuilding cells here.
-// But layout ALSO synthesizes new cells (pad spaces for justify, truncate
-// marker glyph) — those new cells need the same segment baseStyle so the
-// PowerlineJoiner sees one continuous bg run across the segment and the marker
-// glyph is rendered in segment fg, not as an unstyled gap. `baseStyle` flows
-// into layout for that single, narrow purpose: filling cells layout itself
-// creates. Existing cells flow through with their own style intact.
+// [LAW:types-are-the-program] With RichText as the cell type, every layout
+// operation is span-preserving by construction. There is no rebuild path,
+// no slice-then-restyle dance: `richText.truncate({width, mode, marker})`
+// and `richText.align(justify, width)` clip and shift spans through every
+// cut. The bzh.9 limitation (truncation drops per-part fg) cannot be
+// expressed in this shape — its preconditions don't exist.
 
-import { StripCell, cellLen, splitText, asCellCol } from "@promptctl/rich-js";
-import type { RichText, Style } from "@promptctl/rich-js";
+import { RichText } from "@promptctl/rich-js";
+import type { Style } from "@promptctl/rich-js";
 import type { Template } from "@promptctl/go-template-js";
 
 export type JustifyMode = "left" | "center" | "right";
@@ -30,14 +29,13 @@ export interface SegmentLayoutOptions {
   justify: JustifyMode;
   /** Overflow strategy when content exceeds a fixed width. Ignored when "auto". */
   truncate: TruncateMode;
-  /** Glyph appended/prepended/inserted at the overflow cut point. Default "…". */
+  /** Glyph inserted at the overflow cut point. Default "…". */
   truncateMarker?: string;
   /**
-   * Style for cells layout itself synthesizes — padding spaces and the
-   * truncate marker. Existing cells flow through with their own style; this
-   * fills only the new ones. Pass the same resolved segment baseStyle used
-   * for `fragmentsToStripCells(fragments, baseStyle)` so the PowerlineJoiner
-   * sees one continuous bg run across the whole segment.
+   * Style for synthesized whitespace — RichText pads using plain spaces.
+   * The padding inherits the cell's wrapping style at render time, so the
+   * segment bg/fg is continuous across padded gaps without a second style
+   * assignment here.
    */
   baseStyle?: Style;
 }
@@ -60,157 +58,56 @@ export function evaluateWhen(
 }
 
 /**
- * Apply per-segment layout constraints to a list of StripCells produced by
- * fragmentsToStripCells().
+ * Apply per-segment layout constraints to the cells produced by
+ * `fragmentsToCells()`. Returns a (possibly different-length) RichText[]
+ * that fits the requested width.
  *
- * Steps (always executed in order; values govern output, not whether steps run):
- *   1. "auto" width → return cells as-is.
- *   2. Fixed width → truncate on overflow or pad for justification.
- *
- * Existing cells flow through with their own style (baked in upstream by
- * `fragmentsToStripCells(fragments, baseStyle)`). New cells synthesized here
- * (pad spaces, truncate marker) inherit `options.baseStyle` so the segment's
- * bg/fg is continuous across them.
+ * Multi-cell input is concatenated into a single RichText before layout,
+ * because layout decisions (truncation across cell boundaries, justify
+ * padding) are joint properties of the whole segment. The OSC-8 link
+ * structure is preserved via spans across the concatenation. After
+ * layout, the result is returned as a single-cell array — the join
+ * structure is now interior to that one cell.
  */
 export function applySegmentLayout(
-  cells: StripCell[],
+  cells: readonly RichText[],
   options: SegmentLayoutOptions,
-): StripCell[] {
+): RichText[] {
   const { width, justify, truncate, truncateMarker = "…", baseStyle } = options;
 
-  // Step 1: "auto" — content-sized, no constraint.
-  if (width === "auto") return cells;
+  if (cells.length === 0) return [];
 
-  // Step 2: fixed width — measure, then truncate or pad.
-  const total = totalCellWidth(cells);
+  // Step 1: "auto" — content-sized, no width-driven constraint. Pass
+  // cells through unchanged so each link-cell stays its own cell (the
+  // Strip joiner can render edges between them).
+  if (width === "auto") return cells.slice();
 
-  return total > width
-    ? truncateCells(cells, width, truncate, truncateMarker, baseStyle)
-    : padCells(cells, width, justify, total, baseStyle);
+  // Step 2: fixed width — merge cells into one RichText so layout ops
+  // (truncate, align) operate across the segment.
+  const merged = mergeCells(cells, baseStyle);
+  if (merged.cellLength > width) {
+    merged.truncate(width, { mode: truncate, marker: truncateMarker });
+  } else if (merged.cellLength < width) {
+    merged.align(justify, width);
+  }
+
+  return [merged];
 }
 
-// ─── Width measurement ───────────────────────────────────────────────────────
-
-function totalCellWidth(cells: StripCell[]): number {
-  return cells.reduce((sum, c) => sum + cellLen(c.text), 0);
-}
-
-// ─── Truncation ──────────────────────────────────────────────────────────────
-
-function truncateCells(
-  cells: StripCell[],
-  targetWidth: number,
-  mode: TruncateMode,
-  marker: string,
+function mergeCells(
+  cells: readonly RichText[],
   baseStyle: Style | undefined,
-): StripCell[] {
-  const markerWidth = cellLen(marker);
-  const budget = Math.max(0, targetWidth - markerWidth);
-  const markerCell = new StripCell(marker, baseStyle);
-
-  if (mode === "right") {
-    return [...keepFromLeft(cells, budget), markerCell];
+): RichText {
+  if (cells.length === 1) {
+    const c = cells[0]!.copy();
+    c.end = "";
+    c.noWrap = true;
+    if (baseStyle !== undefined && !baseStyle.isNull) c.style = baseStyle;
+    return c;
   }
-
-  if (mode === "left") {
-    return [markerCell, ...keepFromRight(cells, budget)];
-  }
-
-  // middle: keep equal halves from both ends
-  const leftBudget = Math.floor(budget / 2);
-  const rightBudget = budget - leftBudget;
-  return [
-    ...keepFromLeft(cells, leftBudget),
-    markerCell,
-    ...keepFromRight(cells, rightBudget),
-  ];
-}
-
-/**
- * Take cells from the left, up to `budget` terminal columns.
- * The boundary cell's text is sliced via splitText() if it partially fits.
- *
- * [LAW:types-are-the-program] Known limitation: when the boundary cell is
- * parts-based (heterogeneous per-part fg/attrs under a shared cell-level
- * bg — only gitTaculous-shaped segments today), the slice rebuilds as
- * `new StripCell(splitText(cell.text), cell.style)`, where `cell.style`
- * carries only the cell-level bgcolor. Per-part fg/attrs are dropped on
- * the cut. rich-js's StripCell does not expose `_parts` publicly, so
- * slicing parts directly is not available. `groupToCell` already collapses
- * uniform-style multi-fragment groups to single-text cells (the common
- * case), so this affects ONLY segments that have *genuinely heterogeneous*
- * fg AND a fixed width that triggers truncation through a styled run —
- * no current segment configures that combination. Behavior is pinned by
- * `test/segment-layout.test.ts` (truncation through parts-based cell).
- */
-function keepFromLeft(cells: StripCell[], budget: number): StripCell[] {
-  let remaining = budget;
-  const result: StripCell[] = [];
-
-  for (const cell of cells) {
-    if (remaining <= 0) break;
-    const w = cellLen(cell.text);
-    if (w <= remaining) {
-      result.push(cell);
-      remaining -= w;
-    } else {
-      const [left] = splitText(cell.text, asCellCol(remaining));
-      if (left) result.push(new StripCell(left, cell.style));
-      remaining = 0;
-    }
-  }
-
-  return result;
-}
-
-/**
- * Take cells from the right, up to `budget` terminal columns.
- * The boundary cell's text is sliced via splitText() if it partially fits.
- *
- * Same parts-based-cell limitation as keepFromLeft applies on the right
- * boundary; see that function's comment for details.
- */
-function keepFromRight(cells: StripCell[], budget: number): StripCell[] {
-  let remaining = budget;
-  const result: StripCell[] = [];
-
-  for (let i = cells.length - 1; i >= 0; i--) {
-    if (remaining <= 0) break;
-    const cell = cells[i]!;
-    const w = cellLen(cell.text);
-    if (w <= remaining) {
-      result.unshift(cell);
-      remaining -= w;
-    } else {
-      // Take the right `remaining` columns: split at (w - remaining) from left.
-      const [, right] = splitText(cell.text, asCellCol(w - remaining));
-      if (right) result.unshift(new StripCell(right, cell.style));
-      remaining = 0;
-    }
-  }
-
-  return result;
-}
-
-// ─── Justification ───────────────────────────────────────────────────────────
-
-function padCells(
-  cells: StripCell[],
-  targetWidth: number,
-  justify: JustifyMode,
-  currentWidth: number,
-  baseStyle: Style | undefined,
-): StripCell[] {
-  const padAmount = targetWidth - currentWidth;
-  if (padAmount <= 0) return cells;
-
-  const pad = (n: number) => new StripCell(" ".repeat(n), baseStyle);
-
-  if (justify === "left") return [...cells, pad(padAmount)];
-  if (justify === "right") return [pad(padAmount), ...cells];
-
-  // center: split pad, left side gets the smaller half
-  const leftPad = Math.floor(padAmount / 2);
-  const rightPad = padAmount - leftPad;
-  return [pad(leftPad), ...cells, pad(rightPad)];
+  const merged = RichText.fromFragments(cells);
+  merged.end = "";
+  merged.noWrap = true;
+  if (baseStyle !== undefined && !baseStyle.isNull) merged.style = baseStyle;
+  return merged;
 }

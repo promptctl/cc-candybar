@@ -1,248 +1,90 @@
 // [LAW:dataflow-not-control-flow] The fragment walk is unconditional: every
 // fragment is visited; style.link (a value on the fragment) decides whether
-// it becomes a cell or joiner content. No control-flow branching on "are
-// there any cells" — variability lives entirely in the data.
+// it becomes its own cell or coalesces with neighbours. No branching on
+// "are there any cells" — variability lives entirely in the data.
 //
-// Cell-splitting algorithm:
-//   1. Iterate RichText[] left-to-right.
-//   2. fragment.style.link truthy → flush pending joiner run, emit fragment
-//      as its own StripCell.
-//   3. Otherwise → accumulate as joiner.
-//   4. End of input → flush final joiner run.
-// Joiner runs are flushed through coalescePlainRun (splits at bg changes).
-//
-// [LAW:types-are-the-program] A StripCell with style.link is the type asserting
-// "my entire content is clickable". Joiners — unlinked plain text — are never
-// absorbed into a link cell, because that would make the claim false for the
-// joiner range. Joiners always form their own cells.
+// [LAW:one-type-per-behavior] Cells are RichText. There is no parallel
+// "cell" type with a single-bg invariant: rich-js's joiner protocol asks
+// each item only for its edge style, so the interior can vary freely.
+// What was previously expressed as "split this run into N cells at bg
+// boundaries" or "lift the modal style to cell-level so parts survive a
+// slice" is now structurally impossible to need — RichText carries per-
+// character styling via spans, and every layout op (truncate / align /
+// pad / slice) preserves spans by construction.
 
-import { StripCell, Style } from "@promptctl/rich-js";
-import type { Span, StripCellPart, RichText } from "@promptctl/rich-js";
+import { RichText } from "@promptctl/rich-js";
+import type { Style } from "@promptctl/rich-js";
 
-// [LAW:single-enforcer] The only place that maps RichText[] → StripCell[].
-// All callers go through here; no second conversion path exists.
-//
-// [LAW:types-are-the-program] `baseStyle` is the segment-level default (typically
-// the resolved bg + fg). It flows in as data on every fragment via
-// `baseStyle.add(fragment.style)` so the fragment's own style wins on overlap.
-// Applying it HERE — before grouping — preserves per-fragment fg as cell parts:
-// every fragment becomes a part with its own (possibly merged) fg, sharing the
-// cell-level bg. Applying it AFTER cells exist would force `new StripCell(text,
-// merged)` and drop parts, because `_parts` is private to rich-js's StripCell.
-export function fragmentsToStripCells(
+/**
+ * Convert template-engine fragments (`RichText[]`) into Strip cells
+ * (`RichText[]`), splitting at OSC-8 link boundaries so each clickable
+ * region is its own cell. Non-link runs coalesce into one cell whose
+ * interior styling is carried as spans.
+ *
+ * `baseStyle` is the segment-level default (resolved bg + fg). It becomes
+ * the cell's wrapping style so segment-wide bg+fg cascade across every
+ * character, and per-fragment fg overlays land as spans on top.
+ *
+ * [LAW:single-enforcer] The only mapper from template fragments to Strip
+ * cells. Callers do not assemble cells by hand.
+ */
+export function fragmentsToCells(
   fragments: RichText[],
   baseStyle?: Style,
-): StripCell[] {
-  // [LAW:dataflow-not-control-flow] The base merge is unconditional in shape:
-  // when baseStyle has no contribution, the merge is identity. The fragments
-  // walk is the same code path either way.
-  const effective =
-    baseStyle !== undefined && !baseStyle.isNull
-      ? fragments.map((f) => withBaseStyle(f, baseStyle))
-      : fragments;
-
-  const cells: StripCell[] = [];
-  // [LAW:dataflow-not-control-flow] Accumulate full RichText (not just plain
-  // text) so joiner styling survives — style is data on the fragment, not a
-  // side-channel that can be re-attached from the text string alone.
-  let joiners: RichText[] = [];
-
-  for (const fragment of effective) {
-    if (fragment.style.link) {
-      cells.push(...coalescePlainRun(joiners));
-      joiners = [];
-      cells.push(richTextToCell(fragment));
-    } else {
-      joiners.push(fragment);
-    }
-  }
-
-  cells.push(...coalescePlainRun(joiners));
-
-  return cells;
-}
-
-// Layer baseStyle beneath fragment.style — same merge semantics rich-js's
-// `applyStyleToFragment` uses for nested style calls: `base.add(overlay)` keeps
-// every field the overlay sets and falls through to base for unset fields.
-function withBaseStyle(f: RichText, base: Style): RichText {
-  const copy = f.copy();
-  copy.style = base.add(f.style);
-  return copy;
-}
-
-// Convert a run of adjacent non-link fragments into cells.
-//
-// [LAW:one-source-of-truth] A StripCell carries exactly one joiner-visible
-// background (its cell-level style); parts may not carry bgcolor per the
-// single-style invariant. So the background is what defines a cell: the run is
-// split into one cell per maximal sub-run of equal bgcolor. Foreground and
-// attributes vary freely within a cell (as parts); a background change is a
-// cell boundary. Empty (no plain text) fragments contribute nothing.
-function coalescePlainRun(run: RichText[]): StripCell[] {
-  const cells: StripCell[] = [];
+): RichText[] {
+  const cells: RichText[] = [];
   let group: RichText[] = [];
 
   const flush = () => {
-    const cell = groupToCell(group);
-    if (cell) cells.push(cell);
+    if (!group.length) return;
+    const cell = buildCell(group, baseStyle);
+    if (cell.plain.length > 0) cells.push(cell);
     group = [];
   };
 
-  for (const frag of run) {
-    if (!frag.plain) continue;
-    if (group.length && frag.style.bgcolor !== group[0]!.style.bgcolor) flush();
-    group.push(frag);
+  for (const frag of fragments) {
+    if (frag.style.link) {
+      flush();
+      const cell = buildCell([frag], baseStyle);
+      if (cell.plain.length > 0) cells.push(cell);
+    } else {
+      group.push(frag);
+    }
   }
   flush();
 
   return cells;
 }
 
-// Convert one background-homogeneous fragment group into a single cell.
-//
-// A single fragment defines the cell's dominant style wholesale (fg + bg at
-// cell level, so both survive the later layout merge). Multiple fragments share
-// only their background: it lives at cell level (joiner-visible), while each
-// fragment's fg/attrs become part-level overlays with bgcolor stripped.
-function groupToCell(group: RichText[]): StripCell | null {
-  if (!group.length) return null;
-  if (group.length === 1) return richTextToCell(group[0]!);
-
-  const bgcolor = group[0]!.style.bgcolor;
-  const cellStyle = bgcolor !== undefined ? new Style({ bgcolor }) : undefined;
-
-  const parts: StripCellPart[] = [];
-  let text = "";
-
-  for (const frag of group) {
-    text += frag.plain;
-    const base = stripBgcolor(frag.style);
-    const fragParts: StripCellPart[] = frag.spans.length
-      ? spansToStripCellParts(frag.plain, frag.spans, 0)
-      : [{ text: frag.plain }];
-
-    for (const part of fragParts) {
-      // Inner span style (if any) wins over the fragment's wrapping style.
-      const merged = part.style ? base.add(part.style) : base;
-      const style = merged.isNull ? undefined : merged;
-      parts.push({ text: part.text, style });
-    }
+function buildCell(fragments: RichText[], baseStyle?: Style): RichText {
+  // [LAW:types-are-the-program] Each fragment carries its own style (and
+  // possibly spans). We merge baseStyle UNDER each fragment's style before
+  // assembling so the segment-wide default flows through every character,
+  // with the fragment's own style winning on overlap. That merged style
+  // then lands as a span on the assembled RichText, so per-fragment styles
+  // are addressable as overlays.
+  const layered =
+    baseStyle !== undefined && !baseStyle.isNull
+      ? fragments.map((f) => withBaseStyle(f, baseStyle))
+      : fragments;
+  const cell = RichText.fromFragments(layered);
+  cell.end = "";
+  cell.noWrap = true;
+  // [LAW:one-source-of-truth] For a single-fragment cell (a link cell, or a
+  // single-styled non-link fragment), the cell's wrapping style IS that
+  // fragment's effective style. This keeps the link / linked-region claim
+  // structurally at cell level (where joiners and click dispatch read it)
+  // and matches the old per-cell-style contract.
+  if (layered.length === 1) {
+    cell.style = layered[0]!.style;
+  } else if (baseStyle !== undefined && !baseStyle.isNull) {
+    cell.style = baseStyle;
   }
-
-  // [LAW:types-are-the-program] Choose the strongest cell shape the data
-  // admits. When every part shares the same style — the common case after a
-  // uniform baseStyle merge over a plain multi-fragment run — the single-text
-  // shape `(text, fullStyle)` is strictly stronger than `(parts, cellStyle)`:
-  // both produce identical bytes through rich-js (the serializer coalesces
-  // adjacent same-SGR Segments), but single-text survives layout-time slicing
-  // (`new StripCell(splitText(cell.text), cell.style)`) without losing per-part
-  // style. The parts shape is reserved for *genuinely heterogeneous* fg/attrs
-  // (e.g. gitTaculous's inline green/red flags), where it actually does work
-  // the single-text shape cannot.
-  if (allPartsShareStyle(parts)) {
-    const partStyle = parts[0]?.style;
-    const fullStyle = partStyle
-      ? cellStyle !== undefined
-        ? cellStyle.add(partStyle)
-        : partStyle
-      : cellStyle;
-    return new StripCell(text, fullStyle);
-  }
-
-  return new StripCell(parts, cellStyle);
+  return cell;
 }
 
-// True when every part carries the same style (or every part is unstyled).
-// `Style.equals` is the canonical structural-equality check on rich-js styles.
-function allPartsShareStyle(parts: StripCellPart[]): boolean {
-  if (parts.length <= 1) return true;
-  const first = parts[0]!.style;
-  return parts.every((p) => {
-    if (p.style === first) return true;
-    if (p.style === undefined || first === undefined) return false;
-    return p.style.equals(first);
-  });
-}
-
-// Convert a single RichText fragment to a StripCell.
-function richTextToCell(fragment: RichText): StripCell {
-  const cellStyle = fragment.style;
-  const plain = fragment.plain;
-  const spans = fragment.spans;
-
-  if (!spans.length) {
-    return new StripCell(plain, cellStyle);
-  }
-
-  const parts = spansToStripCellParts(plain, spans, 0);
-  return new StripCell(parts, cellStyle);
-}
-
-// Decompose text + spans (offset-adjusted) into StripCellPart[].
-// Spans are half-open [start, end) character ranges with a style overlay.
-// Any unstyled gap becomes a plain part (no style override).
-// [LAW:single-enforcer] bgcolor is stripped from part styles here — once —
-// because StripCell rejects parts with bgcolor (single-style invariant).
-function spansToStripCellParts(
-  text: string,
-  spans: readonly Span[],
-  spanOffset: number,
-): StripCellPart[] {
-  const parts: StripCellPart[] = [];
-  let cursor = 0;
-
-  for (const span of spans) {
-    const start = span.start + spanOffset;
-    const end = span.end + spanOffset;
-
-    if (cursor < start) {
-      parts.push({ text: text.slice(cursor, start) });
-    }
-
-    const spanText = text.slice(start, end);
-    if (spanText) {
-      const rawSpanStyle =
-        typeof span.style === "string" ? Style.parse(span.style) : span.style;
-      // Strip bgcolor so we don't violate the StripCell single-style
-      // invariant. Cell-level style governs bg; parts only carry fg/attrs.
-      const partStyle = stripBgcolor(rawSpanStyle);
-      parts.push({
-        text: spanText,
-        style: partStyle.isNull ? undefined : partStyle,
-      });
-    }
-
-    cursor = Math.max(cursor, end);
-  }
-
-  if (cursor < text.length) {
-    parts.push({ text: text.slice(cursor) });
-  }
-
-  return parts.length ? parts : [{ text }];
-}
-
-// Build a Style that carries everything from `s` except bgcolor.
-// [LAW:one-source-of-truth] bgcolor belongs on the cell, not on parts.
-function stripBgcolor(s: Style): Style {
-  if (s.bgcolor === undefined) return s;
-  return new Style({
-    color: s.color,
-    bold: s.bold,
-    dim: s.dim,
-    italic: s.italic,
-    underline: s.underline,
-    blink: s.blink,
-    blink2: s.blink2,
-    reverse: s.reverse,
-    conceal: s.conceal,
-    strike: s.strike,
-    underline2: s.underline2,
-    frame: s.frame,
-    encircle: s.encircle,
-    overline: s.overline,
-    link: s.link,
-    meta: s.meta,
-  });
+function withBaseStyle(f: RichText, base: Style): RichText {
+  const copy = f.copy();
+  copy.style = base.add(f.style);
+  return copy;
 }
