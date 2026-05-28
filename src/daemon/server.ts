@@ -623,8 +623,9 @@ async function handleRequest(req: Request): Promise<Response> {
       // applyClaudeCodeReserve so `width` always means "usable cells
       // post-reserve" — no semantic split between wire-supplied and
       // fallback values. Downstream code never sees termCols directly.
+      const termCols = sanitizeTermCols(req.termCols);
       const width =
-        getTerminalWidth(sanitizeTermCols(req.termCols)) ??
+        getTerminalWidth(termCols) ??
         applyClaudeCodeReserve(DEFAULT_TERMINAL_WIDTH);
       const renderOpts: BuildLineOptions = { ...RENDER_OPTS_BASE, width };
       // [LAW:dataflow-not-control-flow] Two outcomes fall out of one rule:
@@ -672,7 +673,7 @@ async function handleRequest(req: Request): Promise<Response> {
       const u = usageProvider.getStats();
       dlog(
         "info",
-        `render sid=${req.hookData.session_id ?? "?"} took=${ms}ms termCols=${req.termCols ?? "?"} width=${width} git=${g.size}/${g.hits}h/${g.misses}m usage=${u.size}/${u.hits}h/${u.misses}m err=${entry.lastError ? "Y" : "N"} warn=${entry.lastWarning ? "Y" : "N"}`,
+        `render sid=${req.hookData.session_id ?? "?"} took=${ms}ms termCols=${termCols ?? "?"} width=${width} git=${g.size}/${g.hits}h/${g.misses}m usage=${u.size}/${u.hits}h/${u.misses}m err=${entry.lastError ? "Y" : "N"} warn=${entry.lastWarning ? "Y" : "N"}`,
       );
       return { ok: true, output: output + "\n" };
     } catch (e) {
