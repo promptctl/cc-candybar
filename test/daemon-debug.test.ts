@@ -73,7 +73,7 @@ const TEST_CONFIG_SOURCE = `{
       fg: 'foreground',
     },
   },
-  layout: ['intro', 'plain'],
+  layout: [['intro', 'plain']],
 }`;
 
 // [LAW:single-enforcer] env-state is managed at one place — these hooks —
@@ -367,7 +367,7 @@ describe("introspectConfig with populated state", () => {
     const state = buildPopulatedState();
     const config = introspectConfig(state);
     expect(config).not.toBeNull();
-    expect(config?.layout).toEqual(["intro", "plain"]);
+    expect(config?.layout).toEqual([["intro", "plain"]]);
     expect(Object.keys(config?.variables ?? {}).sort()).toEqual([
       "derived",
       "greeting",
@@ -386,7 +386,7 @@ describe("introspectConfig with populated state", () => {
     const state = buildPopulatedState();
     const config = introspectConfig(state);
     const wireShape = JSON.parse(JSON.stringify(config));
-    expect(wireShape.layout).toEqual(["intro", "plain"]);
+    expect(wireShape.layout).toEqual([["intro", "plain"]]);
     expect(wireShape.variables.greeting.kind).toBe("literal");
     expect(wireShape.segments.intro.template).toBe(
       "{{ .greeting }} {{ .session.id }}",

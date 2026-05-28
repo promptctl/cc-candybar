@@ -27,7 +27,7 @@ const DFLT: DslConfig = {
     a: { template: " A " } as SegmentDecl,
     b: { template: " B " } as SegmentDecl,
   },
-  layout: ["a", "b"],
+  layout: [["a", "b"]],
 };
 
 describe("mergeWithDefault", () => {
@@ -72,12 +72,12 @@ describe("mergeWithDefault", () => {
   });
 
   test("layout: user replaces wholesale when present and non-empty", () => {
-    const raw: RawDslConfig = { layout: ["b", "a"] };
-    expect(mergeWithDefault(raw, DFLT).layout).toEqual(["b", "a"]);
+    const raw: RawDslConfig = { layout: [["b", "a"]] };
+    expect(mergeWithDefault(raw, DFLT).layout).toEqual([["b", "a"]]);
   });
 
   test("layout: absent → default layout", () => {
-    expect(mergeWithDefault({}, DFLT).layout).toEqual(["a", "b"]);
+    expect(mergeWithDefault({}, DFLT).layout).toEqual([["a", "b"]]);
   });
 
   test("layout: explicit [] → empty layout (user suppresses all default segments)", () => {
@@ -107,7 +107,7 @@ describe("validateConfig", () => {
   test("throws ConfigError when a merged layout references an unknown segment", () => {
     const merged: DslConfig = {
       ...DFLT,
-      layout: ["does-not-exist"],
+      layout: [["does-not-exist"]],
     };
     expect(() => validateConfig(merged, "<test>")).toThrow(ConfigError);
   });

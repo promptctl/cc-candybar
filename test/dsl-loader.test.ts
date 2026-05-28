@@ -582,9 +582,9 @@ describe("effectiveSegmentPalette — cascade order", () => {
 describe("loadDslConfig — layout", () => {
   test("string entries must match a declared segment", () => {
     expectIssue(
-      `{ segments: { cwd: { template: "t" } }, layout: ["cwd", "missing"] }`,
+      `{ segments: { cwd: { template: "t" } }, layout: [["cwd", "missing"]] }`,
       {
-        path: "layout[1]",
+        path: "layout[0][1]",
         message: 'layout entry "missing" does not match any declared segment',
       },
     );
@@ -592,9 +592,9 @@ describe("loadDslConfig — layout", () => {
 
   test("non-string entries reported", () => {
     expectIssue(
-      `{ segments: { cwd: { template: "t" } }, layout: ["cwd", 42] }`,
+      `{ segments: { cwd: { template: "t" } }, layout: [["cwd", 42]] }`,
       {
-        path: "layout[1]",
+        path: "layout[0][1]",
         message: "layout entries must be strings",
       },
     );
@@ -603,9 +603,41 @@ describe("loadDslConfig — layout", () => {
   test("valid layout passes through", () => {
     const cfg = parseAndValidate(
       FILE,
-      `{ segments: { a: { template: "x" }, b: { template: "y" } }, layout: ["a", "b", "a"] }`,
+      `{ segments: { a: { template: "x" }, b: { template: "y" } }, layout: [["a", "b", "a"]] }`,
     );
-    expect(cfg.layout).toEqual(["a", "b", "a"]);
+    expect(cfg.layout).toEqual([["a", "b", "a"]]);
+  });
+
+  test("multi-row layout passes through (row order preserved)", () => {
+    const cfg = parseAndValidate(
+      FILE,
+      `{ segments: { a: { template: "x" }, b: { template: "y" }, c: { template: "z" } }, layout: [["a", "b"], ["c"]] }`,
+    );
+    expect(cfg.layout).toEqual([["a", "b"], ["c"]]);
+  });
+
+  test("legacy flat string[] layout rejected with migration message", () => {
+    // [LAW:no-silent-fallbacks] A pre-multiline-layout-ilg config with a flat
+    // string[] layout must fail loudly. Auto-wrapping into [[...]] would
+    // silently convert an outdated file into a working one and hide the
+    // breaking change from users upgrading.
+    expectIssue(
+      `{ segments: { cwd: { template: "t" } }, layout: ["cwd"] }`,
+      {
+        path: "layout[0]",
+        message: "wrap your segment list in an outer []",
+      },
+    );
+  });
+
+  test("row entries must be arrays", () => {
+    expectIssue(
+      `{ segments: { cwd: { template: "t" } }, layout: [42] }`,
+      {
+        path: "layout[0]",
+        message: "layout row must be an array of segment names",
+      },
+    );
   });
 });
 
@@ -986,7 +1018,7 @@ describe("loadDslConfig — valid corpus", () => {
           width: 8, justify: "right", truncate: "middle",
         },
       },
-      layout: ["cwd", "branch", "load"],
+      layout: [["cwd", "branch", "load"]],
     }`;
     const cfg = parseAndValidate(FILE, source);
     expect(cfg.globals.hueStep).toBe(8);
@@ -994,7 +1026,7 @@ describe("loadDslConfig — valid corpus", () => {
       "branch", "constant", "cwd", "cwd_short", "home", "hostname",
       "load_avg", "now", "sid",
     ]);
-    expect(cfg.layout).toEqual(["cwd", "branch", "load"]);
+    expect(cfg.layout).toEqual([["cwd", "branch", "load"]]);
   });
 
   test("minimal valid config loads to canonical empty shape", () => {

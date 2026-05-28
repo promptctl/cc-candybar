@@ -155,7 +155,7 @@ describe("RenderCache", () => {
           segments: {
             s: { template: " {{ .x }} ", bg: "surface", fg: "foreground" },
           },
-          layout: ["s"],
+          layout: [["s"]],
         }),
       );
       const entry = cache.getOrCreate(dir, dir, undefined);
@@ -190,8 +190,11 @@ describe("RenderCache", () => {
       // First call: no file exists, falls back to default.
       const entry = cache.getOrCreate(dir, dir, undefined);
       expect(entry.configFilePath).toBeNull();
-      // The bundled default's layout is non-empty.
-      const defaultLayoutLen = entry.state!.config.layout.length;
+      // The bundled default's layout is non-empty. Use the flat segment
+      // count (across all rows) because the user fixture below uses one
+      // row of one segment — matching the default's row count of 1 — so
+      // row count alone wouldn't prove the file was picked up.
+      const defaultLayoutSegCount = entry.state!.config.layout.flat().length;
 
       // Give fs.watch a moment to attach to the parent dir before we
       // start writing into it. Without this, on macOS the writeFileSync
@@ -214,7 +217,7 @@ describe("RenderCache", () => {
               fg: "foreground",
             },
           },
-          layout: ["only"],
+          layout: [["only"]],
         }),
       );
       // fs.watch is async and platform-debounced (50ms in our registry).
@@ -222,9 +225,11 @@ describe("RenderCache", () => {
         label: `watcher should have observed new config file at ${cfg}`,
       });
       expect(entry.configFilePath).toBe(cfg);
-      expect(entry.state!.config.layout).toEqual(["only"]);
+      expect(entry.state!.config.layout).toEqual([["only"]]);
       // Sanity: was actually different from the default.
-      expect(entry.state!.config.layout.length).not.toBe(defaultLayoutLen);
+      expect(entry.state!.config.layout.flat().length).not.toBe(
+        defaultLayoutSegCount,
+      );
     } finally {
       for (const fn of cleanups) fn();
       cleanup();
@@ -250,13 +255,13 @@ describe("RenderCache", () => {
               fg: "foreground",
             },
           },
-          layout: ["only"],
+          layout: [["only"]],
         }),
       );
       const entry = cache.getOrCreate(dir, dir, undefined);
       expect(entry.lastError).toBeNull();
       expect(entry.configFilePath).toBe(cfg);
-      expect(entry.state!.config.layout).toEqual(["only"]);
+      expect(entry.state!.config.layout).toEqual([["only"]]);
     } finally {
       for (const fn of cleanups) fn();
       cleanup();
@@ -277,7 +282,7 @@ describe("RenderCache", () => {
         segments: {
           s: { template: " {{ .x }} ", bg: "surface", fg: "foreground" },
         },
-        layout: ["s"],
+        layout: [["s"]],
       });
       writeFileSync(cfgJson5, validCfg);
       writeFileSync(cfgJson, validCfg);

@@ -3,7 +3,7 @@
 //   pnpm demo:dsl                       # renders src/demo/statusline.json5
 //   pnpm demo:dsl path/to/other.json5   # renders any DSL config
 //
-// [LAW:single-enforcer] This renders through registerDslConfig + renderDslLine
+// [LAW:single-enforcer] This renders through registerDslConfig + renderDsl
 // — the exact spine the daemon calls. There is no demo-only render path; what
 // prints here is what production produces.
 //
@@ -31,7 +31,7 @@ import { VariableStore } from "../var-system/store.js";
 import { SourceRegistry } from "../var-system/sources.js";
 import { getThemePalette } from "../themes/palette-registry.js";
 import { listResolvablePaletteNames } from "../themes/cascade.js";
-import { registerDslConfig, renderDslLine } from "../dsl/render.js";
+import { registerDslConfig, renderDsl } from "../dsl/render.js";
 import { DEFAULT_TERMINAL_WIDTH } from "../render/strip.js";
 import { applyClaudeCodeReserve } from "../utils/terminal-width.js";
 
@@ -82,12 +82,12 @@ try {
 
   process.stdout.write(
     `\n  DSL demo — ${configPath}\n` +
-      `  rendered through registerDslConfig + renderDslLine (the daemon's spine)\n` +
+      `  rendered through registerDslConfig + renderDsl (the daemon's spine)\n` +
       `  watch the git branch segment appear and the clock tick:\n\n`,
   );
 
   for (let frame = 0; frame < FRAMES; frame++) {
-    const line = renderDslLine(
+    const line = renderDsl(
       config,
       compiled,
       store,
