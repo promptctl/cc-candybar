@@ -107,7 +107,11 @@ export interface CacheEntry {
 // resolution: projectDir, cwd, and the resolved `--config` file (if provided).
 // `projectDir`/`cwd` are real strings by construction (validated upstream);
 // `configFile` collapses absent → empty in the key, distinct from any real path.
-function cacheKey(projectDir: string, cwd: string, configFile: string | undefined): string {
+function cacheKey(
+  projectDir: string,
+  cwd: string,
+  configFile: string | undefined,
+): string {
   return projectDir + "\0" + cwd + "\0" + (configFile ?? "");
 }
 
@@ -180,7 +184,11 @@ export class RenderCache {
   // one. The registry owns timers, watchers, MobX reactions, and git
   // subscriptions — dropping it without dispose leaks every handle.
   private reloadInto(entry: CacheEntry): void {
-    const resolvedPath = resolveDslConfigPath(entry.projectDir, entry.cwd, entry.configFile);
+    const resolvedPath = resolveDslConfigPath(
+      entry.projectDir,
+      entry.cwd,
+      entry.configFile,
+    );
 
     // [LAW:dataflow-not-control-flow] Collision detection runs every reload,
     // independent of load success — even if the .json5 fails to parse, the
