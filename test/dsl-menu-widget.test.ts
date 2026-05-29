@@ -282,13 +282,32 @@ describe("k5a.6 — menu page-key validator", () => {
     // page writes confusingly at click time.
     const src = `{
       globals: {},
-      variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
+      variables: {
+        'session.id': { kind: 'input', path: 'session_id', default: '' },
+        'term.cols': { kind: 'input', path: 'term.cols', type: 'number', default: 80 },
+      },
       widgets: { m: { kind: 'menu', state: 'theme', items: [{ optionsFrom: 'themes', onClick: { set: 'theme' } }] } },
       segments: { s: { template: '{{ widget "m" }}', bg: 'surface', fg: 'foreground' } },
       layout: [['s']],
     }`;
     const config = parseAndValidate("<test>", src, ALLOWED);
     expect(deriveWidgetValidators(config).map((d) => d.key)).toEqual(["theme"]);
+  });
+
+  test("a menu config without term.cols fails at load (not at render)", () => {
+    // [LAW:verifiable-goals] The menu paginates against term.cols; a config that
+    // declares a menu but not the width variable is surfaced at config-load with
+    // a clear message, not a render-time "Unknown variable".
+    const src = `{
+      globals: {},
+      variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' }, p: { kind: 'state', key: 'p', default: '-1' } },
+      widgets: { m: { kind: 'menu', state: 'p', items: [{ optionsFrom: 'themes', onClick: { set: 'theme' } }] } },
+      segments: { s: { template: '{{ widget "m" }}', bg: 'surface', fg: 'foreground' } },
+      layout: [['s']],
+    }`;
+    expect(() => parseAndValidate("<test>", src, ALLOWED)).toThrow(
+      /term\.cols/,
+    );
   });
 
   test("baseline keys are not re-derived (buttons writing theme)", () => {

@@ -336,4 +336,56 @@ describe("RenderCache", () => {
       for (const fn of cleanups) fn();
     }
   });
+
+  test("a menu config loads into multiple cache entries without a validator clash", () => {
+    // [LAW:one-source-of-truth] A menu derives a writable page-key validator
+    // into the GLOBAL registry. Two cache entries sharing one config (one repo,
+    // two cwds) both register that key; ref-counting must let both succeed and
+    // keep the key valid until the last entry is gone. Before ref-counting, the
+    // second entry threw "already has a validator" and rendered a config error.
+    const { cache, cleanups } = makeCache();
+    const { dir, cleanup } = mkConfigDir();
+    cleanups.push(cleanup);
+    const cfg = join(dir, ".cc-candybar.json5");
+    writeFileSync(
+      cfg,
+      JSON.stringify({
+        globals: {},
+        variables: {
+          "session.id": { kind: "input", path: "session_id", default: "" },
+          "term.cols": {
+            kind: "input",
+            path: "term.cols",
+            type: "number",
+            default: 80,
+          },
+          page: { kind: "state", key: "menu-page", default: "-1" },
+        },
+        widgets: {
+          m: {
+            kind: "menu",
+            state: "menu-page",
+            items: [{ optionsFrom: "themes", onClick: { set: "theme" } }],
+          },
+        },
+        segments: {
+          s: { template: '{{ widget "m" }}', bg: "surface", fg: "foreground" },
+        },
+        layout: [{ when: "{{ ge (int .page) 0 }}", segments: ["s"] }],
+      }),
+    );
+    try {
+      const sub = join(dir, "sub");
+      const a = cache.getOrCreate(dir, dir, undefined);
+      const b = cache.getOrCreate(dir, sub, undefined);
+      // Both entries loaded cleanly — no validator clash on the shared page key.
+      expect(a.lastError).toBeNull();
+      expect(b.lastError).toBeNull();
+      expect(a.state).not.toBeNull();
+      expect(b.state).not.toBeNull();
+      expect(a).not.toBe(b);
+    } finally {
+      for (const fn of cleanups) fn();
+    }
+  });
 });

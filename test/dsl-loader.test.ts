@@ -559,10 +559,13 @@ describe("loadDslConfig — palette switch", () => {
 
 describe("loadDslConfig — layout", () => {
   test("string entries must match a declared segment", () => {
+    // Cross-ref runs on the merged, normalized config (rows already collapsed to
+    // the canonical { segments }), so it reports the canonical path — unlike
+    // parse-time structural validation, which still holds the raw row form.
     expectIssue(
       `{ segments: { cwd: { template: "t" } }, layout: [["cwd", "missing"]] }`,
       {
-        path: "layout[0][1]",
+        path: "layout[0].segments[1]",
         message: 'layout entry "missing" does not match any declared segment',
       },
     );

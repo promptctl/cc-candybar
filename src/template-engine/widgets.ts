@@ -23,6 +23,7 @@ import { toString as varToString, toNumber } from "../var-system/types.js";
 import { buildScope } from "./scope.js";
 import {
   isOptionsButtonItem,
+  TERM_COLS_VAR,
   type Action,
   type WidgetDecl,
 } from "../config/dsl-types.js";
@@ -395,7 +396,7 @@ function renderMenu(
     expandItemCells(item, scope, sessionId, store, [closeSet]),
   );
 
-  const width = toNumber(store.read("term.cols"));
+  const width = toNumber(store.read(TERM_COLS_VAR));
   const reserve =
     cellWidth(MENU_CLOSE) + cellWidth(MENU_PREV) + cellWidth(MENU_NEXT) + 3;
   const pages = paginate(

@@ -404,6 +404,12 @@ export interface MenuWidget {
   readonly items: readonly ButtonItem[];
 }
 
+// [LAW:one-source-of-truth] The conventional variable a menu paginates against —
+// the usable terminal width renderDsl injects each render. One name shared by
+// the declaration (default config), the renderer's read (widgets), and the
+// loader's "a menu requires this variable" check, so they cannot drift.
+export const TERM_COLS_VAR = "term.cols";
+
 export type WidgetDecl = ButtonsWidget | MenuWidget;
 
 export function isMenuWidget(w: WidgetDecl): w is MenuWidget {

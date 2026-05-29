@@ -52,6 +52,7 @@ import {
   type ValidatedConfig,
   type VariableDecl,
   type WidgetDecl,
+  TERM_COLS_VAR,
 } from "./dsl-types.js";
 import { DEFAULT_DSL_CONFIG } from "./default-dsl-config.js";
 import { listResolvablePaletteNames } from "../themes/policy.js";
@@ -1552,7 +1553,15 @@ function validateCrossReferences(ctx: ValidateCtx, cfg: DslConfig): void {
       const entry = row.segments[c]!;
       if (!Object.prototype.hasOwnProperty.call(cfg.segments, entry)) {
         ctx.issues.push({
-          path: `layout[${r}][${c}]`,
+          // [LAW:one-source-of-truth] Cross-ref runs on the MERGED, normalized
+          // config — every row is the canonical `{ segments }` shape, the raw
+          // bare-array vs object form already collapsed at parse and
+          // unrecoverable post-merge (the check must be post-merge to resolve
+          // default-provided segments). So the path describes the canonical
+          // model it traverses; the `line` already points the user at the
+          // `layout` key. (Parse-time structural validation, which still holds
+          // the raw form, emits form-accurate paths.)
+          path: `layout[${r}].segments[${c}]`,
           message: `layout entry "${entry}" does not match any declared segment`,
           line: findKeyLine(ctx.source, ["layout"]),
         });
@@ -1672,6 +1681,32 @@ function validateCrossReferences(ctx: ValidateCtx, cfg: DslConfig): void {
       line: findKeyLine(ctx.source, ["variables"]),
     });
   }
+
+  // [LAW:verifiable-goals] A `menu` widget paginates against the live terminal
+  // width, which it reads from the conventional TERM_COLS_VAR variable. The
+  // bundled default declares it, so a production config that merges the default
+  // always satisfies this; a programmatic/standalone config that declares a menu
+  // must declare it too. Surface the requirement at load — same anchor shape as
+  // session.id above — instead of a render-time "Unknown variable" from the menu.
+  if (
+    hasMenuWidget(cfg) &&
+    !Object.prototype.hasOwnProperty.call(cfg.variables, TERM_COLS_VAR)
+  ) {
+    ctx.issues.push({
+      path: `variables.${TERM_COLS_VAR}`,
+      message: `a menu widget paginates against the terminal width and requires a global "${TERM_COLS_VAR}" variable (the bundled default declares it as { kind: "input", path: "${TERM_COLS_VAR}", type: "number" }; a standalone config must declare it)`,
+      line: findKeyLine(ctx.source, ["variables"]),
+    });
+  }
+}
+
+// [LAW:dataflow-not-control-flow] Any menu widget ⇒ the config reads TERM_COLS_VAR
+// at render ⇒ it must be declared.
+function hasMenuWidget(cfg: DslConfig): boolean {
+  for (const widget of Object.values(cfg.widgets)) {
+    if (widget.kind === "menu") return true;
+  }
+  return false;
 }
 
 function hasStateKind(cfg: DslConfig): boolean {
