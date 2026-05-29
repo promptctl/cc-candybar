@@ -294,6 +294,23 @@ describe("k5a.6 — menu page-key validator", () => {
     expect(deriveWidgetValidators(config).map((d) => d.key)).toEqual(["theme"]);
   });
 
+  test("a menu config without session.id fails at load (navigation needs it)", () => {
+    // [LAW:verifiable-goals] A menu always emits set-state navigation URLs
+    // (✕/←/→), whose first segment is session.id — so a menu needs the global
+    // session.id even when its items carry no set actions. Surface at load.
+    const src = `{
+      globals: {},
+      variables: {
+        'term.cols': { kind: 'input', path: 'term.cols', type: 'number', default: 80 },
+        p: { kind: 'state', key: 'p', default: '-1' },
+      },
+      widgets: { m: { kind: 'menu', state: 'p', items: [{ glyph: 'x', onClick: { copy: 'hi' } }] } },
+      segments: { s: { template: '{{ widget "m" }}', bg: 'surface', fg: 'foreground' } },
+      layout: [['s']],
+    }`;
+    expect(() => parseAndValidate("<test>", src, ALLOWED)).toThrow(/session\.id/);
+  });
+
   test("a menu config without term.cols fails at load (not at render)", () => {
     // [LAW:verifiable-goals] The menu paginates against term.cols; a config that
     // declares a menu but not the width variable is surfaced at config-load with

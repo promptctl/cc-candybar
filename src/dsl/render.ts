@@ -204,7 +204,7 @@ function declareOne(
  * when/template/bg/fg strings once — renderDsl only evaluates.
  *
  * Call once per config (at startup or hot-reload). The daemon calls this;
- * the render loop calls renderDsl with the returned CompiledSegments.
+ * the render loop calls renderDsl with the returned CompiledConfig.
  *
  * HOT-RELOAD: pass a fresh VariableStore + SourceRegistry on each call.
  * defineBox/defineComputed throws if a variable name is already declared in

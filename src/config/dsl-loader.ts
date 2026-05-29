@@ -1671,13 +1671,18 @@ function validateCrossReferences(ctx: ValidateCtx, cfg: DslConfig): void {
   // ids loudly, so there is no silent corruption; this surfaces the SAME
   // requirement at load instead of at first click). Same anchor + same shape as
   // the state-kind requirement above; OR them so either trigger fires it once.
+  // [LAW:dataflow-not-control-flow] A menu ALWAYS emits set-state navigation URLs
+  // (✕/←/→ on its page key) regardless of whether its items carry set actions —
+  // so a menu needs session.id exactly like a set-action does. OR it in so a
+  // menu with only copy/open items (no state vars, no set actions) can't load
+  // while rendering broken navigation links with an empty session id.
   if (
-    (hasStateKind(cfg) || hasWidgetSetAction(cfg)) &&
+    (hasStateKind(cfg) || hasWidgetSetAction(cfg) || hasMenuWidget(cfg)) &&
     !Object.prototype.hasOwnProperty.call(cfg.variables, "session.id")
   ) {
     ctx.issues.push({
       path: "variables.session.id",
-      message: `state reads and widget set-actions require a global "session.id" variable (segment-local declarations do not satisfy this — declareState/set-state both read the global box; conventionally { kind: "input", path: "session_id" })`,
+      message: `state reads, widget set-actions, and menu navigation require a global "session.id" variable (segment-local declarations do not satisfy this — declareState/set-state both read the global box; conventionally { kind: "input", path: "session_id" })`,
       line: findKeyLine(ctx.source, ["variables"]),
     });
   }
