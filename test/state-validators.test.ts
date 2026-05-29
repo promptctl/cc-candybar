@@ -19,7 +19,6 @@ import {
   listStateKeys,
   makeAllowListValidator,
   registerStateValidator,
-  STATE_VALIDATORS,
   validateStateWrite,
   type ValidateResult,
 } from "../src/daemon/verbs/state-validators";
@@ -36,15 +35,6 @@ describe("state-validators registry contract", () => {
     // bindings, docs, panel migration) get the signal.
     expect([...listStateKeys()].sort()).toEqual(
       ["style", "theme", "toolbar-expanded"].sort(),
-    );
-  });
-
-  test("STATE_VALIDATORS keys match listStateKeys() exactly", () => {
-    // The exported ReadonlyMap view and the snapshot fn must agree by
-    // construction — both read the same private mutable Map. A drift
-    // here means somebody mutated one without the other.
-    expect([...STATE_VALIDATORS.keys()].sort()).toEqual(
-      [...listStateKeys()].sort(),
     );
   });
 
@@ -139,37 +129,46 @@ describe("state-validators registry contract", () => {
     if (!after.ok) expect(after.reason).toMatch(/unknown state key "mode"/);
   });
 
-  test("registerStateValidator throws on duplicate key (no silent shadow)", () => {
-    // [LAW:no-silent-fallbacks] Two widget configs both claiming a key
-    // is a config-authoring bug; silently shadowing the existing
-    // validator would hide it. The throw aborts the second
-    // registration entirely — partial installation is unrepresentable.
-    const disposer = registerStateValidator("mode-2", () => ({
+  test("registerStateValidator ref-counts a duplicate non-baseline key (no shadow)", () => {
+    // [LAW:one-source-of-truth] The same derived key legitimately registers more
+    // than once — two cache entries sharing one config, or a reload's
+    // new-before-old overlap. Ref-counting keeps the FIRST validator
+    // authoritative (no shadow) and the key survives until the LAST disposer
+    // runs. (Safe because every derived validator for a key is semantically
+    // identical — menus are the only deriver and a page key is always integer.)
+    const dispose1 = registerStateValidator("mode-2", () => ({
       ok: true,
       value: "x",
     }));
+    const dispose2 = registerStateValidator("mode-2", () => ({
+      ok: true,
+      value: "y",
+    }));
     try {
-      expect(() =>
-        registerStateValidator("mode-2", () => ({ ok: true, value: "y" })),
-      ).toThrow(/already has a validator/);
-      // The original validator is undisturbed.
+      // First validator stays authoritative — the second did not shadow it.
       expect(validateStateWrite("mode-2", "anything")).toEqual({
         ok: true,
         value: "x",
       });
+      // One disposer leaves the key alive (refCount still > 0).
+      dispose1();
+      expect(listStateKeys()).toContain("mode-2");
+      expect(validateStateWrite("mode-2", "anything").ok).toBe(true);
     } finally {
-      disposer();
+      dispose2();
     }
+    // Both disposed → the key is gone.
+    expect(listStateKeys()).not.toContain("mode-2");
   });
 
-  test("registerStateValidator throws on baseline key (theme/style/toolbar-expanded)", () => {
-    // The baseline three are no different from extensions at the
-    // dispatch layer — they share the same Map. A widget config that
-    // tries to override `theme` collides loudly rather than silently
-    // hijacking the canonical theme validator.
+  test("registerStateValidator throws on a baseline key (theme/style/toolbar-expanded)", () => {
+    // [LAW:no-silent-fallbacks] Baseline keys are permanent; a widget config that
+    // names its menu page key `theme` collides loudly at load rather than
+    // silently hijacking the canonical theme validator (which would then reject
+    // the menu's integer page writes confusingly at click time).
     expect(() =>
       registerStateValidator("theme", () => ({ ok: true, value: "x" })),
-    ).toThrow(/already has a validator/);
+    ).toThrow(/built-in state key/);
   });
 
   test("registerStateValidator rejects empty key", () => {

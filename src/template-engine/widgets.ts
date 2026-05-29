@@ -19,10 +19,11 @@
 import { RichText, Style } from "@promptctl/rich-js";
 import type { Engine, FuncMap, Template } from "@promptctl/go-template-js";
 import type { VariableStore } from "../var-system/store.js";
-import { toString as varToString } from "../var-system/types.js";
+import { toString as varToString, toNumber } from "../var-system/types.js";
 import { buildScope } from "./scope.js";
 import {
   isOptionsButtonItem,
+  TERM_COLS_VAR,
   type Action,
   type WidgetDecl,
 } from "../config/dsl-types.js";
@@ -61,9 +62,19 @@ interface CompiledButton {
   readonly actions: readonly CompiledAction[];
 }
 
-interface CompiledWidget {
-  readonly items: readonly CompiledButton[];
-}
+// [LAW:types-are-the-program] A compiled widget is discriminated by `kind`,
+// mirroring WidgetDecl. Both arms share the compiled item list; a menu adds the
+// page-state coordinates it paginates against — `stateKey` (the SessionState key
+// it writes via ←/→/close) and `stateVar` (the variable that reads it, resolved
+// from the key so reading and the row-`when` see one value).
+type CompiledWidget =
+  | { readonly kind: "buttons"; readonly items: readonly CompiledButton[] }
+  | {
+      readonly kind: "menu";
+      readonly items: readonly CompiledButton[];
+      readonly stateKey: string;
+      readonly stateVar: string;
+    };
 
 export type CompiledWidgets = ReadonlyMap<string, CompiledWidget>;
 
@@ -95,32 +106,56 @@ export function compileWidgets(
 ): CompiledWidgets {
   const out = new Map<string, CompiledWidget>();
   for (const [name, widget] of Object.entries(widgets)) {
-    const items: CompiledButton[] = widget.items.map((item) => {
-      const options = isOptionsButtonItem(item)
-        ? item.optionsFrom === "themes"
-          ? listResolvablePaletteNames()
-          : [...STYLE_ORDER]
-        : null;
-      const actions = item.onClick.map((a) => compileAction(engine, a, name));
-      // Resolve the set KEY to the VARIABLE that reads it for active-marking.
-      // Falls back to the key itself (the by-convention case where the var is
-      // named after the key); readVar yields "" if no such variable exists.
-      const setKey =
-        options !== null
-          ? (actions.find((a) => a.kind === "set")?.key ?? null)
-          : null;
-      const currentVar =
-        setKey !== null ? (stateKeyToVar.get(setKey) ?? setKey) : null;
-      const display =
-        options !== null
-          ? null
-          : joinDisplay(item.glyph, "label" in item ? item.label : undefined);
-      const glyph = options !== null ? (item.glyph ?? null) : null;
-      return { display, glyph, options, currentVar, actions };
-    });
-    out.set(name, { items });
+    const items = widget.items.map((item) =>
+      compileButton(engine, item, name, stateKeyToVar),
+    );
+    if (widget.kind === "menu") {
+      // [LAW:one-source-of-truth] Resolve the page KEY to the variable that
+      // reads it (same resolution as an option picker's active-mark) so the
+      // menu render and the row-`when` predicate read ONE value.
+      const stateVar = stateKeyToVar.get(widget.state) ?? widget.state;
+      out.set(name, {
+        kind: "menu",
+        items,
+        stateKey: widget.state,
+        stateVar,
+      });
+      continue;
+    }
+    out.set(name, { kind: "buttons", items });
   }
   return out;
+}
+
+// [LAW:one-source-of-truth] One item-compile path shared by both widget arms —
+// a menu's items are the SAME shape as a buttons widget's. options expand from
+// the canonical source lists; the set KEY resolves to the variable that reads it
+// for active-marking (falls back to the key itself when the var is named after
+// the key; readVar yields "" if no such variable exists).
+function compileButton(
+  engine: Engine<RichText>,
+  item: WidgetDecl["items"][number],
+  widgetName: string,
+  stateKeyToVar: ReadonlyMap<string, string>,
+): CompiledButton {
+  const options = isOptionsButtonItem(item)
+    ? item.optionsFrom === "themes"
+      ? listResolvablePaletteNames()
+      : [...STYLE_ORDER]
+    : null;
+  const actions = item.onClick.map((a) => compileAction(engine, a, widgetName));
+  const setKey =
+    options !== null
+      ? (actions.find((a) => a.kind === "set")?.key ?? null)
+      : null;
+  const currentVar =
+    setKey !== null ? (stateKeyToVar.get(setKey) ?? setKey) : null;
+  const display =
+    options !== null
+      ? null
+      : joinDisplay(item.glyph, "label" in item ? item.label : undefined);
+  const glyph = options !== null ? (item.glyph ?? null) : null;
+  return { display, glyph, options, currentVar, actions };
 }
 
 function compileAction(
@@ -236,6 +271,175 @@ function readVar(store: VariableStore, name: string): string {
   return store.has(name) ? varToString(store.read(name)) : "";
 }
 
+// [LAW:types-are-the-program] One clickable cell: its display text, its OSC-8
+// URL, and whether it is the current selection. Both arms render a list of
+// these; the only difference is buttons show all of them inline while a menu
+// shows one width-paginated page plus derived ←/→/✕ affordances.
+interface Cell {
+  readonly text: string;
+  readonly url: string;
+  readonly active: boolean;
+}
+
+// [LAW:one-source-of-truth] Expand one compiled item into its cells. An option
+// picker yields one cell per option (each binding its value into the set + the
+// active mark); a fixed button yields one cell. `extraSets` (a menu's close-set)
+// is appended ONLY to set-based items — a copy/open item composes to a single
+// non-set verb URL that can't also carry a set, so appending there is a no-op by
+// construction rather than a mis-batch.
+function expandItemCells(
+  item: CompiledButton,
+  scope: object,
+  sessionId: string,
+  store: VariableStore,
+  extraSets: readonly CompiledAction[],
+): Cell[] {
+  const allSet =
+    item.actions.length > 0 && item.actions.every((a) => a.kind === "set");
+  const actions = allSet ? [...item.actions, ...extraSets] : item.actions;
+  if (item.options !== null) {
+    const current =
+      item.currentVar !== null ? readVar(store, item.currentVar) : "";
+    return item.options.map((option) => ({
+      text: item.glyph ? `${item.glyph} ${option}` : option,
+      url: composeUrl(actions, scope, sessionId, option),
+      active: option === current,
+    }));
+  }
+  return [
+    {
+      text: item.display ?? "",
+      url: composeUrl(actions, scope, sessionId, null),
+      active: false,
+    },
+  ];
+}
+
+// [LAW:dataflow-not-control-flow] Join link-bearing spans with single-space
+// separators into ONE RichText. A widget is one top-level `{{ widget }}`
+// expression, so it must emit one value; many OSC-8 regions ride as spans on it.
+function assembleFragments(fragments: readonly RichText[]): RichText {
+  const spaced: RichText[] = [];
+  for (const frag of fragments) {
+    if (spaced.length > 0) spaced.push(new RichText(" "));
+    spaced.push(frag);
+  }
+  const assembled = RichText.fromFragments(spaced);
+  assembled.noWrap = true;
+  assembled.end = "";
+  return assembled;
+}
+
+const MENU_CLOSE = "✕";
+const MENU_PREV = "←";
+const MENU_NEXT = "→";
+
+// [LAW:single-enforcer] One display-width measure — rich-js's cellLength, the
+// same algebra FlexStrip wraps by — so pagination fits the line the strip
+// produces. No second width function.
+function cellWidth(text: string): number {
+  return new RichText(text).cellLength;
+}
+
+// [LAW:dataflow-not-control-flow] A pure function of (item widths, available
+// width, reserved width): greedy fill into pages, each page reserving room for
+// the ←/→/✕ affordances. The `page` value selects the slice; an oversized lone
+// item gets its own page (it can't be split). Infinite width = one page (the
+// degenerate "everything fits" case). Exported for direct unit testing.
+export function paginate(
+  widths: readonly number[],
+  available: number,
+  reserve: number,
+): number[][] {
+  if (!Number.isFinite(available)) {
+    return widths.length > 0 ? [widths.map((_, i) => i)] : [];
+  }
+  const usable = Math.max(1, available - reserve);
+  const pages: number[][] = [];
+  let cur: number[] = [];
+  let curW = 0;
+  for (let i = 0; i < widths.length; i++) {
+    const w = widths[i]!;
+    if (cur.length === 0) {
+      cur = [i];
+      curW = w;
+    } else if (curW + 1 + w <= usable) {
+      cur.push(i);
+      curW += 1 + w;
+    } else {
+      pages.push(cur);
+      cur = [i];
+      curW = w;
+    }
+  }
+  if (cur.length > 0) pages.push(cur);
+  return pages;
+}
+
+// [LAW:dataflow-not-control-flow] The page value (and the live width) select
+// which option cells render and which boundary arrows exist — a boundary arrow
+// is an ABSENT fragment, never a skipped branch. Every click is a `set` on the
+// page key: ←/→ navigate (render-computed p±1), ✕ closes (-1). Option clicks
+// already carry apply-and-close via expandItemCells's appended close-set.
+function renderMenu(
+  menu: Extract<CompiledWidget, { kind: "menu" }>,
+  scope: object,
+  sessionId: string,
+  store: VariableStore,
+): RichText {
+  const closeSet: CompiledAction = {
+    kind: "set",
+    key: menu.stateKey,
+    value: "-1",
+  };
+  const cells = menu.items.flatMap((item) =>
+    expandItemCells(item, scope, sessionId, store, [closeSet]),
+  );
+
+  const width = toNumber(store.read(TERM_COLS_VAR));
+  const widths = cells.map((c) => cellWidth(c.text));
+  // ✕ is always present; ←/→ appear only on a multi-page menu. Reserving arrow
+  // space unconditionally is self-fulfilling — a run that fits on one line with
+  // just ✕ could be forced to split, making the arrows appear unnecessarily. So
+  // paginate first with only the close overhead; if that already fits on one
+  // page, no arrows are needed. Only when it genuinely overflows do we
+  // re-paginate reserving ←/→ space, so every page of a multi-page menu has
+  // consistent room for navigation. [LAW:dataflow-not-control-flow] the page
+  // count (data) selects which reservation applies, not a config flag.
+  const closeReserve = cellWidth(MENU_CLOSE) + 1;
+  const arrowReserve = cellWidth(MENU_PREV) + 1 + cellWidth(MENU_NEXT) + 1;
+  const firstPass = paginate(widths, width, closeReserve);
+  const pages =
+    firstPass.length > 1
+      ? paginate(widths, width, closeReserve + arrowReserve)
+      : firstPass;
+
+  // [LAW:no-defensive-null-guards] The page value genuinely may be absent/empty
+  // (the key was never written) — that optionality is real, so parse it at this
+  // trust boundary (parseInt, not toNumber which throws on ""). The row-`when`
+  // gates rendering to page>=0; an out-of-range or unset value clamps into the
+  // existing page set, so the menu never indexes a non-existent page.
+  const rawPage = parseInt(readVar(store, menu.stateVar), 10);
+  const page = Number.isInteger(rawPage)
+    ? Math.max(0, Math.min(rawPage, pages.length - 1))
+    : 0;
+  const pageCells = pages[page] ?? [];
+
+  const setUrl = (value: number | string): string =>
+    clickUrl("set-state", sessionId, menu.stateKey, String(value));
+
+  const frags: RichText[] = [linkFragment(MENU_CLOSE, setUrl(-1), false)];
+  if (page > 0) frags.push(linkFragment(MENU_PREV, setUrl(page - 1), false));
+  for (const i of pageCells) {
+    const cell = cells[i]!;
+    frags.push(linkFragment(cell.text, cell.url, cell.active));
+  }
+  if (page < pages.length - 1) {
+    frags.push(linkFragment(MENU_NEXT, setUrl(page + 1), false));
+  }
+  return assembleFragments(frags);
+}
+
 // Render a named widget to one RichText (many link-bearing spans). The `widget`
 // template function delegates here.
 export function renderWidget(name: string, runtime: WidgetRuntime): RichText {
@@ -255,31 +459,17 @@ export function renderWidget(name: string, runtime: WidgetRuntime): RichText {
   const scope = buildScope(store);
   const sessionId = readVar(store, "session.id");
 
-  const fragments: RichText[] = [];
-  const push = (frag: RichText): void => {
-    if (fragments.length > 0) fragments.push(new RichText(" "));
-    fragments.push(frag);
-  };
-
-  for (const item of widget.items) {
-    if (item.options !== null) {
-      const current =
-        item.currentVar !== null ? readVar(store, item.currentVar) : "";
-      for (const option of item.options) {
-        const text = item.glyph ? `${item.glyph} ${option}` : option;
-        const url = composeUrl(item.actions, scope, sessionId, option);
-        push(linkFragment(text, url, option === current));
-      }
-    } else {
-      const url = composeUrl(item.actions, scope, sessionId, null);
-      push(linkFragment(item.display ?? "", url, false));
-    }
+  // [LAW:dataflow-not-control-flow] The widget kind selects the assembly; both
+  // arms produce one RichText of link-bearing spans through the same composer.
+  if (widget.kind === "menu") {
+    return renderMenu(widget, scope, sessionId, store);
   }
-
-  const assembled = RichText.fromFragments(fragments);
-  assembled.noWrap = true;
-  assembled.end = "";
-  return assembled;
+  const cells = widget.items.flatMap((item) =>
+    expandItemCells(item, scope, sessionId, store, []),
+  );
+  return assembleFragments(
+    cells.map((c) => linkFragment(c.text, c.url, c.active)),
+  );
 }
 
 // ─── FuncMap entry ─────────────────────────────────────────────────────────────

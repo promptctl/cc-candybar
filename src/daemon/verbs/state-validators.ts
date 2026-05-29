@@ -25,6 +25,8 @@
 // validator becomes the parsing boundary, the verb body the dataflow.
 
 import { listResolvablePaletteNames, STYLE_ORDER } from "../../themes/policy";
+import type { DslConfig } from "../../config/dsl-types";
+import { isMenuWidget } from "../../config/dsl-types";
 
 // [LAW:types-are-the-program] Discriminated union — every legal return is
 // either an accepted-and-canonicalized string or a structured rejection
@@ -105,64 +107,67 @@ const validateBoolean: KeyValidator = (raw) => {
   };
 };
 
-// [LAW:one-source-of-truth] THE list of state keys the click protocol can
-// write. The Map is mutable internally so widget configs can install
-// per-config entries at load time via registerStateValidator; the public
-// surface is a ReadonlyMap view and a snapshot-on-call listStateKeys().
+// [LAW:types-are-the-program] One registry entry. `permanent` marks the
+// built-in keys (theme/style/toolbar-expanded) that can never be removed or
+// re-claimed; `refCount` tracks how many live cache entries installed a derived
+// key. The same derived key legitimately registers more than once — multiple
+// cache entries share one config (one repo, two cwds), and a hot-reload builds
+// the new state's validators BEFORE disposing the old (so the key is briefly
+// held twice). Ref-counting keeps the key valid across the whole overlap and
+// removes it only when the last holder disposes.
+interface ValidatorEntry {
+  readonly validator: KeyValidator;
+  readonly permanent: boolean;
+  refCount: number;
+}
+
+// [LAW:one-source-of-truth] THE registry of state keys the click protocol can
+// write. Baseline keys are permanent (refCount is irrelevant for them);
+// widget-derived keys are ref-counted across cache entries.
 //
-// [LAW:types-are-the-program] `ReadonlyMap` is the type whose lookup is
-// `(key) → KeyValidator | undefined` with NO prototype chain — keys like
-// `__proto__` or `constructor` from an untrusted wire URL are ordinary
-// non-members, not truthy hits on Object.prototype properties. Plain
-// object literals (`Record<string, T>`) admit those keys as truthy
-// lookups that then crash on invocation — RENDER_FAILED instead of the
-// intended BAD_REQUEST. Map makes that crash unrepresentable rather than
-// guarded against, matching the in-memory dispatching pattern already
-// used in src/daemon/session-state.ts.
-const _STATE_VALIDATORS = new Map<string, KeyValidator>([
-  ["style", validateStyle],
-  ["theme", validateTheme],
-  ["toolbar-expanded", validateBoolean],
+// [LAW:types-are-the-program] A `Map` lookup is `(key) → entry | undefined` with
+// NO prototype chain — `__proto__`/`constructor` from an untrusted wire URL are
+// ordinary non-members, not truthy hits on Object.prototype. A plain object
+// would admit those as truthy lookups that crash on invocation (RENDER_FAILED
+// instead of the intended BAD_REQUEST). Map makes that unrepresentable.
+const _STATE_VALIDATORS = new Map<string, ValidatorEntry>([
+  ["style", { validator: validateStyle, permanent: true, refCount: 1 }],
+  ["theme", { validator: validateTheme, permanent: true, refCount: 1 }],
+  [
+    "toolbar-expanded",
+    { validator: validateBoolean, permanent: true, refCount: 1 },
+  ],
 ]);
 
-// [LAW:single-enforcer] One registry, one dispatch path. The exported
-// ReadonlyMap aliases the same underlying Map, so iteration and lookups
-// always see live state — there is no second store to drift against.
-export const STATE_VALIDATORS: ReadonlyMap<string, KeyValidator> =
-  _STATE_VALIDATORS;
-
-// [LAW:dataflow-not-control-flow] listStateKeys returns a fresh snapshot
-// on each call — the snapshot semantics IS the contract. The previous
-// frozen `STATE_KEYS` constant was wrong-by-construction once the
-// registry became dynamic: it would have frozen the baseline three at
-// module-load time and silently misreport the writable surface to every
-// caller after a widget config registered a new key. The function shape
-// makes "as-of-now" the only readable value.
+// [LAW:dataflow-not-control-flow] listStateKeys returns a fresh snapshot on each
+// call — the snapshot semantics IS the contract. A frozen constant would
+// silently misreport the writable surface after a widget config registered a key.
 export function listStateKeys(): readonly string[] {
   return [..._STATE_VALIDATORS.keys()];
 }
 
-// [LAW:locality-or-seam] The widget config (a config-load consumer) owns
-// the lifecycle of the validators it installs; this function returns a
-// disposer rather than coupling the registry to a global "config reload"
-// event. On hot-reload of a DSL config, the cache's reloadInto pattern
-// installs new validators into a local first and only disposes the old
-// disposers on successful swap — matching the SourceRegistry dispose-
-// before-swap contract that keeps a broken reload from corrupting the
-// last-known-good state. See src/daemon/cache/render.ts for the wiring.
+// [LAW:locality-or-seam] The widget config (a config-load consumer) owns the
+// lifecycle of the validators it installs; this returns a disposer rather than
+// coupling the registry to a global "config reload" event. The cache's
+// reloadInto installs the new state's validators, then disposes the old — the
+// dispose-before-swap contract that keeps a broken reload from corrupting
+// last-known-good. See src/daemon/cache/render.ts.
 //
-// [LAW:no-silent-fallbacks] Registering a key that already has a
-// validator (baseline or previously-installed) throws — silently
-// shadowing an existing validator would hide config-authoring bugs
-// where two widget configs both claim authority over a key. The
-// disposer for the conflict-losing config never runs (the throw
-// aborts the entire registration), so partial installation is
-// unrepresentable.
+// [LAW:no-silent-fallbacks] A baseline (permanent) key cannot be re-claimed —
+// re-registering one throws, so a menu naming its page key `theme` surfaces a
+// loud config-load error rather than silently shadowing the theme gate.
 //
-// [LAW:single-enforcer] The disposer removes exactly its own entry;
-// double-dispose is a no-op (the key may have been re-registered by a
-// new config in between), not a structural error. Idempotence on the
-// caller side is the contract.
+// [LAW:one-source-of-truth] A non-permanent key that is already installed is
+// ref-counted, NOT shadowed: the FIRST validator stays authoritative and the
+// count increments. This is safe because every derived validator for a given
+// key is semantically identical — menus are the only deriver and a page key is
+// always integer-valued. (A future heterogeneous deriver — e.g. allow-list
+// keys from buttons — must add a compatibility check before this assumption
+// holds for it.) Keeping the first validator means two cache entries sharing a
+// key, and a reload's new-before-old overlap, both resolve to one consistent gate.
+//
+// [LAW:single-enforcer] The disposer decrements exactly once (idempotent via the
+// `active` flag) and removes the key only when the count reaches zero.
 export function registerStateValidator(
   key: string,
   validator: KeyValidator,
@@ -170,13 +175,10 @@ export function registerStateValidator(
   if (!key) {
     throw new Error("registerStateValidator: key is required");
   }
-  // [LAW:types-are-the-program] The set-state wire parses its tail by
-  // splitting on `/`, so a slash-bearing key can never be addressed on
-  // the wire — it would be split into two separate segments before
-  // dispatch. Listing such a key in listStateKeys() while making it
-  // structurally unreachable is the kind of registry-vs-wire drift
-  // [LAW:one-source-of-truth] forbids. Reject at registration so the
-  // unreachable-but-listed state is unrepresentable.
+  // [LAW:types-are-the-program] The set-state wire splits its tail on `/`, so a
+  // slash-bearing key can never be addressed — listing it would be registry-vs-
+  // wire drift. Reject at registration so the unreachable-but-listed state is
+  // unrepresentable.
   if (key.includes("/")) {
     throw new Error(
       `registerStateValidator: key "${key}" contains "/" — the set-state ` +
@@ -184,21 +186,36 @@ export function registerStateValidator(
         `addressed. Use a slash-free key.`,
     );
   }
-  if (_STATE_VALIDATORS.has(key)) {
-    throw new Error(
-      `registerStateValidator: key "${key}" already has a validator ` +
-        `(existing keys: ${[..._STATE_VALIDATORS.keys()].join(", ")})`,
-    );
+  const existing = _STATE_VALIDATORS.get(key);
+  if (existing) {
+    if (existing.permanent) {
+      throw new Error(
+        `registerStateValidator: key "${key}" is a built-in state key and ` +
+          `cannot be re-claimed (built-in keys: ${[...baselineKeys()].join(", ")})`,
+      );
+    }
+    existing.refCount++;
+  } else {
+    _STATE_VALIDATORS.set(key, { validator, permanent: false, refCount: 1 });
   }
-  _STATE_VALIDATORS.set(key, validator);
   let active = true;
   return () => {
     if (!active) return;
     active = false;
-    if (_STATE_VALIDATORS.get(key) === validator) {
-      _STATE_VALIDATORS.delete(key);
+    const entry = _STATE_VALIDATORS.get(key);
+    if (entry && !entry.permanent) {
+      entry.refCount--;
+      if (entry.refCount <= 0) _STATE_VALIDATORS.delete(key);
     }
   };
+}
+
+function baselineKeys(): readonly string[] {
+  const out: string[] = [];
+  for (const [key, entry] of _STATE_VALIDATORS) {
+    if (entry.permanent) out.push(key);
+  }
+  return out;
 }
 
 // [LAW:one-type-per-behavior] The "values come from list Y" pattern IS
@@ -262,6 +279,65 @@ export function makeAllowListValidator(
   };
 }
 
+// [LAW:types-are-the-program] An integer-valued state key (a menu's page
+// index). The wire delivers a string; the validator IS the parse boundary —
+// it accepts only `^-?\d+$` and canonicalizes to the minimal decimal form, so
+// "007"/"-0" can't persist a non-canonical page that the next render's `int`
+// read would have to re-normalize. Negative is legal: -1 is the menu's CLOSED
+// sentinel.
+const INT_RE = /^-?\d+$/;
+export function makeIntValidator(label: string): KeyValidator {
+  return (raw) => {
+    if (!raw) return { ok: false, reason: `${label} value is required` };
+    if (!INT_RE.test(raw)) {
+      return { ok: false, reason: `${label} must be an integer, got "${raw}"` };
+    }
+    // [LAW:types-are-the-program] Canonicalize as a pure decimal string —
+    // strip leading zeros, fold "-0" → "0" — NOT via parseInt/String, which for
+    // a >= 1e21 magnitude would emit scientific notation ("1e+21") that a later
+    // parseInt(_, 10) reads back as 1. A page index is small in practice, but
+    // the canonical form must hold for every accepted input, not just small ones.
+    const neg = raw[0] === "-";
+    const digits = (neg ? raw.slice(1) : raw).replace(/^0+/, "");
+    if (digits === "") return { ok: true, value: "0" };
+    return { ok: true, value: neg ? `-${digits}` : digits };
+  };
+}
+
+// [LAW:one-source-of-truth] The writable-key surface a config's widgets need is
+// DERIVED from the widget declarations — the same data the renderer paginates
+// from is the gate the wire enforces, so they cannot diverge. A menu writes its
+// `state` page key (←/→ navigation + apply-and-close to -1); that key is
+// integer-valued. Buttons write only baseline keys (theme/style) for now;
+// allow-list derivation for custom buttons keys is a separate follow-up.
+//
+// [LAW:no-silent-fallbacks] A baseline-colliding page key is NOT skipped — it
+// is derived like any other so registerStateValidator throws on the duplicate,
+// surfacing a config-load error (a menu naming its page key `theme` is a
+// misconfiguration: an integer page key cannot share a column with the theme
+// allow-list gate). Skipping would silently leave the theme validator in place
+// and the menu's integer ←/→ writes would fail confusingly at click time
+// instead of loudly at load. Only the within-config dedupe survives: two menus
+// sharing one page key share one int validator (legitimate — same page state),
+// registered once rather than throwing on the second.
+export function deriveWidgetValidators(
+  config: DslConfig,
+): ReadonlyArray<{ readonly key: string; readonly validator: KeyValidator }> {
+  const out = new Map<string, KeyValidator>();
+  for (const widget of Object.values(config.widgets)) {
+    if (!isMenuWidget(widget)) continue;
+    const key = widget.state;
+    if (out.has(key)) continue;
+    // [LAW:one-source-of-truth] Label from the KEY, not the widget name: the
+    // registry ref-counts by key and keeps the first validator authoritative, so
+    // a name-based label would misattribute an error to whichever config/cache
+    // entry happened to register first. A key-based label makes every derived
+    // validator for a key byte-identical.
+    out.set(key, makeIntValidator(`menu page "${key}"`));
+  }
+  return [...out.entries()].map(([key, validator]) => ({ key, validator }));
+}
+
 // [LAW:dataflow-not-control-flow] Single entry point for validation: the
 // caller hands over (key, value), this returns a uniform ValidateResult
 // regardless of whether the key was known. The verb body never branches
@@ -270,12 +346,12 @@ export function validateStateWrite(
   key: string,
   rawValue: string,
 ): ValidateResult {
-  const validator = _STATE_VALIDATORS.get(key);
-  if (!validator) {
+  const entry = _STATE_VALIDATORS.get(key);
+  if (!entry) {
     return {
       ok: false,
       reason: `unknown state key "${key}" (have: ${listStateKeys().join(", ")})`,
     };
   }
-  return validator(rawValue);
+  return entry.validator(rawValue);
 }

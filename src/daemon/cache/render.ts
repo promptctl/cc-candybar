@@ -11,7 +11,11 @@ import {
   ConfigError,
 } from "../../config/dsl-loader.js";
 import type { ValidatedConfig } from "../../config/dsl-types.js";
-import { registerDslConfig, type CompiledSegments } from "../../dsl/render.js";
+import { registerDslConfig, type CompiledConfig } from "../../dsl/render.js";
+import {
+  deriveWidgetValidators,
+  registerStateValidator,
+} from "../verbs/state-validators.js";
 import { VariableStore } from "../../var-system/store.js";
 import { SourceRegistry } from "../../var-system/sources.js";
 import type { GitDataProvider } from "./git.js";
@@ -65,9 +69,14 @@ export interface DslRenderState {
   readonly config: ValidatedConfig;
   readonly store: VariableStore;
   readonly registry: SourceRegistry;
-  readonly compiled: CompiledSegments;
+  readonly compiled: CompiledConfig;
   readonly neededInputPaths: ReadonlySet<string>;
   readonly lastRenderCellsBySegment: Map<string, readonly RichText[]>;
+  // [LAW:single-enforcer] Disposers for the SessionState validators this config
+  // installed (derived from its menu widgets). Disposed on swap/eviction in the
+  // same dispose-before-swap transaction as the SourceRegistry, so a reload
+  // never leaks a stale writable-key entry or shadows the next config's keys.
+  readonly validatorDisposers: ReadonlyArray<() => void>;
 }
 
 // [LAW:one-source-of-truth] Each entry tracks the last *valid* DSL state +
@@ -159,8 +168,10 @@ export class RenderCache {
         const evicted = this.entries.get(oldest);
         // [LAW:single-enforcer] dispose the registry on eviction — it owns
         // timers, fs watchers, and git subscriptions. Dropping the entry
-        // without dispose leaks every async handle the config declared.
+        // without dispose leaks every async handle the config declared. The
+        // validator disposers free this entry's writable-key entries too.
         evicted?.state?.registry.dispose();
+        evicted?.state?.validatorDisposers.forEach((dispose) => dispose());
         evicted?.watcher?.release();
         this.entries.delete(oldest);
       }
@@ -220,10 +231,13 @@ export class RenderCache {
       return;
     }
 
-    // [LAW:single-enforcer] Dispose-before-swap: the old registry owns
-    // timers, fs watchers, MobX reactions, and git subscriptions. Dropping
-    // the reference without dispose() would leak every handle.
+    // [LAW:single-enforcer] Dispose-before-swap: the old registry owns timers,
+    // fs watchers, MobX reactions, and git subscriptions; the old validator
+    // disposers own this entry's writable-key entries in the global registry.
+    // Both are disposed in one step before the swap — dropping either reference
+    // without disposing would leak handles or shadow the new config's keys.
     entry.state?.registry.dispose();
+    entry.state?.validatorDisposers.forEach((dispose) => dispose());
     entry.lastError = null;
     entry.state = newState;
     this.refreshWatcher(entry, resolvedPath);
@@ -264,7 +278,13 @@ export class RenderCache {
       this.deps.sessionState,
     );
 
-    let compiled: CompiledSegments;
+    let compiled: CompiledConfig;
+    // [LAW:single-enforcer] Validators this config installs (one per menu page
+    // key) are part of the same construction transaction as the registry: any
+    // failure (registration, a duplicate-key throw) disposes every handle built
+    // so far — registry AND already-installed validators — before rethrowing, so
+    // reloadInto preserves the prior last-known-good with nothing half-installed.
+    const validatorDisposers: Array<() => void> = [];
     try {
       // [LAW:locality-or-seam] Pass the store so the config's `widget`
       // references can read session.id + current picker values from the same
@@ -273,7 +293,16 @@ export class RenderCache {
         cwd: entry.cwd,
         store,
       });
+      // [LAW:one-source-of-truth] Derive the writable-key validators from the
+      // config's widgets (same data the renderer paginates from) and register
+      // them so the click wire accepts the menus' ←/→/apply-close set-state
+      // writes. registerStateValidator throws on a duplicate key — caught here
+      // to roll the whole reload back.
+      for (const { key, validator } of deriveWidgetValidators(config)) {
+        validatorDisposers.push(registerStateValidator(key, validator));
+      }
     } catch (err) {
+      for (const dispose of validatorDisposers) dispose();
       registry.dispose();
       throw err;
     }
@@ -290,6 +319,7 @@ export class RenderCache {
       compiled,
       neededInputPaths: buildNeededPrefixes(config),
       lastRenderCellsBySegment: new Map<string, readonly RichText[]>(),
+      validatorDisposers,
     };
   }
 

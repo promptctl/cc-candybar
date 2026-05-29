@@ -27,7 +27,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
 
   test("every layout entry is a declared segment", () => {
     for (const row of DEFAULT_DSL_CONFIG.layout) {
-      for (const segName of row) {
+      for (const segName of row.segments) {
         expect(DEFAULT_DSL_CONFIG.segments).toHaveProperty(segName);
       }
     }
@@ -87,7 +87,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
       // that segment's text. `home` flows through the augmented payload
       // (kind: "input", path: "home" in DEFAULT_DSL_CONFIG) — we set it
       // on the payload object directly; no env-var mutation needed.
-      const dirOnly = { ...parsed, layout: [["directory"]] };
+      const dirOnly = { ...parsed, layout: [{ segments: ["directory"] }] };
       const store = new VariableStore();
       const registry = new SourceRegistry(store);
       try {
@@ -199,7 +199,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
       linesRemoved?: number;
     }): string {
       const parsed = parseAndValidate("<default>", SERIALIZED);
-      const metricsOnly = { ...parsed, layout: [["metrics"]] };
+      const metricsOnly = { ...parsed, layout: [{ segments: ["metrics"] }] };
       const store = new VariableStore();
       const registry = new SourceRegistry(store);
       try {
@@ -280,7 +280,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
         const parsed = parseAndValidate("<default>", SERIALIZED);
         const blockOnly = {
           ...parsed,
-          layout: [["block"]],
+          layout: [{ segments: ["block"] }],
           variables: {
             ...parsed.variables,
             "block.budget.warningThreshold": {
