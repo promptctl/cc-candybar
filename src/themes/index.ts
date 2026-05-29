@@ -1,6 +1,7 @@
 // [LAW:single-enforcer] Public barrel for the themes module. Name/string policy
-// lives in policy.ts; the only color math cc-candybar keeps (OKLCH hue rotation)
-// lives in oklch.ts. rich-js owns palettes, hydration, and the anchor rule.
+// lives in policy.ts; per-segment palette transposition lives in
+// transposed-resolver.ts. rich-js owns palettes, hydration, all color math, and
+// the anchor rule — cc-candybar keeps no color arithmetic of its own.
 export {
   resolvePaletteName,
   listResolvablePaletteNames,
@@ -10,4 +11,4 @@ export {
   DISPLAY_STYLES,
 } from "./policy.js";
 
-export { rotateHue } from "./oklch.js";
+export { transposedResolver } from "./transposed-resolver.js";

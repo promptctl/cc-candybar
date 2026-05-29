@@ -1,9 +1,10 @@
 // [LAW:behavior-not-structure] Tests assert observable output (resolved hex
 // values, Style fields, thrown errors) — never internal state.
 
-import { Palette, PaletteResolver, parseRgbHex, ColorSpec } from "@promptctl/rich-js";
+import { Palette, PaletteResolver, parseRgbHex, ColorSpec, ColorRgba } from "@promptctl/rich-js";
 import { createCcCandybarEngine } from "../src/template-engine/engine";
 import { resolveSegmentColors, ColorSpecError } from "../src/template-engine/colors";
+import { transposedResolver } from "../src/themes/transposed-resolver";
 import type { Template } from "@promptctl/go-template-js";
 import type { RichText } from "@promptctl/rich-js";
 
@@ -17,6 +18,9 @@ function makeTestResolver(): PaletteResolver {
     ["success", parseRgbHex("44cc88")],
     ["surface", parseRgbHex("1a1a2e")],
     ["text", parseRgbHex("eeeeee")],
+    // transposePalette derives the dark flag from "background" (required for
+    // any non-identity key); real registry palettes always carry it.
+    ["background", parseRgbHex("12121a")],
   ]);
   return new PaletteResolver(new Palette("test", true, vars));
 }
@@ -221,73 +225,74 @@ describe("both bg and fg resolved", () => {
 });
 
 // ────────────────────────────────────────────────────────────────────────────
-// 9. hueStep threading — per-segment hue rotation (wd5.4)
+// 9. Per-segment hue = WHICH palette (whole-theme transposition)
+//
+// [LAW:behavior-not-structure] The hue behavior is now a property of the palette
+// the resolver carries, not an option of resolveSegmentColors. These assert the
+// observable: resolved hex through a transposed resolver. The anchor rule itself
+// (error/success/warning hue-locked, info NOT) is owned + exhaustively tested in
+// rich-js (transposePalette / ANCHORED_ROOTS); here we assert only that
+// cc-candybar wires it through correctly.
 // ────────────────────────────────────────────────────────────────────────────
 
-describe("hueStep threading", () => {
-  test("hueRotationDegrees 0 → identical output to no rotation (identity)", () => {
-    const resolver = makeTestResolver();
-    const bgTpl = parseTemplate("primary");
-    const withZero = resolveSegmentColors(resolver, bgTpl, undefined, {}, { hueRotationDegrees: 0 });
-    const withNone = resolveSegmentColors(resolver, bgTpl, undefined, {});
-    expect(withZero.bgcolor?.value?.hex).toBe(withNone.bgcolor?.value?.hex);
+// Per-channel max delta — sRGB↔OKLCH round-trips quantize by ±1.
+function maxChannelDelta(a: ColorRgba, b: ColorRgba): number {
+  return Math.max(
+    Math.abs(a.red - b.red),
+    Math.abs(a.green - b.green),
+    Math.abs(a.blue - b.blue),
+  );
+}
+
+describe("per-segment hue via palette transposition", () => {
+  const base = makeTestResolver();
+
+  test("hueShift 0 → identity: resolved color is byte-exact to base", () => {
+    const shifted = transposedResolver(base, 0);
+    const a = shifted.resolve("primary")!;
+    const b = base.resolve("primary")!;
+    expect(maxChannelDelta(a, b)).toBe(0);
   });
 
-  test("hueRotationDegrees 30 → bg color differs from un-rotated primary", () => {
-    const resolver = makeTestResolver();
-    const bgTpl = parseTemplate("primary");
-    const rotated = resolveSegmentColors(resolver, bgTpl, undefined, {}, { hueRotationDegrees: 30 });
-    const original = resolveSegmentColors(resolver, bgTpl, undefined, {});
-    expect(rotated.bgcolor?.value?.hex).not.toBe(original.bgcolor?.value?.hex);
+  test("hueShift 30 → non-anchored color shifts substantially", () => {
+    const shifted = transposedResolver(base, 30);
+    const a = shifted.resolve("primary")!;
+    const b = base.resolve("primary")!;
+    expect(maxChannelDelta(a, b)).toBeGreaterThan(5);
   });
 
-  test("hueRotationDegrees 30 → error spec is exempt (semantic color unchanged)", () => {
-    const resolver = makeTestResolver();
-    const bgTpl = parseTemplate("error");
-    const rotated = resolveSegmentColors(resolver, bgTpl, undefined, {}, { hueRotationDegrees: 30 });
-    expect(rotated.bgcolor?.value?.hex).toBe("#ff4444");
+  test("hueShift 30 → anchored specs (error/success) keep their hue", () => {
+    const shifted = transposedResolver(base, 30);
+    // error/success are in rich-js ANCHORED_ROOTS: hue-locked under transpose,
+    // so they survive within round-trip tolerance while primary (above) moves.
+    expect(maxChannelDelta(shifted.resolve("error")!, base.resolve("error")!)).toBeLessThanOrEqual(2);
+    expect(maxChannelDelta(shifted.resolve("success")!, base.resolve("success")!)).toBeLessThanOrEqual(2);
   });
 
-  test("hueRotationDegrees 90 → warning spec is exempt (semantic color unchanged)", () => {
-    const resolver = makeTestResolver();
-    // warning is a semantic spec; add it to the test palette
-    const vars = new Map([
-      ["warning", parseRgbHex("ffaa00")],
-      ["primary", parseRgbHex("4488ff")],
-    ]);
-    const r = new PaletteResolver(new Palette("test", true, vars));
-    const bgTpl = parseTemplate("warning", r);
-    const rotated = resolveSegmentColors(r, bgTpl, undefined, {}, { hueRotationDegrees: 90 });
-    expect(rotated.bgcolor?.value?.hex).toBe("#ffaa00");
+  test("hueShift 30 → 'info' is NOT anchored (transposes like any color)", () => {
+    // The old local SEMANTIC_SPECS list exempted 'info'; rich-js ANCHORED_ROOTS
+    // does not. This is the drift the reshaping removed.
+    const shifted = transposedResolver(base, 30);
+    expect(
+      maxChannelDelta(shifted.resolve("info")!, base.resolve("info")!),
+    ).toBeGreaterThan(5);
   });
 
-  test("hueRotationDegrees 30 → success spec is exempt (semantic color unchanged)", () => {
-    const resolver = makeTestResolver(); // success: #44cc88
-    const bgTpl = parseTemplate("success");
-    const rotated = resolveSegmentColors(resolver, bgTpl, undefined, {}, { hueRotationDegrees: 30 });
-    expect(rotated.bgcolor?.value?.hex).toBe("#44cc88");
+  test("memoized: same (palette, hueShift) returns the same resolver instance", () => {
+    expect(transposedResolver(base, 30)).toBe(transposedResolver(base, 30));
   });
 
-  test("hueRotationDegrees 30 → info spec is exempt (semantic color unchanged)", () => {
-    const resolver = makeTestResolver(); // info: #44aaff
-    const bgTpl = parseTemplate("info");
-    const rotated = resolveSegmentColors(resolver, bgTpl, undefined, {}, { hueRotationDegrees: 30 });
-    expect(rotated.bgcolor?.value?.hex).toBe("#44aaff");
-  });
-
-  test("fg auto-contrast resolves against the rotated bg, not the original", () => {
-    const resolver = makeTestResolver();
-    const bgTpl = parseTemplate("primary"); // #4488ff (blue)
-    const fgTpl = parseTemplate("auto");
-    // Rotate 180 degrees: blue → yellow-ish. The auto-contrast fg should
-    // differ between rotated and unrotated because the bg luminance changes.
-    const rotated = resolveSegmentColors(resolver, bgTpl, fgTpl, {}, { hueRotationDegrees: 180 });
-    const original = resolveSegmentColors(resolver, bgTpl, fgTpl, {});
-    // Both should have a defined fg; they may or may not differ (luminance of
-    // 180-rotated blue could be similar). Just verify fg is always present.
-    expect(rotated.color).toBeDefined();
-    expect(original.color).toBeDefined();
-    // Rotated bg must differ from original bg.
-    expect(rotated.bgcolor?.value?.hex).not.toBe(original.bgcolor?.value?.hex);
+  test("literal fg is transposed too (bg/fg pair preserved, not output-only)", () => {
+    // The key fix: transposing the whole palette means a LITERAL fg token
+    // shifts alongside bg. The old output-only bg rotation left a literal fg
+    // un-shifted, drifting the theme-designed bg/fg relationship apart.
+    const shifted = transposedResolver(base, 60);
+    // fg is a chromatic literal token (not `auto`): under whole-palette
+    // transposition it shifts with bg; the old bg-output-only rotation left it put.
+    const bgTpl = parseTemplate("surface", shifted);
+    const fgTpl = parseTemplate("info", shifted);
+    const style = resolveSegmentColors(shifted, bgTpl, fgTpl, {});
+    const baseStyle = resolveSegmentColors(base, bgTpl, fgTpl, {});
+    expect(style.color?.value?.hex).not.toBe(baseStyle.color?.value?.hex);
   });
 });
