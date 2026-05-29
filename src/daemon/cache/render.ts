@@ -1,10 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import {
-  PaletteResolver,
-  getThemePalette,
-  type RichText,
-} from "@promptctl/rich-js";
+import type { RichText } from "@promptctl/rich-js";
 import { buildNeededPrefixes } from "../render-payload.js";
 import {
   loadConfig,
@@ -18,7 +14,6 @@ import type { ValidatedConfig } from "../../config/dsl-types.js";
 import { registerDslConfig, type CompiledSegments } from "../../dsl/render.js";
 import { VariableStore } from "../../var-system/store.js";
 import { SourceRegistry } from "../../var-system/sources.js";
-import { resolvePaletteName } from "../../themes/index.js";
 import type { GitDataProvider } from "./git.js";
 import type { SessionStateRW } from "../session-state.js";
 import type { WatcherRegistry, WatcherHandle } from "./watchers.js";
@@ -71,7 +66,6 @@ export interface DslRenderState {
   readonly store: VariableStore;
   readonly registry: SourceRegistry;
   readonly compiled: CompiledSegments;
-  readonly basePalette: PaletteResolver;
   readonly neededInputPaths: ReadonlySet<string>;
   readonly lastRenderCellsBySegment: Map<string, readonly RichText[]>;
 }
@@ -284,26 +278,16 @@ export class RenderCache {
       throw err;
     }
 
-    const paletteName = resolvePaletteName(
-      config.globals.palette ?? "textual-dark",
-    );
-    const palette = getThemePalette(paletteName);
-    if (palette === null) {
-      // [LAW:single-enforcer] The loader validates palette names against
-      // the resolver's set; an unresolvable name here is registry/resolver
-      // drift, not user error.
-      registry.dispose();
-      throw new Error(
-        `Palette "${paletteName}" did not resolve in the theme registry`,
-      );
-    }
-
+    // [LAW:one-source-of-truth] basePalette is NOT frozen here. One cache entry
+    // serves many sessions, but the effective theme is per-session SessionState;
+    // freezing the palette per entry would let the rendered colors diverge from
+    // the session's chosen theme. The server resolves basePalette per render
+    // from the effective theme (resolverForThemeName ∘ effectiveThemeName).
     return {
       config,
       store,
       registry,
       compiled,
-      basePalette: new PaletteResolver(palette),
       neededInputPaths: buildNeededPrefixes(config),
       lastRenderCellsBySegment: new Map<string, readonly RichText[]>(),
     };

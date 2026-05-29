@@ -16,6 +16,10 @@ import { SourceRegistry } from "../src/var-system/sources";
 import { registerDslConfig, renderDsl } from "../src/dsl/render";
 import { SessionState } from "../src/daemon/session-state";
 import { VERBS } from "../src/daemon/verbs";
+import {
+  effectiveThemeName,
+  resolverForThemeName,
+} from "../src/themes";
 
 const ALLOWED_PALETTES = new Set(["textual-dark"]);
 
@@ -85,6 +89,61 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
     expect(render()).toContain("theme=(unset)");
     sessionState.set(SESSION_ID, "theme", "ocean");
     expect(render()).toContain("theme=ocean");
+  });
+
+  test("set-state theme write changes the rendered COLORS on next render (k5a.4)", () => {
+    // [LAW:verifiable-goals] The k5a.4 contract: a theme click recolors the
+    // bar. The renderDsl-level tests above prove the TEXT cascade; this proves
+    // the COLOR cascade by resolving basePalette per render from the session
+    // theme exactly as the daemon does (effectiveThemeName ∘ resolverForThemeName
+    // over SessionState) — no frozen entry palette.
+    // globals.palette is SET (as in the bundled default) — the regression this
+    // pins: a config-default base theme must NOT be frozen per-segment, or the
+    // session theme could never override it. A segment with no explicit
+    // `palette:` follows the live base theme.
+    const config = parseAndValidate(
+      "<test>",
+      `{
+        globals: { palette: 'textual-dark' },
+        variables: {
+          'session.id': { kind: 'input', path: 'session_id', default: '' },
+        },
+        segments: {
+          seg: { template: ' x ', bg: 'primary', fg: 'foreground' },
+        },
+        layout: [['seg']],
+      }`,
+      ALLOWED_PALETTES,
+    );
+    const sessionState = new SessionState();
+    const store = new VariableStore();
+    const registry = new SourceRegistry(store, "", undefined, sessionState);
+    const compiled = registerDslConfig(config, registry);
+    // Mirror the daemon's per-render base-palette derivation.
+    const render = () =>
+      renderDsl(
+        config,
+        compiled,
+        store,
+        registry,
+        HOOK_DATA,
+        resolverForThemeName(
+          effectiveThemeName(
+            sessionState.get(SESSION_ID, "theme"),
+            config.globals.palette,
+          ),
+        ),
+        OPTS,
+      );
+
+    const before = render(); // effective theme = textual-dark (globals default)
+    const ctx = { sessionState, dlog: () => {} };
+    VERBS.get("set-state")!(`${SESSION_ID}/theme/nord`, ctx);
+    const after = render(); // effective theme = nord
+
+    // Same text, different ANSI color codes — the palette switched live.
+    expect(stripAnsi(after)).toBe(stripAnsi(before));
+    expect(after).not.toBe(before);
   });
 
   test("set-state click verb propagates to the next render", () => {
