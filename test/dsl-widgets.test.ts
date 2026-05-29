@@ -7,11 +7,10 @@
 // renderDsl for rendering, parseHandlerUrl + VERBS for the click — so the
 // verification matches the live path, not a parallel rig.
 
-import { PaletteResolver } from "@promptctl/rich-js";
+import { PaletteResolver, getThemePalette } from "@promptctl/rich-js";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
-import { getThemePalette } from "../src/themes/palette-registry";
 import { registerDslConfig, renderDsl } from "../src/dsl/render";
 import { SessionState } from "../src/daemon/session-state";
 import { VERBS } from "../src/daemon/verbs";

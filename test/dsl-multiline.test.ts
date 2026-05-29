@@ -9,11 +9,10 @@
 // refactors (hue rotation policy, sink ordering) that preserve these
 // behaviors must not break these tests.
 
-import { PaletteResolver } from "@promptctl/rich-js";
+import { PaletteResolver, getThemePalette } from "@promptctl/rich-js";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
-import { getThemePalette } from "../src/themes/palette-registry";
 import { registerDslConfig, renderDsl } from "../src/dsl/render";
 import { ConfigError } from "../src/config/dsl-loader";
 

@@ -20,7 +20,7 @@ import { dirname, join } from "node:path";
 import process from "node:process";
 import { setTimeout as sleep } from "node:timers/promises";
 
-import { PaletteResolver } from "@promptctl/rich-js";
+import { PaletteResolver, getThemePalette } from "@promptctl/rich-js";
 
 import {
   parseDslConfig,
@@ -29,7 +29,6 @@ import {
 } from "../config/dsl-loader.js";
 import { VariableStore } from "../var-system/store.js";
 import { SourceRegistry } from "../var-system/sources.js";
-import { getThemePalette } from "../themes/palette-registry.js";
 import { listResolvablePaletteNames } from "../themes/cascade.js";
 import { registerDslConfig, renderDsl } from "../dsl/render.js";
 import { DEFAULT_TERMINAL_WIDTH } from "../render/strip.js";

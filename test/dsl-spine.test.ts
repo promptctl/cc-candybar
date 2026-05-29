@@ -9,12 +9,11 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { PaletteResolver } from "@promptctl/rich-js";
+import { PaletteResolver, getThemePalette } from "@promptctl/rich-js";
 
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
-import { getThemePalette } from "../src/themes/palette-registry";
 import { registerDslConfig, renderDsl } from "../src/dsl/render";
 
 // [LAW:single-enforcer] Inlined fixture values formerly served by

@@ -11,7 +11,11 @@
 // the input values (kind discriminators, layout length, palette presence)
 // govern output, not whether operations run.
 
-import { PaletteResolver, type RichText } from "@promptctl/rich-js";
+import {
+  PaletteResolver,
+  getThemePalette,
+  type RichText,
+} from "@promptctl/rich-js";
 import type { Template } from "@promptctl/go-template-js";
 import type {
   ValidatedConfig,
@@ -29,7 +33,6 @@ import type { BuildLineOptions } from "../render/strip.js";
 import { renderStripCells } from "../render/strip.js";
 import { effectiveSegmentPalette } from "../config/dsl-loader.js";
 import { resolvePaletteName } from "../themes/index.js";
-import { getThemePalette } from "../themes/palette-registry.js";
 import { buildScope } from "../template-engine/scope.js";
 import {
   createCcCandybarEngine,
