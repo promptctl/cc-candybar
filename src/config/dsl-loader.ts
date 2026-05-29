@@ -1093,8 +1093,12 @@ function validateLayoutRow(
       `layout[${r}].segments`,
       row.segments,
     );
+    // Preserve the predicate faithfully — an explicit `when: ""` is a present
+    // (if degenerate) predicate, distinct from an absent one; only `undefined`
+    // (absent or non-string) means "no predicate". A truthiness check would
+    // silently drop "".
     const when = optionalStringField(ctx, `layout[${r}]`, row, "when");
-    return when ? { when, segments } : { segments };
+    return when !== undefined ? { when, segments } : { segments };
   }
   ctx.issues.push({
     path: `layout[${r}]`,

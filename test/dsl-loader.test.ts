@@ -605,6 +605,16 @@ describe("loadDslConfig — layout", () => {
     expect(cfg.layout).toEqual([{ when: "{{ true }}", segments: ["a"] }]);
   });
 
+  test("an explicit empty when is preserved (not silently dropped)", () => {
+    // A present-but-empty predicate is distinct from an absent one; the
+    // validated config must reflect the user's input faithfully.
+    const cfg = parseAndValidate(
+      FILE,
+      `{ segments: { a: { template: "x" } }, layout: [{ when: "", segments: ["a"] }] }`,
+    );
+    expect(cfg.layout).toEqual([{ when: "", segments: ["a"] }]);
+  });
+
   test("unknown layout-row key is rejected", () => {
     expectIssue(
       `{ segments: { a: { template: "x" } }, layout: [{ rows: ["a"] }] }`,

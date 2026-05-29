@@ -296,9 +296,15 @@ describe("k5a.6 — menu page-key validator", () => {
     expect(v("-1")).toEqual({ ok: true, value: "-1" });
     expect(v("0")).toEqual({ ok: true, value: "0" });
     expect(v("007")).toEqual({ ok: true, value: "7" });
+    expect(v("-0")).toEqual({ ok: true, value: "0" });
+    expect(v("-007")).toEqual({ ok: true, value: "-7" });
     expect(v("")).toEqual({ ok: false, reason: expect.any(String) });
     expect(v("1.5")).toEqual({ ok: false, reason: expect.any(String) });
     expect(v("x")).toEqual({ ok: false, reason: expect.any(String) });
+    // Large magnitude stays an exact decimal string — NOT scientific notation
+    // (which would read back as a different number).
+    const big = "1000000000000000000000"; // 1e21
+    expect(v(big)).toEqual({ ok: true, value: big });
   });
 
   test("deriveWidgetValidators derives an int validator for a menu page key", () => {

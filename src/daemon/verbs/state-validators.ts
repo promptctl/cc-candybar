@@ -282,9 +282,9 @@ export function makeAllowListValidator(
 // [LAW:types-are-the-program] An integer-valued state key (a menu's page
 // index). The wire delivers a string; the validator IS the parse boundary —
 // it accepts only `^-?\d+$` and canonicalizes to the minimal decimal form, so
-// "007"/"−0" can't persist a non-canonical page that the next render's
-// `int` read would have to re-normalize. Negative is legal: -1 is the menu's
-// CLOSED sentinel.
+// "007"/"-0" can't persist a non-canonical page that the next render's `int`
+// read would have to re-normalize. Negative is legal: -1 is the menu's CLOSED
+// sentinel.
 const INT_RE = /^-?\d+$/;
 export function makeIntValidator(label: string): KeyValidator {
   return (raw) => {
@@ -292,9 +292,15 @@ export function makeIntValidator(label: string): KeyValidator {
     if (!INT_RE.test(raw)) {
       return { ok: false, reason: `${label} must be an integer, got "${raw}"` };
     }
-    // parseInt over Number() so the canonical form drops leading zeros / a
-    // lone "-0" → "0"; the regex already excludes non-numeric tails.
-    return { ok: true, value: String(parseInt(raw, 10)) };
+    // [LAW:types-are-the-program] Canonicalize as a pure decimal string —
+    // strip leading zeros, fold "-0" → "0" — NOT via parseInt/String, which for
+    // a >= 1e21 magnitude would emit scientific notation ("1e+21") that a later
+    // parseInt(_, 10) reads back as 1. A page index is small in practice, but
+    // the canonical form must hold for every accepted input, not just small ones.
+    const neg = raw[0] === "-";
+    const digits = (neg ? raw.slice(1) : raw).replace(/^0+/, "");
+    if (digits === "") return { ok: true, value: "0" };
+    return { ok: true, value: neg ? `-${digits}` : digits };
   };
 }
 
