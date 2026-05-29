@@ -102,7 +102,16 @@ export class CachedUsageProvider extends UsageProvider {
     }
 
     this.misses++;
-    const info = await this.flight.run(sessionId, () =>
+    // [LAW:one-source-of-truth] The coalescing key is the full computation
+    // identity, not just the session: it includes the observed transcript
+    // mtime. Two renders that saw the SAME mtime compute the same result, so
+    // sharing one read is sound; a render that observed a NEWER mtime is a
+    // DIFFERENT computation and must do its own read rather than attach to an
+    // in-flight read of the older content. This makes coalescing
+    // result-equivalent to no coalescing — it changes timing, never answers.
+    // (The pre-existing post-compute re-stat below is unchanged by this and is
+    // owned by the architectural usage-cache rework, brandon-daemon-memory-leak-5qh.)
+    const info = await this.flight.run(`${sessionId}:${currentMtime}`, () =>
       super.getUsageInfo(sessionId, hookData),
     );
 
