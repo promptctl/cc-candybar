@@ -163,7 +163,7 @@ describe("DSL render spine (bzh.7 steel thread)", () => {
     expect(sink.has("doesNotExist")).toBe(false);
     // Every layout entry that wasn't `when`-hidden appears in the sink.
     expect(sink.size).toBeGreaterThan(0);
-    const allLayoutSegments = config.layout.flat();
+    const allLayoutSegments = config.layout.flatMap((r) => r.segments);
     for (const [name, cells] of sink) {
       expect(allLayoutSegments).toContain(name);
       expect(cells.length).toBeGreaterThan(0);

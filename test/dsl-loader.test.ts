@@ -559,10 +559,13 @@ describe("loadDslConfig — palette switch", () => {
 
 describe("loadDslConfig — layout", () => {
   test("string entries must match a declared segment", () => {
+    // Cross-ref runs on the merged, normalized config (rows already collapsed to
+    // the canonical { segments }), so it reports the canonical path — unlike
+    // parse-time structural validation, which still holds the raw row form.
     expectIssue(
       `{ segments: { cwd: { template: "t" } }, layout: [["cwd", "missing"]] }`,
       {
-        path: "layout[0][1]",
+        path: "layout[0].segments[1]",
         message: 'layout entry "missing" does not match any declared segment',
       },
     );
@@ -583,7 +586,7 @@ describe("loadDslConfig — layout", () => {
       FILE,
       `{ segments: { a: { template: "x" }, b: { template: "y" } }, layout: [["a", "b", "a"]] }`,
     );
-    expect(cfg.layout).toEqual([["a", "b", "a"]]);
+    expect(cfg.layout).toEqual([{ segments: ["a", "b", "a"] }]);
   });
 
   test("multi-row layout passes through (row order preserved)", () => {
@@ -591,7 +594,46 @@ describe("loadDslConfig — layout", () => {
       FILE,
       `{ segments: { a: { template: "x" }, b: { template: "y" }, c: { template: "z" } }, layout: [["a", "b"], ["c"]] }`,
     );
-    expect(cfg.layout).toEqual([["a", "b"], ["c"]]);
+    expect(cfg.layout).toEqual([{ segments: ["a", "b"] }, { segments: ["c"] }]);
+  });
+
+  test("object-form row with when normalizes to { when, segments }", () => {
+    const cfg = parseAndValidate(
+      FILE,
+      `{ segments: { a: { template: "x" } }, layout: [{ when: '{{ true }}', segments: ["a"] }] }`,
+    );
+    expect(cfg.layout).toEqual([{ when: "{{ true }}", segments: ["a"] }]);
+  });
+
+  test("an explicit empty when is preserved (not silently dropped)", () => {
+    // A present-but-empty predicate is distinct from an absent one; the
+    // validated config must reflect the user's input faithfully.
+    const cfg = parseAndValidate(
+      FILE,
+      `{ segments: { a: { template: "x" } }, layout: [{ when: "", segments: ["a"] }] }`,
+    );
+    expect(cfg.layout).toEqual([{ when: "", segments: ["a"] }]);
+  });
+
+  test("unknown layout-row key is rejected", () => {
+    expectIssue(
+      `{ segments: { a: { template: "x" } }, layout: [{ rows: ["a"] }] }`,
+      { path: "layout[0].rows", message: "Unknown layout-row key" },
+    );
+  });
+
+  test("structural error path reflects the row form the user wrote", () => {
+    // [LAW:locality-or-seam] bare-array row → layout[r][c]; object row →
+    // layout[r].segments[c]. The path mirrors the input, never asserting a
+    // `.segments` key a sugar-form config never wrote.
+    expectIssue(`{ segments: { a: { template: "x" } }, layout: [["a", 42]] }`, {
+      path: "layout[0][1]",
+      message: "layout entries must be strings",
+    });
+    expectIssue(
+      `{ segments: { a: { template: "x" } }, layout: [{ segments: ["a", 42] }] }`,
+      { path: "layout[0].segments[1]", message: "layout entries must be strings" },
+    );
   });
 
   test("legacy flat string[] layout rejected with migration message", () => {
@@ -1004,7 +1046,7 @@ describe("loadDslConfig — valid corpus", () => {
       "branch", "constant", "cwd", "cwd_short", "home", "hostname",
       "load_avg", "now", "sid",
     ]);
-    expect(cfg.layout).toEqual([["cwd", "branch", "load"]]);
+    expect(cfg.layout).toEqual([{ segments: ["cwd", "branch", "load"] }]);
   });
 
   test("minimal valid config loads to canonical empty shape", () => {

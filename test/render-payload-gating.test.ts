@@ -136,7 +136,7 @@ const CONFIG_WITHOUT_METRICS: DslConfig = {
   globals: {},
   variables: SHARED_VARIABLES,
   segments: SHARED_SEGMENTS,
-  layout: [["directory", "git"]],
+  layout: [{ segments: ["directory", "git"] }],
   widgets: {},
 };
 
@@ -144,7 +144,7 @@ const CONFIG_WITH_METRICS: DslConfig = {
   globals: {},
   variables: SHARED_VARIABLES,
   segments: SHARED_SEGMENTS,
-  layout: [["directory", "git", "metrics", "tmux"]],
+  layout: [{ segments: ["directory", "git", "metrics", "tmux"] }],
   widgets: {},
 };
 
@@ -200,7 +200,7 @@ describe("buildRenderPayload — layout-driven provider gating", () => {
           fg: "foreground",
         },
       },
-      layout: [["gitDump"]],
+      layout: [{ segments: ["gitDump"] }],
       widgets: {},
     };
     const needed = buildNeededPrefixes(config);

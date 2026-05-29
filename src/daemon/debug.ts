@@ -1,5 +1,5 @@
 // [LAW:single-enforcer] One module owns the projection from daemon DSL
-// state (VariableStore + SourceRegistry + DslConfig + CompiledSegments) to
+// state (VariableStore + SourceRegistry + DslConfig + CompiledConfig) to
 // the wire-level DebugSnapshot. buildDebugSnapshot dispatches via an
 // exhaustive switch on `what` — TypeScript enforces every DebugWhat arm
 // at compile time (the function's return-type narrowing fails if a case
@@ -26,7 +26,7 @@ import type { VariableStore } from "../var-system/store";
 import type { SourceRegistry } from "../var-system/sources";
 import type { DslConfig, SourceKind, VariableDecl } from "../config/dsl-types";
 import { extractTemplateRefs } from "../config/dsl-loader";
-import type { CompiledSegments } from "../dsl/render";
+import type { CompiledConfig } from "../dsl/render";
 import type {
   DebugSnapshot,
   DebugWhat,
@@ -41,7 +41,7 @@ export interface DaemonDslState {
   readonly store: VariableStore;
   readonly registry: SourceRegistry;
   readonly config: DslConfig;
-  readonly compiled: CompiledSegments;
+  readonly compiled: CompiledConfig;
   // [LAW:dataflow-not-control-flow] Per-segment last-render strings live in
   // the same state bundle the renderer mutates. Today (legacy renderer) it
   // is empty; bzh.2 populates it from inside renderDsl.
@@ -187,7 +187,7 @@ function orderedSegmentNames(config: DslConfig): readonly string[] {
   const out: string[] = [];
   const seen = new Set<string>();
   for (const row of config.layout) {
-    for (const name of row) {
+    for (const name of row.segments) {
       if (config.segments[name] && !seen.has(name)) {
         out.push(name);
         seen.add(name);

@@ -147,6 +147,20 @@ export const DEFAULT_DSL_CONFIG = {
     "session.id": { kind: "input", path: "session_id", default: "" },
     version: { kind: "input", path: "version", default: "" },
 
+    // [LAW:one-source-of-truth] The usable terminal width for THIS render —
+    // the exact post-reserve cell count FlexStrip wraps to. renderDsl injects
+    // it into the payload from its own `opts.width` (the single value that
+    // feeds both the wrap and this variable), so a width-paginated widget and
+    // the wrap algebra can never disagree. Never cached: a resize is just a
+    // new value on the same path, re-read every render. The default only
+    // applies to compile-only callers that render without injecting a width.
+    "term.cols": {
+      kind: "input",
+      path: "term.cols",
+      type: "number",
+      default: 80,
+    },
+
     // home flows through the augmented payload (buildRenderPayload reads
     // HOME, falling back to USERPROFILE on Windows where HOME is often
     // unset). Sourcing via `kind: "input"` rather than `kind: "env",
@@ -479,11 +493,14 @@ export const DEFAULT_DSL_CONFIG = {
   },
 
   // Default layout — one row containing the historical default-enabled
-  // segment list. Single-line is the `[[...]]` degenerate case of multi-line;
-  // users adding rows opt in by extending this outer array. Nothing else
-  // changes when they do — every segment is already declared above, and the
-  // renderer walks rows uniformly.
-  layout: [["directory", "git", "model", "session", "today", "context"]],
+  // segment list. A row is `{ when?, segments }`; an always-rendered row omits
+  // `when`. Single-line is the size-1 degenerate case of multi-line; users
+  // adding rows opt in by extending this outer array. Nothing else changes when
+  // they do — every segment is already declared above, and the renderer walks
+  // rows uniformly.
+  layout: [
+    { segments: ["directory", "git", "model", "session", "today", "context"] },
+  ],
 
   // [LAW:locality-or-seam] No interactive widgets in the bundled default — the
   // baseline statusline is non-interactive text segments. A user config
