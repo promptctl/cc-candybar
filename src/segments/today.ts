@@ -5,6 +5,7 @@ import { debug } from "../utils/logger";
 import { PricingService } from "./pricing";
 import { CacheManager } from "../utils/cache";
 import { loadEntriesFromProjects } from "../utils/claude";
+import { SingleFlight } from "../utils/single-flight";
 
 export interface TodayUsageEntry {
   timestamp: Date;
@@ -57,13 +58,22 @@ function convertToTodayEntry(entry: ParsedEntry): TodayUsageEntry {
 }
 
 export class TodayProvider {
-  private async loadTodayEntries(): Promise<TodayUsageEntry[]> {
+  // [LAW:one-source-of-truth] The `today` aggregate is a whole-transcript-tree
+  // scan that every render with a `today` segment triggers; its disk cache
+  // near-permanently misses during active work (newest-mtime invalidates it
+  // each second). Without coalescing, K concurrent renders launch K identical
+  // scans. This shares the work across all concurrent callers via two
+  // namespaced key spaces (see getTodayEntries). The provider is a
+  // daemon-singleton, so this member persists across renders and coalesces them.
+  private readonly flight = new SingleFlight();
+
+  private async loadTodayEntries(
+    latestMtime: number,
+  ): Promise<TodayUsageEntry[]> {
     const today = new Date();
     const todayDateString = formatDate(today);
 
     debug(`Today segment: Loading entries for date ${todayDateString}`);
-
-    const latestMtime = await CacheManager.getLatestTranscriptMtime();
 
     const sharedCached = (await CacheManager.getUsageCache(
       "today",
@@ -126,7 +136,26 @@ export class TodayProvider {
 
   private async getTodayEntries(): Promise<TodayUsageEntry[]> {
     try {
-      return await this.loadTodayEntries();
+      const day = formatDate(new Date());
+      // [LAW:one-source-of-truth] Two-stage coalescing so the coalescing key is
+      // the full computation identity — (day, observed freshness) — without
+      // re-introducing redundant whole-tree scans.
+      //
+      // Stage 1: the freshness probe (getLatestTranscriptMtime, itself a
+      // whole-tree stat-scan) is coalesced by day, so concurrent renders share
+      // ONE probe rather than each running their own.
+      const latestMtime = await this.flight.run(`mtime:${day}`, () =>
+        CacheManager.getLatestTranscriptMtime(),
+      );
+      // Stage 2: the entry scan is keyed by (day, freshness). Renders that
+      // observed the SAME newest-mtime compute the same result and share one
+      // scan; a render that observed NEWER content keys differently and reads
+      // fresh instead of attaching to a scan of older content — making
+      // coalescing result-equivalent to no coalescing. The catch is per-caller
+      // — every waiter sharing a rejected scan degrades to [].
+      return await this.flight.run(`today:${day}:${latestMtime}`, () =>
+        this.loadTodayEntries(latestMtime),
+      );
     } catch (error) {
       debug("Error loading today's entries:", error);
       return [];
