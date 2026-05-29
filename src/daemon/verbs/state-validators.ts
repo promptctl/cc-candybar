@@ -218,6 +218,23 @@ export function makeAllowListValidator(
   allowed: readonly string[],
   label: string,
 ): KeyValidator {
+  // [LAW:types-are-the-program] The set-state wire splits its tail on
+  // "/" — a slash-bearing value would be broken into two segments
+  // before reaching the validator, so a widget config that listed
+  // such an option could never write it. Refusing at factory-build
+  // time (rather than later, when a click happens) is [LAW:verifiable-
+  // goals] — the constraint is checkable at the earliest point, so a
+  // misconfigured widget surfaces at config-load, not on first user
+  // click. Mirrors the same constraint registerStateValidator enforces
+  // for keys: registry surface = writable surface, by construction.
+  const offenders = allowed.filter((v) => v.includes("/"));
+  if (offenders.length > 0) {
+    throw new Error(
+      `makeAllowListValidator(${label}): values contain "/" — the set-state ` +
+        `wire shape splits values on "/" so slash-bearing options cannot ` +
+        `be addressed. Offending values: ${offenders.join(", ")}`,
+    );
+  }
   const allowedSet: ReadonlySet<string> = new Set(allowed);
   const allowedList = [...allowed];
   return (raw) => {

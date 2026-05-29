@@ -241,6 +241,28 @@ describe("state-validators registry contract", () => {
     if (!result.ok) expect(result.reason).toBe("fruit value is required");
   });
 
+  test("makeAllowListValidator rejects slash-bearing allowed values at factory time", () => {
+    // [LAW:types-are-the-program] Symmetric with the slash-rejection on
+    // registerStateValidator: the wire splits BOTH keys and values on
+    // "/" so a slash-bearing option could never be delivered to the
+    // validator as a single value. Catching at factory-build (config-
+    // load time) per [LAW:verifiable-goals] — a misconfigured widget
+    // declaration surfaces immediately, not on the operator's first
+    // click.
+    expect(() =>
+      makeAllowListValidator(["good", "with/slash", "another/bad"], "mode"),
+    ).toThrow(/contain "\/"/);
+    // The error names every offender so the operator can find all
+    // misconfigurations in one fix pass.
+    expect(() =>
+      makeAllowListValidator(["with/slash", "another/bad"], "mode"),
+    ).toThrow(/with\/slash, another\/bad/);
+    // Slash-free lists build fine.
+    expect(() =>
+      makeAllowListValidator(["a", "b", "c"], "mode"),
+    ).not.toThrow();
+  });
+
   test("makeAllowListValidator composes with registerStateValidator", () => {
     // [LAW:one-type-per-behavior] The canonical "widget options = allow
     // list" registration shape — one factory call + one register call
