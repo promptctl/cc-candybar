@@ -59,7 +59,7 @@ Wire format lives in `src/daemon/protocol.ts`. The Rust client mirrors it as a l
 - Idle-shutdown after 30 min; hard limits in `src/daemon/limits.ts` (200 MB RSS → heap snapshot then exit; 24 h age → exit). Restarts are normal — every cache is rebuilt cold.
 - Caches owned by the daemon process (one each, not per-session):
   - `src/daemon/cache/git.ts` — git state, keyed by **repo root** (not cwd, not session), invalidated by fs watchers on `.git/HEAD` and `.git/index` mtimes.
-  - `src/daemon/cache/usage.ts` — Claude usage/cost data parsed from transcript JSONLs.
+  - `src/daemon/cache/session-usage-store.ts` — the daemon's single owner of per-session usage records (one parse per session, keyed by transcript mtime). Both the `session` projection (whole-session totals) and the `today` projection (cross-session sum of per-day buckets) are **folds** over this one store — there is no per-render whole-tree scan. The whole transcript tree is read **exactly once**, lazily (a per-day seed), to backfill sessions that did work before the daemon saw them; every render after that is a single sync `statSync` on the active session's transcript plus an in-memory fold (`[LAW:dataflow-not-control-flow]` — `today` is derived state maintained incrementally, not recompute-if-stale).
   - `src/daemon/cache/render.ts` — per `(projectDir, cwd)` tuple, holds the live DSL state: parsed `DslConfig`, `VariableStore`, `SourceRegistry` (with timers/watchers/git-subscriptions), `CompiledSegments`, and resolved `basePalette`. LRU-capped at 256. Each entry watches every candidate config-file location (so creating one later triggers reload). `reloadInto` builds the new state into a local first and only swaps + disposes the old `SourceRegistry` on success, so a broken-config reload preserves last-known-good (`[LAW:single-enforcer]` — the registry owns async handles; dispose-before-swap is the contract).
   - `src/daemon/session-state.ts` — per-session key/value store for click-driven state (currently active theme, toolbar-expanded, etc.).
 - Stats snapshot at `cc-candybar daemon-stats --json` — uptime, RSS, cache hit rates, watcher count, request totals.
@@ -83,7 +83,7 @@ Both `.json5` and `.json` are accepted (JSON ⊂ JSON5, same parser) — `.json5
 
 Both functions are called verbatim by the daemon — no parallel render path, no inline computation that diverges. The demo at `src/demo/dsl.ts` calls the same two functions.
 
-Segment data providers live in `src/segments/` (`git`, `session`, `today`, `block`, `weekly`, `context`, `metrics`, `tmux`, `pricing`). These produce structured data — `GitInfo`, `UsageInfo`, `BlockInfo`, etc. The daemon's `buildRenderPayload` (`src/daemon/render-payload.ts`) composes them into one augmented payload that the DSL's `kind: "input"` declarations read.
+Segment data providers live in `src/segments/` (`git`, `session`, `context`, `metrics`, `tmux`, `pricing`). These produce structured data — `GitInfo`, `UsageInfo`, etc. The `session`/`today` cost aggregates are served by `src/daemon/cache/session-usage-store.ts` (folds over per-session records), and `block`/`weekly` read straight from `hookData.rate_limits` in `buildRenderPayload` — neither scans transcripts per render. The daemon's `buildRenderPayload` (`src/daemon/render-payload.ts`) composes them into one augmented payload that the DSL's `kind: "input"` declarations read.
 
 Add a new built-in segment by:
 
