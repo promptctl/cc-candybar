@@ -24,8 +24,7 @@
 // numeric stepper with int-range bounds), this same shape extends — the
 // validator becomes the parsing boundary, the verb body the dataflow.
 
-import { listResolvablePaletteNames } from "../../themes/cascade";
-import { STYLE_ORDER } from "../../themes/default-mapping";
+import { listResolvablePaletteNames, STYLE_ORDER } from "../../themes/policy";
 
 // [LAW:types-are-the-program] Discriminated union — every legal return is
 // either an accepted-and-canonicalized string or a structured rejection

@@ -16,7 +16,7 @@ import { SessionState } from "../src/daemon/session-state";
 import { VERBS } from "../src/daemon/verbs";
 import { parseHandlerUrl } from "../src/install/index";
 import { extractWidgetRefs } from "../src/config/dsl-loader";
-import { listResolvablePaletteNames } from "../src/themes/cascade";
+import { listResolvablePaletteNames } from "../src/themes/policy";
 
 const ALLOWED = new Set(["textual-dark"]);
 const OPTS = {

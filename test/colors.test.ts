@@ -5,14 +5,8 @@ import {
   extractBgToFg,
 } from "../src/utils/colors";
 import { getColorSupport } from "../src/utils/color-support";
-import { resolveThemeColors, listAvailableThemes } from "../src/themes";
+import { listAvailableThemes, STYLE_ORDER } from "../src/themes";
 import { rotateHue, rgbaToOklch } from "../src/themes/oklch";
-import {
-  buildPaletteMapping,
-  SEMANTIC_VARIANTS,
-  STYLE_ORDER,
-  STYLE_PRESETS,
-} from "../src/themes/default-mapping";
 import { ColorRgba } from "@promptctl/rich-js";
 
 describe("Colors", () => {
@@ -96,7 +90,7 @@ describe("Colors", () => {
     });
   });
 
-  describe("Theme Cascade", () => {
+  describe("Theme name policy", () => {
     it("should list available themes (excludes dark/light aliases)", () => {
       const themes = listAvailableThemes();
       expect(themes).toContain("nord");
@@ -105,116 +99,6 @@ describe("Colors", () => {
       expect(themes).not.toContain("dark");
       expect(themes).not.toContain("light");
       expect(themes.length).toBeGreaterThanOrEqual(16);
-    });
-
-    it("should resolve theme colors for gruvbox", () => {
-      const colors = resolveThemeColors({
-        theme: "gruvbox",
-        colorSupport: "truecolor",
-      });
-      expect(colors.modeBg).toBeTruthy();
-      expect(colors.modeFg).toBeTruthy();
-      expect(colors.gitBg).toBeTruthy();
-      expect(colors.hex).toBeDefined();
-      expect(colors.hex!.modeBg).toMatch(/^#[0-9a-f]{6}$/);
-    });
-
-    it("should resolve theme colors for all built-in themes", () => {
-      const themes = listAvailableThemes().filter((t) => t !== "custom");
-      for (const name of themes) {
-        const colors = resolveThemeColors({
-          theme: name,
-          colorSupport: "truecolor",
-        });
-        expect(colors.modeBg).toBeTruthy();
-        expect(colors.hex!.modeBg).toMatch(/^#[0-9a-f]{6}$/);
-      }
-    });
-
-    it("should produce distinct bg colors per segment with surface style", () => {
-      const colors = resolveThemeColors({
-        theme: "gruvbox",
-        style: "surface",
-        colorSupport: "truecolor",
-      });
-      const bgs = new Set([
-        colors.hex!.modeBg,
-        colors.hex!.gitBg,
-        colors.hex!.modelBg,
-        colors.hex!.sessionBg,
-      ]);
-      expect(bgs.size).toBeGreaterThanOrEqual(2);
-    });
-
-    it("should produce distinct bg colors with hueStep", () => {
-      const colors = resolveThemeColors({
-        theme: "gruvbox",
-        colorSupport: "truecolor",
-        hueStep: 30,
-      });
-      const bgs = new Set([
-        colors.hex!.modeBg,
-        colors.hex!.gitBg,
-        colors.hex!.modelBg,
-        colors.hex!.sessionBg,
-      ]);
-      expect(bgs.size).toBeGreaterThanOrEqual(3);
-    });
-
-    it("should apply user overrides per segment", () => {
-      const base = resolveThemeColors({
-        theme: "gruvbox",
-        colorSupport: "truecolor",
-      });
-      const overridden = resolveThemeColors({
-        theme: "gruvbox",
-        colorSupport: "truecolor",
-        themeMapping: {
-          git: { bg: "error" },
-        },
-      });
-      expect(overridden.hex!.gitBg).not.toBe(base.hex!.gitBg);
-    });
-
-    it("should apply hueStep to generate auto-incremented offsets", () => {
-      const colors = resolveThemeColors({
-        theme: "gruvbox",
-        colorSupport: "truecolor",
-        hueStep: 60,
-      });
-      const bgs = [
-        colors.hex!.modeBg,
-        colors.hex!.gitBg,
-        colors.hex!.modelBg,
-        colors.hex!.sessionBg,
-        colors.hex!.blockBg,
-      ];
-      const unique = new Set(bgs);
-      expect(unique.size).toBeGreaterThanOrEqual(3);
-    });
-
-    it("should handle color compatibility modes", () => {
-      const noneColors = resolveThemeColors({
-        theme: "gruvbox",
-        colorSupport: "none",
-      });
-      expect(noneColors.modeBg).toBe("");
-      expect(noneColors.reset).toBe("");
-
-      const ansi256Colors = resolveThemeColors({
-        theme: "gruvbox",
-        colorSupport: "ansi256",
-      });
-      expect(ansi256Colors.modeBg).toMatch(/^\x1b\[48;5;\d+m$/);
-    });
-
-    it("should throw for unknown themes", () => {
-      expect(() =>
-        resolveThemeColors({
-          theme: "nonexistent-theme",
-          colorSupport: "truecolor",
-        }),
-      ).toThrow(/Unknown theme palette/);
     });
   });
 
@@ -271,49 +155,7 @@ describe("Colors", () => {
     });
   });
 
-  describe("Semantic Variants & Style Presets", () => {
-    it("should have entries for all standard segments", () => {
-      const segments = [
-        "directory", "git", "gitTaculous", "model", "session",
-        "block", "today", "tmux", "context", "contextWarning",
-        "contextCritical", "metrics", "version", "env", "weekly",
-      ];
-      for (const seg of segments) {
-        expect(SEMANTIC_VARIANTS[seg]).toBeDefined();
-      }
-    });
-
-    it("should produce a valid mapping from any style", () => {
-      for (const style of STYLE_ORDER) {
-        const mapping = buildPaletteMapping(style);
-        expect(Object.keys(mapping).length).toBeGreaterThan(10);
-        expect(mapping.contextWarning!.bg).toBe("warning");
-        expect(mapping.contextCritical!.bg).toBe("error");
-      }
-    });
-
-    it("should apply correct bg/fg pattern per style", () => {
-      const surface = buildPaletteMapping("surface");
-      expect(surface.directory!.bg).toBe("surface");
-      expect(surface.directory!.fg).toBe("foreground");
-
-      const muted = buildPaletteMapping("muted");
-      expect(muted.directory!.bg).toBe("primary-muted");
-      expect(muted.directory!.fg).toBe("text-primary");
-
-      const button = buildPaletteMapping("button");
-      expect(button.directory!.bg).toBe("primary");
-      expect(button.directory!.fg).toBe("button-color-foreground");
-    });
-
-    it("should apply hueStep to non-semantic segments only", () => {
-      const mapping = buildPaletteMapping("surface", 45);
-      expect(mapping.directory!.hue).toBe(0);
-      expect(mapping.git!.hue).toBe(45);
-      expect(mapping.contextWarning!.hue).toBeUndefined();
-      expect(mapping.contextCritical!.hue).toBeUndefined();
-    });
-
+  describe("Style policy", () => {
     it("should include all four styles in STYLE_ORDER", () => {
       expect(STYLE_ORDER).toEqual(["surface", "muted", "button", "hue"]);
     });

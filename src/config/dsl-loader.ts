@@ -53,7 +53,7 @@ import {
   type WidgetDecl,
 } from "./dsl-types.js";
 import { DEFAULT_DSL_CONFIG } from "./default-dsl-config.js";
-import { listResolvablePaletteNames } from "../themes/cascade.js";
+import { listResolvablePaletteNames } from "../themes/policy.js";
 
 // ─── Public types ────────────────────────────────────────────────────────────
 

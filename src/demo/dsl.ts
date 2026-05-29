@@ -29,7 +29,7 @@ import {
 } from "../config/dsl-loader.js";
 import { VariableStore } from "../var-system/store.js";
 import { SourceRegistry } from "../var-system/sources.js";
-import { listResolvablePaletteNames } from "../themes/cascade.js";
+import { listResolvablePaletteNames } from "../themes/policy.js";
 import { registerDslConfig, renderDsl } from "../dsl/render.js";
 import { DEFAULT_TERMINAL_WIDTH } from "../render/strip.js";
 import { applyClaudeCodeReserve } from "../utils/terminal-width.js";
