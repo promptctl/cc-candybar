@@ -1130,7 +1130,15 @@ function validateWidgets(
     });
     return {};
   }
-  const out: Record<string, WidgetDecl> = {};
+  // [LAW:types-are-the-program] Null-prototype record for user-keyed data, so a
+  // widget named "__proto__"/"constructor" becomes an ordinary own property
+  // instead of mutating the prototype chain. Matches the Object.create(null)
+  // compiled map in dsl/render.ts and the Map dispatch in the click-verb
+  // registries — untrusted keys are plain data by construction.
+  const out: Record<string, WidgetDecl> = Object.create(null) as Record<
+    string,
+    WidgetDecl
+  >;
   for (const [name, decl] of Object.entries(raw)) {
     const parsed = validateWidget(ctx, `widgets.${name}`, decl);
     if (parsed !== null) out[name] = parsed;

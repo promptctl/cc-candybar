@@ -53,9 +53,12 @@ interface CompiledButton {
   readonly glyph: string | null;
   // The option list for an optionsFrom button, else null.
   readonly options: readonly string[] | null;
-  // The key an optionsFrom button's set action writes — used to mark the
-  // currently-selected option. null when the button is not an option picker.
-  readonly setKey: string | null;
+  // The VARIABLE name to read for marking the currently-selected option —
+  // resolved at compile time from the set action's SessionState KEY to whatever
+  // variable reads that key (a config may name the var differently than the
+  // key). null when the button is not an option picker or no variable reads the
+  // key (then nothing is marked — a legitimate "current may not exist" state).
+  readonly currentVar: string | null;
   readonly actions: readonly CompiledAction[];
 }
 
@@ -81,9 +84,15 @@ export interface WidgetRuntime {
 // Pre-parse the copy/open action templates for every widget once, at config
 // registration. set actions stay literal. [LAW:one-source-of-truth] parse-once,
 // evaluate-many — renderWidget only evaluates.
+//
+// `stateKeyToVar` maps a SessionState key → the variable that reads it, so an
+// option picker can mark its current selection by reading the SAME value the
+// templates read, regardless of whether the config named the variable after the
+// key. Built by the caller from the config's state-kind variable declarations.
 export function compileWidgets(
   engine: Engine<RichText>,
   widgets: Readonly<Record<string, WidgetDecl>>,
+  stateKeyToVar: ReadonlyMap<string, string>,
 ): CompiledWidgets {
   const out = new Map<string, CompiledWidget>();
   for (const [name, widget] of Object.entries(widgets)) {
@@ -94,16 +103,21 @@ export function compileWidgets(
           : [...STYLE_ORDER]
         : null;
       const actions = item.onClick.map((a) => compileAction(engine, a, name));
+      // Resolve the set KEY to the VARIABLE that reads it for active-marking.
+      // Falls back to the key itself (the by-convention case where the var is
+      // named after the key); readVar yields "" if no such variable exists.
       const setKey =
         options !== null
           ? (actions.find((a) => a.kind === "set")?.key ?? null)
           : null;
+      const currentVar =
+        setKey !== null ? (stateKeyToVar.get(setKey) ?? setKey) : null;
       const display =
         options !== null
           ? null
           : joinDisplay(item.glyph, "label" in item ? item.label : undefined);
       const glyph = options !== null ? (item.glyph ?? null) : null;
-      return { display, glyph, options, setKey, actions };
+      return { display, glyph, options, currentVar, actions };
     });
     out.set(name, { items });
   }
@@ -250,7 +264,8 @@ export function renderWidget(name: string, runtime: WidgetRuntime): RichText {
 
   for (const item of widget.items) {
     if (item.options !== null) {
-      const current = item.setKey !== null ? readVar(store, item.setKey) : "";
+      const current =
+        item.currentVar !== null ? readVar(store, item.currentVar) : "";
       for (const option of item.options) {
         const text = item.glyph ? `${item.glyph} ${option}` : option;
         const url = composeUrl(item.actions, scope, sessionId, option);

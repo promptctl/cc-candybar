@@ -173,6 +173,39 @@ describe("DSL widgets — option picker end-to-end (chunk-11 .3)", () => {
   });
 });
 
+describe("DSL widgets — active marking via differently-named state var", () => {
+  // [LAW:one-source-of-truth] The state var is named `themeName` but reads the
+  // `theme` key the picker writes. Active-marking must resolve key→var and mark
+  // the current option — not assume a var literally named `theme`.
+  const SRC = `{
+    globals: {},
+    variables: {
+      'session.id': { kind: 'input', path: 'session_id', default: '' },
+      themeName: { kind: 'state', key: 'theme', default: '(none)' },
+    },
+    widgets: {
+      themePicker: { kind: 'buttons', items: [{ optionsFrom: 'themes', onClick: { set: 'theme' } }] },
+    },
+    segments: { pick: { template: '{{ widget "themePicker" }}', bg: 'surface', fg: 'foreground' } },
+    layout: [['pick']],
+  }`;
+
+  test("marks the current option even when the state var name differs from the key", () => {
+    const SID = "s-named";
+    const { sessionState, render } = buildRuntime(SRC, { session_id: SID });
+    expect(render()).not.toContain(";1m\x1b]8;;");
+    const target = listResolvablePaletteNames()[0]!;
+    VERBS.get("set-state")!(`${SID}/theme/${target}`, {
+      sessionState,
+      dlog: () => {},
+    });
+    const after = render();
+    expect(after).toContain(
+      `;1m\x1b]8;;cc-candybar://set-state/${SID}/theme/${target}\x1b\\`,
+    );
+  });
+});
+
 describe("DSL widgets — loader validation (chunk-11 .3)", () => {
   const wrap = (widgets: string, template = '{{ widget "w" }}') => `{
     globals: {},

@@ -231,7 +231,21 @@ export function registerDslConfig(
     compiled: new Map(),
   };
   const engine = createCcCandybarEngine(undefined, widgetRuntime);
-  widgetRuntime.compiled = compileWidgets(engine, config.widgets);
+  // [LAW:one-source-of-truth] Map each SessionState key → the variable that
+  // reads it, so an option picker marks its current selection by reading the
+  // SAME value the templates read — independent of whether the config named the
+  // variable after the key. State vars are the single read path for SessionState.
+  const stateKeyToVar = new Map<string, string>();
+  for (const [name, decl] of Object.entries(config.variables)) {
+    if (decl.kind === "state" && !stateKeyToVar.has(decl.key)) {
+      stateKeyToVar.set(decl.key, name);
+    }
+  }
+  widgetRuntime.compiled = compileWidgets(
+    engine,
+    config.widgets,
+    stateKeyToVar,
+  );
 
   for (const [name, decl] of Object.entries(config.variables)) {
     declareOne(registry, name, decl, cwd);
