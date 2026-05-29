@@ -34,7 +34,7 @@ const MAX_ENTRIES = 256;
 // [LAW:single-enforcer] These are the cache-and-registry deps — git data
 // (for declareGit subscriptions), session state (for declareState atoms),
 // and the watcher registry (for hot-reload's config file watcher). Daemon-
-// owned data providers like UsageProvider/TodayProvider/etc. live in
+// owned data providers like the SessionUsageStore/git provider/etc. live in
 // `payloadDeps` (server.ts) and feed `buildRenderPayload`; they are not
 // part of cache identity or lifecycle.
 export interface RenderDeps {

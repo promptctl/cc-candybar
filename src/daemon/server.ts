@@ -19,7 +19,7 @@ import {
 } from "./protocol";
 import type { Request, Response } from "./protocol";
 import { GitDataProvider } from "./cache/git";
-import { CachedUsageProvider } from "./cache/usage";
+import { SessionUsageStore } from "./cache/session-usage-store";
 import { RenderCache } from "./cache/render";
 import { WatcherRegistry } from "./cache/watchers";
 import { RuntimeStats } from "./stats";
@@ -42,7 +42,6 @@ import {
 import { applyClaudeCodeReserve } from "../utils/terminal-width.js";
 import type { RichText } from "@promptctl/rich-js";
 import { buildRenderPayload } from "./render-payload.js";
-import { TodayProvider } from "../segments/today.js";
 import { ContextProvider } from "../segments/context.js";
 import { MetricsProvider } from "../segments/metrics.js";
 import { TmuxService } from "../segments/tmux.js";
@@ -67,7 +66,7 @@ const gitService = new GitDataProvider({
   watchers: watcherRegistry,
   logger: dlog,
 });
-const usageProvider = new CachedUsageProvider();
+const usageStore = new SessionUsageStore();
 // [LAW:locality-or-seam] Constructed ephemeral so importing this module (CLI
 // relay, subcommands) does no disk I/O. The daemon binds the file-backed
 // storage in runDaemon(), making it the sole reader/writer of the state file.
@@ -75,7 +74,6 @@ const sessionState = new SessionState();
 // [LAW:one-source-of-truth] One provider per data shape, shared across every
 // render in this daemon. The render cache owns DSL-state-per-config; these
 // providers serve the augmented payload that flows through every render.
-const todayProvider = new TodayProvider();
 const contextProvider = new ContextProvider();
 const metricsProvider = new MetricsProvider();
 const tmuxService = new TmuxService();
@@ -417,9 +415,9 @@ function shutdown(code: number): void {
     dlog("warn", `gitService close failed: ${(e as Error).message}`);
   }
   try {
-    usageProvider.close();
+    usageStore.close();
   } catch (e) {
-    dlog("warn", `usageProvider close failed: ${(e as Error).message}`);
+    dlog("warn", `usageStore close failed: ${(e as Error).message}`);
   }
   try {
     watcherRegistry.closeAll();
@@ -565,7 +563,7 @@ async function handleRequest(req: Request): Promise<Response> {
       ok: true,
       stats: stats.snapshot({
         gitCache: gitService.getStats(),
-        usageCache: usageProvider.getStats(),
+        usageCache: usageStore.getStats(),
         renderCacheSize: renderCache.size,
         watchersActive: watcherRegistry.size(),
         nextRestartReason: limits?.describeNextRestart() ?? null,
@@ -690,7 +688,7 @@ async function handleRequest(req: Request): Promise<Response> {
       );
       const ms = Date.now() - t0;
       const g = gitService.getStats();
-      const u = usageProvider.getStats();
+      const u = usageStore.getStats();
       dlog(
         "info",
         `render sid=${req.hookData.session_id ?? "?"} took=${ms}ms termCols=${termCols ?? "?"} width=${width} git=${g.size}/${g.hits}h/${g.misses}m usage=${u.size}/${u.hits}h/${u.misses}m err=${entry.lastError ? "Y" : "N"} warn=${entry.lastWarning ? "Y" : "N"}`,
@@ -962,8 +960,7 @@ function serializeSegmentCells(
 // passed through every render — the data the daemon brings to each tick.
 const payloadDeps = {
   gitProvider: gitService,
-  usageProvider,
-  todayProvider,
+  usageStore,
   contextProvider,
   metricsProvider,
   tmuxService,
