@@ -8,6 +8,9 @@ import {
   findProjectPaths,
   getFileModificationDate,
 } from "./claude";
+// [LAW:single-enforcer] The transcript-tree readdir in getLatestTranscriptMtime
+// shares the same in-flight-I/O budget as the rest of the scanning path.
+import { readdir as gatedReaddir } from "./transcript-fs";
 import { cacheDir } from "../daemon/paths";
 
 interface ErrnoError extends Error {
@@ -218,7 +221,7 @@ export class CacheManager {
 
       for (const projectPath of projectPaths) {
         try {
-          const files = await fs.promises.readdir(projectPath);
+          const files = await gatedReaddir(projectPath);
           const jsonlFiles = files.filter((file) => file.endsWith(".jsonl"));
 
           for (const file of jsonlFiles) {
