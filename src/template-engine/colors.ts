@@ -14,8 +14,8 @@ import type { RichText } from "@promptctl/rich-js";
 import type { Template } from "@promptctl/go-template-js";
 import { rotateHue } from "../themes/oklch.js";
 
-// Semantic palette specs exempt from hue rotation — same rule as the legacy
-// hue system in src/themes/default-mapping.ts (non-semantic only).
+// Semantic palette specs exempt from hue rotation: their meaning must not drift
+// with layout position.
 // [LAW:one-source-of-truth] Defined once here; enforced unconditionally
 // by passing 0 degrees to rotateHue for semantic specs.
 const SEMANTIC_SPECS = new Set(["error", "warning", "success", "info"]);

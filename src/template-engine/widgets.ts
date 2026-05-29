@@ -26,8 +26,7 @@ import {
   type Action,
   type WidgetDecl,
 } from "../config/dsl-types.js";
-import { listResolvablePaletteNames } from "../themes/cascade.js";
-import { STYLE_ORDER } from "../themes/default-mapping.js";
+import { listResolvablePaletteNames, STYLE_ORDER } from "../themes/policy.js";
 
 // ─── Compiled shapes ───────────────────────────────────────────────────────────
 

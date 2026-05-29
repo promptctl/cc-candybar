@@ -25,8 +25,7 @@ import {
   minutesUntilReset,
 } from "../utils/formatters.js";
 import { getBudgetStatus } from "../utils/budget.js";
-import { listResolvablePaletteNames } from "../themes/cascade.js";
-import { STYLE_ORDER } from "../themes/default-mapping.js";
+import { listResolvablePaletteNames, STYLE_ORDER } from "../themes/policy.js";
 
 // [LAW:one-source-of-truth] The DSL `themes()` and `styles()` bindings
 // project the SAME canonical sources the set-state validator consults
