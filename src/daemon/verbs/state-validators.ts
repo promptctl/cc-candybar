@@ -107,7 +107,9 @@ const validateBoolean: KeyValidator = (raw) => {
 };
 
 // [LAW:one-source-of-truth] THE list of state keys the click protocol can
-// write. Alphabetical for diff-stability — order is not load-bearing.
+// write. The Map is mutable internally so widget configs can install
+// per-config entries at load time via registerStateValidator; the public
+// surface is a ReadonlyMap view and a snapshot-on-call listStateKeys().
 //
 // [LAW:types-are-the-program] `ReadonlyMap` is the type whose lookup is
 // `(key) → KeyValidator | undefined` with NO prototype chain — keys like
@@ -118,20 +120,148 @@ const validateBoolean: KeyValidator = (raw) => {
 // intended BAD_REQUEST. Map makes that crash unrepresentable rather than
 // guarded against, matching the in-memory dispatching pattern already
 // used in src/daemon/session-state.ts.
-export const STATE_VALIDATORS: ReadonlyMap<string, KeyValidator> = new Map<
-  string,
-  KeyValidator
->([
+const _STATE_VALIDATORS = new Map<string, KeyValidator>([
   ["style", validateStyle],
   ["theme", validateTheme],
   ["toolbar-expanded", validateBoolean],
 ]);
 
-// Exported for error messages (the BAD_REQUEST surfaces this list so the
-// caller learns the writable schema without a separate API call).
-export const STATE_KEYS: readonly string[] = Object.freeze([
-  ...STATE_VALIDATORS.keys(),
-]) as readonly string[];
+// [LAW:single-enforcer] One registry, one dispatch path. The exported
+// ReadonlyMap aliases the same underlying Map, so iteration and lookups
+// always see live state — there is no second store to drift against.
+export const STATE_VALIDATORS: ReadonlyMap<string, KeyValidator> =
+  _STATE_VALIDATORS;
+
+// [LAW:dataflow-not-control-flow] listStateKeys returns a fresh snapshot
+// on each call — the snapshot semantics IS the contract. The previous
+// frozen `STATE_KEYS` constant was wrong-by-construction once the
+// registry became dynamic: it would have frozen the baseline three at
+// module-load time and silently misreport the writable surface to every
+// caller after a widget config registered a new key. The function shape
+// makes "as-of-now" the only readable value.
+export function listStateKeys(): readonly string[] {
+  return [..._STATE_VALIDATORS.keys()];
+}
+
+// [LAW:locality-or-seam] The widget config (a config-load consumer) owns
+// the lifecycle of the validators it installs; this function returns a
+// disposer rather than coupling the registry to a global "config reload"
+// event. On hot-reload of a DSL config, the cache's reloadInto pattern
+// installs new validators into a local first and only disposes the old
+// disposers on successful swap — matching the SourceRegistry dispose-
+// before-swap contract that keeps a broken reload from corrupting the
+// last-known-good state. See src/daemon/cache/render.ts for the wiring.
+//
+// [LAW:no-silent-fallbacks] Registering a key that already has a
+// validator (baseline or previously-installed) throws — silently
+// shadowing an existing validator would hide config-authoring bugs
+// where two widget configs both claim authority over a key. The
+// disposer for the conflict-losing config never runs (the throw
+// aborts the entire registration), so partial installation is
+// unrepresentable.
+//
+// [LAW:single-enforcer] The disposer removes exactly its own entry;
+// double-dispose is a no-op (the key may have been re-registered by a
+// new config in between), not a structural error. Idempotence on the
+// caller side is the contract.
+export function registerStateValidator(
+  key: string,
+  validator: KeyValidator,
+): () => void {
+  if (!key) {
+    throw new Error("registerStateValidator: key is required");
+  }
+  // [LAW:types-are-the-program] The set-state wire parses its tail by
+  // splitting on `/`, so a slash-bearing key can never be addressed on
+  // the wire — it would be split into two separate segments before
+  // dispatch. Listing such a key in listStateKeys() while making it
+  // structurally unreachable is the kind of registry-vs-wire drift
+  // [LAW:one-source-of-truth] forbids. Reject at registration so the
+  // unreachable-but-listed state is unrepresentable.
+  if (key.includes("/")) {
+    throw new Error(
+      `registerStateValidator: key "${key}" contains "/" — the set-state ` +
+        `wire shape splits on "/" so a slash-bearing key cannot be ` +
+        `addressed. Use a slash-free key.`,
+    );
+  }
+  if (_STATE_VALIDATORS.has(key)) {
+    throw new Error(
+      `registerStateValidator: key "${key}" already has a validator ` +
+        `(existing keys: ${[..._STATE_VALIDATORS.keys()].join(", ")})`,
+    );
+  }
+  _STATE_VALIDATORS.set(key, validator);
+  let active = true;
+  return () => {
+    if (!active) return;
+    active = false;
+    if (_STATE_VALIDATORS.get(key) === validator) {
+      _STATE_VALIDATORS.delete(key);
+    }
+  };
+}
+
+// [LAW:one-type-per-behavior] The "values come from list Y" pattern IS
+// the canonical widget-config use case (theme picker draws from
+// themes(), style picker draws from styles(), a custom enum picker
+// draws from a user-declared list). One factory builds the validator
+// from the list — every callsite that registers an allow-list key
+// passes through the same shape, so error messages, empty-input
+// rejection, and lookup semantics are identical by construction.
+//
+// [LAW:no-silent-fallbacks] Empty input is rejected with a label-
+// referencing reason rather than silently mapped to a default — the
+// shape matches validateTheme/validateStyle so the operator experience
+// is consistent across baseline and widget-installed keys.
+export function makeAllowListValidator(
+  allowed: readonly string[],
+  label: string,
+): KeyValidator {
+  // [LAW:types-are-the-program] The factory's contract is "options =
+  // allow list" — every value the picker can RENDER must also be a
+  // value the wire can DELIVER. Two structural reasons a declared
+  // option can't reach the validator as itself:
+  //   (1) the wire splits the tail on "/", so a slash-bearing value
+  //       would arrive as two segments — the validator never sees it
+  //       as one value;
+  //   (2) the validator's empty-input rejection ("X value is required")
+  //       fires before the allow-list check, so an "" in the allow
+  //       list would be listed-but-undeliverable.
+  // Both are the same shape as [LAW:registry-vs-wire drift] caught by
+  // registerStateValidator's slash-key check. Catching at factory-build
+  // time (config-load) per [LAW:verifiable-goals] surfaces a
+  // misconfigured option list immediately, not on the operator's first
+  // click. Mirrors registry surface = writable surface, by construction.
+  const slashOffenders = allowed.filter((v) => v.includes("/"));
+  if (slashOffenders.length > 0) {
+    throw new Error(
+      `makeAllowListValidator(${label}): values contain "/" — the set-state ` +
+        `wire shape splits values on "/" so slash-bearing options cannot ` +
+        `be addressed. Offending values: ${slashOffenders.join(", ")}`,
+    );
+  }
+  if (allowed.includes("")) {
+    throw new Error(
+      `makeAllowListValidator(${label}): empty string is not a writable ` +
+        `option — the validator rejects empty input before the allow-list ` +
+        `check, so an "" in the allowed list could be rendered but never ` +
+        `delivered. Remove "" from the allowed list.`,
+    );
+  }
+  const allowedSet: ReadonlySet<string> = new Set(allowed);
+  const allowedList = [...allowed];
+  return (raw) => {
+    if (!raw) return { ok: false, reason: `${label} value is required` };
+    if (!allowedSet.has(raw)) {
+      return {
+        ok: false,
+        reason: `unknown ${label} "${raw}" (have: ${allowedList.join(", ")})`,
+      };
+    }
+    return { ok: true, value: raw };
+  };
+}
 
 // [LAW:dataflow-not-control-flow] Single entry point for validation: the
 // caller hands over (key, value), this returns a uniform ValidateResult
@@ -141,11 +271,11 @@ export function validateStateWrite(
   key: string,
   rawValue: string,
 ): ValidateResult {
-  const validator = STATE_VALIDATORS.get(key);
+  const validator = _STATE_VALIDATORS.get(key);
   if (!validator) {
     return {
       ok: false,
-      reason: `unknown state key "${key}" (have: ${STATE_KEYS.join(", ")})`,
+      reason: `unknown state key "${key}" (have: ${listStateKeys().join(", ")})`,
     };
   }
   return validator(rawValue);

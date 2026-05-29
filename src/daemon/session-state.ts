@@ -23,8 +23,20 @@ export interface SessionStateReader {
 // [LAW:locality-or-seam] Renderer needs to *cache* per-session random picks
 // so subsequent renders are stable. Writing them back into the same store
 // click verbs use keeps state in one place — no parallel cache to drift.
+//
+// setBatch commits multiple (key, value) pairs as a single reactive
+// transaction: observers fire ONCE after every pair has landed, never
+// between pairs. The set-state verb's batched-pair URL (a Menu click that
+// writes the chosen value AND collapses the menu) depends on this — if
+// observers saw the first write before the second, an autorun could
+// render half-applied state. The atomicity contract lives in the seam,
+// not in each consumer. [LAW:single-enforcer]
 export interface SessionStateRW extends SessionStateReader {
   set(sessionId: string, key: string, value: string): void;
+  setBatch(
+    sessionId: string,
+    pairs: ReadonlyArray<{ key: string; value: string }>,
+  ): void;
   clear(sessionId: string, key: string): void;
 }
 
@@ -115,10 +127,39 @@ export class SessionState implements SessionStateReader, SessionStateRW {
     return session.get(key) ?? null;
   }
 
+  // [LAW:one-source-of-truth] set is the degenerate single-pair form of
+  // setBatch — one write path through the store. The previous shape (a
+  // standalone set body) split the write semantics across two routes
+  // once setBatch was introduced; collapsing keeps mutation, persistence,
+  // and notification in exactly one place.
   set(sessionId: string, key: string, value: string): void {
+    this.setBatch(sessionId, [{ key, value }]);
+  }
+
+  // [LAW:no-silent-fallbacks] Atomic commit of N pairs: every write
+  // lands BEFORE the single reportChanged() that scheduler-visibly
+  // marks the transaction complete. Observers cannot see an
+  // intermediate "half-applied" snapshot — `runInAction` defers
+  // reaction scheduling until the outermost call exits, and we hold
+  // ALL writes inside this one block. Previously, the verb's "loop and
+  // call set N times" pattern fired reportChanged() N times, which
+  // scheduled autoruns between pairs (visible to consumers as the menu
+  // value changing while toolbar-expanded was still old). The batch
+  // method is the structural fix: there is no way to get half-applied
+  // state because there is no intermediate scheduler tick.
+  //
+  // [LAW:dataflow-not-control-flow] An empty pairs array is no-work-
+  // to-do, returned without firing reportChanged or persisting. The
+  // verb body validates that pairs is non-empty before calling, so
+  // this is the public-API safety net rather than the hot path.
+  setBatch(
+    sessionId: string,
+    pairs: ReadonlyArray<{ key: string; value: string }>,
+  ): void {
+    if (pairs.length === 0) return;
     runInAction(() => {
       const session = this.sessions.get(sessionId) ?? new Map<string, string>();
-      session.set(key, value);
+      for (const { key, value } of pairs) session.set(key, value);
       this.touch(sessionId, session);
       this.evictOldest();
       this.persist();

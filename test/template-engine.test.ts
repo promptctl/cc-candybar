@@ -316,6 +316,8 @@ describe("ccCandybarFuncs registry", () => {
       "dirname",
       "int",
       "string",
+      "styles",
+      "themes",
       "urlEncode",
     ]);
   });
@@ -325,5 +327,62 @@ describe("ccCandybarFuncs registry", () => {
     for (const [name, entry] of Object.entries(funcs)) {
       expect(Array.isArray(entry.argTypes)).toBe(true);
     }
+  });
+});
+
+// ────────────────────────────────────────────────────────────────
+// 10. Domain-list bindings (themes / styles)
+// ────────────────────────────────────────────────────────────────
+
+// [LAW:one-source-of-truth] The DSL `themes()` and `styles()` bindings
+// project the SAME canonical sources as the set-state validators
+// (listResolvablePaletteNames / STYLE_ORDER). A widget config that
+// `range`s over themes() to emit OSC-8 picker cells is iterating the
+// allow-list the validator will enforce on the resulting click — the
+// list and the gate cannot diverge. These tests pin the projection
+// shape (zero-arg, list-returning) so a refactor that changed the
+// signature would break here loudly.
+describe("themes / styles domain-list bindings", () => {
+  test("themes() returns the canonical resolvable-palette list", async () => {
+    const { listResolvablePaletteNames } = await import(
+      "../src/themes/cascade"
+    );
+    const expected = [...listResolvablePaletteNames()];
+    const result = evalText(
+      "{{ range themes }}{{ . }}|{{ end }}",
+      {},
+    );
+    expect(result).toBe(expected.join("|") + "|");
+  });
+
+  test("styles() returns the canonical STYLE_ORDER list", async () => {
+    const { STYLE_ORDER } = await import("../src/themes/default-mapping");
+    const expected = [...STYLE_ORDER];
+    const result = evalText(
+      "{{ range styles }}{{ . }}|{{ end }}",
+      {},
+    );
+    expect(result).toBe(expected.join("|") + "|");
+  });
+
+  test("themes() participates in `has` membership checks", () => {
+    // [LAW:dataflow-not-control-flow] A picker template uses `has`
+    // against themes() to mark the currently-active item. This exercises
+    // the same composition path the widget will use in chunk-11 .3.
+    const result = evalText(
+      '{{ if has "nord" themes }}yes{{ else }}no{{ end }}',
+      {},
+    );
+    expect(result).toBe("yes");
+  });
+
+  test("themes() and styles() are zero-arg list-returning bindings", () => {
+    const funcs = ccCandybarFuncs();
+    const themesEntry = funcs.themes;
+    const stylesEntry = funcs.styles;
+    expect(themesEntry).toBeDefined();
+    expect(stylesEntry).toBeDefined();
+    expect(themesEntry?.argTypes).toEqual([]);
+    expect(stylesEntry?.argTypes).toEqual([]);
   });
 });
