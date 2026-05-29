@@ -360,6 +360,22 @@ describe("k5a.6 — menu page-key validator", () => {
     expect(() => parseAndValidate("<test>", wrongPath, ALLOWED)).toThrow(
       /term\.cols/,
     );
+    // Wrong type: width is injected as a number; a non-number type coerces it
+    // (e.g. boolean → true → 1) and the menu paginates against a broken width.
+    const wrongType = `{
+      globals: {},
+      variables: {
+        'session.id': { kind: 'input', path: 'session_id', default: '' },
+        p: { kind: 'state', key: 'p', default: '-1' },
+        'term.cols': { kind: 'input', path: 'term.cols', type: 'boolean', default: false },
+      },
+      widgets: { m: { kind: 'menu', state: 'p', items: [{ optionsFrom: 'themes', onClick: { set: 'theme' } }] } },
+      segments: { s: { template: '{{ widget "m" }}', bg: 'surface', fg: 'foreground' } },
+      layout: [['s']],
+    }`;
+    expect(() => parseAndValidate("<test>", wrongType, ALLOWED)).toThrow(
+      /term\.cols/,
+    );
   });
 
   test("baseline keys are not re-derived (buttons writing theme)", () => {

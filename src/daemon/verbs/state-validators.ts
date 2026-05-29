@@ -318,11 +318,16 @@ export function deriveWidgetValidators(
   config: DslConfig,
 ): ReadonlyArray<{ readonly key: string; readonly validator: KeyValidator }> {
   const out = new Map<string, KeyValidator>();
-  for (const [name, widget] of Object.entries(config.widgets)) {
+  for (const widget of Object.values(config.widgets)) {
     if (!isMenuWidget(widget)) continue;
     const key = widget.state;
     if (out.has(key)) continue;
-    out.set(key, makeIntValidator(`widget "${name}" page`));
+    // [LAW:one-source-of-truth] Label from the KEY, not the widget name: the
+    // registry ref-counts by key and keeps the first validator authoritative, so
+    // a name-based label would misattribute an error to whichever config/cache
+    // entry happened to register first. A key-based label makes every derived
+    // validator for a key byte-identical.
+    out.set(key, makeIntValidator(`menu page "${key}"`));
   }
   return [...out.entries()].map(([key, validator]) => ({ key, validator }));
 }

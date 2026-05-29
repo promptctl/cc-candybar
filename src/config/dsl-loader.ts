@@ -1706,11 +1706,12 @@ function validateCrossReferences(ctx: ValidateCtx, cfg: DslConfig): void {
     if (
       decl === undefined ||
       decl.kind !== "input" ||
-      decl.path !== TERM_COLS_VAR
+      decl.path !== TERM_COLS_VAR ||
+      decl.type !== "number"
     ) {
       ctx.issues.push({
         path: `variables.${TERM_COLS_VAR}`,
-        message: `a menu widget paginates against the terminal width, which renderDsl injects at the "${TERM_COLS_VAR}" path — so it requires a global "${TERM_COLS_VAR}" variable declared as { kind: "input", path: "${TERM_COLS_VAR}", type: "number" } (the bundled default declares exactly this; a standalone config must too). A different kind or path never receives the injected width.`,
+        message: `a menu widget paginates against the terminal width, which renderDsl injects (as a number) at the "${TERM_COLS_VAR}" path — so it requires a global "${TERM_COLS_VAR}" variable declared as { kind: "input", path: "${TERM_COLS_VAR}", type: "number" } (the bundled default declares exactly this; a standalone config must too). A different kind, path, or non-number type never receives the injected width correctly.`,
         line: findKeyLine(ctx.source, ["variables"]),
       });
     }
