@@ -83,7 +83,7 @@ export class SessionProvider {
     try {
       debug(`Found transcript at: ${transcriptPath}`);
 
-      const parsedEntries = await parseJsonlFile(transcriptPath);
+      const mainEntries = await parseJsonlFile(transcriptPath);
       const projectPath = dirname(transcriptPath);
       const agentTranscripts = await findAgentTranscripts(
         sessionId,
@@ -92,10 +92,16 @@ export class SessionProvider {
 
       debug(`Found ${agentTranscripts.length} agent transcripts for session`);
 
-      for (const agentPath of agentTranscripts) {
-        const agentEntries = await parseJsonlFile(agentPath);
-        parsedEntries.push(...agentEntries);
-      }
+      // [LAW:one-source-of-truth] parseJsonlFile returns its cached entries
+      // array BY REFERENCE; the parse cache is the canonical store of a file's
+      // parsed entries and is shared across providers. Mutating that array
+      // (the old `push`) corrupted the cache — agent entries leaked into the
+      // main transcript's cached value and re-appended on every warm hit.
+      // Build a fresh combined list instead so no shared array is touched.
+      const agentEntries = (
+        await Promise.all(agentTranscripts.map((p) => parseJsonlFile(p)))
+      ).flat();
+      const parsedEntries = [...mainEntries, ...agentEntries];
 
       if (parsedEntries.length === 0) {
         return { totalCost: 0, entries: [] };
