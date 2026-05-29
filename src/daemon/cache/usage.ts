@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import { UsageProvider, type UsageInfo } from "../../segments/session";
 import type { ClaudeHookData } from "../../utils/claude";
+import { SingleFlight } from "../../utils/single-flight";
 import { dlog } from "../log";
 
 // [LAW:one-source-of-truth] cache key is sessionId. Each session has its own
@@ -29,6 +30,12 @@ function statMtimeMs(filePath: string | undefined): number {
 
 export class CachedUsageProvider extends UsageProvider {
   private readonly entries = new Map<string, UsageCacheEntry>();
+  // [LAW:one-source-of-truth] The mtime cache memoizes RESULTS across renders;
+  // this coalesces concurrent MISSES within one render tick. Two overlapping
+  // renders that both miss and observed the SAME (sessionId, transcript mtime)
+  // would each launch their own transcript read — single-flight shares the one
+  // in-flight compute (keyed below by sessionId+mtime) so the read happens once.
+  private readonly flight = new SingleFlight();
   private readonly maxEntries: number;
   private readonly staleAgeMs: number;
   private hits = 0;
@@ -95,7 +102,18 @@ export class CachedUsageProvider extends UsageProvider {
     }
 
     this.misses++;
-    const info = await super.getUsageInfo(sessionId, hookData);
+    // [LAW:one-source-of-truth] The coalescing key is the full computation
+    // identity, not just the session: it includes the observed transcript
+    // mtime. Two renders that saw the SAME mtime compute the same result, so
+    // sharing one read is sound; a render that observed a NEWER mtime is a
+    // DIFFERENT computation and must do its own read rather than attach to an
+    // in-flight read of the older content. This makes coalescing
+    // result-equivalent to no coalescing — it changes timing, never answers.
+    // (The pre-existing post-compute re-stat below is unchanged by this and is
+    // owned by the architectural usage-cache rework, brandon-daemon-memory-leak-5qh.)
+    const info = await this.flight.run(`${sessionId}:${currentMtime}`, () =>
+      super.getUsageInfo(sessionId, hookData),
+    );
 
     // Re-stat after compute to capture any in-flight transcript writes; using
     // the post-compute mtime guarantees the next request that finds the same
