@@ -28,7 +28,15 @@ const TRANSCRIPT_FS_CONCURRENCY = 8;
 // race of an increment-then-wake design is structurally absent.
 class Limiter {
   private slots: number;
+  // FIFO wait queue with a head index, so dequeue is O(1): release() reads at
+  // `head` and advances it rather than Array.shift() reindexing every element.
+  // Under the thousands-of-queued-ops burst this limiter exists to absorb, an
+  // O(n) shift per release would make a single drain O(n²) on the render hot
+  // path. Slot conservation guarantees the queue always empties between bursts,
+  // so resetting it the moment `head` meets `length` bounds the consumed prefix
+  // without any midpoint-compaction heuristic.
   private readonly waiters: Array<() => void> = [];
+  private head = 0;
 
   constructor(max: number) {
     this.slots = max;
@@ -54,9 +62,16 @@ class Limiter {
   }
 
   private release(): void {
-    const next = this.waiters.shift();
-    if (next) next();
-    else this.slots++;
+    if (this.head === this.waiters.length) {
+      // Queue drained — return the slot to the pool and drop the spent array.
+      this.waiters.length = 0;
+      this.head = 0;
+      this.slots++;
+      return;
+    }
+    // Hand the slot directly to the next waiter; the freed closure is reclaimed
+    // when the array is reset on full drain.
+    this.waiters[this.head++]!();
   }
 }
 
