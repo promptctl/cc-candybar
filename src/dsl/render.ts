@@ -241,6 +241,18 @@ export function registerDslConfig(
       stateKeyToVar.set(decl.key, name);
     }
   }
+  // Segment-local state vars read the same SessionState keys; they register
+  // under the namespaced `segName.varName` (the form the store + scope use), so
+  // map the key to that namespaced name. Global wins on key collision (added
+  // first) — the value is the same key regardless, so either reads correctly.
+  for (const [segName, seg] of Object.entries(config.segments)) {
+    if (!seg.vars) continue;
+    for (const [varName, decl] of Object.entries(seg.vars)) {
+      if (decl.kind === "state" && !stateKeyToVar.has(decl.key)) {
+        stateKeyToVar.set(decl.key, `${segName}.${varName}`);
+      }
+    }
+  }
   widgetRuntime.compiled = compileWidgets(
     engine,
     config.widgets,
