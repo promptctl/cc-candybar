@@ -38,6 +38,10 @@ import {
   applySegmentLayout,
   resolveSegmentColors,
 } from "../template-engine/index.js";
+import {
+  compileWidgets,
+  type WidgetRuntime,
+} from "../template-engine/widgets.js";
 
 // ─── Compiled segment shape ───────────────────────────────────────────────────
 
@@ -172,15 +176,6 @@ function declareOne(
 
 // ─── registerDslConfig ────────────────────────────────────────────────────────
 
-// [LAW:one-source-of-truth] One engine instance for all template compilation.
-// Engine creation is expensive; sharing one instance means parse() amortizes
-// the startup cost across all segment templates. The engine is resolver-less
-// because built-in segment templates do not call palette functions in their
-// bodies — colors are set via the bg/fg fields evaluated in resolveSegmentColors.
-// Palette functions in template bodies ({{ primary "..." }}) are a future
-// extension that would require a per-palette engine instance.
-const _compileEngine = createCcCandybarEngine();
-
 /**
  * Translate a validated DslConfig into the live VariableStore + SourceRegistry
  * and pre-parse all segment templates.
@@ -218,9 +213,51 @@ const _compileEngine = createCcCandybarEngine();
 export function registerDslConfig(
   config: ValidatedConfig,
   registry: SourceRegistry,
-  opts?: { cwd?: string },
+  opts?: { cwd?: string; store?: VariableStore },
 ): CompiledSegments {
   const cwd = opts?.cwd ?? process.cwd();
+
+  // [LAW:locality-or-seam] One engine per config load, carrying THIS config's
+  // widget runtime. Engine creation amortizes across all of this config's
+  // segment templates (parse-once); per-config (not per-render) is the right
+  // granularity because the widget set is config-scoped. The runtime holder is
+  // populated below — the `widget` func references the engine, and the compiled
+  // widgets reference the engine, so the holder breaks that cycle.
+  // [LAW:no-defensive-null-guards] store may be absent for compile-only callers
+  // with no widgets; renderWidget throws loudly if a widget is actually used
+  // without a store, rather than silently rendering an empty click.
+  const widgetRuntime: WidgetRuntime = {
+    store: opts?.store ?? null,
+    compiled: new Map(),
+  };
+  const engine = createCcCandybarEngine(undefined, widgetRuntime);
+  // [LAW:one-source-of-truth] Map each SessionState key → the variable that
+  // reads it, so an option picker marks its current selection by reading the
+  // SAME value the templates read — independent of whether the config named the
+  // variable after the key. State vars are the single read path for SessionState.
+  const stateKeyToVar = new Map<string, string>();
+  for (const [name, decl] of Object.entries(config.variables)) {
+    if (decl.kind === "state" && !stateKeyToVar.has(decl.key)) {
+      stateKeyToVar.set(decl.key, name);
+    }
+  }
+  // Segment-local state vars read the same SessionState keys; they register
+  // under the namespaced `segName.varName` (the form the store + scope use), so
+  // map the key to that namespaced name. Global wins on key collision (added
+  // first) — the value is the same key regardless, so either reads correctly.
+  for (const [segName, seg] of Object.entries(config.segments)) {
+    if (!seg.vars) continue;
+    for (const [varName, decl] of Object.entries(seg.vars)) {
+      if (decl.kind === "state" && !stateKeyToVar.has(decl.key)) {
+        stateKeyToVar.set(decl.key, `${segName}.${varName}`);
+      }
+    }
+  }
+  widgetRuntime.compiled = compileWidgets(
+    engine,
+    config.widgets,
+    stateKeyToVar,
+  );
 
   for (const [name, decl] of Object.entries(config.variables)) {
     declareOne(registry, name, decl, cwd);
@@ -247,7 +284,7 @@ export function registerDslConfig(
     const paletteName = effectiveSegmentPalette(config.globals, seg);
     const parseField = (src: string, field: string) => {
       try {
-        return _compileEngine.parse(src);
+        return engine.parse(src);
       } catch (e) {
         throw new Error(
           `Template parse error in segments.${segName}.${field}: ${(e as Error).message}`,

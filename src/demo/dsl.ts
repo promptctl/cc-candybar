@@ -78,7 +78,10 @@ const basePalette = new PaletteResolver(
 const store = new VariableStore();
 const registry = new SourceRegistry(store);
 try {
-  const compiled = registerDslConfig(config, registry, { cwd: process.cwd() });
+  const compiled = registerDslConfig(config, registry, {
+    cwd: process.cwd(),
+    store,
+  });
 
   process.stdout.write(
     `\n  DSL demo — ${configPath}\n` +

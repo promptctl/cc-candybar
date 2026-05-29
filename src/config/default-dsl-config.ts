@@ -485,4 +485,10 @@ export const DEFAULT_DSL_CONFIG = {
   // changes when they do — every segment is already declared above, and the
   // renderer walks rows uniformly.
   layout: [["directory", "git", "model", "session", "today", "context"]],
+
+  // [LAW:locality-or-seam] No interactive widgets in the bundled default — the
+  // baseline statusline is non-interactive text segments. A user config
+  // declares widgets and references them from a segment template via
+  // `{{ widget "name" }}`; the merge cascade adds them by name.
+  widgets: {},
 } satisfies DslConfig;

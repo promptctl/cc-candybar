@@ -28,6 +28,7 @@ const DFLT: DslConfig = {
     b: { template: " B " } as SegmentDecl,
   },
   layout: [["a", "b"]],
+  widgets: {},
 };
 
 describe("mergeWithDefault", () => {
