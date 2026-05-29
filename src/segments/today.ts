@@ -5,6 +5,7 @@ import { debug } from "../utils/logger";
 import { PricingService } from "./pricing";
 import { CacheManager } from "../utils/cache";
 import { loadEntriesFromProjects } from "../utils/claude";
+import { SingleFlight } from "../utils/single-flight";
 
 export interface TodayUsageEntry {
   timestamp: Date;
@@ -57,6 +58,15 @@ function convertToTodayEntry(entry: ParsedEntry): TodayUsageEntry {
 }
 
 export class TodayProvider {
+  // [LAW:one-source-of-truth] The `today` aggregate is a whole-transcript-tree
+  // scan that every render with a `today` segment triggers; its disk cache
+  // near-permanently misses during active work (newest-mtime invalidates it
+  // each second). Without coalescing, K concurrent renders launch K identical
+  // scans. This shares one in-flight scan per day across all concurrent
+  // callers. The provider is a daemon-singleton, so this member persists across
+  // renders and coalesces them.
+  private readonly flight = new SingleFlight();
+
   private async loadTodayEntries(): Promise<TodayUsageEntry[]> {
     const today = new Date();
     const todayDateString = formatDate(today);
@@ -126,7 +136,13 @@ export class TodayProvider {
 
   private async getTodayEntries(): Promise<TodayUsageEntry[]> {
     try {
-      return await this.loadTodayEntries();
+      // Key by the calendar day: concurrent callers within one day share the
+      // scan, and a date rollover naturally starts a fresh computation under a
+      // new key rather than serving yesterday's in-flight result. The catch is
+      // per-caller — every waiter sharing a rejected scan degrades to [].
+      return await this.flight.run(formatDate(new Date()), () =>
+        this.loadTodayEntries(),
+      );
     } catch (error) {
       debug("Error loading today's entries:", error);
       return [];

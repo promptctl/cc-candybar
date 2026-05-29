@@ -453,7 +453,17 @@ function handleConnection(sock: net.Socket): void {
   };
 
   // Per-request timeout protects the daemon from a single slow request
-  // (e.g. a hung git call) blocking subsequent connections.
+  // (e.g. a hung git call) blocking subsequent connections. It abandons the
+  // RESPONSE, not the work — the handler promise keeps running.
+  //
+  // [LAW:one-source-of-truth] That is safe for the transcript-fs path because
+  // the work is bounded + shared, not orphaned: the today aggregate and
+  // per-session usage compute behind a SingleFlight (src/utils/single-flight.ts),
+  // so a timed-out render that abandoned its await leaves behind the ONE
+  // canonical in-flight scan, which the next render coalesces onto rather than
+  // duplicating. A timeout therefore adds zero new fs work — there is never
+  // more than one scan per key to orphan. Cancellation would be both messier
+  // and wasteful here (the in-flight scan is exactly what the next tick needs).
   const timer = setTimeout(() => {
     stats.requestsTimedOut++;
     respond({
