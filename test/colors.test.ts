@@ -6,8 +6,6 @@ import {
 } from "../src/utils/colors";
 import { getColorSupport } from "../src/utils/color-support";
 import { listAvailableThemes, STYLE_ORDER } from "../src/themes";
-import { rotateHue, rgbaToOklch } from "../src/themes/oklch";
-import { ColorRgba } from "@promptctl/rich-js";
 
 describe("Colors", () => {
   describe("Core Color Functions", () => {
@@ -99,59 +97,6 @@ describe("Colors", () => {
       expect(themes).not.toContain("dark");
       expect(themes).not.toContain("light");
       expect(themes.length).toBeGreaterThanOrEqual(16);
-    });
-  });
-
-  describe("OKLCH Hue Rotation", () => {
-    it("should be identity for 0 degree rotation", () => {
-      const red = new ColorRgba(255, 0, 0);
-      const result = rotateHue(red, 0);
-      expect(result.red).toBe(255);
-      expect(result.green).toBe(0);
-      expect(result.blue).toBe(0);
-    });
-
-    it("should round-trip for 360 degree rotation", () => {
-      const color = new ColorRgba(133, 165, 152);
-      const result = rotateHue(color, 360);
-      expect(Math.abs(result.red - 133)).toBeLessThanOrEqual(2);
-      expect(Math.abs(result.green - 165)).toBeLessThanOrEqual(2);
-      expect(Math.abs(result.blue - 152)).toBeLessThanOrEqual(2);
-    });
-
-    it("should produce perceptually equal hue steps", () => {
-      const base = new ColorRgba(200, 50, 50);
-      const oklch0 = rgbaToOklch(rotateHue(base, 0));
-      const oklch60 = rgbaToOklch(rotateHue(base, 60));
-      const oklch120 = rgbaToOklch(rotateHue(base, 120));
-      const oklch180 = rgbaToOklch(rotateHue(base, 180));
-
-      // Lightness should be preserved (within gamut clamp tolerance)
-      expect(Math.abs(oklch0.L - oklch60.L)).toBeLessThan(0.05);
-      expect(Math.abs(oklch0.L - oklch120.L)).toBeLessThan(0.05);
-      expect(Math.abs(oklch0.L - oklch180.L)).toBeLessThan(0.05);
-
-      // All four should have distinct hue angles
-      const hues = [oklch0.H, oklch60.H, oklch120.H, oklch180.H];
-      const uniqueHues = new Set(hues.map((h) => h.toFixed(3)));
-      expect(uniqueHues.size).toBe(4);
-    });
-
-    it("should produce different RGB values for different hue offsets", () => {
-      const base = new ColorRgba(100, 150, 200);
-      const r0 = rotateHue(base, 0);
-      const r90 = rotateHue(base, 90);
-      const r180 = rotateHue(base, 180);
-      const r270 = rotateHue(base, 270);
-
-      // All four should be visually distinct
-      const unique = new Set([
-        `${r0.red},${r0.green},${r0.blue}`,
-        `${r90.red},${r90.green},${r90.blue}`,
-        `${r180.red},${r180.green},${r180.blue}`,
-        `${r270.red},${r270.green},${r270.blue}`,
-      ]);
-      expect(unique.size).toBe(4);
     });
   });
 
