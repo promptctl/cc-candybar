@@ -20,8 +20,6 @@ import { dirname, join } from "node:path";
 import process from "node:process";
 import { setTimeout as sleep } from "node:timers/promises";
 
-import { PaletteResolver, getThemePalette } from "@promptctl/rich-js";
-
 import {
   parseDslConfig,
   mergeWithDefault,
@@ -30,6 +28,7 @@ import {
 import { VariableStore } from "../var-system/store.js";
 import { SourceRegistry } from "../var-system/sources.js";
 import { listResolvablePaletteNames } from "../themes/policy.js";
+import { effectiveThemeName, resolverForThemeName } from "../themes/index.js";
 import { registerDslConfig, renderDsl } from "../dsl/render.js";
 import { DEFAULT_TERMINAL_WIDTH } from "../render/strip.js";
 import { applyClaudeCodeReserve } from "../utils/terminal-width.js";
@@ -65,8 +64,9 @@ const payload = {
   },
 };
 
-const basePalette = new PaletteResolver(
-  getThemePalette(config.globals.palette ?? "textual-dark")!,
+// The demo has no SessionState; the effective theme is just the config default.
+const basePalette = resolverForThemeName(
+  effectiveThemeName(null, config.globals.palette),
 );
 
 // A fresh store + registry for this run. (A hot-reloading daemon would

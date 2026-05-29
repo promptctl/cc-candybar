@@ -11,11 +11,7 @@
 // the input values (kind discriminators, layout length, palette presence)
 // govern output, not whether operations run.
 
-import {
-  PaletteResolver,
-  getThemePalette,
-  type RichText,
-} from "@promptctl/rich-js";
+import type { PaletteResolver, RichText } from "@promptctl/rich-js";
 import type { Template } from "@promptctl/go-template-js";
 import type {
   ValidatedConfig,
@@ -32,8 +28,7 @@ import {
 import type { BuildLineOptions } from "../render/strip.js";
 import { renderStripCells } from "../render/strip.js";
 import { effectiveSegmentPalette } from "../config/dsl-loader.js";
-import { resolvePaletteName } from "../themes/index.js";
-import { transposedResolver } from "../themes/transposed-resolver.js";
+import { resolverForThemeName, transposedResolver } from "../themes/index.js";
 import { buildScope } from "../template-engine/scope.js";
 import {
   createCcCandybarEngine,
@@ -302,27 +297,12 @@ export function registerDslConfig(
       bg: seg.bg !== undefined ? parseField(seg.bg, "bg") : undefined,
       fg: seg.fg !== undefined ? parseField(seg.fg, "fg") : undefined,
       paletteResolver:
-        paletteName !== undefined ? resolverForPalette(paletteName) : undefined,
+        paletteName !== undefined
+          ? resolverForThemeName(paletteName)
+          : undefined,
     };
   }
   return compiled;
-}
-
-// ─── Per-segment palette resolution ──────────────────────────────────────────
-
-// [LAW:single-enforcer] One place converts a validated palette name to a
-// PaletteResolver. The loader guarantees the name is in allowedPalettes
-// (validated at load time), so getThemePalette must succeed — null is a
-// programming error (registry inconsistency), not a user error.
-function resolverForPalette(name: string): PaletteResolver {
-  const palette = getThemePalette(resolvePaletteName(name));
-  if (palette === null) {
-    throw new Error(
-      `Palette "${name}" was validated by loader but not found in registry — ` +
-        `allowedPalettes and the real registry are inconsistent`,
-    );
-  }
-  return new PaletteResolver(palette);
 }
 
 // ─── renderDsl ───────────────────────────────────────────────────────────────

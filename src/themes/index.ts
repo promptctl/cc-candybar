@@ -4,6 +4,7 @@
 // the anchor rule — cc-candybar keeps no color arithmetic of its own.
 export {
   resolvePaletteName,
+  effectiveThemeName,
   listResolvablePaletteNames,
   listAvailableThemes,
   pickRandomTheme,
@@ -11,4 +12,7 @@ export {
   DISPLAY_STYLES,
 } from "./policy.js";
 
-export { transposedResolver } from "./transposed-resolver.js";
+export {
+  resolverForThemeName,
+  transposedResolver,
+} from "./palette-resolvers.js";
