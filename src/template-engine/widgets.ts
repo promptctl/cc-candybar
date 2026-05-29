@@ -397,13 +397,22 @@ function renderMenu(
   );
 
   const width = toNumber(store.read(TERM_COLS_VAR));
-  const reserve =
-    cellWidth(MENU_CLOSE) + cellWidth(MENU_PREV) + cellWidth(MENU_NEXT) + 3;
-  const pages = paginate(
-    cells.map((c) => cellWidth(c.text)),
-    width,
-    reserve,
-  );
+  const widths = cells.map((c) => cellWidth(c.text));
+  // ✕ is always present; ←/→ appear only on a multi-page menu. Reserving arrow
+  // space unconditionally is self-fulfilling — a run that fits on one line with
+  // just ✕ could be forced to split, making the arrows appear unnecessarily. So
+  // paginate first with only the close overhead; if that already fits on one
+  // page, no arrows are needed. Only when it genuinely overflows do we
+  // re-paginate reserving ←/→ space, so every page of a multi-page menu has
+  // consistent room for navigation. [LAW:dataflow-not-control-flow] the page
+  // count (data) selects which reservation applies, not a config flag.
+  const closeReserve = cellWidth(MENU_CLOSE) + 1;
+  const arrowReserve = cellWidth(MENU_PREV) + 1 + cellWidth(MENU_NEXT) + 1;
+  const firstPass = paginate(widths, width, closeReserve);
+  const pages =
+    firstPass.length > 1
+      ? paginate(widths, width, closeReserve + arrowReserve)
+      : firstPass;
 
   // [LAW:no-defensive-null-guards] The page value genuinely may be absent/empty
   // (the key was never written) — that optionality is real, so parse it at this

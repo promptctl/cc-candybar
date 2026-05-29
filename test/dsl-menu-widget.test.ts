@@ -10,14 +10,14 @@
 //   4. paginate() — the pure pagination function in isolation.
 //   5. The menu's page key gets an integer validator DERIVED from the widget.
 
-import { PaletteResolver, getThemePalette } from "@promptctl/rich-js";
+import { PaletteResolver, RichText, getThemePalette } from "@promptctl/rich-js";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import { registerDslConfig, renderDsl } from "../src/dsl/render";
 import { paginate } from "../src/template-engine/widgets";
 import { SessionState } from "../src/daemon/session-state";
-import { listResolvablePaletteNames } from "../src/themes/policy";
+import { listResolvablePaletteNames, STYLE_ORDER } from "../src/themes/policy";
 import {
   makeIntValidator,
   deriveWidgetValidators,
@@ -241,6 +241,41 @@ describe("k5a.6 — menu widget", () => {
     const line = render(34).split("\n")[1]!;
     expect(stripAnsi(line)).toContain("←");
     expect(stripAnsi(line)).not.toContain("→");
+  });
+
+  test("arrow reservation is not self-fulfilling: a run that fits with just ✕ stays one page", () => {
+    // [LAW:dataflow-not-control-flow] At the boundary width where the option run
+    // fits on one page reserving ONLY the close glyph, the menu must NOT reserve
+    // arrow space and split — that would make ←/→ appear unnecessarily. Compute
+    // the exact boundary from measured widths so the assertion is deterministic.
+    const STYLE_MENU_SRC = `{
+      globals: {},
+      variables: {
+        'session.id': { kind: 'input', path: 'session_id', default: '' },
+        'term.cols': { kind: 'input', path: 'term.cols', type: 'number', default: 80 },
+        sp: { kind: 'state', key: 'style-page', default: '-1' },
+        style: { kind: 'state', key: 'style', default: 'surface' },
+      },
+      widgets: { sm: { kind: 'menu', state: 'style-page', items: [{ optionsFrom: 'styles', onClick: { set: 'style' } }] } },
+      segments: { m: { template: '{{ widget "sm" }}', bg: 'surface', fg: 'foreground' } },
+      layout: [{ when: '{{ ge (int .sp) 0 }}', segments: ['m'] }],
+    }`;
+    const w = (s: string): number => new RichText(s).cellLength;
+    const sumOpts =
+      STYLE_ORDER.reduce((a, s) => a + w(s), 0) + (STYLE_ORDER.length - 1);
+    const closeReserve = w("✕") + 1;
+    const boundary = sumOpts + closeReserve; // fits one page with close-only
+
+    const { render, sessionState } = buildRuntime(STYLE_MENU_SRC);
+    sessionState.set("s1", "style-page", "0");
+    // This config has a single (menu) row, so the rendered menu is line 0.
+    const line = render(boundary).split("\n")[0]!;
+    // Reserving both arrows here would overflow → split → a → would appear.
+    // The two-pass logic keeps it one page with no navigation arrows.
+    expect(stripAnsi(line)).not.toContain("→");
+    expect(stripAnsi(line)).not.toContain("←");
+    // All four styles are present on the single page.
+    for (const s of STYLE_ORDER) expect(stripAnsi(line)).toContain(s);
   });
 
   test("the currently-selected theme is marked active (bold)", () => {
