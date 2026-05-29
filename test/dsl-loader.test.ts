@@ -594,6 +594,35 @@ describe("loadDslConfig — layout", () => {
     expect(cfg.layout).toEqual([{ segments: ["a", "b"] }, { segments: ["c"] }]);
   });
 
+  test("object-form row with when normalizes to { when, segments }", () => {
+    const cfg = parseAndValidate(
+      FILE,
+      `{ segments: { a: { template: "x" } }, layout: [{ when: '{{ true }}', segments: ["a"] }] }`,
+    );
+    expect(cfg.layout).toEqual([{ when: "{{ true }}", segments: ["a"] }]);
+  });
+
+  test("unknown layout-row key is rejected", () => {
+    expectIssue(
+      `{ segments: { a: { template: "x" } }, layout: [{ rows: ["a"] }] }`,
+      { path: "layout[0].rows", message: "Unknown layout-row key" },
+    );
+  });
+
+  test("structural error path reflects the row form the user wrote", () => {
+    // [LAW:locality-or-seam] bare-array row → layout[r][c]; object row →
+    // layout[r].segments[c]. The path mirrors the input, never asserting a
+    // `.segments` key a sugar-form config never wrote.
+    expectIssue(`{ segments: { a: { template: "x" } }, layout: [["a", 42]] }`, {
+      path: "layout[0][1]",
+      message: "layout entries must be strings",
+    });
+    expectIssue(
+      `{ segments: { a: { template: "x" } }, layout: [{ segments: ["a", 42] }] }`,
+      { path: "layout[0].segments[1]", message: "layout entries must be strings" },
+    );
+  });
+
   test("legacy flat string[] layout rejected with migration message", () => {
     // [LAW:no-silent-fallbacks] A pre-multiline-layout-ilg config with a flat
     // string[] layout must fail loudly. Auto-wrapping into [[...]] would

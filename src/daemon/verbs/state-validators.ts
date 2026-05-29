@@ -290,10 +290,15 @@ export function makeIntValidator(label: string): KeyValidator {
 // integer-valued. Buttons write only baseline keys (theme/style) for now;
 // allow-list derivation for custom buttons keys is a separate follow-up.
 //
-// [LAW:no-silent-fallbacks] Keys already covered by a baseline validator are
-// NOT re-derived — a menu naming its page key `theme` would collide at
-// registration and throw loudly rather than silently shadow the theme gate.
-// Dedupe within a config so two menus sharing one page key register once.
+// [LAW:no-silent-fallbacks] A baseline-colliding page key is NOT skipped — it
+// is derived like any other so registerStateValidator throws on the duplicate,
+// surfacing a config-load error (a menu naming its page key `theme` is a
+// misconfiguration: an integer page key cannot share a column with the theme
+// allow-list gate). Skipping would silently leave the theme validator in place
+// and the menu's integer ←/→ writes would fail confusingly at click time
+// instead of loudly at load. Only the within-config dedupe survives: two menus
+// sharing one page key share one int validator (legitimate — same page state),
+// registered once rather than throwing on the second.
 export function deriveWidgetValidators(
   config: DslConfig,
 ): ReadonlyArray<{ readonly key: string; readonly validator: KeyValidator }> {
@@ -301,7 +306,7 @@ export function deriveWidgetValidators(
   for (const [name, widget] of Object.entries(config.widgets)) {
     if (!isMenuWidget(widget)) continue;
     const key = widget.state;
-    if (STATE_VALIDATORS.has(key) || out.has(key)) continue;
+    if (out.has(key)) continue;
     out.set(key, makeIntValidator(`widget "${name}" page`));
   }
   return [...out.entries()].map(([key, validator]) => ({ key, validator }));

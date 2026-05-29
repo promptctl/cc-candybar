@@ -274,6 +274,23 @@ describe("k5a.6 — menu page-key validator", () => {
     expect(derived[0]!.validator("nope").ok).toBe(false);
   });
 
+  test("a menu page key colliding with a baseline key IS derived (so registration throws loudly)", () => {
+    // [LAW:no-silent-fallbacks] A menu naming its page key `theme` is a
+    // misconfiguration. Deriving the int validator anyway makes
+    // registerStateValidator throw on the duplicate at load — loud — rather than
+    // silently leaving the theme allow-list gate to reject the menu's integer
+    // page writes confusingly at click time.
+    const src = `{
+      globals: {},
+      variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
+      widgets: { m: { kind: 'menu', state: 'theme', items: [{ optionsFrom: 'themes', onClick: { set: 'theme' } }] } },
+      segments: { s: { template: '{{ widget "m" }}', bg: 'surface', fg: 'foreground' } },
+      layout: [['s']],
+    }`;
+    const config = parseAndValidate("<test>", src, ALLOWED);
+    expect(deriveWidgetValidators(config).map((d) => d.key)).toEqual(["theme"]);
+  });
+
   test("baseline keys are not re-derived (buttons writing theme)", () => {
     const src = `{
       globals: {},

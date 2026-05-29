@@ -1066,7 +1066,7 @@ function validateLayoutRow(
     return null;
   }
   if (Array.isArray(row)) {
-    return { segments: validateLayoutSegments(ctx, r, row) };
+    return { segments: validateLayoutSegments(ctx, `layout[${r}]`, row) };
   }
   if (isPlainObject(row)) {
     const allowed = new Set(["when", "segments"]);
@@ -1087,7 +1087,11 @@ function validateLayoutRow(
       });
       return null;
     }
-    const segments = validateLayoutSegments(ctx, r, row.segments);
+    const segments = validateLayoutSegments(
+      ctx,
+      `layout[${r}].segments`,
+      row.segments,
+    );
     const when = optionalStringField(ctx, `layout[${r}]`, row, "when");
     return when ? { when, segments } : { segments };
   }
@@ -1099,9 +1103,15 @@ function validateLayoutRow(
   return null;
 }
 
+// [LAW:locality-or-seam] `pathPrefix` is the caller's actual row path, so the
+// error path reflects the form the user wrote: `layout[r][c]` for a bare-array
+// row, `layout[r].segments[c]` for an object row. The discriminator lives in
+// validateLayoutRow (which knows which form it received); threading the prefix
+// keeps the error honest about the input rather than asserting a `.segments`
+// key a sugar-form config never wrote.
 function validateLayoutSegments(
   ctx: ValidateCtx,
-  r: number,
+  pathPrefix: string,
   row: readonly unknown[],
 ): readonly string[] {
   const rowOut: string[] = [];
@@ -1109,7 +1119,7 @@ function validateLayoutSegments(
     const entry = row[c];
     if (typeof entry !== "string") {
       ctx.issues.push({
-        path: `layout[${r}][${c}]`,
+        path: `${pathPrefix}[${c}]`,
         message: `layout entries must be strings (segment names), got ${describeType(entry)}`,
         line: findKeyLine(ctx.source, ["layout"]),
       });
