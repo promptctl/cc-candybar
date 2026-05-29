@@ -144,22 +144,6 @@ export async function findProjectPaths(
   return projectPaths;
 }
 
-export async function findTranscriptFile(
-  sessionId: string,
-): Promise<string | null> {
-  const claudePaths = getClaudePaths();
-  const projectPaths = await findProjectPaths(claudePaths);
-
-  for (const projectPath of projectPaths) {
-    const transcriptPath = join(projectPath, `${sessionId}.jsonl`);
-    if (existsSync(transcriptPath)) {
-      return transcriptPath;
-    }
-  }
-
-  return null;
-}
-
 export async function findAgentTranscripts(
   sessionId: string,
   projectPath: string,
