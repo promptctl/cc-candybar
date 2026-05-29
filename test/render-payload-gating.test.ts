@@ -139,6 +139,7 @@ const CONFIG_WITHOUT_METRICS: DslConfig = {
   variables: SHARED_VARIABLES,
   segments: SHARED_SEGMENTS,
   layout: [["directory", "git"]],
+  widgets: {},
 };
 
 const CONFIG_WITH_METRICS: DslConfig = {
@@ -146,6 +147,7 @@ const CONFIG_WITH_METRICS: DslConfig = {
   variables: SHARED_VARIABLES,
   segments: SHARED_SEGMENTS,
   layout: [["directory", "git", "metrics", "tmux"]],
+  widgets: {},
 };
 
 describe("buildRenderPayload — layout-driven provider gating", () => {
@@ -201,6 +203,7 @@ describe("buildRenderPayload — layout-driven provider gating", () => {
         },
       },
       layout: [["gitDump"]],
+      widgets: {},
     };
     const needed = buildNeededPrefixes(config);
     // The only declared `git.*` input is `git.branch`; it must be in

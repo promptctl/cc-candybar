@@ -79,7 +79,13 @@ describe("loadDslConfig — JSON5 syntax", () => {
 describe("loadDslConfig — top-level shape", () => {
   test("empty config is valid", () => {
     const cfg = parseAndValidate(FILE, "{}");
-    expect(cfg).toEqual({ globals: {}, variables: {}, segments: {}, layout: [] });
+    expect(cfg).toEqual({
+      globals: {},
+      variables: {},
+      segments: {},
+      layout: [],
+      widgets: {},
+    });
   });
 
   test("unknown top-level keys are reported", () => {
@@ -1035,6 +1041,7 @@ describe("loadDslConfig — valid corpus", () => {
       variables: {},
       segments: {},
       layout: [],
+      widgets: {},
     });
   });
 });

@@ -22,6 +22,7 @@ const EMPTY_DEFAULT: DslConfig = {
   variables: {},
   segments: {},
   layout: [],
+  widgets: {},
 };
 
 export function parseAndValidate(
