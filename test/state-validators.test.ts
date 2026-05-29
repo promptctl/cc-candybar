@@ -23,8 +23,7 @@ import {
   validateStateWrite,
   type ValidateResult,
 } from "../src/daemon/verbs/state-validators";
-import { listResolvablePaletteNames } from "../src/themes/cascade";
-import { STYLE_ORDER } from "../src/themes/default-mapping";
+import { listResolvablePaletteNames, STYLE_ORDER } from "../src/themes/policy";
 
 describe("state-validators registry contract", () => {
   test("listStateKeys() exactly enumerates the baseline writable schema", () => {

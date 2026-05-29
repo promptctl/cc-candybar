@@ -339,11 +339,10 @@ export const DEFAULT_DSL_CONFIG = {
   },
 
   // ─── Segments ──────────────────────────────────────────────────────────────
-  // Every built-in. Templates ported from the parity bindings; bg/fg are the
-  // palette spec names that buildPaletteMapping(style="surface") historically
-  // assigned each segment's semantic variant. `when` predicates hide a
-  // segment when its primary signal is absent (no git repo, no version field,
-  // no env var, no tmux, no rate-limit window).
+  // Every built-in. Templates ported from the parity bindings; bg/fg are
+  // palette spec names resolved against the active theme. `when` predicates
+  // hide a segment when its primary signal is absent (no git repo, no version
+  // field, no env var, no tmux, no rate-limit window).
   segments: {
     directory: {
       template: DIR_TEMPLATE,

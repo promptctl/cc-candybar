@@ -10,8 +10,7 @@
 // dataflow is uniform — no parallel "random cache" to keep in sync with
 // sessionState.
 
-import { pickRandomTheme, DISPLAY_STYLES } from "./cascade.js";
-import { STYLE_ORDER } from "./default-mapping.js";
+import { pickRandomTheme, DISPLAY_STYLES, STYLE_ORDER } from "./policy.js";
 
 interface SessionStateRW {
   get(sessionId: string, key: string): string | null;
