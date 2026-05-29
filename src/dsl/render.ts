@@ -27,7 +27,6 @@ import {
 } from "../var-system/sources.js";
 import type { BuildLineOptions } from "../render/strip.js";
 import { renderStripCells } from "../render/strip.js";
-import { effectiveSegmentPalette } from "../config/dsl-loader.js";
 import { resolverForThemeName, transposedResolver } from "../themes/index.js";
 import { buildScope } from "../template-engine/scope.js";
 import {
@@ -52,8 +51,9 @@ export interface CompiledSegment {
   readonly template: Template<RichText>;
   readonly bg?: Template<RichText>;
   readonly fg?: Template<RichText>;
-  // Pre-resolved from effectiveSegmentPalette at registration time; undefined
-  // means "use the basePalette passed to renderDsl".
+  // Pre-resolved from the segment's explicit `palette:` override at registration
+  // time; undefined means "use the per-render basePalette passed to renderDsl"
+  // (the live session ?? globals ?? default base theme).
   readonly paletteResolver?: PaletteResolver;
 }
 
@@ -280,7 +280,6 @@ export function registerDslConfig(
     null,
   ) as Record<string, CompiledSegment>;
   for (const [segName, seg] of Object.entries(config.segments)) {
-    const paletteName = effectiveSegmentPalette(config.globals, seg);
     const parseField = (src: string, field: string) => {
       try {
         return engine.parse(src);
@@ -296,9 +295,15 @@ export function registerDslConfig(
       template: parseField(seg.template, "template"),
       bg: seg.bg !== undefined ? parseField(seg.bg, "bg") : undefined,
       fg: seg.fg !== undefined ? parseField(seg.fg, "fg") : undefined,
+      // [LAW:one-source-of-truth] Freeze ONLY the explicit per-segment `palette:`
+      // override — a deliberate static pin that intentionally ignores the live
+      // session theme. The base theme (session ?? globals ?? default) is the
+      // per-render basePalette; folding globals.palette in here too would freeze
+      // it per segment and the stale copy would shadow basePalette, so a session
+      // theme change could never recolor the bar.
       paletteResolver:
-        paletteName !== undefined
-          ? resolverForThemeName(paletteName)
+        seg.palette !== undefined
+          ? resolverForThemeName(seg.palette)
           : undefined,
     };
   }

@@ -97,10 +97,14 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
     // the COLOR cascade by resolving basePalette per render from the session
     // theme exactly as the daemon does (effectiveThemeName ∘ resolverForThemeName
     // over SessionState) — no frozen entry palette.
+    // globals.palette is SET (as in the bundled default) — the regression this
+    // pins: a config-default base theme must NOT be frozen per-segment, or the
+    // session theme could never override it. A segment with no explicit
+    // `palette:` follows the live base theme.
     const config = parseAndValidate(
       "<test>",
       `{
-        globals: {},
+        globals: { palette: 'textual-dark' },
         variables: {
           'session.id': { kind: 'input', path: 'session_id', default: '' },
         },

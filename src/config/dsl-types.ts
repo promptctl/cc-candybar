@@ -76,8 +76,10 @@ export interface Globals {
   readonly hueStep?: number;
   // [LAW:one-source-of-truth] A palette NAME, not a resolved Palette: DslConfig
   // is the JSON-shape mirror, so the name is the authoritative datum and the
-  // renderer owns name→Palette resolution. Base of the cascade; a per-segment
-  // `palette` overrides it (see effectiveSegmentPalette in the loader).
+  // renderer owns name→Palette resolution. The config default for the base
+  // theme; the daemon resolves the live base per render as
+  // `sessionState.theme ?? globals.palette ?? default`, and a per-segment
+  // `palette` is an explicit override that ignores the session theme.
   readonly palette?: string;
 }
 
