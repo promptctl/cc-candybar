@@ -314,6 +314,16 @@ describe("DSL widgets — loader validation (chunk-11 .3)", () => {
     ).toThrow(/requires "to"/);
   });
 
+  test("an optionsFrom button with a copy action is rejected (option unused)", () => {
+    expect(() =>
+      parseAndValidate(
+        "<t>",
+        wrap(`{ w: { kind: 'buttons', items: [ { optionsFrom: 'themes', onClick: { copy: 'hi' } } ] } }`),
+        ALLOWED,
+      ),
+    ).toThrow(/optionsFrom button's onClick must be "set"/);
+  });
+
   test("an optionsFrom button with an explicit `to` is rejected (option supplies it)", () => {
     expect(() =>
       parseAndValidate(

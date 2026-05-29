@@ -1323,6 +1323,19 @@ function validateOnClick(
     });
     return null;
   }
+  // [LAW:types-are-the-program] An optionsFrom button binds each option's value
+  // into a `set` action — that binding IS the picker. A `copy`/`open` action
+  // ignores the option, so an option list paired with copy/open would render N
+  // identical clickable cells: the option list becomes meaningless. Require the
+  // onClick to be set action(s).
+  if (isOptions && sets !== actions.length) {
+    ctx.issues.push({
+      path: `${path}.onClick`,
+      message: `an optionsFrom button's onClick must be "set" action(s) — each option binds its value into the set; "copy"/"open" don't use the option, so the list would be meaningless`,
+      line: findKeyLine(ctx.source, [...path.split("."), "onClick"]),
+    });
+    return null;
+  }
   return actions;
 }
 

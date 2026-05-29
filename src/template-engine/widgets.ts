@@ -155,10 +155,14 @@ function joinDisplay(
 // ─── Rendering ───────────────────────────────────────────────────────────────
 
 // [LAW:single-enforcer] One click-URL composer. encodeURIComponent each segment
-// and join with "/" — parseHandlerUrl (src/install/index.ts) decodes the value
-// with a single decodeURIComponent, so per-segment encoding round-trips and the
-// structural "/" separators survive. set-state values never contain "/" (the
-// loader + validators reject it), so no separator can be smuggled in.
+// and join with "/". parseHandlerUrl (src/install/index.ts) decodes the WHOLE
+// value with a single decodeURIComponent before the daemon splits on "/", so a
+// `%2F` inside a segment WOULD decode to a real "/" and be misread as a
+// separator. That never happens here because set-state keys/values are
+// slash-free by construction (the loader and validators reject "/"), so
+// encodeURIComponent emits no `%2F` — the only "/" the daemon sees are the
+// structural joiners. The per-segment encoding still matters for other reserved
+// characters (spaces, %, etc.), which round-trip cleanly through the single decode.
 function clickUrl(verb: string, ...segments: string[]): string {
   const tail = segments.map((s) => encodeURIComponent(s)).join("/");
   return `cc-candybar://${verb}/${tail}`;
