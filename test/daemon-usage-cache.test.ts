@@ -130,6 +130,78 @@ describe("CachedUsageProvider", () => {
     }
   });
 
+  test("concurrent misses for one (session, mtime) compute once and share the result", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "cc-candybar-usage-"));
+    const transcript = join(dir, "t.jsonl");
+    writeFileSync(transcript, "");
+
+    // Slow, gated compute so all K callers are provably in flight at once
+    // before any resolves — the in-flight window is unambiguous.
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    UsageProvider.prototype.getUsageInfo = async function (): Promise<UsageInfo> {
+      computeCalls++;
+      await gate;
+      return {
+        session: {
+          cost: computeCalls, // distinct per compute → equal results prove sharing
+          calculatedCost: 0,
+          officialCost: 0,
+          tokens: 0,
+          tokenBreakdown: null,
+        },
+      };
+    };
+
+    const cache = new CachedUsageProvider({ sweepIntervalMs: 0 });
+    try {
+      const hd = { transcript_path: transcript } as ClaudeHookData;
+      const K = 8;
+      const calls = Array.from({ length: K }, () =>
+        cache.getUsageInfo("session-A", hd),
+      );
+      // All K coalesced onto one in-flight compute before any resolved.
+      expect(computeCalls).toBe(1);
+      release();
+      const results = await Promise.all(calls);
+      // Still one compute; every caller received the one shared result.
+      expect(computeCalls).toBe(1);
+      for (const r of results) expect(r).toEqual(results[0]);
+    } finally {
+      cache.close();
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("concurrent calls observing different mtimes do NOT coalesce", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "cc-candybar-usage-"));
+    const tA = join(dir, "a.jsonl");
+    const tB = join(dir, "b.jsonl");
+    writeFileSync(tA, "");
+    writeFileSync(tB, "");
+    // Distinct mtimes → distinct single-flight keys for the same session.
+    const future = Math.floor(Date.now() / 1000) + 3600;
+    utimesSync(tB, future, future);
+
+    const cache = new CachedUsageProvider({ sweepIntervalMs: 0 });
+    try {
+      await Promise.all([
+        cache.getUsageInfo("session-A", {
+          transcript_path: tA,
+        } as ClaudeHookData),
+        cache.getUsageInfo("session-A", {
+          transcript_path: tB,
+        } as ClaudeHookData),
+      ]);
+      // Two different computations (different observed mtime) → two computes,
+      // never one shared read of stale content.
+      expect(computeCalls).toBe(2);
+    } finally {
+      cache.close();
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   test("sweepStale drops entries older than staleAgeMs", async () => {
     const cache = new CachedUsageProvider({
       sweepIntervalMs: 0,
