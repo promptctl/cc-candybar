@@ -25,8 +25,8 @@
 // validator becomes the parsing boundary, the verb body the dataflow.
 
 import { listResolvablePaletteNames, STYLE_ORDER } from "../../themes/policy";
-import type { DslConfig } from "../../config/dsl-types";
-import { isMenuWidget } from "../../config/dsl-types";
+import type { DslConfig, OptionSource } from "../../config/dsl-types";
+import { isMenuWidget, isOptionsButtonItem } from "../../config/dsl-types";
 
 // [LAW:types-are-the-program] Discriminated union — every legal return is
 // either an accepted-and-canonicalized string or a structured rejection
@@ -40,6 +40,23 @@ export type ValidateResult =
 // they don't carry the key name, the registry does. The validator's only
 // concern is: does this raw string belong in this key's column?
 export type KeyValidator = (rawValue: string) => ValidateResult;
+
+// [LAW:types-are-the-program] A derived key's SEMANTIC identity — the data a
+// widget config declares about a custom SessionState key, from which the
+// validator is residue. A key is one of exactly two column shapes: an integer
+// (a menu's page index) or an allow-list (the union of values some button can
+// write). The registry compares specs to decide whether two registrations can
+// share a key (same `kind`) and merges them by unioning content; the opaque
+// `KeyValidator` it builds from the spec cannot be compared or merged, which is
+// why registration takes the spec and owns validator construction.
+//
+// [LAW:one-source-of-truth] The spec carries only content (kind + allow-list
+// members), never the human label — the label is a pure function of the key,
+// computed where the validator is built, so two registrations of one key yield
+// byte-identical validators regardless of which config registered first.
+export type DerivedValidatorSpec =
+  | { readonly kind: "int" }
+  | { readonly kind: "allow-list"; readonly allowed: readonly string[] };
 
 // [LAW:one-source-of-truth] listResolvablePaletteNames is THE set whose
 // members resolve to a concrete Palette. The broader listAvailableThemes
@@ -107,23 +124,37 @@ const validateBoolean: KeyValidator = (raw) => {
   };
 };
 
-// [LAW:types-are-the-program] One registry entry. `permanent` marks the
-// built-in keys (theme/style/toolbar-expanded) that can never be removed or
-// re-claimed; `refCount` tracks how many live cache entries installed a derived
-// key. The same derived key legitimately registers more than once — multiple
-// cache entries share one config (one repo, two cwds), and a hot-reload builds
-// the new state's validators BEFORE disposing the old (so the key is briefly
-// held twice). Ref-counting keeps the key valid across the whole overlap and
-// removes it only when the last holder disposes.
-interface ValidatorEntry {
+// [LAW:types-are-the-program] Two registry-entry shapes, discriminated by
+// `permanent`. A baseline entry is a fixed built-in validator (theme/style/
+// toolbar-expanded) that can never be removed or re-claimed. A derived entry
+// holds the LIVE registrations for a widget-installed key: each registration
+// contributes a spec, the entry's `validator` is rebuilt as their merge, and
+// `specs.length` IS the ref-count. The same derived key legitimately registers
+// more than once — multiple cache entries share one config (one repo, two
+// cwds), and a hot-reload builds the new state's validators BEFORE disposing the
+// old (so the key is briefly held twice). The merged validator stays valid
+// across the whole overlap; the key is removed only when the last spec disposes.
+interface BaselineEntry {
+  readonly permanent: true;
   readonly validator: KeyValidator;
-  readonly permanent: boolean;
-  refCount: number;
 }
+interface DerivedEntry {
+  readonly permanent: false;
+  // [LAW:types-are-the-program] All live specs for a key share one kind — the
+  // registration check rejects a kind change, so `kind` is the entry's stable
+  // column shape and the discriminator the rebuild matches on.
+  readonly kind: DerivedValidatorSpec["kind"];
+  validator: KeyValidator;
+  // [LAW:one-source-of-truth] The live registrations. The validator is derived
+  // from these (union of allow-list members); they are the single source, the
+  // validator the cache. `length` is the ref-count — no separate counter to drift.
+  readonly specs: DerivedValidatorSpec[];
+}
+type ValidatorEntry = BaselineEntry | DerivedEntry;
 
 // [LAW:one-source-of-truth] THE registry of state keys the click protocol can
-// write. Baseline keys are permanent (refCount is irrelevant for them);
-// widget-derived keys are ref-counted across cache entries.
+// write. Baseline keys are permanent; widget-derived keys carry their live
+// registrations.
 //
 // [LAW:types-are-the-program] A `Map` lookup is `(key) → entry | undefined` with
 // NO prototype chain — `__proto__`/`constructor` from an untrusted wire URL are
@@ -131,12 +162,9 @@ interface ValidatorEntry {
 // would admit those as truthy lookups that crash on invocation (RENDER_FAILED
 // instead of the intended BAD_REQUEST). Map makes that unrepresentable.
 const _STATE_VALIDATORS = new Map<string, ValidatorEntry>([
-  ["style", { validator: validateStyle, permanent: true, refCount: 1 }],
-  ["theme", { validator: validateTheme, permanent: true, refCount: 1 }],
-  [
-    "toolbar-expanded",
-    { validator: validateBoolean, permanent: true, refCount: 1 },
-  ],
+  ["style", { validator: validateStyle, permanent: true }],
+  ["theme", { validator: validateTheme, permanent: true }],
+  ["toolbar-expanded", { validator: validateBoolean, permanent: true }],
 ]);
 
 // [LAW:dataflow-not-control-flow] listStateKeys returns a fresh snapshot on each
@@ -144,6 +172,30 @@ const _STATE_VALIDATORS = new Map<string, ValidatorEntry>([
 // silently misreport the writable surface after a widget config registered a key.
 export function listStateKeys(): readonly string[] {
   return [..._STATE_VALIDATORS.keys()];
+}
+
+// [LAW:types-are-the-program] The validator is RESIDUE of the live specs: given
+// the (uniform) kind and every live registration's content, the validator is
+// forced. An int key builds a parse-boundary validator; an allow-list key builds
+// one from the UNION of every live registration's members — so a value any live
+// config can legitimately render is a value the wire accepts, by construction.
+// The label is a pure function of (key, kind) so the built validator is identical
+// across registrations of one key. makeIntValidator/makeAllowListValidator are
+// the single validator constructors (re-validating slash/empty values), so a
+// merged allow-list that somehow held an undeliverable value would throw HERE,
+// at config-load, not at the operator's first click.
+function buildValidatorFromSpecs(
+  key: string,
+  kind: DerivedValidatorSpec["kind"],
+  specs: readonly DerivedValidatorSpec[],
+): KeyValidator {
+  if (kind === "int") return makeIntValidator(`menu page "${key}"`);
+  const allowed = [
+    ...new Set(
+      specs.flatMap((s) => (s.kind === "allow-list" ? s.allowed : [])),
+    ),
+  ];
+  return makeAllowListValidator(allowed, `state "${key}"`);
 }
 
 // [LAW:locality-or-seam] The widget config (a config-load consumer) owns the
@@ -157,20 +209,21 @@ export function listStateKeys(): readonly string[] {
 // re-registering one throws, so a menu naming its page key `theme` surfaces a
 // loud config-load error rather than silently shadowing the theme gate.
 //
-// [LAW:one-source-of-truth] A non-permanent key that is already installed is
-// ref-counted, NOT shadowed: the FIRST validator stays authoritative and the
-// count increments. This is safe because every derived validator for a given
-// key is semantically identical — menus are the only deriver and a page key is
-// always integer-valued. (A future heterogeneous deriver — e.g. allow-list
-// keys from buttons — must add a compatibility check before this assumption
-// holds for it.) Keeping the first validator means two cache entries sharing a
-// key, and a reload's new-before-old overlap, both resolve to one consistent gate.
+// [LAW:types-are-the-program] The semantic-compatibility gate: a key has ONE
+// column shape. Registering an `int` spec for a key already held as `allow-list`
+// (or vice versa) is a genuine conflict — no merged validator could honor both —
+// so it throws at config-load, not silently keeps whichever loaded first. Two
+// registrations of the SAME kind merge: their specs accumulate and the validator
+// is rebuilt as their union, so two cache entries sharing a config (identical
+// specs → idempotent) and two distinct configs sharing a key (different members
+// → unioned, both deliverable) both resolve to one consistent gate.
 //
-// [LAW:single-enforcer] The disposer decrements exactly once (idempotent via the
-// `active` flag) and removes the key only when the count reaches zero.
+// [LAW:single-enforcer] The disposer removes exactly its own spec once
+// (idempotent via the `active` flag), rebuilds the validator from what remains,
+// and deletes the key only when the last spec is gone.
 export function registerStateValidator(
   key: string,
-  validator: KeyValidator,
+  spec: DerivedValidatorSpec,
 ): () => void {
   if (!key) {
     throw new Error("registerStateValidator: key is required");
@@ -194,18 +247,41 @@ export function registerStateValidator(
           `cannot be re-claimed (built-in keys: ${[...baselineKeys()].join(", ")})`,
       );
     }
-    existing.refCount++;
+    if (existing.kind !== spec.kind) {
+      throw new Error(
+        `registerStateValidator: key "${key}" is already a ${existing.kind} ` +
+          `state key; cannot also register it as ${spec.kind}. A state key has ` +
+          `one column shape — a menu page index (int) and a button allow-list ` +
+          `cannot share a key.`,
+      );
+    }
+    existing.specs.push(spec);
+    existing.validator = buildValidatorFromSpecs(
+      key,
+      existing.kind,
+      existing.specs,
+    );
   } else {
-    _STATE_VALIDATORS.set(key, { validator, permanent: false, refCount: 1 });
+    const specs = [spec];
+    _STATE_VALIDATORS.set(key, {
+      permanent: false,
+      kind: spec.kind,
+      validator: buildValidatorFromSpecs(key, spec.kind, specs),
+      specs,
+    });
   }
   let active = true;
   return () => {
     if (!active) return;
     active = false;
     const entry = _STATE_VALIDATORS.get(key);
-    if (entry && !entry.permanent) {
-      entry.refCount--;
-      if (entry.refCount <= 0) _STATE_VALIDATORS.delete(key);
+    if (!entry || entry.permanent) return;
+    const i = entry.specs.indexOf(spec);
+    if (i >= 0) entry.specs.splice(i, 1);
+    if (entry.specs.length === 0) {
+      _STATE_VALIDATORS.delete(key);
+    } else {
+      entry.validator = buildValidatorFromSpecs(key, entry.kind, entry.specs);
     }
   };
 }
@@ -304,38 +380,96 @@ export function makeIntValidator(label: string): KeyValidator {
   };
 }
 
+// [LAW:one-source-of-truth] The option members a picker draws from ARE the same
+// canonical lists the `themes()`/`styles()` bindings and the baseline theme/
+// style validators consult — the rendered options and the derived gate cannot
+// diverge because there is no second enumeration.
+function optionValuesFor(src: OptionSource): readonly string[] {
+  return src === "themes" ? RESOLVABLE_THEMES_LIST : STYLE_ORDER;
+}
+
 // [LAW:one-source-of-truth] The writable-key surface a config's widgets need is
 // DERIVED from the widget declarations — the same data the renderer paginates
-// from is the gate the wire enforces, so they cannot diverge. A menu writes its
-// `state` page key (←/→ navigation + apply-and-close to -1); that key is
-// integer-valued. Buttons write only baseline keys (theme/style) for now;
-// allow-list derivation for custom buttons keys is a separate follow-up.
+// from and clicks against is the gate the wire enforces, so they cannot diverge.
+// Two column shapes fall out of the declarations:
+//   • a menu's `state` page key is INTEGER-valued (←/→ navigation + apply-and-
+//     close to -1);
+//   • a button's `set` action writes an ALLOW-LIST key whose members are every
+//     value that button can produce — the literal `to` for a fixed button, or
+//     the resolved option list for an `optionsFrom` picker. Multiple buttons (or
+//     items) writing one key union into one allow-list: the gate accepts exactly
+//     what the config can render.
 //
-// [LAW:no-silent-fallbacks] A baseline-colliding page key is NOT skipped — it
-// is derived like any other so registerStateValidator throws on the duplicate,
-// surfacing a config-load error (a menu naming its page key `theme` is a
-// misconfiguration: an integer page key cannot share a column with the theme
-// allow-list gate). Skipping would silently leave the theme validator in place
-// and the menu's integer ←/→ writes would fail confusingly at click time
-// instead of loudly at load. Only the within-config dedupe survives: two menus
-// sharing one page key share one int validator (legitimate — same page state),
-// registered once rather than throwing on the second.
-export function deriveWidgetValidators(
-  config: DslConfig,
-): ReadonlyArray<{ readonly key: string; readonly validator: KeyValidator }> {
-  const out = new Map<string, KeyValidator>();
+// [LAW:single-enforcer] Baseline keys (theme/style/toolbar-expanded) already own
+// a permanent validator, so a button writing `set: theme` is using the canonical
+// theme gate as intended — it derives NOTHING (skipped). A menu PAGE key is not
+// skipped: naming it `theme` collides with the baseline at registration and
+// throws, because an integer page index genuinely cannot share the theme column.
+// The asymmetry is the real semantic difference — a button reuses a baseline
+// gate; a menu page key conflicts with it.
+//
+// [LAW:no-silent-fallbacks] A within-config key that is BOTH a menu page (int)
+// and a button target (allow-list) is a contradiction no single column can
+// honor — it throws at derivation (config-load), not silently picks one shape.
+export function deriveWidgetValidators(config: DslConfig): ReadonlyArray<{
+  readonly key: string;
+  readonly spec: DerivedValidatorSpec;
+}> {
+  const baseline = new Set(baselineKeys());
+  const intKeys = new Set<string>();
+  const allowListMembers = new Map<string, Set<string>>();
+  const addMembers = (key: string, values: readonly string[]): void => {
+    if (baseline.has(key)) return;
+    let set = allowListMembers.get(key);
+    if (!set) {
+      set = new Set<string>();
+      allowListMembers.set(key, set);
+    }
+    for (const v of values) set.add(v);
+  };
+
   for (const widget of Object.values(config.widgets)) {
-    if (!isMenuWidget(widget)) continue;
-    const key = widget.state;
-    if (out.has(key)) continue;
-    // [LAW:one-source-of-truth] Label from the KEY, not the widget name: the
-    // registry ref-counts by key and keeps the first validator authoritative, so
-    // a name-based label would misattribute an error to whichever config/cache
-    // entry happened to register first. A key-based label makes every derived
-    // validator for a key byte-identical.
-    out.set(key, makeIntValidator(`menu page "${key}"`));
+    if (isMenuWidget(widget)) intKeys.add(widget.state);
+    for (const item of widget.items) {
+      if (isOptionsButtonItem(item)) {
+        const values = optionValuesFor(item.optionsFrom);
+        for (const action of item.onClick) {
+          if ("set" in action) addMembers(action.set, values);
+        }
+      } else {
+        for (const action of item.onClick) {
+          // [LAW:single-enforcer] The loader owns the literal⇒`to` pairing: a
+          // fixed button's `set` action always carries a non-empty, slash-free
+          // `to` (an options button's never does). Reading `to` here narrows the
+          // deliberately-optional field to the literal value it guarantees.
+          if ("set" in action && action.to !== undefined) {
+            addMembers(action.set, [action.to]);
+          }
+        }
+      }
+    }
   }
-  return [...out.entries()].map(([key, validator]) => ({ key, validator }));
+
+  for (const key of intKeys) {
+    if (allowListMembers.has(key)) {
+      throw new Error(
+        `deriveWidgetValidators: key "${key}" is written both as a menu page ` +
+          `index (int) and a button allow-list value — a state key has one ` +
+          `column shape. Give the menu page key a distinct name.`,
+      );
+    }
+  }
+
+  return [
+    ...[...intKeys].map((key) => ({
+      key,
+      spec: { kind: "int" as const },
+    })),
+    ...[...allowListMembers].map(([key, members]) => ({
+      key,
+      spec: { kind: "allow-list" as const, allowed: [...members] },
+    })),
+  ];
 }
 
 // [LAW:dataflow-not-control-flow] Single entry point for validation: the

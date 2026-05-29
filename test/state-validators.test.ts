@@ -105,21 +105,19 @@ describe("state-validators registry contract", () => {
     // the seam that lets a hot-reload of a DSL config dispose old +
     // install new without a global reset path that could clobber other
     // configs' entries.
-    const disposer = registerStateValidator("mode", (raw) =>
-      raw === "full" || raw === "compact"
-        ? { ok: true, value: raw }
-        : { ok: false, reason: `bad mode "${raw}"` },
-    );
+    const disposer = registerStateValidator("mode", {
+      kind: "allow-list",
+      allowed: ["full", "compact"],
+    });
     try {
       expect(listStateKeys()).toContain("mode");
       expect(validateStateWrite("mode", "full")).toEqual({
         ok: true,
         value: "full",
       });
-      expect(validateStateWrite("mode", "bogus")).toEqual({
-        ok: false,
-        reason: 'bad mode "bogus"',
-      });
+      const bad = validateStateWrite("mode", "bogus");
+      expect(bad.ok).toBe(false);
+      if (!bad.ok) expect(bad.reason).toMatch(/unknown state "mode" "bogus"/);
     } finally {
       disposer();
     }
@@ -129,36 +127,58 @@ describe("state-validators registry contract", () => {
     if (!after.ok) expect(after.reason).toMatch(/unknown state key "mode"/);
   });
 
-  test("registerStateValidator ref-counts a duplicate non-baseline key (no shadow)", () => {
+  test("registerStateValidator unions same-kind specs and ref-counts by spec", () => {
     // [LAW:one-source-of-truth] The same derived key legitimately registers more
-    // than once — two cache entries sharing one config, or a reload's
-    // new-before-old overlap. Ref-counting keeps the FIRST validator
-    // authoritative (no shadow) and the key survives until the LAST disposer
-    // runs. (Safe because every derived validator for a key is semantically
-    // identical — menus are the only deriver and a page key is always integer.)
-    const dispose1 = registerStateValidator("mode-2", () => ({
-      ok: true,
-      value: "x",
-    }));
-    const dispose2 = registerStateValidator("mode-2", () => ({
-      ok: true,
-      value: "y",
-    }));
+    // than once — two cache entries sharing one config (identical specs → the
+    // union is idempotent), or two distinct configs whose buttons write the same
+    // custom key with DIFFERENT members. The gate is the UNION: every value any
+    // live registration can render is accepted, so neither config's clicks fail.
+    // The key survives until the LAST spec disposes; disposing one shrinks the
+    // union back to what remains.
+    const disposeRed = registerStateValidator("mode-2", {
+      kind: "allow-list",
+      allowed: ["red"],
+    });
+    const disposeBlue = registerStateValidator("mode-2", {
+      kind: "allow-list",
+      allowed: ["blue"],
+    });
     try {
-      // First validator stays authoritative — the second did not shadow it.
-      expect(validateStateWrite("mode-2", "anything")).toEqual({
-        ok: true,
-        value: "x",
-      });
-      // One disposer leaves the key alive (refCount still > 0).
-      dispose1();
+      // Union: both registrations' members are deliverable.
+      expect(validateStateWrite("mode-2", "red").ok).toBe(true);
+      expect(validateStateWrite("mode-2", "blue").ok).toBe(true);
+      // Disposing the "red" registration shrinks the union — "red" no longer
+      // deliverable, "blue" still is, key still alive.
+      disposeRed();
       expect(listStateKeys()).toContain("mode-2");
-      expect(validateStateWrite("mode-2", "anything").ok).toBe(true);
+      expect(validateStateWrite("mode-2", "red").ok).toBe(false);
+      expect(validateStateWrite("mode-2", "blue").ok).toBe(true);
     } finally {
-      dispose2();
+      disposeBlue();
     }
     // Both disposed → the key is gone.
     expect(listStateKeys()).not.toContain("mode-2");
+  });
+
+  test("registerStateValidator throws on a kind change for a live key", () => {
+    // [LAW:types-are-the-program] A state key has ONE column shape. Registering
+    // an allow-list spec for a key already held as an int page index (or vice
+    // versa) is a contradiction no merged validator could honor — it throws at
+    // registration, not silently keeps whichever kind loaded first.
+    const dispose = registerStateValidator("kind-clash", { kind: "int" });
+    try {
+      expect(() =>
+        registerStateValidator("kind-clash", {
+          kind: "allow-list",
+          allowed: ["a"],
+        }),
+      ).toThrow(/already a int state key/);
+      // The rejected registration left the int gate intact.
+      expect(validateStateWrite("kind-clash", "5").ok).toBe(true);
+    } finally {
+      dispose();
+    }
+    expect(listStateKeys()).not.toContain("kind-clash");
   });
 
   test("registerStateValidator throws on a baseline key (theme/style/toolbar-expanded)", () => {
@@ -167,13 +187,13 @@ describe("state-validators registry contract", () => {
     // silently hijacking the canonical theme validator (which would then reject
     // the menu's integer page writes confusingly at click time).
     expect(() =>
-      registerStateValidator("theme", () => ({ ok: true, value: "x" })),
+      registerStateValidator("theme", { kind: "allow-list", allowed: ["x"] }),
     ).toThrow(/built-in state key/);
   });
 
   test("registerStateValidator rejects empty key", () => {
     expect(() =>
-      registerStateValidator("", () => ({ ok: true, value: "x" })),
+      registerStateValidator("", { kind: "int" }),
     ).toThrow(/key is required/);
   });
 
@@ -184,7 +204,7 @@ describe("state-validators registry contract", () => {
     // Listing such a key in listStateKeys() while it cannot be written
     // to is the registry-vs-wire drift the registration check forbids.
     expect(() =>
-      registerStateValidator("a/b", () => ({ ok: true, value: "x" })),
+      registerStateValidator("a/b", { kind: "int" }),
     ).toThrow(/contains "\/"/);
     // The failing registration must NOT pollute the registry.
     expect(listStateKeys()).not.toContain("a/b");
@@ -193,25 +213,28 @@ describe("state-validators registry contract", () => {
   test("disposer is idempotent (second call is a no-op)", () => {
     // [LAW:single-enforcer] Double-dispose must not affect a key
     // re-registered by a different caller between calls.
-    const dispose1 = registerStateValidator("idem-1", () => ({
-      ok: true,
-      value: "a",
-    }));
+    const dispose1 = registerStateValidator("idem-1", {
+      kind: "allow-list",
+      allowed: ["a"],
+    });
     dispose1();
     expect(listStateKeys()).not.toContain("idem-1");
-    // Re-register under the same key with a different validator.
-    const dispose2 = registerStateValidator("idem-1", () => ({
-      ok: true,
-      value: "b",
-    }));
+    // Re-register under the same key with a different spec.
+    const dispose2 = registerStateValidator("idem-1", {
+      kind: "allow-list",
+      allowed: ["b"],
+    });
     try {
-      // Second call of the FIRST disposer must NOT remove the new entry.
+      // Second call of the FIRST disposer must NOT remove the new entry — it
+      // removes its OWN (already-gone) spec once, then no-ops.
       dispose1();
       expect(listStateKeys()).toContain("idem-1");
-      expect(validateStateWrite("idem-1", "anything")).toEqual({
+      expect(validateStateWrite("idem-1", "b")).toEqual({
         ok: true,
         value: "b",
       });
+      // The first spec's member is gone — only the re-registered spec gates now.
+      expect(validateStateWrite("idem-1", "a").ok).toBe(false);
     } finally {
       dispose2();
     }
@@ -281,14 +304,14 @@ describe("state-validators registry contract", () => {
     ).not.toThrow();
   });
 
-  test("makeAllowListValidator composes with registerStateValidator", () => {
-    // [LAW:one-type-per-behavior] The canonical "widget options = allow
-    // list" registration shape — one factory call + one register call
-    // expresses "key X is written from list Y."
-    const disposer = registerStateValidator(
-      "compose-key",
-      makeAllowListValidator(["one", "two"], "compose-key"),
-    );
+  test("an allow-list spec registers as a working gate", () => {
+    // [LAW:one-type-per-behavior] The canonical "widget options = allow list"
+    // registration shape — an allow-list spec expresses "key X is written from
+    // list Y"; the registry builds the validator (label derived from the key).
+    const disposer = registerStateValidator("compose-key", {
+      kind: "allow-list",
+      allowed: ["one", "two"],
+    });
     try {
       expect(validateStateWrite("compose-key", "one")).toEqual({
         ok: true,
@@ -297,7 +320,7 @@ describe("state-validators registry contract", () => {
       const bad = validateStateWrite("compose-key", "three");
       expect(bad.ok).toBe(false);
       if (!bad.ok)
-        expect(bad.reason).toMatch(/unknown compose-key "three"/);
+        expect(bad.reason).toMatch(/unknown state "compose-key" "three"/);
     } finally {
       disposer();
     }

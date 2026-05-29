@@ -298,8 +298,8 @@ export class RenderCache {
       // them so the click wire accepts the menus' ←/→/apply-close set-state
       // writes. registerStateValidator throws on a duplicate key — caught here
       // to roll the whole reload back.
-      for (const { key, validator } of deriveWidgetValidators(config)) {
-        validatorDisposers.push(registerStateValidator(key, validator));
+      for (const { key, spec } of deriveWidgetValidators(config)) {
+        validatorDisposers.push(registerStateValidator(key, spec));
       }
     } catch (err) {
       for (const dispose of validatorDisposers) dispose();
