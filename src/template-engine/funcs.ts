@@ -25,6 +25,23 @@ import {
   minutesUntilReset,
 } from "../utils/formatters.js";
 import { getBudgetStatus } from "../utils/budget.js";
+import { listResolvablePaletteNames } from "../themes/cascade.js";
+import { STYLE_ORDER } from "../themes/default-mapping.js";
+
+// [LAW:one-source-of-truth] The DSL `themes()` and `styles()` bindings
+// project the SAME canonical sources the set-state validator consults
+// (listResolvablePaletteNames / STYLE_ORDER). A widget config that
+// `range`s over themes() to emit OSC-8 picker cells is iterating the
+// allow-list the validator will enforce on the resulting click — the
+// list and the gate cannot diverge because there is no second list.
+//
+// Module-init caching is correct by construction: rich-js THEMES is a
+// static import (no dynamic palette registration at runtime) and
+// STYLE_ORDER is a const array. The "reactivity" requirement from the
+// ticket is satisfied vacuously — the lists never change during a
+// daemon lifetime, so a cached snapshot IS the current truth.
+const THEMES_LIST: readonly string[] = listResolvablePaletteNames();
+const STYLES_LIST: readonly string[] = [...STYLE_ORDER];
 
 // Normalize an engine-supplied numeric argument. The "number" argType admits
 // both number and bigint (per @promptctl/go-template-js); the underlying
@@ -99,6 +116,26 @@ export function ccCandybarFuncs(): FuncMap {
     urlEncode: {
       fn: (s: string) => encodeURIComponent(s),
       argTypes: ["string"],
+    },
+
+    // [LAW:one-source-of-truth] themes() and styles() are zero-arg
+    // projections of the daemon's canonical domain lists. Picker widgets
+    // express "options come from list Y" by ranging over these bindings;
+    // the same lists feed the set-state validator's allow-list checks,
+    // so the rendered options are exactly the values the next click
+    // will be allowed to write. No second enumeration in user config.
+    // [LAW:dataflow-not-control-flow] A range loop over a list IS the
+    // widget primitive — `{{ range themes }}…{{ end }}` produces one
+    // rendered cell per allowed value. Adding a theme adds a cell;
+    // removing a theme removes a cell; no template branch on "how many
+    // themes are there."
+    themes: {
+      fn: () => THEMES_LIST,
+      argTypes: [],
+    },
+    styles: {
+      fn: () => STYLES_LIST,
+      argTypes: [],
     },
   };
 }

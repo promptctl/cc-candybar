@@ -297,11 +297,11 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
     ).toThrow(/expected boolean-ish/);
   });
 
-  test("set-state rejects malformed wire input (missing key or value)", () => {
-    // [LAW:types-are-the-program] The wire shape <sid>/<key>/<value> has
-    // three required pieces. Each missing piece is a structurally distinct
-    // rejection so a malformed URL surfaces the right hint, not a generic
-    // "bad input" — the operator sees which slash they forgot.
+  test("set-state rejects malformed wire input (missing tail or odd count)", () => {
+    // [LAW:types-are-the-program] The wire shape after <sessionId> is a
+    // sequence of even-count <key>/<value> pairs. Each structural
+    // defect — empty tail, odd count, empty key segment — surfaces its
+    // own diagnostic so the operator sees which slash they forgot.
     const { sessionState } = buildRuntime();
     const ctx = { sessionState, dlog: () => {} };
 
@@ -309,15 +309,14 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
     expect(() => VERBS.get("set-state")!(`${SESSION_ID}`, ctx)).toThrow(
       /<key>\/<value> is required/,
     );
-    // Key but no value separator.
+    // Key but no value separator (odd-count: one segment).
     expect(() => VERBS.get("set-state")!(`${SESSION_ID}/theme`, ctx)).toThrow(
-      /missing value after key "theme"/,
+      /expected even-count.*got 1 segment/,
     );
-    // Empty key (extra leading slash). Structurally distinct from the
-    // unknown-key validator rejection — the operator's mistake was a
-    // missing key segment, not a typo on the key name.
+    // Empty key segment at pair 1 — structurally distinct from the
+    // unknown-key validator rejection.
     expect(() => VERBS.get("set-state")!(`${SESSION_ID}//ocean`, ctx)).toThrow(
-      /empty key \(expected <sessionId>\/<key>\/<value>\)/,
+      /empty key at pair 1/,
     );
   });
 
@@ -344,21 +343,152 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
     }
   });
 
-  test("set-state preserves slashes inside the value (no further splitting)", () => {
-    // [LAW:dataflow-not-control-flow] The verb splits exactly twice (sid,
-    // key) — the remainder is the value verbatim. A future state key
-    // whose values may legitimately contain `/` (paths, URLs) gets that
-    // for free; the parser does not steal slashes from the value space.
-    // We exercise this via a temporary registry of one key — the live
-    // registry currently has no slash-bearing values, so we synthesize a
-    // fixture key by piggybacking on theme: the validator rejects "a/b"
-    // by content, but the verb must still SEE "a/b" as the value (not
-    // "a"). The rejection message proves the verb passed "a/b" through.
+  test("set-state writes a multi-pair batch atomically (Menu action contract)", () => {
+    // [LAW:dataflow-not-control-flow] The N=2 batched form IS the same
+    // dispatch path as N=1 — the parser walks even-count pairs. The
+    // Menu primitive (chunk 11 .3) uses this to atomically write the
+    // chosen value AND collapse the menu in one click.
+    const { sessionState } = buildRuntime();
+    const ctx = { sessionState, dlog: () => {} };
+    VERBS.get("set-state")!(
+      `${SESSION_ID}/theme/nord/toolbar-expanded/0`,
+      ctx,
+    );
+    expect(sessionState.get(SESSION_ID, "theme")).toBe("nord");
+    expect(sessionState.get(SESSION_ID, "toolbar-expanded")).toBe("");
+  });
+
+  test("multi-pair batch fires reactive observers exactly once", () => {
+    // [LAW:single-enforcer] SessionState owns the reactive atomicity
+    // contract — observers see the post-batch snapshot, never an
+    // intermediate "first write applied, second pending" state. A
+    // previous shape (loop and call sessionState.set N times) fired
+    // reportChanged() per pair, scheduling autoruns between writes; an
+    // observer correlating theme and toolbar-expanded would have seen
+    // (nord, "1") momentarily before reaching (nord, ""). The setBatch
+    // seam collapses N notifications into one.
+    //
+    // [LAW:behavior-not-structure] We don't assert "setBatch was
+    // called" — we assert the user-observable contract: one autorun
+    // tick per click, regardless of pair count.
+    const config = parseAndValidate(
+      "<test>",
+      `{
+        globals: {},
+        variables: {
+          'session.id': { kind: 'input', path: 'session_id', default: '' },
+          theme: { kind: 'state', key: 'theme', default: '(unset)' },
+          expanded: { kind: 'state', key: 'toolbar-expanded', default: '' },
+        },
+        segments: {
+          s: { template: '{{ .theme }}', bg: 'surface', fg: 'foreground' },
+        },
+        layout: [['s']],
+      }`,
+      ALLOWED_PALETTES,
+    );
+    const sessionState = new SessionState();
+    sessionState.set(SESSION_ID, "toolbar-expanded", "1");
+    const store = new VariableStore();
+    const registry = new SourceRegistry(store, "", undefined, sessionState);
+    registerDslConfig(config, registry);
+    registry.applyInput(HOOK_DATA);
+
+    // Observer reads BOTH state vars in one tracked frame — the kind
+    // of cross-key correlation a Menu rendering would do.
+    const snapshots: Array<{ theme: string; expanded: string }> = [];
+    const dispose = autorun(() => {
+      snapshots.push({
+        theme: String(store.read("theme")),
+        expanded: String(store.read("expanded")),
+      });
+    });
+    try {
+      expect(snapshots).toEqual([{ theme: "(unset)", expanded: "1" }]);
+
+      const ctx = { sessionState, dlog: () => {} };
+      VERBS.get("set-state")!(
+        `${SESSION_ID}/theme/nord/toolbar-expanded/0`,
+        ctx,
+      );
+
+      // Exactly one new snapshot AND it shows BOTH writes applied.
+      // An intermediate fire would have inserted a `(nord, "1")` row.
+      expect(snapshots).toEqual([
+        { theme: "(unset)", expanded: "1" },
+        { theme: "nord", expanded: "" },
+      ]);
+    } finally {
+      dispose();
+    }
+  });
+
+  test("set-state rejects whole batch if any pair fails (no partial writes)", () => {
+    // [LAW:no-silent-fallbacks] A batch is one transactional click.
+    // First pair valid, second pair invalid — the whole batch rejects.
+    // Asserting the FIRST pair did NOT land is the load-bearing
+    // guarantee: a future widget author can write a two-pair URL
+    // without worrying that half of it might apply on failure.
+    const { sessionState } = buildRuntime();
+    const ctx = { sessionState, dlog: () => {} };
+    // Seed a known prior state so we can prove the failing batch did
+    // not overwrite it.
+    sessionState.set(SESSION_ID, "theme", "dracula");
+    expect(() =>
+      VERBS.get("set-state")!(
+        `${SESSION_ID}/theme/nord/toolbar-expanded/maybe`,
+        ctx,
+      ),
+    ).toThrow(/pair 2.*expected boolean-ish/);
+    // The failing batch did NOT advance the prior theme value.
+    expect(sessionState.get(SESSION_ID, "theme")).toBe("dracula");
+  });
+
+  test("set-state rejects odd-count pair tail with a localizing diagnostic", () => {
+    // [LAW:types-are-the-program] The wire shape is structurally
+    // even-count pairs after the session id. Three segments is a
+    // missing-value structural error — caught with its own message
+    // rather than routed through a validator's unknown-key path.
     const { sessionState } = buildRuntime();
     const ctx = { sessionState, dlog: () => {} };
     expect(() =>
-      VERBS.get("set-state")!(`${SESSION_ID}/theme/a/b/c`, ctx),
-    ).toThrow(/unknown theme "a\/b\/c"/);
+      VERBS.get("set-state")!(`${SESSION_ID}/theme/nord/leftover`, ctx),
+    ).toThrow(/expected even-count.*got 3 segment/);
+  });
+
+  test("set-state names the failing pair index for batched diagnostics", () => {
+    // [LAW:errors-context-in-errors] The operator clicked a Menu URL
+    // with N pairs; the diagnostic tells them WHICH pair the validator
+    // rejected (1-based) so they can localize their config bug. A
+    // generic "set-state: unknown state key" without an index would
+    // leave them counting slashes by hand.
+    const { sessionState } = buildRuntime();
+    const ctx = { sessionState, dlog: () => {} };
+    expect(() =>
+      VERBS.get("set-state")!(
+        `${SESSION_ID}/theme/nord/nonsense-key/foo`,
+        ctx,
+      ),
+    ).toThrow(/pair 2: unknown state key "nonsense-key"/);
+  });
+
+  test("set-state rejects an empty key at any pair position", () => {
+    // [LAW:types-are-the-program] An empty key segment is structurally
+    // distinct from a typo'd key — the operator's mistake is a wrong
+    // count of slashes, not a wrong key name. Catching it in the pair
+    // loop (rather than letting it fall to the validator's unknown-key
+    // path which would report `unknown state key ""`) names the
+    // structural defect at the pair index.
+    const { sessionState } = buildRuntime();
+    const ctx = { sessionState, dlog: () => {} };
+    // Empty key at pair 1.
+    expect(() =>
+      VERBS.get("set-state")!(`${SESSION_ID}//nord`, ctx),
+    ).toThrow(/empty key at pair 1/);
+    // Empty key at pair 2 (theme valid, then empty key).
+    expect(() =>
+      VERBS.get("set-state")!(`${SESSION_ID}/theme/nord//1`, ctx),
+    ).toThrow(/empty key at pair 2/);
   });
 
   test("parseDslConfig rejects a state-kind var with no session.id anchor", () => {
