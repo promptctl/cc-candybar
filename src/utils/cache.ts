@@ -3,14 +3,6 @@ import path from "node:path";
 import { createHash } from "node:crypto";
 import { setTimeout } from "node:timers/promises";
 import { debug } from "./logger";
-import {
-  getClaudePaths,
-  findProjectPaths,
-  getFileModificationDate,
-} from "./claude";
-// [LAW:single-enforcer] The transcript-tree readdir in getLatestTranscriptMtime
-// shares the same in-flight-I/O budget as the rest of the scanning path.
-import { readdir as gatedReaddir } from "./transcript-fs";
 import { cacheDir } from "../daemon/paths";
 
 interface ErrnoError extends Error {
@@ -121,7 +113,7 @@ export class CacheManager {
   }
 
   static async getUsageCache(
-    cacheType: "today" | "block" | "pricing",
+    cacheType: "pricing",
     latestMtime?: number,
   ): Promise<unknown> {
     const MAX_RETRIES = 3;
@@ -182,7 +174,7 @@ export class CacheManager {
   }
 
   static async setUsageCache(
-    cacheType: "today" | "block" | "pricing",
+    cacheType: "pricing",
     data: unknown,
     latestMtime?: number,
   ): Promise<void> {
@@ -209,38 +201,6 @@ export class CacheManager {
       debug(`Failed to save ${cacheType} usage cache:`, error);
     } finally {
       await this.releaseLock(lockName);
-    }
-  }
-
-  static async getLatestTranscriptMtime(): Promise<number> {
-    try {
-      const claudePaths = getClaudePaths();
-      const projectPaths = await findProjectPaths(claudePaths);
-
-      let latestMtime = 0;
-
-      for (const projectPath of projectPaths) {
-        try {
-          const files = await gatedReaddir(projectPath);
-          const jsonlFiles = files.filter((file) => file.endsWith(".jsonl"));
-
-          for (const file of jsonlFiles) {
-            const filePath = path.join(projectPath, file);
-            const mtime = await getFileModificationDate(filePath);
-            if (mtime && mtime.getTime() > latestMtime) {
-              latestMtime = mtime.getTime();
-            }
-          }
-        } catch (error) {
-          debug(`Failed to read project directory ${projectPath}:`, error);
-          continue;
-        }
-      }
-
-      return latestMtime;
-    } catch (error) {
-      debug("Failed to get latest transcript mtime:", error);
-      return Date.now();
     }
   }
 }

@@ -21,8 +21,7 @@ import type { ClaudeHookData } from "../utils/claude.js";
 import type { DslConfig, VariableDecl } from "../config/dsl-types.js";
 import { extractTemplateRefs } from "../config/dsl-loader.js";
 import type { GitInfo } from "../segments/git.js";
-import type { UsageProvider } from "../segments/session.js";
-import type { TodayProvider } from "../segments/today.js";
+import type { SessionUsageStore } from "./cache/session-usage-store.js";
 import type { ContextProvider } from "../segments/context.js";
 import type { MetricsProvider } from "../segments/metrics.js";
 import type { TmuxService } from "../segments/tmux.js";
@@ -129,8 +128,10 @@ export interface MetricsPayload {
 
 export interface RenderPayloadDeps {
   readonly gitProvider: GitDataProvider;
-  readonly usageProvider: UsageProvider;
-  readonly todayProvider: TodayProvider;
+  // [LAW:one-source-of-truth] One store backs BOTH the `session` and `today`
+  // projections — they are folds over the same per-session records, not two
+  // independent providers that could disagree.
+  readonly usageStore: SessionUsageStore;
   readonly contextProvider: ContextProvider;
   readonly metricsProvider: MetricsProvider;
   readonly tmuxService: TmuxService;
@@ -354,13 +355,13 @@ export async function buildRenderPayload(
             .catch(() => null)
         : nullP<GitInfo>(),
       wants("session.cost") || wants("session.tokens")
-        ? deps.usageProvider
+        ? deps.usageStore
             .getUsageInfo(hookData.session_id, hookData)
             .catch(() => null)
-        : nullP<Awaited<ReturnType<UsageProvider["getUsageInfo"]>>>(),
+        : nullP<Awaited<ReturnType<SessionUsageStore["getUsageInfo"]>>>(),
       wants("today")
-        ? deps.todayProvider.getTodayInfo().catch(() => null)
-        : nullP<Awaited<ReturnType<TodayProvider["getTodayInfo"]>>>(),
+        ? deps.usageStore.getTodayInfo(hookData).catch(() => null)
+        : nullP<Awaited<ReturnType<SessionUsageStore["getTodayInfo"]>>>(),
       wants("context")
         ? deps.contextProvider
             .getContextInfo(hookData, DEFAULT_AUTOCOMPACT_BUFFER)

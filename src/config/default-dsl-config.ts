@@ -218,7 +218,7 @@ export const DEFAULT_DSL_CONFIG = {
     },
     "git.status": { kind: "input", path: "git.status", default: "clean" },
 
-    // Usage / cost — daemon fetches via UsageProvider; numeric.
+    // Usage / cost — daemon folds from the SessionUsageStore; numeric.
     "session.cost": {
       kind: "input",
       path: "session.cost",
@@ -232,7 +232,7 @@ export const DEFAULT_DSL_CONFIG = {
       default: 0,
     },
 
-    // Today — daemon fetches via TodayProvider.
+    // Today — daemon folds today's cross-session total from the SessionUsageStore.
     "today.cost": {
       kind: "input",
       path: "today.cost",

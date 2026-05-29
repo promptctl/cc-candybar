@@ -37,7 +37,7 @@ function buildMockDeps(): { deps: RenderPayloadDeps; counts: CallCounts } {
         return null;
       },
     },
-    usageProvider: {
+    usageStore: {
       getUsageInfo: async () => {
         counts.usage++;
         return {
@@ -50,8 +50,6 @@ function buildMockDeps(): { deps: RenderPayloadDeps; counts: CallCounts } {
           },
         };
       },
-    },
-    todayProvider: {
       getTodayInfo: async () => {
         counts.today++;
         return { cost: 0, tokens: 0, tokenBreakdown: null, date: "" };
