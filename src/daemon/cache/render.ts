@@ -1,6 +1,10 @@
 import fs from "node:fs";
 import path from "node:path";
-import { PaletteResolver, type RichText } from "@promptctl/rich-js";
+import {
+  PaletteResolver,
+  getThemePalette,
+  type RichText,
+} from "@promptctl/rich-js";
 import { buildNeededPrefixes } from "../render-payload.js";
 import {
   loadConfig,
@@ -15,7 +19,6 @@ import { registerDslConfig, type CompiledSegments } from "../../dsl/render.js";
 import { VariableStore } from "../../var-system/store.js";
 import { SourceRegistry } from "../../var-system/sources.js";
 import { resolvePaletteName } from "../../themes/index.js";
-import { getThemePalette } from "../../themes/palette-registry.js";
 import type { GitDataProvider } from "./git.js";
 import type { SessionStateRW } from "../session-state.js";
 import type { WatcherRegistry, WatcherHandle } from "./watchers.js";
