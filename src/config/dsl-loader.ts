@@ -24,25 +24,33 @@ import os from "node:os";
 import path from "node:path";
 import JSON5 from "json5";
 import {
+  ACTION_KEYS,
   CACHE_KEYS,
   GIT_FIELDS,
   JUSTIFY_MODES,
+  OPTION_SOURCES,
   SOURCES_REQUIRING_CACHE,
   SOURCE_KINDS,
   TRUNCATE_MODES,
+  WIDGET_KINDS,
   hasCacheField,
+  type Action,
+  type ActionKey,
+  type ButtonItem,
   type CacheDecl,
   type CacheKey,
   type DslConfig,
   type GitField,
   type Globals,
   type JustifyMode,
+  type OptionSource,
   type RawDslConfig,
   type SegmentDecl,
   type SourceKind,
   type TruncateMode,
   type ValidatedConfig,
   type VariableDecl,
+  type WidgetDecl,
 } from "./dsl-types.js";
 import { DEFAULT_DSL_CONFIG } from "./default-dsl-config.js";
 import { listResolvablePaletteNames } from "../themes/cascade.js";
@@ -331,6 +339,10 @@ export function mergeWithDefault(
     variables: { ...dflt.variables, ...(raw.variables ?? {}) },
     segments: { ...dflt.segments, ...(raw.segments ?? {}) },
     layout: raw.layout !== undefined ? raw.layout : dflt.layout,
+    // [LAW:one-source-of-truth] widgets merge by name (user wins per-name),
+    // identical cascade to variables/segments — a user declares only the
+    // widgets that differ from the bundled default.
+    widgets: { ...dflt.widgets, ...(raw.widgets ?? {}) },
   };
 }
 
@@ -460,10 +472,18 @@ function validateTopLevel(
   if (raw.segments !== undefined)
     out.segments = validateSegments(ctx, raw.segments);
   if (raw.layout !== undefined) out.layout = validateLayout(ctx, raw.layout);
+  if (raw.widgets !== undefined)
+    out.widgets = validateWidgets(ctx, raw.widgets);
   return out;
 }
 
-const TOP_LEVEL_KEYS = new Set(["globals", "variables", "segments", "layout"]);
+const TOP_LEVEL_KEYS = new Set([
+  "globals",
+  "variables",
+  "segments",
+  "layout",
+  "widgets",
+]);
 
 // ─── Globals ─────────────────────────────────────────────────────────────────
 
@@ -1089,6 +1109,337 @@ function validateLayout(
   return out;
 }
 
+// ─── Widgets ─────────────────────────────────────────────────────────────────
+
+// [LAW:locality-or-seam] Structural validation of the `widgets` block: each
+// widget is discriminated by `kind`, each button item by presence of
+// `optionsFrom`, each action by which of set/copy/open is present. Whether a
+// `{{ widget "name" }}` reference resolves is a cross-ref concern
+// (validateCrossReferences), which runs on the MERGED config so a segment can
+// reference a default-provided widget.
+function validateWidgets(
+  ctx: ValidateCtx,
+  raw: unknown,
+): Record<string, WidgetDecl> {
+  if (raw === undefined) return {};
+  if (!isPlainObject(raw)) {
+    ctx.issues.push({
+      path: "widgets",
+      message: `widgets must be an object, got ${describeType(raw)}`,
+      line: findKeyLine(ctx.source, ["widgets"]),
+    });
+    return {};
+  }
+  const out: Record<string, WidgetDecl> = {};
+  for (const [name, decl] of Object.entries(raw)) {
+    const parsed = validateWidget(ctx, `widgets.${name}`, decl);
+    if (parsed !== null) out[name] = parsed;
+  }
+  return out;
+}
+
+function validateWidget(
+  ctx: ValidateCtx,
+  path: string,
+  raw: unknown,
+): WidgetDecl | null {
+  if (!isPlainObject(raw)) {
+    ctx.issues.push({
+      path,
+      message: `${path} must be an object, got ${describeType(raw)}`,
+      line: findKeyLine(ctx.source, path.split(".")),
+    });
+    return null;
+  }
+  const kind = raw.kind;
+  if (
+    typeof kind !== "string" ||
+    !(WIDGET_KINDS as readonly string[]).includes(kind)
+  ) {
+    ctx.issues.push({
+      path: `${path}.kind`,
+      message: `widget kind must be one of: ${WIDGET_KINDS.join(", ")}, got ${describeValue(kind)}`,
+      line: findKeyLine(ctx.source, [...path.split("."), "kind"]),
+    });
+    return null;
+  }
+  // [LAW:one-type-per-behavior] One arm; menu/stepper join here as new arms.
+  const allowed = new Set(["kind", "items"]);
+  for (const key of Object.keys(raw)) {
+    if (!allowed.has(key)) {
+      ctx.issues.push({
+        path: `${path}.${key}`,
+        message: `Unknown widget key "${key}". Expected one of: ${[...allowed].join(", ")}`,
+        line: findKeyLine(ctx.source, [...path.split("."), key]),
+      });
+    }
+  }
+  if (!Array.isArray(raw.items)) {
+    ctx.issues.push({
+      path: `${path}.items`,
+      message: `widget items must be an array, got ${describeType(raw.items)}`,
+      line: findKeyLine(ctx.source, [...path.split("."), "items"]),
+    });
+    return null;
+  }
+  const items: ButtonItem[] = [];
+  for (let i = 0; i < raw.items.length; i++) {
+    const item = validateButtonItem(ctx, `${path}.items[${i}]`, raw.items[i]);
+    if (item !== null) items.push(item);
+  }
+  return { kind: "buttons", items };
+}
+
+function validateButtonItem(
+  ctx: ValidateCtx,
+  path: string,
+  raw: unknown,
+): ButtonItem | null {
+  if (!isPlainObject(raw)) {
+    ctx.issues.push({
+      path,
+      message: `${path} must be an object, got ${describeType(raw)}`,
+      line: findKeyLine(ctx.source, path.split(".")),
+    });
+    return null;
+  }
+  // [LAW:types-are-the-program] presence of `optionsFrom` is the discriminator.
+  const isOptions = "optionsFrom" in raw;
+  const allowed = isOptions
+    ? new Set(["optionsFrom", "glyph", "onClick"])
+    : new Set(["glyph", "label", "onClick"]);
+  for (const key of Object.keys(raw)) {
+    if (!allowed.has(key)) {
+      ctx.issues.push({
+        path: `${path}.${key}`,
+        message: `Unknown button-item key "${key}". Expected one of: ${[...allowed].join(", ")}`,
+        line: findKeyLine(ctx.source, [...path.split("."), key]),
+      });
+    }
+  }
+
+  const onClick = validateOnClick(ctx, path, raw, isOptions);
+  if (onClick === null) return null;
+  const glyph = optionalStringField(ctx, path, raw, "glyph");
+
+  if (isOptions) {
+    const src = raw.optionsFrom;
+    if (
+      typeof src !== "string" ||
+      !(OPTION_SOURCES as readonly string[]).includes(src)
+    ) {
+      ctx.issues.push({
+        path: `${path}.optionsFrom`,
+        message: `optionsFrom must be one of: ${OPTION_SOURCES.join(", ")}, got ${describeValue(src)}`,
+        line: findKeyLine(ctx.source, [...path.split("."), "optionsFrom"]),
+      });
+      return null;
+    }
+    return {
+      optionsFrom: src as OptionSource,
+      ...(glyph !== undefined && { glyph }),
+      onClick,
+    };
+  }
+  const label = optionalStringField(ctx, path, raw, "label");
+  if (glyph === undefined && label === undefined) {
+    // [LAW:no-silent-fallbacks] A fixed button with neither glyph nor label has
+    // nothing to render or click — an empty clickable region. Reject at load.
+    ctx.issues.push({
+      path,
+      message: `a fixed button must declare a "glyph" or a "label" (its clickable text)`,
+      line: findKeyLine(ctx.source, path.split(".")),
+    });
+    return null;
+  }
+  return {
+    ...(glyph !== undefined && { glyph }),
+    ...(label !== undefined && { label }),
+    onClick,
+  };
+}
+
+// [LAW:dataflow-not-control-flow] `onClick` accepts a single action object or
+// an array; both normalize to the one canonical runtime shape (Action[]).
+// `isOptions` carries the set-action `to` pairing rule: an option-bound button
+// gets each option's value, so its set actions must NOT carry `to`; a literal
+// button's set actions MUST carry `to`.
+function validateOnClick(
+  ctx: ValidateCtx,
+  path: string,
+  raw: Record<string, unknown>,
+  isOptions: boolean,
+): readonly Action[] | null {
+  const rawClick = raw.onClick;
+  if (rawClick === undefined) {
+    ctx.issues.push({
+      path: `${path}.onClick`,
+      message: `${path}.onClick is required (an action or array of actions)`,
+      line: findKeyLine(ctx.source, [...path.split("."), "onClick"]),
+    });
+    return null;
+  }
+  const rawActions = Array.isArray(rawClick) ? rawClick : [rawClick];
+  if (rawActions.length === 0) {
+    ctx.issues.push({
+      path: `${path}.onClick`,
+      message: `${path}.onClick must declare at least one action`,
+      line: findKeyLine(ctx.source, [...path.split("."), "onClick"]),
+    });
+    return null;
+  }
+  const actions: Action[] = [];
+  for (let i = 0; i < rawActions.length; i++) {
+    const a = validateAction(
+      ctx,
+      `${path}.onClick[${i}]`,
+      rawActions[i],
+      isOptions,
+    );
+    if (a !== null) actions.push(a);
+  }
+  if (actions.length !== rawActions.length) return null;
+  // [LAW:no-mode-explosion] One OSC-8 link = one click = one verb URL. A button
+  // composes to a SINGLE URL: either N `set` actions batched into one set-state
+  // URL (the .2 batched wire), or a single `copy`/`open` verb. Mixed kinds
+  // (set+copy) or multiple copy/open need more than one URL — that compound
+  // click is an explicit follow-up, rejected here so the limit is visible at
+  // load, not silently rendered as a broken click.
+  const sets = actions.filter((a) => "set" in a).length;
+  if (sets > 0 && sets !== actions.length) {
+    ctx.issues.push({
+      path: `${path}.onClick`,
+      message: `a button's onClick cannot mix "set" with "copy"/"open" — a click composes to one verb URL (compound clicks are a follow-up). Split into separate buttons.`,
+      line: findKeyLine(ctx.source, [...path.split("."), "onClick"]),
+    });
+    return null;
+  }
+  if (sets === 0 && actions.length !== 1) {
+    ctx.issues.push({
+      path: `${path}.onClick`,
+      message: `a button's onClick may declare at most one "copy"/"open" action (compound clicks are a follow-up)`,
+      line: findKeyLine(ctx.source, [...path.split("."), "onClick"]),
+    });
+    return null;
+  }
+  return actions;
+}
+
+function validateAction(
+  ctx: ValidateCtx,
+  path: string,
+  raw: unknown,
+  isOptions: boolean,
+): Action | null {
+  if (!isPlainObject(raw)) {
+    ctx.issues.push({
+      path,
+      message: `${path} must be an action object, got ${describeType(raw)}`,
+      line: findKeyLine(ctx.source, path.split(".")),
+    });
+    return null;
+  }
+  const present = (ACTION_KEYS as readonly string[]).filter((k) => k in raw);
+  if (present.length !== 1) {
+    ctx.issues.push({
+      path,
+      message: `action must declare exactly one of: ${ACTION_KEYS.join(", ")}${
+        present.length > 1 ? ` (found: ${present.join(", ")})` : ""
+      }`,
+      line: findKeyLine(ctx.source, path.split(".")),
+    });
+    return null;
+  }
+  const key = present[0] as ActionKey;
+  switch (key) {
+    case "set": {
+      const stateKey = requireString(ctx, path, raw, "set");
+      if (stateKey === null) return null;
+      if (stateKey.includes("/")) {
+        // [LAW:types-are-the-program] The set-state wire splits on "/"; a
+        // slash-bearing key is structurally undeliverable. Reject at load.
+        ctx.issues.push({
+          path: `${path}.set`,
+          message: `set key "${stateKey}" contains "/" — the set-state wire splits on "/", so it cannot be addressed`,
+          line: findKeyLine(ctx.source, [...path.split("."), "set"]),
+        });
+        return null;
+      }
+      const hasTo = "to" in raw;
+      // [LAW:types-are-the-program] The to/optionsFrom pairing: an option-bound
+      // button supplies the value from the option (no `to`); a literal button
+      // must carry an explicit `to`. Catch the mismatch at load.
+      if (isOptions && hasTo) {
+        ctx.issues.push({
+          path: `${path}.to`,
+          message: `an optionsFrom button supplies the set value from each option — remove "to"`,
+          line: findKeyLine(ctx.source, [...path.split("."), "to"]),
+        });
+        return null;
+      }
+      if (!isOptions && !hasTo) {
+        ctx.issues.push({
+          path: `${path}.to`,
+          message: `set action on a fixed button requires "to" (the value to write)`,
+          line: findKeyLine(ctx.source, [...path.split("."), "to"]),
+        });
+        return null;
+      }
+      if (!hasTo) return { set: stateKey };
+      const to = requireString(ctx, path, raw, "to");
+      if (to === null) return null;
+      if (to === "") {
+        // [LAW:no-silent-fallbacks] The set-state validators reject empty input
+        // (an empty value on the wire is structurally ambiguous), so an empty
+        // `to` is undeliverable. Reject at load, not at first click.
+        ctx.issues.push({
+          path: `${path}.to`,
+          message: `set value must be non-empty — an empty value cannot be delivered on the set-state wire`,
+          line: findKeyLine(ctx.source, [...path.split("."), "to"]),
+        });
+        return null;
+      }
+      if (to.includes("/")) {
+        ctx.issues.push({
+          path: `${path}.to`,
+          message: `set value "${to}" contains "/" — the set-state wire splits values on "/", so it cannot be delivered`,
+          line: findKeyLine(ctx.source, [...path.split("."), "to"]),
+        });
+        return null;
+      }
+      return { set: stateKey, to };
+    }
+    case "copy": {
+      const text = requireString(ctx, path, raw, "copy");
+      return text === null ? null : { copy: text };
+    }
+    case "open": {
+      const target = requireString(ctx, path, raw, "open");
+      return target === null ? null : { open: target };
+    }
+  }
+}
+
+// [LAW:dataflow-not-control-flow] Extract every `widget "name"` / `widget 'name'`
+// call from a template. Mirrors extractTemplateRefs (regex over `{{ }}` blocks);
+// the caller checks each name against the declared widget set. We deliberately
+// don't full-parse — that's the engine's job at compile time.
+const WIDGET_CALL_RE = /\bwidget\s+(?:"([^"]*)"|'([^']*)')/g;
+export function extractWidgetRefs(template: string): Set<string> {
+  const refs = new Set<string>();
+  let m: RegExpExecArray | null;
+  TEMPLATE_BLOCK_RE.lastIndex = 0;
+  while ((m = TEMPLATE_BLOCK_RE.exec(template)) !== null) {
+    const block = m[1]!;
+    let w: RegExpExecArray | null;
+    WIDGET_CALL_RE.lastIndex = 0;
+    while ((w = WIDGET_CALL_RE.exec(block)) !== null) {
+      refs.add((w[1] ?? w[2])!);
+    }
+  }
+  return refs;
+}
+
 // ─── Cross-references ────────────────────────────────────────────────────────
 
 function validateCrossReferences(ctx: ValidateCtx, cfg: DslConfig): void {
@@ -1150,6 +1501,18 @@ function validateCrossReferences(ctx: ValidateCtx, cfg: DslConfig): void {
       const tpl = seg[field];
       if (typeof tpl !== "string") continue;
       checkTemplateRefs(ctx, `segments.${segName}.${field}`, tpl, segScope);
+    }
+    // [LAW:locality-or-seam] A `{{ widget "name" }}` reference must resolve to
+    // a declared widget — same existence-check shape as layout→segments. Runs
+    // on the merged config so a segment can reference a default widget.
+    for (const wref of extractWidgetRefs(seg.template)) {
+      if (!Object.prototype.hasOwnProperty.call(cfg.widgets, wref)) {
+        ctx.issues.push({
+          path: `segments.${segName}.template`,
+          message: `template references unknown widget "${wref}"`,
+          line: findKeyLine(ctx.source, ["segments", segName, "template"]),
+        });
+      }
     }
   }
 

@@ -269,7 +269,13 @@ export class RenderCache {
 
     let compiled: CompiledSegments;
     try {
-      compiled = registerDslConfig(config, registry, { cwd: entry.cwd });
+      // [LAW:locality-or-seam] Pass the store so the config's `widget`
+      // references can read session.id + current picker values from the same
+      // source the rest of the render reads.
+      compiled = registerDslConfig(config, registry, {
+        cwd: entry.cwd,
+        store,
+      });
     } catch (err) {
       registry.dispose();
       throw err;

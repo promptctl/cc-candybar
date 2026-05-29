@@ -41,6 +41,7 @@ export interface RawDslConfig {
   readonly variables?: Readonly<Record<string, VariableDecl>>;
   readonly segments?: Readonly<Record<string, SegmentDecl>>;
   readonly layout?: ReadonlyArray<readonly string[]>;
+  readonly widgets?: Readonly<Record<string, WidgetDecl>>;
 }
 
 export interface DslConfig {
@@ -48,6 +49,11 @@ export interface DslConfig {
   readonly variables: Readonly<Record<string, VariableDecl>>;
   readonly segments: Readonly<Record<string, SegmentDecl>>;
   readonly layout: ReadonlyArray<readonly string[]>;
+  // [LAW:locality-or-seam] The named seam between interaction behavior (what a
+  // click does) and presentation (segments/layout). Declared once, referenced
+  // from segment templates via `{{ widget "name" }}`. Empty when no config
+  // declares interactive components — an absent `widgets` key merges to `{}`.
+  readonly widgets: Readonly<Record<string, WidgetDecl>>;
 }
 
 // [LAW:single-enforcer] The brand symbol is `unique` and module-private —
@@ -283,3 +289,82 @@ export const TRUNCATE_MODES: readonly TruncateMode[] = [
   "left",
   "middle",
 ];
+
+// ─── Interactive widgets ───────────────────────────────────────────────────────
+//
+// [LAW:locality-or-seam] A widget is a reusable interactive component declared
+// in `DslConfig.widgets` and referenced from a segment template via
+// `{{ widget "name" }}`. It is NOT a kind of segment — there is one Segment
+// type; a widget reference is content a template uses, exactly like `link` or a
+// variable. Whether a segment shows text, a button, both, or neither falls out
+// of what its template contains, never a segment-type distinction.
+
+// [LAW:types-are-the-program] An Action is the click effect a button binds to.
+// Discriminated by which key is present (the CacheDecl pattern): exactly one of
+// `set` / `copy` / `open`. The loader proves the one-of invariant; the renderer
+// and the validator-derivation walk match on the present key with no fallthrough.
+//
+//   set  — write a SessionState key. `to` is the literal value for a fixed
+//          button; OMITTED when the value is supplied by the option (an
+//          `optionsFrom` button binds each option's value into its own click).
+//          The loader enforces this pairing (literal ⇒ `to` required;
+//          option-bound ⇒ `to` forbidden) — the type carries `to?` because the
+//          legality depends on the enclosing item's context.
+//   copy — copy templated text to the clipboard (the `copy` verb).
+//   open — open a templated path/target in the editor (the `open-vscode` verb).
+//
+// [LAW:one-source-of-truth] Only `set` actions write SessionState, so only
+// `set` actions derive a validator (from their target key + value(s)).
+// `copy`/`open` write nothing — they derive nothing. The vocabulary grows by
+// arms (a future `run`/`open-url`), not by validator plumbing.
+export type Action =
+  | { readonly set: string; readonly to?: string }
+  | { readonly copy: string }
+  | { readonly open: string };
+
+export const ACTION_KEYS = ["set", "copy", "open"] as const;
+export type ActionKey = (typeof ACTION_KEYS)[number];
+
+// [LAW:one-source-of-truth] The domain lists a picker draws options from. Same
+// canonical sources the `themes()`/`styles()` bindings and the set-state
+// validators consult — the rendered options and the derived gate cannot diverge
+// because there is no second enumeration.
+export type OptionSource = "themes" | "styles";
+export const OPTION_SOURCES: readonly OptionSource[] = ["themes", "styles"];
+
+// [LAW:types-are-the-program] A button item is discriminated by presence of
+// `optionsFrom`. A literal item carries its own glyph/label; an option-bound
+// item expands to one button per option, binding each option's value into its
+// `set` action. `onClick` is always a list — single is the N=1 case, no
+// `Action | Action[]` union for consumers to normalize. Multiple `set` actions
+// in one list batch into a single set-state click (the .2 batched wire).
+export interface LiteralButtonItem {
+  readonly glyph?: string;
+  readonly label?: string;
+  readonly onClick: readonly Action[];
+}
+export interface OptionsButtonItem {
+  readonly optionsFrom: OptionSource;
+  readonly glyph?: string;
+  readonly onClick: readonly Action[];
+}
+export type ButtonItem = LiteralButtonItem | OptionsButtonItem;
+
+export function isOptionsButtonItem(
+  item: ButtonItem,
+): item is OptionsButtonItem {
+  return "optionsFrom" in item;
+}
+
+// [LAW:one-type-per-behavior] Widgets are discriminated by `kind` (the
+// VariableDecl pattern). The foundation ships `buttons`; `menu` (nested,
+// open-path state) and `stepper` (numeric dec/cur/inc) join as new arms — one
+// arm each, the segment surface untouched.
+export interface ButtonsWidget {
+  readonly kind: "buttons";
+  readonly items: readonly ButtonItem[];
+}
+export type WidgetDecl = ButtonsWidget;
+
+export const WIDGET_KINDS = ["buttons"] as const;
+export type WidgetKind = (typeof WIDGET_KINDS)[number];

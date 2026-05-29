@@ -102,6 +102,31 @@ MobX-backed store of named variables: `box` nodes for externally-driven values (
 
 Source kinds (`SourceRegistry.declare*`): `literal`, `input`, `env`, `file`, `shell`, `template`, `time`, `git`, `state`. New kinds require a new union arm in `src/config/dsl-types.ts`, a loader case in `src/config/dsl-loader.ts`, a `declareOne` arm in `src/dsl/render.ts`, and the runtime implementation here.
 
+### Interactive widgets (`src/template-engine/widgets.ts`, `widgets:` config block)
+
+A **widget** is reusable interactive content declared once in the top-level `widgets:` block and pulled into a segment template via `{{ widget "name" }}`. A widget is **not** a kind of segment (`[LAW:one-type-per-behavior]`) — there is one Segment type; whether a segment shows text, a button, both, or neither falls out of what its template contains. The author binds clicks to **actions**, never to validators or hand-built URLs.
+
+- **Action** (`Action` in `dsl-types.ts`) — the click effect, discriminated by which key is present: `{ set: key, to?: value }` (write SessionState), `{ copy: tmpl }`, `{ open: tmpl }`. `copy`/`open` values are Go-template strings evaluated at render; a `set`'s key/value are **literal** so the validator is *derivable*. Only `set` writes state, so only `set` needs a validator — `copy`/`open` need none. The vocabulary grows by arms, not validator plumbing.
+- **Button item** (`ButtonItem`) — discriminated by presence of `optionsFrom`. A fixed item carries its own `glyph`/`label`; an `optionsFrom: "themes" | "styles"` item expands to one button per option, binding each option's value into its `set` action (its `set` carries no `to`). `onClick` is one action or an array; it must be homogeneous — all `set` (batched into one set-state URL via the `.2` wire) or a single `copy`/`open` (one OSC-8 link = one verb URL). Compound heterogeneous clicks are a follow-up.
+- **Widget** (`WidgetDecl`) — discriminated by `kind`. The foundation ships `kind: "buttons"`; `menu` (nested, open-path state) and `stepper` (numeric) are future arms — one arm each, the segment surface untouched.
+- **Render** — `renderWidget` (driven by the `widget` FuncMap entry) returns ONE `RichText` whose spans each carry an OSC-8 URL. `{{ widget "x" }}` is one top-level expression, and go-template-js stringifies array returns on direct emit, so a widget cannot emit multiple fragments — it assembles one `RichText` via `RichText.fromFragments`, which serializes to one OSC-8 region per span. `registerDslConfig` builds a **per-config** engine carrying the compiled widgets + the live store (so the `widget` func reads `session.id` and the current picker value); `renderDsl` is unchanged.
+- **Validator derivation** (planned) — because `set` actions are literal data, the set of `(key, value)` pairs a config's widgets can write is statically enumerable, so per-key validators can be *derived* from the declared actions (the same list the picker renders from is the gate — they cannot diverge). The foundation drives the **baseline** keys (`theme`/`style` via the existing global validators) + `copy`/`open` (no validator); deriving + **registering** validators for *custom* writable keys needs a multi-entry lifecycle on the global `STATE_VALIDATORS` registry (union/ref-count across cache entries) — an explicit follow-up.
+
+Example (a user config — the bundled default has no widgets):
+
+```json5
+widgets: {
+  actions: { kind: "buttons", items: [
+    { glyph: "⎘", onClick: { copy: "{{ .session.id }}" } },
+    { glyph: "📂", onClick: { open: "{{ .project_dir }}" } },
+  ] },
+  themePicker: { kind: "buttons", items: [
+    { optionsFrom: "themes", onClick: { set: "theme" } },
+  ] },
+},
+segments: { bar: { template: '{{ widget "actions" }} {{ widget "themePicker" }}', bg: "surface", fg: "foreground" } },
+```
+
 ### Click actions and the URL handler
 
 Hyperlinks in segment output emit `cc-candybar://<verb>/<value>` OSC-8 links. On macOS, `cc-candybar install` builds `~/Applications/CCCandybarURLHandler.app`, copies the runtime to `~/Library/Application Support/CCCandybar/url-handler.mjs` (stable path independent of pnpm cache), and registers the URL scheme via Launch Services. Click → URL handler app → `cc-candybar url-handle <url>` → daemon click protocol. Verbs are dispatched in `handleClick` (`src/daemon/server.ts`).
