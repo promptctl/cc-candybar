@@ -227,6 +227,16 @@ describe("DSL widgets — loader validation (chunk-11 .3)", () => {
     ).toThrow(/optionsFrom must be one of/);
   });
 
+  test("an empty set key is rejected (undeliverable on the wire)", () => {
+    expect(() =>
+      parseAndValidate(
+        "<t>",
+        wrap(`{ w: { kind: 'buttons', items: [ { glyph: 'x', onClick: { set: '', to: 'v' } } ] } }`),
+        ALLOWED,
+      ),
+    ).toThrow(/set key must be non-empty/);
+  });
+
   test("an empty set value is rejected (undeliverable on the wire)", () => {
     expect(() =>
       parseAndValidate(

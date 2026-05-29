@@ -1370,6 +1370,17 @@ function validateAction(
     case "set": {
       const stateKey = requireString(ctx, path, raw, "set");
       if (stateKey === null) return null;
+      if (stateKey === "") {
+        // [LAW:no-silent-fallbacks] An empty key composes a broken set-state URL
+        // (the daemon rejects "empty key at pair N" at click); reject at load,
+        // matching the non-empty check on `to`.
+        ctx.issues.push({
+          path: `${path}.set`,
+          message: `set key must be non-empty (the SessionState key to write)`,
+          line: findKeyLine(ctx.source, [...path.split("."), "set"]),
+        });
+        return null;
+      }
       if (stateKey.includes("/")) {
         // [LAW:types-are-the-program] The set-state wire splits on "/"; a
         // slash-bearing key is structurally undeliverable. Reject at load.
