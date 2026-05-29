@@ -9,11 +9,10 @@
 // invokes for a wire-level click; no duplication.
 
 import { autorun } from "mobx";
-import { PaletteResolver } from "@promptctl/rich-js";
+import { PaletteResolver, getThemePalette } from "@promptctl/rich-js";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
-import { getThemePalette } from "../src/themes/palette-registry";
 import { registerDslConfig, renderDsl } from "../src/dsl/render";
 import { SessionState } from "../src/daemon/session-state";
 import { VERBS } from "../src/daemon/verbs";
