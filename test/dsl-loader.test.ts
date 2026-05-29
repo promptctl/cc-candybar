@@ -7,7 +7,6 @@
 
 import {
   ConfigError,
-  effectiveSegmentPalette,
   extractTemplateRefs,
   findKeyLine,
 } from "../src/config/dsl-loader";
@@ -553,33 +552,6 @@ describe("loadDslConfig — palette switch", () => {
       throw new Error("expected ConfigError");
     })();
     expect(err.issues.some((i) => i.path === "globals.palette")).toBe(true);
-  });
-});
-
-describe("effectiveSegmentPalette — cascade order", () => {
-  test("no palette anywhere → undefined (inherit active palette)", () => {
-    expect(effectiveSegmentPalette({}, { template: "t" })).toBeUndefined();
-  });
-
-  test("globals palette applies to a segment with no override", () => {
-    expect(
-      effectiveSegmentPalette({ palette: "gruvbox" }, { template: "t" }),
-    ).toBe("gruvbox");
-  });
-
-  test("per-segment palette overrides globals (last write wins)", () => {
-    expect(
-      effectiveSegmentPalette(
-        { palette: "gruvbox" },
-        { template: "t", palette: "monokai" },
-      ),
-    ).toBe("monokai");
-  });
-
-  test("per-segment palette applies with no globals base", () => {
-    expect(
-      effectiveSegmentPalette({}, { template: "t", palette: "monokai" }),
-    ).toBe("monokai");
   });
 });
 

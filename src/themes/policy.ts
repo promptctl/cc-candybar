@@ -18,6 +18,21 @@ export function resolvePaletteName(name: string): string {
   return THEME_ALIASES[name] ?? name;
 }
 
+// The theme name a render should use, as data. [LAW:dataflow-not-control-flow]
+// The `??` chain is the precedence — session choice over config default over the
+// built-in — with no "if the session has a theme" branch. The session value is
+// the user's live per-session pick (null when unset); globals.palette is the
+// config default; "textual-dark" is the always-present floor.
+// [LAW:one-source-of-truth] The single definition of "which theme is effective";
+// every render derives basePalette through this, so the rendered palette can
+// never disagree with the chosen theme.
+export function effectiveThemeName(
+  sessionTheme: string | null,
+  globalsPalette: string | undefined,
+): string {
+  return sessionTheme ?? globalsPalette ?? "textual-dark";
+}
+
 function listThemeAliases(): readonly string[] {
   return Object.keys(THEME_ALIASES);
 }

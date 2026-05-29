@@ -392,31 +392,6 @@ export function parseDslConfig(
   return topLevel;
 }
 
-// ─── Palette cascade ─────────────────────────────────────────────────────────
-
-/**
- * Resolve a segment's effective palette name from the cascade:
- *   default → globals.palette → segment.palette   (last write wins).
- *
- * Returns the name the renderer should pull this segment's colors from, or
- * undefined to inherit the active/default palette (which lives outside the DSL
- * config, set by the top-level theme). Both inputs were validated at load, so
- * any non-undefined result is guaranteed to resolve to a real Palette.
- *
- * [LAW:single-enforcer] The cascade precedence is defined here once. Consumers
- * call this rather than re-deriving `segment.palette ?? globals.palette`, so
- * the precedence cannot drift between callsites.
- * [LAW:one-source-of-truth] The effective palette is a derivation, not stored
- * state — globals.palette and segment.palette remain the only authoritative
- * inputs, so there is nothing to keep in sync.
- */
-export function effectiveSegmentPalette(
-  globals: Globals,
-  segment: SegmentDecl,
-): string | undefined {
-  return segment.palette ?? globals.palette;
-}
-
 // ─── Internals ───────────────────────────────────────────────────────────────
 
 interface ValidateCtx {

@@ -5,7 +5,11 @@ import {
   extractBgToFg,
 } from "../src/utils/colors";
 import { getColorSupport } from "../src/utils/color-support";
-import { listAvailableThemes, STYLE_ORDER } from "../src/themes";
+import {
+  listAvailableThemes,
+  STYLE_ORDER,
+  effectiveThemeName,
+} from "../src/themes";
 
 describe("Colors", () => {
   describe("Core Color Functions", () => {
@@ -97,6 +101,18 @@ describe("Colors", () => {
       expect(themes).not.toContain("dark");
       expect(themes).not.toContain("light");
       expect(themes.length).toBeGreaterThanOrEqual(16);
+    });
+  });
+
+  describe("effectiveThemeName precedence", () => {
+    it("prefers the session theme over the config default", () => {
+      expect(effectiveThemeName("nord", "gruvbox")).toBe("nord");
+    });
+    it("falls back to the config default when no session theme", () => {
+      expect(effectiveThemeName(null, "gruvbox")).toBe("gruvbox");
+    });
+    it("falls back to textual-dark when neither is set", () => {
+      expect(effectiveThemeName(null, undefined)).toBe("textual-dark");
     });
   });
 

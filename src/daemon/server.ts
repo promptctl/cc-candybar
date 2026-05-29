@@ -33,6 +33,7 @@ import { buildDebugSnapshot } from "./debug";
 import { DEBUG_WHATS, isDebugWhat } from "./debug-types";
 import { expandHome } from "../config/dsl-loader.js";
 import { renderDsl } from "../dsl/render.js";
+import { effectiveThemeName, resolverForThemeName } from "../themes/index.js";
 import {
   renderStripCells,
   DEFAULT_TERMINAL_WIDTH,
@@ -636,6 +637,18 @@ async function handleRequest(req: Request): Promise<Response> {
           req.cwd,
           entry.state.neededInputPaths,
         );
+        // [LAW:one-source-of-truth][LAW:dataflow-not-control-flow] basePalette
+        // is derived per render from the effective theme — the session's chosen
+        // theme (SessionState) over the config default — so a theme click
+        // recolors the whole bar on the next render. Not frozen on the cache
+        // entry (one entry serves many sessions). resolverForThemeName memoizes,
+        // so the per-render cost is one Map lookup once the theme is warm.
+        const basePalette = resolverForThemeName(
+          effectiveThemeName(
+            sessionState.get(req.hookData.session_id, "theme"),
+            entry.state.config.globals.palette,
+          ),
+        );
         // [LAW:single-enforcer] renderDsl internally calls
         // `registry.applyInput(payload)` as its first step (see step 1 in
         // src/dsl/render.ts). The daemon must not pre-apply — doing so
@@ -647,7 +660,7 @@ async function handleRequest(req: Request): Promise<Response> {
           entry.state.store,
           entry.state.registry,
           payload,
-          entry.state.basePalette,
+          basePalette,
           renderOpts,
           // [LAW:single-enforcer] The per-segment StripCell sink for the
           // `debug segments` projection. Its identity stays stable for the

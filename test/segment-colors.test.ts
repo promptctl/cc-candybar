@@ -4,7 +4,10 @@
 import { Palette, PaletteResolver, parseRgbHex, ColorSpec, ColorRgba } from "@promptctl/rich-js";
 import { createCcCandybarEngine } from "../src/template-engine/engine";
 import { resolveSegmentColors, ColorSpecError } from "../src/template-engine/colors";
-import { transposedResolver } from "../src/themes/transposed-resolver";
+import {
+  transposedResolver,
+  resolverForThemeName,
+} from "../src/themes/palette-resolvers";
 import type { Template } from "@promptctl/go-template-js";
 import type { RichText } from "@promptctl/rich-js";
 
@@ -294,5 +297,35 @@ describe("per-segment hue via palette transposition", () => {
     const style = resolveSegmentColors(shifted, bgTpl, fgTpl, {});
     const baseStyle = resolveSegmentColors(base, bgTpl, fgTpl, {});
     expect(style.color?.value?.hex).not.toBe(baseStyle.color?.value?.hex);
+  });
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// 10. resolverForThemeName — the single name -> PaletteResolver enforcer (k5a.4)
+// ────────────────────────────────────────────────────────────────────────────
+
+describe("resolverForThemeName", () => {
+  test("memoized: same name returns the same resolver instance", () => {
+    expect(resolverForThemeName("nord")).toBe(resolverForThemeName("nord"));
+  });
+
+  test("resolves aliases to the same resolver as the canonical name", () => {
+    // 'dark' is an alias of 'textual-dark' (resolvePaletteName), so both must
+    // collapse to one cached resolver.
+    expect(resolverForThemeName("dark")).toBe(
+      resolverForThemeName("textual-dark"),
+    );
+  });
+
+  test("distinct themes resolve a 'primary' spec to distinct colors", () => {
+    const a = resolverForThemeName("nord").resolve("primary")!;
+    const b = resolverForThemeName("gruvbox").resolve("primary")!;
+    expect(maxChannelDelta(a, b)).toBeGreaterThan(5);
+  });
+
+  test("an unresolvable name throws loudly (registry drift, not a fallback)", () => {
+    expect(() => resolverForThemeName("not-a-real-theme")).toThrow(
+      /did not resolve in the theme registry/,
+    );
   });
 });

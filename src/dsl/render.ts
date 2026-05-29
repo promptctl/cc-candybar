@@ -11,11 +11,7 @@
 // the input values (kind discriminators, layout length, palette presence)
 // govern output, not whether operations run.
 
-import {
-  PaletteResolver,
-  getThemePalette,
-  type RichText,
-} from "@promptctl/rich-js";
+import type { PaletteResolver, RichText } from "@promptctl/rich-js";
 import type { Template } from "@promptctl/go-template-js";
 import type {
   ValidatedConfig,
@@ -31,9 +27,7 @@ import {
 } from "../var-system/sources.js";
 import type { BuildLineOptions } from "../render/strip.js";
 import { renderStripCells } from "../render/strip.js";
-import { effectiveSegmentPalette } from "../config/dsl-loader.js";
-import { resolvePaletteName } from "../themes/index.js";
-import { transposedResolver } from "../themes/transposed-resolver.js";
+import { resolverForThemeName, transposedResolver } from "../themes/index.js";
 import { buildScope } from "../template-engine/scope.js";
 import {
   createCcCandybarEngine,
@@ -57,8 +51,9 @@ export interface CompiledSegment {
   readonly template: Template<RichText>;
   readonly bg?: Template<RichText>;
   readonly fg?: Template<RichText>;
-  // Pre-resolved from effectiveSegmentPalette at registration time; undefined
-  // means "use the basePalette passed to renderDsl".
+  // Pre-resolved from the segment's explicit `palette:` override at registration
+  // time; undefined means "use the per-render basePalette passed to renderDsl"
+  // (the live session ?? globals ?? default base theme).
   readonly paletteResolver?: PaletteResolver;
 }
 
@@ -285,7 +280,6 @@ export function registerDslConfig(
     null,
   ) as Record<string, CompiledSegment>;
   for (const [segName, seg] of Object.entries(config.segments)) {
-    const paletteName = effectiveSegmentPalette(config.globals, seg);
     const parseField = (src: string, field: string) => {
       try {
         return engine.parse(src);
@@ -301,28 +295,19 @@ export function registerDslConfig(
       template: parseField(seg.template, "template"),
       bg: seg.bg !== undefined ? parseField(seg.bg, "bg") : undefined,
       fg: seg.fg !== undefined ? parseField(seg.fg, "fg") : undefined,
+      // [LAW:one-source-of-truth] Freeze ONLY the explicit per-segment `palette:`
+      // override — a deliberate static pin that intentionally ignores the live
+      // session theme. The base theme (session ?? globals ?? default) is the
+      // per-render basePalette; folding globals.palette in here too would freeze
+      // it per segment and the stale copy would shadow basePalette, so a session
+      // theme change could never recolor the bar.
       paletteResolver:
-        paletteName !== undefined ? resolverForPalette(paletteName) : undefined,
+        seg.palette !== undefined
+          ? resolverForThemeName(seg.palette)
+          : undefined,
     };
   }
   return compiled;
-}
-
-// ─── Per-segment palette resolution ──────────────────────────────────────────
-
-// [LAW:single-enforcer] One place converts a validated palette name to a
-// PaletteResolver. The loader guarantees the name is in allowedPalettes
-// (validated at load time), so getThemePalette must succeed — null is a
-// programming error (registry inconsistency), not a user error.
-function resolverForPalette(name: string): PaletteResolver {
-  const palette = getThemePalette(resolvePaletteName(name));
-  if (palette === null) {
-    throw new Error(
-      `Palette "${name}" was validated by loader but not found in registry — ` +
-        `allowedPalettes and the real registry are inconsistent`,
-    );
-  }
-  return new PaletteResolver(palette);
 }
 
 // ─── renderDsl ───────────────────────────────────────────────────────────────
