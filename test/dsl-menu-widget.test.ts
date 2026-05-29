@@ -21,6 +21,8 @@ import { listResolvablePaletteNames, STYLE_ORDER } from "../src/themes/policy";
 import {
   makeIntValidator,
   deriveWidgetValidators,
+  registerStateValidator,
+  validateStateWrite,
 } from "../src/daemon/verbs/state-validators";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
@@ -307,12 +309,13 @@ describe("k5a.6 — menu page-key validator", () => {
     expect(v(big)).toEqual({ ok: true, value: big });
   });
 
-  test("deriveWidgetValidators derives an int validator for a menu page key", () => {
+  test("deriveWidgetValidators derives an int spec for a menu page key", () => {
     const config = parseAndValidate("<test>", MENU_SRC, ALLOWED);
     const derived = deriveWidgetValidators(config);
+    // The menu writes its page key (int) and the baseline `theme` key (skipped),
+    // so the only derived key is the page key.
     expect(derived.map((d) => d.key)).toEqual(["theme-page"]);
-    expect(derived[0]!.validator("3")).toEqual({ ok: true, value: "3" });
-    expect(derived[0]!.validator("nope").ok).toBe(false);
+    expect(derived[0]!.spec).toEqual({ kind: "int" });
   });
 
   test("a menu page key colliding with a baseline key IS derived (so registration throws loudly)", () => {
@@ -448,5 +451,114 @@ describe("k5a.6 — menu page-key validator", () => {
     }`;
     const config = parseAndValidate("<test>", src, ALLOWED);
     expect(deriveWidgetValidators(config)).toEqual([]);
+  });
+
+  test("buttons writing a custom key derive a unioned allow-list spec", () => {
+    // [LAW:one-source-of-truth] The allow-list members ARE every value the
+    // buttons can produce — the two fixed `to` values union into one gate, so a
+    // click on either is deliverable and nothing else is.
+    const src = `{
+      globals: {},
+      variables: {
+        'session.id': { kind: 'input', path: 'session_id', default: '' },
+        viewMode: { kind: 'state', key: 'viewMode', default: 'full' },
+      },
+      widgets: { p: { kind: 'buttons', items: [
+        { glyph: 'F', label: 'full', onClick: { set: 'viewMode', to: 'full' } },
+        { glyph: 'C', label: 'compact', onClick: { set: 'viewMode', to: 'compact' } },
+      ] } },
+      segments: { s: { template: '{{ widget "p" }}', bg: 'surface', fg: 'foreground' } },
+      layout: [['s']],
+    }`;
+    const config = parseAndValidate("<test>", src, ALLOWED);
+    const derived = deriveWidgetValidators(config);
+    expect(derived).toEqual([
+      { key: "viewMode", spec: { kind: "allow-list", allowed: ["full", "compact"] } },
+    ]);
+  });
+
+  test("an optionsFrom button on a custom key derives the resolved option list", () => {
+    // [LAW:one-source-of-truth] An options picker's allow-list members are the
+    // canonical theme list — the same source the renderer expands options from.
+    const src = `{
+      globals: {},
+      variables: {
+        'session.id': { kind: 'input', path: 'session_id', default: '' },
+        bg: { kind: 'state', key: 'bg', default: '' },
+      },
+      widgets: { p: { kind: 'buttons', items: [
+        { optionsFrom: 'themes', onClick: { set: 'bg' } },
+      ] } },
+      segments: { s: { template: '{{ widget "p" }}', bg: 'surface', fg: 'foreground' } },
+      layout: [['s']],
+    }`;
+    const config = parseAndValidate("<test>", src, ALLOWED);
+    const derived = deriveWidgetValidators(config);
+    expect(derived).toHaveLength(1);
+    expect(derived[0]!.key).toBe("bg");
+    expect(derived[0]!.spec).toEqual({
+      kind: "allow-list",
+      allowed: listResolvablePaletteNames(),
+    });
+  });
+
+  test("a key written both as a menu page (int) and a button (allow-list) throws at derivation", () => {
+    // [LAW:no-silent-fallbacks] A state key has one column shape; a name written
+    // both ways is a contradiction surfaced at config-load, not silently
+    // resolved to one shape.
+    const src = `{
+      globals: {},
+      variables: {
+        'session.id': { kind: 'input', path: 'session_id', default: '' },
+        'term.cols': { kind: 'input', path: 'term.cols', type: 'number', default: 80 },
+        shared: { kind: 'state', key: 'shared', default: '-1' },
+      },
+      widgets: {
+        m: { kind: 'menu', state: 'shared', items: [{ optionsFrom: 'themes', onClick: { set: 'theme' } }] },
+        b: { kind: 'buttons', items: [{ glyph: 'x', onClick: { set: 'shared', to: 'v' } }] },
+      },
+      segments: { s: { template: '{{ widget "m" }} {{ widget "b" }}', bg: 'surface', fg: 'foreground' } },
+      layout: [['s']],
+    }`;
+    const config = parseAndValidate("<test>", src, ALLOWED);
+    expect(() => deriveWidgetValidators(config)).toThrow(/one .*column shape/);
+  });
+
+  test("end-to-end: a custom-key config's clicks are accepted by the live gate", () => {
+    // [LAW:verifiable-goals] The ticket's contract: a hand-authored config with
+    // a custom writable button key has its clicks accepted on the set-state
+    // wire. Drives the whole chain — real loader → derive → register → the live
+    // validateStateWrite the set-state verb calls — exactly as the daemon's
+    // RenderCache.buildState wires it, with no live socket.
+    const src = `{
+      globals: {},
+      variables: {
+        'session.id': { kind: 'input', path: 'session_id', default: '' },
+        viewMode: { kind: 'state', key: 'viewMode', default: 'full' },
+      },
+      widgets: { p: { kind: 'buttons', items: [
+        { glyph: 'F', label: 'full', onClick: { set: 'viewMode', to: 'full' } },
+        { glyph: 'C', label: 'compact', onClick: { set: 'viewMode', to: 'compact' } },
+      ] } },
+      segments: { s: { template: '{{ widget "p" }}', bg: 'surface', fg: 'foreground' } },
+      layout: [['s']],
+    }`;
+    const config = parseAndValidate("<test>", src, ALLOWED);
+    const disposers = deriveWidgetValidators(config).map(({ key, spec }) =>
+      registerStateValidator(key, spec),
+    );
+    try {
+      // Both button-producible values are deliverable; anything else is rejected.
+      expect(validateStateWrite("viewMode", "full")).toEqual({
+        ok: true,
+        value: "full",
+      });
+      expect(validateStateWrite("viewMode", "compact").ok).toBe(true);
+      expect(validateStateWrite("viewMode", "huge").ok).toBe(false);
+    } finally {
+      for (const dispose of disposers) dispose();
+    }
+    // Dispose-before-swap parity: the key is gone once the config unloads.
+    expect(validateStateWrite("viewMode", "full").ok).toBe(false);
   });
 });
