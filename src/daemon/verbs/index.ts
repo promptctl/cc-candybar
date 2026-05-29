@@ -20,7 +20,7 @@
 
 import { launchSync } from "../../proc/launch";
 import type { SessionStateRW } from "../session-state";
-import { STATE_KEYS, validateStateWrite } from "./state-validators";
+import { listStateKeys, validateStateWrite } from "./state-validators";
 
 export interface VerbContext {
   readonly sessionState: SessionStateRW;
@@ -136,51 +136,92 @@ const toolbarToggle: VerbHandler = (value, ctx) => {
 };
 
 // [LAW:single-enforcer] One verb writes SessionState — for every
-// registered key. The per-key validator registry in ./state-validators.ts
-// is the single place that decides what is a legal value for a given key;
-// the body here is residue: split args, validate, write, log.
+// registered key, for every pair in a batch. The per-key validator
+// registry in ./state-validators.ts is the single place that decides
+// what is a legal value for a given key; the body here is residue:
+// split args into pairs, validate each, write atomically, log.
 //
 // [LAW:dataflow-not-control-flow] The key is data flowing across the
-// boundary, not a discriminator that selects between verb handlers. A new
-// state-writable key is a registry row, not a new verb.
+// boundary, not a discriminator that selects between verb handlers.
+// The pair count is data too — N=1 (single write) is the degenerate
+// form of the N≥2 batch; the parser walks pairs uniformly. A new
+// state-writable key is a registry row, not a new verb; a multi-write
+// click (e.g. menu action that writes the chosen value AND collapses
+// the menu) is one URL with multiple pairs, not multiple URLs.
 //
 // [LAW:types-are-the-program] The validator returns a discriminated
 // `ValidateResult`. The body cannot fabricate a value (the `ok: true`
-// branch's `value` is the only thing it may write) and cannot proceed on
-// `ok: false` (it throws BadVerbArgs with the reason verbatim). The
+// branch's `value` is the only thing it may write) and cannot proceed
+// on `ok: false` (it throws BadVerbArgs with the reason verbatim,
+// naming the failing pair so the operator can localize the typo). The
 // dispatcher in server.ts maps BadVerbArgs to BAD_REQUEST.
 //
-// Wire shape: cc-candybar://set-state/<sessionId>/<key>/<value>
-//   where <value> may itself contain `/` (no further splitting; the
-//   validator decides what's legal for the key).
+// [LAW:no-silent-fallbacks] Batch atomicity: every pair is validated
+// BEFORE any write happens. Any single failure rejects the whole
+// batch — no half-applied state, no "first three writes landed and
+// the fourth failed." A widget click is one transactional intent;
+// partial application would leave the UI in a state no author wrote.
+//
+// Wire shape: cc-candybar://set-state/<sessionId>/<k1>/<v1>[/<k2>/<v2>/...]
+//   The tail after <sessionId> is an even-count sequence of (key,
+//   value) segments. The N=1 form `<sid>/<k>/<v>` is the degenerate
+//   case — single-pair callers do not change. Slash-bearing values are
+//   structurally unrepresentable in this wire shape (a `/` inside a
+//   value would parse as the next key boundary); no current validator
+//   accepts slash-bearing values, so this is a non-breaking shape
+//   constraint, not a regression.
 const setState: VerbHandler = (rawValue, ctx) => {
-  const { sessionId, rest: keyAndValue } = splitSessionAndRest(rawValue);
+  const { sessionId, rest: pairsTail } = splitSessionAndRest(rawValue);
   const sid = requireSessionId(sessionId);
-  if (!keyAndValue)
+  if (!pairsTail)
     throw new BadVerbArgs(
-      `set-state: <key>/<value> is required (have keys: ${STATE_KEYS.join(", ")})`,
+      `set-state: <key>/<value> is required (have keys: ${listStateKeys().join(", ")})`,
     );
-  const slash = keyAndValue.indexOf("/");
-  if (slash === -1)
+  // [LAW:dataflow-not-control-flow] One uniform split; the pair count
+  // emerges from the data. The parser walks the same loop for N=1 and
+  // N=K — no branch on "is this a batch."
+  const segments = pairsTail.split("/");
+  if (segments.length % 2 !== 0) {
     throw new BadVerbArgs(
-      `set-state: missing value after key "${keyAndValue}" (expected <key>/<value>)`,
+      `set-state: expected even-count <key>/<value> pairs, got ${segments.length} ` +
+        `segment(s) after session id (have keys: ${listStateKeys().join(", ")})`,
     );
-  // [LAW:types-are-the-program] Each structurally distinct rejection
-  // category gets its own diagnostic — an empty key (e.g. wire shape
-  // `<sid>//<value>`) is a structural error (missing key segment), not a
-  // semantic one (validator rejection of an unknown key). Routing it to
-  // the unknown-key validator message ("unknown state key \"\"") would
-  // mislead the operator about where their mistake was. Catch it here.
-  if (slash === 0)
-    throw new BadVerbArgs(
-      `set-state: empty key (expected <sessionId>/<key>/<value>)`,
-    );
-  const key = keyAndValue.slice(0, slash);
-  const incoming = keyAndValue.slice(slash + 1);
-  const result = validateStateWrite(key, incoming);
-  if (!result.ok) throw new BadVerbArgs(`set-state: ${result.reason}`);
-  ctx.sessionState.set(sid, key, result.value);
-  ctx.dlog("info", `set-state: ${key}=${result.value} (session=${sid})`);
+  }
+  // [LAW:types-are-the-program] Validate the entire batch before any
+  // write. The "validated pairs" array IS the proof that every write
+  // about to happen is legal — once it's built, the write loop is
+  // forced (no branches, no failures possible).
+  const validated: Array<{ key: string; value: string }> = [];
+  for (let i = 0; i < segments.length; i += 2) {
+    const key = segments[i]!;
+    const incoming = segments[i + 1]!;
+    // [LAW:types-are-the-program] An empty key is a structural error
+    // (missing segment), not a semantic one (validator rejection of an
+    // unknown key). Routing it to the unknown-key validator message
+    // ("unknown state key \"\"") would mislead the operator about
+    // where their mistake was. Catch it here, name the pair index so
+    // batches are localizable.
+    if (!key) {
+      throw new BadVerbArgs(
+        `set-state: empty key at pair ${i / 2 + 1} ` +
+          `(expected <sessionId>/<key>/<value>[/<key>/<value>...])`,
+      );
+    }
+    const result = validateStateWrite(key, incoming);
+    if (!result.ok) {
+      throw new BadVerbArgs(`set-state: pair ${i / 2 + 1}: ${result.reason}`);
+    }
+    validated.push({ key, value: result.value });
+  }
+  // [LAW:single-enforcer] One write loop, one log line format. The
+  // SessionState writes are committed AFTER validation — partial
+  // application is unrepresentable because the loop runs only when
+  // every pair has produced an `ok: true` ValidateResult.
+  for (const { key, value } of validated) {
+    ctx.sessionState.set(sid, key, value);
+  }
+  const summary = validated.map((p) => `${p.key}=${p.value}`).join(" ");
+  ctx.dlog("info", `set-state: ${summary} (session=${sid})`);
 };
 
 // ─── Registry ───────────────────────────────────────────────────────────────
