@@ -1688,20 +1688,32 @@ function validateCrossReferences(ctx: ValidateCtx, cfg: DslConfig): void {
   }
 
   // [LAW:verifiable-goals] A `menu` widget paginates against the live terminal
-  // width, which it reads from the conventional TERM_COLS_VAR variable. The
-  // bundled default declares it, so a production config that merges the default
-  // always satisfies this; a programmatic/standalone config that declares a menu
-  // must declare it too. Surface the requirement at load — same anchor shape as
-  // session.id above — instead of a render-time "Unknown variable" from the menu.
-  if (
-    hasMenuWidget(cfg) &&
-    !Object.prototype.hasOwnProperty.call(cfg.variables, TERM_COLS_VAR)
-  ) {
-    ctx.issues.push({
-      path: `variables.${TERM_COLS_VAR}`,
-      message: `a menu widget paginates against the terminal width and requires a global "${TERM_COLS_VAR}" variable (the bundled default declares it as { kind: "input", path: "${TERM_COLS_VAR}", type: "number" }; a standalone config must declare it)`,
-      line: findKeyLine(ctx.source, ["variables"]),
-    });
+  // width. renderDsl injects that width into the payload at the `term.cols` path
+  // every render, so the ONLY declaration that receives it is an input variable
+  // named TERM_COLS_VAR whose `path` is TERM_COLS_VAR. Validate the SHAPE, not
+  // just presence: a term.cols declared as a different kind, or an input reading
+  // a different path, never sees the injected width and the menu would silently
+  // paginate against the stale default. The bundled default declares the correct
+  // shape, so a production config that merges it always satisfies this; surface
+  // a misdeclaration at load instead of as silent stale-width pagination.
+  if (hasMenuWidget(cfg)) {
+    const decl = Object.prototype.hasOwnProperty.call(
+      cfg.variables,
+      TERM_COLS_VAR,
+    )
+      ? cfg.variables[TERM_COLS_VAR]
+      : undefined;
+    if (
+      decl === undefined ||
+      decl.kind !== "input" ||
+      decl.path !== TERM_COLS_VAR
+    ) {
+      ctx.issues.push({
+        path: `variables.${TERM_COLS_VAR}`,
+        message: `a menu widget paginates against the terminal width, which renderDsl injects at the "${TERM_COLS_VAR}" path — so it requires a global "${TERM_COLS_VAR}" variable declared as { kind: "input", path: "${TERM_COLS_VAR}", type: "number" } (the bundled default declares exactly this; a standalone config must too). A different kind or path never receives the injected width.`,
+        line: findKeyLine(ctx.source, ["variables"]),
+      });
+    }
   }
 }
 

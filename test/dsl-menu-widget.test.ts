@@ -327,6 +327,41 @@ describe("k5a.6 — menu page-key validator", () => {
     );
   });
 
+  test("a menu config with a mis-shaped term.cols fails at load", () => {
+    // [LAW:verifiable-goals] A term.cols that isn't the input var width
+    // injection targets (wrong kind, or input reading a different path) never
+    // receives the injected width — the menu would silently paginate against
+    // the stale default. Validate the shape, not just presence.
+    const wrongKind = `{
+      globals: {},
+      variables: {
+        'session.id': { kind: 'input', path: 'session_id', default: '' },
+        p: { kind: 'state', key: 'p', default: '-1' },
+        'term.cols': { kind: 'literal', value: 80 },
+      },
+      widgets: { m: { kind: 'menu', state: 'p', items: [{ optionsFrom: 'themes', onClick: { set: 'theme' } }] } },
+      segments: { s: { template: '{{ widget "m" }}', bg: 'surface', fg: 'foreground' } },
+      layout: [['s']],
+    }`;
+    expect(() => parseAndValidate("<test>", wrongKind, ALLOWED)).toThrow(
+      /term\.cols/,
+    );
+    const wrongPath = `{
+      globals: {},
+      variables: {
+        'session.id': { kind: 'input', path: 'session_id', default: '' },
+        p: { kind: 'state', key: 'p', default: '-1' },
+        'term.cols': { kind: 'input', path: 'something.else', type: 'number', default: 80 },
+      },
+      widgets: { m: { kind: 'menu', state: 'p', items: [{ optionsFrom: 'themes', onClick: { set: 'theme' } }] } },
+      segments: { s: { template: '{{ widget "m" }}', bg: 'surface', fg: 'foreground' } },
+      layout: [['s']],
+    }`;
+    expect(() => parseAndValidate("<test>", wrongPath, ALLOWED)).toThrow(
+      /term\.cols/,
+    );
+  });
+
   test("baseline keys are not re-derived (buttons writing theme)", () => {
     const src = `{
       globals: {},
