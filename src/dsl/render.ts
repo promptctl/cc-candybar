@@ -33,6 +33,7 @@ import type { BuildLineOptions } from "../render/strip.js";
 import { renderStripCells } from "../render/strip.js";
 import { effectiveSegmentPalette } from "../config/dsl-loader.js";
 import { resolvePaletteName } from "../themes/index.js";
+import { transposedResolver } from "../themes/transposed-resolver.js";
 import { buildScope } from "../template-engine/scope.js";
 import {
   createCcCandybarEngine,
@@ -345,7 +346,7 @@ function resolverForPalette(name: string): PaletteResolver {
  * data; more rows is more iterations, not more code. The scope proxy is built
  * once per render and shared across all rows (payload is the same).
  *
- * Hue rotation: the segment index used for `hueRotationDegrees` continues
+ * Hue rotation: the segment index used for the per-segment `hueShift` continues
  * across rows. A user converting `[a,b,c,d,e]` into `[[a,b,c],[d,e]]` keeps
  * the same per-segment colors; splitting at a row boundary preserves visual
  * continuity for that case.
@@ -395,19 +396,24 @@ export function renderDsl(
         throw new Error(`Layout entry "${segName}" has no matching segment`);
       }
 
-      const hueRotationDegrees = segIndex * hueStep;
+      const hueShift = segIndex * hueStep;
       segIndex++;
 
       if (!evaluateWhen(segCompiled.when, scope)) continue;
 
-      const resolver = segCompiled.paletteResolver ?? basePalette;
+      // [LAW:dataflow-not-control-flow] The per-segment variability is WHICH
+      // palette — the base resolver (per-segment override or basePalette)
+      // transposed by hueShift. bg and fg then resolve from this one palette.
+      const resolver = transposedResolver(
+        segCompiled.paletteResolver ?? basePalette,
+        hueShift,
+      );
 
       const baseStyle = resolveSegmentColors(
         resolver,
         segCompiled.bg,
         segCompiled.fg,
         scope,
-        { hueRotationDegrees },
       );
 
       const fragments = segCompiled.template.evaluate(scope);
