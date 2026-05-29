@@ -1237,24 +1237,25 @@ function validateButtonItem(
     }
     return {
       optionsFrom: src as OptionSource,
-      ...(glyph !== undefined && { glyph }),
+      ...(glyph ? { glyph } : {}),
       onClick,
     };
   }
   const label = optionalStringField(ctx, path, raw, "label");
-  if (glyph === undefined && label === undefined) {
-    // [LAW:no-silent-fallbacks] A fixed button with neither glyph nor label has
-    // nothing to render or click — an empty clickable region. Reject at load.
+  // [LAW:no-silent-fallbacks] An empty-string glyph/label is "present" to the
+  // type but renders as no clickable text (joinDisplay filters falsy parts), so
+  // treat "" exactly as absent — a fixed button needs NON-EMPTY clickable text.
+  if (!glyph && !label) {
     ctx.issues.push({
       path,
-      message: `a fixed button must declare a "glyph" or a "label" (its clickable text)`,
+      message: `a fixed button must declare a non-empty "glyph" or "label" (its clickable text)`,
       line: findKeyLine(ctx.source, path.split(".")),
     });
     return null;
   }
   return {
-    ...(glyph !== undefined && { glyph }),
-    ...(label !== undefined && { label }),
+    ...(glyph ? { glyph } : {}),
+    ...(label ? { label } : {}),
     onClick,
   };
 }
@@ -1351,6 +1352,20 @@ function validateAction(
     return null;
   }
   const key = present[0] as ActionKey;
+  // [LAW:no-silent-fallbacks] Reject unknown keys on the action object, matching
+  // the widget/button validators — so a typo like `{ set: "theme", too: "nord" }`
+  // surfaces at load, not as a silently-ignored field. The allowed companions
+  // depend on the discriminator: only `set` admits `to`.
+  const allowedActionKeys = key === "set" ? ["set", "to"] : [key];
+  for (const k of Object.keys(raw)) {
+    if (!allowedActionKeys.includes(k)) {
+      ctx.issues.push({
+        path: `${path}.${k}`,
+        message: `Unknown key "${k}" on a ${key} action. Expected one of: ${allowedActionKeys.join(", ")}`,
+        line: findKeyLine(ctx.source, [...path.split("."), k]),
+      });
+    }
+  }
   switch (key) {
     case "set": {
       const stateKey = requireString(ctx, path, raw, "set");
@@ -1420,21 +1435,30 @@ function validateAction(
   }
 }
 
-// [LAW:dataflow-not-control-flow] Extract every `widget "name"` / `widget 'name'`
-// call from a template. Mirrors extractTemplateRefs (regex over `{{ }}` blocks);
-// the caller checks each name against the declared widget set. We deliberately
-// don't full-parse — that's the engine's job at compile time.
-const WIDGET_CALL_RE = /\bwidget\s+(?:"([^"]*)"|'([^']*)')/g;
+// [LAW:dataflow-not-control-flow] Extract every `widget "name"` call from a
+// template, for the load-time existence check. Walk each `{{ }}` block as
+// alternating code / string-literal spans (the engine's job is the real parse;
+// this is the same best-effort heuristic shape as extractTemplateRefs). A
+// `widget` keyword lives in a CODE span and its name is the very next string
+// literal; a `widget "x"` sitting INSIDE a larger string literal is part of one
+// string span, never a code span, so it cannot be misread as a call.
+const WIDGET_ARG_RE = /\bwidget\s+$/;
 export function extractWidgetRefs(template: string): Set<string> {
   const refs = new Set<string>();
-  let m: RegExpExecArray | null;
   TEMPLATE_BLOCK_RE.lastIndex = 0;
+  let m: RegExpExecArray | null;
   while ((m = TEMPLATE_BLOCK_RE.exec(template)) !== null) {
     const block = m[1]!;
-    let w: RegExpExecArray | null;
-    WIDGET_CALL_RE.lastIndex = 0;
-    while ((w = WIDGET_CALL_RE.exec(block)) !== null) {
-      refs.add((w[1] ?? w[2])!);
+    let cursor = 0;
+    let s: RegExpExecArray | null;
+    STRING_LITERAL_RE.lastIndex = 0;
+    while ((s = STRING_LITERAL_RE.exec(block)) !== null) {
+      // The code span immediately before this string literal; if it ends with
+      // `widget` + whitespace, this literal is that call's name argument.
+      if (WIDGET_ARG_RE.test(block.slice(cursor, s.index))) {
+        refs.add(s[0].slice(1, -1));
+      }
+      cursor = s.index + s[0].length;
     }
   }
   return refs;
@@ -1497,21 +1521,23 @@ function validateCrossReferences(ctx: ValidateCtx, cfg: DslConfig): void {
         checkVarRefs(ctx, `segments.${segName}.vars.${vName}`, vDecl, segScope);
       }
     }
+    // [LAW:locality-or-seam] Variable refs AND `{{ widget "name" }}` refs are
+    // checked across EVERY template-bearing field, not just `template` — bg/fg/
+    // when are templates too, so an unknown ref in them is a load error, not a
+    // render-time surprise. Same existence-check shape as layout→segments; runs
+    // on the merged config so a segment can reference a default widget.
     for (const field of ["template", "bg", "fg", "when"] as const) {
       const tpl = seg[field];
       if (typeof tpl !== "string") continue;
       checkTemplateRefs(ctx, `segments.${segName}.${field}`, tpl, segScope);
-    }
-    // [LAW:locality-or-seam] A `{{ widget "name" }}` reference must resolve to
-    // a declared widget — same existence-check shape as layout→segments. Runs
-    // on the merged config so a segment can reference a default widget.
-    for (const wref of extractWidgetRefs(seg.template)) {
-      if (!Object.prototype.hasOwnProperty.call(cfg.widgets, wref)) {
-        ctx.issues.push({
-          path: `segments.${segName}.template`,
-          message: `template references unknown widget "${wref}"`,
-          line: findKeyLine(ctx.source, ["segments", segName, "template"]),
-        });
+      for (const wref of extractWidgetRefs(tpl)) {
+        if (!Object.prototype.hasOwnProperty.call(cfg.widgets, wref)) {
+          ctx.issues.push({
+            path: `segments.${segName}.${field}`,
+            message: `${field} references unknown widget "${wref}"`,
+            line: findKeyLine(ctx.source, ["segments", segName, field]),
+          });
+        }
       }
     }
   }
@@ -1545,13 +1571,20 @@ function validateCrossReferences(ctx: ValidateCtx, cfg: DslConfig): void {
   // predicate is "GLOBAL session.id declared" — `allVarNames` (which
   // includes bare segment-local names by construction, for depends_on
   // scope) is the wrong set.
+  // [LAW:verifiable-goals] A widget `set` action composes a set-state click URL
+  // whose first segment is `session.id` (read from the store at render). Without
+  // a global session.id the URL is malformed and the daemon rejects the click
+  // (requireSessionId is the single enforcer — it rejects empty/slash session
+  // ids loudly, so there is no silent corruption; this surfaces the SAME
+  // requirement at load instead of at first click). Same anchor + same shape as
+  // the state-kind requirement above; OR them so either trigger fires it once.
   if (
-    hasStateKind(cfg) &&
+    (hasStateKind(cfg) || hasWidgetSetAction(cfg)) &&
     !Object.prototype.hasOwnProperty.call(cfg.variables, "session.id")
   ) {
     ctx.issues.push({
       path: "variables.session.id",
-      message: `state-kind variables require a global "session.id" variable (segment-local declarations do not satisfy this — declareState reads the global box; conventionally { kind: "input", path: "session_id" })`,
+      message: `state reads and widget set-actions require a global "session.id" variable (segment-local declarations do not satisfy this — declareState/set-state both read the global box; conventionally { kind: "input", path: "session_id" })`,
       line: findKeyLine(ctx.source, ["variables"]),
     });
   }
@@ -1565,6 +1598,19 @@ function hasStateKind(cfg: DslConfig): boolean {
     if (!seg.vars) continue;
     for (const v of Object.values(seg.vars)) {
       if (v.kind === "state") return true;
+    }
+  }
+  return false;
+}
+
+// [LAW:dataflow-not-control-flow] Any widget button whose onClick carries a
+// `set` action ⇒ the config emits a set-state click ⇒ it needs session.id.
+function hasWidgetSetAction(cfg: DslConfig): boolean {
+  for (const widget of Object.values(cfg.widgets)) {
+    for (const item of widget.items) {
+      for (const action of item.onClick) {
+        if ("set" in action) return true;
+      }
     }
   }
   return false;

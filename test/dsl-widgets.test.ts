@@ -16,6 +16,7 @@ import { registerDslConfig, renderDsl } from "../src/dsl/render";
 import { SessionState } from "../src/daemon/session-state";
 import { VERBS } from "../src/daemon/verbs";
 import { parseHandlerUrl } from "../src/install/index";
+import { extractWidgetRefs } from "../src/config/dsl-loader";
 import { listResolvablePaletteNames } from "../src/themes/cascade";
 
 const ALLOWED = new Set(["textual-dark"]);
@@ -243,7 +244,54 @@ describe("DSL widgets — loader validation (chunk-11 .3)", () => {
         wrap(`{ w: { kind: 'buttons', items: [ { onClick: { copy: 'hi' } } ] } }`),
         ALLOWED,
       ),
-    ).toThrow(/must declare a "glyph" or a "label"/);
+    ).toThrow(/must declare a non-empty "glyph" or "label"/);
+  });
+
+  test("an empty-string glyph (no label) is rejected as no clickable text", () => {
+    expect(() =>
+      parseAndValidate(
+        "<t>",
+        wrap(`{ w: { kind: 'buttons', items: [ { glyph: '', onClick: { copy: 'hi' } } ] } }`),
+        ALLOWED,
+      ),
+    ).toThrow(/must declare a non-empty "glyph" or "label"/);
+  });
+
+  test("an unknown key on an action object is rejected", () => {
+    expect(() =>
+      parseAndValidate(
+        "<t>",
+        wrap(`{ w: { kind: 'buttons', items: [ { glyph: 'x', onClick: { set: 'theme', to: 'nord', too: 'oops' } } ] } }`),
+        ALLOWED,
+      ),
+    ).toThrow(/Unknown key "too" on a set action/);
+  });
+
+  test("extractWidgetRefs ignores `widget \"x\"` mentioned inside a string literal", () => {
+    // [LAW:no-silent-fallbacks] A real code-position `widget "name"` is a ref;
+    // the same text INSIDE a string literal is part of one string span, not a
+    // call, so it must NOT be extracted (no spurious unknown-widget error).
+    expect([...extractWidgetRefs(`{{ widget "real" }}`)]).toEqual(["real"]);
+    expect([...extractWidgetRefs(`{{ printf 'widget "ghost"' }}`)]).toEqual([]);
+    expect([
+      ...extractWidgetRefs(`{{ printf "say widget \\"ghost\\"" }} {{ widget "real" }}`),
+    ]).toEqual(["real"]);
+  });
+
+  test("an unknown widget ref in a non-template field (bg) is caught at load", () => {
+    expect(() =>
+      parseAndValidate(
+        "<t>",
+        `{
+          globals: {},
+          variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
+          widgets: { w: { kind: 'buttons', items: [ { glyph: 'x', onClick: { copy: 'hi' } } ] } },
+          segments: { s: { template: '{{ widget "w" }}', bg: '{{ widget "ghost" }}', fg: 'foreground' } },
+          layout: [['s']],
+        }`,
+        ALLOWED,
+      ),
+    ).toThrow(/bg references unknown widget "ghost"/);
   });
 
   test("a fixed button cannot carry an optionsFrom-style bare set (needs `to`)", () => {
