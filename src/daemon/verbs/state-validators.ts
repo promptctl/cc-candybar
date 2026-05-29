@@ -218,21 +218,35 @@ export function makeAllowListValidator(
   allowed: readonly string[],
   label: string,
 ): KeyValidator {
-  // [LAW:types-are-the-program] The set-state wire splits its tail on
-  // "/" — a slash-bearing value would be broken into two segments
-  // before reaching the validator, so a widget config that listed
-  // such an option could never write it. Refusing at factory-build
-  // time (rather than later, when a click happens) is [LAW:verifiable-
-  // goals] — the constraint is checkable at the earliest point, so a
-  // misconfigured widget surfaces at config-load, not on first user
-  // click. Mirrors the same constraint registerStateValidator enforces
-  // for keys: registry surface = writable surface, by construction.
-  const offenders = allowed.filter((v) => v.includes("/"));
-  if (offenders.length > 0) {
+  // [LAW:types-are-the-program] The factory's contract is "options =
+  // allow list" — every value the picker can RENDER must also be a
+  // value the wire can DELIVER. Two structural reasons a declared
+  // option can't reach the validator as itself:
+  //   (1) the wire splits the tail on "/", so a slash-bearing value
+  //       would arrive as two segments — the validator never sees it
+  //       as one value;
+  //   (2) the validator's empty-input rejection ("X value is required")
+  //       fires before the allow-list check, so an "" in the allow
+  //       list would be listed-but-undeliverable.
+  // Both are the same shape as [LAW:registry-vs-wire drift] caught by
+  // registerStateValidator's slash-key check. Catching at factory-build
+  // time (config-load) per [LAW:verifiable-goals] surfaces a
+  // misconfigured option list immediately, not on the operator's first
+  // click. Mirrors registry surface = writable surface, by construction.
+  const slashOffenders = allowed.filter((v) => v.includes("/"));
+  if (slashOffenders.length > 0) {
     throw new Error(
       `makeAllowListValidator(${label}): values contain "/" — the set-state ` +
         `wire shape splits values on "/" so slash-bearing options cannot ` +
-        `be addressed. Offending values: ${offenders.join(", ")}`,
+        `be addressed. Offending values: ${slashOffenders.join(", ")}`,
+    );
+  }
+  if (allowed.includes("")) {
+    throw new Error(
+      `makeAllowListValidator(${label}): empty string is not a writable ` +
+        `option — the validator rejects empty input before the allow-list ` +
+        `check, so an "" in the allowed list could be rendered but never ` +
+        `delivered. Remove "" from the allowed list.`,
     );
   }
   const allowedSet: ReadonlySet<string> = new Set(allowed);

@@ -241,6 +241,26 @@ describe("state-validators registry contract", () => {
     if (!result.ok) expect(result.reason).toBe("fruit value is required");
   });
 
+  test("makeAllowListValidator rejects empty string in allowed values at factory time", () => {
+    // [LAW:types-are-the-program] The validator's `!raw` early-reject
+    // fires BEFORE the allow-list lookup, so an "" in the allowed list
+    // would render in the picker but never deliver as a writable
+    // value. Same shape of registry-vs-wire drift as slash-bearing
+    // values — caught at factory-build time per [LAW:verifiable-goals].
+    expect(() => makeAllowListValidator(["a", "", "b"], "mode")).toThrow(
+      /empty string is not a writable option/,
+    );
+    // The validator built from a list without "" doesn't reject at
+    // factory time and rejects empty INPUT at runtime — the existing
+    // validateBoolean / validateTheme contract for missing values is
+    // preserved.
+    const v = makeAllowListValidator(["a", "b"], "mode");
+    expect(v("")).toEqual({
+      ok: false,
+      reason: "mode value is required",
+    });
+  });
+
   test("makeAllowListValidator rejects slash-bearing allowed values at factory time", () => {
     // [LAW:types-are-the-program] Symmetric with the slash-rejection on
     // registerStateValidator: the wire splits BOTH keys and values on
