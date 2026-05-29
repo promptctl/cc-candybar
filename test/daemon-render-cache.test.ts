@@ -194,7 +194,7 @@ describe("RenderCache", () => {
       // count (across all rows) because the user fixture below uses one
       // row of one segment — matching the default's row count of 1 — so
       // row count alone wouldn't prove the file was picked up.
-      const defaultLayoutSegCount = entry.state!.config.layout.flat().length;
+      const defaultLayoutSegCount = entry.state!.config.layout.flatMap((r) => r.segments).length;
 
       // Give fs.watch a moment to attach to the parent dir before we
       // start writing into it. Without this, on macOS the writeFileSync
@@ -225,9 +225,9 @@ describe("RenderCache", () => {
         label: `watcher should have observed new config file at ${cfg}`,
       });
       expect(entry.configFilePath).toBe(cfg);
-      expect(entry.state!.config.layout).toEqual([["only"]]);
+      expect(entry.state!.config.layout).toEqual([{ segments: ["only"] }]);
       // Sanity: was actually different from the default.
-      expect(entry.state!.config.layout.flat().length).not.toBe(
+      expect(entry.state!.config.layout.flatMap((r) => r.segments).length).not.toBe(
         defaultLayoutSegCount,
       );
     } finally {
@@ -261,7 +261,7 @@ describe("RenderCache", () => {
       const entry = cache.getOrCreate(dir, dir, undefined);
       expect(entry.lastError).toBeNull();
       expect(entry.configFilePath).toBe(cfg);
-      expect(entry.state!.config.layout).toEqual([["only"]]);
+      expect(entry.state!.config.layout).toEqual([{ segments: ["only"] }]);
     } finally {
       for (const fn of cleanups) fn();
       cleanup();

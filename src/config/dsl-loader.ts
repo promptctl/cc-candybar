@@ -43,6 +43,7 @@ import {
   type GitField,
   type Globals,
   type JustifyMode,
+  type LayoutRow,
   type OptionSource,
   type RawDslConfig,
   type SegmentDecl,
@@ -1015,73 +1016,108 @@ function validateSegment(
 
 // ─── Layout ──────────────────────────────────────────────────────────────────
 
-// [LAW:locality-or-seam] Structural validation only — layout is an array of
-// rows, each row an array of segment names (strings). Whether each name
-// resolves to a declared segment is a cross-ref concern
-// (validateCrossReferences), which runs on the MERGED config so a user's
-// layout can reference default-provided segments.
+// [LAW:locality-or-seam] The single boundary that turns the user's layout into
+// the canonical `LayoutRow[]`. Two user-file forms collapse to one shape here
+// so no downstream consumer ever sees the union:
+//   • a bare `string[]` row   → `{ segments: [...] }`  (predicate-less sugar)
+//   • a `{ when?, segments }`  → itself                (explicit predicate form)
+// Whether each name resolves to a declared segment is a cross-ref concern
+// (validateCrossReferences), which runs on the MERGED config so a user's layout
+// can reference default-provided segments.
 //
-// [LAW:types-are-the-program] Single-line is the degenerate `[[a, b, c]]`
-// case. A flat `string[]` (the pre-multiline-layout-ilg shape) is rejected
-// here with a migration-pointing message — no auto-wrap shim, because the
-// shim would silently convert "I forgot to wrap" into a working config and
-// hide the breaking change.
-function validateLayout(
-  ctx: ValidateCtx,
-  raw: unknown,
-): ReadonlyArray<readonly string[]> {
+// [LAW:types-are-the-program] Single-line is the degenerate `[[a, b, c]]` case.
+// A flat `string[]` (the pre-multiline shape) is rejected with a migration-
+// pointing message — no auto-wrap shim, because the shim would silently convert
+// "I forgot to wrap" into a working config and hide the breaking change.
+function validateLayout(ctx: ValidateCtx, raw: unknown): readonly LayoutRow[] {
   if (raw === undefined) return [];
   if (!Array.isArray(raw)) {
     ctx.issues.push({
       path: "layout",
-      message: `layout must be an array of rows (each row an array of segment names), got ${describeType(raw)}`,
+      message: `layout must be an array of rows (each row an array of segment names, or a { when?, segments } object), got ${describeType(raw)}`,
       line: findKeyLine(ctx.source, ["layout"]),
     });
     return [];
   }
 
-  // Built as mutable; the return type widens it to ReadonlyArray<readonly
-  // string[]> at the boundary. Declaring it readonly internally would force
-  // an `as` cast on every push and obscure the actual mutation pattern.
-  const out: string[][] = [];
+  const out: LayoutRow[] = [];
   for (let r = 0; r < raw.length; r++) {
-    const row = raw[r];
-    // Detect the legacy flat shape — strings at the outer level — and emit a
-    // migration-pointing error. [LAW:no-silent-fallbacks] Don't auto-wrap into
-    // `[[...]]`; a silent shim makes the breaking change invisible to users
-    // upgrading and to tests.
-    if (typeof row === "string") {
-      ctx.issues.push({
-        path: `layout[${r}]`,
-        message: `layout is now an array of rows; wrap your segment list in an outer [] (e.g. [["${row}", ...]]). Single-line layouts use one row.`,
-        line: findKeyLine(ctx.source, ["layout"]),
-      });
-      continue;
-    }
-    if (!Array.isArray(row)) {
-      ctx.issues.push({
-        path: `layout[${r}]`,
-        message: `layout row must be an array of segment names, got ${describeType(row)}`,
-        line: findKeyLine(ctx.source, ["layout"]),
-      });
-      continue;
-    }
-    const rowOut: string[] = [];
-    for (let c = 0; c < row.length; c++) {
-      const entry = row[c];
-      if (typeof entry !== "string") {
-        ctx.issues.push({
-          path: `layout[${r}][${c}]`,
-          message: `layout entries must be strings (segment names), got ${describeType(entry)}`,
-          line: findKeyLine(ctx.source, ["layout"]),
-        });
-        continue;
-      }
-      rowOut.push(entry);
-    }
-    out.push(rowOut);
+    const row = validateLayoutRow(ctx, r, raw[r]);
+    if (row !== null) out.push(row);
   }
   return out;
+}
+
+// [LAW:dataflow-not-control-flow] One row → one normalized LayoutRow. The outer
+// shape (array vs object) selects how `segments`/`when` are read; both land in
+// the same struct. A bare string at the outer level is the legacy flat layout —
+// rejected with a wrap hint, not silently shimmed [LAW:no-silent-fallbacks].
+function validateLayoutRow(
+  ctx: ValidateCtx,
+  r: number,
+  row: unknown,
+): LayoutRow | null {
+  if (typeof row === "string") {
+    ctx.issues.push({
+      path: `layout[${r}]`,
+      message: `layout is now an array of rows; wrap your segment list in an outer [] (e.g. [["${row}", ...]]). Single-line layouts use one row.`,
+      line: findKeyLine(ctx.source, ["layout"]),
+    });
+    return null;
+  }
+  if (Array.isArray(row)) {
+    return { segments: validateLayoutSegments(ctx, r, row) };
+  }
+  if (isPlainObject(row)) {
+    const allowed = new Set(["when", "segments"]);
+    for (const key of Object.keys(row)) {
+      if (!allowed.has(key)) {
+        ctx.issues.push({
+          path: `layout[${r}].${key}`,
+          message: `Unknown layout-row key "${key}". Expected one of: ${[...allowed].join(", ")}`,
+          line: findKeyLine(ctx.source, ["layout"]),
+        });
+      }
+    }
+    if (!Array.isArray(row.segments)) {
+      ctx.issues.push({
+        path: `layout[${r}].segments`,
+        message: `a layout row object must have a "segments" array of segment names, got ${describeType(row.segments)}`,
+        line: findKeyLine(ctx.source, ["layout"]),
+      });
+      return null;
+    }
+    const segments = validateLayoutSegments(ctx, r, row.segments);
+    const when = optionalStringField(ctx, `layout[${r}]`, row, "when");
+    return when ? { when, segments } : { segments };
+  }
+  ctx.issues.push({
+    path: `layout[${r}]`,
+    message: `a layout row must be an array of segment names or a { when?, segments } object, got ${describeType(row)}`,
+    line: findKeyLine(ctx.source, ["layout"]),
+  });
+  return null;
+}
+
+function validateLayoutSegments(
+  ctx: ValidateCtx,
+  r: number,
+  row: readonly unknown[],
+): readonly string[] {
+  const rowOut: string[] = [];
+  for (let c = 0; c < row.length; c++) {
+    const entry = row[c];
+    if (typeof entry !== "string") {
+      ctx.issues.push({
+        path: `layout[${r}][${c}]`,
+        message: `layout entries must be strings (segment names), got ${describeType(entry)}`,
+        line: findKeyLine(ctx.source, ["layout"]),
+      });
+      continue;
+    }
+    rowOut.push(entry);
+  }
+  return rowOut;
 }
 
 // ─── Widgets ─────────────────────────────────────────────────────────────────
@@ -1146,8 +1182,13 @@ function validateWidget(
     });
     return null;
   }
-  // [LAW:one-type-per-behavior] One arm; menu/stepper join here as new arms.
-  const allowed = new Set(["kind", "items"]);
+  // [LAW:one-type-per-behavior] A `menu` is a `buttons` plus the `state` key it
+  // paginates against — same `items` shape, one extra field. The allowed key
+  // set is the only per-kind difference; the items walk is shared.
+  const isMenu = kind === "menu";
+  const allowed = isMenu
+    ? new Set(["kind", "items", "state"])
+    : new Set(["kind", "items"]);
   for (const key of Object.keys(raw)) {
     if (!allowed.has(key)) {
       ctx.issues.push({
@@ -1169,6 +1210,22 @@ function validateWidget(
   for (let i = 0; i < raw.items.length; i++) {
     const item = validateButtonItem(ctx, `${path}.items[${i}]`, raw.items[i]);
     if (item !== null) items.push(item);
+  }
+  if (isMenu) {
+    // [LAW:types-are-the-program] A menu without its page key is not a menu —
+    // `state` is the one value carrying open/closed/which-page. Require a
+    // non-empty key; the int validator for it is DERIVED at load (see
+    // deriveWidgetValidators) so the wire accepts the menu's ←/→/close writes.
+    const state = optionalStringField(ctx, path, raw, "state");
+    if (!state) {
+      ctx.issues.push({
+        path: `${path}.state`,
+        message: `a menu widget must declare a non-empty "state" (the SessionState integer page key it reads and writes)`,
+        line: findKeyLine(ctx.source, [...path.split("."), "state"]),
+      });
+      return null;
+    }
+    return { kind: "menu", state, items };
   }
   return { kind: "buttons", items };
 }
@@ -1476,13 +1533,13 @@ export function extractWidgetRefs(template: string): Set<string> {
 function validateCrossReferences(ctx: ValidateCtx, cfg: DslConfig): void {
   // [LAW:locality-or-seam] Layout entries reference segments. Cross-ref runs
   // on the MERGED config so a user's layout can name default-provided
-  // segments without re-declaring them. Layout's own 2D-array shape is
-  // enforced by validateLayout at parse time; "does name exist?" lives here,
-  // with the rest of the existence checks.
+  // segments without re-declaring them. The row shape (predicate + segment
+  // names) is enforced by validateLayout at parse time; "does name exist?"
+  // lives here, with the rest of the existence checks.
   for (let r = 0; r < cfg.layout.length; r++) {
     const row = cfg.layout[r]!;
-    for (let c = 0; c < row.length; c++) {
-      const entry = row[c]!;
+    for (let c = 0; c < row.segments.length; c++) {
+      const entry = row.segments[c]!;
       if (!Object.prototype.hasOwnProperty.call(cfg.segments, entry)) {
         ctx.issues.push({
           path: `layout[${r}][${c}]`,
@@ -1501,6 +1558,16 @@ function validateCrossReferences(ctx: ValidateCtx, cfg: DslConfig): void {
       for (const v of Object.keys(seg.vars)) allVarNames.add(v);
       for (const v of Object.keys(seg.vars)) allVarNames.add(`${segName}.${v}`);
     }
+  }
+
+  // [LAW:locality-or-seam] A row's `when` predicate is a template like any
+  // other; its refs must resolve. A row is not scoped to a segment, so it
+  // reads the global scope (bare globals + namespaced segment vars) — the
+  // same existence-check shape as segment templates, surfaced at load time.
+  for (let r = 0; r < cfg.layout.length; r++) {
+    const when = cfg.layout[r]!.when;
+    if (when === undefined) continue;
+    checkTemplateRefs(ctx, `layout[${r}].when`, when, allVarNames);
   }
 
   // For each variable's template/cache.key, every dotted ref must exist

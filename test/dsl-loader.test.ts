@@ -583,7 +583,7 @@ describe("loadDslConfig — layout", () => {
       FILE,
       `{ segments: { a: { template: "x" }, b: { template: "y" } }, layout: [["a", "b", "a"]] }`,
     );
-    expect(cfg.layout).toEqual([["a", "b", "a"]]);
+    expect(cfg.layout).toEqual([{ segments: ["a", "b", "a"] }]);
   });
 
   test("multi-row layout passes through (row order preserved)", () => {
@@ -591,7 +591,7 @@ describe("loadDslConfig — layout", () => {
       FILE,
       `{ segments: { a: { template: "x" }, b: { template: "y" }, c: { template: "z" } }, layout: [["a", "b"], ["c"]] }`,
     );
-    expect(cfg.layout).toEqual([["a", "b"], ["c"]]);
+    expect(cfg.layout).toEqual([{ segments: ["a", "b"] }, { segments: ["c"] }]);
   });
 
   test("legacy flat string[] layout rejected with migration message", () => {
@@ -1004,7 +1004,7 @@ describe("loadDslConfig — valid corpus", () => {
       "branch", "constant", "cwd", "cwd_short", "home", "hostname",
       "load_avg", "now", "sid",
     ]);
-    expect(cfg.layout).toEqual([["cwd", "branch", "load"]]);
+    expect(cfg.layout).toEqual([{ segments: ["cwd", "branch", "load"] }]);
   });
 
   test("minimal valid config loads to canonical empty shape", () => {

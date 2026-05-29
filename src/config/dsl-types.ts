@@ -30,17 +30,36 @@
 //                     `unique symbol`, so the only construction site is
 //                     `validateConfig` itself.
 // [LAW:types-are-the-program] `layout` is the strongest theorem we can write
-// about row/segment structure: an ordered list of rows, each row an ordered
-// list of segment names. Single-line config is the degenerate `N=1` case
-// (`[[a, b, c]]`); no separate "single-line" arm, no `null|undefined` flag.
-// A separator-sentinel form (e.g. `["a", "\n", "b"]`) would permit illegal
-// interleavings (`["\n", "\n"]`) at the type level; the 2D array makes those
+// about row/segment structure: an ordered list of rows, each row a predicate
+// (optional) plus an ordered list of segment names. Single-line config is the
+// degenerate `N=1` case; no separate "single-line" arm, no `null|undefined`
+// flag. A separator-sentinel form (e.g. `["a", "\n", "b"]`) would permit
+// illegal interleavings at the type level; the row objects make those
 // unrepresentable. *Single-line is multi-line with size 1.*
+//
+// [LAW:dataflow-not-control-flow] A row's `when` lifts the segment-level
+// visibility predicate to the row: the rendered ROW SET is a pure function of
+// state. A closed/absent row does not exist (no blank line) — the renderer
+// skips it exactly as it skips a hidden segment. The user-file sugar for a
+// predicate-less row is a bare `string[]`, normalized to `{ segments }` at the
+// loader boundary so this is the only row shape downstream.
+export interface LayoutRow {
+  // [LAW:dataflow-not-control-flow] Absent `when` ≡ always-rendered. A Go-
+  // template predicate string evaluated per render; false hides the whole row.
+  readonly when?: string;
+  readonly segments: readonly string[];
+}
+
 export interface RawDslConfig {
   readonly globals?: Partial<Globals>;
   readonly variables?: Readonly<Record<string, VariableDecl>>;
   readonly segments?: Readonly<Record<string, SegmentDecl>>;
-  readonly layout?: ReadonlyArray<readonly string[]>;
+  // [LAW:types-are-the-program] Post-parse, rows are already the normalized
+  // LayoutRow shape. The user-facing sugar (a bare `string[]` row) is
+  // collapsed to `{ segments }` inside validateLayout — the single boundary
+  // that turns user input into the canonical shape — so no downstream
+  // consumer ever sees the two-shape union.
+  readonly layout?: readonly LayoutRow[];
   readonly widgets?: Readonly<Record<string, WidgetDecl>>;
 }
 
@@ -48,7 +67,7 @@ export interface DslConfig {
   readonly globals: Globals;
   readonly variables: Readonly<Record<string, VariableDecl>>;
   readonly segments: Readonly<Record<string, SegmentDecl>>;
-  readonly layout: ReadonlyArray<readonly string[]>;
+  readonly layout: readonly LayoutRow[];
   // [LAW:locality-or-seam] The named seam between interaction behavior (what a
   // click does) and presentation (segments/layout). Declared once, referenced
   // from segment templates via `{{ widget "name" }}`. Empty when no config
@@ -359,14 +378,37 @@ export function isOptionsButtonItem(
 }
 
 // [LAW:one-type-per-behavior] Widgets are discriminated by `kind` (the
-// VariableDecl pattern). The foundation ships `buttons`; `menu` (nested,
-// open-path state) and `stepper` (numeric dec/cur/inc) join as new arms — one
-// arm each, the segment surface untouched.
+// VariableDecl pattern). The foundation ships `buttons`; `menu` (width-
+// paginated, open-page state) joins as one arm; `stepper` (numeric
+// dec/cur/inc) is a future arm — the segment surface stays untouched.
 export interface ButtonsWidget {
   readonly kind: "buttons";
   readonly items: readonly ButtonItem[];
 }
-export type WidgetDecl = ButtonsWidget;
 
-export const WIDGET_KINDS = ["buttons"] as const;
+// [LAW:types-are-the-program] A `menu` is a `buttons` whose item run is too
+// wide for one line: the SAME `items` shape, plus the page state it indexes.
+// `state` names the SessionState integer key the menu reads to choose its
+// page (-1/absent = closed) and writes for navigation (←/→) and apply-and-
+// close. The page key carries the whole open/closed/which-page discriminator
+// in ONE value — no separate isOpen flag to drift [LAW:one-source-of-truth].
+//
+// The author declares a MENU OF OPTIONS; pages, the ←/→/✕ affordances, and
+// their click URLs are DERIVED at render from `state` + the live terminal
+// width — never hand-authored. Each option click APPLIES its own set(s) AND
+// writes `state` to -1 (apply-and-close) via the existing batched set-state
+// wire; no menu-specific action vocabulary.
+export interface MenuWidget {
+  readonly kind: "menu";
+  readonly state: string;
+  readonly items: readonly ButtonItem[];
+}
+
+export type WidgetDecl = ButtonsWidget | MenuWidget;
+
+export function isMenuWidget(w: WidgetDecl): w is MenuWidget {
+  return w.kind === "menu";
+}
+
+export const WIDGET_KINDS = ["buttons", "menu"] as const;
 export type WidgetKind = (typeof WIDGET_KINDS)[number];

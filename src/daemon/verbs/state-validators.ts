@@ -25,6 +25,8 @@
 // validator becomes the parsing boundary, the verb body the dataflow.
 
 import { listResolvablePaletteNames, STYLE_ORDER } from "../../themes/policy";
+import type { DslConfig } from "../../config/dsl-types";
+import { isMenuWidget } from "../../config/dsl-types";
 
 // [LAW:types-are-the-program] Discriminated union — every legal return is
 // either an accepted-and-canonicalized string or a structured rejection
@@ -260,6 +262,49 @@ export function makeAllowListValidator(
     }
     return { ok: true, value: raw };
   };
+}
+
+// [LAW:types-are-the-program] An integer-valued state key (a menu's page
+// index). The wire delivers a string; the validator IS the parse boundary —
+// it accepts only `^-?\d+$` and canonicalizes to the minimal decimal form, so
+// "007"/"−0" can't persist a non-canonical page that the next render's
+// `int` read would have to re-normalize. Negative is legal: -1 is the menu's
+// CLOSED sentinel.
+const INT_RE = /^-?\d+$/;
+export function makeIntValidator(label: string): KeyValidator {
+  return (raw) => {
+    if (!raw) return { ok: false, reason: `${label} value is required` };
+    if (!INT_RE.test(raw)) {
+      return { ok: false, reason: `${label} must be an integer, got "${raw}"` };
+    }
+    // parseInt over Number() so the canonical form drops leading zeros / a
+    // lone "-0" → "0"; the regex already excludes non-numeric tails.
+    return { ok: true, value: String(parseInt(raw, 10)) };
+  };
+}
+
+// [LAW:one-source-of-truth] The writable-key surface a config's widgets need is
+// DERIVED from the widget declarations — the same data the renderer paginates
+// from is the gate the wire enforces, so they cannot diverge. A menu writes its
+// `state` page key (←/→ navigation + apply-and-close to -1); that key is
+// integer-valued. Buttons write only baseline keys (theme/style) for now;
+// allow-list derivation for custom buttons keys is a separate follow-up.
+//
+// [LAW:no-silent-fallbacks] Keys already covered by a baseline validator are
+// NOT re-derived — a menu naming its page key `theme` would collide at
+// registration and throw loudly rather than silently shadow the theme gate.
+// Dedupe within a config so two menus sharing one page key register once.
+export function deriveWidgetValidators(
+  config: DslConfig,
+): ReadonlyArray<{ readonly key: string; readonly validator: KeyValidator }> {
+  const out = new Map<string, KeyValidator>();
+  for (const [name, widget] of Object.entries(config.widgets)) {
+    if (!isMenuWidget(widget)) continue;
+    const key = widget.state;
+    if (STATE_VALIDATORS.has(key) || out.has(key)) continue;
+    out.set(key, makeIntValidator(`widget "${name}" page`));
+  }
+  return [...out.entries()].map(([key, validator]) => ({ key, validator }));
 }
 
 // [LAW:dataflow-not-control-flow] Single entry point for validation: the

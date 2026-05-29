@@ -58,8 +58,27 @@ export interface CompiledSegment {
 }
 
 // Pre-compiled templates for every segment in a DslConfig, keyed by segment
-// name. Returned by registerDslConfig; consumed by renderDsl.
+// name. Consumed by renderDsl.
 export type CompiledSegments = Readonly<Record<string, CompiledSegment>>;
+
+// [LAW:dataflow-not-control-flow] A row's `when` is a value flowing out of the
+// template engine, parsed once here exactly like a segment's. `segments` is the
+// row's ordered segment-name list (mirrors LayoutRow). renderDsl walks the
+// compiled layout — not the raw config — so the parse-once guarantee covers
+// rows too.
+export interface CompiledRow {
+  readonly when?: Template<RichText>;
+  readonly segments: readonly string[];
+}
+
+// [LAW:one-source-of-truth] The full compiled artifact registerDslConfig
+// produces: every segment's compiled templates AND the compiled layout (rows
+// with parsed `when`). renderDsl needs both; bundling them keeps the daemon
+// cache holding one value, not two that could fall out of sync.
+export interface CompiledConfig {
+  readonly segments: CompiledSegments;
+  readonly layout: readonly CompiledRow[];
+}
 
 // ─── CacheDecl → CachePolicy ─────────────────────────────────────────────────
 
@@ -213,7 +232,7 @@ export function registerDslConfig(
   config: ValidatedConfig,
   registry: SourceRegistry,
   opts?: { cwd?: string; store?: VariableStore },
-): CompiledSegments {
+): CompiledConfig {
   const cwd = opts?.cwd ?? process.cwd();
 
   // [LAW:locality-or-seam] One engine per config load, carrying THIS config's
@@ -307,7 +326,29 @@ export function registerDslConfig(
           : undefined,
     };
   }
-  return compiled;
+
+  // [LAW:one-source-of-truth] Compile each row's `when` once here, alongside
+  // the segment templates — renderDsl never parses. The compiled layout mirrors
+  // config.layout 1:1 (same rows, same segment order), so a row's predicate and
+  // its segment list travel together.
+  const layout: CompiledRow[] = config.layout.map((row, r) => ({
+    when:
+      row.when !== undefined
+        ? (() => {
+            try {
+              return engine.parse(row.when);
+            } catch (e) {
+              throw new Error(
+                `Template parse error in layout[${r}].when: ${(e as Error).message}`,
+                { cause: e },
+              );
+            }
+          })()
+        : undefined,
+    segments: row.segments,
+  }));
+
+  return { segments: compiled, layout };
 }
 
 // ─── renderDsl ───────────────────────────────────────────────────────────────
@@ -316,29 +357,32 @@ export function registerDslConfig(
  * Render the DSL config to a (possibly multi-line) ANSI string.
  *
  * Pipeline:
- *   1. Push payload into input boxes (registry.applyInput) — once per render.
+ *   1. Push payload (+ injected `term.cols`) into input boxes — once per render.
  *   2. Build the scope proxy — once per render.
- *   3. For each row in `config.layout`:
- *        a. Walk row segments; skip those whose `when` evaluates false.
- *        b. Per-segment palette resolver, bg/fg → baseStyle, template
+ *   3. For each row in the compiled layout:
+ *        a. Evaluate the row's `when`; a false row contributes no line (the row
+ *           does not exist — no blank line), but its positions still consume hue
+ *           indices so visible rows keep positionally-stable colors.
+ *        b. Walk row segments; skip those whose `when` evaluates false.
+ *        c. Per-segment palette resolver, bg/fg → baseStyle, template
  *           evaluation, applySegmentLayout — identical to single-row spine.
- *        c. Concatenate the row's cells; render to a powerline ANSI strip.
- *   4. Join rows with "\n".
+ *        d. Concatenate the row's cells; render to a powerline ANSI strip.
+ *   4. Join visible rows with "\n".
  *
- * [LAW:single-enforcer] The daemon (bzh.2) calls this verbatim — no alternate
- * render path. The test and the daemon share ONE render path.
- * [LAW:dataflow-not-control-flow] Both row count and per-row segment count are
- * data; more rows is more iterations, not more code. The scope proxy is built
- * once per render and shared across all rows (payload is the same).
+ * [LAW:single-enforcer] The daemon calls this verbatim — no alternate render
+ * path. The test and the daemon share ONE render path.
+ * [LAW:dataflow-not-control-flow] Row visibility, row count, and per-row segment
+ * count are all data; more rows is more iterations, not more code. The scope
+ * proxy is built once per render and shared across all rows.
  *
  * Hue rotation: the segment index used for the per-segment `hueShift` continues
- * across rows. A user converting `[a,b,c,d,e]` into `[[a,b,c],[d,e]]` keeps
- * the same per-segment colors; splitting at a row boundary preserves visual
- * continuity for that case.
+ * across rows AND across hidden rows. A user converting `[a,b,c,d,e]` into
+ * `[[a,b,c],[d,e]]` keeps the same per-segment colors; a row toggling visibility
+ * does not recolor the rows below it.
  */
 export function renderDsl(
   config: ValidatedConfig,
-  compiled: CompiledSegments,
+  compiled: CompiledConfig,
   store: VariableStore,
   registry: SourceRegistry,
   payload: unknown,
@@ -358,7 +402,12 @@ export function renderDsl(
   // natural per-segment shape.
   perSegmentSink?: Map<string, readonly RichText[]>,
 ): string {
-  registry.applyInput(payload);
+  // [LAW:one-source-of-truth] Inject the usable width as `term.cols` from the
+  // SAME opts.width the strip wraps to (below), so a width-paginated widget
+  // reads the exact wrap width — never a cached or independently-measured copy.
+  // Spreading a non-object payload yields no keys (compile-only callers), so the
+  // width is set regardless without a trust-boundary guard.
+  registry.applyInput({ ...(payload as object), term: { cols: opts.width } });
 
   const scope = buildScope(store);
   const hueStep = config.globals.hueStep ?? 0;
@@ -367,11 +416,15 @@ export function renderDsl(
 
   const lines: string[] = [];
   let segIndex = 0;
-  for (const row of config.layout) {
+  for (const row of compiled.layout) {
+    // [LAW:dataflow-not-control-flow] Row visibility is a value, not a branch
+    // around the loop: hidden rows still walk their segments to advance the hue
+    // index (positional color stability), but contribute no line.
+    const rowVisible = evaluateWhen(row.when, scope);
     const rowCells: RichText[] = [];
-    for (const segName of row) {
+    for (const segName of row.segments) {
       const seg = config.segments[segName];
-      const segCompiled = compiled[segName];
+      const segCompiled = compiled.segments[segName];
       // [LAW:no-defensive-null-guards] seg + segCompiled are always defined —
       // the loader validates every layout entry against segments, and
       // registerDslConfig compiles every declared segment. A missing entry
@@ -384,6 +437,7 @@ export function renderDsl(
       const hueShift = segIndex * hueStep;
       segIndex++;
 
+      if (!rowVisible) continue;
       if (!evaluateWhen(segCompiled.when, scope)) continue;
 
       // [LAW:dataflow-not-control-flow] The per-segment variability is WHICH
@@ -417,7 +471,9 @@ export function renderDsl(
 
       rowCells.push(...laidOut);
     }
-    lines.push(renderStripCells(rowCells, opts));
+    // [LAW:dataflow-not-control-flow] A hidden row is absent, not blank — its
+    // line is never produced, so no empty line survives in the output.
+    if (rowVisible) lines.push(renderStripCells(rowCells, opts));
   }
 
   return lines.join("\n");
