@@ -13,8 +13,7 @@ import { parseAndValidate } from "./helpers/parse-and-validate";
 import { registerDslConfig, renderDsl } from "../src/dsl/render";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
-import { PaletteResolver } from "@promptctl/rich-js";
-import { getThemePalette } from "../src/themes/palette-registry";
+import { PaletteResolver, getThemePalette } from "@promptctl/rich-js";
 
 const SERIALIZED = JSON.stringify(DEFAULT_DSL_CONFIG, null, 2);
 

@@ -1,6 +1,10 @@
-import type { Palette } from "@promptctl/rich-js";
-import { PaletteResolver, type ColorRgba } from "@promptctl/rich-js";
-import { getThemePalette, listThemePalettes } from "./palette-registry.js";
+import {
+  PaletteResolver,
+  getThemePalette,
+  listThemePalettes,
+  type Palette,
+  type ColorRgba,
+} from "@promptctl/rich-js";
 import { hexToAnsi, hexTo256Ansi, hexToBasicAnsi } from "../utils/colors";
 import { RESET_CODE } from "../utils/constants";
 import { rotateHue } from "./oklch.js";
