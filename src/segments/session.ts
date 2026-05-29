@@ -64,13 +64,23 @@ function convertToSessionEntry(entry: ParsedEntry): SessionUsageEntry {
 
 export class SessionProvider {
   async getSessionUsage(sessionId: string): Promise<SessionUsage | null> {
-    try {
-      const transcriptPath = await findTranscriptFile(sessionId);
-      if (!transcriptPath) {
-        debug(`No transcript found for session: ${sessionId}`);
-        return null;
-      }
+    const transcriptPath = await findTranscriptFile(sessionId);
+    if (!transcriptPath) {
+      debug(`No transcript found for session: ${sessionId}`);
+      return null;
+    }
+    return this.getSessionUsageFromPath(sessionId, transcriptPath);
+  }
 
+  // [LAW:single-enforcer] One parse+cost path, entered two ways. The daemon's
+  // SessionUsageStore already holds the transcript path (hookData.transcript_path
+  // or its seed scan), so it enters here directly and skips findTranscriptFile's
+  // existsSync-per-project probe. getSessionUsage is the lookup-by-id wrapper.
+  async getSessionUsageFromPath(
+    sessionId: string,
+    transcriptPath: string,
+  ): Promise<SessionUsage | null> {
+    try {
       debug(`Found transcript at: ${transcriptPath}`);
 
       const parsedEntries = await parseJsonlFile(transcriptPath);
@@ -140,8 +150,16 @@ export class SessionProvider {
     sessionId: string,
     hookData?: ClaudeHookData,
   ): Promise<SessionInfo> {
-    const sessionUsage = await this.getSessionUsage(sessionId);
+    return this.toSessionInfo(await this.getSessionUsage(sessionId), hookData);
+  }
 
+  // [LAW:types-are-the-program] Pure projection SessionUsage → SessionInfo, no
+  // I/O. The store computes it once per ingest from already-parsed usage; the
+  // empty-usage arm yields the all-null SessionInfo (which the payload drops).
+  toSessionInfo(
+    sessionUsage: SessionUsage | null,
+    hookData?: ClaudeHookData,
+  ): SessionInfo {
     if (!sessionUsage || sessionUsage.entries.length === 0) {
       return {
         cost: null,
@@ -170,38 +188,5 @@ export class SessionProvider {
       tokens: totalTokens,
       tokenBreakdown,
     };
-  }
-}
-
-export class UsageProvider {
-  private sessionProvider = new SessionProvider();
-
-  async getUsageInfo(
-    sessionId: string,
-    hookData?: ClaudeHookData,
-  ): Promise<UsageInfo> {
-    try {
-      debug(`Starting usage info retrieval for session: ${sessionId}`);
-
-      const sessionInfo = await this.sessionProvider.getSessionInfo(
-        sessionId,
-        hookData,
-      );
-
-      return {
-        session: sessionInfo,
-      };
-    } catch (error) {
-      debug(`Error getting usage info for session ${sessionId}:`, error);
-      return {
-        session: {
-          cost: null,
-          calculatedCost: null,
-          officialCost: null,
-          tokens: null,
-          tokenBreakdown: null,
-        },
-      };
-    }
   }
 }
