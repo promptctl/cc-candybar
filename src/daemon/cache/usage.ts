@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import { UsageProvider, type UsageInfo } from "../../segments/session";
 import type { ClaudeHookData } from "../../utils/claude";
+import { SingleFlight } from "../../utils/single-flight";
 import { dlog } from "../log";
 
 // [LAW:one-source-of-truth] cache key is sessionId. Each session has its own
@@ -29,6 +30,12 @@ function statMtimeMs(filePath: string | undefined): number {
 
 export class CachedUsageProvider extends UsageProvider {
   private readonly entries = new Map<string, UsageCacheEntry>();
+  // [LAW:one-source-of-truth] The mtime cache memoizes RESULTS across renders;
+  // this coalesces concurrent MISSES within one render tick. Two overlapping
+  // renders for the same session that both miss the mtime check would each
+  // launch their own transcript read — single-flight shares the one in-flight
+  // compute keyed by sessionId so the read happens once.
+  private readonly flight = new SingleFlight();
   private readonly maxEntries: number;
   private readonly staleAgeMs: number;
   private hits = 0;
@@ -95,7 +102,9 @@ export class CachedUsageProvider extends UsageProvider {
     }
 
     this.misses++;
-    const info = await super.getUsageInfo(sessionId, hookData);
+    const info = await this.flight.run(sessionId, () =>
+      super.getUsageInfo(sessionId, hookData),
+    );
 
     // Re-stat after compute to capture any in-flight transcript writes; using
     // the post-compute mtime guarantees the next request that finds the same
