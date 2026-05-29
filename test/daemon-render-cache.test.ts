@@ -194,7 +194,7 @@ describe("RenderCache", () => {
       // count (across all rows) because the user fixture below uses one
       // row of one segment — matching the default's row count of 1 — so
       // row count alone wouldn't prove the file was picked up.
-      const defaultLayoutSegCount = entry.state!.config.layout.flat().length;
+      const defaultLayoutSegCount = entry.state!.config.layout.flatMap((r) => r.segments).length;
 
       // Give fs.watch a moment to attach to the parent dir before we
       // start writing into it. Without this, on macOS the writeFileSync
@@ -225,9 +225,9 @@ describe("RenderCache", () => {
         label: `watcher should have observed new config file at ${cfg}`,
       });
       expect(entry.configFilePath).toBe(cfg);
-      expect(entry.state!.config.layout).toEqual([["only"]]);
+      expect(entry.state!.config.layout).toEqual([{ segments: ["only"] }]);
       // Sanity: was actually different from the default.
-      expect(entry.state!.config.layout.flat().length).not.toBe(
+      expect(entry.state!.config.layout.flatMap((r) => r.segments).length).not.toBe(
         defaultLayoutSegCount,
       );
     } finally {
@@ -261,7 +261,7 @@ describe("RenderCache", () => {
       const entry = cache.getOrCreate(dir, dir, undefined);
       expect(entry.lastError).toBeNull();
       expect(entry.configFilePath).toBe(cfg);
-      expect(entry.state!.config.layout).toEqual([["only"]]);
+      expect(entry.state!.config.layout).toEqual([{ segments: ["only"] }]);
     } finally {
       for (const fn of cleanups) fn();
       cleanup();
@@ -332,6 +332,58 @@ describe("RenderCache", () => {
       // entry's state is no longer reachable from the cache.
       const survivor = cache.getOrCreate("/p0", "/p0", undefined);
       expect(survivor).not.toBe(evicted);
+    } finally {
+      for (const fn of cleanups) fn();
+    }
+  });
+
+  test("a menu config loads into multiple cache entries without a validator clash", () => {
+    // [LAW:one-source-of-truth] A menu derives a writable page-key validator
+    // into the GLOBAL registry. Two cache entries sharing one config (one repo,
+    // two cwds) both register that key; ref-counting must let both succeed and
+    // keep the key valid until the last entry is gone. Before ref-counting, the
+    // second entry threw "already has a validator" and rendered a config error.
+    const { cache, cleanups } = makeCache();
+    const { dir, cleanup } = mkConfigDir();
+    cleanups.push(cleanup);
+    const cfg = join(dir, ".cc-candybar.json5");
+    writeFileSync(
+      cfg,
+      JSON.stringify({
+        globals: {},
+        variables: {
+          "session.id": { kind: "input", path: "session_id", default: "" },
+          "term.cols": {
+            kind: "input",
+            path: "term.cols",
+            type: "number",
+            default: 80,
+          },
+          page: { kind: "state", key: "menu-page", default: "-1" },
+        },
+        widgets: {
+          m: {
+            kind: "menu",
+            state: "menu-page",
+            items: [{ optionsFrom: "themes", onClick: { set: "theme" } }],
+          },
+        },
+        segments: {
+          s: { template: '{{ widget "m" }}', bg: "surface", fg: "foreground" },
+        },
+        layout: [{ when: "{{ ge (int .page) 0 }}", segments: ["s"] }],
+      }),
+    );
+    try {
+      const sub = join(dir, "sub");
+      const a = cache.getOrCreate(dir, dir, undefined);
+      const b = cache.getOrCreate(dir, sub, undefined);
+      // Both entries loaded cleanly — no validator clash on the shared page key.
+      expect(a.lastError).toBeNull();
+      expect(b.lastError).toBeNull();
+      expect(a.state).not.toBeNull();
+      expect(b.state).not.toBeNull();
+      expect(a).not.toBe(b);
     } finally {
       for (const fn of cleanups) fn();
     }

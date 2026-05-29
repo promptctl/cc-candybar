@@ -187,7 +187,11 @@ export function buildNeededPrefixes(config: DslConfig): ReadonlySet<string> {
   const visited = new Set<string>();
 
   for (const row of config.layout) {
-    for (const segName of row) {
+    // A row's `when` references variables too — seed them so a provider feeding
+    // only a row predicate (e.g. a state var gating the row) isn't gated out.
+    if (row.when)
+      for (const ref of extractTemplateRefs(row.when)) frontier.push(ref);
+    for (const segName of row.segments) {
       const seg = config.segments[segName];
       if (!seg) continue;
       for (const src of [seg.template, seg.when, seg.bg, seg.fg]) {
