@@ -94,7 +94,7 @@ Add a new built-in segment by:
 
 ### Themes (`src/themes/`)
 
-Cascade defined in `src/themes/cascade.ts`. Color math uses **OKLCH** (`src/themes/oklch.ts`) for perceptual uniformity. The DSL config picks a palette via `globals.palette` (a palette name validated by the loader against the resolver's name set); per-segment `palette:` overrides cascade on top. `effectiveSegmentPalette` (`src/config/dsl-loader.ts`) is the single point that defines the cascade precedence.
+All color math (palette hydration, spec resolution, darken/lighten/alpha/contrast, **OKLCH** transposition) lives in **rich-js** — cc-candybar's `src/themes/` keeps no color arithmetic of its own, only name/string policy (`src/themes/policy.ts`: `resolvePaletteName`, `effectiveThemeName`, `listResolvablePaletteNames`, `STYLE_ORDER`, …) and memoized resolver construction (`src/themes/palette-resolvers.ts`: `resolverForThemeName(name)` — the single name→`PaletteResolver` enforcer — and `transposedResolver(base, hueShift)`, a memoized wrapper over rich-js `transposePalette`). The DSL config picks a palette via `globals.palette`, but the **effective** rendered theme is resolved per render from `effectiveThemeName(sessionState.theme, globals.palette)` (session choice over config default), so a theme click recolors the whole bar live; a per-segment `palette:` is an explicit override that ignores the session theme (frozen at registration in `registerDslConfig`), and `globals.hueStep` drives the per-segment whole-theme hue transposition (anchors error/success/warning hue-locked by rich-js `ANCHORED_ROOTS`).
 
 ### Variable system (`src/var-system/`)
 
