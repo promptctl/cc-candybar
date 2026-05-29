@@ -1,5 +1,7 @@
-import { readdir, readFile, stat } from "node:fs/promises";
 import { existsSync, createReadStream } from "node:fs";
+// [LAW:single-enforcer] readdir/readFile/stat come from the gated transcript-fs
+// owner, not node:fs/promises — the in-flight-I/O bound lives at one seam.
+import { readdir, readFile, stat } from "./transcript-fs";
 import { join } from "node:path";
 import { homedir } from "node:os";
 import { createInterface } from "node:readline";
