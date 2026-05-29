@@ -7,8 +7,8 @@ import { SessionState } from "../src/daemon/session-state";
 import {
   listAvailableThemes,
   DISPLAY_STYLES,
-} from "../src/themes/cascade";
-import { STYLE_ORDER } from "../src/themes/default-mapping";
+  STYLE_ORDER,
+} from "../src/themes/policy";
 
 describe("session-random resolvers", () => {
   describe("resolveSessionTheme", () => {

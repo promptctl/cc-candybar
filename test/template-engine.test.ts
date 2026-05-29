@@ -345,7 +345,7 @@ describe("ccCandybarFuncs registry", () => {
 describe("themes / styles domain-list bindings", () => {
   test("themes() returns the canonical resolvable-palette list", async () => {
     const { listResolvablePaletteNames } = await import(
-      "../src/themes/cascade"
+      "../src/themes/policy"
     );
     const expected = [...listResolvablePaletteNames()];
     const result = evalText(
@@ -356,7 +356,7 @@ describe("themes / styles domain-list bindings", () => {
   });
 
   test("styles() returns the canonical STYLE_ORDER list", async () => {
-    const { STYLE_ORDER } = await import("../src/themes/default-mapping");
+    const { STYLE_ORDER } = await import("../src/themes/policy");
     const expected = [...STYLE_ORDER];
     const result = evalText(
       "{{ range styles }}{{ . }}|{{ end }}",
