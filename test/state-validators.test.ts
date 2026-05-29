@@ -179,6 +179,19 @@ describe("state-validators registry contract", () => {
     ).toThrow(/key is required/);
   });
 
+  test("registerStateValidator rejects slash-bearing keys", () => {
+    // [LAW:types-are-the-program] The set-state wire shape splits the
+    // tail on "/" — a slash-bearing key would be broken into two
+    // segments before dispatch, making it structurally unaddressable.
+    // Listing such a key in listStateKeys() while it cannot be written
+    // to is the registry-vs-wire drift the registration check forbids.
+    expect(() =>
+      registerStateValidator("a/b", () => ({ ok: true, value: "x" })),
+    ).toThrow(/contains "\/"/);
+    // The failing registration must NOT pollute the registry.
+    expect(listStateKeys()).not.toContain("a/b");
+  });
+
   test("disposer is idempotent (second call is a no-op)", () => {
     // [LAW:single-enforcer] Double-dispose must not affect a key
     // re-registered by a different caller between calls.

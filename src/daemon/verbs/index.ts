@@ -213,13 +213,12 @@ const setState: VerbHandler = (rawValue, ctx) => {
     }
     validated.push({ key, value: result.value });
   }
-  // [LAW:single-enforcer] One write loop, one log line format. The
-  // SessionState writes are committed AFTER validation — partial
-  // application is unrepresentable because the loop runs only when
-  // every pair has produced an `ok: true` ValidateResult.
-  for (const { key, value } of validated) {
-    ctx.sessionState.set(sid, key, value);
-  }
+  // [LAW:single-enforcer] One write call, one log line format. setBatch
+  // is the seam that owns reactive atomicity — every pair lands before
+  // observers fire, so an autorun never sees half-applied batch state.
+  // Partial application is unrepresentable: validation already passed,
+  // and the seam guarantees the writes ship as one transaction.
+  ctx.sessionState.setBatch(sid, validated);
   const summary = validated.map((p) => `${p.key}=${p.value}`).join(" ");
   ctx.dlog("info", `set-state: ${summary} (session=${sid})`);
 };

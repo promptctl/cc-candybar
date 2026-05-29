@@ -358,6 +358,71 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
     expect(sessionState.get(SESSION_ID, "toolbar-expanded")).toBe("");
   });
 
+  test("multi-pair batch fires reactive observers exactly once", () => {
+    // [LAW:single-enforcer] SessionState owns the reactive atomicity
+    // contract — observers see the post-batch snapshot, never an
+    // intermediate "first write applied, second pending" state. A
+    // previous shape (loop and call sessionState.set N times) fired
+    // reportChanged() per pair, scheduling autoruns between writes; an
+    // observer correlating theme and toolbar-expanded would have seen
+    // (nord, "1") momentarily before reaching (nord, ""). The setBatch
+    // seam collapses N notifications into one.
+    //
+    // [LAW:behavior-not-structure] We don't assert "setBatch was
+    // called" — we assert the user-observable contract: one autorun
+    // tick per click, regardless of pair count.
+    const config = parseAndValidate(
+      "<test>",
+      `{
+        globals: {},
+        variables: {
+          'session.id': { kind: 'input', path: 'session_id', default: '' },
+          theme: { kind: 'state', key: 'theme', default: '(unset)' },
+          expanded: { kind: 'state', key: 'toolbar-expanded', default: '' },
+        },
+        segments: {
+          s: { template: '{{ .theme }}', bg: 'surface', fg: 'foreground' },
+        },
+        layout: [['s']],
+      }`,
+      ALLOWED_PALETTES,
+    );
+    const sessionState = new SessionState();
+    sessionState.set(SESSION_ID, "toolbar-expanded", "1");
+    const store = new VariableStore();
+    const registry = new SourceRegistry(store, "", undefined, sessionState);
+    registerDslConfig(config, registry);
+    registry.applyInput(HOOK_DATA);
+
+    // Observer reads BOTH state vars in one tracked frame — the kind
+    // of cross-key correlation a Menu rendering would do.
+    const snapshots: Array<{ theme: string; expanded: string }> = [];
+    const dispose = autorun(() => {
+      snapshots.push({
+        theme: String(store.read("theme")),
+        expanded: String(store.read("expanded")),
+      });
+    });
+    try {
+      expect(snapshots).toEqual([{ theme: "(unset)", expanded: "1" }]);
+
+      const ctx = { sessionState, dlog: () => {} };
+      VERBS.get("set-state")!(
+        `${SESSION_ID}/theme/nord/toolbar-expanded/0`,
+        ctx,
+      );
+
+      // Exactly one new snapshot AND it shows BOTH writes applied.
+      // An intermediate fire would have inserted a `(nord, "1")` row.
+      expect(snapshots).toEqual([
+        { theme: "(unset)", expanded: "1" },
+        { theme: "nord", expanded: "" },
+      ]);
+    } finally {
+      dispose();
+    }
+  });
+
   test("set-state rejects whole batch if any pair fails (no partial writes)", () => {
     // [LAW:no-silent-fallbacks] A batch is one transactional click.
     // First pair valid, second pair invalid — the whole batch rejects.

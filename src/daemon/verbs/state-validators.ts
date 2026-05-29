@@ -171,6 +171,20 @@ export function registerStateValidator(
   if (!key) {
     throw new Error("registerStateValidator: key is required");
   }
+  // [LAW:types-are-the-program] The set-state wire parses its tail by
+  // splitting on `/`, so a slash-bearing key can never be addressed on
+  // the wire — it would be split into two separate segments before
+  // dispatch. Listing such a key in listStateKeys() while making it
+  // structurally unreachable is the kind of registry-vs-wire drift
+  // [LAW:one-source-of-truth] forbids. Reject at registration so the
+  // unreachable-but-listed state is unrepresentable.
+  if (key.includes("/")) {
+    throw new Error(
+      `registerStateValidator: key "${key}" contains "/" — the set-state ` +
+        `wire shape splits on "/" so a slash-bearing key cannot be ` +
+        `addressed. Use a slash-free key.`,
+    );
+  }
   if (_STATE_VALIDATORS.has(key)) {
     throw new Error(
       `registerStateValidator: key "${key}" already has a validator ` +
