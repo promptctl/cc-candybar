@@ -32,9 +32,9 @@ export class CachedUsageProvider extends UsageProvider {
   private readonly entries = new Map<string, UsageCacheEntry>();
   // [LAW:one-source-of-truth] The mtime cache memoizes RESULTS across renders;
   // this coalesces concurrent MISSES within one render tick. Two overlapping
-  // renders for the same session that both miss the mtime check would each
-  // launch their own transcript read — single-flight shares the one in-flight
-  // compute keyed by sessionId so the read happens once.
+  // renders that both miss and observed the SAME (sessionId, transcript mtime)
+  // would each launch their own transcript read — single-flight shares the one
+  // in-flight compute (keyed below by sessionId+mtime) so the read happens once.
   private readonly flight = new SingleFlight();
   private readonly maxEntries: number;
   private readonly staleAgeMs: number;

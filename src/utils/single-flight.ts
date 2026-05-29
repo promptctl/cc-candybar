@@ -48,8 +48,9 @@ export class SingleFlight {
     return promise;
   }
 
-  // Number of computations currently in flight. Exposed for the daemon stats
-  // snapshot and the verification harness — observers, not control flow.
+  // Number of computations currently in flight — a read-only observability
+  // surface for tests asserting the coalescing contract (one in-flight entry
+  // per key). Never read as control flow.
   get size(): number {
     return this.inflight.size;
   }
