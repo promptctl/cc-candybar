@@ -22,16 +22,18 @@
 // FSREQPROMISE resources libuv holds), deterministically and without depending
 // on the not-yet-built concurrency gate.
 //
-// RED → GREEN HANDSHAKE
-// --------------------
-// The bounded-concurrency gate lands in a LATER child (gn4.2). Until it does,
-// the bound assertion below cannot hold, so it is pinned with `test.failing`:
-// CI stays green while the known-broken invariant is documented. When gn4.2
-// lands, this test starts PASSING, which makes `test.failing` FAIL — that red is
-// the signal to flip `test.failing` → `test` (do NOT weaken the ceiling). The
-// `it("observes the fan-out")` characterization below is a non-failing safety
-// net: it runs the same measurement path, so a broken harness surfaces as a
-// loud red here instead of silently making the `.failing` gate vacuously green.
+// WHAT KEEPS THIS GREEN
+// ---------------------
+// gn4.2 landed the bound: a single-owner concurrency gate (src/utils/
+// transcript-fs.ts) routes every transcript readdir/stat/readFile through one
+// limiter, so peak in-flight is capped by a constant no matter how many renders
+// fan out. Removing that gate (or routing fs around it) re-admits the unbounded
+// fan-out and this assertion fails at thousands-in-flight — that is the
+// regression this gate guards against. Do NOT weaken the ceiling to "fix" a
+// failure; a failure here means the bound was lost, not that the bar is wrong.
+// The "observes real transcript fs ops" test below is a non-failing safety net:
+// it runs the same measurement path, so a broken harness (import error, no-op
+// observer) surfaces as a loud red instead of making this gate vacuously green.
 
 import { createHook } from "node:async_hooks";
 import { writeHeapSnapshot } from "node:v8";
@@ -141,10 +143,10 @@ async function measurePeakInFlight(renderConcurrency: number): Promise<number> {
 
 describe("daemon transcript-fs concurrency", () => {
   // [LAW:single-enforcer] PINNED REGRESSION GATE. Bounded by a documented
-  // constant regardless of render rate. Fails on current main (unbounded
-  // fan-out → thousands in flight); `test.failing` keeps CI green and flips to
-  // red — "flip me to test()" — the moment gn4.2's bound makes it pass.
-  test.failing(
+  // constant regardless of render rate. gn4.2 landed the single-owner gate
+  // (src/utils/transcript-fs.ts) that routes every transcript readdir/stat/
+  // readFile through one limiter, so peak in-flight is now bounded by its cap.
+  test(
     "peak in-flight transcript fs ops stays under the ceiling",
     async () => {
       const peak = await measurePeakInFlight(RENDER_CONCURRENCY);
