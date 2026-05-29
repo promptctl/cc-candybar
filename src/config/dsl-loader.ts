@@ -1716,6 +1716,34 @@ function validateCrossReferences(ctx: ValidateCtx, cfg: DslConfig): void {
       });
     }
   }
+
+  // [LAW:verifiable-goals] A menu's `state` page key is the value it reads to
+  // choose its page (and that a row `when` reads to gate the menu's row). Reading
+  // a SessionState key requires a kind:"state" variable bound to it — without
+  // one, the menu's ←/→/✕ writes land in SessionState but nothing reads them, so
+  // navigation has no visible effect. Require a backing state variable (global or
+  // segment-local, same key set registerDslConfig resolves for active-marking),
+  // surfaced at load rather than as a silently-inert menu.
+  const declaredStateKeys = new Set<string>();
+  for (const v of Object.values(cfg.variables)) {
+    if (v.kind === "state") declaredStateKeys.add(v.key);
+  }
+  for (const seg of Object.values(cfg.segments)) {
+    if (!seg.vars) continue;
+    for (const v of Object.values(seg.vars)) {
+      if (v.kind === "state") declaredStateKeys.add(v.key);
+    }
+  }
+  for (const [name, widget] of Object.entries(cfg.widgets)) {
+    if (widget.kind !== "menu") continue;
+    if (!declaredStateKeys.has(widget.state)) {
+      ctx.issues.push({
+        path: `widgets.${name}.state`,
+        message: `menu "${name}" reads/writes the page key "${widget.state}", but no kind:"state" variable is bound to it — its navigation writes would land in SessionState with nothing reading them back. Declare a variable like { kind: "state", key: "${widget.state}" } (and gate the menu's row with a when on it).`,
+        line: findKeyLine(ctx.source, ["widgets", name, "state"]),
+      });
+    }
+  }
 }
 
 // [LAW:dataflow-not-control-flow] Any menu widget ⇒ the config reads TERM_COLS_VAR

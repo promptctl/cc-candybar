@@ -285,6 +285,7 @@ describe("k5a.6 — menu page-key validator", () => {
       variables: {
         'session.id': { kind: 'input', path: 'session_id', default: '' },
         'term.cols': { kind: 'input', path: 'term.cols', type: 'number', default: 80 },
+        theme: { kind: 'state', key: 'theme', default: 'textual-dark' },
       },
       widgets: { m: { kind: 'menu', state: 'theme', items: [{ optionsFrom: 'themes', onClick: { set: 'theme' } }] } },
       segments: { s: { template: '{{ widget "m" }}', bg: 'surface', fg: 'foreground' } },
@@ -309,6 +310,24 @@ describe("k5a.6 — menu page-key validator", () => {
       layout: [['s']],
     }`;
     expect(() => parseAndValidate("<test>", src, ALLOWED)).toThrow(/session\.id/);
+  });
+
+  test("a menu whose state key has no backing state variable fails at load", () => {
+    // [LAW:verifiable-goals] Navigation writes the page key; without a
+    // kind:"state" variable reading it, the writes are inert. Surface at load.
+    const src = `{
+      globals: {},
+      variables: {
+        'session.id': { kind: 'input', path: 'session_id', default: '' },
+        'term.cols': { kind: 'input', path: 'term.cols', type: 'number', default: 80 },
+      },
+      widgets: { m: { kind: 'menu', state: 'orphan-page', items: [{ optionsFrom: 'themes', onClick: { set: 'theme' } }] } },
+      segments: { s: { template: '{{ widget "m" }}', bg: 'surface', fg: 'foreground' } },
+      layout: [['s']],
+    }`;
+    expect(() => parseAndValidate("<test>", src, ALLOWED)).toThrow(
+      /orphan-page/,
+    );
   });
 
   test("a menu config without term.cols fails at load (not at render)", () => {
