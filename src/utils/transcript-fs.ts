@@ -22,21 +22,26 @@ import {
 // while peak in-flight memory stays O(threadpool) rather than O(transcript count).
 const TRANSCRIPT_FS_CONCURRENCY = 8;
 
+interface Waiter {
+  readonly wake: () => void;
+  next: Waiter | null;
+}
+
 // A counting semaphore that runs at most `max` thunks concurrently. Slots are
 // handed off directly to the next waiter on release (never incremented while a
 // waiter is parked), so admission can never exceed `max` — the over-admission
 // race of an increment-then-wake design is structurally absent.
 class Limiter {
   private slots: number;
-  // FIFO wait queue with a head index, so dequeue is O(1): release() reads at
-  // `head` and advances it rather than Array.shift() reindexing every element.
-  // Under the thousands-of-queued-ops burst this limiter exists to absorb, an
-  // O(n) shift per release would make a single drain O(n²) on the render hot
-  // path. Slot conservation guarantees the queue always empties between bursts,
-  // so resetting it the moment `head` meets `length` bounds the consumed prefix
-  // without any midpoint-compaction heuristic.
-  private readonly waiters: Array<() => void> = [];
-  private head = 0;
+  // FIFO wait queue as a singly-linked list: enqueue at `tail`, dequeue at
+  // `head`, both O(1) with no array reindexing (Array.shift would be O(n), so a
+  // drain of the thousands-of-queued-ops burst this limiter exists to absorb
+  // would be O(n²) on the render hot path). A dequeued node is immediately
+  // unreferenced, so a continuously-saturated queue retains only the waiters
+  // currently parked — no consumed-prefix accumulates, unlike a head-index
+  // array that only reclaims on full drain.
+  private head: Waiter | null = null;
+  private tail: Waiter | null = null;
 
   constructor(max: number) {
     this.slots = max;
@@ -58,27 +63,38 @@ class Limiter {
     }
     // No slot free — park until release() hands one to us. The slot is
     // transferred directly, so we must NOT decrement again on resume.
-    await new Promise<void>((resolve) => this.waiters.push(resolve));
+    await new Promise<void>((wake) => {
+      const node: Waiter = { wake, next: null };
+      if (this.tail) this.tail.next = node;
+      else this.head = node;
+      this.tail = node;
+    });
   }
 
   private release(): void {
-    if (this.head === this.waiters.length) {
-      // Queue drained — return the slot to the pool and drop the spent array.
-      this.waiters.length = 0;
-      this.head = 0;
+    const node = this.head;
+    if (!node) {
+      // No one waiting — return the slot to the pool.
       this.slots++;
       return;
     }
-    // Hand the slot directly to the next waiter; the freed closure is reclaimed
-    // when the array is reset on full drain.
-    this.waiters[this.head++]!();
+    // Hand the slot directly to the next waiter; the dequeued node is dropped.
+    this.head = node.next;
+    if (!this.head) this.tail = null;
+    node.wake();
   }
 }
 
 const gate = new Limiter(TRANSCRIPT_FS_CONCURRENCY);
 
-// Wrap an async fs primitive so every call flows through the shared gate while
-// preserving the original's full overloaded signature for callers (`as F`).
+// Wrap an async fs primitive so every call flows through the shared gate. The
+// `(...args: never[])` bound is the maximally-permissive function constraint
+// (parameters are contravariant, so `never[]` accepts any arg list) — it admits
+// every fs/promises overload, not rejects them. Callers see the original
+// overloaded type `F`; the cast is needed because TS can't prove a generic
+// wrapper preserves an overload set, but each fs overload is a valid `fn(...)`
+// call, so the wrap is sound (verified: `tsc --noEmit` passes against the
+// multi-overload call sites in claude.ts/cache.ts).
 function gated<F extends (...args: never[]) => Promise<unknown>>(fn: F): F {
   return ((...args: Parameters<F>) =>
     gate.run(() => fn(...args))) as unknown as F;
