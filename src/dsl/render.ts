@@ -366,8 +366,10 @@ export function registerDslConfig(
  *        b. Walk row segments; skip those whose `when` evaluates false.
  *        c. Per-segment palette resolver, bg/fg → baseStyle, template
  *           evaluation, applySegmentLayout — identical to single-row spine.
- *        d. Concatenate the row's cells; render to a powerline ANSI strip.
- *   4. Join visible rows with "\n".
+ *        d. Concatenate the row's cells; render to a powerline ANSI strip. A row
+ *           renders to ZERO OR MORE visual lines (FlexStrip auto-wrap, or a
+ *           multi-strip widget); each becomes its own `lines` entry.
+ *   4. Join visible lines with "\n".
  *
  * [LAW:single-enforcer] The daemon calls this verbatim — no alternate render
  * path. The test and the daemon share ONE render path.
@@ -473,7 +475,19 @@ export function renderDsl(
     }
     // [LAW:dataflow-not-control-flow] A hidden row is absent, not blank — its
     // line is never produced, so no empty line survives in the output.
-    if (rowVisible) lines.push(renderStripCells(rowCells, opts));
+    //
+    // [LAW:one-source-of-truth] A layout entry renders to ZERO OR MORE visual
+    // lines, not exactly one. renderStripCells already returns a "\n"-joined
+    // string when FlexStrip auto-wraps a too-wide row; splitting here makes
+    // `lines` one-entry-per-VISUAL-line rather than one-entry-per-layout-row.
+    // Vertical composition lives in exactly one place — BETWEEN `lines` entries
+    // — never inside a cell (the horizontal-only strip measures a cell by
+    // cellLength, for which an embedded "\n" is a zero-width lie). The split is
+    // string-identical to the prior push under join("\n") (associativity), so
+    // every current render is byte-for-byte unchanged; it widens the model so a
+    // row that renders multiple strips (a multi-level menu) becomes first-class
+    // lines without the layout special-casing the widget.
+    if (rowVisible) lines.push(...renderStripCells(rowCells, opts).split("\n"));
   }
 
   return lines.join("\n");
