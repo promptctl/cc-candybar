@@ -25,6 +25,7 @@ import {
   isOptionsButtonItem,
   TERM_COLS_VAR,
   type Action,
+  type ButtonItem,
   type WidgetDecl,
 } from "../config/dsl-types.js";
 import { listResolvablePaletteNames, STYLE_ORDER } from "../themes/policy.js";
@@ -74,6 +75,19 @@ type CompiledWidget =
       readonly items: readonly CompiledButton[];
       readonly stateKey: string;
       readonly stateVar: string;
+    }
+  | {
+      // [LAW:types-are-the-program] A stepper has NO compiled items — its ◀/▶/
+      // current cells are render-derived from (live value, bounds, step), like a
+      // menu's ←/→/✕. `stateKey` is the SessionState integer key it writes;
+      // `stateVar` is the variable that reads it (resolved from the key so the
+      // displayed current and the written value are one source).
+      readonly kind: "stepper";
+      readonly stateKey: string;
+      readonly stateVar: string;
+      readonly min: number;
+      readonly max: number;
+      readonly step: number;
     };
 
 export type CompiledWidgets = ReadonlyMap<string, CompiledWidget>;
@@ -106,25 +120,56 @@ export function compileWidgets(
 ): CompiledWidgets {
   const out = new Map<string, CompiledWidget>();
   for (const [name, widget] of Object.entries(widgets)) {
-    const items = widget.items.map((item) =>
-      compileButton(engine, item, name, stateKeyToVar),
-    );
-    if (widget.kind === "menu") {
-      // [LAW:one-source-of-truth] Resolve the page KEY to the variable that
-      // reads it (same resolution as an option picker's active-mark) so the
-      // menu render and the row-`when` predicate read ONE value.
-      const stateVar = stateKeyToVar.get(widget.state) ?? widget.state;
-      out.set(name, {
-        kind: "menu",
-        items,
-        stateKey: widget.state,
-        stateVar,
-      });
-      continue;
-    }
-    out.set(name, { kind: "buttons", items });
+    out.set(name, compileWidget(engine, widget, name, stateKeyToVar));
   }
   return out;
+}
+
+// [LAW:dataflow-not-control-flow] One total switch maps each widget kind to its
+// compiled shape — every arm reads only its own fields, so there is no
+// "does this kind have items / a state key" guard. A new kind is one arm here.
+// [LAW:one-source-of-truth] menu and stepper resolve their `state` KEY to the
+// variable that reads it (same resolution an option picker uses for its active
+// mark), so the widget's displayed value, renderDsl's read, and any row-`when`
+// predicate all see ONE value.
+function compileWidget(
+  engine: Engine<RichText>,
+  widget: WidgetDecl,
+  name: string,
+  stateKeyToVar: ReadonlyMap<string, string>,
+): CompiledWidget {
+  switch (widget.kind) {
+    case "stepper":
+      return {
+        kind: "stepper",
+        stateKey: widget.state,
+        stateVar: stateKeyToVar.get(widget.state) ?? widget.state,
+        min: widget.min,
+        max: widget.max,
+        step: widget.step,
+      };
+    case "menu":
+      return {
+        kind: "menu",
+        items: compileButtons(engine, widget.items, name, stateKeyToVar),
+        stateKey: widget.state,
+        stateVar: stateKeyToVar.get(widget.state) ?? widget.state,
+      };
+    case "buttons":
+      return {
+        kind: "buttons",
+        items: compileButtons(engine, widget.items, name, stateKeyToVar),
+      };
+  }
+}
+
+function compileButtons(
+  engine: Engine<RichText>,
+  items: readonly ButtonItem[],
+  name: string,
+  stateKeyToVar: ReadonlyMap<string, string>,
+): CompiledButton[] {
+  return items.map((item) => compileButton(engine, item, name, stateKeyToVar));
 }
 
 // [LAW:one-source-of-truth] One item-compile path shared by both widget arms —
@@ -134,7 +179,7 @@ export function compileWidgets(
 // the key; readVar yields "" if no such variable exists).
 function compileButton(
   engine: Engine<RichText>,
-  item: WidgetDecl["items"][number],
+  item: ButtonItem,
   widgetName: string,
   stateKeyToVar: ReadonlyMap<string, string>,
 ): CompiledButton {
@@ -334,6 +379,9 @@ const MENU_CLOSE = "✕";
 const MENU_PREV = "←";
 const MENU_NEXT = "→";
 
+const STEP_DEC = "◀";
+const STEP_INC = "▶";
+
 // [LAW:single-enforcer] One display-width measure — rich-js's cellLength, the
 // same algebra FlexStrip wraps by — so pagination fits the line the strip
 // produces. No second width function.
@@ -440,6 +488,37 @@ function renderMenu(
   return assembleFragments(frags);
 }
 
+// [LAW:dataflow-not-control-flow] Three derived cells from one value: ◀ writes
+// (current − step), the display shows current, ▶ writes (current + step). The
+// stepper owns NAVIGATION — stepping past a bound WRAPS to the other end (one
+// behavior for every stepper, no clamp-vs-wrap mode). Bounds themselves are the
+// range validator's single concern; the wrapped writes always land inside
+// bounds, so the gate passes them through. The current display is a plain (non-
+// link) span — only the affordances are clickable.
+function renderStepper(
+  stepper: Extract<CompiledWidget, { kind: "stepper" }>,
+  sessionId: string,
+  store: VariableStore,
+): RichText {
+  const raw = parseInt(readVar(store, stepper.stateVar), 10);
+  // [LAW:no-defensive-null-guards] An unset/non-integer value is a real state
+  // (the key was never written, no backing variable) — its meaning is "start at
+  // the floor". The range validator keeps every written value in bounds, so a
+  // parsed value is already in [min,max]; only the unset case needs the floor.
+  const current = Number.isInteger(raw) ? raw : stepper.min;
+  const dec = current - stepper.step;
+  const inc = current + stepper.step;
+  const wrapped = (v: number): number =>
+    v > stepper.max ? stepper.min : v < stepper.min ? stepper.max : v;
+  const setUrl = (value: number): string =>
+    clickUrl("set-state", sessionId, stepper.stateKey, String(value));
+  return assembleFragments([
+    linkFragment(STEP_DEC, setUrl(wrapped(dec)), false),
+    new RichText(String(current)),
+    linkFragment(STEP_INC, setUrl(wrapped(inc)), false),
+  ]);
+}
+
 // Render a named widget to one RichText (many link-bearing spans). The `widget`
 // template function delegates here.
 export function renderWidget(name: string, runtime: WidgetRuntime): RichText {
@@ -459,17 +538,23 @@ export function renderWidget(name: string, runtime: WidgetRuntime): RichText {
   const scope = buildScope(store);
   const sessionId = readVar(store, "session.id");
 
-  // [LAW:dataflow-not-control-flow] The widget kind selects the assembly; both
-  // arms produce one RichText of link-bearing spans through the same composer.
-  if (widget.kind === "menu") {
-    return renderMenu(widget, scope, sessionId, store);
+  // [LAW:dataflow-not-control-flow] One total switch selects the per-kind
+  // assembly; every arm produces ONE RichText of link-bearing spans. A buttons
+  // widget is the degenerate menu — all cells on one line, no pagination.
+  switch (widget.kind) {
+    case "menu":
+      return renderMenu(widget, scope, sessionId, store);
+    case "stepper":
+      return renderStepper(widget, sessionId, store);
+    case "buttons": {
+      const cells = widget.items.flatMap((item) =>
+        expandItemCells(item, scope, sessionId, store, []),
+      );
+      return assembleFragments(
+        cells.map((c) => linkFragment(c.text, c.url, c.active)),
+      );
+    }
   }
-  const cells = widget.items.flatMap((item) =>
-    expandItemCells(item, scope, sessionId, store, []),
-  );
-  return assembleFragments(
-    cells.map((c) => linkFragment(c.text, c.url, c.active)),
-  );
 }
 
 // ─── FuncMap entry ─────────────────────────────────────────────────────────────

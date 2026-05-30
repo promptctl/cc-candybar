@@ -49,9 +49,11 @@ import {
   type SegmentDecl,
   type SourceKind,
   type TruncateMode,
+  type StepperWidget,
   type ValidatedConfig,
   type VariableDecl,
   type WidgetDecl,
+  widgetStateUse,
   TERM_COLS_VAR,
 } from "./dsl-types.js";
 import { DEFAULT_DSL_CONFIG } from "./default-dsl-config.js";
@@ -482,7 +484,6 @@ function validateGlobals(ctx: ValidateCtx, raw: unknown): Globals {
     "default_empty_value",
     "default_separator",
     "default_truncate_marker",
-    "hueStep",
     "palette",
   ]);
 
@@ -514,18 +515,6 @@ function validateGlobals(ctx: ValidateCtx, raw: unknown): Globals {
       continue;
     }
     out[stringKey] = v;
-  }
-
-  if (raw.hueStep !== undefined) {
-    if (typeof raw.hueStep !== "number" || !Number.isFinite(raw.hueStep)) {
-      ctx.issues.push({
-        path: "globals.hueStep",
-        message: `globals.hueStep must be a finite number, got ${describeType(raw.hueStep)}`,
-        line: findKeyLine(ctx.source, ["globals", "hueStep"]),
-      });
-    } else {
-      out.hueStep = raw.hueStep;
-    }
   }
 
   const palette = validatePaletteName(ctx, "globals", raw);
@@ -1197,6 +1186,13 @@ function validateWidget(
     });
     return null;
   }
+  // [LAW:types-are-the-program] A `stepper` has no author items — its cells are
+  // render-derived from (value, bounds, step). It is the one widget arm whose
+  // shape diverges from the shared items walk, so it validates on its own path
+  // before the items requirement that buttons/menu share.
+  if (kind === "stepper") {
+    return validateStepperWidget(ctx, path, raw);
+  }
   // [LAW:one-type-per-behavior] A `menu` is a `buttons` plus the `state` key it
   // paginates against — same `items` shape, one extra field. The allowed key
   // set is the only per-kind difference; the items walk is shared.
@@ -1243,6 +1239,76 @@ function validateWidget(
     return { kind: "menu", state, items };
   }
   return { kind: "buttons", items };
+}
+
+// [LAW:types-are-the-program] A stepper is fully described by its integer key
+// and an integer domain (min < max) plus a positive integer step. Validate that
+// domain at the boundary so the renderer and the range validator both receive a
+// well-formed [min,max]/step and never re-check. `step` defaults to 1 — the
+// obvious increment — so the common stepper is `{ state, min, max }`.
+function validateStepperWidget(
+  ctx: ValidateCtx,
+  path: string,
+  raw: Record<string, unknown>,
+): StepperWidget | null {
+  const allowed = new Set(["kind", "state", "min", "max", "step"]);
+  for (const key of Object.keys(raw)) {
+    if (!allowed.has(key)) {
+      ctx.issues.push({
+        path: `${path}.${key}`,
+        message: `Unknown widget key "${key}". Expected one of: ${[...allowed].join(", ")}`,
+        line: findKeyLine(ctx.source, [...path.split("."), key]),
+      });
+    }
+  }
+
+  const state = optionalStringField(ctx, path, raw, "state");
+  if (!state) {
+    ctx.issues.push({
+      path: `${path}.state`,
+      message: `a stepper widget must declare a non-empty "state" (the SessionState integer key it reads and writes)`,
+      line: findKeyLine(ctx.source, [...path.split("."), "state"]),
+    });
+  }
+
+  const intField = (field: string): number | null => {
+    const v = raw[field];
+    if (typeof v !== "number" || !Number.isInteger(v)) {
+      ctx.issues.push({
+        path: `${path}.${field}`,
+        message: `stepper ${field} must be an integer, got ${describeValue(v)}`,
+        line: findKeyLine(ctx.source, [...path.split("."), field]),
+      });
+      return null;
+    }
+    return v;
+  };
+  const min = intField("min");
+  const max = intField("max");
+  // [LAW:no-mode-explosion] step is optional with one canonical default (1), not
+  // a required knob — the common stepper declares only its bounds.
+  const step = raw.step === undefined ? 1 : intField("step");
+
+  if (!state || min === null || max === null || step === null) {
+    return null;
+  }
+  if (min >= max) {
+    ctx.issues.push({
+      path: `${path}.min`,
+      message: `stepper min (${min}) must be less than max (${max})`,
+      line: findKeyLine(ctx.source, [...path.split("."), "min"]),
+    });
+    return null;
+  }
+  if (step < 1) {
+    ctx.issues.push({
+      path: `${path}.step`,
+      message: `stepper step (${step}) must be a positive integer`,
+      line: findKeyLine(ctx.source, [...path.split("."), "step"]),
+    });
+    return null;
+  }
+  return { kind: "stepper", state, min, max, step };
 }
 
 function validateButtonItem(
@@ -1721,13 +1787,14 @@ function validateCrossReferences(ctx: ValidateCtx, cfg: DslConfig): void {
     }
   }
 
-  // [LAW:verifiable-goals] A menu's `state` page key is the value it reads to
-  // choose its page (and that a row `when` reads to gate the menu's row). Reading
-  // a SessionState key requires a kind:"state" variable bound to it — without
-  // one, the menu's ←/→/✕ writes land in SessionState but nothing reads them, so
-  // navigation has no visible effect. Require a backing state variable (global or
-  // segment-local, same key set registerDslConfig resolves for active-marking),
-  // surfaced at load rather than as a silently-inert menu.
+  // [LAW:verifiable-goals] A menu/stepper reads AND writes a SessionState `state`
+  // key — a menu to choose its page (and a row `when` to gate the menu's row), a
+  // stepper to display and step its value. Reading a SessionState key requires a
+  // kind:"state" variable bound to it; without one the widget's writes land in
+  // SessionState with nothing reading them back, so the click has no visible
+  // effect. Require the backing state variable (global or segment-local, the same
+  // key set registerDslConfig resolves for active-marking), surfaced at load
+  // rather than as a silently-inert widget.
   const declaredStateKeys = new Set<string>();
   for (const v of Object.values(cfg.variables)) {
     if (v.kind === "state") declaredStateKeys.add(v.key);
@@ -1738,15 +1805,25 @@ function validateCrossReferences(ctx: ValidateCtx, cfg: DslConfig): void {
       if (v.kind === "state") declaredStateKeys.add(v.key);
     }
   }
-  for (const [name, widget] of Object.entries(cfg.widgets)) {
-    if (widget.kind !== "menu") continue;
-    if (!declaredStateKeys.has(widget.state)) {
-      ctx.issues.push({
-        path: `widgets.${name}.state`,
-        message: `menu "${name}" reads/writes the page key "${widget.state}", but no kind:"state" variable is bound to it — its navigation writes would land in SessionState with nothing reading them back. Declare a variable like { kind: "state", key: "${widget.state}" } (and gate the menu's row with a when on it).`,
-        line: findKeyLine(ctx.source, ["widgets", name, "state"]),
-      });
-    }
+  // [LAW:dataflow-not-control-flow] Project each widget to the key it reads back
+  // (null for buttons), then keep the unbacked ones — the invalid set is a
+  // filtered VALUE, not a per-kind branch in the loop.
+  const unbacked = Object.entries(cfg.widgets)
+    .map(([name, widget]) => ({
+      name,
+      kind: widget.kind,
+      readsKey: widgetStateUse(widget).readsKey,
+    }))
+    .filter(
+      (e): e is { name: string; kind: WidgetDecl["kind"]; readsKey: string } =>
+        e.readsKey !== null && !declaredStateKeys.has(e.readsKey),
+    );
+  for (const { name, kind, readsKey } of unbacked) {
+    ctx.issues.push({
+      path: `widgets.${name}.state`,
+      message: `${kind} "${name}" reads/writes the state key "${readsKey}", but no kind:"state" variable is bound to it — its writes would land in SessionState with nothing reading them back. Declare a variable like { kind: "state", key: "${readsKey}" }.`,
+      line: findKeyLine(ctx.source, ["widgets", name, "state"]),
+    });
   }
 }
 
@@ -1772,17 +1849,16 @@ function hasStateKind(cfg: DslConfig): boolean {
   return false;
 }
 
-// [LAW:dataflow-not-control-flow] Any widget button whose onClick carries a
-// `set` action ⇒ the config emits a set-state click ⇒ it needs session.id.
+// [LAW:dataflow-not-control-flow] A config emits a set-state click — and so
+// needs session.id — when any widget writes a SessionState key. That is two
+// values of the widget's state-use OR'd: it reads back a key (menu/stepper nav
+// is a render-derived set-state write) or an author item binds a `set` action.
+// copy/open-only buttons embed no session.id, so they write neither.
 function hasWidgetSetAction(cfg: DslConfig): boolean {
-  for (const widget of Object.values(cfg.widgets)) {
-    for (const item of widget.items) {
-      for (const action of item.onClick) {
-        if ("set" in action) return true;
-      }
-    }
-  }
-  return false;
+  return Object.values(cfg.widgets).some((w) => {
+    const use = widgetStateUse(w);
+    return use.readsKey !== null || use.hasSetItem;
+  });
 }
 
 function checkVarRefs(

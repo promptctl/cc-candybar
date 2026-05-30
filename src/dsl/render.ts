@@ -18,7 +18,9 @@ import type {
   VariableDecl,
   CacheDecl,
 } from "../config/dsl-types.js";
+import { HUE_STEP_VAR } from "../config/dsl-types.js";
 import type { VariableStore } from "../var-system/store.js";
+import { toNumber } from "../var-system/types.js";
 import type { SourceRegistry } from "../var-system/sources.js";
 import {
   parseDuration,
@@ -410,7 +412,20 @@ export function renderDsl(
   registry.applyInput({ ...(payload as object), term: { cols: opts.width } });
 
   const scope = buildScope(store);
-  const hueStep = config.globals.hueStep ?? 0;
+  // [LAW:one-source-of-truth] hueStep is a value in the store like every other
+  // render input — NOT a second source in globals. A config declares the
+  // conventional hue-step variable and renderDsl reads that one source here. The
+  // kind decides liveness with no change here: a `state` var lets a stepper drive
+  // it live (session value over the declared default, the same session-over-
+  // default the theme uses), a literal pins it (the bundled default's fixed 14°).
+  // [LAW:no-defensive-null-guards] "config declares no hue variable" is a real,
+  // representable state (an empty-default merge) whose meaning is "no rotation"
+  // (step 0) — has() is the discriminator, mirroring the widget renderer's store
+  // reads. This is the exact degenerate case the prior `globals.hueStep ?? 0`
+  // expressed, now sourced from the store.
+  const hueStep = store.has(HUE_STEP_VAR)
+    ? toNumber(store.read(HUE_STEP_VAR))
+    : 0;
 
   perSegmentSink?.clear();
 

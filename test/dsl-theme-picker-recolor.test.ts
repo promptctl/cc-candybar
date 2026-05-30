@@ -36,10 +36,11 @@ const OPTS = {
 // per-segment `palette:` override — both segments resolve against the live
 // basePalette, so they follow the session pick.
 const SRC = `{
-  globals: { palette: '${BASE_THEME}', hueStep: 14 },
+  globals: { palette: '${BASE_THEME}' },
   variables: {
     'session.id': { kind: 'input', path: 'session_id', default: '' },
     theme: { kind: 'state', key: 'theme', default: '${BASE_THEME}' },
+    'hue.step': { kind: 'literal', value: 14 },
   },
   widgets: {
     themePicker: {
