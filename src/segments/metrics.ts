@@ -1,6 +1,9 @@
 import type { ClaudeHookData } from "../utils/claude";
 
-import { readFile } from "node:fs/promises";
+// [LAW:single-enforcer] readFile comes from the gated transcript-fs owner, not
+// node:fs/promises — transcript reads share the one in-flight-I/O budget (gn4.2)
+// so concurrent renders can't reintroduce the unbounded libuv FS burst.
+import { readFile } from "../utils/transcript-fs";
 import { debug } from "../utils/logger";
 
 export interface MetricsInfo {
