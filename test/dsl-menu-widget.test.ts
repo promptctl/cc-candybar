@@ -502,10 +502,12 @@ describe("k5a.6 — menu page-key validator", () => {
     });
   });
 
-  test("a key written both as a menu page (int) and a button (allow-list) throws at derivation", () => {
-    // [LAW:no-silent-fallbacks] A state key has one column shape; a name written
-    // both ways is a contradiction surfaced at config-load, not silently
-    // resolved to one shape.
+  test("a NON-integer value written to a menu page key throws at derivation", () => {
+    // [LAW:no-silent-fallbacks] A menu page key is int-valued; a button writing a
+    // non-integer value (here "v") to it is a genuine one-column-shape
+    // contradiction no int validator could honor — surfaced at config-load, not
+    // silently resolved to one shape. (An INTEGER write to the same key is legal
+    // — that is the open-trigger pattern, covered by the next test.)
     const src = `{
       globals: {},
       variables: {
@@ -521,7 +523,34 @@ describe("k5a.6 — menu page-key validator", () => {
       layout: [['s']],
     }`;
     const config = parseAndValidate("<test>", src, ALLOWED);
-    expect(() => deriveWidgetValidators(config)).toThrow(/one .*column shape/);
+    expect(() => deriveWidgetValidators(config)).toThrow(/non-integer value/);
+  });
+
+  test("a button writing an integer to a menu page key is the open trigger — derives one int spec, no throw", () => {
+    // [LAW:types-are-the-program] The canonical menu-with-trigger pattern: a
+    // `buttons` widget writing "0" to the menu's page key OPENS it (the only way
+    // to move the page off its -1 closed sentinel — there is no open verb). The
+    // literal "0" is an int WRITE gated by the page key's int validator, NOT a
+    // second allow-list column, so derivation yields exactly one int spec for the
+    // shared page key and does not throw. This is the live-config interaction the
+    // earlier menu tests missed (they opened the menu via sessionState.set).
+    const src = `{
+      globals: {},
+      variables: {
+        'session.id': { kind: 'input', path: 'session_id', default: '' },
+        'term.cols': { kind: 'input', path: 'term.cols', type: 'number', default: 80 },
+        themePage: { kind: 'state', key: 'theme-page', default: '-1' },
+      },
+      widgets: {
+        open: { kind: 'buttons', items: [{ label: '▸', onClick: { set: 'theme-page', to: '0' } }] },
+        menu: { kind: 'menu', state: 'theme-page', items: [{ optionsFrom: 'themes', onClick: { set: 'theme' } }] },
+      },
+      segments: { s: { template: '{{ widget "open" }} {{ widget "menu" }}', bg: 'surface', fg: 'foreground' } },
+      layout: [['s']],
+    }`;
+    const config = parseAndValidate("<test>", src, ALLOWED);
+    const derived = deriveWidgetValidators(config);
+    expect(derived).toEqual([{ key: "theme-page", spec: { kind: "int" } }]);
   });
 
   test("end-to-end: a custom-key config's clicks are accepted by the live gate", () => {
