@@ -1,8 +1,9 @@
 import { MetricsProvider } from "../src/segments/metrics";
-import { writeFileSync, unlinkSync, mkdtempSync } from "fs";
+import { writeFileSync, unlinkSync, mkdtempSync, utimesSync } from "fs";
 import { join } from "path";
 import { tmpdir } from "os";
 import type { ClaudeHookData } from "../src/utils/claude";
+import { clearParseCache } from "../src/utils/claude";
 
 describe("Metrics Provider", () => {
   let tempDir: string;
@@ -38,6 +39,7 @@ describe("Metrics Provider", () => {
   beforeEach(() => {
     tempDir = mkdtempSync(join(tmpdir(), "metrics-test-"));
     metricsProvider = new MetricsProvider();
+    clearParseCache();
   });
 
   afterEach(() => {
@@ -89,6 +91,38 @@ describe("Metrics Provider", () => {
     expect(metrics.lastResponseTime).toBeNull();
     expect(metrics.linesAdded).toBe(25);
     expect(metrics.linesRemoved).toBe(10);
+  });
+
+  it("reads through the shared parse cache — no re-read when mtime+size unchanged", async () => {
+    const transcriptPath = join(tempDir, "test.jsonl");
+    const fixedMtime = new Date(Date.now() - 60_000);
+    // Two `user` lines → messageCount 2. v2 flips the second line's type
+    // "user" → "xxxx" (byte-length identical) → a fresh parse would count 1.
+    const line = (type: string, ts: string) =>
+      `{"timestamp":"${ts}","type":"${type}","message":{"content":"hi"}}`;
+    const t0 = new Date("2024-01-01T00:00:00.000Z").toISOString();
+    const t1 = new Date("2024-01-01T00:00:01.000Z").toISOString();
+    const v1 = [line("user", t0), line("user", t1)].join("\n");
+    const v2 = [line("user", t0), line("xxxx", t1)].join("\n");
+
+    const hookData = createMockHookData("cache-session", transcriptPath);
+
+    writeFileSync(transcriptPath, v1);
+    utimesSync(transcriptPath, fixedMtime, fixedMtime);
+    const warm = await metricsProvider.getMetricsInfo("cache-session", hookData);
+    expect(warm.messageCount).toBe(2);
+
+    // Mutate content but hold mtime+size identical: the cache key is unchanged,
+    // so a correct shared-cache read returns the stale 2; a private re-read
+    // would observe v2 and return 1.
+    expect(v2.length).toBe(v1.length);
+    writeFileSync(transcriptPath, v2);
+    utimesSync(transcriptPath, fixedMtime, fixedMtime);
+    const cached = await metricsProvider.getMetricsInfo(
+      "cache-session",
+      hookData,
+    );
+    expect(cached.messageCount).toBe(2);
   });
 
   it("handles empty transcript gracefully", async () => {

@@ -1,9 +1,10 @@
-import type { ClaudeHookData } from "../utils/claude";
+import type { ClaudeHookData, ParsedEntry } from "../utils/claude";
 
-// [LAW:single-enforcer] readFile comes from the gated transcript-fs owner, not
-// node:fs/promises — transcript reads share the one in-flight-I/O budget (gn4.2)
-// so concurrent renders can't reintroduce the unbounded libuv FS burst.
-import { readFile } from "../utils/transcript-fs";
+// [LAW:one-source-of-truth] Metrics reads the transcript through the shared
+// mtime-keyed parse LRU — the same parse the session/context segments already
+// performed this render — instead of a private readFile+parse. One parse path,
+// one cache; the multi-MB content arrays are dropped at parse time.
+import { parseJsonlFile } from "../utils/claude";
 import { debug } from "../utils/logger";
 
 export interface MetricsInfo {
@@ -15,80 +16,21 @@ export interface MetricsInfo {
   linesRemoved: number | null;
 }
 
-interface TranscriptEntry {
-  timestamp: string;
-  type?: string;
-  message?: {
-    role?: string;
-    type?: string;
-    content?: Array<{
-      type?: string;
-      [key: string]: unknown;
-    }>;
-    usage?: {
-      input_tokens?: number;
-      output_tokens?: number;
-      cache_creation_input_tokens?: number;
-      cache_read_input_tokens?: number;
-    };
-  };
-  isSidechain?: boolean;
+// A real user turn vs. a tool_result echoed back as a "user" line. The
+// discriminator is metrics-local policy over the shared ParsedEntry scalars.
+function isRealUserMessage(entry: ParsedEntry): boolean {
+  const messageType = entry.type ?? entry.message?.role ?? entry.message?.type;
+  const isToolResult =
+    entry.type === "user" && entry.message?.firstContentType === "tool_result";
+  return messageType === "user" && !isToolResult;
 }
 
 export class MetricsProvider {
-  // [LAW:one-source-of-truth] The transcript path is supplied by the caller
-  // (the required hookData.transcript_path field); metrics never rediscovers it
-  // by scanning every project dir. A missing/unreadable file falls through the
-  // readFile catch to an empty entry list — no separate existence probe.
-  private async loadTranscriptEntries(
-    transcriptPath: string,
-  ): Promise<TranscriptEntry[]> {
-    try {
-      debug(`Loading transcript from: ${transcriptPath}`);
-
-      const content = await readFile(transcriptPath, "utf-8");
-      const lines = content
-        .trim()
-        .split("\n")
-        .filter((line) => line.trim());
-
-      const entries: TranscriptEntry[] = [];
-
-      for (const line of lines) {
-        try {
-          const entry = JSON.parse(line) as TranscriptEntry;
-
-          if (entry.isSidechain === true) {
-            continue;
-          }
-
-          entries.push(entry);
-        } catch (parseError) {
-          debug(`Failed to parse JSONL line: ${parseError}`);
-          continue;
-        }
-      }
-
-      debug(`Loaded ${entries.length} transcript entries`);
-      return entries;
-    } catch (error) {
-      debug(`Error loading transcript at ${transcriptPath}:`, error);
-      return [];
-    }
+  private calculateMessageCount(entries: ParsedEntry[]): number {
+    return entries.filter(isRealUserMessage).length;
   }
 
-  private calculateMessageCount(entries: TranscriptEntry[]): number {
-    return entries.filter((entry) => {
-      const messageType =
-        entry.type || entry.message?.role || entry.message?.type;
-      const isToolResult =
-        entry.type === "user" &&
-        entry.message?.content?.[0]?.type === "tool_result";
-      return messageType === "user" && !isToolResult;
-    }).length;
-  }
-
-  private calculateLastResponseTime(entries: TranscriptEntry[]): number | null {
+  private calculateLastResponseTime(entries: ParsedEntry[]): number | null {
     if (entries.length === 0) return null;
 
     const recentEntries = entries.slice(-20);
@@ -97,29 +39,17 @@ export class MetricsProvider {
     let bestResponseTime: number | null = null;
 
     for (const entry of recentEntries) {
-      if (!entry.timestamp) continue;
+      const messageType =
+        entry.type ?? entry.message?.role ?? entry.message?.type;
 
-      try {
-        const timestamp = new Date(entry.timestamp);
-        const messageType =
-          entry.type || entry.message?.role || entry.message?.type;
-
-        const isToolResult =
-          entry.type === "user" &&
-          entry.message?.content?.[0]?.type === "tool_result";
-        const isRealUserMessage = messageType === "user" && !isToolResult;
-
-        if (isRealUserMessage) {
-          lastUserTime = timestamp;
-        } else if (messageType === "assistant" && lastUserTime) {
-          const responseTime =
-            (timestamp.getTime() - lastUserTime.getTime()) / 1000;
-          if (responseTime > 0.1 && responseTime < 300) {
-            bestResponseTime = responseTime;
-          }
+      if (isRealUserMessage(entry)) {
+        lastUserTime = entry.timestamp;
+      } else if (messageType === "assistant" && lastUserTime) {
+        const responseTime =
+          (entry.timestamp.getTime() - lastUserTime.getTime()) / 1000;
+        if (responseTime > 0.1 && responseTime < 300) {
+          bestResponseTime = responseTime;
         }
-      } catch {
-        continue;
       }
     }
 
@@ -145,8 +75,10 @@ export class MetricsProvider {
         };
       }
 
-      const entries = await this.loadTranscriptEntries(
-        hookData.transcript_path,
+      // parseJsonlFile keeps sidechain entries (usage needs them); metrics
+      // counts only main-thread turns, so the sidechain exclusion is local.
+      const entries = (await parseJsonlFile(hookData.transcript_path)).filter(
+        (entry) => !entry.isSidechain,
       );
       const messageCount = this.calculateMessageCount(entries);
       const lastResponseTime = this.calculateLastResponseTime(entries);
