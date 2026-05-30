@@ -273,10 +273,21 @@ export type PrunedRaw = {
 
 export interface ParsedEntry {
   timestamp: Date;
+  // [LAW:one-source-of-truth] The pruned projection carries every scalar any
+  // consumer reads. `type`, `message.role/type/firstContentType` are the
+  // message-classification discriminators the metrics segment needs; they are
+  // small enum-like strings, so projecting them keeps metrics on this one parse
+  // path WITHOUT retaining the multi-MB `message.content[]` arrays the pruning
+  // exists to drop. `firstContentType` is the `type` of the first content block
+  // only (undefined when content is text/absent) — never the array itself.
+  type?: string;
   message?: {
     id?: string;
     usage?: UsageCounts;
     model?: string;
+    role?: string;
+    type?: string;
+    firstContentType?: string;
   };
   costUSD?: number;
   isSidechain?: boolean;
@@ -379,13 +390,25 @@ function makeEntry(parsed: Record<string, unknown>): ParsedEntry | null {
   if (!parsed.timestamp) return null;
   const msg = parsed.message as Record<string, unknown> | undefined;
   const usage = msg?.usage as UsageCounts | undefined;
+  // Project only the first content block's `type` scalar; the array (full LLM
+  // text) is never retained. Text content (a bare string) has no block type.
+  const content = msg?.content;
+  const firstBlock =
+    Array.isArray(content) && typeof content[0] === "object" && content[0]
+      ? (content[0] as { type?: unknown })
+      : undefined;
   return {
     timestamp: new Date(parsed.timestamp as string),
+    type: typeof parsed.type === "string" ? parsed.type : undefined,
     message: msg
       ? {
           id: typeof msg.id === "string" ? msg.id : undefined,
           model: typeof msg.model === "string" ? msg.model : undefined,
           usage,
+          role: typeof msg.role === "string" ? msg.role : undefined,
+          type: typeof msg.type === "string" ? msg.type : undefined,
+          firstContentType:
+            typeof firstBlock?.type === "string" ? firstBlock.type : undefined,
         }
       : undefined,
     costUSD: typeof parsed.costUSD === "number" ? parsed.costUSD : undefined,
