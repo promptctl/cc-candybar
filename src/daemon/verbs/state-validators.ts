@@ -450,14 +450,31 @@ export function deriveWidgetValidators(config: DslConfig): ReadonlyArray<{
     }
   }
 
+  // [LAW:types-are-the-program] A menu page key is INT-valued and its int
+  // validator is the single enforcer; every `set` aimed at it writes an int —
+  // including a fixed button's literal `to`. The canonical "open the menu at
+  // page 0" trigger is exactly that: a button writing "0" to the page key (the
+  // ONLY way to move it off its -1 closed sentinel — there is no open verb). So
+  // an int key's would-be allow-list members are int WRITES, not a second
+  // column: the int validator gates them, and they are dropped from allow-list
+  // derivation. The genuine contradiction is the residue — a NON-int value
+  // (e.g. an optionsFrom picker's option names) aimed at a page key, which fails
+  // the int column's own membership test. [LAW:no-silent-fallbacks] That, and
+  // only that, throws at config-load rather than silently picking one shape.
   for (const key of intKeys) {
-    if (allowListMembers.has(key)) {
+    const members = allowListMembers.get(key);
+    if (!members) continue;
+    const nonInt = [...members].filter((v) => !INT_RE.test(v));
+    if (nonInt.length > 0) {
       throw new Error(
-        `deriveWidgetValidators: key "${key}" is written both as a menu page ` +
-          `index (int) and a button allow-list value — a state key has one ` +
-          `column shape. Give the menu page key a distinct name.`,
+        `deriveWidgetValidators: key "${key}" is a menu page index (int) but a ` +
+          `button set-action writes non-integer value(s) to it (${nonInt.join(", ")}). A ` +
+          `state key has one column shape — a page key accepts only integer ` +
+          `writes (e.g. a trigger writing "0" to open the menu). Point that ` +
+          `set-action at a distinct key, or write an integer.`,
       );
     }
+    allowListMembers.delete(key);
   }
 
   return [
