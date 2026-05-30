@@ -468,10 +468,10 @@ export function deriveWidgetValidators(config: DslConfig): ReadonlyArray<{
     if (nonInt.length > 0) {
       throw new Error(
         `deriveWidgetValidators: key "${key}" is a menu page index (int) but a ` +
-          `button writes non-integer value(s) to it (${nonInt.join(", ")}). A ` +
+          `button set-action writes non-integer value(s) to it (${nonInt.join(", ")}). A ` +
           `state key has one column shape — a page key accepts only integer ` +
-          `writes (e.g. a trigger writing "0" to open the menu). Give the ` +
-          `picker a distinct key, or write an integer.`,
+          `writes (e.g. a trigger writing "0" to open the menu). Point that ` +
+          `set-action at a distinct key, or write an integer.`,
       );
     }
     allowListMembers.delete(key);
