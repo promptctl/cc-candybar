@@ -19,7 +19,7 @@ export interface MetricsInfo {
 // A real user turn vs. a tool_result echoed back as a "user" line. The
 // discriminator is metrics-local policy over the shared ParsedEntry scalars.
 function isRealUserMessage(entry: ParsedEntry): boolean {
-  const messageType = entry.type ?? entry.message?.role ?? entry.message?.type;
+  const messageType = entry.type || entry.message?.role || entry.message?.type;
   const isToolResult =
     entry.type === "user" && entry.message?.firstContentType === "tool_result";
   return messageType === "user" && !isToolResult;
@@ -40,7 +40,7 @@ export class MetricsProvider {
 
     for (const entry of recentEntries) {
       const messageType =
-        entry.type ?? entry.message?.role ?? entry.message?.type;
+        entry.type || entry.message?.role || entry.message?.type;
 
       if (isRealUserMessage(entry)) {
         lastUserTime = entry.timestamp;
