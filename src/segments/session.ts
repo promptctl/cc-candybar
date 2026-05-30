@@ -1,7 +1,6 @@
 import { debug } from "../utils/logger";
 import { PricingService } from "./pricing";
 import {
-  findTranscriptFile,
   findAgentTranscripts,
   parseJsonlFile,
   type ParsedEntry,
@@ -63,19 +62,11 @@ function convertToSessionEntry(entry: ParsedEntry): SessionUsageEntry {
 }
 
 export class SessionProvider {
-  async getSessionUsage(sessionId: string): Promise<SessionUsage | null> {
-    const transcriptPath = await findTranscriptFile(sessionId);
-    if (!transcriptPath) {
-      debug(`No transcript found for session: ${sessionId}`);
-      return null;
-    }
-    return this.getSessionUsageFromPath(sessionId, transcriptPath);
-  }
-
-  // [LAW:single-enforcer] One parse+cost path, entered two ways. The daemon's
-  // SessionUsageStore already holds the transcript path (hookData.transcript_path
-  // or its seed scan), so it enters here directly and skips findTranscriptFile's
-  // existsSync-per-project probe. getSessionUsage is the lookup-by-id wrapper.
+  // [LAW:one-source-of-truth] The transcript path is always in hand — the
+  // daemon's SessionUsageStore holds it (hookData.transcript_path or its seed
+  // scan) and passes it straight here. There is no lookup-by-id path: recovering
+  // a path we already hold by scanning every project dir is the data-duplication
+  // this method exists to avoid.
   async getSessionUsageFromPath(
     sessionId: string,
     transcriptPath: string,
@@ -150,13 +141,6 @@ export class SessionProvider {
       }),
       { input: 0, output: 0, cacheCreation: 0, cacheRead: 0 },
     );
-  }
-
-  async getSessionInfo(
-    sessionId: string,
-    hookData?: ClaudeHookData,
-  ): Promise<SessionInfo> {
-    return this.toSessionInfo(await this.getSessionUsage(sessionId), hookData);
   }
 
   // [LAW:types-are-the-program] Pure projection SessionUsage → SessionInfo, no

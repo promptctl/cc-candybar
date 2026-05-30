@@ -1,8 +1,10 @@
 import type { ClaudeHookData } from "../utils/claude";
 
-import { readFile } from "node:fs/promises";
+// [LAW:single-enforcer] readFile comes from the gated transcript-fs owner, not
+// node:fs/promises — transcript reads share the one in-flight-I/O budget (gn4.2)
+// so concurrent renders can't reintroduce the unbounded libuv FS burst.
+import { readFile } from "../utils/transcript-fs";
 import { debug } from "../utils/logger";
-import { findTranscriptFile } from "../utils/claude";
 
 export interface MetricsInfo {
   responseTime: number | null;
@@ -34,16 +36,14 @@ interface TranscriptEntry {
 }
 
 export class MetricsProvider {
+  // [LAW:one-source-of-truth] The transcript path is supplied by the caller
+  // (the required hookData.transcript_path field); metrics never rediscovers it
+  // by scanning every project dir. A missing/unreadable file falls through the
+  // readFile catch to an empty entry list — no separate existence probe.
   private async loadTranscriptEntries(
-    sessionId: string,
+    transcriptPath: string,
   ): Promise<TranscriptEntry[]> {
     try {
-      const transcriptPath = await findTranscriptFile(sessionId);
-      if (!transcriptPath) {
-        debug(`No transcript found for session: ${sessionId}`);
-        return [];
-      }
-
       debug(`Loading transcript from: ${transcriptPath}`);
 
       const content = await readFile(transcriptPath, "utf-8");
@@ -72,7 +72,7 @@ export class MetricsProvider {
       debug(`Loaded ${entries.length} transcript entries`);
       return entries;
     } catch (error) {
-      debug(`Error loading transcript for ${sessionId}:`, error);
+      debug(`Error loading transcript at ${transcriptPath}:`, error);
       return [];
     }
   }
@@ -145,7 +145,9 @@ export class MetricsProvider {
         };
       }
 
-      const entries = await this.loadTranscriptEntries(sessionId);
+      const entries = await this.loadTranscriptEntries(
+        hookData.transcript_path,
+      );
       const messageCount = this.calculateMessageCount(entries);
       const lastResponseTime = this.calculateLastResponseTime(entries);
 

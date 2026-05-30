@@ -2,17 +2,19 @@ import { MetricsProvider } from "../src/segments/metrics";
 import { writeFileSync, unlinkSync, mkdtempSync } from "fs";
 import { join } from "path";
 import { tmpdir } from "os";
-import * as claudePaths from "../src/utils/claude";
 import type { ClaudeHookData } from "../src/utils/claude";
 
 describe("Metrics Provider", () => {
   let tempDir: string;
   let metricsProvider: MetricsProvider;
 
-  const createMockHookData = (sessionId: string): ClaudeHookData => ({
+  const createMockHookData = (
+    sessionId: string,
+    transcriptPath: string,
+  ): ClaudeHookData => ({
     hook_event_name: "Status",
     session_id: sessionId,
-    transcript_path: `/path/to/${sessionId}.jsonl`,
+    transcript_path: transcriptPath,
     cwd: "/test/cwd",
     model: {
       id: "claude-opus-4-1",
@@ -57,11 +59,7 @@ describe("Metrics Provider", () => {
     const transcriptPath = join(tempDir, "test.jsonl");
     writeFileSync(transcriptPath, transcriptContent);
 
-    jest
-      .spyOn(claudePaths, "findTranscriptFile")
-      .mockResolvedValue(transcriptPath);
-
-    const mockHookData = createMockHookData("test-session");
+    const mockHookData = createMockHookData("test-session", transcriptPath);
     const metrics = await metricsProvider.getMetricsInfo(
       "test-session",
       mockHookData
@@ -76,9 +74,10 @@ describe("Metrics Provider", () => {
   });
 
   it("handles missing transcript gracefully", async () => {
-    jest.spyOn(claudePaths, "findTranscriptFile").mockResolvedValue(null);
-
-    const mockHookData = createMockHookData("nonexistent-session");
+    const mockHookData = createMockHookData(
+      "nonexistent-session",
+      join(tempDir, "nonexistent.jsonl"),
+    );
     const metrics = await metricsProvider.getMetricsInfo(
       "nonexistent-session",
       mockHookData
@@ -96,11 +95,7 @@ describe("Metrics Provider", () => {
     const transcriptPath = join(tempDir, "test.jsonl");
     writeFileSync(transcriptPath, "");
 
-    jest
-      .spyOn(claudePaths, "findTranscriptFile")
-      .mockResolvedValue(transcriptPath);
-
-    const mockHookData = createMockHookData("empty-session");
+    const mockHookData = createMockHookData("empty-session", transcriptPath);
     const metrics = await metricsProvider.getMetricsInfo(
       "empty-session",
       mockHookData
