@@ -112,10 +112,9 @@ function blockLikeFg(pctRef: string): string {
 export const DEFAULT_DSL_CONFIG = {
   globals: {
     // Picked by the daemon's basePalette resolution; user overrides in their
-    // own config. textual-dark matches the demo's default and ships with
-    // every required spec name (surface, panel, accent, secondary, primary,
-    // foreground, button-color-foreground, warning, error, surface-active).
-    palette: "textual-dark",
+    // own config. catppuccin-mocha ships every spec name the default
+    // segments reference (surface, panel, surface-active, foreground).
+    palette: "catppuccin-mocha",
     // Adjacent segments rotate hue by 14° so they stay visually distinct
     // without authoring per-segment colors.
     hueStep: 14,
