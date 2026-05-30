@@ -500,15 +500,17 @@ function renderStepper(
   sessionId: string,
   store: VariableStore,
 ): RichText {
-  const raw = parseInt(readVar(store, stepper.stateVar), 10);
   // [LAW:single-enforcer] The range validator clamps every WRITTEN value into
   // bounds — but a state variable's `default` is config, not a write, so it
-  // bypasses the gate (a `default: "999"` on a 0..60 stepper would otherwise
-  // render "999" and emit links wrapped from an out-of-bounds value). Clamp the
-  // displayed current here so the bounds hold for the pre-click default too; a
-  // non-integer (unset, no backing var) starts at the floor.
-  const current = Number.isFinite(raw)
-    ? Math.max(stepper.min, Math.min(stepper.max, raw))
+  // bypasses the gate. Mirror the validator's canonical-integer shape (`^-?\d+$`)
+  // at this read boundary: only an integer-shaped string is a value (then
+  // clamped into [min,max]); anything else — empty (unset/no backing var), a
+  // float "3.5", a typo "14abc" — is NOT loosely parsed (parseInt would yield
+  // 3/14), it starts at the floor. So the displayed current is always an in-range
+  // integer the wire validator would also accept.
+  const rawStr = readVar(store, stepper.stateVar);
+  const current = /^-?\d+$/.test(rawStr)
+    ? Math.max(stepper.min, Math.min(stepper.max, parseInt(rawStr, 10)))
     : stepper.min;
   const dec = current - stepper.step;
   const inc = current + stepper.step;

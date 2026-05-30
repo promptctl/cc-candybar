@@ -184,6 +184,26 @@ describe("70m.7 — stepper tolerates unvalidated state (defaults bypass the gat
     dispose();
   });
 
+  test("a non-canonical-integer default is not loosely parsed — starts at the floor", () => {
+    // [LAW:one-source-of-truth] The render boundary mirrors the wire validator's
+    // canonical-integer shape: "14abc"/"3.5" are NOT integer strings (parseInt
+    // would loosely yield 14/3), so they fall to the floor, not a half-parsed
+    // value the wire would reject.
+    const src = `{
+      globals: {},
+      variables: {
+        'session.id': { kind: 'input', path: 'session_id', default: '' },
+        'hue.step': { kind: 'state', key: 'hue-step', default: '14abc' },
+      },
+      widgets: { hue: { kind: 'stepper', state: 'hue-step', min: 4, max: 60, step: 2 } },
+      segments: { ctl: { template: '{{ widget "hue" }}', bg: 'surface', fg: 'foreground' } },
+      layout: [['ctl']],
+    }`;
+    const { render, dispose } = buildRuntime(src);
+    expect(stripAnsi(render())).toContain("◀ 4 ▶"); // floor (min), not 14
+    dispose();
+  });
+
   test("a hue.step state var with NO default renders without throwing (step 0)", () => {
     // [LAW:no-defensive-null-guards] A state var with no default reads "" until
     // the first click — renderDsl must coerce that to the no-rotation floor (0),
