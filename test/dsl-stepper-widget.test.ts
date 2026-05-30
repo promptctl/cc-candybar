@@ -162,6 +162,53 @@ describe("70m.7 — stepper wraps at the bounds", () => {
   });
 });
 
+// ─── Values that bypass the validator are made safe at the read boundary ───────
+
+describe("70m.7 — stepper tolerates unvalidated state (defaults bypass the gate)", () => {
+  test("an out-of-range state-var default clamps the displayed current", () => {
+    // A `default` is config, not a write, so it never passes through the range
+    // validator — the render must clamp it into bounds itself.
+    const src = `{
+      globals: {},
+      variables: {
+        'session.id': { kind: 'input', path: 'session_id', default: '' },
+        'hue.step': { kind: 'state', key: 'hue-step', default: '999' },
+      },
+      widgets: { hue: { kind: 'stepper', state: 'hue-step', min: 0, max: 60, step: 2 } },
+      segments: { ctl: { template: '{{ widget "hue" }}', bg: 'surface', fg: 'foreground' } },
+      layout: [['ctl']],
+    }`;
+    const { render, dispose } = buildRuntime(src);
+    const out = render();
+    expect(stripAnsi(out)).toContain("◀ 60 ▶"); // clamped to max, not "999"
+    dispose();
+  });
+
+  test("a hue.step state var with NO default renders without throwing (step 0)", () => {
+    // [LAW:no-defensive-null-guards] A state var with no default reads "" until
+    // the first click — renderDsl must coerce that to the no-rotation floor (0),
+    // not throw casting "" to a number.
+    const src = `{
+      globals: { palette: 'textual-dark' },
+      variables: {
+        'session.id': { kind: 'input', path: 'session_id', default: '' },
+        'hue.step': { kind: 'state', key: 'hue-step' },
+      },
+      widgets: { hue: { kind: 'stepper', state: 'hue-step', min: 0, max: 60, step: 2 } },
+      segments: {
+        a: { template: ' A ', bg: 'surface', fg: 'foreground' },
+        ctl: { template: '{{ widget "hue" }}', bg: 'surface', fg: 'foreground' },
+      },
+      layout: [['a', 'ctl']],
+    }`;
+    const { render, dispose } = buildRuntime(src);
+    expect(() => render()).not.toThrow();
+    // Unset (no default) → current starts at the floor (min).
+    expect(stripAnsi(render())).toContain("◀ 0 ▶");
+    dispose();
+  });
+});
+
 // ─── Derived range validator + clamp gate ──────────────────────────────────────
 
 describe("70m.7 — derived range validator", () => {
@@ -191,6 +238,48 @@ describe("70m.7 — derived range validator", () => {
       value: "60",
     });
     dispose();
+  });
+
+  test("a button writing an out-of-range integer to a stepper key throws at derivation", () => {
+    // [LAW:no-silent-fallbacks] The range gate clamps at click time; a button
+    // declaring an out-of-bounds literal would silently store a different value
+    // than it renders, so it is rejected at config-load instead.
+    const src = `{
+      globals: {},
+      variables: {
+        'session.id': { kind: 'input', path: 'session_id', default: '' },
+        'hue.step': { kind: 'state', key: 'hue-step', default: '14' },
+      },
+      widgets: {
+        hue: { kind: 'stepper', state: 'hue-step', min: 0, max: 60, step: 2 },
+        jump: { kind: 'buttons', items: [{ label: 'max!', onClick: { set: 'hue-step', to: '100' } }] },
+      },
+      segments: { s: { template: '{{ widget "hue" }}{{ widget "jump" }}', bg: 'surface', fg: 'foreground' } },
+      layout: [['s']],
+    }`;
+    const config = parseAndValidate("<test>", src, ALLOWED);
+    expect(() => deriveWidgetValidators(config)).toThrow(/out-of-range/);
+  });
+
+  test("a button writing an IN-range integer to a stepper key is absorbed", () => {
+    // A "reset to 0" button is a legal integer write the range gate honors.
+    const src = `{
+      globals: {},
+      variables: {
+        'session.id': { kind: 'input', path: 'session_id', default: '' },
+        'hue.step': { kind: 'state', key: 'hue-step', default: '14' },
+      },
+      widgets: {
+        hue: { kind: 'stepper', state: 'hue-step', min: 0, max: 60, step: 2 },
+        reset: { kind: 'buttons', items: [{ label: 'reset', onClick: { set: 'hue-step', to: '0' } }] },
+      },
+      segments: { s: { template: '{{ widget "hue" }}{{ widget "reset" }}', bg: 'surface', fg: 'foreground' } },
+      layout: [['s']],
+    }`;
+    const config = parseAndValidate("<test>", src, ALLOWED);
+    expect(deriveWidgetValidators(config)).toEqual([
+      { key: "hue-step", spec: { kind: "range", min: 0, max: 60 } },
+    ]);
   });
 
   test("same-key range registrations widen-union their bounds", () => {

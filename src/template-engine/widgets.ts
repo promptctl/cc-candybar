@@ -501,11 +501,15 @@ function renderStepper(
   store: VariableStore,
 ): RichText {
   const raw = parseInt(readVar(store, stepper.stateVar), 10);
-  // [LAW:no-defensive-null-guards] An unset/non-integer value is a real state
-  // (the key was never written, no backing variable) — its meaning is "start at
-  // the floor". The range validator keeps every written value in bounds, so a
-  // parsed value is already in [min,max]; only the unset case needs the floor.
-  const current = Number.isInteger(raw) ? raw : stepper.min;
+  // [LAW:single-enforcer] The range validator clamps every WRITTEN value into
+  // bounds — but a state variable's `default` is config, not a write, so it
+  // bypasses the gate (a `default: "999"` on a 0..60 stepper would otherwise
+  // render "999" and emit links wrapped from an out-of-bounds value). Clamp the
+  // displayed current here so the bounds hold for the pre-click default too; a
+  // non-integer (unset, no backing var) starts at the floor.
+  const current = Number.isFinite(raw)
+    ? Math.max(stepper.min, Math.min(stepper.max, raw))
+    : stepper.min;
   const dec = current - stepper.step;
   const inc = current + stepper.step;
   const wrapped = (v: number): number =>

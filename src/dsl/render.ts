@@ -20,7 +20,6 @@ import type {
 } from "../config/dsl-types.js";
 import { HUE_STEP_VAR } from "../config/dsl-types.js";
 import type { VariableStore } from "../var-system/store.js";
-import { toNumber } from "../var-system/types.js";
 import type { SourceRegistry } from "../var-system/sources.js";
 import {
   parseDuration,
@@ -418,14 +417,14 @@ export function renderDsl(
   // kind decides liveness with no change here: a `state` var lets a stepper drive
   // it live (session value over the declared default, the same session-over-
   // default the theme uses), a literal pins it (the bundled default's fixed 14°).
-  // [LAW:no-defensive-null-guards] "config declares no hue variable" is a real,
-  // representable state (an empty-default merge) whose meaning is "no rotation"
-  // (step 0) — has() is the discriminator, mirroring the widget renderer's store
-  // reads. This is the exact degenerate case the prior `globals.hueStep ?? 0`
-  // expressed, now sourced from the store.
-  const hueStep = store.has(HUE_STEP_VAR)
-    ? toNumber(store.read(HUE_STEP_VAR))
-    : 0;
+  // [LAW:no-defensive-null-guards] Two real, representable states both mean "no
+  // rotation yet" (step 0): the variable is absent (an empty-default merge), OR
+  // it is a `state` var with no default that no click has written yet (reads the
+  // registry's empty fallback ""). Coerce to a finite number or 0 — a render must
+  // never throw on a valid config. Number("") and Number("abc") collapse to the
+  // 0 floor; any finite value (the literal default, a session pick) flows through.
+  const rawHue = store.has(HUE_STEP_VAR) ? Number(store.read(HUE_STEP_VAR)) : 0;
+  const hueStep = Number.isFinite(rawHue) ? rawHue : 0;
 
   perSegmentSink?.clear();
 

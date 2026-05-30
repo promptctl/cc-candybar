@@ -529,11 +529,27 @@ function mergeColumnSpecs(
     );
   }
   if (ranges.length > 0) {
-    return {
-      kind: "range",
-      min: Math.min(...ranges.map((r) => r.min)),
-      max: Math.max(...ranges.map((r) => r.max)),
-    };
+    const min = Math.min(...ranges.map((r) => r.min));
+    const max = Math.max(...ranges.map((r) => r.max));
+    // [LAW:no-silent-fallbacks] A menu page (int) is UNBOUNDED, so any integer
+    // write is a legal member to absorb. A stepper range is BOUNDED — an integer
+    // a button declares OUTSIDE [min,max] would be clamped by the range gate at
+    // click time, silently storing a different value than the button rendered.
+    // That is a config error, surfaced at load rather than papered over at click.
+    const outOfRange = allowed.filter((v) => {
+      const n = parseInt(v, 10);
+      return n < min || n > max;
+    });
+    if (outOfRange.length > 0) {
+      throw new Error(
+        `deriveWidgetValidators: key "${key}" is a stepper range [${min},${max}] ` +
+          `but a button set-action writes out-of-range value(s) to it ` +
+          `(${outOfRange.join(", ")}). The range gate would clamp them, storing a ` +
+          `different value than the button renders — write an in-range integer, ` +
+          `or point that set-action at a distinct key.`,
+      );
+    }
+    return { kind: "range", min, max };
   }
   return { kind: "int" };
 }
