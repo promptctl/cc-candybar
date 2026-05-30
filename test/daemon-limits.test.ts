@@ -4,15 +4,21 @@ interface Recorder {
   shutdownCalls: number[];
   snapshotsWritten: string[];
   removed: string[];
+  logs: Array<{ level: string; msg: string }>;
   fakeRss: number;
   fakeNow: number;
   startedAtMs: number;
+  pid: number;
+  snapshotDir: string;
   existingFiles: string[];
 }
 
 function makeDeps(rec: Recorder, overrides: Partial<LimitsDeps> = {}): LimitsDeps {
   return {
     now: () => rec.fakeNow,
+    pid: rec.pid,
+    snapshotDir: rec.snapshotDir,
+    log: (level, msg) => rec.logs.push({ level, msg }),
     rssBytes: () => rec.fakeRss,
     writeHeapSnapshot: (file) => {
       rec.snapshotsWritten.push(file);
@@ -36,9 +42,12 @@ function newRec(): Recorder {
     shutdownCalls: [],
     snapshotsWritten: [],
     removed: [],
+    logs: [],
     fakeRss: 50 * 1024 * 1024,
     fakeNow: Date.parse("2026-04-01T00:00:00Z"),
     startedAtMs: Date.parse("2026-04-01T00:00:00Z"),
+    pid: 4242,
+    snapshotDir: "/fake-snapshot-dir",
     existingFiles: [],
   };
 }
@@ -70,6 +79,38 @@ describe("limits.checkRss", () => {
     limits.checkRss();
     expect(rec.shutdownCalls).toEqual([0]);
     expect(rec.snapshotsWritten).toHaveLength(1);
+  });
+
+  test("snapshot filename is written under the injected dir, not the real daemonDir", () => {
+    const rec = newRec();
+    rec.fakeRss = 250 * 1024 * 1024;
+    const limits = makeLimits(makeDeps(rec, { rssLimitBytes: 200 * 1024 * 1024 }));
+    limits.checkRss();
+    expect(rec.snapshotsWritten[0]).toMatch(
+      /^\/fake-snapshot-dir\/heap-.*\.heapsnapshot$/,
+    );
+    // No ambient logging: every line landed in the injected sink.
+    expect(rec.logs.map((l) => l.msg)).toContain(
+      "heap snapshot written: /fake-snapshot-dir/heap-2026-04-01T00-00-00-000Z-4242.heapsnapshot",
+    );
+  });
+
+  test("filename carries the pid so overlapping daemons never collide", () => {
+    // Two daemons hit the wall at the SAME instant (identical fakeNow); only
+    // the pid distinguishes their snapshots, so neither clobbers the other.
+    const a = newRec();
+    a.fakeRss = 250 * 1024 * 1024;
+    a.pid = 111;
+    makeLimits(makeDeps(a, { rssLimitBytes: 200 * 1024 * 1024 })).checkRss();
+
+    const b = newRec();
+    b.fakeRss = 250 * 1024 * 1024;
+    b.pid = 222;
+    makeLimits(makeDeps(b, { rssLimitBytes: 200 * 1024 * 1024 })).checkRss();
+
+    expect(a.snapshotsWritten[0]).toContain("-111.heapsnapshot");
+    expect(b.snapshotsWritten[0]).toContain("-222.heapsnapshot");
+    expect(a.snapshotsWritten[0]).not.toBe(b.snapshotsWritten[0]);
   });
 });
 
