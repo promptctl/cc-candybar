@@ -82,7 +82,7 @@ Saving the file triggers a hot-reload of every active session.
                                 └──────────────────┘
 ```
 
-- **Daemon** (`src/daemon/`) — long-lived background process. One per user. Caches git state via filesystem watchers, usage data, and per-session key/value state. Idles out after 30 minutes of inactivity.
+- **Daemon** (`src/daemon/`) — long-lived background process. One per user. Caches git state via filesystem watchers, usage data, and per-session key/value state. Runs until it exits on an RSS backstop (default 512 MB) or the host restarts; there is no idle or age timeout.
 - **Client** (`src/daemon/client.ts`) — each Claude Code hook invocation connects to the daemon, sends a render request, and prints the ANSI response. On failure, spawns a fresh daemon and emits empty output.
 - **Renderer** (`src/render/`, `src/segments/`) — segments produce styled output from cached data. Themes cascade from defaults through palette resolution using OKLCH color math.
 - **TUI grid** (`src/tui/`) — CSS Grid-inspired layout engine with breakpoints, column sizing (`auto`, `1fr`, fixed), spanning, and automatic culling of empty segments.
