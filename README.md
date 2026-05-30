@@ -48,13 +48,17 @@ The file is a **complete** replacement for the bundled default — no merge laye
 ```json5
 // minimal example — user, directory, branch, model, session, clock
 {
-  globals: { palette: 'textual-dark', hueStep: 14 },
+  globals: { palette: 'textual-dark' },
   variables: {
     user:    { kind: 'env', name: 'USER', default: 'anon' },
     cwd:     { kind: 'input', path: 'workspace.current_dir', default: '?' },
     branch:  { kind: 'shell', command: 'git branch --show-current',
                cache: { ttl: '5s' }, default: '' },
     clock:   { kind: 'time', layout: '15:04:05', cache: { ttl: '1s' } },
+    // per-segment hue rotation (degrees), read by the renderer. A literal pins
+    // it; make it `{ kind: 'state', key: 'hue-step' }` + a stepper widget to
+    // adjust it live.
+    'hue.step': { kind: 'literal', value: 14 },
   },
   segments: {
     user:      { template: ' {{ .user }} ',   bg: 'primary', fg: 'auto' },
@@ -82,7 +86,7 @@ Saving the file triggers a hot-reload of every active session.
                                 └──────────────────┘
 ```
 
-- **Daemon** (`src/daemon/`) — long-lived background process. One per user. Caches git state via filesystem watchers, usage data, and per-session key/value state. Idles out after 30 minutes of inactivity.
+- **Daemon** (`src/daemon/`) — long-lived background process. One per user. Caches git state via filesystem watchers, usage data, and per-session key/value state. Runs until it exits on an RSS backstop (default 512 MB) or the host restarts; there is no idle or age timeout.
 - **Client** (`src/daemon/client.ts`) — each Claude Code hook invocation connects to the daemon, sends a render request, and prints the ANSI response. On failure, spawns a fresh daemon and emits empty output.
 - **Renderer** (`src/render/`, `src/segments/`) — segments produce styled output from cached data. Themes cascade from defaults through palette resolution using OKLCH color math.
 - **TUI grid** (`src/tui/`) — CSS Grid-inspired layout engine with breakpoints, column sizing (`auto`, `1fr`, fixed), spanning, and automatic culling of empty segments.
@@ -109,7 +113,7 @@ Each segment is a DSL declaration with a `template` (text + interpolation + styl
 
 ## Themes
 
-The DSL config picks a base palette via `globals.palette` (e.g. `textual-dark`, `gruvbox`). Each segment may override with its own `palette:` field, and `bg`/`fg` evaluate as palette spec names (`primary`, `surface`, `panel`, `accent`, `foreground`, `auto`, `warning`, `error`, …). Color math runs through OKLCH for perceptual uniformity; `hueStep` rotates adjacent segments to keep them visually distinct without authoring per-segment colors.
+The DSL config picks a base palette via `globals.palette` (e.g. `textual-dark`, `gruvbox`). Each segment may override with its own `palette:` field, and `bg`/`fg` evaluate as palette spec names (`primary`, `surface`, `panel`, `accent`, `foreground`, `auto`, `warning`, `error`, …). Color math runs through OKLCH for perceptual uniformity; the `hue.step` variable (read via the conventional `HUE_STEP_VAR` name) rotates adjacent segments by that many degrees to keep them visually distinct without authoring per-segment colors — a literal pins it, a `state` var driven by a stepper widget makes it adjustable live.
 
 ## Installation
 
