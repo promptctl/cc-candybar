@@ -115,9 +115,6 @@ export const DEFAULT_DSL_CONFIG = {
     // own config. catppuccin-mocha ships every spec name the default
     // segments reference (surface, panel, surface-active, foreground).
     palette: "catppuccin-mocha",
-    // Adjacent segments rotate hue by 14° so they stay visually distinct
-    // without authoring per-segment colors.
-    hueStep: 14,
   },
 
   // ─── Variables ─────────────────────────────────────────────────────────────
@@ -159,6 +156,18 @@ export const DEFAULT_DSL_CONFIG = {
       type: "number",
       default: 80,
     },
+
+    // [LAW:one-source-of-truth] The per-segment hue-rotation step renderDsl
+    // reads (HUE_STEP_VAR) — a value in the store like every other render input,
+    // NOT a globals field. [LAW:types-are-the-program] In the bundled default it
+    // is a LITERAL: nothing here writes the "hue-step" SessionState key (the
+    // default ships no widgets), so a fixed 14° is the strongest TRUE theorem —
+    // a `state` var would claim a session-variability the default never exercises
+    // and force a SessionState on every consumer. A user makes hue live by
+    // overriding this one variable to `{ kind: "state", key: "hue-step" }` and
+    // adding a stepper widget — the same two-part pattern the theme picker uses.
+    // 14°: adjacent segments stay visually distinct without per-segment colors.
+    "hue.step": { kind: "literal", value: 14 },
 
     // home flows through the augmented payload (buildRenderPayload reads
     // HOME, falling back to USERPROFILE on Windows where HOME is often

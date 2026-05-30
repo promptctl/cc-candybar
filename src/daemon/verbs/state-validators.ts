@@ -25,8 +25,13 @@
 // validator becomes the parsing boundary, the verb body the dataflow.
 
 import { listResolvablePaletteNames, STYLE_ORDER } from "../../themes/policy";
-import type { DslConfig, OptionSource } from "../../config/dsl-types";
-import { isMenuWidget, isOptionsButtonItem } from "../../config/dsl-types";
+import { isOptionsButtonItem } from "../../config/dsl-types";
+import type {
+  ButtonItem,
+  DslConfig,
+  OptionSource,
+  WidgetDecl,
+} from "../../config/dsl-types";
 
 // [LAW:types-are-the-program] Discriminated union — every legal return is
 // either an accepted-and-canonicalized string or a structured rejection
@@ -43,20 +48,22 @@ export type KeyValidator = (rawValue: string) => ValidateResult;
 
 // [LAW:types-are-the-program] A derived key's SEMANTIC identity — the data a
 // widget config declares about a custom SessionState key, from which the
-// validator is residue. A key is one of exactly two column shapes: an integer
-// (a menu's page index) or an allow-list (the union of values some button can
-// write). The registry compares specs to decide whether two registrations can
-// share a key (same `kind`) and merges them by unioning content; the opaque
+// validator is residue. A key is one of three column shapes: an integer (a
+// menu's page index), an allow-list (the union of values some button can write),
+// or a bounded integer range (a stepper's value). The registry compares specs to
+// decide whether two registrations can share a key (same `kind`) and merges them
+// by unioning content (allow-list members; range bounds); the opaque
 // `KeyValidator` it builds from the spec cannot be compared or merged, which is
 // why registration takes the spec and owns validator construction.
 //
 // [LAW:one-source-of-truth] The spec carries only content (kind + allow-list
-// members), never the human label — the label is a pure function of the key,
-// computed where the validator is built, so two registrations of one key yield
-// byte-identical validators regardless of which config registered first.
+// members + range bounds), never the human label — the label is a pure function
+// of the key, computed where the validator is built, so two registrations of one
+// key yield byte-identical validators regardless of which config registered first.
 export type DerivedValidatorSpec =
   | { readonly kind: "int" }
-  | { readonly kind: "allow-list"; readonly allowed: readonly string[] };
+  | { readonly kind: "allow-list"; readonly allowed: readonly string[] }
+  | { readonly kind: "range"; readonly min: number; readonly max: number };
 
 // [LAW:one-source-of-truth] listResolvablePaletteNames is THE set whose
 // members resolve to a concrete Palette. The broader listAvailableThemes
@@ -190,6 +197,20 @@ function buildValidatorFromSpecs(
   specs: readonly DerivedValidatorSpec[],
 ): KeyValidator {
   if (kind === "int") return makeIntValidator(`menu page "${key}"`);
+  if (kind === "range") {
+    // [LAW:types-are-the-program] Two configs declaring one stepper key with
+    // different bounds widen to the UNION range — parity with allow-list's
+    // member union: a value any live config can legitimately render (step into)
+    // is a value the wire accepts. The clamp is to the widest live bounds, so
+    // the gate never rejects a write a narrower co-resident stepper could make.
+    const mins = specs.flatMap((s) => (s.kind === "range" ? [s.min] : []));
+    const maxs = specs.flatMap((s) => (s.kind === "range" ? [s.max] : []));
+    return makeRangeValidator(
+      Math.min(...mins),
+      Math.max(...maxs),
+      `stepper "${key}"`,
+    );
+  }
   const allowed = [
     ...new Set(
       specs.flatMap((s) => (s.kind === "allow-list" ? s.allowed : [])),
@@ -380,6 +401,31 @@ export function makeIntValidator(label: string): KeyValidator {
   };
 }
 
+// [LAW:types-are-the-program] A bounded-integer state key (a stepper's value).
+// The validator is the parse-AND-clamp boundary: it accepts only `^-?\d+$` then
+// clamps into [min,max]. [LAW:single-enforcer] This is the ONE place bounds are
+// enforced — it owns the [min,max] floor/ceiling for EVERY write to the key,
+// including a hand-typed wire URL. The stepper render owns NAVIGATION (wrap past
+// a bound to the other end) the way the menu render owns page navigation; the
+// stepper only ever emits values already inside bounds, so for stepper clicks
+// this clamp is identity. The clamped result is small (≤ |max| or |min| digits),
+// so String() cannot emit the scientific notation the raw int canonicalizer
+// guards against.
+export function makeRangeValidator(
+  min: number,
+  max: number,
+  label: string,
+): KeyValidator {
+  return (raw) => {
+    if (!raw) return { ok: false, reason: `${label} value is required` };
+    if (!INT_RE.test(raw)) {
+      return { ok: false, reason: `${label} must be an integer, got "${raw}"` };
+    }
+    const clamped = Math.max(min, Math.min(max, parseInt(raw, 10)));
+    return { ok: true, value: String(clamped) };
+  };
+}
+
 // [LAW:one-source-of-truth] The option members a picker draws from ARE the same
 // canonical lists the `themes()`/`styles()` bindings and the baseline theme/
 // style validators consult — the rendered options and the derived gate cannot
@@ -388,105 +434,157 @@ function optionValuesFor(src: OptionSource): readonly string[] {
   return src === "themes" ? RESOLVABLE_THEMES_LIST : STYLE_ORDER;
 }
 
+// [LAW:single-enforcer] The ONE place mapping a widget kind to the validator
+// COLUMNS it declares. Every consumer reads these contributions; none re-walks a
+// widget's shape by kind. A new widget kind is one new arm in this exhaustive
+// switch, and the compiler forces it.
+//   • a menu declares its page key as an INT column (←/→/close navigation);
+//   • a stepper declares its value key as a RANGE column ([min,max]);
+//   • both arms ALSO contribute their items' allow-list columns; buttons
+//     contribute only those.
+function widgetColumns(w: WidgetDecl): ReadonlyArray<{
+  readonly key: string;
+  readonly spec: DerivedValidatorSpec;
+}> {
+  switch (w.kind) {
+    case "stepper":
+      return [
+        { key: w.state, spec: { kind: "range", min: w.min, max: w.max } },
+      ];
+    case "menu":
+      return [{ key: w.state, spec: { kind: "int" } }, ...itemColumns(w.items)];
+    case "buttons":
+      return itemColumns(w.items);
+  }
+}
+
+// [LAW:dataflow-not-control-flow] One allow-list column per key an item `set`
+// action writes. The allowed VALUES vary by item shape — an options item binds
+// the whole resolved option list, a literal item writes its action's `to` — but
+// that variability lives in the `optionValues` VALUE, not in a branch around
+// different code: the same flatMap runs for every item.
+function itemColumns(
+  items: readonly ButtonItem[],
+): Array<{ readonly key: string; readonly spec: DerivedValidatorSpec }> {
+  return items.flatMap((item) => {
+    const optionValues = isOptionsButtonItem(item)
+      ? optionValuesFor(item.optionsFrom)
+      : null;
+    return item.onClick.flatMap((action) =>
+      "set" in action
+        ? [
+            {
+              key: action.set,
+              // [LAW:single-enforcer] The loader owns the literal⇒`to` pairing:
+              // a fixed button's `set` carries a non-empty `to`; an options
+              // button's never does (its values are the resolved option list).
+              spec: {
+                kind: "allow-list" as const,
+                allowed:
+                  optionValues ?? (action.to !== undefined ? [action.to] : []),
+              },
+            },
+          ]
+        : [],
+    );
+  });
+}
+
+// [LAW:types-are-the-program] Collapse one key's column contributions into the
+// single spec that gates it. A key is an INTEGER column (a menu page `int` or a
+// stepper `range`) or an allow-list — never both. An integer column ABSORBS
+// integer allow-list members (a button writing "0" to a menu page is a legal int
+// write — the open-trigger pattern), and a NON-integer member aimed at it is the
+// genuine contradiction that throws. Two ranges widen-union; two allow-lists
+// union; an int and a range on one key (a menu page vs a stepper value) conflict.
+function mergeColumnSpecs(
+  key: string,
+  specs: readonly DerivedValidatorSpec[],
+): DerivedValidatorSpec {
+  type Range = Extract<DerivedValidatorSpec, { kind: "range" }>;
+  const ranges = specs.filter((s): s is Range => s.kind === "range");
+  const hasInt = specs.some((s) => s.kind === "int");
+  const allowed = specs.flatMap((s) =>
+    s.kind === "allow-list" ? s.allowed : [],
+  );
+  if (ranges.length === 0 && !hasInt) {
+    return { kind: "allow-list", allowed: [...new Set(allowed)] };
+  }
+  // [LAW:no-silent-fallbacks] An integer column accepts only integer writes; a
+  // non-integer member is a one-column-shape contradiction surfaced at load.
+  const nonInt = allowed.filter((v) => !INT_RE.test(v));
+  if (nonInt.length > 0) {
+    throw new Error(
+      `deriveWidgetValidators: key "${key}" is an integer column (a menu page ` +
+        `index or a stepper value) but a button set-action writes non-integer ` +
+        `value(s) to it (${nonInt.join(", ")}). A state key has one column ` +
+        `shape — point that set-action at a distinct key, or write an integer.`,
+    );
+  }
+  if (hasInt && ranges.length > 0) {
+    throw new Error(
+      `deriveWidgetValidators: key "${key}" is declared as both a menu page ` +
+        `(int) and a stepper value (range) — a state key has one column shape. ` +
+        `Use distinct keys.`,
+    );
+  }
+  if (ranges.length > 0) {
+    const min = Math.min(...ranges.map((r) => r.min));
+    const max = Math.max(...ranges.map((r) => r.max));
+    // [LAW:no-silent-fallbacks] A menu page (int) is UNBOUNDED, so any integer
+    // write is a legal member to absorb. A stepper range is BOUNDED — an integer
+    // a button declares OUTSIDE [min,max] would be clamped by the range gate at
+    // click time, silently storing a different value than the button rendered.
+    // That is a config error, surfaced at load rather than papered over at click.
+    const outOfRange = allowed.filter((v) => {
+      const n = parseInt(v, 10);
+      return n < min || n > max;
+    });
+    if (outOfRange.length > 0) {
+      throw new Error(
+        `deriveWidgetValidators: key "${key}" is a stepper range [${min},${max}] ` +
+          `but a button set-action writes out-of-range value(s) to it ` +
+          `(${outOfRange.join(", ")}). The range gate would clamp them, storing a ` +
+          `different value than the button renders — write an in-range integer, ` +
+          `or point that set-action at a distinct key.`,
+      );
+    }
+    return { kind: "range", min, max };
+  }
+  return { kind: "int" };
+}
+
 // [LAW:one-source-of-truth] The writable-key surface a config's widgets need is
-// DERIVED from the widget declarations — the same data the renderer paginates
-// from and clicks against is the gate the wire enforces, so they cannot diverge.
-// Two column shapes fall out of the declarations:
-//   • a menu's `state` page key is INTEGER-valued (←/→ navigation + apply-and-
-//     close to -1);
-//   • a button's `set` action writes an ALLOW-LIST key whose members are every
-//     value that button can produce — the literal `to` for a fixed button, or
-//     the resolved option list for an `optionsFrom` picker. Multiple buttons (or
-//     items) writing one key union into one allow-list: the gate accepts exactly
-//     what the config can render.
+// DERIVED from the widget declarations (widgetColumns) — the same data the
+// renderer paginates/steps from and clicks against is the gate the wire enforces,
+// so they cannot diverge.
 //
-// [LAW:single-enforcer] Baseline keys (theme/style/toolbar-expanded) already own
-// a permanent validator, so a button writing `set: theme` is using the canonical
-// theme gate as intended — it derives NOTHING (skipped). A menu PAGE key is not
-// skipped: naming it `theme` collides with the baseline at registration and
-// throws, because an integer page index genuinely cannot share the theme column.
-// The asymmetry is the real semantic difference — a button reuses a baseline
-// gate; a menu page key conflicts with it.
-//
-// [LAW:no-silent-fallbacks] A within-config key that is BOTH a menu page (int)
-// and a button target (allow-list) is a contradiction no single column can
-// honor — it throws at derivation (config-load), not silently picks one shape.
+// [LAW:single-enforcer] A STRUCTURAL column (menu int / stepper range) is always
+// derived — even on a baseline key — so a collision throws loudly at
+// registration rather than silently shadowing the permanent gate. Only an item's
+// ALLOW-LIST contribution to a baseline key derives nothing (the button reuses
+// the baseline gate as intended). The spec kind IS that discriminator: a
+// structural column is int/range, an item column is allow-list.
 export function deriveWidgetValidators(config: DslConfig): ReadonlyArray<{
   readonly key: string;
   readonly spec: DerivedValidatorSpec;
 }> {
   const baseline = new Set(baselineKeys());
-  const intKeys = new Set<string>();
-  const allowListMembers = new Map<string, Set<string>>();
-  const addMembers = (key: string, values: readonly string[]): void => {
-    if (baseline.has(key)) return;
-    let set = allowListMembers.get(key);
-    if (!set) {
-      set = new Set<string>();
-      allowListMembers.set(key, set);
-    }
-    for (const v of values) set.add(v);
-  };
+  const contributions = Object.values(config.widgets)
+    .flatMap(widgetColumns)
+    .filter((c) => c.spec.kind !== "allow-list" || !baseline.has(c.key));
 
-  for (const widget of Object.values(config.widgets)) {
-    if (isMenuWidget(widget)) intKeys.add(widget.state);
-    for (const item of widget.items) {
-      if (isOptionsButtonItem(item)) {
-        const values = optionValuesFor(item.optionsFrom);
-        for (const action of item.onClick) {
-          if ("set" in action) addMembers(action.set, values);
-        }
-      } else {
-        for (const action of item.onClick) {
-          // [LAW:single-enforcer] The loader owns the literal⇒`to` pairing: a
-          // fixed button's `set` action always carries a non-empty, slash-free
-          // `to` (an options button's never does). Reading `to` here narrows the
-          // deliberately-optional field to the literal value it guarantees.
-          if ("set" in action && action.to !== undefined) {
-            addMembers(action.set, [action.to]);
-          }
-        }
-      }
-    }
+  const byKey = new Map<string, DerivedValidatorSpec[]>();
+  for (const { key, spec } of contributions) {
+    const specs = byKey.get(key);
+    if (specs) specs.push(spec);
+    else byKey.set(key, [spec]);
   }
 
-  // [LAW:types-are-the-program] A menu page key is INT-valued and its int
-  // validator is the single enforcer; every `set` aimed at it writes an int —
-  // including a fixed button's literal `to`. The canonical "open the menu at
-  // page 0" trigger is exactly that: a button writing "0" to the page key (the
-  // ONLY way to move it off its -1 closed sentinel — there is no open verb). So
-  // an int key's would-be allow-list members are int WRITES, not a second
-  // column: the int validator gates them, and they are dropped from allow-list
-  // derivation. The genuine contradiction is the residue — a NON-int value
-  // (e.g. an optionsFrom picker's option names) aimed at a page key, which fails
-  // the int column's own membership test. [LAW:no-silent-fallbacks] That, and
-  // only that, throws at config-load rather than silently picking one shape.
-  for (const key of intKeys) {
-    const members = allowListMembers.get(key);
-    if (!members) continue;
-    const nonInt = [...members].filter((v) => !INT_RE.test(v));
-    if (nonInt.length > 0) {
-      throw new Error(
-        `deriveWidgetValidators: key "${key}" is a menu page index (int) but a ` +
-          `button set-action writes non-integer value(s) to it (${nonInt.join(", ")}). A ` +
-          `state key has one column shape — a page key accepts only integer ` +
-          `writes (e.g. a trigger writing "0" to open the menu). Point that ` +
-          `set-action at a distinct key, or write an integer.`,
-      );
-    }
-    allowListMembers.delete(key);
-  }
-
-  return [
-    ...[...intKeys].map((key) => ({
-      key,
-      spec: { kind: "int" as const },
-    })),
-    ...[...allowListMembers].map(([key, members]) => ({
-      key,
-      spec: { kind: "allow-list" as const, allowed: [...members] },
-    })),
-  ];
+  return [...byKey].map(([key, specs]) => ({
+    key,
+    spec: mergeColumnSpecs(key, specs),
+  }));
 }
 
 // [LAW:dataflow-not-control-flow] Single entry point for validation: the

@@ -133,7 +133,6 @@ describe("loadDslConfig — globals", () => {
         default_bg: "black", default_fg: "white",
         default_empty_value: "—", default_separator: " ",
         default_truncate_marker: "…",
-        hueStep: 12,
       }}`,
     );
     expect(cfg.globals).toEqual({
@@ -142,7 +141,6 @@ describe("loadDslConfig — globals", () => {
       default_empty_value: "—",
       default_separator: " ",
       default_truncate_marker: "…",
-      hueStep: 12,
     });
   });
 
@@ -157,20 +155,6 @@ describe("loadDslConfig — globals", () => {
     expectIssue(`{ globals: { default_bg: 42 } }`, {
       path: "globals.default_bg",
       message: "globals.default_bg must be a string",
-    });
-  });
-
-  test("non-numeric hueStep is rejected", () => {
-    expectIssue(`{ globals: { hueStep: "12" } }`, {
-      path: "globals.hueStep",
-      message: "globals.hueStep must be a finite number",
-    });
-  });
-
-  test("Infinity hueStep is rejected", () => {
-    expectIssue(`{ globals: { hueStep: Infinity } }`, {
-      path: "globals.hueStep",
-      message: "globals.hueStep must be a finite number",
     });
   });
 });
@@ -958,12 +942,12 @@ describe("loadDslConfig — cycle detection", () => {
 describe("loadDslConfig — error aggregation", () => {
   test("multiple unrelated errors all reported in one throw", () => {
     const err = expectError(
-      `{ globals: { hueStep: "no" }, variables: { x: { kind: "wat" } }, segments: { s: {} } }`,
+      `{ globals: { default_bg: 42 }, variables: { x: { kind: "wat" } }, segments: { s: {} } }`,
     );
     expect(err.issues.length).toBeGreaterThanOrEqual(3);
     expect(err.issues.map((i) => i.path)).toEqual(
       expect.arrayContaining([
-        "globals.hueStep",
+        "globals.default_bg",
         "variables.x.kind",
         "segments.s.template",
       ]),
@@ -999,7 +983,6 @@ describe("loadDslConfig — valid corpus", () => {
       globals: {
         default_bg: "panel", default_fg: "text",
         default_separator: " ",
-        hueStep: 8,
       },
       variables: {
         cwd: { kind: "input", path: "cwd" },
@@ -1041,7 +1024,6 @@ describe("loadDslConfig — valid corpus", () => {
       layout: [["cwd", "branch", "load"]],
     }`;
     const cfg = parseAndValidate(FILE, source);
-    expect(cfg.globals.hueStep).toBe(8);
     expect(Object.keys(cfg.variables).sort()).toEqual([
       "branch", "constant", "cwd", "cwd_short", "home", "hostname",
       "load_avg", "now", "sid",

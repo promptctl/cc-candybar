@@ -92,7 +92,6 @@ export interface Globals {
   readonly default_empty_value?: string;
   readonly default_separator?: string;
   readonly default_truncate_marker?: string;
-  readonly hueStep?: number;
   // [LAW:one-source-of-truth] A palette NAME, not a resolved Palette: DslConfig
   // is the JSON-shape mirror, so the name is the authoritative datum and the
   // renderer owns name→Palette resolution. The config default for the base
@@ -410,11 +409,62 @@ export interface MenuWidget {
 // loader's "a menu requires this variable" check, so they cannot drift.
 export const TERM_COLS_VAR = "term.cols";
 
-export type WidgetDecl = ButtonsWidget | MenuWidget;
+// [LAW:one-source-of-truth] The conventional variable per-segment hue rotation
+// reads. hueStep is NOT a globals field (that would be a second source for a
+// render-time value); it is a value in the store like every other render input.
+// A config declares this variable — as a `state` var so a stepper can drive it
+// live (session value over the declared default, the same session-over-default
+// the theme uses), or as any kind for a fixed value. renderDsl reads it through
+// this one name; the stepper widget writes the SessionState key it reads. Absent
+// ≡ no rotation (step 0) — the degenerate case, not a special branch.
+export const HUE_STEP_VAR = "hue.step";
 
-export function isMenuWidget(w: WidgetDecl): w is MenuWidget {
-  return w.kind === "menu";
+// [LAW:types-are-the-program] A `stepper` is a numeric control: three derived
+// cells (◀ current ▶) bound to ONE integer SessionState key with [min,max]
+// bounds and an increment. Unlike buttons/menu it has NO author `items` — its
+// affordances are render-derived from (current, step), exactly as a menu's
+// ←/→/✕ are. ◀/▶ navigate by ∓step and WRAP past a bound to the other end, so
+// the cells emit values already inside [min,max]; the range validator (derived
+// from min/max) owns the bounds for any other write. `step` lives here (render
+// needs it) and deliberately NOT in the derived validator spec — legality is
+// "an integer in [min,max]", which step does not affect and which merges cleanly
+// across configs where step would not.
+export interface StepperWidget {
+  readonly kind: "stepper";
+  readonly state: string;
+  readonly min: number;
+  readonly max: number;
+  readonly step: number;
 }
 
-export const WIDGET_KINDS = ["buttons", "menu"] as const;
+export type WidgetDecl = ButtonsWidget | MenuWidget | StepperWidget;
+
+// [LAW:single-enforcer] The ONE place mapping a widget kind to its SessionState
+// relationship, as DATA. Every consumer (the loader's backing-var and session.id
+// checks; the validator derivation reads the richer spec form in
+// state-validators) reads these fields — none re-switches on kind. A new widget
+// kind is one new arm in this exhaustive switch, and the compiler forces it.
+//   readsKey   — the key the widget READS BACK (a menu's page, a stepper's
+//                value); null for buttons. A row `when` and the backing-var
+//                check key off this.
+//   hasSetItem — whether an author item binds a `set` action (buttons/menu).
+export interface WidgetStateUse {
+  readonly readsKey: string | null;
+  readonly hasSetItem: boolean;
+}
+export function widgetStateUse(w: WidgetDecl): WidgetStateUse {
+  switch (w.kind) {
+    case "stepper":
+      return { readsKey: w.state, hasSetItem: false };
+    case "menu":
+      return { readsKey: w.state, hasSetItem: itemsBindSet(w.items) };
+    case "buttons":
+      return { readsKey: null, hasSetItem: itemsBindSet(w.items) };
+  }
+}
+function itemsBindSet(items: readonly ButtonItem[]): boolean {
+  return items.some((item) => item.onClick.some((action) => "set" in action));
+}
+
+export const WIDGET_KINDS = ["buttons", "menu", "stepper"] as const;
 export type WidgetKind = (typeof WIDGET_KINDS)[number];
