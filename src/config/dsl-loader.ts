@@ -1224,21 +1224,47 @@ function validateWidget(
   }
   if (isMenu) {
     // [LAW:types-are-the-program] A menu without its page key is not a menu —
-    // `state` is the one value carrying open/closed/which-page. Require a
-    // non-empty key; the int validator for it is DERIVED at load (see
-    // deriveWidgetValidators) so the wire accepts the menu's ←/→/close writes.
-    const state = optionalStringField(ctx, path, raw, "state");
-    if (!state) {
-      ctx.issues.push({
-        path: `${path}.state`,
-        message: `a menu widget must declare a non-empty "state" (the SessionState integer page key it reads and writes)`,
-        line: findKeyLine(ctx.source, [...path.split("."), "state"]),
-      });
-      return null;
-    }
+    // `state` is the one value carrying open/closed/which-page. The int
+    // validator for it is DERIVED at load (see deriveWidgetValidators) so the
+    // wire accepts the menu's ←/→/close writes.
+    const state = validateWidgetStateKey(ctx, path, raw, "menu");
+    if (state === null) return null;
     return { kind: "menu", state, items };
   }
   return { kind: "buttons", items };
+}
+
+// [LAW:single-enforcer] A widget's `state` key (a menu's page, a stepper's
+// value) is a set-state URL path segment, so it must be a non-empty, slash-free
+// key — the SAME shape validateAction requires of a button's `set` key, since
+// the menu's ←/→/close and the stepper's ◀/▶ are render-derived set-state writes.
+// One check for both arms means a slash-bearing key is rejected at load with a
+// clear message, not deferred to a throw when validators register. Returns the
+// validated key, or null (with a recorded issue) when absent/empty/slash-bearing.
+function validateWidgetStateKey(
+  ctx: ValidateCtx,
+  path: string,
+  raw: Record<string, unknown>,
+  kind: "menu" | "stepper",
+): string | null {
+  const state = optionalStringField(ctx, path, raw, "state");
+  if (!state) {
+    ctx.issues.push({
+      path: `${path}.state`,
+      message: `a ${kind} widget must declare a non-empty "state" (the SessionState key it reads and writes)`,
+      line: findKeyLine(ctx.source, [...path.split("."), "state"]),
+    });
+    return null;
+  }
+  if (state.includes("/")) {
+    ctx.issues.push({
+      path: `${path}.state`,
+      message: `state key "${state}" contains "/" — the set-state wire splits on "/", so it cannot be addressed`,
+      line: findKeyLine(ctx.source, [...path.split("."), "state"]),
+    });
+    return null;
+  }
+  return state;
 }
 
 // [LAW:types-are-the-program] A stepper is fully described by its integer key
@@ -1262,14 +1288,7 @@ function validateStepperWidget(
     }
   }
 
-  const state = optionalStringField(ctx, path, raw, "state");
-  if (!state) {
-    ctx.issues.push({
-      path: `${path}.state`,
-      message: `a stepper widget must declare a non-empty "state" (the SessionState integer key it reads and writes)`,
-      line: findKeyLine(ctx.source, [...path.split("."), "state"]),
-    });
-  }
+  const state = validateWidgetStateKey(ctx, path, raw, "stepper");
 
   const intField = (field: string): number | null => {
     const v = raw[field];
@@ -1289,7 +1308,7 @@ function validateStepperWidget(
   // a required knob — the common stepper declares only its bounds.
   const step = raw.step === undefined ? 1 : intField("step");
 
-  if (!state || min === null || max === null || step === null) {
+  if (state === null || min === null || max === null || step === null) {
     return null;
   }
   if (min >= max) {

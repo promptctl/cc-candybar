@@ -402,6 +402,16 @@ describe("70m.7 — loader validates the stepper domain", () => {
     ).toThrow(/max must be an integer/);
   });
 
+  test("a slash-bearing state key is rejected at load (set-state wire splits on /)", () => {
+    expect(() =>
+      parseAndValidate(
+        "<test>",
+        wrap(`{ kind: 'stepper', state: 'a/b', min: 0, max: 60 }`),
+        ALLOWED,
+      ),
+    ).toThrow(/contains "\/"/);
+  });
+
   test("a missing state key is rejected", () => {
     expect(() =>
       parseAndValidate(
