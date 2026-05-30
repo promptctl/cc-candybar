@@ -11,8 +11,6 @@
   globals: {
     // Base palette for every segment that doesn't pull its own (see `branch`).
     palette: 'textual-dark',
-    // Rotate each segment's hue by 14° so adjacent segments stay distinct.
-    hueStep: 14,
   },
 
   // ── Variables: where each segment's data comes from ──────────────────────
@@ -39,7 +37,13 @@
     // time — the system clock, formatted with a Go reference-time layout.
     clock: { kind: 'time', layout: '15:04:05', cache: { ttl: '1s' } },
 
-    // (file, git, and literal kinds exist too — omitted here to stay minimal.)
+    // literal — a fixed value read like any other var. Here it drives the
+    // per-segment hue rotation (HUE_STEP_VAR): adjacent segments rotate 14° so
+    // they stay distinct. Make it a `state` var + a stepper widget to adjust it
+    // live; a literal is the fixed-value form.
+    'hue.step': { kind: 'literal', value: 14 },
+
+    // (file and git kinds exist too — omitted here to stay minimal.)
   },
 
   // ── Segments: how each piece of data is drawn ────────────────────────────
