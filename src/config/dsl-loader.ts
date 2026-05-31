@@ -1803,21 +1803,32 @@ function validateCrossReferences(ctx: ValidateCtx, cfg: DslConfig): void {
   // them. It traverses the canonical tree — the raw `layout`-vs-`root` authoring
   // form is already collapsed and unrecoverable post-merge — so the path
   // describes the tree and `line` points at whichever layout key the user wrote.
-  const layoutLine =
-    findKeyLine(ctx.source, ["root"]) ?? findKeyLine(ctx.source, ["layout"]);
+  // [LAW:one-source-of-truth] The presence of the `root` key in the source IS
+  // the discriminator for which surface the user authored; the reported path
+  // and line both follow from it, so a root-authored config's errors point at
+  // `root`, not the absent `layout` sugar.
+  const rootLine = findKeyLine(ctx.source, ["root"]);
+  const layoutKey = rootLine !== undefined ? "root" : "layout";
+  const layoutLine = rootLine ?? findKeyLine(ctx.source, ["layout"]);
   for (const node of walkNodes(cfg.root)) {
     // [LAW:locality-or-seam] A node's `when` reads the global scope (bare
     // globals + namespaced segment vars) — the same existence-check shape as a
     // segment template, surfaced at load time.
     if (node.when !== undefined) {
-      checkTemplateRefs(ctx, "layout.when", node.when, allVarNames, layoutLine);
+      checkTemplateRefs(
+        ctx,
+        `${layoutKey}.when`,
+        node.when,
+        allVarNames,
+        layoutLine,
+      );
     }
     if (node.kind !== "cells") continue;
     for (const entry of node.segments) {
       if (!Object.prototype.hasOwnProperty.call(cfg.segments, entry)) {
         ctx.issues.push({
-          path: "layout",
-          message: `layout entry "${entry}" does not match any declared segment`,
+          path: layoutKey,
+          message: `${layoutKey} entry "${entry}" does not match any declared segment`,
           line: layoutLine,
         });
       }

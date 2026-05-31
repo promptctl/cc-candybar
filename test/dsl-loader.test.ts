@@ -664,6 +664,31 @@ describe("loadDslConfig — layout", () => {
 // ─── Cross-reference validation ──────────────────────────────────────────────
 
 describe("loadDslConfig — cross-references", () => {
+  test("root-authored config reports unknown segment under the `root` path", () => {
+    // The reported path follows the surface the user wrote — a root-authored
+    // config points at `root`, not the absent `layout` sugar.
+    expectIssue(
+      `{ segments: { cwd: { template: "t" } },
+         root: { kind: "cells", segments: ["cwd", "missing"] } }`,
+      {
+        path: "root",
+        message: 'root entry "missing" does not match any declared segment',
+      },
+    );
+  });
+
+  test("root node `when` referencing an unknown variable is reported under `root.when`", () => {
+    expectIssue(
+      `{ segments: { cwd: { template: "t" } },
+         root: { kind: "container", direction: "vertical", when: "{{ .nope }}",
+                 children: [{ kind: "cells", segments: ["cwd"] }] } }`,
+      {
+        path: "root.when",
+        message: 'Template references unknown variable ".nope"',
+      },
+    );
+  });
+
   test("template references unknown variable is reported", () => {
     expectIssue(
       `{ segments: { cwd: { template: "{{ .nope }}" } } }`,
