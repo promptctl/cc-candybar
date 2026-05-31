@@ -188,6 +188,27 @@ describe("renderDsl — multi-line layout", () => {
     expect(lines[0]!).not.toContain("\n");
   });
 
+  test("fixed-width segment with authored \\n caps each line independently", () => {
+    // Regression: the split must happen BEFORE per-segment width layout. With
+    // split-after-layout, the merged 'ABCDE\nFGHIJ' cell measures as one
+    // over-width cell and truncates — destroying the second line. Split-first
+    // lays out each 5-wide line cleanly, so both survive intact.
+    const source = `{
+      globals: { palette: 'textual-dark' },
+      variables: { x: { kind: 'literal', value: 'ABCDE\\nFGHIJ' } },
+      segments: { s: { template: '{{ .x }}', width: 5, bg: 'surface', fg: 'foreground' } },
+      layout: [['s']],
+    }`;
+    const { config, compiled, store, registry } = buildRuntime(source);
+    const out = renderDsl(config, compiled, store, registry, {}, basePalette(), OPTS);
+    const lines = out.split("\n").map(stripAnsi);
+    expect(lines).toHaveLength(2);
+    expect(lines[0]!).toContain("ABCDE");
+    expect(lines[1]!).toContain("FGHIJ");
+    // The second line is not truncated away, and no truncation marker appears.
+    expect(out).not.toContain("…");
+  });
+
   test("OSC-8 link survives an authored \\n split (both pieces keep the URL)", () => {
     // A linked fragment carrying a "\n" splits into two lines; the OSC-8 hyperlink
     // span must be preserved on each piece, not dropped at the boundary.

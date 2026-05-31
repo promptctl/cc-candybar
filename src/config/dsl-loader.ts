@@ -1810,7 +1810,7 @@ function validateCrossReferences(ctx: ValidateCtx, cfg: DslConfig): void {
     // globals + namespaced segment vars) — the same existence-check shape as a
     // segment template, surfaced at load time.
     if (node.when !== undefined) {
-      checkTemplateRefs(ctx, "layout when", node.when, allVarNames);
+      checkTemplateRefs(ctx, "layout.when", node.when, allVarNames, layoutLine);
     }
     if (node.kind !== "cells") continue;
     for (const entry of node.segments) {
@@ -2072,13 +2072,18 @@ function checkTemplateRefs(
   declPath: string,
   template: string,
   allVars: Set<string>,
+  // [LAW:one-source-of-truth] Callers whose `declPath` is not a literal key path
+  // into the source (a node `when`, whose canonical tree position no longer maps
+  // to a source key after the layout/root merge) pass the already-resolved line
+  // explicitly. Absent, the line is derived from the dotted declPath as before.
+  line?: number,
 ): void {
   for (const ref of extractTemplateRefs(template)) {
     if (refResolves(ref, allVars)) continue;
     ctx.issues.push({
       path: declPath,
       message: `Template references unknown variable ".${ref}"`,
-      line: findKeyLine(ctx.source, declPath.split(".")),
+      line: line ?? findKeyLine(ctx.source, declPath.split(".")),
     });
   }
 }

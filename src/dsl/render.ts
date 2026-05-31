@@ -465,7 +465,12 @@ export function renderDsl(
       return node.children.flatMap((child) => renderNode(child, visible));
     }
 
-    const cells: RichText[] = [];
+    // [LAW:dataflow-not-control-flow] The leaf accumulates VISUAL lines, not a
+    // flat cell run. A segment's first line continues the current row line; each
+    // subsequent line (from an authored "\n") opens a new one. Starts as one
+    // empty line so an all-hidden visible leaf still yields exactly one (empty)
+    // line — the pre-substrate behavior.
+    const rowLines: RichText[][] = [[]];
     for (const segName of node.segments) {
       const seg = config.segments[segName];
       const segCompiled = compiled.segments[segName];
@@ -502,30 +507,37 @@ export function renderDsl(
       const fragments = segCompiled.template.evaluate(scope);
       const segCells = fragmentsToCells(fragments, baseStyle);
 
-      const laidOut = applySegmentLayout(segCells, {
-        width: seg.width ?? "auto",
-        justify: seg.justify ?? "left",
-        truncate: seg.truncate ?? "right",
-        baseStyle,
+      // [LAW:single-enforcer] Partition the segment's authored "\n" into visual
+      // lines BEFORE per-segment layout — width/justify/truncate then measure
+      // each line cleanly, never a "\n"-bearing cell whose cellLength is a
+      // zero-width lie (which would truncate or mis-align across the break). A
+      // newline-free segment is the degenerate one-line case: one applySegmentLayout
+      // call on the whole cell run, byte-identical to the pre-split path.
+      const laidLines = splitCellsIntoLines(segCells).map((line) =>
+        applySegmentLayout(line, {
+          width: seg.width ?? "auto",
+          justify: seg.justify ?? "left",
+          truncate: seg.truncate ?? "right",
+          baseStyle,
+        }),
+      );
+
+      laidLines.forEach((laid, i) => {
+        if (i > 0) rowLines.push([]);
+        rowLines[rowLines.length - 1]!.push(...laid);
       });
 
       if (perSegmentSink !== undefined) {
-        perSegmentSink.set(segName, laidOut);
+        perSegmentSink.set(segName, laidLines.flat());
       }
-
-      cells.push(...laidOut);
     }
 
     // [LAW:dataflow-not-control-flow] A hidden leaf is absent (no line). A
-    // visible leaf renders to zero-or-more lines: splitCellsIntoLines partitions
-    // the cell stream on authored "\n" (BEFORE measuring), then FlexStrip
-    // auto-wrap partitions each rendered strip on "\n" — both boundary sources
-    // feed one line list. An empty visible leaf yields exactly one empty line
-    // (splitCellsIntoLines([]) === [[]]), matching the pre-substrate behavior.
+    // visible leaf renders each accumulated row line to its own strip; FlexStrip
+    // auto-wrap may further partition a strip on "\n" (the width-overflow
+    // boundary source), so both feed one flat line list.
     if (!visible) return [];
-    return splitCellsIntoLines(cells).flatMap((group) =>
-      renderStripCells(group, opts).split("\n"),
-    );
+    return rowLines.flatMap((line) => renderStripCells(line, opts).split("\n"));
   };
 
   return renderNode(compiled.root, true).join("\n");
