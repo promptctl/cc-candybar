@@ -72,7 +72,11 @@ export type Direction = (typeof DIRECTIONS)[number];
 export interface CellsNode {
   readonly kind: "cells";
   // Names into the `segments` block — the same reference-by-name a LayoutRow
-  // uses. One leaf packs its segments into one horizontal strip.
+  // uses. A leaf packs its segments into a horizontal strip and renders to
+  // ONE OR MORE visual lines: an authored "\n" in a segment's output partitions
+  // it into independently-laid-out lines, and FlexStrip width-overflow wrapping
+  // may split further. A newline-free, non-overflowing leaf is the degenerate
+  // single-line case.
   readonly segments: readonly string[];
   // [LAW:dataflow-not-control-flow] Absent `when` ≡ always-rendered.
   readonly when?: string;
