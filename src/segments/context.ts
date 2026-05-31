@@ -5,11 +5,12 @@ import { parseJsonlFile } from "../utils/claude";
 
 export interface ContextInfo {
   totalTokens: number;
+  // Used / remaining percentages. Sourced from Claude's native
+  // context_window.used_percentage / remaining_percentage when present; a
+  // plain token-ratio is the only fallback (no auto-compact buffer guess).
   percentage: number;
-  usablePercentage: number;
   contextLeftPercentage: number;
   maxTokens: number;
-  usableTokens: number;
 }
 
 interface ContextUsageThresholds {
@@ -35,43 +36,27 @@ export class ContextProvider {
     return this.thresholds;
   }
 
-  private calculatePercentages(
+  // Token-ratio percentages — the fallback ONLY. Used when Claude doesn't
+  // report used_percentage / remaining_percentage natively (transcript path,
+  // or a native window whose percentages are still null pre-first-call). No
+  // auto-compact buffer: that was a hardcoded guess at Claude's threshold and
+  // a soft second source; the native remaining_percentage is authoritative.
+  private ratioPercentages(
     totalTokens: number,
     contextLimit: number,
-    autocompactBuffer: number = 33000,
-  ): Pick<
-    ContextInfo,
-    "percentage" | "usablePercentage" | "contextLeftPercentage" | "usableTokens"
-  > {
+  ): Pick<ContextInfo, "percentage" | "contextLeftPercentage"> {
     const percentage = Math.min(
       100,
       Math.max(0, Math.round((totalTokens / contextLimit) * 100)),
     );
-
-    const usableLimit = Math.max(1, contextLimit - autocompactBuffer);
-    const usablePercentage = Math.min(
-      100,
-      Math.max(0, Math.round((totalTokens / usableLimit) * 100)),
-    );
-
-    const contextLeftPercentage = Math.max(0, 100 - usablePercentage);
-
-    return {
-      percentage,
-      usablePercentage,
-      contextLeftPercentage,
-      usableTokens: usableLimit,
-    };
+    return { percentage, contextLeftPercentage: Math.max(0, 100 - percentage) };
   }
 
   /**
    * Calculate context info from native Claude Code context_window data (preferred).
    * Requires Claude Code 2.0.70+ with current_usage field.
    */
-  calculateContextFromHookData(
-    hookData: ClaudeHookData,
-    autocompactBuffer: number = 33000,
-  ): ContextInfo | null {
+  calculateContextFromHookData(hookData: ClaudeHookData): ContextInfo | null {
     const cw = hookData.context_window;
     if (!cw?.current_usage) {
       debug(
@@ -94,22 +79,22 @@ export class ContextProvider {
       `Native current_usage: input=${currentUsage.input_tokens}, cache_create=${currentUsage.cache_creation_input_tokens}, cache_read=${currentUsage.cache_read_input_tokens}, total=${totalTokens} (limit: ${contextLimit})`,
     );
 
-    const nativePct = hookData.context_window?.used_percentage;
-    const percentages = this.calculatePercentages(
-      totalTokens,
-      contextLimit,
-      autocompactBuffer,
-    );
-
-    if (nativePct != null) {
-      percentages.percentage = Math.round(nativePct);
-      debug(`Using native used_percentage: ${nativePct}%`);
-    }
-
+    // [LAW:one-source-of-truth] Claude's reported used/remaining percentages
+    // are authoritative; the token-ratio is only a floor for the window whose
+    // percentages are still null (pre-first-call). remaining_percentage is NOT
+    // recomputed from a local buffer — it measures real headroom to the limit.
+    const ratio = this.ratioPercentages(totalTokens, contextLimit);
     return {
       totalTokens,
       maxTokens: contextLimit,
-      ...percentages,
+      percentage:
+        cw.used_percentage != null
+          ? Math.round(cw.used_percentage)
+          : ratio.percentage,
+      contextLeftPercentage:
+        cw.remaining_percentage != null
+          ? Math.round(cw.remaining_percentage)
+          : ratio.contextLeftPercentage,
     };
   }
 
@@ -120,7 +105,6 @@ export class ContextProvider {
   async calculateContextTokensFromTranscript(
     transcriptPath: string,
     contextLimit: number,
-    autocompactBuffer: number = 33000,
   ): Promise<ContextInfo | null> {
     try {
       debug(`Calculating context tokens from transcript: ${transcriptPath}`);
@@ -159,16 +143,10 @@ export class ContextProvider {
           `Most recent main chain context: ${totalTokens} tokens (limit: ${contextLimit})`,
         );
 
-        const percentages = this.calculatePercentages(
-          totalTokens,
-          contextLimit,
-          autocompactBuffer,
-        );
-
         return {
           totalTokens,
           maxTokens: contextLimit,
-          ...percentages,
+          ...this.ratioPercentages(totalTokens, contextLimit),
         };
       }
 
@@ -185,14 +163,8 @@ export class ContextProvider {
   /**
    * Get context info using native data if available, falling back to transcript parsing.
    */
-  async getContextInfo(
-    hookData: ClaudeHookData,
-    autocompactBuffer: number = 33000,
-  ): Promise<ContextInfo | null> {
-    const nativeContext = this.calculateContextFromHookData(
-      hookData,
-      autocompactBuffer,
-    );
+  async getContextInfo(hookData: ClaudeHookData): Promise<ContextInfo | null> {
+    const nativeContext = this.calculateContextFromHookData(hookData);
     if (nativeContext) {
       return nativeContext;
     }
@@ -207,7 +179,6 @@ export class ContextProvider {
     return this.calculateContextTokensFromTranscript(
       hookData.transcript_path,
       contextLimit,
-      autocompactBuffer,
     );
   }
 }

@@ -6,7 +6,8 @@ import { PROTOCOL_VERSION, encodeFrame, makeFrameReader } from "../src/daemon/pr
 import type { Response } from "../src/daemon/protocol";
 import { socketPath } from "../src/daemon/paths";
 import { SessionState } from "../src/daemon/session-state";
-import { VERBS, VERB_NAMES } from "../src/daemon/verbs";
+import { VERBS, VERB_NAMES, BadVerbArgs } from "../src/daemon/verbs";
+import type { VerbContext } from "../src/daemon/verbs";
 
 // --- SessionState unit tests ---
 
@@ -113,6 +114,23 @@ describe("click protocol", () => {
     // rather than as a type-only diff a reviewer might wave through.
     for (const poison of ["__proto__", "constructor", "toString", "hasOwnProperty"]) {
       expect(VERBS.get(poison)).toBeUndefined();
+    }
+  });
+
+  test("malformed wire encoding is a BadVerbArgs (→ BAD_REQUEST), not an operational failure", () => {
+    // [LAW:behavior-not-structure] A bad percent-escape on the wire is an
+    // argument-shape failure; the dispatcher routes BadVerbArgs to BAD_REQUEST
+    // and any other Error to RENDER_FAILED. A lone `%` makes decodeURIComponent
+    // throw a raw URIError — without reclassification it would surface as an
+    // operational RENDER_FAILED. Pins the single-arg (copy) and multi-seg
+    // (set-state) codecs at their shared decode boundary.
+    const ctx: VerbContext = {
+      sessionState: new SessionState(),
+      dlog: () => {},
+    };
+    for (const verb of ["copy", "set-state"]) {
+      const handler = VERBS.get(verb)!;
+      expect(() => handler("%", ctx)).toThrow(BadVerbArgs);
     }
   });
 });
