@@ -23,6 +23,7 @@ import {
   formatModelName,
   shortenModelName,
   minutesUntilReset,
+  formatTimeSince,
 } from "../utils/formatters.js";
 import { getBudgetStatus } from "../utils/budget.js";
 import { listResolvablePaletteNames, STYLE_ORDER } from "../themes/policy.js";
@@ -203,6 +204,12 @@ export function formatterFuncs(): FuncMap {
     },
     formatResponseTime: {
       fn: (s: number | bigint) => formatResponseTime(num(s)),
+      argTypes: ["number"],
+    },
+    // Seconds-since-last-commit → compact "12m"/"3h"/"2d" for the custom git
+    // segment's time-since-commit affordance.
+    formatTimeSince: {
+      fn: (s: number | bigint) => formatTimeSince(num(s)),
       argTypes: ["number"],
     },
     // Epoch-seconds → minutes until reset, used by the weekly segment so the

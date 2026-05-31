@@ -356,8 +356,9 @@ export const OPTION_SOURCES: readonly OptionSource[] = ["themes", "styles"];
 // `optionsFrom`. A literal item carries its own glyph/label; an option-bound
 // item expands to one button per option, binding each option's value into its
 // `set` action. `onClick` is always a list — single is the N=1 case, no
-// `Action | Action[]` union for consumers to normalize. Multiple `set` actions
-// in one list batch into a single set-state click (the .2 batched wire).
+// `Action | Action[]` union for consumers to normalize. The list may mix kinds:
+// every `set` batches into one atomic set-state effect, each `copy`/`open` is its
+// own effect, and all ride one `dispatch` click URL.
 export interface LiteralButtonItem {
   readonly glyph?: string;
   readonly label?: string;

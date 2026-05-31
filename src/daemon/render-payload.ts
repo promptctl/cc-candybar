@@ -20,7 +20,8 @@ import path from "node:path";
 import type { ClaudeHookData } from "../utils/claude.js";
 import type { DslConfig, VariableDecl } from "../config/dsl-types.js";
 import { extractTemplateRefs } from "../config/dsl-loader.js";
-import type { GitInfo } from "../segments/git.js";
+import type { GitInfo, GitInfoOptions } from "../segments/git.js";
+import { cacheExpiresAt } from "../segments/cache.js";
 import type { SessionUsageStore } from "./cache/session-usage-store.js";
 import type { ContextProvider } from "../segments/context.js";
 import type { MetricsProvider } from "../segments/metrics.js";
@@ -62,6 +63,7 @@ export interface RenderPayload extends ClaudeHookData {
   readonly today?: TodayPayload;
   readonly block?: BlockPayload;
   readonly weekly?: WeeklyPayload;
+  readonly cache?: CachePayload;
   readonly context?: ContextPayload;
   readonly metrics?: MetricsPayload;
 }
@@ -82,6 +84,8 @@ export interface GitPayload {
   readonly upstream: string;
   readonly stash: number;
   readonly status: string;
+  readonly operation: string;
+  readonly timeSinceCommit: number;
 }
 
 export interface SessionPayload {
@@ -102,6 +106,13 @@ export interface BlockPayload {
 export interface WeeklyPayload {
   readonly percentage: number;
   readonly resetsAt: number;
+}
+
+// Prompt-cache warmth. One field — the epoch-seconds expiry instant —
+// mirroring block/weekly `resetsAt` so the DSL composes the countdown via
+// `minutesUntilReset`. Absent when no cache-bearing transcript entry exists.
+export interface CachePayload {
+  readonly expiresAt: number;
 }
 
 export interface ContextPayload {
@@ -139,12 +150,6 @@ export interface RenderPayloadDeps {
 }
 
 // ─── Builder ─────────────────────────────────────────────────────────────────
-
-// Autocompact buffer used by the context provider. Hardcoded here because the
-// DSL config has no equivalent of the legacy `context.autocompactBuffer` knob
-// — if a user needs a different value, they configure the context segment's
-// template to compute differently. Matches the legacy default.
-const DEFAULT_AUTOCOMPACT_BUFFER = 33000;
 
 // ─── Config-driven provider gating ───────────────────────────────────────────
 //
@@ -279,13 +284,7 @@ function anyPathStartsWith(
 // computing them requires extra git invocations), and a user who declares
 // `git.sha` or `git.staged` would see their template evaluate against
 // empty strings or zeros.
-function gitOptionsFromClosure(needed: ReadonlySet<string>): {
-  showSha?: boolean;
-  showWorkingTree?: boolean;
-  showStashCount?: boolean;
-  showUpstream?: boolean;
-  showRepoName?: boolean;
-} {
+function gitOptionsFromClosure(needed: ReadonlySet<string>): GitInfoOptions {
   const has = (path: string): boolean => needed.has(path);
   // `git.staged` / `git.unstaged` / `git.untracked` / `git.conflicts` all
   // come from one `git status --porcelain` call — any one of them turning
@@ -301,6 +300,8 @@ function gitOptionsFromClosure(needed: ReadonlySet<string>): {
     ...(has("git.stash") && { showStashCount: true }),
     ...(has("git.upstream") && { showUpstream: true }),
     ...(has("git.repoName") && { showRepoName: true }),
+    ...(has("git.operation") && { showOperation: true }),
+    ...(has("git.timeSinceCommit") && { showTimeSinceCommit: true }),
   };
 }
 
@@ -347,7 +348,7 @@ export async function buildRenderPayload(
   // the destructure shape).
   const nullP = <T>(): Promise<T | null> => Promise.resolve(null);
 
-  const [gitInfo, usage, today, context, metrics, tmuxSession] =
+  const [gitInfo, usage, today, context, metrics, tmuxSession, cacheExpiry] =
     await Promise.all([
       wants("git")
         ? deps.gitProvider
@@ -367,9 +368,7 @@ export async function buildRenderPayload(
         ? deps.usageStore.getTodayInfo(hookData).catch(() => null)
         : nullP<Awaited<ReturnType<SessionUsageStore["getTodayInfo"]>>>(),
       wants("context")
-        ? deps.contextProvider
-            .getContextInfo(hookData, DEFAULT_AUTOCOMPACT_BUFFER)
-            .catch(() => null)
+        ? deps.contextProvider.getContextInfo(hookData).catch(() => null)
         : nullP<Awaited<ReturnType<ContextProvider["getContextInfo"]>>>(),
       wants("metrics")
         ? deps.metricsProvider
@@ -379,6 +378,12 @@ export async function buildRenderPayload(
       wants("tmux")
         ? deps.tmuxService.getSessionId().catch(() => null)
         : nullP<string>(),
+      // Prompt-cache expiry: a bounded tail-read through the gated transcript-fs
+      // seam, so it runs alongside the other providers and stays in the shared
+      // in-flight budget rather than blocking the event loop on sync fs.
+      wants("cache")
+        ? cacheExpiresAt(hookData.transcript_path).catch(() => null)
+        : nullP<number>(),
     ]);
   // [LAW:dataflow-not-control-flow] block.* reads straight from hookData
   // alongside weekly. (The prior dedicated provider only re-derived
@@ -466,6 +471,7 @@ export async function buildRenderPayload(
         resetsAt: hookData.rate_limits.seven_day.resets_at,
       },
     }),
+    ...(cacheExpiry !== null && { cache: { expiresAt: cacheExpiry } }),
     ...(context !== null && {
       context: {
         totalTokens: context.totalTokens,
@@ -528,5 +534,7 @@ function projectGitInfo(info: GitInfo): GitPayload {
     upstream: info.upstream ?? "",
     stash: info.stashCount ?? 0,
     status: info.status,
+    operation: info.operation ?? "",
+    timeSinceCommit: info.timeSinceCommit ?? 0,
   };
 }

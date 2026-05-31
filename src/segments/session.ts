@@ -4,7 +4,6 @@ import {
   findAgentTranscripts,
   parseJsonlFile,
   type ParsedEntry,
-  type ClaudeHookData,
 } from "../utils/claude";
 import { dirname } from "node:path";
 
@@ -146,10 +145,7 @@ export class SessionProvider {
   // [LAW:types-are-the-program] Pure projection SessionUsage → SessionInfo, no
   // I/O. The store computes it once per ingest from already-parsed usage; the
   // empty-usage arm yields the all-null SessionInfo (which the payload drops).
-  toSessionInfo(
-    sessionUsage: SessionUsage | null,
-    hookData?: ClaudeHookData,
-  ): SessionInfo {
+  toSessionInfo(sessionUsage: SessionUsage | null): SessionInfo {
     if (!sessionUsage || sessionUsage.entries.length === 0) {
       return {
         cost: null,
@@ -167,14 +163,17 @@ export class SessionProvider {
       tokenBreakdown.cacheCreation +
       tokenBreakdown.cacheRead;
 
+    // [LAW:single-enforcer] Transcript-derived projection only. `cost` is the
+    // priced-transcript total; the authoritative native cost (officialCost =
+    // hook total_cost_usd) is overlaid by the store at READ time — it is
+    // per-render and must not be frozen into this mtime-keyed record, so it is
+    // null here by construction.
     const calculatedCost = sessionUsage.totalCost;
-    const hookDataCost = hookData?.cost?.total_cost_usd ?? null;
-    const cost = calculatedCost ?? hookDataCost;
 
     return {
-      cost,
+      cost: calculatedCost,
       calculatedCost,
-      officialCost: hookDataCost,
+      officialCost: null,
       tokens: totalTokens,
       tokenBreakdown,
     };

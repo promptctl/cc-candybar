@@ -17,8 +17,8 @@ import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import { registerDslConfig, renderDsl } from "../src/dsl/render";
 import { SessionState } from "../src/daemon/session-state";
-import { VERBS } from "../src/daemon/verbs";
-import { parseHandlerUrl } from "../src/install/index";
+import { effectsOf, clickUrl, boldUrls } from "./helpers/click";
+import { effectsUrl, VERB_SET_STATE } from "../src/click/wire";
 import { effectiveThemeName, resolverForThemeName } from "../src/themes";
 
 const SID = "s-recolor";
@@ -101,10 +101,12 @@ function bgColors(rendered: string): Set<string> {
 }
 
 function clickTheme(sessionState: SessionState, theme: string): void {
-  const url = `cc-candybar://set-state/${SID}/theme/${theme}`;
-  const parsed = parseHandlerUrl(url);
-  expect(parsed.verb).toBe("set-state");
-  VERBS.get("set-state")!(parsed.value, { sessionState, dlog: () => {} });
+  // Drive the real wire end-to-end: emit the click URL the picker would, then
+  // dispatch it exactly as the daemon does (parse → dispatch → set-state).
+  const url = effectsUrl([
+    { verb: VERB_SET_STATE, args: [SID, "theme", theme] },
+  ]);
+  clickUrl(url, { sessionState, dlog: () => {} });
 }
 
 describe("DSL theme picker — live recolor (epic k5a done-gate #1)", () => {
@@ -151,19 +153,15 @@ describe("DSL theme picker — live recolor (epic k5a done-gate #1)", () => {
     // Before any click, the state var defaults to the config palette, so the
     // base theme option is the single bold (active) region.
     const before = render();
-    const beforeBold = before.match(/;1m\x1b\]8;;/g) ?? [];
-    expect(beforeBold.length).toBe(1);
-    expect(before).toContain(
-      `;1m\x1b]8;;cc-candybar://set-state/${SID}/theme/${BASE_THEME}\x1b\\`,
-    );
+    expect(boldUrls(before).map(effectsOf)).toEqual([
+      [{ verb: "set-state", args: [SID, "theme", BASE_THEME] }],
+    ]);
 
     clickTheme(sessionState, PICKED_THEME);
 
     const after = render();
-    const afterBold = after.match(/;1m\x1b\]8;;/g) ?? [];
-    expect(afterBold.length).toBe(1);
-    expect(after).toContain(
-      `;1m\x1b]8;;cc-candybar://set-state/${SID}/theme/${PICKED_THEME}\x1b\\`,
-    );
+    expect(boldUrls(after).map(effectsOf)).toEqual([
+      [{ verb: "set-state", args: [SID, "theme", PICKED_THEME] }],
+    ]);
   });
 });

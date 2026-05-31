@@ -27,6 +27,11 @@ import { makeLimits, realLimitsDeps, type LimitsHandle } from "./limits";
 import { SessionState } from "./session-state";
 import { FileSessionStorage } from "./session-state-file";
 import { VERBS, BadVerbArgs } from "./verbs";
+import {
+  effectsUrl,
+  VERB_SHOW_CONFIG_ERROR,
+  VERB_SHOW_CONFIG_WARNING,
+} from "../click/wire.js";
 import { validateHookData } from "../utils/schema-validator.js";
 import { setLaunchStats } from "../proc/launch";
 import { buildDebugSnapshot } from "./debug";
@@ -847,14 +852,16 @@ const MAX_DIAGNOSTIC_LINE_LEN = 120;
 const MAX_DIAGNOSTIC_LINES = 8;
 
 function makeDiagnosticLink(
-  verb: "show-config-error" | "show-config-warning",
+  verb: typeof VERB_SHOW_CONFIG_ERROR | typeof VERB_SHOW_CONFIG_WARNING,
   message: string,
   bg: string,
   fg: string,
 ): string {
   // Full message in the OSC-8 URL (clipboard-copy on click) — truncation
-  // only affects what is visible, never what is accessible.
-  const url = `cc-candybar://${verb}/${encodeURIComponent(message)}`;
+  // only affects what is visible, never what is accessible. [LAW:single-enforcer]
+  // The click URL is born through effectsUrl like every other click — one
+  // single-effect dispatch list, no second URL-format in the codebase.
+  const url = effectsUrl([{ verb, args: [message] }]);
   // [LAW:dataflow-not-control-flow] Split on natural line boundaries from
   // the source message (config validator emits one issue per line), sanitize
   // each line individually, then render each as a separate styled row.
@@ -890,7 +897,7 @@ function composeWithDiagnostics(
   if (error) {
     prefixes.push(
       makeDiagnosticLink(
-        "show-config-error",
+        VERB_SHOW_CONFIG_ERROR,
         error,
         ERROR_ICON_BG,
         ERROR_ICON_FG,
@@ -900,7 +907,7 @@ function composeWithDiagnostics(
   if (warning) {
     prefixes.push(
       makeDiagnosticLink(
-        "show-config-warning",
+        VERB_SHOW_CONFIG_WARNING,
         warning,
         WARNING_ICON_BG,
         WARNING_ICON_FG,

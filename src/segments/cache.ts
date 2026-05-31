@@ -1,0 +1,125 @@
+// Prompt-cache warmth provider.
+//
+// Anthropic's prompt cache has a fixed TTL (1h): each turn that reads or
+// creates cache entries refreshes it, and after the TTL the next turn pays
+// full cache-creation cost again. This provider answers one question — when
+// does the current session's cache go cold? — by tail-reading the transcript
+// for the most recent entry that touched the cache and projecting its
+// timestamp forward by the TTL.
+//
+// [LAW:dataflow-not-control-flow] The datum is a single epoch instant, not a
+// rendered string. Whether the timer shows "12m", "cold", or hides entirely,
+// and what color it takes, are all functions of this one number evaluated in
+// the DSL template — the same shape block/weekly use with `resetsAt`. The
+// provider carries no display policy.
+//
+// [LAW:types-are-the-program] The return is `number | null`: a known expiry
+// instant, or "no cache activity found" (no transcript, unreadable, or no
+// cache-bearing entry). Null becomes an absent payload field, which the
+// segment's `when` predicate reads as hidden — there is no "0 means hidden"
+// ambiguity to defend against downstream.
+
+import { readTail } from "../utils/transcript-fs.js";
+
+// Anthropic prompt cache TTL. A const, not a knob: it is a property of the
+// upstream cache, not of this renderer. If a future cache tier ships a
+// different TTL, that is a new arm here, not a user config field.
+const CACHE_TTL_MS = 60 * 60 * 1000;
+const TAIL_CHUNK = 64 * 1024;
+const TAIL_MAX = 1 * 1024 * 1024;
+
+// [LAW:types-are-the-program] A cheap CANDIDATE filter, not the authority. It
+// matches any line mentioning a non-zero cache-token field, which includes a
+// line whose *message content* merely quotes the string (a pasted JSON snippet,
+// a transcript of a review discussing these very fields). The authoritative
+// check is the parsed `message.usage` value — the regex only avoids JSON.parsing
+// every line; a match is verified before its timestamp is trusted. The `[1-9]`
+// rejects the `":0` common case so most non-cache lines never reach the parser.
+const CACHE_HIT_RE =
+  /"(?:cache_read_input_tokens|cache_creation_input_tokens)":[1-9]/;
+
+// The transcript-line shape this provider reads. Untrusted JSON — every field is
+// optional and narrowed at use; only positive `message.usage` cache tokens count.
+interface UsageLine {
+  readonly timestamp?: string;
+  readonly message?: {
+    readonly usage?: {
+      readonly cache_read_input_tokens?: number;
+      readonly cache_creation_input_tokens?: number;
+    };
+  };
+}
+
+// Parse a candidate line and return its millisecond timestamp ONLY if its
+// `message.usage` actually records positive cache activity. A content-only
+// mention (or unparseable line) yields null, so a false-positive regex match
+// can never set the timer warm.
+function cacheActivityTs(line: string): number | null {
+  let parsed: UsageLine;
+  try {
+    parsed = JSON.parse(line) as UsageLine;
+  } catch {
+    return null;
+  }
+  const usage = parsed.message?.usage;
+  const positive =
+    (usage?.cache_read_input_tokens ?? 0) > 0 ||
+    (usage?.cache_creation_input_tokens ?? 0) > 0;
+  if (!positive) return null;
+  const ms = parsed.timestamp != null ? Date.parse(parsed.timestamp) : NaN;
+  return Number.isNaN(ms) ? null : ms;
+}
+
+/**
+ * Epoch *seconds* at which the session's prompt cache expires, or null when
+ * no cache-bearing transcript entry can be found. Seconds (not millis) to
+ * match the unit of block/weekly `resetsAt`, so the DSL composes
+ * `minutesUntilReset .cache.expiresAt` with no unit translation.
+ */
+export async function cacheExpiresAt(
+  transcriptPath: string,
+): Promise<number | null> {
+  const lastCacheMs = await findLastCacheActivityTs(transcriptPath);
+  if (lastCacheMs == null) return null;
+  return Math.floor((lastCacheMs + CACHE_TTL_MS) / 1000);
+}
+
+// Tail-read the JSONL transcript and return the millisecond timestamp of the
+// last entry with cache activity. The relevant entry is almost always within
+// the final few KB, so the common case reads one TAIL_CHUNK; only a transcript
+// whose last cache hit is deeper grows to TAIL_MAX. [LAW:single-enforcer] both
+// reads go through the gated transcript-fs seam (readTail), so this scanner is
+// bounded with every other transcript read instead of blocking the event loop
+// on synchronous fs.
+async function findLastCacheActivityTs(
+  transcriptPath: string,
+): Promise<number | null> {
+  for (const maxBytes of [TAIL_CHUNK, TAIL_MAX]) {
+    const tail = await readTail(transcriptPath, maxBytes);
+    if (tail == null) return null;
+    const ts = scanBufferForLastCacheTs(tail.buf, tail.fromStart);
+    if (ts != null) return ts;
+    // The window reached the file start: the whole transcript is scanned, no
+    // hit exists — growing further would re-read the same bytes.
+    if (tail.fromStart) return null;
+  }
+  return null;
+}
+
+function scanBufferForLastCacheTs(
+  buf: Buffer,
+  bufStartsAtFileBeginning: boolean,
+): number | null {
+  const text = buf.toString("utf8");
+  const lines = text.split("\n");
+  // When the window doesn't start at the file beginning, the first line is
+  // likely a partial JSON object — skip it so we never mis-parse a fragment.
+  const start = bufStartsAtFileBeginning ? 0 : 1;
+  for (let i = lines.length - 1; i >= start; i--) {
+    const line = lines[i];
+    if (!line || !CACHE_HIT_RE.test(line)) continue; // cheap candidate filter
+    const ts = cacheActivityTs(line); // authoritative: parsed usage must be > 0
+    if (ts != null) return ts;
+  }
+  return null;
+}

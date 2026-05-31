@@ -17,6 +17,7 @@ import { SourceRegistry } from "../src/var-system/sources";
 import { registerDslConfig, renderDsl } from "../src/dsl/render";
 import { paginate } from "../src/template-engine/widgets";
 import { SessionState } from "../src/daemon/session-state";
+import { effectsOf } from "./helpers/click";
 import { listResolvablePaletteNames, STYLE_ORDER } from "../src/themes/policy";
 import {
   makeIntValidator,
@@ -201,12 +202,19 @@ describe("k5a.6 — menu widget", () => {
     const themeCount = listResolvablePaletteNames().length;
     // close + one per theme
     expect(urls).toHaveLength(themeCount + 1);
-    expect(urls[0]).toBe("cc-candybar://set-state/s1/theme-page/-1");
-    // every option click APPLIES theme AND closes (page -1) in one batched url
+    // ✕ is one set-state effect closing the page.
+    expect(effectsOf(urls[0]!)).toEqual([
+      { verb: "set-state", args: ["s1", "theme-page", "-1"] },
+    ]);
+    // every option click APPLIES theme AND closes (page -1) in one batched
+    // set-state effect.
     for (const u of urls.slice(1)) {
-      expect(u).toMatch(
-        /^cc-candybar:\/\/set-state\/s1\/theme\/[^/]+\/theme-page\/-1$/,
-      );
+      const effects = effectsOf(u);
+      expect(effects).toHaveLength(1);
+      const { verb, args } = effects[0]!;
+      expect(verb).toBe("set-state");
+      expect(args.slice(0, 2)).toEqual(["s1", "theme"]);
+      expect(args.slice(3)).toEqual(["theme-page", "-1"]);
     }
     expect(stripAnsi(line)).not.toContain("→");
     expect(stripAnsi(line)).not.toContain("←");
@@ -219,11 +227,14 @@ describe("k5a.6 — menu widget", () => {
     expect(stripAnsi(line)).toContain("→");
     expect(stripAnsi(line)).not.toContain("←"); // page 0 has no back arrow
     // the forward arrow navigates to page 1 (render-computed)
-    expect(extractUrls(line)).toContain(
-      "cc-candybar://set-state/s1/theme-page/1",
+    expect(extractUrls(line).map(effectsOf)).toContainEqual([
+      { verb: "set-state", args: ["s1", "theme-page", "1"] },
+    ]);
+    // fewer options than the full set fit on the page (an option click sets the
+    // `theme` key; the ←/→/✕ affordances set only `theme-page`)
+    const optionUrls = extractUrls(line).filter((u) =>
+      effectsOf(u).some((e) => e.args[1] === "theme"),
     );
-    // fewer options than the full set fit on the page
-    const optionUrls = extractUrls(line).filter((u) => u.includes("/theme/"));
     expect(optionUrls.length).toBeLessThan(listResolvablePaletteNames().length);
   });
 
@@ -232,9 +243,9 @@ describe("k5a.6 — menu widget", () => {
     sessionState.set("s1", "theme-page", "1");
     const line = render(34).split("\n")[1]!;
     expect(stripAnsi(line)).toContain("←");
-    expect(extractUrls(line)).toContain(
-      "cc-candybar://set-state/s1/theme-page/0",
-    );
+    expect(extractUrls(line).map(effectsOf)).toContainEqual([
+      { verb: "set-state", args: ["s1", "theme-page", "0"] },
+    ]);
   });
 
   test("a page beyond range clamps to the last page (back arrow, no forward)", () => {

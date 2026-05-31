@@ -1,8 +1,10 @@
 import {
+  open as fsOpen,
   readdir as fsReaddir,
   readFile as fsReadFile,
   stat as fsStat,
 } from "node:fs/promises";
+import type { FileHandle } from "node:fs/promises";
 
 // [LAW:single-enforcer] One owner of the transcript-scanning in-flight-I/O
 // budget. Every readdir/stat/readFile over the ~/.claude/projects tree passes
@@ -103,3 +105,49 @@ function gated<F extends (...args: never[]) => Promise<unknown>>(fn: F): F {
 export const readdir = gated(fsReaddir);
 export const readFile = gated(fsReadFile);
 export const stat = gated(fsStat);
+
+// [LAW:single-enforcer] A bounded tail read through the SAME gate: the last
+// `maxBytes` of a file (the whole file when smaller), plus whether that window
+// reaches the file start. The open→stat→read→close runs under one gate slot, so
+// a tail read counts as one in-flight op exactly like a readFile — a transcript
+// scanner that grows its window backward must use THIS, not raw node:fs, or it
+// reintroduces the unbounded-fs state the gate forbids. Returns null when the
+// file can't be opened/read; callers treat "no readable transcript" as "no data"
+// (the same convention readFile callers apply to their rejections).
+export async function readTail(
+  path: string,
+  maxBytes: number,
+): Promise<{ buf: Buffer; fromStart: boolean } | null> {
+  return gate.run(async () => {
+    let fh: FileHandle | null = null;
+    try {
+      fh = await fsOpen(path, "r");
+      const { size } = await fh.stat();
+      const start = Math.max(0, size - maxBytes);
+      const buf = Buffer.alloc(size - start);
+      // [LAW:no-silent-fallbacks] A single read may return short — the scanner
+      // would then parse a zero-padded tail and miss cache activity. Loop until
+      // the window is filled or EOF; on a short final read (the file shrank
+      // under us) return only the bytes actually read, never the zero padding.
+      let off = 0;
+      while (off < buf.length) {
+        const { bytesRead } = await fh.read(
+          buf,
+          off,
+          buf.length - off,
+          start + off,
+        );
+        if (bytesRead === 0) break;
+        off += bytesRead;
+      }
+      return {
+        buf: off === buf.length ? buf : buf.subarray(0, off),
+        fromStart: start === 0,
+      };
+    } catch {
+      return null;
+    } finally {
+      await fh?.close();
+    }
+  });
+}

@@ -22,6 +22,22 @@ export interface GitInfo {
   isWorktree?: boolean;
 }
 
+// [LAW:one-source-of-truth] The one shape of getGitInfo's `show*` toggles. Each
+// flag opts into an extra git invocation; an unset flag leaves its GitInfo field
+// at the cheap default ("" / 0). Every caller that builds these options
+// (render-payload's gitOptionsFromClosure, the cache override) references THIS
+// type, so the toggle set cannot drift between producer and consumer.
+export interface GitInfoOptions {
+  showSha?: boolean;
+  showWorkingTree?: boolean;
+  showOperation?: boolean;
+  showTag?: boolean;
+  showTimeSinceCommit?: boolean;
+  showStashCount?: boolean;
+  showUpstream?: boolean;
+  showRepoName?: boolean;
+}
+
 export class GitService {
   private isGitRepo(workingDir: string): boolean {
     try {
@@ -96,16 +112,7 @@ export class GitService {
   // invalidation surface — exactly the trap that kz8.3 collapses.
   async getGitInfo(
     workingDir: string,
-    options: {
-      showSha?: boolean;
-      showWorkingTree?: boolean;
-      showOperation?: boolean;
-      showTag?: boolean;
-      showTimeSinceCommit?: boolean;
-      showStashCount?: boolean;
-      showUpstream?: boolean;
-      showRepoName?: boolean;
-    } = {},
+    options: GitInfoOptions = {},
     projectDir?: string,
   ): Promise<GitInfo | null> {
     return this.computeGitInfo(workingDir, options, projectDir);
@@ -113,16 +120,7 @@ export class GitService {
 
   private async computeGitInfo(
     workingDir: string,
-    options: {
-      showSha?: boolean;
-      showWorkingTree?: boolean;
-      showOperation?: boolean;
-      showTag?: boolean;
-      showTimeSinceCommit?: boolean;
-      showStashCount?: boolean;
-      showUpstream?: boolean;
-      showRepoName?: boolean;
-    } = {},
+    options: GitInfoOptions = {},
     projectDir?: string,
   ): Promise<GitInfo | null> {
     let gitDir: string;
