@@ -62,13 +62,18 @@ export interface LayoutRow {
 // loader boundary so no downstream consumer sees two layout representations
 // [LAW:one-source-of-truth].
 //
-// [LAW:types-are-the-program] `Direction` is a SINGLE-arm union today: only
-// `vertical` has a renderer (this child). It widens by one arm as each later
-// child implements it (`horizontal`, then `outline`) — the strongest theorem
-// that is still TRUE, with no representable-but-unrenderable direction.
+// [LAW:types-are-the-program] `Direction` carries the projection a container
+// applies to its child blocks as DATA. `vertical` STACKS them (concat the
+// children's line-lists); `horizontal` ZIPS them (per row, the children's cells
+// concatenate into one strip, so the powerline joiner caps ACROSS the seam —
+// abut is never valid). `outline` (a later child's menu) is the one remaining
+// unrenderable arm; the union stays the strongest theorem that is still TRUE,
+// with no representable-but-unrenderable direction.
 // [LAW:one-source-of-truth] The runtime list and the type derive from one
-// declaration; the loader validates a container's `direction` against this set.
-export const DIRECTIONS = ["vertical"] as const;
+// declaration; the loader validates a container's `direction` against this set,
+// and renderDsl's projection switch is exhaustive over it (adding an arm here
+// forces a matching render arm).
+export const DIRECTIONS = ["vertical", "horizontal"] as const;
 export type Direction = (typeof DIRECTIONS)[number];
 
 export interface CellsNode {

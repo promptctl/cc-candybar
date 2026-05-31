@@ -263,6 +263,75 @@ describe("renderDsl — multi-line layout", () => {
     expect(lines[1]!).toContain("BOT");
   });
 
+  test("horizontal container of single-line leaves is byte-identical to one cells leaf (caps across the seam — no abut)", () => {
+    // [LAW:behavior-not-structure] The defining contract of `horizontal`: it
+    // composes CELLS (not serialized blocks), so the joiner caps across the
+    // seam exactly as if the segments lived in one leaf. Abut would serialize
+    // each leaf first and string-concat — producing a triangle-into-void seam
+    // and DIFFERENT bytes. Byte-equality is the precise refutation of abut.
+    const segs = `
+      segments: {
+        sa: { template: ' {{ .a }} ', bg: 'surface', fg: 'foreground' },
+        sb: { template: ' {{ .b }} ', bg: 'surface', fg: 'foreground' },
+      },`;
+    const vars = `
+      variables: {
+        a: { kind: 'literal', value: 'AA' },
+        b: { kind: 'literal', value: 'BB' },
+      },`;
+    const leafSrc = `{ globals: { palette: 'textual-dark' },${vars}${segs}
+      root: { kind: 'cells', segments: ['sa', 'sb'] } }`;
+    const horizSrc = `{ globals: { palette: 'textual-dark' },${vars}${segs}
+      root: { kind: 'container', direction: 'horizontal', children: [
+        { kind: 'cells', segments: ['sa'] },
+        { kind: 'cells', segments: ['sb'] },
+      ] } }`;
+    const leaf = buildRuntime(leafSrc);
+    const horiz = buildRuntime(horizSrc);
+    const leafOut = renderDsl(leaf.config, leaf.compiled, leaf.store, leaf.registry, {}, basePalette(), OPTS);
+    const horizOut = renderDsl(horiz.config, horiz.compiled, horiz.store, horiz.registry, {}, basePalette(), OPTS);
+    expect(horizOut).toBe(leafOut);
+    expect(horizOut.split("\n")).toHaveLength(1);
+  });
+
+  test("horizontal container of multi-line children zips cells per row (ragged rows carry fewer cells, no padding)", () => {
+    // colL is 2 lines, colR is 1 — row 0 carries both children's cells (joined
+    // in one strip), row 1 carries only the taller child's. No rectangle padding.
+    const source = `{
+      globals: { palette: 'textual-dark' },
+      variables: {
+        l1: { kind: 'literal', value: 'L1' }, l2: { kind: 'literal', value: 'L2' },
+        r1: { kind: 'literal', value: 'R1' },
+      },
+      segments: {
+        sl1: { template: ' {{ .l1 }} ', bg: 'surface', fg: 'foreground' },
+        sl2: { template: ' {{ .l2 }} ', bg: 'surface', fg: 'foreground' },
+        sr1: { template: ' {{ .r1 }} ', bg: 'surface', fg: 'foreground' },
+      },
+      root: {
+        kind: 'container',
+        direction: 'horizontal',
+        children: [
+          { kind: 'container', direction: 'vertical', children: [
+            { kind: 'cells', segments: ['sl1'] },
+            { kind: 'cells', segments: ['sl2'] },
+          ] },
+          { kind: 'container', direction: 'vertical', children: [
+            { kind: 'cells', segments: ['sr1'] },
+          ] },
+        ],
+      },
+    }`;
+    const { config, compiled, store, registry } = buildRuntime(source);
+    const out = renderDsl(config, compiled, store, registry, {}, basePalette(), OPTS);
+    const lines = out.split("\n").map(stripAnsi);
+    expect(lines).toHaveLength(2);
+    expect(lines[0]!).toContain("L1");
+    expect(lines[0]!).toContain("R1");
+    expect(lines[1]!).toContain("L2");
+    expect(lines[1]!).not.toContain("R1");
+  });
+
   test("a container's `when` gates its whole subtree (hidden → no line)", () => {
     // A false container contributes no lines; its descendants are still walked
     // (hue stability) but emit nothing — the same contract a hidden row had.
