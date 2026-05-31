@@ -263,8 +263,17 @@ const LEAF_VERBS = new Map<string, VerbHandler>([
 // (temporary per-effect error display is a follow-up). An unknown or
 // non-leaf (e.g. nested `dispatch`) verb is a miss in LEAF_VERBS — reported,
 // never executed.
+//
+// [LAW:types-are-the-program] The aggregate PRESERVES the dispatcher's
+// input-vs-operational error classification: a leaf throws BadVerbArgs for bad
+// input (→ BAD_REQUEST) and a plain Error for an operational failure (e.g. a
+// pbcopy/open launch failure → RENDER_FAILED). If ANY effect failed
+// operationally, the whole click failed operationally (plain Error); only when
+// every failure is an input error does the aggregate stay BadVerbArgs. An
+// unknown verb is bad input — it does not flip the classification.
 const dispatch: VerbHandler = (rawValue, ctx) => {
   const errors: string[] = [];
+  let operational = false;
   for (const { verb, value } of parseEffects(rawValue)) {
     const handler = LEAF_VERBS.get(verb);
     if (!handler) {
@@ -274,11 +283,13 @@ const dispatch: VerbHandler = (rawValue, ctx) => {
     try {
       handler(value, ctx);
     } catch (e) {
+      if (!(e instanceof BadVerbArgs)) operational = true;
       errors.push(`${verb}: ${e instanceof Error ? e.message : String(e)}`);
     }
   }
   if (errors.length > 0) {
-    throw new BadVerbArgs(`dispatch: ${errors.join("; ")}`);
+    const message = `dispatch: ${errors.join("; ")}`;
+    throw operational ? new Error(message) : new BadVerbArgs(message);
   }
 };
 

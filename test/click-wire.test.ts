@@ -15,7 +15,7 @@ import {
   VERB_SET_STATE,
 } from "../src/click/wire";
 import { parseHandlerUrl } from "../src/install/index";
-import { VERBS } from "../src/daemon/verbs";
+import { VERBS, BadVerbArgs } from "../src/daemon/verbs";
 import { SessionState } from "../src/daemon/session-state";
 import { effectsOf, clickUrl } from "./helpers/click";
 
@@ -134,6 +134,15 @@ describe("dispatch verb — run all, aggregate, no nesting", () => {
     expect(() => clickUrl(url, ctx(sessionState))).toThrow(/no-such-key/);
     // ...but the earlier effect still committed (run-all, not abort-on-first).
     expect(sessionState.get(SID, "theme")).toBe("textual-dark");
+  });
+
+  test("an input-only failure keeps the BadVerbArgs (BAD_REQUEST) classification", () => {
+    // A leaf's input rejection (set-state unknown key) is BadVerbArgs; the
+    // aggregate must stay BadVerbArgs so the dispatcher maps it to BAD_REQUEST,
+    // not RENDER_FAILED. (An operational leaf failure flips it to a plain Error.)
+    const sessionState = new SessionState();
+    const url = effectsUrl([{ verb: VERB_SET_STATE, args: [SID, "no-such-key", "x"] }]);
+    expect(() => clickUrl(url, ctx(sessionState))).toThrow(BadVerbArgs);
   });
 
   test("a clean compound click applies both set effects", () => {
