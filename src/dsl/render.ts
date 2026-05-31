@@ -18,6 +18,7 @@ import type {
   VariableDecl,
   CacheDecl,
   LayoutNode,
+  Direction,
 } from "../config/dsl-types.js";
 import { HUE_STEP_VAR } from "../config/dsl-types.js";
 import type { VariableStore } from "../var-system/store.js";
@@ -76,7 +77,7 @@ export interface CompiledCellsNode {
 }
 export interface CompiledContainerNode {
   readonly kind: "container";
-  readonly direction: "vertical";
+  readonly direction: Direction;
   readonly when?: Template<RichText>;
   readonly children: readonly CompiledNode[];
 }
@@ -89,6 +90,39 @@ export type CompiledNode = CompiledCellsNode | CompiledContainerNode;
 export interface CompiledConfig {
   readonly segments: CompiledSegments;
   readonly root: CompiledNode;
+}
+
+// A rendered node is a LIST OF LINES, each line a list of cells — NOT yet
+// serialized. [LAW:types-are-the-program] Cells (not ANSI bytes) are the
+// composition substrate: the powerline joiner caps between adjacent cells, and
+// serializing a node before composition would freeze its last cell's edge to
+// the default background, making a cap across a sibling seam unrecoverable.
+// Serialization (the single joiner pass) therefore runs exactly once, at the
+// root, AFTER the whole tree has composed.
+type RenderedLines = ReadonlyArray<readonly RichText[]>;
+
+// [LAW:dataflow-not-control-flow] A container's `direction` is the projection it
+// applies to its already-rendered child blocks — DATA selecting a fold, not a
+// branch that skips work. `vertical` STACKS (concatenate the children's line-
+// lists); `horizontal` ZIPS (row i is every child's row-i cells concatenated, so
+// the joiner caps ACROSS the seam — there is no abut). The switch is exhaustive
+// over `Direction`; adding `outline` to DIRECTIONS forces a new arm here.
+function composeBlocks(
+  direction: Direction,
+  blocks: readonly RenderedLines[],
+): RenderedLines {
+  switch (direction) {
+    case "vertical":
+      return blocks.flatMap((b) => b);
+    case "horizontal": {
+      const height = blocks.reduce((m, b) => Math.max(m, b.length), 0);
+      const rows: RichText[][] = [];
+      for (let i = 0; i < height; i++) {
+        rows.push(blocks.flatMap((b) => b[i] ?? []));
+      }
+      return rows;
+    }
+  }
 }
 
 // ─── CacheDecl → CachePolicy ─────────────────────────────────────────────────
@@ -379,13 +413,14 @@ export function registerDslConfig(
  * Pipeline:
  *   1. Push payload (+ injected `term.cols`) into input boxes — once per render.
  *   2. Build the scope proxy — once per render.
- *   3. Walk the compiled layout tree (renderNode) in pre-order. A `container`
- *      stacks its children's line blocks (today only `direction: vertical`); a
- *      `cells` leaf evaluates its segments and renders to ZERO-OR-MORE lines.
- *      A node whose `when` (or an ancestor's) is false contributes no line, but
- *      its segments still advance the hue index so visible siblings keep
+ *   3. Walk the compiled layout tree (renderNode) in pre-order, producing a list
+ *      of LINES OF CELLS (not yet serialized). A `container` composes its
+ *      children's blocks by its `direction` (vertical stacks, horizontal zips
+ *      cells per row); a `cells` leaf evaluates its segments into cell lines. A
+ *      node whose `when` (or an ancestor's) is false contributes no line, but its
+ *      segments still advance the hue index so visible siblings keep
  *      positionally-stable colors.
- *   4. Join the produced lines with "\n".
+ *   4. Serialize each composed line through the ONE strip joiner and join "\n".
  *
  * [LAW:single-enforcer] The daemon calls this verbatim — no alternate render
  * path. ONE walk renders every layout, flat or nested. The test and the daemon
@@ -453,16 +488,23 @@ export function renderDsl(
   // are currently hidden.
   let segIndex = 0;
 
-  // [LAW:dataflow-not-control-flow] One walk renders any node. `visible` ANDs
-  // the node's own `when` with its ancestors' — a leaf renders only when its
-  // whole path is visible, yet its segments always advance segIndex. A
-  // container's projection is its `direction` VALUE; with only `vertical` today,
-  // children's line blocks concatenate in order.
-  const renderNode = (node: CompiledNode, parentVisible: boolean): string[] => {
+  // [LAW:dataflow-not-control-flow] One walk renders any node to LINES OF CELLS
+  // (serialization is deferred to the root). `visible` ANDs the node's own `when`
+  // with its ancestors' — a leaf renders only when its whole path is visible, yet
+  // its segments always advance segIndex. A container's projection is its
+  // `direction` VALUE: composeBlocks folds the children's blocks (vertical stacks,
+  // horizontal zips cells per row so the joiner caps across the seam).
+  const renderNode = (
+    node: CompiledNode,
+    parentVisible: boolean,
+  ): RenderedLines => {
     const visible = parentVisible && evaluateWhen(node.when, scope);
 
     if (node.kind === "container") {
-      return node.children.flatMap((child) => renderNode(child, visible));
+      return composeBlocks(
+        node.direction,
+        node.children.map((child) => renderNode(child, visible)),
+      );
     }
 
     // [LAW:dataflow-not-control-flow] The leaf accumulates VISUAL lines, not a
@@ -533,12 +575,18 @@ export function renderDsl(
     }
 
     // [LAW:dataflow-not-control-flow] A hidden leaf is absent (no line). A
-    // visible leaf renders each accumulated row line to its own strip; FlexStrip
-    // auto-wrap may further partition a strip on "\n" (the width-overflow
-    // boundary source), so both feed one flat line list.
+    // visible leaf hands back its accumulated cell lines; serialization (and
+    // FlexStrip auto-wrap) happens once at the root, never here.
     if (!visible) return [];
-    return rowLines.flatMap((line) => renderStripCells(line, opts).split("\n"));
+    return rowLines;
   };
 
-  return renderNode(compiled.root, true).join("\n");
+  // [LAW:single-enforcer] The ONE serialization pass: each composed line of cells
+  // runs through the strip joiner exactly once, here. renderStripCells may itself
+  // emit a "\n"-bearing string (FlexStrip width-overflow wrap); joining the per-
+  // line results with "\n" splices those in place — byte-identical to serializing
+  // each leaf row independently, since the cells and their order are unchanged.
+  return renderNode(compiled.root, true)
+    .map((line) => renderStripCells(line, opts))
+    .join("\n");
 }
