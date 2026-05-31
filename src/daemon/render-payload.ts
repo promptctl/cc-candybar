@@ -21,6 +21,7 @@ import type { ClaudeHookData } from "../utils/claude.js";
 import type { DslConfig, VariableDecl } from "../config/dsl-types.js";
 import { extractTemplateRefs } from "../config/dsl-loader.js";
 import type { GitInfo } from "../segments/git.js";
+import { cacheExpiresAt } from "../segments/cache.js";
 import type { SessionUsageStore } from "./cache/session-usage-store.js";
 import type { ContextProvider } from "../segments/context.js";
 import type { MetricsProvider } from "../segments/metrics.js";
@@ -62,6 +63,7 @@ export interface RenderPayload extends ClaudeHookData {
   readonly today?: TodayPayload;
   readonly block?: BlockPayload;
   readonly weekly?: WeeklyPayload;
+  readonly cache?: CachePayload;
   readonly context?: ContextPayload;
   readonly metrics?: MetricsPayload;
 }
@@ -82,6 +84,8 @@ export interface GitPayload {
   readonly upstream: string;
   readonly stash: number;
   readonly status: string;
+  readonly operation: string;
+  readonly timeSinceCommit: number;
 }
 
 export interface SessionPayload {
@@ -102,6 +106,13 @@ export interface BlockPayload {
 export interface WeeklyPayload {
   readonly percentage: number;
   readonly resetsAt: number;
+}
+
+// Prompt-cache warmth. One field — the epoch-seconds expiry instant —
+// mirroring block/weekly `resetsAt` so the DSL composes the countdown via
+// `minutesUntilReset`. Absent when no cache-bearing transcript entry exists.
+export interface CachePayload {
+  readonly expiresAt: number;
 }
 
 export interface ContextPayload {
@@ -301,6 +312,8 @@ function gitOptionsFromClosure(needed: ReadonlySet<string>): {
     ...(has("git.stash") && { showStashCount: true }),
     ...(has("git.upstream") && { showUpstream: true }),
     ...(has("git.repoName") && { showRepoName: true }),
+    ...(has("git.operation") && { showOperation: true }),
+    ...(has("git.timeSinceCommit") && { showTimeSinceCommit: true }),
   };
 }
 
@@ -386,6 +399,14 @@ export async function buildRenderPayload(
   // the formatter func — a duplicate code path was retired.)
   const fiveHour = hookData.rate_limits?.five_hour;
 
+  // Prompt-cache expiry. A synchronous bounded tail-read, gated to layouts
+  // that actually declare a cache.* input — unused layouts pay nothing. Not
+  // folded into the Promise.all above because it does no async I/O; the read
+  // is a few KB from the transcript tail.
+  const cacheExpiry = wants("cache")
+    ? cacheExpiresAt(hookData.transcript_path)
+    : null;
+
   // [LAW:one-source-of-truth] The theme variable surfaces the session's
   // resolved theme so the toolbar/tray DSL templates can encode it into
   // cc-candybar:// URLs without re-resolving. SessionState owns the value;
@@ -466,6 +487,7 @@ export async function buildRenderPayload(
         resetsAt: hookData.rate_limits.seven_day.resets_at,
       },
     }),
+    ...(cacheExpiry !== null && { cache: { expiresAt: cacheExpiry } }),
     ...(context !== null && {
       context: {
         totalTokens: context.totalTokens,
@@ -528,5 +550,7 @@ function projectGitInfo(info: GitInfo): GitPayload {
     upstream: info.upstream ?? "",
     stash: info.stashCount ?? 0,
     status: info.status,
+    operation: info.operation ?? "",
+    timeSinceCommit: info.timeSinceCommit ?? 0,
   };
 }
