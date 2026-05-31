@@ -176,9 +176,12 @@ const toolbarToggle: VerbHandler = (value, ctx) => {
 //
 // Value shape (the raw tail after the verb): the percent-encoded segment run
 //   <sessionId>/<k1>/<v1>[/<k2>/<v2>/...]. decodeSegments splits on `/` and
-//   decodes each segment, so a key or value containing `/` round-trips intact
-//   (it rides as `%2F`, never read as a separator). The N=1 form is the
-//   degenerate single-pair case — the parser walks pairs uniformly.
+//   decodes each segment — a CODEC property: a `/` inside a segment rides as
+//   `%2F` and is never read as a separator, so the wire itself is slash-safe.
+//   This is NOT an end-to-end "slash-bearing state keys are supported" claim:
+//   the loader and the state-validator factories reject slash-bearing keys and
+//   option values upstream, so a slash never reaches here in practice. The N=1
+//   form is the degenerate single-pair case — the parser walks pairs uniformly.
 const setState: VerbHandler = (rawValue, ctx) => {
   // [LAW:single-enforcer] Decode the whole encoded tail at this boundary; the
   // session id is the head, the rest are the (key,value) pairs.
