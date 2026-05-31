@@ -48,7 +48,7 @@ describe("cacheExpiresAt", () => {
     for (const dir of createdDirs) rmSync(dir, { recursive: true, force: true });
   });
 
-  it("projects the LAST cache-bearing entry forward by the TTL", () => {
+  it("projects the LAST cache-bearing entry forward by the TTL", async () => {
     const last = "2026-05-30T12:00:00.000Z";
     const path = writeTranscript([
       entry({ ts: "2026-05-30T11:00:00.000Z", cacheRead: 100 }),
@@ -56,10 +56,10 @@ describe("cacheExpiresAt", () => {
       entry({ ts: last, cacheRead: 50 }),
     ]);
     const expected = Math.floor(Date.parse(last) / 1000) + TTL_SEC;
-    expect(cacheExpiresAt(path)).toBe(expected);
+    expect(await cacheExpiresAt(path)).toBe(expected);
   });
 
-  it("ignores entries with zero cache tokens", () => {
+  it("ignores entries with zero cache tokens", async () => {
     const cacheHit = "2026-05-30T11:00:00.000Z";
     const path = writeTranscript([
       entry({ ts: cacheHit, cacheRead: 100 }),
@@ -67,22 +67,22 @@ describe("cacheExpiresAt", () => {
       entry({ ts: "2026-05-30T12:00:00.000Z", cacheRead: 0, cacheCreation: 0 }),
     ]);
     const expected = Math.floor(Date.parse(cacheHit) / 1000) + TTL_SEC;
-    expect(cacheExpiresAt(path)).toBe(expected);
+    expect(await cacheExpiresAt(path)).toBe(expected);
   });
 
-  it("returns null when no entry ever touched the cache", () => {
+  it("returns null when no entry ever touched the cache", async () => {
     const path = writeTranscript([
       entry({ ts: "2026-05-30T11:00:00.000Z" }),
       entry({ ts: "2026-05-30T12:00:00.000Z" }),
     ]);
-    expect(cacheExpiresAt(path)).toBeNull();
+    expect(await cacheExpiresAt(path)).toBeNull();
   });
 
-  it("returns null for a missing transcript", () => {
-    expect(cacheExpiresAt("/no/such/transcript.jsonl")).toBeNull();
+  it("returns null for a missing transcript", async () => {
+    expect(await cacheExpiresAt("/no/such/transcript.jsonl")).toBeNull();
   });
 
-  it("finds a cache hit beyond the first 64KB tail chunk", () => {
+  it("finds a cache hit beyond the first 64KB tail chunk", async () => {
     const cacheHit = "2026-05-30T10:00:00.000Z";
     const filler = Array.from({ length: 2000 }, (_, i) =>
       entry({ ts: `2026-05-30T11:${String(i % 60).padStart(2, "0")}:00.000Z` }),
@@ -90,6 +90,6 @@ describe("cacheExpiresAt", () => {
     // One cache-bearing entry, then >64KB of zero-cache filler after it.
     const path = writeTranscript([entry({ ts: cacheHit, cacheRead: 1 }), ...filler]);
     const expected = Math.floor(Date.parse(cacheHit) / 1000) + TTL_SEC;
-    expect(cacheExpiresAt(path)).toBe(expected);
+    expect(await cacheExpiresAt(path)).toBe(expected);
   });
 });

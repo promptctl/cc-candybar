@@ -151,12 +151,6 @@ export interface RenderPayloadDeps {
 
 // ─── Builder ─────────────────────────────────────────────────────────────────
 
-// Autocompact buffer used by the context provider. Hardcoded here because the
-// DSL config has no equivalent of the legacy `context.autocompactBuffer` knob
-// — if a user needs a different value, they configure the context segment's
-// template to compute differently. Matches the legacy default.
-const DEFAULT_AUTOCOMPACT_BUFFER = 33000;
-
 // ─── Config-driven provider gating ───────────────────────────────────────────
 //
 // [LAW:dataflow-not-control-flow] Whether a provider fires is selected by
@@ -360,7 +354,7 @@ export async function buildRenderPayload(
   // the destructure shape).
   const nullP = <T>(): Promise<T | null> => Promise.resolve(null);
 
-  const [gitInfo, usage, today, context, metrics, tmuxSession] =
+  const [gitInfo, usage, today, context, metrics, tmuxSession, cacheExpiry] =
     await Promise.all([
       wants("git")
         ? deps.gitProvider
@@ -380,9 +374,7 @@ export async function buildRenderPayload(
         ? deps.usageStore.getTodayInfo(hookData).catch(() => null)
         : nullP<Awaited<ReturnType<SessionUsageStore["getTodayInfo"]>>>(),
       wants("context")
-        ? deps.contextProvider
-            .getContextInfo(hookData, DEFAULT_AUTOCOMPACT_BUFFER)
-            .catch(() => null)
+        ? deps.contextProvider.getContextInfo(hookData).catch(() => null)
         : nullP<Awaited<ReturnType<ContextProvider["getContextInfo"]>>>(),
       wants("metrics")
         ? deps.metricsProvider
@@ -392,20 +384,18 @@ export async function buildRenderPayload(
       wants("tmux")
         ? deps.tmuxService.getSessionId().catch(() => null)
         : nullP<string>(),
+      // Prompt-cache expiry: a bounded tail-read through the gated transcript-fs
+      // seam, so it runs alongside the other providers and stays in the shared
+      // in-flight budget rather than blocking the event loop on sync fs.
+      wants("cache")
+        ? cacheExpiresAt(hookData.transcript_path).catch(() => null)
+        : nullP<number>(),
     ]);
   // [LAW:dataflow-not-control-flow] block.* reads straight from hookData
   // alongside weekly. (The prior dedicated provider only re-derived
   // `minutesUntilReset(resets_at)`, which the DSL template composes via
   // the formatter func — a duplicate code path was retired.)
   const fiveHour = hookData.rate_limits?.five_hour;
-
-  // Prompt-cache expiry. A synchronous bounded tail-read, gated to layouts
-  // that actually declare a cache.* input — unused layouts pay nothing. Not
-  // folded into the Promise.all above because it does no async I/O; the read
-  // is a few KB from the transcript tail.
-  const cacheExpiry = wants("cache")
-    ? cacheExpiresAt(hookData.transcript_path)
-    : null;
 
   // [LAW:one-source-of-truth] The theme variable surfaces the session's
   // resolved theme so the toolbar/tray DSL templates can encode it into

@@ -19,7 +19,7 @@
 // segment's `when` predicate reads as hidden — there is no "0 means hidden"
 // ambiguity to defend against downstream.
 
-import { openSync, readSync, closeSync, statSync } from "node:fs";
+import { readTail } from "../utils/transcript-fs.js";
 
 // Anthropic prompt cache TTL. A const, not a knob: it is a property of the
 // upstream cache, not of this renderer. If a future cache tier ships a
@@ -41,45 +41,34 @@ const TIMESTAMP_RE = /"timestamp":"([^"]+)"/;
  * match the unit of block/weekly `resetsAt`, so the DSL composes
  * `minutesUntilReset .cache.expiresAt` with no unit translation.
  */
-export function cacheExpiresAt(transcriptPath: string): number | null {
-  const lastCacheMs = findLastCacheActivityTs(transcriptPath);
+export async function cacheExpiresAt(
+  transcriptPath: string,
+): Promise<number | null> {
+  const lastCacheMs = await findLastCacheActivityTs(transcriptPath);
   if (lastCacheMs == null) return null;
   return Math.floor((lastCacheMs + CACHE_TTL_MS) / 1000);
 }
 
 // Tail-read the JSONL transcript and return the millisecond timestamp of the
-// last entry with cache activity. Grows the read window backward from EOF
-// until a hit is found or the cap is reached — the relevant entry is almost
-// always within the final few KB, so the common case reads one chunk.
-function findLastCacheActivityTs(transcriptPath: string): number | null {
-  let fd: number | null = null;
-  try {
-    fd = openSync(transcriptPath, "r");
-    const size = statSync(transcriptPath).size;
-    let tailStart = Math.max(0, size - TAIL_CHUNK);
-
-    while (true) {
-      const chunkLen = size - tailStart;
-      const chunk = Buffer.alloc(chunkLen);
-      readSync(fd, chunk, 0, chunkLen, tailStart);
-
-      const ts = scanBufferForLastCacheTs(chunk, tailStart === 0);
-      if (ts != null) return ts;
-      if (tailStart === 0) return null;
-
-      const grown = Math.min(chunk.length * 2, TAIL_MAX);
-      const next = Math.max(0, size - grown);
-      if (next === tailStart) return null;
-      tailStart = next;
-    }
-  } catch {
-    return null;
-  } finally {
-    if (fd != null)
-      try {
-        closeSync(fd);
-      } catch {}
+// last entry with cache activity. The relevant entry is almost always within
+// the final few KB, so the common case reads one TAIL_CHUNK; only a transcript
+// whose last cache hit is deeper grows to TAIL_MAX. [LAW:single-enforcer] both
+// reads go through the gated transcript-fs seam (readTail), so this scanner is
+// bounded with every other transcript read instead of blocking the event loop
+// on synchronous fs.
+async function findLastCacheActivityTs(
+  transcriptPath: string,
+): Promise<number | null> {
+  for (const maxBytes of [TAIL_CHUNK, TAIL_MAX]) {
+    const tail = await readTail(transcriptPath, maxBytes);
+    if (tail == null) return null;
+    const ts = scanBufferForLastCacheTs(tail.buf, tail.fromStart);
+    if (ts != null) return ts;
+    // The window reached the file start: the whole transcript is scanned, no
+    // hit exists — growing further would re-read the same bytes.
+    if (tail.fromStart) return null;
   }
+  return null;
 }
 
 function scanBufferForLastCacheTs(
