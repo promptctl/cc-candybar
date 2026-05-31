@@ -20,7 +20,7 @@ import path from "node:path";
 import type { ClaudeHookData } from "../utils/claude.js";
 import type { DslConfig, VariableDecl } from "../config/dsl-types.js";
 import { extractTemplateRefs } from "../config/dsl-loader.js";
-import type { GitInfo } from "../segments/git.js";
+import type { GitInfo, GitInfoOptions } from "../segments/git.js";
 import { cacheExpiresAt } from "../segments/cache.js";
 import type { SessionUsageStore } from "./cache/session-usage-store.js";
 import type { ContextProvider } from "../segments/context.js";
@@ -284,13 +284,7 @@ function anyPathStartsWith(
 // computing them requires extra git invocations), and a user who declares
 // `git.sha` or `git.staged` would see their template evaluate against
 // empty strings or zeros.
-function gitOptionsFromClosure(needed: ReadonlySet<string>): {
-  showSha?: boolean;
-  showWorkingTree?: boolean;
-  showStashCount?: boolean;
-  showUpstream?: boolean;
-  showRepoName?: boolean;
-} {
+function gitOptionsFromClosure(needed: ReadonlySet<string>): GitInfoOptions {
   const has = (path: string): boolean => needed.has(path);
   // `git.staged` / `git.unstaged` / `git.untracked` / `git.conflicts` all
   // come from one `git status --porcelain` call — any one of them turning
