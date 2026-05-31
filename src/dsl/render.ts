@@ -118,7 +118,7 @@ function composeBlocks(
       const height = blocks.reduce((m, b) => Math.max(m, b.length), 0);
       const rows: RichText[][] = [];
       for (let i = 0; i < height; i++) {
-        rows.push(blocks.flatMap((b) => [...(b[i] ?? [])]));
+        rows.push(blocks.flatMap((b) => b[i] ?? []));
       }
       return rows;
     }
