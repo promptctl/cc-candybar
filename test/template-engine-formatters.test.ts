@@ -352,6 +352,7 @@ describe("formatterFuncs registry", () => {
       "formatLongTimeRemaining",
       "formatModelName",
       "formatResponseTime",
+      "formatTimeSince",
       "formatTokenBreakdown",
       "formatTokenCount",
       "formatTokens",

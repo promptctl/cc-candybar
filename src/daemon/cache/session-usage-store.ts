@@ -210,14 +210,19 @@ export class SessionUsageStore {
   ): Promise<UsageInfo> {
     const record = await this.ingest(sessionId, hookData?.transcript_path);
     const base = record?.sessionInfo ?? EMPTY_SESSION_INFO;
-    // [LAW:one-source-of-truth] The record's truth is the transcript
-    // (calculatedCost / tokens, keyed by mtime). `officialCost` is the
-    // hook-reported cost — a DIFFERENT per-render source that must not be
-    // frozen into the mtime-keyed record (that would serve a stale value), so
-    // it is overlaid here at read time. `cost` stays the transcript total; the
-    // overlay never changes it.
+    // [LAW:one-source-of-truth] Claude's reported total_cost_usd is the
+    // authoritative cost of the active session. base.cost (transcript entries
+    // priced by PricingService against a hand-maintained rate table) is a
+    // reimplementation — kept ONLY as a fallback for clients that omit cost,
+    // and to feed the cross-session `today` total, which has no native source
+    // (past sessions expose only their transcripts, not a live cost figure).
+    // The native cost is overlaid at READ time, not frozen into the mtime-keyed
+    // record, because it changes every render while the transcript total moves
+    // only when the file does.
     const officialCost = hookData?.cost?.total_cost_usd ?? null;
-    return { session: { ...base, officialCost } };
+    return {
+      session: { ...base, cost: officialCost ?? base.cost, officialCost },
+    };
   }
 
   // The `today` projection: cross-session sum of every record's today bucket.

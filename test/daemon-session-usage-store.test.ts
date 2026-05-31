@@ -102,7 +102,7 @@ describe("SessionUsageStore — session projection", () => {
     }
   });
 
-  test("session cost projects the parsed transcript total", async () => {
+  test("session cost falls back to the priced transcript total when the hook omits cost", async () => {
     const t = join(dir, "A.jsonl");
     writeFileSync(
       t,
@@ -110,8 +110,40 @@ describe("SessionUsageStore — session projection", () => {
     );
     const store = new SessionUsageStore({ sweepIntervalMs: 0 });
     try {
+      // hook() carries no cost block → officialCost null → display the
+      // transcript total.
       const info = await store.getUsageInfo("A", hook("A", t));
       expect(info.session.cost).toBeCloseTo(0.03, 5);
+      expect(info.session.officialCost).toBeNull();
+      expect(info.session.calculatedCost).toBeCloseTo(0.03, 5);
+    } finally {
+      store.close();
+    }
+  });
+
+  test("session cost prefers the native total_cost_usd over the priced transcript total", async () => {
+    const t = join(dir, "A.jsonl");
+    writeFileSync(
+      t,
+      usageLine("a1", new Date(), 0.01) + usageLine("a2", new Date(), 0.02),
+    );
+    const store = new SessionUsageStore({ sweepIntervalMs: 0 });
+    try {
+      const hd = hook("A", t);
+      // Claude's authoritative figure differs from the rate-table sum (0.03).
+      hd.cost = {
+        total_cost_usd: 0.99,
+        total_duration_ms: 0,
+        total_api_duration_ms: 0,
+        total_lines_added: 0,
+        total_lines_removed: 0,
+      };
+      const info = await store.getUsageInfo("A", hd);
+      // Displayed cost is the native number; the priced sum is retained
+      // separately (it still feeds the cross-session `today` total).
+      expect(info.session.cost).toBeCloseTo(0.99, 5);
+      expect(info.session.officialCost).toBeCloseTo(0.99, 5);
+      expect(info.session.calculatedCost).toBeCloseTo(0.03, 5);
     } finally {
       store.close();
     }

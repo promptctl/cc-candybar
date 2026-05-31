@@ -29,6 +29,13 @@ import {
   type WidgetDecl,
 } from "../config/dsl-types.js";
 import { listResolvablePaletteNames, STYLE_ORDER } from "../themes/policy.js";
+import {
+  effectsUrl,
+  VERB_COPY,
+  VERB_OPEN_VSCODE,
+  VERB_SET_STATE,
+  type Effect,
+} from "../click/wire.js";
 
 // ─── Compiled shapes ───────────────────────────────────────────────────────────
 
@@ -247,51 +254,49 @@ function joinDisplay(
 
 // ─── Rendering ───────────────────────────────────────────────────────────────
 
-// [LAW:single-enforcer] One click-URL composer. encodeURIComponent each segment
-// and join with "/". parseHandlerUrl (src/install/index.ts) decodes the WHOLE
-// value with a single decodeURIComponent before the daemon splits on "/", so a
-// `%2F` inside a segment WOULD decode to a real "/" and be misread as a
-// separator. That never happens here because set-state keys/values are
-// slash-free by construction (the loader and validators reject "/"), so
-// encodeURIComponent emits no `%2F` — the only "/" the daemon sees are the
-// structural joiners. The per-segment encoding still matters for other reserved
-// characters (spaces, %, etc.), which round-trip cleanly through the single decode.
-function clickUrl(verb: string, ...segments: string[]): string {
-  const tail = segments.map((s) => encodeURIComponent(s)).join("/");
-  return `cc-candybar://${verb}/${tail}`;
+// [LAW:single-enforcer] One set-state URL helper, used by the menu's ←/→/✕ and
+// the stepper's ◀/▶ — each is a single set-state effect. effectsUrl owns the
+// wire format; this just names the common one-effect shape.
+function setStateUrl(sessionId: string, ...pairs: string[]): string {
+  return effectsUrl([{ verb: VERB_SET_STATE, args: [sessionId, ...pairs] }]);
 }
 
-// [LAW:dataflow-not-control-flow] A button's onClick is homogeneous (the loader
-// enforces: all `set`, or one `copy`, or one `open`). set actions batch into one
-// set-state URL (the .2 batched wire); copy/open compose their own verb URL.
-// `optionValue` is the option string for an optionsFrom button (bound into set
-// actions whose literal value is null), else null.
+// [LAW:dataflow-not-control-flow] Project a button's compiled actions onto an
+// ordered effect list — the single total mapping of the action union to wire
+// effects (consumers never re-switch on action kind). All `set` actions BATCH
+// into one atomic set-state effect (its pairs land transactionally); each
+// `copy`/`open` becomes its own effect. The set-state effect leads, then
+// copy/open in author order. A homogeneous click is the degenerate case — one
+// effect — so there is no all-set-vs-copy branch: the same projection serves
+// 1 effect or N. `optionValue` binds into set actions whose literal value is
+// null (an optionsFrom picker), else null.
 function composeUrl(
   actions: readonly CompiledAction[],
   scope: object,
   sessionId: string,
   optionValue: string | null,
 ): string {
-  const sets = actions.filter(
-    (a): a is Extract<CompiledAction, { kind: "set" }> => a.kind === "set",
+  const sets = actions.filter((a) => a.kind === "set");
+  const setEffect: Effect[] =
+    sets.length > 0
+      ? [
+          {
+            verb: VERB_SET_STATE,
+            args: [
+              sessionId,
+              ...sets.flatMap((a) => [a.key, a.value ?? optionValue ?? ""]),
+            ],
+          },
+        ]
+      : [];
+  const sideEffects = actions.flatMap((a): Effect[] =>
+    a.kind === "copy"
+      ? [{ verb: VERB_COPY, args: [evalTemplate(a.text, scope)] }]
+      : a.kind === "open"
+        ? [{ verb: VERB_OPEN_VSCODE, args: [evalTemplate(a.target, scope)] }]
+        : [],
   );
-  if (sets.length > 0) {
-    const pairs = sets.flatMap((a) => [a.key, a.value ?? optionValue ?? ""]);
-    return clickUrl("set-state", sessionId, ...pairs);
-  }
-  // [LAW:no-defensive-null-guards] The loader guarantees a non-set button has
-  // exactly one copy/open action; index 0 is that action by construction.
-  const action = actions[0]!;
-  if (action.kind === "copy") {
-    return clickUrl("copy", evalTemplate(action.text, scope));
-  }
-  if (action.kind === "open") {
-    return clickUrl("open-vscode", evalTemplate(action.target, scope));
-  }
-  // [LAW:types-are-the-program] Unreachable: sets.length===0 above means no set
-  // action, and the loader rejects an empty/mixed onClick — so index 0 is
-  // copy/open. The throw makes the exhaustiveness explicit rather than silent.
-  throw new Error("widget: non-set button had no copy/open action");
+  return effectsUrl([...setEffect, ...sideEffects]);
 }
 
 function evalTemplate(tpl: Template<RichText>, scope: object): string {
@@ -329,9 +334,11 @@ interface Cell {
 // [LAW:one-source-of-truth] Expand one compiled item into its cells. An option
 // picker yields one cell per option (each binding its value into the set + the
 // active mark); a fixed button yields one cell. `extraSets` (a menu's close-set)
-// is appended ONLY to set-based items — a copy/open item composes to a single
-// non-set verb URL that can't also carry a set, so appending there is a no-op by
-// construction rather than a mis-batch.
+// is always appended — composeUrl batches every set into one atomic set-state
+// effect, so the close-set rides along whether the item itself sets, copies, or
+// opens. [LAW:dataflow-not-control-flow] No "is this item all-set" branch: the
+// projection absorbs the close-set uniformly, so a copy-only menu item still
+// closes the menu on click.
 function expandItemCells(
   item: CompiledButton,
   scope: object,
@@ -339,9 +346,7 @@ function expandItemCells(
   store: VariableStore,
   extraSets: readonly CompiledAction[],
 ): Cell[] {
-  const allSet =
-    item.actions.length > 0 && item.actions.every((a) => a.kind === "set");
-  const actions = allSet ? [...item.actions, ...extraSets] : item.actions;
+  const actions = [...item.actions, ...extraSets];
   if (item.options !== null) {
     const current =
       item.currentVar !== null ? readVar(store, item.currentVar) : "";
@@ -474,7 +479,7 @@ function renderMenu(
   const pageCells = pages[page] ?? [];
 
   const setUrl = (value: number | string): string =>
-    clickUrl("set-state", sessionId, menu.stateKey, String(value));
+    setStateUrl(sessionId, menu.stateKey, String(value));
 
   const frags: RichText[] = [linkFragment(MENU_CLOSE, setUrl(-1), false)];
   if (page > 0) frags.push(linkFragment(MENU_PREV, setUrl(page - 1), false));
@@ -517,7 +522,7 @@ function renderStepper(
   const wrapped = (v: number): number =>
     v > stepper.max ? stepper.min : v < stepper.min ? stepper.max : v;
   const setUrl = (value: number): string =>
-    clickUrl("set-state", sessionId, stepper.stateKey, String(value));
+    setStateUrl(sessionId, stepper.stateKey, String(value));
   return assembleFragments([
     linkFragment(STEP_DEC, setUrl(wrapped(dec)), false),
     new RichText(String(current)),

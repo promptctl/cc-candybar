@@ -21,6 +21,17 @@
 import { launchSync } from "../../proc/launch";
 import type { SessionStateRW } from "../session-state";
 import { listStateKeys, validateStateWrite } from "./state-validators";
+import {
+  decodeSegments,
+  parseEffects,
+  VERB_COPY,
+  VERB_DISPATCH,
+  VERB_OPEN_VSCODE,
+  VERB_SET_STATE,
+  VERB_SHOW_CONFIG_ERROR,
+  VERB_SHOW_CONFIG_WARNING,
+  VERB_TOOLBAR_TOGGLE,
+} from "../../click/wire";
 
 export interface VerbContext {
   readonly sessionState: SessionStateRW;
@@ -59,24 +70,24 @@ function requireSessionId(value: string): string {
   return value;
 }
 
-// [LAW:dataflow-not-control-flow] Split value on the FIRST `/` only.
-// Session-bound multi-arg verbs encode as `<sessionId>/<rest>` where
-// <rest> may itself contain `/`. Splitting once preserves the rest verbatim.
-function splitSessionAndRest(value: string): {
-  sessionId: string;
-  rest: string;
-} {
-  const slash = value.indexOf("/");
-  if (slash === -1) return { sessionId: value, rest: "" };
-  return {
-    sessionId: value.slice(0, slash),
-    rest: value.slice(slash + 1),
-  };
+// [LAW:types-are-the-program] A single-argument verb (copy/open/toolbar/show-
+// config) carries ONE argument: the WHOLE value, decoded once. It must NOT split
+// on "/" the way the multi-arg set-state does — a single-arg value legitimately
+// contains "/" (a copy of "a/b", an open path), and an old direct `copy/a/b`
+// scrollback link would be truncated at the first slash if split. The verb's
+// arity picks the codec: 1 arg → decode the whole tail; N args → decodeSegments.
+// parseHandlerUrl no longer decodes the value, so the decode lives with the verb
+// that knows its shape [LAW:single-enforcer].
+function oneArg(value: string): string {
+  return decodeURIComponent(value);
 }
 
 // ─── Verb handlers ───────────────────────────────────────────────────────────
 
-const copy: VerbHandler = (text, ctx) => {
+// [LAW:single-enforcer] One clipboard primitive, no decode — both the `copy`
+// verb (decodes a wire segment) and the diagnostic verbs (already hold a plain
+// message) funnel here so the launch + rate-limit handling lives in one place.
+function pbcopy(text: string, ctx: VerbContext): void {
   const result = launchSync({
     bin: "/usr/bin/pbcopy",
     stdinInput: text,
@@ -94,12 +105,14 @@ const copy: VerbHandler = (text, ctx) => {
       `pbcopy failed (${result.reason}, exit ${result.exitCode ?? "null"})`,
     );
   }
-};
+}
 
-const openVscode: VerbHandler = (target, ctx) => {
+const copy: VerbHandler = (value, ctx) => pbcopy(oneArg(value), ctx);
+
+const openVscode: VerbHandler = (value, ctx) => {
   const result = launchSync({
     bin: "/usr/bin/open",
-    args: ["-a", "Visual Studio Code", target],
+    args: ["-a", "Visual Studio Code", oneArg(value)],
     category: "click.open",
   });
   if (!result.ok) {
@@ -113,23 +126,22 @@ const openVscode: VerbHandler = (target, ctx) => {
   }
 };
 
-// Click on the ⚠ in the bar copies the parse error to clipboard. The value
-// arrives already URL-decoded by parseHandlerUrl on the client; downstream
-// treats it as a plain string.
-const showConfigError: VerbHandler = (message, ctx) => copy(message, ctx);
+// Click on the ⚠ in the bar copies the parse error to clipboard.
+const showConfigError: VerbHandler = (value, ctx) => pbcopy(oneArg(value), ctx);
 
 // [LAW:one-type-per-behavior] Warnings (advisory diagnostics — e.g. config
 // extension collision) and errors (load-fatal) are surfaced as distinct
 // icons in the bar so the operator can tell them apart at a glance. The
 // click behavior is the same — copy the message — but the diagnostic
 // categories are kept in separate channels through the render pipeline.
-const showConfigWarning: VerbHandler = (message, ctx) => copy(message, ctx);
+const showConfigWarning: VerbHandler = (value, ctx) =>
+  pbcopy(oneArg(value), ctx);
 
 // [LAW:one-source-of-truth] SessionState is the canonical store for
 // toolbar-expanded state (eir merge). Toggle via set/clear; the file-backed
 // storage owned by the daemon process persists the change automatically.
 const toolbarToggle: VerbHandler = (value, ctx) => {
-  const sessionId = requireSessionId(value);
+  const sessionId = requireSessionId(oneArg(value));
   const expanded = ctx.sessionState.get(sessionId, "toolbar-expanded");
   if (expanded) ctx.sessionState.clear(sessionId, "toolbar-expanded");
   else ctx.sessionState.set(sessionId, "toolbar-expanded", "1");
@@ -162,28 +174,28 @@ const toolbarToggle: VerbHandler = (value, ctx) => {
 // the fourth failed." A widget click is one transactional intent;
 // partial application would leave the UI in a state no author wrote.
 //
-// Wire shape: cc-candybar://set-state/<sessionId>/<k1>/<v1>[/<k2>/<v2>/...]
-//   The tail after <sessionId> is an even-count sequence of (key,
-//   value) segments. The N=1 form `<sid>/<k>/<v>` is the degenerate
-//   case — single-pair callers do not change. Slash-bearing values are
-//   structurally unrepresentable in this wire shape (a `/` inside a
-//   value would parse as the next key boundary); no current validator
-//   accepts slash-bearing values, so this is a non-breaking shape
-//   constraint, not a regression.
+// Value shape (the raw tail after the verb): the percent-encoded segment run
+//   <sessionId>/<k1>/<v1>[/<k2>/<v2>/...]. decodeSegments splits on `/` and
+//   decodes each segment — a CODEC property: a `/` inside a segment rides as
+//   `%2F` and is never read as a separator, so the wire itself is slash-safe.
+//   This is NOT an end-to-end "slash-bearing state keys are supported" claim:
+//   the loader and the state-validator factories reject slash-bearing keys and
+//   option values upstream, so a slash never reaches here in practice. The N=1
+//   form is the degenerate single-pair case — the parser walks pairs uniformly.
 const setState: VerbHandler = (rawValue, ctx) => {
-  const { sessionId, rest: pairsTail } = splitSessionAndRest(rawValue);
+  // [LAW:single-enforcer] Decode the whole encoded tail at this boundary; the
+  // session id is the head, the rest are the (key,value) pairs.
+  const [sessionId = "", ...rest] = decodeSegments(rawValue);
   const sid = requireSessionId(sessionId);
-  if (!pairsTail)
+  if (rest.length === 0)
     throw new BadVerbArgs(
       `set-state: <key>/<value> is required (have keys: ${listStateKeys().join(", ")})`,
     );
-  // [LAW:dataflow-not-control-flow] One uniform split; the pair count
-  // emerges from the data. The parser walks the same loop for N=1 and
-  // N=K — no branch on "is this a batch."
-  const segments = pairsTail.split("/");
-  if (segments.length % 2 !== 0) {
+  // [LAW:dataflow-not-control-flow] The pair count emerges from the data. The
+  // loop walks the same path for N=1 and N=K — no branch on "is this a batch."
+  if (rest.length % 2 !== 0) {
     throw new BadVerbArgs(
-      `set-state: expected even-count <key>/<value> pairs, got ${segments.length} ` +
+      `set-state: expected even-count <key>/<value> pairs, got ${rest.length} ` +
         `segment(s) after session id (have keys: ${listStateKeys().join(", ")})`,
     );
   }
@@ -192,9 +204,9 @@ const setState: VerbHandler = (rawValue, ctx) => {
   // about to happen is legal — once it's built, the write loop is
   // forced (no branches, no failures possible).
   const validated: Array<{ key: string; value: string }> = [];
-  for (let i = 0; i < segments.length; i += 2) {
-    const key = segments[i]!;
-    const incoming = segments[i + 1]!;
+  for (let i = 0; i < rest.length; i += 2) {
+    const key = rest[i]!;
+    const incoming = rest[i + 1]!;
     // [LAW:types-are-the-program] An empty key is a structural error
     // (missing segment), not a semantic one (validator rejection of an
     // unknown key). Routing it to the unknown-key validator message
@@ -204,7 +216,7 @@ const setState: VerbHandler = (rawValue, ctx) => {
     if (!key) {
       throw new BadVerbArgs(
         `set-state: empty key at pair ${i / 2 + 1} ` +
-          `(expected <sessionId>/<key>/<value>[/<key>/<value>...])`,
+          `(expected <sessionId>/<key>/<value>[/<key>/<value>...] segments)`,
       );
     }
     const result = validateStateWrite(key, incoming);
@@ -225,28 +237,72 @@ const setState: VerbHandler = (rawValue, ctx) => {
 
 // ─── Registry ───────────────────────────────────────────────────────────────
 
-// [LAW:one-source-of-truth] The verb table is THE list of supported click
-// verbs. Order is alphabetical for diff-stability — the daemon does not
-// care about order, but human readers do.
+// [LAW:one-source-of-truth] The LEAF verbs — every click effect that does real
+// work. `dispatch` (below) is NOT here: it folds an effect list back through
+// THIS map, so a dispatch effect can never resolve to dispatch and nesting is
+// structurally impossible [LAW:types-are-the-program] — no recursion guard, the
+// shape forbids it.
 //
-// [LAW:types-are-the-program] `ReadonlyMap` is the dispatch type whose
-// lookup is `(verb) → VerbHandler | undefined` with no prototype chain.
-// The wire-level `verb` field is untrusted input; a `__proto__` or
-// `constructor` value over a plain object would be a truthy hit on
-// Object.prototype that then throws on invocation (RENDER_FAILED instead
-// of BAD_REQUEST). Map makes the wrong dispatch unrepresentable, matching
-// the in-memory dispatching pattern in src/daemon/session-state.ts.
+// [LAW:types-are-the-program] `Map` is the dispatch type whose lookup is
+// `(verb) → VerbHandler | undefined` with no prototype chain. The wire-level
+// `verb` field is untrusted input; a `__proto__` or `constructor` value over a
+// plain object would be a truthy hit on Object.prototype that then throws on
+// invocation (RENDER_FAILED instead of BAD_REQUEST). Map makes the wrong
+// dispatch unrepresentable, matching src/daemon/session-state.ts.
+const LEAF_VERBS = new Map<string, VerbHandler>([
+  [VERB_COPY, copy],
+  [VERB_OPEN_VSCODE, openVscode],
+  [VERB_SET_STATE, setState],
+  [VERB_SHOW_CONFIG_ERROR, showConfigError],
+  [VERB_SHOW_CONFIG_WARNING, showConfigWarning],
+  [VERB_TOOLBAR_TOGGLE, toolbarToggle],
+]);
+
+// [LAW:dataflow-not-control-flow] One click is an ordered list of effects; the
+// dispatcher folds the list, running EVERY effect through the leaf table. The
+// effect count is data — N=1 and N=100 walk the identical loop, no plain-vs-
+// compound branch. [LAW:no-silent-fallbacks] Every effect runs even if an
+// earlier one failed; failures accumulate and surface as ONE aggregated error
+// (temporary per-effect error display is a follow-up). An unknown or
+// non-leaf (e.g. nested `dispatch`) verb is a miss in LEAF_VERBS — reported,
+// never executed.
+//
+// [LAW:types-are-the-program] The aggregate PRESERVES the dispatcher's
+// input-vs-operational error classification: a leaf throws BadVerbArgs for bad
+// input (→ BAD_REQUEST) and a plain Error for an operational failure (e.g. a
+// pbcopy/open launch failure → RENDER_FAILED). If ANY effect failed
+// operationally, the whole click failed operationally (plain Error); only when
+// every failure is an input error does the aggregate stay BadVerbArgs. An
+// unknown verb is bad input — it does not flip the classification.
+const dispatch: VerbHandler = (rawValue, ctx) => {
+  const errors: string[] = [];
+  let operational = false;
+  for (const { verb, value } of parseEffects(rawValue)) {
+    const handler = LEAF_VERBS.get(verb);
+    if (!handler) {
+      errors.push(`unknown effect verb "${verb}"`);
+      continue;
+    }
+    try {
+      handler(value, ctx);
+    } catch (e) {
+      if (!(e instanceof BadVerbArgs)) operational = true;
+      errors.push(`${verb}: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+  if (errors.length > 0) {
+    const message = `dispatch: ${errors.join("; ")}`;
+    throw operational ? new Error(message) : new BadVerbArgs(message);
+  }
+};
+
+// [LAW:one-source-of-truth] The full dispatch table the daemon looks up against:
+// every leaf verb plus the one `dispatch` wrapper. Old scrollback links that
+// name a leaf verb directly still resolve here; new renders all emit `dispatch`.
 export const VERBS: ReadonlyMap<string, VerbHandler> = new Map<
   string,
   VerbHandler
->([
-  ["copy", copy],
-  ["open-vscode", openVscode],
-  ["set-state", setState],
-  ["show-config-error", showConfigError],
-  ["show-config-warning", showConfigWarning],
-  ["toolbar-toggle", toolbarToggle],
-]);
+>([...LEAF_VERBS, [VERB_DISPATCH, dispatch]]);
 
 export const VERB_NAMES: readonly string[] = Object.freeze([
   ...VERBS.keys(),

@@ -29,8 +29,13 @@ import {
   registerStateValidator,
   validateStateWrite,
 } from "../src/daemon/verbs/state-validators";
+import { effectsOf } from "./helpers/click";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
+
+// The effect a hue-step ◀/▶ click applies: one set-state writing the value.
+const stepEffects = (...values: string[]) =>
+  values.map((v) => [{ verb: "set-state", args: ["s1", "hue-step", v] }]);
 
 function opts(width: number) {
   return {
@@ -96,11 +101,15 @@ function buildRuntime(src: string, sessionId = "s1") {
   // [LAW:single-enforcer] Apply a set-state click exactly as the verb does:
   // validate through the derived gate, then write the canonical value.
   const click = (url: string): void => {
-    const tail = url.replace("cc-candybar://set-state/", "").split("/");
-    const [sid, key, rawValue] = tail;
-    const result = validateStateWrite(key!, rawValue!);
-    if (!result.ok) throw new Error(`click rejected: ${result.reason}`);
-    sessionState.set(sid!, key!, result.value);
+    for (const { verb, args } of effectsOf(url)) {
+      if (verb !== "set-state") throw new Error(`unexpected click verb ${verb}`);
+      const [sid, ...pairs] = args;
+      for (let i = 0; i < pairs.length; i += 2) {
+        const result = validateStateWrite(pairs[i]!, pairs[i + 1]!);
+        if (!result.ok) throw new Error(`click rejected: ${result.reason}`);
+        sessionState.set(sid!, pairs[i]!, result.value);
+      }
+    }
   };
   const dispose = (): void => disposers.forEach((d) => d());
   return { config, store, registry, sessionState, render, click, dispose };
@@ -116,10 +125,7 @@ describe("70m.7 — stepper render shape", () => {
     expect(stripAnsi(out)).toContain("◀ 14 ▶");
     // Two links only — ◀ and ▶. The current value carries no OSC-8 URL.
     const urls = extractUrls(out);
-    expect(urls).toEqual([
-      "cc-candybar://set-state/s1/hue-step/12",
-      "cc-candybar://set-state/s1/hue-step/16",
-    ]);
+    expect(urls.map(effectsOf)).toEqual(stepEffects("12", "16"));
     dispose();
   });
 
@@ -127,10 +133,7 @@ describe("70m.7 — stepper render shape", () => {
     const { render, sessionState, dispose } = buildRuntime(HUE_SRC);
     sessionState.set("s1", "hue-step", "30");
     const urls = extractUrls(render());
-    expect(urls).toEqual([
-      "cc-candybar://set-state/s1/hue-step/28",
-      "cc-candybar://set-state/s1/hue-step/32",
-    ]);
+    expect(urls.map(effectsOf)).toEqual(stepEffects("28", "32"));
     expect(stripAnsi(render())).toContain("◀ 30 ▶");
     dispose();
   });
@@ -143,10 +146,7 @@ describe("70m.7 — stepper wraps at the bounds", () => {
     const { render, sessionState, dispose } = buildRuntime(HUE_SRC);
     sessionState.set("s1", "hue-step", "60"); // max
     const urls = extractUrls(render());
-    expect(urls).toEqual([
-      "cc-candybar://set-state/s1/hue-step/58",
-      "cc-candybar://set-state/s1/hue-step/0", // wrapped, not clamped-to-60
-    ]);
+    expect(urls.map(effectsOf)).toEqual(stepEffects("58", "0")); // wrapped, not clamped-to-60
     dispose();
   });
 
@@ -154,10 +154,7 @@ describe("70m.7 — stepper wraps at the bounds", () => {
     const { render, sessionState, dispose } = buildRuntime(HUE_SRC);
     sessionState.set("s1", "hue-step", "0"); // min
     const urls = extractUrls(render());
-    expect(urls).toEqual([
-      "cc-candybar://set-state/s1/hue-step/60", // wrapped to max
-      "cc-candybar://set-state/s1/hue-step/2",
-    ]);
+    expect(urls.map(effectsOf)).toEqual(stepEffects("60", "2")); // first wrapped to max
     dispose();
   });
 });
@@ -324,7 +321,7 @@ describe("70m.7 — hue stepper drives renderDsl rotation live", () => {
 
     // The ▶ URL is the second link; click it through the real gate.
     const incUrl = extractUrls(before)[1]!;
-    expect(incUrl).toBe("cc-candybar://set-state/s1/hue-step/16");
+    expect(effectsOf(incUrl)).toEqual(stepEffects("16")[0]);
     click(incUrl);
 
     const after = render();
