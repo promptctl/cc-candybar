@@ -125,8 +125,25 @@ export async function readTail(
       const { size } = await fh.stat();
       const start = Math.max(0, size - maxBytes);
       const buf = Buffer.alloc(size - start);
-      if (buf.length > 0) await fh.read(buf, 0, buf.length, start);
-      return { buf, fromStart: start === 0 };
+      // [LAW:no-silent-fallbacks] A single read may return short — the scanner
+      // would then parse a zero-padded tail and miss cache activity. Loop until
+      // the window is filled or EOF; on a short final read (the file shrank
+      // under us) return only the bytes actually read, never the zero padding.
+      let off = 0;
+      while (off < buf.length) {
+        const { bytesRead } = await fh.read(
+          buf,
+          off,
+          buf.length - off,
+          start + off,
+        );
+        if (bytesRead === 0) break;
+        off += bytesRead;
+      }
+      return {
+        buf: off === buf.length ? buf : buf.subarray(0, off),
+        fromStart: start === 0,
+      };
     } catch {
       return null;
     } finally {
