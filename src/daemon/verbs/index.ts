@@ -79,7 +79,23 @@ function requireSessionId(value: string): string {
 // parseHandlerUrl no longer decodes the value, so the decode lives with the verb
 // that knows its shape [LAW:single-enforcer].
 function oneArg(value: string): string {
-  return decodeURIComponent(value);
+  return decodeWire(() => decodeURIComponent(value));
+}
+
+// [LAW:single-enforcer] One boundary reclassifies malformed wire encoding.
+// percent-decoding untrusted wire input throws a raw URIError on a bad escape
+// (`%ZZ`, a lone `%`); that is an argument-shape failure, not an operational
+// one, so it must reach the dispatcher as BadVerbArgs (→ BAD_REQUEST) like every
+// other bad-input shape. Both verb codecs (single-arg whole-value, multi-seg
+// set-state) funnel their decode through here so the reclassification lives once.
+function decodeWire<T>(decode: () => T): T {
+  try {
+    return decode();
+  } catch (err) {
+    if (err instanceof URIError)
+      throw new BadVerbArgs(`malformed wire encoding: ${err.message}`);
+    throw err;
+  }
 }
 
 // ─── Verb handlers ───────────────────────────────────────────────────────────
@@ -184,8 +200,9 @@ const toolbarToggle: VerbHandler = (value, ctx) => {
 //   form is the degenerate single-pair case — the parser walks pairs uniformly.
 const setState: VerbHandler = (rawValue, ctx) => {
   // [LAW:single-enforcer] Decode the whole encoded tail at this boundary; the
-  // session id is the head, the rest are the (key,value) pairs.
-  const [sessionId = "", ...rest] = decodeSegments(rawValue);
+  // session id is the head, the rest are the (key,value) pairs. A malformed
+  // escape in any segment is bad input, not a handler failure (decodeWire).
+  const [sessionId = "", ...rest] = decodeWire(() => decodeSegments(rawValue));
   const sid = requireSessionId(sessionId);
   if (rest.length === 0)
     throw new BadVerbArgs(

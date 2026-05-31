@@ -49,12 +49,15 @@ describe("ContextProvider window-size sourcing", () => {
     expect(info!.contextLeftPercentage).toBeGreaterThan(80);
   });
 
-  it("prefers native used_percentage for the 'used' figure when present", async () => {
+  it("uses native used_percentage and remaining_percentage verbatim, not a local buffer calc", async () => {
     const hook = baseHook({
       context_window: {
         total_input_tokens: 0,
         total_output_tokens: 0,
         context_window_size: 1_000_000,
+        // Deliberately NOT 100 - used: proves we pass Claude's numbers through
+        // rather than deriving "left" from a (size - 33k) computation, which
+        // would yield a different value.
         used_percentage: 42,
         remaining_percentage: 58,
         current_usage: {
@@ -67,6 +70,29 @@ describe("ContextProvider window-size sourcing", () => {
     });
     const info = await provider.getContextInfo(hook);
     expect(info!.percentage).toBe(42);
+    expect(info!.contextLeftPercentage).toBe(58);
+  });
+
+  it("falls back to a plain token-ratio (no auto-compact buffer) when native percentages are null", async () => {
+    const hook = baseHook({
+      context_window: {
+        total_input_tokens: 0,
+        total_output_tokens: 0,
+        context_window_size: 1_000_000,
+        used_percentage: null,
+        remaining_percentage: null,
+        current_usage: {
+          input_tokens: 200_000,
+          output_tokens: 0,
+          cache_creation_input_tokens: 0,
+          cache_read_input_tokens: 0,
+        },
+      },
+    });
+    const info = await provider.getContextInfo(hook);
+    // 200k / 1M = 20% used → 80% left, with NO 33k buffer skew.
+    expect(info!.percentage).toBe(20);
+    expect(info!.contextLeftPercentage).toBe(80);
   });
 
   it("falls back to context_window_size even when current_usage is null", async () => {
