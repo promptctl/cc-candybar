@@ -13,8 +13,7 @@ import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import { registerDslConfig, renderDsl } from "../src/dsl/render";
 import { SessionState } from "../src/daemon/session-state";
-import { VERBS } from "../src/daemon/verbs";
-import { parseHandlerUrl } from "../src/install/index";
+import { effectsOf, clickUrl, boldUrls } from "./helpers/click";
 import { extractWidgetRefs } from "../src/config/dsl-loader";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 
@@ -78,9 +77,9 @@ describe("DSL widgets — action buttons (chunk-11 .3)", () => {
       project_dir: "/proj",
     });
     const urls = extractUrls(render());
-    expect(urls).toEqual([
-      "cc-candybar://copy/s1",
-      "cc-candybar://open-vscode/%2Fproj",
+    expect(urls.map(effectsOf)).toEqual([
+      [{ verb: "copy", args: ["s1"] }],
+      [{ verb: "open-vscode", args: ["/proj"] }],
     ]);
   });
 
@@ -90,11 +89,10 @@ describe("DSL widgets — action buttons (chunk-11 .3)", () => {
       project_dir: "/proj",
     });
     const [copyUrl, openUrl] = extractUrls(render());
-    expect(parseHandlerUrl(copyUrl!)).toEqual({ verb: "copy", value: "s1" });
-    expect(parseHandlerUrl(openUrl!)).toEqual({
-      verb: "open-vscode",
-      value: "/proj",
-    });
+    expect(effectsOf(copyUrl!)).toEqual([{ verb: "copy", args: ["s1"] }]);
+    expect(effectsOf(openUrl!)).toEqual([
+      { verb: "open-vscode", args: ["/proj"] },
+    ]);
   });
 
   test("the widget's button text is present in the rendered line", () => {
@@ -137,10 +135,11 @@ describe("DSL widgets — option picker end-to-end (chunk-11 .3)", () => {
     const urls = extractUrls(out);
     const themes = listResolvablePaletteNames();
     expect(urls.length).toBe(themes.length);
-    // Every URL is a set-state click for the `theme` key with that option.
-    for (const t of themes) {
-      expect(urls).toContain(`cc-candybar://set-state/${SID}/theme/${t}`);
-    }
+    // Every URL is a set-state click for the `theme` key with that option, in
+    // option order.
+    expect(urls.map(effectsOf)).toEqual(
+      themes.map((t) => [{ verb: "set-state", args: [SID, "theme", t] }]),
+    );
     // No option is current yet (state default is "(none)", not a theme), so
     // no link region is marked bold. Bold is emitted as a combined SGR ending
     // ";1m" immediately before the option's OSC-8 open — check that shape, not
@@ -153,22 +152,21 @@ describe("DSL widgets — option picker end-to-end (chunk-11 .3)", () => {
     expect(render()).toContain("cur=(none)");
 
     const target = listResolvablePaletteNames()[0]!;
-    const url = `cc-candybar://set-state/${SID}/theme/${target}`;
-    const parsed = parseHandlerUrl(url);
-    expect(parsed.verb).toBe("set-state");
-
-    // Dispatch through the same verb the daemon invokes for a wire click.
-    VERBS.get("set-state")!(parsed.value, { sessionState, dlog: () => {} });
+    // Click the ACTUAL rendered region for that theme, through the real path.
+    const url = extractUrls(render()).find((u) =>
+      effectsOf(u).some(
+        (e) => e.verb === "set-state" && e.args[2] === target,
+      ),
+    )!;
+    clickUrl(url, { sessionState, dlog: () => {} });
 
     const after = render();
     expect(after).toContain(`cur=${target}`);
-    // The chosen option is now marked current: its OSC-8 region is preceded by
-    // a bold SGR (";1m"), and no other option is.
-    expect(after).toContain(
-      `;1m\x1b]8;;cc-candybar://set-state/${SID}/theme/${target}\x1b\\`,
-    );
-    const boldRegions = after.match(/;1m\x1b\]8;;/g) ?? [];
-    expect(boldRegions.length).toBe(1);
+    // The chosen option is now marked current: exactly one OSC-8 region is
+    // preceded by a bold SGR, and it sets the chosen theme.
+    expect(boldUrls(after).map(effectsOf)).toEqual([
+      [{ verb: "set-state", args: [SID, "theme", target] }],
+    ]);
   });
 });
 
@@ -194,14 +192,16 @@ describe("DSL widgets — active marking via differently-named state var", () =>
     const { sessionState, render } = buildRuntime(SRC, { session_id: SID });
     expect(render()).not.toContain(";1m\x1b]8;;");
     const target = listResolvablePaletteNames()[0]!;
-    VERBS.get("set-state")!(`${SID}/theme/${target}`, {
-      sessionState,
-      dlog: () => {},
-    });
+    const url = extractUrls(render()).find((u) =>
+      effectsOf(u).some(
+        (e) => e.verb === "set-state" && e.args[2] === target,
+      ),
+    )!;
+    clickUrl(url, { sessionState, dlog: () => {} });
     const after = render();
-    expect(after).toContain(
-      `;1m\x1b]8;;cc-candybar://set-state/${SID}/theme/${target}\x1b\\`,
-    );
+    expect(boldUrls(after).map(effectsOf)).toEqual([
+      [{ verb: "set-state", args: [SID, "theme", target] }],
+    ]);
   });
 });
 
@@ -237,16 +237,28 @@ describe("DSL widgets — loader validation (chunk-11 .3)", () => {
     ).toThrow(/unknown widget "nope"/);
   });
 
-  test("mixing set with copy in one onClick is rejected (compound is a follow-up)", () => {
-    expect(() =>
-      parseAndValidate(
-        "<t>",
-        wrap(
-          `{ w: { kind: 'buttons', items: [ { glyph: 'x', onClick: [ { set: 'theme', to: 'nord' }, { copy: 'hi' } ] } ] } }`,
-        ),
-        ALLOWED,
-      ),
-    ).toThrow(/cannot mix "set" with "copy"\/"open"/);
+  test("a compound onClick (set + copy) loads and renders BOTH effects on one click", () => {
+    // [LAW:verifiable-goals] 70m.8 acceptance: a heterogeneous click is one
+    // dispatch URL carrying an ordered effect list — the set and the copy both
+    // ride one click, the set batched as a set-state effect and the copy its own.
+    const { render } = buildRuntime(
+      `{
+        globals: {},
+        variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
+        widgets: { w: { kind: 'buttons', items: [
+          { glyph: 'x', onClick: [ { set: 'theme', to: 'textual-dark' }, { copy: 'copied!' } ] },
+        ] } },
+        segments: { s: { template: '{{ widget "w" }}', bg: 'surface', fg: 'foreground' } },
+        layout: [['s']],
+      }`,
+      { session_id: "s1" },
+    );
+    const urls = extractUrls(render());
+    expect(urls).toHaveLength(1);
+    expect(effectsOf(urls[0]!)).toEqual([
+      { verb: "set-state", args: ["s1", "theme", "textual-dark"] },
+      { verb: "copy", args: ["copied!"] },
+    ]);
   });
 
   test("an unknown optionsFrom source is rejected", () => {
@@ -353,7 +365,7 @@ describe("DSL widgets — loader validation (chunk-11 .3)", () => {
         wrap(`{ w: { kind: 'buttons', items: [ { optionsFrom: 'themes', onClick: { copy: 'hi' } } ] } }`),
         ALLOWED,
       ),
-    ).toThrow(/optionsFrom button's onClick must be "set"/);
+    ).toThrow(/optionsFrom button's onClick must include a "set"/);
   });
 
   test("an optionsFrom button with an explicit `to` is rejected (option supplies it)", () => {
