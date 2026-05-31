@@ -6,8 +6,11 @@
 //
 // [LAW:dataflow-not-control-flow] N effects ride one URL the SAME way for N=1 and
 // N=100 — a lone click is the degenerate one-element list. There is no
-// plain-vs-compound mode: every click URL is `dispatch?e=…`, and the effect
-// COUNT is data the dispatcher folds over, never a branch that selects a wire.
+// plain-vs-compound mode: every URL effectsUrl emits is `dispatch?e=…`, and the
+// effect COUNT is data the dispatcher folds over, never a branch that selects a
+// wire. (The wire still ACCEPTS direct `cc-candybar://<verb>/…` URLs — old
+// scrollback links, a hand-authored `link` template — so a direct verb is the
+// degenerate one-effect case on the parse side; only emission is unified here.)
 //
 // Why query params (not slashes, not base64): the value handed to the daemon is
 // passed RAW (parseHandlerUrl decodes only the verb), so each `e` param survives
