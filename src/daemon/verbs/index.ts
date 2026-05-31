@@ -70,13 +70,16 @@ function requireSessionId(value: string): string {
   return value;
 }
 
-// [LAW:single-enforcer] A single-segment verb (copy/open/toolbar/show-config)
-// carries one percent-encoded segment as its value; decode it here, at the
-// verb's boundary. Absent (empty value) yields "" — the degenerate case, parsed
-// not guarded. parseHandlerUrl no longer decodes the value, so the decode lives
-// with the verb that knows its shape [LAW:one-source-of-truth].
+// [LAW:types-are-the-program] A single-argument verb (copy/open/toolbar/show-
+// config) carries ONE argument: the WHOLE value, decoded once. It must NOT split
+// on "/" the way the multi-arg set-state does — a single-arg value legitimately
+// contains "/" (a copy of "a/b", an open path), and an old direct `copy/a/b`
+// scrollback link would be truncated at the first slash if split. The verb's
+// arity picks the codec: 1 arg → decode the whole tail; N args → decodeSegments.
+// parseHandlerUrl no longer decodes the value, so the decode lives with the verb
+// that knows its shape [LAW:single-enforcer].
 function oneArg(value: string): string {
-  return decodeSegments(value)[0] ?? "";
+  return decodeURIComponent(value);
 }
 
 // ─── Verb handlers ───────────────────────────────────────────────────────────

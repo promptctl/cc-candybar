@@ -27,7 +27,7 @@ describe("click wire — encode/decode round-trip", () => {
     const url = effectsUrl([
       { verb: VERB_SET_STATE, args: [SID, "theme", "nord"] },
     ]);
-    expect(url.startsWith("cc-candybar://dispatch?e=")).toBe(true);
+    expect(url.startsWith("cc-candybar://dispatch/e=")).toBe(true);
     expect(effectsOf(url)).toEqual([
       { verb: "set-state", args: [SID, "theme", "nord"] },
     ]);
@@ -86,6 +86,25 @@ describe("parseHandlerUrl — verb split, value raw", () => {
     expect(parseHandlerUrl("cc-candybar://hello-world")).toEqual({
       verb: "copy",
       value: "hello-world",
+    });
+  });
+
+  test("a bare value containing '?' copies verbatim — ? is data, not a delimiter", () => {
+    // Regression: only `/` delimits the verb; `dispatch/e=…` carries the effect
+    // list, so `?` never needs to split and stays part of a bare copy value.
+    expect(parseHandlerUrl("cc-candybar://hello?world")).toEqual({
+      verb: "copy",
+      value: "hello?world",
+    });
+  });
+
+  test("a direct single-arg link keeps its unencoded slashes in the raw value", () => {
+    // Regression: the copy handler decodes the WHOLE value (oneArg →
+    // decodeURIComponent), so an old `copy/a/b` link copies "a/b", not "a".
+    // parseHandlerUrl hands the raw tail; only the verb is split off.
+    expect(parseHandlerUrl("cc-candybar://copy/a/b")).toEqual({
+      verb: "copy",
+      value: "a/b",
     });
   });
 });

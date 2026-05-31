@@ -6,7 +6,7 @@
 //
 // [LAW:dataflow-not-control-flow] N effects ride one URL the SAME way for N=1 and
 // N=100 — a lone click is the degenerate one-element list. There is no
-// plain-vs-compound mode: every URL effectsUrl emits is `dispatch?e=…`, and the
+// plain-vs-compound mode: every URL effectsUrl emits is `dispatch/e=…`, and the
 // effect COUNT is data the dispatcher folds over, never a branch that selects a
 // wire. (The wire still ACCEPTS direct `cc-candybar://<verb>/…` URLs — old
 // scrollback links, a hand-authored `link` template — so a direct verb is the
@@ -17,7 +17,10 @@
 // exactly one URLSearchParams decode and an effect's own slash-bearing value
 // (a path, a set-state key/value tail) round-trips untouched. base64 was
 // rejected as opaque; a slash-nested payload is unsafe under any single
-// whole-value decode (a `%2F` would un-escape into a structural separator).
+// whole-value decode (a `%2F` would un-escape into a structural separator). The
+// `e=…&e=…` payload follows the verb after a `/` (`dispatch/e=…`), NOT a `?`, so
+// `/` stays the one verb delimiter and `?` remains ordinary data in a bare-copy
+// value (`cc-candybar://hello?world`).
 
 import { URLSearchParams } from "node:url";
 
@@ -67,14 +70,15 @@ export function decodeSegments(value: string): string[] {
 
 // Serialize an effect list to its dispatch URL. Each effect becomes one ordered
 // `e` query param carrying `verb/<encoded-args>`, percent-encoded whole so its
-// internal `/`, `&`, `=` survive as data.
+// internal `/`, `&`, `=` survive as data. The payload follows `dispatch/` (not
+// `dispatch?`) so `/` is the only verb delimiter parseHandlerUrl needs.
 export function effectsUrl(effects: readonly Effect[]): string {
   const qs = effects
     .map(
       (e) => `e=${encodeURIComponent(`${e.verb}/${encodeSegments(e.args)}`)}`,
     )
     .join("&");
-  return `${URL_SCHEME}://${VERB_DISPATCH}?${qs}`;
+  return `${URL_SCHEME}://${VERB_DISPATCH}/${qs}`;
 }
 
 // [LAW:dataflow-not-control-flow] Parse the dispatch verb's raw value (an

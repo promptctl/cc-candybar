@@ -239,15 +239,17 @@ interface ParsedUrl {
 
 // [LAW:dataflow-not-control-flow] Parse the URL into a {verb, value} pair
 // without using `new URL`, which lowercases hosts (would mangle case-sensitive
-// session ids). Format: cc-candybar://<verb>/<tail> | cc-candybar://<verb>?<query>
-// | cc-candybar://<value> (bare → copy). The verb ends at the first `/` (path
-// tail) or `?` (query, used by the `dispatch` effect list).
+// session ids). Format: cc-candybar://<verb>/<tail> | cc-candybar://<value>
+// (bare → copy). The verb ends at the FIRST `/`; everything after is the raw
+// value. The dispatch effect list rides as `dispatch/e=…&e=…`, so its query-
+// style payload is just the tail — `?` is NOT a delimiter, it is ordinary data
+// in a bare-copy value (`cc-candybar://hello?world` copies "hello?world").
 //
 // [LAW:single-enforcer] Only the VERB is decoded here. The value is passed RAW
-// to the daemon; each verb's handler decodes its own segments at its boundary
-// (the verb that owns the structure owns its decode). A whole-value decode here
-// would un-escape structural separators inside a nested value — the exact hazard
-// that made compound clicks unrepresentable — so it is deliberately absent.
+// to the daemon; each verb's handler decodes its own value at its boundary (the
+// verb that owns the structure owns its decode). A whole-value decode here would
+// un-escape structural separators inside a nested value — the exact hazard that
+// made compound clicks unrepresentable — so it is deliberately absent.
 export function parseHandlerUrl(
   rawUrl: string,
   scheme: string = URL_SCHEME,
@@ -257,13 +259,13 @@ export function parseHandlerUrl(
     throw new Error(`expected ${prefix} scheme, got: ${rawUrl}`);
   }
   const rest = rawUrl.slice(prefix.length);
-  const delim = rest.search(/[/?]/);
-  if (delim === -1) {
+  const slash = rest.indexOf("/");
+  if (slash === -1) {
     return { verb: VERB_COPY, value: rest };
   }
   return {
-    verb: decodeURIComponent(rest.slice(0, delim)),
-    value: rest.slice(delim + 1),
+    verb: decodeURIComponent(rest.slice(0, slash)),
+    value: rest.slice(slash + 1),
   };
 }
 
