@@ -92,4 +92,26 @@ describe("cacheExpiresAt", () => {
     const expected = Math.floor(Date.parse(cacheHit) / 1000) + TTL_SEC;
     expect(await cacheExpiresAt(path)).toBe(expected);
   });
+
+  it("ignores a cache-token string that appears in message CONTENT, not usage", async () => {
+    // The regex is only a candidate filter — authority is `message.usage`. A
+    // later line whose CONTENT quotes the token string (zero actual usage) must
+    // NOT win over an earlier real cache hit.
+    const realHit = "2026-05-30T10:00:00.000Z";
+    const decoy = JSON.stringify({
+      timestamp: "2026-05-30T12:00:00.000Z", // later, but content-only
+      message: {
+        content: 'pasted "cache_read_input_tokens":999 from a log',
+        usage: {
+          input_tokens: 1,
+          output_tokens: 1,
+          cache_read_input_tokens: 0,
+          cache_creation_input_tokens: 0,
+        },
+      },
+    });
+    const path = writeTranscript([entry({ ts: realHit, cacheRead: 100 }), decoy]);
+    const expected = Math.floor(Date.parse(realHit) / 1000) + TTL_SEC;
+    expect(await cacheExpiresAt(path)).toBe(expected);
+  });
 });

@@ -28,12 +28,47 @@ const CACHE_TTL_MS = 60 * 60 * 1000;
 const TAIL_CHUNK = 64 * 1024;
 const TAIL_MAX = 1 * 1024 * 1024;
 
-// A transcript line counts as cache activity when its usage block records a
-// non-zero cache read or cache creation. The `[1-9]` guard rejects the
-// `":0` case without parsing JSON for every candidate line.
+// [LAW:types-are-the-program] A cheap CANDIDATE filter, not the authority. It
+// matches any line mentioning a non-zero cache-token field, which includes a
+// line whose *message content* merely quotes the string (a pasted JSON snippet,
+// a transcript of a review discussing these very fields). The authoritative
+// check is the parsed `message.usage` value — the regex only avoids JSON.parsing
+// every line; a match is verified before its timestamp is trusted. The `[1-9]`
+// rejects the `":0` common case so most non-cache lines never reach the parser.
 const CACHE_HIT_RE =
   /"(?:cache_read_input_tokens|cache_creation_input_tokens)":[1-9]/;
-const TIMESTAMP_RE = /"timestamp":"([^"]+)"/;
+
+// The transcript-line shape this provider reads. Untrusted JSON — every field is
+// optional and narrowed at use; only positive `message.usage` cache tokens count.
+interface UsageLine {
+  readonly timestamp?: string;
+  readonly message?: {
+    readonly usage?: {
+      readonly cache_read_input_tokens?: number;
+      readonly cache_creation_input_tokens?: number;
+    };
+  };
+}
+
+// Parse a candidate line and return its millisecond timestamp ONLY if its
+// `message.usage` actually records positive cache activity. A content-only
+// mention (or unparseable line) yields null, so a false-positive regex match
+// can never set the timer warm.
+function cacheActivityTs(line: string): number | null {
+  let parsed: UsageLine;
+  try {
+    parsed = JSON.parse(line) as UsageLine;
+  } catch {
+    return null;
+  }
+  const usage = parsed.message?.usage;
+  const positive =
+    (usage?.cache_read_input_tokens ?? 0) > 0 ||
+    (usage?.cache_creation_input_tokens ?? 0) > 0;
+  if (!positive) return null;
+  const ms = parsed.timestamp != null ? Date.parse(parsed.timestamp) : NaN;
+  return Number.isNaN(ms) ? null : ms;
+}
 
 /**
  * Epoch *seconds* at which the session's prompt cache expires, or null when
@@ -82,11 +117,9 @@ function scanBufferForLastCacheTs(
   const start = bufStartsAtFileBeginning ? 0 : 1;
   for (let i = lines.length - 1; i >= start; i--) {
     const line = lines[i];
-    if (!line || !CACHE_HIT_RE.test(line)) continue;
-    const m = TIMESTAMP_RE.exec(line);
-    if (!m) continue;
-    const ms = Date.parse(m[1]!);
-    if (!Number.isNaN(ms)) return ms;
+    if (!line || !CACHE_HIT_RE.test(line)) continue; // cheap candidate filter
+    const ts = cacheActivityTs(line); // authoritative: parsed usage must be > 0
+    if (ts != null) return ts;
   }
   return null;
 }
