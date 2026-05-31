@@ -30,17 +30,22 @@ function entry(opts: {
   });
 }
 
+// [LAW:one-source-of-truth] The temp dir is tracked at the moment it is created,
+// so afterAll removes the exact directories that exist — not a file path's
+// guessed-at parent. Every transcript this suite writes is cleaned up.
+const createdDirs: string[] = [];
+
 function writeTranscript(lines: string[]): string {
   const dir = mkdtempSync(join(tmpdir(), "cc-cache-"));
+  createdDirs.push(dir);
   const path = join(dir, "transcript.jsonl");
   writeFileSync(path, lines.join("\n") + "\n");
   return path;
 }
 
 describe("cacheExpiresAt", () => {
-  const dirs: string[] = [];
   afterAll(() => {
-    for (const p of dirs) rmSync(join(p, ".."), { recursive: true, force: true });
+    for (const dir of createdDirs) rmSync(dir, { recursive: true, force: true });
   });
 
   it("projects the LAST cache-bearing entry forward by the TTL", () => {
