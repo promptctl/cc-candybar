@@ -1,7 +1,8 @@
 // [LAW:behavior-not-structure] These tests pin the merge cascade's contract:
-// per-key precedence for globals/variables/segments, wholesale replace for
-// layout, and the brand handoff at validateConfig. The renderer accepts only
-// ValidatedConfig, so the chain proven here is the chain used in production.
+// per-key precedence for globals/variables/segments, the `layout` sugar
+// compiling to the canonical `root` tree (wholesale replace), and the brand
+// handoff at validateConfig. The renderer accepts only ValidatedConfig, so the
+// chain proven here is the chain used in production.
 
 import {
   mergeWithDefault,
@@ -10,9 +11,18 @@ import {
 } from "../src/config/dsl-loader";
 import type {
   DslConfig,
+  LayoutNode,
   RawDslConfig,
   SegmentDecl,
 } from "../src/config/dsl-types";
+
+// One vertical container of cells leaves — the canonical shape the `layout`
+// sugar compiles to. Each argument is one leaf's segment list.
+const vert = (...rows: string[][]): LayoutNode => ({
+  kind: "container",
+  direction: "vertical",
+  children: rows.map((segments) => ({ kind: "cells", segments })),
+});
 
 // Self-contained default for these tests. Avoids coupling to
 // DEFAULT_DSL_CONFIG's evolving content — merge semantics are the subject,
@@ -27,7 +37,7 @@ const DFLT: DslConfig = {
     a: { template: " A " } as SegmentDecl,
     b: { template: " B " } as SegmentDecl,
   },
-  layout: [{ segments: ["a", "b"] }],
+  root: vert(["a", "b"]),
   widgets: {},
 };
 
@@ -72,27 +82,33 @@ describe("mergeWithDefault", () => {
     expect(out.segments.c!.template).toBe(" C ");
   });
 
-  test("layout: user replaces wholesale when present and non-empty", () => {
+  test("layout sugar: user replaces wholesale, compiled to the root tree", () => {
     const raw: RawDslConfig = { layout: [{ segments: ["b", "a"] }] };
-    expect(mergeWithDefault(raw, DFLT).layout).toEqual([{ segments: ["b", "a"] }]);
+    expect(mergeWithDefault(raw, DFLT).root).toEqual(vert(["b", "a"]));
   });
 
-  test("layout: absent → default layout", () => {
-    expect(mergeWithDefault({}, DFLT).layout).toEqual([{ segments: ["a", "b"] }]);
+  test("layout absent → default root", () => {
+    expect(mergeWithDefault({}, DFLT).root).toEqual(vert(["a", "b"]));
   });
 
-  test("layout: explicit [] → empty layout (user suppresses all default segments)", () => {
+  test("layout explicit [] → empty container (user suppresses all default segments)", () => {
     // [LAW:types-are-the-program] RawDslConfig.layout carries three states
     // (absent / [] / non-empty). The merge respects that discriminator —
-    // explicit [] means "render no segments", distinct from absent.
-    expect(mergeWithDefault({ layout: [] }, DFLT).layout).toEqual([]);
+    // explicit [] compiles to a childless vertical container ("render no
+    // segments"), distinct from absent (inherit the default).
+    expect(mergeWithDefault({ layout: [] }, DFLT).root).toEqual(vert());
+  });
+
+  test("raw root wins over the default and is used verbatim", () => {
+    const raw: RawDslConfig = { root: vert(["a"], ["b"]) };
+    expect(mergeWithDefault(raw, DFLT).root).toEqual(vert(["a"], ["b"]));
   });
 
   test("default arg is DEFAULT_DSL_CONFIG when omitted (sanity)", () => {
     // Without a `dflt` argument, mergeWithDefault uses the bundled default —
     // a real ValidatedConfig fixture flows through without throwing.
     const out = mergeWithDefault({});
-    expect(out.layout.length).toBeGreaterThan(0); // bundled default has a layout
+    expect(out.root.kind).toBe("container"); // bundled default has a root tree
   });
 });
 
@@ -108,7 +124,7 @@ describe("validateConfig", () => {
   test("throws ConfigError when a merged layout references an unknown segment", () => {
     const merged: DslConfig = {
       ...DFLT,
-      layout: [{ segments: ["does-not-exist"] }],
+      root: vert(["does-not-exist"]),
     };
     expect(() => validateConfig(merged, "<test>")).toThrow(ConfigError);
   });

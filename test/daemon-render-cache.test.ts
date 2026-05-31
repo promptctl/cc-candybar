@@ -13,6 +13,19 @@ import { RenderCache } from "../src/daemon/cache/render";
 import { GitDataProvider } from "../src/daemon/cache/git";
 import { SessionState } from "../src/daemon/session-state";
 import { WatcherRegistry } from "../src/daemon/cache/watchers";
+import { walkNodes, type LayoutNode } from "../src/config/dsl-types";
+
+// Flatten a layout tree to its segment names, in pre-order — the post-`root`
+// equivalent of the old `config.layout.flatMap(r => r.segments)`.
+const layoutSegments = (root: LayoutNode): string[] =>
+  [...walkNodes(root)].flatMap((n) => (n.kind === "cells" ? n.segments : []));
+
+// The canonical tree a one-row `layout: [[...]]` sugar compiles to.
+const oneRow = (...segments: string[]): LayoutNode => ({
+  kind: "container",
+  direction: "vertical",
+  children: [{ kind: "cells", segments }],
+});
 
 function makeCache(): {
   cache: RenderCache;
@@ -133,7 +146,7 @@ describe("RenderCache", () => {
       // No file means state was built from the bundled default — every
       // built-in segment is declared.
       expect(entry.state).not.toBeNull();
-      expect(entry.state!.config.layout.length).toBeGreaterThan(0);
+      expect(layoutSegments(entry.state!.config.root).length).toBeGreaterThan(0);
       expect(entry.configFilePath).toBeNull();
     } finally {
       for (const fn of cleanups) fn();
@@ -194,7 +207,7 @@ describe("RenderCache", () => {
       // count (across all rows) because the user fixture below uses one
       // row of one segment — matching the default's row count of 1 — so
       // row count alone wouldn't prove the file was picked up.
-      const defaultLayoutSegCount = entry.state!.config.layout.flatMap((r) => r.segments).length;
+      const defaultLayoutSegCount = layoutSegments(entry.state!.config.root).length;
 
       // Give fs.watch a moment to attach to the parent dir before we
       // start writing into it. Without this, on macOS the writeFileSync
@@ -225,9 +238,9 @@ describe("RenderCache", () => {
         label: `watcher should have observed new config file at ${cfg}`,
       });
       expect(entry.configFilePath).toBe(cfg);
-      expect(entry.state!.config.layout).toEqual([{ segments: ["only"] }]);
+      expect(entry.state!.config.root).toEqual(oneRow("only"));
       // Sanity: was actually different from the default.
-      expect(entry.state!.config.layout.flatMap((r) => r.segments).length).not.toBe(
+      expect(layoutSegments(entry.state!.config.root).length).not.toBe(
         defaultLayoutSegCount,
       );
     } finally {
@@ -261,7 +274,7 @@ describe("RenderCache", () => {
       const entry = cache.getOrCreate(dir, dir, undefined);
       expect(entry.lastError).toBeNull();
       expect(entry.configFilePath).toBe(cfg);
-      expect(entry.state!.config.layout).toEqual([{ segments: ["only"] }]);
+      expect(entry.state!.config.root).toEqual(oneRow("only"));
     } finally {
       for (const fn of cleanups) fn();
       cleanup();

@@ -258,8 +258,12 @@ export class RenderCache {
     // sole producer of `ValidatedConfig`. The renderer accepts only
     // `ValidatedConfig`, so the compiler enforces the chain — there is no
     // "skip validate" path that typechecks downstream.
-    const merged = loadConfig(resolvedPath);
-    const config = validateConfig(merged, resolvedPath ?? "<default>");
+    // [LAW:one-source-of-truth] Thread the source through to validateConfig so
+    // cross-ref diagnostics on the daemon path carry real line numbers and the
+    // authored-surface (root vs layout) discriminator works — the file is read
+    // once inside loadConfig, not re-read here.
+    const { config: merged, source } = loadConfig(resolvedPath);
+    const config = validateConfig(merged, resolvedPath ?? "<default>", source);
 
     const store = new VariableStore();
     // [LAW:single-enforcer] Inject the daemon's shared GitDataProvider so

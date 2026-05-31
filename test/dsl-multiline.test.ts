@@ -1,12 +1,15 @@
 // [LAW:single-enforcer] These tests pin the multi-line layout contract
-// directly against the render spine. renderDsl walks `config.layout` as a 2D
-// array of rows; each row renders through the same per-segment pipeline as a
-// single-row config; rows are joined with exactly one `\n`. Single-line is
-// the degenerate `[[...]]` case — not a separate code path.
+// directly against the render spine. renderDsl walks the canonical node tree
+// (renderNode); the flat `layout` sugar compiles to one vertical container of
+// cells leaves; leaves are joined with exactly one `\n`. Single-line is the
+// degenerate one-leaf case — not a separate code path. They also pin the two
+// vertical-line sources that feed the same join: an AUTHORED "\n" inside a
+// segment's cell stream (split on the cells, span-preserving) and the raw
+// `root` node grammar authored directly.
 //
 // [LAW:behavior-not-structure] Assertions pin observable output: line count,
-// segment-rendered-into-correct-line, exact newline separator. Internal
-// refactors (hue rotation policy, sink ordering) that preserve these
+// segment-rendered-into-correct-line, exact newline separator, link survival.
+// Internal refactors (hue rotation policy, sink ordering) that preserve these
 // behaviors must not break these tests.
 
 import { PaletteResolver, getThemePalette } from "@promptctl/rich-js";
@@ -160,5 +163,148 @@ describe("renderDsl — multi-line layout", () => {
     expect(lines[0]!).toContain("B");
     expect(lines[0]!).not.toContain("A");
     expect(lines[1]!).toContain("C");
+  });
+
+  test("authored \\n inside a single segment splits its cell into multiple lines", () => {
+    // The "\n" rides inside ONE segment's rendered cell stream — the cell-stream
+    // split (not output-split) partitions it BEFORE the strip measures, so each
+    // side is its own independently-rendered line. This is the case PR #58's
+    // output-split could catch only by accident; here it is first-class.
+    const source = `{
+      globals: { palette: 'textual-dark' },
+      variables: { x: { kind: 'literal', value: 'TOP\\nBOT' } },
+      segments: { s: { template: '{{ .x }}', bg: 'surface', fg: 'foreground' } },
+      layout: [['s']],
+    }`;
+    const { config, compiled, store, registry } = buildRuntime(source);
+    const out = renderDsl(config, compiled, store, registry, {}, basePalette(), OPTS);
+    const lines = out.split("\n").map(stripAnsi);
+    expect(lines).toHaveLength(2);
+    expect(lines[0]!).toContain("TOP");
+    expect(lines[0]!).not.toContain("BOT");
+    expect(lines[1]!).toContain("BOT");
+    expect(lines[1]!).not.toContain("TOP");
+    // The "\n" is consumed as the partition point — it never leaks into a line.
+    expect(lines[0]!).not.toContain("\n");
+  });
+
+  test("fixed-width segment with authored \\n caps each line independently", () => {
+    // Regression: the split must happen BEFORE per-segment width layout. With
+    // split-after-layout, the merged 'ABCDE\nFGHIJ' cell measures as one
+    // over-width cell and truncates — destroying the second line. Split-first
+    // lays out each 5-wide line cleanly, so both survive intact.
+    const source = `{
+      globals: { palette: 'textual-dark' },
+      variables: { x: { kind: 'literal', value: 'ABCDE\\nFGHIJ' } },
+      segments: { s: { template: '{{ .x }}', width: 5, bg: 'surface', fg: 'foreground' } },
+      layout: [['s']],
+    }`;
+    const { config, compiled, store, registry } = buildRuntime(source);
+    const out = renderDsl(config, compiled, store, registry, {}, basePalette(), OPTS);
+    const lines = out.split("\n").map(stripAnsi);
+    expect(lines).toHaveLength(2);
+    expect(lines[0]!).toContain("ABCDE");
+    expect(lines[1]!).toContain("FGHIJ");
+    // The second line is not truncated away, and no truncation marker appears.
+    expect(out).not.toContain("…");
+  });
+
+  test("OSC-8 link survives an authored \\n split (both pieces keep the URL)", () => {
+    // A linked fragment carrying a "\n" splits into two lines; the OSC-8 hyperlink
+    // span must be preserved on each piece, not dropped at the boundary.
+    const source = `{
+      globals: { palette: 'textual-dark' },
+      variables: { x: { kind: 'literal', value: 'UP\\nDN' } },
+      segments: {
+        s: {
+          template: '{{ link "cc-candybar://x/1" .x }}',
+          bg: 'surface', fg: 'foreground',
+        },
+      },
+      layout: [['s']],
+    }`;
+    const { config, compiled, store, registry } = buildRuntime(source);
+    const out = renderDsl(config, compiled, store, registry, {}, basePalette(), OPTS);
+    const lines = out.split("\n");
+    expect(lines).toHaveLength(2);
+    // Each visual line carries an OSC-8 open sequence for the same URL.
+    for (const line of lines) {
+      expect(line).toContain("cc-candybar://x/1");
+    }
+  });
+
+  test("raw root grammar: a cells leaf inside a vertical container renders", () => {
+    // The substrate's own authoring surface — no `layout` sugar. A vertical
+    // container of two cells leaves stacks them, identical to two sugar rows.
+    const source = `{
+      globals: { palette: 'textual-dark' },
+      variables: {
+        a: { kind: 'literal', value: 'TOP' },
+        b: { kind: 'literal', value: 'BOT' },
+      },
+      segments: {
+        top: { template: ' {{ .a }} ', bg: 'surface', fg: 'foreground' },
+        bot: { template: ' {{ .b }} ', bg: 'surface', fg: 'foreground' },
+      },
+      root: {
+        kind: 'container',
+        direction: 'vertical',
+        children: [
+          { kind: 'cells', segments: ['top'] },
+          { kind: 'cells', segments: ['bot'] },
+        ],
+      },
+    }`;
+    const { config, compiled, store, registry } = buildRuntime(source);
+    const out = renderDsl(config, compiled, store, registry, {}, basePalette(), OPTS);
+    const lines = out.split("\n").map(stripAnsi);
+    expect(lines).toHaveLength(2);
+    expect(lines[0]!).toContain("TOP");
+    expect(lines[1]!).toContain("BOT");
+  });
+
+  test("a container's `when` gates its whole subtree (hidden → no line)", () => {
+    // A false container contributes no lines; its descendants are still walked
+    // (hue stability) but emit nothing — the same contract a hidden row had.
+    const source = `{
+      globals: { palette: 'textual-dark' },
+      variables: {
+        show: { kind: 'literal', value: '' },
+        a: { kind: 'literal', value: 'A' },
+        b: { kind: 'literal', value: 'B' },
+      },
+      segments: {
+        sa: { template: ' {{ .a }} ', bg: 'surface', fg: 'foreground' },
+        sb: { template: ' {{ .b }} ', bg: 'surface', fg: 'foreground' },
+      },
+      root: {
+        kind: 'container',
+        direction: 'vertical',
+        children: [
+          { kind: 'container', direction: 'vertical', when: '{{ ne .show "" }}',
+            children: [ { kind: 'cells', segments: ['sa'] } ] },
+          { kind: 'cells', segments: ['sb'] },
+        ],
+      },
+    }`;
+    const { config, compiled, store, registry } = buildRuntime(source);
+    const out = renderDsl(config, compiled, store, registry, {}, basePalette(), OPTS);
+    const lines = out.split("\n").map(stripAnsi);
+    expect(lines).toHaveLength(1);
+    expect(lines[0]!).toContain("B");
+    expect(lines[0]!).not.toContain("A");
+  });
+
+  test("authoring both `layout` and `root` is rejected", () => {
+    // [LAW:one-source-of-truth] Two authoring surfaces for the same tree could
+    // diverge — the loader rejects the ambiguity loudly.
+    const source = `{
+      segments: { s: { template: ' x ', bg: 'surface', fg: 'foreground' } },
+      layout: [['s']],
+      root: { kind: 'cells', segments: ['s'] },
+    }`;
+    expect(() =>
+      parseAndValidate("<test>", source, ALLOWED_PALETTES),
+    ).toThrow(ConfigError);
   });
 });

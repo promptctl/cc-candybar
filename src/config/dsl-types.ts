@@ -50,16 +50,74 @@ export interface LayoutRow {
   readonly segments: readonly string[];
 }
 
+// [LAW:types-are-the-program] The recursive layout substrate: a `Node` is
+// either a `cells` leaf (a horizontal run of segments rendered to one-or-more
+// strips — an authored "\n" or width-overflow wrapping splits it into multiple
+// visual lines) or a `container` whose `direction` is DATA that decides how its
+// children map
+// onto the 2D plane. Both the bar and (a later child's) menu are projections of
+// this one tree — they differ only in `direction`, not in code path
+// [LAW:dataflow-not-control-flow]. `LayoutRow[]` is the flat-vertical SUGAR for
+// this tree (one container of cells leaves), compiled to a `LayoutNode` at the
+// loader boundary so no downstream consumer sees two layout representations
+// [LAW:one-source-of-truth].
+//
+// [LAW:types-are-the-program] `Direction` is a SINGLE-arm union today: only
+// `vertical` has a renderer (this child). It widens by one arm as each later
+// child implements it (`horizontal`, then `outline`) — the strongest theorem
+// that is still TRUE, with no representable-but-unrenderable direction.
+// [LAW:one-source-of-truth] The runtime list and the type derive from one
+// declaration; the loader validates a container's `direction` against this set.
+export const DIRECTIONS = ["vertical"] as const;
+export type Direction = (typeof DIRECTIONS)[number];
+
+export interface CellsNode {
+  readonly kind: "cells";
+  // Names into the `segments` block — the same reference-by-name a LayoutRow
+  // uses. A leaf packs its segments into a horizontal strip and renders to
+  // ONE OR MORE visual lines: an authored "\n" in a segment's output partitions
+  // it into independently-laid-out lines, and FlexStrip width-overflow wrapping
+  // may split further. A newline-free, non-overflowing leaf is the degenerate
+  // single-line case.
+  readonly segments: readonly string[];
+  // [LAW:dataflow-not-control-flow] Absent `when` ≡ always-rendered.
+  readonly when?: string;
+}
+
+export interface ContainerNode {
+  readonly kind: "container";
+  readonly direction: Direction;
+  readonly children: readonly LayoutNode[];
+  // A container's `when` gates the whole subtree: a hidden container emits no
+  // lines, but its descendants are still walked so per-segment hue indices stay
+  // positionally stable (the same contract a hidden LayoutRow had).
+  readonly when?: string;
+}
+
+export type LayoutNode = CellsNode | ContainerNode;
+
+// [LAW:single-enforcer] THE one pre-order walk over a node tree. Every consumer
+// that needs "which segments / which `when` predicates does this layout name"
+// (the reachability closure, the debug dump, the cross-ref validator) iterates
+// this — none re-recurses the tree itself.
+export function* walkNodes(node: LayoutNode): IterableIterator<LayoutNode> {
+  yield node;
+  if (node.kind === "container") {
+    for (const child of node.children) yield* walkNodes(child);
+  }
+}
+
 export interface RawDslConfig {
   readonly globals?: Partial<Globals>;
   readonly variables?: Readonly<Record<string, VariableDecl>>;
   readonly segments?: Readonly<Record<string, SegmentDecl>>;
-  // [LAW:types-are-the-program] Post-parse, rows are already the normalized
-  // LayoutRow shape. The user-facing sugar (a bare `string[]` row) is
-  // collapsed to `{ segments }` inside validateLayout — the single boundary
-  // that turns user input into the canonical shape — so no downstream
-  // consumer ever sees the two-shape union.
+  // [LAW:types-are-the-program] Two authoring surfaces for the same canonical
+  // `root` tree, never both at once (the loader rejects a config that writes
+  // both): `layout` is the flat-vertical SUGAR (a list of rows, each a bare
+  // `string[]` or `{ when?, segments }`), `root` is the raw recursive grammar.
+  // Both collapse to one `LayoutNode` at the loader so downstream sees one shape.
   readonly layout?: readonly LayoutRow[];
+  readonly root?: LayoutNode;
   readonly widgets?: Readonly<Record<string, WidgetDecl>>;
 }
 
@@ -67,7 +125,10 @@ export interface DslConfig {
   readonly globals: Globals;
   readonly variables: Readonly<Record<string, VariableDecl>>;
   readonly segments: Readonly<Record<string, SegmentDecl>>;
-  readonly layout: readonly LayoutRow[];
+  // [LAW:one-source-of-truth] The SINGLE canonical layout representation. The
+  // user-file `layout` sugar is compiled into this `root` tree at load time;
+  // nothing downstream re-derives or carries the flat row form.
+  readonly root: LayoutNode;
   // [LAW:locality-or-seam] The named seam between interaction behavior (what a
   // click does) and presentation (segments/layout). Declared once, referenced
   // from segment templates via `{{ widget "name" }}`. Empty when no config
