@@ -5,6 +5,7 @@ import { launchSync } from "../proc/launch";
 import { tryClickViaDaemon } from "../daemon/client";
 import type { PermanentOutcome } from "../daemon/client";
 import { obtainDaemonKick } from "../daemon/acquire";
+import { URL_SCHEME, VERB_COPY } from "../click/wire";
 
 // [LAW:one-source-of-truth] Replaced at build time by tsdown's `define` option
 // from package.json. The pinned version is what we write into settings.json so
@@ -15,7 +16,6 @@ const PACKAGE_VERSION =
   typeof __PACKAGE_VERSION__ !== "undefined" ? __PACKAGE_VERSION__ : "dev";
 
 const PACKAGE_NAME = "@promptctl/cc-candybar";
-const URL_SCHEME = "cc-candybar";
 const BUNDLE_ID = "com.cccandybar.url-handler";
 const APP_NAME = "CCCandybarURLHandler";
 
@@ -239,7 +239,17 @@ interface ParsedUrl {
 
 // [LAW:dataflow-not-control-flow] Parse the URL into a {verb, value} pair
 // without using `new URL`, which lowercases hosts (would mangle case-sensitive
-// session ids). Format: cc-candybar://<verb>/<value> | cc-candybar://<value> (verb=copy).
+// session ids). Format: cc-candybar://<verb>/<tail> | cc-candybar://<value>
+// (bare → copy). The verb ends at the FIRST `/`; everything after is the raw
+// value. The dispatch effect list rides as `dispatch/e=…&e=…`, so its query-
+// style payload is just the tail — `?` is NOT a delimiter, it is ordinary data
+// in a bare-copy value (`cc-candybar://hello?world` copies "hello?world").
+//
+// [LAW:single-enforcer] Only the VERB is decoded here. The value is passed RAW
+// to the daemon; each verb's handler decodes its own value at its boundary (the
+// verb that owns the structure owns its decode). A whole-value decode here would
+// un-escape structural separators inside a nested value — the exact hazard that
+// made compound clicks unrepresentable — so it is deliberately absent.
 export function parseHandlerUrl(
   rawUrl: string,
   scheme: string = URL_SCHEME,
@@ -251,11 +261,11 @@ export function parseHandlerUrl(
   const rest = rawUrl.slice(prefix.length);
   const slash = rest.indexOf("/");
   if (slash === -1) {
-    return { verb: "copy", value: decodeURIComponent(rest) };
+    return { verb: VERB_COPY, value: rest };
   }
   return {
     verb: decodeURIComponent(rest.slice(0, slash)),
-    value: decodeURIComponent(rest.slice(slash + 1)),
+    value: rest.slice(slash + 1),
   };
 }
 

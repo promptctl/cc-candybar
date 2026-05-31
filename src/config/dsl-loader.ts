@@ -1440,38 +1440,21 @@ function validateOnClick(
     if (a !== null) actions.push(a);
   }
   if (actions.length !== rawActions.length) return null;
-  // [LAW:no-mode-explosion] One OSC-8 link = one click = one verb URL. A button
-  // composes to a SINGLE URL: either N `set` actions batched into one set-state
-  // URL (the .2 batched wire), or a single `copy`/`open` verb. Mixed kinds
-  // (set+copy) or multiple copy/open need more than one URL — that compound
-  // click is an explicit follow-up, rejected here so the limit is visible at
-  // load, not silently rendered as a broken click.
+  // [LAW:dataflow-not-control-flow] A click is an ordered list of effects on one
+  // dispatch URL (the `dispatch` wire). Heterogeneous and repeated actions are
+  // first-class: every `set` batches into one atomic set-state effect, each
+  // `copy`/`open` is its own effect, all run on one click. There is no
+  // homogeneity rule — the only constraint left is the optionsFrom binding below.
   const sets = actions.filter((a) => "set" in a).length;
-  if (sets > 0 && sets !== actions.length) {
-    ctx.issues.push({
-      path: `${path}.onClick`,
-      message: `a button's onClick cannot mix "set" with "copy"/"open" — a click composes to one verb URL (compound clicks are a follow-up). Split into separate buttons.`,
-      line: findKeyLine(ctx.source, [...path.split("."), "onClick"]),
-    });
-    return null;
-  }
-  if (sets === 0 && actions.length !== 1) {
-    ctx.issues.push({
-      path: `${path}.onClick`,
-      message: `a button's onClick may declare at most one "copy"/"open" action (compound clicks are a follow-up)`,
-      line: findKeyLine(ctx.source, [...path.split("."), "onClick"]),
-    });
-    return null;
-  }
   // [LAW:types-are-the-program] An optionsFrom button binds each option's value
-  // into a `set` action — that binding IS the picker. A `copy`/`open` action
-  // ignores the option, so an option list paired with copy/open would render N
-  // identical clickable cells: the option list becomes meaningless. Require the
-  // onClick to be set action(s).
-  if (isOptions && sets !== actions.length) {
+  // into a `set` action — that binding IS the picker. A button with NO set
+  // action has nowhere to bind the option, so the option list would render N
+  // identical clickable cells: meaningless. Require at least one `set`; copy/open
+  // alongside it are fine (they just ignore the option).
+  if (isOptions && sets === 0) {
     ctx.issues.push({
       path: `${path}.onClick`,
-      message: `an optionsFrom button's onClick must be "set" action(s) — each option binds its value into the set; "copy"/"open" don't use the option, so the list would be meaningless`,
+      message: `an optionsFrom button's onClick must include a "set" action — each option binds its value into the set; without one the option list has nowhere to bind`,
       line: findKeyLine(ctx.source, [...path.split("."), "onClick"]),
     });
     return null;

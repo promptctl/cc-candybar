@@ -239,6 +239,24 @@ export const DEFAULT_DSL_CONFIG = {
       default: 0,
     },
     "git.status": { kind: "input", path: "git.status", default: "clean" },
+    "git.operation": { kind: "input", path: "git.operation", default: "" },
+    "git.timeSinceCommit": {
+      kind: "input",
+      path: "git.timeSinceCommit",
+      type: "number",
+      default: 0,
+    },
+
+    // Prompt-cache expiry — epoch seconds, projected by the cache provider.
+    // Same unit/shape as block/weekly resetsAt so the cacheTimer segment
+    // composes `minutesUntilReset` identically. 0 (default) ⇒ no cache
+    // activity found ⇒ segment's `when` hides it.
+    "cache.expiresAt": {
+      kind: "input",
+      path: "cache.expiresAt",
+      type: "number",
+      default: 0,
+    },
 
     // Usage / cost — daemon folds from the SessionUsageStore; numeric.
     "session.cost": {
@@ -405,6 +423,7 @@ export const DEFAULT_DSL_CONFIG = {
       template:
         " (git)" +
         '{{ if ne .git.repoName "" }} {{ .git.repoName }}{{ end }}' +
+        '{{ if ne .git.operation "" }} [{{ .git.operation }}]{{ end }}' +
         '{{ if ne .git.sha "" }} {{ .git.sha }}{{ end }}' +
         "{{ if or (gt .git.staged 0) (gt .git.unstaged 0) (gt .git.untracked 0) (gt .git.conflicts 0) }} " +
         '{{ if gt .git.staged 0 }}{{ green "S" }}{{ end }}' +
@@ -417,7 +436,10 @@ export const DEFAULT_DSL_CONFIG = {
         '{{ if gt .git.ahead 0 }}{{ green (printf "+%v" .git.ahead) }}{{ end }}' +
         "{{ if and (gt .git.ahead 0) (gt .git.behind 0) }}/{{ end }}" +
         '{{ if gt .git.behind 0 }}{{ red (printf "-%v" .git.behind) }}{{ end }}' +
-        "{{ end }}]{{ end }} ",
+        "{{ end }}]{{ end }}" +
+        "{{ if gt .git.stash 0 }} ({{ .git.stash }} stashed){{ end }}" +
+        "{{ if gt .git.timeSinceCommit 0 }} ◷ {{ formatTimeSince .git.timeSinceCommit }}{{ end }}" +
+        " ",
       bg: "surface-active",
       fg: "foreground",
       when: '{{ ne .git.branch "" }}',
@@ -461,6 +483,24 @@ export const DEFAULT_DSL_CONFIG = {
       bg: blockLikeBg(".weekly.percentage", ".weekly.budget.warningThreshold"),
       fg: blockLikeFg(".weekly.percentage"),
       when: "{{ gt .weekly.resetsAt 0 }}",
+    },
+    // Prompt-cache warmth countdown. minutesUntilReset clamps a past expiry
+    // to 0, so an expired cache renders "cold" (and reads red via the ≤8
+    // arm) rather than a negative number. [LAW:dataflow-not-control-flow]
+    // glyph + "cold"/"Nm" + color all derive from the one expiry value; the
+    // provider supplies no display state. Constant `surface` bg with a
+    // fg-only threshold cascade mirrors the legacy inline-colored text
+    // (warm = normal, ≤20m = warning, ≤8m/cold = error).
+    cacheTimer: {
+      template:
+        " ◴ {{ if le (minutesUntilReset .cache.expiresAt) 0 }}cold" +
+        "{{ else }}{{ minutesUntilReset .cache.expiresAt }}m{{ end }} ",
+      bg: "surface",
+      fg:
+        "{{ if le (minutesUntilReset .cache.expiresAt) 8 }}error" +
+        "{{ else }}{{ if le (minutesUntilReset .cache.expiresAt) 20 }}warning" +
+        "{{ else }}foreground{{ end }}{{ end }}",
+      when: "{{ gt .cache.expiresAt 0 }}",
     },
     context: {
       template:

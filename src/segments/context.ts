@@ -17,15 +17,13 @@ interface ContextUsageThresholds {
   MEDIUM: number;
 }
 
-// [LAW:one-source-of-truth] Model context-window limits. Hardcoded because
-// every model in this family is currently 200k; a future divergence
-// (different limit per model variant) is the moment to lift this back into
-// configuration. Today, baking it in keeps the provider config-free.
-const MODEL_CONTEXT_LIMITS: Readonly<Record<string, number>> = {
-  default: 200000,
-  sonnet: 200000,
-  opus: 200000,
-};
+// [LAW:one-source-of-truth] The context-window size is NEVER guessed from the
+// model name. Claude Code reports the real size for the active model in
+// `context_window.context_window_size` (1M for the [1m] variants, 200k
+// otherwise) — that field is the single authority. This constant is the
+// last-resort floor for ancient clients that omit `context_window` entirely;
+// it is not a per-model table and must not grow into one.
+const DEFAULT_CONTEXT_WINDOW = 200000;
 
 export class ContextProvider {
   private readonly thresholds: ContextUsageThresholds = {
@@ -35,26 +33,6 @@ export class ContextProvider {
 
   getContextUsageThresholds(): ContextUsageThresholds {
     return this.thresholds;
-  }
-
-  private getContextLimit(modelId: string): number {
-    const modelType = this.getModelType(modelId);
-    return (
-      MODEL_CONTEXT_LIMITS[modelType] ?? MODEL_CONTEXT_LIMITS.default ?? 200000
-    );
-  }
-
-  private getModelType(modelId: string): string {
-    const id = modelId.toLowerCase();
-
-    if (id.includes("sonnet")) {
-      return "sonnet";
-    }
-    if (id.includes("opus")) {
-      return "opus";
-    }
-
-    return "default";
   }
 
   private calculatePercentages(
@@ -94,15 +72,19 @@ export class ContextProvider {
     hookData: ClaudeHookData,
     autocompactBuffer: number = 33000,
   ): ContextInfo | null {
-    const currentUsage = hookData.context_window?.current_usage;
-    if (!currentUsage) {
+    const cw = hookData.context_window;
+    if (!cw?.current_usage) {
       debug(
         "No current_usage in hook data, falling back to transcript parsing",
       );
       return null;
     }
 
-    const contextLimit = hookData.context_window?.context_window_size || 200000;
+    const currentUsage = cw.current_usage;
+    // [LAW:no-defensive-null-guards] context_window_size is a required `number`
+    // within context_window; reaching here proves cw is present, so the size
+    // is too. No `|| default` — that would mask a malformed payload as 200k.
+    const contextLimit = cw.context_window_size;
     const totalTokens =
       (currentUsage.input_tokens || 0) +
       (currentUsage.cache_creation_input_tokens || 0) +
@@ -137,7 +119,7 @@ export class ContextProvider {
    */
   async calculateContextTokensFromTranscript(
     transcriptPath: string,
-    modelId?: string,
+    contextLimit: number,
     autocompactBuffer: number = 33000,
   ): Promise<ContextInfo | null> {
     try {
@@ -172,8 +154,6 @@ export class ContextProvider {
           (usage.input_tokens || 0) +
           (usage.cache_read_input_tokens || 0) +
           (usage.cache_creation_input_tokens || 0);
-
-        const contextLimit = modelId ? this.getContextLimit(modelId) : 200000;
 
         debug(
           `Most recent main chain context: ${totalTokens} tokens (limit: ${contextLimit})`,
@@ -217,9 +197,16 @@ export class ContextProvider {
       return nativeContext;
     }
 
+    // [LAW:one-source-of-truth] current_usage can be null (pre-first-call or
+    // post-/compact) while context_window_size is still present and
+    // authoritative — prefer it here too, and only fall to the floor when the
+    // client omits context_window entirely.
+    const contextLimit =
+      hookData.context_window?.context_window_size ?? DEFAULT_CONTEXT_WINDOW;
+
     return this.calculateContextTokensFromTranscript(
       hookData.transcript_path,
-      hookData.model?.id,
+      contextLimit,
       autocompactBuffer,
     );
   }
