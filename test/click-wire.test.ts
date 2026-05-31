@@ -107,6 +107,19 @@ describe("parseHandlerUrl — verb split, value raw", () => {
       value: "a/b",
     });
   });
+
+  test("effectsOf mirrors the daemon's per-verb decode (single-arg whole, set-state segmented)", () => {
+    // A single-arg verb decodes the whole value: direct `copy/a/b` → one arg
+    // "a/b", matching what the copy handler copies (so the helper can't mask a
+    // back-compat regression).
+    expect(effectsOf("cc-candybar://copy/a/b")).toEqual([
+      { verb: "copy", args: ["a/b"] },
+    ]);
+    // set-state, the one multi-arg verb, still segments.
+    expect(effectsOf("cc-candybar://set-state/s1/theme/nord")).toEqual([
+      { verb: "set-state", args: ["s1", "theme", "nord"] },
+    ]);
+  });
 });
 
 describe("dispatch verb — run all, aggregate, no nesting", () => {

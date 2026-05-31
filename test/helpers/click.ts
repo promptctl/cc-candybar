@@ -1,10 +1,15 @@
-// Test helpers for the click wire. A rendered click URL is `dispatch?e=…` (an
-// ordered effect list); these decode it to its behavioral content and drive it
-// through the REAL daemon path, so assertions track "what effects does this
-// click apply" rather than the exact wire encoding.
+// Test helpers for the click wire. A rendered click URL is `dispatch/e=…` (an
+// ordered effect list after the verb's `/`); these decode it to its behavioral
+// content and drive it through the REAL daemon path, so assertions track "what
+// effects does this click apply" rather than the exact wire encoding.
 
 import { parseHandlerUrl } from "../../src/install/index";
-import { parseEffects, decodeSegments, VERB_DISPATCH } from "../../src/click/wire";
+import {
+  parseEffects,
+  decodeSegments,
+  VERB_DISPATCH,
+  VERB_SET_STATE,
+} from "../../src/click/wire";
 import { VERBS } from "../../src/daemon/verbs";
 import type { VerbContext } from "../../src/daemon/verbs";
 
@@ -13,14 +18,25 @@ export interface DecodedEffect {
   readonly args: string[];
 }
 
+// [LAW:one-source-of-truth] Decode an effect's value the SAME way the daemon's
+// handler does, so the helper cannot mask a back-compat decode regression:
+// set-state is the one multi-argument verb (slash-segmented); every other verb
+// takes ONE argument — the whole value decoded once — so a direct `copy/a/b`
+// reports one arg "a/b" (exactly what the copy handler copies), not two.
+function decodeArgs(verb: string, value: string): string[] {
+  return verb === VERB_SET_STATE
+    ? decodeSegments(value)
+    : [decodeURIComponent(value)];
+}
+
 // Decode a rendered click URL into its ordered effect list (verb + decoded
 // args). A direct (non-dispatch) URL is the degenerate one-effect case.
 export function effectsOf(url: string): DecodedEffect[] {
   const { verb, value } = parseHandlerUrl(url);
-  if (verb !== VERB_DISPATCH) return [{ verb, args: decodeSegments(value) }];
+  if (verb !== VERB_DISPATCH) return [{ verb, args: decodeArgs(verb, value) }];
   return parseEffects(value).map((e) => ({
     verb: e.verb,
-    args: decodeSegments(e.value),
+    args: decodeArgs(e.verb, e.value),
   }));
 }
 
