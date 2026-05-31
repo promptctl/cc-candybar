@@ -51,8 +51,10 @@ export interface LayoutRow {
 }
 
 // [LAW:types-are-the-program] The recursive layout substrate: a `Node` is
-// either a `cells` leaf (a horizontal run of segments rendered to ONE strip)
-// or a `container` whose `direction` is DATA that decides how its children map
+// either a `cells` leaf (a horizontal run of segments rendered to one-or-more
+// strips — an authored "\n" or width-overflow wrapping splits it into multiple
+// visual lines) or a `container` whose `direction` is DATA that decides how its
+// children map
 // onto the 2D plane. Both the bar and (a later child's) menu are projections of
 // this one tree — they differ only in `direction`, not in code path
 // [LAW:dataflow-not-control-flow]. `LayoutRow[]` is the flat-vertical SUGAR for

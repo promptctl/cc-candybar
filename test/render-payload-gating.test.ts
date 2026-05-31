@@ -216,4 +216,30 @@ describe("buildRenderPayload — layout-driven provider gating", () => {
     // `.git.branch`.
     expect(needed.has("git.branch")).toBe(true);
   });
+
+  test("a container `when` keeps its referenced input prefix reachable (no segment references it)", () => {
+    // The reachability walk seeds from EVERY node's `when`, not just cells/
+    // segments. A container gated on `.metrics.sessionDuration` whose only
+    // rendered segment is `directory` must still pull metrics into the closure —
+    // otherwise the provider gates out and the predicate can never become true.
+    const config: DslConfig = {
+      globals: {},
+      variables: SHARED_VARIABLES,
+      segments: SHARED_SEGMENTS,
+      root: {
+        kind: "container",
+        direction: "vertical",
+        when: '{{ gt (int .metrics.sessionDuration) 0 }}',
+        children: [{ kind: "cells", segments: ["directory"] }],
+      },
+      widgets: {},
+    };
+    const needed = buildNeededPrefixes(config);
+    expect(needed.has("metrics.sessionDuration")).toBe(true);
+    // `directory`'s own input is reachable too (sanity).
+    expect(needed.has("workspace.current_dir")).toBe(true);
+    // `tmux`/`git` are referenced by neither the container `when` nor the one
+    // rendered segment, so they stay gated out.
+    expect(needed.has("tmux.session")).toBe(false);
+  });
 });

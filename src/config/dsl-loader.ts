@@ -268,12 +268,17 @@ export function detectConfigCollisions(
 
 /**
  * Load a JSON5 DSL config file from disk and merge it with the bundled
- * default. Returns the effective DslConfig.
+ * default. Returns the effective DslConfig AND the raw source text.
  *
  * `path = null` means "no user file exists" — returns the default unchanged
- * (uniform merge against an empty raw, which is deep-equal to the default).
- * No consumer branches on file presence; that branch lives inside loadConfig
- * exactly once.
+ * (uniform merge against an empty raw, which is deep-equal to the default) and
+ * an empty source. No consumer branches on file presence; that branch lives
+ * inside loadConfig exactly once.
+ *
+ * [LAW:one-source-of-truth] The source is returned alongside the config so the
+ * caller can hand it to validateConfig — cross-ref diagnostics (line numbers,
+ * the authored-surface discriminator) are derived from it, and the file is read
+ * exactly once here rather than re-read downstream.
  *
  * Throws ConfigError on JSON5 syntax / structural / per-record validation
  * failures. Cross-references and cycles are validateConfig()'s job.
@@ -285,12 +290,11 @@ export function loadConfig(
   path: string | null,
   dflt: DslConfig = DEFAULT_DSL_CONFIG,
   allowedPalettes?: ReadonlySet<string>,
-): DslConfig {
+): { config: DslConfig; source: string } {
+  const source = path === null ? "" : fs.readFileSync(path, "utf-8");
   const raw: RawDslConfig =
-    path === null
-      ? {}
-      : parseDslConfig(path, fs.readFileSync(path, "utf-8"), allowedPalettes);
-  return mergeWithDefault(raw, dflt);
+    path === null ? {} : parseDslConfig(path, source, allowedPalettes);
+  return { config: mergeWithDefault(raw, dflt), source };
 }
 
 /**
