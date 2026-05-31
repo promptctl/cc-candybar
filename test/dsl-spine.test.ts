@@ -15,6 +15,7 @@ import { parseAndValidate } from "./helpers/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import { registerDslConfig, renderDsl } from "../src/dsl/render";
+import { walkNodes } from "../src/config/dsl-types";
 
 // [LAW:single-enforcer] Inlined fixture values formerly served by
 // `test/parity/fixtures.ts`. The parity infra was retired alongside the
@@ -163,7 +164,9 @@ describe("DSL render spine (bzh.7 steel thread)", () => {
     expect(sink.has("doesNotExist")).toBe(false);
     // Every layout entry that wasn't `when`-hidden appears in the sink.
     expect(sink.size).toBeGreaterThan(0);
-    const allLayoutSegments = config.layout.flatMap((r) => r.segments);
+    const allLayoutSegments = [...walkNodes(config.root)].flatMap((n) =>
+      n.kind === "cells" ? n.segments : [],
+    );
     for (const [name, cells] of sink) {
       expect(allLayoutSegments).toContain(name);
       expect(cells.length).toBeGreaterThan(0);

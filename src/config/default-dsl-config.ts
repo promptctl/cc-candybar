@@ -540,15 +540,23 @@ export const DEFAULT_DSL_CONFIG = {
     },
   },
 
-  // Default layout — one row containing the historical default-enabled
-  // segment list. A row is `{ when?, segments }`; an always-rendered row omits
-  // `when`. Single-line is the size-1 degenerate case of multi-line; users
-  // adding rows opt in by extending this outer array. Nothing else changes when
-  // they do — every segment is already declared above, and the renderer walks
-  // rows uniformly.
-  layout: [
-    { segments: ["directory", "git", "model", "session", "today", "context"] },
-  ],
+  // Default layout — the canonical node tree: one vertical container holding a
+  // single `cells` leaf with the historical default-enabled segment list. The
+  // default authors `root` directly (rather than the `layout` sugar) so the
+  // bundled config exercises the same canonical surface every other config
+  // compiles to [LAW:one-source-of-truth]. Adding rows = appending more `cells`
+  // children; nesting = a child `container`. Every segment is already declared
+  // above, and the renderer walks the tree uniformly.
+  root: {
+    kind: "container",
+    direction: "vertical",
+    children: [
+      {
+        kind: "cells",
+        segments: ["directory", "git", "model", "session", "today", "context"],
+      },
+    ],
+  },
 
   // [LAW:locality-or-seam] No interactive widgets in the bundled default — the
   // baseline statusline is non-interactive text segments. A user config
