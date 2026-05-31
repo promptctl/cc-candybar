@@ -367,7 +367,11 @@ describe("introspectConfig with populated state", () => {
     const state = buildPopulatedState();
     const config = introspectConfig(state);
     expect(config).not.toBeNull();
-    expect(config?.layout).toEqual([{ segments: ["intro", "plain"] }]);
+    expect(config?.root).toEqual({
+      kind: "container",
+      direction: "vertical",
+      children: [{ kind: "cells", segments: ["intro", "plain"] }],
+    });
     expect(Object.keys(config?.variables ?? {}).sort()).toEqual([
       "derived",
       "greeting",
@@ -386,7 +390,11 @@ describe("introspectConfig with populated state", () => {
     const state = buildPopulatedState();
     const config = introspectConfig(state);
     const wireShape = JSON.parse(JSON.stringify(config));
-    expect(wireShape.layout).toEqual([{ segments: ["intro", "plain"] }]);
+    expect(wireShape.root).toEqual({
+      kind: "container",
+      direction: "vertical",
+      children: [{ kind: "cells", segments: ["intro", "plain"] }],
+    });
     expect(wireShape.variables.greeting.kind).toBe("literal");
     expect(wireShape.segments.intro.template).toBe(
       "{{ .greeting }} {{ .session.id }}",

@@ -9,6 +9,7 @@
 // (via parseDslConfig). Two boundaries, one truth.
 
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
+import { walkNodes } from "../src/config/dsl-types";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { registerDslConfig, renderDsl } from "../src/dsl/render";
 import { VariableStore } from "../src/var-system/store";
@@ -17,17 +18,27 @@ import { PaletteResolver, getThemePalette } from "@promptctl/rich-js";
 
 const SERIALIZED = JSON.stringify(DEFAULT_DSL_CONFIG, null, 2);
 
+// A canonical one-leaf vertical root — narrows a spread config to a single
+// segment so the rendered line is exactly that segment's text.
+const oneSegmentRoot = (segment: string) =>
+  ({
+    kind: "container" as const,
+    direction: "vertical" as const,
+    children: [{ kind: "cells" as const, segments: [segment] }],
+  });
+
 describe("DEFAULT_DSL_CONFIG", () => {
   test("loader round-trips the bundled default", () => {
     const parsed = parseAndValidate("<default>", SERIALIZED);
     expect(Object.keys(parsed.variables).length).toBeGreaterThan(0);
     expect(Object.keys(parsed.segments).length).toBeGreaterThan(0);
-    expect(parsed.layout.length).toBeGreaterThan(0);
+    expect(parsed.root.kind).toBe("container");
   });
 
   test("every layout entry is a declared segment", () => {
-    for (const row of DEFAULT_DSL_CONFIG.layout) {
-      for (const segName of row.segments) {
+    for (const node of walkNodes(DEFAULT_DSL_CONFIG.root)) {
+      if (node.kind !== "cells") continue;
+      for (const segName of node.segments) {
         expect(DEFAULT_DSL_CONFIG.segments).toHaveProperty(segName);
       }
     }
@@ -87,7 +98,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
       // that segment's text. `home` flows through the augmented payload
       // (kind: "input", path: "home" in DEFAULT_DSL_CONFIG) — we set it
       // on the payload object directly; no env-var mutation needed.
-      const dirOnly = { ...parsed, layout: [{ segments: ["directory"] }] };
+      const dirOnly = { ...parsed, root: oneSegmentRoot("directory") };
       const store = new VariableStore();
       const registry = new SourceRegistry(store);
       try {
@@ -199,7 +210,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
       linesRemoved?: number;
     }): string {
       const parsed = parseAndValidate("<default>", SERIALIZED);
-      const metricsOnly = { ...parsed, layout: [{ segments: ["metrics"] }] };
+      const metricsOnly = { ...parsed, root: oneSegmentRoot("metrics") };
       const store = new VariableStore();
       const registry = new SourceRegistry(store);
       try {
@@ -280,7 +291,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
         const parsed = parseAndValidate("<default>", SERIALIZED);
         const blockOnly = {
           ...parsed,
-          layout: [{ segments: ["block"] }],
+          root: oneSegmentRoot("block"),
           variables: {
             ...parsed.variables,
             "block.budget.warningThreshold": {

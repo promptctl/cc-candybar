@@ -17,6 +17,7 @@ import type {
   ValidatedConfig,
   VariableDecl,
   CacheDecl,
+  LayoutNode,
 } from "../config/dsl-types.js";
 import { HUE_STEP_VAR } from "../config/dsl-types.js";
 import type { VariableStore } from "../var-system/store.js";
@@ -28,6 +29,7 @@ import {
 } from "../var-system/sources.js";
 import type { BuildLineOptions } from "../render/strip.js";
 import { renderStripCells } from "../render/strip.js";
+import { splitCellsIntoLines } from "../render/split-lines.js";
 import { resolverForThemeName, transposedResolver } from "../themes/index.js";
 import { buildScope } from "../template-engine/scope.js";
 import {
@@ -62,23 +64,31 @@ export interface CompiledSegment {
 // name. Consumed by renderDsl.
 export type CompiledSegments = Readonly<Record<string, CompiledSegment>>;
 
-// [LAW:dataflow-not-control-flow] A row's `when` is a value flowing out of the
-// template engine, parsed once here exactly like a segment's. `segments` is the
-// row's ordered segment-name list (mirrors LayoutRow). renderDsl walks the
-// compiled layout — not the raw config — so the parse-once guarantee covers
-// rows too.
-export interface CompiledRow {
+// [LAW:dataflow-not-control-flow] The compiled mirror of a LayoutNode: the same
+// recursive shape with every `when` predicate parsed ONCE here. renderDsl walks
+// this compiled tree — not the raw config — so the parse-once guarantee covers
+// every node. A `cells` node carries its segment-name run; a `container` node
+// carries its `direction` and compiled children.
+export interface CompiledCellsNode {
+  readonly kind: "cells";
   readonly when?: Template<RichText>;
   readonly segments: readonly string[];
 }
+export interface CompiledContainerNode {
+  readonly kind: "container";
+  readonly direction: "vertical";
+  readonly when?: Template<RichText>;
+  readonly children: readonly CompiledNode[];
+}
+export type CompiledNode = CompiledCellsNode | CompiledContainerNode;
 
 // [LAW:one-source-of-truth] The full compiled artifact registerDslConfig
-// produces: every segment's compiled templates AND the compiled layout (rows
-// with parsed `when`). renderDsl needs both; bundling them keeps the daemon
-// cache holding one value, not two that could fall out of sync.
+// produces: every segment's compiled templates AND the compiled layout tree
+// (nodes with parsed `when`). renderDsl needs both; bundling them keeps the
+// daemon cache holding one value, not two that could fall out of sync.
 export interface CompiledConfig {
   readonly segments: CompiledSegments;
-  readonly layout: readonly CompiledRow[];
+  readonly root: CompiledNode;
 }
 
 // ─── CacheDecl → CachePolicy ─────────────────────────────────────────────────
@@ -328,28 +338,37 @@ export function registerDslConfig(
     };
   }
 
-  // [LAW:one-source-of-truth] Compile each row's `when` once here, alongside
-  // the segment templates — renderDsl never parses. The compiled layout mirrors
-  // config.layout 1:1 (same rows, same segment order), so a row's predicate and
-  // its segment list travel together.
-  const layout: CompiledRow[] = config.layout.map((row, r) => ({
-    when:
-      row.when !== undefined
-        ? (() => {
-            try {
-              return engine.parse(row.when);
-            } catch (e) {
-              throw new Error(
-                `Template parse error in layout[${r}].when: ${(e as Error).message}`,
-                { cause: e },
-              );
-            }
-          })()
-        : undefined,
-    segments: row.segments,
-  }));
+  // [LAW:one-source-of-truth] Compile the layout tree once here, alongside the
+  // segment templates — renderDsl never parses. Each node's `when` is parsed in
+  // place; the compiled tree mirrors config.root 1:1 (same structure, same
+  // segment order), so a node's predicate and its children travel together.
+  const compileWhen = (when: string | undefined, path: string) => {
+    if (when === undefined) return undefined;
+    try {
+      return engine.parse(when);
+    } catch (e) {
+      throw new Error(
+        `Template parse error in ${path}.when: ${(e as Error).message}`,
+        { cause: e },
+      );
+    }
+  };
+  const compileNode = (node: LayoutNode, path: string): CompiledNode => {
+    const when = compileWhen(node.when, path);
+    if (node.kind === "cells") {
+      return { kind: "cells", when, segments: node.segments };
+    }
+    return {
+      kind: "container",
+      direction: node.direction,
+      when,
+      children: node.children.map((child, i) =>
+        compileNode(child, `${path}.children[${i}]`),
+      ),
+    };
+  };
 
-  return { segments: compiled, layout };
+  return { segments: compiled, root: compileNode(config.root, "root") };
 }
 
 // ─── renderDsl ───────────────────────────────────────────────────────────────
@@ -360,26 +379,26 @@ export function registerDslConfig(
  * Pipeline:
  *   1. Push payload (+ injected `term.cols`) into input boxes — once per render.
  *   2. Build the scope proxy — once per render.
- *   3. For each row in the compiled layout:
- *        a. Evaluate the row's `when`; a false row contributes no line (the row
- *           does not exist — no blank line), but its positions still consume hue
- *           indices so visible rows keep positionally-stable colors.
- *        b. Walk row segments; skip those whose `when` evaluates false.
- *        c. Per-segment palette resolver, bg/fg → baseStyle, template
- *           evaluation, applySegmentLayout — identical to single-row spine.
- *        d. Concatenate the row's cells; render to a powerline ANSI strip.
- *   4. Join visible rows with "\n".
+ *   3. Walk the compiled layout tree (renderNode) in pre-order. A `container`
+ *      stacks its children's line blocks (today only `direction: vertical`); a
+ *      `cells` leaf evaluates its segments and renders to ZERO-OR-MORE lines.
+ *      A node whose `when` (or an ancestor's) is false contributes no line, but
+ *      its segments still advance the hue index so visible siblings keep
+ *      positionally-stable colors.
+ *   4. Join the produced lines with "\n".
  *
  * [LAW:single-enforcer] The daemon calls this verbatim — no alternate render
- * path. The test and the daemon share ONE render path.
- * [LAW:dataflow-not-control-flow] Row visibility, row count, and per-row segment
- * count are all data; more rows is more iterations, not more code. The scope
- * proxy is built once per render and shared across all rows.
+ * path. ONE walk renders every layout, flat or nested. The test and the daemon
+ * share it.
+ * [LAW:dataflow-not-control-flow] Node visibility, node count, and per-leaf
+ * segment count are all data; a deeper tree is more recursion, not more code.
+ * The projection (how a container maps children onto the plane) is the
+ * `direction` VALUE, not a branch in the walk.
  *
- * Hue rotation: the segment index used for the per-segment `hueShift` continues
- * across rows AND across hidden rows. A user converting `[a,b,c,d,e]` into
- * `[[a,b,c],[d,e]]` keeps the same per-segment colors; a row toggling visibility
- * does not recolor the rows below it.
+ * Hue rotation: the segment index driving each `hueShift` advances in pre-order
+ * across the whole tree, including hidden subtrees. Re-shaping a flat row list
+ * into nested containers keeps every segment's color; toggling a node's
+ * visibility does not recolor the nodes after it.
  */
 export function renderDsl(
   config: ValidatedConfig,
@@ -428,19 +447,35 @@ export function renderDsl(
 
   perSegmentSink?.clear();
 
-  const lines: string[] = [];
+  // [LAW:single-enforcer] segIndex is the one hue cursor, advanced in pre-order
+  // across the whole tree (visible or not) so per-segment colors stay
+  // positionally stable regardless of how the layout is nested or which nodes
+  // are currently hidden.
   let segIndex = 0;
-  for (const row of compiled.layout) {
-    // [LAW:dataflow-not-control-flow] Row visibility is a value, not a branch
-    // around the loop: hidden rows still walk their segments to advance the hue
-    // index (positional color stability), but contribute no line.
-    const rowVisible = evaluateWhen(row.when, scope);
-    const rowCells: RichText[] = [];
-    for (const segName of row.segments) {
+
+  // [LAW:dataflow-not-control-flow] One walk renders any node. `visible` ANDs
+  // the node's own `when` with its ancestors' — a leaf renders only when its
+  // whole path is visible, yet its segments always advance segIndex. A
+  // container's projection is its `direction` VALUE; with only `vertical` today,
+  // children's line blocks concatenate in order.
+  const renderNode = (node: CompiledNode, parentVisible: boolean): string[] => {
+    const visible = parentVisible && evaluateWhen(node.when, scope);
+
+    if (node.kind === "container") {
+      return node.children.flatMap((child) => renderNode(child, visible));
+    }
+
+    // [LAW:dataflow-not-control-flow] The leaf accumulates VISUAL lines, not a
+    // flat cell run. A segment's first line continues the current row line; each
+    // subsequent line (from an authored "\n") opens a new one. Starts as one
+    // empty line so an all-hidden visible leaf still yields exactly one (empty)
+    // line — the pre-substrate behavior.
+    const rowLines: RichText[][] = [[]];
+    for (const segName of node.segments) {
       const seg = config.segments[segName];
       const segCompiled = compiled.segments[segName];
       // [LAW:no-defensive-null-guards] seg + segCompiled are always defined —
-      // the loader validates every layout entry against segments, and
+      // the loader validates every cells-node entry against segments, and
       // registerDslConfig compiles every declared segment. A missing entry
       // here is a caller bug (renderDsl called with a mismatched compiled
       // object).
@@ -451,7 +486,7 @@ export function renderDsl(
       const hueShift = segIndex * hueStep;
       segIndex++;
 
-      if (!rowVisible) continue;
+      if (!visible) continue;
       if (!evaluateWhen(segCompiled.when, scope)) continue;
 
       // [LAW:dataflow-not-control-flow] The per-segment variability is WHICH
@@ -470,25 +505,40 @@ export function renderDsl(
       );
 
       const fragments = segCompiled.template.evaluate(scope);
-      const cells = fragmentsToCells(fragments, baseStyle);
+      const segCells = fragmentsToCells(fragments, baseStyle);
 
-      const laidOut = applySegmentLayout(cells, {
-        width: seg.width ?? "auto",
-        justify: seg.justify ?? "left",
-        truncate: seg.truncate ?? "right",
-        baseStyle,
+      // [LAW:single-enforcer] Partition the segment's authored "\n" into visual
+      // lines BEFORE per-segment layout — width/justify/truncate then measure
+      // each line cleanly, never a "\n"-bearing cell whose cellLength is a
+      // zero-width lie (which would truncate or mis-align across the break). A
+      // newline-free segment is the degenerate one-line case: one applySegmentLayout
+      // call on the whole cell run, byte-identical to the pre-split path.
+      const laidLines = splitCellsIntoLines(segCells).map((line) =>
+        applySegmentLayout(line, {
+          width: seg.width ?? "auto",
+          justify: seg.justify ?? "left",
+          truncate: seg.truncate ?? "right",
+          baseStyle,
+        }),
+      );
+
+      laidLines.forEach((laid, i) => {
+        if (i > 0) rowLines.push([]);
+        rowLines[rowLines.length - 1]!.push(...laid);
       });
 
       if (perSegmentSink !== undefined) {
-        perSegmentSink.set(segName, laidOut);
+        perSegmentSink.set(segName, laidLines.flat());
       }
-
-      rowCells.push(...laidOut);
     }
-    // [LAW:dataflow-not-control-flow] A hidden row is absent, not blank — its
-    // line is never produced, so no empty line survives in the output.
-    if (rowVisible) lines.push(renderStripCells(rowCells, opts));
-  }
 
-  return lines.join("\n");
+    // [LAW:dataflow-not-control-flow] A hidden leaf is absent (no line). A
+    // visible leaf renders each accumulated row line to its own strip; FlexStrip
+    // auto-wrap may further partition a strip on "\n" (the width-overflow
+    // boundary source), so both feed one flat line list.
+    if (!visible) return [];
+    return rowLines.flatMap((line) => renderStripCells(line, opts).split("\n"));
+  };
+
+  return renderNode(compiled.root, true).join("\n");
 }
