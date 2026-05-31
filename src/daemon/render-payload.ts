@@ -19,6 +19,7 @@
 import path from "node:path";
 import type { ClaudeHookData } from "../utils/claude.js";
 import type { DslConfig, VariableDecl } from "../config/dsl-types.js";
+import { walkNodes } from "../config/dsl-types.js";
 import { extractTemplateRefs } from "../config/dsl-loader.js";
 import type { GitInfo, GitInfoOptions } from "../segments/git.js";
 import { cacheExpiresAt } from "../segments/cache.js";
@@ -154,8 +155,8 @@ export interface RenderPayloadDeps {
 // ─── Config-driven provider gating ───────────────────────────────────────────
 //
 // [LAW:dataflow-not-control-flow] Whether a provider fires is selected by
-// the active layout. Walk from `config.layout` → segments → their template
-// strings → referenced variable names → recursive expansion through
+// the active layout. Walk from `config.root` → cells nodes → their segments →
+// their template strings → referenced variable names → recursive expansion through
 // `template`-kind vars. The transitive closure tells us which input paths
 // are actually reachable from a rendered segment; providers feeding paths
 // outside that closure do not run.
@@ -191,12 +192,13 @@ export function buildNeededPrefixes(config: DslConfig): ReadonlySet<string> {
   const frontier: string[] = [];
   const visited = new Set<string>();
 
-  for (const row of config.layout) {
-    // A row's `when` references variables too — seed them so a provider feeding
-    // only a row predicate (e.g. a state var gating the row) isn't gated out.
-    if (row.when)
-      for (const ref of extractTemplateRefs(row.when)) frontier.push(ref);
-    for (const segName of row.segments) {
+  for (const node of walkNodes(config.root)) {
+    // A node's `when` references variables too — seed them so a provider feeding
+    // only a predicate (e.g. a state var gating a row/container) isn't gated out.
+    if (node.when)
+      for (const ref of extractTemplateRefs(node.when)) frontier.push(ref);
+    if (node.kind !== "cells") continue;
+    for (const segName of node.segments) {
       const seg = config.segments[segName];
       if (!seg) continue;
       for (const src of [seg.template, seg.when, seg.bg, seg.fg]) {
@@ -311,7 +313,7 @@ function gitOptionsFromClosure(needed: ReadonlySet<string>): GitInfoOptions {
  *
  * Each provider runs only if its payload prefix sits in the closure
  * computed by `buildNeededPrefixes(config)` — the set of `kind: "input"`
- * paths transitively reachable from a segment in `config.layout`. Merely
+ * paths transitively reachable from a segment in `config.root`. Merely
  * declaring an input variable does NOT trigger provider work; the variable
  * must actually be referenced by a layout-rendered segment (directly, or
  * via a chain of `template`-kind vars). The default config declares many

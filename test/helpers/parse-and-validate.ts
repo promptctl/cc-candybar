@@ -21,7 +21,7 @@ const EMPTY_DEFAULT: DslConfig = {
   globals: {},
   variables: {},
   segments: {},
-  layout: [],
+  root: { kind: "container", direction: "vertical", children: [] },
   widgets: {},
 };
 

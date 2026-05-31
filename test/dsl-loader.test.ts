@@ -11,8 +11,23 @@ import {
   findKeyLine,
 } from "../src/config/dsl-loader";
 import { parseAndValidate } from "./helpers/parse-and-validate";
+import type { LayoutNode } from "../src/config/dsl-types";
 
 const FILE = "/tmp/test.json5";
+
+// The canonical node tree a flat `layout` sugar compiles to: one vertical
+// container, one cells leaf per row. Pass `{ when }` to carry a row predicate.
+type Row = { segments: readonly string[]; when?: string };
+const vert = (...rows: (Row | readonly string[])[]): LayoutNode => ({
+  kind: "container",
+  direction: "vertical",
+  children: rows.map((row): LayoutNode => {
+    const r: Row = Array.isArray(row) ? { segments: row } : (row as Row);
+    return r.when !== undefined
+      ? { kind: "cells", segments: r.segments, when: r.when }
+      : { kind: "cells", segments: r.segments };
+  }),
+});
 
 function expectError(source: string): ConfigError {
   try {
@@ -82,7 +97,7 @@ describe("loadDslConfig — top-level shape", () => {
       globals: {},
       variables: {},
       segments: {},
-      layout: [],
+      root: { kind: "container", direction: "vertical", children: [] },
       widgets: {},
     });
   });
@@ -543,13 +558,14 @@ describe("loadDslConfig — palette switch", () => {
 
 describe("loadDslConfig — layout", () => {
   test("string entries must match a declared segment", () => {
-    // Cross-ref runs on the merged, normalized config (rows already collapsed to
-    // the canonical { segments }), so it reports the canonical path — unlike
-    // parse-time structural validation, which still holds the raw row form.
+    // Cross-ref runs on the merged, normalized config — it walks the canonical
+    // node tree (the raw row form is already collapsed and the `layout`-vs-`root`
+    // authoring surface is unrecoverable post-merge), so it reports the canonical
+    // `layout` path and names the offending segment in the message.
     expectIssue(
       `{ segments: { cwd: { template: "t" } }, layout: [["cwd", "missing"]] }`,
       {
-        path: "layout[0].segments[1]",
+        path: "layout",
         message: 'layout entry "missing" does not match any declared segment',
       },
     );
@@ -570,7 +586,7 @@ describe("loadDslConfig — layout", () => {
       FILE,
       `{ segments: { a: { template: "x" }, b: { template: "y" } }, layout: [["a", "b", "a"]] }`,
     );
-    expect(cfg.layout).toEqual([{ segments: ["a", "b", "a"] }]);
+    expect(cfg.root).toEqual(vert(["a", "b", "a"]));
   });
 
   test("multi-row layout passes through (row order preserved)", () => {
@@ -578,7 +594,7 @@ describe("loadDslConfig — layout", () => {
       FILE,
       `{ segments: { a: { template: "x" }, b: { template: "y" }, c: { template: "z" } }, layout: [["a", "b"], ["c"]] }`,
     );
-    expect(cfg.layout).toEqual([{ segments: ["a", "b"] }, { segments: ["c"] }]);
+    expect(cfg.root).toEqual(vert(["a", "b"], ["c"]));
   });
 
   test("object-form row with when normalizes to { when, segments }", () => {
@@ -586,7 +602,7 @@ describe("loadDslConfig — layout", () => {
       FILE,
       `{ segments: { a: { template: "x" } }, layout: [{ when: '{{ true }}', segments: ["a"] }] }`,
     );
-    expect(cfg.layout).toEqual([{ when: "{{ true }}", segments: ["a"] }]);
+    expect(cfg.root).toEqual(vert({ when: "{{ true }}", segments: ["a"] }));
   });
 
   test("an explicit empty when is preserved (not silently dropped)", () => {
@@ -596,7 +612,7 @@ describe("loadDslConfig — layout", () => {
       FILE,
       `{ segments: { a: { template: "x" } }, layout: [{ when: "", segments: ["a"] }] }`,
     );
-    expect(cfg.layout).toEqual([{ when: "", segments: ["a"] }]);
+    expect(cfg.root).toEqual(vert({ when: "", segments: ["a"] }));
   });
 
   test("unknown layout-row key is rejected", () => {
@@ -1028,7 +1044,7 @@ describe("loadDslConfig — valid corpus", () => {
       "branch", "constant", "cwd", "cwd_short", "home", "hostname",
       "load_avg", "now", "sid",
     ]);
-    expect(cfg.layout).toEqual([{ segments: ["cwd", "branch", "load"] }]);
+    expect(cfg.root).toEqual(vert(["cwd", "branch", "load"]));
   });
 
   test("minimal valid config loads to canonical empty shape", () => {
@@ -1036,7 +1052,7 @@ describe("loadDslConfig — valid corpus", () => {
       globals: {},
       variables: {},
       segments: {},
-      layout: [],
+      root: { kind: "container", direction: "vertical", children: [] },
       widgets: {},
     });
   });

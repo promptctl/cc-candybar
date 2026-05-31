@@ -27,6 +27,7 @@ import {
   ACTION_KEYS,
   CACHE_KEYS,
   GIT_FIELDS,
+  DIRECTIONS,
   JUSTIFY_MODES,
   OPTION_SOURCES,
   SOURCES_REQUIRING_CACHE,
@@ -44,6 +45,8 @@ import {
   type Globals,
   type JustifyMode,
   type LayoutRow,
+  type LayoutNode,
+  type Direction,
   type OptionSource,
   type RawDslConfig,
   type SegmentDecl,
@@ -53,6 +56,7 @@ import {
   type ValidatedConfig,
   type VariableDecl,
   type WidgetDecl,
+  walkNodes,
   widgetStateUse,
   TERM_COLS_VAR,
 } from "./dsl-types.js";
@@ -321,14 +325,14 @@ export function validateConfig(
  *   globals    : shallow merge per field (user wins per-field)
  *   variables  : merge by name (user wins per-name)
  *   segments   : merge by name (user wins per-name)
- *   layout     : user replaces wholesale when the key is present (including
- *                explicit `[]`, which means "render no segments"). Only an
- *                absent `layout` key falls back to the default.
- *                [LAW:types-are-the-program] RawDslConfig.layout?: string[]
- *                carries three states (absent / [] / non-empty); collapsing
- *                [] into "absent" loses the user's ability to suppress all
- *                default segments. The merge respects the discriminator the
- *                type already encodes.
+ *   root       : the canonical layout tree. Authored directly (`root`) wins;
+ *                else the flat `layout` sugar is compiled to a tree
+ *                (layoutRowsToNode); else the default's tree. `layout` replaces
+ *                wholesale when present (including explicit `[]`, which compiles
+ *                to an empty container = "render no segments"). Only when the
+ *                user wrote NEITHER `root` nor `layout` does the default apply.
+ *                [LAW:one-source-of-truth] The two authoring surfaces collapse
+ *                to one `root` here; parseDslConfig rejects writing both.
  *
  * [LAW:one-source-of-truth] The single point that consults DEFAULT_DSL_CONFIG
  * for missing keys. Adding a new merged top-level key is a new line here, not
@@ -342,11 +346,33 @@ export function mergeWithDefault(
     globals: { ...dflt.globals, ...(raw.globals ?? {}) },
     variables: { ...dflt.variables, ...(raw.variables ?? {}) },
     segments: { ...dflt.segments, ...(raw.segments ?? {}) },
-    layout: raw.layout !== undefined ? raw.layout : dflt.layout,
+    root:
+      raw.root !== undefined
+        ? raw.root
+        : raw.layout !== undefined
+          ? layoutRowsToNode(raw.layout)
+          : dflt.root,
     // [LAW:one-source-of-truth] widgets merge by name (user wins per-name),
     // identical cascade to variables/segments — a user declares only the
     // widgets that differ from the bundled default.
     widgets: { ...dflt.widgets, ...(raw.widgets ?? {}) },
+  };
+}
+
+// [LAW:one-source-of-truth] THE compiler from the flat-vertical `layout` sugar
+// to the canonical node tree: a list of rows becomes one vertical container of
+// `cells` leaves, in order, each carrying the row's segments and (if present)
+// its `when`. This is the only place the sugar shape is interpreted; everything
+// downstream sees the tree.
+export function layoutRowsToNode(rows: readonly LayoutRow[]): LayoutNode {
+  return {
+    kind: "container",
+    direction: "vertical",
+    children: rows.map((row) =>
+      row.when !== undefined
+        ? { kind: "cells", segments: row.segments, when: row.when }
+        : { kind: "cells", segments: row.segments },
+    ),
   };
 }
 
@@ -451,6 +477,18 @@ function validateTopLevel(
   if (raw.segments !== undefined)
     out.segments = validateSegments(ctx, raw.segments);
   if (raw.layout !== undefined) out.layout = validateLayout(ctx, raw.layout);
+  if (raw.root !== undefined) out.root = validateRoot(ctx, "root", raw.root);
+  // [LAW:one-source-of-truth] One canonical layout — a config authors EITHER the
+  // flat `layout` sugar OR the raw `root` node grammar, never both: two surfaces
+  // for the same tree could drift. Reject the ambiguity loudly rather than
+  // silently letting one win.
+  if (raw.layout !== undefined && raw.root !== undefined) {
+    ctx.issues.push({
+      path: "root",
+      message: `a config declares either "layout" (the flat-row sugar) or "root" (the node grammar), not both`,
+      line: findKeyLine(ctx.source, ["root"]),
+    });
+  }
   if (raw.widgets !== undefined)
     out.widgets = validateWidgets(ctx, raw.widgets);
   return out;
@@ -461,6 +499,7 @@ const TOP_LEVEL_KEYS = new Set([
   "variables",
   "segments",
   "layout",
+  "root",
   "widgets",
 ]);
 
@@ -1124,6 +1163,138 @@ function validateLayoutSegments(
   return rowOut;
 }
 
+// ─── Root node grammar ───────────────────────────────────────────────────────
+
+// [LAW:locality-or-seam] The boundary that turns the raw `root` grammar into a
+// validated LayoutNode tree. STRUCTURAL only — whether a segment name resolves
+// and whether a `when` ref exists are cross-ref concerns (validateCrossReferences
+// runs on the MERGED config, so a node can name default-provided segments).
+// Mirrors validateLayout's discipline: loud, no silent shimming.
+//
+// [LAW:dataflow-not-control-flow] The `kind` discriminator selects the arm; an
+// unknown kind is rejected, never coerced. On a fundamental shape error the
+// validator returns a degenerate node so traversal continues collecting issues
+// — parseDslConfig throws once any issue exists, so the fallback never renders.
+const EMPTY_VERTICAL_NODE: LayoutNode = {
+  kind: "container",
+  direction: "vertical",
+  children: [],
+};
+
+function validateRoot(
+  ctx: ValidateCtx,
+  path: string,
+  raw: unknown,
+): LayoutNode {
+  if (!isPlainObject(raw)) {
+    ctx.issues.push({
+      path,
+      message: `a layout node must be an object with "kind" of "cells" or "container", got ${describeType(raw)}`,
+      line: findKeyLine(ctx.source, ["root"]),
+    });
+    return EMPTY_VERTICAL_NODE;
+  }
+  if (raw.kind === "cells") return validateCellsNode(ctx, path, raw);
+  if (raw.kind === "container") return validateContainerNode(ctx, path, raw);
+  ctx.issues.push({
+    path: `${path}.kind`,
+    message: `a layout node "kind" must be "cells" or "container", got ${JSON.stringify(raw.kind)}`,
+    line: findKeyLine(ctx.source, ["root"]),
+  });
+  return EMPTY_VERTICAL_NODE;
+}
+
+function rejectUnknownNodeKeys(
+  ctx: ValidateCtx,
+  path: string,
+  raw: Record<string, unknown>,
+  allowed: ReadonlySet<string>,
+): void {
+  for (const key of Object.keys(raw)) {
+    if (!allowed.has(key)) {
+      ctx.issues.push({
+        path: `${path}.${key}`,
+        message: `Unknown layout-node key "${key}". Expected one of: ${[...allowed].join(", ")}`,
+        line: findKeyLine(ctx.source, ["root"]),
+      });
+    }
+  }
+}
+
+function validateCellsNode(
+  ctx: ValidateCtx,
+  path: string,
+  raw: Record<string, unknown>,
+): LayoutNode {
+  rejectUnknownNodeKeys(ctx, path, raw, new Set(["kind", "segments", "when"]));
+  const when = optionalStringField(ctx, path, raw, "when");
+  if (!Array.isArray(raw.segments)) {
+    ctx.issues.push({
+      path: `${path}.segments`,
+      message: `a cells node must have a "segments" array of segment names, got ${describeType(raw.segments)}`,
+      line: findKeyLine(ctx.source, ["root"]),
+    });
+    return when !== undefined
+      ? { kind: "cells", segments: [], when }
+      : { kind: "cells", segments: [] };
+  }
+  const segments = validateLayoutSegments(
+    ctx,
+    `${path}.segments`,
+    raw.segments,
+  );
+  return when !== undefined
+    ? { kind: "cells", segments, when }
+    : { kind: "cells", segments };
+}
+
+function validateContainerNode(
+  ctx: ValidateCtx,
+  path: string,
+  raw: Record<string, unknown>,
+): LayoutNode {
+  rejectUnknownNodeKeys(
+    ctx,
+    path,
+    raw,
+    new Set(["kind", "direction", "children", "when"]),
+  );
+  const when = optionalStringField(ctx, path, raw, "when");
+
+  // [LAW:one-source-of-truth] Valid directions come from the DIRECTIONS list —
+  // the same set the renderer projects. Today only `vertical` is implemented;
+  // an unimplemented direction is a hard error, not a silent downgrade.
+  const direction = raw.direction;
+  const directionOk =
+    typeof direction === "string" &&
+    (DIRECTIONS as readonly string[]).includes(direction);
+  if (!directionOk) {
+    ctx.issues.push({
+      path: `${path}.direction`,
+      message: `a container "direction" must be one of: ${DIRECTIONS.join(", ")} (got ${JSON.stringify(direction)})`,
+      line: findKeyLine(ctx.source, ["root"]),
+    });
+  }
+  const dir: Direction = directionOk ? (direction as Direction) : "vertical";
+
+  let children: LayoutNode[] = [];
+  if (!Array.isArray(raw.children)) {
+    ctx.issues.push({
+      path: `${path}.children`,
+      message: `a container must have a "children" array of layout nodes, got ${describeType(raw.children)}`,
+      line: findKeyLine(ctx.source, ["root"]),
+    });
+  } else {
+    children = raw.children.map((child, i) =>
+      validateRoot(ctx, `${path}.children[${i}]`, child),
+    );
+  }
+
+  return when !== undefined
+    ? { kind: "container", direction: dir, children, when }
+    : { kind: "container", direction: dir, children };
+}
+
 // ─── Widgets ─────────────────────────────────────────────────────────────────
 
 // [LAW:locality-or-seam] Structural validation of the `widgets` block: each
@@ -1614,33 +1785,6 @@ export function extractWidgetRefs(template: string): Set<string> {
 // ─── Cross-references ────────────────────────────────────────────────────────
 
 function validateCrossReferences(ctx: ValidateCtx, cfg: DslConfig): void {
-  // [LAW:locality-or-seam] Layout entries reference segments. Cross-ref runs
-  // on the MERGED config so a user's layout can name default-provided
-  // segments without re-declaring them. The row shape (predicate + segment
-  // names) is enforced by validateLayout at parse time; "does name exist?"
-  // lives here, with the rest of the existence checks.
-  for (let r = 0; r < cfg.layout.length; r++) {
-    const row = cfg.layout[r]!;
-    for (let c = 0; c < row.segments.length; c++) {
-      const entry = row.segments[c]!;
-      if (!Object.prototype.hasOwnProperty.call(cfg.segments, entry)) {
-        ctx.issues.push({
-          // [LAW:one-source-of-truth] Cross-ref runs on the MERGED, normalized
-          // config — every row is the canonical `{ segments }` shape, the raw
-          // bare-array vs object form already collapsed at parse and
-          // unrecoverable post-merge (the check must be post-merge to resolve
-          // default-provided segments). So the path describes the canonical
-          // model it traverses; the `line` already points the user at the
-          // `layout` key. (Parse-time structural validation, which still holds
-          // the raw form, emits form-accurate paths.)
-          path: `layout[${r}].segments[${c}]`,
-          message: `layout entry "${entry}" does not match any declared segment`,
-          line: findKeyLine(ctx.source, ["layout"]),
-        });
-      }
-    }
-  }
-
   // Full set for depends_on validation (all names, bare + namespaced). depends_on
   // takes explicit fully-qualified names, so cross-segment visibility is intentional.
   const allVarNames = new Set<string>(Object.keys(cfg.variables));
@@ -1651,14 +1795,33 @@ function validateCrossReferences(ctx: ValidateCtx, cfg: DslConfig): void {
     }
   }
 
-  // [LAW:locality-or-seam] A row's `when` predicate is a template like any
-  // other; its refs must resolve. A row is not scoped to a segment, so it
-  // reads the global scope (bare globals + namespaced segment vars) — the
-  // same existence-check shape as segment templates, surfaced at load time.
-  for (let r = 0; r < cfg.layout.length; r++) {
-    const when = cfg.layout[r]!.when;
-    if (when === undefined) continue;
-    checkTemplateRefs(ctx, `layout[${r}].when`, when, allVarNames);
+  // [LAW:single-enforcer] ONE pre-order walk over the canonical node tree owns
+  // every layout cross-ref: each cells node's segment names must resolve to a
+  // declared segment, and any node's `when` predicate (a template like any
+  // other) must reference only existing variables. Cross-ref runs on the MERGED
+  // config so a node can name default-provided segments without re-declaring
+  // them. It traverses the canonical tree — the raw `layout`-vs-`root` authoring
+  // form is already collapsed and unrecoverable post-merge — so the path
+  // describes the tree and `line` points at whichever layout key the user wrote.
+  const layoutLine =
+    findKeyLine(ctx.source, ["root"]) ?? findKeyLine(ctx.source, ["layout"]);
+  for (const node of walkNodes(cfg.root)) {
+    // [LAW:locality-or-seam] A node's `when` reads the global scope (bare
+    // globals + namespaced segment vars) — the same existence-check shape as a
+    // segment template, surfaced at load time.
+    if (node.when !== undefined) {
+      checkTemplateRefs(ctx, "layout when", node.when, allVarNames);
+    }
+    if (node.kind !== "cells") continue;
+    for (const entry of node.segments) {
+      if (!Object.prototype.hasOwnProperty.call(cfg.segments, entry)) {
+        ctx.issues.push({
+          path: "layout",
+          message: `layout entry "${entry}" does not match any declared segment`,
+          line: layoutLine,
+        });
+      }
+    }
   }
 
   // For each variable's template/cache.key, every dotted ref must exist
