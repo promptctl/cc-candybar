@@ -1803,13 +1803,14 @@ function validateCrossReferences(ctx: ValidateCtx, cfg: DslConfig): void {
   // them. It traverses the canonical tree — the raw `layout`-vs-`root` authoring
   // form is already collapsed and unrecoverable post-merge — so the path
   // describes the tree and `line` points at whichever layout key the user wrote.
-  // [LAW:one-source-of-truth] The presence of the `root` key in the source IS
-  // the discriminator for which surface the user authored; the reported path
-  // and line both follow from it, so a root-authored config's errors point at
-  // `root`, not the absent `layout` sugar.
-  const rootLine = findKeyLine(ctx.source, ["root"]);
-  const layoutKey = rootLine !== undefined ? "root" : "layout";
-  const layoutLine = rootLine ?? findKeyLine(ctx.source, ["layout"]);
+  // [LAW:one-source-of-truth] Which top-level layout surface the user authored
+  // is read from the PARSED structure, not a text probe: a nested key named
+  // `root` (a variable, a segment) — or `layout` (a `time` var's `layout`
+  // field) — would fool a raw `findKeyLine` search and misclassify the config.
+  // Validation is cold-path, so reading the source's top-level keys is exact.
+  // The reported path/message then point at the surface the user wrote.
+  const layoutKey = authoredLayoutKey(ctx.source);
+  const layoutLine = findKeyLine(ctx.source, [layoutKey]);
   for (const node of walkNodes(cfg.root)) {
     // [LAW:locality-or-seam] A node's `when` reads the global scope (bare
     // globals + namespaced segment vars) — the same existence-check shape as a
@@ -2434,6 +2435,22 @@ type Mutable<T> = { -readonly [K in keyof T]: T[K] };
 //
 // This is "good enough" navigation, not a guarantee. Returns undefined if a
 // path part can't be located — the caller falls back to the logical path.
+// [LAW:one-source-of-truth] The authored top-level layout surface, read from the
+// PARSED top-level keys (`root` wins; the loader already rejects authoring both).
+// A structural read — not a text search — so a nested key named `root`/`layout`
+// can never misclassify the config. Empty/unparseable source (the bundled
+// default, no file) has no surface; defaults to the historical `layout` label.
+function authoredLayoutKey(source: string): "root" | "layout" {
+  try {
+    const parsed = JSON5.parse(source);
+    if (isPlainObject(parsed) && "root" in parsed) return "root";
+  } catch {
+    // No source to read (default config) or unparseable — fall through. A real
+    // syntax error is already reported by parseDslConfig before cross-ref runs.
+  }
+  return "layout";
+}
+
 export function findKeyLine(
   source: string,
   pathParts: readonly string[],

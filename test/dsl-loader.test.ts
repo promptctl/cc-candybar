@@ -677,6 +677,21 @@ describe("loadDslConfig — cross-references", () => {
     );
   });
 
+  test("a nested key named `root` does not misclassify a layout-authored config", () => {
+    // A text-search discriminator would see the variable `root:` and wrongly
+    // report the `root` surface; the parsed-structure discriminator correctly
+    // reports `layout` because that is the top-level key the user authored.
+    expectIssue(
+      `{ variables: { root: { kind: "literal", value: "x" } },
+         segments: { cwd: { template: "t" } },
+         layout: [["cwd", "missing"]] }`,
+      {
+        path: "layout",
+        message: 'layout entry "missing" does not match any declared segment',
+      },
+    );
+  });
+
   test("root node `when` referencing an unknown variable is reported under `root.when`", () => {
     expectIssue(
       `{ segments: { cwd: { template: "t" } },
