@@ -197,6 +197,14 @@ export function buildNeededPrefixes(config: DslConfig): ReadonlySet<string> {
     // only a predicate (e.g. a state var gating a row/container) isn't gated out.
     if (node.when)
       for (const ref of extractTemplateRefs(node.when)) frontier.push(ref);
+    // An inline leaf's bg/fg are template surfaces (resolved by the same
+    // resolveSegmentColors path as a segment's), so seed their refs too — a
+    // provider feeding ONLY an inline color must not be gated out.
+    if (node.kind === "inline") {
+      for (const src of [node.bg, node.fg]) {
+        if (src) for (const ref of extractTemplateRefs(src)) frontier.push(ref);
+      }
+    }
     if (node.kind !== "cells") continue;
     for (const segName of node.segments) {
       const seg = config.segments[segName];
