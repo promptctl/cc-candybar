@@ -20,6 +20,7 @@
 import {
   createEngine,
   type Engine,
+  type FuncMap,
   sprigDefaults,
   sprigStrings,
   sprigLists,
@@ -28,21 +29,21 @@ import type { PaletteResolver } from "@promptctl/rich-js";
 import { richTextFuncs, RichText } from "@promptctl/rich-js";
 import { paletteFuncs } from "@promptctl/rich-js/template-bindings";
 import { ccCandybarFuncs, formatterFuncs } from "./funcs.js";
-import { widgetFuncs, type WidgetRuntime } from "./widgets.js";
 
 // [LAW:single-enforcer] fromString/toString are declared once here.
 // richTextFuncs() provides style functions (bold, red, link, …).
 // paletteFuncs(resolver) registers semantic palette functions when a theme
 // resolver is provided — same engine instance, no second parse path.
-// widgetFuncs(runtime) registers the `widget` reference function when a widget
-// runtime is provided (the daemon's per-config engine supplies one; the
-// resolver-less compile-only paths do not).
-// [LAW:one-type-per-behavior] resolver?/widgetRuntime? are values, not modes —
+// [LAW:one-way-deps] `extraFuncs` is an INJECTED FuncMap (e.g. the widget
+// feature's `widget` func, built in render/widget.ts). The generic engine never
+// imports a specific feature — the caller hands it the capability as data, so
+// the dependency runs caller → engine, never engine → feature.
+// [LAW:one-type-per-behavior] resolver?/extraFuncs? are values, not modes —
 // one factory, one engine shape; the data (their presence) governs what's
 // registered.
 export function createCcCandybarEngine(
   resolver?: PaletteResolver,
-  widgetRuntime?: WidgetRuntime,
+  extraFuncs?: FuncMap,
 ): Engine<RichText> {
   return createEngine<RichText>({
     fromString: (s) => new RichText(s),
@@ -63,9 +64,10 @@ export function createCcCandybarEngine(
       // src/utils/formatters.ts (and src/utils/budget.ts); no name collides
       // with sprig or ccCandybarFuncs.
       ...formatterFuncs(),
-      // [LAW:locality-or-seam] `widget` resolves a `{{ widget "name" }}`
-      // reference against this config's compiled widgets + live store.
-      ...(widgetRuntime !== undefined ? widgetFuncs(widgetRuntime) : {}),
+      // [LAW:locality-or-seam] Injected feature funcs (the daemon's per-config
+      // engine supplies the `widget` func; resolver-less compile-only paths do
+      // not). Last so a feature can override on collision.
+      ...(extraFuncs ?? {}),
     },
   });
 }
