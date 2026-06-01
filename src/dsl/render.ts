@@ -42,8 +42,9 @@ import {
 } from "../template-engine/index.js";
 import {
   compileWidgets,
+  widgetFuncs,
   type WidgetRuntime,
-} from "../template-engine/widgets.js";
+} from "../render/widget.js";
 
 // ─── Compiled segment shape ───────────────────────────────────────────────────
 
@@ -293,7 +294,10 @@ export function registerDslConfig(
     store: opts?.store ?? null,
     compiled: new Map(),
   };
-  const engine = createCcCandybarEngine(undefined, widgetRuntime);
+  // [LAW:one-way-deps] Inject the widget feature's func as data — the engine
+  // stays generic. The func closes over the runtime holder, whose `compiled`
+  // map is populated just below (the holder breaks the engine↔widgets cycle).
+  const engine = createCcCandybarEngine(undefined, widgetFuncs(widgetRuntime));
   // [LAW:one-source-of-truth] Map each SessionState key → the variable that
   // reads it, so an option picker marks its current selection by reading the
   // SAME value the templates read — independent of whether the config named the

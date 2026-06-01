@@ -10,6 +10,11 @@
 // src/var-system/sources.ts). The loader is the single point that translates
 // between the two; no other module should re-derive these shapes.
 
+// [LAW:one-way-deps] The widget schema lives in its own leaf module; DslConfig
+// references it here. The dependency is one-way (this file → widget.ts), never
+// the reverse, so the widget shapes can be lifted out without a cycle.
+import type { WidgetDecl } from "./widget.js";
+
 // [LAW:types-are-the-program] Three stages, three names.
 //
 //   RawDslConfig    — the user-file shape. Every top-level key is optional
@@ -377,99 +382,11 @@ export const TRUNCATE_MODES: readonly TruncateMode[] = [
   "middle",
 ];
 
-// ─── Interactive widgets ───────────────────────────────────────────────────────
+// ─── Conventional render-time variable names ─────────────────────────────────
 //
-// [LAW:locality-or-seam] A widget is a reusable interactive component declared
-// in `DslConfig.widgets` and referenced from a segment template via
-// `{{ widget "name" }}`. It is NOT a kind of segment — there is one Segment
-// type; a widget reference is content a template uses, exactly like `link` or a
-// variable. Whether a segment shows text, a button, both, or neither falls out
-// of what its template contains, never a segment-type distinction.
-
-// [LAW:types-are-the-program] An Action is the click effect a button binds to.
-// Discriminated by which key is present (the CacheDecl pattern): exactly one of
-// `set` / `copy` / `open`. The loader proves the one-of invariant; the renderer
-// and the validator-derivation walk match on the present key with no fallthrough.
-//
-//   set  — write a SessionState key. `to` is the literal value for a fixed
-//          button; OMITTED when the value is supplied by the option (an
-//          `optionsFrom` button binds each option's value into its own click).
-//          The loader enforces this pairing (literal ⇒ `to` required;
-//          option-bound ⇒ `to` forbidden) — the type carries `to?` because the
-//          legality depends on the enclosing item's context.
-//   copy — copy templated text to the clipboard (the `copy` verb).
-//   open — open a templated path/target in the editor (the `open-vscode` verb).
-//
-// [LAW:one-source-of-truth] Only `set` actions write SessionState, so only
-// `set` actions derive a validator (from their target key + value(s)).
-// `copy`/`open` write nothing — they derive nothing. The vocabulary grows by
-// arms (a future `run`/`open-url`), not by validator plumbing.
-export type Action =
-  | { readonly set: string; readonly to?: string }
-  | { readonly copy: string }
-  | { readonly open: string };
-
-export const ACTION_KEYS = ["set", "copy", "open"] as const;
-export type ActionKey = (typeof ACTION_KEYS)[number];
-
-// [LAW:one-source-of-truth] The domain lists a picker draws options from. Same
-// canonical sources the `themes()`/`styles()` bindings and the set-state
-// validators consult — the rendered options and the derived gate cannot diverge
-// because there is no second enumeration.
-export type OptionSource = "themes" | "styles";
-export const OPTION_SOURCES: readonly OptionSource[] = ["themes", "styles"];
-
-// [LAW:types-are-the-program] A button item is discriminated by presence of
-// `optionsFrom`. A literal item carries its own glyph/label; an option-bound
-// item expands to one button per option, binding each option's value into its
-// `set` action. `onClick` is always a list — single is the N=1 case, no
-// `Action | Action[]` union for consumers to normalize. The list may mix kinds:
-// every `set` batches into one atomic set-state effect, each `copy`/`open` is its
-// own effect, and all ride one `dispatch` click URL.
-export interface LiteralButtonItem {
-  readonly glyph?: string;
-  readonly label?: string;
-  readonly onClick: readonly Action[];
-}
-export interface OptionsButtonItem {
-  readonly optionsFrom: OptionSource;
-  readonly glyph?: string;
-  readonly onClick: readonly Action[];
-}
-export type ButtonItem = LiteralButtonItem | OptionsButtonItem;
-
-export function isOptionsButtonItem(
-  item: ButtonItem,
-): item is OptionsButtonItem {
-  return "optionsFrom" in item;
-}
-
-// [LAW:one-type-per-behavior] Widgets are discriminated by `kind` (the
-// VariableDecl pattern). The foundation ships `buttons`; `menu` (width-
-// paginated, open-page state) joins as one arm; `stepper` (numeric
-// dec/cur/inc) is a future arm — the segment surface stays untouched.
-export interface ButtonsWidget {
-  readonly kind: "buttons";
-  readonly items: readonly ButtonItem[];
-}
-
-// [LAW:types-are-the-program] A `menu` is a `buttons` whose item run is too
-// wide for one line: the SAME `items` shape, plus the page state it indexes.
-// `state` names the SessionState integer key the menu reads to choose its
-// page (-1/absent = closed) and writes for navigation (←/→) and apply-and-
-// close. The page key carries the whole open/closed/which-page discriminator
-// in ONE value — no separate isOpen flag to drift [LAW:one-source-of-truth].
-//
-// The author declares a MENU OF OPTIONS; pages, the ←/→/✕ affordances, and
-// their click URLs are DERIVED at render from `state` + the live terminal
-// width — never hand-authored. Each option click APPLIES its own set(s) AND
-// writes `state` to -1 (apply-and-close) via the existing batched set-state
-// wire; no menu-specific action vocabulary.
-export interface MenuWidget {
-  readonly kind: "menu";
-  readonly state: string;
-  readonly items: readonly ButtonItem[];
-}
+// [LAW:one-source-of-truth] These are not widget types (those live in
+// `./widget.ts`); they are the conventional variable NAMES the renderer and the
+// widget runtime agree on. Kept here, with the other render/config conventions.
 
 // [LAW:one-source-of-truth] The conventional variable a menu paginates against —
 // the usable terminal width renderDsl injects each render. One name shared by
@@ -486,53 +403,3 @@ export const TERM_COLS_VAR = "term.cols";
 // this one name; the stepper widget writes the SessionState key it reads. Absent
 // ≡ no rotation (step 0) — the degenerate case, not a special branch.
 export const HUE_STEP_VAR = "hue.step";
-
-// [LAW:types-are-the-program] A `stepper` is a numeric control: three derived
-// cells (◀ current ▶) bound to ONE integer SessionState key with [min,max]
-// bounds and an increment. Unlike buttons/menu it has NO author `items` — its
-// affordances are render-derived from (current, step), exactly as a menu's
-// ←/→/✕ are. ◀/▶ navigate by ∓step and WRAP past a bound to the other end, so
-// the cells emit values already inside [min,max]; the range validator (derived
-// from min/max) owns the bounds for any other write. `step` lives here (render
-// needs it) and deliberately NOT in the derived validator spec — legality is
-// "an integer in [min,max]", which step does not affect and which merges cleanly
-// across configs where step would not.
-export interface StepperWidget {
-  readonly kind: "stepper";
-  readonly state: string;
-  readonly min: number;
-  readonly max: number;
-  readonly step: number;
-}
-
-export type WidgetDecl = ButtonsWidget | MenuWidget | StepperWidget;
-
-// [LAW:single-enforcer] The ONE place mapping a widget kind to its SessionState
-// relationship, as DATA. Every consumer (the loader's backing-var and session.id
-// checks; the validator derivation reads the richer spec form in
-// state-validators) reads these fields — none re-switches on kind. A new widget
-// kind is one new arm in this exhaustive switch, and the compiler forces it.
-//   readsKey   — the key the widget READS BACK (a menu's page, a stepper's
-//                value); null for buttons. A row `when` and the backing-var
-//                check key off this.
-//   hasSetItem — whether an author item binds a `set` action (buttons/menu).
-export interface WidgetStateUse {
-  readonly readsKey: string | null;
-  readonly hasSetItem: boolean;
-}
-export function widgetStateUse(w: WidgetDecl): WidgetStateUse {
-  switch (w.kind) {
-    case "stepper":
-      return { readsKey: w.state, hasSetItem: false };
-    case "menu":
-      return { readsKey: w.state, hasSetItem: itemsBindSet(w.items) };
-    case "buttons":
-      return { readsKey: null, hasSetItem: itemsBindSet(w.items) };
-  }
-}
-function itemsBindSet(items: readonly ButtonItem[]): boolean {
-  return items.some((item) => item.onClick.some((action) => "set" in action));
-}
-
-export const WIDGET_KINDS = ["buttons", "menu", "stepper"] as const;
-export type WidgetKind = (typeof WIDGET_KINDS)[number];
