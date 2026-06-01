@@ -95,6 +95,62 @@ export interface CellsNode {
   readonly when?: string;
 }
 
+// [LAW:types-are-the-program] An `onClick` is the MIRROR of `when`: where `when`
+// is a predicate that READS SessionState to gate visibility, `onClick` is a
+// structured (key, value) WRITE — the click effect bound to a clickable leaf
+// cell. STRUCTURED (a literal key + literal value) rather than a pre-built URL
+// precisely so the validator that gates the write is DERIVABLE from the layout
+// itself [LAW:one-source-of-truth: the rendered click IS the gate]. The renderer
+// turns it into a `set-state` OSC-8 URL via the one click wire; the daemon's
+// gate is derived from the same (key, value) pairs (deriveNodeValidators).
+//
+// One arm today (the state write — the substrate primitive this slice pins).
+// `copy`/`open` side-effects (which write NO SessionState and need NO validator)
+// join as additive arms when the buttons widget dissolves; the vocabulary grows
+// by arms, never by URL plumbing at the callsite.
+export interface ClickWrite {
+  readonly set: string;
+  readonly to: string;
+}
+
+// [LAW:types-are-the-program] One generated cell of an inline leaf: display text
+// plus an OPTIONAL click. Absent `onClick` ≡ a plain (non-clickable) cell — a
+// stepper's current-value display, a separator glyph — so "clickable" is data on
+// the cell, not a second cell type. Composites (later slices) build these cells
+// from their live state; an author writes them directly for a fixed trigger.
+export interface InlineCell {
+  readonly text: string;
+  readonly onClick?: ClickWrite;
+}
+
+// [LAW:types-are-the-program] The other base-case leaf alongside CellsNode: a
+// leaf whose content is GENERATED cells (text + optional click), not segment-
+// name refs. [LAW:one-type-per-behavior] a segment-ref leaf and an inline leaf
+// are distinct because their RENDER behavior differs — a ref leaf looks up each
+// segment and evaluates its template/palette/layout; an inline leaf carries the
+// cells already, evaluating only its own click URLs and color. This is the
+// substrate hook composite node types (stepper/picker/disclosure) land their
+// rendered cells on. Like a segment it owns its color (`bg`/`fg`/`palette` are
+// palette-spec NAMES, resolved against the live base theme and transposed by the
+// leaf's hue position) — there is no backing segment to carry it.
+export interface InlineNode {
+  readonly kind: "inline";
+  readonly cells: readonly InlineCell[];
+  // [LAW:single-enforcer] Color-spec template strings, the SAME surface a
+  // segment's bg/fg are — resolved by the one resolveSegmentColors path, so an
+  // inline leaf's color cannot drift from a segment's. As template surfaces they
+  // are ref-checked and frontier-seeded identically (loader + render-payload).
+  // Absent ≡ inherit the cascade base (no color of the leaf's own).
+  readonly bg?: string;
+  readonly fg?: string;
+  // [LAW:one-source-of-truth] Per-leaf palette override (a NAME); undefined =
+  // inherit the per-render base theme, the same contract a segment's `palette`.
+  readonly palette?: string;
+  // [LAW:dataflow-not-control-flow] Absent `when` ≡ always-rendered — the same
+  // subtree-gating contract every node shares.
+  readonly when?: string;
+}
+
 export interface ContainerNode {
   readonly kind: "container";
   readonly direction: Direction;
@@ -105,7 +161,7 @@ export interface ContainerNode {
   readonly when?: string;
 }
 
-export type LayoutNode = CellsNode | ContainerNode;
+export type LayoutNode = CellsNode | InlineNode | ContainerNode;
 
 // [LAW:single-enforcer] THE one pre-order walk over a node tree. Every consumer
 // that needs "which segments / which `when` predicates does this layout name"

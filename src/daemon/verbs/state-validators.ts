@@ -36,7 +36,17 @@ import type {
   OptionSource,
   WidgetDecl,
 } from "../../config/widget";
+import { walkNodes } from "../../config/dsl-types";
 import type { DslConfig } from "../../config/dsl-types";
+
+// [LAW:one-source-of-truth] One contribution shape — a (key, spec) pair — shared
+// by both the widget walk and the node walk. mergeContributions folds a list of
+// these into the final per-key validator specs, so widgets and nodes feed ONE
+// coherence merge regardless of which surface authored the write.
+interface KeySpecContribution {
+  readonly key: string;
+  readonly spec: DerivedValidatorSpec;
+}
 
 // [LAW:types-are-the-program] Discriminated union — every legal return is
 // either an accepted-and-canonicalized string or a structured rejection
@@ -545,15 +555,15 @@ function mergeKeySpecs(
   const nonInt = allowed.filter((v) => !INT_RE.test(v));
   if (nonInt.length > 0) {
     throw new Error(
-      `deriveWidgetValidators: key "${key}" is an integer spec (a menu page ` +
-        `index or a stepper value) but a button set-action writes non-integer ` +
+      `deriveValidators: key "${key}" is an integer spec (a menu page ` +
+        `index or a stepper value) but a click writes non-integer ` +
         `value(s) to it (${nonInt.join(", ")}). A state key has one key ` +
-        `shape — point that set-action at a distinct key, or write an integer.`,
+        `shape — point that click at a distinct key, or write an integer.`,
     );
   }
   if (hasInt && ranges.length > 0) {
     throw new Error(
-      `deriveWidgetValidators: key "${key}" is declared as both a menu page ` +
+      `deriveValidators: key "${key}" is declared as both a menu page ` +
         `(int) and a stepper value (range) — a state key has one key shape. ` +
         `Use distinct keys.`,
     );
@@ -563,8 +573,8 @@ function mergeKeySpecs(
     const max = Math.max(...ranges.map((r) => r.max));
     // [LAW:no-silent-fallbacks] A menu page (int) is UNBOUNDED, so any integer
     // write is a legal member to absorb. A stepper range is BOUNDED — an integer
-    // a button declares OUTSIDE [min,max] would be clamped by the range gate at
-    // click time, silently storing a different value than the button rendered.
+    // a click declares OUTSIDE [min,max] would be clamped by the range gate at
+    // click time, silently storing a different value than the click rendered.
     // That is a config error, surfaced at load rather than papered over at click.
     const outOfRange = allowed.filter((v) => {
       const n = parseInt(v, 10);
@@ -572,11 +582,11 @@ function mergeKeySpecs(
     });
     if (outOfRange.length > 0) {
       throw new Error(
-        `deriveWidgetValidators: key "${key}" is a stepper range [${min},${max}] ` +
-          `but a button set-action writes out-of-range value(s) to it ` +
+        `deriveValidators: key "${key}" is a stepper range [${min},${max}] ` +
+          `but a click writes out-of-range value(s) to it ` +
           `(${outOfRange.join(", ")}). The range gate would clamp them, storing a ` +
-          `different value than the button renders — write an in-range integer, ` +
-          `or point that set-action at a distinct key.`,
+          `different value than the click renders — write an in-range integer, ` +
+          `or point that click at a distinct key.`,
       );
     }
     return { kind: "range", min, max };
@@ -584,37 +594,102 @@ function mergeKeySpecs(
   return { kind: "int" };
 }
 
-// [LAW:one-source-of-truth] The writable-key surface a config's widgets need is
-// DERIVED from the widget declarations (widgetKeySpecs) — the same data the
-// renderer paginates/steps from and clicks against is the gate the wire enforces,
-// so they cannot diverge.
-//
 // [LAW:single-enforcer] A STRUCTURAL spec (menu int / stepper range) is always
-// derived — even on a baseline key — so a collision throws loudly at
-// registration rather than silently shadowing the permanent gate. Only an item's
-// ALLOW-LIST contribution to a baseline key derives nothing (the button reuses
-// the baseline gate as intended). The spec kind IS that discriminator: a
-// structural spec is int/range, an item spec is allow-list.
-export function deriveWidgetValidators(config: DslConfig): ReadonlyArray<{
-  readonly key: string;
-  readonly spec: DerivedValidatorSpec;
-}> {
+// kept — even on a baseline key — so a collision throws loudly at registration
+// rather than silently shadowing the permanent gate. Only an ALLOW-LIST
+// contribution to a baseline key is dropped (the click reuses the baseline gate
+// as intended). The spec kind IS that discriminator: structural is int/range, an
+// item/onClick spec is allow-list. Shared by both contribution collectors.
+function dropBaselineAllowLists(
+  contributions: readonly KeySpecContribution[],
+): KeySpecContribution[] {
   const baseline = new Set(baselineKeys());
-  const contributions = Object.values(config.widgets)
-    .flatMap(widgetKeySpecs)
-    .filter((c) => c.spec.kind !== "allow-list" || !baseline.has(c.key));
+  return contributions.filter(
+    (c) => c.spec.kind !== "allow-list" || !baseline.has(c.key),
+  );
+}
 
+// [LAW:one-source-of-truth] The writable-key surface a config's WIDGETS need,
+// DERIVED from the widget declarations (widgetKeySpecs) — the same data the
+// renderer paginates/steps from and clicks against is the gate the wire enforces.
+function widgetContributions(config: DslConfig): KeySpecContribution[] {
+  return dropBaselineAllowLists(
+    Object.values(config.widgets).flatMap(widgetKeySpecs),
+  );
+}
+
+// [LAW:one-source-of-truth] The writable-key surface a config's LAYOUT NODES
+// need, DERIVED by walking the node tree: each inline cell's `onClick` is a
+// structured (key, value) write, so it contributes an allow-list spec whose lone
+// member is that literal value. The same (key, value) the renderer turns into the
+// click URL is the gate the wire enforces — the rendered click IS the gate.
+function nodeContributions(config: DslConfig): KeySpecContribution[] {
+  const out: KeySpecContribution[] = [];
+  for (const node of walkNodes(config.root)) {
+    if (node.kind !== "inline") continue;
+    for (const cell of node.cells) {
+      if (cell.onClick === undefined) continue;
+      out.push({
+        key: cell.onClick.set,
+        spec: { kind: "allow-list", allowed: [cell.onClick.to] },
+      });
+    }
+  }
+  return dropBaselineAllowLists(out);
+}
+
+// [LAW:single-enforcer] THE coherence merge: group every contribution by key and
+// collapse each key's specs into the one spec that gates it (mergeKeySpecs).
+// Whether a contribution came from a widget or a node is irrelevant here — the
+// open-trigger pattern (an inline cell writing "0" to a menu's int page key)
+// resolves because mergeKeySpecs absorbs an integer allow-list member into the
+// int spec. One merge, one gate per key.
+function mergeContributions(
+  contributions: readonly KeySpecContribution[],
+): KeySpecContribution[] {
   const byKey = new Map<string, DerivedValidatorSpec[]>();
   for (const { key, spec } of contributions) {
     const specs = byKey.get(key);
     if (specs) specs.push(spec);
     else byKey.set(key, [spec]);
   }
-
   return [...byKey].map(([key, specs]) => ({
     key,
     spec: mergeKeySpecs(key, specs),
   }));
+}
+
+// [LAW:one-source-of-truth] Per-surface derivations, each isolated-testable. The
+// install site uses `deriveValidators` (both surfaces, one merge); these exist so
+// each surface's contribution can be asserted on its own. deriveWidgetValidators
+// keeps its exact prior contract (widgets only) — S5 deletes it once the widget
+// surface is gone and deriveNodeValidators is the sole authority.
+export function deriveWidgetValidators(
+  config: DslConfig,
+): readonly KeySpecContribution[] {
+  return mergeContributions(widgetContributions(config));
+}
+
+export function deriveNodeValidators(
+  config: DslConfig,
+): readonly KeySpecContribution[] {
+  return mergeContributions(nodeContributions(config));
+}
+
+// [LAW:single-enforcer] The install-site derivation: a config's writable-key
+// surface is the merge of EVERY interaction declaration it carries — widget
+// blocks AND layout-node onClicks — through ONE coherence pass. Registering the
+// two surfaces separately would collide on a shared key (a menu's int page and a
+// trigger cell's allow-list "0" are different KINDS to registerStateValidator);
+// merging the contributions first lets mergeKeySpecs absorb the one into the
+// other, so the daemon registers one consistent gate per key.
+export function deriveValidators(
+  config: DslConfig,
+): readonly KeySpecContribution[] {
+  return mergeContributions([
+    ...widgetContributions(config),
+    ...nodeContributions(config),
+  ]);
 }
 
 // [LAW:dataflow-not-control-flow] Single entry point for validation: the

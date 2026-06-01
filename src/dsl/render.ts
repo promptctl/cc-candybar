@@ -11,20 +11,25 @@
 // the input values (kind discriminators, layout length, palette presence)
 // govern output, not whether operations run.
 
-import type { PaletteResolver, RichText } from "@promptctl/rich-js";
+import { RichText, Style } from "@promptctl/rich-js";
+import type { PaletteResolver } from "@promptctl/rich-js";
 import type { Template } from "@promptctl/go-template-js";
 import type {
   ValidatedConfig,
   VariableDecl,
   CacheDecl,
   LayoutNode,
+  InlineCell,
   Direction,
 } from "../config/dsl-types.js";
 import { HUE_STEP_VAR } from "../config/dsl-types.js";
+import { toString as varToString } from "../var-system/types.js";
+import { effectsUrl, VERB_SET_STATE } from "../click/wire.js";
 import type { VariableStore } from "../var-system/store.js";
 import type { SourceRegistry } from "../var-system/sources.js";
 import {
   parseDuration,
+  SESSION_ID_VAR_NAME,
   type CachePolicy,
   type GitField,
 } from "../var-system/sources.js";
@@ -76,13 +81,30 @@ export interface CompiledCellsNode {
   readonly when?: Template<RichText>;
   readonly segments: readonly string[];
 }
+// [LAW:dataflow-not-control-flow] The compiled inline leaf: its `when` and its
+// bg/fg color specs are parsed ONCE here (renderDsl only evaluates), its palette
+// override pre-resolved. The cells themselves are literal (text + literal
+// onClick), so they need no compilation — the only render-time work is turning
+// each cell's literal (key, value) into a set-state URL against the live
+// session id, and resolving the leaf's color.
+export interface CompiledInlineNode {
+  readonly kind: "inline";
+  readonly when?: Template<RichText>;
+  readonly cells: readonly InlineCell[];
+  readonly bg?: Template<RichText>;
+  readonly fg?: Template<RichText>;
+  readonly paletteResolver?: PaletteResolver;
+}
 export interface CompiledContainerNode {
   readonly kind: "container";
   readonly direction: Direction;
   readonly when?: Template<RichText>;
   readonly children: readonly CompiledNode[];
 }
-export type CompiledNode = CompiledCellsNode | CompiledContainerNode;
+export type CompiledNode =
+  | CompiledCellsNode
+  | CompiledInlineNode
+  | CompiledContainerNode;
 
 // [LAW:one-source-of-truth] The full compiled artifact registerDslConfig
 // produces: every segment's compiled templates AND the compiled layout tree
@@ -124,6 +146,14 @@ function composeBlocks(
       return rows;
     }
   }
+}
+
+// [LAW:single-enforcer] One inline-cell click → URL mapping: a structured
+// (key, value) write becomes exactly one `set-state` effect on the one click
+// wire. effectsUrl owns the encoding; this names the single-effect shape an
+// inline cell emits (the same shape the doomed widget runtime builds today).
+function setStateUrl(sessionId: string, key: string, value: string): string {
+  return effectsUrl([{ verb: VERB_SET_STATE, args: [sessionId, key, value] }]);
 }
 
 // ─── CacheDecl → CachePolicy ─────────────────────────────────────────────────
@@ -380,21 +410,46 @@ export function registerDslConfig(
   // segment templates — renderDsl never parses. Each node's `when` is parsed in
   // place; the compiled tree mirrors config.root 1:1 (same structure, same
   // segment order), so a node's predicate and its children travel together.
-  const compileWhen = (when: string | undefined, path: string) => {
-    if (when === undefined) return undefined;
+  const compileNodeField = (src: string, path: string, field: string) => {
     try {
-      return engine.parse(when);
+      return engine.parse(src);
     } catch (e) {
       throw new Error(
-        `Template parse error in ${path}.when: ${(e as Error).message}`,
+        `Template parse error in ${path}.${field}: ${(e as Error).message}`,
         { cause: e },
       );
     }
   };
+  const compileWhen = (when: string | undefined, path: string) =>
+    when === undefined ? undefined : compileNodeField(when, path, "when");
   const compileNode = (node: LayoutNode, path: string): CompiledNode => {
     const when = compileWhen(node.when, path);
     if (node.kind === "cells") {
       return { kind: "cells", when, segments: node.segments };
+    }
+    if (node.kind === "inline") {
+      // [LAW:one-source-of-truth] bg/fg are parsed through the SAME engine as a
+      // segment's bg/fg and resolved by the SAME resolveSegmentColors at render,
+      // so an inline leaf's color follows one color path — never a second one
+      // that could drift. A static palette name parses to a literal-emitting
+      // template; the parse-once guarantee still holds.
+      return {
+        kind: "inline",
+        when,
+        cells: node.cells,
+        bg:
+          node.bg !== undefined
+            ? compileNodeField(node.bg, path, "bg")
+            : undefined,
+        fg:
+          node.fg !== undefined
+            ? compileNodeField(node.fg, path, "fg")
+            : undefined,
+        paletteResolver:
+          node.palette !== undefined
+            ? resolverForThemeName(node.palette)
+            : undefined,
+      };
     }
     return {
       kind: "container",
@@ -484,6 +539,15 @@ export function renderDsl(
   const rawHue = store.has(HUE_STEP_VAR) ? Number(store.read(HUE_STEP_VAR)) : 0;
   const hueStep = Number.isFinite(rawHue) ? rawHue : 0;
 
+  // [LAW:one-source-of-truth] The session id an inline cell's set-state URL
+  // carries comes from the SAME conventional variable the widget runtime reads —
+  // one name for "which session am I in." Absent (compile-only callers, or a
+  // config that never declared it) is a real state: an empty id yields a wire URL
+  // the daemon rejects loudly rather than mutating the wrong session.
+  const sessionId = store.has(SESSION_ID_VAR_NAME)
+    ? varToString(store.read(SESSION_ID_VAR_NAME))
+    : "";
+
   perSegmentSink?.clear();
 
   // [LAW:single-enforcer] segIndex is the one hue cursor, advanced in pre-order
@@ -509,6 +573,48 @@ export function renderDsl(
         node.direction,
         node.children.map((child) => renderNode(child, visible)),
       );
+    }
+
+    if (node.kind === "inline") {
+      // [LAW:single-enforcer] An inline leaf is ONE hue unit (like a segment): it
+      // consumes exactly one segIndex so its color is positionally stable and the
+      // siblings after it keep their colors regardless of its visibility.
+      const hueShift = segIndex * hueStep;
+      segIndex++;
+      if (!visible) return [];
+
+      // [LAW:dataflow-not-control-flow] The per-leaf variability is WHICH palette
+      // — the leaf's override (or basePalette) transposed by its hueShift — and
+      // bg/fg resolve from that one palette, the SAME path a segment's color
+      // takes. No second color codepath.
+      const resolver = transposedResolver(
+        node.paletteResolver ?? basePalette,
+        hueShift,
+      );
+      const baseStyle = resolveSegmentColors(resolver, node.bg, node.fg, scope);
+
+      // [LAW:dataflow-not-control-flow] Each cell becomes one fragment; a cell's
+      // `onClick` (a value, not a branch) decides whether that fragment carries an
+      // OSC-8 set-state link. fragmentsToCells then splits at link boundaries so
+      // each clickable cell is independently addressable — the SAME mapper a
+      // segment template's output flows through. Inter-cell single-space
+      // separators match the inline spacing the bar already renders.
+      const fragments = node.cells.flatMap((cell, i) => {
+        const frag =
+          cell.onClick !== undefined
+            ? new RichText(cell.text, {
+                style: new Style({
+                  link: setStateUrl(
+                    sessionId,
+                    cell.onClick.set,
+                    cell.onClick.to,
+                  ),
+                }),
+              })
+            : new RichText(cell.text);
+        return i > 0 ? [new RichText(" "), frag] : [frag];
+      });
+      return [fragmentsToCells(fragments, baseStyle)];
     }
 
     // [LAW:dataflow-not-control-flow] The leaf accumulates VISUAL lines, not a
