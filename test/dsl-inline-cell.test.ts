@@ -280,3 +280,31 @@ describe("2de.5 — loader rejects a malformed inline onClick", () => {
     ).toThrow(/text/);
   });
 });
+
+describe("2de.5 — inline onClick requires session.id (the set-state wire needs it)", () => {
+  test("a config with an inline onClick but no global session.id is rejected", () => {
+    const src = `{
+      globals: { palette: 'textual-dark' },
+      root: { kind: 'inline', cells: [{ text: 'x', onClick: { set: 'k', to: 'v' } }] },
+    }`;
+    expect(() => parseAndValidate("<test>", src, ALLOWED)).toThrow(/session\.id/);
+  });
+
+  test("a clickless inline leaf needs no session.id", () => {
+    const src = `{
+      globals: { palette: 'textual-dark' },
+      root: { kind: 'inline', cells: [{ text: 'plain' }] },
+    }`;
+    expect(() => parseAndValidate("<test>", src, ALLOWED)).not.toThrow();
+  });
+});
+
+describe("2de.5 — inline bg/fg are template surfaces (refs validated like a segment's)", () => {
+  test("an inline bg referencing an undeclared variable is rejected at load", () => {
+    const src = `{
+      globals: { palette: 'textual-dark' },
+      root: { kind: 'inline', bg: '{{ .nope }}', cells: [{ text: 'x' }] },
+    }`;
+    expect(() => parseAndValidate("<test>", src, ALLOWED)).toThrow(/nope/);
+  });
+});
