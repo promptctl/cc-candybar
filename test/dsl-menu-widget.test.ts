@@ -15,7 +15,7 @@ import { parseAndValidate } from "./helpers/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import { registerDslConfig, renderDsl } from "../src/dsl/render";
-import { paginate } from "../src/template-engine/widgets";
+import { paginate } from "../src/render/widget";
 import { SessionState } from "../src/daemon/session-state";
 import { effectsOf } from "./helpers/click";
 import { listResolvablePaletteNames, STYLE_ORDER } from "../src/themes/policy";
