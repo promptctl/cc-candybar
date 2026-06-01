@@ -554,7 +554,7 @@ function mergeKeySpecs(
   if (hasInt && ranges.length > 0) {
     throw new Error(
       `deriveWidgetValidators: key "${key}" is declared as both a menu page ` +
-        `(int) and a stepper value (range) — a state key has one shape. ` +
+        `(int) and a stepper value (range) — a state key has one key shape. ` +
         `Use distinct keys.`,
     );
   }
