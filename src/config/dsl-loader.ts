@@ -40,6 +40,9 @@ import {
   type JustifyMode,
   type LayoutRow,
   type LayoutNode,
+  type InlineNode,
+  type InlineCell,
+  type ClickWrite,
   type Direction,
   type RawDslConfig,
   type SegmentDecl,
@@ -1197,16 +1200,17 @@ function validateRoot(
   if (!isPlainObject(raw)) {
     ctx.issues.push({
       path,
-      message: `a layout node must be an object with "kind" of "cells" or "container", got ${describeType(raw)}`,
+      message: `a layout node must be an object with "kind" of "cells", "inline", or "container", got ${describeType(raw)}`,
       line: findKeyLine(ctx.source, ["root"]),
     });
     return EMPTY_VERTICAL_NODE;
   }
   if (raw.kind === "cells") return validateCellsNode(ctx, path, raw);
+  if (raw.kind === "inline") return validateInlineNode(ctx, path, raw);
   if (raw.kind === "container") return validateContainerNode(ctx, path, raw);
   ctx.issues.push({
     path: `${path}.kind`,
-    message: `a layout node "kind" must be "cells" or "container", got ${JSON.stringify(raw.kind)}`,
+    message: `a layout node "kind" must be "cells", "inline", or "container", got ${JSON.stringify(raw.kind)}`,
     line: findKeyLine(ctx.source, ["root"]),
   });
   return EMPTY_VERTICAL_NODE;
@@ -1254,6 +1258,152 @@ function validateCellsNode(
   return when !== undefined
     ? { kind: "cells", segments, when }
     : { kind: "cells", segments };
+}
+
+// [LAW:locality-or-seam] STRUCTURAL validation of an inline leaf: it carries a
+// `cells` array (each cell `{ text, onClick? }`) and optional color (bg/fg/
+// palette). Whether the onClick key is a writable SessionState key is a derived-
+// validator concern (deriveNodeValidators), not a cross-ref one — the gate IS
+// the rendered click, derived from this same structure.
+function validateInlineNode(
+  ctx: ValidateCtx,
+  path: string,
+  raw: Record<string, unknown>,
+): LayoutNode {
+  rejectUnknownNodeKeys(
+    ctx,
+    path,
+    raw,
+    new Set(["kind", "cells", "bg", "fg", "palette", "when"]),
+  );
+  const when = optionalStringField(ctx, path, raw, "when");
+  const bg = optionalStringField(ctx, path, raw, "bg");
+  const fg = optionalStringField(ctx, path, raw, "fg");
+  const palette = validatePaletteName(ctx, path, raw);
+
+  // [LAW:dataflow-not-control-flow] Strip the undefined optionals so the emitted
+  // node carries only the keys the author wrote — the same exact-presence shape
+  // every other node validator returns (no `bg: undefined` noise downstream).
+  const withOptionals = (cells: readonly InlineCell[]): InlineNode => ({
+    kind: "inline",
+    cells,
+    ...(bg !== undefined && { bg }),
+    ...(fg !== undefined && { fg }),
+    ...(palette !== undefined && { palette }),
+    ...(when !== undefined && { when }),
+  });
+
+  if (!Array.isArray(raw.cells)) {
+    ctx.issues.push({
+      path: `${path}.cells`,
+      message: `an inline node must have a "cells" array of { text, onClick? } cells, got ${describeType(raw.cells)}`,
+      line: findKeyLine(ctx.source, ["root"]),
+    });
+    return withOptionals([]);
+  }
+  const cells = raw.cells.map((cell, i) =>
+    validateInlineCell(ctx, `${path}.cells[${i}]`, cell),
+  );
+  return withOptionals(cells);
+}
+
+function validateInlineCell(
+  ctx: ValidateCtx,
+  path: string,
+  raw: unknown,
+): InlineCell {
+  if (!isPlainObject(raw)) {
+    ctx.issues.push({
+      path,
+      message: `an inline cell must be an object with a "text" string and optional "onClick", got ${describeType(raw)}`,
+      line: findKeyLine(ctx.source, ["root"]),
+    });
+    return { text: "" };
+  }
+  rejectUnknownNodeKeys(ctx, path, raw, new Set(["text", "onClick"]));
+  const text = typeof raw.text === "string" ? raw.text : "";
+  if (typeof raw.text !== "string") {
+    ctx.issues.push({
+      path: `${path}.text`,
+      message: `an inline cell "text" must be a string, got ${describeType(raw.text)}`,
+      line: findKeyLine(ctx.source, ["root"]),
+    });
+  }
+  if (raw.onClick === undefined) return { text };
+  const onClick = validateClickWrite(ctx, `${path}.onClick`, raw.onClick);
+  return onClick !== undefined ? { text, onClick } : { text };
+}
+
+// [LAW:types-are-the-program] A `ClickWrite` is exactly `{ set, to }` — both
+// LITERAL strings (the literalness is load-bearing: it is what makes the gate
+// derivable). Reject anything else loudly rather than coercing.
+function validateClickWrite(
+  ctx: ValidateCtx,
+  path: string,
+  raw: unknown,
+): ClickWrite | undefined {
+  if (!isPlainObject(raw)) {
+    ctx.issues.push({
+      path,
+      message: `an onClick must be an object { set, to }, got ${describeType(raw)}`,
+      line: findKeyLine(ctx.source, ["root"]),
+    });
+    return undefined;
+  }
+  rejectUnknownNodeKeys(ctx, path, raw, new Set(["set", "to"]));
+  const set = raw.set;
+  const to = raw.to;
+  if (typeof set !== "string" || set.length === 0) {
+    ctx.issues.push({
+      path: `${path}.set`,
+      message: `an onClick "set" must be a non-empty SessionState key string, got ${describeValue(set)}`,
+      line: findKeyLine(ctx.source, ["root"]),
+    });
+    return undefined;
+  }
+  // [LAW:verifiable-goals] Surface the set-state validator registry's policy (the
+  // single enforcer is registerStateValidator + makeAllowListValidator) here at
+  // the node path, so a config that would fail later at cache-install instead
+  // fails at load with a local, line-numbered message. The registry rejects
+  // slash-bearing keys; mirror that rejection earlier — not a separate rule.
+  if (set.includes("/")) {
+    ctx.issues.push({
+      path: `${path}.set`,
+      message: `an onClick "set" key must be slash-free — the set-state validator registry rejects slash-bearing keys (got ${describeValue(set)})`,
+      line: findKeyLine(ctx.source, ["root"]),
+    });
+    return undefined;
+  }
+  if (typeof to !== "string") {
+    ctx.issues.push({
+      path: `${path}.to`,
+      message: `an onClick "to" must be a string value, got ${describeValue(to)}`,
+      line: findKeyLine(ctx.source, ["root"]),
+    });
+    return undefined;
+  }
+  // [LAW:verifiable-goals] Mirror the same constraints the derived allow-list
+  // validator enforces, for the same reason as a widget set-action's `to`: the
+  // validator rejects empty input (an empty value is undeliverable) and rejects
+  // slash-bearing values — both surfaced at load rather than at the operator's
+  // first click.
+  if (to === "") {
+    ctx.issues.push({
+      path: `${path}.to`,
+      message: `an onClick "to" must be non-empty — the set-state validator rejects empty values`,
+      line: findKeyLine(ctx.source, ["root"]),
+    });
+    return undefined;
+  }
+  if (to.includes("/")) {
+    ctx.issues.push({
+      path: `${path}.to`,
+      message: `an onClick "to" value must be slash-free — the set-state validator registry rejects slash-bearing values (got ${describeValue(to)})`,
+      line: findKeyLine(ctx.source, ["root"]),
+    });
+    return undefined;
+  }
+  return { set, to };
 }
 
 function validateContainerNode(
@@ -1938,6 +2088,26 @@ function validateCrossReferences(ctx: ValidateCtx, cfg: DslConfig): void {
         layoutLine,
       );
     }
+    // [LAW:single-enforcer] An inline leaf's bg/fg flow through the SAME
+    // resolveSegmentColors path a segment's bg/fg do, so they are template
+    // surfaces and get the SAME ref existence-check — a typo'd `{{ .var }}` in an
+    // inline color surfaces at load, never as a silent render-time miss.
+    if (node.kind === "inline") {
+      for (const [field, src] of [
+        ["bg", node.bg],
+        ["fg", node.fg],
+      ] as const) {
+        if (src !== undefined) {
+          checkTemplateRefs(
+            ctx,
+            `${layoutKey}.${field}`,
+            src,
+            allVarNames,
+            layoutLine,
+          );
+        }
+      }
+    }
     if (node.kind !== "cells") continue;
     for (const entry of node.segments) {
       if (!Object.prototype.hasOwnProperty.call(cfg.segments, entry)) {
@@ -2038,12 +2208,15 @@ function validateCrossReferences(ctx: ValidateCtx, cfg: DslConfig): void {
   // menu with only copy/open items (no state vars, no set actions) can't load
   // while rendering broken navigation links with an empty session id.
   if (
-    (hasStateKind(cfg) || hasWidgetSetAction(cfg) || hasMenuWidget(cfg)) &&
+    (hasStateKind(cfg) ||
+      hasWidgetSetAction(cfg) ||
+      hasMenuWidget(cfg) ||
+      hasInlineOnClick(cfg)) &&
     !Object.prototype.hasOwnProperty.call(cfg.variables, "session.id")
   ) {
     ctx.issues.push({
       path: "variables.session.id",
-      message: `state reads, widget set-actions, and menu navigation require a global "session.id" variable (segment-local declarations do not satisfy this — declareState/set-state both read the global box; conventionally { kind: "input", path: "session_id" })`,
+      message: `state reads, widget set-actions, menu navigation, and inline-cell onClick all require a global "session.id" variable (segment-local declarations do not satisfy this — declareState/set-state both read the global box; conventionally { kind: "input", path: "session_id" })`,
       line: findKeyLine(ctx.source, ["variables"]),
     });
   }
@@ -2123,6 +2296,19 @@ function validateCrossReferences(ctx: ValidateCtx, cfg: DslConfig): void {
 function hasMenuWidget(cfg: DslConfig): boolean {
   for (const widget of Object.values(cfg.widgets)) {
     if (widget.kind === "menu") return true;
+  }
+  return false;
+}
+
+// [LAW:dataflow-not-control-flow] An inline cell's `onClick` composes a set-state
+// click URL whose first segment is the session id — exactly like a widget set
+// action. So "any inline cell has onClick" is one more value OR'd into the
+// session.id requirement, not a parallel check. A clickless inline leaf (pure
+// generated text) writes nothing and needs no session id.
+function hasInlineOnClick(cfg: DslConfig): boolean {
+  for (const node of walkNodes(cfg.root)) {
+    if (node.kind !== "inline") continue;
+    if (node.cells.some((c) => c.onClick !== undefined)) return true;
   }
   return false;
 }
