@@ -1,4 +1,4 @@
-// [LAW:locality-or-seam] The render half of the widgets seam. A widget is
+// [LAW:locality-or-seam] The runtime half of the widgets seam. A widget is
 // reusable interactive content a segment template pulls in via `{{ widget
 // "name" }}`. This module compiles widget declarations (pre-parsing the
 // copy/open action templates once) and renders a named widget to a single
@@ -13,21 +13,33 @@
 // expression, so it must emit ONE value. go-template-js stringifies array
 // returns on direct emit, so a func cannot emit multiple fragments — instead we
 // assemble one RichText from many link-bearing spans (RichText.fromFragments),
-// which serializes to one correctly-delimited OSC-8 region per span. Terminals
-// dispatch clicks per OSC-8 region regardless of cc-candybar's cell model.
+// which serializes to one correctly-delimited OSC-8 region per span. A `tree`
+// emits MANY lines as one RichText too: the per-level "\n" sentinels ride inside
+// it and splitCellsIntoLines partitions them downstream (the .1 primitive).
+//
+// [LAW:one-way-deps] This is the widget feature's runtime. It lives in render/
+// (which already depends on template-engine/), reads template-engine/scope, and
+// is injected into the engine by the caller (createCcCandybarEngine takes the
+// widget FuncMap as data). The generic engine does not import this module — so
+// the dependency is one-way (render → template-engine), never a cycle.
 
 import { RichText, Style } from "@promptctl/rich-js";
 import type { Engine, FuncMap, Template } from "@promptctl/go-template-js";
 import type { VariableStore } from "../var-system/store.js";
 import { toString as varToString, toNumber } from "../var-system/types.js";
-import { buildScope } from "./scope.js";
+import { buildScope } from "../template-engine/scope.js";
 import {
   isOptionsButtonItem,
-  TERM_COLS_VAR,
+  isSubmenuItem,
+  openPathToString,
+  MENU_CLOSED,
+  MENU_OPEN_ROOT,
   type Action,
   type ButtonItem,
+  type MenuTreeItem,
   type WidgetDecl,
-} from "../config/dsl-types.js";
+} from "../config/widget.js";
+import { TERM_COLS_VAR } from "../config/dsl-types.js";
 import { listResolvablePaletteNames, STYLE_ORDER } from "../themes/policy.js";
 import {
   effectsUrl,
@@ -70,16 +82,35 @@ interface CompiledButton {
   readonly actions: readonly CompiledAction[];
 }
 
+// [LAW:types-are-the-program] A compiled tree item mirrors MenuTreeItem: a LEAF
+// wraps a CompiledButton (clickable), a SUBMENU carries a display label and its
+// compiled children. The recursion is the only structure; clickability is the
+// reused CompiledButton.
+type CompiledTreeItem =
+  | { readonly kind: "leaf"; readonly button: CompiledButton }
+  | {
+      readonly kind: "submenu";
+      readonly label: string;
+      readonly items: readonly CompiledTreeItem[];
+    };
+
 // [LAW:types-are-the-program] A compiled widget is discriminated by `kind`,
-// mirroring WidgetDecl. Both arms share the compiled item list; a menu adds the
-// page-state coordinates it paginates against — `stateKey` (the SessionState key
-// it writes via ←/→/close) and `stateVar` (the variable that reads it, resolved
-// from the key so reading and the row-`when` see one value).
+// mirroring WidgetDecl. buttons/menu share the compiled item list; a menu adds
+// the page-state coordinates it paginates against; a tree carries the recursive
+// compiled item tree plus the open-path state coordinates (`stateKey` it writes
+// via toggles, `stateVar` it reads — resolved from the key so reading and the
+// row-`when` see one value); a stepper carries only its bounds.
 type CompiledWidget =
   | { readonly kind: "buttons"; readonly items: readonly CompiledButton[] }
   | {
       readonly kind: "menu";
       readonly items: readonly CompiledButton[];
+      readonly stateKey: string;
+      readonly stateVar: string;
+    }
+  | {
+      readonly kind: "tree";
+      readonly items: readonly CompiledTreeItem[];
       readonly stateKey: string;
       readonly stateVar: string;
     }
@@ -135,7 +166,7 @@ export function compileWidgets(
 // [LAW:dataflow-not-control-flow] One total switch maps each widget kind to its
 // compiled shape — every arm reads only its own fields, so there is no
 // "does this kind have items / a state key" guard. A new kind is one arm here.
-// [LAW:one-source-of-truth] menu and stepper resolve their `state` KEY to the
+// [LAW:one-source-of-truth] menu/tree/stepper resolve their `state` KEY to the
 // variable that reads it (same resolution an option picker uses for its active
 // mark), so the widget's displayed value, renderDsl's read, and any row-`when`
 // predicate all see ONE value.
@@ -162,6 +193,13 @@ function compileWidget(
         stateKey: widget.state,
         stateVar: stateKeyToVar.get(widget.state) ?? widget.state,
       };
+    case "tree":
+      return {
+        kind: "tree",
+        items: compileTreeItems(engine, widget.items, name, stateKeyToVar),
+        stateKey: widget.state,
+        stateVar: stateKeyToVar.get(widget.state) ?? widget.state,
+      };
     case "buttons":
       return {
         kind: "buttons",
@@ -177,6 +215,29 @@ function compileButtons(
   stateKeyToVar: ReadonlyMap<string, string>,
 ): CompiledButton[] {
   return items.map((item) => compileButton(engine, item, name, stateKeyToVar));
+}
+
+// [LAW:one-source-of-truth] One item-compile path shared by buttons/menu and a
+// tree's LEAVES — a tree leaf is the SAME ButtonItem shape. A submenu recurses;
+// only the branch structure is new, the clickable content reuses compileButton.
+function compileTreeItems(
+  engine: Engine<RichText>,
+  items: readonly MenuTreeItem[],
+  name: string,
+  stateKeyToVar: ReadonlyMap<string, string>,
+): CompiledTreeItem[] {
+  return items.map((item) =>
+    isSubmenuItem(item)
+      ? {
+          kind: "submenu",
+          label: joinDisplay(item.glyph, item.label),
+          items: compileTreeItems(engine, item.items, name, stateKeyToVar),
+        }
+      : {
+          kind: "leaf",
+          button: compileButton(engine, item, name, stateKeyToVar),
+        },
+  );
 }
 
 // [LAW:one-source-of-truth] One item-compile path shared by both widget arms —
@@ -254,9 +315,9 @@ function joinDisplay(
 
 // ─── Rendering ───────────────────────────────────────────────────────────────
 
-// [LAW:single-enforcer] One set-state URL helper, used by the menu's ←/→/✕ and
-// the stepper's ◀/▶ — each is a single set-state effect. effectsUrl owns the
-// wire format; this just names the common one-effect shape.
+// [LAW:single-enforcer] One set-state URL helper, used by the menu's ←/→/✕, the
+// tree's toggles, and the stepper's ◀/▶ — each is a single set-state effect.
+// effectsUrl owns the wire format; this just names the common one-effect shape.
 function setStateUrl(sessionId: string, ...pairs: string[]): string {
   return effectsUrl([{ verb: VERB_SET_STATE, args: [sessionId, ...pairs] }]);
 }
@@ -380,6 +441,26 @@ function assembleFragments(fragments: readonly RichText[]): RichText {
   return assembled;
 }
 
+// [LAW:dataflow-not-control-flow] Assemble MANY lines into ONE RichText: cells
+// within a line join with a space, lines join with the "\n" sentinel. The "\n"
+// is a value carried in the assembled RichText, NOT a control branch — downstream
+// splitCellsIntoLines partitions on it so each line lands in its own strip. One
+// emitted value, many visual lines (the outline projection).
+function assembleLines(lines: ReadonlyArray<readonly RichText[]>): RichText {
+  const frags: RichText[] = [];
+  lines.forEach((cells, lineIdx) => {
+    if (lineIdx > 0) frags.push(new RichText("\n"));
+    cells.forEach((cell, cellIdx) => {
+      if (cellIdx > 0) frags.push(new RichText(" "));
+      frags.push(cell);
+    });
+  });
+  const assembled = RichText.fromFragments(frags);
+  assembled.noWrap = true;
+  assembled.end = "";
+  return assembled;
+}
+
 const MENU_CLOSE = "✕";
 const MENU_PREV = "←";
 const MENU_NEXT = "→";
@@ -493,6 +574,138 @@ function renderMenu(
   return assembleFragments(frags);
 }
 
+const TREE_CLOSED = "☰";
+const TREE_OPEN = "✕";
+const CHEVRON_CLOSED = "▸";
+const CHEVRON_OPEN = "▾";
+const TREE_INDENT = "  ";
+
+// [LAW:types-are-the-program] Parse the stored open-path value into the program
+// it drives: `null` = closed (only the toggle shows), `[]` = open at the top
+// (MENU_OPEN_ROOT), `[i, …]` = the expanded submenu chain. This is the trust
+// boundary for external state — anything not a canonical open value (unset "",
+// the MENU_CLOSED sentinel, a non-integer, a negative) collapses to closed, so
+// the renderer below never branches on malformedness.
+function parseOpenPath(raw: string): number[] | null {
+  if (raw === MENU_OPEN_ROOT) return [];
+  if (raw !== MENU_CLOSED && raw !== "") {
+    const indices = raw.split(".").map((p) => parseInt(p, 10));
+    if (indices.every((n) => Number.isInteger(n) && n >= 0)) return indices;
+  }
+  return null;
+}
+
+// [LAW:dataflow-not-control-flow] `candidate` is a prefix of `path` — i.e. this
+// submenu lies ON the open chain, so it is open. A value (the prefix test), not
+// a branch that skips rendering.
+function isOpenChain(
+  candidate: readonly number[],
+  path: readonly number[],
+): boolean {
+  return (
+    candidate.length <= path.length && candidate.every((n, i) => n === path[i])
+  );
+}
+
+// One expanded level: the items shown on a line, plus the index-path of the
+// container whose children they are. Resolving the stored open-path against the
+// actual tree (truncating at the first index that no longer names a submenu —
+// the stored path may predate a config edit) produces this chain of frames; the
+// renderer maps each to a line.
+interface TreeLevel {
+  readonly items: readonly CompiledTreeItem[];
+  readonly prefix: readonly number[];
+}
+
+function resolveLevels(
+  root: readonly CompiledTreeItem[],
+  path: readonly number[],
+): TreeLevel[] {
+  const levels: TreeLevel[] = [{ items: root, prefix: [] }];
+  let cur = root;
+  const prefix: number[] = [];
+  for (const idx of path) {
+    const item = cur[idx];
+    if (!item || item.kind !== "submenu") break;
+    prefix.push(idx);
+    cur = item.items;
+    levels.push({ items: cur, prefix: [...prefix] });
+  }
+  return levels;
+}
+
+// [LAW:dataflow-not-control-flow] One level's cells: a LEAF expands to its
+// button cells (NO close-set — a leaf click fires its action and the menu STAYS
+// OPEN; only ✕ closes); a SUBMENU is one chevron cell whose glyph and click
+// target are pure functions of whether it is on the open chain (open → collapse
+// to its parent path; closed → expand to its own path, which closes siblings —
+// accordion). No branch skips work; the item kind selects the projection.
+function treeLevelCells(
+  level: TreeLevel,
+  path: readonly number[],
+  scope: object,
+  sessionId: string,
+  store: VariableStore,
+  setUrl: (value: string) => string,
+): RichText[] {
+  return level.items.flatMap((item, i) => {
+    if (item.kind === "leaf") {
+      return expandItemCells(item.button, scope, sessionId, store, []).map(
+        (c) => linkFragment(c.text, c.url, c.active),
+      );
+    }
+    const indices = [...level.prefix, i];
+    const open = isOpenChain(indices, path);
+    const target = open
+      ? openPathToString(level.prefix)
+      : openPathToString(indices);
+    const chevron = open ? CHEVRON_OPEN : CHEVRON_CLOSED;
+    const text = item.label ? `${chevron} ${item.label}` : chevron;
+    return [linkFragment(text, setUrl(target), open)];
+  });
+}
+
+// [LAW:dataflow-not-control-flow] The outline projection: the open-path VALUE
+// selects which levels exist, and each level is one line. Closed = only the
+// toggle (linking to open-root). Open = the toggle (✕, linking to closed) leads
+// the top line, then one indented line per expanded level. All emitted as one
+// "\n"-joined RichText; the per-segment split downstream lays each line into its
+// own full-width strip.
+//
+// [LAW:types-are-the-program] parseOpenPath returns a discriminated result —
+// `null` (closed) | `number[]` (the open chain). Closed and open-at-root are
+// genuinely distinct user-facing states (collapsed hamburger vs. expanded ✕ over
+// the level lines), so this is a two-arm dispatch on that discriminator, not
+// control flow hiding variability: the closed arm is the degenerate render (one
+// toggle, no levels) and falls out as a trivial early branch.
+function renderTree(
+  tree: Extract<CompiledWidget, { kind: "tree" }>,
+  scope: object,
+  sessionId: string,
+  store: VariableStore,
+): RichText {
+  const setUrl = (value: string): string =>
+    setStateUrl(sessionId, tree.stateKey, value);
+  const path = parseOpenPath(readVar(store, tree.stateVar));
+  if (path === null) {
+    return assembleFragments([
+      linkFragment(TREE_CLOSED, setUrl(MENU_OPEN_ROOT), false),
+    ]);
+  }
+  const levels = resolveLevels(tree.items, path);
+  const lines = levels.map((level, depth) => {
+    const lead =
+      depth === 0
+        ? linkFragment(TREE_OPEN, setUrl(MENU_CLOSED), false)
+        : new RichText(TREE_INDENT.repeat(depth));
+    return [
+      lead,
+      ...treeLevelCells(level, path, scope, sessionId, store, setUrl),
+    ];
+  });
+  return assembleLines(lines);
+}
+
 // [LAW:dataflow-not-control-flow] Three derived cells from one value: ◀ writes
 // (current − step), the display shows current, ▶ writes (current + step). The
 // stepper owns NAVIGATION — stepping past a bound WRAPS to the other end (one
@@ -555,6 +768,8 @@ export function renderWidget(name: string, runtime: WidgetRuntime): RichText {
   switch (widget.kind) {
     case "menu":
       return renderMenu(widget, scope, sessionId, store);
+    case "tree":
+      return renderTree(widget, scope, sessionId, store);
     case "stepper":
       return renderStepper(widget, sessionId, store);
     case "buttons": {
@@ -573,6 +788,10 @@ export function renderWidget(name: string, runtime: WidgetRuntime): RichText {
 // [LAW:dataflow-not-control-flow] One zero-config func; the widget NAME is the
 // data that selects which declared component renders. Returns T (RichText), the
 // single fragment go-template-js emits for `{{ widget "name" }}`.
+//
+// [LAW:one-way-deps] The caller injects this FuncMap into createCcCandybarEngine
+// (capabilities-over-context) so the generic engine never imports the widget
+// feature.
 export function widgetFuncs(runtime: WidgetRuntime): FuncMap {
   return {
     widget: {

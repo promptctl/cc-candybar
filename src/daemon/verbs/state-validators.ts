@@ -25,13 +25,18 @@
 // validator becomes the parsing boundary, the verb body the dataflow.
 
 import { listResolvablePaletteNames, STYLE_ORDER } from "../../themes/policy";
-import { isOptionsButtonItem } from "../../config/dsl-types";
+import {
+  enumerateOpenPaths,
+  isOptionsButtonItem,
+  isSubmenuItem,
+} from "../../config/widget";
 import type {
   ButtonItem,
-  DslConfig,
+  MenuTreeItem,
   OptionSource,
   WidgetDecl,
-} from "../../config/dsl-types";
+} from "../../config/widget";
+import type { DslConfig } from "../../config/dsl-types";
 
 // [LAW:types-are-the-program] Discriminated union — every legal return is
 // either an accepted-and-canonicalized string or a structured rejection
@@ -453,9 +458,31 @@ function widgetColumns(w: WidgetDecl): ReadonlyArray<{
       ];
     case "menu":
       return [{ key: w.state, spec: { kind: "int" } }, ...itemColumns(w.items)];
+    case "tree":
+      // [LAW:one-source-of-truth] The open-path key's accepted set IS the tree's
+      // enumerated paths — same data the renderer writes — plus every leaf's
+      // allow-list column (a tree's leaves are the SAME ButtonItem shape, so they
+      // reuse itemColumns once flattened out of the submenu structure).
+      return [
+        {
+          key: w.state,
+          spec: { kind: "allow-list", allowed: enumerateOpenPaths(w.items) },
+        },
+        ...itemColumns(treeLeafItems(w.items)),
+      ];
     case "buttons":
       return itemColumns(w.items);
   }
+}
+
+// [LAW:dataflow-not-control-flow] Flatten a tree's clickable leaves out of its
+// submenu nesting — a submenu contributes its descendants' leaves, a leaf is
+// itself. The open/close behavior of submenus derives no validator (it writes
+// the open-path key, handled above), so only leaves flow to itemColumns.
+function treeLeafItems(items: readonly MenuTreeItem[]): ButtonItem[] {
+  return items.flatMap((item) =>
+    isSubmenuItem(item) ? treeLeafItems(item.items) : [item],
+  );
 }
 
 // [LAW:dataflow-not-control-flow] One allow-list column per key an item `set`
