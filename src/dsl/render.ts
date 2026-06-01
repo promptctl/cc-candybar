@@ -22,13 +22,14 @@ import type {
   InlineCell,
   Direction,
 } from "../config/dsl-types.js";
-import { HUE_STEP_VAR, SESSION_ID_VAR } from "../config/dsl-types.js";
+import { HUE_STEP_VAR } from "../config/dsl-types.js";
 import { toString as varToString } from "../var-system/types.js";
 import { effectsUrl, VERB_SET_STATE } from "../click/wire.js";
 import type { VariableStore } from "../var-system/store.js";
 import type { SourceRegistry } from "../var-system/sources.js";
 import {
   parseDuration,
+  SESSION_ID_VAR_NAME,
   type CachePolicy,
   type GitField,
 } from "../var-system/sources.js";
@@ -543,8 +544,8 @@ export function renderDsl(
   // one name for "which session am I in." Absent (compile-only callers, or a
   // config that never declared it) is a real state: an empty id yields a wire URL
   // the daemon rejects loudly rather than mutating the wrong session.
-  const sessionId = store.has(SESSION_ID_VAR)
-    ? varToString(store.read(SESSION_ID_VAR))
+  const sessionId = store.has(SESSION_ID_VAR_NAME)
+    ? varToString(store.read(SESSION_ID_VAR_NAME))
     : "";
 
   perSegmentSink?.clear();
