@@ -161,7 +161,7 @@ describe("state-validators registry contract", () => {
   });
 
   test("registerStateValidator throws on a kind change for a live key", () => {
-    // [LAW:types-are-the-program] A state key has ONE column shape. Registering
+    // [LAW:types-are-the-program] A state key has ONE key shape. Registering
     // an allow-list spec for a key already held as an int page index (or vice
     // versa) is a contradiction no merged validator could honor — it throws at
     // registration, not silently keeps whichever kind loaded first.
