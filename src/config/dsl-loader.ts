@@ -24,20 +24,14 @@ import os from "node:os";
 import path from "node:path";
 import JSON5 from "json5";
 import {
-  ACTION_KEYS,
   CACHE_KEYS,
   GIT_FIELDS,
   DIRECTIONS,
   JUSTIFY_MODES,
-  OPTION_SOURCES,
   SOURCES_REQUIRING_CACHE,
   SOURCE_KINDS,
   TRUNCATE_MODES,
-  WIDGET_KINDS,
   hasCacheField,
-  type Action,
-  type ActionKey,
-  type ButtonItem,
   type CacheDecl,
   type CacheKey,
   type DslConfig,
@@ -47,19 +41,29 @@ import {
   type LayoutRow,
   type LayoutNode,
   type Direction,
-  type OptionSource,
   type RawDslConfig,
   type SegmentDecl,
   type SourceKind,
   type TruncateMode,
-  type StepperWidget,
   type ValidatedConfig,
   type VariableDecl,
-  type WidgetDecl,
   walkNodes,
-  widgetStateUse,
   TERM_COLS_VAR,
 } from "./dsl-types.js";
+import {
+  ACTION_KEYS,
+  OPTION_SOURCES,
+  WIDGET_KINDS,
+  widgetStateUse,
+  type Action,
+  type ActionKey,
+  type ButtonItem,
+  type MenuTreeItem,
+  type OptionSource,
+  type StepperWidget,
+  type TreeWidget,
+  type WidgetDecl,
+} from "./widget.js";
 import { DEFAULT_DSL_CONFIG } from "./default-dsl-config.js";
 import { listResolvablePaletteNames } from "../themes/policy.js";
 
@@ -1368,6 +1372,12 @@ function validateWidget(
   if (kind === "stepper") {
     return validateStepperWidget(ctx, path, raw);
   }
+  // [LAW:types-are-the-program] A `tree` is the recursive (leaf | submenu) item
+  // structure — it does NOT share the flat ButtonItem items walk buttons/menu
+  // use, so (like stepper) it validates on its own path.
+  if (kind === "tree") {
+    return validateTreeWidget(ctx, path, raw);
+  }
   // [LAW:one-type-per-behavior] A `menu` is a `buttons` plus the `state` key it
   // paginates against — same `items` shape, one extra field. The allowed key
   // set is the only per-kind difference; the items walk is shared.
@@ -1420,7 +1430,7 @@ function validateWidgetStateKey(
   ctx: ValidateCtx,
   path: string,
   raw: Record<string, unknown>,
-  kind: "menu" | "stepper",
+  kind: "menu" | "stepper" | "tree",
 ): string | null {
   const state = optionalStringField(ctx, path, raw, "state");
   if (!state) {
@@ -1503,6 +1513,106 @@ function validateStepperWidget(
     return null;
   }
   return { kind: "stepper", state, min, max, step };
+}
+
+// [LAW:types-are-the-program] A `tree` carries its open-path `state` key and the
+// recursive item structure. Unlike buttons/menu, its items are MenuTreeItems
+// (leaf | submenu), so it owns its own recursive item walk; the open-path
+// allow-list validator is derived later from this structure (deriveWidgetValidators).
+function validateTreeWidget(
+  ctx: ValidateCtx,
+  path: string,
+  raw: Record<string, unknown>,
+): TreeWidget | null {
+  const allowed = new Set(["kind", "state", "items"]);
+  for (const key of Object.keys(raw)) {
+    if (!allowed.has(key)) {
+      ctx.issues.push({
+        path: `${path}.${key}`,
+        message: `Unknown widget key "${key}". Expected one of: ${[...allowed].join(", ")}`,
+        line: findKeyLine(ctx.source, [...path.split("."), key]),
+      });
+    }
+  }
+  const state = validateWidgetStateKey(ctx, path, raw, "tree");
+  if (!Array.isArray(raw.items)) {
+    ctx.issues.push({
+      path: `${path}.items`,
+      message: `widget items must be an array, got ${describeType(raw.items)}`,
+      line: findKeyLine(ctx.source, [...path.split("."), "items"]),
+    });
+    return null;
+  }
+  const items: MenuTreeItem[] = [];
+  for (let i = 0; i < raw.items.length; i++) {
+    const item = validateTreeItem(ctx, `${path}.items[${i}]`, raw.items[i]);
+    if (item !== null) items.push(item);
+  }
+  if (state === null) return null;
+  return { kind: "tree", state, items };
+}
+
+// [LAW:types-are-the-program] A tree item is discriminated by presence of
+// `items`: a SUBMENU (children + a chevron, its open/close toggle render-derived
+// so NO onClick) or a LEAF (the existing ButtonItem, reused verbatim). The
+// discriminator is the same "which key is present" the runtime's isSubmenuItem
+// reads — the loader proves it so the runtime never re-checks.
+function validateTreeItem(
+  ctx: ValidateCtx,
+  path: string,
+  raw: unknown,
+): MenuTreeItem | null {
+  if (!isPlainObject(raw)) {
+    ctx.issues.push({
+      path,
+      message: `${path} must be an object, got ${describeType(raw)}`,
+      line: findKeyLine(ctx.source, path.split(".")),
+    });
+    return null;
+  }
+  // A LEAF reuses the full ButtonItem validation (incl. optionsFrom pickers).
+  if (!("items" in raw)) {
+    return validateButtonItem(ctx, path, raw);
+  }
+  // A SUBMENU: glyph/label (its identity beside the chevron) + recursive items.
+  const allowed = new Set(["glyph", "label", "items"]);
+  for (const key of Object.keys(raw)) {
+    if (!allowed.has(key)) {
+      ctx.issues.push({
+        path: `${path}.${key}`,
+        message: `Unknown submenu key "${key}". Expected one of: ${[...allowed].join(", ")}`,
+        line: findKeyLine(ctx.source, [...path.split("."), key]),
+      });
+    }
+  }
+  const glyph = optionalStringField(ctx, path, raw, "glyph");
+  const label = optionalStringField(ctx, path, raw, "label");
+  // [LAW:no-silent-fallbacks] As with a fixed button, an empty glyph/label
+  // renders as no identifying text (only the chevron) — so a submenu needs
+  // NON-EMPTY clickable identity; "" is treated as absent. Computed ONCE: the
+  // diagnostic and the build-vs-reject gate read the same boolean.
+  const hasIdentity = Boolean(glyph || label);
+  if (!hasIdentity) {
+    ctx.issues.push({
+      path,
+      message: `a submenu must declare a non-empty "glyph" or "label" (its identity beside the chevron)`,
+      line: findKeyLine(ctx.source, path.split(".")),
+    });
+  }
+  if (!Array.isArray(raw.items)) {
+    ctx.issues.push({
+      path: `${path}.items`,
+      message: `a submenu's items must be an array, got ${describeType(raw.items)}`,
+      line: findKeyLine(ctx.source, [...path.split("."), "items"]),
+    });
+    return null;
+  }
+  const items = raw.items
+    .map((it, i) => validateTreeItem(ctx, `${path}.items[${i}]`, it))
+    .filter((it): it is MenuTreeItem => it !== null);
+  return hasIdentity
+    ? { ...(glyph ? { glyph } : {}), ...(label ? { label } : {}), items }
+    : null;
 }
 
 function validateButtonItem(
