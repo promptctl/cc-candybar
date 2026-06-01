@@ -13,7 +13,7 @@ import {
 import type { ValidatedConfig } from "../../config/dsl-types.js";
 import { registerDslConfig, type CompiledConfig } from "../../dsl/render.js";
 import {
-  deriveWidgetValidators,
+  deriveValidators,
   registerStateValidator,
 } from "../verbs/state-validators.js";
 import { VariableStore } from "../../var-system/store.js";
@@ -297,12 +297,15 @@ export class RenderCache {
         cwd: entry.cwd,
         store,
       });
-      // [LAW:one-source-of-truth] Derive the writable-key validators from the
-      // config's widgets (same data the renderer paginates from) and register
-      // them so the click wire accepts the menus' ←/→/apply-close set-state
-      // writes. registerStateValidator throws on a duplicate key — caught here
-      // to roll the whole reload back.
-      for (const { key, spec } of deriveWidgetValidators(config)) {
+      // [LAW:one-source-of-truth] Derive the writable-key validators from EVERY
+      // interaction surface the config carries — widget blocks AND layout-node
+      // onClicks — through one coherence merge (deriveValidators), then register
+      // them so the click wire accepts the menus' ←/→/apply-close writes and the
+      // nodes' onClick writes alike. Merging before registration lets a trigger
+      // cell's allow-list value be absorbed into a menu's int page gate instead
+      // of colliding. registerStateValidator throws on a duplicate baseline key —
+      // caught here to roll the whole reload back.
+      for (const { key, spec } of deriveValidators(config)) {
         validatorDisposers.push(registerStateValidator(key, spec));
       }
     } catch (err) {
