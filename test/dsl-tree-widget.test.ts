@@ -319,4 +319,19 @@ describe("2de.3 — render (outline projection)", () => {
     expect(stripAnsi(lines[1]!)).toContain("▾ Deep");
     expect(stripAnsi(lines[2]!)).toContain("X"); // Deep's leaf
   });
+
+  test("a non-canonical stored open-path collapses to closed (parse = inverse of enumerate)", () => {
+    // [LAW:one-source-of-truth] "01"/"1abc" would be loosely read as index 1 by
+    // parseInt, but the derived allow-list gate (openPathToString outputs) never
+    // emits them — the renderer must NOT treat them as open, or its understood
+    // set would diverge from the wire's accepted set.
+    for (const stale of ["01", "1abc", " 1", "-1", "0.01"]) {
+      const { render, sessionState } = buildRuntime(TREE_SRC);
+      sessionState.set("s1", "menu-path", stale);
+      const out = render(Number.POSITIVE_INFINITY);
+      expect(out.includes("\n")).toBe(false); // closed = a single toggle line
+      expect(stripAnsi(out)).toContain("☰");
+      expect(stripAnsi(out)).not.toContain("✕");
+    }
+  });
 });

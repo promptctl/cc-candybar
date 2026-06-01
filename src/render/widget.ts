@@ -34,6 +34,7 @@ import {
   openPathToString,
   MENU_CLOSED,
   MENU_OPEN_ROOT,
+  MENU_PATH_SEP,
   type Action,
   type ButtonItem,
   type MenuTreeItem,
@@ -583,16 +584,21 @@ const TREE_INDENT = "  ";
 // [LAW:types-are-the-program] Parse the stored open-path value into the program
 // it drives: `null` = closed (only the toggle shows), `[]` = open at the top
 // (MENU_OPEN_ROOT), `[i, …]` = the expanded submenu chain. This is the trust
-// boundary for external state — anything not a canonical open value (unset "",
-// the MENU_CLOSED sentinel, a non-integer, a negative) collapses to closed, so
-// the renderer below never branches on malformedness.
+// boundary for external state — anything not a canonical open value collapses
+// to closed, so the renderer below never branches on malformedness.
+//
+// [LAW:one-source-of-truth] Accept ONLY the exact segment shape openPathToString
+// EMITS — a canonical non-negative integer with no leading zeros. parseInt would
+// be lax ("01" → 1, "1abc" → 1, " 2" → 2), making the renderer treat as OPEN a
+// value the derived allow-list gate (whose members are openPathToString outputs)
+// would REJECT on the wire — a renderer/gate divergence. The regex makes parse
+// the exact inverse of openPathToString, so the two sets are identical.
+const OPEN_PATH_SEG = /^(0|[1-9]\d*)$/;
 function parseOpenPath(raw: string): number[] | null {
   if (raw === MENU_OPEN_ROOT) return [];
-  if (raw !== MENU_CLOSED && raw !== "") {
-    const indices = raw.split(".").map((p) => parseInt(p, 10));
-    if (indices.every((n) => Number.isInteger(n) && n >= 0)) return indices;
-  }
-  return null;
+  if (raw === MENU_CLOSED || raw === "") return null;
+  const segs = raw.split(MENU_PATH_SEP);
+  return segs.every((s) => OPEN_PATH_SEG.test(s)) ? segs.map(Number) : null;
 }
 
 // [LAW:dataflow-not-control-flow] `candidate` is a prefix of `path` — i.e. this
