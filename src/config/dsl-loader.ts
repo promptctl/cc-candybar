@@ -1281,22 +1281,16 @@ function validateInlineNode(
   const fg = optionalStringField(ctx, path, raw, "fg");
   const palette = validatePaletteName(ctx, path, raw);
 
-  const base = {
-    bg,
-    fg,
-    palette,
-    when,
-  } as const;
   // [LAW:dataflow-not-control-flow] Strip the undefined optionals so the emitted
   // node carries only the keys the author wrote — the same exact-presence shape
   // every other node validator returns (no `bg: undefined` noise downstream).
   const withOptionals = (cells: readonly InlineCell[]): InlineNode => ({
     kind: "inline",
     cells,
-    ...(bg !== undefined && { bg: base.bg }),
-    ...(fg !== undefined && { fg: base.fg }),
-    ...(palette !== undefined && { palette: base.palette }),
-    ...(when !== undefined && { when: base.when }),
+    ...(bg !== undefined && { bg }),
+    ...(fg !== undefined && { fg }),
+    ...(palette !== undefined && { palette }),
+    ...(when !== undefined && { when }),
   });
 
   if (!Array.isArray(raw.cells)) {
