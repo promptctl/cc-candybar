@@ -450,12 +450,6 @@ export const TRUNCATE_MODES: readonly TruncateMode[] = [
 // loader's "a menu requires this variable" check, so they cannot drift.
 export const TERM_COLS_VAR = "term.cols";
 
-// [LAW:one-source-of-truth] The conventional variable naming "which session am
-// I in." A clickable cell's `set-state` URL carries this id so the daemon writes
-// the right session's state; the renderer reads it through this one name. A DSL
-// config declares it as an `input` var carrying `hook_data.session_id`.
-export const SESSION_ID_VAR = "session.id";
-
 // [LAW:one-source-of-truth] The conventional variable per-segment hue rotation
 // reads. hueStep is NOT a globals field (that would be a second source for a
 // render-time value); it is a value in the store like every other render input.
