@@ -2,6 +2,18 @@ import os from "node:os";
 import path from "node:path";
 import crypto from "node:crypto";
 
+import { PARENT_PID_ENV } from "../src/daemon/parent-watchdog";
+
+// [LAW:single-enforcer] The one place that arms the parent-death watchdog for
+// every daemon any test spawns. This runs in each Jest worker; the worker
+// publishes its own pid, and every daemon spawned by the worker — directly, or
+// detached through the production spawn path — inherits it via process.env and
+// exits when this worker dies. So a SIGKILLed / crashed / timed-out Jest can
+// never orphan a daemon to init (the 113-corpse leak). The real daemon is
+// spawned by the client, never under Jest, so it never sees this variable and
+// is never touched.
+process.env[PARENT_PID_ENV] = String(process.pid);
+
 // [LAW:single-enforcer] Guard every Jest worker from accidentally touching the
 // live daemon's socket at /tmp/cc-candybar-<uid>/socket. setupFiles re-runs in
 // a fresh module context per test file, so randomUUID() gives a path unique per
