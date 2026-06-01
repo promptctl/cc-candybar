@@ -515,7 +515,7 @@ describe("k5a.6 — menu page-key validator", () => {
 
   test("a NON-integer value written to a menu page key throws at derivation", () => {
     // [LAW:no-silent-fallbacks] A menu page key is int-valued; a button writing a
-    // non-integer value (here "v") to it is a genuine one-column-shape
+    // non-integer value (here "v") to it is a genuine one-key-shape
     // contradiction no int validator could honor — surfaced at config-load, not
     // silently resolved to one shape. (An INTEGER write to the same key is legal
     // — that is the open-trigger pattern, covered by the next test.)
@@ -542,7 +542,7 @@ describe("k5a.6 — menu page-key validator", () => {
     // `buttons` widget writing "0" to the menu's page key OPENS it (the only way
     // to move the page off its -1 closed sentinel — there is no open verb). The
     // literal "0" is an int WRITE gated by the page key's int validator, NOT a
-    // second allow-list column, so derivation yields exactly one int spec for the
+    // second allow-list key spec, so derivation yields exactly one int spec for the
     // shared page key and does not throw. This is the live-config interaction the
     // earlier menu tests missed (they opened the menu via sessionState.set).
     const src = `{

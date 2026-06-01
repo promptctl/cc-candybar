@@ -18,7 +18,7 @@
 // [LAW:types-are-the-program] The validator's return type is the program:
 // the verb body cannot proceed without an `ok: true` branch and cannot
 // fabricate a value — on failure it surfaces the reason verbatim. The
-// SessionState column is currently string-typed, so the validator's
+// SessionState value is currently string-typed, so the validator's
 // `value` is the canonical string to write (post-normalization for boolean-
 // ish keys). When a future widget needs a non-string typed value (e.g. a
 // numeric stepper with int-range bounds), this same shape extends — the
@@ -48,12 +48,12 @@ export type ValidateResult =
 
 // [LAW:one-type-per-behavior] All key validators have the same shape —
 // they don't carry the key name, the registry does. The validator's only
-// concern is: does this raw string belong in this key's column?
+// concern is: does this raw string belong in this key's value-set?
 export type KeyValidator = (rawValue: string) => ValidateResult;
 
 // [LAW:types-are-the-program] A derived key's SEMANTIC identity — the data a
 // widget config declares about a custom SessionState key, from which the
-// validator is residue. A key is one of three column shapes: an integer (a
+// validator is residue. A key is one of three key shapes: an integer (a
 // menu's page index), an allow-list (the union of values some button can write),
 // or a bounded integer range (a stepper's value). The registry compares specs to
 // decide whether two registrations can share a key (same `kind`) and merges them
@@ -154,7 +154,7 @@ interface DerivedEntry {
   readonly permanent: false;
   // [LAW:types-are-the-program] All live specs for a key share one kind — the
   // registration check rejects a kind change, so `kind` is the entry's stable
-  // column shape and the discriminator the rebuild matches on.
+  // key shape and the discriminator the rebuild matches on.
   readonly kind: DerivedValidatorSpec["kind"];
   validator: KeyValidator;
   // [LAW:one-source-of-truth] The live registrations. The validator is derived
@@ -236,7 +236,7 @@ function buildValidatorFromSpecs(
 // loud config-load error rather than silently shadowing the theme gate.
 //
 // [LAW:types-are-the-program] The semantic-compatibility gate: a key has ONE
-// column shape. Registering an `int` spec for a key already held as `allow-list`
+// key shape. Registering an `int` spec for a key already held as `allow-list`
 // (or vice versa) is a genuine conflict — no merged validator could honor both —
 // so it throws at config-load, not silently keeps whichever loaded first. Two
 // registrations of the SAME kind merge: their specs accumulate and the validator
@@ -277,7 +277,7 @@ export function registerStateValidator(
       throw new Error(
         `registerStateValidator: key "${key}" is already a ${existing.kind} ` +
           `state key; cannot also register it as ${spec.kind}. A state key has ` +
-          `one column shape — a menu page index (int) and a button allow-list ` +
+          `one key shape — a menu page index (int) and a button allow-list ` +
           `cannot share a key.`,
       );
     }
@@ -440,14 +440,14 @@ function optionValuesFor(src: OptionSource): readonly string[] {
 }
 
 // [LAW:single-enforcer] The ONE place mapping a widget kind to the validator
-// COLUMNS it declares. Every consumer reads these contributions; none re-walks a
+// key SPECS it declares. Every consumer reads these contributions; none re-walks a
 // widget's shape by kind. A new widget kind is one new arm in this exhaustive
 // switch, and the compiler forces it.
-//   • a menu declares its page key as an INT column (←/→/close navigation);
-//   • a stepper declares its value key as a RANGE column ([min,max]);
-//   • both arms ALSO contribute their items' allow-list columns; buttons
+//   • a menu declares its page key as an INT spec (←/→/close navigation);
+//   • a stepper declares its value key as a RANGE spec ([min,max]);
+//   • both arms ALSO contribute their items' allow-list specs; buttons
 //     contribute only those.
-function widgetColumns(w: WidgetDecl): ReadonlyArray<{
+function widgetKeySpecs(w: WidgetDecl): ReadonlyArray<{
   readonly key: string;
   readonly spec: DerivedValidatorSpec;
 }> {
@@ -457,40 +457,43 @@ function widgetColumns(w: WidgetDecl): ReadonlyArray<{
         { key: w.state, spec: { kind: "range", min: w.min, max: w.max } },
       ];
     case "menu":
-      return [{ key: w.state, spec: { kind: "int" } }, ...itemColumns(w.items)];
+      return [
+        { key: w.state, spec: { kind: "int" } },
+        ...itemKeySpecs(w.items),
+      ];
     case "tree":
       // [LAW:one-source-of-truth] The open-path key's accepted set IS the tree's
       // enumerated paths — same data the renderer writes — plus every leaf's
-      // allow-list column (a tree's leaves are the SAME ButtonItem shape, so they
-      // reuse itemColumns once flattened out of the submenu structure).
+      // allow-list spec (a tree's leaves are the SAME ButtonItem shape, so they
+      // reuse itemKeySpecs once flattened out of the submenu structure).
       return [
         {
           key: w.state,
           spec: { kind: "allow-list", allowed: enumerateOpenPaths(w.items) },
         },
-        ...itemColumns(treeLeafItems(w.items)),
+        ...itemKeySpecs(treeLeafItems(w.items)),
       ];
     case "buttons":
-      return itemColumns(w.items);
+      return itemKeySpecs(w.items);
   }
 }
 
 // [LAW:dataflow-not-control-flow] Flatten a tree's clickable leaves out of its
 // submenu nesting — a submenu contributes its descendants' leaves, a leaf is
 // itself. The open/close behavior of submenus derives no validator (it writes
-// the open-path key, handled above), so only leaves flow to itemColumns.
+// the open-path key, handled above), so only leaves flow to itemKeySpecs.
 function treeLeafItems(items: readonly MenuTreeItem[]): ButtonItem[] {
   return items.flatMap((item) =>
     isSubmenuItem(item) ? treeLeafItems(item.items) : [item],
   );
 }
 
-// [LAW:dataflow-not-control-flow] One allow-list column per key an item `set`
+// [LAW:dataflow-not-control-flow] One allow-list spec per key an item `set`
 // action writes. The allowed VALUES vary by item shape — an options item binds
 // the whole resolved option list, a literal item writes its action's `to` — but
 // that variability lives in the `optionValues` VALUE, not in a branch around
 // different code: the same flatMap runs for every item.
-function itemColumns(
+function itemKeySpecs(
   items: readonly ButtonItem[],
 ): Array<{ readonly key: string; readonly spec: DerivedValidatorSpec }> {
   return items.flatMap((item) => {
@@ -517,14 +520,14 @@ function itemColumns(
   });
 }
 
-// [LAW:types-are-the-program] Collapse one key's column contributions into the
-// single spec that gates it. A key is an INTEGER column (a menu page `int` or a
-// stepper `range`) or an allow-list — never both. An integer column ABSORBS
+// [LAW:types-are-the-program] Collapse one key's spec contributions into the
+// single spec that gates it. A key is an INTEGER spec (a menu page `int` or a
+// stepper `range`) or an allow-list — never both. An integer spec ABSORBS
 // integer allow-list members (a button writing "0" to a menu page is a legal int
 // write — the open-trigger pattern), and a NON-integer member aimed at it is the
 // genuine contradiction that throws. Two ranges widen-union; two allow-lists
 // union; an int and a range on one key (a menu page vs a stepper value) conflict.
-function mergeColumnSpecs(
+function mergeKeySpecs(
   key: string,
   specs: readonly DerivedValidatorSpec[],
 ): DerivedValidatorSpec {
@@ -537,21 +540,21 @@ function mergeColumnSpecs(
   if (ranges.length === 0 && !hasInt) {
     return { kind: "allow-list", allowed: [...new Set(allowed)] };
   }
-  // [LAW:no-silent-fallbacks] An integer column accepts only integer writes; a
-  // non-integer member is a one-column-shape contradiction surfaced at load.
+  // [LAW:no-silent-fallbacks] An integer spec accepts only integer writes; a
+  // non-integer member is a one-key-shape contradiction surfaced at load.
   const nonInt = allowed.filter((v) => !INT_RE.test(v));
   if (nonInt.length > 0) {
     throw new Error(
-      `deriveWidgetValidators: key "${key}" is an integer column (a menu page ` +
+      `deriveWidgetValidators: key "${key}" is an integer spec (a menu page ` +
         `index or a stepper value) but a button set-action writes non-integer ` +
-        `value(s) to it (${nonInt.join(", ")}). A state key has one column ` +
+        `value(s) to it (${nonInt.join(", ")}). A state key has one key ` +
         `shape — point that set-action at a distinct key, or write an integer.`,
     );
   }
   if (hasInt && ranges.length > 0) {
     throw new Error(
       `deriveWidgetValidators: key "${key}" is declared as both a menu page ` +
-        `(int) and a stepper value (range) — a state key has one column shape. ` +
+        `(int) and a stepper value (range) — a state key has one key shape. ` +
         `Use distinct keys.`,
     );
   }
@@ -582,23 +585,23 @@ function mergeColumnSpecs(
 }
 
 // [LAW:one-source-of-truth] The writable-key surface a config's widgets need is
-// DERIVED from the widget declarations (widgetColumns) — the same data the
+// DERIVED from the widget declarations (widgetKeySpecs) — the same data the
 // renderer paginates/steps from and clicks against is the gate the wire enforces,
 // so they cannot diverge.
 //
-// [LAW:single-enforcer] A STRUCTURAL column (menu int / stepper range) is always
+// [LAW:single-enforcer] A STRUCTURAL spec (menu int / stepper range) is always
 // derived — even on a baseline key — so a collision throws loudly at
 // registration rather than silently shadowing the permanent gate. Only an item's
 // ALLOW-LIST contribution to a baseline key derives nothing (the button reuses
 // the baseline gate as intended). The spec kind IS that discriminator: a
-// structural column is int/range, an item column is allow-list.
+// structural spec is int/range, an item spec is allow-list.
 export function deriveWidgetValidators(config: DslConfig): ReadonlyArray<{
   readonly key: string;
   readonly spec: DerivedValidatorSpec;
 }> {
   const baseline = new Set(baselineKeys());
   const contributions = Object.values(config.widgets)
-    .flatMap(widgetColumns)
+    .flatMap(widgetKeySpecs)
     .filter((c) => c.spec.kind !== "allow-list" || !baseline.has(c.key));
 
   const byKey = new Map<string, DerivedValidatorSpec[]>();
@@ -610,7 +613,7 @@ export function deriveWidgetValidators(config: DslConfig): ReadonlyArray<{
 
   return [...byKey].map(([key, specs]) => ({
     key,
-    spec: mergeColumnSpecs(key, specs),
+    spec: mergeKeySpecs(key, specs),
   }));
 }
 
