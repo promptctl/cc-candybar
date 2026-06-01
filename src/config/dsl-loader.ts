@@ -1361,10 +1361,45 @@ function validateClickWrite(
     });
     return undefined;
   }
+  // [LAW:verifiable-goals] Surface the set-state WIRE constraints (the single
+  // enforcer is registerStateValidator + makeAllowListValidator) here at the
+  // node path, so a config that would fail later at cache-install instead fails
+  // at load with a local, line-numbered message. The wire splits its tail on
+  // "/", so a slash-bearing key can never be addressed — the same rejection
+  // registerStateValidator makes, surfaced earlier.
+  if (set.includes("/")) {
+    ctx.issues.push({
+      path: `${path}.set`,
+      message: `an onClick "set" key must be slash-free — the set-state wire splits on "/" so a slash-bearing key cannot be addressed (got ${describeValue(set)})`,
+      line: findKeyLine(ctx.source, ["root"]),
+    });
+    return undefined;
+  }
   if (typeof to !== "string") {
     ctx.issues.push({
       path: `${path}.to`,
       message: `an onClick "to" must be a string value, got ${describeValue(to)}`,
+      line: findKeyLine(ctx.source, ["root"]),
+    });
+    return undefined;
+  }
+  // [LAW:verifiable-goals] Mirror the same constraints the derived allow-list
+  // validator enforces, for the same reason as a widget set-action's `to`: an
+  // empty value is undeliverable (the validator rejects empty input), and a
+  // slash-bearing value would be split by the wire — both surfaced at load
+  // rather than at the operator's first click.
+  if (to === "") {
+    ctx.issues.push({
+      path: `${path}.to`,
+      message: `an onClick "to" must be non-empty — an empty value cannot be delivered on the set-state wire`,
+      line: findKeyLine(ctx.source, ["root"]),
+    });
+    return undefined;
+  }
+  if (to.includes("/")) {
+    ctx.issues.push({
+      path: `${path}.to`,
+      message: `an onClick "to" value must be slash-free — the set-state wire splits values on "/" so a slash-bearing value cannot be delivered (got ${describeValue(to)})`,
       line: findKeyLine(ctx.source, ["root"]),
     });
     return undefined;

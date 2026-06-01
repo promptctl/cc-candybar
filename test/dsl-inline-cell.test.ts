@@ -279,6 +279,27 @@ describe("2de.5 — loader rejects a malformed inline onClick", () => {
       parseAndValidate("<test>", base(`{ onClick: { set: 'k', to: '0' } }`), ALLOWED),
     ).toThrow(/text/);
   });
+
+  // [LAW:verifiable-goals] The set-state wire constraints (slash-free key/value,
+  // non-empty value) are surfaced at the node path at LOAD, not at a later
+  // cache-install throw — mirroring the widget set-action's `to` check.
+  test("an onClick with an empty 'to' is rejected at load", () => {
+    expect(() =>
+      parseAndValidate("<test>", base(`{ text: 'x', onClick: { set: 'k', to: '' } }`), ALLOWED),
+    ).toThrow(/non-empty/);
+  });
+
+  test("a slash-bearing onClick key is rejected at load", () => {
+    expect(() =>
+      parseAndValidate("<test>", base(`{ text: 'x', onClick: { set: 'a/b', to: '0' } }`), ALLOWED),
+    ).toThrow(/slash-free/);
+  });
+
+  test("a slash-bearing onClick value is rejected at load", () => {
+    expect(() =>
+      parseAndValidate("<test>", base(`{ text: 'x', onClick: { set: 'k', to: 'a/b' } }`), ALLOWED),
+    ).toThrow(/slash-free/);
+  });
 });
 
 describe("2de.5 — inline onClick requires session.id (the set-state wire needs it)", () => {
