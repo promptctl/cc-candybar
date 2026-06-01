@@ -24,6 +24,7 @@ import { RenderCache } from "./cache/render";
 import { WatcherRegistry } from "./cache/watchers";
 import { RuntimeStats } from "./stats";
 import { makeLimits, realLimitsDeps, type LimitsHandle } from "./limits";
+import { armParentWatchdog, anchorFromEnv, pidAlive } from "./parent-watchdog";
 import { SessionState } from "./session-state";
 import { FileSessionStorage } from "./session-state-file";
 import { VERBS, BadVerbArgs } from "./verbs";
@@ -132,6 +133,19 @@ export function runDaemon(): void {
       shutdown(0);
     });
   }
+
+  // [LAW:single-enforcer] Same death funnel as the signals and the RSS backstop:
+  // the watchdog calls shutdown(0), it never exits on its own. A production
+  // daemon has no spawner to outlive (env unset) and arms an inert handle; only
+  // a test-spawned daemon is anchored, so this is invisible to the real daemon.
+  armParentWatchdog({
+    anchor: anchorFromEnv(process.env),
+    isAlive: pidAlive,
+    onOrphaned: (reason) => {
+      dlog("info", `parent watchdog: ${reason}; shutting down`);
+      shutdown(0);
+    },
+  });
 
   const server = net.createServer({ allowHalfOpen: false }, (sock) => {
     handleConnection(sock);
