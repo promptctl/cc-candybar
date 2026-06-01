@@ -40,6 +40,9 @@ import {
   type JustifyMode,
   type LayoutRow,
   type LayoutNode,
+  type InlineNode,
+  type InlineCell,
+  type ClickWrite,
   type Direction,
   type RawDslConfig,
   type SegmentDecl,
@@ -1197,16 +1200,17 @@ function validateRoot(
   if (!isPlainObject(raw)) {
     ctx.issues.push({
       path,
-      message: `a layout node must be an object with "kind" of "cells" or "container", got ${describeType(raw)}`,
+      message: `a layout node must be an object with "kind" of "cells", "inline", or "container", got ${describeType(raw)}`,
       line: findKeyLine(ctx.source, ["root"]),
     });
     return EMPTY_VERTICAL_NODE;
   }
   if (raw.kind === "cells") return validateCellsNode(ctx, path, raw);
+  if (raw.kind === "inline") return validateInlineNode(ctx, path, raw);
   if (raw.kind === "container") return validateContainerNode(ctx, path, raw);
   ctx.issues.push({
     path: `${path}.kind`,
-    message: `a layout node "kind" must be "cells" or "container", got ${JSON.stringify(raw.kind)}`,
+    message: `a layout node "kind" must be "cells", "inline", or "container", got ${JSON.stringify(raw.kind)}`,
     line: findKeyLine(ctx.source, ["root"]),
   });
   return EMPTY_VERTICAL_NODE;
@@ -1254,6 +1258,124 @@ function validateCellsNode(
   return when !== undefined
     ? { kind: "cells", segments, when }
     : { kind: "cells", segments };
+}
+
+// [LAW:locality-or-seam] STRUCTURAL validation of an inline leaf: it carries a
+// `cells` array (each cell `{ text, onClick? }`) and optional color (bg/fg/
+// palette). Whether the onClick key is a writable SessionState key is a derived-
+// validator concern (deriveNodeValidators), not a cross-ref one — the gate IS
+// the rendered click, derived from this same structure.
+function validateInlineNode(
+  ctx: ValidateCtx,
+  path: string,
+  raw: Record<string, unknown>,
+): LayoutNode {
+  rejectUnknownNodeKeys(
+    ctx,
+    path,
+    raw,
+    new Set(["kind", "cells", "bg", "fg", "palette", "when"]),
+  );
+  const when = optionalStringField(ctx, path, raw, "when");
+  const bg = optionalStringField(ctx, path, raw, "bg");
+  const fg = optionalStringField(ctx, path, raw, "fg");
+  const palette = validatePaletteName(ctx, path, raw);
+
+  const base = {
+    bg,
+    fg,
+    palette,
+    when,
+  } as const;
+  // [LAW:dataflow-not-control-flow] Strip the undefined optionals so the emitted
+  // node carries only the keys the author wrote — the same exact-presence shape
+  // every other node validator returns (no `bg: undefined` noise downstream).
+  const withOptionals = (cells: readonly InlineCell[]): InlineNode => ({
+    kind: "inline",
+    cells,
+    ...(bg !== undefined && { bg: base.bg }),
+    ...(fg !== undefined && { fg: base.fg }),
+    ...(palette !== undefined && { palette: base.palette }),
+    ...(when !== undefined && { when: base.when }),
+  });
+
+  if (!Array.isArray(raw.cells)) {
+    ctx.issues.push({
+      path: `${path}.cells`,
+      message: `an inline node must have a "cells" array of { text, onClick? } cells, got ${describeType(raw.cells)}`,
+      line: findKeyLine(ctx.source, ["root"]),
+    });
+    return withOptionals([]);
+  }
+  const cells = raw.cells.map((cell, i) =>
+    validateInlineCell(ctx, `${path}.cells[${i}]`, cell),
+  );
+  return withOptionals(cells);
+}
+
+function validateInlineCell(
+  ctx: ValidateCtx,
+  path: string,
+  raw: unknown,
+): InlineCell {
+  if (!isPlainObject(raw)) {
+    ctx.issues.push({
+      path,
+      message: `an inline cell must be an object with a "text" string and optional "onClick", got ${describeType(raw)}`,
+      line: findKeyLine(ctx.source, ["root"]),
+    });
+    return { text: "" };
+  }
+  rejectUnknownNodeKeys(ctx, path, raw, new Set(["text", "onClick"]));
+  const text = typeof raw.text === "string" ? raw.text : "";
+  if (typeof raw.text !== "string") {
+    ctx.issues.push({
+      path: `${path}.text`,
+      message: `an inline cell "text" must be a string, got ${describeType(raw.text)}`,
+      line: findKeyLine(ctx.source, ["root"]),
+    });
+  }
+  if (raw.onClick === undefined) return { text };
+  const onClick = validateClickWrite(ctx, `${path}.onClick`, raw.onClick);
+  return onClick !== undefined ? { text, onClick } : { text };
+}
+
+// [LAW:types-are-the-program] A `ClickWrite` is exactly `{ set, to }` — both
+// LITERAL strings (the literalness is load-bearing: it is what makes the gate
+// derivable). Reject anything else loudly rather than coercing.
+function validateClickWrite(
+  ctx: ValidateCtx,
+  path: string,
+  raw: unknown,
+): ClickWrite | undefined {
+  if (!isPlainObject(raw)) {
+    ctx.issues.push({
+      path,
+      message: `an onClick must be an object { set, to }, got ${describeType(raw)}`,
+      line: findKeyLine(ctx.source, ["root"]),
+    });
+    return undefined;
+  }
+  rejectUnknownNodeKeys(ctx, path, raw, new Set(["set", "to"]));
+  const set = raw.set;
+  const to = raw.to;
+  if (typeof set !== "string" || set.length === 0) {
+    ctx.issues.push({
+      path: `${path}.set`,
+      message: `an onClick "set" must be a non-empty SessionState key string, got ${describeValue(set)}`,
+      line: findKeyLine(ctx.source, ["root"]),
+    });
+    return undefined;
+  }
+  if (typeof to !== "string") {
+    ctx.issues.push({
+      path: `${path}.to`,
+      message: `an onClick "to" must be a string value, got ${describeValue(to)}`,
+      line: findKeyLine(ctx.source, ["root"]),
+    });
+    return undefined;
+  }
+  return { set, to };
 }
 
 function validateContainerNode(
