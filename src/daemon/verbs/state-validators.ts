@@ -556,9 +556,9 @@ function mergeKeySpecs(
   if (nonInt.length > 0) {
     throw new Error(
       `deriveValidators: key "${key}" is an integer spec (a menu page ` +
-        `index or a stepper value) but a button set-action writes non-integer ` +
+        `index or a stepper value) but a click writes non-integer ` +
         `value(s) to it (${nonInt.join(", ")}). A state key has one key ` +
-        `shape — point that set-action at a distinct key, or write an integer.`,
+        `shape — point that click at a distinct key, or write an integer.`,
     );
   }
   if (hasInt && ranges.length > 0) {
@@ -573,8 +573,8 @@ function mergeKeySpecs(
     const max = Math.max(...ranges.map((r) => r.max));
     // [LAW:no-silent-fallbacks] A menu page (int) is UNBOUNDED, so any integer
     // write is a legal member to absorb. A stepper range is BOUNDED — an integer
-    // a button declares OUTSIDE [min,max] would be clamped by the range gate at
-    // click time, silently storing a different value than the button rendered.
+    // a click declares OUTSIDE [min,max] would be clamped by the range gate at
+    // click time, silently storing a different value than the click rendered.
     // That is a config error, surfaced at load rather than papered over at click.
     const outOfRange = allowed.filter((v) => {
       const n = parseInt(v, 10);
@@ -583,10 +583,10 @@ function mergeKeySpecs(
     if (outOfRange.length > 0) {
       throw new Error(
         `deriveValidators: key "${key}" is a stepper range [${min},${max}] ` +
-          `but a button set-action writes out-of-range value(s) to it ` +
+          `but a click writes out-of-range value(s) to it ` +
           `(${outOfRange.join(", ")}). The range gate would clamp them, storing a ` +
-          `different value than the button renders — write an in-range integer, ` +
-          `or point that set-action at a distinct key.`,
+          `different value than the click renders — write an in-range integer, ` +
+          `or point that click at a distinct key.`,
       );
     }
     return { kind: "range", min, max };

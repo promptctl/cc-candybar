@@ -2054,6 +2054,26 @@ function validateCrossReferences(ctx: ValidateCtx, cfg: DslConfig): void {
         layoutLine,
       );
     }
+    // [LAW:single-enforcer] An inline leaf's bg/fg flow through the SAME
+    // resolveSegmentColors path a segment's bg/fg do, so they are template
+    // surfaces and get the SAME ref existence-check — a typo'd `{{ .var }}` in an
+    // inline color surfaces at load, never as a silent render-time miss.
+    if (node.kind === "inline") {
+      for (const [field, src] of [
+        ["bg", node.bg],
+        ["fg", node.fg],
+      ] as const) {
+        if (src !== undefined) {
+          checkTemplateRefs(
+            ctx,
+            `${layoutKey}.${field}`,
+            src,
+            allVarNames,
+            layoutLine,
+          );
+        }
+      }
+    }
     if (node.kind !== "cells") continue;
     for (const entry of node.segments) {
       if (!Object.prototype.hasOwnProperty.call(cfg.segments, entry)) {
@@ -2154,12 +2174,15 @@ function validateCrossReferences(ctx: ValidateCtx, cfg: DslConfig): void {
   // menu with only copy/open items (no state vars, no set actions) can't load
   // while rendering broken navigation links with an empty session id.
   if (
-    (hasStateKind(cfg) || hasWidgetSetAction(cfg) || hasMenuWidget(cfg)) &&
+    (hasStateKind(cfg) ||
+      hasWidgetSetAction(cfg) ||
+      hasMenuWidget(cfg) ||
+      hasInlineOnClick(cfg)) &&
     !Object.prototype.hasOwnProperty.call(cfg.variables, "session.id")
   ) {
     ctx.issues.push({
       path: "variables.session.id",
-      message: `state reads, widget set-actions, and menu navigation require a global "session.id" variable (segment-local declarations do not satisfy this — declareState/set-state both read the global box; conventionally { kind: "input", path: "session_id" })`,
+      message: `state reads, widget set-actions, menu navigation, and inline-cell onClick all require a global "session.id" variable (segment-local declarations do not satisfy this — declareState/set-state both read the global box; conventionally { kind: "input", path: "session_id" })`,
       line: findKeyLine(ctx.source, ["variables"]),
     });
   }
@@ -2239,6 +2262,19 @@ function validateCrossReferences(ctx: ValidateCtx, cfg: DslConfig): void {
 function hasMenuWidget(cfg: DslConfig): boolean {
   for (const widget of Object.values(cfg.widgets)) {
     if (widget.kind === "menu") return true;
+  }
+  return false;
+}
+
+// [LAW:dataflow-not-control-flow] An inline cell's `onClick` composes a set-state
+// click URL whose first segment is the session id — exactly like a widget set
+// action. So "any inline cell has onClick" is one more value OR'd into the
+// session.id requirement, not a parallel check. A clickless inline leaf (pure
+// generated text) writes nothing and needs no session id.
+function hasInlineOnClick(cfg: DslConfig): boolean {
+  for (const node of walkNodes(cfg.root)) {
+    if (node.kind !== "inline") continue;
+    if (node.cells.some((c) => c.onClick !== undefined)) return true;
   }
   return false;
 }

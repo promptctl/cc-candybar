@@ -136,8 +136,11 @@ export interface InlineCell {
 export interface InlineNode {
   readonly kind: "inline";
   readonly cells: readonly InlineCell[];
-  // [LAW:one-source-of-truth] Palette-spec names, the same vocabulary a segment's
-  // bg/fg use; absent ≡ inherit the cascade base (no color of the leaf's own).
+  // [LAW:single-enforcer] Color-spec template strings, the SAME surface a
+  // segment's bg/fg are — resolved by the one resolveSegmentColors path, so an
+  // inline leaf's color cannot drift from a segment's. As template surfaces they
+  // are ref-checked and frontier-seeded identically (loader + render-payload).
+  // Absent ≡ inherit the cascade base (no color of the leaf's own).
   readonly bg?: string;
   readonly fg?: string;
   // [LAW:one-source-of-truth] Per-leaf palette override (a NAME); undefined =
