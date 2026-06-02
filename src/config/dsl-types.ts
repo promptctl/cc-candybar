@@ -161,7 +161,46 @@ export interface ContainerNode {
   readonly when?: string;
 }
 
-export type LayoutNode = CellsNode | InlineNode | ContainerNode;
+// [LAW:types-are-the-program] The first COMPOSITE node type: not a base-case
+// leaf like cells/inline (which emit terminal cells), but a type whose `render`
+// EXPANDS into more nodes that bottom out in the base cases — the React-composite
+// shape (a function component returning host elements). A `stepper` is a numeric
+// control over ONE integer SessionState key: its ◀ current ▶ affordances are
+// render-DERIVED from (live value, [min,max], step), never authored, so it has no
+// `items` (the StepperWidget shape it replaces, lifted onto the substrate). ◀/▶
+// navigate by ∓step and WRAP past a bound; the derived range validator owns the
+// bounds for any other write.
+//
+// [LAW:single-enforcer] HUE PIN: a composite is hue-NEUTRAL — it consumes exactly
+// the hue units its expansion's BASE leaves consume. A stepper expands to ONE
+// inline leaf (its ◀ N ▶ cells), so it is ONE hue unit, visually identical to the
+// old widget that inherited its one enclosing segment's hue. Because the leaf owns
+// the color, the stepper carries bg/fg/palette to hand it — the SAME color surface
+// an InlineNode has, resolved by the one resolveSegmentColors path.
+export interface StepperNode {
+  readonly kind: "stepper";
+  // The integer SessionState key the stepper reads (to display) and writes (◀/▶).
+  readonly state: string;
+  readonly min: number;
+  readonly max: number;
+  readonly step: number;
+  // [LAW:types-are-the-program] An optional UNIT symbol appended to the displayed
+  // value (`◀ 14° ▶`) — presentation only. It rides the plain current-value cell,
+  // never the ◀/▶ links, so the wire value stays a bare integer the range gate
+  // accepts. Absent ≡ no unit. Kept generic (not hue-specific): `°`, `%`, `px`…
+  readonly unit?: string;
+  // [LAW:one-source-of-truth] Color-spec NAMES/templates, the SAME surface a
+  // segment's / inline leaf's bg/fg are — handed to the expanded inline leaf and
+  // resolved by the one resolveSegmentColors path. Absent ≡ inherit the base.
+  readonly bg?: string;
+  readonly fg?: string;
+  readonly palette?: string;
+  // [LAW:dataflow-not-control-flow] Absent `when` ≡ always-rendered — the same
+  // subtree-gating contract every node shares.
+  readonly when?: string;
+}
+
+export type LayoutNode = CellsNode | InlineNode | ContainerNode | StepperNode;
 
 // [LAW:single-enforcer] THE one pre-order walk over a node tree. Every consumer
 // that needs "which segments / which `when` predicates does this layout name"
@@ -171,6 +210,38 @@ export function* walkNodes(node: LayoutNode): IterableIterator<LayoutNode> {
   yield node;
   if (node.kind === "container") {
     for (const child of node.children) yield* walkNodes(child);
+  }
+}
+
+// [LAW:single-enforcer] THE one place mapping a node kind to its SessionState
+// relationship, as DATA — the node-tree mirror of widgetStateUse (src/config/
+// widget.ts). The loader's cross-ref checks (session.id required, backing-var
+// required) READ this projection over walkNodes; none re-switch on node kind.
+// A new node kind is one new arm in this exhaustive switch, and the compiler
+// forces it.
+//   writesSet — does this node emit a set-state click? (an inline cell's onClick,
+//               a stepper's ◀/▶). Drives the session.id requirement: a set-state
+//               URL's first segment is the session id.
+//   readsKey  — the key the node READS BACK to render itself (a stepper's value);
+//               null when it reads nothing. Drives the backing-var check: a node
+//               reading a key with no kind:"state" variable bound to it would
+//               write into SessionState with nothing reading it back.
+export interface NodeStateUse {
+  readonly writesSet: boolean;
+  readonly readsKey: string | null;
+}
+export function nodeStateUse(node: LayoutNode): NodeStateUse {
+  switch (node.kind) {
+    case "inline":
+      return {
+        writesSet: node.cells.some((c) => c.onClick !== undefined),
+        readsKey: null,
+      };
+    case "stepper":
+      return { writesSet: true, readsKey: node.state };
+    case "cells":
+    case "container":
+      return { writesSet: false, readsKey: null };
   }
 }
 

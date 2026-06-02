@@ -11,20 +11,15 @@
 // the input values (kind discriminators, layout length, palette presence)
 // govern output, not whether operations run.
 
-import { RichText, Style } from "@promptctl/rich-js";
-import type { PaletteResolver } from "@promptctl/rich-js";
-import type { Template } from "@promptctl/go-template-js";
+import type { RichText, PaletteResolver } from "@promptctl/rich-js";
 import type {
   ValidatedConfig,
   VariableDecl,
   CacheDecl,
   LayoutNode,
-  InlineCell,
-  Direction,
 } from "../config/dsl-types.js";
 import { HUE_STEP_VAR } from "../config/dsl-types.js";
 import { toString as varToString } from "../var-system/types.js";
-import { effectsUrl, VERB_SET_STATE } from "../click/wire.js";
 import type { VariableStore } from "../var-system/store.js";
 import type { SourceRegistry } from "../var-system/sources.js";
 import {
@@ -35,125 +30,42 @@ import {
 } from "../var-system/sources.js";
 import type { BuildLineOptions } from "../render/strip.js";
 import { renderStripCells } from "../render/strip.js";
-import { splitCellsIntoLines } from "../render/split-lines.js";
-import { resolverForThemeName, transposedResolver } from "../themes/index.js";
+import { resolverForThemeName } from "../themes/index.js";
 import { buildScope } from "../template-engine/scope.js";
 import {
   createCcCandybarEngine,
-  fragmentsToCells,
   evaluateWhen,
-  applySegmentLayout,
-  resolveSegmentColors,
 } from "../template-engine/index.js";
 import {
   compileWidgets,
   widgetFuncs,
   type WidgetRuntime,
 } from "../render/widget.js";
+// [LAW:one-way-deps] The node-type registry sits below this driver: it owns the
+// compiled node shapes + each kind's compile/render, dispatched via nodeType().
+// render.ts threads the recursion (compileChild/renderChild) + the hue counter in
+// as capabilities; it never re-switches on node kind.
+import {
+  nodeType,
+  type CompiledNode,
+  type CompiledSegment,
+  type CompiledSegments,
+  type RenderedLines,
+  type NodeCompileCtx,
+  type NodeRenderCtx,
+} from "./node-registry.js";
 
-// ─── Compiled segment shape ───────────────────────────────────────────────────
-
-// Pre-parsed templates and pre-resolved palette for one segment. Built once at
-// registration time; renderDsl only evaluates. [LAW:one-source-of-truth]
-// the compiled form is the authoritative runtime shape for a segment.
-export interface CompiledSegment {
-  readonly when?: Template<RichText>;
-  readonly template: Template<RichText>;
-  readonly bg?: Template<RichText>;
-  readonly fg?: Template<RichText>;
-  // Pre-resolved from the segment's explicit `palette:` override at registration
-  // time; undefined means "use the per-render basePalette passed to renderDsl"
-  // (the live session ?? globals ?? default base theme).
-  readonly paletteResolver?: PaletteResolver;
-}
-
-// Pre-compiled templates for every segment in a DslConfig, keyed by segment
-// name. Consumed by renderDsl.
-export type CompiledSegments = Readonly<Record<string, CompiledSegment>>;
-
-// [LAW:dataflow-not-control-flow] The compiled mirror of a LayoutNode: the same
-// recursive shape with every `when` predicate parsed ONCE here. renderDsl walks
-// this compiled tree — not the raw config — so the parse-once guarantee covers
-// every node. A `cells` node carries its segment-name run; a `container` node
-// carries its `direction` and compiled children.
-export interface CompiledCellsNode {
-  readonly kind: "cells";
-  readonly when?: Template<RichText>;
-  readonly segments: readonly string[];
-}
-// [LAW:dataflow-not-control-flow] The compiled inline leaf: its `when` and its
-// bg/fg color specs are parsed ONCE here (renderDsl only evaluates), its palette
-// override pre-resolved. The cells themselves are literal (text + literal
-// onClick), so they need no compilation — the only render-time work is turning
-// each cell's literal (key, value) into a set-state URL against the live
-// session id, and resolving the leaf's color.
-export interface CompiledInlineNode {
-  readonly kind: "inline";
-  readonly when?: Template<RichText>;
-  readonly cells: readonly InlineCell[];
-  readonly bg?: Template<RichText>;
-  readonly fg?: Template<RichText>;
-  readonly paletteResolver?: PaletteResolver;
-}
-export interface CompiledContainerNode {
-  readonly kind: "container";
-  readonly direction: Direction;
-  readonly when?: Template<RichText>;
-  readonly children: readonly CompiledNode[];
-}
-export type CompiledNode =
-  | CompiledCellsNode
-  | CompiledInlineNode
-  | CompiledContainerNode;
+// ─── Compiled config ───────────────────────────────────────────────────────────
 
 // [LAW:one-source-of-truth] The full compiled artifact registerDslConfig
 // produces: every segment's compiled templates AND the compiled layout tree
 // (nodes with parsed `when`). renderDsl needs both; bundling them keeps the
-// daemon cache holding one value, not two that could fall out of sync.
+// daemon cache holding one value, not two that could fall out of sync. The
+// compiled node + segment shapes live in node-registry (the render layer that
+// owns node behavior); this driver only assembles + walks them.
 export interface CompiledConfig {
   readonly segments: CompiledSegments;
   readonly root: CompiledNode;
-}
-
-// A rendered node is a LIST OF LINES, each line a list of cells — NOT yet
-// serialized. [LAW:types-are-the-program] Cells (not ANSI bytes) are the
-// composition substrate: the powerline joiner caps between adjacent cells, and
-// serializing a node before composition would freeze its last cell's edge to
-// the default background, making a cap across a sibling seam unrecoverable.
-// Serialization (the single joiner pass) therefore runs exactly once, at the
-// root, AFTER the whole tree has composed.
-type RenderedLines = ReadonlyArray<readonly RichText[]>;
-
-// [LAW:dataflow-not-control-flow] A container's `direction` is the projection it
-// applies to its already-rendered child blocks — DATA selecting a fold, not a
-// branch that skips work. `vertical` STACKS (concatenate the children's line-
-// lists); `horizontal` ZIPS (row i is every child's row-i cells concatenated, so
-// the joiner caps ACROSS the seam — there is no abut). The switch is exhaustive
-// over `Direction`; adding `outline` to DIRECTIONS forces a new arm here.
-function composeBlocks(
-  direction: Direction,
-  blocks: readonly RenderedLines[],
-): RenderedLines {
-  switch (direction) {
-    case "vertical":
-      return blocks.flatMap((b) => b);
-    case "horizontal": {
-      const height = blocks.reduce((m, b) => Math.max(m, b.length), 0);
-      const rows: RichText[][] = [];
-      for (let i = 0; i < height; i++) {
-        rows.push(blocks.flatMap((b) => b[i] ?? []));
-      }
-      return rows;
-    }
-  }
-}
-
-// [LAW:single-enforcer] One inline-cell click → URL mapping: a structured
-// (key, value) write becomes exactly one `set-state` effect on the one click
-// wire. effectsUrl owns the encoding; this names the single-effect shape an
-// inline cell emits (the same shape the doomed widget runtime builds today).
-function setStateUrl(sessionId: string, key: string, value: string): string {
-  return effectsUrl([{ verb: VERB_SET_STATE, args: [sessionId, key, value] }]);
 }
 
 // ─── CacheDecl → CachePolicy ─────────────────────────────────────────────────
@@ -407,10 +319,13 @@ export function registerDslConfig(
   }
 
   // [LAW:one-source-of-truth] Compile the layout tree once here, alongside the
-  // segment templates — renderDsl never parses. Each node's `when` is parsed in
-  // place; the compiled tree mirrors config.root 1:1 (same structure, same
-  // segment order), so a node's predicate and its children travel together.
-  const compileNodeField = (src: string, path: string, field: string) => {
+  // segment templates — renderDsl never parses. This driver owns the cross-cutting
+  // `when` parse (one site, walk-uniform) and threads the recursion + per-config
+  // resolution (palette names, state-key→var) into each node type's compile as
+  // capabilities; the kind-specific assembly lives in node-registry.
+  // [LAW:single-enforcer] The compiled tree mirrors config.root 1:1, so a node's
+  // predicate and its children travel together.
+  const parseNodeField = (src: string, path: string, field: string) => {
     try {
       return engine.parse(src);
     } catch (e) {
@@ -420,45 +335,19 @@ export function registerDslConfig(
       );
     }
   };
-  const compileWhen = (when: string | undefined, path: string) =>
-    when === undefined ? undefined : compileNodeField(when, path, "when");
   const compileNode = (node: LayoutNode, path: string): CompiledNode => {
-    const when = compileWhen(node.when, path);
-    if (node.kind === "cells") {
-      return { kind: "cells", when, segments: node.segments };
-    }
-    if (node.kind === "inline") {
-      // [LAW:one-source-of-truth] bg/fg are parsed through the SAME engine as a
-      // segment's bg/fg and resolved by the SAME resolveSegmentColors at render,
-      // so an inline leaf's color follows one color path — never a second one
-      // that could drift. A static palette name parses to a literal-emitting
-      // template; the parse-once guarantee still holds.
-      return {
-        kind: "inline",
-        when,
-        cells: node.cells,
-        bg:
-          node.bg !== undefined
-            ? compileNodeField(node.bg, path, "bg")
-            : undefined,
-        fg:
-          node.fg !== undefined
-            ? compileNodeField(node.fg, path, "fg")
-            : undefined,
-        paletteResolver:
-          node.palette !== undefined
-            ? resolverForThemeName(node.palette)
-            : undefined,
-      };
-    }
-    return {
-      kind: "container",
-      direction: node.direction,
-      when,
-      children: node.children.map((child, i) =>
-        compileNode(child, `${path}.children[${i}]`),
-      ),
+    const cctx: NodeCompileCtx = {
+      path,
+      when:
+        node.when === undefined
+          ? undefined
+          : parseNodeField(node.when, path, "when"),
+      parseField: (src, field) => parseNodeField(src, path, field),
+      resolver: resolverForThemeName,
+      stateVarFor: (key) => stateKeyToVar.get(key) ?? key,
+      compileChild: compileNode,
     };
+    return nodeType(node.kind).compile(node, cctx);
   };
 
   return { segments: compiled, root: compileNode(config.root, "root") };
@@ -550,145 +439,52 @@ export function renderDsl(
 
   perSegmentSink?.clear();
 
-  // [LAW:single-enforcer] segIndex is the one hue cursor, advanced in pre-order
-  // across the whole tree (visible or not) so per-segment colors stay
-  // positionally stable regardless of how the layout is nested or which nodes
-  // are currently hidden.
-  let segIndex = 0;
+  // [LAW:single-enforcer] The hue cursor: one counter, advanced in pre-order
+  // across the whole tree (visible or not) by base leaves only, so per-segment
+  // colors stay positionally stable regardless of nesting or which nodes are
+  // hidden. ctx exposes nextHueShift() as the single mutator; composites advance
+  // nothing themselves and inherit their units from the base leaves they expand to.
+  const hue = { value: 0 };
+  const nextHueShift = (): number => {
+    const shift = hue.value * hueStep;
+    hue.value += 1;
+    return shift;
+  };
 
-  // [LAW:dataflow-not-control-flow] One walk renders any node to LINES OF CELLS
-  // (serialization is deferred to the root). `visible` ANDs the node's own `when`
-  // with its ancestors' — a leaf renders only when its whole path is visible, yet
-  // its segments always advance segIndex. A container's projection is its
-  // `direction` VALUE: composeBlocks folds the children's blocks (vertical stacks,
-  // horizontal zips cells per row so the joiner caps across the seam).
+  // [LAW:no-defensive-null-guards] A cells leaf names segments; resolve each to
+  // its decl + compiled form. Both are always present together (loader validates,
+  // registerDslConfig compiles); a miss is a caller bug the cells render throws on.
+  const lookupSegment = (name: string) => {
+    const seg = config.segments[name];
+    const segCompiled = compiled.segments[name];
+    return seg !== undefined && segCompiled !== undefined
+      ? { seg, compiled: segCompiled }
+      : undefined;
+  };
+
+  // [LAW:dataflow-not-control-flow] ONE walk renders any node to LINES OF CELLS
+  // (serialization deferred to the root). The driver owns the cross-cutting
+  // `when`: `visible` ANDs the node's own predicate with its ancestors'. It then
+  // dispatches to the node type's render via nodeType() — no kind switch here.
+  // The node count, nesting depth, and per-leaf segment count are all data; a
+  // deeper tree is more recursion, not more code.
   const renderNode = (
     node: CompiledNode,
     parentVisible: boolean,
   ): RenderedLines => {
     const visible = parentVisible && evaluateWhen(node.when, scope);
-
-    if (node.kind === "container") {
-      return composeBlocks(
-        node.direction,
-        node.children.map((child) => renderNode(child, visible)),
-      );
-    }
-
-    if (node.kind === "inline") {
-      // [LAW:single-enforcer] An inline leaf is ONE hue unit (like a segment): it
-      // consumes exactly one segIndex so its color is positionally stable and the
-      // siblings after it keep their colors regardless of its visibility.
-      const hueShift = segIndex * hueStep;
-      segIndex++;
-      if (!visible) return [];
-
-      // [LAW:dataflow-not-control-flow] The per-leaf variability is WHICH palette
-      // — the leaf's override (or basePalette) transposed by its hueShift — and
-      // bg/fg resolve from that one palette, the SAME path a segment's color
-      // takes. No second color codepath.
-      const resolver = transposedResolver(
-        node.paletteResolver ?? basePalette,
-        hueShift,
-      );
-      const baseStyle = resolveSegmentColors(resolver, node.bg, node.fg, scope);
-
-      // [LAW:dataflow-not-control-flow] Each cell becomes one fragment; a cell's
-      // `onClick` (a value, not a branch) decides whether that fragment carries an
-      // OSC-8 set-state link. fragmentsToCells then splits at link boundaries so
-      // each clickable cell is independently addressable — the SAME mapper a
-      // segment template's output flows through. Inter-cell single-space
-      // separators match the inline spacing the bar already renders.
-      const fragments = node.cells.flatMap((cell, i) => {
-        const frag =
-          cell.onClick !== undefined
-            ? new RichText(cell.text, {
-                style: new Style({
-                  link: setStateUrl(
-                    sessionId,
-                    cell.onClick.set,
-                    cell.onClick.to,
-                  ),
-                }),
-              })
-            : new RichText(cell.text);
-        return i > 0 ? [new RichText(" "), frag] : [frag];
-      });
-      return [fragmentsToCells(fragments, baseStyle)];
-    }
-
-    // [LAW:dataflow-not-control-flow] The leaf accumulates VISUAL lines, not a
-    // flat cell run. A segment's first line continues the current row line; each
-    // subsequent line (from an authored "\n") opens a new one. Starts as one
-    // empty line so an all-hidden visible leaf still yields exactly one (empty)
-    // line — the pre-substrate behavior.
-    const rowLines: RichText[][] = [[]];
-    for (const segName of node.segments) {
-      const seg = config.segments[segName];
-      const segCompiled = compiled.segments[segName];
-      // [LAW:no-defensive-null-guards] seg + segCompiled are always defined —
-      // the loader validates every cells-node entry against segments, and
-      // registerDslConfig compiles every declared segment. A missing entry
-      // here is a caller bug (renderDsl called with a mismatched compiled
-      // object).
-      if (!seg || !segCompiled) {
-        throw new Error(`Layout entry "${segName}" has no matching segment`);
-      }
-
-      const hueShift = segIndex * hueStep;
-      segIndex++;
-
-      if (!visible) continue;
-      if (!evaluateWhen(segCompiled.when, scope)) continue;
-
-      // [LAW:dataflow-not-control-flow] The per-segment variability is WHICH
-      // palette — the base resolver (per-segment override or basePalette)
-      // transposed by hueShift. bg and fg then resolve from this one palette.
-      const resolver = transposedResolver(
-        segCompiled.paletteResolver ?? basePalette,
-        hueShift,
-      );
-
-      const baseStyle = resolveSegmentColors(
-        resolver,
-        segCompiled.bg,
-        segCompiled.fg,
-        scope,
-      );
-
-      const fragments = segCompiled.template.evaluate(scope);
-      const segCells = fragmentsToCells(fragments, baseStyle);
-
-      // [LAW:single-enforcer] Partition the segment's authored "\n" into visual
-      // lines BEFORE per-segment layout — width/justify/truncate then measure
-      // each line cleanly, never a "\n"-bearing cell whose cellLength is a
-      // zero-width lie (which would truncate or mis-align across the break). A
-      // newline-free segment is the degenerate one-line case: one applySegmentLayout
-      // call on the whole cell run, byte-identical to the pre-split path.
-      const laidLines = splitCellsIntoLines(segCells).map((line) =>
-        applySegmentLayout(line, {
-          width: seg.width ?? "auto",
-          justify: seg.justify ?? "left",
-          truncate: seg.truncate ?? "right",
-          baseStyle,
-        }),
-      );
-
-      laidLines.forEach((laid, i) => {
-        if (i > 0) rowLines.push([]);
-        rowLines[rowLines.length - 1]!.push(...laid);
-      });
-
-      if (perSegmentSink !== undefined) {
-        perSegmentSink.set(segName, laidLines.flat());
-      }
-    }
-
-    // [LAW:dataflow-not-control-flow] A hidden leaf is absent (no line). A
-    // visible leaf hands back its accumulated cell lines; serialization (and
-    // FlexStrip auto-wrap) happens once at the root, never here.
-    if (!visible) return [];
-    return rowLines;
+    const ctx: NodeRenderCtx = {
+      scope,
+      store,
+      sessionId,
+      basePalette,
+      visible,
+      nextHueShift,
+      perSegmentSink,
+      lookupSegment,
+      renderChild: renderNode,
+    };
+    return nodeType(node.kind).render(node, ctx);
   };
 
   // [LAW:single-enforcer] The ONE serialization pass: each composed line of cells
