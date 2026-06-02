@@ -42,6 +42,7 @@ import {
   type LayoutNode,
   type InlineNode,
   type InlineCell,
+  type StepperNode,
   type ClickWrite,
   type Direction,
   type RawDslConfig,
@@ -51,6 +52,7 @@ import {
   type ValidatedConfig,
   type VariableDecl,
   walkNodes,
+  nodeStateUse,
   TERM_COLS_VAR,
 } from "./dsl-types.js";
 import {
@@ -1200,7 +1202,7 @@ function validateRoot(
   if (!isPlainObject(raw)) {
     ctx.issues.push({
       path,
-      message: `a layout node must be an object with "kind" of "cells", "inline", or "container", got ${describeType(raw)}`,
+      message: `a layout node must be an object with "kind" of "cells", "inline", "container", or "stepper", got ${describeType(raw)}`,
       line: findKeyLine(ctx.source, ["root"]),
     });
     return EMPTY_VERTICAL_NODE;
@@ -1208,9 +1210,10 @@ function validateRoot(
   if (raw.kind === "cells") return validateCellsNode(ctx, path, raw);
   if (raw.kind === "inline") return validateInlineNode(ctx, path, raw);
   if (raw.kind === "container") return validateContainerNode(ctx, path, raw);
+  if (raw.kind === "stepper") return validateStepperNode(ctx, path, raw);
   ctx.issues.push({
     path: `${path}.kind`,
-    message: `a layout node "kind" must be "cells", "inline", or "container", got ${JSON.stringify(raw.kind)}`,
+    message: `a layout node "kind" must be "cells", "inline", "container", or "stepper", got ${JSON.stringify(raw.kind)}`,
     line: findKeyLine(ctx.source, ["root"]),
   });
   return EMPTY_VERTICAL_NODE;
@@ -1451,6 +1454,108 @@ function validateContainerNode(
   return when !== undefined
     ? { kind: "container", direction: dir, children, when }
     : { kind: "container", direction: dir, children };
+}
+
+// [LAW:types-are-the-program] A stepper NODE is fully described by its integer
+// key, integer domain (min < max), positive integer step, and the color it hands
+// its expanded inline leaf — the StepperWidget shape lifted onto the substrate.
+// Mirrors validateStepperWidget's domain checks; adds the inline-leaf color
+// surface (bg/fg/palette). `step` defaults to 1. On any error it still returns a
+// type-valid node (issues block the config); the renderer never sees an invalid
+// one.
+function validateStepperNode(
+  ctx: ValidateCtx,
+  path: string,
+  raw: Record<string, unknown>,
+): LayoutNode {
+  rejectUnknownNodeKeys(
+    ctx,
+    path,
+    raw,
+    new Set([
+      "kind",
+      "state",
+      "min",
+      "max",
+      "step",
+      "unit",
+      "bg",
+      "fg",
+      "palette",
+      "when",
+    ]),
+  );
+  const when = optionalStringField(ctx, path, raw, "when");
+  const unit = optionalStringField(ctx, path, raw, "unit");
+  const bg = optionalStringField(ctx, path, raw, "bg");
+  const fg = optionalStringField(ctx, path, raw, "fg");
+  const palette = validatePaletteName(ctx, path, raw);
+
+  // [LAW:verifiable-goals] The state key is a set-state URL path segment, so it
+  // must be non-empty and slash-free — the SAME constraint the derived range
+  // validator + the wire enforce, surfaced here at the node path with a line.
+  const stateRaw = raw.state;
+  let state = "";
+  if (typeof stateRaw !== "string" || stateRaw.length === 0) {
+    ctx.issues.push({
+      path: `${path}.state`,
+      message: `a stepper node must declare a non-empty "state" (the integer SessionState key it reads and writes)`,
+      line: findKeyLine(ctx.source, ["root"]),
+    });
+  } else if (stateRaw.includes("/")) {
+    ctx.issues.push({
+      path: `${path}.state`,
+      message: `a stepper node "state" key must be slash-free — the set-state wire splits on "/", so a slash-bearing key cannot be addressed (got ${describeValue(stateRaw)})`,
+      line: findKeyLine(ctx.source, ["root"]),
+    });
+  } else {
+    state = stateRaw;
+  }
+
+  const intField = (field: string): number | null => {
+    const v = raw[field];
+    if (typeof v !== "number" || !Number.isInteger(v)) {
+      ctx.issues.push({
+        path: `${path}.${field}`,
+        message: `a stepper node ${field} must be an integer, got ${describeValue(v)}`,
+        line: findKeyLine(ctx.source, ["root"]),
+      });
+      return null;
+    }
+    return v;
+  };
+  const minV = intField("min");
+  const maxV = intField("max");
+  // [LAW:no-mode-explosion] step is optional with one canonical default (1).
+  const stepV = raw.step === undefined ? 1 : intField("step");
+  if (minV !== null && maxV !== null && minV >= maxV) {
+    ctx.issues.push({
+      path: `${path}.min`,
+      message: `stepper node min (${minV}) must be less than max (${maxV})`,
+      line: findKeyLine(ctx.source, ["root"]),
+    });
+  }
+  if (stepV !== null && stepV < 1) {
+    ctx.issues.push({
+      path: `${path}.step`,
+      message: `stepper node step (${stepV}) must be a positive integer`,
+      line: findKeyLine(ctx.source, ["root"]),
+    });
+  }
+
+  const node: StepperNode = {
+    kind: "stepper",
+    state,
+    min: minV ?? 0,
+    max: maxV ?? 1,
+    step: stepV ?? 1,
+    ...(unit !== undefined && { unit }),
+    ...(bg !== undefined && { bg }),
+    ...(fg !== undefined && { fg }),
+    ...(palette !== undefined && { palette }),
+    ...(when !== undefined && { when }),
+  };
+  return node;
 }
 
 // ─── Widgets ─────────────────────────────────────────────────────────────────
@@ -2088,11 +2193,13 @@ function validateCrossReferences(ctx: ValidateCtx, cfg: DslConfig): void {
         layoutLine,
       );
     }
-    // [LAW:single-enforcer] An inline leaf's bg/fg flow through the SAME
+    // [LAW:single-enforcer] A color-bearing node's bg/fg flow through the SAME
     // resolveSegmentColors path a segment's bg/fg do, so they are template
     // surfaces and get the SAME ref existence-check — a typo'd `{{ .var }}` in an
-    // inline color surfaces at load, never as a silent render-time miss.
-    if (node.kind === "inline") {
+    // inline/stepper color surfaces at load, never as a silent render-time miss.
+    // Both base inline leaves and stepper composites carry the same color surface
+    // (the stepper hands it to the one inline leaf it expands to).
+    if (node.kind === "inline" || node.kind === "stepper") {
       for (const [field, src] of [
         ["bg", node.bg],
         ["fg", node.fg],
@@ -2211,12 +2318,12 @@ function validateCrossReferences(ctx: ValidateCtx, cfg: DslConfig): void {
     (hasStateKind(cfg) ||
       hasWidgetSetAction(cfg) ||
       hasMenuWidget(cfg) ||
-      hasInlineOnClick(cfg)) &&
+      hasNodeSetWrite(cfg)) &&
     !Object.prototype.hasOwnProperty.call(cfg.variables, "session.id")
   ) {
     ctx.issues.push({
       path: "variables.session.id",
-      message: `state reads, widget set-actions, menu navigation, and inline-cell onClick all require a global "session.id" variable (segment-local declarations do not satisfy this — declareState/set-state both read the global box; conventionally { kind: "input", path: "session_id" })`,
+      message: `state reads, widget set-actions, menu navigation, and layout-node interaction (inline-cell onClick, stepper ◀/▶) all require a global "session.id" variable (segment-local declarations do not satisfy this — declareState/set-state both read the global box; conventionally { kind: "input", path: "session_id" })`,
       line: findKeyLine(ctx.source, ["variables"]),
     });
   }
@@ -2289,6 +2396,20 @@ function validateCrossReferences(ctx: ValidateCtx, cfg: DslConfig): void {
       line: findKeyLine(ctx.source, ["widgets", name, "state"]),
     });
   }
+
+  // [LAW:dataflow-not-control-flow] The SAME backing-var requirement for layout
+  // nodes that read a state key (a stepper reads its value to display + step).
+  // Project each node to its readsKey via nodeStateUse and keep the unbacked ones —
+  // one total projection, mirroring the widget check above.
+  for (const node of walkNodes(cfg.root)) {
+    const readsKey = nodeStateUse(node).readsKey;
+    if (readsKey === null || declaredStateKeys.has(readsKey)) continue;
+    ctx.issues.push({
+      path: "root",
+      message: `a ${node.kind} node reads/writes the state key "${readsKey}", but no kind:"state" variable is bound to it — its writes would land in SessionState with nothing reading them back. Declare a variable like { kind: "state", key: "${readsKey}" }.`,
+      line: findKeyLine(ctx.source, ["root"]),
+    });
+  }
 }
 
 // [LAW:dataflow-not-control-flow] Any menu widget ⇒ the config reads TERM_COLS_VAR
@@ -2300,15 +2421,14 @@ function hasMenuWidget(cfg: DslConfig): boolean {
   return false;
 }
 
-// [LAW:dataflow-not-control-flow] An inline cell's `onClick` composes a set-state
-// click URL whose first segment is the session id — exactly like a widget set
-// action. So "any inline cell has onClick" is one more value OR'd into the
-// session.id requirement, not a parallel check. A clickless inline leaf (pure
-// generated text) writes nothing and needs no session id.
-function hasInlineOnClick(cfg: DslConfig): boolean {
+// [LAW:dataflow-not-control-flow] Any layout node that emits a set-state click
+// (an inline cell's onClick, a stepper's ◀/▶) composes a URL whose first segment
+// is the session id — exactly like a widget set action. The per-kind answer is
+// the nodeStateUse projection's `writesSet`; this folds it over the tree, so a
+// new interactive node kind is covered without touching this check.
+function hasNodeSetWrite(cfg: DslConfig): boolean {
   for (const node of walkNodes(cfg.root)) {
-    if (node.kind !== "inline") continue;
-    if (node.cells.some((c) => c.onClick !== undefined)) return true;
+    if (nodeStateUse(node).writesSet) return true;
   }
   return false;
 }

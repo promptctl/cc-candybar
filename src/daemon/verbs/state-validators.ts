@@ -37,7 +37,7 @@ import type {
   WidgetDecl,
 } from "../../config/widget";
 import { walkNodes } from "../../config/dsl-types";
-import type { DslConfig } from "../../config/dsl-types";
+import type { DslConfig, LayoutNode } from "../../config/dsl-types";
 
 // [LAW:one-source-of-truth] One contribution shape — a (key, spec) pair — shared
 // by both the widget walk and the node walk. mergeContributions folds a list of
@@ -618,24 +618,50 @@ function widgetContributions(config: DslConfig): KeySpecContribution[] {
   );
 }
 
-// [LAW:one-source-of-truth] The writable-key surface a config's LAYOUT NODES
-// need, DERIVED by walking the node tree: each inline cell's `onClick` is a
-// structured (key, value) write, so it contributes an allow-list spec whose lone
-// member is that literal value. The same (key, value) the renderer turns into the
-// click URL is the gate the wire enforces — the rendered click IS the gate.
-function nodeContributions(config: DslConfig): KeySpecContribution[] {
-  const out: KeySpecContribution[] = [];
-  for (const node of walkNodes(config.root)) {
-    if (node.kind !== "inline") continue;
-    for (const cell of node.cells) {
-      if (cell.onClick === undefined) continue;
-      out.push({
-        key: cell.onClick.set,
-        spec: { kind: "allow-list", allowed: [cell.onClick.to] },
-      });
-    }
+// [LAW:single-enforcer] THE one place mapping a node kind to the validator key
+// SPECS it declares — the node-tree analogue of widgetKeySpecs. A TOTAL switch
+// returning data: every consumer (nodeContributions below) READS it; none
+// re-switches on node kind. A new node kind is one new arm, and the compiler
+// forces it. [LAW:one-source-of-truth: the rendered click IS the gate] — the same
+// (key, value) the renderer turns into a click URL is the spec the wire enforces.
+//   • inline — each cell `onClick` is a structured (key, value) write ⇒ an
+//     allow-list spec whose lone member is that literal value;
+//   • stepper — its value key is a RANGE spec ([min,max]); ◀/▶ writes land inside
+//     bounds, the gate owns the bounds for any other write;
+//   • cells / container — pure layout, no writes, no specs.
+function nodeDeriveSpecs(node: LayoutNode): KeySpecContribution[] {
+  switch (node.kind) {
+    case "inline":
+      return node.cells.flatMap((cell): KeySpecContribution[] =>
+        cell.onClick !== undefined
+          ? [
+              {
+                key: cell.onClick.set,
+                spec: { kind: "allow-list", allowed: [cell.onClick.to] },
+              },
+            ]
+          : [],
+      );
+    case "stepper":
+      return [
+        {
+          key: node.state,
+          spec: { kind: "range", min: node.min, max: node.max },
+        },
+      ];
+    case "cells":
+    case "container":
+      return [];
   }
-  return dropBaselineAllowLists(out);
+}
+
+// [LAW:one-source-of-truth] The writable-key surface a config's LAYOUT NODES
+// need, DERIVED by walking the node tree and folding nodeDeriveSpecs over every
+// node — one total projection, no consumer-side kind branch.
+function nodeContributions(config: DslConfig): KeySpecContribution[] {
+  return dropBaselineAllowLists(
+    [...walkNodes(config.root)].flatMap(nodeDeriveSpecs),
+  );
 }
 
 // [LAW:single-enforcer] THE coherence merge: group every contribution by key and
