@@ -41,6 +41,7 @@ import { splitCellsIntoLines } from "../render/split-lines.js";
 import { transposedResolver } from "../themes/index.js";
 import {
   fragmentsToCells,
+  collapseToCell,
   evaluateWhen,
   applySegmentLayout,
   resolveSegmentColors,
@@ -371,7 +372,13 @@ const inlineType: NodeType<"inline"> = {
           : new RichText(cell.text);
       return i > 0 ? [new RichText(" "), frag] : [frag];
     });
-    return [fragmentsToCells(fragments, baseStyle)];
+    // [LAW:single-enforcer] An inline leaf is ONE unit ⇒ ONE strip item: collapse
+    // its cells into a single RichText so the joiner caps only at the leaf's edges,
+    // never between its clickable regions. Each onClick region survives as its own
+    // OSC-8 span inside that one cell.
+    return [
+      [collapseToCell(fragmentsToCells(fragments, baseStyle), baseStyle)],
+    ];
   },
 };
 
