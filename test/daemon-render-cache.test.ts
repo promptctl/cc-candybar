@@ -357,12 +357,13 @@ describe("RenderCache", () => {
     }
   });
 
-  test("a menu config loads into multiple cache entries without a validator clash", () => {
-    // [LAW:one-source-of-truth] A menu derives a writable page-key validator
-    // into the GLOBAL registry. Two cache entries sharing one config (one repo,
-    // two cwds) both register that key; ref-counting must let both succeed and
-    // keep the key valid until the last entry is gone. Before ref-counting, the
-    // second entry threw "already has a validator" and rendered a config error.
+  test("a picker config loads into multiple cache entries without a validator clash", () => {
+    // [LAW:one-source-of-truth] A picker's page (int) action derives a writable
+    // page-key validator into the GLOBAL registry. Two cache entries sharing one
+    // config (one repo, two cwds) both register that key; ref-counting must let
+    // both succeed and keep the key valid until the last entry is gone. Before
+    // ref-counting, the second entry threw "already has a validator" and rendered
+    // a config error.
     const { cache, cleanups } = makeCache();
     const { dir, cleanup } = mkConfigDir();
     cleanups.push(cleanup);
@@ -381,15 +382,16 @@ describe("RenderCache", () => {
           },
           page: { kind: "state", key: "menu-page", default: "-1" },
         },
-        widgets: {
-          m: {
-            kind: "menu",
-            state: "menu-page",
-            items: [{ optionsFrom: "themes", onClick: { set: "theme" } }],
-          },
+        actions: {
+          applyTheme: { set: "theme", from: "themes" },
+          menuPage: { set: "menu-page", int: true },
         },
         segments: {
-          s: { template: '{{ widget "m" }}', bg: "surface", fg: "foreground" },
+          s: {
+            template: '{{ picker "applyTheme" "menuPage" true true }}',
+            bg: "surface",
+            fg: "foreground",
+          },
         },
         layout: [{ when: "{{ ge (int .page) 0 }}", segments: ["s"] }],
       }),

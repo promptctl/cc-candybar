@@ -48,23 +48,15 @@ import {
   type ValidatedConfig,
   type VariableDecl,
   walkNodes,
-  TERM_COLS_VAR,
 } from "./dsl-types.js";
 import {
+  actionBindsSet,
   ACTION_KEYS,
   OPTION_SOURCES,
-  WIDGET_KINDS,
-  widgetStateUse,
-  type Action,
+  type ActionDecl,
   type ActionKey,
-  type ButtonItem,
-  type MenuTreeItem,
   type OptionSource,
-  type StepperWidget,
-  type TreeWidget,
-  type WidgetDecl,
-} from "./widget.js";
-import { actionBindsSet, type ActionDecl } from "./action.js";
+} from "./action.js";
 import { DEFAULT_DSL_CONFIG } from "./default-dsl-config.js";
 import { listResolvablePaletteNames } from "../themes/policy.js";
 
@@ -361,10 +353,6 @@ export function mergeWithDefault(
         : raw.layout !== undefined
           ? layoutRowsToNode(raw.layout)
           : dflt.root,
-    // [LAW:one-source-of-truth] widgets merge by name (user wins per-name),
-    // identical cascade to variables/segments — a user declares only the
-    // widgets that differ from the bundled default.
-    widgets: { ...dflt.widgets, ...(raw.widgets ?? {}) },
     // [LAW:one-source-of-truth] actions merge by name, same cascade — a user
     // declares only the actions that differ from the bundled default (which
     // ships none).
@@ -512,8 +500,6 @@ function validateTopLevel(
       line: findKeyLine(ctx.source, ["root"]),
     });
   }
-  if (raw.widgets !== undefined)
-    out.widgets = validateWidgets(ctx, raw.widgets);
   if (raw.actions !== undefined)
     out.actions = validateActions(ctx, raw.actions);
   return out;
@@ -525,7 +511,6 @@ const TOP_LEVEL_KEYS = new Set([
   "segments",
   "layout",
   "root",
-  "widgets",
   "actions",
 ]);
 
@@ -1348,570 +1333,6 @@ function validateContainerNode(
     : { kind: "container", direction: dir, children };
 }
 
-// ─── Widgets ─────────────────────────────────────────────────────────────────
-
-// [LAW:locality-or-seam] Structural validation of the `widgets` block: each
-// widget is discriminated by `kind`, each button item by presence of
-// `optionsFrom`, each action by which of set/copy/open is present. Whether a
-// `{{ widget "name" }}` reference resolves is a cross-ref concern
-// (validateCrossReferences), which runs on the MERGED config so a segment can
-// reference a default-provided widget.
-function validateWidgets(
-  ctx: ValidateCtx,
-  raw: unknown,
-): Record<string, WidgetDecl> {
-  if (raw === undefined) return {};
-  if (!isPlainObject(raw)) {
-    ctx.issues.push({
-      path: "widgets",
-      message: `widgets must be an object, got ${describeType(raw)}`,
-      line: findKeyLine(ctx.source, ["widgets"]),
-    });
-    return {};
-  }
-  // [LAW:types-are-the-program] Null-prototype record for user-keyed data, so a
-  // widget named "__proto__"/"constructor" becomes an ordinary own property
-  // instead of mutating the prototype chain. Matches the Object.create(null)
-  // compiled map in dsl/render.ts and the Map dispatch in the click-verb
-  // registries — untrusted keys are plain data by construction.
-  const out: Record<string, WidgetDecl> = Object.create(null) as Record<
-    string,
-    WidgetDecl
-  >;
-  for (const [name, decl] of Object.entries(raw)) {
-    const parsed = validateWidget(ctx, `widgets.${name}`, decl);
-    if (parsed !== null) out[name] = parsed;
-  }
-  return out;
-}
-
-function validateWidget(
-  ctx: ValidateCtx,
-  path: string,
-  raw: unknown,
-): WidgetDecl | null {
-  if (!isPlainObject(raw)) {
-    ctx.issues.push({
-      path,
-      message: `${path} must be an object, got ${describeType(raw)}`,
-      line: findKeyLine(ctx.source, path.split(".")),
-    });
-    return null;
-  }
-  const kind = raw.kind;
-  if (
-    typeof kind !== "string" ||
-    !(WIDGET_KINDS as readonly string[]).includes(kind)
-  ) {
-    ctx.issues.push({
-      path: `${path}.kind`,
-      message: `widget kind must be one of: ${WIDGET_KINDS.join(", ")}, got ${describeValue(kind)}`,
-      line: findKeyLine(ctx.source, [...path.split("."), "kind"]),
-    });
-    return null;
-  }
-  // [LAW:types-are-the-program] A `stepper` has no author items — its cells are
-  // render-derived from (value, bounds, step). It is the one widget arm whose
-  // shape diverges from the shared items walk, so it validates on its own path
-  // before the items requirement that buttons/menu share.
-  if (kind === "stepper") {
-    return validateStepperWidget(ctx, path, raw);
-  }
-  // [LAW:types-are-the-program] A `tree` is the recursive (leaf | submenu) item
-  // structure — it does NOT share the flat ButtonItem items walk buttons/menu
-  // use, so (like stepper) it validates on its own path.
-  if (kind === "tree") {
-    return validateTreeWidget(ctx, path, raw);
-  }
-  // [LAW:one-type-per-behavior] A `menu` is a `buttons` plus the `state` key it
-  // paginates against — same `items` shape, one extra field. The allowed key
-  // set is the only per-kind difference; the items walk is shared.
-  const isMenu = kind === "menu";
-  const allowed = isMenu
-    ? new Set(["kind", "items", "state"])
-    : new Set(["kind", "items"]);
-  for (const key of Object.keys(raw)) {
-    if (!allowed.has(key)) {
-      ctx.issues.push({
-        path: `${path}.${key}`,
-        message: `Unknown widget key "${key}". Expected one of: ${[...allowed].join(", ")}`,
-        line: findKeyLine(ctx.source, [...path.split("."), key]),
-      });
-    }
-  }
-  if (!Array.isArray(raw.items)) {
-    ctx.issues.push({
-      path: `${path}.items`,
-      message: `widget items must be an array, got ${describeType(raw.items)}`,
-      line: findKeyLine(ctx.source, [...path.split("."), "items"]),
-    });
-    return null;
-  }
-  const items: ButtonItem[] = [];
-  for (let i = 0; i < raw.items.length; i++) {
-    const item = validateButtonItem(ctx, `${path}.items[${i}]`, raw.items[i]);
-    if (item !== null) items.push(item);
-  }
-  if (isMenu) {
-    // [LAW:types-are-the-program] A menu without its page key is not a menu —
-    // `state` is the one value carrying open/closed/which-page. The int
-    // validator for it is DERIVED at load (see deriveWidgetValidators) so the
-    // wire accepts the menu's ←/→/close writes.
-    const state = validateWidgetStateKey(ctx, path, raw, "menu");
-    if (state === null) return null;
-    return { kind: "menu", state, items };
-  }
-  return { kind: "buttons", items };
-}
-
-// [LAW:single-enforcer] A widget's `state` key (a menu's page, a stepper's
-// value) is a set-state URL path segment, so it must be a non-empty, slash-free
-// key — the SAME shape validateAction requires of a button's `set` key, since
-// the menu's ←/→/close and the stepper's ◀/▶ are render-derived set-state writes.
-// One check for both arms means a slash-bearing key is rejected at load with a
-// clear message, not deferred to a throw when validators register. Returns the
-// validated key, or null (with a recorded issue) when absent/empty/slash-bearing.
-function validateWidgetStateKey(
-  ctx: ValidateCtx,
-  path: string,
-  raw: Record<string, unknown>,
-  kind: "menu" | "stepper" | "tree",
-): string | null {
-  const state = optionalStringField(ctx, path, raw, "state");
-  if (!state) {
-    ctx.issues.push({
-      path: `${path}.state`,
-      message: `a ${kind} widget must declare a non-empty "state" (the SessionState key it reads and writes)`,
-      line: findKeyLine(ctx.source, [...path.split("."), "state"]),
-    });
-    return null;
-  }
-  if (state.includes("/")) {
-    ctx.issues.push({
-      path: `${path}.state`,
-      message: `state key "${state}" contains "/" — the set-state wire splits on "/", so it cannot be addressed`,
-      line: findKeyLine(ctx.source, [...path.split("."), "state"]),
-    });
-    return null;
-  }
-  return state;
-}
-
-// [LAW:types-are-the-program] A stepper is fully described by its integer key
-// and an integer domain (min < max) plus a positive integer step. Validate that
-// domain at the boundary so the renderer and the range validator both receive a
-// well-formed [min,max]/step and never re-check. `step` defaults to 1 — the
-// obvious increment — so the common stepper is `{ state, min, max }`.
-function validateStepperWidget(
-  ctx: ValidateCtx,
-  path: string,
-  raw: Record<string, unknown>,
-): StepperWidget | null {
-  const allowed = new Set(["kind", "state", "min", "max", "step"]);
-  for (const key of Object.keys(raw)) {
-    if (!allowed.has(key)) {
-      ctx.issues.push({
-        path: `${path}.${key}`,
-        message: `Unknown widget key "${key}". Expected one of: ${[...allowed].join(", ")}`,
-        line: findKeyLine(ctx.source, [...path.split("."), key]),
-      });
-    }
-  }
-
-  const state = validateWidgetStateKey(ctx, path, raw, "stepper");
-
-  const intField = (field: string): number | null => {
-    const v = raw[field];
-    if (typeof v !== "number" || !Number.isInteger(v)) {
-      ctx.issues.push({
-        path: `${path}.${field}`,
-        message: `stepper ${field} must be an integer, got ${describeValue(v)}`,
-        line: findKeyLine(ctx.source, [...path.split("."), field]),
-      });
-      return null;
-    }
-    return v;
-  };
-  const min = intField("min");
-  const max = intField("max");
-  // [LAW:no-mode-explosion] step is optional with one canonical default (1), not
-  // a required knob — the common stepper declares only its bounds.
-  const step = raw.step === undefined ? 1 : intField("step");
-
-  if (state === null || min === null || max === null || step === null) {
-    return null;
-  }
-  if (min >= max) {
-    ctx.issues.push({
-      path: `${path}.min`,
-      message: `stepper min (${min}) must be less than max (${max})`,
-      line: findKeyLine(ctx.source, [...path.split("."), "min"]),
-    });
-    return null;
-  }
-  if (step < 1) {
-    ctx.issues.push({
-      path: `${path}.step`,
-      message: `stepper step (${step}) must be a positive integer`,
-      line: findKeyLine(ctx.source, [...path.split("."), "step"]),
-    });
-    return null;
-  }
-  return { kind: "stepper", state, min, max, step };
-}
-
-// [LAW:types-are-the-program] A `tree` carries its open-path `state` key and the
-// recursive item structure. Unlike buttons/menu, its items are MenuTreeItems
-// (leaf | submenu), so it owns its own recursive item walk; the open-path
-// allow-list validator is derived later from this structure (deriveWidgetValidators).
-function validateTreeWidget(
-  ctx: ValidateCtx,
-  path: string,
-  raw: Record<string, unknown>,
-): TreeWidget | null {
-  const allowed = new Set(["kind", "state", "items"]);
-  for (const key of Object.keys(raw)) {
-    if (!allowed.has(key)) {
-      ctx.issues.push({
-        path: `${path}.${key}`,
-        message: `Unknown widget key "${key}". Expected one of: ${[...allowed].join(", ")}`,
-        line: findKeyLine(ctx.source, [...path.split("."), key]),
-      });
-    }
-  }
-  const state = validateWidgetStateKey(ctx, path, raw, "tree");
-  if (!Array.isArray(raw.items)) {
-    ctx.issues.push({
-      path: `${path}.items`,
-      message: `widget items must be an array, got ${describeType(raw.items)}`,
-      line: findKeyLine(ctx.source, [...path.split("."), "items"]),
-    });
-    return null;
-  }
-  const items: MenuTreeItem[] = [];
-  for (let i = 0; i < raw.items.length; i++) {
-    const item = validateTreeItem(ctx, `${path}.items[${i}]`, raw.items[i]);
-    if (item !== null) items.push(item);
-  }
-  if (state === null) return null;
-  return { kind: "tree", state, items };
-}
-
-// [LAW:types-are-the-program] A tree item is discriminated by presence of
-// `items`: a SUBMENU (children + a chevron, its open/close toggle render-derived
-// so NO onClick) or a LEAF (the existing ButtonItem, reused verbatim). The
-// discriminator is the same "which key is present" the runtime's isSubmenuItem
-// reads — the loader proves it so the runtime never re-checks.
-function validateTreeItem(
-  ctx: ValidateCtx,
-  path: string,
-  raw: unknown,
-): MenuTreeItem | null {
-  if (!isPlainObject(raw)) {
-    ctx.issues.push({
-      path,
-      message: `${path} must be an object, got ${describeType(raw)}`,
-      line: findKeyLine(ctx.source, path.split(".")),
-    });
-    return null;
-  }
-  // A LEAF reuses the full ButtonItem validation (incl. optionsFrom pickers).
-  if (!("items" in raw)) {
-    return validateButtonItem(ctx, path, raw);
-  }
-  // A SUBMENU: glyph/label (its identity beside the chevron) + recursive items.
-  const allowed = new Set(["glyph", "label", "items"]);
-  for (const key of Object.keys(raw)) {
-    if (!allowed.has(key)) {
-      ctx.issues.push({
-        path: `${path}.${key}`,
-        message: `Unknown submenu key "${key}". Expected one of: ${[...allowed].join(", ")}`,
-        line: findKeyLine(ctx.source, [...path.split("."), key]),
-      });
-    }
-  }
-  const glyph = optionalStringField(ctx, path, raw, "glyph");
-  const label = optionalStringField(ctx, path, raw, "label");
-  // [LAW:no-silent-fallbacks] As with a fixed button, an empty glyph/label
-  // renders as no identifying text (only the chevron) — so a submenu needs
-  // NON-EMPTY clickable identity; "" is treated as absent. Computed ONCE: the
-  // diagnostic and the build-vs-reject gate read the same boolean.
-  const hasIdentity = Boolean(glyph || label);
-  if (!hasIdentity) {
-    ctx.issues.push({
-      path,
-      message: `a submenu must declare a non-empty "glyph" or "label" (its identity beside the chevron)`,
-      line: findKeyLine(ctx.source, path.split(".")),
-    });
-  }
-  if (!Array.isArray(raw.items)) {
-    ctx.issues.push({
-      path: `${path}.items`,
-      message: `a submenu's items must be an array, got ${describeType(raw.items)}`,
-      line: findKeyLine(ctx.source, [...path.split("."), "items"]),
-    });
-    return null;
-  }
-  const items = raw.items
-    .map((it, i) => validateTreeItem(ctx, `${path}.items[${i}]`, it))
-    .filter((it): it is MenuTreeItem => it !== null);
-  return hasIdentity
-    ? { ...(glyph ? { glyph } : {}), ...(label ? { label } : {}), items }
-    : null;
-}
-
-function validateButtonItem(
-  ctx: ValidateCtx,
-  path: string,
-  raw: unknown,
-): ButtonItem | null {
-  if (!isPlainObject(raw)) {
-    ctx.issues.push({
-      path,
-      message: `${path} must be an object, got ${describeType(raw)}`,
-      line: findKeyLine(ctx.source, path.split(".")),
-    });
-    return null;
-  }
-  // [LAW:types-are-the-program] presence of `optionsFrom` is the discriminator.
-  const isOptions = "optionsFrom" in raw;
-  const allowed = isOptions
-    ? new Set(["optionsFrom", "glyph", "onClick"])
-    : new Set(["glyph", "label", "onClick"]);
-  for (const key of Object.keys(raw)) {
-    if (!allowed.has(key)) {
-      ctx.issues.push({
-        path: `${path}.${key}`,
-        message: `Unknown button-item key "${key}". Expected one of: ${[...allowed].join(", ")}`,
-        line: findKeyLine(ctx.source, [...path.split("."), key]),
-      });
-    }
-  }
-
-  const onClick = validateOnClick(ctx, path, raw, isOptions);
-  if (onClick === null) return null;
-  const glyph = optionalStringField(ctx, path, raw, "glyph");
-
-  if (isOptions) {
-    const src = raw.optionsFrom;
-    if (
-      typeof src !== "string" ||
-      !(OPTION_SOURCES as readonly string[]).includes(src)
-    ) {
-      ctx.issues.push({
-        path: `${path}.optionsFrom`,
-        message: `optionsFrom must be one of: ${OPTION_SOURCES.join(", ")}, got ${describeValue(src)}`,
-        line: findKeyLine(ctx.source, [...path.split("."), "optionsFrom"]),
-      });
-      return null;
-    }
-    return {
-      optionsFrom: src as OptionSource,
-      ...(glyph ? { glyph } : {}),
-      onClick,
-    };
-  }
-  const label = optionalStringField(ctx, path, raw, "label");
-  // [LAW:no-silent-fallbacks] An empty-string glyph/label is "present" to the
-  // type but renders as no clickable text (joinDisplay filters falsy parts), so
-  // treat "" exactly as absent — a fixed button needs NON-EMPTY clickable text.
-  if (!glyph && !label) {
-    ctx.issues.push({
-      path,
-      message: `a fixed button must declare a non-empty "glyph" or "label" (its clickable text)`,
-      line: findKeyLine(ctx.source, path.split(".")),
-    });
-    return null;
-  }
-  return {
-    ...(glyph ? { glyph } : {}),
-    ...(label ? { label } : {}),
-    onClick,
-  };
-}
-
-// [LAW:dataflow-not-control-flow] `onClick` accepts a single action object or
-// an array; both normalize to the one canonical runtime shape (Action[]).
-// `isOptions` carries the set-action `to` pairing rule: an option-bound button
-// gets each option's value, so its set actions must NOT carry `to`; a literal
-// button's set actions MUST carry `to`.
-function validateOnClick(
-  ctx: ValidateCtx,
-  path: string,
-  raw: Record<string, unknown>,
-  isOptions: boolean,
-): readonly Action[] | null {
-  const rawClick = raw.onClick;
-  if (rawClick === undefined) {
-    ctx.issues.push({
-      path: `${path}.onClick`,
-      message: `${path}.onClick is required (an action or array of actions)`,
-      line: findKeyLine(ctx.source, [...path.split("."), "onClick"]),
-    });
-    return null;
-  }
-  const rawActions = Array.isArray(rawClick) ? rawClick : [rawClick];
-  if (rawActions.length === 0) {
-    ctx.issues.push({
-      path: `${path}.onClick`,
-      message: `${path}.onClick must declare at least one action`,
-      line: findKeyLine(ctx.source, [...path.split("."), "onClick"]),
-    });
-    return null;
-  }
-  const actions: Action[] = [];
-  for (let i = 0; i < rawActions.length; i++) {
-    const a = validateAction(
-      ctx,
-      `${path}.onClick[${i}]`,
-      rawActions[i],
-      isOptions,
-    );
-    if (a !== null) actions.push(a);
-  }
-  if (actions.length !== rawActions.length) return null;
-  // [LAW:dataflow-not-control-flow] A click is an ordered list of effects on one
-  // dispatch URL (the `dispatch` wire). Heterogeneous and repeated actions are
-  // first-class: every `set` batches into one atomic set-state effect, each
-  // `copy`/`open` is its own effect, all run on one click. There is no
-  // homogeneity rule — the only constraint left is the optionsFrom binding below.
-  const sets = actions.filter((a) => "set" in a).length;
-  // [LAW:types-are-the-program] An optionsFrom button binds each option's value
-  // into a `set` action — that binding IS the picker. A button with NO set
-  // action has nowhere to bind the option, so the option list would render N
-  // identical clickable cells: meaningless. Require at least one `set`; copy/open
-  // alongside it are fine (they just ignore the option).
-  if (isOptions && sets === 0) {
-    ctx.issues.push({
-      path: `${path}.onClick`,
-      message: `an optionsFrom button's onClick must include a "set" action — each option binds its value into the set; without one the option list has nowhere to bind`,
-      line: findKeyLine(ctx.source, [...path.split("."), "onClick"]),
-    });
-    return null;
-  }
-  return actions;
-}
-
-function validateAction(
-  ctx: ValidateCtx,
-  path: string,
-  raw: unknown,
-  isOptions: boolean,
-): Action | null {
-  if (!isPlainObject(raw)) {
-    ctx.issues.push({
-      path,
-      message: `${path} must be an action object, got ${describeType(raw)}`,
-      line: findKeyLine(ctx.source, path.split(".")),
-    });
-    return null;
-  }
-  const present = (ACTION_KEYS as readonly string[]).filter((k) => k in raw);
-  if (present.length !== 1) {
-    ctx.issues.push({
-      path,
-      message: `action must declare exactly one of: ${ACTION_KEYS.join(", ")}${
-        present.length > 1 ? ` (found: ${present.join(", ")})` : ""
-      }`,
-      line: findKeyLine(ctx.source, path.split(".")),
-    });
-    return null;
-  }
-  const key = present[0] as ActionKey;
-  // [LAW:no-silent-fallbacks] Reject unknown keys on the action object, matching
-  // the widget/button validators — so a typo like `{ set: "theme", too: "nord" }`
-  // surfaces at load, not as a silently-ignored field. The allowed companions
-  // depend on the discriminator: only `set` admits `to`.
-  const allowedActionKeys = key === "set" ? ["set", "to"] : [key];
-  for (const k of Object.keys(raw)) {
-    if (!allowedActionKeys.includes(k)) {
-      ctx.issues.push({
-        path: `${path}.${k}`,
-        message: `Unknown key "${k}" on a ${key} action. Expected one of: ${allowedActionKeys.join(", ")}`,
-        line: findKeyLine(ctx.source, [...path.split("."), k]),
-      });
-    }
-  }
-  switch (key) {
-    case "set": {
-      const stateKey = requireString(ctx, path, raw, "set");
-      if (stateKey === null) return null;
-      if (stateKey === "") {
-        // [LAW:no-silent-fallbacks] An empty key composes a broken set-state URL
-        // (the daemon rejects "empty key at pair N" at click); reject at load,
-        // matching the non-empty check on `to`.
-        ctx.issues.push({
-          path: `${path}.set`,
-          message: `set key must be non-empty (the SessionState key to write)`,
-          line: findKeyLine(ctx.source, [...path.split("."), "set"]),
-        });
-        return null;
-      }
-      if (stateKey.includes("/")) {
-        // [LAW:types-are-the-program] The set-state wire splits on "/"; a
-        // slash-bearing key is structurally undeliverable. Reject at load.
-        ctx.issues.push({
-          path: `${path}.set`,
-          message: `set key "${stateKey}" contains "/" — the set-state wire splits on "/", so it cannot be addressed`,
-          line: findKeyLine(ctx.source, [...path.split("."), "set"]),
-        });
-        return null;
-      }
-      const hasTo = "to" in raw;
-      // [LAW:types-are-the-program] The to/optionsFrom pairing: an option-bound
-      // button supplies the value from the option (no `to`); a literal button
-      // must carry an explicit `to`. Catch the mismatch at load.
-      if (isOptions && hasTo) {
-        ctx.issues.push({
-          path: `${path}.to`,
-          message: `an optionsFrom button supplies the set value from each option — remove "to"`,
-          line: findKeyLine(ctx.source, [...path.split("."), "to"]),
-        });
-        return null;
-      }
-      if (!isOptions && !hasTo) {
-        ctx.issues.push({
-          path: `${path}.to`,
-          message: `set action on a fixed button requires "to" (the value to write)`,
-          line: findKeyLine(ctx.source, [...path.split("."), "to"]),
-        });
-        return null;
-      }
-      if (!hasTo) return { set: stateKey };
-      const to = requireString(ctx, path, raw, "to");
-      if (to === null) return null;
-      if (to === "") {
-        // [LAW:no-silent-fallbacks] The set-state validators reject empty input
-        // (an empty value on the wire is structurally ambiguous), so an empty
-        // `to` is undeliverable. Reject at load, not at first click.
-        ctx.issues.push({
-          path: `${path}.to`,
-          message: `set value must be non-empty — an empty value cannot be delivered on the set-state wire`,
-          line: findKeyLine(ctx.source, [...path.split("."), "to"]),
-        });
-        return null;
-      }
-      if (to.includes("/")) {
-        ctx.issues.push({
-          path: `${path}.to`,
-          message: `set value "${to}" contains "/" — the set-state wire splits values on "/", so it cannot be delivered`,
-          line: findKeyLine(ctx.source, [...path.split("."), "to"]),
-        });
-        return null;
-      }
-      return { set: stateKey, to };
-    }
-    case "copy": {
-      const text = requireString(ctx, path, raw, "copy");
-      return text === null ? null : { copy: text };
-    }
-    case "open": {
-      const target = requireString(ctx, path, raw, "open");
-      return target === null ? null : { open: target };
-    }
-  }
-}
-
 // ─── Actions table ────────────────────────────────────────────────────────────
 
 // [LAW:locality-or-seam] Structural validation of the `actions` block: each
@@ -2011,12 +1432,13 @@ function validateSetAction(
   if ("to" in raw) sources.push("to");
   if ("from" in raw) sources.push("from");
   if (BOUNDED_KEYS.some((k) => k in raw)) sources.push("min/max/by");
+  if ("int" in raw) sources.push("int");
   if (sources.length !== 1) {
     ctx.issues.push({
       path,
       message: `a set action declares exactly one value source: "to" (a literal value), "from" (an option domain: ${OPTION_SOURCES.join(
         "/",
-      )}), or "min"/"max"/"by" (a bounded step)${
+      )}), "min"/"max"/"by" (a bounded step), or "int" (an unbounded integer cursor)${
         sources.length > 1 ? ` — found: ${sources.join(", ")}` : ""
       }`,
       line: findKeyLine(ctx.source, path.split(".")),
@@ -2029,7 +1451,9 @@ function validateSetAction(
       ? ["set", "to"]
       : source === "from"
         ? ["set", "from"]
-        : ["set", ...BOUNDED_KEYS];
+        : source === "int"
+          ? ["set", "int"]
+          : ["set", ...BOUNDED_KEYS];
   for (const k of Object.keys(raw)) {
     if (!allowed.includes(k)) {
       ctx.issues.push({
@@ -2060,6 +1484,20 @@ function validateSetAction(
     return stateKey === null
       ? null
       : { set: stateKey, from: from as OptionSource };
+  }
+  if (source === "int") {
+    // [LAW:no-silent-fallbacks] `int` is a marker, not a value — it declares the
+    // key as an unbounded-integer cursor. Only the literal `true` is meaningful;
+    // anything else is a typo to surface, not silently coerce.
+    if (raw.int !== true) {
+      ctx.issues.push({
+        path: `${path}.int`,
+        message: `int must be the literal true (declares the key an unbounded integer cursor — a paged picker's page key), got ${describeValue(raw.int)}`,
+        line: findKeyLine(ctx.source, [...path.split("."), "int"]),
+      });
+      return null;
+    }
+    return stateKey === null ? null : { set: stateKey, int: true };
   }
   const bounds = validateBoundedStep(ctx, path, raw);
   return stateKey === null || bounds === null
@@ -2207,28 +1645,28 @@ export function extractActionRefs(template: string): Set<string> {
   return refs;
 }
 
-// [LAW:dataflow-not-control-flow] Extract every `widget "name"` call from a
-// template, for the load-time existence check. Walk each `{{ }}` block as
-// alternating code / string-literal spans (the engine's job is the real parse;
-// this is the same best-effort heuristic shape as extractTemplateRefs). A
-// `widget` keyword lives in a CODE span and its name is the very next string
-// literal; a `widget "x"` sitting INSIDE a larger string literal is part of one
-// string span, never a code span, so it cannot be misread as a call.
-const WIDGET_ARG_RE = /\bwidget\s+$/;
-export function extractWidgetRefs(template: string): Set<string> {
+// [LAW:dataflow-not-control-flow] Extract the action names a `picker` call
+// references — its FIRST TWO string-literal args are the apply action and the
+// page action (`{{ picker "applyTheme" "themePage" true true }}`). Same code/
+// string-span walk as extractActionRefs; the picker keyword arms the next literal
+// as the apply name and the one after it as the page name (the trailing bool args
+// are not string literals, so they are never captured).
+const PICKER_ARG_RE = /\bpicker\s+$/;
+export function extractPickerRefs(template: string): Set<string> {
   const refs = new Set<string>();
   TEMPLATE_BLOCK_RE.lastIndex = 0;
   let m: RegExpExecArray | null;
   while ((m = TEMPLATE_BLOCK_RE.exec(template)) !== null) {
     const block = m[1]!;
     let cursor = 0;
+    let pending = 0; // remaining name args to capture for the current picker call
     let s: RegExpExecArray | null;
     STRING_LITERAL_RE.lastIndex = 0;
     while ((s = STRING_LITERAL_RE.exec(block)) !== null) {
-      // The code span immediately before this string literal; if it ends with
-      // `widget` + whitespace, this literal is that call's name argument.
-      if (WIDGET_ARG_RE.test(block.slice(cursor, s.index))) {
+      if (PICKER_ARG_RE.test(block.slice(cursor, s.index))) pending = 2;
+      if (pending > 0) {
         refs.add(s[0].slice(1, -1));
+        pending--;
       }
       cursor = s.index + s[0].length;
     }
@@ -2313,33 +1751,35 @@ function validateCrossReferences(ctx: ValidateCtx, cfg: DslConfig): void {
         checkVarRefs(ctx, `segments.${segName}.vars.${vName}`, vDecl, segScope);
       }
     }
-    // [LAW:locality-or-seam] Variable refs AND `{{ widget "name" }}` refs are
-    // checked across EVERY template-bearing field, not just `template` — bg/fg/
-    // when are templates too, so an unknown ref in them is a load error, not a
-    // render-time surprise. Same existence-check shape as layout→segments; runs
-    // on the merged config so a segment can reference a default widget.
+    // [LAW:locality-or-seam] Variable refs AND `{{ action }}`/`{{ picker }}` refs
+    // are checked across EVERY template-bearing field, not just `template` —
+    // bg/fg/when are templates too, so an unknown ref in them is a load error, not
+    // a render-time surprise. Same existence-check shape as layout→segments; runs
+    // on the merged config so a segment can reference a default-provided action.
     for (const field of ["template", "bg", "fg", "when"] as const) {
       const tpl = seg[field];
       if (typeof tpl !== "string") continue;
       checkTemplateRefs(ctx, `segments.${segName}.${field}`, tpl, segScope);
-      for (const wref of extractWidgetRefs(tpl)) {
-        if (!Object.prototype.hasOwnProperty.call(cfg.widgets, wref)) {
-          ctx.issues.push({
-            path: `segments.${segName}.${field}`,
-            message: `${field} references unknown widget "${wref}"`,
-            line: findKeyLine(ctx.source, ["segments", segName, field]),
-          });
-        }
-      }
       // [LAW:locality-or-seam] `{{ action "name" … }}` refs resolve against the
-      // action table exactly as widget refs resolve against the widget block —
-      // same existence-check shape, on the merged config so a segment can
-      // reference a default-provided action.
+      // action table on the merged config so a segment can reference a
+      // default-provided action.
       for (const aref of extractActionRefs(tpl)) {
         if (!Object.prototype.hasOwnProperty.call(cfg.actions, aref)) {
           ctx.issues.push({
             path: `segments.${segName}.${field}`,
             message: `${field} references unknown action "${aref}"`,
+            line: findKeyLine(ctx.source, ["segments", segName, field]),
+          });
+        }
+      }
+      // [LAW:locality-or-seam] A `{{ picker "apply" "page" … }}` references two
+      // named actions — both resolve against the action table at load, same
+      // existence-check shape as a bare action ref.
+      for (const pref of extractPickerRefs(tpl)) {
+        if (!Object.prototype.hasOwnProperty.call(cfg.actions, pref)) {
+          ctx.issues.push({
+            path: `segments.${segName}.${field}`,
+            message: `${field} references unknown action "${pref}" (in a picker)`,
             line: findKeyLine(ctx.source, ["segments", segName, field]),
           });
         }
@@ -2383,106 +1823,20 @@ function validateCrossReferences(ctx: ValidateCtx, cfg: DslConfig): void {
   // ids loudly, so there is no silent corruption; this surfaces the SAME
   // requirement at load instead of at first click). Same anchor + same shape as
   // the state-kind requirement above; OR them so either trigger fires it once.
-  // [LAW:dataflow-not-control-flow] A menu ALWAYS emits set-state navigation URLs
-  // (✕/←/→ on its page key) regardless of whether its items carry set actions —
-  // so a menu needs session.id exactly like a set-action does. OR it in so a
-  // menu with only copy/open items (no state vars, no set actions) can't load
-  // while rendering broken navigation links with an empty session id.
   // [LAW:dataflow-not-control-flow] A `set` action composes a set-state click URL
-  // whose first segment is session.id — exactly like a widget set-action. OR it
-  // into the same requirement so an actions-only config (no state vars, no
-  // widgets) still demands the anchor it needs.
+  // whose first segment is session.id. OR it into the same requirement so an
+  // actions-only config (no state vars) still demands the anchor it needs. A
+  // picker's ✕/←/→/apply-close all go through `set` actions, so this covers them.
   if (
-    (hasStateKind(cfg) ||
-      hasWidgetSetAction(cfg) ||
-      hasMenuWidget(cfg) ||
-      hasActionSetAction(cfg)) &&
+    (hasStateKind(cfg) || hasActionSetAction(cfg)) &&
     !Object.prototype.hasOwnProperty.call(cfg.variables, "session.id")
   ) {
     ctx.issues.push({
       path: "variables.session.id",
-      message: `state reads, widget set-actions, menu navigation, and action set-writes all require a global "session.id" variable (segment-local declarations do not satisfy this — declareState/set-state both read the global box; conventionally { kind: "input", path: "session_id" })`,
+      message: `state reads and action set-writes require a global "session.id" variable (segment-local declarations do not satisfy this — declareState/set-state both read the global box; conventionally { kind: "input", path: "session_id" })`,
       line: findKeyLine(ctx.source, ["variables"]),
     });
   }
-
-  // [LAW:verifiable-goals] A `menu` widget paginates against the live terminal
-  // width. renderDsl injects that width into the payload at the `term.cols` path
-  // every render, so the ONLY declaration that receives it is an input variable
-  // named TERM_COLS_VAR whose `path` is TERM_COLS_VAR. Validate the SHAPE, not
-  // just presence: a term.cols declared as a different kind, or an input reading
-  // a different path, never sees the injected width and the menu would silently
-  // paginate against the stale default. The bundled default declares the correct
-  // shape, so a production config that merges it always satisfies this; surface
-  // a misdeclaration at load instead of as silent stale-width pagination.
-  if (hasMenuWidget(cfg)) {
-    const decl = Object.prototype.hasOwnProperty.call(
-      cfg.variables,
-      TERM_COLS_VAR,
-    )
-      ? cfg.variables[TERM_COLS_VAR]
-      : undefined;
-    if (
-      decl === undefined ||
-      decl.kind !== "input" ||
-      decl.path !== TERM_COLS_VAR ||
-      decl.type !== "number"
-    ) {
-      ctx.issues.push({
-        path: `variables.${TERM_COLS_VAR}`,
-        message: `a menu widget paginates against the terminal width, which renderDsl injects (as a number) at the "${TERM_COLS_VAR}" path — so it requires a global "${TERM_COLS_VAR}" variable declared as { kind: "input", path: "${TERM_COLS_VAR}", type: "number" } (the bundled default declares exactly this; a standalone config must too). A different kind, path, or non-number type never receives the injected width correctly.`,
-        line: findKeyLine(ctx.source, ["variables"]),
-      });
-    }
-  }
-
-  // [LAW:verifiable-goals] A menu/stepper reads AND writes a SessionState `state`
-  // key — a menu to choose its page (and a row `when` to gate the menu's row), a
-  // stepper to display and step its value. Reading a SessionState key requires a
-  // kind:"state" variable bound to it; without one the widget's writes land in
-  // SessionState with nothing reading them back, so the click has no visible
-  // effect. Require the backing state variable (global or segment-local, the same
-  // key set registerDslConfig resolves for active-marking), surfaced at load
-  // rather than as a silently-inert widget.
-  const declaredStateKeys = new Set<string>();
-  for (const v of Object.values(cfg.variables)) {
-    if (v.kind === "state") declaredStateKeys.add(v.key);
-  }
-  for (const seg of Object.values(cfg.segments)) {
-    if (!seg.vars) continue;
-    for (const v of Object.values(seg.vars)) {
-      if (v.kind === "state") declaredStateKeys.add(v.key);
-    }
-  }
-  // [LAW:dataflow-not-control-flow] Project each widget to the key it reads back
-  // (null for buttons), then keep the unbacked ones — the invalid set is a
-  // filtered VALUE, not a per-kind branch in the loop.
-  const unbacked = Object.entries(cfg.widgets)
-    .map(([name, widget]) => ({
-      name,
-      kind: widget.kind,
-      readsKey: widgetStateUse(widget).readsKey,
-    }))
-    .filter(
-      (e): e is { name: string; kind: WidgetDecl["kind"]; readsKey: string } =>
-        e.readsKey !== null && !declaredStateKeys.has(e.readsKey),
-    );
-  for (const { name, kind, readsKey } of unbacked) {
-    ctx.issues.push({
-      path: `widgets.${name}.state`,
-      message: `${kind} "${name}" reads/writes the state key "${readsKey}", but no kind:"state" variable is bound to it — its writes would land in SessionState with nothing reading them back. Declare a variable like { kind: "state", key: "${readsKey}" }.`,
-      line: findKeyLine(ctx.source, ["widgets", name, "state"]),
-    });
-  }
-}
-
-// [LAW:dataflow-not-control-flow] Any menu widget ⇒ the config reads TERM_COLS_VAR
-// at render ⇒ it must be declared.
-function hasMenuWidget(cfg: DslConfig): boolean {
-  for (const widget of Object.values(cfg.widgets)) {
-    if (widget.kind === "menu") return true;
-  }
-  return false;
 }
 
 function hasStateKind(cfg: DslConfig): boolean {
@@ -2496,18 +1850,6 @@ function hasStateKind(cfg: DslConfig): boolean {
     }
   }
   return false;
-}
-
-// [LAW:dataflow-not-control-flow] A config emits a set-state click — and so
-// needs session.id — when any widget writes a SessionState key. That is two
-// values of the widget's state-use OR'd: it reads back a key (menu/stepper nav
-// is a render-derived set-state write) or an author item binds a `set` action.
-// copy/open-only buttons embed no session.id, so they write neither.
-function hasWidgetSetAction(cfg: DslConfig): boolean {
-  return Object.values(cfg.widgets).some((w) => {
-    const use = widgetStateUse(w);
-    return use.readsKey !== null || use.hasSetItem;
-  });
 }
 
 // [LAW:dataflow-not-control-flow] A config emits a set-state click — and so needs

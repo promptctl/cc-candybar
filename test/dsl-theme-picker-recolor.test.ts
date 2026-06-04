@@ -1,7 +1,7 @@
 // [LAW:verifiable-goals] Epic k5a done-gate #1: clicking a theme picker option
-// recolors the WHOLE bar live. The existing widget test (dsl-widgets.test.ts)
-// proves the click writes SessionState and the active-marking moves, but it
-// passes a STATIC basePalette into renderDsl — so it never exercises the
+// recolors the WHOLE bar live. The action-surface tests (dsl-actions/dsl-picker)
+// prove the click writes SessionState and the active-marking moves, but they
+// pass a STATIC basePalette into renderDsl — so they never exercise the
 // recolor. The recolor lives in the daemon's PER-RENDER basePalette resolution
 // (effectiveThemeName -> resolverForThemeName), OUTSIDE renderDsl. This test
 // replicates that resolution exactly as src/daemon/server.ts does, so it proves
@@ -42,15 +42,12 @@ const SRC = `{
     theme: { kind: 'state', key: 'theme', default: '${BASE_THEME}' },
     'hue.step': { kind: 'literal', value: 14 },
   },
-  widgets: {
-    themePicker: {
-      kind: 'buttons',
-      items: [{ optionsFrom: 'themes', onClick: { set: 'theme' } }],
-    },
+  actions: {
+    applyTheme: { set: 'theme', from: 'themes' },
   },
   segments: {
     plain: { template: ' ◆ here ', bg: 'surface', fg: 'foreground' },
-    pickers: { template: '{{ widget "themePicker" }}', bg: 'surface', fg: 'foreground' },
+    pickers: { template: '{{ range themes }}{{ action "applyTheme" . }}{{ end }}', bg: 'surface', fg: 'foreground' },
   },
   layout: [['plain'], ['pickers']],
 }`;

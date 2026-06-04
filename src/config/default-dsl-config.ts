@@ -146,7 +146,7 @@ export const DEFAULT_DSL_CONFIG = {
     // [LAW:one-source-of-truth] The usable terminal width for THIS render —
     // the exact post-reserve cell count FlexStrip wraps to. renderDsl injects
     // it into the payload from its own `opts.width` (the single value that
-    // feeds both the wrap and this variable), so a width-paginated widget and
+    // feeds both the wrap and this variable), so a width-paginated picker and
     // the wrap algebra can never disagree. Never cached: a resize is just a
     // new value on the same path, re-read every render. The default only
     // applies to compile-only callers that render without injecting a width.
@@ -161,11 +161,12 @@ export const DEFAULT_DSL_CONFIG = {
     // reads (HUE_STEP_VAR) — a value in the store like every other render input,
     // NOT a globals field. [LAW:types-are-the-program] In the bundled default it
     // is a LITERAL: nothing here writes the "hue-step" SessionState key (the
-    // default ships no widgets), so a fixed 14° is the strongest TRUE theorem —
-    // a `state` var would claim a session-variability the default never exercises
-    // and force a SessionState on every consumer. A user makes hue live by
-    // overriding this one variable to `{ kind: "state", key: "hue-step" }` and
-    // adding a stepper widget — the same two-part pattern the theme picker uses.
+    // default declares no interactive actions), so a fixed 14° is the strongest
+    // TRUE theorem — a `state` var would claim a session-variability the default
+    // never exercises and force a SessionState on every consumer. A user makes
+    // hue live by overriding this one variable to `{ kind: "state", key:
+    // "hue-step" }` and adding a pair of bounded stepper actions — the same
+    // two-part pattern the theme picker uses.
     // 14°: adjacent segments stay visually distinct without per-segment colors.
     "hue.step": { kind: "literal", value: 14 },
 
@@ -566,12 +567,6 @@ export const DEFAULT_DSL_CONFIG = {
       },
     ],
   },
-
-  // [LAW:locality-or-seam] No interactive widgets in the bundled default — the
-  // baseline statusline is non-interactive text segments. A user config
-  // declares widgets and references them from a segment template via
-  // `{{ widget "name" }}`; the merge cascade adds them by name.
-  widgets: {},
 
   // [LAW:locality-or-seam] No decoupled actions in the bundled default either —
   // the baseline statusline binds no clickable regions. A user config declares
