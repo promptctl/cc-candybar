@@ -370,7 +370,16 @@ describe("introspectConfig with populated state", () => {
     expect(config?.root).toEqual({
       kind: "container",
       direction: "vertical",
-      children: [{ kind: "cells", segments: ["intro", "plain"] }],
+      children: [
+        {
+          kind: "container",
+          direction: "horizontal",
+          children: [
+            { kind: "segment", name: "intro" },
+            { kind: "segment", name: "plain" },
+          ],
+        },
+      ],
     });
     expect(Object.keys(config?.variables ?? {}).sort()).toEqual([
       "derived",
@@ -393,7 +402,16 @@ describe("introspectConfig with populated state", () => {
     expect(wireShape.root).toEqual({
       kind: "container",
       direction: "vertical",
-      children: [{ kind: "cells", segments: ["intro", "plain"] }],
+      children: [
+        {
+          kind: "container",
+          direction: "horizontal",
+          children: [
+            { kind: "segment", name: "intro" },
+            { kind: "segment", name: "plain" },
+          ],
+        },
+      ],
     });
     expect(wireShape.variables.greeting.kind).toBe("literal");
     expect(wireShape.segments.intro.template).toBe(

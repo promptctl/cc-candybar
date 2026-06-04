@@ -19,12 +19,10 @@ import type {
   LayoutNode,
 } from "../config/dsl-types.js";
 import { HUE_STEP_VAR } from "../config/dsl-types.js";
-import { toString as varToString } from "../var-system/types.js";
 import type { VariableStore } from "../var-system/store.js";
 import type { SourceRegistry } from "../var-system/sources.js";
 import {
   parseDuration,
-  SESSION_ID_VAR_NAME,
   type CachePolicy,
   type GitField,
 } from "../var-system/sources.js";
@@ -342,9 +340,6 @@ export function registerDslConfig(
         node.when === undefined
           ? undefined
           : parseNodeField(node.when, path, "when"),
-      parseField: (src, field) => parseNodeField(src, path, field),
-      resolver: resolverForThemeName,
-      stateVarFor: (key) => stateKeyToVar.get(key) ?? key,
       compileChild: compileNode,
     };
     return nodeType(node.kind).compile(node, cctx);
@@ -428,22 +423,13 @@ export function renderDsl(
   const rawHue = store.has(HUE_STEP_VAR) ? Number(store.read(HUE_STEP_VAR)) : 0;
   const hueStep = Number.isFinite(rawHue) ? rawHue : 0;
 
-  // [LAW:one-source-of-truth] The session id an inline cell's set-state URL
-  // carries comes from the SAME conventional variable the widget runtime reads —
-  // one name for "which session am I in." Absent (compile-only callers, or a
-  // config that never declared it) is a real state: an empty id yields a wire URL
-  // the daemon rejects loudly rather than mutating the wrong session.
-  const sessionId = store.has(SESSION_ID_VAR_NAME)
-    ? varToString(store.read(SESSION_ID_VAR_NAME))
-    : "";
-
   perSegmentSink?.clear();
 
   // [LAW:single-enforcer] The hue cursor: one counter, advanced in pre-order
-  // across the whole tree (visible or not) by base leaves only, so per-segment
-  // colors stay positionally stable regardless of nesting or which nodes are
-  // hidden. ctx exposes nextHueShift() as the single mutator; composites advance
-  // nothing themselves and inherit their units from the base leaves they expand to.
+  // across the whole tree (visible or not) by segment leaves only — a container
+  // advances none — so per-segment colors stay positionally stable regardless of
+  // nesting or which nodes are hidden. ctx exposes nextHueShift() as the single
+  // mutator. Hue is decorative: it carries no structural meaning.
   const hue = { value: 0 };
   const nextHueShift = (): number => {
     const shift = hue.value * hueStep;
@@ -451,9 +437,9 @@ export function renderDsl(
     return shift;
   };
 
-  // [LAW:no-defensive-null-guards] A cells leaf names segments; resolve each to
+  // [LAW:no-defensive-null-guards] A segment node names one segment; resolve it to
   // its decl + compiled form. Both are always present together (loader validates,
-  // registerDslConfig compiles); a miss is a caller bug the cells render throws on.
+  // registerDslConfig compiles); a miss is a caller bug the segment render throws on.
   const lookupSegment = (name: string) => {
     const seg = config.segments[name];
     const segCompiled = compiled.segments[name];
@@ -475,8 +461,6 @@ export function renderDsl(
     const visible = parentVisible && evaluateWhen(node.when, scope);
     const ctx: NodeRenderCtx = {
       scope,
-      store,
-      sessionId,
       basePalette,
       visible,
       nextHueShift,
