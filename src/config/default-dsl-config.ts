@@ -572,4 +572,10 @@ export const DEFAULT_DSL_CONFIG = {
   // declares widgets and references them from a segment template via
   // `{{ widget "name" }}`; the merge cascade adds them by name.
   widgets: {},
+
+  // [LAW:locality-or-seam] No decoupled actions in the bundled default either —
+  // the baseline statusline binds no clickable regions. A user config declares
+  // named actions and binds them from a segment template via
+  // `{{ action "name" … }}`; the merge cascade adds them by name.
+  actions: {},
 } satisfies DslConfig;
