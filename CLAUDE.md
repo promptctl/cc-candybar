@@ -95,7 +95,7 @@ Add a new built-in segment by:
 
 ### Themes (`src/themes/`)
 
-All color math (palette hydration, spec resolution, darken/lighten/alpha/contrast, **OKLCH** transposition) lives in **rich-js** — cc-candybar's `src/themes/` keeps no color arithmetic of its own, only name/string policy (`src/themes/policy.ts`: `resolvePaletteName`, `effectiveThemeName`, `listResolvablePaletteNames`, `STYLE_ORDER`, …) and memoized resolver construction (`src/themes/palette-resolvers.ts`: `resolverForThemeName(name)` — the single name→`PaletteResolver` enforcer — and `transposedResolver(base, hueShift)`, a memoized wrapper over rich-js `transposePalette`). The DSL config picks a palette via `globals.palette`, but the **effective** rendered theme is resolved per render from `effectiveThemeName(sessionState.theme, globals.palette)` (session choice over config default), so a theme click recolors the whole bar live; a per-segment `palette:` is an explicit override that ignores the session theme (frozen at registration in `registerDslConfig`), and the `hue.step` variable — read by `renderDsl` via the conventional `HUE_STEP_VAR` name, NOT a globals field (a literal pins it; a `state` var driven by a stepper widget makes it live, session-over-default) — drives the per-segment whole-theme hue transposition (anchors error/success/warning hue-locked by rich-js `ANCHORED_ROOTS`).
+All color math (palette hydration, spec resolution, darken/lighten/alpha/contrast, **OKLCH** transposition) lives in **rich-js** — cc-candybar's `src/themes/` keeps no color arithmetic of its own, only name/string policy (`src/themes/policy.ts`: `resolvePaletteName`, `effectiveThemeName`, `listResolvablePaletteNames`, `STYLE_ORDER`, …) and memoized resolver construction (`src/themes/palette-resolvers.ts`: `resolverForThemeName(name)` — the single name→`PaletteResolver` enforcer — and `transposedResolver(base, hueShift)`, a memoized wrapper over rich-js `transposePalette`). The DSL config picks a palette via `globals.palette`, but the **effective** rendered theme is resolved per render from `effectiveThemeName(sessionState.theme, globals.palette)` (session choice over config default), so a theme click recolors the whole bar live; a per-segment `palette:` is an explicit override that ignores the session theme (frozen at registration in `registerDslConfig`), and the `hue.step` variable — read by `renderDsl` via the conventional `HUE_STEP_VAR` name, NOT a globals field (a literal pins it; a `state` var driven by hue stepper actions — the `{{ action "hueUp" … }}` idiom — makes it live, session-over-default) — drives the per-segment whole-theme hue transposition (anchors error/success/warning hue-locked by rich-js `ANCHORED_ROOTS`).
 
 ### Variable system (`src/var-system/`)
 
@@ -103,29 +103,49 @@ MobX-backed store of named variables: `box` nodes for externally-driven values (
 
 Source kinds (`SourceRegistry.declare*`): `literal`, `input`, `env`, `file`, `shell`, `template`, `time`, `git`, `state`. New kinds require a new union arm in `src/config/dsl-types.ts`, a loader case in `src/config/dsl-loader.ts`, a `declareOne` arm in `src/dsl/render.ts`, and the runtime implementation here.
 
-### Interactive widgets (`src/template-engine/widgets.ts`, `widgets:` config block)
+### Interactive actions (`src/config/action.ts`, top-level `actions:` block)
 
-A **widget** is reusable interactive content declared once in the top-level `widgets:` block and pulled into a segment template via `{{ widget "name" }}`. A widget is **not** a kind of segment (`[LAW:one-type-per-behavior]`) — there is one Segment type; whether a segment shows text, a button, both, or neither falls out of what its template contains. The author binds clicks to **actions**, never to validators or hand-built URLs.
+Interaction is **decoupled by name**. The clickable *representation* (a region of a segment template) and the *behavior* (what the click does) are separate declarations joined by an action name. There is no widget type and no component kind (`[LAW:one-type-per-behavior]`) — there is one Segment, and whether it shows text, state-driven display, clickable regions, or all three falls out of what its template contains. The author binds a region to a named action, never to a validator or a hand-built URL. Re-glyph a button without touching behavior; re-target an action without touching the template (`[LAW:locality-or-seam]` — the name is the seam).
 
-- **Action** (`Action` in `dsl-types.ts`) — the click effect, discriminated by which key is present: `{ set: key, to?: value }` (write SessionState), `{ copy: tmpl }`, `{ open: tmpl }`. `copy`/`open` values are Go-template strings evaluated at render; a `set`'s key/value are **literal** so the validator is *derivable*. Only `set` writes state, so only `set` needs a validator — `copy`/`open` need none. The vocabulary grows by arms, not validator plumbing.
-- **Button item** (`ButtonItem`) — discriminated by presence of `optionsFrom`. A fixed item carries its own `glyph`/`label`; an `optionsFrom: "themes" | "styles"` item expands to one button per option, binding each option's value into its `set` action (its `set` carries no `to`). `onClick` is one action or an array; it must be homogeneous — all `set` (batched into one set-state URL via the `.2` wire) or a single `copy`/`open` (one OSC-8 link = one verb URL). Compound heterogeneous clicks are a follow-up.
-- **Widget** (`WidgetDecl`) — discriminated by `kind`. The foundation ships `kind: "buttons"`; `menu` (nested, open-path state) and `stepper` (numeric) are future arms — one arm each, the segment surface untouched.
-- **Render** — `renderWidget` (driven by the `widget` FuncMap entry) returns ONE `RichText` whose spans each carry an OSC-8 URL. `{{ widget "x" }}` is one top-level expression, and go-template-js stringifies array returns on direct emit, so a widget cannot emit multiple fragments — it assembles one `RichText` via `RichText.fromFragments`, which serializes to one OSC-8 region per span. `registerDslConfig` builds a **per-config** engine carrying the compiled widgets + the live store (so the `widget` func reads `session.id` and the current picker value); `renderDsl` is unchanged.
-- **Validator derivation** — because `set` actions are literal data, the set of `(key, value)` pairs a config's widgets can write is statically enumerable, so per-key validators are *derived* from the declared actions (`deriveWidgetValidators` in `src/daemon/verbs/state-validators.ts` — the same list the picker renders from is the gate, so they cannot diverge). A `set` writing a **baseline** key (`theme`/`style`/`toolbar-expanded`) reuses the existing global validator (derives nothing); `copy`/`open` write nothing (no validator). A `set` to a **custom** key derives a spec — `{kind:"allow-list", allowed}` whose members are the union of every value that button can produce (literal `to`, or the resolved `optionsFrom` list); a menu page key derives `{kind:"int"}`. `registerStateValidator` takes the spec (not an opaque validator) so the daemon-global `STATE_VALIDATORS` registry can do its **multi-entry lifecycle**: same-key registrations merge (allow-list members union; the validator is residue rebuilt from the live specs), a kind change on a live key throws (one shape per key), and the spec list IS the ref-count — disposed on the same dispose-before-swap path as `registry.dispose()` so a hot-reload's new-before-old overlap stays valid and the key is removed only when the last config unloads.
+- **Action** (`ActionDecl` in `src/config/action.ts`) — the click effect, discriminated by which key is present, and for `set` by its value *source*:
+  - `{ set: key, to: value }` — write a literal → allow-list `{to}`
+  - `{ set: key, from: "themes" | "styles" }` — write the option the template binds at render → allow-list `{options}`
+  - `{ set: key, min, max, by }` — write `wrap(current ± by)` (a stepper affordance) → range `[min,max]`
+  - `{ set: key, int: true }` — write any integer the render binds (a paged cursor: −1 closed / 0..N) → unbounded int gate
+  - `{ copy: tmpl }` / `{ open: tmpl }` — copy / open a Go-template string evaluated at render → no gate
 
-Example (a user config — the bundled default has no widgets):
+  Only `set` writes SessionState, so only `set` derives a validator; `copy`/`open` derive nothing. The vocabulary grows by arms, not by validator plumbing.
+- **`{{ action "name" display [boundValue] }}`** (`src/render/action.ts`) — binds one clickable region (an OSC-8 span) to the named action and realizes it against live state via one total fold over the compiled-action union: a `set-literal` writes its fixed value (active when the key already holds it); a `set-option` writes `boundValue ?? display` (the common picker form `{{ action "applyTheme" . }}`); a `set-int` writes the bound integer; a `set-bounded` writes the wrapped step; `copy`/`open` evaluate their pre-parsed template. Returns ONE `RichText` carrying one OSC-8 URL — `{{ action … }}` is one expression, so it emits one fragment.
+- **`{{ picker "applyAction" "pageAction" closeOnPick paged }}`** (`src/render/picker.ts`) — a width-fit grid of option cells over `applyAction`'s resolved option domain, with ✕/←/→ affordances driven by `pageAction` (a `set-int` cursor). A pure render helper: it owns no state and declares no new gate, only references two already-declared, already-gated actions by name. `closeOnPick` folds a page-reset into the option's set-state write (one atomic apply+close). `paged` selects the available width passed to pagination — finite (term cols) ⇒ sliced pages with arrows; `Infinity` ⇒ one page the strip wraps — one value, not a mode (`[LAW:dataflow-not-control-flow]`).
+- **Validator derivation** (`deriveActionValidators` in `src/daemon/verbs/state-validators.ts`) — the **sole** gate authority. Because every `set` carries its value source as literal data, the set of writable `(key, spec)` pairs is statically enumerable: literal/option → allow-list, bounded → range, `int` → unbounded int. A template references a name; it cannot smuggle an un-gated write — the rendered click and the wire gate share one source. Same-key contributions merge (allow-lists union; an `int` cursor subsumes a literal page-open like `{to:"0"}`; a kind clash throws), feeding the daemon-global `STATE_VALIDATORS` registry's multi-entry lifecycle (merge / ref-count / dispose-before-swap) unchanged from the widget era — only the derivation *source* changed.
+
+`registerDslConfig` builds a **per-config** engine and injects the `action`/`picker` FuncMap entries as data (`[LAW:one-way-deps]` — the generic engine never imports the feature). The compiled actions and the FuncMap close over one `ActionRuntime` holding the live `VariableStore`, so a click reads `session.id` and the current value from the same source the rest of the render does. `renderDsl` is unchanged.
+
+Example (a user config — the bundled default declares no actions; this mirrors the maintainer's live config):
 
 ```json5
-widgets: {
-  actions: { kind: "buttons", items: [
-    { glyph: "⎘", onClick: { copy: "{{ .session.id }}" } },
-    { glyph: "📂", onClick: { open: "{{ .project_dir }}" } },
-  ] },
-  themePicker: { kind: "buttons", items: [
-    { optionsFrom: "themes", onClick: { set: "theme" } },
-  ] },
+actions: {
+  openMenu:   { set: "theme-page", to: "0" },        // open the menu at page 0
+  themePage:  { set: "theme-page", int: true },       // the picker's page cursor
+  applyTheme: { set: "theme", from: "themes" },        // picker binds each option here
+  hueUp:      { set: "hue-step", min: 0, max: 60, by: 2 },
+  hueDown:    { set: "hue-step", min: 0, max: 60, by: -2 },
 },
-segments: { bar: { template: '{{ widget "actions" }} {{ widget "themePicker" }}', bg: "surface", fg: "foreground" } },
+segments: {
+  trigger: {
+    template: '🎨 {{ .theme }} {{ action "openMenu" "▸" }}  ⬡ {{ action "hueDown" "◀" }} {{ .hue.step }}° {{ action "hueUp" "▶" }}',
+    bg: "surface", fg: "foreground",
+  },
+  pickerMenu: {
+    template: '{{ picker "applyTheme" "themePage" true true }}',  // closeOnPick, paged
+    bg: "surface", fg: "foreground",
+  },
+},
+layout: [
+  ["directory", "git", "model", "context"],
+  ["trigger"],
+  { when: "{{ ge (int .themePage) 0 }}", segments: ["pickerMenu"] },  // row exists only when open
+],
 ```
 
 ### Click actions and the URL handler
