@@ -217,11 +217,16 @@ function readClampedInt(
 //   • set-bounded: writes wrap(current ± by) clamped to [min,max] — the stepper
 //                  affordance; never "active" (an affordance is not a selection).
 //   • copy/open:   one copy/open effect of the evaluated template; never active.
+// [LAW:dataflow-not-control-flow] The template scope is an input only the copy/
+// open arms consume, so it is built WHERE consumed (buildScope snapshots
+// store.names() into a Set per call — paying it for a set-* region, e.g. every
+// cell of an option picker, is pure waste). set-* arms read individual vars
+// directly. This is data locality, not a control-flow guard: the scope simply
+// flows into the arms that need it.
 function realize(
   c: CompiledActionDecl,
   display: string,
   boundValue: string | undefined,
-  scope: object,
   store: VariableStore,
   sessionId: string,
 ): { effect: Effect; active: boolean } {
@@ -258,14 +263,17 @@ function realize(
     }
     case "copy":
       return {
-        effect: { verb: VERB_COPY, args: [evalTemplate(c.text, scope)] },
+        effect: {
+          verb: VERB_COPY,
+          args: [evalTemplate(c.text, buildScope(store))],
+        },
         active: false,
       };
     case "open":
       return {
         effect: {
           verb: VERB_OPEN_VSCODE,
-          args: [evalTemplate(c.target, scope)],
+          args: [evalTemplate(c.target, buildScope(store))],
         },
         active: false,
       };
@@ -293,13 +301,11 @@ export function renderAction(
       `action "${name}" rendered without a VariableStore — registerDslConfig was not given one`,
     );
   }
-  const scope = buildScope(store);
   const sessionId = readVar(store, "session.id");
   const { effect, active } = realize(
     action,
     display,
     boundValue,
-    scope,
     store,
     sessionId,
   );
