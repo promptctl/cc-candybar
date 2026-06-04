@@ -90,6 +90,30 @@ describe("segment is the rendering unit (2de.10)", () => {
     expect(linkUrls(out)).toHaveLength(3);
   });
 
+  test("a unit that renders nothing contributes no strip item — no spurious cap", () => {
+    // An inline leaf whose only cell renders empty text: fragmentsToCells drops
+    // the empty cell, so the leaf collapses to zero cells (not one empty cell).
+    // An empty strip item would draw powerline caps around nothing; the unit
+    // must instead contribute no item at all — zero glyphs in the output.
+    const src = `{
+      globals: { palette: 'textual-dark' },
+      variables: {
+        'session.id': { kind: 'input', path: 'session_id', default: '' },
+      },
+      segments: { unused: { template: ' ', bg: 'surface', fg: 'foreground' } },
+      root: {
+        kind: 'inline',
+        bg: 'surface',
+        fg: 'foreground',
+        cells: [{ text: '' }],
+      },
+    }`;
+    const out = render(src, { session_id: "s1" });
+
+    expect(chevronCount(out)).toBe(0);
+    expect(out).toBe("");
+  });
+
   test("two adjacent same-bg segments read as TWO units — the structural chevron survives equal bg", () => {
     // hue.step = 0 freezes the per-segment hue rotation, so `a` and `b` — same
     // bg spec, same palette — resolve to the SAME background. The mid-join

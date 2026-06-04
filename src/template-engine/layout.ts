@@ -69,7 +69,7 @@ export function evaluateWhen(
  * each. `baseStyle` is the wrapping default so synthesized padding and gaps
  * inherit the unit's bg.
  */
-export function collapseToCell(
+function collapseToCell(
   cells: readonly RichText[],
   baseStyle?: Style,
 ): RichText {
