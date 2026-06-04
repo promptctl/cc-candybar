@@ -19,18 +19,23 @@
 // A template references a NAME; it cannot smuggle an un-gated write. The rendered
 // click and the gate share ONE source — the action declaration.
 //
-// [LAW:one-way-deps] This module reuses the option-domain + effect-verb
-// vocabulary from `./widget.js` (the shapes a picker draws from, the set/copy/
-// open discriminator) so there is ONE definition while both surfaces coexist.
-// The dependency is one-way (action → widget). When the widget surface is
-// deleted (epic child .13), these shared shapes relocate here — action.ts is the
-// surviving home.
+// [LAW:one-source-of-truth] The option-domain + effect-verb vocabulary lives
+// HERE — action.ts is the surviving home now that the widget surface is gone.
+// These are the shapes a picker draws options from and the set/copy/open/int
+// discriminator the loader and the validator-derivation match on.
 
-import { OPTION_SOURCES, ACTION_KEYS, type OptionSource } from "./widget.js";
+// [LAW:one-source-of-truth] The domain lists a picker draws options from. Same
+// canonical sources the `themes()`/`styles()` bindings and the set-state
+// validators consult — the rendered options and the derived gate cannot diverge
+// because there is no second enumeration.
+export type OptionSource = "themes" | "styles";
+export const OPTION_SOURCES: readonly OptionSource[] = ["themes", "styles"];
 
-export { OPTION_SOURCES, ACTION_KEYS };
-export type { OptionSource };
-export type { ActionKey } from "./widget.js";
+// [LAW:types-are-the-program] The top-level discriminator of an ActionDecl — the
+// click effect is keyed by which of these is present. The loader proves
+// exactly-one-of; the renderer and validator-derivation match with no fallthrough.
+export const ACTION_KEYS = ["set", "copy", "open"] as const;
+export type ActionKey = (typeof ACTION_KEYS)[number];
 
 // [LAW:types-are-the-program] An ActionDecl is the click effect a named action
 // binds to. The top-level discriminator is which of `set`/`copy`/`open` is
@@ -44,6 +49,11 @@ export type { ActionKey } from "./widget.js";
 //                         (a picker ranges the domain) -> allow-list {options}
 //   set + min/max/by    — write wrap(current ± by) clamped to [min,max]
 //                         (a stepper affordance) -> range [min,max]
+//   set + int           — write any integer the render binds (a paged cursor:
+//                         -1 closed / 0..N pages, clamp owned by the renderer)
+//                         -> int gate (unbounded). The missing primitive a
+//                         width-paginated picker needs — its page key accepts any
+//                         integer, which no bounded/literal arm can express.
 //   copy                — copy templated text to the clipboard -> no gate
 //   open                — open a templated target in the editor -> no gate
 //
@@ -59,6 +69,7 @@ export type ActionDecl =
       readonly max: number;
       readonly by: number;
     }
+  | { readonly set: string; readonly int: true }
   | { readonly copy: string }
   | { readonly open: string };
 

@@ -1,7 +1,7 @@
-// [LAW:verifiable-goals] 2de.12 acceptance, driven through the real spine
+// [LAW:verifiable-goals] Action-surface acceptance, driven through the real spine
 // (registerDslConfig + renderDsl), the real loader (parseAndValidate), and the
-// real set-state gate (deriveValidators/deriveActionValidators +
-// registerStateValidator + validateStateWrite) — never a parallel rig:
+// real set-state gate (deriveActionValidators + registerStateValidator +
+// validateStateWrite) — never a parallel rig:
 //
 //   1. A `{{ action "name" display [boundValue] }}` call renders ONE clickable
 //      region whose OSC-8 URL is the action realized against current state —
@@ -12,8 +12,9 @@
 //      a BASELINE key (theme/style) reuses the baseline gate (derives nothing);
 //      copy/open derive nothing.
 //   3. deriveActionValidators feeds the SAME registerStateValidator merge/dispose
-//      lifecycle widgets use — same-key registrations union, dispose ref-counts.
-//   4. deriveValidators merges the widget AND action surfaces at one site.
+//      lifecycle — same-key registrations union, dispose ref-counts.
+//   4. The action table is the SOLE interaction authority — multiple actions
+//      writing one key merge at one site.
 //   5. The loader proves the ActionDecl invariants (one effect; one set value
 //      source; integer bounds; non-zero `by`), resolves `{{ action }}` refs, and
 //      requires session.id for any set action.
@@ -27,7 +28,6 @@ import { SessionState } from "../src/daemon/session-state";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import {
   deriveActionValidators,
-  deriveValidators,
   registerStateValidator,
   validateStateWrite,
 } from "../src/daemon/verbs/state-validators";
@@ -63,10 +63,10 @@ interface SideEffect {
   readonly args: string[];
 }
 
-// Drive a config through the real spine + the real merged gate (deriveValidators,
-// so the harness exercises the widget+action merge site even when there are no
-// widgets). `click` validates set-state writes through the derived gate and
-// applies them; copy/open are recorded as side effects (they carry no gate).
+// Drive a config through the real spine + the real derived gate
+// (deriveActionValidators — the sole interaction authority). `click` validates
+// set-state writes through the derived gate and applies them; copy/open are
+// recorded as side effects (they carry no gate).
 function buildRuntime(src: string, sessionId = "s1") {
   const config = parseAndValidate("<test>", src, ALLOWED);
   const sessionState = new SessionState();
@@ -84,7 +84,7 @@ function buildRuntime(src: string, sessionId = "s1") {
       basePalette,
       opts(width),
     );
-  const disposers = deriveValidators(config).map(({ key, spec }) =>
+  const disposers = deriveActionValidators(config).map(({ key, spec }) =>
     registerStateValidator(key, spec),
   );
   const sideEffects: SideEffect[] = [];
@@ -372,10 +372,10 @@ describe("2de.12 — derived specs feed the registerStateValidator lifecycle", (
     expect(validateStateWrite("k", "c").ok).toBe(false); // key removed
   });
 
-  test("deriveValidators merges the widget and action surfaces at one site", () => {
-    // A widget set-action on key `w`, an action set on key `a`, and BOTH a widget
-    // and an action writing the shared key `shared` — the merge unions the shared
-    // members and keeps the surface-specific keys distinct.
+  test("deriveActionValidators merges multiple actions writing one key", () => {
+    // [LAW:single-enforcer] Two literal actions on key `w` and `a`, and TWO
+    // actions writing the shared key `shared` — the one coherence merge unions the
+    // shared key's members and keeps the distinct keys distinct.
     const src = `{
       globals: {},
       variables: {
@@ -384,29 +384,25 @@ describe("2de.12 — derived specs feed the registerStateValidator lifecycle", (
         av: { kind: 'state', key: 'a', default: '' },
         sv: { kind: 'state', key: 'shared', default: '' },
       },
-      widgets: {
-        wbtn: { kind: 'buttons', items: [
-          { glyph: 'W', onClick: { set: 'w', to: 'x' } },
-          { glyph: 'S', onClick: { set: 'shared', to: 'fromWidget' } },
-        ] },
-      },
       actions: {
+        wbtn: { set: 'w', to: 'x' },
         abtn: { set: 'a', to: 'y' },
-        sbtn: { set: 'shared', to: 'fromAction' },
+        s1: { set: 'shared', to: 'fromOne' },
+        s2: { set: 'shared', to: 'fromTwo' },
       },
-      segments: { bar: { template: '{{ widget "wbtn" }} {{ action "abtn" "A" }} {{ action "sbtn" "S" }}', bg: 'surface', fg: 'foreground' } },
+      segments: { bar: { template: '{{ action "wbtn" "W" }} {{ action "abtn" "A" }} {{ action "s1" "1" }} {{ action "s2" "2" }}', bg: 'surface', fg: 'foreground' } },
       layout: [['bar']],
     }`;
     const config = parseAndValidate("<test>", src, ALLOWED);
     const merged = Object.fromEntries(
-      deriveValidators(config).map(({ key, spec }) => [key, spec]),
+      deriveActionValidators(config).map(({ key, spec }) => [key, spec]),
     );
     expect(merged.w).toEqual({ kind: "allow-list", allowed: ["x"] });
     expect(merged.a).toEqual({ kind: "allow-list", allowed: ["y"] });
-    // The shared key unions both surfaces' members.
+    // The shared key unions both actions' members.
     expect(merged.shared).toEqual({
       kind: "allow-list",
-      allowed: expect.arrayContaining(["fromWidget", "fromAction"]),
+      allowed: expect.arrayContaining(["fromOne", "fromTwo"]),
     });
   });
 });

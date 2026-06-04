@@ -10,11 +10,9 @@
 // src/var-system/sources.ts). The loader is the single point that translates
 // between the two; no other module should re-derive these shapes.
 
-// [LAW:one-way-deps] The widget + action schemas live in their own leaf modules;
-// DslConfig references them here. The dependency is one-way (this file →
-// widget.ts/action.ts), never the reverse, so those shapes can be lifted out
-// without a cycle.
-import type { WidgetDecl } from "./widget.js";
+// [LAW:one-way-deps] The action schema lives in its own leaf module; DslConfig
+// references it here. The dependency is one-way (this file → action.ts), never
+// the reverse, so that shape can be lifted out without a cycle.
 import type { ActionDecl } from "./action.js";
 
 // [LAW:types-are-the-program] Three stages, three names.
@@ -136,7 +134,6 @@ export interface RawDslConfig {
   // Both collapse to one `LayoutNode` at the loader so downstream sees one shape.
   readonly layout?: readonly LayoutRow[];
   readonly root?: LayoutNode;
-  readonly widgets?: Readonly<Record<string, WidgetDecl>>;
   readonly actions?: Readonly<Record<string, ActionDecl>>;
 }
 
@@ -148,11 +145,6 @@ export interface DslConfig {
   // user-file `layout` sugar is compiled into this `root` tree at load time;
   // nothing downstream re-derives or carries the flat row form.
   readonly root: LayoutNode;
-  // [LAW:locality-or-seam] The named seam between interaction behavior (what a
-  // click does) and presentation (segments/layout). Declared once, referenced
-  // from segment templates via `{{ widget "name" }}`. Empty when no config
-  // declares interactive components — an absent `widgets` key merges to `{}`.
-  readonly widgets: Readonly<Record<string, WidgetDecl>>;
   // [LAW:locality-or-seam] The named seam between click BEHAVIOR and the
   // clickable REPRESENTATION. Each entry is a statically-declared effect a
   // segment template binds a region to via `{{ action "name" … }}`. The
@@ -400,13 +392,12 @@ export const TRUNCATE_MODES: readonly TruncateMode[] = [
 // ─── Conventional render-time variable names ─────────────────────────────────
 //
 // [LAW:one-source-of-truth] These are not widget types (those live in
-// `./widget.ts`); they are the conventional variable NAMES the renderer and the
-// widget runtime agree on. Kept here, with the other render/config conventions.
+// `./action.ts`); they are the conventional variable NAMES the renderer and the
+// picker agree on. Kept here, with the other render/config conventions.
 
-// [LAW:one-source-of-truth] The conventional variable a menu paginates against —
-// the usable terminal width renderDsl injects each render. One name shared by
-// the declaration (default config), the renderer's read (widgets), and the
-// loader's "a menu requires this variable" check, so they cannot drift.
+// [LAW:one-source-of-truth] The conventional variable a picker paginates against
+// — the usable terminal width renderDsl injects each render. One name shared by
+// the declaration (default config) and the picker's read, so they cannot drift.
 export const TERM_COLS_VAR = "term.cols";
 
 // [LAW:one-source-of-truth] The conventional variable per-segment hue rotation
@@ -415,6 +406,6 @@ export const TERM_COLS_VAR = "term.cols";
 // A config declares this variable — as a `state` var so a stepper can drive it
 // live (session value over the declared default, the same session-over-default
 // the theme uses), or as any kind for a fixed value. renderDsl reads it through
-// this one name; the stepper widget writes the SessionState key it reads. Absent
-// ≡ no rotation (step 0) — the degenerate case, not a special branch.
+// this one name; a bounded stepper action writes the SessionState key it reads.
+// Absent ≡ no rotation (step 0) — the degenerate case, not a special branch.
 export const HUE_STEP_VAR = "hue.step";
