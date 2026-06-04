@@ -2,7 +2,7 @@ export { createCcCandybarEngine } from "./engine.js";
 export { buildScope } from "./scope.js";
 export { ccCandybarFuncs } from "./funcs.js";
 export { fragmentsToCells } from "./cells.js";
-export { evaluateWhen, applySegmentLayout, collapseToCell } from "./layout.js";
+export { evaluateWhen, applySegmentLayout } from "./layout.js";
 export type {
   SegmentLayoutOptions,
   JustifyMode,
