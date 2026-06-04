@@ -42,7 +42,6 @@ const DFLT: DslConfig = {
     b: { template: " B " } as SegmentDecl,
   },
   root: vert(["a", "b"]),
-  widgets: {},
   actions: {},
 };
 

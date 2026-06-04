@@ -25,18 +25,7 @@
 // validator becomes the parsing boundary, the verb body the dataflow.
 
 import { listResolvablePaletteNames, STYLE_ORDER } from "../../themes/policy";
-import {
-  enumerateOpenPaths,
-  isOptionsButtonItem,
-  isSubmenuItem,
-} from "../../config/widget";
-import type {
-  ButtonItem,
-  MenuTreeItem,
-  OptionSource,
-  WidgetDecl,
-} from "../../config/widget";
-import type { ActionDecl } from "../../config/action";
+import type { ActionDecl, OptionSource } from "../../config/action";
 import type { DslConfig } from "../../config/dsl-types";
 
 // [LAW:one-source-of-truth] One contribution shape — a (key, spec) pair — shared
@@ -449,94 +438,13 @@ function optionValuesFor(src: OptionSource): readonly string[] {
   return src === "themes" ? RESOLVABLE_THEMES_LIST : STYLE_ORDER;
 }
 
-// [LAW:single-enforcer] The ONE place mapping a widget kind to the validator
-// key SPECS it declares. Every consumer reads these contributions; none re-walks a
-// widget's shape by kind. A new widget kind is one new arm in this exhaustive
-// switch, and the compiler forces it.
-//   • a menu declares its page key as an INT spec (←/→/close navigation);
-//   • a stepper declares its value key as a RANGE spec ([min,max]);
-//   • both arms ALSO contribute their items' allow-list specs; buttons
-//     contribute only those.
-function widgetKeySpecs(w: WidgetDecl): ReadonlyArray<{
-  readonly key: string;
-  readonly spec: DerivedValidatorSpec;
-}> {
-  switch (w.kind) {
-    case "stepper":
-      return [
-        { key: w.state, spec: { kind: "range", min: w.min, max: w.max } },
-      ];
-    case "menu":
-      return [
-        { key: w.state, spec: { kind: "int" } },
-        ...itemKeySpecs(w.items),
-      ];
-    case "tree":
-      // [LAW:one-source-of-truth] The open-path key's accepted set IS the tree's
-      // enumerated paths — same data the renderer writes — plus every leaf's
-      // allow-list spec (a tree's leaves are the SAME ButtonItem shape, so they
-      // reuse itemKeySpecs once flattened out of the submenu structure).
-      return [
-        {
-          key: w.state,
-          spec: { kind: "allow-list", allowed: enumerateOpenPaths(w.items) },
-        },
-        ...itemKeySpecs(treeLeafItems(w.items)),
-      ];
-    case "buttons":
-      return itemKeySpecs(w.items);
-  }
-}
-
-// [LAW:dataflow-not-control-flow] Flatten a tree's clickable leaves out of its
-// submenu nesting — a submenu contributes its descendants' leaves, a leaf is
-// itself. The open/close behavior of submenus derives no validator (it writes
-// the open-path key, handled above), so only leaves flow to itemKeySpecs.
-function treeLeafItems(items: readonly MenuTreeItem[]): ButtonItem[] {
-  return items.flatMap((item) =>
-    isSubmenuItem(item) ? treeLeafItems(item.items) : [item],
-  );
-}
-
-// [LAW:dataflow-not-control-flow] One allow-list spec per key an item `set`
-// action writes. The allowed VALUES vary by item shape — an options item binds
-// the whole resolved option list, a literal item writes its action's `to` — but
-// that variability lives in the `optionValues` VALUE, not in a branch around
-// different code: the same flatMap runs for every item.
-function itemKeySpecs(
-  items: readonly ButtonItem[],
-): Array<{ readonly key: string; readonly spec: DerivedValidatorSpec }> {
-  return items.flatMap((item) => {
-    const optionValues = isOptionsButtonItem(item)
-      ? optionValuesFor(item.optionsFrom)
-      : null;
-    return item.onClick.flatMap((action) =>
-      "set" in action
-        ? [
-            {
-              key: action.set,
-              // [LAW:single-enforcer] The loader owns the literal⇒`to` pairing:
-              // a fixed button's `set` carries a non-empty `to`; an options
-              // button's never does (its values are the resolved option list).
-              spec: {
-                kind: "allow-list" as const,
-                allowed:
-                  optionValues ?? (action.to !== undefined ? [action.to] : []),
-              },
-            },
-          ]
-        : [],
-    );
-  });
-}
-
 // [LAW:types-are-the-program] Collapse one key's spec contributions into the
-// single spec that gates it. A key is an INTEGER spec (a menu page `int` or a
-// stepper `range`) or an allow-list — never both. An integer spec ABSORBS
-// integer allow-list members (a button writing "0" to a menu page is a legal int
-// write — the open-trigger pattern), and a NON-integer member aimed at it is the
-// genuine contradiction that throws. Two ranges widen-union; two allow-lists
-// union; an int and a range on one key (a menu page vs a stepper value) conflict.
+// single spec that gates it. A key is an INTEGER spec (a paged cursor `int` or a
+// bounded `range`) or an allow-list — never both. An integer spec ABSORBS
+// integer allow-list members (a trigger writing "0" to a page cursor is a legal
+// int write — the open-trigger pattern), and a NON-integer member aimed at it is
+// the genuine contradiction that throws. Two ranges widen-union; two allow-lists
+// union; an int and a range on one key (a page cursor vs a bounded value) conflict.
 function mergeKeySpecs(
   key: string,
   specs: readonly DerivedValidatorSpec[],
@@ -555,24 +463,24 @@ function mergeKeySpecs(
   const nonInt = allowed.filter((v) => !INT_RE.test(v));
   if (nonInt.length > 0) {
     throw new Error(
-      `deriveValidators: key "${key}" is an integer spec (a menu page ` +
-        `index or a stepper value) but a click writes non-integer ` +
+      `deriveActionValidators: key "${key}" is an integer spec (a paged ` +
+        `cursor or a bounded value) but a click writes non-integer ` +
         `value(s) to it (${nonInt.join(", ")}). A state key has one key ` +
         `shape — point that click at a distinct key, or write an integer.`,
     );
   }
   if (hasInt && ranges.length > 0) {
     throw new Error(
-      `deriveValidators: key "${key}" is declared as both a menu page ` +
-        `(int) and a stepper value (range) — a state key has one key shape. ` +
-        `Use distinct keys.`,
+      `deriveActionValidators: key "${key}" is declared as both a paged ` +
+        `cursor (int) and a bounded value (range) — a state key has one key ` +
+        `shape. Use distinct keys.`,
     );
   }
   if (ranges.length > 0) {
     const min = Math.min(...ranges.map((r) => r.min));
     const max = Math.max(...ranges.map((r) => r.max));
-    // [LAW:no-silent-fallbacks] A menu page (int) is UNBOUNDED, so any integer
-    // write is a legal member to absorb. A stepper range is BOUNDED — an integer
+    // [LAW:no-silent-fallbacks] A page cursor (int) is UNBOUNDED, so any integer
+    // write is a legal member to absorb. A bounded range is BOUNDED — an integer
     // a click declares OUTSIDE [min,max] would be clamped by the range gate at
     // click time, silently storing a different value than the click rendered.
     // That is a config error, surfaced at load rather than papered over at click.
@@ -582,7 +490,7 @@ function mergeKeySpecs(
     });
     if (outOfRange.length > 0) {
       throw new Error(
-        `deriveValidators: key "${key}" is a stepper range [${min},${max}] ` +
+        `deriveActionValidators: key "${key}" is a bounded range [${min},${max}] ` +
           `but a click writes out-of-range value(s) to it ` +
           `(${outOfRange.join(", ")}). The range gate would clamp them, storing a ` +
           `different value than the click renders — write an in-range integer, ` +
@@ -609,21 +517,12 @@ function dropBaselineAllowLists(
   );
 }
 
-// [LAW:one-source-of-truth] The writable-key surface a config's WIDGETS need,
-// DERIVED from the widget declarations (widgetKeySpecs) — the same data the
-// renderer paginates/steps from and clicks against is the gate the wire enforces.
-function widgetContributions(config: DslConfig): KeySpecContribution[] {
-  return dropBaselineAllowLists(
-    Object.values(config.widgets).flatMap(widgetKeySpecs),
-  );
-}
-
 // [LAW:single-enforcer] THE coherence merge: group every contribution by key and
 // collapse each key's specs into the one spec that gates it (mergeKeySpecs).
-// Multiple widgets writing the same key (a menu's int page and a trigger button's
-// allow-list "0" are different KINDS to registerStateValidator) resolve here
-// because mergeKeySpecs absorbs an integer allow-list member into the int spec.
-// One merge, one gate per key.
+// Multiple actions writing the same key (a picker's int page and a trigger's
+// literal "0" are different KINDS to registerStateValidator) resolve here because
+// mergeKeySpecs absorbs an integer allow-list member into the int spec. One
+// merge, one gate per key.
 function mergeContributions(
   contributions: readonly KeySpecContribution[],
 ): KeySpecContribution[] {
@@ -639,25 +538,18 @@ function mergeContributions(
   }));
 }
 
-// [LAW:one-source-of-truth] The widget surface's contribution, isolated-testable.
-// One of the two interaction surfaces feeding the install-site merge; the other
-// is the action table (actionContributions).
-export function deriveWidgetValidators(
-  config: DslConfig,
-): readonly KeySpecContribution[] {
-  return mergeContributions(widgetContributions(config));
-}
-
 // [LAW:single-enforcer] The ONE place mapping a decoupled ACTION to the validator
-// key SPEC it declares — the action-table analogue of widgetKeySpecs. The
-// discriminator is the action's value SOURCE (which key is present), as DATA:
+// key SPEC it declares. The discriminator is the action's value SOURCE (which key
+// is present), as DATA:
 //   • a literal `set` + `to` declares an allow-list of {to};
 //   • an option `set` + `from` declares an allow-list of the resolved domain —
-//     the SAME canonical list a `{{ range themes }}` picker iterates, so the
-//     rendered options and the gate cannot diverge;
+//     the SAME canonical list the picker iterates, so the rendered options and
+//     the gate cannot diverge;
 //   • a bounded `set` + `min/max/by` declares a range [min,max] (the stepper's
-//     navigation owns the wrap; the gate owns the bounds, exactly as for a
-//     stepper widget — `by` is render-only, never in the spec);
+//     navigation owns the wrap; the gate owns the bounds — `by` is render-only,
+//     never in the spec);
+//   • an `int` `set` declares an unbounded int (a paged picker's page cursor —
+//     the renderer owns clamping; the gate requires integer shape);
 //   • copy/open write nothing, so they declare no spec.
 // A new action arm is one new branch here, returning data the existing merge
 // folds — no consumer re-walks an action's shape.
@@ -674,6 +566,12 @@ function actionKeySpecs(a: ActionDecl): KeySpecContribution[] {
       },
     ];
   }
+  // [LAW:single-enforcer] An int cursor (a paged picker's page key) gates as an
+  // unbounded int — the SAME `int` spec a menu page used. The renderer owns
+  // clamping to valid pages; the gate only requires integer shape.
+  if ("int" in a) {
+    return [{ key: a.set, spec: { kind: "int" } }];
+  }
   return [{ key: a.set, spec: { kind: "range", min: a.min, max: a.max } }];
 }
 
@@ -686,28 +584,16 @@ function actionContributions(config: DslConfig): KeySpecContribution[] {
   );
 }
 
-// [LAW:one-source-of-truth] The action surface's contribution, isolated-testable —
-// the action-table analogue of deriveWidgetValidators.
+// [LAW:single-enforcer] The SOLE install-site derivation: a config's writable-key
+// surface is the merge of every ACTION it declares, through ONE coherence pass.
+// The action table is the single interaction authority — the same declarations
+// the `{{ action }}`/`{{ picker }}` funcs realize clicks from are the gate the
+// wire enforces. mergeContributions resolves any intra-table key collision (a
+// picker's int page and a trigger's literal "0" on one key) into one gate.
 export function deriveActionValidators(
   config: DslConfig,
 ): readonly KeySpecContribution[] {
   return mergeContributions(actionContributions(config));
-}
-
-// [LAW:single-enforcer] The install-site derivation: a config's writable-key
-// surface is the merge of every interaction declaration it carries — the widget
-// block AND the action table — through ONE coherence pass. The two surfaces feed
-// their RAW (pre-merge) contributions so mergeContributions resolves any
-// cross-surface key collision (e.g. an action and a widget writing one key) the
-// same way it resolves intra-surface ones. This is the sole site where the two
-// surfaces meet; everything downstream sees one merged gate per key.
-export function deriveValidators(
-  config: DslConfig,
-): readonly KeySpecContribution[] {
-  return mergeContributions([
-    ...widgetContributions(config),
-    ...actionContributions(config),
-  ]);
 }
 
 // [LAW:dataflow-not-control-flow] Single entry point for validation: the

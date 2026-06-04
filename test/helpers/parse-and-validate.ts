@@ -22,7 +22,6 @@ const EMPTY_DEFAULT: DslConfig = {
   variables: {},
   segments: {},
   root: { kind: "container", direction: "vertical", children: [] },
-  widgets: {},
   actions: {},
 };
 
