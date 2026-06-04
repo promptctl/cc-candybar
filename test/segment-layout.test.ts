@@ -2,10 +2,11 @@
 // text, total width, style fields at the boundaries) — never the internal
 // shape of how the layout result was assembled.
 //
-// [LAW:types-are-the-program] applySegmentLayout returns RichText[]. For
-// "auto" width it passes the input through; for fixed width it produces
-// one merged RichText sized exactly to `width`, with truncation/padding
-// already applied. Span-preserving across every op.
+// [LAW:types-are-the-program] applySegmentLayout returns the ONE strip item a
+// segment line contributes (0 cells for an empty line, 1 otherwise). For
+// "auto" width it collapses the cells with no resize; for fixed width it sizes
+// that one cell exactly to `width`, with truncation/padding applied.
+// Span-preserving across every op (OSC-8 links survive as interior spans).
 
 import { Style, cellLen, RichText } from "@promptctl/rich-js";
 import { createCcCandybarEngine } from "../src/template-engine/engine";
@@ -75,17 +76,18 @@ describe("evaluateWhen", () => {
 });
 
 // ────────────────────────────────────────────────────────────────────────────
-// 2. Auto width — cells pass through
+// 2. Auto width — cells collapse into one strip item (no resize)
 // ────────────────────────────────────────────────────────────────────────────
 
-describe("auto width — no layout constraint applied", () => {
-  test("returns cells unchanged", () => {
+describe("auto width — collapse to one cell, no width constraint", () => {
+  test("collapses the segment's cells into one strip item", () => {
     const cells = [cell("hello"), cell(" world")];
     const result = applySegmentLayout(cells, autoOptions);
-    expect(texts(result)).toEqual(["hello", " world"]);
+    expect(result).toHaveLength(1);
+    expect(texts(result)).toEqual(["hello world"]);
   });
 
-  test("empty input returns empty", () => {
+  test("empty input returns empty (a unit that rendered nothing has no item)", () => {
     expect(applySegmentLayout([], autoOptions)).toHaveLength(0);
   });
 });
@@ -298,8 +300,10 @@ describe("truncation preserves per-character styling through the cut", () => {
     expect(result[0]!.plain).toBe("hello…");
     // The "world" span was at chars 6..11; after truncation to width 6
     // (keeping 5 chars + marker), all of "world" is dropped, so no red
-    // span survives — but the kept text retains its base styling.
-    expect(result[0]!.style.bgcolor?.name).toBe("blue");
+    // span survives — but the kept text retains its base styling. Assert the
+    // rendered edge colour (what the joiner reads), not where it is stored:
+    // the collapsed cell carries the base bg as a span, not as wrapping style.
+    expect(result[0]!.edgeStyle("left").bgcolor?.name).toBe("blue");
   });
 
   test("left truncation keeps the right side spans", () => {
