@@ -6,7 +6,8 @@
 // [LAW:dataflow-not-control-flow] Every step is unconditional in shape;
 // option values (width, justify, truncate) decide what the output is, not
 // whether the step runs. "auto" width is not a branch that skips logic —
-// it is a value that makes the function return the input unchanged.
+// it is a value that selects "collapse only, no resize" over "collapse then
+// size to width".
 //
 // [LAW:types-are-the-program] With RichText as the cell type, every layout
 // operation is span-preserving by construction. There is no rebuild path,
@@ -58,16 +59,37 @@ export function evaluateWhen(
 }
 
 /**
- * Apply per-segment layout constraints to the cells produced by
- * `fragmentsToCells()`. Returns a (possibly different-length) RichText[]
- * that fits the requested width.
+ * Collapse a visual line's cells into the ONE strip item the unit contributes
+ * for that line. [LAW:single-enforcer] A unit (segment, or an inline leaf) is
+ * one strip item — the powerline joiner caps BETWEEN units, never inside one,
+ * so a unit's interior bg/fg variation is paint, not a structural seam the
+ * joiner reads. Each input cell's wrapping style becomes a span over its range
+ * and its interior spans (including OSC-8 links) carry through, so every
+ * clickable region survives as its own span — serialized as one OSC-8 region
+ * each. `baseStyle` is the wrapping default so synthesized padding and gaps
+ * inherit the unit's bg.
+ */
+function collapseToCell(
+  cells: readonly RichText[],
+  baseStyle?: Style,
+): RichText {
+  const merged = RichText.fromFragments(cells);
+  merged.end = "";
+  merged.noWrap = true;
+  if (baseStyle !== undefined && !baseStyle.isNull) merged.style = baseStyle;
+  return merged;
+}
+
+/**
+ * Lay out one segment visual line: collapse its cells into a single strip
+ * item, then size that item to the requested width. Returns `[]` for an empty
+ * line (a unit that rendered nothing contributes no strip item) or `[cell]`
+ * for one — never more, so the caller's branchless spread handles both.
  *
- * Multi-cell input is concatenated into a single RichText before layout,
- * because layout decisions (truncation across cell boundaries, justify
- * padding) are joint properties of the whole segment. The OSC-8 link
- * structure is preserved via spans across the concatenation. After
- * layout, the result is returned as a single-cell array — the join
- * structure is now interior to that one cell.
+ * [LAW:dataflow-not-control-flow] `width` is the value that selects the sizing
+ * op: "auto" keeps the content-sized cell as-is; a fixed width truncates when
+ * over and pad-aligns when under. Truncation/align are span-preserving, so the
+ * collapsed link structure survives every cut.
  */
 export function applySegmentLayout(
   cells: readonly RichText[],
@@ -77,37 +99,14 @@ export function applySegmentLayout(
 
   if (cells.length === 0) return [];
 
-  // Step 1: "auto" — content-sized, no width-driven constraint. Pass
-  // cells through unchanged so each link-cell stays its own cell (the
-  // Strip joiner can render edges between them).
-  if (width === "auto") return cells.slice();
+  const cell = collapseToCell(cells, baseStyle);
+  if (width === "auto") return [cell];
 
-  // Step 2: fixed width — merge cells into one RichText so layout ops
-  // (truncate, align) operate across the segment.
-  const merged = mergeCells(cells, baseStyle);
-  if (merged.cellLength > width) {
-    merged.truncate(width, { mode: truncate, marker: truncateMarker });
-  } else if (merged.cellLength < width) {
-    merged.align(justify, width);
+  if (cell.cellLength > width) {
+    cell.truncate(width, { mode: truncate, marker: truncateMarker });
+  } else if (cell.cellLength < width) {
+    cell.align(justify, width);
   }
 
-  return [merged];
-}
-
-function mergeCells(
-  cells: readonly RichText[],
-  baseStyle: Style | undefined,
-): RichText {
-  if (cells.length === 1) {
-    const c = cells[0]!.copy();
-    c.end = "";
-    c.noWrap = true;
-    if (baseStyle !== undefined && !baseStyle.isNull) c.style = baseStyle;
-    return c;
-  }
-  const merged = RichText.fromFragments(cells);
-  merged.end = "";
-  merged.noWrap = true;
-  if (baseStyle !== undefined && !baseStyle.isNull) merged.style = baseStyle;
-  return merged;
+  return [cell];
 }

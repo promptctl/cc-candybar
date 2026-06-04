@@ -371,7 +371,20 @@ const inlineType: NodeType<"inline"> = {
           : new RichText(cell.text);
       return i > 0 ? [new RichText(" "), frag] : [frag];
     });
-    return [fragmentsToCells(fragments, baseStyle)];
+    // [LAW:single-enforcer] An inline leaf is ONE unit ⇒ ONE strip item. It runs
+    // through the SAME applySegmentLayout that collapses a segment line, at "auto"
+    // width (collapse, no resize): the joiner caps only at the leaf's edges, never
+    // between its clickable regions (each onClick survives as its own OSC-8 span),
+    // and a leaf that rendered nothing yields zero cells — no empty item to draw a
+    // spurious cap. One enforcer of "a unit's line is 0-or-1 strip item".
+    return [
+      applySegmentLayout(fragmentsToCells(fragments, baseStyle), {
+        width: "auto",
+        justify: "left",
+        truncate: "right",
+        baseStyle,
+      }),
+    ];
   },
 };
 

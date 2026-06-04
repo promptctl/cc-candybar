@@ -80,7 +80,11 @@ describe("renderStripCells wrap behavior (via buildLineStrip adapter)", () => {
 
   describe("powerline style", () => {
     it("narrow width breaks across rows with arrow caps on every row", () => {
-      const out = buildLineStrip([seg("aaa"), seg("bbb"), seg("ccc")], {
+      // The powerline cap is painted in the segment's bg (the colour bleeding
+      // out), so the segments must carry a bg for a cap to exist \u2014 a fg-only
+      // segment has no colour to paint and correctly gets no arrow.
+      const lit = (text: string) => ({ type: "x", text, bgHex: "#445566" });
+      const out = buildLineStrip([lit("aaa"), lit("bbb"), lit("ccc")], {
         style: "powerline",
         colorCompatibility: "none",
         width: 8,
