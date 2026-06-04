@@ -36,8 +36,7 @@ import type {
   OptionSource,
   WidgetDecl,
 } from "../../config/widget";
-import { walkNodes } from "../../config/dsl-types";
-import type { DslConfig, LayoutNode } from "../../config/dsl-types";
+import type { DslConfig } from "../../config/dsl-types";
 
 // [LAW:one-source-of-truth] One contribution shape — a (key, spec) pair — shared
 // by both the widget walk and the node walk. mergeContributions folds a list of
@@ -618,58 +617,12 @@ function widgetContributions(config: DslConfig): KeySpecContribution[] {
   );
 }
 
-// [LAW:single-enforcer] THE one place mapping a node kind to the validator key
-// SPECS it declares — the node-tree analogue of widgetKeySpecs. A TOTAL switch
-// returning data: every consumer (nodeContributions below) READS it; none
-// re-switches on node kind. A new node kind is one new arm, and the compiler
-// forces it. [LAW:one-source-of-truth: the rendered click IS the gate] — the same
-// (key, value) the renderer turns into a click URL is the spec the wire enforces.
-//   • inline — each cell `onClick` is a structured (key, value) write ⇒ an
-//     allow-list spec whose lone member is that literal value;
-//   • stepper — its value key is a RANGE spec ([min,max]); ◀/▶ writes land inside
-//     bounds, the gate owns the bounds for any other write;
-//   • cells / container — pure layout, no writes, no specs.
-function nodeDeriveSpecs(node: LayoutNode): KeySpecContribution[] {
-  switch (node.kind) {
-    case "inline":
-      return node.cells.flatMap((cell): KeySpecContribution[] =>
-        cell.onClick !== undefined
-          ? [
-              {
-                key: cell.onClick.set,
-                spec: { kind: "allow-list", allowed: [cell.onClick.to] },
-              },
-            ]
-          : [],
-      );
-    case "stepper":
-      return [
-        {
-          key: node.state,
-          spec: { kind: "range", min: node.min, max: node.max },
-        },
-      ];
-    case "cells":
-    case "container":
-      return [];
-  }
-}
-
-// [LAW:one-source-of-truth] The writable-key surface a config's LAYOUT NODES
-// need, DERIVED by walking the node tree and folding nodeDeriveSpecs over every
-// node — one total projection, no consumer-side kind branch.
-function nodeContributions(config: DslConfig): KeySpecContribution[] {
-  return dropBaselineAllowLists(
-    [...walkNodes(config.root)].flatMap(nodeDeriveSpecs),
-  );
-}
-
 // [LAW:single-enforcer] THE coherence merge: group every contribution by key and
 // collapse each key's specs into the one spec that gates it (mergeKeySpecs).
-// Whether a contribution came from a widget or a node is irrelevant here — the
-// open-trigger pattern (an inline cell writing "0" to a menu's int page key)
-// resolves because mergeKeySpecs absorbs an integer allow-list member into the
-// int spec. One merge, one gate per key.
+// Multiple widgets writing the same key (a menu's int page and a trigger button's
+// allow-list "0" are different KINDS to registerStateValidator) resolve here
+// because mergeKeySpecs absorbs an integer allow-list member into the int spec.
+// One merge, one gate per key.
 function mergeContributions(
   contributions: readonly KeySpecContribution[],
 ): KeySpecContribution[] {
@@ -685,37 +638,25 @@ function mergeContributions(
   }));
 }
 
-// [LAW:one-source-of-truth] Per-surface derivations, each isolated-testable. The
-// install site uses `deriveValidators` (both surfaces, one merge); these exist so
-// each surface's contribution can be asserted on its own. deriveWidgetValidators
-// keeps its exact prior contract (widgets only) — S5 deletes it once the widget
-// surface is gone and deriveNodeValidators is the sole authority.
+// [LAW:one-source-of-truth] The widget surface's contribution, isolated-testable.
+// Interaction lives in the `widgets` block (until .12 relocates it to a static
+// `actions:` table); layout nodes (container | segment) carry no writes, so the
+// widget surface is the whole writable-key surface today.
 export function deriveWidgetValidators(
   config: DslConfig,
 ): readonly KeySpecContribution[] {
   return mergeContributions(widgetContributions(config));
 }
 
-export function deriveNodeValidators(
-  config: DslConfig,
-): readonly KeySpecContribution[] {
-  return mergeContributions(nodeContributions(config));
-}
-
 // [LAW:single-enforcer] The install-site derivation: a config's writable-key
-// surface is the merge of EVERY interaction declaration it carries — widget
-// blocks AND layout-node onClicks — through ONE coherence pass. Registering the
-// two surfaces separately would collide on a shared key (a menu's int page and a
-// trigger cell's allow-list "0" are different KINDS to registerStateValidator);
-// merging the contributions first lets mergeKeySpecs absorb the one into the
-// other, so the daemon registers one consistent gate per key.
+// surface is the merge of every interaction declaration it carries, through ONE
+// coherence pass. Today that is the widget surface alone; when the `actions:`
+// table lands (.12) its contributions merge here too, so the daemon keeps
+// registering one consistent gate per key.
 export function deriveValidators(
   config: DslConfig,
 ): readonly KeySpecContribution[] {
-  return mergeContributions([
-    ...widgetContributions(config),
-    ...nodeContributions(config),
-  ]);
+  return mergeContributions(widgetContributions(config));
 }
 
 // [LAW:dataflow-not-control-flow] Single entry point for validation: the

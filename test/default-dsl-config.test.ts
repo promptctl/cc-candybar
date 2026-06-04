@@ -24,7 +24,13 @@ const oneSegmentRoot = (segment: string) =>
   ({
     kind: "container" as const,
     direction: "vertical" as const,
-    children: [{ kind: "cells" as const, segments: [segment] }],
+    children: [
+      {
+        kind: "container" as const,
+        direction: "horizontal" as const,
+        children: [{ kind: "segment" as const, name: segment }],
+      },
+    ],
   });
 
 describe("DEFAULT_DSL_CONFIG", () => {
@@ -37,10 +43,8 @@ describe("DEFAULT_DSL_CONFIG", () => {
 
   test("every layout entry is a declared segment", () => {
     for (const node of walkNodes(DEFAULT_DSL_CONFIG.root)) {
-      if (node.kind !== "cells") continue;
-      for (const segName of node.segments) {
-        expect(DEFAULT_DSL_CONFIG.segments).toHaveProperty(segName);
-      }
+      if (node.kind !== "segment") continue;
+      expect(DEFAULT_DSL_CONFIG.segments).toHaveProperty(node.name);
     }
   });
 

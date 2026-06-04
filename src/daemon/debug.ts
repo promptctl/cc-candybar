@@ -188,12 +188,10 @@ function orderedSegmentNames(config: DslConfig): readonly string[] {
   const out: string[] = [];
   const seen = new Set<string>();
   for (const node of walkNodes(config.root)) {
-    if (node.kind !== "cells") continue;
-    for (const name of node.segments) {
-      if (config.segments[name] && !seen.has(name)) {
-        out.push(name);
-        seen.add(name);
-      }
+    if (node.kind !== "segment") continue;
+    if (config.segments[node.name] && !seen.has(node.name)) {
+      out.push(node.name);
+      seen.add(node.name);
     }
   }
   for (const name of Object.keys(config.segments)) {

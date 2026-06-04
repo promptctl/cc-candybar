@@ -540,20 +540,29 @@ export const DEFAULT_DSL_CONFIG = {
     },
   },
 
-  // Default layout — the canonical node tree: one vertical container holding a
-  // single `cells` leaf with the historical default-enabled segment list. The
-  // default authors `root` directly (rather than the `layout` sugar) so the
-  // bundled config exercises the same canonical surface every other config
-  // compiles to [LAW:one-source-of-truth]. Adding rows = appending more `cells`
-  // children; nesting = a child `container`. Every segment is already declared
+  // Default layout — the canonical node tree: a vertical container holding one
+  // horizontal container of `segment` refs (the historical default-enabled
+  // segment list). The default authors `root` directly in the canonical
+  // `container | segment` grammar (rather than the `layout`/`cells` sugar) so the
+  // bundled config exercises the same surface every other config lowers to
+  // [LAW:one-source-of-truth]. Adding rows = appending more horizontal-container
+  // children; nesting = a deeper `container`. Every segment is already declared
   // above, and the renderer walks the tree uniformly.
   root: {
     kind: "container",
     direction: "vertical",
     children: [
       {
-        kind: "cells",
-        segments: ["directory", "git", "model", "session", "today", "context"],
+        kind: "container",
+        direction: "horizontal",
+        children: [
+          { kind: "segment", name: "directory" },
+          { kind: "segment", name: "git" },
+          { kind: "segment", name: "model" },
+          { kind: "segment", name: "session" },
+          { kind: "segment", name: "today" },
+          { kind: "segment", name: "context" },
+        ],
       },
     ],
   },
