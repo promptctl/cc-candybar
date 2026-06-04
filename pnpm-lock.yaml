@@ -12,8 +12,8 @@ importers:
         specifier: ^0.3.0
         version: 0.3.0
       '@promptctl/rich-js':
-        specifier: ^0.4.0
-        version: 0.4.0
+        specifier: ^0.5.0
+        version: 0.5.0
       json5:
         specifier: ^2.2.3
         version: 2.2.3
@@ -705,8 +705,8 @@ packages:
     resolution: {integrity: sha512-u6AlJSH137gfTIOUfpfvadixSoFV07JqeU6D2nyfKVE+2E0UCUCJvQ1KeKyuRA0/+r8Q3vIXYPbmVUQgOnE6Yg==}
     engines: {node: '>=20.19.0'}
 
-  '@promptctl/rich-js@0.4.0':
-    resolution: {integrity: sha512-jHJrTg92hi4A8XPDu97oIJNUNnCVBJnCkN/iEFcFC4nU6IRAuDGwhiTitzeTtX2WLZc5iOE7ZkmwYSn8gN1lvA==}
+  '@promptctl/rich-js@0.5.0':
+    resolution: {integrity: sha512-IghNOq5y4hts+EqhWrc3c2XHLTM3Kq0a0Zbg6rf96qYeyqFonr7i5dpmsfUMuPGbSJyW/xjYHbmwWRzm9glT1g==}
     engines: {node: ^20.19.0 || >=22.12.0}
 
   '@quansync/fs@1.0.0':
@@ -3881,7 +3881,7 @@ snapshots:
     dependencies:
       '@noble/hashes': 2.2.0
 
-  '@promptctl/rich-js@0.4.0':
+  '@promptctl/rich-js@0.5.0':
     dependencies:
       '@promptctl/go-template-js': 0.1.1
       mobx: 6.15.1
