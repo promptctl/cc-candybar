@@ -39,6 +39,11 @@ import {
   widgetFuncs,
   type WidgetRuntime,
 } from "../render/widget.js";
+import {
+  compileActions,
+  actionFuncs,
+  type ActionRuntime,
+} from "../render/action.js";
 // [LAW:one-way-deps] The node-type registry sits below this driver: it owns the
 // compiled node shapes + each kind's compile/render, dispatched via nodeType().
 // render.ts threads the recursion (compileChild/renderChild) + the hue counter in
@@ -234,10 +239,19 @@ export function registerDslConfig(
     store: opts?.store ?? null,
     compiled: new Map(),
   };
-  // [LAW:one-way-deps] Inject the widget feature's func as data — the engine
-  // stays generic. The func closes over the runtime holder, whose `compiled`
-  // map is populated just below (the holder breaks the engine↔widgets cycle).
-  const engine = createCcCandybarEngine(undefined, widgetFuncs(widgetRuntime));
+  const actionRuntime: ActionRuntime = {
+    store: opts?.store ?? null,
+    compiled: new Map(),
+  };
+  // [LAW:one-way-deps] Inject the widget + action feature funcs as data — the
+  // engine stays generic. Each func closes over its runtime holder, whose
+  // `compiled` map is populated just below (the holder breaks the engine↔feature
+  // cycle). Both surfaces coexist (the action table is additive until the widget
+  // surface is deleted in epic child .13).
+  const engine = createCcCandybarEngine(undefined, {
+    ...widgetFuncs(widgetRuntime),
+    ...actionFuncs(actionRuntime),
+  });
   // [LAW:one-source-of-truth] Map each SessionState key → the variable that
   // reads it, so an option picker marks its current selection by reading the
   // SAME value the templates read — independent of whether the config named the
@@ -263,6 +277,14 @@ export function registerDslConfig(
   widgetRuntime.compiled = compileWidgets(
     engine,
     config.widgets,
+    stateKeyToVar,
+  );
+  // [LAW:one-source-of-truth] Actions resolve their set key → the reading
+  // variable through the SAME stateKeyToVar map widgets use, so a stepper action
+  // and a stepper widget read one value.
+  actionRuntime.compiled = compileActions(
+    engine,
+    config.actions,
     stateKeyToVar,
   );
 

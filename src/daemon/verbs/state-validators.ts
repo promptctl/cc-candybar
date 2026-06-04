@@ -36,6 +36,7 @@ import type {
   OptionSource,
   WidgetDecl,
 } from "../../config/widget";
+import type { ActionDecl } from "../../config/action";
 import type { DslConfig } from "../../config/dsl-types";
 
 // [LAW:one-source-of-truth] One contribution shape — a (key, spec) pair — shared
@@ -639,25 +640,74 @@ function mergeContributions(
 }
 
 // [LAW:one-source-of-truth] The widget surface's contribution, isolated-testable.
-// Interaction lives in the `widgets` block (until .12 relocates it to a static
-// `actions:` table); layout nodes (container | segment) carry no writes, so the
-// widget surface is the whole writable-key surface today.
+// One of the two interaction surfaces feeding the install-site merge; the other
+// is the action table (actionContributions).
 export function deriveWidgetValidators(
   config: DslConfig,
 ): readonly KeySpecContribution[] {
   return mergeContributions(widgetContributions(config));
 }
 
+// [LAW:single-enforcer] The ONE place mapping a decoupled ACTION to the validator
+// key SPEC it declares — the action-table analogue of widgetKeySpecs. The
+// discriminator is the action's value SOURCE (which key is present), as DATA:
+//   • a literal `set` + `to` declares an allow-list of {to};
+//   • an option `set` + `from` declares an allow-list of the resolved domain —
+//     the SAME canonical list a `{{ range themes }}` picker iterates, so the
+//     rendered options and the gate cannot diverge;
+//   • a bounded `set` + `min/max/by` declares a range [min,max] (the stepper's
+//     navigation owns the wrap; the gate owns the bounds, exactly as for a
+//     stepper widget — `by` is render-only, never in the spec);
+//   • copy/open write nothing, so they declare no spec.
+// A new action arm is one new branch here, returning data the existing merge
+// folds — no consumer re-walks an action's shape.
+function actionKeySpecs(a: ActionDecl): KeySpecContribution[] {
+  if (!("set" in a)) return [];
+  if ("to" in a) {
+    return [{ key: a.set, spec: { kind: "allow-list", allowed: [a.to] } }];
+  }
+  if ("from" in a) {
+    return [
+      {
+        key: a.set,
+        spec: { kind: "allow-list", allowed: optionValuesFor(a.from) },
+      },
+    ];
+  }
+  return [{ key: a.set, spec: { kind: "range", min: a.min, max: a.max } }];
+}
+
+// [LAW:one-source-of-truth] The writable-key surface a config's ACTIONS need,
+// DERIVED from the action table — the same declarations the `{{ action }}` fn
+// realizes a click from are the gate the wire enforces.
+function actionContributions(config: DslConfig): KeySpecContribution[] {
+  return dropBaselineAllowLists(
+    Object.values(config.actions).flatMap(actionKeySpecs),
+  );
+}
+
+// [LAW:one-source-of-truth] The action surface's contribution, isolated-testable —
+// the action-table analogue of deriveWidgetValidators.
+export function deriveActionValidators(
+  config: DslConfig,
+): readonly KeySpecContribution[] {
+  return mergeContributions(actionContributions(config));
+}
+
 // [LAW:single-enforcer] The install-site derivation: a config's writable-key
-// surface is the merge of every interaction declaration it carries, through ONE
-// coherence pass. Today the widget surface IS that whole surface, so this
-// delegates to deriveWidgetValidators — one body, no drift. When the `actions:`
-// table lands (.12), this becomes mergeContributions([...widget, ...action]) and
-// the two diverge by intent at exactly one site.
+// surface is the merge of every interaction declaration it carries — the widget
+// block AND the action table — through ONE coherence pass. The two surfaces feed
+// their RAW (pre-merge) contributions so mergeContributions resolves any
+// cross-surface key collision (e.g. an action and a widget writing one key) the
+// same way it resolves intra-surface ones. This is the sole site where the two
+// surfaces meet; everything downstream sees one merged gate per key.
 export function deriveValidators(
   config: DslConfig,
 ): readonly KeySpecContribution[] {
-  return deriveWidgetValidators(config);
+  return mergeContributions([
+    ...widgetContributions(config),
+    ...actionContributions(config),
+  ]);
 }
 
 // [LAW:dataflow-not-control-flow] Single entry point for validation: the

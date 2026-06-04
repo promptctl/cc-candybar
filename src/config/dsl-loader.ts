@@ -64,6 +64,7 @@ import {
   type TreeWidget,
   type WidgetDecl,
 } from "./widget.js";
+import { actionBindsSet, type ActionDecl } from "./action.js";
 import { DEFAULT_DSL_CONFIG } from "./default-dsl-config.js";
 import { listResolvablePaletteNames } from "../themes/policy.js";
 
@@ -364,6 +365,10 @@ export function mergeWithDefault(
     // identical cascade to variables/segments — a user declares only the
     // widgets that differ from the bundled default.
     widgets: { ...dflt.widgets, ...(raw.widgets ?? {}) },
+    // [LAW:one-source-of-truth] actions merge by name, same cascade — a user
+    // declares only the actions that differ from the bundled default (which
+    // ships none).
+    actions: { ...dflt.actions, ...(raw.actions ?? {}) },
   };
 }
 
@@ -509,6 +514,8 @@ function validateTopLevel(
   }
   if (raw.widgets !== undefined)
     out.widgets = validateWidgets(ctx, raw.widgets);
+  if (raw.actions !== undefined)
+    out.actions = validateActions(ctx, raw.actions);
   return out;
 }
 
@@ -519,6 +526,7 @@ const TOP_LEVEL_KEYS = new Set([
   "layout",
   "root",
   "widgets",
+  "actions",
 ]);
 
 // ─── Globals ─────────────────────────────────────────────────────────────────
@@ -1904,6 +1912,301 @@ function validateAction(
   }
 }
 
+// ─── Actions table ────────────────────────────────────────────────────────────
+
+// [LAW:locality-or-seam] Structural validation of the `actions` block: each
+// action is discriminated by which of set/copy/open is present, a `set` further
+// by its value SOURCE (to | from | min/max/by). Whether a `{{ action "name" }}`
+// reference resolves is a cross-ref concern (validateCrossReferences), which runs
+// on the MERGED config so a segment can reference a default-provided action.
+function validateActions(
+  ctx: ValidateCtx,
+  raw: unknown,
+): Record<string, ActionDecl> {
+  if (raw === undefined) return {};
+  if (!isPlainObject(raw)) {
+    ctx.issues.push({
+      path: "actions",
+      message: `actions must be an object, got ${describeType(raw)}`,
+      line: findKeyLine(ctx.source, ["actions"]),
+    });
+    return {};
+  }
+  // [LAW:types-are-the-program] Null-prototype record for user-keyed data, so an
+  // action named "__proto__"/"constructor" is an ordinary own property, never a
+  // prototype-chain mutation — matching the widgets block and the compiled maps.
+  const out: Record<string, ActionDecl> = Object.create(null) as Record<
+    string,
+    ActionDecl
+  >;
+  for (const [name, decl] of Object.entries(raw)) {
+    const parsed = validateActionDecl(ctx, `actions.${name}`, decl);
+    if (parsed !== null) out[name] = parsed;
+  }
+  return out;
+}
+
+// [LAW:types-are-the-program] Narrow `unknown` to one ActionDecl arm or record an
+// issue. The top-level discriminator is exactly-one-of set/copy/open; a `set`
+// adds exactly-one value SOURCE (to/from/min-max-by). The proof here is what lets
+// every downstream consumer (renderAction, deriveActionValidators) match on the
+// present key with no fallthrough.
+function validateActionDecl(
+  ctx: ValidateCtx,
+  path: string,
+  raw: unknown,
+): ActionDecl | null {
+  if (!isPlainObject(raw)) {
+    ctx.issues.push({
+      path,
+      message: `${path} must be an action object, got ${describeType(raw)}`,
+      line: findKeyLine(ctx.source, path.split(".")),
+    });
+    return null;
+  }
+  const present = (ACTION_KEYS as readonly string[]).filter((k) => k in raw);
+  if (present.length !== 1) {
+    ctx.issues.push({
+      path,
+      message: `action must declare exactly one of: ${ACTION_KEYS.join(", ")}${
+        present.length > 1 ? ` (found: ${present.join(", ")})` : ""
+      }`,
+      line: findKeyLine(ctx.source, path.split(".")),
+    });
+    return null;
+  }
+  const key = present[0] as ActionKey;
+  if (key === "copy" || key === "open") {
+    for (const k of Object.keys(raw)) {
+      if (k !== key) {
+        ctx.issues.push({
+          path: `${path}.${k}`,
+          message: `Unknown key "${k}" on a ${key} action. Expected only: ${key}`,
+          line: findKeyLine(ctx.source, [...path.split("."), k]),
+        });
+      }
+    }
+    const tmpl = requireString(ctx, path, raw, key);
+    if (tmpl === null) return null;
+    return key === "copy" ? { copy: tmpl } : { open: tmpl };
+  }
+  return validateSetAction(ctx, path, raw);
+}
+
+// [LAW:types-are-the-program] A `set` action's value SOURCE is exactly one of:
+// `to` (literal), `from` (option domain), or `min`/`max`/`by` (bounded step).
+// Discriminate by presence, require exactly one source, then narrow that arm —
+// the same single-discriminator shape the CacheDecl and ActionDecl unions use.
+function validateSetAction(
+  ctx: ValidateCtx,
+  path: string,
+  raw: Record<string, unknown>,
+): ActionDecl | null {
+  const stateKey = validateSetKey(ctx, path, raw);
+
+  // [LAW:dataflow-not-control-flow] Which value sources the object declares is a
+  // VALUE (a filtered list), not a branch — exactly one is legal.
+  const BOUNDED_KEYS = ["min", "max", "by"];
+  const sources: string[] = [];
+  if ("to" in raw) sources.push("to");
+  if ("from" in raw) sources.push("from");
+  if (BOUNDED_KEYS.some((k) => k in raw)) sources.push("min/max/by");
+  if (sources.length !== 1) {
+    ctx.issues.push({
+      path,
+      message: `a set action declares exactly one value source: "to" (a literal value), "from" (an option domain: ${OPTION_SOURCES.join(
+        "/",
+      )}), or "min"/"max"/"by" (a bounded step)${
+        sources.length > 1 ? ` — found: ${sources.join(", ")}` : ""
+      }`,
+      line: findKeyLine(ctx.source, path.split(".")),
+    });
+    return null;
+  }
+  const source = sources[0]!;
+  const allowed =
+    source === "to"
+      ? ["set", "to"]
+      : source === "from"
+        ? ["set", "from"]
+        : ["set", ...BOUNDED_KEYS];
+  for (const k of Object.keys(raw)) {
+    if (!allowed.includes(k)) {
+      ctx.issues.push({
+        path: `${path}.${k}`,
+        message: `Unknown key "${k}" on this set action. Expected one of: ${allowed.join(", ")}`,
+        line: findKeyLine(ctx.source, [...path.split("."), k]),
+      });
+    }
+  }
+
+  if (source === "to") {
+    const to = validateSetLiteralValue(ctx, path, raw);
+    return stateKey === null || to === null ? null : { set: stateKey, to };
+  }
+  if (source === "from") {
+    const from = raw.from;
+    if (
+      typeof from !== "string" ||
+      !(OPTION_SOURCES as readonly string[]).includes(from)
+    ) {
+      ctx.issues.push({
+        path: `${path}.from`,
+        message: `from must be one of: ${OPTION_SOURCES.join(", ")}, got ${describeValue(from)}`,
+        line: findKeyLine(ctx.source, [...path.split("."), "from"]),
+      });
+      return null;
+    }
+    return stateKey === null
+      ? null
+      : { set: stateKey, from: from as OptionSource };
+  }
+  const bounds = validateBoundedStep(ctx, path, raw);
+  return stateKey === null || bounds === null
+    ? null
+    : { set: stateKey, ...bounds };
+}
+
+// [LAW:single-enforcer] A set action's key is a set-state URL path segment, so it
+// must be a non-empty, slash-free string — the SAME shape a widget's `set` key
+// and a widget's `state` key require. One check, surfaced at load with a clear
+// message, not deferred to a throw when validators register.
+function validateSetKey(
+  ctx: ValidateCtx,
+  path: string,
+  raw: Record<string, unknown>,
+): string | null {
+  const stateKey = requireString(ctx, path, raw, "set");
+  if (stateKey === null) return null;
+  if (stateKey === "") {
+    ctx.issues.push({
+      path: `${path}.set`,
+      message: `set key must be non-empty (the SessionState key to write)`,
+      line: findKeyLine(ctx.source, [...path.split("."), "set"]),
+    });
+    return null;
+  }
+  if (stateKey.includes("/")) {
+    // [LAW:no-silent-fallbacks] State keys are restricted to slash-free by
+    // policy: the set-state value is a slash-delimited <session>/<key>/<value>
+    // run, and the loader + state-validator factories reject slash-bearing keys
+    // upstream so one never reaches the wire (the segment codec itself is
+    // slash-safe — this is a deliberate restriction, not a codec limitation).
+    ctx.issues.push({
+      path: `${path}.set`,
+      message: `set key "${stateKey}" contains "/" — state keys must be slash-free`,
+      line: findKeyLine(ctx.source, [...path.split("."), "set"]),
+    });
+    return null;
+  }
+  return stateKey;
+}
+
+// [LAW:no-silent-fallbacks] A literal `to` must be a non-empty, slash-free string
+// — the set-state wire rejects empty values and splits on "/", so either is
+// undeliverable. Reject at load, mirroring the widget `to` check.
+function validateSetLiteralValue(
+  ctx: ValidateCtx,
+  path: string,
+  raw: Record<string, unknown>,
+): string | null {
+  const to = requireString(ctx, path, raw, "to");
+  if (to === null) return null;
+  if (to === "") {
+    ctx.issues.push({
+      path: `${path}.to`,
+      message: `set value must be non-empty — an empty value cannot be delivered on the set-state wire`,
+      line: findKeyLine(ctx.source, [...path.split("."), "to"]),
+    });
+    return null;
+  }
+  if (to.includes("/")) {
+    // [LAW:no-silent-fallbacks] Set values are slash-free by the same upstream
+    // policy as keys (see validateSetKey) — the segment codec is slash-safe, but
+    // the loader + validators reject slash-bearing values so one never reaches
+    // the wire. State the restriction, not a false codec detail.
+    ctx.issues.push({
+      path: `${path}.to`,
+      message: `set value "${to}" contains "/" — set values must be slash-free`,
+      line: findKeyLine(ctx.source, [...path.split("."), "to"]),
+    });
+    return null;
+  }
+  return to;
+}
+
+// [LAW:types-are-the-program] A bounded step is fully described by an integer
+// domain (min < max) and a non-zero integer increment (`by`; negative for a
+// down-step). The validator derives a range [min,max] from it (the wire gate);
+// the renderer wraps current ± by inside those bounds. Validate the domain here
+// so neither re-checks. Unlike a stepper widget's `step`, `by` may be negative
+// (the down affordance), so the non-zero check replaces the positive check.
+function validateBoundedStep(
+  ctx: ValidateCtx,
+  path: string,
+  raw: Record<string, unknown>,
+): { min: number; max: number; by: number } | null {
+  const intField = (field: string): number | null => {
+    const v = raw[field];
+    if (typeof v !== "number" || !Number.isInteger(v)) {
+      ctx.issues.push({
+        path: `${path}.${field}`,
+        message: `${field} must be an integer, got ${describeValue(v)}`,
+        line: findKeyLine(ctx.source, [...path.split("."), field]),
+      });
+      return null;
+    }
+    return v;
+  };
+  const min = intField("min");
+  const max = intField("max");
+  const by = intField("by");
+  if (min === null || max === null || by === null) return null;
+  if (min >= max) {
+    ctx.issues.push({
+      path: `${path}.min`,
+      message: `min (${min}) must be less than max (${max})`,
+      line: findKeyLine(ctx.source, [...path.split("."), "min"]),
+    });
+    return null;
+  }
+  if (by === 0) {
+    ctx.issues.push({
+      path: `${path}.by`,
+      message: `by must be a non-zero integer (the per-click increment; negative steps down)`,
+      line: findKeyLine(ctx.source, [...path.split("."), "by"]),
+    });
+    return null;
+  }
+  return { min, max, by };
+}
+
+// [LAW:dataflow-not-control-flow] Extract every `action "name"` call from a
+// template, for the load-time existence check. Same best-effort code-span /
+// string-literal walk as extractWidgetRefs: the `action` keyword lives in a CODE
+// span and its NAME is the very next string literal (the display/boundValue
+// literals that follow are preceded by a non-`action` span, so they are never
+// misread as the name).
+const ACTION_ARG_RE = /\baction\s+$/;
+export function extractActionRefs(template: string): Set<string> {
+  const refs = new Set<string>();
+  TEMPLATE_BLOCK_RE.lastIndex = 0;
+  let m: RegExpExecArray | null;
+  while ((m = TEMPLATE_BLOCK_RE.exec(template)) !== null) {
+    const block = m[1]!;
+    let cursor = 0;
+    let s: RegExpExecArray | null;
+    STRING_LITERAL_RE.lastIndex = 0;
+    while ((s = STRING_LITERAL_RE.exec(block)) !== null) {
+      if (ACTION_ARG_RE.test(block.slice(cursor, s.index))) {
+        refs.add(s[0].slice(1, -1));
+      }
+      cursor = s.index + s[0].length;
+    }
+  }
+  return refs;
+}
+
 // [LAW:dataflow-not-control-flow] Extract every `widget "name"` call from a
 // template, for the load-time existence check. Walk each `{{ }}` block as
 // alternating code / string-literal spans (the engine's job is the real parse;
@@ -2028,6 +2331,19 @@ function validateCrossReferences(ctx: ValidateCtx, cfg: DslConfig): void {
           });
         }
       }
+      // [LAW:locality-or-seam] `{{ action "name" … }}` refs resolve against the
+      // action table exactly as widget refs resolve against the widget block —
+      // same existence-check shape, on the merged config so a segment can
+      // reference a default-provided action.
+      for (const aref of extractActionRefs(tpl)) {
+        if (!Object.prototype.hasOwnProperty.call(cfg.actions, aref)) {
+          ctx.issues.push({
+            path: `segments.${segName}.${field}`,
+            message: `${field} references unknown action "${aref}"`,
+            line: findKeyLine(ctx.source, ["segments", segName, field]),
+          });
+        }
+      }
     }
   }
 
@@ -2072,13 +2388,20 @@ function validateCrossReferences(ctx: ValidateCtx, cfg: DslConfig): void {
   // so a menu needs session.id exactly like a set-action does. OR it in so a
   // menu with only copy/open items (no state vars, no set actions) can't load
   // while rendering broken navigation links with an empty session id.
+  // [LAW:dataflow-not-control-flow] A `set` action composes a set-state click URL
+  // whose first segment is session.id — exactly like a widget set-action. OR it
+  // into the same requirement so an actions-only config (no state vars, no
+  // widgets) still demands the anchor it needs.
   if (
-    (hasStateKind(cfg) || hasWidgetSetAction(cfg) || hasMenuWidget(cfg)) &&
+    (hasStateKind(cfg) ||
+      hasWidgetSetAction(cfg) ||
+      hasMenuWidget(cfg) ||
+      hasActionSetAction(cfg)) &&
     !Object.prototype.hasOwnProperty.call(cfg.variables, "session.id")
   ) {
     ctx.issues.push({
       path: "variables.session.id",
-      message: `state reads, widget set-actions, and menu navigation all require a global "session.id" variable (segment-local declarations do not satisfy this — declareState/set-state both read the global box; conventionally { kind: "input", path: "session_id" })`,
+      message: `state reads, widget set-actions, menu navigation, and action set-writes all require a global "session.id" variable (segment-local declarations do not satisfy this — declareState/set-state both read the global box; conventionally { kind: "input", path: "session_id" })`,
       line: findKeyLine(ctx.source, ["variables"]),
     });
   }
@@ -2185,6 +2508,13 @@ function hasWidgetSetAction(cfg: DslConfig): boolean {
     const use = widgetStateUse(w);
     return use.readsKey !== null || use.hasSetItem;
   });
+}
+
+// [LAW:dataflow-not-control-flow] A config emits a set-state click — and so needs
+// session.id — when any declared action is a `set` (literal, option, or bounded).
+// copy/open actions write nothing, so they embed no session.id.
+function hasActionSetAction(cfg: DslConfig): boolean {
+  return Object.values(cfg.actions).some(actionBindsSet);
 }
 
 function checkVarRefs(
