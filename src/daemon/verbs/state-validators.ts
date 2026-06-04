@@ -28,10 +28,10 @@ import { listResolvablePaletteNames, STYLE_ORDER } from "../../themes/policy";
 import type { ActionDecl, OptionSource } from "../../config/action";
 import type { DslConfig } from "../../config/dsl-types";
 
-// [LAW:one-source-of-truth] One contribution shape — a (key, spec) pair — shared
-// by both the widget walk and the node walk. mergeContributions folds a list of
-// these into the final per-key validator specs, so widgets and nodes feed ONE
-// coherence merge regardless of which surface authored the write.
+// [LAW:one-source-of-truth] One contribution shape — a (key, spec) pair — every
+// action's `set` declaration projects to. mergeContributions folds a list of
+// these into the final per-key validator specs, so multiple actions writing one
+// key feed ONE coherence merge regardless of which action authored the write.
 interface KeySpecContribution {
   readonly key: string;
   readonly spec: DerivedValidatorSpec;
