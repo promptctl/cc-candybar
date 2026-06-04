@@ -650,13 +650,14 @@ export function deriveWidgetValidators(
 
 // [LAW:single-enforcer] The install-site derivation: a config's writable-key
 // surface is the merge of every interaction declaration it carries, through ONE
-// coherence pass. Today that is the widget surface alone; when the `actions:`
-// table lands (.12) its contributions merge here too, so the daemon keeps
-// registering one consistent gate per key.
+// coherence pass. Today the widget surface IS that whole surface, so this
+// delegates to deriveWidgetValidators — one body, no drift. When the `actions:`
+// table lands (.12), this becomes mergeContributions([...widget, ...action]) and
+// the two diverge by intent at exactly one site.
 export function deriveValidators(
   config: DslConfig,
 ): readonly KeySpecContribution[] {
-  return mergeContributions(widgetContributions(config));
+  return deriveWidgetValidators(config);
 }
 
 // [LAW:dataflow-not-control-flow] Single entry point for validation: the
