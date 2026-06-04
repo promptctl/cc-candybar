@@ -214,8 +214,9 @@ function readClampedInt(
 //   • set-literal: writes its fixed value; active when the key already holds it.
 //   • set-option:  writes boundValue ?? display (the bound option); active when
 //                  the key already holds it (the picker's current-mark).
-//   • set-bounded: writes wrap(current ± by) clamped to [min,max] — the stepper
-//                  affordance; never "active" (an affordance is not a selection).
+//   • set-bounded: writes current ± by, WRAPPED past a bound to the other end
+//                  (not clamped — clamping is the range validator's job; the
+//                  stepper affordance navigates by wrapping); never "active".
 //   • copy/open:   one copy/open effect of the evaluated template; never active.
 // [LAW:dataflow-not-control-flow] The template scope is an input only the copy/
 // open arms consume, so it is built WHERE consumed (buildScope snapshots
