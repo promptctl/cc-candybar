@@ -2087,9 +2087,14 @@ function validateSetKey(
     return null;
   }
   if (stateKey.includes("/")) {
+    // [LAW:no-silent-fallbacks] State keys are restricted to slash-free by
+    // policy: the set-state value is a slash-delimited <session>/<key>/<value>
+    // run, and the loader + state-validator factories reject slash-bearing keys
+    // upstream so one never reaches the wire (the segment codec itself is
+    // slash-safe — this is a deliberate restriction, not a codec limitation).
     ctx.issues.push({
       path: `${path}.set`,
-      message: `set key "${stateKey}" contains "/" — the set-state wire splits on "/", so it cannot be addressed`,
+      message: `set key "${stateKey}" contains "/" — state keys must be slash-free`,
       line: findKeyLine(ctx.source, [...path.split("."), "set"]),
     });
     return null;
@@ -2116,9 +2121,13 @@ function validateSetLiteralValue(
     return null;
   }
   if (to.includes("/")) {
+    // [LAW:no-silent-fallbacks] Set values are slash-free by the same upstream
+    // policy as keys (see validateSetKey) — the segment codec is slash-safe, but
+    // the loader + validators reject slash-bearing values so one never reaches
+    // the wire. State the restriction, not a false codec detail.
     ctx.issues.push({
       path: `${path}.to`,
-      message: `set value "${to}" contains "/" — the set-state wire splits values on "/", so it cannot be delivered`,
+      message: `set value "${to}" contains "/" — set values must be slash-free`,
       line: findKeyLine(ctx.source, [...path.split("."), "to"]),
     });
     return null;
