@@ -24,7 +24,7 @@ import { listResolvablePaletteNames } from "../src/themes/policy";
 const ALLOWED = new Set(listResolvablePaletteNames());
 
 // U+E0B0 — the powerline right-arrow the PowerlineJoiner paints between items.
-const CHEVRON = "";
+const CHEVRON = "\uE0B0";
 
 // Strip (not FlexStrip): an unbounded line, so the glyph count is exactly the
 // joiner walk's output — no width-driven wrap to perturb it.
@@ -36,11 +36,10 @@ const OPTS = {
 
 function linkUrls(rendered: string): string[] {
   // matchAll owns its own iterator — no shared, stateful `lastIndex` across
-  // calls. The close sequence carries an empty URL; keep only the opens.
+  // calls. The `+` capture requires a non-empty URL, so OSC-8 closes (empty
+  // URL) never match: every capture is a link OPEN.
   // eslint-disable-next-line no-control-regex
-  return [...rendered.matchAll(/\x1b\]8;;([^\x1b]+)\x1b\\/g)]
-    .map((m) => m[1]!)
-    .filter((url) => url.length > 0);
+  return [...rendered.matchAll(/\x1b\]8;;([^\x1b]+)\x1b\\/g)].map((m) => m[1]!);
 }
 
 function chevronCount(rendered: string): number {
