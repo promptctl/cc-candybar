@@ -34,15 +34,13 @@ const OPTS = {
   width: Number.POSITIVE_INFINITY,
 };
 
-// eslint-disable-next-line no-control-regex
-const LINK = /\x1b\]8;;([^\x1b]+)\x1b\\/g;
 function linkUrls(rendered: string): string[] {
-  const urls: string[] = [];
-  let m: RegExpExecArray | null;
-  while ((m = LINK.exec(rendered)) !== null) {
-    if (m[1]!.length > 0) urls.push(m[1]!);
-  }
-  return urls;
+  // matchAll owns its own iterator — no shared, stateful `lastIndex` across
+  // calls. The close sequence carries an empty URL; keep only the opens.
+  // eslint-disable-next-line no-control-regex
+  return [...rendered.matchAll(/\x1b\]8;;([^\x1b]+)\x1b\\/g)]
+    .map((m) => m[1]!)
+    .filter((url) => url.length > 0);
 }
 
 function chevronCount(rendered: string): number {
