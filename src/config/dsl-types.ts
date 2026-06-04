@@ -10,10 +10,12 @@
 // src/var-system/sources.ts). The loader is the single point that translates
 // between the two; no other module should re-derive these shapes.
 
-// [LAW:one-way-deps] The widget schema lives in its own leaf module; DslConfig
-// references it here. The dependency is one-way (this file → widget.ts), never
-// the reverse, so the widget shapes can be lifted out without a cycle.
+// [LAW:one-way-deps] The widget + action schemas live in their own leaf modules;
+// DslConfig references them here. The dependency is one-way (this file →
+// widget.ts/action.ts), never the reverse, so those shapes can be lifted out
+// without a cycle.
 import type { WidgetDecl } from "./widget.js";
+import type { ActionDecl } from "./action.js";
 
 // [LAW:types-are-the-program] Three stages, three names.
 //
@@ -135,6 +137,7 @@ export interface RawDslConfig {
   readonly layout?: readonly LayoutRow[];
   readonly root?: LayoutNode;
   readonly widgets?: Readonly<Record<string, WidgetDecl>>;
+  readonly actions?: Readonly<Record<string, ActionDecl>>;
 }
 
 export interface DslConfig {
@@ -150,6 +153,13 @@ export interface DslConfig {
   // from segment templates via `{{ widget "name" }}`. Empty when no config
   // declares interactive components — an absent `widgets` key merges to `{}`.
   readonly widgets: Readonly<Record<string, WidgetDecl>>;
+  // [LAW:locality-or-seam] The named seam between click BEHAVIOR and the
+  // clickable REPRESENTATION. Each entry is a statically-declared effect a
+  // segment template binds a region to via `{{ action "name" … }}`. The
+  // writable-key gate derives from this table (deriveActionValidators), so a
+  // template cannot smuggle an un-gated write. Empty when no config declares
+  // actions — an absent `actions` key merges to `{}`.
+  readonly actions: Readonly<Record<string, ActionDecl>>;
 }
 
 // [LAW:single-enforcer] The brand symbol is `unique` and module-private —
