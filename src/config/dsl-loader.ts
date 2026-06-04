@@ -367,11 +367,6 @@ export function mergeWithDefault(
   };
 }
 
-// [LAW:one-source-of-truth] THE compiler from the flat-vertical `layout` sugar
-// to the canonical node tree: a list of rows becomes one vertical container of
-// `cells` leaves, in order, each carrying the row's segments and (if present)
-// its `when`. This is the only place the sugar shape is interpreted; everything
-// downstream sees the tree.
 // [LAW:one-source-of-truth] `layout` rows are flat-vertical SUGAR: each row
 // lowers to a horizontal container of segment refs (the row's `when` gates that
 // whole row-container), and the row list lowers to one vertical container of
