@@ -23,9 +23,12 @@ const vert = (...rows: (Row | readonly string[])[]): LayoutNode => ({
   direction: "vertical",
   children: rows.map((row): LayoutNode => {
     const r: Row = Array.isArray(row) ? { segments: row } : (row as Row);
+    const children = r.segments.map(
+      (name): LayoutNode => ({ kind: "segment", name }),
+    );
     return r.when !== undefined
-      ? { kind: "cells", segments: r.segments, when: r.when }
-      : { kind: "cells", segments: r.segments };
+      ? { kind: "container", direction: "horizontal", children, when: r.when }
+      : { kind: "container", direction: "horizontal", children };
   }),
 });
 

@@ -10,11 +10,18 @@ import {
 import type { RenderPayloadDeps } from "../src/daemon/render-payload";
 import type { DslConfig, LayoutNode } from "../src/config/dsl-types";
 
-// One vertical container, one cells leaf — the canonical root for a single row.
+// One vertical container holding one horizontal container of segment refs — the
+// canonical root for a single row.
 const rootOf = (...segments: string[]): LayoutNode => ({
   kind: "container",
   direction: "vertical",
-  children: [{ kind: "cells", segments }],
+  children: [
+    {
+      kind: "container",
+      direction: "horizontal",
+      children: segments.map((name) => ({ kind: "segment" as const, name })),
+    },
+  ],
 });
 
 interface CallCounts {
@@ -230,7 +237,7 @@ describe("buildRenderPayload — layout-driven provider gating", () => {
         kind: "container",
         direction: "vertical",
         when: '{{ gt (int .metrics.sessionDuration) 0 }}',
-        children: [{ kind: "cells", segments: ["directory"] }],
+        children: [{ kind: "segment", name: "directory" }],
       },
       widgets: {},
     };

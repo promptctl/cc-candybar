@@ -21,7 +21,11 @@ import type {
 const vert = (...rows: string[][]): LayoutNode => ({
   kind: "container",
   direction: "vertical",
-  children: rows.map((segments) => ({ kind: "cells", segments })),
+  children: rows.map((segments) => ({
+    kind: "container" as const,
+    direction: "horizontal" as const,
+    children: segments.map((name) => ({ kind: "segment" as const, name })),
+  })),
 });
 
 // Self-contained default for these tests. Avoids coupling to

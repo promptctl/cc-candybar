@@ -1,15 +1,15 @@
 // [LAW:single-enforcer] THE node-type registry: the one place each layout node
 // kind's render-time behavior (compile + render) is defined, dispatched through a
-// single typed lookup. Generalizes the former hand-coded kind:container|cells|
-// inline if-chains in render.ts into a registry keyed by `LayoutNode["kind"]`.
+// single typed lookup. The walk is ONE uniform dispatch:
+// nodeType(node.kind).render(node, ctx).
 //
-// [LAW:one-type-per-behavior] container, cells, inline, and a composite like
-// stepper all have the SAME behavior — render a subtree of lines-of-cells from
-// (node, ctx). So they are ONE contract with a registry, not a base-substrate
-// layer plus a separate component layer. The walk is ONE uniform dispatch:
-// nodeType(node.kind).render(node, ctx). A composite's render returns MORE nodes
-// by handing them to ctx.renderChild (the walk continues into them), exactly as a
-// React function-component returns host elements — it never serializes itself.
+// [LAW:one-type-per-behavior] The layout is exactly two kinds — `container`
+// (arranges children) and `segment` (THE unit of rendering: one ref into the
+// named segments map, rendered to ONE strip item). Interaction, state-driven
+// display, and multi-region clickability all live in a segment's TEMPLATE, not
+// in extra node kinds — so there is no inline/stepper/picker node arm to add.
+// A horizontal run of segments is `container(horizontal, [segment…])`; the
+// `cells` form and `LayoutRow` are loader sugar that lower to exactly that.
 //
 // [LAW:one-way-deps] This module sits BELOW render.ts (the driver): it imports
 // the leaf render/template helpers directly and receives the two recursive
@@ -17,26 +17,19 @@
 // driver. It must NOT import render.ts — that would invert the layering. render.ts
 // imports the compiled types + nodeType() from here, one-way.
 //
-// [LAW:single-enforcer] HUE PIN: hue is accounted ONLY at base leaves — `cells`
-// advances one unit per segment, `inline` one unit. A COMPOSITE is hue-NEUTRAL:
-// it advances zero units itself and delegates to ctx.renderChild, so it consumes
-// exactly the units its expansion's base leaves consume. A stepper expands to ONE
-// inline leaf ⇒ ONE hue unit ⇒ visually identical to the old widget that inherited
-// its one enclosing segment's hue. The counter lives in the driver; ctx exposes
-// only nextHueShift() so there is one mutator.
+// Hue is per-segment DECORATIVE only: each `segment` advances the cursor by one
+// unit (a container advances none), so colors stay positionally stable. It
+// carries NO structural meaning — unit cohesion is structural (one segment = one
+// strip item), not a function of matching backgrounds.
 
-import { RichText, Style } from "@promptctl/rich-js";
+import type { RichText } from "@promptctl/rich-js";
 import type { PaletteResolver } from "@promptctl/rich-js";
 import type { Template } from "@promptctl/go-template-js";
 import type {
   LayoutNode,
-  InlineCell,
   Direction,
   SegmentDecl,
 } from "../config/dsl-types.js";
-import { toString as varToString } from "../var-system/types.js";
-import type { VariableStore } from "../var-system/store.js";
-import { effectsUrl, VERB_SET_STATE } from "../click/wire.js";
 import { splitCellsIntoLines } from "../render/split-lines.js";
 import { transposedResolver } from "../themes/index.js";
 import {
@@ -49,21 +42,13 @@ import {
 // ─── Compiled node shapes ──────────────────────────────────────────────────────
 
 // [LAW:dataflow-not-control-flow] The compiled mirror of a LayoutNode: the same
-// recursive shape with every template (`when`, and inline/stepper bg/fg) parsed
-// ONCE at registration. renderDsl walks this compiled tree — never the raw config
-// — so the parse-once guarantee covers every node.
-export interface CompiledCellsNode {
-  readonly kind: "cells";
+// recursive shape with every `when` parsed ONCE at registration. renderDsl walks
+// this compiled tree — never the raw config — so the parse-once guarantee covers
+// every node.
+export interface CompiledSegmentNode {
+  readonly kind: "segment";
   readonly when?: Template<RichText>;
-  readonly segments: readonly string[];
-}
-export interface CompiledInlineNode {
-  readonly kind: "inline";
-  readonly when?: Template<RichText>;
-  readonly cells: readonly InlineCell[];
-  readonly bg?: Template<RichText>;
-  readonly fg?: Template<RichText>;
-  readonly paletteResolver?: PaletteResolver;
+  readonly name: string;
 }
 export interface CompiledContainerNode {
   readonly kind: "container";
@@ -71,34 +56,10 @@ export interface CompiledContainerNode {
   readonly when?: Template<RichText>;
   readonly children: readonly CompiledNode[];
 }
-// [LAW:types-are-the-program] A compiled stepper carries its render-derived
-// affordances' coordinates: the integer key it WRITES (stateKey), the variable
-// that READS it back (stateVar, resolved from the key at compile so the displayed
-// value and the written value are one source), the bounds + step, and the color
-// it hands to the one inline leaf it expands to. It has NO compiled cells — they
-// are derived from the live value at render.
-export interface CompiledStepperNode {
-  readonly kind: "stepper";
-  readonly when?: Template<RichText>;
-  readonly stateKey: string;
-  readonly stateVar: string;
-  readonly min: number;
-  readonly max: number;
-  readonly step: number;
-  // Unit symbol appended to the displayed value ("" = none); presentation only.
-  readonly unit: string;
-  readonly bg?: Template<RichText>;
-  readonly fg?: Template<RichText>;
-  readonly paletteResolver?: PaletteResolver;
-}
-export type CompiledNode =
-  | CompiledCellsNode
-  | CompiledInlineNode
-  | CompiledContainerNode
-  | CompiledStepperNode;
+export type CompiledNode = CompiledSegmentNode | CompiledContainerNode;
 
 // Pre-parsed templates and pre-resolved palette for one segment, built once at
-// registration. A `cells` leaf names segments; render looks each up via
+// registration. A `segment` node names one; render looks it up via
 // ctx.lookupSegment.
 export interface CompiledSegment {
   readonly when?: Template<RichText>;
@@ -121,20 +82,12 @@ export type RenderedLines = ReadonlyArray<readonly RichText[]>;
 
 // [LAW:locality-or-seam] The compile-time context the driver hands each node
 // type. `when` is PRE-COMPILED by the driver (walk-owned, uniform across kinds);
-// the type only assembles it in. parseField/resolver/stateVarFor/compileChild are
-// the leaf capabilities a kind needs without importing the driver.
+// the type only assembles it in. compileChild is the recursion, injected so this
+// module needn't import the driver.
 export interface NodeCompileCtx {
   readonly path: string;
   // The node's own `when`, already parsed by the driver (one parse-when site).
   readonly when?: Template<RichText>;
-  // Parse a type-specific template field (inline/stepper bg/fg) with this node's
-  // path baked into the error context.
-  parseField(src: string, field: string): Template<RichText>;
-  // Resolve a palette NAME to its memoized resolver (resolverForThemeName).
-  resolver(name: string): PaletteResolver;
-  // Resolve a SessionState KEY to the variable that reads it (falls back to the
-  // key itself when a variable is named after the key).
-  stateVarFor(stateKey: string): string;
   // Compile a child node (the recursion, injected so this module needn't import
   // the driver).
   compileChild(node: LayoutNode, path: string): CompiledNode;
@@ -146,15 +99,13 @@ export interface NodeCompileCtx {
 // (the driver ANDs node.when with the parent's). renderChild continues the walk.
 export interface NodeRenderCtx {
   readonly scope: object;
-  readonly store: VariableStore;
-  readonly sessionId: string;
   readonly basePalette: PaletteResolver;
   readonly visible: boolean;
   // Advance the walk-owned hue cursor by one unit and return that unit's shift.
   nextHueShift(): number;
   readonly perSegmentSink?: Map<string, readonly RichText[]>;
-  // Resolve a cells-leaf segment name to its decl + compiled form (the driver
-  // closes over config.segments + the compiled segments).
+  // Resolve a segment name to its decl + compiled form (the driver closes over
+  // config.segments + the compiled segments).
   lookupSegment(
     name: string,
   ):
@@ -189,24 +140,6 @@ function composeBlocks(
     }
   }
 }
-
-// [LAW:single-enforcer] One inline-cell click → URL mapping: a structured
-// (key, value) write becomes exactly one `set-state` effect on the one click
-// wire. effectsUrl owns the encoding; this names the single-effect shape an
-// inline cell emits. A stepper's ◀/▶ ride this SAME path (their cells are inline
-// cells), so there is no second click-URL builder.
-function setStateUrl(sessionId: string, key: string, value: string): string {
-  return effectsUrl([{ verb: VERB_SET_STATE, args: [sessionId, key, value] }]);
-}
-
-// Stepper affordance glyphs (render-derived, not authored).
-const STEP_DEC = "◀";
-const STEP_INC = "▶";
-// [LAW:one-source-of-truth] The canonical integer shape both the render read
-// boundary and the range validator accept (`^-?\d+$`). A float/typo/empty value
-// is NOT loosely parsed — it starts at the floor — so the displayed current is
-// always an in-range integer the wire validator would also accept.
-const INT_SHAPE = /^-?\d+$/;
 
 // ─── The node-type contract + registry ──────────────────────────────────────────
 
@@ -250,202 +183,64 @@ const containerType: NodeType<"container"> = {
   },
 };
 
-const cellsType: NodeType<"cells"> = {
+const segmentType: NodeType<"segment"> = {
   compile(node, cctx) {
-    return { kind: "cells", when: cctx.when, segments: node.segments };
+    return { kind: "segment", when: cctx.when, name: node.name };
   },
   render(node, ctx) {
-    // [LAW:dataflow-not-control-flow] The leaf accumulates VISUAL lines, not a
-    // flat cell run. A segment's first line continues the current row line; each
-    // subsequent line (from an authored "\n") opens a new one. Starts as one empty
-    // line so an all-hidden visible leaf still yields exactly one (empty) line.
-    const rowLines: RichText[][] = [[]];
-    for (const segName of node.segments) {
-      const found = ctx.lookupSegment(segName);
-      // [LAW:no-defensive-null-guards] The loader validates every cells entry
-      // against segments and registerDslConfig compiles every declared segment; a
-      // miss is a caller bug (renderDsl given a mismatched compiled object).
-      if (!found) {
-        throw new Error(`Layout entry "${segName}" has no matching segment`);
-      }
-      const { seg, compiled: segCompiled } = found;
-
-      const hueShift = ctx.nextHueShift();
-      if (!ctx.visible) continue;
-      if (!evaluateWhen(segCompiled.when, ctx.scope)) continue;
-
-      // [LAW:dataflow-not-control-flow] The per-segment variability is WHICH
-      // palette — the base resolver (per-segment override or basePalette)
-      // transposed by hueShift. bg and fg then resolve from this one palette.
-      const resolver = transposedResolver(
-        segCompiled.paletteResolver ?? ctx.basePalette,
-        hueShift,
-      );
-      const baseStyle = resolveSegmentColors(
-        resolver,
-        segCompiled.bg,
-        segCompiled.fg,
-        ctx.scope,
-      );
-
-      const fragments = segCompiled.template.evaluate(ctx.scope);
-      const segCells = fragmentsToCells(fragments, baseStyle);
-
-      // [LAW:single-enforcer] Partition the segment's authored "\n" into visual
-      // lines BEFORE per-segment layout — width/justify/truncate then measure each
-      // line cleanly. A newline-free segment is the degenerate one-line case.
-      const laidLines = splitCellsIntoLines(segCells).map((line) =>
-        applySegmentLayout(line, {
-          width: seg.width ?? "auto",
-          justify: seg.justify ?? "left",
-          truncate: seg.truncate ?? "right",
-          baseStyle,
-        }),
-      );
-
-      laidLines.forEach((laid, i) => {
-        if (i > 0) rowLines.push([]);
-        rowLines[rowLines.length - 1]!.push(...laid);
-      });
-
-      if (ctx.perSegmentSink !== undefined) {
-        ctx.perSegmentSink.set(segName, laidLines.flat());
-      }
+    const found = ctx.lookupSegment(node.name);
+    // [LAW:no-defensive-null-guards] The loader validates every segment ref
+    // against the segments map and registerDslConfig compiles every declared
+    // segment; a miss is a caller bug (renderDsl given a mismatched compiled
+    // object).
+    if (!found) {
+      throw new Error(`Layout segment "${node.name}" has no matching segment`);
     }
+    const { seg, compiled: segCompiled } = found;
 
-    if (!ctx.visible) return [];
-    return rowLines;
-  },
-};
-
-const inlineType: NodeType<"inline"> = {
-  compile(node, cctx) {
-    return {
-      kind: "inline",
-      when: cctx.when,
-      cells: node.cells,
-      // [LAW:one-source-of-truth] bg/fg parse through the SAME engine and resolve
-      // via the SAME resolveSegmentColors as a segment's, so an inline leaf's color
-      // follows one color path — never a second that could drift.
-      bg: node.bg !== undefined ? cctx.parseField(node.bg, "bg") : undefined,
-      fg: node.fg !== undefined ? cctx.parseField(node.fg, "fg") : undefined,
-      paletteResolver:
-        node.palette !== undefined ? cctx.resolver(node.palette) : undefined,
-    };
-  },
-  render(node, ctx) {
-    // [LAW:single-enforcer] An inline leaf is ONE hue unit (like a segment): it
-    // consumes exactly one shift so its color is positionally stable and siblings
-    // after it keep their colors regardless of its visibility.
+    // [LAW:single-enforcer] Advance the hue cursor BEFORE the visibility gate so a
+    // hidden segment still consumes its unit — siblings after it keep their
+    // positionally-stable colors regardless of which segments are hidden.
     const hueShift = ctx.nextHueShift();
     if (!ctx.visible) return [];
+    if (!evaluateWhen(segCompiled.when, ctx.scope)) return [];
 
+    // [LAW:dataflow-not-control-flow] The per-segment variability is WHICH
+    // palette — the base resolver (per-segment override or basePalette)
+    // transposed by hueShift. bg and fg then resolve from this one palette.
     const resolver = transposedResolver(
-      node.paletteResolver ?? ctx.basePalette,
+      segCompiled.paletteResolver ?? ctx.basePalette,
       hueShift,
     );
     const baseStyle = resolveSegmentColors(
       resolver,
-      node.bg,
-      node.fg,
+      segCompiled.bg,
+      segCompiled.fg,
       ctx.scope,
     );
 
-    // [LAW:dataflow-not-control-flow] Each cell becomes one fragment; a cell's
-    // `onClick` (a value, not a branch) decides whether that fragment carries an
-    // OSC-8 set-state link. fragmentsToCells then splits at link boundaries so each
-    // clickable cell is independently addressable. Inter-cell single spaces match
-    // the inline spacing the bar already renders.
-    const fragments = node.cells.flatMap((cell, i) => {
-      const frag =
-        cell.onClick !== undefined
-          ? new RichText(cell.text, {
-              style: new Style({
-                link: setStateUrl(
-                  ctx.sessionId,
-                  cell.onClick.set,
-                  cell.onClick.to,
-                ),
-              }),
-            })
-          : new RichText(cell.text);
-      return i > 0 ? [new RichText(" "), frag] : [frag];
-    });
-    // [LAW:single-enforcer] An inline leaf is ONE unit ⇒ ONE strip item. It runs
-    // through the SAME applySegmentLayout that collapses a segment line, at "auto"
-    // width (collapse, no resize): the joiner caps only at the leaf's edges, never
-    // between its clickable regions (each onClick survives as its own OSC-8 span),
-    // and a leaf that rendered nothing yields zero cells — no empty item to draw a
-    // spurious cap. One enforcer of "a unit's line is 0-or-1 strip item".
-    return [
-      applySegmentLayout(fragmentsToCells(fragments, baseStyle), {
-        width: "auto",
-        justify: "left",
-        truncate: "right",
+    const fragments = segCompiled.template.evaluate(ctx.scope);
+    const segCells = fragmentsToCells(fragments, baseStyle);
+
+    // [LAW:single-enforcer] Partition the segment's authored "\n" into visual
+    // lines BEFORE per-segment layout — width/justify/truncate then measure each
+    // line cleanly. A newline-free segment is the degenerate one-line case. Each
+    // laid line is ONE strip item: applySegmentLayout collapses a line's cells to
+    // 0-or-1 item (OSC-8 links survive as interior spans), so the joiner caps only
+    // at the segment's edges, never inside it.
+    const laidLines = splitCellsIntoLines(segCells).map((line) =>
+      applySegmentLayout(line, {
+        width: seg.width ?? "auto",
+        justify: seg.justify ?? "left",
+        truncate: seg.truncate ?? "right",
         baseStyle,
       }),
-    ];
-  },
-};
+    );
 
-const stepperType: NodeType<"stepper"> = {
-  compile(node, cctx) {
-    return {
-      kind: "stepper",
-      when: cctx.when,
-      stateKey: node.state,
-      stateVar: cctx.stateVarFor(node.state),
-      min: node.min,
-      max: node.max,
-      step: node.step,
-      unit: node.unit ?? "",
-      bg: node.bg !== undefined ? cctx.parseField(node.bg, "bg") : undefined,
-      fg: node.fg !== undefined ? cctx.parseField(node.fg, "fg") : undefined,
-      paletteResolver:
-        node.palette !== undefined ? cctx.resolver(node.palette) : undefined,
-    };
-  },
-  render(node, ctx) {
-    // [LAW:single-enforcer] The range validator clamps every WRITTEN value into
-    // bounds, but a state var's `default` is config (not a write) so it bypasses
-    // the gate. Mirror the validator's canonical-integer shape at this read
-    // boundary: only an integer-shaped string is clamped into [min,max]; anything
-    // else (empty/float/typo) starts at the floor — so the displayed current is
-    // always an in-range integer the wire validator would also accept.
-    const rawStr = ctx.store.has(node.stateVar)
-      ? varToString(ctx.store.read(node.stateVar))
-      : "";
-    const current = INT_SHAPE.test(rawStr)
-      ? Math.max(node.min, Math.min(node.max, parseInt(rawStr, 10)))
-      : node.min;
-    // [LAW:dataflow-not-control-flow] The stepper owns NAVIGATION — stepping past a
-    // bound WRAPS to the other end (one behavior, no clamp-vs-wrap mode). The
-    // wrapped writes always land inside bounds, so the range gate passes them.
-    const wrapped = (v: number): number =>
-      v > node.max ? node.min : v < node.min ? node.max : v;
-    const dec = wrapped(current - node.step);
-    const inc = wrapped(current + node.step);
-
-    // [LAW:single-enforcer] HUE PIN realized: expand to ONE inline leaf and hand
-    // off to the walk. That leaf consumes the single hue unit and owns the one
-    // color path + one click-URL path — the stepper builds neither itself. The
-    // current display is a plain (non-link) cell; only ◀/▶ are clickable.
-    const inlineNode: CompiledInlineNode = {
-      kind: "inline",
-      when: undefined,
-      cells: [
-        { text: STEP_DEC, onClick: { set: node.stateKey, to: String(dec) } },
-        // [LAW:single-enforcer] The unit rides the plain current cell only — the
-        // ◀/▶ links still carry bare integers, so the wire value and the display
-        // string stay separate (the range gate never sees "14°").
-        { text: `${current}${node.unit}` },
-        { text: STEP_INC, onClick: { set: node.stateKey, to: String(inc) } },
-      ],
-      bg: node.bg,
-      fg: node.fg,
-      paletteResolver: node.paletteResolver,
-    };
-    return ctx.renderChild(inlineNode, ctx.visible);
+    if (ctx.perSegmentSink !== undefined) {
+      ctx.perSegmentSink.set(node.name, laidLines.flat());
+    }
+    return laidLines;
   },
 };
 
@@ -454,9 +249,7 @@ const stepperType: NodeType<"stepper"> = {
 // behavior is registered, so "register a type" is one mechanically-enforced act.
 const REGISTRY = {
   container: containerType,
-  cells: cellsType,
-  inline: inlineType,
-  stepper: stepperType,
+  segment: segmentType,
 } satisfies { [K in NodeKind]: NodeType<K> };
 
 // [LAW:types-are-the-program] The one dispatch primitive. Indexing by a node's OWN

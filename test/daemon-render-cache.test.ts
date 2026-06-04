@@ -18,13 +18,20 @@ import { walkNodes, type LayoutNode } from "../src/config/dsl-types";
 // Flatten a layout tree to its segment names, in pre-order — the post-`root`
 // equivalent of the old `config.layout.flatMap(r => r.segments)`.
 const layoutSegments = (root: LayoutNode): string[] =>
-  [...walkNodes(root)].flatMap((n) => (n.kind === "cells" ? n.segments : []));
+  [...walkNodes(root)].flatMap((n) => (n.kind === "segment" ? [n.name] : []));
 
-// The canonical tree a one-row `layout: [[...]]` sugar compiles to.
+// The canonical tree a one-row `layout: [[...]]` sugar compiles to: a vertical
+// container holding one horizontal container of segment refs.
 const oneRow = (...segments: string[]): LayoutNode => ({
   kind: "container",
   direction: "vertical",
-  children: [{ kind: "cells", segments }],
+  children: [
+    {
+      kind: "container",
+      direction: "horizontal",
+      children: segments.map((name) => ({ kind: "segment" as const, name })),
+    },
+  ],
 });
 
 function makeCache(): {

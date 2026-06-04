@@ -40,10 +40,6 @@ import {
   type JustifyMode,
   type LayoutRow,
   type LayoutNode,
-  type InlineNode,
-  type InlineCell,
-  type StepperNode,
-  type ClickWrite,
   type Direction,
   type RawDslConfig,
   type SegmentDecl,
@@ -52,7 +48,6 @@ import {
   type ValidatedConfig,
   type VariableDecl,
   walkNodes,
-  nodeStateUse,
   TERM_COLS_VAR,
 } from "./dsl-types.js";
 import {
@@ -372,20 +367,30 @@ export function mergeWithDefault(
   };
 }
 
-// [LAW:one-source-of-truth] THE compiler from the flat-vertical `layout` sugar
-// to the canonical node tree: a list of rows becomes one vertical container of
-// `cells` leaves, in order, each carrying the row's segments and (if present)
-// its `when`. This is the only place the sugar shape is interpreted; everything
-// downstream sees the tree.
+// [LAW:one-source-of-truth] `layout` rows are flat-vertical SUGAR: each row
+// lowers to a horizontal container of segment refs (the row's `when` gates that
+// whole row-container), and the row list lowers to one vertical container of
+// those — the SAME `container | segment` tree the raw `root` grammar produces, so
+// nothing downstream sees the row form. `rowToHorizontal` is the one place a list
+// of segment names becomes a horizontal container, shared with `cells`-sugar
+// lowering in the validator.
+function rowToHorizontal(
+  segments: readonly string[],
+  when: string | undefined,
+): LayoutNode {
+  return {
+    kind: "container",
+    direction: "horizontal",
+    children: segments.map((name) => ({ kind: "segment", name })),
+    ...(when !== undefined && { when }),
+  };
+}
+
 export function layoutRowsToNode(rows: readonly LayoutRow[]): LayoutNode {
   return {
     kind: "container",
     direction: "vertical",
-    children: rows.map((row) =>
-      row.when !== undefined
-        ? { kind: "cells", segments: row.segments, when: row.when }
-        : { kind: "cells", segments: row.segments },
-    ),
+    children: rows.map((row) => rowToHorizontal(row.segments, row.when)),
   };
 }
 
@@ -1202,18 +1207,20 @@ function validateRoot(
   if (!isPlainObject(raw)) {
     ctx.issues.push({
       path,
-      message: `a layout node must be an object with "kind" of "cells", "inline", "container", or "stepper", got ${describeType(raw)}`,
+      message: `a layout node must be an object with "kind" of "container", "segment", or "cells", got ${describeType(raw)}`,
       line: findKeyLine(ctx.source, ["root"]),
     });
     return EMPTY_VERTICAL_NODE;
   }
-  if (raw.kind === "cells") return validateCellsNode(ctx, path, raw);
-  if (raw.kind === "inline") return validateInlineNode(ctx, path, raw);
   if (raw.kind === "container") return validateContainerNode(ctx, path, raw);
-  if (raw.kind === "stepper") return validateStepperNode(ctx, path, raw);
+  if (raw.kind === "segment") return validateSegmentNode(ctx, path, raw);
+  // [LAW:one-source-of-truth] `cells` is SUGAR — a horizontal run of segments —
+  // lowered immediately to `container(horizontal, [segment…])` so no `cells` value
+  // ever reaches a downstream consumer; the canonical tree is `container | segment`.
+  if (raw.kind === "cells") return validateCellsNode(ctx, path, raw);
   ctx.issues.push({
     path: `${path}.kind`,
-    message: `a layout node "kind" must be "cells", "inline", "container", or "stepper", got ${JSON.stringify(raw.kind)}`,
+    message: `a layout node "kind" must be "container", "segment", or "cells", got ${JSON.stringify(raw.kind)}`,
     line: findKeyLine(ctx.source, ["root"]),
   });
   return EMPTY_VERTICAL_NODE;
@@ -1236,6 +1243,10 @@ function rejectUnknownNodeKeys(
   }
 }
 
+// [LAW:one-source-of-truth] `cells` is authoring SUGAR for a horizontal run of
+// segments. It is validated then LOWERED here to `container(horizontal,
+// [segment…])` — the canonical form — so no `cells` value escapes the loader. The
+// `when` (if any) gates the whole row-container, the same as a `LayoutRow`'s.
 function validateCellsNode(
   ctx: ValidateCtx,
   path: string,
@@ -1249,164 +1260,37 @@ function validateCellsNode(
       message: `a cells node must have a "segments" array of segment names, got ${describeType(raw.segments)}`,
       line: findKeyLine(ctx.source, ["root"]),
     });
-    return when !== undefined
-      ? { kind: "cells", segments: [], when }
-      : { kind: "cells", segments: [] };
+    return rowToHorizontal([], when);
   }
   const segments = validateLayoutSegments(
     ctx,
     `${path}.segments`,
     raw.segments,
   );
-  return when !== undefined
-    ? { kind: "cells", segments, when }
-    : { kind: "cells", segments };
+  return rowToHorizontal(segments, when);
 }
 
-// [LAW:locality-or-seam] STRUCTURAL validation of an inline leaf: it carries a
-// `cells` array (each cell `{ text, onClick? }`) and optional color (bg/fg/
-// palette). Whether the onClick key is a writable SessionState key is a derived-
-// validator concern (deriveNodeValidators), not a cross-ref one — the gate IS
-// the rendered click, derived from this same structure.
-function validateInlineNode(
+// [LAW:locality-or-seam] STRUCTURAL validation of a segment node: a `name` (a ref
+// into the segments block) plus optional `when`. Whether the name resolves is a
+// cross-ref concern (validateCrossReferences, on the MERGED config).
+function validateSegmentNode(
   ctx: ValidateCtx,
   path: string,
   raw: Record<string, unknown>,
 ): LayoutNode {
-  rejectUnknownNodeKeys(
-    ctx,
-    path,
-    raw,
-    new Set(["kind", "cells", "bg", "fg", "palette", "when"]),
-  );
+  rejectUnknownNodeKeys(ctx, path, raw, new Set(["kind", "name", "when"]));
   const when = optionalStringField(ctx, path, raw, "when");
-  const bg = optionalStringField(ctx, path, raw, "bg");
-  const fg = optionalStringField(ctx, path, raw, "fg");
-  const palette = validatePaletteName(ctx, path, raw);
-
-  // [LAW:dataflow-not-control-flow] Strip the undefined optionals so the emitted
-  // node carries only the keys the author wrote — the same exact-presence shape
-  // every other node validator returns (no `bg: undefined` noise downstream).
-  const withOptionals = (cells: readonly InlineCell[]): InlineNode => ({
-    kind: "inline",
-    cells,
-    ...(bg !== undefined && { bg }),
-    ...(fg !== undefined && { fg }),
-    ...(palette !== undefined && { palette }),
-    ...(when !== undefined && { when }),
-  });
-
-  if (!Array.isArray(raw.cells)) {
+  const name = typeof raw.name === "string" ? raw.name : "";
+  if (typeof raw.name !== "string" || raw.name.length === 0) {
     ctx.issues.push({
-      path: `${path}.cells`,
-      message: `an inline node must have a "cells" array of { text, onClick? } cells, got ${describeType(raw.cells)}`,
-      line: findKeyLine(ctx.source, ["root"]),
-    });
-    return withOptionals([]);
-  }
-  const cells = raw.cells.map((cell, i) =>
-    validateInlineCell(ctx, `${path}.cells[${i}]`, cell),
-  );
-  return withOptionals(cells);
-}
-
-function validateInlineCell(
-  ctx: ValidateCtx,
-  path: string,
-  raw: unknown,
-): InlineCell {
-  if (!isPlainObject(raw)) {
-    ctx.issues.push({
-      path,
-      message: `an inline cell must be an object with a "text" string and optional "onClick", got ${describeType(raw)}`,
-      line: findKeyLine(ctx.source, ["root"]),
-    });
-    return { text: "" };
-  }
-  rejectUnknownNodeKeys(ctx, path, raw, new Set(["text", "onClick"]));
-  const text = typeof raw.text === "string" ? raw.text : "";
-  if (typeof raw.text !== "string") {
-    ctx.issues.push({
-      path: `${path}.text`,
-      message: `an inline cell "text" must be a string, got ${describeType(raw.text)}`,
+      path: `${path}.name`,
+      message: `a segment node must have a non-empty "name" (a segment name), got ${describeValue(raw.name)}`,
       line: findKeyLine(ctx.source, ["root"]),
     });
   }
-  if (raw.onClick === undefined) return { text };
-  const onClick = validateClickWrite(ctx, `${path}.onClick`, raw.onClick);
-  return onClick !== undefined ? { text, onClick } : { text };
-}
-
-// [LAW:types-are-the-program] A `ClickWrite` is exactly `{ set, to }` — both
-// LITERAL strings (the literalness is load-bearing: it is what makes the gate
-// derivable). Reject anything else loudly rather than coercing.
-function validateClickWrite(
-  ctx: ValidateCtx,
-  path: string,
-  raw: unknown,
-): ClickWrite | undefined {
-  if (!isPlainObject(raw)) {
-    ctx.issues.push({
-      path,
-      message: `an onClick must be an object { set, to }, got ${describeType(raw)}`,
-      line: findKeyLine(ctx.source, ["root"]),
-    });
-    return undefined;
-  }
-  rejectUnknownNodeKeys(ctx, path, raw, new Set(["set", "to"]));
-  const set = raw.set;
-  const to = raw.to;
-  if (typeof set !== "string" || set.length === 0) {
-    ctx.issues.push({
-      path: `${path}.set`,
-      message: `an onClick "set" must be a non-empty SessionState key string, got ${describeValue(set)}`,
-      line: findKeyLine(ctx.source, ["root"]),
-    });
-    return undefined;
-  }
-  // [LAW:verifiable-goals] Surface the set-state validator registry's policy (the
-  // single enforcer is registerStateValidator + makeAllowListValidator) here at
-  // the node path, so a config that would fail later at cache-install instead
-  // fails at load with a local, line-numbered message. The registry rejects
-  // slash-bearing keys; mirror that rejection earlier — not a separate rule.
-  if (set.includes("/")) {
-    ctx.issues.push({
-      path: `${path}.set`,
-      message: `an onClick "set" key must be slash-free — the set-state validator registry rejects slash-bearing keys (got ${describeValue(set)})`,
-      line: findKeyLine(ctx.source, ["root"]),
-    });
-    return undefined;
-  }
-  if (typeof to !== "string") {
-    ctx.issues.push({
-      path: `${path}.to`,
-      message: `an onClick "to" must be a string value, got ${describeValue(to)}`,
-      line: findKeyLine(ctx.source, ["root"]),
-    });
-    return undefined;
-  }
-  // [LAW:verifiable-goals] Mirror the same constraints the derived allow-list
-  // validator enforces, for the same reason as a widget set-action's `to`: the
-  // validator rejects empty input (an empty value is undeliverable) and rejects
-  // slash-bearing values — both surfaced at load rather than at the operator's
-  // first click.
-  if (to === "") {
-    ctx.issues.push({
-      path: `${path}.to`,
-      message: `an onClick "to" must be non-empty — the set-state validator rejects empty values`,
-      line: findKeyLine(ctx.source, ["root"]),
-    });
-    return undefined;
-  }
-  if (to.includes("/")) {
-    ctx.issues.push({
-      path: `${path}.to`,
-      message: `an onClick "to" value must be slash-free — the set-state validator registry rejects slash-bearing values (got ${describeValue(to)})`,
-      line: findKeyLine(ctx.source, ["root"]),
-    });
-    return undefined;
-  }
-  return { set, to };
+  return when !== undefined
+    ? { kind: "segment", name, when }
+    : { kind: "segment", name };
 }
 
 function validateContainerNode(
@@ -1454,108 +1338,6 @@ function validateContainerNode(
   return when !== undefined
     ? { kind: "container", direction: dir, children, when }
     : { kind: "container", direction: dir, children };
-}
-
-// [LAW:types-are-the-program] A stepper NODE is fully described by its integer
-// key, integer domain (min < max), positive integer step, and the color it hands
-// its expanded inline leaf — the StepperWidget shape lifted onto the substrate.
-// Mirrors validateStepperWidget's domain checks; adds the inline-leaf color
-// surface (bg/fg/palette). `step` defaults to 1. On any error it still returns a
-// type-valid node (issues block the config); the renderer never sees an invalid
-// one.
-function validateStepperNode(
-  ctx: ValidateCtx,
-  path: string,
-  raw: Record<string, unknown>,
-): LayoutNode {
-  rejectUnknownNodeKeys(
-    ctx,
-    path,
-    raw,
-    new Set([
-      "kind",
-      "state",
-      "min",
-      "max",
-      "step",
-      "unit",
-      "bg",
-      "fg",
-      "palette",
-      "when",
-    ]),
-  );
-  const when = optionalStringField(ctx, path, raw, "when");
-  const unit = optionalStringField(ctx, path, raw, "unit");
-  const bg = optionalStringField(ctx, path, raw, "bg");
-  const fg = optionalStringField(ctx, path, raw, "fg");
-  const palette = validatePaletteName(ctx, path, raw);
-
-  // [LAW:verifiable-goals] The state key is a set-state URL path segment, so it
-  // must be non-empty and slash-free — the SAME constraint the derived range
-  // validator + the wire enforce, surfaced here at the node path with a line.
-  const stateRaw = raw.state;
-  let state = "";
-  if (typeof stateRaw !== "string" || stateRaw.length === 0) {
-    ctx.issues.push({
-      path: `${path}.state`,
-      message: `a stepper node must declare a non-empty "state" (the integer SessionState key it reads and writes)`,
-      line: findKeyLine(ctx.source, ["root"]),
-    });
-  } else if (stateRaw.includes("/")) {
-    ctx.issues.push({
-      path: `${path}.state`,
-      message: `a stepper node "state" key must be slash-free — the set-state wire splits on "/", so a slash-bearing key cannot be addressed (got ${describeValue(stateRaw)})`,
-      line: findKeyLine(ctx.source, ["root"]),
-    });
-  } else {
-    state = stateRaw;
-  }
-
-  const intField = (field: string): number | null => {
-    const v = raw[field];
-    if (typeof v !== "number" || !Number.isInteger(v)) {
-      ctx.issues.push({
-        path: `${path}.${field}`,
-        message: `a stepper node ${field} must be an integer, got ${describeValue(v)}`,
-        line: findKeyLine(ctx.source, ["root"]),
-      });
-      return null;
-    }
-    return v;
-  };
-  const minV = intField("min");
-  const maxV = intField("max");
-  // [LAW:no-mode-explosion] step is optional with one canonical default (1).
-  const stepV = raw.step === undefined ? 1 : intField("step");
-  if (minV !== null && maxV !== null && minV >= maxV) {
-    ctx.issues.push({
-      path: `${path}.min`,
-      message: `stepper node min (${minV}) must be less than max (${maxV})`,
-      line: findKeyLine(ctx.source, ["root"]),
-    });
-  }
-  if (stepV !== null && stepV < 1) {
-    ctx.issues.push({
-      path: `${path}.step`,
-      message: `stepper node step (${stepV}) must be a positive integer`,
-      line: findKeyLine(ctx.source, ["root"]),
-    });
-  }
-
-  const node: StepperNode = {
-    kind: "stepper",
-    state,
-    min: minV ?? 0,
-    max: maxV ?? 1,
-    step: stepV ?? 1,
-    ...(unit !== undefined && { unit }),
-    ...(bg !== undefined && { bg }),
-    ...(fg !== undefined && { fg }),
-    ...(palette !== undefined && { palette }),
-    ...(when !== undefined && { when }),
-  };
-  return node;
 }
 
 // ─── Widgets ─────────────────────────────────────────────────────────────────
@@ -2193,37 +1975,13 @@ function validateCrossReferences(ctx: ValidateCtx, cfg: DslConfig): void {
         layoutLine,
       );
     }
-    // [LAW:single-enforcer] A color-bearing node's bg/fg flow through the SAME
-    // resolveSegmentColors path a segment's bg/fg do, so they are template
-    // surfaces and get the SAME ref existence-check — a typo'd `{{ .var }}` in an
-    // inline/stepper color surfaces at load, never as a silent render-time miss.
-    // Both base inline leaves and stepper composites carry the same color surface
-    // (the stepper hands it to the one inline leaf it expands to).
-    if (node.kind === "inline" || node.kind === "stepper") {
-      for (const [field, src] of [
-        ["bg", node.bg],
-        ["fg", node.fg],
-      ] as const) {
-        if (src !== undefined) {
-          checkTemplateRefs(
-            ctx,
-            `${layoutKey}.${field}`,
-            src,
-            allVarNames,
-            layoutLine,
-          );
-        }
-      }
-    }
-    if (node.kind !== "cells") continue;
-    for (const entry of node.segments) {
-      if (!Object.prototype.hasOwnProperty.call(cfg.segments, entry)) {
-        ctx.issues.push({
-          path: layoutKey,
-          message: `${layoutKey} entry "${entry}" does not match any declared segment`,
-          line: layoutLine,
-        });
-      }
+    if (node.kind !== "segment") continue;
+    if (!Object.prototype.hasOwnProperty.call(cfg.segments, node.name)) {
+      ctx.issues.push({
+        path: layoutKey,
+        message: `${layoutKey} entry "${node.name}" does not match any declared segment`,
+        line: layoutLine,
+      });
     }
   }
 
@@ -2315,15 +2073,12 @@ function validateCrossReferences(ctx: ValidateCtx, cfg: DslConfig): void {
   // menu with only copy/open items (no state vars, no set actions) can't load
   // while rendering broken navigation links with an empty session id.
   if (
-    (hasStateKind(cfg) ||
-      hasWidgetSetAction(cfg) ||
-      hasMenuWidget(cfg) ||
-      hasNodeSetWrite(cfg)) &&
+    (hasStateKind(cfg) || hasWidgetSetAction(cfg) || hasMenuWidget(cfg)) &&
     !Object.prototype.hasOwnProperty.call(cfg.variables, "session.id")
   ) {
     ctx.issues.push({
       path: "variables.session.id",
-      message: `state reads, widget set-actions, menu navigation, and layout-node interaction (inline-cell onClick, stepper ◀/▶) all require a global "session.id" variable (segment-local declarations do not satisfy this — declareState/set-state both read the global box; conventionally { kind: "input", path: "session_id" })`,
+      message: `state reads, widget set-actions, and menu navigation all require a global "session.id" variable (segment-local declarations do not satisfy this — declareState/set-state both read the global box; conventionally { kind: "input", path: "session_id" })`,
       line: findKeyLine(ctx.source, ["variables"]),
     });
   }
@@ -2396,20 +2151,6 @@ function validateCrossReferences(ctx: ValidateCtx, cfg: DslConfig): void {
       line: findKeyLine(ctx.source, ["widgets", name, "state"]),
     });
   }
-
-  // [LAW:dataflow-not-control-flow] The SAME backing-var requirement for layout
-  // nodes that read a state key (a stepper reads its value to display + step).
-  // Project each node to its readsKey via nodeStateUse and keep the unbacked ones —
-  // one total projection, mirroring the widget check above.
-  for (const node of walkNodes(cfg.root)) {
-    const readsKey = nodeStateUse(node).readsKey;
-    if (readsKey === null || declaredStateKeys.has(readsKey)) continue;
-    ctx.issues.push({
-      path: "root",
-      message: `a ${node.kind} node reads/writes the state key "${readsKey}", but no kind:"state" variable is bound to it — its writes would land in SessionState with nothing reading them back. Declare a variable like { kind: "state", key: "${readsKey}" }.`,
-      line: findKeyLine(ctx.source, ["root"]),
-    });
-  }
 }
 
 // [LAW:dataflow-not-control-flow] Any menu widget ⇒ the config reads TERM_COLS_VAR
@@ -2417,18 +2158,6 @@ function validateCrossReferences(ctx: ValidateCtx, cfg: DslConfig): void {
 function hasMenuWidget(cfg: DslConfig): boolean {
   for (const widget of Object.values(cfg.widgets)) {
     if (widget.kind === "menu") return true;
-  }
-  return false;
-}
-
-// [LAW:dataflow-not-control-flow] Any layout node that emits a set-state click
-// (an inline cell's onClick, a stepper's ◀/▶) composes a URL whose first segment
-// is the session id — exactly like a widget set action. The per-kind answer is
-// the nodeStateUse projection's `writesSet`; this folds it over the tree, so a
-// new interactive node kind is covered without touching this check.
-function hasNodeSetWrite(cfg: DslConfig): boolean {
-  for (const node of walkNodes(cfg.root)) {
-    if (nodeStateUse(node).writesSet) return true;
   }
   return false;
 }

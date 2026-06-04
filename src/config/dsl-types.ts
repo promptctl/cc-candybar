@@ -55,16 +55,15 @@ export interface LayoutRow {
   readonly segments: readonly string[];
 }
 
-// [LAW:types-are-the-program] The recursive layout substrate: a `Node` is
-// either a `cells` leaf (a horizontal run of segments rendered to one-or-more
-// strips — an authored "\n" or width-overflow wrapping splits it into multiple
-// visual lines) or a `container` whose `direction` is DATA that decides how its
-// children map
-// onto the 2D plane. Both the bar and (a later child's) menu are projections of
-// this one tree — they differ only in `direction`, not in code path
-// [LAW:dataflow-not-control-flow]. `LayoutRow[]` is the flat-vertical SUGAR for
-// this tree (one container of cells leaves), compiled to a `LayoutNode` at the
-// loader boundary so no downstream consumer sees two layout representations
+// [LAW:types-are-the-program] The recursive layout substrate collapses to
+// exactly two kinds: a `segment` leaf (a ref into the named `segments` block —
+// THE unit of rendering, a single template that IS its content) or a
+// `container` whose `direction` is DATA that decides how its children map onto
+// the 2D plane. Both the bar and (a later child's) menu are projections of this
+// one tree — they differ only in `direction`, not in code path
+// [LAW:dataflow-not-control-flow]. `LayoutRow[]` and the `cells` form are
+// flat-vertical/horizontal SUGAR, lowered to this `container | segment` tree at
+// the loader boundary so no downstream consumer sees more than two node kinds
 // [LAW:one-source-of-truth].
 //
 // [LAW:types-are-the-program] `Direction` carries the projection a container
@@ -82,72 +81,22 @@ export interface LayoutRow {
 export const DIRECTIONS = ["vertical", "horizontal"] as const;
 export type Direction = (typeof DIRECTIONS)[number];
 
-export interface CellsNode {
-  readonly kind: "cells";
-  // Names into the `segments` block — the same reference-by-name a LayoutRow
-  // uses. A leaf packs its segments into a horizontal strip and renders to
-  // ONE OR MORE visual lines: an authored "\n" in a segment's output partitions
-  // it into independently-laid-out lines, and FlexStrip width-overflow wrapping
-  // may split further. A newline-free, non-overflowing leaf is the degenerate
-  // single-line case.
-  readonly segments: readonly string[];
-  // [LAW:dataflow-not-control-flow] Absent `when` ≡ always-rendered.
-  readonly when?: string;
-}
-
-// [LAW:types-are-the-program] An `onClick` is the MIRROR of `when`: where `when`
-// is a predicate that READS SessionState to gate visibility, `onClick` is a
-// structured (key, value) WRITE — the click effect bound to a clickable leaf
-// cell. STRUCTURED (a literal key + literal value) rather than a pre-built URL
-// precisely so the validator that gates the write is DERIVABLE from the layout
-// itself [LAW:one-source-of-truth: the rendered click IS the gate]. The renderer
-// turns it into a `set-state` OSC-8 URL via the one click wire; the daemon's
-// gate is derived from the same (key, value) pairs (deriveNodeValidators).
-//
-// One arm today (the state write — the substrate primitive this slice pins).
-// `copy`/`open` side-effects (which write NO SessionState and need NO validator)
-// join as additive arms when the buttons widget dissolves; the vocabulary grows
-// by arms, never by URL plumbing at the callsite.
-export interface ClickWrite {
-  readonly set: string;
-  readonly to: string;
-}
-
-// [LAW:types-are-the-program] One generated cell of an inline leaf: display text
-// plus an OPTIONAL click. Absent `onClick` ≡ a plain (non-clickable) cell — a
-// stepper's current-value display, a separator glyph — so "clickable" is data on
-// the cell, not a second cell type. Composites (later slices) build these cells
-// from their live state; an author writes them directly for a fixed trigger.
-export interface InlineCell {
-  readonly text: string;
-  readonly onClick?: ClickWrite;
-}
-
-// [LAW:types-are-the-program] The other base-case leaf alongside CellsNode: a
-// leaf whose content is GENERATED cells (text + optional click), not segment-
-// name refs. [LAW:one-type-per-behavior] a segment-ref leaf and an inline leaf
-// are distinct because their RENDER behavior differs — a ref leaf looks up each
-// segment and evaluates its template/palette/layout; an inline leaf carries the
-// cells already, evaluating only its own click URLs and color. This is the
-// substrate hook composite node types (stepper/picker/disclosure) land their
-// rendered cells on. Like a segment it owns its color (`bg`/`fg`/`palette` are
-// palette-spec NAMES, resolved against the live base theme and transposed by the
-// leaf's hue position) — there is no backing segment to carry it.
-export interface InlineNode {
-  readonly kind: "inline";
-  readonly cells: readonly InlineCell[];
-  // [LAW:single-enforcer] Color-spec template strings, the SAME surface a
-  // segment's bg/fg are — resolved by the one resolveSegmentColors path, so an
-  // inline leaf's color cannot drift from a segment's. As template surfaces they
-  // are ref-checked and frontier-seeded identically (loader + render-payload).
-  // Absent ≡ inherit the cascade base (no color of the leaf's own).
-  readonly bg?: string;
-  readonly fg?: string;
-  // [LAW:one-source-of-truth] Per-leaf palette override (a NAME); undefined =
-  // inherit the per-render base theme, the same contract a segment's `palette`.
-  readonly palette?: string;
-  // [LAW:dataflow-not-control-flow] Absent `when` ≡ always-rendered — the same
-  // subtree-gating contract every node shares.
+// [LAW:one-type-per-behavior] THE unit of rendering: a ref into the named
+// `segments` block. A segment IS a single template (text, state-driven display,
+// clickable regions — whatever the template produces); there is no `inline` /
+// `stepper` / `picker` node kind, because "make a node flexible enough for
+// whatever" = one template expresses anything. A segment renders to ONE strip
+// item; the powerline joiner joins items, never inside one. A horizontal run of
+// segments is `container(horizontal, [segment…])`; the `cells` authoring form
+// and `LayoutRow` are sugar that lower to exactly that at the loader.
+export interface SegmentNode {
+  readonly kind: "segment";
+  // A name into the `segments` block — the same reference-by-name a LayoutRow's
+  // entry uses. The segment's own template/palette/layout/`when` live on its
+  // SegmentDecl, not here; this node is purely the position in the tree.
+  readonly name: string;
+  // [LAW:dataflow-not-control-flow] Absent `when` ≡ always-rendered. A node-level
+  // predicate, ANDed with the segment-decl's own `when` at render.
   readonly when?: string;
 }
 
@@ -161,46 +110,7 @@ export interface ContainerNode {
   readonly when?: string;
 }
 
-// [LAW:types-are-the-program] The first COMPOSITE node type: not a base-case
-// leaf like cells/inline (which emit terminal cells), but a type whose `render`
-// EXPANDS into more nodes that bottom out in the base cases — the React-composite
-// shape (a function component returning host elements). A `stepper` is a numeric
-// control over ONE integer SessionState key: its ◀ current ▶ affordances are
-// render-DERIVED from (live value, [min,max], step), never authored, so it has no
-// `items` (the StepperWidget shape it replaces, lifted onto the substrate). ◀/▶
-// navigate by ∓step and WRAP past a bound; the derived range validator owns the
-// bounds for any other write.
-//
-// [LAW:single-enforcer] HUE PIN: a composite is hue-NEUTRAL — it consumes exactly
-// the hue units its expansion's BASE leaves consume. A stepper expands to ONE
-// inline leaf (its ◀ N ▶ cells), so it is ONE hue unit, visually identical to the
-// old widget that inherited its one enclosing segment's hue. Because the leaf owns
-// the color, the stepper carries bg/fg/palette to hand it — the SAME color surface
-// an InlineNode has, resolved by the one resolveSegmentColors path.
-export interface StepperNode {
-  readonly kind: "stepper";
-  // The integer SessionState key the stepper reads (to display) and writes (◀/▶).
-  readonly state: string;
-  readonly min: number;
-  readonly max: number;
-  readonly step: number;
-  // [LAW:types-are-the-program] An optional UNIT symbol appended to the displayed
-  // value (`◀ 14° ▶`) — presentation only. It rides the plain current-value cell,
-  // never the ◀/▶ links, so the wire value stays a bare integer the range gate
-  // accepts. Absent ≡ no unit. Kept generic (not hue-specific): `°`, `%`, `px`…
-  readonly unit?: string;
-  // [LAW:one-source-of-truth] Color-spec NAMES/templates, the SAME surface a
-  // segment's / inline leaf's bg/fg are — handed to the expanded inline leaf and
-  // resolved by the one resolveSegmentColors path. Absent ≡ inherit the base.
-  readonly bg?: string;
-  readonly fg?: string;
-  readonly palette?: string;
-  // [LAW:dataflow-not-control-flow] Absent `when` ≡ always-rendered — the same
-  // subtree-gating contract every node shares.
-  readonly when?: string;
-}
-
-export type LayoutNode = CellsNode | InlineNode | ContainerNode | StepperNode;
+export type LayoutNode = ContainerNode | SegmentNode;
 
 // [LAW:single-enforcer] THE one pre-order walk over a node tree. Every consumer
 // that needs "which segments / which `when` predicates does this layout name"
@@ -210,38 +120,6 @@ export function* walkNodes(node: LayoutNode): IterableIterator<LayoutNode> {
   yield node;
   if (node.kind === "container") {
     for (const child of node.children) yield* walkNodes(child);
-  }
-}
-
-// [LAW:single-enforcer] THE one place mapping a node kind to its SessionState
-// relationship, as DATA — the node-tree mirror of widgetStateUse (src/config/
-// widget.ts). The loader's cross-ref checks (session.id required, backing-var
-// required) READ this projection over walkNodes; none re-switch on node kind.
-// A new node kind is one new arm in this exhaustive switch, and the compiler
-// forces it.
-//   writesSet — does this node emit a set-state click? (an inline cell's onClick,
-//               a stepper's ◀/▶). Drives the session.id requirement: a set-state
-//               URL's first segment is the session id.
-//   readsKey  — the key the node READS BACK to render itself (a stepper's value);
-//               null when it reads nothing. Drives the backing-var check: a node
-//               reading a key with no kind:"state" variable bound to it would
-//               write into SessionState with nothing reading it back.
-export interface NodeStateUse {
-  readonly writesSet: boolean;
-  readonly readsKey: string | null;
-}
-export function nodeStateUse(node: LayoutNode): NodeStateUse {
-  switch (node.kind) {
-    case "inline":
-      return {
-        writesSet: node.cells.some((c) => c.onClick !== undefined),
-        readsKey: null,
-      };
-    case "stepper":
-      return { writesSet: true, readsKey: node.state };
-    case "cells":
-    case "container":
-      return { writesSet: false, readsKey: null };
   }
 }
 

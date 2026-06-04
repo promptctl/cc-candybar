@@ -2,7 +2,7 @@
 // (registerDslConfig + renderDsl) and the REAL loader (parseAndValidate) — the
 // same path the daemon renders through, never a parallel rig.
 //
-// The unit of rendering is the SEGMENT (or inline leaf): one strip item. The
+// The unit of rendering is the SEGMENT: one strip item. The
 // powerline joiner caps BETWEEN units, never inside one, and a same-bg seam
 // between two distinct units survives as a structural boundary. Both facts are
 // observed here as powerline-glyph counts in the rendered output:
@@ -58,54 +58,40 @@ function render(src: string, hookData: Record<string, unknown>): string {
 
 describe("segment is the rendering unit (2de.10)", () => {
   test("a unit with internal clickable regions renders as ONE strip item — no internal chevron", () => {
-    // An inline leaf with three onClick cells. Pre-collapse each was its own
-    // strip cell; now the leaf collapses to one item, so the only chevron in
-    // the whole line is the single end-cap — never one between X/Y/Z.
+    // A segment whose template emits three OSC-8 links. The segment collapses to
+    // one strip item, so the only chevron in the whole line is the single end-cap
+    // — never one between X/Y/Z — while all three link spans survive inside it.
     const src = `{
       globals: { palette: 'textual-dark' },
-      variables: {
-        'session.id': { kind: 'input', path: 'session_id', default: '' },
+      segments: {
+        actions: {
+          template: '{{ link "u1" "X" }}{{ link "u2" "Y" }}{{ link "u3" "Z" }}',
+          bg: 'surface',
+          fg: 'foreground',
+        },
       },
-      segments: { unused: { template: ' ', bg: 'surface', fg: 'foreground' } },
-      root: {
-        kind: 'inline',
-        bg: 'surface',
-        fg: 'foreground',
-        cells: [
-          { text: 'X', onClick: { set: 'k', to: '1' } },
-          { text: 'Y', onClick: { set: 'k', to: '2' } },
-          { text: 'Z', onClick: { set: 'k', to: '3' } },
-        ],
-      },
+      layout: [['actions']],
     }`;
-    const out = render(src, { session_id: "s1" });
+    const out = render(src, {});
 
-    // One unit ⇒ one item ⇒ only the end-cap chevron, none between the cells.
+    // One unit ⇒ one item ⇒ only the end-cap chevron, none between the regions.
     expect(chevronCount(out)).toBe(1);
     // All three clickable regions survive as their own OSC-8 spans inside the
-    // single cell.
+    // single item.
     expect(linkUrls(out)).toHaveLength(3);
   });
 
-  test("a unit that renders nothing contributes no strip item — no spurious cap", () => {
-    // An inline leaf whose only cell renders empty text: fragmentsToCells drops
-    // the empty cell, so the leaf collapses to zero cells (not one empty cell).
-    // An empty strip item would draw powerline caps around nothing; the unit
-    // must instead contribute no item at all — zero glyphs in the output.
+  test("a segment that renders nothing contributes no strip item — no spurious cap", () => {
+    // A visible segment whose template evaluates to empty: fragmentsToCells drops
+    // the empty content, so the segment collapses to zero cells (not one empty
+    // cell). An empty strip item would draw powerline caps around nothing; the
+    // unit must instead contribute no item at all — zero glyphs in the output.
     const src = `{
       globals: { palette: 'textual-dark' },
-      variables: {
-        'session.id': { kind: 'input', path: 'session_id', default: '' },
-      },
-      segments: { unused: { template: ' ', bg: 'surface', fg: 'foreground' } },
-      root: {
-        kind: 'inline',
-        bg: 'surface',
-        fg: 'foreground',
-        cells: [{ text: '' }],
-      },
+      segments: { empty: { template: '', bg: 'surface', fg: 'foreground' } },
+      layout: [['empty']],
     }`;
-    const out = render(src, { session_id: "s1" });
+    const out = render(src, {});
 
     expect(chevronCount(out)).toBe(0);
     expect(out).toBe("");
