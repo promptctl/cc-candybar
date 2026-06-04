@@ -13,7 +13,7 @@ import {
 import type { ValidatedConfig } from "../../config/dsl-types.js";
 import { registerDslConfig, type CompiledConfig } from "../../dsl/render.js";
 import {
-  deriveValidators,
+  deriveActionValidators,
   registerStateValidator,
 } from "../verbs/state-validators.js";
 import { VariableStore } from "../../var-system/store.js";
@@ -73,7 +73,7 @@ export interface DslRenderState {
   readonly neededInputPaths: ReadonlySet<string>;
   readonly lastRenderCellsBySegment: Map<string, readonly RichText[]>;
   // [LAW:single-enforcer] Disposers for the SessionState validators this config
-  // installed (derived from its menu widgets). Disposed on swap/eviction in the
+  // installed (derived from its action table). Disposed on swap/eviction in the
   // same dispose-before-swap transaction as the SourceRegistry, so a reload
   // never leaks a stale writable-key entry or shadows the next config's keys.
   readonly validatorDisposers: ReadonlyArray<() => void>;
@@ -297,15 +297,15 @@ export class RenderCache {
         cwd: entry.cwd,
         store,
       });
-      // [LAW:one-source-of-truth] Derive the writable-key validators from EVERY
-      // interaction surface the config carries — widget blocks AND layout-node
-      // onClicks — through one coherence merge (deriveValidators), then register
-      // them so the click wire accepts the menus' ←/→/apply-close writes and the
-      // nodes' onClick writes alike. Merging before registration lets a trigger
-      // cell's allow-list value be absorbed into a menu's int page gate instead
-      // of colliding. registerStateValidator throws on a duplicate baseline key —
-      // caught here to roll the whole reload back.
-      for (const { key, spec } of deriveValidators(config)) {
+      // [LAW:one-source-of-truth] Derive the writable-key validators from the
+      // config's action table (the sole interaction authority) through one
+      // coherence merge (deriveActionValidators), then register them so the click
+      // wire accepts the picker's ←/→/apply-close writes and every other action
+      // write alike. Merging before registration lets a trigger's literal "0" be
+      // absorbed into a picker's int page gate instead of colliding.
+      // registerStateValidator throws on a duplicate baseline key — caught here to
+      // roll the whole reload back.
+      for (const { key, spec } of deriveActionValidators(config)) {
         validatorDisposers.push(registerStateValidator(key, spec));
       }
     } catch (err) {

@@ -25,7 +25,8 @@ import type { Engine, FuncMap, Template } from "@promptctl/go-template-js";
 import type { VariableStore } from "../var-system/store.js";
 import { toString as varToString } from "../var-system/types.js";
 import { buildScope } from "../template-engine/scope.js";
-import type { ActionDecl } from "../config/action.js";
+import type { ActionDecl, OptionSource } from "../config/action.js";
+import { listResolvablePaletteNames, STYLE_ORDER } from "../themes/policy.js";
 import {
   effectsUrl,
   VERB_COPY,
@@ -43,7 +44,7 @@ import {
 // widget uses). A literal carries its fixed `value`; an option binds the value
 // from the template at render; a bounded carries its [min,max]/by navigation.
 // copy/open carry a pre-parsed template evaluated against the live scope.
-type CompiledActionDecl =
+export type CompiledActionDecl =
   | {
       readonly kind: "set-literal";
       readonly key: string;
@@ -54,6 +55,10 @@ type CompiledActionDecl =
       readonly kind: "set-option";
       readonly key: string;
       readonly stateVar: string;
+      // The resolved option domain. Stored at compile so a picker can iterate it
+      // without re-resolving the source list, and so the set-option IS
+      // self-describing (it knows its own domain), not just a key.
+      readonly options: readonly string[];
     }
   | {
       readonly kind: "set-bounded";
@@ -63,10 +68,27 @@ type CompiledActionDecl =
       readonly max: number;
       readonly by: number;
     }
+  | {
+      // [LAW:types-are-the-program] An int cursor: it writes whatever integer the
+      // render binds (the picker's page nav supplies -1/p±1; a bare `{{ action }}`
+      // supplies its display/boundValue). The gate is an unbounded int — the
+      // renderer owns clamping to valid pages, exactly as set-bounded owns wrap.
+      readonly kind: "set-int";
+      readonly key: string;
+      readonly stateVar: string;
+    }
   | { readonly kind: "copy"; readonly text: Template<RichText> }
   | { readonly kind: "open"; readonly target: Template<RichText> };
 
 export type CompiledActions = ReadonlyMap<string, CompiledActionDecl>;
+
+// [LAW:one-source-of-truth] An option source resolves to the SAME canonical list
+// the `themes()`/`styles()` bindings and the derived gate consult — rendered
+// options and the gate cannot diverge. The render-side resolver (the daemon's
+// validator-derivation has its own that must agree, both reading themes/policy).
+export function optionDomain(src: OptionSource): readonly string[] {
+  return src === "themes" ? listResolvablePaletteNames() : STYLE_ORDER;
+}
 
 // [LAW:locality-or-seam] The runtime holder the `action` template function closes
 // over. Populated after the engine is constructed (the func references the
@@ -120,7 +142,15 @@ function compileAction(
       };
     }
     if ("from" in action) {
-      return { kind: "set-option", key: action.set, stateVar };
+      return {
+        kind: "set-option",
+        key: action.set,
+        stateVar,
+        options: [...optionDomain(action.from)],
+      };
+    }
+    if ("int" in action) {
+      return { kind: "set-int", key: action.set, stateVar };
     }
     return {
       kind: "set-bounded",
@@ -160,7 +190,9 @@ function parseActionTemplate(
 
 // ─── Rendering ───────────────────────────────────────────────────────────────
 
-function readVar(store: VariableStore, name: string): string {
+// [LAW:one-source-of-truth] Exported so the picker reads SessionState through the
+// SAME boundary (has() discriminates "never written" → "").
+export function readVar(store: VariableStore, name: string): string {
   // [LAW:no-defensive-null-guards] "current value may not exist" is a legitimate
   // state (the key was never written) — guard the store lookup, not a downstream
   // operation. has() is the discriminator; absence yields "".
@@ -174,7 +206,13 @@ function evalTemplate(tpl: Template<RichText>, scope: object): string {
     .join("");
 }
 
-function linkFragment(text: string, url: string, active: boolean): RichText {
+// [LAW:single-enforcer] One link-span constructor for both action and picker
+// cells — a Style carrying the OSC-8 url, `active` riding as bold.
+export function linkFragment(
+  text: string,
+  url: string,
+  active: boolean,
+): RichText {
   // [LAW:one-source-of-truth] Build the link span exactly as rich-js's `link`
   // does: a Style carrying the OSC-8 url. `active` rides as bold so the
   // currently-selected value reads as current — a value on the span, not a
@@ -240,6 +278,17 @@ function realize(
       };
     }
     case "set-option": {
+      const value = boundValue ?? display;
+      const current = readVar(store, c.stateVar);
+      return {
+        effect: { verb: VERB_SET_STATE, args: [sessionId, c.key, value] },
+        active: current === value,
+      };
+    }
+    case "set-int": {
+      // The render binds the integer to write (a picker's page nav passes the
+      // target page as boundValue; a bare `{{ action }}` passes its display).
+      // The unbounded int gate accepts it; active when the key already holds it.
       const value = boundValue ?? display;
       const current = readVar(store, c.stateVar);
       return {
