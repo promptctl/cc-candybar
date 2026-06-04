@@ -151,7 +151,6 @@ const CONFIG_WITHOUT_METRICS: DslConfig = {
   variables: SHARED_VARIABLES,
   segments: SHARED_SEGMENTS,
   root: rootOf("directory", "git"),
-  widgets: {},
   actions: {},
 };
 
@@ -160,7 +159,6 @@ const CONFIG_WITH_METRICS: DslConfig = {
   variables: SHARED_VARIABLES,
   segments: SHARED_SEGMENTS,
   root: rootOf("directory", "git", "metrics", "tmux"),
-  widgets: {},
   actions: {},
 };
 
@@ -217,7 +215,6 @@ describe("buildRenderPayload — layout-driven provider gating", () => {
         },
       },
       root: rootOf("gitDump"),
-      widgets: {},
       actions: {},
     };
     const needed = buildNeededPrefixes(config);
@@ -242,7 +239,6 @@ describe("buildRenderPayload — layout-driven provider gating", () => {
         when: '{{ gt (int .metrics.sessionDuration) 0 }}',
         children: [{ kind: "segment", name: "directory" }],
       },
-      widgets: {},
       actions: {},
     };
     const needed = buildNeededPrefixes(config);

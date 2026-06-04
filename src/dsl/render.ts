@@ -35,15 +35,11 @@ import {
   evaluateWhen,
 } from "../template-engine/index.js";
 import {
-  compileWidgets,
-  widgetFuncs,
-  type WidgetRuntime,
-} from "../render/widget.js";
-import {
   compileActions,
   actionFuncs,
   type ActionRuntime,
 } from "../render/action.js";
+import { pickerFuncs } from "../render/picker.js";
 // [LAW:one-way-deps] The node-type registry sits below this driver: it owns the
 // compiled node shapes + each kind's compile/render, dispatched via nodeType().
 // render.ts threads the recursion (compileChild/renderChild) + the hue counter in
@@ -227,30 +223,24 @@ export function registerDslConfig(
   const cwd = opts?.cwd ?? process.cwd();
 
   // [LAW:locality-or-seam] One engine per config load, carrying THIS config's
-  // widget runtime. Engine creation amortizes across all of this config's
-  // segment templates (parse-once); per-config (not per-render) is the right
-  // granularity because the widget set is config-scoped. The runtime holder is
-  // populated below — the `widget` func references the engine, and the compiled
-  // widgets reference the engine, so the holder breaks that cycle.
+  // action runtime. Engine creation amortizes across all of this config's segment
+  // templates (parse-once); per-config (not per-render) is the right granularity
+  // because the action set is config-scoped. The runtime holder is populated below
+  // — the `action`/`picker` funcs reference the engine, and the compiled actions
+  // reference the engine, so the holder breaks that cycle.
   // [LAW:no-defensive-null-guards] store may be absent for compile-only callers
-  // with no widgets; renderWidget throws loudly if a widget is actually used
+  // with no actions; renderAction throws loudly if an action is actually used
   // without a store, rather than silently rendering an empty click.
-  const widgetRuntime: WidgetRuntime = {
-    store: opts?.store ?? null,
-    compiled: new Map(),
-  };
   const actionRuntime: ActionRuntime = {
     store: opts?.store ?? null,
     compiled: new Map(),
   };
-  // [LAW:one-way-deps] Inject the widget + action feature funcs as data — the
-  // engine stays generic. Each func closes over its runtime holder, whose
-  // `compiled` map is populated just below (the holder breaks the engine↔feature
-  // cycle). Both surfaces coexist (the action table is additive until the widget
-  // surface is deleted in epic child .13).
+  // [LAW:one-way-deps] Inject action + picker feature funcs as data — the engine
+  // stays generic. The picker shares the ACTION runtime (it resolves its
+  // apply/page actions from the same compiled table), so they read one source.
   const engine = createCcCandybarEngine(undefined, {
-    ...widgetFuncs(widgetRuntime),
     ...actionFuncs(actionRuntime),
+    ...pickerFuncs(actionRuntime),
   });
   // [LAW:one-source-of-truth] Map each SessionState key → the variable that
   // reads it, so an option picker marks its current selection by reading the
@@ -274,14 +264,9 @@ export function registerDslConfig(
       }
     }
   }
-  widgetRuntime.compiled = compileWidgets(
-    engine,
-    config.widgets,
-    stateKeyToVar,
-  );
   // [LAW:one-source-of-truth] Actions resolve their set key → the reading
-  // variable through the SAME stateKeyToVar map widgets use, so a stepper action
-  // and a stepper widget read one value.
+  // variable through the stateKeyToVar map, so an apply action and the picker
+  // that references it read one value.
   actionRuntime.compiled = compileActions(
     engine,
     config.actions,

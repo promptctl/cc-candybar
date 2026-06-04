@@ -34,10 +34,10 @@ import { ccCandybarFuncs, formatterFuncs } from "./funcs.js";
 // richTextFuncs() provides style functions (bold, red, link, …).
 // paletteFuncs(resolver) registers semantic palette functions when a theme
 // resolver is provided — same engine instance, no second parse path.
-// [LAW:one-way-deps] `extraFuncs` is an INJECTED FuncMap (e.g. the widget
-// feature's `widget` func, built in render/widget.ts). The generic engine never
-// imports a specific feature — the caller hands it the capability as data, so
-// the dependency runs caller → engine, never engine → feature.
+// [LAW:one-way-deps] `extraFuncs` is an INJECTED FuncMap (e.g. the action +
+// picker feature funcs, built in render/action.ts + render/picker.ts). The
+// generic engine never imports a specific feature — the caller hands it the
+// capability as data, so the dependency runs caller → engine, never engine → feature.
 // [LAW:one-type-per-behavior] resolver?/extraFuncs? are values, not modes —
 // one factory, one engine shape; the data (their presence) governs what's
 // registered.
@@ -65,8 +65,8 @@ export function createCcCandybarEngine(
       // with sprig or ccCandybarFuncs.
       ...formatterFuncs(),
       // [LAW:locality-or-seam] Injected feature funcs (the daemon's per-config
-      // engine supplies the `widget` func; resolver-less compile-only paths do
-      // not). Last so a feature can override on collision.
+      // engine supplies the `action` + `picker` funcs; resolver-less compile-only
+      // paths do not). Last so a feature can override on collision.
       ...(extraFuncs ?? {}),
     },
   });

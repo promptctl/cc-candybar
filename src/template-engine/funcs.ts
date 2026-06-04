@@ -30,10 +30,10 @@ import { listResolvablePaletteNames, STYLE_ORDER } from "../themes/policy.js";
 
 // [LAW:one-source-of-truth] The DSL `themes()` and `styles()` bindings
 // project the SAME canonical sources the set-state validator consults
-// (listResolvablePaletteNames / STYLE_ORDER). A widget config that
-// `range`s over themes() to emit OSC-8 picker cells is iterating the
-// allow-list the validator will enforce on the resulting click — the
-// list and the gate cannot diverge because there is no second list.
+// (listResolvablePaletteNames / STYLE_ORDER). A picker (or a config that
+// `range`s over themes() to emit OSC-8 cells) iterates the allow-list the
+// validator will enforce on the resulting click — the list and the gate cannot
+// diverge because there is no second list.
 //
 // Module-init caching is correct by construction: rich-js THEMES is a
 // static import (no dynamic palette registration at runtime) and
@@ -119,13 +119,14 @@ export function ccCandybarFuncs(): FuncMap {
     },
 
     // [LAW:one-source-of-truth] themes() and styles() are zero-arg
-    // projections of the daemon's canonical domain lists. Picker widgets
-    // express "options come from list Y" by ranging over these bindings;
-    // the same lists feed the set-state validator's allow-list checks,
-    // so the rendered options are exactly the values the next click
-    // will be allowed to write. No second enumeration in user config.
+    // projections of the daemon's canonical domain lists. A picker (or a
+    // hand-authored `range`) expresses "options come from list Y" by
+    // iterating these bindings; the same lists feed the set-state
+    // validator's allow-list checks, so the rendered options are exactly
+    // the values the next click will be allowed to write. No second
+    // enumeration in user config.
     // [LAW:dataflow-not-control-flow] A range loop over a list IS the
-    // widget primitive — `{{ range themes }}…{{ end }}` produces one
+    // option primitive — `{{ range themes }}…{{ end }}` produces one
     // rendered cell per allowed value. Adding a theme adds a cell;
     // removing a theme removes a cell; no template branch on "how many
     // themes are there."
