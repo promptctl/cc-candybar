@@ -55,6 +55,16 @@ export interface LayoutRow {
   readonly segments: readonly string[];
 }
 
+// [LAW:types-are-the-program] The user-file row domain — exactly what a config
+// may write for a `layout` row, no stronger. A predicate-less row is sugar'd as
+// a bare `string[]`; an explicit predicate uses the `{ when?, segments }` object.
+// Both are LEGAL input, so the honest type is their union — generating the JSON
+// Schema from a normalized `LayoutRow[]` would reject the bare-array form the
+// (maintainer's own) config uses. The parser preserves whichever the user wrote;
+// `layoutRowsToNode` is the single boundary that normalizes the bare form to an
+// object, so the sugar never leaks past lowering [LAW:one-source-of-truth].
+export type LayoutRowInput = readonly string[] | LayoutRow;
+
 // [LAW:types-are-the-program] The recursive layout substrate collapses to
 // exactly two kinds: a `segment` leaf (a ref into the named `segments` block —
 // THE unit of rendering, a single template that IS its content) or a
@@ -132,7 +142,9 @@ export interface RawDslConfig {
   // both): `layout` is the flat-vertical SUGAR (a list of rows, each a bare
   // `string[]` or `{ when?, segments }`), `root` is the raw recursive grammar.
   // Both collapse to one `LayoutNode` at the loader so downstream sees one shape.
-  readonly layout?: readonly LayoutRow[];
+  // `layout` holds rows AS THE USER WROTE THEM (sugar preserved); normalization
+  // to the node tree happens in `layoutRowsToNode`, the single lowering boundary.
+  readonly layout?: readonly LayoutRowInput[];
   readonly root?: LayoutNode;
   readonly actions?: Readonly<Record<string, ActionDecl>>;
 }
