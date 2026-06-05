@@ -1,20 +1,20 @@
 // [LAW:behavior-not-structure] Asserts wrapper output equals the canonical
 // formatter's output. The wrappers' purpose is to expose src/utils/formatters.ts
-// (and src/utils/budget.ts) through the template engine without re-deriving
-// the formatting rules; "wrapper === source" is the contract.
+// through the template engine without re-deriving the formatting rules;
+// "wrapper === source" is the contract.
 //
 // [LAW:single-enforcer] These tests pin the contract that the DSL's render
 // path produces byte-identical output to the legacy renderer. If a wrapper
 // drifts from its source, the parity harness would also fail — but a focused
 // test localizes the cause to the wrapper instead of the assembled segment.
+//
+// The cost/token/budget family moved to DSL helper templates; their byte-parity
+// is pinned in test/dsl-formatters-cost-token.test.ts. What remains here are the
+// JS-func formatters that have no template-native expression yet.
 
 import { createCcCandybarEngine } from "../src/template-engine/engine";
 import { formatterFuncs } from "../src/template-engine/funcs";
 import {
-  formatCost,
-  formatTokens,
-  formatTokenCount,
-  formatTokenBreakdown,
   formatDuration,
   formatLongTimeRemaining,
   formatResponseTime,
@@ -23,7 +23,6 @@ import {
   shortenModelName,
   minutesUntilReset,
 } from "../src/utils/formatters";
-import { getBudgetStatus } from "../src/utils/budget";
 
 // Helper: evaluate a template against a plain-object scope, return joined text.
 function evalText(source: string, scope: object = {}): string {
@@ -37,18 +36,15 @@ function evalText(source: string, scope: object = {}): string {
 
 // [LAW:no-silent-fallbacks] The wrappers' shared num() helper must throw
 // for bigint inputs that cannot round-trip to JS number without precision
-// loss or overflow — otherwise formatTokens(huge_bigint) silently produces
-// wrong output. The check is at the conversion boundary, not at each
-// formatter, so it's tested through any formatter wrapper that takes a
-// numeric arg (formatTokens chosen arbitrarily).
+// loss or overflow — otherwise a formatter silently produces wrong output.
+// The check is at the conversion boundary, not at each formatter, so it's
+// tested through any formatter wrapper that takes a numeric arg (`round`
+// chosen as a stable single-arg numeric wrapper).
 describe("num() bigint range guard", () => {
   test("accepts bigint within safe-integer range (round-trips)", () => {
     // Engine encodes Go-template numeric literals as bigint when ambiguous;
     // values inside ±Number.MAX_SAFE_INTEGER (2^53 − 1) are safe to collapse.
-    // 1_000_000_000n → formatTokens does M/K, so 1e9 → "1000.0M tokens". Just
-    // assert it doesn't throw and produces the same string as the source
-    // formatter.
-    const tpl = createCcCandybarEngine().parse("{{ formatTokens 1000000000 }}");
+    const tpl = createCcCandybarEngine().parse("{{ round 1000000000 }}");
     expect(() => tpl.evaluate({})).not.toThrow();
   });
 
@@ -57,122 +53,26 @@ describe("num() bigint range guard", () => {
     // precision in Number. Template literal forces engine to bigint encoding
     // for values above the safe-integer range.
     const huge = String(BigInt(Number.MAX_SAFE_INTEGER) + 1n);
-    const tpl = createCcCandybarEngine().parse(`{{ formatTokens ${huge} }}`);
+    const tpl = createCcCandybarEngine().parse(`{{ round ${huge} }}`);
     expect(() => tpl.evaluate({})).toThrow(TypeError);
     expect(() => tpl.evaluate({})).toThrow(/safe-integer range/);
   });
 
   test("rejects bigint below MIN_SAFE_INTEGER", () => {
     const tiny = String(BigInt(Number.MIN_SAFE_INTEGER) - 1n);
-    const tpl = createCcCandybarEngine().parse(`{{ formatTokens ${tiny} }}`);
+    const tpl = createCcCandybarEngine().parse(`{{ round ${tiny} }}`);
     expect(() => tpl.evaluate({})).toThrow(TypeError);
   });
 
   test("accepts the safe-integer boundaries themselves", () => {
     const maxTpl = createCcCandybarEngine().parse(
-      `{{ formatTokens ${Number.MAX_SAFE_INTEGER} }}`,
+      `{{ round ${Number.MAX_SAFE_INTEGER} }}`,
     );
     const minTpl = createCcCandybarEngine().parse(
-      `{{ formatTokens ${Number.MIN_SAFE_INTEGER} }}`,
+      `{{ round ${Number.MIN_SAFE_INTEGER} }}`,
     );
     expect(() => maxTpl.evaluate({})).not.toThrow();
     expect(() => minTpl.evaluate({})).not.toThrow();
-  });
-});
-
-// ────────────────────────────────────────────────────────────────
-// 1. Cost / token formatters
-// ────────────────────────────────────────────────────────────────
-
-describe("formatCost wrapper", () => {
-  test.each([0, 0.005, 0.0099, 0.01, 1.234, 1.2345, 42, 9999.99])(
-    "matches source for cost=%p",
-    (cost) => {
-      expect(evalText("{{ formatCost .c }}", { c: cost })).toBe(formatCost(cost));
-    },
-  );
-});
-
-describe("formatTokens wrapper", () => {
-  test.each([0, 1, 500, 999, 1000, 1500, 123456, 999999, 1_000_000, 1_234_567])(
-    "matches source for tokens=%p",
-    (tokens) => {
-      expect(evalText("{{ formatTokens .t }}", { t: tokens })).toBe(
-        formatTokens(tokens),
-      );
-    },
-  );
-});
-
-describe("formatTokenCount wrapper", () => {
-  test("strips trailing ' tokens' (delegates to formatTokenCount)", () => {
-    expect(evalText("{{ formatTokenCount .t }}", { t: 123456 })).toBe(
-      formatTokenCount(123456),
-    );
-    // Sanity: source ends without " tokens"
-    expect(formatTokenCount(123456)).toBe("123.5K");
-  });
-});
-
-// [LAW:one-source-of-truth] formatTokenBreakdown's canonical impl takes a
-// struct; the engine boundary reconstructs it from four scalar args (the
-// var-system is flat-scalar). The wrapper's output must equal the canonical
-// impl's output for the corresponding struct — drift would mean two
-// breakdown formatters exist.
-describe("formatTokenBreakdown wrapper", () => {
-  test("matches source for typical breakdown shape", () => {
-    expect(
-      evalText("{{ formatTokenBreakdown .i .o .cc .cr }}", {
-        i: 1000,
-        o: 2000,
-        cc: 3000,
-        cr: 4000,
-      }),
-    ).toBe(
-      formatTokenBreakdown({
-        input: 1000,
-        output: 2000,
-        cacheCreation: 3000,
-        cacheRead: 4000,
-      }),
-    );
-  });
-
-  test("zero-valued parts collapse to '0 tokens' (delegates fully)", () => {
-    expect(
-      evalText("{{ formatTokenBreakdown .i .o .cc .cr }}", {
-        i: 0,
-        o: 0,
-        cc: 0,
-        cr: 0,
-      }),
-    ).toBe(
-      formatTokenBreakdown({
-        input: 0,
-        output: 0,
-        cacheCreation: 0,
-        cacheRead: 0,
-      }),
-    );
-  });
-
-  test("cache pair sums into a single 'cached' part", () => {
-    // 2000 + 5000 cached → "7.0K cached", combined with input + output.
-    expect(
-      evalText("{{ formatTokenBreakdown .i .o .cc .cr }}", {
-        i: 1000,
-        o: 2000,
-        cc: 2000,
-        cr: 5000,
-      }),
-    ).toBe(
-      formatTokenBreakdown({
-        input: 1000,
-        output: 2000,
-        cacheCreation: 2000,
-        cacheRead: 5000,
-      }),
-    );
   });
 });
 
@@ -263,44 +163,6 @@ describe("round wrapper", () => {
 });
 
 // ────────────────────────────────────────────────────────────────
-// 5. budgetStatus
-// ────────────────────────────────────────────────────────────────
-
-describe("budgetStatus wrapper", () => {
-  test("returns empty string when no budget", () => {
-    // budget=0 → calculateBudgetPercentage returns null → displayText is ""
-    expect(
-      evalText("{{ budgetStatus .c .b .w }}", { c: 1.23, b: 0, w: 80 }),
-    ).toBe("");
-  });
-
-  test("emits ' <pct>%' suffix below 50%", () => {
-    // 4.56 / 50 = 9.12% → " 9%"
-    const got = evalText("{{ budgetStatus .c .b .w }}", {
-      c: 4.56,
-      b: 50,
-      w: 80,
-    });
-    expect(got).toBe(getBudgetStatus(4.56, 50, 80).displayText);
-    expect(got).toBe(" 9%");
-  });
-
-  test("emits ' +<pct>%' suffix at/above 50% (under warning threshold)", () => {
-    // 30 / 50 = 60% → " +60%"
-    const got = evalText("{{ budgetStatus .c .b .w }}", { c: 30, b: 50, w: 80 });
-    expect(got).toBe(getBudgetStatus(30, 50, 80).displayText);
-    expect(got).toBe(" +60%");
-  });
-
-  test("emits ' !<pct>%' suffix at/above warning threshold", () => {
-    // 45 / 50 = 90% → " !90%"
-    const got = evalText("{{ budgetStatus .c .b .w }}", { c: 45, b: 50, w: 80 });
-    expect(got).toBe(getBudgetStatus(45, 50, 80).displayText);
-    expect(got).toBe(" !90%");
-  });
-});
-
-// ────────────────────────────────────────────────────────────────
 // 6. Model-name normalizers
 // ────────────────────────────────────────────────────────────────
 
@@ -345,17 +207,12 @@ describe("formatterFuncs registry", () => {
   test("registers exactly the expected names", () => {
     const funcs = formatterFuncs();
     expect(Object.keys(funcs).sort()).toEqual([
-      "budgetStatus",
-      "formatCost",
       "formatDuration",
       "formatInteger",
       "formatLongTimeRemaining",
       "formatModelName",
       "formatResponseTime",
       "formatTimeSince",
-      "formatTokenBreakdown",
-      "formatTokenCount",
-      "formatTokens",
       "minutesUntilReset",
       "round",
       "shortenModelName",
