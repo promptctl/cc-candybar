@@ -10,6 +10,12 @@
 //  • sprigStrings: trunc, lower, upper, replace, trim/trimPrefix/trimSuffix,
 //    split/join, contains, hasPrefix, hasSuffix, and more string utils.
 //  • sprigLists: has (membership test: `has "v" $list`).
+//  • sprigMath: add, sub, mul, div, mod, floor, ceil, round, min, max,
+//    seq, until (round here is shadowed by formatterFuncs' Math.round below).
+//  • sprigDatetime(clock): now, date, ago, unixEpoch, dateInZone, dateModify,
+//    toDate, duration — all reading "now" through the injected clock seam.
+//  • sprigConversions: atoi, int, int64, float64, toString, toStrings
+//    (int here is shadowed by ccCandybarFuncs' var-system cast below).
 //  • richTextFuncs: bold, italic, red, green, … (styling from rich-js).
 //  • paletteFuncs (when resolver provided): primary, accent, palette, paletteOver, auto.
 //  • ccCandybarFuncs: basename, dirname, int, string, bool, urlEncode.
@@ -24,6 +30,9 @@ import {
   sprigDefaults,
   sprigStrings,
   sprigLists,
+  sprigMath,
+  sprigDatetime,
+  sprigConversions,
 } from "@promptctl/go-template-js";
 import type { PaletteResolver } from "@promptctl/rich-js";
 import { richTextFuncs, RichText } from "@promptctl/rich-js";
@@ -41,13 +50,20 @@ import { ccCandybarFuncs, formatterFuncs } from "./funcs.js";
 // [LAW:one-type-per-behavior] resolver?/extraFuncs? are values, not modes —
 // one factory, one engine shape; the data (their presence) governs what's
 // registered.
+// [LAW:single-enforcer] `clock` is the one time source. It feeds sprigDatetime
+// (the funcs that read "now") AND createEngine's clock option, so every
+// time-dependent evaluation in this engine reads from one seam. Defaulted here
+// so the default literal `() => new Date()` lives in exactly one place; callers
+// that omit it (and forwarders passing `undefined`) inherit it unchanged.
 export function createCcCandybarEngine(
   resolver?: PaletteResolver,
   extraFuncs?: FuncMap,
+  clock: () => Date = () => new Date(),
 ): Engine<RichText> {
   return createEngine<RichText>({
     fromString: (s) => new RichText(s),
     toString: (rt) => rt.plain,
+    clock,
     // [LAW:no-defensive-null-guards] missing fields must throw at the boundary,
     // not silently produce "<no value>". Callers (SourceRegistry, segments)
     // depend on MissingFieldError to drive varDefault / defaultEmptyValue.
@@ -56,13 +72,22 @@ export function createCcCandybarEngine(
       ...sprigDefaults(),
       ...sprigStrings(),
       ...sprigLists(),
+      ...sprigMath(),
+      // [LAW:single-enforcer] one clock seam: the same source createEngine holds.
+      ...sprigDatetime(clock),
+      ...sprigConversions(),
       ...richTextFuncs(),
       ...(resolver !== undefined ? paletteFuncs(resolver) : {}),
       // Domain-specific overrides last (wins on collision with sprig aliases).
+      // [LAW:one-source-of-truth] ccCandybarFuncs' `int` is the var-system cast
+      // (toNumber over VarValue); it intentionally shadows sprigConversions' `int`
+      // so a template's `int` keeps one meaning. Position is the override policy.
       ...ccCandybarFuncs(),
       // [LAW:one-source-of-truth] formatter wrappers delegate to
-      // src/utils/formatters.ts (and src/utils/budget.ts); no name collides
-      // with sprig or ccCandybarFuncs.
+      // src/utils/formatters.ts (and src/utils/budget.ts). The only sprig
+      // collision is `round`: formatterFuncs' Math.round shadows sprigMath's
+      // precision-aware round, registered last so the domain meaning wins
+      // (revisited by the bdi cleanup ticket).
       ...formatterFuncs(),
       // [LAW:locality-or-seam] Injected feature funcs (the daemon's per-config
       // engine supplies the `action` + `picker` funcs; resolver-less compile-only
