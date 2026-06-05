@@ -10,6 +10,7 @@ import {
   type Direction,
   type LayoutNode,
   type LayoutRow,
+  type LayoutRowInput,
 } from "../dsl-types.js";
 import { findKeyLine } from "./diagnostics.js";
 import {
@@ -39,11 +40,19 @@ function rowToHorizontal(
   };
 }
 
-export function layoutRowsToNode(rows: readonly LayoutRow[]): LayoutNode {
+// [LAW:single-enforcer] The ONE boundary that normalizes the user-file row sugar
+// (a bare `string[]` ≡ a predicate-less row) into the canonical node tree. The
+// parser preserves whichever form the user wrote (so the JSON Schema can describe
+// both); the sugar is collapsed here and never leaks past lowering.
+export function layoutRowsToNode(rows: readonly LayoutRowInput[]): LayoutNode {
   return {
     kind: "container",
     direction: "vertical",
-    children: rows.map((row) => rowToHorizontal(row.segments, row.when)),
+    children: rows.map((row) => {
+      // A bare array is a predicate-less row; an object carries its own `when`.
+      const norm: LayoutRow = "segments" in row ? row : { segments: row };
+      return rowToHorizontal(norm.segments, norm.when);
+    }),
   };
 }
 
@@ -63,7 +72,7 @@ export function layoutRowsToNode(rows: readonly LayoutRow[]): LayoutNode {
 export function validateLayout(
   ctx: ValidateCtx,
   raw: unknown,
-): readonly LayoutRow[] {
+): readonly LayoutRowInput[] {
   if (raw === undefined) return [];
   if (!Array.isArray(raw)) {
     ctx.issues.push({
@@ -74,7 +83,7 @@ export function validateLayout(
     return [];
   }
 
-  const out: LayoutRow[] = [];
+  const out: LayoutRowInput[] = [];
   for (let r = 0; r < raw.length; r++) {
     const row = validateLayoutRow(ctx, r, raw[r]);
     if (row !== null) out.push(row);
@@ -82,15 +91,18 @@ export function validateLayout(
   return out;
 }
 
-// [LAW:dataflow-not-control-flow] One row → one normalized LayoutRow. The outer
-// shape (array vs object) selects how `segments`/`when` are read; both land in
-// the same struct. A bare string at the outer level is the legacy flat layout —
-// rejected with a wrap hint, not silently shimmed [LAW:no-silent-fallbacks].
+// [LAW:dataflow-not-control-flow] One row → one validated row, IN THE FORM THE
+// USER WROTE IT (bare `string[]` stays an array; `{ when?, segments }` stays an
+// object). Structural validation only — normalization to the node tree is
+// `layoutRowsToNode`'s job, the single lowering boundary, so the parsed shape can
+// faithfully describe the user-file domain the JSON Schema validates against. A
+// bare string at the outer level is the legacy flat layout — rejected with a wrap
+// hint, not silently shimmed [LAW:no-silent-fallbacks].
 function validateLayoutRow(
   ctx: ValidateCtx,
   r: number,
   row: unknown,
-): LayoutRow | null {
+): LayoutRowInput | null {
   if (typeof row === "string") {
     ctx.issues.push({
       path: `layout[${r}]`,
@@ -100,7 +112,7 @@ function validateLayoutRow(
     return null;
   }
   if (Array.isArray(row)) {
-    return { segments: validateLayoutSegments(ctx, `layout[${r}]`, row) };
+    return validateLayoutSegments(ctx, `layout[${r}]`, row);
   }
   if (isPlainObject(row)) {
     const allowed = new Set(["when", "segments"]);

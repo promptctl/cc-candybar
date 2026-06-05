@@ -9,6 +9,9 @@ import { runInstall, runInstallUrlHandler, runUrlHandle } from "./install";
 import { runDaemon } from "./daemon/server";
 import { tryRenderViaDaemon } from "./daemon/client";
 import { runDaemonStats } from "./daemon/client-stats";
+import { runDebug } from "./daemon/client-debug";
+import { isDebugWhat } from "./daemon/debug-types";
+import { runLint, runSchema } from "./config/cli";
 import { obtainDaemonKick } from "./daemon/acquire";
 import { planOutcome } from "./render/outcome-plan";
 
@@ -62,6 +65,17 @@ Subcommands (macOS):
                            uptime, RSS, cache hit rates, watcher count,
                            request totals. Does not spawn a daemon.
 
+Config tooling:
+  lint <config-file>       Validate a config file (parse + cross-refs + cycles)
+                           with no daemon. Exit 0 valid, 1 invalid, 2 unreadable.
+  schema                   Print the JSON Schema for the config file shape
+                           (.cc-candybar.json5). Point an editor's $schema at it
+                           for autocomplete + structural validation.
+  vars [--json]            Declared variables: source kind, value, last error.
+  segments [--json]        Segment templates and their last rendered output.
+  config [--json]          The effective merged config. (All three query the
+                           running daemon; none spawn one.)
+
 `);
 }
 
@@ -97,6 +111,22 @@ async function main(): Promise<void> {
     }
     if (subcommand === "daemon-stats") {
       await runDaemonStats(process.argv.slice(3));
+      process.exit(0);
+    }
+    if (subcommand === "lint") {
+      runLint(process.argv.slice(3)); // owns its own exit code (0/1/2)
+      return;
+    }
+    if (subcommand === "schema") {
+      runSchema(); // owns its own exit code
+      return;
+    }
+    // [LAW:dataflow-not-control-flow] vars/segments/config are ONE handler
+    // parameterized by `what` — the subcommand name IS the DebugWhat. The guard
+    // is the canonical list (debug-types), so a new debug projection is reachable
+    // here with no second-site edit.
+    if (isDebugWhat(subcommand)) {
+      await runDebug(subcommand, process.argv.slice(3));
       process.exit(0);
     }
 
