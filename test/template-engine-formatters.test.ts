@@ -8,20 +8,19 @@
 // drifts from its source, the parity harness would also fail — but a focused
 // test localizes the cause to the wrapper instead of the assembled segment.
 //
-// The cost/token/budget family moved to DSL helper templates; their byte-parity
-// is pinned in test/dsl-formatters-cost-token.test.ts. What remains here are the
-// JS-func formatters that have no template-native expression yet.
+// The cost/token/budget (bdi.3) and duration/time-remaining (bdi.4) families
+// moved to DSL helper templates; their byte-parity is pinned in
+// test/dsl-formatters-cost-token.test.ts and test/dsl-formatters-duration-time.test.ts.
+// What remains here are the JS-func primitives with no template-native
+// expression yet (locale grouping, regex model-name parsing) plus the
+// clock-reading numeric primitive minutesUntilReset.
 
 import { createCcCandybarEngine } from "../src/template-engine/engine";
 import { formatterFuncs } from "../src/template-engine/funcs";
 import {
-  formatDuration,
-  formatLongTimeRemaining,
-  formatResponseTime,
   formatInteger,
   formatModelName,
   shortenModelName,
-  minutesUntilReset,
 } from "../src/utils/formatters";
 
 // Helper: evaluate a template against a plain-object scope, return joined text.
@@ -73,58 +72,6 @@ describe("num() bigint range guard", () => {
     );
     expect(() => maxTpl.evaluate({})).not.toThrow();
     expect(() => minTpl.evaluate({})).not.toThrow();
-  });
-});
-
-// ────────────────────────────────────────────────────────────────
-// 2. Duration / time formatters
-// ────────────────────────────────────────────────────────────────
-
-describe("formatDuration wrapper", () => {
-  test.each([0, 30, 59, 60, 90, 3599, 3600, 7200, 86399, 86400, 172800])(
-    "matches source for seconds=%p",
-    (seconds) => {
-      expect(evalText("{{ formatDuration .s }}", { s: seconds })).toBe(
-        formatDuration(seconds),
-      );
-    },
-  );
-});
-
-describe("formatLongTimeRemaining wrapper", () => {
-  test.each([0, 30, 59, 60, 90, 180, 1439, 1440, 2880, 4320])(
-    "matches source for minutes=%p",
-    (minutes) => {
-      expect(
-        evalText("{{ formatLongTimeRemaining .m }}", { m: minutes }),
-      ).toBe(formatLongTimeRemaining(minutes));
-    },
-  );
-});
-
-describe("formatResponseTime wrapper", () => {
-  test.each([0, 5.6, 12.3, 59.9, 60, 120, 600])(
-    "matches source for seconds=%p",
-    (seconds) => {
-      expect(evalText("{{ formatResponseTime .s }}", { s: seconds })).toBe(
-        formatResponseTime(seconds),
-      );
-    },
-  );
-});
-
-describe("minutesUntilReset wrapper", () => {
-  test("matches source: epoch in the future rounds to whole minutes", () => {
-    const future = Math.floor(Date.now() / 1000) + 90 * 60;
-    expect(evalText("{{ minutesUntilReset .e }}", { e: future })).toBe(
-      String(minutesUntilReset(future)),
-    );
-  });
-
-  test("epoch in the past floors at 0", () => {
-    const past = Math.floor(Date.now() / 1000) - 3600;
-    expect(evalText("{{ minutesUntilReset .e }}", { e: past })).toBe("0");
-    expect(minutesUntilReset(past)).toBe(0);
   });
 });
 
@@ -207,12 +154,8 @@ describe("formatterFuncs registry", () => {
   test("registers exactly the expected names", () => {
     const funcs = formatterFuncs();
     expect(Object.keys(funcs).sort()).toEqual([
-      "formatDuration",
       "formatInteger",
-      "formatLongTimeRemaining",
       "formatModelName",
-      "formatResponseTime",
-      "formatTimeSince",
       "minutesUntilReset",
       "round",
       "shortenModelName",
