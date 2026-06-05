@@ -218,7 +218,7 @@ function declareOne(
 export function registerDslConfig(
   config: ValidatedConfig,
   registry: SourceRegistry,
-  opts?: { cwd?: string; store?: VariableStore },
+  opts?: { cwd?: string; store?: VariableStore; clock?: () => Date },
 ): CompiledConfig {
   const cwd = opts?.cwd ?? process.cwd();
 
@@ -238,10 +238,17 @@ export function registerDslConfig(
   // [LAW:one-way-deps] Inject action + picker feature funcs as data — the engine
   // stays generic. The picker shares the ACTION runtime (it resolves its
   // apply/page actions from the same compiled table), so they read one source.
-  const engine = createCcCandybarEngine(undefined, {
-    ...actionFuncs(actionRuntime),
-    ...pickerFuncs(actionRuntime),
-  });
+  // [LAW:single-enforcer] Forward the caller's clock (the daemon's `() => new
+  // Date()`, a test's frozen clock) to the one engine. Omitted ⇒ undefined ⇒
+  // createCcCandybarEngine applies its single default; no second default literal.
+  const engine = createCcCandybarEngine(
+    undefined,
+    {
+      ...actionFuncs(actionRuntime),
+      ...pickerFuncs(actionRuntime),
+    },
+    opts?.clock,
+  );
   // [LAW:one-source-of-truth] Map each SessionState key → the variable that
   // reads it, so an option picker marks its current selection by reading the
   // SAME value the templates read — independent of whether the config named the
