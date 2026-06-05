@@ -21,10 +21,10 @@
 //  • richTextFuncs: bold, italic, red, green, … (styling from rich-js).
 //  • paletteFuncs (when resolver provided): primary, accent, palette, paletteOver, auto.
 //  • ccCandybarFuncs: basename, dirname, int, string, bool, urlEncode.
-//  • formatterFuncs: formatDuration, formatLongTimeRemaining, formatResponseTime,
-//    formatTimeSince, minutesUntilReset, formatInteger, round, formatModelName,
-//    shortenModelName. (The cost/token/budget formatters moved to DSL helper
-//    templates — see DEFAULT_DSL_CONFIG.helpers.)
+//  • formatterFuncs: minutesUntilReset (clock-reading numeric primitive),
+//    formatInteger, round, formatModelName, shortenModelName. (The cost/token/
+//    budget AND duration/time-remaining formatters moved to DSL helper templates
+//    — see DEFAULT_DSL_CONFIG.helpers.)
 
 import {
   createEngine,
@@ -93,12 +93,12 @@ export function createCcCandybarEngine(
       // (toNumber over VarValue); it intentionally shadows sprigConversions' `int`
       // so a template's `int` keeps one meaning. Position is the override policy.
       ...ccCandybarFuncs(),
-      // [LAW:one-source-of-truth] formatter wrappers delegate to
-      // src/utils/formatters.ts (and src/utils/budget.ts). The only sprig
-      // collision is `round`: formatterFuncs' Math.round shadows sprigMath's
-      // precision-aware round, registered last so the domain meaning wins
-      // (revisited by the bdi cleanup ticket).
-      ...formatterFuncs(),
+      // [LAW:one-source-of-truth] formatter funcs delegate to
+      // src/utils/formatters.ts; minutesUntilReset reads the same `clock` seam.
+      // The only sprig collision is `round`: formatterFuncs' Math.round shadows
+      // sprigMath's precision-aware round, registered last so the domain meaning
+      // wins (revisited by the bdi cleanup ticket).
+      ...formatterFuncs(clock),
       // [LAW:locality-or-seam] Injected feature funcs (the daemon's per-config
       // engine supplies the `action` + `picker` funcs; resolver-less compile-only
       // paths do not). Last so a feature can override on collision.

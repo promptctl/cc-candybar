@@ -1,23 +1,3 @@
-export function formatTimeSince(seconds: number): string {
-  if (seconds < 60) return `${seconds}s`;
-  if (seconds < 3600) return `${Math.floor(seconds / 60)}m`;
-  if (seconds < 86400) return `${Math.floor(seconds / 3600)}h`;
-  if (seconds < 604800) return `${Math.floor(seconds / 86400)}d`;
-  return `${Math.floor(seconds / 604800)}w`;
-}
-
-export function formatDuration(seconds: number): string {
-  if (seconds < 60) {
-    return `${seconds.toFixed(0)}s`;
-  } else if (seconds < 3600) {
-    return `${(seconds / 60).toFixed(0)}m`;
-  } else if (seconds < 86400) {
-    return `${(seconds / 3600).toFixed(1)}h`;
-  } else {
-    return `${(seconds / 86400).toFixed(1)}d`;
-  }
-}
-
 const CLAUDE_MODEL_PATTERN =
   /^(?:(?:global|apac|au|eu|us|us-east-\d|us-west-\d|eu-west-\d|eu-central-\d)\.)?(?:anthropic\.|azure_ai\/|bedrock\/|vertex_ai\/)?claude-(?:(?<family>opus|sonnet|haiku)-(?<newMajor>\d+)(?:-(?<newMinor>\d))?|(?<oldMajor>\d+)(?:-(?<oldMinor>\d))?-(?<oldFamily>opus|sonnet|haiku))(?:[-@]\d{8})?(?:-v\d+:\d+)?(?:-latest)?$/i;
 
@@ -99,13 +79,6 @@ export function abbreviateFishStyle(dirPath: string): string {
     .join(sep);
 }
 
-export function formatResponseTime(seconds: number): string {
-  if (seconds < 60) {
-    return `${seconds.toFixed(1)}s`;
-  }
-  return `${(seconds / 60).toFixed(1)}m`;
-}
-
 // [LAW:one-source-of-truth] Locale-grouped integer rendering. Callers that
 // want "50,000" instead of "50000" go through this rather than calling
 // toLocaleString() ad-hoc — the legacy context segment used the latter
@@ -139,21 +112,4 @@ export function formatTimeRemaining(totalMinutes: number): string {
   const hours = Math.floor(totalMinutes / 60);
   const minutes = totalMinutes % 60;
   return hours > 0 ? `${hours}h ${minutes}m left` : `${minutes}m left`;
-}
-
-export function formatLongTimeRemaining(totalMinutes: number): string {
-  if (totalMinutes >= 1440) {
-    const days = Math.floor(totalMinutes / 1440);
-    const hours = Math.floor((totalMinutes % 1440) / 60);
-    return hours > 0 ? `${days}d ${hours}h` : `${days}d`;
-  } else if (totalMinutes >= 60) {
-    const hours = Math.floor(totalMinutes / 60);
-    const minutes = totalMinutes % 60;
-    return minutes > 0 ? `${hours}h ${minutes}m` : `${hours}h`;
-  }
-  return `${totalMinutes}m`;
-}
-
-export function minutesUntilReset(epochSeconds: number): number {
-  return Math.round(Math.max(0, epochSeconds * 1000 - Date.now()) / 60000);
 }
