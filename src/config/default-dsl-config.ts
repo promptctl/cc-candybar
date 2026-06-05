@@ -439,7 +439,7 @@ export const DEFAULT_DSL_CONFIG = {
         '{{ if gt .git.behind 0 }}{{ red (printf "-%v" .git.behind) }}{{ end }}' +
         "{{ end }}]{{ end }}" +
         "{{ if gt .git.stash 0 }} ({{ .git.stash }} stashed){{ end }}" +
-        "{{ if gt .git.timeSinceCommit 0 }} ◷ {{ formatTimeSince .git.timeSinceCommit }}{{ end }}" +
+        '{{ if gt .git.timeSinceCommit 0 }} ◷ {{ template "formatTimeSince" .git.timeSinceCommit }}{{ end }}' +
         " ",
       bg: "surface-active",
       fg: "foreground",
@@ -468,7 +468,7 @@ export const DEFAULT_DSL_CONFIG = {
     block: {
       template:
         " ◱ {{ round .block.nativeUtilization }}% " +
-        "({{ formatLongTimeRemaining (minutesUntilReset .block.resetsAt) }}) ",
+        '({{ template "formatLongTimeRemaining" (minutesUntilReset .block.resetsAt) }}) ',
       bg: blockLikeBg(
         ".block.nativeUtilization",
         ".block.budget.warningThreshold",
@@ -480,7 +480,7 @@ export const DEFAULT_DSL_CONFIG = {
     weekly: {
       template:
         " ◑ {{ round .weekly.percentage }}% " +
-        "({{ formatLongTimeRemaining (minutesUntilReset .weekly.resetsAt) }}) ",
+        '({{ template "formatLongTimeRemaining" (minutesUntilReset .weekly.resetsAt) }}) ',
       bg: blockLikeBg(".weekly.percentage", ".weekly.budget.warningThreshold"),
       fg: blockLikeFg(".weekly.percentage"),
       when: "{{ gt .weekly.resetsAt 0 }}",
@@ -526,9 +526,9 @@ export const DEFAULT_DSL_CONFIG = {
       // with zero metrics data renders no cell at all (an empty template
       // would otherwise produce a single-space bg-styled cell).
       template:
-        "{{ if .metrics.lastResponseTime }} Δ {{ formatResponseTime .metrics.lastResponseTime }}{{ end }}" +
-        "{{ if .metrics.responseTime }} ⧖ {{ formatResponseTime .metrics.responseTime }}{{ end }}" +
-        "{{ if .metrics.sessionDuration }} ⧗ {{ formatDuration .metrics.sessionDuration }}{{ end }}" +
+        '{{ if .metrics.lastResponseTime }} Δ {{ template "formatResponseTime" .metrics.lastResponseTime }}{{ end }}' +
+        '{{ if .metrics.responseTime }} ⧖ {{ template "formatResponseTime" .metrics.responseTime }}{{ end }}' +
+        '{{ if .metrics.sessionDuration }} ⧗ {{ template "formatDuration" .metrics.sessionDuration }}{{ end }}' +
         "{{ if .metrics.messageCount }} ◆ {{ .metrics.messageCount }}{{ end }}" +
         "{{ if .metrics.linesAdded }} + {{ .metrics.linesAdded }}{{ end }}" +
         "{{ if .metrics.linesRemoved }} - {{ .metrics.linesRemoved }}{{ end }} ",
@@ -619,5 +619,50 @@ export const DEFAULT_DSL_CONFIG = {
       "{{ if ge $pct .warn }} !{{ $p }}" +
       "{{ else }}{{ if ge $pct 50 }} +{{ $p }}{{ else }} {{ $p }}{{ end }}{{ end }}" +
       "{{ end }}",
+
+    // ─── Duration / time-remaining family (bdi.4) ──────────────────────────
+    // Display policy for elapsed/remaining times, each DEFINED ONCE and called
+    // from every segment via `{{ template "name" .x }}`. Input domain is a
+    // non-negative number (seconds, or minutes for formatLongTimeRemaining); the
+    // var-system owns "missing" as a numeric default upstream, so no null arm.
+    //
+    // The cascades branch on the VALUE (which unit threshold it falls in), never
+    // on control flow [LAW:dataflow-not-control-flow]. `div`/`mod` are Go int64
+    // (truncate toward zero == Math.floor for the non-negative domain); `printf
+    // "%.Nf"` is the toFixed(N) stand-in (rounds, matching JS toFixed).
+
+    // Compact "since" stamp: <1m → "Ns"; then floored m/h/d/w. `div` truncates
+    // exactly like Math.floor here (seconds ≥ 0). Used by the git segment's
+    // time-since-commit affordance — verbatim seconds under a minute.
+    formatTimeSince:
+      "{{ if lt . 60 }}{{ . }}s" +
+      "{{ else if lt . 3600 }}{{ div . 60 }}m" +
+      "{{ else if lt . 86400 }}{{ div . 3600 }}h" +
+      "{{ else if lt . 604800 }}{{ div . 86400 }}d" +
+      "{{ else }}{{ div . 604800 }}w{{ end }}",
+    // Elapsed duration: <1m toFixed(0)+s; <1h (/60).toFixed(0)+m; <1d
+    // (/3600).toFixed(1)+h; else (/86400).toFixed(1)+d. printf rounds (not
+    // truncates), reproducing toFixed.
+    formatDuration:
+      '{{ if lt . 60 }}{{ printf "%.0f" . }}s' +
+      '{{ else if lt . 3600 }}{{ printf "%.0f" (divf . 60) }}m' +
+      '{{ else if lt . 86400 }}{{ printf "%.1f" (divf . 3600) }}h' +
+      '{{ else }}{{ printf "%.1f" (divf . 86400) }}d{{ end }}',
+    // Response time: one-decimal seconds under a minute, else one-decimal
+    // minutes.
+    formatResponseTime:
+      '{{ if lt . 60 }}{{ printf "%.1f" . }}s' +
+      '{{ else }}{{ printf "%.1f" (divf . 60) }}m{{ end }}',
+    // Long remaining (input = whole minutes): ≥1day → "Nd"/"Nd Nh"; ≥1hour →
+    // "Nh"/"Nh Nm"; else "Nm". The lower unit is appended only when non-zero,
+    // matching the JS hours>0/minutes>0 guards. `$d`/`$h`/`$m` declared in the
+    // branch frame and read by the inner if (lexical scope reads enclosing
+    // frames) — go-template-js cannot capture a value any other way.
+    formatLongTimeRemaining:
+      "{{ if ge . 1440 }}{{ $d := div . 1440 }}{{ $h := div (mod . 1440) 60 }}" +
+      "{{ if gt $h 0 }}{{ $d }}d {{ $h }}h{{ else }}{{ $d }}d{{ end }}" +
+      "{{ else if ge . 60 }}{{ $h := div . 60 }}{{ $m := mod . 60 }}" +
+      "{{ if gt $m 0 }}{{ $h }}h {{ $m }}m{{ else }}{{ $h }}h{{ end }}" +
+      "{{ else }}{{ . }}m{{ end }}",
   },
 } satisfies DslConfig;

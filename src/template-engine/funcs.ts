@@ -12,14 +12,9 @@ import {
   type VarValue,
 } from "../var-system/types.js";
 import {
-  formatDuration,
-  formatLongTimeRemaining,
-  formatResponseTime,
   formatInteger,
   formatModelName,
   shortenModelName,
-  minutesUntilReset,
-  formatTimeSince,
 } from "../utils/formatters.js";
 import { listResolvablePaletteNames, STYLE_ORDER } from "../themes/policy.js";
 
@@ -137,48 +132,39 @@ export function ccCandybarFuncs(): FuncMap {
 }
 
 // [LAW:one-source-of-truth] Domain value formatters wrap src/utils/formatters.ts
-// without re-deriving the formatting rules. DSL templates that render
-// time/locale-grouped values delegate here, so every duration string in the
-// bar passes through one formatting definition — drift between segments is
-// unrepresentable.
+// without re-deriving the formatting rules. What remains are funcs with no
+// template-native expression: regex model-name parsing, locale grouping, and
+// the one clock-reading numeric primitive (minutesUntilReset).
 //
-// [LAW:dataflow-not-control-flow] Each entry is a thin pure call; the wrapper
-// adds the engine FuncMap shape (argTypes + fn) and nothing else. No business
-// logic, no defaulting, no null-coalescing — the underlying formatter's
-// contract IS the DSL function's contract.
+// The display-formatting families moved to DSL helper templates
+// (DEFAULT_DSL_CONFIG.helpers) so their policy is data a user can override:
+// the cost/token/budget family (bdi.3) and the duration/time-remaining family
+// (formatDuration/formatResponseTime/formatTimeSince/formatLongTimeRemaining,
+// bdi.4). They are display policy — strings the bar shows — so they belong in
+// data, not compiled code.
 //
-// The cost/token/budget family (formatCost, formatTokens, formatTokenCount,
-// formatTokenBreakdown, budgetStatus) used to live here too; they moved to
-// DSL helper templates (DEFAULT_DSL_CONFIG.helpers) so their display policy is
-// data a user can override. What remains are formatters with no template-native
-// expression yet (regex model-name parsing, locale grouping, time math).
-export function formatterFuncs(): FuncMap {
+// minutesUntilReset stays a func because it returns a NUMBER consumed in
+// arithmetic and comparisons (`le (minutesUntilReset .x) 8`,
+// `formatLongTimeRemaining (minutesUntilReset .x)`). A `{{ template }}` helper
+// writes to output and cannot return a value, so expressing it as a helper
+// would force duplicating its formula across every comparison site
+// [LAW:one-source-of-truth]. It is a numeric primitive, not display policy.
+//
+// [LAW:single-enforcer] minutesUntilReset reads "now" from the injected `clock`
+// — the SAME seam createCcCandybarEngine threads to sprigDatetime (now/unixEpoch)
+// and createEngine. There is no hidden Date.now(): the one clock governs every
+// time-dependent evaluation, and tests inject a frozen clock for determinism.
+export function formatterFuncs(clock: () => Date = () => new Date()): FuncMap {
   return {
-    // ─── Duration / time formatters ────────────────────────────────────
-    formatDuration: {
-      fn: (s: number | bigint) => formatDuration(num(s)),
-      argTypes: ["number"],
-    },
-    formatLongTimeRemaining: {
-      fn: (m: number | bigint) => formatLongTimeRemaining(num(m)),
-      argTypes: ["number"],
-    },
-    formatResponseTime: {
-      fn: (s: number | bigint) => formatResponseTime(num(s)),
-      argTypes: ["number"],
-    },
-    // Seconds-since-last-commit → compact "12m"/"3h"/"2d" for the custom git
-    // segment's time-since-commit affordance.
-    formatTimeSince: {
-      fn: (s: number | bigint) => formatTimeSince(num(s)),
-      argTypes: ["number"],
-    },
-    // Epoch-seconds → minutes until reset, used by the weekly segment so the
-    // template can chain `formatLongTimeRemaining (minutesUntilReset .resets_at)`
-    // exactly like the legacy renderer composes the two.
+    // Epoch-seconds → whole minutes until that instant, clamped at 0 for a past
+    // expiry: round(max(0, epoch*1000 − now)/60000). Consumed by the block/weekly
+    // segments (`formatLongTimeRemaining (minutesUntilReset .resetsAt)`) and the
+    // cacheTimer warmth countdown (numeric `le` thresholds).
     minutesUntilReset: {
       fn: (epochSeconds: number | bigint) =>
-        minutesUntilReset(num(epochSeconds)),
+        Math.round(
+          Math.max(0, num(epochSeconds) * 1000 - clock().getTime()) / 60000,
+        ),
       argTypes: ["number"],
     },
 
