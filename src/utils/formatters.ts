@@ -63,22 +63,6 @@ export function shortenModelName(formatted: string): string {
   return `${initial}${version}`;
 }
 
-export function abbreviateFishStyle(dirPath: string): string {
-  const sep = dirPath.includes("/") ? "/" : "\\";
-  const parts = dirPath.split(sep);
-  return parts
-    .map((part, index) => {
-      if (index === parts.length - 1) {
-        return part;
-      }
-      if (part === "~" || part === "") {
-        return part;
-      }
-      return part.charAt(0);
-    })
-    .join(sep);
-}
-
 // [LAW:one-source-of-truth] Locale-grouped integer rendering. Callers that
 // want "50,000" instead of "50000" go through this rather than calling
 // toLocaleString() ad-hoc — the legacy context segment used the latter
@@ -90,26 +74,4 @@ export function abbreviateFishStyle(dirPath: string): string {
 // whatever locale the host process picks at startup.
 export function formatInteger(n: number): string {
   return n.toLocaleString();
-}
-
-export function formatBurnRate(rate: number | null | undefined): string {
-  if (rate === null || rate === undefined || rate <= 0) return "";
-  return rate < 1 ? `${(rate * 100).toFixed(0)}c/h` : `$${rate.toFixed(2)}/h`;
-}
-
-export function collapseHome(dirPath: string, homeDir?: string): string {
-  const home =
-    homeDir ??
-    globalThis.process?.env?.HOME ??
-    globalThis.process?.env?.USERPROFILE;
-  if (home && dirPath.startsWith(home)) {
-    return dirPath.replace(home, "~");
-  }
-  return dirPath;
-}
-
-export function formatTimeRemaining(totalMinutes: number): string {
-  const hours = Math.floor(totalMinutes / 60);
-  const minutes = totalMinutes % 60;
-  return hours > 0 ? `${hours}h ${minutes}m left` : `${minutes}m left`;
 }

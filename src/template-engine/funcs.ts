@@ -131,29 +131,36 @@ export function ccCandybarFuncs(): FuncMap {
   };
 }
 
-// [LAW:one-source-of-truth] Domain value formatters wrap src/utils/formatters.ts
-// without re-deriving the formatting rules. What remains are funcs with no
-// template-native expression: regex model-name parsing, locale grouping, and
-// the one clock-reading numeric primitive (minutesUntilReset).
+// [LAW:one-source-of-truth] Domain value formatters. What remains after the
+// formatting-as-data epic (bdi) are primitives with NO template-native
+// expression — the bdi migration is complete. Do NOT migrate these to DSL
+// helpers; each one is retained for a load-bearing reason:
 //
-// The display-formatting families moved to DSL helper templates
-// (DEFAULT_DSL_CONFIG.helpers) so their policy is data a user can override:
-// the cost/token/budget family (bdi.3) and the duration/time-remaining family
-// (formatDuration/formatResponseTime/formatTimeSince/formatLongTimeRemaining,
-// bdi.4). They are display policy — strings the bar shows — so they belong in
-// data, not compiled code.
+//   minutesUntilReset — returns a NUMBER for comparisons and arithmetic
+//     (`le (minutesUntilReset .x) 8`). A template helper writes to output
+//     and cannot return a value, so a helper form would duplicate the formula
+//     across every comparison site [LAW:one-source-of-truth].
 //
-// minutesUntilReset stays a func because it returns a NUMBER consumed in
-// arithmetic and comparisons (`le (minutesUntilReset .x) 8`,
-// `formatLongTimeRemaining (minutesUntilReset .x)`). A `{{ template }}` helper
-// writes to output and cannot return a value, so expressing it as a helper
-// would force duplicating its formula across every comparison site
-// [LAW:one-source-of-truth]. It is a numeric primitive, not display policy.
+//   formatInteger — locale-aware grouping via toLocaleString(). A regex
+//     helper would be locale-blind (always comma+3), a second divergent
+//     producer [LAW:one-source-of-truth]. The daemon inherits shell LANG/LC_*
+//     from the Rust spawner so grouping honors the user's locale at runtime.
 //
-// [LAW:single-enforcer] minutesUntilReset reads "now" from the injected `clock`
-// — the SAME seam createCcCandybarEngine threads to sprigDatetime (now/unixEpoch)
-// and createEngine. There is no hidden Date.now(): the one clock governs every
-// time-dependent evaluation, and tests inject a frozen clock for determinism.
+//   round — Math.round (half-away-from-zero) consumed in `{{ round .pct }}%`
+//     segments. shadows sprigMath's precision-aware round intentionally:
+//     block/weekly/context need integer-rounding, not decimal rounding.
+//
+//   formatModelName / shortenModelName — regex parsing of external model IDs
+//     (named capture groups, version assembly, variant stripping). Trust-
+//     boundary normalization, not display policy. No regex primitive in DSL.
+//
+// The display-formatting families moved to DSL helpers in DEFAULT_DSL_CONFIG:
+// cost/token/budget (bdi.3), duration/time-remaining (bdi.4).
+//
+// [LAW:single-enforcer] minutesUntilReset reads "now" from the injected
+// `clock` — the SAME seam createCcCandybarEngine threads to sprigDatetime
+// (now/unixEpoch) and createEngine. One clock governs every time-dependent
+// evaluation; tests inject a frozen clock for determinism.
 export function formatterFuncs(clock: () => Date = () => new Date()): FuncMap {
   return {
     // Epoch-seconds → whole minutes until that instant, clamped at 0 for a past
