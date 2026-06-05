@@ -12,6 +12,7 @@
 // govern output, not whether operations run.
 
 import type { RichText, PaletteResolver } from "@promptctl/rich-js";
+import type { Engine, Template } from "@promptctl/go-template-js";
 import type {
   ValidatedConfig,
   VariableDecl,
@@ -179,6 +180,40 @@ function declareOne(
   }
 }
 
+// ─── Helper preamble ─────────────────────────────────────────────────────────
+
+// [LAW:single-enforcer] Compile the config's shared helper templates into ONE
+// output-neutral preamble: each name→body becomes a `{{ define "name" }}body{{ end }}`
+// block, concatenated with no interstitial text so the preamble emits nothing.
+// Prepended to every template this config parses, the defines resolve a
+// `{{ template "name" .arg }}` call locally — go-template-js scopes defines to a
+// single parse unit, so the define and the call MUST share one parse.
+// [LAW:no-silent-fallbacks] Each body is parsed in ISOLATION first, so a malformed
+// helper surfaces a per-helper diagnostic rather than a confusing error blamed on
+// the first segment that happens to call it.
+// [LAW:dataflow-not-control-flow] Empty helpers ⇒ "" ⇒ `engine.parse("" + src)`
+// is byte-identical to `engine.parse(src)`: existing configs are unaffected with
+// no special-case branch.
+function compileHelperPreamble(
+  engine: Engine<RichText>,
+  helpers: Readonly<Record<string, string>>,
+): string {
+  let preamble = "";
+  for (const [name, body] of Object.entries(helpers)) {
+    const define = `{{ define "${name}" }}${body}{{ end }}`;
+    try {
+      engine.parse(define);
+    } catch (e) {
+      throw new Error(
+        `Template parse error in helpers.${name}: ${(e as Error).message}`,
+        { cause: e },
+      );
+    }
+    preamble += define;
+  }
+  return preamble;
+}
+
 // ─── registerDslConfig ────────────────────────────────────────────────────────
 
 /**
@@ -249,6 +284,16 @@ export function registerDslConfig(
     },
     opts?.clock,
   );
+  // [LAW:single-enforcer] THE one parse path for this config: prepend the helper
+  // preamble so every template — segment template/when/bg/fg, node `when`, and
+  // action copy/open — resolves `{{ template "name" }}` calls against the same
+  // shared helpers. One closure, not raw engine.parse scattered across sites, so
+  // there is exactly one boundary where helpers come into scope (and one place a
+  // helper could fail to be visible). The preamble is compiled ONCE here, not per
+  // parse, and is "" when no helpers are declared.
+  const helperPreamble = compileHelperPreamble(engine, config.helpers);
+  const parse = (src: string): Template<RichText> =>
+    engine.parse(helperPreamble + src);
   // [LAW:one-source-of-truth] Map each SessionState key → the variable that
   // reads it, so an option picker marks its current selection by reading the
   // SAME value the templates read — independent of whether the config named the
@@ -274,11 +319,7 @@ export function registerDslConfig(
   // [LAW:one-source-of-truth] Actions resolve their set key → the reading
   // variable through the stateKeyToVar map, so an apply action and the picker
   // that references it read one value.
-  actionRuntime.compiled = compileActions(
-    engine,
-    config.actions,
-    stateKeyToVar,
-  );
+  actionRuntime.compiled = compileActions(parse, config.actions, stateKeyToVar);
 
   for (const [name, decl] of Object.entries(config.variables)) {
     declareOne(registry, name, decl, cwd);
@@ -304,7 +345,7 @@ export function registerDslConfig(
   for (const [segName, seg] of Object.entries(config.segments)) {
     const parseField = (src: string, field: string) => {
       try {
-        return engine.parse(src);
+        return parse(src);
       } catch (e) {
         throw new Error(
           `Template parse error in segments.${segName}.${field}: ${(e as Error).message}`,
@@ -339,7 +380,7 @@ export function registerDslConfig(
   // predicate and its children travel together.
   const parseNodeField = (src: string, path: string, field: string) => {
     try {
-      return engine.parse(src);
+      return parse(src);
     } catch (e) {
       throw new Error(
         `Template parse error in ${path}.${field}: ${(e as Error).message}`,

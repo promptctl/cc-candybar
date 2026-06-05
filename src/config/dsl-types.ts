@@ -147,6 +147,13 @@ export interface RawDslConfig {
   readonly layout?: readonly LayoutRowInput[];
   readonly root?: LayoutNode;
   readonly actions?: Readonly<Record<string, ActionDecl>>;
+  // [LAW:single-enforcer] Config-level shared helper templates: name → Go-template
+  // body. Each compiles to one `{{ define "name" }}body{{ end }}` block, and the
+  // whole set into a single output-neutral preamble prepended to every template
+  // this config parses — so a formatter (`{{ template "formatCost" .x }}`) is
+  // defined ONCE and callable from any segment/predicate, never re-inlined per
+  // segment. Absent ≡ no helpers; merges by-name (user overrides a helper).
+  readonly helpers?: Readonly<Record<string, string>>;
 }
 
 export interface DslConfig {
@@ -164,6 +171,12 @@ export interface DslConfig {
   // template cannot smuggle an un-gated write. Empty when no config declares
   // actions — an absent `actions` key merges to `{}`.
   readonly actions: Readonly<Record<string, ActionDecl>>;
+  // [LAW:single-enforcer] The effective helper set: a name → template-body map
+  // compiled to a defines-preamble at registerDslConfig. Empty when no config
+  // declares helpers — an absent `helpers` key merges to `{}` (same cascade as
+  // actions). The single definition site for each formatter/transform a template
+  // calls via `{{ template "name" .arg }}`.
+  readonly helpers: Readonly<Record<string, string>>;
 }
 
 // [LAW:single-enforcer] The brand symbol is `unique` and module-private —

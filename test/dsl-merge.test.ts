@@ -43,6 +43,7 @@ const DFLT: DslConfig = {
   },
   root: vert(["a", "b"]),
   actions: {},
+  helpers: {},
 };
 
 describe("mergeWithDefault", () => {

@@ -49,6 +49,7 @@ import { validateVariables } from "./loader/variables.js";
 import { validateSegments } from "./loader/segments.js";
 import { validateLayout, validateRoot } from "./loader/layout.js";
 import { validateActions } from "./loader/actions.js";
+import { validateHelpers } from "./loader/helpers.js";
 import { validateCrossReferences } from "./loader/cross-ref.js";
 import { validateNoCycles } from "./loader/cycles.js";
 
@@ -241,6 +242,8 @@ function validateTopLevel(
   }
   if (raw.actions !== undefined)
     out.actions = validateActions(ctx, raw.actions);
+  if (raw.helpers !== undefined)
+    out.helpers = validateHelpers(ctx, raw.helpers);
   return out;
 }
 
@@ -251,4 +254,5 @@ const TOP_LEVEL_KEYS = new Set([
   "layout",
   "root",
   "actions",
+  "helpers",
 ]);

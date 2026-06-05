@@ -152,6 +152,7 @@ const CONFIG_WITHOUT_METRICS: DslConfig = {
   segments: SHARED_SEGMENTS,
   root: rootOf("directory", "git"),
   actions: {},
+  helpers: {},
 };
 
 const CONFIG_WITH_METRICS: DslConfig = {
@@ -160,6 +161,7 @@ const CONFIG_WITH_METRICS: DslConfig = {
   segments: SHARED_SEGMENTS,
   root: rootOf("directory", "git", "metrics", "tmux"),
   actions: {},
+  helpers: {},
 };
 
 describe("buildRenderPayload — layout-driven provider gating", () => {
@@ -216,6 +218,7 @@ describe("buildRenderPayload — layout-driven provider gating", () => {
       },
       root: rootOf("gitDump"),
       actions: {},
+      helpers: {},
     };
     const needed = buildNeededPrefixes(config);
     // The only declared `git.*` input is `git.branch`; it must be in
@@ -240,6 +243,7 @@ describe("buildRenderPayload — layout-driven provider gating", () => {
         children: [{ kind: "segment", name: "directory" }],
       },
       actions: {},
+      helpers: {},
     };
     const needed = buildNeededPrefixes(config);
     expect(needed.has("metrics.sessionDuration")).toBe(true);
