@@ -42,18 +42,10 @@ const CONNECT_TIMEOUT: Duration = Duration::from_millis(50);
 const TOTAL_BUDGET: Duration = Duration::from_millis(150);
 const MAX_FRAME_BYTES: u32 = 16 * 1024 * 1024;
 
-const SUBCOMMANDS: &[&str] = &[
-    "install",
-    "install-url-handler",
-    "url-handle",
-    "daemon",
-    "daemon-stats",
-];
-
 fn main() {
     let argv: Vec<String> = env::args().collect();
 
-    if should_dispatch_to_node(&argv) {
+    if should_dispatch_to_node(&argv, unsafe { libc::isatty(0) } == 1) {
         exec_node_fallback(&argv);
         eprintln!("cc-candybar: failed to exec node fallback");
         std::process::exit(1);
@@ -139,23 +131,28 @@ fn parse_stdin() -> Result<ParsedInput, BadInput> {
 
 // --- argv dispatch -------------------------------------------------------
 
-fn should_dispatch_to_node(argv: &[String]) -> bool {
+// [LAW:one-source-of-truth] The Rust client is a fast relay for the render hot
+// path and delegates EVERY subcommand to Node — Node is the single authority on
+// what subcommands exist. A subcommand is structurally a positional first arg (a
+// word, not a flag); the render path is invoked with flags only (`--style=…`) or
+// no args, so it never has one. Discriminating on that shape — rather than a
+// hand-maintained name list — means a subcommand Node adds (lint/schema/vars/…)
+// works here with no Rust mirror to update and no drift to ship. `stdin_is_tty`
+// is injected so this is a pure, testable function.
+fn should_dispatch_to_node(argv: &[String], stdin_is_tty: bool) -> bool {
     // --help / -h anywhere → Node prints help.
     if argv.iter().any(|a| a == "--help" || a == "-h") {
         return true;
     }
-    // First non-binary arg is a subcommand → Node handles it.
+    // A positional first arg (not a flag) is a subcommand → Node owns it.
     if let Some(first) = argv.get(1) {
-        if SUBCOMMANDS.iter().any(|s| s == first) {
+        if !first.starts_with('-') {
             return true;
         }
     }
-    // Stdin is a TTY → Node prints the "needs input from Claude Code"
-    // error. We mirror the check rather than reproducing the message.
-    if unsafe { libc::isatty(0) } == 1 {
-        return true;
-    }
-    false
+    // No subcommand, but stdin is a TTY → Node prints the "needs input from
+    // Claude Code" error. We mirror the check rather than reproducing the message.
+    stdin_is_tty
 }
 
 fn exec_node_fallback(argv: &[String]) {
@@ -716,5 +713,51 @@ mod tests {
     fn classify_io_error_default_is_transient_io() {
         let other = classify_io_error(io::Error::new(io::ErrorKind::Other, "something"));
         assert!(matches!(other, RenderOutcome::Transient(TransientCause::Io(_))));
+    }
+
+    fn argv(parts: &[&str]) -> Vec<String> {
+        parts.iter().map(|s| s.to_string()).collect()
+    }
+
+    // [LAW:one-source-of-truth] Every Node subcommand — including the ones added
+    // long after this client was written — must route to Node from the shipped
+    // binary, regardless of whether stdin is a TTY. This is the regression that
+    // a hand-maintained name list silently broke for lint/schema/vars/segments/
+    // config: they failed with "no input on stdin" under redirected stdin.
+    #[test]
+    fn dispatch_routes_every_subcommand_to_node() {
+        for cmd in [
+            "install",
+            "install-url-handler",
+            "url-handle",
+            "daemon",
+            "daemon-stats",
+            "lint",
+            "schema",
+            "vars",
+            "segments",
+            "config",
+        ] {
+            assert!(
+                should_dispatch_to_node(&argv(&["cc-candybar", cmd]), false),
+                "subcommand `{cmd}` must dispatch to Node even with non-TTY stdin"
+            );
+        }
+    }
+
+    // The render hot path (flags only, or no args) stays on the Rust render path.
+    #[test]
+    fn dispatch_keeps_render_invocation_local() {
+        assert!(!should_dispatch_to_node(&argv(&["cc-candybar", "--style=powerline"]), false));
+        assert!(!should_dispatch_to_node(&argv(&["cc-candybar"]), false));
+    }
+
+    #[test]
+    fn dispatch_help_and_tty_to_node() {
+        assert!(should_dispatch_to_node(&argv(&["cc-candybar", "--help"]), false));
+        assert!(should_dispatch_to_node(&argv(&["cc-candybar", "-h"]), false));
+        // No positional subcommand, but an interactive TTY → Node prints the
+        // needs-input error.
+        assert!(should_dispatch_to_node(&argv(&["cc-candybar"]), true));
     }
 }
