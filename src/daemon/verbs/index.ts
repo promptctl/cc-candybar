@@ -279,8 +279,7 @@ const LEAF_VERBS = new Map<string, VerbHandler>([
 // dispatcher folds the list, running EVERY effect through the leaf table. The
 // effect count is data — N=1 and N=100 walk the identical loop, no plain-vs-
 // compound branch. [LAW:no-silent-fallbacks] Every effect runs even if an
-// earlier one failed; failures accumulate and surface as ONE aggregated error
-// (temporary per-effect error display is a follow-up). An unknown or
+// earlier one failed; failures accumulate in `errors`. An unknown or
 // non-leaf (e.g. nested `dispatch`) verb is a miss in LEAF_VERBS — reported,
 // never executed.
 //
@@ -291,10 +290,24 @@ const LEAF_VERBS = new Map<string, VerbHandler>([
 // operationally, the whole click failed operationally (plain Error); only when
 // every failure is an input error does the aggregate stay BadVerbArgs. An
 // unknown verb is bad input — it does not flip the classification.
+//
+// [LAW:one-source-of-truth] Per-effect errors are written to session state
+// under 'click.error' so the next render shows WHICH effect(s) failed in the
+// bar transiently (one render, then cleared). Only possible when a session ID
+// is available from a set-state or toolbar-toggle effect in the same click.
 const dispatch: VerbHandler = (rawValue, ctx) => {
   const errors: string[] = [];
   let operational = false;
+  let sessionId: string | null = null;
   for (const { verb, value } of parseEffects(rawValue)) {
+    // Extract session ID from the first session-bearing effect for error display.
+    if (
+      !sessionId &&
+      (verb === VERB_SET_STATE || verb === VERB_TOOLBAR_TOGGLE)
+    ) {
+      const parts = decodeSegments(value);
+      if (parts.length > 0 && parts[0]) sessionId = parts[0];
+    }
     const handler = LEAF_VERBS.get(verb);
     if (!handler) {
       errors.push(`unknown effect verb "${verb}"`);
@@ -308,6 +321,9 @@ const dispatch: VerbHandler = (rawValue, ctx) => {
     }
   }
   if (errors.length > 0) {
+    if (sessionId) {
+      ctx.sessionState.set(sessionId, "click.error", errors.join("\n"));
+    }
     const message = `dispatch: ${errors.join("; ")}`;
     throw operational ? new Error(message) : new BadVerbArgs(message);
   }
