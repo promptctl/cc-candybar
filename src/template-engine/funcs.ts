@@ -12,10 +12,6 @@ import {
   type VarValue,
 } from "../var-system/types.js";
 import {
-  formatCost,
-  formatTokens,
-  formatTokenCount,
-  formatTokenBreakdown,
   formatDuration,
   formatLongTimeRemaining,
   formatResponseTime,
@@ -25,7 +21,6 @@ import {
   minutesUntilReset,
   formatTimeSince,
 } from "../utils/formatters.js";
-import { getBudgetStatus } from "../utils/budget.js";
 import { listResolvablePaletteNames, STYLE_ORDER } from "../themes/policy.js";
 
 // [LAW:one-source-of-truth] The DSL `themes()` and `styles()` bindings
@@ -50,10 +45,10 @@ const STYLES_LIST: readonly string[] = [...STYLE_ORDER];
 //
 // [LAW:no-silent-fallbacks] A bigint outside JS's safe-integer range cannot
 // round-trip through Number without silent precision loss (53-bit mantissa)
-// or overflow to ±Infinity. Either would feed wrong values into formatCost /
-// formatTokens / formatDuration and produce confidently-wrong output. Throw
-// at the conversion boundary so the failure surfaces where the conversion
-// happens, not deep inside a formatter doing math on a corrupted number.
+// or overflow to ±Infinity. Either would feed a wrong value into a formatter
+// (e.g. formatDuration) and produce confidently-wrong output. Throw at the
+// conversion boundary so the failure surfaces where the conversion happens,
+// not deep inside a formatter doing math on a corrupted number.
 function num(v: number | bigint): number {
   if (typeof v === "bigint") {
     if (
@@ -142,58 +137,23 @@ export function ccCandybarFuncs(): FuncMap {
 }
 
 // [LAW:one-source-of-truth] Domain value formatters wrap src/utils/formatters.ts
-// (and src/utils/budget.ts) without re-deriving the formatting rules. DSL
-// templates that render usage/cost/time/locale-grouped values delegate here,
-// so every cost/token/duration string in the bar passes through one
-// formatting definition — drift between segments is unrepresentable.
+// without re-deriving the formatting rules. DSL templates that render
+// time/locale-grouped values delegate here, so every duration string in the
+// bar passes through one formatting definition — drift between segments is
+// unrepresentable.
 //
 // [LAW:dataflow-not-control-flow] Each entry is a thin pure call; the wrapper
 // adds the engine FuncMap shape (argTypes + fn) and nothing else. No business
 // logic, no defaulting, no null-coalescing — the underlying formatter's
 // contract IS the DSL function's contract.
 //
-// Surfaced by chunk-7 segment migration (lit brandon-segment-dsl-migration-bzh.5):
-// the usage/cost/time/locale family of built-in segments (session, today, block,
-// weekly, context, metrics) could not reach dsl-parity without these.
+// The cost/token/budget family (formatCost, formatTokens, formatTokenCount,
+// formatTokenBreakdown, budgetStatus) used to live here too; they moved to
+// DSL helper templates (DEFAULT_DSL_CONFIG.helpers) so their display policy is
+// data a user can override. What remains are formatters with no template-native
+// expression yet (regex model-name parsing, locale grouping, time math).
 export function formatterFuncs(): FuncMap {
   return {
-    // ─── Cost / token value formatters ─────────────────────────────────
-    formatCost: {
-      fn: (n: number | bigint) => formatCost(num(n)),
-      argTypes: ["number"],
-    },
-    formatTokens: {
-      fn: (n: number | bigint) => formatTokens(num(n)),
-      argTypes: ["number"],
-    },
-    formatTokenCount: {
-      fn: (n: number | bigint) => formatTokenCount(num(n)),
-      argTypes: ["number"],
-    },
-    // [LAW:one-source-of-truth] The canonical breakdown formatter takes a
-    // struct {input, output, cacheCreation, cacheRead}; the var-system is
-    // flat scalar. Reconstruct the struct at the engine boundary and
-    // delegate — no formatting rules duplicated here.
-    // [LAW:types-are-the-program] Four numeric args match the four
-    // independent scalar fields. A struct-typed var-system entry would let
-    // the call be one arg, but adding a struct type to VarValue is a
-    // separate substrate change.
-    formatTokenBreakdown: {
-      fn: (
-        input: number | bigint,
-        output: number | bigint,
-        cacheCreation: number | bigint,
-        cacheRead: number | bigint,
-      ) =>
-        formatTokenBreakdown({
-          input: num(input),
-          output: num(output),
-          cacheCreation: num(cacheCreation),
-          cacheRead: num(cacheRead),
-        }),
-      argTypes: ["number", "number", "number", "number"],
-    },
-
     // ─── Duration / time formatters ────────────────────────────────────
     formatDuration: {
       fn: (s: number | bigint) => formatDuration(num(s)),
@@ -236,24 +196,6 @@ export function formatterFuncs(): FuncMap {
     round: {
       fn: (n: number | bigint) => Math.round(num(n)),
       argTypes: ["number"],
-    },
-
-    // ─── Budget-status suffix (today's " 9%") ──────────────────────────
-    // Returns the displayText field of getBudgetStatus — an empty string when
-    // the inputs make the status non-displayable (no budget, negative cost),
-    // a " <pct>%" / " +<pct>%" / " !<pct>%" suffix otherwise. The legacy
-    // formatUsageWithBudget concatenates this same field unconditionally;
-    // wrapping it preserves byte-parity (incl. the empty-string non-display
-    // case) without the DSL re-implementing the warning-threshold logic.
-    budgetStatus: {
-      fn: (
-        cost: number | bigint,
-        budget: number | bigint,
-        warningThreshold: number | bigint,
-      ) =>
-        getBudgetStatus(num(cost), num(budget), num(warningThreshold))
-          .displayText,
-      argTypes: ["number", "number", "number"],
     },
 
     // ─── Model-name normalizers (chunk-7 model dsl-pending → dsl-parity) ─
