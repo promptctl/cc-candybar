@@ -16,12 +16,15 @@
 //    toDate, duration — all reading "now" through the injected clock seam.
 //  • sprigConversions: atoi, int, int64, float64, toString, toStrings
 //    (int here is shadowed by ccCandybarFuncs' var-system cast below).
+//  • sprigDicts: dict, get, set, keys, values, pick, omit, hasKey, merge —
+//    `dict` lets a helper take multiple named inputs through its one dot arg.
 //  • richTextFuncs: bold, italic, red, green, … (styling from rich-js).
 //  • paletteFuncs (when resolver provided): primary, accent, palette, paletteOver, auto.
 //  • ccCandybarFuncs: basename, dirname, int, string, bool, urlEncode.
-//  • formatterFuncs: formatCost, formatTokens, formatTokenCount, formatDuration,
-//    formatLongTimeRemaining, formatResponseTime, minutesUntilReset,
-//    formatInteger, round, budgetStatus, formatModelName, shortenModelName.
+//  • formatterFuncs: formatDuration, formatLongTimeRemaining, formatResponseTime,
+//    formatTimeSince, minutesUntilReset, formatInteger, round, formatModelName,
+//    shortenModelName. (The cost/token/budget formatters moved to DSL helper
+//    templates — see DEFAULT_DSL_CONFIG.helpers.)
 
 import {
   createEngine,
@@ -33,6 +36,7 @@ import {
   sprigMath,
   sprigDatetime,
   sprigConversions,
+  sprigDicts,
 } from "@promptctl/go-template-js";
 import type { PaletteResolver } from "@promptctl/rich-js";
 import { richTextFuncs, RichText } from "@promptctl/rich-js";
@@ -76,6 +80,12 @@ export function createCcCandybarEngine(
       // [LAW:single-enforcer] one clock seam: the same source createEngine holds.
       ...sprigDatetime(clock),
       ...sprigConversions(),
+      // [LAW:types-are-the-program] `dict` is the substrate primitive a helper
+      // uses to receive more than one input through its single dot arg:
+      // `{{ template "budgetStatus" (dict "cost" .x "budget" .y "warn" .z) }}`.
+      // It makes a multi-input formatter's domain exactly {named scalars},
+      // decoupled from any payload's nesting — no per-payload helper variant.
+      ...sprigDicts(),
       ...richTextFuncs(),
       ...(resolver !== undefined ? paletteFuncs(resolver) : {}),
       // Domain-specific overrides last (wins on collision with sprig aliases).
