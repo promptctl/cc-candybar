@@ -21,7 +21,7 @@
 // FuncMap in as data). The generic engine never imports this module.
 
 import { RichText, Style } from "@promptctl/rich-js";
-import type { Engine, FuncMap, Template } from "@promptctl/go-template-js";
+import type { FuncMap, Template } from "@promptctl/go-template-js";
 import type { VariableStore } from "../var-system/store.js";
 import { toString as varToString } from "../var-system/types.js";
 import { buildScope } from "../template-engine/scope.js";
@@ -109,14 +109,18 @@ export interface ActionRuntime {
 // SessionState key → the variable that reads it (same map widgets use), so a
 // set action reads its current/active value from the SAME value the templates
 // read, regardless of whether the config named the variable after the key.
+// [LAW:single-enforcer] `parse` is the config's ONE helper-aware parse closure
+// (registerDslConfig owns it), not a bare engine — action copy/open templates
+// resolve the same shared `{{ template "name" }}` helpers every segment does,
+// through one boundary. compileActions needs only the ability to parse a source.
 export function compileActions(
-  engine: Engine<RichText>,
+  parse: (src: string) => Template<RichText>,
   actions: Readonly<Record<string, ActionDecl>>,
   stateKeyToVar: ReadonlyMap<string, string>,
 ): CompiledActions {
   const out = new Map<string, CompiledActionDecl>();
   for (const [name, action] of Object.entries(actions)) {
-    out.set(name, compileAction(engine, name, action, stateKeyToVar));
+    out.set(name, compileAction(parse, name, action, stateKeyToVar));
   }
   return out;
 }
@@ -126,7 +130,7 @@ export function compileActions(
 // for the three set arms; copy/open otherwise). Every arm reads only its own
 // fields; a new arm is one new branch.
 function compileAction(
-  engine: Engine<RichText>,
+  parse: (src: string) => Template<RichText>,
   name: string,
   action: ActionDecl,
   stateKeyToVar: ReadonlyMap<string, string>,
@@ -164,22 +168,22 @@ function compileAction(
   if ("copy" in action) {
     return {
       kind: "copy",
-      text: parseActionTemplate(engine, action.copy, name),
+      text: parseActionTemplate(parse, action.copy, name),
     };
   }
   return {
     kind: "open",
-    target: parseActionTemplate(engine, action.open, name),
+    target: parseActionTemplate(parse, action.open, name),
   };
 }
 
 function parseActionTemplate(
-  engine: Engine<RichText>,
+  parse: (src: string) => Template<RichText>,
   src: string,
   name: string,
 ): Template<RichText> {
   try {
-    return engine.parse(src);
+    return parse(src);
   } catch (e) {
     throw new Error(
       `Template parse error in actions.${name}: ${(e as Error).message}`,

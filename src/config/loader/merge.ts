@@ -41,5 +41,9 @@ export function mergeWithDefault(
     // declares only the actions that differ from the bundled default (which
     // ships none).
     actions: { ...dflt.actions, ...(raw.actions ?? {}) },
+    // [LAW:one-source-of-truth] helpers merge by name, same cascade — a user
+    // overrides one formatter helper by re-declaring its name; the rest inherit
+    // from the bundled default.
+    helpers: { ...dflt.helpers, ...(raw.helpers ?? {}) },
   };
 }
