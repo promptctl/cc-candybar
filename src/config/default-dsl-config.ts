@@ -573,4 +573,10 @@ export const DEFAULT_DSL_CONFIG = {
   // named actions and binds them from a segment template via
   // `{{ action "name" … }}`; the merge cascade adds them by name.
   actions: {},
+
+  // [LAW:single-enforcer] No shared helper templates in the bundled default yet —
+  // the baseline segments call the JS formatter funcs directly. The bdi migration
+  // tickets move those formatters here as named helpers, each defined once and
+  // called via `{{ template "name" .arg }}`; a user config adds/overrides by name.
+  helpers: {},
 } satisfies DslConfig;
