@@ -454,14 +454,14 @@ export const DEFAULT_DSL_CONFIG = {
     },
     session: {
       template:
-        " § {{ formatCost .session.cost }} ({{ formatTokens .session.tokens }}) ",
+        ' § {{ template "formatCost" .session.cost }} ({{ template "formatTokens" .session.tokens }}) ',
       bg: "surface",
       fg: "foreground",
     },
     today: {
       template:
-        " ☉ {{ formatCost .today.cost }} ({{ formatTokens .today.tokens }})" +
-        "{{ budgetStatus .today.cost .today.budget.amount .today.budget.warningThreshold }} ",
+        ' ☉ {{ template "formatCost" .today.cost }} ({{ template "formatTokens" .today.tokens }})' +
+        '{{ template "budgetStatus" (dict "cost" .today.cost "budget" .today.budget.amount "warn" .today.budget.warningThreshold) }} ',
       bg: "surface",
       fg: "foreground",
     },
@@ -574,9 +574,50 @@ export const DEFAULT_DSL_CONFIG = {
   // `{{ action "name" … }}`; the merge cascade adds them by name.
   actions: {},
 
-  // [LAW:single-enforcer] No shared helper templates in the bundled default yet —
-  // the baseline segments call the JS formatter funcs directly. The bdi migration
-  // tickets move those formatters here as named helpers, each defined once and
-  // called via `{{ template "name" .arg }}`; a user config adds/overrides by name.
-  helpers: {},
+  // [LAW:single-enforcer] / [LAW:one-source-of-truth] Display-formatting policy
+  // for the cost/token/budget family lives here as named template helpers, each
+  // DEFINED ONCE and called from every segment via `{{ template "name" .arg }}`
+  // — so how a cost/token string looks is data a user overrides by name, not
+  // compiled JS. The K/M token-scale rule has a SINGLE home (`formatTokenCount`);
+  // `formatTokens` suffixes " tokens" onto it and `formatTokenBreakdown` calls it
+  // per part, so the scale policy can never drift between the three.
+  // [LAW:dataflow-not-control-flow] A multi-input helper (budgetStatus,
+  // formatTokenBreakdown) receives its inputs as one `dict` value through its
+  // single dot arg — variability flows as data across one boundary, not as a
+  // bespoke multi-arg signature.
+  helpers: {
+    // Cost: under a cent reads "<$0.01"; otherwise "$" + two decimals. (Null is
+    // unrepresentable through the var-system — type:number with a numeric default
+    // owns "missing" upstream — so no null branch is needed here.)
+    formatCost:
+      '{{ if lt . 0.01 }}<$0.01{{ else }}${{ printf "%.2f" . }}{{ end }}',
+    // The single home of the K/M token-scale rule. >=1e6 → "X.YM", >=1e3 → "X.YK",
+    // else the integer verbatim (0 and negatives fall through to this arm, exactly
+    // as the retired JS did). No " tokens" suffix — that is formatTokens' job.
+    formatTokenCount:
+      '{{ if ge . 1000000 }}{{ printf "%.1f" (divf . 1000000) }}M' +
+      '{{ else if ge . 1000 }}{{ printf "%.1f" (divf . 1000) }}K' +
+      "{{ else }}{{ . }}{{ end }}",
+    formatTokens: '{{ template "formatTokenCount" . }} tokens',
+    // Breakdown over a dict {input, output, cacheCreation, cacheRead}; each present
+    // part is formatted by the shared formatTokenCount and joined with " + ". A
+    // `$first` flag (reassigned across if-frames) inserts the separator before all
+    // but the first present part; all-zero collapses to "0 tokens".
+    formatTokenBreakdown:
+      "{{ $first := true }}" +
+      '{{ if gt .input 0 }}{{ template "formatTokenCount" .input }} in{{ $first = false }}{{ end }}' +
+      '{{ if gt .output 0 }}{{ if not $first }} + {{ end }}{{ template "formatTokenCount" .output }} out{{ $first = false }}{{ end }}' +
+      '{{ if or (gt .cacheCreation 0) (gt .cacheRead 0) }}{{ if not $first }} + {{ end }}{{ template "formatTokenCount" (add .cacheCreation .cacheRead) }} cached{{ $first = false }}{{ end }}' +
+      "{{ if $first }}0 tokens{{ end }}",
+    // Budget suffix over a dict {cost, budget, warn}. Non-displayable (budget<=0 or
+    // cost<0) → "". Otherwise pct = min(100, cost/budget*100), rendered " !N%" at/above
+    // warn, " +N%" at/above 50, " N%" below.
+    budgetStatus:
+      "{{ if or (le .budget 0) (lt .cost 0) }}{{ else }}" +
+      "{{ $pct := minf 100 (mulf (divf .cost .budget) 100) }}" +
+      '{{ $p := printf "%.0f%%" $pct }}' +
+      "{{ if ge $pct .warn }} !{{ $p }}" +
+      "{{ else }}{{ if ge $pct 50 }} +{{ $p }}{{ else }} {{ $p }}{{ end }}{{ end }}" +
+      "{{ end }}",
+  },
 } satisfies DslConfig;
