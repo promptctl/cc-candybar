@@ -698,8 +698,20 @@ async function handleRequest(req: Request): Promise<Response> {
           entry.state.lastRenderCellsBySegment,
         );
       }
+      // [LAW:one-source-of-truth] Consume the transient click error written by
+      // dispatch on partial/total effect failure, then clear it so it shows
+      // exactly once. Only called when non-null to avoid a no-op persist+MobX
+      // tick on every render.
+      const clickError = sessionState.get(
+        req.hookData.session_id,
+        "click.error",
+      );
+      if (clickError)
+        sessionState.clear(req.hookData.session_id, "click.error");
       const combinedError =
-        [unknownFlagsError, entry.lastError].filter(Boolean).join("\n") || null;
+        [unknownFlagsError, entry.lastError, clickError]
+          .filter(Boolean)
+          .join("\n") || null;
       const output = composeWithDiagnostics(
         body,
         combinedError,

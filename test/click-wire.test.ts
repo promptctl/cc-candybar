@@ -169,4 +169,28 @@ describe("dispatch verb — run all, aggregate, no nesting", () => {
     // does not — so an effect can never re-enter dispatch.
     expect(VERBS.has(VERB_DISPATCH)).toBe(true);
   });
+
+  test("per-effect errors are written to click.error in session state for bar display", () => {
+    const sessionState = new SessionState();
+    // Two effects: first valid, second bad. Dispatch throws but also writes
+    // per-effect errors to session state so the next render shows them.
+    const url = effectsUrl([
+      { verb: VERB_SET_STATE, args: [SID, "theme", "textual-dark"] },
+      { verb: VERB_SET_STATE, args: [SID, "no-such-key", "x"] },
+    ]);
+    expect(() => clickUrl(url, ctx(sessionState))).toThrow();
+    const clickError = sessionState.get(SID, "click.error");
+    expect(clickError).not.toBeNull();
+    expect(clickError).toMatch(/no-such-key/);
+    // Session ID is extracted from the first set-state effect.
+    expect(clickError).toMatch(/set-state:/);
+  });
+
+  test("click.error is not written when no session-bearing effect exists", () => {
+    const sessionState = new SessionState();
+    // copy-only dispatch with an unknown verb — no session ID available.
+    const url = effectsUrl([{ verb: VERB_DISPATCH, args: ["whatever"] }]);
+    expect(() => clickUrl(url, ctx(sessionState))).toThrow();
+    expect(sessionState.get(SID, "click.error")).toBeNull();
+  });
 });
