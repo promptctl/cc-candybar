@@ -1,48 +1,3 @@
-interface TokenBreakdown {
-  input: number;
-  output: number;
-  cacheCreation: number;
-  cacheRead: number;
-}
-
-export function formatCost(cost: number | null): string {
-  if (cost === null) return "$0.00";
-  if (cost < 0.01) return "<$0.01";
-  return `$${cost.toFixed(2)}`;
-}
-
-export function formatTokens(tokens: number | null): string {
-  if (tokens === null) return "0 tokens";
-  if (tokens === 0) return "0 tokens";
-  if (tokens >= 1_000_000) {
-    return `${(tokens / 1_000_000).toFixed(1)}M tokens`;
-  } else if (tokens >= 1_000) {
-    return `${(tokens / 1_000).toFixed(1)}K tokens`;
-  }
-  return `${tokens} tokens`;
-}
-
-export function formatTokenBreakdown(breakdown: TokenBreakdown | null): string {
-  if (!breakdown) return "0 tokens";
-
-  const parts: string[] = [];
-
-  if (breakdown.input > 0) {
-    parts.push(`${formatTokenCount(breakdown.input)} in`);
-  }
-
-  if (breakdown.output > 0) {
-    parts.push(`${formatTokenCount(breakdown.output)} out`);
-  }
-
-  if (breakdown.cacheCreation > 0 || breakdown.cacheRead > 0) {
-    const totalCached = breakdown.cacheCreation + breakdown.cacheRead;
-    parts.push(`${formatTokenCount(totalCached)} cached`);
-  }
-
-  return parts.length > 0 ? parts.join(" + ") : "0 tokens";
-}
-
 export function formatTimeSince(seconds: number): string {
   if (seconds < 60) return `${seconds}s`;
   if (seconds < 3600) return `${Math.floor(seconds / 60)}m`;
@@ -149,10 +104,6 @@ export function formatResponseTime(seconds: number): string {
     return `${seconds.toFixed(1)}s`;
   }
   return `${(seconds / 60).toFixed(1)}m`;
-}
-
-export function formatTokenCount(tokens: number | null): string {
-  return formatTokens(tokens).replace(" tokens", "");
 }
 
 // [LAW:one-source-of-truth] Locale-grouped integer rendering. Callers that
