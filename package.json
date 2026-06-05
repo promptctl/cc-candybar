@@ -12,7 +12,7 @@
     "cc-candybar": "./bin/cc-candybar"
   },
   "scripts": {
-    "build": "tsdown",
+    "build": "node scripts/gen-schema.mjs && tsdown",
     "build:rust": "cd rust-client && cargo build --release",
     "dev": "tsdown --watch",
     "typecheck": "tsc --noEmit",
@@ -25,9 +25,11 @@
     "demo": "tsx src/demo/dsl.ts",
     "benchmark:timing": "scripts/benchmark_timing.sh",
     "check:protocol": "node scripts/check-protocol.mjs",
+    "gen:schema": "node scripts/gen-schema.mjs",
+    "check:schema": "node scripts/check-schema.mjs",
     "prepack": "node scripts/write-bin-placeholder.mjs",
     "postinstall": "node scripts/postinstall.mjs",
-    "prepublishOnly": "npm run lint && npm run typecheck && npm run check:protocol && npm run build"
+    "prepublishOnly": "npm run lint && npm run typecheck && npm run check:protocol && npm run check:schema && npm run build"
   },
   "keywords": [
     "claude",
@@ -54,6 +56,7 @@
     "bin",
     "plugin",
     "src",
+    "schema",
     "README.md",
     "LICENSE"
   ],
@@ -69,6 +72,7 @@
     "@types/node": "^20.0.0",
     "@typescript-eslint/eslint-plugin": "^8.39.0",
     "@typescript-eslint/parser": "^8.39.0",
+    "ajv": "^8.20.0",
     "eslint": "^9.33.0",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-prettier": "^5.5.4",
@@ -76,6 +80,7 @@
     "prettier": "^3.6.2",
     "semantic-release": "^25.0.2",
     "ts-jest": "^29.4.1",
+    "ts-json-schema-generator": "^2.9.0",
     "tsdown": "^0.21.4",
     "tsx": "^4.21.0",
     "typescript": "^5.0.0"
