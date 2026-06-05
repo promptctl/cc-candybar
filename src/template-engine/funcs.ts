@@ -169,6 +169,12 @@ export function formatterFuncs(clock: () => Date = () => new Date()): FuncMap {
     },
 
     // ─── Locale-grouped integer (context's "50,000") ──────────────────
+    // [LAW:one-source-of-truth] bdi.5: deliberately RETAINED as a primitive
+    // (not migrated to a DSL helper). toLocaleString reads the host locale the
+    // daemon inherits, so grouping is locale-correct (en_US "50,000" /
+    // de_DE "50.000"). A regex helper would be a second, locale-blind producer
+    // of grouping policy — same parsing/formatting boundary that keeps
+    // formatModelName here.
     formatInteger: {
       fn: (n: number | bigint) => formatInteger(num(n)),
       argTypes: ["number"],
