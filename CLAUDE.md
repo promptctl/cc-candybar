@@ -55,7 +55,7 @@ Wire format lives in `src/daemon/protocol.ts`. The Rust client mirrors it as a l
 
 ### Daemon (`src/daemon/server.ts`)
 
-- One instance per user, mutex'd via `$XDG_STATE_HOME/cc-candybar/pid`, listening on `$XDG_STATE_HOME/cc-candybar/socket`.
+- One instance per user, mutex'd via `$XDG_STATE_HOME/cc-candybar/pid`, listening on `/tmp/cc-candybar-$UID/socket` (UID-derived path, immutable kernel identity — see `src/daemon/paths.ts:socketPath()`). The socket is **not** under `$XDG_STATE_HOME`; overriding `XDG_STATE_HOME` does not isolate the socket. The `CC_CANDYBAR_SOCKET` env var is the explicit override for test/dev isolation.
 - No idle or age shutdown (both removed — they interrupted active sessions). The sole hard limit in `src/daemon/limits.ts` is an RSS backstop: default 512 MB (override via `CC_CANDYBAR_RSS_LIMIT_MB`), on breach it writes a heap snapshot (keeps the newest 3) then exits. Restarts are normal — every cache is rebuilt cold.
 - Parent-death watchdog (`src/daemon/parent-watchdog.ts`): a daemon spawned with `CC_CANDYBAR_PARENT_PID` set polls that pid and shuts down (through the same `shutdown(code)` funnel) when it dies. The production daemon is spawned detached and never sees the var, so it outlives its spawner as designed. Test daemons inherit the var from the Jest worker (armed once in `test/setup.ts`), so a SIGKILLed/crashed/timed-out Jest cannot orphan a daemon to PID 1 — this closes the test-daemon leak.
 - Caches owned by the daemon process (one each, not per-session):
