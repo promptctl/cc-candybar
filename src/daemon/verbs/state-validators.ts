@@ -67,7 +67,18 @@ export type KeyValidator = (rawValue: string) => ValidateResult;
 export type DerivedValidatorSpec =
   | { readonly kind: "int" }
   | { readonly kind: "allow-list"; readonly allowed: readonly string[] }
-  | { readonly kind: "range"; readonly min: number; readonly max: number };
+  | {
+      // [LAW:one-source-of-truth] A bounded-integer state key (a stepper's
+      // value). `min`/`max` gate the value; `seed` is the value an UNSET key
+      // reads as — sourced from the backing state variable's `default` so the
+      // first relative click steps from the same number the bar displays (not
+      // silently from `min`). The validator ignores `seed` (it only clamps); the
+      // step-state handler reads it via rangeParamsFor when the key is unset.
+      readonly kind: "range";
+      readonly min: number;
+      readonly max: number;
+      readonly seed: number;
+    };
 
 // [LAW:one-source-of-truth] listResolvablePaletteNames is THE set whose
 // members resolve to a concrete Palette. The broader listAvailableThemes
@@ -497,7 +508,11 @@ function mergeKeySpecs(
           `or point that click at a distinct key.`,
       );
     }
-    return { kind: "range", min, max };
+    // [LAW:one-source-of-truth] Every range contribution to a key carries the
+    // same seed (the one backing state variable's default), so any is canonical;
+    // re-clamp it into the widened [min,max] to stay an in-range start value.
+    const seed = clampSeed(ranges[0]!.seed, min, max);
+    return { kind: "range", min, max, seed };
   }
   return { kind: "int" };
 }
@@ -547,13 +562,18 @@ function mergeContributions(
 //     the gate cannot diverge;
 //   • a bounded `set` + `min/max/by` declares a range [min,max] (the stepper's
 //     navigation owns the wrap; the gate owns the bounds — `by` is render-only,
-//     never in the spec);
+//     never in the spec) plus a `seed` (the unset initial value, read from the
+//     backing state variable's `default` so the first relative click steps from
+//     the displayed number);
 //   • an `int` `set` declares an unbounded int (a paged picker's page cursor —
 //     the renderer owns clamping; the gate requires integer shape);
 //   • copy/open write nothing, so they declare no spec.
 // A new action arm is one new branch here, returning data the existing merge
 // folds — no consumer re-walks an action's shape.
-function actionKeySpecs(a: ActionDecl): KeySpecContribution[] {
+function actionKeySpecs(
+  a: ActionDecl,
+  seeds: ReadonlyMap<string, number>,
+): KeySpecContribution[] {
   if (!("set" in a)) return [];
   if ("to" in a) {
     return [{ key: a.set, spec: { kind: "allow-list", allowed: [a.to] } }];
@@ -572,15 +592,52 @@ function actionKeySpecs(a: ActionDecl): KeySpecContribution[] {
   if ("int" in a) {
     return [{ key: a.set, spec: { kind: "int" } }];
   }
-  return [{ key: a.set, spec: { kind: "range", min: a.min, max: a.max } }];
+  return [
+    {
+      key: a.set,
+      spec: {
+        kind: "range",
+        min: a.min,
+        max: a.max,
+        seed: clampSeed(seeds.get(a.set), a.min, a.max),
+      },
+    },
+  ];
+}
+
+// [LAW:one-source-of-truth] The unset seed for a stepped key is the backing
+// state variable's `default` — the SAME number the bar displays before the first
+// click — so the first relative step doesn't silently start from `min`. Absent or
+// non-integer default falls back to `min` (the historical render-side behavior).
+function clampSeed(seed: number | undefined, min: number, max: number): number {
+  if (seed === undefined) return min;
+  return Math.max(min, Math.min(max, seed));
+}
+
+// [LAW:one-source-of-truth] Each `state` variable's integer `default` is the
+// initial value of its key — the value the bar renders before any click. The
+// step-state handler must seed an unset key from the SAME number, so the derived
+// range spec carries it. A non-integer or absent default contributes nothing
+// (the key seeds from `min`).
+function stateKeySeeds(config: DslConfig): ReadonlyMap<string, number> {
+  const seeds = new Map<string, number>();
+  for (const decl of Object.values(config.variables)) {
+    if (decl.kind !== "state") continue;
+    const raw = decl.default;
+    if (raw !== undefined && INT_RE.test(raw)) {
+      seeds.set(decl.key, parseInt(raw, 10));
+    }
+  }
+  return seeds;
 }
 
 // [LAW:one-source-of-truth] The writable-key surface a config's ACTIONS need,
 // DERIVED from the action table — the same declarations the `{{ action }}` fn
 // realizes a click from are the gate the wire enforces.
 function actionContributions(config: DslConfig): KeySpecContribution[] {
+  const seeds = stateKeySeeds(config);
   return dropBaselineAllowLists(
-    Object.values(config.actions).flatMap(actionKeySpecs),
+    Object.values(config.actions).flatMap((a) => actionKeySpecs(a, seeds)),
   );
 }
 
@@ -612,4 +669,30 @@ export function validateStateWrite(
     };
   }
   return entry.validator(rawValue);
+}
+
+// [LAW:types-are-the-program] The bounded-step parameters of a key: the (widened)
+// [min,max] the step wraps within plus the `seed` an unset key starts from. The
+// step-state handler reads these to compute `wrap(current ± by)` against LIVE
+// state — the link carries only the signed `by`, so every numeric the wrap needs
+// lives here in the single registry, never snapshotted into the link.
+export interface RangeParams {
+  readonly min: number;
+  readonly max: number;
+  readonly seed: number;
+}
+
+// [LAW:one-source-of-truth] The registry IS the source of a key's bounds; the
+// step handler reads them through this one boundary rather than re-deriving from
+// the config. A key with no range registration (unknown, baseline, allow-list,
+// or int) returns null — the handler rejects it as "not a stepper" loudly,
+// never silently treating it as a step target.
+export function rangeParamsFor(key: string): RangeParams | null {
+  const entry = _STATE_VALIDATORS.get(key);
+  if (!entry || entry.permanent || entry.kind !== "range") return null;
+  const ranges = entry.specs.flatMap((s) => (s.kind === "range" ? [s] : []));
+  if (ranges.length === 0) return null;
+  const min = Math.min(...ranges.map((r) => r.min));
+  const max = Math.max(...ranges.map((r) => r.max));
+  return { min, max, seed: clampSeed(ranges[0]!.seed, min, max) };
 }
