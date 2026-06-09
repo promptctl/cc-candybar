@@ -32,6 +32,7 @@ import {
   VERB_COPY,
   VERB_OPEN_VSCODE,
   VERB_SET_STATE,
+  VERB_STEP_STATE,
   type Effect,
 } from "../click/wire.js";
 
@@ -61,11 +62,15 @@ export type CompiledActionDecl =
       readonly options: readonly string[];
     }
   | {
+      // [LAW:types-are-the-program] A stepper affordance. It carries ONLY the
+      // render-invariant click intent: the state `key` and the signed delta `by`.
+      // It deliberately holds NO stateVar/min/max and reads NO current value at
+      // render — the absolute target is computed at APPLY time from live state
+      // (the daemon's step-state handler), so the emitted link is byte-identical
+      // across renders and N rapid clicks each re-read-and-step. [LAW:one-source-
+      // of-truth] the bounds live once in the range validator the handler reads.
       readonly kind: "set-bounded";
       readonly key: string;
-      readonly stateVar: string;
-      readonly min: number;
-      readonly max: number;
       readonly by: number;
     }
   | {
@@ -159,9 +164,6 @@ function compileAction(
     return {
       kind: "set-bounded",
       key: action.set,
-      stateVar,
-      min: action.min,
-      max: action.max,
       by: action.by,
     };
   }
@@ -229,24 +231,6 @@ export function linkFragment(
   return rt;
 }
 
-// [LAW:single-enforcer] One integer-read boundary mirroring the range validator's
-// canonical shape (`^-?\d+$`): only an integer-shaped string is a value (clamped
-// into [min,max]); anything else — empty (unset/no backing var), a float, a typo —
-// starts at the floor. So the value a bounded action steps FROM is always an
-// in-range integer the wire validator would also accept.
-const INT_RE = /^-?\d+$/;
-function readClampedInt(
-  store: VariableStore,
-  name: string,
-  min: number,
-  max: number,
-): number {
-  const raw = readVar(store, name);
-  return INT_RE.test(raw)
-    ? Math.max(min, Math.min(max, parseInt(raw, 10)))
-    : min;
-}
-
 // [LAW:dataflow-not-control-flow] The single total projection of a compiled action
 // onto (effect, active) — the click's wire effect plus whether this region is the
 // current selection. The template supplies `display` (the clickable text) and an
@@ -256,9 +240,10 @@ function readClampedInt(
 //   • set-literal: writes its fixed value; active when the key already holds it.
 //   • set-option:  writes boundValue ?? display (the bound option); active when
 //                  the key already holds it (the picker's current-mark).
-//   • set-bounded: writes current ± by, WRAPPED past a bound to the other end
-//                  (not clamped — clamping is the range validator's job; the
-//                  stepper affordance navigates by wrapping); never "active".
+//   • set-bounded: emits a RELATIVE step-state nudge (key + signed by); never
+//                  reads current and never "active". The wrap + bounds + the
+//                  unset seed are applied at APPLY time by the daemon handler
+//                  reading live state, not snapshotted into the link here.
 //   • copy/open:   one copy/open effect of the evaluated template; never active.
 // [LAW:dataflow-not-control-flow] The template scope is an input only the copy/
 // open arms consume, so it is built WHERE consumed (buildScope snapshots
@@ -301,16 +286,16 @@ function realize(
       };
     }
     case "set-bounded": {
-      const current = readClampedInt(store, c.stateVar, c.min, c.max);
-      const next = current + c.by;
-      // The stepper owns navigation: stepping past a bound WRAPS to the other
-      // end, so the written value is always inside [min,max] (the range gate
-      // passes it through).
-      const wrapped = next > c.max ? c.min : next < c.min ? c.max : next;
+      // [LAW:one-source-of-truth] Emit a RELATIVE nudge — the irreducible intent
+      // (key + signed delta), never an absolute target derived from a render-time
+      // snapshot of `current`. The daemon's step-state handler reads live state,
+      // applies the wrap against the registry's bounds, and writes through the
+      // single range gate. So the link is byte-identical across renders and N
+      // rapid clicks each accumulate (the idempotent absolute-write bug is gone).
       return {
         effect: {
-          verb: VERB_SET_STATE,
-          args: [sessionId, c.key, String(wrapped)],
+          verb: VERB_STEP_STATE,
+          args: [sessionId, c.key, String(c.by)],
         },
         active: false,
       };

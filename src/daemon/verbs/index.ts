@@ -20,7 +20,11 @@
 
 import { launchSync } from "../../proc/launch";
 import type { SessionStateRW } from "../session-state";
-import { listStateKeys, validateStateWrite } from "./state-validators";
+import {
+  listStateKeys,
+  rangeParamsFor,
+  validateStateWrite,
+} from "./state-validators";
 import {
   decodeSegments,
   parseEffects,
@@ -28,6 +32,7 @@ import {
   VERB_DISPATCH,
   VERB_OPEN_VSCODE,
   VERB_SET_STATE,
+  VERB_STEP_STATE,
   VERB_SHOW_CONFIG_ERROR,
   VERB_SHOW_CONFIG_WARNING,
   VERB_TOOLBAR_TOGGLE,
@@ -252,6 +257,72 @@ const setState: VerbHandler = (rawValue, ctx) => {
   ctx.dlog("info", `set-state: ${summary} (session=${sid})`);
 };
 
+// [LAW:single-enforcer] One integer-shape boundary, mirroring the range
+// validator's canonical `^-?\d+$`: the `by` delta and a stored current value are
+// integers or they are not values. Only an integer-shaped stored value is a
+// current value; absence (or a non-integer) is the genuine "unset" state, seeded
+// from the registry's configured default.
+const STEP_INT_RE = /^-?\d+$/;
+
+// [LAW:no-ambient-temporal-coupling] Stepping past a bound WRAPS to the other end
+// — the navigation owner is THIS handler (moved off the render side, which is no
+// longer the timing authority for the value). The range gate still owns the
+// [min,max] CLAMP; wrap is navigation, clamp is enforcement.
+function wrapStep(n: number, min: number, max: number): number {
+  return n > max ? min : n < min ? max : n;
+}
+
+// [LAW:one-source-of-truth] A RELATIVE nudge to a bounded state key. The link
+// carries ONLY the irreducible intent `[sessionId, key, by]` (no `current`
+// snapshot), so the SAME link string fires every render and N rapid clicks each
+// re-read live state and accumulate — the idempotent absolute-write bug is gone.
+// The absolute target is computed HERE: read the live value (seed an unset key
+// from the registry's configured default, NOT silently from min), wrap by the
+// signed delta against the registry's bounds, then route the result through
+// validateStateWrite so the one range gate owns the [min,max] clamp and the
+// canonical decimal form that persists.
+const stepState: VerbHandler = (rawValue, ctx) => {
+  const [sessionId = "", key = "", byRaw = ""] = decodeWire(() =>
+    decodeSegments(rawValue),
+  );
+  const sid = requireSessionId(sessionId);
+  if (!key) {
+    throw new BadVerbArgs(
+      "step-state: <key> is required (shape: <sessionId>/<key>/<by>)",
+    );
+  }
+  if (!STEP_INT_RE.test(byRaw)) {
+    throw new BadVerbArgs(
+      `step-state: delta must be an integer, got "${byRaw}"`,
+    );
+  }
+  const by = parseInt(byRaw, 10);
+  // [LAW:no-silent-fallbacks] A key with no range registration is not a stepper —
+  // reject loudly rather than fabricate bounds or silently no-op.
+  const params = rangeParamsFor(key);
+  if (!params) {
+    throw new BadVerbArgs(
+      `step-state: key "${key}" is not a bounded (range) state key ` +
+        `(have keys: ${listStateKeys().join(", ")})`,
+    );
+  }
+  // [LAW:no-defensive-null-guards] "unset" is a real state — seed from the
+  // configured default; only an integer-shaped stored value is a current value.
+  const stored = ctx.sessionState.get(sid, key);
+  const current =
+    stored && STEP_INT_RE.test(stored)
+      ? Math.max(params.min, Math.min(params.max, parseInt(stored, 10)))
+      : params.seed;
+  const next = wrapStep(current + by, params.min, params.max);
+  const result = validateStateWrite(key, String(next));
+  if (!result.ok) throw new BadVerbArgs(`step-state: ${result.reason}`);
+  ctx.sessionState.set(sid, key, result.value);
+  ctx.dlog(
+    "info",
+    `step-state: ${key} ${current}→${result.value} (by ${by}, session=${sid})`,
+  );
+};
+
 // ─── Registry ───────────────────────────────────────────────────────────────
 
 // [LAW:one-source-of-truth] The LEAF verbs — every click effect that does real
@@ -270,6 +341,7 @@ const LEAF_VERBS = new Map<string, VerbHandler>([
   [VERB_COPY, copy],
   [VERB_OPEN_VSCODE, openVscode],
   [VERB_SET_STATE, setState],
+  [VERB_STEP_STATE, stepState],
   [VERB_SHOW_CONFIG_ERROR, showConfigError],
   [VERB_SHOW_CONFIG_WARNING, showConfigWarning],
   [VERB_TOOLBAR_TOGGLE, toolbarToggle],
@@ -301,9 +373,13 @@ const dispatch: VerbHandler = (rawValue, ctx) => {
   let sessionId: string | null = null;
   for (const { verb, value } of parseEffects(rawValue)) {
     // Extract session ID from the first session-bearing effect for error display.
+    // set-state, step-state, and toolbar-toggle all carry the session id as their
+    // first segment, so a failing step surfaces in the bar like any other.
     if (
       !sessionId &&
-      (verb === VERB_SET_STATE || verb === VERB_TOOLBAR_TOGGLE)
+      (verb === VERB_SET_STATE ||
+        verb === VERB_STEP_STATE ||
+        verb === VERB_TOOLBAR_TOGGLE)
     ) {
       const parts = decodeSegments(value);
       if (parts.length > 0 && parts[0]) sessionId = parts[0];

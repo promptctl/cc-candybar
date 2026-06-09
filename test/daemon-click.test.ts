@@ -8,6 +8,8 @@ import { socketPath } from "../src/daemon/paths";
 import { SessionState } from "../src/daemon/session-state";
 import { VERBS, VERB_NAMES, BadVerbArgs } from "../src/daemon/verbs";
 import type { VerbContext } from "../src/daemon/verbs";
+import { registerStateValidator } from "../src/daemon/verbs/state-validators";
+import { encodeSegments, VERB_STEP_STATE } from "../src/click/wire";
 
 // --- SessionState unit tests ---
 
@@ -182,6 +184,87 @@ describe("toolbar toggle dataflow", () => {
     // Clear → collapsed.
     state.clear(sessionId, "toolbar-expanded");
     expect(state.get(sessionId, "toolbar-expanded")).toBeNull();
+  });
+});
+
+// --- step-state handler (relative nudge) ---
+// [LAW:behavior-not-structure] The handler IS the bug fix: it reads LIVE state
+// per click and re-computes the absolute target, so the value moves once per
+// CLICK regardless of render cadence (the prior absolute-target write moved once
+// per RENDER). These exercise the real handler at the daemon boundary, against a
+// real SessionState and the real range registry.
+
+describe("step-state handler", () => {
+  const KEY = "step-test-hue";
+  function setup() {
+    const sessionState = new SessionState();
+    const ctx: VerbContext = { sessionState, dlog: () => {} };
+    // The range registry is the single source of bounds + the unset seed.
+    const dispose = registerStateValidator(KEY, {
+      kind: "range",
+      min: 0,
+      max: 60,
+      seed: 14,
+    });
+    const step = VERBS.get(VERB_STEP_STATE)!;
+    const click = (by: number): void =>
+      step(encodeSegments(["s1", KEY, String(by)]), ctx);
+    return { sessionState, click, dispose };
+  }
+
+  test("an unset key seeds from the registry default, not min", () => {
+    const { sessionState, click, dispose } = setup();
+    expect(sessionState.get("s1", KEY)).toBeNull();
+    click(2);
+    expect(sessionState.get("s1", KEY)).toBe("16"); // 14 + 2, NOT 0 + 2
+    dispose();
+  });
+
+  test("N identical clicks accumulate N steps (idempotency gone)", () => {
+    const { sessionState, click, dispose } = setup();
+    click(2);
+    click(2);
+    click(2);
+    expect(sessionState.get("s1", KEY)).toBe("20"); // 14 → 16 → 18 → 20
+    dispose();
+  });
+
+  test("stepping past a bound WRAPS to the other end", () => {
+    const { sessionState, click, dispose } = setup();
+    sessionState.set("s1", KEY, "60"); // max
+    click(2);
+    expect(sessionState.get("s1", KEY)).toBe("0"); // wrapped, not clamped to 60
+    dispose();
+  });
+
+  test("a negative delta steps down", () => {
+    const { sessionState, click, dispose } = setup();
+    sessionState.set("s1", KEY, "10");
+    click(-2);
+    expect(sessionState.get("s1", KEY)).toBe("8");
+    dispose();
+  });
+
+  test("a non-integer delta is BadVerbArgs (→ BAD_REQUEST)", () => {
+    const { dispose } = setup();
+    const step = VERBS.get(VERB_STEP_STATE)!;
+    const ctx: VerbContext = { sessionState: new SessionState(), dlog: () => {} };
+    expect(() =>
+      step(encodeSegments(["s1", KEY, "x"]), ctx),
+    ).toThrow(BadVerbArgs);
+    dispose();
+  });
+
+  test("a key with no range registration is rejected, not silently stepped", () => {
+    const step = VERBS.get(VERB_STEP_STATE)!;
+    const ctx: VerbContext = { sessionState: new SessionState(), dlog: () => {} };
+    expect(() =>
+      step(encodeSegments(["s1", "not-a-stepper", "2"]), ctx),
+    ).toThrow(BadVerbArgs);
+  });
+
+  test("step-state is a registered leaf verb", () => {
+    expect(VERB_NAMES).toContain(VERB_STEP_STATE);
   });
 });
 
