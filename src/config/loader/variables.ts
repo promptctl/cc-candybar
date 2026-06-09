@@ -11,6 +11,7 @@ import {
   type GitField,
   type EnvVarDecl,
   type FileVarDecl,
+  type InputVarDecl,
   type GitVarDecl,
   type LiteralVarDecl,
   type ShellVarDecl,
@@ -25,10 +26,8 @@ import {
   fields,
   isPlainObject,
   objectJson,
-  optionalEnum,
   optionalStringSpec,
   optionalTypedDefault,
-  requireString,
   requireStringSpec,
   optionalEnumSpec,
   taggedUnion,
@@ -121,6 +120,27 @@ function gitFieldSpec(): FieldSpec<GitField> {
   };
 }
 
+// [LAW:types-are-the-program] `input`'s `default` carries the cross-field
+// invariant — it must match the declared `type` (an absent or invalid `type`
+// defaults the check to "string"). A field spec receives the WHOLE record, so it
+// reads its sibling `raw.type` to pick the expected type WITHOUT re-reporting a
+// bad type (the `type` field spec owns that error — reading raw here avoids the
+// duplicate issue). This is what lets `input` derive BOTH `parse` and `json` from
+// one field map via `arm()`, like every other arm — closing the last spot where
+// the two interpreters were authored independently [LAW:one-source-of-truth].
+function inputDefaultSpec(): FieldSpec<string | number | boolean> {
+  return {
+    required: false,
+    json: { type: ["string", "number", "boolean"] },
+    parse: (ctx, path, _field, raw) => {
+      const t = raw.type;
+      const expected =
+        t === "number" || t === "boolean" || t === "string" ? t : "string";
+      return optionalTypedDefault(ctx, path, raw, expected);
+    },
+  };
+}
+
 // [LAW:dataflow-not-control-flow] Each arm's field set is DATA over the member's
 // non-`kind` fields; the engine supplies the discriminator. `fields` runs every
 // spec (reporting all issues) and fails the arm when a required field is absent
@@ -128,6 +148,11 @@ function gitFieldSpec(): FieldSpec<GitField> {
 const LITERAL_FIELDS: FieldSpecMap<Omit<LiteralVarDecl, "kind">> = {
   value: literalValueSpec(),
   default: optionalStringSpec(),
+};
+const INPUT_FIELDS: FieldSpecMap<Omit<InputVarDecl, "kind">> = {
+  path: requireStringSpec(),
+  type: optionalEnumSpec(["string", "number", "boolean"] as const),
+  default: inputDefaultSpec(),
 };
 const ENV_FIELDS: FieldSpecMap<Omit<EnvVarDecl, "kind">> = {
   name: requireStringSpec(),
@@ -199,41 +224,11 @@ const VARIABLE_SCHEMA: TaggedUnionSchema<VariableDecl, "kind"> = {
   noun: "source kind",
   arms: {
     literal: arm("literal", LITERAL_FIELDS),
-    // [LAW:types-are-the-program] `input`'s `default` must match its declared
-    // `type` (absent `type` defaults to "string"), so `default` cannot be an
-    // independent field spec — the cross-field invariant lives in this closure.
-    input: {
-      // [LAW:one-source-of-truth] `input`'s cross-field invariant (default must
-      // match type) is unexpressible in JSON Schema, so emit describes only the
-      // structural shape — the same shape/meaning split every refinement keeps.
-      json: {
-        type: "object",
-        properties: {
-          kind: { const: "input" },
-          path: { type: "string" },
-          type: { enum: ["string", "number", "boolean"] },
-          default: { type: ["string", "number", "boolean"] },
-        },
-        required: ["kind", "path"],
-        additionalProperties: false,
-      },
-      parse: (ctx, path, raw) => {
-        const p = requireString(ctx, path, raw, "path");
-        if (p === null) return null;
-        const t = optionalEnum(ctx, path, raw, "type", [
-          "string",
-          "number",
-          "boolean",
-        ] as const);
-        const def = optionalTypedDefault(ctx, path, raw, t ?? "string");
-        return {
-          kind: "input",
-          path: p,
-          ...(t !== undefined && { type: t }),
-          ...(def !== undefined && { default: def }),
-        };
-      },
-    },
+    // [LAW:one-source-of-truth] `input`'s `default`/`type` cross-field invariant
+    // lives in `inputDefaultSpec` (a field spec reading its sibling), so `input`
+    // is one field map like every other arm — `arm()` derives both `parse` and
+    // `json` from INPUT_FIELDS, no hand-authored schema to keep in sync.
+    input: arm("input", INPUT_FIELDS),
     env: arm("env", ENV_FIELDS),
     file: arm("file", FILE_FIELDS),
     shell: arm("shell", SHELL_FIELDS),
