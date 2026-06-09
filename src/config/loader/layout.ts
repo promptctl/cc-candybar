@@ -143,7 +143,14 @@ function rowSegmentsSpec(): FieldSpec<readonly string[]> {
 // data and in recover-vs-drop.
 function cellsSegmentsSpec(): FieldSpec<readonly string[]> {
   return {
-    required: false,
+    // [LAW:types-are-the-program] `required` has two readers: `fields` (fail when
+    // a required field's parse returns undefined) and `objectJson` (emit the field
+    // in the schema `required`). This parse RECOVERS (never returns undefined), so
+    // `required: true` is a no-op for `fields` — but it correctly tells the emitter
+    // the field is mandatory, matching the loader's behavior (a missing `segments`
+    // pushes an issue → parseDslConfig throws). `required: false` would lie to the
+    // emitter, weakening the schema below what the validator enforces.
+    required: true,
     json: { type: "array", items: { type: "string" } },
     parse: (ctx, path, field, raw) => {
       const v = raw[field];
@@ -253,8 +260,10 @@ const EMPTY_VERTICAL_NODE: LayoutNode = {
 // validated; as a record field it is included (so the unknown-key rejection allows
 // it) and yields the literal back. It can never be absent or wrong here — the
 // dispatch routes to this arm only on an exact kind match.
+// `required: true` though parse never fails — it's mandatory in the emitted
+// schema (the const discriminator), a no-op for `fields`. See `cellsSegmentsSpec`.
 function literalSpec<V extends string>(value: V): FieldSpec<V> {
-  return { required: false, json: { const: value }, parse: () => value };
+  return { required: true, json: { const: value }, parse: () => value };
 }
 
 // [LAW:dataflow-not-control-flow] A segment node's `name`: present-non-empty-string
@@ -263,7 +272,9 @@ function literalSpec<V extends string>(value: V): FieldSpec<V> {
 // undefined), so the record always keeps the field.
 function segmentNameSpec(): FieldSpec<string> {
   return {
-    required: false,
+    // Mandatory in the schema (a missing/empty name pushes an issue → throw); the
+    // parse recovers to "" so it's a no-op for `fields`. See `cellsSegmentsSpec`.
+    required: true,
     json: { type: "string" },
     parse: (ctx, path, field, raw) => {
       const v = raw[field];
@@ -285,7 +296,10 @@ function segmentNameSpec(): FieldSpec<string> {
 // required, so it must recover to a value, not vanish.
 function directionSpec(): FieldSpec<Direction> {
   return {
-    required: false,
+    // Mandatory in the schema (a missing/invalid direction pushes an issue →
+    // throw); the parse recovers to "vertical", a no-op for `fields`. See
+    // `cellsSegmentsSpec`.
+    required: true,
     json: { enum: [...DIRECTIONS] },
     parse: (ctx, path, field, raw) => {
       const v = raw[field];
@@ -314,7 +328,9 @@ function childrenSpec(
   node: (ctx: ValidateCtx, path: string, raw: unknown) => LayoutNode,
 ): FieldSpec<readonly LayoutNode[]> {
   return {
-    required: false,
+    // Mandatory in the schema (a missing/non-array `children` pushes an issue →
+    // throw); the parse recovers to [], a no-op for `fields`. See `cellsSegmentsSpec`.
+    required: true,
     // [LAW:one-source-of-truth] The recursive field points at the node definition
     // via `$ref` — emit's analogue of the `lazy` thunk that defers the parse-time
     // self-reference. The runtime recursion and the schema recursion break the

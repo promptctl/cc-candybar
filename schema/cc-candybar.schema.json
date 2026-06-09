@@ -1353,6 +1353,11 @@
               "type": "string"
             }
           },
+          "required": [
+            "kind",
+            "direction",
+            "children"
+          ],
           "additionalProperties": false
         },
         {
@@ -1368,6 +1373,10 @@
               "type": "string"
             }
           },
+          "required": [
+            "kind",
+            "name"
+          ],
           "additionalProperties": false
         },
         {
@@ -1386,6 +1395,10 @@
               "type": "string"
             }
           },
+          "required": [
+            "kind",
+            "segments"
+          ],
           "additionalProperties": false
         }
       ]
