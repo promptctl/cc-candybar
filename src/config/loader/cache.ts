@@ -14,7 +14,9 @@ import { findKeyLine } from "./diagnostics.js";
 import {
   describeValue,
   oneOfPresent,
+  oneOfPresentJson,
   type FieldSpec,
+  type JsonNode,
   type OneOfPresentSchema,
   type ValidateCtx,
 } from "./validate-core.js";
@@ -59,6 +61,7 @@ export function optionalCache(
 export function requireCacheSpec(kind: SourceKind): FieldSpec<CacheDecl> {
   return {
     required: true,
+    json: cacheJson(),
     parse: (ctx, path, _field, raw) =>
       requireCache(ctx, path, raw, kind) ?? undefined,
   };
@@ -67,6 +70,7 @@ export function requireCacheSpec(kind: SourceKind): FieldSpec<CacheDecl> {
 export function optionalCacheSpec(): FieldSpec<CacheDecl> {
   return {
     required: false,
+    json: cacheJson(),
     parse: (ctx, path, _field, raw) => optionalCache(ctx, path, raw),
   };
 }
@@ -86,10 +90,16 @@ function reject<M>(ctx: ValidateCtx, path: string, message: string): M | null {
 // CACHE_KEYS order (the structural messages join them), each arm carrying its
 // value-validation predicate and bespoke message. The literal "cache.<key>"
 // prefix is the contract text, independent of the runtime path used for line.
+// [LAW:one-source-of-truth] Each arm's `json` is the schema for the VALUE at its
+// present key — duration/path/key are strings, depends_on a string array, never
+// the literal true; the duration FORMAT (and non-empty) is a semantic check the
+// validator keeps (a JSON Schema `pattern` could mirror it, but the loader's
+// duration grammar is the single authority, so the schema stays at `type:string`).
 const CACHE_SCHEMA: OneOfPresentSchema<CacheDecl> = {
   noun: "cache",
   arms: {
     ttl: {
+      json: { type: "string" },
       parse: (ctx, path, value) =>
         typeof value === "string" && isValidDuration(value)
           ? { ttl: value }
@@ -100,6 +110,7 @@ const CACHE_SCHEMA: OneOfPresentSchema<CacheDecl> = {
             ),
     },
     watch_file: {
+      json: { type: "string" },
       parse: (ctx, path, value) =>
         typeof value === "string" && value !== ""
           ? { watch_file: value }
@@ -110,6 +121,7 @@ const CACHE_SCHEMA: OneOfPresentSchema<CacheDecl> = {
             ),
     },
     depends_on: {
+      json: { type: "array", items: { type: "string" } },
       parse: (ctx, path, value) =>
         Array.isArray(value) && value.every((v) => typeof v === "string")
           ? { depends_on: value as string[] }
@@ -120,6 +132,7 @@ const CACHE_SCHEMA: OneOfPresentSchema<CacheDecl> = {
             ),
     },
     key: {
+      json: { type: "string" },
       parse: (ctx, path, value) =>
         typeof value === "string" && value !== ""
           ? { key: value }
@@ -130,6 +143,7 @@ const CACHE_SCHEMA: OneOfPresentSchema<CacheDecl> = {
             ),
     },
     never: {
+      json: { const: true },
       parse: (ctx, path, value) =>
         value === true
           ? { never: true }
@@ -148,6 +162,12 @@ function validateCache(
   raw: unknown,
 ): CacheDecl | null {
   return oneOfPresent(ctx, CACHE_SCHEMA, path, raw);
+}
+
+// [LAW:one-source-of-truth] The cache emitter derives from the SAME CACHE_SCHEMA
+// the validator interprets — shared by the per-kind variable cache fields.
+export function cacheJson(): JsonNode {
+  return oneOfPresentJson(CACHE_SCHEMA);
 }
 
 const DURATION_RE = /^(\d+(?:\.\d+)?)(ms|s|m|h)$/;
