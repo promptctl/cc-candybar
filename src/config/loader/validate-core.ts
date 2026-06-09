@@ -429,6 +429,20 @@ export type ArmParse<T> = (
   raw: Record<string, unknown>,
 ) => T | null;
 
+// [LAW:types-are-the-program] The recursion seam: a parser referenced before it
+// exists. A recursive config shape (the layout node tree — a container's children
+// are themselves nodes) declares its child-list field as DATA that points back at
+// the very parser it is part of; reading that parser at schema-construction time
+// is a temporal-dead-zone crash, so `lazy` defers the read to call time. Generic
+// over any parser signature (a node parser takes raw:unknown and recovers, an arm
+// takes a guarded record and may drop) — it owns no validation, only the deferral,
+// so the same primitive serves every self-referential schema [LAW:decomposition].
+export function lazy<A extends readonly unknown[], R>(
+  thunk: () => (...args: A) => R,
+): (...args: A) => R {
+  return (...args) => thunk()(...args);
+}
+
 // [LAW:types-are-the-program] A cross-field refinement: a predicate over the
 // ASSEMBLED member that the field specs cannot express alone (min < max, by != 0
 // — invariants relating two fields), paired with the bespoke issue it yields when
