@@ -34,10 +34,20 @@ import {
   lazy,
   optionalStringSpec,
   record,
+  recordJson,
   type FieldSpec,
+  type JsonNode,
   type RecordSchema,
   type ValidateCtx,
 } from "./validate-core.js";
+
+// [LAW:types-are-the-program] The recursion seam for EMIT: a container's children
+// are LayoutNodes, so the node schema must reference itself. JSON Schema breaks
+// the cycle with a named definition + `$ref` — the structural analogue of the
+// `lazy` thunk that breaks the parse-time cycle. The emitter publishes the node
+// schema at this path; `childrenSpec` and the top-level `root` both point here.
+export const LAYOUT_NODE_REF = "#/definitions/LayoutNode";
+export const LAYOUT_NODE_DEF_NAME = "LayoutNode";
 
 // [LAW:one-source-of-truth] `layout` rows are flat-vertical SUGAR: each row
 // lowers to a horizontal container of segment refs (the row's `when` gates that
@@ -110,6 +120,7 @@ function validateLayoutSegments(
 function rowSegmentsSpec(): FieldSpec<readonly string[]> {
   return {
     required: true,
+    json: { type: "array", items: { type: "string" } },
     parse: (ctx, path, field, raw) => {
       const v = raw[field];
       if (!Array.isArray(v)) {
@@ -133,6 +144,7 @@ function rowSegmentsSpec(): FieldSpec<readonly string[]> {
 function cellsSegmentsSpec(): FieldSpec<readonly string[]> {
   return {
     required: false,
+    json: { type: "array", items: { type: "string" } },
     parse: (ctx, path, field, raw) => {
       const v = raw[field];
       if (!Array.isArray(v)) {
@@ -242,7 +254,7 @@ const EMPTY_VERTICAL_NODE: LayoutNode = {
 // it) and yields the literal back. It can never be absent or wrong here — the
 // dispatch routes to this arm only on an exact kind match.
 function literalSpec<V extends string>(value: V): FieldSpec<V> {
-  return { required: false, parse: () => value };
+  return { required: false, json: { const: value }, parse: () => value };
 }
 
 // [LAW:dataflow-not-control-flow] A segment node's `name`: present-non-empty-string
@@ -252,6 +264,7 @@ function literalSpec<V extends string>(value: V): FieldSpec<V> {
 function segmentNameSpec(): FieldSpec<string> {
   return {
     required: false,
+    json: { type: "string" },
     parse: (ctx, path, field, raw) => {
       const v = raw[field];
       if (typeof v === "string" && v.length > 0) return v;
@@ -273,6 +286,7 @@ function segmentNameSpec(): FieldSpec<string> {
 function directionSpec(): FieldSpec<Direction> {
   return {
     required: false,
+    json: { enum: [...DIRECTIONS] },
     parse: (ctx, path, field, raw) => {
       const v = raw[field];
       if (
@@ -301,6 +315,11 @@ function childrenSpec(
 ): FieldSpec<readonly LayoutNode[]> {
   return {
     required: false,
+    // [LAW:one-source-of-truth] The recursive field points at the node definition
+    // via `$ref` — emit's analogue of the `lazy` thunk that defers the parse-time
+    // self-reference. The runtime recursion and the schema recursion break the
+    // same cycle, declared in one place.
+    json: { type: "array", items: { $ref: LAYOUT_NODE_REF } },
     parse: (ctx, path, field, raw) => {
       const v = raw[field];
       if (!Array.isArray(v)) {
@@ -398,3 +417,40 @@ export const validateRoot = (
   });
   return EMPTY_VERTICAL_NODE;
 };
+
+// ─── Schema emit ─────────────────────────────────────────────────────────────
+
+// [LAW:one-source-of-truth] The LayoutNode definition: the anyOf of the three
+// kind-arms `validateRoot` dispatches over (container / segment / cells), each
+// derived from the SAME record schema the validator interprets. The `kind`
+// `const` on each arm keeps them disjoint; the container arm's `children` field
+// `$ref`s back here, closing the recursion. The emitter publishes this at
+// `LAYOUT_NODE_REF`, so a config writing `root` is validated by the same grammar
+// the loader enforces — `cells` sugar included (the old type-derived schema
+// omitted it; deriving from the loader declaration restores parity).
+export function layoutNodeJson(): JsonNode {
+  return {
+    anyOf: [
+      recordJson(CONTAINER_SCHEMA),
+      recordJson(SEGMENT_NODE_SCHEMA),
+      recordJson(CELLS_SCHEMA),
+    ],
+  };
+}
+
+// [LAW:one-source-of-truth] The `layout` row-sugar surface: an array of rows,
+// each a bare `string[]` (a predicate-less row) OR a `{ when?, segments }`
+// object — the two forms `validateLayoutRow` dispatches over, derived from the
+// SAME ROW_SCHEMA. A bare string at the row level (the legacy flat layout) matches
+// neither and is rejected, the same boundary the validator draws.
+export function layoutRowsJson(): JsonNode {
+  return {
+    type: "array",
+    items: {
+      anyOf: [
+        { type: "array", items: { type: "string" } },
+        recordJson(ROW_SCHEMA),
+      ],
+    },
+  };
+}

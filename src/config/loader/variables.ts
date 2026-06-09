@@ -24,6 +24,7 @@ import {
   describeType,
   fields,
   isPlainObject,
+  objectJson,
   optionalEnum,
   optionalStringSpec,
   optionalTypedDefault,
@@ -31,8 +32,12 @@ import {
   requireStringSpec,
   optionalEnumSpec,
   taggedUnion,
+  taggedUnionJson,
+  withConst,
   type FieldSpec,
   type FieldSpecMap,
+  type JsonNode,
+  type TaggedArm,
   type TaggedUnionSchema,
   type ValidateCtx,
 } from "./validate-core.js";
@@ -72,6 +77,7 @@ export function validateVariables(
 function literalValueSpec(): FieldSpec<string | number | boolean> {
   return {
     required: true,
+    json: { type: ["string", "number", "boolean"] },
     parse: (ctx, path, _field, raw) => {
       const value = raw.value;
       if (
@@ -96,6 +102,7 @@ function literalValueSpec(): FieldSpec<string | number | boolean> {
 function gitFieldSpec(): FieldSpec<GitField> {
   return {
     required: true,
+    json: { enum: [...GIT_FIELDS] },
     parse: (ctx, path, _field, raw) => {
       const field = raw.field;
       if (
@@ -164,8 +171,16 @@ const STATE_FIELDS: FieldSpecMap<Omit<StateVarDecl, "kind">> = {
 function arm<
   K extends VariableDecl["kind"],
   M extends Omit<Extract<VariableDecl, { kind: K }>, "kind">,
->(kind: K, fieldMap: FieldSpecMap<M>) {
+>(
+  kind: K,
+  fieldMap: FieldSpecMap<M>,
+): TaggedArm<Extract<VariableDecl, { kind: K }>> {
   return {
+    // [LAW:one-source-of-truth] The arm's emit facet: the member object schema
+    // with its `kind` discriminator baked in — `objectJson` over the SAME field
+    // map `fields` validates, plus `{ kind: { const } }`. taggedUnionJson collects
+    // these verbatim into the union's anyOf.
+    json: withConst(objectJson(fieldMap), "kind", kind),
     parse: (ctx: ValidateCtx, path: string, raw: Record<string, unknown>) => {
       const body = fields(ctx, fieldMap, path, raw);
       // [LAW:types-are-the-program] `fieldMap: FieldSpecMap<M>` is checked against
@@ -188,6 +203,20 @@ const VARIABLE_SCHEMA: TaggedUnionSchema<VariableDecl, "kind"> = {
     // `type` (absent `type` defaults to "string"), so `default` cannot be an
     // independent field spec — the cross-field invariant lives in this closure.
     input: {
+      // [LAW:one-source-of-truth] `input`'s cross-field invariant (default must
+      // match type) is unexpressible in JSON Schema, so emit describes only the
+      // structural shape — the same shape/meaning split every refinement keeps.
+      json: {
+        type: "object",
+        properties: {
+          kind: { const: "input" },
+          path: { type: "string" },
+          type: { enum: ["string", "number", "boolean"] },
+          default: { type: ["string", "number", "boolean"] },
+        },
+        required: ["kind", "path"],
+        additionalProperties: false,
+      },
       parse: (ctx, path, raw) => {
         const p = requireString(ctx, path, raw, "path");
         if (p === null) return null;
@@ -214,3 +243,16 @@ const VARIABLE_SCHEMA: TaggedUnionSchema<VariableDecl, "kind"> = {
     state: arm("state", STATE_FIELDS),
   },
 };
+
+// [LAW:one-source-of-truth] One VariableDecl's schema, derived from the SAME
+// VARIABLE_SCHEMA the validator interprets — the tag-by-kind anyOf.
+export function variableDeclJson(): JsonNode {
+  return taggedUnionJson(VARIABLE_SCHEMA);
+}
+
+// [LAW:one-source-of-truth] The `variables` block (and a segment's nested `vars`)
+// is a name → VariableDecl map; both surfaces emit this one shape, symmetric to
+// both calling `validateVariables`.
+export function variablesMapJson(): JsonNode {
+  return { type: "object", additionalProperties: variableDeclJson() };
+}

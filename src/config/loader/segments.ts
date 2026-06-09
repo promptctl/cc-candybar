@@ -20,13 +20,15 @@ import {
   optionalStringSpec,
   paletteSpec,
   record,
+  recordJson,
   requireStringSpec,
   type FieldSpec,
   type FieldSpecMap,
+  type JsonNode,
   type RecordSchema,
   type ValidateCtx,
 } from "./validate-core.js";
-import { validateVariables } from "./variables.js";
+import { validateVariables, variablesMapJson } from "./variables.js";
 
 export function validateSegments(
   ctx: ValidateCtx,
@@ -56,6 +58,7 @@ export function validateSegments(
 function widthSpec(): FieldSpec<"auto" | number> {
   return {
     required: false,
+    json: { anyOf: [{ const: "auto" }, { type: "integer", minimum: 1 }] },
     parse: (ctx, path, field, raw) => {
       const v = raw[field];
       if (v === undefined) return undefined;
@@ -78,6 +81,9 @@ function widthSpec(): FieldSpec<"auto" | number> {
 function varsSpec(): FieldSpec<Readonly<Record<string, VariableDecl>>> {
   return {
     required: false,
+    // [LAW:one-source-of-truth] The nested `vars` schema is the SAME name →
+    // VariableDecl map the top-level `variables` block emits — one source.
+    json: variablesMapJson(),
     parse: (ctx, path, field, raw) => {
       const v = raw[field];
       if (v === undefined) return undefined;
@@ -106,3 +112,9 @@ const SEGMENT_SCHEMA: RecordSchema<SegmentDecl> = {
   noun: "segment key",
   fields: SEGMENT_FIELDS,
 };
+
+// [LAW:one-source-of-truth] The `segments` block is a name → SegmentDecl map,
+// derived from the SAME SEGMENT_SCHEMA the validator interprets.
+export function segmentsJson(): JsonNode {
+  return { type: "object", additionalProperties: recordJson(SEGMENT_SCHEMA) };
+}
