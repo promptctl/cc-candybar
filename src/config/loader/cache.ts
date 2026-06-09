@@ -1,20 +1,20 @@
 // [LAW:types-are-the-program] The cache-policy schema: a CacheDecl is exactly one
-// of ttl / watch_file / depends_on / key / never. requireCache/optionalCache gate
-// presence by source kind; validateCache enforces exactly-one; validateCacheVariant
-// narrows that one. This file changes when the cache vocabulary changes.
+// of ttl / watch_file / depends_on / key / never, declared as DATA (CACHE_SCHEMA)
+// and interpreted by the tag-by-present-key engine (oneOfPresent).
+// requireCache/optionalCache gate presence by source kind. This file changes when
+// the cache vocabulary changes — add an arm to CACHE_SCHEMA and CacheDecl.
 
 import {
   CACHE_KEYS,
   SOURCES_REQUIRING_CACHE,
   type CacheDecl,
-  type CacheKey,
   type SourceKind,
 } from "../dsl-types.js";
 import { findKeyLine } from "./diagnostics.js";
 import {
-  describeType,
   describeValue,
-  isPlainObject,
+  oneOfPresent,
+  type OneOfPresentSchema,
   type ValidateCtx,
 } from "./validate-core.js";
 
@@ -50,119 +50,83 @@ export function optionalCache(
   return c ?? undefined;
 }
 
+// [LAW:single-enforcer] One arm helper to push a variant's bespoke message and
+// drop — the message is the only thing that varies per arm, carried as DATA.
+function reject<M>(ctx: ValidateCtx, path: string, message: string): M | null {
+  ctx.issues.push({
+    path,
+    message,
+    line: findKeyLine(ctx.source, path.split(".")),
+  });
+  return null;
+}
+
+// [LAW:types-are-the-program] The cache schema declared as DATA: arm keys in
+// CACHE_KEYS order (the structural messages join them), each arm carrying its
+// value-validation predicate and bespoke message. The literal "cache.<key>"
+// prefix is the contract text, independent of the runtime path used for line.
+const CACHE_SCHEMA: OneOfPresentSchema<CacheDecl> = {
+  noun: "cache",
+  arms: {
+    ttl: {
+      parse: (ctx, path, value) =>
+        typeof value === "string" && isValidDuration(value)
+          ? { ttl: value }
+          : reject(
+              ctx,
+              path,
+              `cache.ttl must be a duration string like "5s", "100ms", "2m", "1h"; got ${describeValue(value)}`,
+            ),
+    },
+    watch_file: {
+      parse: (ctx, path, value) =>
+        typeof value === "string" && value !== ""
+          ? { watch_file: value }
+          : reject(
+              ctx,
+              path,
+              `cache.watch_file must be a non-empty path string, got ${describeValue(value)}`,
+            ),
+    },
+    depends_on: {
+      parse: (ctx, path, value) =>
+        Array.isArray(value) && value.every((v) => typeof v === "string")
+          ? { depends_on: value as string[] }
+          : reject(
+              ctx,
+              path,
+              `cache.depends_on must be an array of variable-name strings, got ${describeValue(value)}`,
+            ),
+    },
+    key: {
+      parse: (ctx, path, value) =>
+        typeof value === "string" && value !== ""
+          ? { key: value }
+          : reject(
+              ctx,
+              path,
+              `cache.key must be a non-empty template string, got ${describeValue(value)}`,
+            ),
+    },
+    never: {
+      parse: (ctx, path, value) =>
+        value === true
+          ? { never: true }
+          : reject(
+              ctx,
+              path,
+              `cache.never must be the literal boolean true, got ${describeValue(value)}`,
+            ),
+    },
+  },
+};
+
 function validateCache(
   ctx: ValidateCtx,
   path: string,
   raw: unknown,
 ): CacheDecl | null {
-  if (!isPlainObject(raw)) {
-    ctx.issues.push({
-      path,
-      message: `cache must be an object, got ${describeType(raw)}`,
-      line: findKeyLine(ctx.source, path.split(".")),
-    });
-    return null;
-  }
-
-  const present = Object.keys(raw).filter((k): k is CacheKey =>
-    (CACHE_KEYS as readonly string[]).includes(k),
-  );
-  const unknown = Object.keys(raw).filter(
-    (k) => !(CACHE_KEYS as readonly string[]).includes(k),
-  );
-
-  for (const k of unknown) {
-    ctx.issues.push({
-      path: `${path}.${k}`,
-      message: `Unknown cache key "${k}". Expected exactly one of: ${CACHE_KEYS.join(", ")}`,
-      line: findKeyLine(ctx.source, [...path.split("."), k]),
-    });
-  }
-
-  if (present.length === 0) {
-    ctx.issues.push({
-      path,
-      message: `cache must declare exactly one of: ${CACHE_KEYS.join(", ")}`,
-      line: findKeyLine(ctx.source, path.split(".")),
-    });
-    return null;
-  }
-  if (present.length > 1) {
-    ctx.issues.push({
-      path,
-      message: `cache must declare exactly one of: ${CACHE_KEYS.join(", ")} (found: ${present.join(", ")})`,
-      line: findKeyLine(ctx.source, path.split(".")),
-    });
-    return null;
-  }
-
-  const key = present[0]!;
-  const value = raw[key];
-  return validateCacheVariant(ctx, `${path}.${key}`, key, value);
-}
-
-function validateCacheVariant(
-  ctx: ValidateCtx,
-  path: string,
-  key: CacheKey,
-  value: unknown,
-): CacheDecl | null {
-  switch (key) {
-    case "ttl":
-      if (typeof value !== "string" || !isValidDuration(value)) {
-        ctx.issues.push({
-          path,
-          message: `cache.ttl must be a duration string like "5s", "100ms", "2m", "1h"; got ${describeValue(value)}`,
-          line: findKeyLine(ctx.source, path.split(".")),
-        });
-        return null;
-      }
-      return { ttl: value };
-
-    case "watch_file":
-      if (typeof value !== "string" || value === "") {
-        ctx.issues.push({
-          path,
-          message: `cache.watch_file must be a non-empty path string, got ${describeValue(value)}`,
-          line: findKeyLine(ctx.source, path.split(".")),
-        });
-        return null;
-      }
-      return { watch_file: value };
-
-    case "depends_on":
-      if (!Array.isArray(value) || !value.every((v) => typeof v === "string")) {
-        ctx.issues.push({
-          path,
-          message: `cache.depends_on must be an array of variable-name strings, got ${describeValue(value)}`,
-          line: findKeyLine(ctx.source, path.split(".")),
-        });
-        return null;
-      }
-      return { depends_on: value as string[] };
-
-    case "key":
-      if (typeof value !== "string" || value === "") {
-        ctx.issues.push({
-          path,
-          message: `cache.key must be a non-empty template string, got ${describeValue(value)}`,
-          line: findKeyLine(ctx.source, path.split(".")),
-        });
-        return null;
-      }
-      return { key: value };
-
-    case "never":
-      if (value !== true) {
-        ctx.issues.push({
-          path,
-          message: `cache.never must be the literal boolean true, got ${describeValue(value)}`,
-          line: findKeyLine(ctx.source, path.split(".")),
-        });
-        return null;
-      }
-      return { never: true };
-  }
+  return oneOfPresent(ctx, CACHE_SCHEMA, path, raw);
 }
 
 const DURATION_RE = /^(\d+(?:\.\d+)?)(ms|s|m|h)$/;
