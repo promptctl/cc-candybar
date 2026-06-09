@@ -208,12 +208,33 @@ export function record<T>(
     return null;
   }
 
-  const fields = schema.fields as Readonly<Record<string, FieldSpec<unknown>>>;
-  rejectUnknownKeys(ctx, path, raw, schema.noun, new Set(Object.keys(fields)));
+  rejectUnknownKeys(
+    ctx,
+    path,
+    raw,
+    schema.noun,
+    new Set(Object.keys(schema.fields)),
+  );
+  return fields(ctx, schema.fields, path, raw);
+}
 
+// [LAW:decomposition] The field-assembly core: run each field spec against an
+// already-guarded object, collect the present values, fail the whole when a
+// required field is absent or invalid. `record` adds the object guard and
+// unknown-key rejection on top; a tagged-union arm reuses THIS directly, because
+// an arm must NOT reject unknown keys — the discriminator (`kind`) is a sibling
+// key the arm doesn't list. Returns the assembled record, or null when a required
+// field failed. This is the join `record` and `taggedUnion`'s arms share.
+export function fields<T>(
+  ctx: ValidateCtx,
+  fieldMap: FieldSpecMap<T>,
+  path: string,
+  raw: Record<string, unknown>,
+): T | null {
+  const specs = fieldMap as Readonly<Record<string, FieldSpec<unknown>>>;
   const out: Record<string, unknown> = {};
   let ok = true;
-  for (const [field, spec] of Object.entries(fields)) {
+  for (const [field, spec] of Object.entries(specs)) {
     const value = spec.parse(ctx, path, field, raw);
     if (value !== undefined) out[field] = value;
     else if (spec.required) ok = false;
@@ -323,6 +344,81 @@ export function oneOfPresent<T>(
   return arms[key]!.parse(ctx, `${path}.${key}`, raw[key]);
 }
 
+// [LAW:types-are-the-program] A tag-by-field-value union: every member carries a
+// shared discriminator field (VariableDecl's `kind`) whose value selects the arm.
+// TaggedArm parses the WHOLE raw object into its member shape (an arm reads many
+// sibling fields, so it receives `raw`, not one extracted value), at the union's
+// own path (the discriminator is a sibling, so the path doesn't descend). The arm
+// map must cover every tag value (`-?` + Extract force an arm per member, typed
+// to return exactly that member). The bespoke per-arm field schema lives in its
+// parse closure as DATA.
+export interface TaggedArm<M> {
+  parse(ctx: ValidateCtx, path: string, raw: Record<string, unknown>): M | null;
+}
+
+type TagValueOf<T, K extends string> =
+  T extends Record<K, infer V> ? V & string : never;
+
+export type TaggedArmMap<T, K extends string> = {
+  [V in TagValueOf<T, K>]-?: TaggedArm<Extract<T, Record<K, V>>>;
+};
+
+export interface TaggedUnionSchema<T, K extends string> {
+  // The discriminator field name ("kind") and the noun in its unknown-value
+  // message ("source kind") — the two phrasings that vary per union; the valid
+  // tag-value list is the arm-map's key order.
+  readonly tag: K;
+  readonly noun: string;
+  readonly arms: TaggedArmMap<T, K>;
+}
+
+// [LAW:dataflow-not-control-flow] The tag-by-field-value interpreter: the same
+// unconditional sequence for every such union — guard object, read the
+// discriminator, reject a non-string or unknown tag, dispatch to that arm.
+// Distinct from `oneOfPresent` because the tag is a named field's VALUE, not
+// which key is present; the variability (tag name, noun, arms) is DATA. Returns
+// the parsed member, or null when raw is not an object, the tag is missing/
+// non-string/unknown, or the arm fails — the drop shape the per-name caller
+// recovers. A non-string tag points at the variable (the key may be absent); an
+// unknown tag value points at the discriminator key itself.
+export function taggedUnion<T, K extends string>(
+  ctx: ValidateCtx,
+  schema: TaggedUnionSchema<T, K>,
+  path: string,
+  raw: unknown,
+): T | null {
+  if (!isPlainObject(raw)) {
+    ctx.issues.push({
+      path,
+      message: `${path} must be an object, got ${describeType(raw)}`,
+      line: findKeyLine(ctx.source, path.split(".")),
+    });
+    return null;
+  }
+
+  const tagValue = raw[schema.tag];
+  if (typeof tagValue !== "string") {
+    ctx.issues.push({
+      path: `${path}.${schema.tag}`,
+      message: `${path}.${schema.tag} must be a string, got ${describeType(tagValue)}`,
+      line: findKeyLine(ctx.source, path.split(".")),
+    });
+    return null;
+  }
+
+  const arms = schema.arms as Readonly<Record<string, TaggedArm<T>>>;
+  if (!(tagValue in arms)) {
+    ctx.issues.push({
+      path: `${path}.${schema.tag}`,
+      message: `Unknown ${schema.noun} "${tagValue}". Expected one of: ${Object.keys(arms).join(", ")}`,
+      line: findKeyLine(ctx.source, [...path.split("."), schema.tag]),
+    });
+    return null;
+  }
+
+  return arms[tagValue]!.parse(ctx, path, raw);
+}
+
 // [LAW:dataflow-not-control-flow] Field specs lift the existing field combinators
 // into the record vocabulary. An optional string is included when present-and-
 // valid, omitted (with an issue) when present-and-wrong, omitted silently when
@@ -342,5 +438,31 @@ export function paletteSpec(): FieldSpec<string> {
   return {
     required: false,
     parse: (ctx, path, _field, raw) => validatePaletteName(ctx, path, raw),
+  };
+}
+
+// [LAW:dataflow-not-control-flow] A required string field: present-and-valid is
+// included, present-and-wrong reports an issue and fails the record, absent fails
+// the record — the map key names the field, so one spec serves path/command/
+// layout/name/key. `requireString` returns null on failure; the record engine
+// reads undefined as "absent or invalid", so null collapses to undefined.
+export function requireStringSpec(): FieldSpec<string> {
+  return {
+    required: true,
+    parse: (ctx, path, field, raw) =>
+      requireString(ctx, path, raw, field) ?? undefined,
+  };
+}
+
+// [LAW:dataflow-not-control-flow] An optional enum field over a closed set; the
+// allowed values are DATA, the field key comes from the map. Present-and-invalid
+// reports the one-of message and omits; absent omits silently.
+export function optionalEnumSpec<T extends string>(
+  allowed: readonly T[],
+): FieldSpec<T> {
+  return {
+    required: false,
+    parse: (ctx, path, field, raw) =>
+      optionalEnum(ctx, path, raw, field, allowed),
   };
 }
