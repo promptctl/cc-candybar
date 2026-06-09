@@ -419,6 +419,58 @@ export function taggedUnion<T, K extends string>(
   return arms[tagValue]!.parse(ctx, path, raw);
 }
 
+// [LAW:types-are-the-program] An arm parser narrows an already-guarded record to
+// a member shape or null — the signature `fields`, `refine`, and a union arm all
+// speak. Exposing it as a name lets a per-type schema compose arms (refine a
+// fields-record, hand it to a present-key dispatch) without restating the shape.
+export type ArmParse<T> = (
+  ctx: ValidateCtx,
+  path: string,
+  raw: Record<string, unknown>,
+) => T | null;
+
+// [LAW:types-are-the-program] A cross-field refinement: a predicate over the
+// ASSEMBLED member that the field specs cannot express alone (min < max, by != 0
+// — invariants relating two fields), paired with the bespoke issue it yields when
+// violated. `ok` and `issue` both read the value, so an interpolated message
+// ("min (0) must be less than max (-1)") is DATA derived from the value, not a
+// branch. `issue.field` names the sub-path the message points at ("" = the record
+// itself); the engine prepends the path and resolves the source line.
+export interface Refinement<T> {
+  ok(value: T): boolean;
+  issue(value: T): { readonly field: string; readonly message: string };
+}
+
+// [LAW:dataflow-not-control-flow] The refinement interpreter: run the inner arm,
+// then fold the assembled value through each refinement in order, surfacing the
+// first violated invariant and dropping the member. The lawful generalization of
+// the hand-rolled `if (min >= max) { push; return null }` tail every record grew
+// for its cross-field checks — the invariant is a DECLARATION, the report is
+// mechanical. Null threads through untouched (a failed inner parse never reaches
+// a refinement), and the order of `checks` is the order of reporting — the same
+// short-circuit the inline tail expressed with sequential `if`s.
+export function refine<T>(
+  inner: ArmParse<T>,
+  ...checks: ReadonlyArray<Refinement<T>>
+): ArmParse<T> {
+  return (ctx, path, raw) => {
+    const value = inner(ctx, path, raw);
+    if (value === null) return null;
+    for (const check of checks) {
+      if (check.ok(value)) continue;
+      const { field, message } = check.issue(value);
+      const at = field === "" ? path : `${path}.${field}`;
+      ctx.issues.push({
+        path: at,
+        message,
+        line: findKeyLine(ctx.source, at.split(".")),
+      });
+      return null;
+    }
+    return value;
+  };
+}
+
 // [LAW:dataflow-not-control-flow] Field specs lift the existing field combinators
 // into the record vocabulary. An optional string is included when present-and-
 // valid, omitted (with an issue) when present-and-wrong, omitted silently when
