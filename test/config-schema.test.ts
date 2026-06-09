@@ -79,6 +79,12 @@ const BAD_STRUCTURAL: ReadonlyArray<readonly [string, string]> = [
   ["unknown variable kind", `{ variables: { x: { kind: 'bogus' } } }`],
   ["non-string palette", `{ globals: { palette: 5 } }`],
   ["legacy flat layout", `{ segments: { a: { template: 'a' } }, layout: ['a', 'b'] }`],
+  // A node must carry its mandatory fields — the loader reports a missing
+  // direction/name (→ throws), so the schema must require them too. The empty
+  // object once passed all three arms vacuously; the layout specs' required-ness
+  // closes that, keeping schema and loader in lockstep.
+  ["bare container node (missing direction/children)", `{ root: { kind: 'container' } }`],
+  ["bare segment node (missing name)", `{ root: { kind: 'segment' } }`],
 ];
 
 function schemaAccepts(source: string): boolean {

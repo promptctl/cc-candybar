@@ -8,6 +8,8 @@ import {
   optionalStringSpec,
   paletteSpec,
   record,
+  recordJson,
+  type JsonNode,
   type RecordSchema,
   type ValidateCtx,
 } from "./validate-core.js";
@@ -30,4 +32,11 @@ const GLOBALS_SCHEMA: RecordSchema<Globals> = {
 export function validateGlobals(ctx: ValidateCtx, raw: unknown): Globals {
   if (raw === undefined) return {};
   return record(ctx, GLOBALS_SCHEMA, "globals", raw) ?? {};
+}
+
+// [LAW:one-source-of-truth] The schema emitter derives from the SAME declaration
+// the validator interprets — `globals` emit is `recordJson(GLOBALS_SCHEMA)`,
+// symmetric to `validateGlobals` calling `record(GLOBALS_SCHEMA)`.
+export function globalsJson(): JsonNode {
+  return recordJson(GLOBALS_SCHEMA);
 }

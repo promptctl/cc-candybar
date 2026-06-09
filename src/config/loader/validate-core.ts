@@ -161,6 +161,15 @@ export function describeValue(v: unknown): string {
 // hand-threading combinator results through `if (x === null) return null`.
 export interface FieldSpec<T> {
   readonly required: boolean;
+  // [LAW:one-source-of-truth] The emit facet, authored beside `parse`: the
+  // JSON-Schema fragment for THIS field's value. `parse` is the validate
+  // interpreter, `json` the schema interpreter — two projections of one
+  // declaration, so the editor-facing schema can never describe a different
+  // grammar than the runtime validator. Both read the same source constants
+  // (e.g. an enum spec's `allowed` feeds both `parse`'s membership check and
+  // `json`'s `enum`), so they cannot drift. A JSON Schema fragment IS data
+  // (JSON Schema is its own serialization), so the facet is a plain object.
+  readonly json: JsonNode;
   parse(
     ctx: ValidateCtx,
     path: string,
@@ -168,6 +177,11 @@ export interface FieldSpec<T> {
     raw: Record<string, unknown>,
   ): T | undefined;
 }
+
+// [LAW:types-are-the-program] A JSON-Schema fragment: the schema-shape facet of
+// a declaration. JSON Schema is itself JSON, so the emit AST is just the target
+// format — no parallel descriptor type to keep in sync with the serializer.
+export type JsonNode = Readonly<Record<string, unknown>>;
 
 // [LAW:types-are-the-program] The field map must cover EXACTLY the keys of the
 // target type — `-?` forces a spec for every field (forgetting one is a compile
@@ -270,6 +284,10 @@ function rejectUnknownKeys(
 // arm per member, typed to return exactly that member — forgetting one is a
 // compile error). The bespoke per-arm message lives in its parse closure as DATA.
 export interface PresentArm<M> {
+  // [LAW:one-source-of-truth] The emit facet: the JSON-Schema for the VALUE held
+  // at this arm's present key (oneOfPresentJson wraps it in the single-required
+  // object the present-key contract describes). Authored beside `parse`.
+  readonly json: JsonNode;
   parse(ctx: ValidateCtx, path: string, value: unknown): M | null;
 }
 
@@ -353,6 +371,11 @@ export function oneOfPresent<T>(
 // to return exactly that member). The bespoke per-arm field schema lives in its
 // parse closure as DATA.
 export interface TaggedArm<M> {
+  // [LAW:one-source-of-truth] The emit facet: the FULL object schema for this
+  // member, discriminator included (the arm knows its own tag value, so it bakes
+  // `{ [tag]: { const } }` into `json`). taggedUnionJson simply collects each
+  // arm's `json` into the `anyOf`. Authored beside `parse`.
+  readonly json: JsonNode;
   parse(ctx: ValidateCtx, path: string, raw: Record<string, unknown>): M | null;
 }
 
@@ -492,6 +515,7 @@ export function refine<T>(
 export function optionalStringSpec(): FieldSpec<string> {
   return {
     required: false,
+    json: { type: "string" },
     parse: (ctx, path, field, raw) =>
       optionalStringField(ctx, path, raw, field),
   };
@@ -503,6 +527,10 @@ export function optionalStringSpec(): FieldSpec<string> {
 export function paletteSpec(): FieldSpec<string> {
   return {
     required: false,
+    // Palette NAME membership is semantic (the allowed set is resolved at load
+    // from installed palettes, not a closed compile-time enum), so the schema
+    // checks only `type: string` — the same shape/meaning split the loader keeps.
+    json: { type: "string" },
     parse: (ctx, path, _field, raw) => validatePaletteName(ctx, path, raw),
   };
 }
@@ -515,6 +543,7 @@ export function paletteSpec(): FieldSpec<string> {
 export function requireStringSpec(): FieldSpec<string> {
   return {
     required: true,
+    json: { type: "string" },
     parse: (ctx, path, field, raw) =>
       requireString(ctx, path, raw, field) ?? undefined,
   };
@@ -528,7 +557,85 @@ export function optionalEnumSpec<T extends string>(
 ): FieldSpec<T> {
   return {
     required: false,
+    // [LAW:one-source-of-truth] `allowed` is the single source: `parse` checks
+    // membership against it, `json` lists it as the schema `enum`.
+    json: { enum: [...allowed] },
     parse: (ctx, path, field, raw) =>
       optionalEnum(ctx, path, raw, field, allowed),
+  };
+}
+
+// ─── Schema emit: the second interpreter over the same declarations ──────────
+
+// [LAW:dataflow-not-control-flow] The record/field emit-twin of `fields`: walk
+// the SAME field-map the validator walks, projecting each spec's `json` into a
+// JSON-Schema `properties` map and collecting the required field names. The
+// caller chooses whether unknown keys are forbidden — a `record` forbids them
+// (additionalProperties:false), a tagged-union arm allows the sibling
+// discriminator. The structure is the declaration; emit is mechanical.
+export function objectJson<T>(
+  fieldMap: FieldSpecMap<T>,
+  opts: { readonly closed: boolean } = { closed: true },
+): JsonNode {
+  const specs = fieldMap as Readonly<Record<string, FieldSpec<unknown>>>;
+  const properties: Record<string, JsonNode> = {};
+  const required: string[] = [];
+  for (const [field, spec] of Object.entries(specs)) {
+    properties[field] = spec.json;
+    if (spec.required) required.push(field);
+  }
+  return {
+    type: "object",
+    properties,
+    ...(required.length > 0 && { required }),
+    ...(opts.closed && { additionalProperties: false }),
+  };
+}
+
+// [LAW:one-source-of-truth] The emit-twin of `record`: a closed object schema
+// over the schema's fields — the same shape `record` enforces at runtime.
+export function recordJson<T>(schema: RecordSchema<T>): JsonNode {
+  return objectJson(schema.fields);
+}
+
+// [LAW:dataflow-not-control-flow] Merge a discriminator constant into an object
+// schema: add `{ [tag]: { const } }` to its properties and `tag` to required.
+// An arm bakes this in so taggedUnionJson can collect arms verbatim.
+export function withConst(
+  base: JsonNode,
+  key: string,
+  value: string,
+): JsonNode {
+  const b = base as Record<string, unknown>;
+  const properties = {
+    [key]: { const: value },
+    ...(b.properties as Record<string, JsonNode> | undefined),
+  };
+  const required = [key, ...((b.required as string[] | undefined) ?? [])];
+  return { ...b, properties, required };
+}
+
+// [LAW:one-source-of-truth] The emit-twin of `taggedUnion`: each arm already
+// carries its full member schema (discriminator baked in), so the union is just
+// the `anyOf` of arm schemas — the same disjoint set the dispatcher selects from.
+export function taggedUnionJson<T, K extends string>(
+  schema: TaggedUnionSchema<T, K>,
+): JsonNode {
+  const arms = schema.arms as Readonly<Record<string, TaggedArm<T>>>;
+  return { anyOf: Object.values(arms).map((arm) => arm.json) };
+}
+
+// [LAW:one-source-of-truth] The emit-twin of `oneOfPresent`: each member is the
+// closed single-key object the present-key contract describes (exactly that key
+// required, no others) — the `anyOf` of those is the tag-by-present-key shape.
+export function oneOfPresentJson<T>(schema: OneOfPresentSchema<T>): JsonNode {
+  const arms = schema.arms as Readonly<Record<string, PresentArm<T>>>;
+  return {
+    anyOf: Object.entries(arms).map(([key, arm]) => ({
+      type: "object",
+      properties: { [key]: arm.json },
+      required: [key],
+      additionalProperties: false,
+    })),
   };
 }

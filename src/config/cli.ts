@@ -133,9 +133,9 @@ export function loadSchemaText(): string | null {
 
 // `cc-candybar schema` — print the schema so an editor can annotate a config with
 // `"$schema": "<this output, saved somewhere>"` (or the stable published URL) for
-// autocomplete + structural validation. Generated from the config types at build
-// time (scripts/gen-schema.mjs); served verbatim here (the generator is a build-
-// only devDep, not shipped).
+// autocomplete + structural validation. Emitted from the loader schemas at build
+// time (scripts/gen-schema.ts → emitConfigSchema); served verbatim here (the
+// emitter runs at build, not ship time).
 export function runSchema(): void {
   const text = loadSchemaText();
   if (text === null) {
