@@ -2,672 +2,1405 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://raw.githubusercontent.com/promptctl/cc-candybar/main/schema/cc-candybar.schema.json",
   "title": "cc-candybar config (.cc-candybar.json5)",
-  "$ref": "#/definitions/RawDslConfig",
-  "definitions": {
-    "RawDslConfig": {
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "globals": {
       "type": "object",
       "properties": {
-        "globals": {
-          "type": "object",
-          "properties": {
-            "default_bg": {
-              "type": "string"
-            },
-            "default_fg": {
-              "type": "string"
-            },
-            "default_empty_value": {
-              "type": "string"
-            },
-            "default_separator": {
-              "type": "string"
-            },
-            "default_truncate_marker": {
-              "type": "string"
-            },
-            "palette": {
-              "type": "string"
-            }
-          },
-          "additionalProperties": false
-        },
-        "variables": {
-          "type": "object",
-          "additionalProperties": {
-            "$ref": "#/definitions/VariableDecl"
-          }
-        },
-        "segments": {
-          "type": "object",
-          "additionalProperties": {
-            "$ref": "#/definitions/SegmentDecl"
-          }
-        },
-        "layout": {
-          "type": "array",
-          "items": {
-            "$ref": "#/definitions/LayoutRowInput"
-          }
-        },
-        "root": {
-          "$ref": "#/definitions/LayoutNode"
-        },
-        "actions": {
-          "type": "object",
-          "additionalProperties": {
-            "$ref": "#/definitions/ActionDecl"
-          }
-        },
-        "helpers": {
-          "type": "object",
-          "additionalProperties": {
-            "type": "string"
-          }
-        }
-      },
-      "additionalProperties": false
-    },
-    "VariableDecl": {
-      "anyOf": [
-        {
-          "$ref": "#/definitions/LiteralVarDecl"
-        },
-        {
-          "$ref": "#/definitions/InputVarDecl"
-        },
-        {
-          "$ref": "#/definitions/EnvVarDecl"
-        },
-        {
-          "$ref": "#/definitions/FileVarDecl"
-        },
-        {
-          "$ref": "#/definitions/ShellVarDecl"
-        },
-        {
-          "$ref": "#/definitions/TemplateVarDecl"
-        },
-        {
-          "$ref": "#/definitions/TimeVarDecl"
-        },
-        {
-          "$ref": "#/definitions/GitVarDecl"
-        },
-        {
-          "$ref": "#/definitions/StateVarDecl"
-        }
-      ]
-    },
-    "LiteralVarDecl": {
-      "type": "object",
-      "properties": {
-        "kind": {
-          "type": "string",
-          "const": "literal"
-        },
-        "value": {
-          "type": [
-            "string",
-            "number",
-            "boolean"
-          ]
-        },
-        "default": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "kind",
-        "value"
-      ],
-      "additionalProperties": false
-    },
-    "InputVarDecl": {
-      "type": "object",
-      "properties": {
-        "kind": {
-          "type": "string",
-          "const": "input"
-        },
-        "path": {
+        "default_bg": {
           "type": "string"
         },
-        "type": {
-          "type": "string",
-          "enum": [
-            "string",
-            "number",
-            "boolean"
-          ]
-        },
-        "default": {
-          "type": [
-            "string",
-            "number",
-            "boolean"
-          ]
-        }
-      },
-      "required": [
-        "kind",
-        "path"
-      ],
-      "additionalProperties": false
-    },
-    "EnvVarDecl": {
-      "type": "object",
-      "properties": {
-        "kind": {
-          "type": "string",
-          "const": "env"
-        },
-        "name": {
+        "default_fg": {
           "type": "string"
         },
-        "default": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "kind",
-        "name"
-      ],
-      "additionalProperties": false
-    },
-    "FileVarDecl": {
-      "type": "object",
-      "properties": {
-        "kind": {
-          "type": "string",
-          "const": "file"
-        },
-        "path": {
+        "default_empty_value": {
           "type": "string"
         },
-        "readMode": {
-          "type": "string",
-          "enum": [
-            "whole",
-            "first-line"
-          ]
-        },
-        "regex": {
+        "default_separator": {
           "type": "string"
         },
-        "cache": {
-          "$ref": "#/definitions/CacheDecl"
-        },
-        "default": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "kind",
-        "path",
-        "cache"
-      ],
-      "additionalProperties": false
-    },
-    "CacheDecl": {
-      "anyOf": [
-        {
-          "type": "object",
-          "properties": {
-            "ttl": {
-              "type": "string"
-            }
-          },
-          "required": [
-            "ttl"
-          ],
-          "additionalProperties": false
-        },
-        {
-          "type": "object",
-          "properties": {
-            "watch_file": {
-              "type": "string"
-            }
-          },
-          "required": [
-            "watch_file"
-          ],
-          "additionalProperties": false
-        },
-        {
-          "type": "object",
-          "properties": {
-            "depends_on": {
-              "type": "array",
-              "items": {
-                "type": "string"
-              }
-            }
-          },
-          "required": [
-            "depends_on"
-          ],
-          "additionalProperties": false
-        },
-        {
-          "type": "object",
-          "properties": {
-            "key": {
-              "type": "string"
-            }
-          },
-          "required": [
-            "key"
-          ],
-          "additionalProperties": false
-        },
-        {
-          "type": "object",
-          "properties": {
-            "never": {
-              "type": "boolean",
-              "const": true
-            }
-          },
-          "required": [
-            "never"
-          ],
-          "additionalProperties": false
-        }
-      ]
-    },
-    "ShellVarDecl": {
-      "type": "object",
-      "properties": {
-        "kind": {
-          "type": "string",
-          "const": "shell"
-        },
-        "command": {
-          "type": "string"
-        },
-        "regex": {
-          "type": "string"
-        },
-        "cache": {
-          "$ref": "#/definitions/CacheDecl"
-        },
-        "default": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "kind",
-        "command",
-        "cache"
-      ],
-      "additionalProperties": false
-    },
-    "TemplateVarDecl": {
-      "type": "object",
-      "properties": {
-        "kind": {
-          "type": "string",
-          "const": "template"
-        },
-        "template": {
-          "type": "string"
-        },
-        "cache": {
-          "$ref": "#/definitions/CacheDecl"
-        },
-        "default": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "kind",
-        "template"
-      ],
-      "additionalProperties": false
-    },
-    "TimeVarDecl": {
-      "type": "object",
-      "properties": {
-        "kind": {
-          "type": "string",
-          "const": "time"
-        },
-        "layout": {
-          "type": "string"
-        },
-        "cache": {
-          "$ref": "#/definitions/CacheDecl"
-        },
-        "default": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "kind",
-        "layout"
-      ],
-      "additionalProperties": false
-    },
-    "GitVarDecl": {
-      "type": "object",
-      "properties": {
-        "kind": {
-          "type": "string",
-          "const": "git"
-        },
-        "field": {
-          "$ref": "#/definitions/GitField"
-        },
-        "cache": {
-          "$ref": "#/definitions/CacheDecl"
-        },
-        "default": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "kind",
-        "field",
-        "cache"
-      ],
-      "additionalProperties": false
-    },
-    "GitField": {
-      "type": "string",
-      "enum": [
-        "branch",
-        "sha",
-        "dirty",
-        "ahead",
-        "behind",
-        "stash"
-      ]
-    },
-    "StateVarDecl": {
-      "type": "object",
-      "properties": {
-        "kind": {
-          "type": "string",
-          "const": "state"
-        },
-        "key": {
-          "type": "string"
-        },
-        "default": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "kind",
-        "key"
-      ],
-      "additionalProperties": false
-    },
-    "SegmentDecl": {
-      "type": "object",
-      "properties": {
-        "template": {
-          "type": "string"
-        },
-        "width": {
-          "anyOf": [
-            {
-              "type": "string",
-              "const": "auto"
-            },
-            {
-              "type": "number"
-            }
-          ]
-        },
-        "justify": {
-          "$ref": "#/definitions/JustifyMode"
-        },
-        "truncate": {
-          "$ref": "#/definitions/TruncateMode"
-        },
-        "bg": {
-          "type": "string"
-        },
-        "fg": {
-          "type": "string"
-        },
-        "when": {
+        "default_truncate_marker": {
           "type": "string"
         },
         "palette": {
           "type": "string"
-        },
-        "vars": {
-          "type": "object",
-          "additionalProperties": {
-            "$ref": "#/definitions/VariableDecl"
-          }
         }
       },
-      "required": [
-        "template"
-      ],
       "additionalProperties": false
     },
-    "JustifyMode": {
-      "type": "string",
-      "enum": [
-        "left",
-        "center",
-        "right"
-      ]
-    },
-    "TruncateMode": {
-      "type": "string",
-      "enum": [
-        "right",
-        "left",
-        "middle"
-      ]
-    },
-    "LayoutRowInput": {
-      "anyOf": [
-        {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
-        },
-        {
-          "$ref": "#/definitions/LayoutRow"
-        }
-      ]
-    },
-    "LayoutRow": {
+    "variables": {
       "type": "object",
-      "properties": {
-        "when": {
-          "type": "string"
-        },
-        "segments": {
-          "type": "array",
-          "items": {
-            "type": "string"
+      "additionalProperties": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "const": "literal"
+              },
+              "value": {
+                "type": [
+                  "string",
+                  "number",
+                  "boolean"
+                ]
+              },
+              "default": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "value"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "const": "input"
+              },
+              "path": {
+                "type": "string"
+              },
+              "type": {
+                "enum": [
+                  "string",
+                  "number",
+                  "boolean"
+                ]
+              },
+              "default": {
+                "type": [
+                  "string",
+                  "number",
+                  "boolean"
+                ]
+              }
+            },
+            "required": [
+              "kind",
+              "path"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "const": "env"
+              },
+              "name": {
+                "type": "string"
+              },
+              "default": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "name"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "const": "file"
+              },
+              "path": {
+                "type": "string"
+              },
+              "readMode": {
+                "enum": [
+                  "whole",
+                  "first-line"
+                ]
+              },
+              "regex": {
+                "type": "string"
+              },
+              "cache": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "ttl": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "ttl"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "watch_file": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "watch_file"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "depends_on": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "required": [
+                      "depends_on"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "key": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "key"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "never": {
+                        "const": true
+                      }
+                    },
+                    "required": [
+                      "never"
+                    ],
+                    "additionalProperties": false
+                  }
+                ]
+              },
+              "default": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "path",
+              "cache"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "const": "shell"
+              },
+              "command": {
+                "type": "string"
+              },
+              "regex": {
+                "type": "string"
+              },
+              "cache": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "ttl": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "ttl"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "watch_file": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "watch_file"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "depends_on": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "required": [
+                      "depends_on"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "key": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "key"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "never": {
+                        "const": true
+                      }
+                    },
+                    "required": [
+                      "never"
+                    ],
+                    "additionalProperties": false
+                  }
+                ]
+              },
+              "default": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "command",
+              "cache"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "const": "template"
+              },
+              "template": {
+                "type": "string"
+              },
+              "cache": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "ttl": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "ttl"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "watch_file": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "watch_file"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "depends_on": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "required": [
+                      "depends_on"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "key": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "key"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "never": {
+                        "const": true
+                      }
+                    },
+                    "required": [
+                      "never"
+                    ],
+                    "additionalProperties": false
+                  }
+                ]
+              },
+              "default": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "template"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "const": "time"
+              },
+              "layout": {
+                "type": "string"
+              },
+              "cache": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "ttl": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "ttl"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "watch_file": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "watch_file"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "depends_on": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "required": [
+                      "depends_on"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "key": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "key"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "never": {
+                        "const": true
+                      }
+                    },
+                    "required": [
+                      "never"
+                    ],
+                    "additionalProperties": false
+                  }
+                ]
+              },
+              "default": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "layout"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "const": "git"
+              },
+              "field": {
+                "enum": [
+                  "branch",
+                  "sha",
+                  "dirty",
+                  "ahead",
+                  "behind",
+                  "stash"
+                ]
+              },
+              "cache": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "ttl": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "ttl"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "watch_file": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "watch_file"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "depends_on": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "required": [
+                      "depends_on"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "key": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "key"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "never": {
+                        "const": true
+                      }
+                    },
+                    "required": [
+                      "never"
+                    ],
+                    "additionalProperties": false
+                  }
+                ]
+              },
+              "default": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "field",
+              "cache"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "const": "state"
+              },
+              "key": {
+                "type": "string"
+              },
+              "default": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "key"
+            ],
+            "additionalProperties": false
           }
-        }
-      },
-      "required": [
-        "segments"
-      ],
-      "additionalProperties": false
+        ]
+      }
     },
+    "segments": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "template": {
+            "type": "string"
+          },
+          "width": {
+            "anyOf": [
+              {
+                "const": "auto"
+              },
+              {
+                "type": "integer",
+                "minimum": 1
+              }
+            ]
+          },
+          "justify": {
+            "enum": [
+              "left",
+              "center",
+              "right"
+            ]
+          },
+          "truncate": {
+            "enum": [
+              "right",
+              "left",
+              "middle"
+            ]
+          },
+          "bg": {
+            "type": "string"
+          },
+          "fg": {
+            "type": "string"
+          },
+          "when": {
+            "type": "string"
+          },
+          "palette": {
+            "type": "string"
+          },
+          "vars": {
+            "type": "object",
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "const": "literal"
+                    },
+                    "value": {
+                      "type": [
+                        "string",
+                        "number",
+                        "boolean"
+                      ]
+                    },
+                    "default": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "value"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "const": "input"
+                    },
+                    "path": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "enum": [
+                        "string",
+                        "number",
+                        "boolean"
+                      ]
+                    },
+                    "default": {
+                      "type": [
+                        "string",
+                        "number",
+                        "boolean"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "path"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "const": "env"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "default": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "name"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "const": "file"
+                    },
+                    "path": {
+                      "type": "string"
+                    },
+                    "readMode": {
+                      "enum": [
+                        "whole",
+                        "first-line"
+                      ]
+                    },
+                    "regex": {
+                      "type": "string"
+                    },
+                    "cache": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "ttl": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "ttl"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "watch_file": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "watch_file"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "depends_on": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            }
+                          },
+                          "required": [
+                            "depends_on"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "key": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "key"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "never": {
+                              "const": true
+                            }
+                          },
+                          "required": [
+                            "never"
+                          ],
+                          "additionalProperties": false
+                        }
+                      ]
+                    },
+                    "default": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "path",
+                    "cache"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "const": "shell"
+                    },
+                    "command": {
+                      "type": "string"
+                    },
+                    "regex": {
+                      "type": "string"
+                    },
+                    "cache": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "ttl": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "ttl"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "watch_file": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "watch_file"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "depends_on": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            }
+                          },
+                          "required": [
+                            "depends_on"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "key": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "key"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "never": {
+                              "const": true
+                            }
+                          },
+                          "required": [
+                            "never"
+                          ],
+                          "additionalProperties": false
+                        }
+                      ]
+                    },
+                    "default": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "command",
+                    "cache"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "const": "template"
+                    },
+                    "template": {
+                      "type": "string"
+                    },
+                    "cache": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "ttl": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "ttl"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "watch_file": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "watch_file"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "depends_on": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            }
+                          },
+                          "required": [
+                            "depends_on"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "key": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "key"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "never": {
+                              "const": true
+                            }
+                          },
+                          "required": [
+                            "never"
+                          ],
+                          "additionalProperties": false
+                        }
+                      ]
+                    },
+                    "default": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "template"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "const": "time"
+                    },
+                    "layout": {
+                      "type": "string"
+                    },
+                    "cache": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "ttl": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "ttl"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "watch_file": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "watch_file"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "depends_on": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            }
+                          },
+                          "required": [
+                            "depends_on"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "key": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "key"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "never": {
+                              "const": true
+                            }
+                          },
+                          "required": [
+                            "never"
+                          ],
+                          "additionalProperties": false
+                        }
+                      ]
+                    },
+                    "default": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "layout"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "const": "git"
+                    },
+                    "field": {
+                      "enum": [
+                        "branch",
+                        "sha",
+                        "dirty",
+                        "ahead",
+                        "behind",
+                        "stash"
+                      ]
+                    },
+                    "cache": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "ttl": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "ttl"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "watch_file": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "watch_file"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "depends_on": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            }
+                          },
+                          "required": [
+                            "depends_on"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "key": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "key"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "never": {
+                              "const": true
+                            }
+                          },
+                          "required": [
+                            "never"
+                          ],
+                          "additionalProperties": false
+                        }
+                      ]
+                    },
+                    "default": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "field",
+                    "cache"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "const": "state"
+                    },
+                    "key": {
+                      "type": "string"
+                    },
+                    "default": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "key"
+                  ],
+                  "additionalProperties": false
+                }
+              ]
+            }
+          }
+        },
+        "required": [
+          "template"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "layout": {
+      "type": "array",
+      "items": {
+        "anyOf": [
+          {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          {
+            "type": "object",
+            "properties": {
+              "when": {
+                "type": "string"
+              },
+              "segments": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": [
+              "segments"
+            ],
+            "additionalProperties": false
+          }
+        ]
+      }
+    },
+    "root": {
+      "$ref": "#/definitions/LayoutNode"
+    },
+    "actions": {
+      "type": "object",
+      "additionalProperties": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "set": {
+                "type": "string"
+              },
+              "to": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "set",
+              "to"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "set": {
+                "type": "string"
+              },
+              "from": {
+                "enum": [
+                  "themes",
+                  "styles"
+                ]
+              }
+            },
+            "required": [
+              "set",
+              "from"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "set": {
+                "type": "string"
+              },
+              "min": {
+                "type": "integer"
+              },
+              "max": {
+                "type": "integer"
+              },
+              "by": {
+                "type": "integer"
+              }
+            },
+            "required": [
+              "set",
+              "min",
+              "max",
+              "by"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "set": {
+                "type": "string"
+              },
+              "int": {
+                "const": true
+              }
+            },
+            "required": [
+              "set",
+              "int"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "copy": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "copy"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "open": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "open"
+            ],
+            "additionalProperties": false
+          }
+        ]
+      }
+    },
+    "helpers": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      }
+    }
+  },
+  "definitions": {
     "LayoutNode": {
       "anyOf": [
         {
-          "$ref": "#/definitions/ContainerNode"
-        },
-        {
-          "$ref": "#/definitions/SegmentNode"
-        }
-      ]
-    },
-    "ContainerNode": {
-      "type": "object",
-      "properties": {
-        "kind": {
-          "type": "string",
-          "const": "container"
-        },
-        "direction": {
-          "$ref": "#/definitions/Direction"
-        },
-        "children": {
-          "type": "array",
-          "items": {
-            "$ref": "#/definitions/LayoutNode"
-          }
-        },
-        "when": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "kind",
-        "direction",
-        "children"
-      ],
-      "additionalProperties": false
-    },
-    "Direction": {
-      "type": "string",
-      "enum": [
-        "vertical",
-        "horizontal"
-      ]
-    },
-    "SegmentNode": {
-      "type": "object",
-      "properties": {
-        "kind": {
-          "type": "string",
-          "const": "segment"
-        },
-        "name": {
-          "type": "string"
-        },
-        "when": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "kind",
-        "name"
-      ],
-      "additionalProperties": false
-    },
-    "ActionDecl": {
-      "anyOf": [
-        {
           "type": "object",
           "properties": {
-            "set": {
-              "type": "string"
+            "kind": {
+              "const": "container"
             },
-            "to": {
+            "direction": {
+              "enum": [
+                "vertical",
+                "horizontal"
+              ]
+            },
+            "children": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/LayoutNode"
+              }
+            },
+            "when": {
               "type": "string"
             }
           },
           "required": [
-            "set",
-            "to"
+            "kind",
+            "direction",
+            "children"
           ],
           "additionalProperties": false
         },
         {
           "type": "object",
           "properties": {
-            "set": {
+            "kind": {
+              "const": "segment"
+            },
+            "name": {
               "type": "string"
             },
-            "from": {
-              "$ref": "#/definitions/OptionSource"
+            "when": {
+              "type": "string"
             }
           },
           "required": [
-            "set",
-            "from"
+            "kind",
+            "name"
           ],
           "additionalProperties": false
         },
         {
           "type": "object",
           "properties": {
-            "set": {
-              "type": "string"
+            "kind": {
+              "const": "cells"
             },
-            "min": {
-              "type": "number"
+            "segments": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
             },
-            "max": {
-              "type": "number"
-            },
-            "by": {
-              "type": "number"
-            }
-          },
-          "required": [
-            "set",
-            "min",
-            "max",
-            "by"
-          ],
-          "additionalProperties": false
-        },
-        {
-          "type": "object",
-          "properties": {
-            "set": {
-              "type": "string"
-            },
-            "int": {
-              "type": "boolean",
-              "const": true
-            }
-          },
-          "required": [
-            "set",
-            "int"
-          ],
-          "additionalProperties": false
-        },
-        {
-          "type": "object",
-          "properties": {
-            "copy": {
+            "when": {
               "type": "string"
             }
           },
           "required": [
-            "copy"
-          ],
-          "additionalProperties": false
-        },
-        {
-          "type": "object",
-          "properties": {
-            "open": {
-              "type": "string"
-            }
-          },
-          "required": [
-            "open"
+            "kind",
+            "segments"
           ],
           "additionalProperties": false
         }
-      ]
-    },
-    "OptionSource": {
-      "type": "string",
-      "enum": [
-        "themes",
-        "styles"
       ]
     }
   }

@@ -28,11 +28,13 @@ import {
   describeValue,
   fields,
   isPlainObject,
+  objectJson,
   refine,
   requireString,
   type ArmParse,
   type FieldSpec,
   type FieldSpecMap,
+  type JsonNode,
   type Refinement,
   type ValidateCtx,
 } from "./validate-core.js";
@@ -122,6 +124,35 @@ const ACTION_ARMS: Record<ActionKey, ArmParse<ActionDecl>> = {
   copy: templateArm("copy"),
   open: templateArm("open"),
 };
+
+// [LAW:one-source-of-truth] A copy/open action emits the closed single-key
+// object its arm validates — symmetric to `templateArm(key)`'s parse.
+function templateArmJson(key: "copy" | "open"): JsonNode {
+  return {
+    type: "object",
+    properties: { [key]: { type: "string" } },
+    required: [key],
+    additionalProperties: false,
+  };
+}
+
+// [LAW:one-source-of-truth] One ActionDecl's schema: the set sub-union (each
+// arm's `json`, derived from SET_ARMS) joined with copy/open — the SAME members
+// `validateActionDecl` dispatches over. The `actions` block is a name → ActionDecl
+// map, symmetric to `validateActions`.
+function actionDeclJson(): JsonNode {
+  return {
+    anyOf: [
+      ...SET_ARMS.map((arm) => arm.json),
+      templateArmJson("copy"),
+      templateArmJson("open"),
+    ],
+  };
+}
+
+export function actionsJson(): JsonNode {
+  return { type: "object", additionalProperties: actionDeclJson() };
+}
 
 // [LAW:one-type-per-behavior] copy and open are one behavior — a single required
 // template string, no other keys — parameterized by the key. Both reject every
@@ -246,6 +277,12 @@ interface SetArm {
   readonly detect: readonly string[];
   readonly allowed: readonly string[];
   readonly label: string;
+  // [LAW:one-source-of-truth] The arm's emit facet: the closed object schema for
+  // a `set` of this source — the shared `set` key plus the source's own fields,
+  // derived from the SAME field map `fields` validates. Cross-field refinements
+  // (min<max, by≠0) are unexpressible in JSON Schema, so only the structural
+  // shape is emitted — the shape/meaning split every refinement keeps.
+  readonly json: JsonNode;
   readonly parse: ArmParse<Partial<ActionDecl>>;
 }
 
@@ -256,10 +293,20 @@ function setArm<P extends object>(
   const detect = Object.keys(fieldMap);
   const inner: ArmParse<P> = (ctx, path, raw) =>
     fields(ctx, fieldMap, path, raw);
+  const source = objectJson(fieldMap) as {
+    properties: Record<string, JsonNode>;
+    required?: readonly string[];
+  };
   return {
     detect,
     allowed: ["set", ...detect],
     label: detect.join("/"),
+    json: {
+      type: "object",
+      properties: { set: { type: "string" }, ...source.properties },
+      required: ["set", ...(source.required ?? [])],
+      additionalProperties: false,
+    },
     parse: (checks.length
       ? refine(inner, ...checks)
       : inner) as unknown as ArmParse<Partial<ActionDecl>>,
@@ -330,6 +377,7 @@ function validateSetAction(
 function setLiteralSpec(): FieldSpec<string> {
   return {
     required: true,
+    json: { type: "string" },
     parse: (ctx, path, field, raw) =>
       slashFreeString(
         ctx,
@@ -348,6 +396,7 @@ function setLiteralSpec(): FieldSpec<string> {
 function fromSpec(): FieldSpec<OptionSource> {
   return {
     required: true,
+    json: { enum: [...OPTION_SOURCES] },
     parse: (ctx, path, field, raw) => {
       const from = raw[field];
       if (
@@ -372,6 +421,7 @@ function fromSpec(): FieldSpec<OptionSource> {
 function intMarkerSpec(): FieldSpec<true> {
   return {
     required: true,
+    json: { const: true },
     parse: (ctx, path, field, raw) => {
       if (raw[field] !== true) {
         issue(
@@ -392,6 +442,7 @@ function intMarkerSpec(): FieldSpec<true> {
 function requireIntSpec(): FieldSpec<number> {
   return {
     required: true,
+    json: { type: "integer" },
     parse: (ctx, path, field, raw) => {
       const v = raw[field];
       if (typeof v !== "number" || !Number.isInteger(v)) {

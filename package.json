@@ -12,7 +12,7 @@
     "cc-candybar": "./bin/cc-candybar"
   },
   "scripts": {
-    "build": "node scripts/gen-schema.mjs && tsdown",
+    "build": "tsx scripts/gen-schema.ts && tsdown",
     "build:rust": "cd rust-client && cargo build --release",
     "dev": "tsdown --watch",
     "typecheck": "tsc --noEmit",
@@ -25,8 +25,8 @@
     "demo": "tsx src/demo/dsl.ts",
     "benchmark:timing": "scripts/benchmark_timing.sh",
     "check:protocol": "node scripts/check-protocol.mjs",
-    "gen:schema": "node scripts/gen-schema.mjs",
-    "check:schema": "node scripts/check-schema.mjs",
+    "gen:schema": "tsx scripts/gen-schema.ts",
+    "check:schema": "tsx scripts/check-schema.ts",
     "prepack": "node scripts/write-bin-placeholder.mjs",
     "postinstall": "node scripts/postinstall.mjs",
     "prepublishOnly": "npm run lint && npm run typecheck && npm run check:protocol && npm run check:schema && npm run build"
@@ -80,7 +80,6 @@
     "prettier": "^3.6.2",
     "semantic-release": "^25.0.2",
     "ts-jest": "^29.4.1",
-    "ts-json-schema-generator": "^2.9.0",
     "tsdown": "^0.21.4",
     "tsx": "^4.21.0",
     "typescript": "^5.0.0"
