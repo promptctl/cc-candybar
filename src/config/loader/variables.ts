@@ -1,29 +1,42 @@
 // [LAW:types-are-the-program] The variable schema: a VariableDecl is discriminated
 // by `kind` (literal / input / env / file / shell / template / time / git / state),
-// each arm declaring its own required + optional fields. validateVariableByKind is
-// the single total switch over the discriminator. This file changes when a source
+// declared as DATA (VARIABLE_SCHEMA) and interpreted by the tag-by-field-value
+// engine (taggedUnion). Each arm is a `fields` schema over its member's non-`kind`
+// fields, except `input`, whose `default` must match its `type` — a genuine
+// cross-field invariant carried as a closure. This file changes when a source
 // kind's shape changes; adding a kind is one new arm here plus its runtime impl.
 
 import {
   GIT_FIELDS,
-  SOURCE_KINDS,
   type GitField,
-  type SourceKind,
+  type EnvVarDecl,
+  type FileVarDecl,
+  type GitVarDecl,
+  type LiteralVarDecl,
+  type ShellVarDecl,
+  type StateVarDecl,
+  type TemplateVarDecl,
+  type TimeVarDecl,
   type VariableDecl,
 } from "../dsl-types.js";
 import { findKeyLine } from "./diagnostics.js";
 import {
   describeType,
+  fields,
   isPlainObject,
-  isSourceKind,
   optionalEnum,
-  optionalString,
-  optionalStringField,
+  optionalStringSpec,
   optionalTypedDefault,
   requireString,
+  requireStringSpec,
+  optionalEnumSpec,
+  taggedUnion,
+  type FieldSpec,
+  type FieldSpecMap,
+  type TaggedUnionSchema,
   type ValidateCtx,
 } from "./validate-core.js";
-import { optionalCache, requireCache } from "./cache.js";
+import { optionalCacheSpec, requireCacheSpec } from "./cache.js";
 
 export function validateVariables(
   ctx: ValidateCtx,
@@ -42,58 +55,24 @@ export function validateVariables(
 
   const out: Record<string, VariableDecl> = {};
   for (const [name, decl] of Object.entries(raw)) {
-    const path = `${pathPrefix}.${name}`;
-    const parsed = validateVariable(ctx, path, decl);
+    const parsed = taggedUnion(
+      ctx,
+      VARIABLE_SCHEMA,
+      `${pathPrefix}.${name}`,
+      decl,
+    );
     if (parsed !== null) out[name] = parsed;
   }
   return out;
 }
 
-function validateVariable(
-  ctx: ValidateCtx,
-  path: string,
-  raw: unknown,
-): VariableDecl | null {
-  if (!isPlainObject(raw)) {
-    ctx.issues.push({
-      path,
-      message: `${path} must be an object, got ${describeType(raw)}`,
-      line: findKeyLine(ctx.source, path.split(".")),
-    });
-    return null;
-  }
-
-  const rawKind = raw.kind;
-  if (typeof rawKind !== "string") {
-    ctx.issues.push({
-      path: `${path}.kind`,
-      message: `${path}.kind must be a string, got ${describeType(rawKind)}`,
-      line: findKeyLine(ctx.source, path.split(".")),
-    });
-    return null;
-  }
-  if (!isSourceKind(rawKind)) {
-    ctx.issues.push({
-      path: `${path}.kind`,
-      message: `Unknown source kind "${rawKind}". Expected one of: ${SOURCE_KINDS.join(", ")}`,
-      line: findKeyLine(ctx.source, [...path.split("."), "kind"]),
-    });
-    return null;
-  }
-
-  // Cache: required for shell/file/git; optional for template/time; n/a for
-  // literal/input/env. Per-kind dispatch handles the requirement.
-  return validateVariableByKind(ctx, path, rawKind, raw);
-}
-
-function validateVariableByKind(
-  ctx: ValidateCtx,
-  path: string,
-  kind: SourceKind,
-  raw: Record<string, unknown>,
-): VariableDecl | null {
-  switch (kind) {
-    case "literal": {
+// [LAW:types-are-the-program] `value` is a required union literal with a bespoke
+// message whose line points at the variable (not `.value`) — a custom spec, since
+// the generic string/enum specs encode different line behavior.
+function literalValueSpec(): FieldSpec<string | number | boolean> {
+  return {
+    required: true,
+    parse: (ctx, path, _field, raw) => {
       const value = raw.value;
       if (
         typeof value !== "string" &&
@@ -105,108 +84,19 @@ function validateVariableByKind(
           message: `literal value must be string|number|boolean, got ${describeType(value)}`,
           line: findKeyLine(ctx.source, path.split(".")),
         });
-        return null;
+        return undefined;
       }
-      return {
-        kind: "literal",
-        value,
-        ...optionalString(ctx, path, raw, "default"),
-      };
-    }
+      return value;
+    },
+  };
+}
 
-    case "input": {
-      const p = requireString(ctx, path, raw, "path");
-      if (p === null) return null;
-      // [LAW:types-are-the-program] Absent `type` keeps existing string-typed
-      // declarations behaving exactly as before — the daemon's augmented
-      // payload carries strings (`cwd`, `model`, `session_id`) at those paths,
-      // and the default at the loader is "string" not "any".
-      const t = optionalEnum(ctx, path, raw, "type", [
-        "string",
-        "number",
-        "boolean",
-      ] as const);
-      const def = optionalTypedDefault(ctx, path, raw, t ?? "string");
-      return {
-        kind: "input",
-        path: p,
-        ...(t !== undefined && { type: t }),
-        ...(def !== undefined && { default: def }),
-      };
-    }
-
-    case "env": {
-      const name = requireString(ctx, path, raw, "name");
-      if (name === null) return null;
-      return {
-        kind: "env",
-        name,
-        ...optionalString(ctx, path, raw, "default"),
-      };
-    }
-
-    case "file": {
-      const filePath = requireString(ctx, path, raw, "path");
-      const cache = requireCache(ctx, path, raw, kind);
-      const readMode = optionalEnum(ctx, path, raw, "readMode", [
-        "whole",
-        "first-line",
-      ] as const);
-      const regex = optionalStringField(ctx, path, raw, "regex");
-      const def = optionalStringField(ctx, path, raw, "default");
-      if (filePath === null || cache === null) return null;
-      return {
-        kind: "file",
-        path: filePath,
-        ...(readMode !== undefined && { readMode }),
-        ...(regex !== undefined && { regex }),
-        cache,
-        ...(def !== undefined && { default: def }),
-      };
-    }
-
-    case "shell": {
-      const command = requireString(ctx, path, raw, "command");
-      const cache = requireCache(ctx, path, raw, kind);
-      const regex = optionalStringField(ctx, path, raw, "regex");
-      const def = optionalStringField(ctx, path, raw, "default");
-      if (command === null || cache === null) return null;
-      return {
-        kind: "shell",
-        command,
-        ...(regex !== undefined && { regex }),
-        cache,
-        ...(def !== undefined && { default: def }),
-      };
-    }
-
-    case "template": {
-      const template = requireString(ctx, path, raw, "template");
-      if (template === null) return null;
-      const cache = optionalCache(ctx, path, raw);
-      const def = optionalStringField(ctx, path, raw, "default");
-      return {
-        kind: "template",
-        template,
-        ...(cache !== undefined && { cache }),
-        ...(def !== undefined && { default: def }),
-      };
-    }
-
-    case "time": {
-      const layout = requireString(ctx, path, raw, "layout");
-      if (layout === null) return null;
-      const cache = optionalCache(ctx, path, raw);
-      const def = optionalStringField(ctx, path, raw, "default");
-      return {
-        kind: "time",
-        layout,
-        ...(cache !== undefined && { cache }),
-        ...(def !== undefined && { default: def }),
-      };
-    }
-
-    case "git": {
+// [LAW:types-are-the-program] `field` is a required member of the closed GitField
+// set with a bespoke one-of message — a custom spec for the same reason.
+function gitFieldSpec(): FieldSpec<GitField> {
+  return {
+    required: true,
+    parse: (ctx, path, _field, raw) => {
       const field = raw.field;
       if (
         typeof field !== "string" ||
@@ -217,28 +107,110 @@ function validateVariableByKind(
           message: `git field must be one of: ${GIT_FIELDS.join(", ")}, got ${JSON.stringify(field)}`,
           line: findKeyLine(ctx.source, [...path.split("."), "field"]),
         });
-        return null;
+        return undefined;
       }
-      const cache = requireCache(ctx, path, raw, kind);
-      const def = optionalStringField(ctx, path, raw, "default");
-      if (cache === null) return null;
-      return {
-        kind: "git",
-        field: field as GitField,
-        cache,
-        ...(def !== undefined && { default: def }),
-      };
-    }
-
-    case "state": {
-      const key = requireString(ctx, path, raw, "key");
-      if (key === null) return null;
-      const def = optionalStringField(ctx, path, raw, "default");
-      return {
-        kind: "state",
-        key,
-        ...(def !== undefined && { default: def }),
-      };
-    }
-  }
+      return field as GitField;
+    },
+  };
 }
+
+// [LAW:dataflow-not-control-flow] Each arm's field set is DATA over the member's
+// non-`kind` fields; the engine supplies the discriminator. `fields` runs every
+// spec (reporting all issues) and fails the arm when a required field is absent
+// or invalid — the conditional-spread + result-threading the old switch hand-rolled.
+const LITERAL_FIELDS: FieldSpecMap<Omit<LiteralVarDecl, "kind">> = {
+  value: literalValueSpec(),
+  default: optionalStringSpec(),
+};
+const ENV_FIELDS: FieldSpecMap<Omit<EnvVarDecl, "kind">> = {
+  name: requireStringSpec(),
+  default: optionalStringSpec(),
+};
+const FILE_FIELDS: FieldSpecMap<Omit<FileVarDecl, "kind">> = {
+  path: requireStringSpec(),
+  readMode: optionalEnumSpec(["whole", "first-line"] as const),
+  regex: optionalStringSpec(),
+  cache: requireCacheSpec("file"),
+  default: optionalStringSpec(),
+};
+const SHELL_FIELDS: FieldSpecMap<Omit<ShellVarDecl, "kind">> = {
+  command: requireStringSpec(),
+  regex: optionalStringSpec(),
+  cache: requireCacheSpec("shell"),
+  default: optionalStringSpec(),
+};
+const TEMPLATE_FIELDS: FieldSpecMap<Omit<TemplateVarDecl, "kind">> = {
+  template: requireStringSpec(),
+  cache: optionalCacheSpec(),
+  default: optionalStringSpec(),
+};
+const TIME_FIELDS: FieldSpecMap<Omit<TimeVarDecl, "kind">> = {
+  layout: requireStringSpec(),
+  cache: optionalCacheSpec(),
+  default: optionalStringSpec(),
+};
+const GIT_VAR_FIELDS: FieldSpecMap<Omit<GitVarDecl, "kind">> = {
+  field: gitFieldSpec(),
+  cache: requireCacheSpec("git"),
+  default: optionalStringSpec(),
+};
+const STATE_FIELDS: FieldSpecMap<Omit<StateVarDecl, "kind">> = {
+  key: requireStringSpec(),
+  default: optionalStringSpec(),
+};
+
+// [LAW:decomposition] A regular arm parses its non-`kind` fields via `fields` and
+// re-attaches the tag the engine already validated; null threading is preserved.
+function arm<
+  K extends VariableDecl["kind"],
+  M extends Omit<Extract<VariableDecl, { kind: K }>, "kind">,
+>(kind: K, fieldMap: FieldSpecMap<M>) {
+  return {
+    parse: (ctx: ValidateCtx, path: string, raw: Record<string, unknown>) => {
+      const body = fields(ctx, fieldMap, path, raw);
+      // [LAW:types-are-the-program] `fieldMap: FieldSpecMap<M>` is checked against
+      // the member's non-`kind` fields at each call site, so {kind, ...body} IS the
+      // member; TS can't relate the reconstruction to the distributed Extract for a
+      // generic K, hence the cast — the call-site check carries the real guarantee.
+      return body === null
+        ? null
+        : ({ kind, ...body } as unknown as Extract<VariableDecl, { kind: K }>);
+    },
+  };
+}
+
+const VARIABLE_SCHEMA: TaggedUnionSchema<VariableDecl, "kind"> = {
+  tag: "kind",
+  noun: "source kind",
+  arms: {
+    literal: arm("literal", LITERAL_FIELDS),
+    // [LAW:types-are-the-program] `input`'s `default` must match its declared
+    // `type` (absent `type` defaults to "string"), so `default` cannot be an
+    // independent field spec — the cross-field invariant lives in this closure.
+    input: {
+      parse: (ctx, path, raw) => {
+        const p = requireString(ctx, path, raw, "path");
+        if (p === null) return null;
+        const t = optionalEnum(ctx, path, raw, "type", [
+          "string",
+          "number",
+          "boolean",
+        ] as const);
+        const def = optionalTypedDefault(ctx, path, raw, t ?? "string");
+        return {
+          kind: "input",
+          path: p,
+          ...(t !== undefined && { type: t }),
+          ...(def !== undefined && { default: def }),
+        };
+      },
+    },
+    env: arm("env", ENV_FIELDS),
+    file: arm("file", FILE_FIELDS),
+    shell: arm("shell", SHELL_FIELDS),
+    template: arm("template", TEMPLATE_FIELDS),
+    time: arm("time", TIME_FIELDS),
+    git: arm("git", GIT_VAR_FIELDS),
+    state: arm("state", STATE_FIELDS),
+  },
+};
