@@ -242,6 +242,87 @@ function rejectUnknownKeys(
   }
 }
 
+// [LAW:types-are-the-program] A tag-by-which-key-present union: every member
+// carries exactly one own key (CacheDecl's ttl/watch_file/…, an action's
+// set/copy/open). PresentArm parses the VALUE held at that key into its member
+// shape; the arm map must cover every present-key (the `-?` + Extract force an
+// arm per member, typed to return exactly that member — forgetting one is a
+// compile error). The bespoke per-arm message lives in its parse closure as DATA.
+export interface PresentArm<M> {
+  parse(ctx: ValidateCtx, path: string, value: unknown): M | null;
+}
+
+type PresentKeyOf<T> = T extends infer M ? keyof M : never;
+
+export type PresentArmMap<T> = {
+  [K in PresentKeyOf<T> & string]-?: PresentArm<
+    Extract<T, { readonly [P in K]: unknown }>
+  >;
+};
+
+export interface OneOfPresentSchema<T> {
+  // The noun in this union's structural messages ("cache must be an object",
+  // "Unknown cache key", "cache must declare exactly one of") — the one phrasing
+  // that varies per union; the candidate key list is the arm-map's key order.
+  readonly noun: string;
+  readonly arms: PresentArmMap<T>;
+}
+
+// [LAW:dataflow-not-control-flow] The tag-by-present-key interpreter: the same
+// unconditional sequence for every such union — guard object, reject unknown
+// keys, enforce exactly-one present, dispatch to that arm. Distinct from `record`
+// because the contract differs ("Expected exactly one of", zero/multiple-present
+// counting); the variability (noun, arms, each arm's message) is DATA. Returns
+// the parsed member, or null when raw is not an object, no/multiple keys are
+// present, or the single arm fails — the drop shape a union caller recovers.
+export function oneOfPresent<T>(
+  ctx: ValidateCtx,
+  schema: OneOfPresentSchema<T>,
+  path: string,
+  raw: unknown,
+): T | null {
+  if (!isPlainObject(raw)) {
+    ctx.issues.push({
+      path,
+      message: `${schema.noun} must be an object, got ${describeType(raw)}`,
+      line: findKeyLine(ctx.source, path.split(".")),
+    });
+    return null;
+  }
+
+  const arms = schema.arms as Readonly<Record<string, PresentArm<T>>>;
+  const keys = Object.keys(arms);
+  const present = Object.keys(raw).filter((k) => k in arms);
+  const unknown = Object.keys(raw).filter((k) => !(k in arms));
+  for (const k of unknown) {
+    ctx.issues.push({
+      path: `${path}.${k}`,
+      message: `Unknown ${schema.noun} key "${k}". Expected exactly one of: ${keys.join(", ")}`,
+      line: findKeyLine(ctx.source, [...path.split("."), k]),
+    });
+  }
+
+  if (present.length === 0) {
+    ctx.issues.push({
+      path,
+      message: `${schema.noun} must declare exactly one of: ${keys.join(", ")}`,
+      line: findKeyLine(ctx.source, path.split(".")),
+    });
+    return null;
+  }
+  if (present.length > 1) {
+    ctx.issues.push({
+      path,
+      message: `${schema.noun} must declare exactly one of: ${keys.join(", ")} (found: ${present.join(", ")})`,
+      line: findKeyLine(ctx.source, path.split(".")),
+    });
+    return null;
+  }
+
+  const key = present[0]!;
+  return arms[key]!.parse(ctx, `${path}.${key}`, raw[key]);
+}
+
 // [LAW:dataflow-not-control-flow] Field specs lift the existing field combinators
 // into the record vocabulary. An optional string is included when present-and-
 // valid, omitted (with an issue) when present-and-wrong, omitted silently when
