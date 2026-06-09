@@ -33,6 +33,15 @@ import {
 } from "../src/daemon/verbs/state-validators";
 import { ConfigError } from "../src/config/dsl-loader";
 import { effectsOf, boldUrls } from "./helpers/click";
+import { parseHandlerUrl } from "../src/install/index";
+import {
+  parseEffects,
+  VERB_DISPATCH,
+  VERB_COPY,
+  VERB_OPEN_VSCODE,
+} from "../src/click/wire";
+import { VERBS } from "../src/daemon/verbs";
+import type { VerbContext } from "../src/daemon/verbs";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 const THEMES = listResolvablePaletteNames();
@@ -64,9 +73,11 @@ interface SideEffect {
 }
 
 // Drive a config through the real spine + the real derived gate
-// (deriveActionValidators — the sole interaction authority). `click` validates
-// set-state writes through the derived gate and applies them; copy/open are
-// recorded as side effects (they carry no gate).
+// (deriveActionValidators — the sole interaction authority). `click` drives state
+// verbs (set-state, step-state) through the REAL daemon leaf handlers against a
+// real SessionState, so the gate, the relative-step wrap, and the unset seed are
+// exercised exactly as the daemon runs them; copy/open are recorded as side
+// effects (executing them would launch pbcopy/open).
 function buildRuntime(src: string, sessionId = "s1") {
   const config = parseAndValidate("<test>", src, ALLOWED);
   const sessionState = new SessionState();
@@ -88,18 +99,20 @@ function buildRuntime(src: string, sessionId = "s1") {
     registerStateValidator(key, spec),
   );
   const sideEffects: SideEffect[] = [];
+  const ctx: VerbContext = { sessionState, dlog: () => {} };
   const click = (url: string): void => {
-    for (const { verb, args } of effectsOf(url)) {
-      if (verb === "set-state") {
-        const [sid, ...pairs] = args;
-        for (let i = 0; i < pairs.length; i += 2) {
-          const result = validateStateWrite(pairs[i]!, pairs[i + 1]!);
-          if (!result.ok) throw new Error(`click rejected: ${result.reason}`);
-          sessionState.set(sid!, pairs[i]!, result.value);
-        }
-      } else {
-        sideEffects.push({ verb, args });
+    const { verb, value } = parseHandlerUrl(url);
+    const effects =
+      verb === VERB_DISPATCH ? parseEffects(value) : [{ verb, value }];
+    for (const e of effects) {
+      // copy/open carry no gate and would launch a real process — record them.
+      if (e.verb === VERB_COPY || e.verb === VERB_OPEN_VSCODE) {
+        sideEffects.push({ verb: e.verb, args: [decodeURIComponent(e.value)] });
+        continue;
       }
+      const handler = VERBS.get(e.verb);
+      if (!handler) throw new Error(`no handler for verb "${e.verb}"`);
+      handler(e.value, ctx); // real set-state / step-state through the gate
     }
   };
   const dispose = (): void => disposers.forEach((d) => d());
@@ -275,33 +288,64 @@ describe("2de.12 — bounded set action", () => {
     layout: [['bar']],
   }`;
 
-  test("◀ writes current+by(down), ▶ writes current+by(up); the display is plain text", () => {
+  test("◀/▶ emit a RELATIVE step-state nudge (key + signed by), no absolute target; display is plain text", () => {
     const { render, dispose } = buildRuntime(SRC);
     const out = render();
     expect(stripAnsi(out)).toContain("◀ 14 ▶");
     const urls = extractUrls(out);
+    // The link carries the irreducible intent — the signed delta — NOT a value
+    // computed from the rendered `current` (the idempotent-absolute bug).
     expect(urls.map(effectsOf)).toEqual([
-      [{ verb: "set-state", args: ["s1", "hue", "12"] }],
-      [{ verb: "set-state", args: ["s1", "hue", "16"] }],
+      [{ verb: "step-state", args: ["s1", "hue", "-2"] }],
+      [{ verb: "step-state", args: ["s1", "hue", "2"] }],
     ]);
     dispose();
   });
 
-  test("navigation WRAPS past a bound to the other end", () => {
+  // [LAW:one-source-of-truth] Acceptance: the ◀/▶ link is byte-identical across
+  // renders at DIFFERENT current values — proof it carries no `current` snapshot.
+  test("the step-state link is byte-identical across renders at different current values", () => {
     const { render, sessionState, dispose } = buildRuntime(SRC);
-    sessionState.set("s1", "hue", "60"); // max
-    const urls = extractUrls(render());
-    expect(urls.map(effectsOf)).toEqual([
-      [{ verb: "set-state", args: ["s1", "hue", "58"] }],
-      [{ verb: "set-state", args: ["s1", "hue", "0"] }], // wrapped, not clamped
-    ]);
+    const at14 = extractUrls(render());
+    sessionState.set("s1", "hue", "58");
+    const at58 = extractUrls(render());
+    expect(stripAnsi(render())).toContain("◀ 58 ▶");
+    expect(at58).toEqual(at14); // identical link strings despite 14 → 58
     dispose();
   });
 
-  test("two bounded actions on one key merge to a single range gate", () => {
+  // Acceptance: N rapid clicks on the SAME link with NO render between move the
+  // value by N·step — the idempotency is gone (mirror the live repro harness).
+  test("three identical clicks with no render between step +3 (idempotency gone)", () => {
+    const { render, click, sessionState, dispose } = buildRuntime(SRC);
+    const up = extractUrls(render())[1]!; // ▶, captured once
+    click(up);
+    click(up);
+    click(up); // same URL string, three times, no render between
+    expect(sessionState.get("s1", "hue")).toBe("20"); // 14 → 16 → 18 → 20
+    dispose();
+  });
+
+  test("the first click seeds from the variable default (14), not from min", () => {
+    const { render, click, sessionState, dispose } = buildRuntime(SRC);
+    expect(sessionState.get("s1", "hue")).toBeNull(); // unset
+    click(extractUrls(render())[1]!); // ▶ from a never-written key
+    expect(sessionState.get("s1", "hue")).toBe("16"); // 14+2, NOT 0+2
+    dispose();
+  });
+
+  test("navigation WRAPS past a bound to the other end at apply time", () => {
+    const { render, click, sessionState, dispose } = buildRuntime(SRC);
+    sessionState.set("s1", "hue", "60"); // max
+    click(extractUrls(render())[1]!); // ▶: 60 +2 wraps to min, not clamped to 60
+    expect(sessionState.get("s1", "hue")).toBe("0");
+    dispose();
+  });
+
+  test("two bounded actions on one key merge to a single range gate carrying the seed", () => {
     const config = parseAndValidate("<test>", SRC, ALLOWED);
     expect(deriveActionValidators(config)).toEqual([
-      { key: "hue", spec: { kind: "range", min: 0, max: 60 } },
+      { key: "hue", spec: { kind: "range", min: 0, max: 60, seed: 14 } },
     ]);
   });
 

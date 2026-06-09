@@ -33,6 +33,13 @@ export const URL_SCHEME = "cc-candybar";
 // verb and the dispatched handler cannot name-drift.
 export const VERB_DISPATCH = "dispatch";
 export const VERB_SET_STATE = "set-state";
+// [LAW:types-are-the-program] A RELATIVE state nudge: its args are
+// `[sessionId, key, by]` where `by` is the signed integer delta. Distinct from
+// set-state because the click intent is "step from whatever the value IS now",
+// not "set to this fixed value" — the absolute target is computed at APPLY time
+// from live state, so the link carries no `current` snapshot and N rapid clicks
+// each re-read-and-write. Additive: old set-state links still resolve.
+export const VERB_STEP_STATE = "step-state";
 export const VERB_COPY = "copy";
 export const VERB_OPEN_VSCODE = "open-vscode";
 export const VERB_TOOLBAR_TOGGLE = "toolbar-toggle";
