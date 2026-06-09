@@ -14,6 +14,7 @@ import { findKeyLine } from "./diagnostics.js";
 import {
   describeValue,
   oneOfPresent,
+  type FieldSpec,
   type OneOfPresentSchema,
   type ValidateCtx,
 } from "./validate-core.js";
@@ -48,6 +49,26 @@ export function optionalCache(
   if (raw.cache === undefined) return undefined;
   const c = validateCache(ctx, `${path}.cache`, raw.cache);
   return c ?? undefined;
+}
+
+// [LAW:dataflow-not-control-flow] The `cache` field as a record-field spec, so a
+// per-kind variable schema declares its cache policy as DATA. `kind` selects the
+// requiredness: file/shell/git require it (a missing cache reports the per-kind
+// message and fails the arm); template/time leave it optional. The field key is
+// conventionally "cache", read directly by requireCache/optionalCache.
+export function requireCacheSpec(kind: SourceKind): FieldSpec<CacheDecl> {
+  return {
+    required: true,
+    parse: (ctx, path, _field, raw) =>
+      requireCache(ctx, path, raw, kind) ?? undefined,
+  };
+}
+
+export function optionalCacheSpec(): FieldSpec<CacheDecl> {
+  return {
+    required: false,
+    parse: (ctx, path, _field, raw) => optionalCache(ctx, path, raw),
+  };
 }
 
 // [LAW:single-enforcer] One arm helper to push a variant's bespoke message and
