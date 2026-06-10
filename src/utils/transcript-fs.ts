@@ -6,6 +6,8 @@ import {
 } from "node:fs/promises";
 import type { FileHandle } from "node:fs/promises";
 
+import { ABSENT, failed, ok, type Outcome } from "./outcome";
+
 // [LAW:single-enforcer] One owner of the transcript-scanning in-flight-I/O
 // budget. Every readdir/stat/readFile over the ~/.claude/projects tree passes
 // through this module's limiter, so the number of concurrent libuv fs requests
@@ -111,13 +113,17 @@ export const stat = gated(fsStat);
 // reaches the file start. The open→stat→read→close runs under one gate slot, so
 // a tail read counts as one in-flight op exactly like a readFile — a transcript
 // scanner that grows its window backward must use THIS, not raw node:fs, or it
-// reintroduces the unbounded-fs state the gate forbids. Returns null when the
-// file can't be opened/read; callers treat "no readable transcript" as "no data"
-// (the same convention readFile callers apply to their rejections).
+// reintroduces the unbounded-fs state the gate forbids.
+//
+// [LAW:no-silent-failure] The file not existing is the expected, every-render
+// case for a fresh session (no transcript yet) — `absent`. Any other error
+// (permissions, I/O) is a real read failure — `failed`, carrying its reason
+// to whichever boundary owns the log effect. Folding both into one null made
+// a broken transcript indistinguishable from a missing one.
 export async function readTail(
   path: string,
   maxBytes: number,
-): Promise<{ buf: Buffer; fromStart: boolean } | null> {
+): Promise<Outcome<{ buf: Buffer; fromStart: boolean }>> {
   return gate.run(async () => {
     let fh: FileHandle | null = null;
     try {
@@ -140,12 +146,15 @@ export async function readTail(
         if (bytesRead === 0) break;
         off += bytesRead;
       }
-      return {
+      return ok({
         buf: off === buf.length ? buf : buf.subarray(0, off),
         fromStart: start === 0,
-      };
-    } catch {
-      return null;
+      });
+    } catch (e) {
+      if ((e as NodeJS.ErrnoException).code === "ENOENT") return ABSENT;
+      return failed(
+        `readTail ${path}: ${e instanceof Error ? e.message : String(e)}`,
+      );
     } finally {
       await fh?.close();
     }

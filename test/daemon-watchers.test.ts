@@ -5,6 +5,7 @@ import { execSync } from "node:child_process";
 import { WatcherRegistry } from "../src/daemon/cache/watchers";
 import { GitDataProvider } from "../src/daemon/cache/git";
 import { GitService, type GitInfo } from "../src/segments/git";
+import { ok, type Outcome } from "../src/utils/outcome";
 
 function makeRepo(): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "powerline-watch-"));
@@ -81,12 +82,16 @@ class StubInner extends GitService {
   constructor(private repo: string) {
     super();
   }
-  override async findGitRoot(): Promise<string> {
-    return this.repo;
+  override async findGitRoot(): Promise<Outcome<string>> {
+    return ok(this.repo);
   }
-  override async getGitInfo(): Promise<GitInfo> {
+  override async getGitInfo(): Promise<Outcome<GitInfo>> {
     this.calls++;
-    return { branch: "main", status: "clean", ahead: 0, behind: 0 };
+    return ok({
+      branch: "main",
+      status: "clean",
+      aheadBehind: ok({ ahead: 0, behind: 0 }),
+    });
   }
 }
 

@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { GitService, type GitInfo } from "../../segments/git";
+import { ok, type Outcome } from "../../utils/outcome";
 import { debug } from "../../utils/logger";
 import { WatcherRegistry, type WatcherHandle } from "./watchers";
 
@@ -145,7 +146,7 @@ export class GitDataProvider extends GitService {
   // mode the daemon is meant to eliminate. The first miss installs a promise
   // here; subsequent concurrent callers await the same promise and resolve in
   // lockstep.
-  private readonly fetchInFlight = new Map<string, Promise<GitInfo | null>>();
+  private readonly fetchInFlight = new Map<string, Promise<Outcome<GitInfo>>>();
   // [LAW:single-enforcer] Coalesce overlapping refreshes for the same repo.
   // `refreshing` holds the repoRoots whose refresh loop is currently
   // executing; `refreshAgain` is the trailing-edge flag: if a new
@@ -224,17 +225,18 @@ export class GitDataProvider extends GitService {
     workingDir: string,
     options: GitOptions = {},
     projectDir?: string,
-  ): Promise<GitInfo | null> {
+  ): Promise<Outcome<GitInfo>> {
     // [LAW:one-source-of-truth] Effective gitDir is the cache + watcher
     // identity. Resolving once here means inner.getGitInfo sees workingDir =
     // effectiveDir, projectDir = undefined: it lands on the same dir without
-    // re-running its own resolution branches.
+    // re-running its own resolution branches. An absent (not a repo) or
+    // failed resolution passes through as the fetch outcome.
     const effectiveDir = await this.inner.resolveEffectiveGitDir(
       workingDir,
       projectDir,
     );
-    if (!effectiveDir) return null;
-    return this.getGitInfoForRoot(effectiveDir, options);
+    if (effectiveDir.kind !== "ok") return effectiveDir;
+    return this.getGitInfoForRoot(effectiveDir.value, options);
   }
 
   // Cache+fetch helper that *already knows* the effective gitDir. Subscribe
@@ -244,7 +246,7 @@ export class GitDataProvider extends GitService {
   private getGitInfoForRoot(
     repoRoot: string,
     options: GitOptions,
-  ): Promise<GitInfo | null> {
+  ): Promise<Outcome<GitInfo>> {
     const key = `${repoRoot}|${optionsKey(options)}`;
     const now = Date.now();
 
@@ -253,7 +255,7 @@ export class GitDataProvider extends GitService {
       this.entries.delete(key);
       this.entries.set(key, existing);
       this.hits++;
-      return Promise.resolve(existing.info);
+      return Promise.resolve(ok(existing.info));
     }
 
     // Coalesce concurrent misses on the same key — see fetchInFlight comment.
@@ -272,7 +274,7 @@ export class GitDataProvider extends GitService {
     key: string,
     options: GitOptions,
     now: number,
-  ): Promise<GitInfo | null> {
+  ): Promise<Outcome<GitInfo>> {
     this.misses++;
     // [LAW:one-source-of-truth] gitDir is the watch+mtime identity for the
     // repo. For worktrees this differs from repoRoot — keying watchers off
@@ -282,8 +284,13 @@ export class GitDataProvider extends GitService {
     // Pass repoRoot as workingDir, no projectDir: inner's gitDir resolution
     // lands on repoRoot via the sync isWorktree/isGitRepo checks — no extra
     // findGitRoot shell-out.
-    const info = await this.inner.getGitInfo(repoRoot, options);
-    if (!info) return null;
+    //
+    // Only `ok` is cached: absent/failed pass through uncached (the next
+    // caller re-fetches, matching the prior null-isn't-cached behavior), and
+    // the outcome carries the reason to each surface's logging edge.
+    const outcome = await this.inner.getGitInfo(repoRoot, options);
+    if (outcome.kind !== "ok") return outcome;
+    const info = outcome.value;
 
     // Drop any prior entry for this exact key before re-inserting (so we
     // release its watcher refcount cleanly).
@@ -305,7 +312,23 @@ export class GitDataProvider extends GitService {
       repoRoot,
     });
     this.evictIfNeeded();
-    return info;
+    return outcome;
+  }
+
+  // [LAW:effects-at-boundaries] The subscribe surface's edge: fold the typed
+  // outcome into the GitInfo|null the var-system callback contract expects.
+  // `failed` is logged HERE — the one log site for this consumption path
+  // (the pull path's edge is buildRenderPayload) — so the interior fetch
+  // machinery never logs and never double-logs.
+  private deliverable(
+    outcome: Outcome<GitInfo>,
+    repoRoot: string,
+  ): GitInfo | null {
+    if (outcome.kind === "failed") {
+      this.logger("warn", `git fetch failed (${repoRoot}): ${outcome.reason}`);
+      return null;
+    }
+    return outcome.kind === "ok" ? outcome.value : null;
   }
 
   // [LAW:dataflow-not-control-flow] Push surface for var-system. The callback
@@ -329,17 +352,25 @@ export class GitDataProvider extends GitService {
       // uses. var-system's declareGit doesn't pass projectDir, but going
       // through resolveEffectiveGitDir keeps the cache-key derivation
       // identical for both surfaces — single source of truth.
-      const repoRoot = await this.inner.resolveEffectiveGitDir(workingDir);
+      const resolved = await this.inner.resolveEffectiveGitDir(workingDir);
       if (unsubscribed) return;
 
-      if (!repoRoot) {
-        // Not in a git repo: deliver null once. No watcher, no follow-up —
-        // when the path later becomes a repo, the existing daemon-lifecycle
-        // invariants don't try to detect that, and neither did the prior
-        // GitPoller. Subscribers handle null by applying their fallback chain.
+      if (resolved.kind !== "ok") {
+        // Not in a git repo (absent) or resolution failed: deliver null once.
+        // No watcher, no follow-up — when the path later becomes a repo, the
+        // existing daemon-lifecycle invariants don't try to detect that, and
+        // neither did the prior GitPoller. Subscribers handle null by
+        // applying their fallback chain; a failure is logged at this edge.
+        if (resolved.kind === "failed") {
+          this.logger(
+            "warn",
+            `git resolve failed (subscribe ${workingDir}): ${resolved.reason}`,
+          );
+        }
         this.safeInvoke(callback, null);
         return;
       }
+      const repoRoot = resolved.value;
 
       let entry = this.subscribersByRepo.get(repoRoot);
       if (!entry) {
@@ -367,7 +398,7 @@ export class GitDataProvider extends GitService {
         ...SUBSCRIBE_OPTIONS,
       });
       if (unsubscribed) return;
-      this.safeInvoke(callback, initial);
+      this.safeInvoke(callback, this.deliverable(initial, repoRoot));
     })();
 
     return () => {
@@ -423,9 +454,10 @@ export class GitDataProvider extends GitService {
         if (!entry || entry.callbacks.size === 0) return;
         // Use the stored repoRoot — no findGitRoot per refresh, no chance of
         // re-resolving to a different value under racing fs changes.
-        const info = await this.getGitInfoForRoot(repoRoot, {
+        const refreshed = await this.getGitInfoForRoot(repoRoot, {
           ...SUBSCRIBE_OPTIONS,
         });
+        const info = this.deliverable(refreshed, repoRoot);
         const current = this.subscribersByRepo.get(repoRoot);
         if (!current || current.callbacks.size === 0) return;
         // [LAW:dataflow-not-control-flow] Membership check at call time, not at

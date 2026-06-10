@@ -2,13 +2,14 @@
 // one question — the epoch-seconds instant the prompt cache expires — by
 // tail-reading the transcript for the last cache-bearing entry and projecting
 // it forward by the 1h TTL. These assert the BEHAVIOR (which timestamp wins,
-// when null is returned), not the tail-read mechanics.
+// when the outcome is absent), not the tail-read mechanics.
 
-import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
+import { chmodSync, mkdtempSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { cacheExpiresAt } from "../src/segments/cache";
+import { ABSENT, ok } from "../src/utils/outcome";
 
 const TTL_SEC = 60 * 60;
 
@@ -56,7 +57,7 @@ describe("cacheExpiresAt", () => {
       entry({ ts: last, cacheRead: 50 }),
     ]);
     const expected = Math.floor(Date.parse(last) / 1000) + TTL_SEC;
-    expect(await cacheExpiresAt(path)).toBe(expected);
+    expect(await cacheExpiresAt(path)).toEqual(ok(expected));
   });
 
   it("ignores entries with zero cache tokens", async () => {
@@ -67,19 +68,31 @@ describe("cacheExpiresAt", () => {
       entry({ ts: "2026-05-30T12:00:00.000Z", cacheRead: 0, cacheCreation: 0 }),
     ]);
     const expected = Math.floor(Date.parse(cacheHit) / 1000) + TTL_SEC;
-    expect(await cacheExpiresAt(path)).toBe(expected);
+    expect(await cacheExpiresAt(path)).toEqual(ok(expected));
   });
 
-  it("returns null when no entry ever touched the cache", async () => {
+  it("returns absent when no entry ever touched the cache", async () => {
     const path = writeTranscript([
       entry({ ts: "2026-05-30T11:00:00.000Z" }),
       entry({ ts: "2026-05-30T12:00:00.000Z" }),
     ]);
-    expect(await cacheExpiresAt(path)).toBeNull();
+    expect(await cacheExpiresAt(path)).toEqual(ABSENT);
   });
 
-  it("returns null for a missing transcript", async () => {
-    expect(await cacheExpiresAt("/no/such/transcript.jsonl")).toBeNull();
+  it("returns absent for a missing transcript", async () => {
+    expect(await cacheExpiresAt("/no/such/transcript.jsonl")).toEqual(ABSENT);
+  });
+
+  it("returns failed for an unreadable transcript", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "cc-cache-"));
+    createdDirs.push(dir);
+    const path = join(dir, "transcript.jsonl");
+    writeFileSync(path, entry({ ts: "2026-05-30T11:00:00.000Z" }) + "\n");
+    chmodSync(path, 0o000);
+    // A transcript that EXISTS but can't be read is a real failure, not the
+    // everyday "no transcript yet" — it must not silently hide the segment.
+    expect(await cacheExpiresAt(path)).toMatchObject({ kind: "failed" });
+    chmodSync(path, 0o644);
   });
 
   it("finds a cache hit beyond the first 64KB tail chunk", async () => {
@@ -90,7 +103,7 @@ describe("cacheExpiresAt", () => {
     // One cache-bearing entry, then >64KB of zero-cache filler after it.
     const path = writeTranscript([entry({ ts: cacheHit, cacheRead: 1 }), ...filler]);
     const expected = Math.floor(Date.parse(cacheHit) / 1000) + TTL_SEC;
-    expect(await cacheExpiresAt(path)).toBe(expected);
+    expect(await cacheExpiresAt(path)).toEqual(ok(expected));
   });
 
   it("ignores a cache-token string that appears in message CONTENT, not usage", async () => {
@@ -112,6 +125,6 @@ describe("cacheExpiresAt", () => {
     });
     const path = writeTranscript([entry({ ts: realHit, cacheRead: 100 }), decoy]);
     const expected = Math.floor(Date.parse(realHit) / 1000) + TTL_SEC;
-    expect(await cacheExpiresAt(path)).toBe(expected);
+    expect(await cacheExpiresAt(path)).toEqual(ok(expected));
   });
 });

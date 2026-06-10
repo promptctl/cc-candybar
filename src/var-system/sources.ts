@@ -28,6 +28,7 @@ import { createCcCandybarEngine } from "../template-engine/engine.js";
 import { buildScope } from "../template-engine/scope.js";
 import { GitDataProvider } from "../daemon/cache/git.js";
 import type { GitInfo } from "../segments/git.js";
+import { orElse } from "../utils/outcome.js";
 import type { SessionStateReader } from "../daemon/session-state.js";
 
 // ─── CachePolicy ─────────────────────────────────────────────────────────────
@@ -345,16 +346,19 @@ function projectGitField(
       // preserving the pre-kz8.3 behavior, which had the same ambiguity in
       // a different shape.)
       return info.branch === "detached" ? "" : info.branch;
+    // [LAW:dataflow-not-control-flow] Outcome fields fold via orElse: this
+    // surface only renders values, so absent and failed both collapse to the
+    // typed zero (the provider's delivery edge already logged any failure).
     case "sha":
-      return info.sha ?? "";
+      return orElse(info.sha, "");
     case "dirty":
       return info.status !== "clean";
     case "ahead":
-      return info.ahead;
+      return orElse(info.aheadBehind, { ahead: 0, behind: 0 }).ahead;
     case "behind":
-      return info.behind;
+      return orElse(info.aheadBehind, { ahead: 0, behind: 0 }).behind;
     case "stash":
-      return info.stashCount ?? 0;
+      return orElse(info.stashCount, 0);
   }
 }
 
