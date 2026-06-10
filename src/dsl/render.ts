@@ -241,14 +241,15 @@ function compileHelperPreamble(
  * [LAW:dataflow-not-control-flow] The kind discriminator in declareOne selects
  * the declare* call; no special-casing beyond the closed source-kind set.
  *
- * NOTE on segment-local vars: segment vars are stored under the namespaced key
- * segName.varName in the store. Templates must reference them via the namespaced
- * form (.segName.varName). Bare-name access (.varName from within the owning
- * segment's template) is NOT currently supported at runtime — the scope proxy
- * only resolves keys present in the store. The loader's cross-ref validator
- * allows bare-name refs for validation purposes but the runtime does not yet
- * implement the aliasing. Use namespaced form until a per-segment scope proxy
- * is added (planned follow-up).
+ * [LAW:one-source-of-truth] Segment-local vars: stored under the namespaced
+ * key segName.varName, referenced from templates ONLY via that namespaced
+ * form. The scope proxy resolves keys literally present in the store, and the
+ * loader's cross-ref validator enforces the identical rule at load time (a
+ * bare own-segment ref is a load diagnostic naming the namespaced form).
+ * Validator and runtime share one definition of what a template may
+ * reference; bare-name aliasing is deliberately NOT a thing — it would make a
+ * ref's meaning depend on which segment is rendering instead of on the ref
+ * string alone.
  */
 export function registerDslConfig(
   config: ValidatedConfig,
