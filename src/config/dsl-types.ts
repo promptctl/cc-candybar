@@ -270,10 +270,14 @@ export interface TemplateVarDecl {
   readonly default?: string;
 }
 
+// [LAW:types-are-the-program] Time vars refresh on a clock — ttl is the only
+// cache form the runtime honors (declareTime always registers a TTL timer).
+// The loader rejects the other CacheDecl arms at load, so past that boundary
+// a non-ttl cache on a time var is unrepresentable, not silently coerced.
 export interface TimeVarDecl {
   readonly kind: "time";
   readonly layout: string;
-  readonly cache?: CacheDecl;
+  readonly cache?: TtlCacheDecl;
   readonly default?: string;
 }
 
@@ -316,11 +320,18 @@ export type GitField =
 // type system enforces "exactly one of these." The loader validates the
 // runtime invariant (one and only one); the type then carries it forward.
 export type CacheDecl =
-  | { readonly ttl: string }
+  | TtlCacheDecl
   | { readonly watch_file: string }
   | { readonly depends_on: readonly string[] }
   | { readonly key: string }
   | { readonly never: true };
+
+// [LAW:one-source-of-truth] The ttl arm named once, so the kinds that honor
+// only a refresh interval (time) reference the same member the full vocabulary
+// is composed from — narrowing is a subset, never a parallel shape.
+export interface TtlCacheDecl {
+  readonly ttl: string;
+}
 
 export const CACHE_KEYS = [
   "ttl",

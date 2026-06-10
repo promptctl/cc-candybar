@@ -304,6 +304,43 @@ describe("loadDslConfig — variable source kinds", () => {
     });
   });
 
+  // [LAW:no-silent-failure] Non-ttl cache forms on time vars were silently
+  // coerced to the default TTL at render; they are now load-time diagnostics
+  // naming ttl as the only supported form (brandon-config-validation-cje).
+  test("time: cache is ttl-only — non-ttl forms are load-time diagnostics", () => {
+    for (const cache of [
+      `{ watch_file: ".git/HEAD" }`,
+      `{ depends_on: ["x"] }`,
+      `{ key: "{{ .x }}" }`,
+      `{ never: true }`,
+    ]) {
+      const cacheKey = cache.match(/\{ (\w+):/)![1]!;
+      expectIssue(
+        `{ variables: { now: { kind: "time", layout: "15:04", cache: ${cache} } } }`,
+        {
+          path: `variables.now.cache.${cacheKey}`,
+          message: `Unknown time-variable cache key "${cacheKey}". Expected exactly one of: ttl`,
+        },
+      );
+    }
+    expectIssue(
+      `{ variables: { now: { kind: "time", layout: "15:04", cache: { ttl: "soon" } } } }`,
+      {
+        path: "variables.now.cache.ttl",
+        message: "cache.ttl must be a duration string",
+      },
+    );
+    const ok = parseAndValidate(
+      FILE,
+      `{ variables: { now: { kind: "time", layout: "15:04", cache: { ttl: "5s" } } } }`,
+    );
+    expect(ok.variables.now).toEqual({
+      kind: "time",
+      layout: "15:04",
+      cache: { ttl: "5s" },
+    });
+  });
+
   test("git: field must be in closed set + cache required", () => {
     expectIssue(`{ variables: { b: { kind: "git" } } }`, {
       path: "variables.b.field",
