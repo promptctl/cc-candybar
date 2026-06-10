@@ -998,6 +998,9 @@ const payloadDeps = {
   metricsProvider,
   tmuxService,
   sessionState,
+  // [LAW:single-enforcer] buildRenderPayload is the one log site for the
+  // outcome-carrying provider lanes (git, cache).
+  log: dlog,
 };
 
 function handleClick(verb: string, value: string): Response {
