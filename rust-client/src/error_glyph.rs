@@ -6,11 +6,12 @@
 // [LAW:one-type-per-behavior] Mirrors src/render/error-glyph.ts byte-for-byte
 // for the same logical cause — both runtimes show the same diagnostic so the
 // user's experience does not depend on which client is on the hot path. The
-// unit test below pins this against the same fixtures the Node side asserts.
+// unit tests below pin this against the same fixtures the Node side asserts.
 //
-// Style: red background, white foreground, ANSI reset at end. Constants live
-// here rather than imported from server.ts to avoid daemon→client coupling
-// (different render contexts; the appearance is policy, not shared state).
+// [LAW:one-source-of-truth] The style constants are a literal mirror of the
+// canonical TS leaf (src/render/diagnostic-style.ts) — Rust cannot import a
+// TS module, so scripts/check-protocol.mjs diffs the mirrored values and
+// fails prepublishOnly on drift.
 
 use crate::PermanentCause;
 
@@ -61,24 +62,47 @@ fn describe(cause: &PermanentCause) -> String {
 // closing both bypass classes — including the 8-bit CSI which
 // `is_ascii_control()` would have missed.
 //
-// [LAW:one-type-per-behavior] Matches the TS mirror at
-// src/render/error-glyph.ts (its `isControlChar` predicate covers the
-// exact same code-point set). Same single-pass sanitize-and-truncate
-// shape, same ellipsis policy.
+// [LAW:one-type-per-behavior] Matches the TS source at
+// src/render/diagnostic-text.ts `sanitizeAndTruncate` byte-for-byte: its
+// `isControlChar` predicate covers the exact same code-point set as
+// `char::is_control()` (Unicode Cc), and the same collapse-whitespace-runs +
+// trim pass runs between sanitization and truncation, so a multi-control
+// input (e.g. "\r\n") yields identical output in both runtimes.
+//
+// The collapse predicate adds U+FEFF to `char::is_whitespace()`: the TS
+// side collapses on JS `\s`, which is Unicode White_Space minus U+0085
+// (NEL — Cc, already sanitized to a space on both sides before collapse)
+// plus U+FEFF (ZWNBSP). With that one addition the two predicates agree on
+// every post-sanitize code point.
 fn truncate(s: &str) -> String {
+    // Sanitize controls to spaces, collapse whitespace runs to one space,
+    // trim both ends — one pass, mirroring the TS sanitize + collapse + trim.
+    let mut sanitized = String::new();
+    let mut gap = false;
+    for raw in s.chars() {
+        let ch = if raw.is_control() { ' ' } else { raw };
+        if ch.is_whitespace() || ch == '\u{FEFF}' {
+            // A gap only renders if visible content precedes it (leading
+            // runs trim away); a trailing gap never flushes.
+            gap = !sanitized.is_empty();
+        } else {
+            if gap {
+                sanitized.push(' ');
+                gap = false;
+            }
+            sanitized.push(ch);
+        }
+    }
+    // Clip to MAX_MESSAGE_LEN visible code points, replacing the last one
+    // with an ellipsis when over budget so visible length stays at budget.
     let mut out = String::new();
-    let mut count: usize = 0;
-    for ch in s.chars() {
+    for (count, ch) in sanitized.chars().enumerate() {
         if count == MAX_MESSAGE_LEN {
-            // Already at budget — replace the last code point we wrote
-            // with the ellipsis so visible length stays at the budget.
             out.pop();
             out.push('…');
             return out;
         }
-        let safe = if ch.is_control() { ' ' } else { ch };
-        out.push(safe);
-        count += 1;
+        out.push(ch);
     }
     out
 }
@@ -178,18 +202,15 @@ mod tests {
     // [LAW:one-type-per-behavior] Newline-sanitization coverage symmetric to
     // the TS side. The single-line glyph contract requires no embedded
     // newlines mid-string; both runtimes sanitize \n and \r to spaces at the
-    // truncate boundary. This test pins that behavior — a regression that
-    // drops the sanitization would let multi-line glyphs reach the
-    // statusline and break the layout.
+    // truncate boundary and collapse the resulting whitespace runs, so a
+    // "\r\n" break yields exactly one space in both — byte-identical output,
+    // not merely "no newline leaked."
     #[test]
     fn truncate_sanitizes_embedded_newlines() {
-        // `\n` and `\r` each become one space, so `\r\n` becomes two spaces.
-        // The load-bearing contract is "no embedded newline/CR in the output";
-        // the count of inserted spaces is incidental.
         let cases: [(&str, &str); 3] = [
             ("line1\nline2\nline3", "line1 line2 line3"),
             ("line1\rline2\rline3", "line1 line2 line3"),
-            ("line1\r\nline2\r\nline3", "line1  line2  line3"),
+            ("line1\r\nline2\r\nline3", "line1 line2 line3"),
         ];
         for (input, expected_substr) in cases {
             let g = format_permanent_glyph(&PermanentCause::RenderFailed(input.to_string()));
@@ -201,6 +222,21 @@ mod tests {
                 "expected to contain {expected_substr:?} for input {input:?}, got: {g:?}"
             );
         }
+    }
+
+    // [LAW:one-type-per-behavior] Collapse/trim parity with the TS source —
+    // the exact fixtures test/diagnostic-text.test.ts pins for
+    // sanitizeAndTruncate, so a divergence in either runtime's
+    // collapse-whitespace-runs or trim behavior breaks its own suite
+    // instead of silently falsifying the byte-identical mirror claim.
+    #[test]
+    fn truncate_collapses_whitespace_runs_and_trims() {
+        assert_eq!(truncate("a    b\n\n\nc"), "a b c");
+        assert_eq!(truncate("  hello  "), "hello");
+        assert_eq!(truncate("\n\nhello\n\n"), "hello");
+        // U+FEFF (ZWNBSP) collapses like whitespace — JS `\s` includes it,
+        // so byte parity requires the Rust predicate to as well.
+        assert_eq!(truncate("a\u{FEFF} b"), "a b");
     }
 
     // [LAW:one-type-per-behavior] Astral-character coverage symmetric to the
