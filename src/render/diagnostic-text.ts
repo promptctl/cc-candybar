@@ -31,7 +31,9 @@ const ELLIPSIS = "…";
 //
 // Mirrors rust-client/src/error_glyph.rs's truncate(): `char::is_control()`
 // matches the exact same Unicode Cc set, so the TS and Rust runtimes
-// neutralize the same byte classes.
+// neutralize the same byte classes. The Rust side also mirrors the
+// collapse-whitespace-runs + trim pass below, so the two runtimes produce
+// byte-identical output — both suites pin the same fixtures.
 export function isControlChar(code: number): boolean {
   return code < 0x20 || code === 0x7f || (code >= 0x80 && code <= 0x9f);
 }
