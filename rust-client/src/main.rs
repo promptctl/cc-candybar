@@ -8,9 +8,8 @@
 //   - 4-byte big-endian length prefix
 //   - UTF-8 JSON body
 //   - 16 MiB cap
-// The protocol version is in the PROTOCOL_VERSION const below — single
-// source of truth, kept in lockstep with src/daemon/protocol.ts via
-// scripts/check-protocol.mjs.
+// Every mirrored const (protocol version, frame cap/header, timeouts) is
+// kept in lockstep with the TS sources via scripts/check-protocol.mjs.
 //
 // Timeouts mirror src/daemon/client.ts: 50ms connect, 150ms total.
 //
@@ -37,10 +36,14 @@ use std::sync::mpsc;
 use std::thread;
 use std::time::{Duration, Instant};
 
+// [LAW:one-source-of-truth] Every const below mirrors the TS wire contract
+// (src/daemon/protocol.ts, src/daemon/client.ts); scripts/check-protocol.mjs
+// diffs each one, so a drift fails prepublishOnly instead of shipping.
 pub(crate) const PROTOCOL_VERSION: u32 = 3;
 const CONNECT_TIMEOUT: Duration = Duration::from_millis(50);
 const TOTAL_BUDGET: Duration = Duration::from_millis(150);
 const MAX_FRAME_BYTES: u32 = 16 * 1024 * 1024;
+const FRAME_HEADER_BYTES: usize = 4;
 
 fn main() {
     let argv: Vec<String> = env::args().collect();
@@ -501,7 +504,7 @@ fn write_frame<W: Write>(w: &mut W, body: &[u8]) -> io::Result<()> {
 }
 
 fn read_frame<R: Read>(r: &mut R) -> io::Result<Vec<u8>> {
-    let mut header = [0u8; 4];
+    let mut header = [0u8; FRAME_HEADER_BYTES];
     r.read_exact(&mut header)?;
     let len = u32::from_be_bytes(header);
     if len > MAX_FRAME_BYTES {
