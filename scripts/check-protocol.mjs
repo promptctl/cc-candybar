@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 // Guard: every wire-affecting constant the Rust client mirrors from the TS
 // source must agree. The wire contract is one source of truth
-// (src/daemon/protocol.ts, src/daemon/client.ts, src/render/error-glyph.ts);
+// (src/daemon/protocol.ts, src/daemon/client.ts, src/render/error-glyph.ts,
+// src/render/diagnostic-style.ts);
 // the Rust binary embeds each value as a literal const because mirroring is
 // cheaper than codegen at this scale. This script diffs the entire mirrored
 // set — protocol version, frame cap and header, timeout budgets, error-code
@@ -91,6 +92,7 @@ function markers(relPath, patterns, description) {
 const TS_PROTOCOL = "src/daemon/protocol.ts";
 const TS_CLIENT = "src/daemon/client.ts";
 const TS_GLYPH = "src/render/error-glyph.ts";
+const TS_STYLE = "src/render/diagnostic-style.ts";
 const RS_MAIN = "rust-client/src/main.rs";
 const RS_GLYPH = "rust-client/src/error_glyph.rs";
 
@@ -146,17 +148,17 @@ const CHECKS = [
   },
   {
     label: "glyph FG",
-    ts: lit(TS_GLYPH, /const FG = "((?:[^"\\]|\\.)*)";/),
+    ts: lit(TS_STYLE, /const DIAGNOSTIC_ERROR_FG = "((?:[^"\\]|\\.)*)";/),
     rust: lit(RS_GLYPH, /const FG: &str = "((?:[^"\\]|\\.)*)";/),
   },
   {
     label: "glyph BG",
-    ts: lit(TS_GLYPH, /const BG = "((?:[^"\\]|\\.)*)";/),
+    ts: lit(TS_STYLE, /const DIAGNOSTIC_ERROR_BG = "((?:[^"\\]|\\.)*)";/),
     rust: lit(RS_GLYPH, /const BG: &str = "((?:[^"\\]|\\.)*)";/),
   },
   {
     label: "glyph RESET",
-    ts: lit(TS_GLYPH, /const RESET = "((?:[^"\\]|\\.)*)";/),
+    ts: lit(TS_STYLE, /const ANSI_RESET = "((?:[^"\\]|\\.)*)";/),
     rust: lit(RS_GLYPH, /const RESET: &str = "((?:[^"\\]|\\.)*)";/),
   },
   {
