@@ -140,9 +140,16 @@ export class ProtocolError extends Error {
 // 4-byte big-endian length prefix + UTF-8 JSON body. Length-prefix beats
 // newline-delimited because error messages may contain embedded newlines and
 // we'd rather not parse them out of-band.
+//
+// [LAW:one-source-of-truth] FRAME_HEADER_BYTES and MAX_FRAME_BYTES are part
+// of the wire contract the Rust client mirrors (rust-client/src/main.rs);
+// scripts/check-protocol.mjs diffs them, so they must stay named consts.
+export const FRAME_HEADER_BYTES = 4;
+export const MAX_FRAME_BYTES = 16 * 1024 * 1024;
+
 export function encodeFrame(value: unknown): Buffer {
   const body = Buffer.from(JSON.stringify(value), "utf8");
-  const header = Buffer.alloc(4);
+  const header = Buffer.alloc(FRAME_HEADER_BYTES);
   header.writeUInt32BE(body.length, 0);
   return Buffer.concat([header, body]);
 }
@@ -156,19 +163,19 @@ export function makeFrameReader(
   let buf = Buffer.alloc(0);
   return function feed(chunk: Buffer): void {
     buf = Buffer.concat([buf, chunk]);
-    while (buf.length >= 4) {
+    while (buf.length >= FRAME_HEADER_BYTES) {
       const len = buf.readUInt32BE(0);
       // Hard cap to defend against a runaway sender allocating gigabytes.
       // [LAW:types-are-the-program] ProtocolError carries the discriminator
       // structurally — interpretException routes on `instanceof`, not on a
       // brittle string match against the message body.
-      if (len > 16 * 1024 * 1024) {
+      if (len > MAX_FRAME_BYTES) {
         onError(new ProtocolError(`frame too large: ${len}`));
         return;
       }
-      if (buf.length < 4 + len) return;
-      const body = buf.subarray(4, 4 + len);
-      buf = buf.subarray(4 + len);
+      if (buf.length < FRAME_HEADER_BYTES + len) return;
+      const body = buf.subarray(FRAME_HEADER_BYTES, FRAME_HEADER_BYTES + len);
+      buf = buf.subarray(FRAME_HEADER_BYTES + len);
       try {
         onFrame(JSON.parse(body.toString("utf8")));
       } catch (e) {
