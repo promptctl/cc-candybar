@@ -52,6 +52,13 @@ import { ContextProvider } from "../segments/context.js";
 import { MetricsProvider } from "../segments/metrics.js";
 import { TmuxService } from "../segments/tmux.js";
 import { sanitizeAndTruncate } from "../render/diagnostic-text.js";
+import {
+  ANSI_RESET,
+  DIAGNOSTIC_ERROR_BG,
+  DIAGNOSTIC_ERROR_FG,
+  DIAGNOSTIC_WARNING_BG,
+  DIAGNOSTIC_WARNING_FG,
+} from "../render/diagnostic-style.js";
 
 // [LAW:one-source-of-truth] one cache instance per daemon process — multiple
 // instances would defeat the share-across-sessions invariant.
@@ -817,11 +824,9 @@ async function handleRequest(req: Request): Promise<Response> {
 // severity; the rest of the cell is the actual error/warning, sanitized
 // and clipped to a single-line budget. A label divorced from the message
 // would be the type lying about what's in the channel.
-const ERROR_ICON_FG = "\x1b[38;2;255;255;255m";
-const ERROR_ICON_BG = "\x1b[48;2;200;40;40m";
-const WARNING_ICON_FG = "\x1b[38;2;0;0;0m";
-const WARNING_ICON_BG = "\x1b[48;2;220;160;40m";
-const ANSI_RESET = "\x1b[0m";
+// [LAW:one-source-of-truth] Style constants come from the shared leaf
+// (src/render/diagnostic-style.ts) — the same visual identity the client's
+// permanent glyph uses. Only the OSC-8 link plumbing is local here.
 const OSC8_OPEN = "\x1b]8;;";
 const OSC8_CLOSE = "\x1b]8;;\x1b\\";
 const ST = "\x1b\\";
@@ -925,8 +930,8 @@ function composeWithDiagnostics(
       makeDiagnosticLink(
         VERB_SHOW_CONFIG_ERROR,
         error,
-        ERROR_ICON_BG,
-        ERROR_ICON_FG,
+        DIAGNOSTIC_ERROR_BG,
+        DIAGNOSTIC_ERROR_FG,
       ),
     );
   }
@@ -935,8 +940,8 @@ function composeWithDiagnostics(
       makeDiagnosticLink(
         VERB_SHOW_CONFIG_WARNING,
         warning,
-        WARNING_ICON_BG,
-        WARNING_ICON_FG,
+        DIAGNOSTIC_WARNING_BG,
+        DIAGNOSTIC_WARNING_FG,
       ),
     );
   }
