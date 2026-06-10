@@ -9,6 +9,7 @@ import {
 } from "../src/daemon/render-payload";
 import type { RenderPayloadDeps } from "../src/daemon/render-payload";
 import type { DslConfig, LayoutNode } from "../src/config/dsl-types";
+import { ABSENT } from "../src/utils/outcome";
 
 // One vertical container holding one horizontal container of segment refs — the
 // canonical root for a single row.
@@ -48,7 +49,7 @@ function buildMockDeps(): { deps: RenderPayloadDeps; counts: CallCounts } {
     gitProvider: {
       getGitInfo: async () => {
         counts.git++;
-        return null;
+        return ABSENT;
       },
     },
     usageStore: {
@@ -100,6 +101,7 @@ function buildMockDeps(): { deps: RenderPayloadDeps; counts: CallCounts } {
         return undefined;
       },
     },
+    log: () => {},
   } as unknown as RenderPayloadDeps;
   return { deps, counts };
 }

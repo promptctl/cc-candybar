@@ -1,5 +1,6 @@
 import { GitDataProvider } from "../src/daemon/cache/git";
 import { GitService, type GitInfo } from "../src/segments/git";
+import { ABSENT, ok, type Outcome } from "../src/utils/outcome";
 
 class StubGitService extends GitService {
   public computeCalls: Array<{ workingDir: string; projectDir?: string }> = [];
@@ -18,12 +19,12 @@ class StubGitService extends GitService {
   public stubInfo: GitInfo = {
     branch: "main",
     status: "clean",
-    ahead: 0,
-    behind: 0,
+    aheadBehind: ok({ ahead: 0, behind: 0 }),
   };
 
-  override async findGitRoot(workingDir: string): Promise<string | null> {
-    return this.repoRootByDir[workingDir] ?? null;
+  override async findGitRoot(workingDir: string): Promise<Outcome<string>> {
+    const root = this.repoRootByDir[workingDir] ?? null;
+    return root === null ? ABSENT : ok(root);
   }
 
   override resolveGitDir(workingDir: string): string {
@@ -35,24 +36,26 @@ class StubGitService extends GitService {
   override async resolveEffectiveGitDir(
     workingDir: string,
     projectDir?: string,
-  ): Promise<string | null> {
+  ): Promise<Outcome<string>> {
     this.resolveCalls.push({ workingDir, projectDir });
     const key = projectDir ? `${workingDir}|${projectDir}` : workingDir;
     if (key in this.effectiveDirByKey) {
-      return this.effectiveDirByKey[key] ?? null;
+      const dir = this.effectiveDirByKey[key] ?? null;
+      return dir === null ? ABSENT : ok(dir);
     }
-    return this.repoRootByDir[workingDir] ?? null;
+    const root = this.repoRootByDir[workingDir] ?? null;
+    return root === null ? ABSENT : ok(root);
   }
 
   override async getGitInfo(
     workingDir: string,
     _options: Parameters<GitService["getGitInfo"]>[1] = {},
     projectDir?: string,
-  ): Promise<GitInfo | null> {
-    if (!(workingDir in this.repoRootByDir)) return null;
-    if (this.repoRootByDir[workingDir] === null) return null;
+  ): Promise<Outcome<GitInfo>> {
+    if (!(workingDir in this.repoRootByDir)) return ABSENT;
+    if (this.repoRootByDir[workingDir] === null) return ABSENT;
     this.computeCalls.push({ workingDir, projectDir });
-    return this.stubInfo;
+    return ok(this.stubInfo);
   }
 }
 
@@ -144,12 +147,12 @@ describe("GitDataProvider", () => {
     expect(inner.computeCalls).toHaveLength(2);
   });
 
-  test("non-repo path returns null and does not cache", async () => {
+  test("non-repo path returns absent and does not cache", async () => {
     const { svc, inner } = makeCache();
     inner.repoRootByDir = { "/nowhere": null };
 
     const r1 = await svc.getGitInfo("/nowhere", {});
-    expect(r1).toBeNull();
+    expect(r1).toEqual({ kind: "absent" });
     expect(svc.getStats().size).toBe(0);
   });
 
@@ -193,7 +196,7 @@ describe("GitDataProvider", () => {
     // paths don't fail (statSync misses → mtime 0, fs.watch misses → no
     // watcher, both bounded). The point is that the resolution path *runs*.
     const r = await svc.getGitInfo("/wt", {});
-    expect(r).toMatchObject({ branch: "main" });
+    expect(r).toMatchObject({ kind: "ok", value: { branch: "main" } });
 
     // Verify resolveGitDir was actually consulted for the worktree path.
     expect(inner.gitDirCalls).toContain("/wt");
@@ -212,7 +215,7 @@ describe("GitDataProvider", () => {
       svc.getGitInfo("/repo", {}),
     ]);
 
-    expect(r1).toMatchObject({ branch: "main" });
+    expect(r1).toMatchObject({ kind: "ok", value: { branch: "main" } });
     expect(r2).toBe(r1); // same object → same fetch
     expect(inner.computeCalls).toHaveLength(1);
     expect(svc.getStats()).toMatchObject({ size: 1, hits: 0, misses: 1 });
