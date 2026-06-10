@@ -143,25 +143,17 @@ function declareOne(
       });
       break;
 
-    case "time": {
-      // Only `ttl` is honored for the refresh interval; other CacheDecl
-      // variants (watch_file, depends_on, key, never) are not mapped because
-      // declareTime has no "disable refresh" mode — it always registers a TTL
-      // timer. A future extension may add a `never`-mode that snapshots the
-      // current time at declaration and never refreshes. Until then, non-ttl
-      // cache declarations on time vars are treated as "use the default 1s TTL"
-      // and the loader should be tightened to disallow them (follow-up ticket).
-      const ttlMs =
-        decl.cache && "ttl" in decl.cache
-          ? parseDuration(decl.cache.ttl)
-          : undefined;
+    case "time":
+      // [LAW:types-are-the-program] TimeVarDecl.cache is ttl-only by
+      // construction — the loader rejects every other CacheDecl form at load
+      // (the runtime honors no other invalidation on a clock-driven var), so
+      // the mapping here is total, not a silent coercion.
       registry.declareTime(name, {
         format: decl.layout,
-        ttlMs,
+        ttlMs: decl.cache ? parseDuration(decl.cache.ttl) : undefined,
         varDefault: decl.default,
       });
       break;
-    }
 
     case "git":
       registry.declareGit(name, {

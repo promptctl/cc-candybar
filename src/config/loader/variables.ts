@@ -40,7 +40,11 @@ import {
   type TaggedUnionSchema,
   type ValidateCtx,
 } from "./validate-core.js";
-import { optionalCacheSpec, requireCacheSpec } from "./cache.js";
+import {
+  optionalCacheSpec,
+  requireCacheSpec,
+  ttlOnlyCacheSpec,
+} from "./cache.js";
 
 export function validateVariables(
   ctx: ValidateCtx,
@@ -178,7 +182,10 @@ const TEMPLATE_FIELDS: FieldSpecMap<Omit<TemplateVarDecl, "kind">> = {
 };
 const TIME_FIELDS: FieldSpecMap<Omit<TimeVarDecl, "kind">> = {
   layout: requireStringSpec(),
-  cache: optionalCacheSpec(),
+  // [LAW:no-silent-failure] ttl-only: the runtime honors no other invalidation
+  // on a clock-driven var, so the loader rejects what it would otherwise have
+  // had to silently coerce.
+  cache: ttlOnlyCacheSpec(),
   default: optionalStringSpec(),
 };
 const GIT_VAR_FIELDS: FieldSpecMap<Omit<GitVarDecl, "kind">> = {
