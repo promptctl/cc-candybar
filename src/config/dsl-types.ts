@@ -393,10 +393,11 @@ export interface SegmentDecl {
   // [LAW:one-source-of-truth] Per-segment palette override (a NAME). Overrides
   // globals.palette for this segment only; undefined = inherit the cascade base.
   readonly palette?: string;
-  // Per-segment vars sub-block — lives in the same global MobX store at runtime
-  // but scoped to the owning segment's template context. Own-segment locals are
-  // reachable by bare name (`.local`) or namespaced form (`.<segment>.local`);
-  // from another segment's template, only the namespaced form is valid.
+  // Per-segment vars sub-block — lives in the same global MobX store at
+  // runtime under the namespaced key `<segment>.<var>`. Templates reference a
+  // segment local ONLY via that namespaced form (`.<segment>.local`), from any
+  // segment including the owning one; the loader rejects bare refs at load
+  // with a diagnostic naming the namespaced form. [LAW:one-source-of-truth]
   readonly vars?: Readonly<Record<string, VariableDecl>>;
 }
 
