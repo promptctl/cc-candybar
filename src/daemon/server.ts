@@ -467,13 +467,43 @@ function handleConnection(sock: net.Socket): void {
   stats.inFlight = inFlight;
   let responded = false;
 
-  const respond = (resp: Response): void => {
-    if (responded) return;
+  // [LAW:no-ambient-temporal-coupling] respond owns the response→exit
+  // ordering. exitAfterFlush (an exit code; null = stay up) is performed
+  // by sock.end's completion callback, which Node invokes on 'finish' OR
+  // 'error' — a total signal. A peer that vanished mid-flush still settles,
+  // so the exit wish can never be stranded on a dead socket, and a live
+  // peer always has the frame in the kernel buffer before process.exit
+  // (unix-socket data survives writer exit). No fixed sleep stands between
+  // respond and exit; the SIGKILL backstop inside shutdown() is the
+  // unrelated last-resort safety.
+  const respond = (resp: Response, exitAfterFlush: number | null): void => {
+    if (responded) {
+      // First responder owns the flush. Reaching here with an exit wish is
+      // unreachable today (both exit-carrying arms resolve synchronously,
+      // far inside the request timeout) — but if it ever happens, say so
+      // instead of silently leaving a daemon up that was told to exit.
+      // [LAW:no-silent-failure]
+      if (exitAfterFlush !== null) {
+        dlog(
+          "warn",
+          "exit-after-flush dropped: an earlier responder settled this socket",
+        );
+      }
+      return;
+    }
     responded = true;
+    const settle =
+      exitAfterFlush === null
+        ? undefined
+        : (): void => shutdown(exitAfterFlush);
     try {
-      sock.write(encodeFrame(resp));
-    } catch {}
-    sock.end();
+      sock.end(encodeFrame(resp), settle);
+    } catch (e) {
+      // [LAW:no-silent-failure] The response is lost (socket already torn
+      // down), but the exit wish must not be.
+      dlog("warn", `response write failed: ${(e as Error).message}`);
+      settle?.();
+    }
   };
 
   // Per-request timeout protects the daemon from a single slow request
@@ -490,36 +520,45 @@ function handleConnection(sock: net.Socket): void {
   // and wasteful here (the in-flight scan is exactly what the next tick needs).
   const timer = setTimeout(() => {
     stats.requestsTimedOut++;
-    respond({
-      ok: false,
-      error: "request exceeded 200ms",
-      code: "TIMEOUT",
-      daemonV: PROTOCOL_VERSION,
-    });
+    respond(
+      {
+        ok: false,
+        error: "request exceeded 200ms",
+        code: "TIMEOUT",
+        daemonV: PROTOCOL_VERSION,
+      },
+      null,
+    );
   }, REQUEST_TIMEOUT_MS);
 
   const reader = makeFrameReader(
     (frame) => {
       void handleRequest(frame as Request)
-        .then((r) => respond(r))
+        .then((r) => respond(r.resp, r.exitAfterFlush))
         .catch((err) => {
           dlog("error", `handler threw: ${err?.stack || err}`);
-          respond({
-            ok: false,
-            error: String(err?.message || err),
-            code: "RENDER_FAILED",
-            daemonV: PROTOCOL_VERSION,
-          });
+          respond(
+            {
+              ok: false,
+              error: String(err?.message || err),
+              code: "RENDER_FAILED",
+              daemonV: PROTOCOL_VERSION,
+            },
+            null,
+          );
         });
     },
     (err) => {
       dlog("warn", `frame parse failed: ${err.message}`);
-      respond({
-        ok: false,
-        error: err.message,
-        code: "BAD_REQUEST",
-        daemonV: PROTOCOL_VERSION,
-      });
+      respond(
+        {
+          ok: false,
+          error: err.message,
+          code: "BAD_REQUEST",
+          daemonV: PROTOCOL_VERSION,
+        },
+        null,
+      );
     },
   );
 
@@ -534,18 +573,36 @@ function handleConnection(sock: net.Socket): void {
   });
 }
 
-async function handleRequest(req: Request): Promise<Response> {
+// [LAW:no-ambient-temporal-coupling] A request whose semantics include "then
+// exit" (the shutdown verb, the stale-binary version mismatch) must not exit
+// until its response has flushed — but handleRequest cannot see the socket.
+// So the exit is returned as DATA (the exit code; null = stay up) and the
+// connection boundary, which owns the flush, sequences shutdown on the write
+// completion. No timer stands between respond and exit.
+// [LAW:effects-at-boundaries] handleRequest computes the description; the
+// socket boundary performs it.
+interface HandledRequest {
+  resp: Response;
+  exitAfterFlush: number | null;
+}
+
+const stay = (resp: Response): HandledRequest => ({
+  resp,
+  exitAfterFlush: null,
+});
+
+async function handleRequest(req: Request): Promise<HandledRequest> {
   if (
     !req ||
     typeof req !== "object" ||
     typeof (req as Request).v !== "number"
   ) {
-    return {
+    return stay({
       ok: false,
       error: "malformed request",
       code: "BAD_REQUEST",
       daemonV: PROTOCOL_VERSION,
-    };
+    });
   }
 
   if (req.v !== PROTOCOL_VERSION) {
@@ -560,9 +617,8 @@ async function handleRequest(req: Request): Promise<Response> {
     if (req.v > PROTOCOL_VERSION) {
       dlog(
         "info",
-        `version mismatch: client=${req.v} > daemon=${PROTOCOL_VERSION}; binary likely upgraded — shutting down`,
+        `version mismatch: client=${req.v} > daemon=${PROTOCOL_VERSION}; binary likely upgraded — exiting after the response flushes`,
       );
-      setTimeout(() => shutdown(0), 50);
     } else {
       dlog(
         "info",
@@ -570,22 +626,27 @@ async function handleRequest(req: Request): Promise<Response> {
       );
     }
     return {
-      ok: false,
-      error: `protocol v${req.v} not supported (daemon at v${PROTOCOL_VERSION})`,
-      code: "VERSION_MISMATCH",
-      daemonV: PROTOCOL_VERSION,
+      resp: {
+        ok: false,
+        error: `protocol v${req.v} not supported (daemon at v${PROTOCOL_VERSION})`,
+        code: "VERSION_MISMATCH",
+        daemonV: PROTOCOL_VERSION,
+      },
+      // [LAW:dataflow-not-control-flow] The asymmetry above is this value.
+      // Exit is sequenced on the response flush, so the client always sees
+      // the VERSION_MISMATCH diagnostic — never a dead socket.
+      exitAfterFlush: req.v > PROTOCOL_VERSION ? 0 : null,
     };
   }
 
   if (req.kind === "shutdown") {
-    setTimeout(() => shutdown(0), 50);
-    return { ok: true, output: "" };
+    return { resp: { ok: true, output: "" }, exitAfterFlush: 0 };
   }
 
   if (req.kind === "stats") {
     // [LAW:single-enforcer] Stats requests do NOT bump request counters —
     // observability shouldn't pollute the metric being observed.
-    return {
+    return stay({
       ok: true,
       stats: stats.snapshot({
         gitCache: gitService.getStats(),
@@ -594,7 +655,7 @@ async function handleRequest(req: Request): Promise<Response> {
         watchersActive: watcherRegistry.size(),
         nextRestartReason: limits?.describeNextRestart() ?? null,
       }),
-    };
+    });
   }
 
   if (req.kind === "render") {
@@ -634,12 +695,12 @@ async function handleRequest(req: Request): Promise<Response> {
       if (wireProblems.length > 0) {
         stats.requestsErrored++;
         dlog("warn", `BAD_REQUEST: ${wireProblems.join("; ")}`);
-        return {
+        return stay({
           ok: false,
           error: `malformed hookData: ${wireProblems.join("; ")}`,
           code: "BAD_REQUEST",
           daemonV: PROTOCOL_VERSION,
-        };
+        });
       }
       const projectDir = req.hookData.workspace.project_dir;
       // [LAW:dataflow-not-control-flow] thread the *request's* cwd, not the
@@ -731,7 +792,7 @@ async function handleRequest(req: Request): Promise<Response> {
         "info",
         `render sid=${req.hookData.session_id ?? "?"} took=${ms}ms termCols=${termCols ?? "?"} width=${width} git=${g.size}/${g.hits}h/${g.misses}m usage=${u.size}/${u.hits}h/${u.misses}m err=${entry.lastError ? "Y" : "N"} warn=${entry.lastWarning ? "Y" : "N"}`,
       );
-      return { ok: true, output: output + "\n" };
+      return stay({ ok: true, output: output + "\n" });
     } catch (e) {
       stats.requestsErrored++;
       throw e;
@@ -739,7 +800,7 @@ async function handleRequest(req: Request): Promise<Response> {
   }
 
   if (req.kind === "click") {
-    return handleClick(req.verb, req.value);
+    return stay(await handleClick(req.verb, req.value));
   }
 
   if (req.kind === "debug") {
@@ -748,7 +809,7 @@ async function handleRequest(req: Request): Promise<Response> {
     // union the introspector consumes; an invalid value short-circuits
     // here, not deep inside buildDebugSnapshot.
     if (!isDebugWhat(req.what)) {
-      return {
+      return stay({
         ok: false,
         // [LAW:errors-context-in-errors] Include the allowed values so a
         // CLI consumer (or operator) sees what is supported without
@@ -757,7 +818,7 @@ async function handleRequest(req: Request): Promise<Response> {
         error: `unknown debug 'what': ${String(req.what)} (have: ${DEBUG_WHATS.join(", ")})`,
         code: "BAD_REQUEST",
         daemonV: PROTOCOL_VERSION,
-      };
+      });
     }
     // [LAW:dataflow-not-control-flow] The debug projection samples whatever
     // DSL state the cache currently holds. With cache keys scoped on
@@ -790,15 +851,15 @@ async function handleRequest(req: Request): Promise<Response> {
                 ? serializeSegmentCells(dbgEntry.lastRenderCellsBySegment)
                 : EMPTY_RENDER_MAP,
           };
-    return { ok: true, debug: buildDebugSnapshot(req.what, dbgState) };
+    return stay({ ok: true, debug: buildDebugSnapshot(req.what, dbgState) });
   }
 
-  return {
+  return stay({
     ok: false,
     error: "unknown kind",
     code: "BAD_REQUEST",
     daemonV: PROTOCOL_VERSION,
-  };
+  });
 }
 
 // --- diagnostics composition ---
