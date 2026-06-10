@@ -399,57 +399,6 @@
                       "ttl"
                     ],
                     "additionalProperties": false
-                  },
-                  {
-                    "type": "object",
-                    "properties": {
-                      "watch_file": {
-                        "type": "string"
-                      }
-                    },
-                    "required": [
-                      "watch_file"
-                    ],
-                    "additionalProperties": false
-                  },
-                  {
-                    "type": "object",
-                    "properties": {
-                      "depends_on": {
-                        "type": "array",
-                        "items": {
-                          "type": "string"
-                        }
-                      }
-                    },
-                    "required": [
-                      "depends_on"
-                    ],
-                    "additionalProperties": false
-                  },
-                  {
-                    "type": "object",
-                    "properties": {
-                      "key": {
-                        "type": "string"
-                      }
-                    },
-                    "required": [
-                      "key"
-                    ],
-                    "additionalProperties": false
-                  },
-                  {
-                    "type": "object",
-                    "properties": {
-                      "never": {
-                        "const": true
-                      }
-                    },
-                    "required": [
-                      "never"
-                    ],
-                    "additionalProperties": false
                   }
                 ]
               },
@@ -992,57 +941,6 @@
                           },
                           "required": [
                             "ttl"
-                          ],
-                          "additionalProperties": false
-                        },
-                        {
-                          "type": "object",
-                          "properties": {
-                            "watch_file": {
-                              "type": "string"
-                            }
-                          },
-                          "required": [
-                            "watch_file"
-                          ],
-                          "additionalProperties": false
-                        },
-                        {
-                          "type": "object",
-                          "properties": {
-                            "depends_on": {
-                              "type": "array",
-                              "items": {
-                                "type": "string"
-                              }
-                            }
-                          },
-                          "required": [
-                            "depends_on"
-                          ],
-                          "additionalProperties": false
-                        },
-                        {
-                          "type": "object",
-                          "properties": {
-                            "key": {
-                              "type": "string"
-                            }
-                          },
-                          "required": [
-                            "key"
-                          ],
-                          "additionalProperties": false
-                        },
-                        {
-                          "type": "object",
-                          "properties": {
-                            "never": {
-                              "const": true
-                            }
-                          },
-                          "required": [
-                            "never"
                           ],
                           "additionalProperties": false
                         }
