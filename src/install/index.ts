@@ -3,7 +3,7 @@ import path from "node:path";
 import os from "node:os";
 import { launchSync } from "../proc/launch";
 import { tryClickViaDaemon } from "../daemon/client";
-import type { PermanentOutcome } from "../daemon/client";
+import type { PermanentOutcome } from "../daemon/client-transport";
 import { obtainDaemonKick } from "../daemon/acquire";
 import { URL_SCHEME, VERB_COPY } from "../click/wire";
 

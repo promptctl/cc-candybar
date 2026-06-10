@@ -17,7 +17,7 @@
 // src/daemon/server.ts so the security-critical control-char neutralization
 // (C0 + DEL + C1/8-bit-CSI) cannot drift between the two callers).
 
-import type { PermanentOutcome } from "../daemon/client";
+import type { PermanentOutcome } from "../daemon/client-transport";
 import {
   ANSI_RESET,
   DIAGNOSTIC_ERROR_BG,

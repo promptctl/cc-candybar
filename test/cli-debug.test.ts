@@ -1,5 +1,5 @@
 // [LAW:verifiable-goals] The vars/segments/config CLI's own logic is the renderer
-// (the connect/sendOne glue mirrors client-stats.ts verbatim and is exercised by
+// (the socket round-trip is the shared client-transport primitive, exercised by
 // the debug protocol's own tests). `formatDebug` is a pure total fold over the
 // DebugSnapshot union; we assert its behavior per arm — populated and empty —
 // with constructed snapshots, the same way daemon-debug.test.ts drives the
