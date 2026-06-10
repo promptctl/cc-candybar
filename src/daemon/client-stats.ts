@@ -1,72 +1,40 @@
-import net from "node:net";
 import process from "node:process";
-import { socketPath } from "./paths";
-import { PROTOCOL_VERSION, sendOne } from "./protocol";
-import type { Response } from "./protocol";
+import { describeFailure, requestOutcome } from "./client-transport";
+import type { RoundTripBudgets, RoundTripOutcome } from "./client-transport";
 import type { StatsSnapshot } from "./stats";
 
-const CONNECT_TIMEOUT_MS = 200;
-const TOTAL_BUDGET_MS = 500;
+// Operator-driven introspection path: legitimately slower budgets than the
+// render hot path, carried as this caller's values through the shared
+// round-trip in ./client-transport. [LAW:dataflow-not-control-flow]
+const BUDGETS: RoundTripBudgets = { connectMs: 200, budgetMs: 500 };
 
 // Query the running daemon for stats. Does NOT spawn a daemon — stats on a
 // dead daemon is meaningless. Exits non-zero on failure with a clear message.
 export async function runDaemonStats(args: readonly string[]): Promise<void> {
   const wantJson = args.includes("--json");
 
-  const stats = await fetchStats().catch((e: Error) => {
-    process.stderr.write(`daemon-stats: ${e.message}\n`);
-    process.stderr.write(
-      "Hint: daemon may not be running. Run `cc-candybar` once to spawn it.\n",
-    );
+  const outcome = await fetchStats();
+  if (outcome.kind !== "ok") {
+    process.stderr.write(`daemon-stats: ${describeFailure(outcome)}\n`);
     process.exit(1);
-  });
-
-  if (!stats) return;
+  }
 
   if (wantJson) {
-    process.stdout.write(JSON.stringify(stats, null, 2) + "\n");
+    process.stdout.write(JSON.stringify(outcome.value, null, 2) + "\n");
     return;
   }
 
-  process.stdout.write(formatStats(stats));
+  process.stdout.write(formatStats(outcome.value));
 }
 
-async function fetchStats(): Promise<StatsSnapshot> {
-  const sock = await connect(socketPath(), CONNECT_TIMEOUT_MS);
-  try {
-    const resp: Response = await sendOne(
-      sock,
-      { v: PROTOCOL_VERSION, kind: "stats" },
-      TOTAL_BUDGET_MS,
-    );
-    if (!resp.ok) {
-      throw new Error(`daemon error: ${resp.code} ${resp.error}`);
-    }
-    if (!("stats" in resp)) {
-      throw new Error("daemon returned ok but no stats payload");
-    }
-    return resp.stats;
-  } finally {
-    sock.destroy();
-  }
-}
-
-function connect(path: string, timeoutMs: number): Promise<net.Socket> {
-  return new Promise((resolve, reject) => {
-    const sock = net.createConnection({ path });
-    const timer = setTimeout(() => {
-      sock.destroy();
-      reject(new Error("connect timeout (no daemon listening?)"));
-    }, timeoutMs);
-    sock.once("connect", () => {
-      clearTimeout(timer);
-      resolve(sock);
-    });
-    sock.once("error", (err) => {
-      clearTimeout(timer);
-      reject(err);
-    });
-  });
+function fetchStats(): Promise<RoundTripOutcome<StatsSnapshot>> {
+  // [LAW:no-defensive-null-guards] exception: trust boundary. The response is
+  // an unchecked cast from socket JSON; the presence check is the explicit
+  // narrowing at the wire edge (an ok response without `stats` classifies as
+  // permanent/malformed_response in the transport).
+  return requestOutcome({ kind: "stats" }, BUDGETS, (resp) =>
+    "stats" in resp ? resp.stats : undefined,
+  );
 }
 
 function fmtBytes(n: number): string {

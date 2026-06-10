@@ -28,7 +28,7 @@ export interface OutcomePlan {
 export function planOutcome(outcome: ClientOutcome): OutcomePlan {
   switch (outcome.kind) {
     case "ok":
-      return { output: outcome.output, kick: false, debug: null };
+      return { output: outcome.value, kick: false, debug: null };
     case "transient":
       return {
         output: "\n",

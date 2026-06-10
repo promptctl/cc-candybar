@@ -8,11 +8,11 @@ import {
   makeFrameReader,
 } from "../src/daemon/protocol";
 import type { Response } from "../src/daemon/protocol";
+import type { ClientOutcome } from "../src/daemon/client";
 import type {
-  ClientOutcome,
   PermanentOutcome,
   TransientOutcome,
-} from "../src/daemon/client";
+} from "../src/daemon/client-transport";
 import { planOutcome } from "../src/render/outcome-plan";
 
 // [LAW:behavior-not-structure] These tests assert the contract — what a
@@ -214,13 +214,13 @@ describe("ClientOutcome typing (kz8.5 chunk 1)", () => {
   ): o is Extract<ClientOutcome, { kind: "transient" }> {
     return o.kind === "transient";
   }
-  function isOk(o: ClientOutcome): o is { kind: "ok"; output: string } {
+  function isOk(o: ClientOutcome): o is { kind: "ok"; value: string } {
     return o.kind === "ok";
   }
 
   test("type guards distinguish all three branches at compile time", () => {
     const samples: ClientOutcome[] = [
-      { kind: "ok", output: "hello" },
+      { kind: "ok", value: "hello" },
       { kind: "transient", cause: "unreachable", message: "ECONNREFUSED" },
       {
         kind: "permanent",
@@ -568,7 +568,7 @@ describe("planOutcome decides kick vs. no-kick per variant (kz8.5 chunk 1+4)", (
   // identically and the spiral repeats.
 
   test("ok outcome returns the daemon output, no kick, no debug message", () => {
-    const plan = planOutcome({ kind: "ok", output: "rendered statusline\n" });
+    const plan = planOutcome({ kind: "ok", value: "rendered statusline\n" });
     expect(plan.kick).toBe(false);
     expect(plan.output).toBe("rendered statusline\n");
     // The happy path carries no debug message — nothing for the caller to log.

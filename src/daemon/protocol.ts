@@ -124,7 +124,7 @@ export type ErrorCode =
 
 // [LAW:types-are-the-program] A typed error class for failures that originate
 // inside the wire-protocol layer (oversized frame, JSON decode failure).
-// Callers in src/daemon/client.ts can branch on `e instanceof ProtocolError`
+// Callers in src/daemon/client-transport.ts branch on `e instanceof ProtocolError`
 // to classify these as `permanent/malformed_response` — far more robust than
 // substring-matching against the message, which would silently drift if
 // Node's JSON.parse error wording changes. The class is small but

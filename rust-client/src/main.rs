@@ -286,7 +286,7 @@ fn render(argv: &[String], hook_data: &serde_json::Value) -> RenderOutcome {
 }
 
 // [LAW:types-are-the-program] One place that turns a wire-level response
-// into a typed outcome — mirrors interpretResponse() in src/daemon/client.ts.
+// into a typed outcome — mirrors interpretResponse() in src/daemon/client-transport.ts.
 // Every non-ok wire code maps to exactly one variant; TIMEOUT is the only
 // one that becomes Transient because it is the only one a respawn can cure.
 fn interpret_response(resp: serde_json::Value) -> RenderOutcome {

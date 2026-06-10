@@ -1,254 +1,75 @@
-import net from "node:net";
+// The render/click client — the statusline hot path. The socket round-trip
+// and failure classification live in ./client-transport (the single
+// implementation shared with the stats/debug CLIs); this module contributes
+// only the render path's own data: tight timeout budgets and the
+// output-string payload projection. [LAW:dataflow-not-control-flow]
+//
+// [LAW:one-source-of-truth] These budget consts are mirrored by the Rust
+// client (rust-client/src/main.rs) and diffed by scripts/check-protocol.mjs,
+// which anchors on the declarations below — keep them named consts in this
+// file, or repoint the CHECKS rows in the same commit.
+
 import type { ClaudeHookData } from "../utils/claude";
-import { socketPath } from "./paths";
-import { PROTOCOL_VERSION, ProtocolError, sendOne } from "./protocol";
+import { requestOutcome } from "./client-transport";
+import type { RoundTripBudgets, RoundTripOutcome } from "./client-transport";
 import type { Response } from "./protocol";
 
 const CONNECT_TIMEOUT_MS = 50;
 const TOTAL_BUDGET_MS = 150;
 const CLICK_BUDGET_MS = 200;
 
-// [LAW:types-are-the-program] The render outcome carries its own recovery
-// semantics. `transient` failures mean the daemon was unavailable/slow —
-// kicking a fresh daemon is the right response. `permanent` failures mean
-// the daemon refused our request semantically — kicking does NOT help
-// because the next daemon will refuse the same request the same way. The
-// caller's branch is no longer uniform: it matches on `kind` and routes
-// kick vs. show-error off the type, not off a stringified `reason`. This
-// asymmetry was missing in the previous shape and is the root of the
-// 452-corpse spiral (kz8.5).
-export type ClientOutcome =
-  | { kind: "ok"; output: string }
-  | TransientOutcome
-  | PermanentOutcome;
+const RENDER_BUDGETS: RoundTripBudgets = {
+  connectMs: CONNECT_TIMEOUT_MS,
+  budgetMs: TOTAL_BUDGET_MS,
+};
+const CLICK_BUDGETS: RoundTripBudgets = {
+  connectMs: CONNECT_TIMEOUT_MS,
+  budgetMs: CLICK_BUDGET_MS,
+};
 
-export interface TransientOutcome {
-  kind: "transient";
-  cause: "unreachable" | "timeout" | "io_error";
-  message: string;
+// The render/click outcome vocabulary, mirrored by the Rust client's outcome
+// enum. The ok payload is the rendered line (or click acknowledgement) to
+// print. See client-transport.ts for the transient/permanent semantics.
+export type ClientOutcome = RoundTripOutcome<string>;
+
+// [LAW:no-defensive-null-guards] exception: trust boundary. The ok response
+// is an unchecked cast from socket JSON; the typeof check is the explicit
+// narrowing at the wire edge, and its failure means "ok response without our
+// payload" (classified permanent/malformed_response by the transport).
+function projectOutput(
+  resp: Extract<Response, { ok: true }>,
+): string | undefined {
+  const output = (resp as { output?: unknown }).output;
+  return typeof output === "string" ? output : undefined;
 }
-
-export type PermanentOutcome =
-  | {
-      kind: "permanent";
-      cause: "version_mismatch";
-      clientV: number;
-      daemonV: number;
-    }
-  | { kind: "permanent"; cause: "bad_request"; message: string }
-  | { kind: "permanent"; cause: "render_failed"; message: string }
-  | { kind: "permanent"; cause: "malformed_response"; message: string };
 
 // Try to render via the daemon. Returns a typed outcome — see ClientOutcome.
 // There is no inline render path; see src/index.ts. The caller is responsible
 // for branching on outcome.kind and deciding whether to kick, display an
 // error glyph, or print the rendered output.
-export async function tryRenderViaDaemon(
+export function tryRenderViaDaemon(
   hookData: ClaudeHookData,
   args: string[],
   cwd: string,
   termCols?: number,
 ): Promise<ClientOutcome> {
-  let sock: net.Socket | null = null;
-  try {
-    sock = await connectWithTimeout(socketPath(), CONNECT_TIMEOUT_MS);
-    const resp: Response = await sendOne(
-      sock,
-      {
-        v: PROTOCOL_VERSION,
-        kind: "render",
-        hookData,
-        args,
-        cwd,
-        termCols,
-      },
-      TOTAL_BUDGET_MS,
-    );
-    return interpretResponse(resp);
-  } catch (e) {
-    return interpretException(e);
-  } finally {
-    if (sock) sock.destroy();
-  }
+  return requestOutcome(
+    { kind: "render", hookData, args, cwd, termCols },
+    RENDER_BUDGETS,
+    projectOutput,
+  );
 }
 
 // [LAW:single-enforcer] Same outcome translator for click as for render —
 // click failures decompose into the same transient/permanent split, so the
 // caller's "ok? done : kick + fallback" logic gets the same typed input.
-export async function tryClickViaDaemon(
+export function tryClickViaDaemon(
   verb: string,
   value: string,
 ): Promise<ClientOutcome> {
-  let sock: net.Socket | null = null;
-  try {
-    sock = await connectWithTimeout(socketPath(), CONNECT_TIMEOUT_MS);
-    const resp: Response = await sendOne(
-      sock,
-      {
-        v: PROTOCOL_VERSION,
-        kind: "click",
-        verb,
-        value,
-      },
-      CLICK_BUDGET_MS,
-    );
-    return interpretResponse(resp);
-  } catch (e) {
-    return interpretException(e);
-  } finally {
-    if (sock) sock.destroy();
-  }
-}
-
-// [LAW:types-are-the-program] One place that turns a wire-level Response
-// into a typed ClientOutcome. Every caller of tryRender/tryClick goes through
-// this, so the kick-vs-show-error decision has a single source of truth.
-//
-// [LAW:no-defensive-null-guards] This function sits AT the trust boundary —
-// `resp` is `frame as Response`, an unchecked cast from socket JSON. The
-// per-field type-narrowings and the default branch below are not defensive
-// guards against an internal bug; they are the explicit handling at the
-// wire edge for fields whose runtime types the JSON cast cannot enforce.
-// Every untrusted access flows through asString/asNumber so the downstream
-// ClientOutcome shape carries values of the declared types only.
-
-// [LAW:single-enforcer] Narrowing primitives used everywhere we read a
-// field off the cast `resp`. Centralised so a future "validate the whole
-// frame" approach has one place to evolve from. Each helper expresses an
-// exact type predicate; mixing semantics (e.g. "any finite number" with
-// "non-negative integer") would weaken the type [LAW:types-are-the-program].
-function asString(v: unknown, fallback: string): string {
-  return typeof v === "string" ? v : fallback;
-}
-
-// [LAW:one-type-per-behavior] Mirrors the Rust client's `as_u64()` semantics:
-// the only valid daemonV values are non-negative integers. Negatives and
-// fractional values fall back to 0 so both runtimes derive the same
-// PermanentOutcome from the same wire payload.
-function asProtocolVersion(v: unknown): number {
-  return typeof v === "number" && Number.isInteger(v) && v >= 0 ? v : 0;
-}
-
-function interpretResponse(resp: Response): ClientOutcome {
-  // Treat the cast `resp` as a bag of unknowns; each access is narrowed
-  // explicitly. The typed parameter still documents the *expected* shape
-  // for readers, but the runtime trusts only what it can verify per field.
-  const raw = resp as {
-    ok?: unknown;
-    output?: unknown;
-    error?: unknown;
-    code?: unknown;
-    daemonV?: unknown;
-  };
-  if (raw.ok === true) {
-    if (typeof raw.output === "string") {
-      return { kind: "ok", output: raw.output };
-    }
-    // Stats response to a render/click call — not our shape. Treat as a
-    // permanent malformed-response so the caller does NOT kick (the daemon
-    // is up, just answered the wrong question).
-    return {
-      kind: "permanent",
-      cause: "malformed_response",
-      message: "stats response to render/click",
-    };
-  }
-  const errorMessage = asString(raw.error, "(no error message)");
-  switch (raw.code) {
-    case "VERSION_MISMATCH":
-      return {
-        kind: "permanent",
-        cause: "version_mismatch",
-        clientV: PROTOCOL_VERSION,
-        // Older daemons may not echo daemonV; non-number values from a
-        // misbehaving stub also fall back to 0 (the renderer maps 0 to
-        // "unknown" in the visible glyph).
-        daemonV: asProtocolVersion(raw.daemonV),
-      };
-    case "TIMEOUT":
-      // Daemon is alive but didn't answer in time — same recovery as
-      // unreachable: kick and emit stale/blank. This is the *only* non-ok
-      // wire code that maps to transient.
-      return { kind: "transient", cause: "timeout", message: errorMessage };
-    case "BAD_REQUEST":
-      return { kind: "permanent", cause: "bad_request", message: errorMessage };
-    case "RENDER_FAILED":
-      return {
-        kind: "permanent",
-        cause: "render_failed",
-        message: errorMessage,
-      };
-    default:
-      // Unknown wire code — mirrors rust-client's `_ => MalformedResponse(...)`
-      // so both runtimes converge on the same observable behavior for any
-      // code the client doesn't recognize. String() handles missing /
-      // non-string values without crashing.
-      return {
-        kind: "permanent",
-        cause: "malformed_response",
-        message: `unknown error code: ${String(raw.code)}`,
-      };
-  }
-}
-
-// Exceptions reaching this function come from two distinct classes:
-//   - Connect/IO/timeout failures — transient. A respawn or retry has a
-//     real chance of recovering (daemon dead, socket vanished, slow link).
-//   - Protocol violations from sendOne's reject path — permanent. The
-//     daemon is alive but produced garbage (oversized frame, JSON parse
-//     failure). Respawning would hit the same response identically; this
-//     is the same recovery class as a wire-level VERSION_MISMATCH, so we
-//     route through PermanentCause::MalformedResponse and the user sees
-//     a glyph naming the failure rather than a blank line plus a kick.
-//
-// [LAW:types-are-the-program] The protocol-violation discriminator is
-// carried structurally by `ProtocolError` (exported from protocol.ts) —
-// not by substring-matching the error message, which would silently drift
-// if Node's JSON.parse wording changes across versions/locales. The
-// `e instanceof SyntaxError` fallback covers a residual case where a
-// JSON.parse happened to escape `makeFrameReader`'s wrapping (defense in
-// depth, not the primary path).
-//
-// [LAW:one-type-per-behavior] Mirrors rust-client's classify_io_error —
-// InvalidData/InvalidInput map to Permanent(MalformedResponse), everything
-// else stays transient. The two runtimes agree on the recovery class for
-// every observable wire failure.
-function interpretException(e: unknown): ClientOutcome {
-  if (e instanceof ProtocolError || e instanceof SyntaxError) {
-    const message = e instanceof Error ? e.message : String(e);
-    return { kind: "permanent", cause: "malformed_response", message };
-  }
-  const message = e instanceof Error ? e.message : String(e);
-  if (message === "CONNECT_TIMEOUT" || message === "TIMEOUT") {
-    return { kind: "transient", cause: "timeout", message };
-  }
-  if (
-    message.includes("ECONNREFUSED") ||
-    message.includes("ENOENT") ||
-    message.includes("ENOTSOCK")
-  ) {
-    return { kind: "transient", cause: "unreachable", message };
-  }
-  return { kind: "transient", cause: "io_error", message };
-}
-
-function connectWithTimeout(
-  path: string,
-  timeoutMs: number,
-): Promise<net.Socket> {
-  return new Promise((resolve, reject) => {
-    const sock = net.createConnection({ path });
-    const timer = setTimeout(() => {
-      sock.destroy();
-      reject(new Error("CONNECT_TIMEOUT"));
-    }, timeoutMs);
-    sock.once("connect", () => {
-      clearTimeout(timer);
-      resolve(sock);
-    });
-    sock.once("error", (err) => {
-      clearTimeout(timer);
-      reject(err);
-    });
-  });
+  return requestOutcome(
+    { kind: "click", verb, value },
+    CLICK_BUDGETS,
+    projectOutput,
+  );
 }
