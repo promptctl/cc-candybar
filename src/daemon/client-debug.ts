@@ -5,11 +5,9 @@
 // this is its client binding, the mirror of client-stats.ts. Like daemon-stats,
 // it does NOT spawn a daemon: introspecting a dead daemon is meaningless.
 
-import net from "node:net";
 import process from "node:process";
-import { socketPath } from "./paths";
-import { PROTOCOL_VERSION, sendOne } from "./protocol";
-import type { Response } from "./protocol";
+import { describeFailure, requestOutcome } from "./client-transport";
+import type { RoundTripBudgets, RoundTripOutcome } from "./client-transport";
 import type {
   DebugSnapshot,
   DebugWhat,
@@ -18,8 +16,10 @@ import type {
 } from "./debug-types";
 import type { DslConfig } from "../config/dsl-types";
 
-const CONNECT_TIMEOUT_MS = 200;
-const TOTAL_BUDGET_MS = 500;
+// Operator-driven introspection path: legitimately slower budgets than the
+// render hot path, carried as this caller's values through the shared
+// round-trip in ./client-transport. [LAW:dataflow-not-control-flow]
+const BUDGETS: RoundTripBudgets = { connectMs: 200, budgetMs: 500 };
 
 // `cc-candybar <vars|segments|config> [--json]` — `what` selects the projection.
 export async function runDebug(
@@ -28,60 +28,28 @@ export async function runDebug(
 ): Promise<void> {
   const wantJson = args.includes("--json");
 
-  const snapshot = await fetchDebug(what).catch((e: Error) => {
-    process.stderr.write(`${what}: ${e.message}\n`);
-    process.stderr.write(
-      "Hint: daemon may not be running. Run `cc-candybar` once to spawn it.\n",
-    );
+  const outcome = await fetchDebug(what);
+  if (outcome.kind !== "ok") {
+    process.stderr.write(`${what}: ${describeFailure(outcome)}\n`);
     process.exit(1);
-  });
-
-  if (!snapshot) return;
+  }
 
   if (wantJson) {
-    process.stdout.write(JSON.stringify(snapshot, null, 2) + "\n");
+    process.stdout.write(JSON.stringify(outcome.value, null, 2) + "\n");
     return;
   }
 
-  process.stdout.write(formatDebug(snapshot));
+  process.stdout.write(formatDebug(outcome.value));
 }
 
-async function fetchDebug(what: DebugWhat): Promise<DebugSnapshot> {
-  const sock = await connect(socketPath(), CONNECT_TIMEOUT_MS);
-  try {
-    const resp: Response = await sendOne(
-      sock,
-      { v: PROTOCOL_VERSION, kind: "debug", what },
-      TOTAL_BUDGET_MS,
-    );
-    if (!resp.ok) {
-      throw new Error(`daemon error: ${resp.code} ${resp.error}`);
-    }
-    if (!("debug" in resp)) {
-      throw new Error("daemon returned ok but no debug payload");
-    }
-    return resp.debug;
-  } finally {
-    sock.destroy();
-  }
-}
-
-function connect(path: string, timeoutMs: number): Promise<net.Socket> {
-  return new Promise((resolve, reject) => {
-    const sock = net.createConnection({ path });
-    const timer = setTimeout(() => {
-      sock.destroy();
-      reject(new Error("connect timeout (no daemon listening?)"));
-    }, timeoutMs);
-    sock.once("connect", () => {
-      clearTimeout(timer);
-      resolve(sock);
-    });
-    sock.once("error", (err) => {
-      clearTimeout(timer);
-      reject(err);
-    });
-  });
+function fetchDebug(what: DebugWhat): Promise<RoundTripOutcome<DebugSnapshot>> {
+  // [LAW:no-defensive-null-guards] exception: trust boundary. The response is
+  // an unchecked cast from socket JSON; the presence check is the explicit
+  // narrowing at the wire edge (an ok response without `debug` classifies as
+  // permanent/malformed_response in the transport).
+  return requestOutcome({ kind: "debug", what }, BUDGETS, (resp) =>
+    "debug" in resp ? resp.debug : undefined,
+  );
 }
 
 // [LAW:types-are-the-program] One total fold over the DebugSnapshot union; each

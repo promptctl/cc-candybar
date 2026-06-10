@@ -3,7 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import { formatPermanentGlyph } from "../src/render/error-glyph";
-import type { PermanentOutcome } from "../src/daemon/client";
+import type { PermanentOutcome } from "../src/daemon/client-transport";
 import { PROTOCOL_VERSION, encodeFrame, makeFrameReader } from "../src/daemon/protocol";
 
 // [LAW:behavior-not-structure] These tests assert the contract — the glyph's
