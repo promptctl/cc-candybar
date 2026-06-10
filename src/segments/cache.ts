@@ -13,12 +13,15 @@
 // the DSL template — the same shape block/weekly use with `resetsAt`. The
 // provider carries no display policy.
 //
-// [LAW:types-are-the-program] The return is `number | null`: a known expiry
-// instant, or "no cache activity found" (no transcript, unreadable, or no
-// cache-bearing entry). Null becomes an absent payload field, which the
-// segment's `when` predicate reads as hidden — there is no "0 means hidden"
-// ambiguity to defend against downstream.
+// [LAW:types-are-the-program] The return is `Outcome<number>`: a known expiry
+// instant (`ok`), "no cache activity found" (`absent` — no transcript yet, or
+// no cache-bearing entry), or a real read failure (`failed` — the transcript
+// exists but couldn't be read). Absent becomes a missing payload field, which
+// the segment's `when` predicate reads as hidden; failed reaches the payload
+// boundary, the one place that logs it — there is no "0 means hidden"
+// ambiguity to defend against downstream, and no failure dressed as absence.
 
+import { ABSENT, ok, type Outcome } from "../utils/outcome.js";
 import { readTail } from "../utils/transcript-fs.js";
 
 // Anthropic prompt cache TTL. A const, not a knob: it is a property of the
@@ -71,17 +74,18 @@ function cacheActivityTs(line: string): number | null {
 }
 
 /**
- * Epoch *seconds* at which the session's prompt cache expires, or null when
- * no cache-bearing transcript entry can be found. Seconds (not millis) to
- * match the unit of block/weekly `resetsAt`, so the DSL composes
+ * Epoch *seconds* at which the session's prompt cache expires; `absent` when
+ * no cache-bearing transcript entry can be found; `failed` when the
+ * transcript exists but couldn't be read. Seconds (not millis) to match the
+ * unit of block/weekly `resetsAt`, so the DSL composes
  * `minutesUntilReset .cache.expiresAt` with no unit translation.
  */
 export async function cacheExpiresAt(
   transcriptPath: string,
-): Promise<number | null> {
+): Promise<Outcome<number>> {
   const lastCacheMs = await findLastCacheActivityTs(transcriptPath);
-  if (lastCacheMs == null) return null;
-  return Math.floor((lastCacheMs + CACHE_TTL_MS) / 1000);
+  if (lastCacheMs.kind !== "ok") return lastCacheMs;
+  return ok(Math.floor((lastCacheMs.value + CACHE_TTL_MS) / 1000));
 }
 
 // Tail-read the JSONL transcript and return the millisecond timestamp of the
@@ -93,17 +97,19 @@ export async function cacheExpiresAt(
 // on synchronous fs.
 async function findLastCacheActivityTs(
   transcriptPath: string,
-): Promise<number | null> {
+): Promise<Outcome<number>> {
   for (const maxBytes of [TAIL_CHUNK, TAIL_MAX]) {
     const tail = await readTail(transcriptPath, maxBytes);
-    if (tail == null) return null;
-    const ts = scanBufferForLastCacheTs(tail.buf, tail.fromStart);
-    if (ts != null) return ts;
+    // absent (no transcript yet) and failed (unreadable) both end the scan;
+    // the outcome carries which one happened to the payload boundary.
+    if (tail.kind !== "ok") return tail;
+    const ts = scanBufferForLastCacheTs(tail.value.buf, tail.value.fromStart);
+    if (ts != null) return ok(ts);
     // The window reached the file start: the whole transcript is scanned, no
     // hit exists — growing further would re-read the same bytes.
-    if (tail.fromStart) return null;
+    if (tail.value.fromStart) return ABSENT;
   }
-  return null;
+  return ABSENT;
 }
 
 function scanBufferForLastCacheTs(

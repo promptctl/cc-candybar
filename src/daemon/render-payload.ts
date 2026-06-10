@@ -22,7 +22,9 @@ import type { DslConfig, VariableDecl } from "../config/dsl-types.js";
 import { walkNodes } from "../config/dsl-types.js";
 import { extractTemplateRefs } from "../config/dsl-loader.js";
 import type { GitInfo, GitInfoOptions } from "../segments/git.js";
+import { ABSENT, failed, type Outcome } from "../utils/outcome.js";
 import { cacheExpiresAt } from "../segments/cache.js";
+import type { DaemonLogger } from "./log.js";
 import type { SessionUsageStore } from "./cache/session-usage-store.js";
 import type { ContextProvider } from "../segments/context.js";
 import type { MetricsProvider } from "../segments/metrics.js";
@@ -70,23 +72,27 @@ export interface RenderPayload extends ClaudeHookData {
 }
 
 // Flattened projection of GitInfo: every field shape the parity bindings
-// reference. Optional fields project to defaulted scalars at this boundary so
-// the DSL input path always lands on a value of the declared type.
+// reference. [LAW:one-type-per-behavior] Same absence policy as
+// MetricsPayload: every field can independently be absent (not requested,
+// genuinely none, or its fetch failed), and absence is PRESERVED — the DSL
+// input fallback chain emits the declared `default` and records a
+// `last_error` per field. The old coerce-to-''/0 shim erased the distinction
+// between "no stashes" and "stash count unknown because git failed".
 export interface GitPayload {
-  readonly repoName: string;
-  readonly branch: string;
-  readonly sha: string;
-  readonly ahead: number;
-  readonly behind: number;
-  readonly staged: number;
-  readonly unstaged: number;
-  readonly untracked: number;
-  readonly conflicts: number;
-  readonly upstream: string;
-  readonly stash: number;
-  readonly status: string;
-  readonly operation: string;
-  readonly timeSinceCommit: number;
+  readonly repoName?: string;
+  readonly branch?: string;
+  readonly sha?: string;
+  readonly ahead?: number;
+  readonly behind?: number;
+  readonly staged?: number;
+  readonly unstaged?: number;
+  readonly untracked?: number;
+  readonly conflicts?: number;
+  readonly upstream?: string;
+  readonly stash?: number;
+  readonly status?: string;
+  readonly operation?: string;
+  readonly timeSinceCommit?: number;
 }
 
 export interface SessionPayload {
@@ -148,6 +154,10 @@ export interface RenderPayloadDeps {
   readonly metricsProvider: MetricsProvider;
   readonly tmuxService: TmuxService;
   readonly sessionState: SessionStateRW;
+  // [LAW:single-enforcer] The log capability for the outcome-carrying lanes
+  // (git, cache): buildRenderPayload is the ONE place their failures are
+  // logged, so the providers' interiors never log and never double-log.
+  readonly log: DaemonLogger;
 }
 
 // ─── Builder ─────────────────────────────────────────────────────────────────
@@ -323,11 +333,16 @@ function gitOptionsFromClosure(needed: ReadonlySet<string>): GitInfoOptions {
  * chain). No provider error propagates to the caller — a single broken
  * source must not blank the bar.
  *
- * [LAW:no-silent-fallbacks] Provider rejections are logged by the underlying
- * data-provider layer; an absent field is the explicit signal that the DSL
- * input fallback uses. This function does not silently coerce nulls to zeros
- * — that decision lives in the DSL declaration's `default` field, owned by
- * the config, not buried here.
+ * [LAW:no-silent-failure][LAW:single-enforcer] Two failure-visibility
+ * contracts meet here. The git and cache lanes carry typed outcomes
+ * (ok | absent | failed) and THIS function is their one log site — `failed`
+ * is logged through `deps.log` and projected as a missing field, `absent`
+ * is a missing field with nothing to log. The remaining lanes
+ * (session/today/context/metrics/tmux) log their own rejections in their
+ * provider layer and surface here as catch-to-null. Either way an absent
+ * field is the explicit signal the DSL input fallback uses: this function
+ * never coerces an unknown to a zero — the default lives in the DSL
+ * declaration's `default` field, owned by the config, not buried here.
  */
 export async function buildRenderPayload(
   hookData: ClaudeHookData,
@@ -342,13 +357,13 @@ export async function buildRenderPayload(
     anyPathStartsWith(neededInputPaths, prefix);
 
   // [LAW:dataflow-not-control-flow] Each provider lane is the same shape:
-  // either "needed → call provider with .catch(() => null)" or "not needed
-  // → resolve(null)". The skipped lanes resolve immediately; no variant
-  // means lanes are present/absent at the array level (which would change
-  // the destructure shape).
+  // "needed → call provider" or "not needed → resolve to its no-data value"
+  // (ABSENT for the outcome lanes, null for the rest). The skipped lanes
+  // resolve immediately; no variant means lanes are present/absent at the
+  // array level (which would change the destructure shape).
   const nullP = <T>(): Promise<T | null> => Promise.resolve(null);
 
-  const [gitInfo, usage, today, context, metrics, tmuxSession, cacheExpiry] =
+  const [gitOutcome, usage, today, context, metrics, tmuxSession, cacheExpiry] =
     await Promise.all([
       wants("git")
         ? deps.gitProvider
@@ -357,8 +372,11 @@ export async function buildRenderPayload(
               gitOptionsFromClosure(neededInputPaths),
               hookData.workspace?.project_dir,
             )
-            .catch(() => null)
-        : nullP<GitInfo>(),
+            // The provider's contract is "never rejects"; this catch makes
+            // the lane total against bugs, mapping the throw into the same
+            // logged failure path instead of swallowing it.
+            .catch((e: unknown) => failed(`git: ${String(e)}`))
+        : (Promise.resolve(ABSENT) as Promise<Outcome<GitInfo>>),
       wants("session.cost") || wants("session.tokens")
         ? deps.usageStore
             .getUsageInfo(hookData.session_id, hookData)
@@ -382,9 +400,20 @@ export async function buildRenderPayload(
       // seam, so it runs alongside the other providers and stays in the shared
       // in-flight budget rather than blocking the event loop on sync fs.
       wants("cache")
-        ? cacheExpiresAt(hookData.transcript_path).catch(() => null)
-        : nullP<number>(),
+        ? cacheExpiresAt(hookData.transcript_path).catch((e: unknown) =>
+            failed(`cache: ${String(e)}`),
+          )
+        : (Promise.resolve(ABSENT) as Promise<Outcome<number>>),
     ]);
+  // [LAW:effects-at-boundaries] The outcome lanes' projections are pure folds
+  // returning data (payload fragment + failure descriptions); the log effect
+  // happens once, here, at the edge.
+  const gitProjection = projectGitInfo(gitOutcome);
+  const failures = [
+    ...gitProjection.failures,
+    ...(cacheExpiry.kind === "failed" ? [cacheExpiry.reason] : []),
+  ];
+  for (const f of failures) deps.log("warn", `provider fetch failed: ${f}`);
   // [LAW:dataflow-not-control-flow] block.* reads straight from hookData
   // alongside weekly. (The prior dedicated provider only re-derived
   // `minutesUntilReset(resets_at)`, which the DSL template composes via
@@ -449,7 +478,7 @@ export async function buildRenderPayload(
     ...hookData,
     ...(workspace !== undefined && { workspace }),
     ...(home !== undefined && { home }),
-    ...(gitInfo !== null && { git: projectGitInfo(gitInfo) }),
+    ...(gitProjection.git !== undefined && { git: gitProjection.git }),
     ...(tmuxSession !== null && { tmux: { session: tmuxSession } }),
     ...(theme !== undefined && { theme }),
     ...(sessionPayload !== undefined && { session: sessionPayload }),
@@ -471,7 +500,9 @@ export async function buildRenderPayload(
         resetsAt: hookData.rate_limits.seven_day.resets_at,
       },
     }),
-    ...(cacheExpiry !== null && { cache: { expiresAt: cacheExpiry } }),
+    ...(cacheExpiry.kind === "ok" && {
+      cache: { expiresAt: cacheExpiry.value },
+    }),
     ...(context !== null && {
       context: {
         totalTokens: context.totalTokens,
@@ -515,26 +546,62 @@ function posixify(s: string | undefined): string | undefined {
   return s.replace(/\\/g, "/");
 }
 
-// [LAW:types-are-the-program] Project the optional-rich GitInfo down to the
-// flat shape the DSL input paths read. Every optional becomes a typed default
-// at this boundary so the DSL never sees `undefined` for these fields —
-// templates can `{{ if ne .git.repoName "" }}` without worrying about whether
-// the path resolved.
-function projectGitInfo(info: GitInfo): GitPayload {
+// [LAW:types-are-the-program] Project the outcome-carrying GitInfo down to
+// the flat shape the DSL input paths read. A pure fold: `ok` fields become
+// values, `absent` and `failed` fields become MISSING keys (the DSL input
+// fallback chain fills the declared default and records a last_error), and
+// every `failed` contributes a description for the boundary to log — this
+// function performs no effect itself ([LAW:effects-at-boundaries]).
+function projectGitInfo(outcome: Outcome<GitInfo>): {
+  readonly git?: GitPayload;
+  readonly failures: readonly string[];
+} {
+  if (outcome.kind === "absent") return { failures: [] };
+  if (outcome.kind === "failed") return { failures: [outcome.reason] };
+
+  const info = outcome.value;
+  const failures: string[] = [];
+  const field = <T>(
+    name: string,
+    oc: Outcome<T> | undefined,
+  ): T | undefined => {
+    if (oc === undefined || oc.kind === "absent") return undefined;
+    if (oc.kind === "failed") {
+      failures.push(`git.${name}: ${oc.reason}`);
+      return undefined;
+    }
+    return oc.value;
+  };
+
+  const aheadBehind = field("aheadBehind", info.aheadBehind);
+  const sha = field("sha", info.sha);
+  const operation = field("operation", info.operation);
+  const timeSinceCommit = field("timeSinceCommit", info.timeSinceCommit);
+  const stash = field("stash", info.stashCount);
+  const upstream = field("upstream", info.upstream);
+  const repoName = field("repoName", info.repoName);
+
   return {
-    repoName: info.repoName ?? "",
-    branch: info.branch,
-    sha: info.sha ?? "",
-    ahead: info.ahead,
-    behind: info.behind,
-    staged: info.staged ?? 0,
-    unstaged: info.unstaged ?? 0,
-    untracked: info.untracked ?? 0,
-    conflicts: info.conflicts ?? 0,
-    upstream: info.upstream ?? "",
-    stash: info.stashCount ?? 0,
-    status: info.status,
-    operation: info.operation ?? "",
-    timeSinceCommit: info.timeSinceCommit ?? 0,
+    git: {
+      branch: info.branch,
+      status: info.status,
+      ...(aheadBehind !== undefined && {
+        ahead: aheadBehind.ahead,
+        behind: aheadBehind.behind,
+      }),
+      ...(info.workingTree !== undefined && {
+        staged: info.workingTree.staged,
+        unstaged: info.workingTree.unstaged,
+        untracked: info.workingTree.untracked,
+        conflicts: info.workingTree.conflicts,
+      }),
+      ...(sha !== undefined && { sha }),
+      ...(operation !== undefined && { operation }),
+      ...(timeSinceCommit !== undefined && { timeSinceCommit }),
+      ...(stash !== undefined && { stash }),
+      ...(upstream !== undefined && { upstream }),
+      ...(repoName !== undefined && { repoName }),
+    },
+    failures,
   };
 }

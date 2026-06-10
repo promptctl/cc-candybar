@@ -1,30 +1,47 @@
 import fs from "node:fs";
 import path from "node:path";
-import { launch } from "../proc/launch";
+import { launch, type LaunchResult } from "../proc/launch";
+import { ABSENT, failed, ok, type Outcome } from "../utils/outcome";
 import { debug } from "../utils/logger";
 
+export interface WorkingTree {
+  staged: number;
+  unstaged: number;
+  untracked: number;
+  conflicts: number;
+}
+
+export interface AheadBehind {
+  ahead: number;
+  behind: number;
+}
+
+// [LAW:types-are-the-program] Every on-demand field is an Outcome, so "this
+// value is unknown because the fetch failed" is representable distinct from
+// a real 0/""/basename — the states the old catch-and-substitute blocks
+// erased. An undefined field means "not requested" (its `show*` flag was
+// off); `absent` means the domain genuinely has none (no upstream, no tags,
+// no stash); `failed` carries the reason to the consuming boundary, which
+// owns the log effect. branch/status stay plain: a fetch that cannot
+// determine them is a failed fetch, not a GitInfo.
 export interface GitInfo {
   branch: string;
   status: "clean" | "dirty" | "conflicts";
-  ahead: number;
-  behind: number;
-  sha?: string;
-  staged?: number;
-  unstaged?: number;
-  untracked?: number;
-  conflicts?: number;
-  operation?: string;
-  tag?: string;
-  timeSinceCommit?: number;
-  stashCount?: number;
-  upstream?: string;
-  repoName?: string;
+  aheadBehind: Outcome<AheadBehind>;
+  workingTree?: WorkingTree;
+  sha?: Outcome<string>;
+  operation?: Outcome<string>;
+  tag?: Outcome<string>;
+  timeSinceCommit?: Outcome<number>;
+  stashCount?: Outcome<number>;
+  upstream?: Outcome<string>;
+  repoName?: Outcome<string>;
   isWorktree?: boolean;
 }
 
 // [LAW:one-source-of-truth] The one shape of getGitInfo's `show*` toggles. Each
 // flag opts into an extra git invocation; an unset flag leaves its GitInfo field
-// at the cheap default ("" / 0). Every caller that builds these options
+// undefined (not requested). Every caller that builds these options
 // (render-payload's gitOptionsFromClosure, the cache override) references THIS
 // type, so the toggle set cannot drift between producer and consumer.
 export interface GitInfoOptions {
@@ -38,6 +55,40 @@ export interface GitInfoOptions {
   showRepoName?: boolean;
 }
 
+// [LAW:dataflow-not-control-flow] One classifier for every git invocation.
+// Whether a non-zero exit is the domain answering "there is none" (describe
+// with no tags, rev-parse @{u} with no upstream) or a real failure is
+// per-command knowledge — it enters here as data, not as a catch block at
+// every callsite. Transport failures (timeout, spawn error, signal) are
+// always `failed`: git did not answer.
+function classify(
+  label: string,
+  result: LaunchResult,
+  nonZero: "absent" | "failed",
+): Outcome<string> {
+  if (result.ok) return ok(result.stdout);
+  if (result.reason === "non-zero" && nonZero === "absent") return ABSENT;
+  const detail = [
+    result.reason,
+    result.exitCode != null ? `exit ${result.exitCode}` : null,
+    result.error ?? firstLine(result.stderr),
+  ]
+    .filter(Boolean)
+    .join(", ");
+  return failed(`${label}: ${detail}`);
+}
+
+function firstLine(s: string): string {
+  return s.trim().split("\n", 1)[0] ?? "";
+}
+
+// Trim an ok stdout; an empty answer is the domain's "there is none".
+function nonEmpty(o: Outcome<string>): Outcome<string> {
+  if (o.kind !== "ok") return o;
+  const v = o.value.trim();
+  return v ? ok(v) : ABSENT;
+}
+
 export class GitService {
   private isGitRepo(workingDir: string): boolean {
     try {
@@ -49,14 +100,14 @@ export class GitService {
 
   // [LAW:types-are-the-program] args is a string[] so the boundary type
   // forbids the only-space-free-arguments contract the prior whitespace-split
-  // implementation relied on. Future callsites that need to pass a path with
-  // spaces or a commit message simply pass it as one element; there is no
-  // re-splitting downstream that could mis-tokenize.
+  // implementation relied on. Returns the full LaunchResult — the typed
+  // termination cause `launch` already computed — so `classify` can map it to
+  // an Outcome without a thrown Error flattening that information away.
   private async execGitAsync(
     args: readonly string[],
     options: { cwd: string; timeout: number },
-  ): Promise<{ stdout: string }> {
-    const result = await launch({
+  ): Promise<LaunchResult> {
+    return launch({
       bin: "git",
       args: [...args],
       cwd: options.cwd,
@@ -64,12 +115,6 @@ export class GitService {
       timeoutMs: options.timeout,
       category: "git",
     });
-    if (!result.ok) {
-      throw new Error(
-        `git ${args.join(" ")} failed (${result.reason}, exit ${result.exitCode ?? "null"})`,
-      );
-    }
-    return { stdout: result.stdout };
   }
 
   // [LAW:locality-or-seam] Public so the daemon's GitDataProvider can key its
@@ -84,45 +129,55 @@ export class GitService {
   async resolveEffectiveGitDir(
     workingDir: string,
     projectDir?: string,
-  ): Promise<string | null> {
-    if (this.isWorktree(workingDir)) return workingDir;
-    if (projectDir && this.isGitRepo(projectDir)) return projectDir;
-    if (this.isGitRepo(workingDir)) return workingDir;
+  ): Promise<Outcome<string>> {
+    if (this.isWorktree(workingDir)) return ok(workingDir);
+    if (projectDir && this.isGitRepo(projectDir)) return ok(projectDir);
+    if (this.isGitRepo(workingDir)) return ok(workingDir);
     return this.findGitRoot(workingDir);
   }
 
   // [LAW:locality-or-seam] public so daemon-side caches can key on the
-  // repoRoot they'd otherwise have to re-derive.
-  async findGitRoot(workingDir: string): Promise<string | null> {
-    try {
-      const result = await this.execGitAsync(["rev-parse", "--show-toplevel"], {
-        cwd: workingDir,
-        timeout: 2000,
-      });
-      const gitRoot = result.stdout.trim();
-      return gitRoot || null;
-    } catch {
-      return null;
-    }
+  // repoRoot they'd otherwise have to re-derive. `absent` is rev-parse's
+  // non-zero exit — "not in a git repository", the everyday domain answer.
+  async findGitRoot(workingDir: string): Promise<Outcome<string>> {
+    return nonEmpty(
+      classify(
+        "git rev-parse --show-toplevel",
+        await this.execGitAsync(["rev-parse", "--show-toplevel"], {
+          cwd: workingDir,
+          timeout: 2000,
+        }),
+        "absent",
+      ),
+    );
   }
 
   // [LAW:one-source-of-truth] No inner cache here. The daemon-side
   // GitDataProvider (src/daemon/cache/git.ts) is the single cache. Layering
   // a per-process cache on top of an already-cached call would double the
   // invalidation surface — exactly the trap that kz8.3 collapses.
+  //
+  // [LAW:no-silent-failure] Never rejects: helpers return outcomes by
+  // construction, and an unexpected throw (a bug) is surfaced as a `failed`
+  // outcome whose reason reaches the consuming boundary's log — not a blank
+  // bar, not a swallowed branch.
   async getGitInfo(
     workingDir: string,
     options: GitInfoOptions = {},
     projectDir?: string,
-  ): Promise<GitInfo | null> {
-    return this.computeGitInfo(workingDir, options, projectDir);
+  ): Promise<Outcome<GitInfo>> {
+    try {
+      return await this.computeGitInfo(workingDir, options, projectDir);
+    } catch (e) {
+      return failed(`git: ${e instanceof Error ? e.message : String(e)}`);
+    }
   }
 
   private async computeGitInfo(
     workingDir: string,
     options: GitInfoOptions = {},
     projectDir?: string,
-  ): Promise<GitInfo | null> {
+  ): Promise<Outcome<GitInfo>> {
     let gitDir: string;
     const isWorktreeDir = this.isWorktree(workingDir);
 
@@ -136,130 +191,73 @@ export class GitService {
       gitDir = workingDir;
     } else {
       const foundGitRoot = await this.findGitRoot(workingDir);
-      if (!foundGitRoot) {
-        return null;
-      }
-      gitDir = foundGitRoot;
+      if (foundGitRoot.kind !== "ok") return foundGitRoot;
+      gitDir = foundGitRoot.value;
     }
 
-    try {
-      const statusWithBranch = await this.getStatusWithBranchAsync(gitDir);
-      const aheadBehind = await this.getAheadBehindAsync(gitDir);
+    // branch/status are the core: without them there is no useful GitInfo,
+    // so a failed core fetch fails the whole outcome rather than dressing
+    // up as a clean repo on a fallback branch.
+    const core = await this.getStatusWithBranchAsync(gitDir);
+    if (core.kind !== "ok") return core;
+    const aheadBehind = await this.getAheadBehindAsync(gitDir);
 
-      const result: GitInfo = {
-        branch: statusWithBranch.branch || "detached",
-        status: statusWithBranch.status,
-        ahead: aheadBehind.ahead,
-        behind: aheadBehind.behind,
-      };
+    const result: GitInfo = {
+      branch: core.value.branch,
+      status: core.value.status,
+      aheadBehind,
+    };
 
-      if (options.showWorkingTree && statusWithBranch.workingTree) {
-        result.staged = statusWithBranch.workingTree.staged;
-        result.unstaged = statusWithBranch.workingTree.unstaged;
-        result.untracked = statusWithBranch.workingTree.untracked;
-        result.conflicts = statusWithBranch.workingTree.conflicts;
-      }
-
-      const heavyOperations: Record<string, Promise<unknown>> = {};
-      const lightOperations: Record<string, Promise<unknown>> = {};
-
-      if (options.showSha) {
-        heavyOperations.sha = this.getShaAsync(gitDir);
-      }
-
-      if (options.showTag) {
-        heavyOperations.tag = this.getNearestTagAsync(gitDir);
-      }
-
-      if (options.showTimeSinceCommit) {
-        heavyOperations.timeSinceCommit =
-          this.getTimeSinceLastCommitAsync(gitDir);
-      }
-
-      if (options.showStashCount) {
-        lightOperations.stashCount = this.getStashCountAsync(gitDir);
-      }
-
-      if (options.showUpstream) {
-        lightOperations.upstream = this.getUpstreamAsync(gitDir);
-      }
-
-      if (options.showRepoName) {
-        lightOperations.repoName = this.getRepoNameAsync(gitDir);
-      }
-
-      const resultMap = new Map<string, unknown>();
-
-      for (const [key, promise] of Object.entries(heavyOperations)) {
-        try {
-          const value = await promise;
-          resultMap.set(key, value);
-        } catch {}
-      }
-
-      if (Object.keys(lightOperations).length > 0) {
-        const lightResults = await Promise.allSettled(
-          Object.entries(lightOperations).map(async ([key, promise]) => ({
-            key,
-            value: await promise,
-          })),
-        );
-
-        lightResults.forEach((result) => {
-          if (result.status === "fulfilled") {
-            resultMap.set(result.value.key, result.value.value);
-          }
-        });
-      }
-
-      if (options.showSha) {
-        result.sha = (resultMap.get("sha") as string) || undefined;
-      }
-
-      if (options.showOperation) {
-        result.operation = this.getOngoingOperation(gitDir) || undefined;
-      }
-
-      if (options.showTag) {
-        result.tag = (resultMap.get("tag") as string) || undefined;
-      }
-
-      if (options.showTimeSinceCommit) {
-        result.timeSinceCommit =
-          (resultMap.get("timeSinceCommit") as number) || undefined;
-      }
-
-      if (options.showStashCount) {
-        result.stashCount = (resultMap.get("stashCount") as number) || 0;
-      }
-
-      if (options.showUpstream) {
-        result.upstream = (resultMap.get("upstream") as string) || undefined;
-      }
-
-      if (options.showRepoName) {
-        result.repoName = (resultMap.get("repoName") as string) || undefined;
-        result.isWorktree = isWorktreeDir;
-      }
-
-      return result;
-    } catch {
-      return null;
+    if (options.showWorkingTree) {
+      result.workingTree = core.value.workingTree;
     }
+
+    // Heavy operations stay serial — each is an expensive git invocation and
+    // running them one at a time bounds concurrent git load per fetch.
+    if (options.showSha) {
+      result.sha = await this.getShaAsync(gitDir);
+    }
+    if (options.showTag) {
+      result.tag = await this.getNearestTagAsync(gitDir);
+    }
+    if (options.showTimeSinceCommit) {
+      result.timeSinceCommit = await this.getTimeSinceLastCommitAsync(gitDir);
+    }
+
+    // Light operations run in parallel. Helpers never reject — failure is a
+    // value in the outcome — so plain Promise.all replaces the allSettled +
+    // untyped resultMap machinery the swallowing design required.
+    const [stashCount, upstream, repoName] = await Promise.all([
+      options.showStashCount ? this.getStashCountAsync(gitDir) : undefined,
+      options.showUpstream ? this.getUpstreamAsync(gitDir) : undefined,
+      options.showRepoName ? this.getRepoNameAsync(gitDir) : undefined,
+    ]);
+    if (stashCount !== undefined) result.stashCount = stashCount;
+    if (upstream !== undefined) result.upstream = upstream;
+    if (repoName !== undefined) {
+      result.repoName = repoName;
+      result.isWorktree = isWorktreeDir;
+    }
+
+    if (options.showOperation) {
+      result.operation = this.getOngoingOperation(gitDir);
+    }
+
+    return ok(result);
   }
 
-  private async getShaAsync(workingDir: string): Promise<string | null> {
-    try {
-      const result = await this.execGitAsync(
-        ["rev-parse", "--short=7", "HEAD"],
-        { cwd: workingDir, timeout: 2000 },
-      );
-      const sha = result.stdout.trim();
-
-      return sha || null;
-    } catch {
-      return null;
-    }
+  private async getShaAsync(workingDir: string): Promise<Outcome<string>> {
+    // non-zero = no HEAD to resolve (empty repo) — a domain answer.
+    return nonEmpty(
+      classify(
+        "git rev-parse HEAD",
+        await this.execGitAsync(["rev-parse", "--short=7", "HEAD"], {
+          cwd: workingDir,
+          timeout: 2000,
+        }),
+        "absent",
+      ),
+    );
   }
 
   // [LAW:locality-or-seam] Public so the daemon-side provider can watch the
@@ -290,105 +288,123 @@ export class GitService {
     return dotGit;
   }
 
-  private getOngoingOperation(workingDir: string): string | null {
+  private getOngoingOperation(workingDir: string): Outcome<string> {
     try {
       const gitDir = this.resolveGitDir(workingDir);
 
-      if (fs.existsSync(path.join(gitDir, "MERGE_HEAD"))) return "MERGE";
+      if (fs.existsSync(path.join(gitDir, "MERGE_HEAD"))) return ok("MERGE");
       if (fs.existsSync(path.join(gitDir, "CHERRY_PICK_HEAD")))
-        return "CHERRY-PICK";
-      if (fs.existsSync(path.join(gitDir, "REVERT_HEAD"))) return "REVERT";
-      if (fs.existsSync(path.join(gitDir, "BISECT_LOG"))) return "BISECT";
+        return ok("CHERRY-PICK");
+      if (fs.existsSync(path.join(gitDir, "REVERT_HEAD"))) return ok("REVERT");
+      if (fs.existsSync(path.join(gitDir, "BISECT_LOG"))) return ok("BISECT");
       if (
         fs.existsSync(path.join(gitDir, "rebase-merge")) ||
         fs.existsSync(path.join(gitDir, "rebase-apply"))
       )
-        return "REBASE";
+        return ok("REBASE");
 
-      return null;
-    } catch {
-      return null;
+      return ABSENT;
+    } catch (e) {
+      return failed(
+        `git operation probe: ${e instanceof Error ? e.message : String(e)}`,
+      );
     }
   }
 
-  private async getNearestTagAsync(workingDir: string): Promise<string | null> {
-    try {
-      const result = await this.execGitAsync(
-        ["describe", "--tags", "--abbrev=0"],
-        { cwd: workingDir, timeout: 2000 },
-      );
-      const tag = result.stdout.trim();
-
-      return tag || null;
-    } catch {
-      return null;
-    }
+  private async getNearestTagAsync(
+    workingDir: string,
+  ): Promise<Outcome<string>> {
+    // non-zero = no tags reachable — describe's domain answer.
+    return nonEmpty(
+      classify(
+        "git describe --tags",
+        await this.execGitAsync(["describe", "--tags", "--abbrev=0"], {
+          cwd: workingDir,
+          timeout: 2000,
+        }),
+        "absent",
+      ),
+    );
   }
 
   private async getTimeSinceLastCommitAsync(
     workingDir: string,
-  ): Promise<number | null> {
-    try {
-      const result = await this.execGitAsync(["log", "-1", "--format=%ct"], {
+  ): Promise<Outcome<number>> {
+    // non-zero = no commits yet (empty repo) — a domain answer.
+    const r = nonEmpty(
+      classify(
+        "git log -1",
+        await this.execGitAsync(["log", "-1", "--format=%ct"], {
+          cwd: workingDir,
+          timeout: 2000,
+        }),
+        "absent",
+      ),
+    );
+    if (r.kind !== "ok") return r;
+
+    const commitTime = parseInt(r.value) * 1000;
+    if (Number.isNaN(commitTime)) {
+      return failed(`git log -1: unparseable timestamp "${r.value}"`);
+    }
+    const now = Date.now();
+    return ok(Math.floor((now - commitTime) / 1000));
+  }
+
+  private async getStashCountAsync(
+    workingDir: string,
+  ): Promise<Outcome<number>> {
+    // An empty stash list is a REAL count of 0; only a transport/exit failure
+    // is `failed` — the meaning-erasure the old catch-to-0 created is
+    // unrepresentable now. `stash list` never exits non-zero as an answer.
+    const r = classify(
+      "git stash list",
+      await this.execGitAsync(["stash", "list"], {
         cwd: workingDir,
         timeout: 2000,
-      });
-      const timestamp = result.stdout.trim();
-
-      if (!timestamp) return null;
-
-      const commitTime = parseInt(timestamp) * 1000;
-      const now = Date.now();
-      return Math.floor((now - commitTime) / 1000);
-    } catch {
-      return null;
-    }
+      }),
+      "failed",
+    );
+    if (r.kind !== "ok") return r;
+    const stashList = r.value.trim();
+    return ok(stashList ? stashList.split("\n").length : 0);
   }
 
-  private async getStashCountAsync(workingDir: string): Promise<number> {
-    try {
-      const result = await this.execGitAsync(["stash", "list"], {
+  private async getUpstreamAsync(workingDir: string): Promise<Outcome<string>> {
+    // non-zero = no upstream configured — the everyday domain answer.
+    return nonEmpty(
+      classify(
+        "git rev-parse @{u}",
+        await this.execGitAsync(["rev-parse", "--abbrev-ref", "@{u}"], {
+          cwd: workingDir,
+          timeout: 2000,
+        }),
+        "absent",
+      ),
+    );
+  }
+
+  private async getRepoNameAsync(workingDir: string): Promise<Outcome<string>> {
+    const r = classify(
+      "git config remote.origin.url",
+      await this.execGitAsync(["config", "--get", "remote.origin.url"], {
         cwd: workingDir,
         timeout: 2000,
-      });
-      const stashList = result.stdout.trim();
+      }),
+      // `config --get` exits 1 when the key is unset — "no remote", a domain
+      // answer, not a failure.
+      "absent",
+    );
+    if (r.kind === "failed") return r;
 
-      if (!stashList) return 0;
-      return stashList.split("\n").length;
-    } catch {
-      return 0;
-    }
-  }
+    // A local-only repo's name is its directory name BY POLICY (the display
+    // contract for repos without a remote) — never as an error fallback; a
+    // failed `git config` above stays failed instead of borrowing this rule.
+    const remoteUrl = r.kind === "ok" ? r.value.trim() : "";
+    if (!remoteUrl) return ok(path.basename(workingDir));
 
-  private async getUpstreamAsync(workingDir: string): Promise<string | null> {
-    try {
-      const result = await this.execGitAsync(
-        ["rev-parse", "--abbrev-ref", "@{u}"],
-        { cwd: workingDir, timeout: 2000 },
-      );
-      const upstream = result.stdout.trim();
-
-      return upstream || null;
-    } catch {
-      return null;
-    }
-  }
-
-  private async getRepoNameAsync(workingDir: string): Promise<string | null> {
-    try {
-      const result = await this.execGitAsync(
-        ["config", "--get", "remote.origin.url"],
-        { cwd: workingDir, timeout: 2000 },
-      );
-      const remoteUrl = result.stdout.trim();
-
-      if (!remoteUrl) return path.basename(workingDir);
-
-      const match = remoteUrl.match(/\/([^/]+?)(\.git)?$/);
-      return match?.[1] || path.basename(workingDir);
-    } catch {
-      return path.basename(workingDir);
-    }
+    const match = remoteUrl.match(/\/([^/]+?)(\.git)?$/);
+    return ok(match?.[1] || path.basename(workingDir));
   }
 
   private isWorktree(workingDir: string): boolean {
@@ -403,137 +419,143 @@ export class GitService {
     }
   }
 
-  private async getStatusWithBranchAsync(workingDir: string): Promise<{
-    branch: string | null;
-    status: "clean" | "dirty" | "conflicts";
-    workingTree?: {
-      staged: number;
-      unstaged: number;
-      untracked: number;
-      conflicts: number;
-    };
-  }> {
-    try {
-      debug(`[GIT-EXEC] Running git status in ${workingDir}`);
-      const result = await this.execGitAsync(["status", "--porcelain", "-b"], {
+  private async getStatusWithBranchAsync(workingDir: string): Promise<
+    Outcome<{
+      branch: string;
+      status: "clean" | "dirty" | "conflicts";
+      workingTree: WorkingTree;
+    }>
+  > {
+    debug(`[GIT-EXEC] Running git status in ${workingDir}`);
+    const r = classify(
+      "git status --porcelain -b",
+      await this.execGitAsync(["status", "--porcelain", "-b"], {
         cwd: workingDir,
         timeout: 2000,
-      });
-      const output = result.stdout;
-      const lines = output.split("\n");
+      }),
+      // `git status` has no non-zero domain answer; any failure means the
+      // core state is unknown — no fabricated "clean" on a fallback branch.
+      "failed",
+    );
+    if (r.kind !== "ok") return r;
 
-      let branch: string | null = null;
-      let status: "clean" | "dirty" | "conflicts" = "clean";
-      let staged = 0;
-      let unstaged = 0;
-      let untracked = 0;
-      let conflicts = 0;
+    const lines = r.value.split("\n");
 
-      for (const line of lines) {
-        if (!line) continue;
+    let branch: string | null = null;
+    let status: "clean" | "dirty" | "conflicts" = "clean";
+    let staged = 0;
+    let unstaged = 0;
+    let untracked = 0;
+    let conflicts = 0;
 
-        if (line.startsWith("## ")) {
-          const branchLine = line.substring(3);
-          const branchMatch = branchLine.split("...")[0];
-          if (branchMatch && branchMatch !== "HEAD (no branch)") {
-            branch = branchMatch;
-          }
+    for (const line of lines) {
+      if (!line) continue;
+
+      if (line.startsWith("## ")) {
+        const branchLine = line.substring(3);
+        const branchMatch = branchLine.split("...")[0];
+        if (branchMatch && branchMatch !== "HEAD (no branch)") {
+          branch = branchMatch;
+        }
+        continue;
+      }
+
+      if (line.length >= 2) {
+        const indexStatus = line.charAt(0);
+        const worktreeStatus = line.charAt(1);
+
+        if (indexStatus === "?" && worktreeStatus === "?") {
+          untracked++;
+          if (status === "clean") status = "dirty";
           continue;
         }
 
-        if (line.length >= 2) {
-          const indexStatus = line.charAt(0);
-          const worktreeStatus = line.charAt(1);
+        const statusPair = indexStatus + worktreeStatus;
+        if (["DD", "AU", "UD", "UA", "DU", "AA", "UU"].includes(statusPair)) {
+          conflicts++;
+          status = "conflicts";
+          continue;
+        }
 
-          if (indexStatus === "?" && worktreeStatus === "?") {
-            untracked++;
-            if (status === "clean") status = "dirty";
-            continue;
-          }
-
-          const statusPair = indexStatus + worktreeStatus;
-          if (["DD", "AU", "UD", "UA", "DU", "AA", "UU"].includes(statusPair)) {
-            conflicts++;
-            status = "conflicts";
-            continue;
-          }
-
-          if (indexStatus !== " " && indexStatus !== "?") {
-            staged++;
-            if (status === "clean") status = "dirty";
-          }
-          if (worktreeStatus !== " " && worktreeStatus !== "?") {
-            unstaged++;
-            if (status === "clean") status = "dirty";
-          }
+        if (indexStatus !== " " && indexStatus !== "?") {
+          staged++;
+          if (status === "clean") status = "dirty";
+        }
+        if (worktreeStatus !== " " && worktreeStatus !== "?") {
+          unstaged++;
+          if (status === "clean") status = "dirty";
         }
       }
-
-      return {
-        branch: branch || (await this.getFallbackBranch(workingDir)),
-        status,
-        workingTree: { staged, unstaged, untracked, conflicts },
-      };
-    } catch (error) {
-      debug(`Git status with branch command failed in ${workingDir}:`, error);
-      return {
-        branch: await this.getFallbackBranch(workingDir),
-        status: "clean",
-      };
     }
+
+    if (branch === null) {
+      const fallback = await this.getFallbackBranch(workingDir);
+      // A transport failure resolving the branch fails the core: rendering
+      // a fake "detached" for a repo whose branch merely couldn't be read
+      // would be the same meaning-erasure this type exists to forbid.
+      if (fallback.kind === "failed") return fallback;
+      branch = fallback.kind === "ok" ? fallback.value : "detached";
+    }
+
+    return ok({
+      branch,
+      status,
+      workingTree: { staged, unstaged, untracked, conflicts },
+    });
   }
 
-  private async getFallbackBranch(workingDir: string): Promise<string | null> {
-    try {
-      const result = await this.execGitAsync(["branch", "--show-current"], {
+  private async getFallbackBranch(
+    workingDir: string,
+  ): Promise<Outcome<string>> {
+    // Both commands answer "detached" with a non-zero exit (symbolic-ref) or
+    // empty output (show-current) — `absent` means genuinely detached.
+    const primary = nonEmpty(
+      classify(
+        "git branch --show-current",
+        await this.execGitAsync(["branch", "--show-current"], {
+          cwd: workingDir,
+          timeout: 2000,
+        }),
+        "absent",
+      ),
+    );
+    if (primary.kind !== "absent") return primary;
+    return nonEmpty(
+      classify(
+        "git symbolic-ref HEAD",
+        await this.execGitAsync(["symbolic-ref", "--short", "HEAD"], {
+          cwd: workingDir,
+          timeout: 2000,
+        }),
+        "absent",
+      ),
+    );
+  }
+
+  private async getAheadBehindAsync(
+    workingDir: string,
+  ): Promise<Outcome<AheadBehind>> {
+    debug(`[GIT-EXEC] Running git ahead/behind in ${workingDir}`);
+    const [aheadResult, behindResult] = await Promise.all([
+      this.execGitAsync(["rev-list", "--count", "@{u}..HEAD"], {
         cwd: workingDir,
         timeout: 2000,
-      });
-      const branch = result.stdout.trim();
-      if (branch) {
-        return branch;
-      }
-    } catch {
-      try {
-        const result = await this.execGitAsync(
-          ["symbolic-ref", "--short", "HEAD"],
-          { cwd: workingDir, timeout: 2000 },
-        );
-        const branch = result.stdout.trim();
-        if (branch) {
-          return branch;
-        }
-      } catch {
-        return null;
-      }
-    }
-    return null;
-  }
-
-  private async getAheadBehindAsync(workingDir: string): Promise<{
-    ahead: number;
-    behind: number;
-  }> {
-    try {
-      debug(`[GIT-EXEC] Running git ahead/behind in ${workingDir}`);
-      const [aheadResult, behindResult] = await Promise.all([
-        this.execGitAsync(["rev-list", "--count", "@{u}..HEAD"], {
-          cwd: workingDir,
-          timeout: 2000,
-        }),
-        this.execGitAsync(["rev-list", "--count", "HEAD..@{u}"], {
-          cwd: workingDir,
-          timeout: 2000,
-        }),
-      ]);
-
-      return {
-        ahead: parseInt(aheadResult.stdout.trim()) || 0,
-        behind: parseInt(behindResult.stdout.trim()) || 0,
-      };
-    } catch (error) {
-      debug(`Git ahead/behind command failed in ${workingDir}:`, error);
-      return { ahead: 0, behind: 0 };
-    }
+      }),
+      this.execGitAsync(["rev-list", "--count", "HEAD..@{u}"], {
+        cwd: workingDir,
+        timeout: 2000,
+      }),
+    ]);
+    // non-zero = no upstream to compare against — the domain answer for any
+    // local-only branch, distinct from a transport failure.
+    const ahead = classify("git rev-list @{u}..HEAD", aheadResult, "absent");
+    const behind = classify("git rev-list HEAD..@{u}", behindResult, "absent");
+    if (ahead.kind === "failed") return ahead;
+    if (behind.kind === "failed") return behind;
+    if (ahead.kind === "absent" || behind.kind === "absent") return ABSENT;
+    return ok({
+      ahead: parseInt(ahead.value.trim()) || 0,
+      behind: parseInt(behind.value.trim()) || 0,
+    });
   }
 }
