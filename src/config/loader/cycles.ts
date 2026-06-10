@@ -102,25 +102,16 @@ function buildTemplateGraph(cfg: DslConfig): {
   const graph = new Map<string, Set<string>>();
   for (const name of allVarNames) graph.set(name, new Set());
 
-  // segCtx resolves bare refs like `.local` to `${segCtx}.local` when that
-  // namespaced form is a declared var — matches how segment-local refs resolve
-  // at runtime (scope proxy walks own segment's vars first).
-  const addTemplateEdges = (
-    from: string,
-    template: string,
-    segCtx?: string,
-  ): void => {
+  // [LAW:one-source-of-truth] Edges resolve refs exactly as the runtime scope
+  // proxy does: a ref is the literal store key (globals bare, segment locals
+  // namespaced as segName.varName) — never re-derived per segment. Bare
+  // own-segment refs are not aliased here because the runtime has no such
+  // aliasing; cross-ref rejects them at load with the namespaced suggestion.
+  const addTemplateEdges = (from: string, template: string): void => {
     for (const ref of extractTemplateRefs(template)) {
       if (allVarNames.has(ref)) {
         graph.get(from)!.add(ref);
         continue;
-      }
-      if (segCtx) {
-        const namespaced = `${segCtx}.${ref}`;
-        if (allVarNames.has(namespaced)) {
-          graph.get(from)!.add(namespaced);
-          continue;
-        }
       }
       // Resolve "first identifier" — `.session.id` may indicate dependence on
       // `session` if that's the declared var (matches scope.ts proxy walk).
@@ -131,15 +122,10 @@ function buildTemplateGraph(cfg: DslConfig): {
     }
   };
 
-  const addVarEdges = (
-    name: string,
-    v: VariableDecl,
-    segCtx?: string,
-  ): void => {
-    if (v.kind === "template") addTemplateEdges(name, v.template, segCtx);
+  const addVarEdges = (name: string, v: VariableDecl): void => {
+    if (v.kind === "template") addTemplateEdges(name, v.template);
     if (hasCacheField(v)) {
-      if (v.cache && "key" in v.cache)
-        addTemplateEdges(name, v.cache.key, segCtx);
+      if (v.cache && "key" in v.cache) addTemplateEdges(name, v.cache.key);
       if (v.cache && "depends_on" in v.cache) {
         for (const dep of v.cache.depends_on) {
           if (allVarNames.has(dep)) graph.get(name)!.add(dep);
@@ -154,7 +140,7 @@ function buildTemplateGraph(cfg: DslConfig): {
   for (const [segName, seg] of Object.entries(cfg.segments)) {
     if (!seg.vars) continue;
     for (const [vName, vDecl] of Object.entries(seg.vars)) {
-      addVarEdges(`${segName}.${vName}`, vDecl, segName);
+      addVarEdges(`${segName}.${vName}`, vDecl);
     }
   }
 

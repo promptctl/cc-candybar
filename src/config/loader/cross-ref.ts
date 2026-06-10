@@ -26,14 +26,31 @@ export function validateCrossReferences(
   ctx: ValidateCtx,
   cfg: DslConfig,
 ): void {
-  // Full set for depends_on validation (all names, bare + namespaced). depends_on
-  // takes explicit fully-qualified names, so cross-segment visibility is intentional.
+  // Set for depends_on validation only (bare + namespaced segment-local names).
+  // depends_on is a literal name list, not a template ref — its runtime
+  // resolution (store.read per name) and the bare-name admission here are a
+  // separate pre-existing contract, deliberately untouched by the
+  // template-scope tightening below.
   const allVarNames = new Set<string>(Object.keys(cfg.variables));
   for (const [segName, seg] of Object.entries(cfg.segments)) {
     if (seg.vars) {
       for (const v of Object.keys(seg.vars)) allVarNames.add(v);
       for (const v of Object.keys(seg.vars)) allVarNames.add(`${segName}.${v}`);
     }
+  }
+
+  // [LAW:one-source-of-truth] THE set of names a template may reference — a
+  // faithful mirror of the runtime store's key set (declareOne in
+  // src/dsl/render.ts registers globals under their bare names and segment
+  // locals under segName.varName, nothing else). The runtime scope proxy
+  // (src/template-engine/scope.ts) resolves only keys literally present in
+  // the store, so exactly the names in this set resolve at render. One set
+  // for every template, wherever it appears: a ref's meaning is a pure
+  // function of the ref string, never of which segment is rendering.
+  const templateScope = new Set<string>(Object.keys(cfg.variables));
+  for (const [segName, seg] of Object.entries(cfg.segments)) {
+    if (!seg.vars) continue;
+    for (const v of Object.keys(seg.vars)) templateScope.add(`${segName}.${v}`);
   }
 
   // [LAW:single-enforcer] ONE pre-order walk over the canonical node tree owns
@@ -57,13 +74,9 @@ export function validateCrossReferences(
     // globals + namespaced segment vars) — the same existence-check shape as a
     // segment template, surfaced at load time.
     if (node.when !== undefined) {
-      checkTemplateRefs(
-        ctx,
-        `${layoutKey}.when`,
-        node.when,
-        allVarNames,
-        layoutLine,
-      );
+      checkTemplateRefs(ctx, `${layoutKey}.when`, node.when, templateScope, {
+        line: layoutLine,
+      });
     }
     if (node.kind !== "segment") continue;
     if (!Object.prototype.hasOwnProperty.call(cfg.segments, node.name)) {
@@ -78,26 +91,25 @@ export function validateCrossReferences(
   // For each variable's template/cache.key, every dotted ref must exist
   // (full path OR a prefix that matches an existing variable's namespace).
   for (const [name, v] of Object.entries(cfg.variables)) {
-    checkVarRefs(ctx, `variables.${name}`, v, allVarNames);
+    checkVarRefs(ctx, `variables.${name}`, v, templateScope);
   }
 
   for (const [segName, seg] of Object.entries(cfg.segments)) {
-    // [LAW:single-enforcer] Per-segment scope: global vars + this segment's
-    // locals (bare + namespaced) + other segments' vars (namespaced ONLY).
-    // Matches runtime scope-proxy rules: own locals visible by bare name;
-    // cross-segment refs require the qualified segName.varName form.
-    const segScope = new Set<string>(Object.keys(cfg.variables));
-    for (const [otherSeg, otherSegDecl] of Object.entries(cfg.segments)) {
-      if (!otherSegDecl.vars) continue;
-      for (const vName of Object.keys(otherSegDecl.vars)) {
-        if (otherSeg === segName) segScope.add(vName); // own: bare form
-        segScope.add(`${otherSeg}.${vName}`); // all: namespaced form
-      }
-    }
-
+    // [LAW:one-source-of-truth] Segment templates check against the SAME
+    // templateScope as everything else — segment locals resolve via the
+    // namespaced segName.varName form only, exactly as the runtime store
+    // keys them. The segment name is passed purely as a diagnostic hint: a
+    // bare ref to an own local is rejected with a message naming the
+    // namespaced form the author should write.
     if (seg.vars) {
       for (const [vName, vDecl] of Object.entries(seg.vars)) {
-        checkVarRefs(ctx, `segments.${segName}.vars.${vName}`, vDecl, segScope);
+        checkVarRefs(
+          ctx,
+          `segments.${segName}.vars.${vName}`,
+          vDecl,
+          templateScope,
+          segName,
+        );
       }
     }
     // [LAW:locality-or-seam] Variable refs AND `{{ action }}`/`{{ picker }}` refs
@@ -108,7 +120,15 @@ export function validateCrossReferences(
     for (const field of ["template", "bg", "fg", "when"] as const) {
       const tpl = seg[field];
       if (typeof tpl !== "string") continue;
-      checkTemplateRefs(ctx, `segments.${segName}.${field}`, tpl, segScope);
+      checkTemplateRefs(
+        ctx,
+        `segments.${segName}.${field}`,
+        tpl,
+        templateScope,
+        {
+          segCtx: segName,
+        },
+      );
       // [LAW:locality-or-seam] `{{ action "name" … }}` refs resolve against the
       // action table on the merged config so a segment can reference a
       // default-provided action.
@@ -213,13 +233,18 @@ function checkVarRefs(
   declPath: string,
   v: VariableDecl,
   allVars: Set<string>,
+  segCtx?: string,
 ): void {
   if (v.kind === "template") {
-    checkTemplateRefs(ctx, `${declPath}.template`, v.template, allVars);
+    checkTemplateRefs(ctx, `${declPath}.template`, v.template, allVars, {
+      segCtx,
+    });
   }
   if (hasCacheField(v)) {
     if (v.cache && "key" in v.cache) {
-      checkTemplateRefs(ctx, `${declPath}.cache.key`, v.cache.key, allVars);
+      checkTemplateRefs(ctx, `${declPath}.cache.key`, v.cache.key, allVars, {
+        segCtx,
+      });
     }
   }
 }
@@ -254,18 +279,31 @@ function checkTemplateRefs(
   declPath: string,
   template: string,
   allVars: Set<string>,
-  // [LAW:one-source-of-truth] Callers whose `declPath` is not a literal key path
-  // into the source (a node `when`, whose canonical tree position no longer maps
-  // to a source key after the layout/root merge) pass the already-resolved line
-  // explicitly. Absent, the line is derived from the dotted declPath as before.
-  line?: number,
+  opts?: {
+    // [LAW:one-source-of-truth] Callers whose `declPath` is not a literal key
+    // path into the source (a node `when`, whose canonical tree position no
+    // longer maps to a source key after the layout/root merge) pass the
+    // already-resolved line explicitly. Absent, the line is derived from the
+    // dotted declPath as before.
+    line?: number;
+    // The segment whose template is being checked — a diagnostic hint only,
+    // never a resolution rule. When a failing bare ref would resolve under
+    // this segment's namespace, the message names the namespaced form.
+    segCtx?: string;
+  },
 ): void {
   for (const ref of extractTemplateRefs(template)) {
     if (refResolves(ref, allVars)) continue;
+    const namespaced =
+      opts?.segCtx !== undefined ? `${opts.segCtx}.${ref}` : undefined;
+    const hint =
+      namespaced !== undefined && refResolves(namespaced, allVars)
+        ? ` (segment-local vars are namespaced — write ".${namespaced}")`
+        : "";
     ctx.issues.push({
       path: declPath,
-      message: `Template references unknown variable ".${ref}"`,
-      line: line ?? findKeyLine(ctx.source, declPath.split(".")),
+      message: `Template references unknown variable ".${ref}"${hint}`,
+      line: opts?.line ?? findKeyLine(ctx.source, declPath.split(".")),
     });
   }
 }

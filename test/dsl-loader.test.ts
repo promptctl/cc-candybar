@@ -812,17 +812,62 @@ describe("loadDslConfig — cross-references", () => {
     expect(cfg.variables.recent!.kind).toBe("shell");
   });
 
-  test("segment-local vars visible to that segment's template", () => {
-    const cfg = parseAndValidate(
-      FILE,
+  test("bare ref to own segment-local var is rejected with namespaced suggestion", () => {
+    // [LAW:one-source-of-truth] The runtime stores segment locals ONLY under
+    // segName.varName and the scope proxy resolves only literal store keys —
+    // a bare own-segment ref always throws MissingFieldError at render. The
+    // validator enforces the same rule at load, and names the form that works.
+    expectIssue(
       `{ segments: {
         s: {
           template: "{{ .local }}",
           vars: { local: { kind: "literal", value: "hi" } }
         }
       }}`,
+      {
+        path: "segments.s.template",
+        message:
+          'Template references unknown variable ".local" (segment-local vars are namespaced — write ".s.local")',
+      },
     );
-    expect(cfg.segments.s!.vars?.local!.kind).toBe("literal");
+  });
+
+  test("bare ref to a sibling local from a segment var template gets the suggestion too", () => {
+    expectIssue(
+      `{ segments: {
+        s: {
+          template: "{{ .s.b }}",
+          vars: {
+            a: { kind: "literal", value: "1" },
+            b: { kind: "template", template: "{{ .a }}" }
+          }
+        }
+      }}`,
+      {
+        path: "segments.s.vars.b.template",
+        message:
+          'Template references unknown variable ".a" (segment-local vars are namespaced — write ".s.a")',
+      },
+    );
+  });
+
+  test("bare segment-local ref outside any segment context is plainly unknown", () => {
+    // A global template var has no owning segment — no namespaced hint, just
+    // the unknown-variable diagnostic.
+    expectIssue(
+      `{ variables: { g: { kind: "template", template: "{{ .local }}" } },
+         segments: {
+        s: {
+          template: "{{ .s.local }}",
+          vars: { local: { kind: "literal", value: "hi" } }
+        }
+      }}`,
+      {
+        path: "variables.g.template",
+        // End-anchored: no namespaced hint outside a segment context.
+        message: /Template references unknown variable "\.local"$/,
+      },
+    );
   });
 
   test("segment-local var namespaced ref passes from same segment", () => {
