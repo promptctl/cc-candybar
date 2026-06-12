@@ -78,6 +78,17 @@ const GOOD: ReadonlyArray<readonly [string, string]> = [
       layout: [['t']],
     }`,
   ],
+  [
+    "group sugar node (2de.4)",
+    `{
+      segments: { m: { template: 'M' } },
+      root: { kind: 'container', direction: 'vertical', children: [
+        { kind: 'group', name: 'details', label: 'details', open: true, key: 'menu',
+          children: [{ kind: 'segment', name: 'm' }] },
+      ]},
+      variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
+    }`,
+  ],
 ];
 
 // Structurally broken — schema rejects, loader rejects.
@@ -104,6 +115,14 @@ const BAD_STRUCTURAL: ReadonlyArray<readonly [string, string]> = [
   [
     "non-array cycle",
     `{ segments: { t: { template: '{{ action "a" "x" }}' } }, actions: { a: { set: 'k', cycle: 'ab' } }, layout: [['t']] }`,
+  ],
+  [
+    "group node missing label/children",
+    `{ root: { kind: 'group', name: 'g' } }`,
+  ],
+  [
+    "group node with non-identifier name",
+    `{ segments: { m: { template: 'M' } }, root: { kind: 'group', name: 'my-group', label: 'x', children: [{ kind: 'segment', name: 'm' }] } }`,
   ],
 ];
 

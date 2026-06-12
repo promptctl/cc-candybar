@@ -388,7 +388,9 @@ function selectDisplay(
       );
     }
     const display =
-      displays.length === 1 ? displays[0]! : displays[cycleIndex(action, store)]!;
+      displays.length === 1
+        ? displays[0]!
+        : displays[cycleIndex(action, store)]!;
     return { display, boundValue: undefined };
   }
   if (displays.length > 2) {

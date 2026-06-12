@@ -24,19 +24,27 @@ import {
   type LayoutNode,
   type LayoutRow,
   type LayoutRowInput,
+  type RawDslConfig,
+  type SegmentDecl,
   type SegmentNode,
+  type VariableDecl,
 } from "../dsl-types.js";
+import type { ActionDecl } from "../action.js";
 import { findKeyLine } from "./diagnostics.js";
 import {
   describeType,
   describeValue,
   isPlainObject,
   lazy,
+  optionalBooleanSpec,
+  optionalEnumSpec,
   optionalStringSpec,
   record,
   recordJson,
+  requireStringSpec,
   type FieldSpec,
   type JsonNode,
+  type Mutable,
   type RecordSchema,
   type ValidateCtx,
 } from "./validate-core.js";
@@ -409,7 +417,7 @@ export const validateRoot = (
   if (!isPlainObject(raw)) {
     ctx.issues.push({
       path,
-      message: `a layout node must be an object with "kind" of "container", "segment", or "cells", got ${describeType(raw)}`,
+      message: `a layout node must be an object with "kind" of "container", "segment", "cells", or "group", got ${describeType(raw)}`,
       line: findKeyLine(ctx.source, ["root"]),
     });
     return EMPTY_VERTICAL_NODE;
@@ -426,13 +434,289 @@ export const validateRoot = (
       ? EMPTY_VERTICAL_NODE
       : rowToHorizontal(cells.segments, cells.when);
   }
+  if (raw.kind === "group") {
+    const group = record(ctx, GROUP_SCHEMA, path, raw);
+    if (group === null) return EMPTY_VERTICAL_NODE;
+    // Collected for the post-walk synthesis pass (state var + cycle action +
+    // toggle segment); the node itself lowers to the canonical grammar here.
+    ctx.groups.push({
+      name: group.name,
+      label: group.label,
+      ...(group.open !== undefined && { open: group.open }),
+      ...(group.direction !== undefined && { direction: group.direction }),
+      ...(group.key !== undefined && { key: group.key }),
+      ...(group.bg !== undefined && { bg: group.bg }),
+      ...(group.fg !== undefined && { fg: group.fg }),
+      ...(group.when !== undefined && { when: group.when }),
+      path,
+    });
+    return lowerGroup(group);
+  }
   ctx.issues.push({
     path: `${path}.kind`,
-    message: `a layout node "kind" must be "container", "segment", or "cells", got ${JSON.stringify(raw.kind)}`,
+    message: `a layout node "kind" must be "container", "segment", "cells", or "group", got ${JSON.stringify(raw.kind)}`,
     line: findKeyLine(ctx.source, ["root"]),
   });
   return EMPTY_VERTICAL_NODE;
 };
+
+// ─── Group sugar (`kind: "group"`) ───────────────────────────────────────────
+
+// [LAW:one-source-of-truth] The reserved namespace every synthesized artifact
+// lives under, in all three sections (variables / actions / segments). One
+// group declaration is the single source; the var, the action, and the toggle
+// segment all derive their name from it. A user-authored name under this
+// prefix is rejected so synthesis can never silently collide.
+export const GROUP_NS = "groups.";
+
+// The "no group open" sentinel a group's cycle starts from. Group names are
+// forbidden from equaling it, so a cycle's two members are always distinct.
+const GROUP_CLOSED = "closed";
+
+// [LAW:types-are-the-program] A group name must be template-addressable — it is
+// spliced into the synthesized `when` predicate and toggle template as
+// `.groups.<name>`, and Go-template field syntax admits identifier characters
+// only. The pattern IS that constraint; it also excludes quotes, slashes, and
+// dots, so a name needs no escaping anywhere it is spliced.
+const GROUP_NAME_RE = /^[A-Za-z_][A-Za-z0-9_]*$/;
+
+const GROUP_GLYPH_CLOSED = "▸";
+const GROUP_GLYPH_OPEN = "▾";
+
+function groupNameSpec(): FieldSpec<string> {
+  return {
+    required: true,
+    json: { type: "string", pattern: GROUP_NAME_RE.source },
+    parse: (ctx, path, field, raw) => {
+      const v = raw[field];
+      if (
+        typeof v !== "string" ||
+        !GROUP_NAME_RE.test(v) ||
+        v === GROUP_CLOSED
+      ) {
+        ctx.issues.push({
+          path: `${path}.${field}`,
+          message: `a group "name" must be an identifier (letters, digits, _; not starting with a digit) and not the reserved "${GROUP_CLOSED}", got ${describeValue(v)}`,
+          line: findKeyLine(ctx.source, ["root"]),
+        });
+        return undefined;
+      }
+      return v;
+    },
+  };
+}
+
+// [LAW:single-enforcer] A group's optional shared `key` is a SessionState key —
+// the same non-empty/slash-free wire shape the action loader's `set` key
+// enforces, restated here because the group synthesizes that `set`.
+function groupKeySpec(): FieldSpec<string> {
+  return {
+    required: false,
+    json: { type: "string", minLength: 1 },
+    parse: (ctx, path, field, raw) => {
+      const v = raw[field];
+      if (v === undefined) return undefined;
+      if (typeof v !== "string" || v === "" || v.includes("/")) {
+        ctx.issues.push({
+          path: `${path}.${field}`,
+          message: `a group "key" must be a non-empty, slash-free SessionState key, got ${describeValue(v)}`,
+          line: findKeyLine(ctx.source, ["root"]),
+        });
+        return undefined;
+      }
+      return v;
+    },
+  };
+}
+
+// [LAW:types-are-the-program] The `group` input record: one declaration carrying
+// everything its synthesized artifacts derive from. `direction` arranges the
+// BODY (the children container) — the toggle row always stacks above it;
+// `key` opts sibling groups into one accordion (shared key ⇒ one open at a
+// time); `open` picks the key's initial state; `bg`/`fg` paint the toggle
+// segment; `when` gates the whole group (toggle included).
+interface GroupNodeInput {
+  readonly kind: "group";
+  readonly name: string;
+  readonly label: string;
+  readonly open?: boolean;
+  readonly direction?: Direction;
+  readonly key?: string;
+  readonly bg?: string;
+  readonly fg?: string;
+  readonly when?: string;
+  readonly children: readonly LayoutNode[];
+}
+
+const GROUP_SCHEMA: RecordSchema<GroupNodeInput> = {
+  noun: "layout-node key",
+  fields: {
+    kind: literalSpec("group"),
+    name: groupNameSpec(),
+    label: requireStringSpec(),
+    open: optionalBooleanSpec(),
+    direction: optionalEnumSpec(DIRECTIONS),
+    key: groupKeySpec(),
+    bg: optionalStringSpec(),
+    fg: optionalStringSpec(),
+    when: optionalStringSpec(),
+    children: childrenSpec(lazy(() => validateRoot)),
+  },
+};
+
+// The state key a group toggles: the explicit shared `key` (accordion) or the
+// group's own derived key (independent toggle). One value selects the behavior
+// — no accordion mode [LAW:dataflow-not-control-flow].
+function groupStateKey(g: { name: string; key?: string }): string {
+  return g.key ?? GROUP_NS + g.name;
+}
+
+// [LAW:one-source-of-truth] Lower a group to the canonical grammar. The toggle
+// segment ref and the body predicate both derive from the group's name — the
+// same name the synthesis names the state var with, so the predicate reads
+// exactly the var the toggle's cycle writes. The body is open exactly when the
+// key holds THIS group's name (a sibling's name or "closed" hides it — the
+// accordion falls out of one key holding one name).
+function lowerGroup(g: GroupNodeInput): LayoutNode {
+  const ref = GROUP_NS + g.name;
+  return {
+    kind: "container",
+    direction: "vertical",
+    children: [
+      { kind: "segment", name: ref },
+      {
+        kind: "container",
+        direction: g.direction ?? "vertical",
+        children: g.children,
+        when: `{{ eq .${ref} "${g.name}" }}`,
+      },
+    ],
+    ...(g.when !== undefined && { when: g.when }),
+  };
+}
+
+// Go-template string-literal escaping for the synthesized toggle template — the
+// label is a plain display string (dynamic labels are raw-grammar territory),
+// so backslashes and quotes are the only characters that could break the splice.
+function escapeTemplateLiteral(s: string): string {
+  return s.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+}
+
+function groupIssue(ctx: ValidateCtx, path: string, message: string): void {
+  ctx.issues.push({
+    path,
+    message,
+    line: findKeyLine(ctx.source, ["root"]),
+  });
+}
+
+// [LAW:one-source-of-truth] The synthesis pass: every artifact a group implies,
+// derived from its one declaration and merged into the raw sections, AFTER the
+// user's own sections parsed — so a user name under the reserved namespace is a
+// loud rejection, never a silent overwrite. Runs once per parse, after the root
+// walk collected every group with its tree position.
+//
+// Invariants enforced here (each a load error, never a silent fixup):
+//   • group names are unique (they name the synthesized artifacts);
+//   • no user-authored variable/action/segment under the reserved namespace;
+//   • an ancestor and a descendant group never share a key (one key holds ONE
+//     open name, so a same-key chain could not represent "both open" — sibling
+//     accordions share keys, nested disclosure nests distinct keys);
+//   • at most one group per shared key declares `open: true` (the key's single
+//     initial value [LAW:one-source-of-truth]).
+export function synthesizeGroupDecls(
+  ctx: ValidateCtx,
+  out: Mutable<RawDslConfig>,
+): void {
+  const groups = ctx.groups;
+  if (groups.length === 0) return;
+
+  for (const section of ["variables", "actions", "segments"] as const) {
+    for (const name of Object.keys(out[section] ?? {})) {
+      if (name.startsWith(GROUP_NS)) {
+        groupIssue(
+          ctx,
+          `${section}.${name}`,
+          `"${name}" is in the reserved "${GROUP_NS}" namespace (synthesized by group nodes) — rename it`,
+        );
+      }
+    }
+  }
+
+  const seen = new Set<string>();
+  for (const g of groups) {
+    if (seen.has(g.name)) {
+      groupIssue(
+        ctx,
+        g.path,
+        `duplicate group name "${g.name}" — group names must be unique (they name the synthesized state var, action, and toggle segment)`,
+      );
+    }
+    seen.add(g.name);
+  }
+
+  for (const inner of groups) {
+    for (const outer of groups) {
+      if (
+        inner !== outer &&
+        inner.path.startsWith(`${outer.path}.`) &&
+        groupStateKey(inner) === groupStateKey(outer)
+      ) {
+        groupIssue(
+          ctx,
+          inner.path,
+          `group "${inner.name}" shares key "${groupStateKey(inner)}" with its ancestor group "${outer.name}" — a shared key holds ONE open group, so an ancestor and a descendant cannot share one. Sibling accordions share a key; nested groups use distinct keys.`,
+        );
+      }
+    }
+  }
+
+  // [LAW:one-source-of-truth] One initial value per key: the single open
+  // group's name, else closed. Every var synthesized on a key carries the SAME
+  // default, so two vars reading one key cannot disagree.
+  const defaultByKey = new Map<string, string>();
+  for (const g of groups) {
+    const key = groupStateKey(g);
+    if (!defaultByKey.has(key)) defaultByKey.set(key, GROUP_CLOSED);
+    if (g.open === true) {
+      const prior = defaultByKey.get(key)!;
+      if (prior !== GROUP_CLOSED) {
+        groupIssue(
+          ctx,
+          g.path,
+          `groups "${prior}" and "${g.name}" share key "${key}" and both declare open: true — a shared key holds one open group; pick one`,
+        );
+      }
+      defaultByKey.set(key, g.name);
+    }
+  }
+
+  const variables: Record<string, VariableDecl> = {};
+  const actions: Record<string, ActionDecl> = {};
+  const segments: Record<string, SegmentDecl> = {};
+  for (const g of groups) {
+    const name = GROUP_NS + g.name;
+    const key = groupStateKey(g);
+    const label = escapeTemplateLiteral(g.label);
+    variables[name] = {
+      kind: "state",
+      key,
+      default: defaultByKey.get(key)!,
+    };
+    // Members are ordered default-state-first ("closed" first): an unset or
+    // sibling-held key counts as the first member, so the toggle renders ▸ and
+    // clicks to its own name — expand, auto-closing the sibling on a shared key.
+    actions[name] = { set: key, cycle: [GROUP_CLOSED, g.name] };
+    segments[name] = {
+      template: `{{ action "${name}" "${GROUP_GLYPH_CLOSED} ${label}" "${GROUP_GLYPH_OPEN} ${label}" }}`,
+      ...(g.bg !== undefined && { bg: g.bg }),
+      ...(g.fg !== undefined && { fg: g.fg }),
+    };
+  }
+  out.variables = { ...(out.variables ?? {}), ...variables };
+  out.actions = { ...(out.actions ?? {}), ...actions };
+  out.segments = { ...(out.segments ?? {}), ...segments };
+}
 
 // ─── Schema emit ─────────────────────────────────────────────────────────────
 
@@ -450,6 +734,7 @@ export function layoutNodeJson(): JsonNode {
       recordJson(CONTAINER_SCHEMA),
       recordJson(SEGMENT_NODE_SCHEMA),
       recordJson(CELLS_SCHEMA),
+      recordJson(GROUP_SCHEMA),
     ],
   };
 }
