@@ -1,9 +1,9 @@
 // [LAW:verifiable-goals] The JSON Schema's contract: accept the configs a user
-// may legitimately write (including the bare-`string[]`-row sugar the maintainer's
-// own config uses), reject structurally-broken ones. We validate the COMMITTED
-// artifact (schema/cc-candybar.schema.json) — the same file editors load via
-// `$schema` and the package ships — so this test guards the published contract,
-// not just the generator.
+// may legitimately write (A-grammar root tree, all variable/action kinds),
+// reject structurally-broken ones. We validate the COMMITTED artifact
+// (schema/cc-candybar.schema.json) — the same file editors load via `$schema`
+// and the package ships — so this test guards the published contract, not just
+// the generator.
 //
 // [LAW:single-enforcer] Schema = shape; lint = meaning. The schema cannot see
 // cross-references or cycles (a JSON Schema structurally can't), so each good
@@ -39,18 +39,18 @@ const GOOD: ReadonlyArray<readonly [string, string]> = [
   ["empty config", `{}`],
   ["globals only", `{ globals: { palette: 'dracula', default_bg: 'surface' } }`],
   [
-    "bare string[] rows (maintainer's form)",
+    "A-grammar multi-row layout (v-arm)",
     `{
       segments: { dir: { template: '{{ .cwd }}' }, git: { template: '{{ .git.branch }}' } },
       variables: { cwd: { kind: 'literal', value: '~' }, 'git.branch': { kind: 'literal', value: 'main' } },
-      layout: [['dir', 'git'], ['dir']],
+      root: { v: [{ h: ['dir', 'git'] }, 'dir'] },
     }`,
   ],
   [
-    "mixed bare + predicate rows",
+    "A-grammar conditional row (when on v children)",
     `{
       segments: { a: { template: 'a' }, b: { template: 'b' } },
-      layout: [['a', 'b'], { when: '{{ true }}', segments: ['a'] }],
+      root: { v: [{ h: ['a', 'b'] }, { seg: 'a', when: '{{ true }}' }] },
     }`,
   ],
   [
@@ -66,7 +66,7 @@ const GOOD: ReadonlyArray<readonly [string, string]> = [
       segments: { t: { template: '{{ .theme }} {{ action "open" "▸" }}' } },
       variables: { theme: { kind: 'state', key: 'theme', default: 'dracula' } },
       actions: { open: { set: 'menu', to: '0' }, step: { set: 'hue', min: 0, max: 60, by: 2 } },
-      layout: [['t']],
+      root: { h: ['t'] },
     }`,
   ],
   [
@@ -75,7 +75,7 @@ const GOOD: ReadonlyArray<readonly [string, string]> = [
       segments: { t: { template: '{{ action "toggle" "▸" "▾" }}' } },
       variables: { open: { kind: 'state', key: 'details-open', default: '0' } },
       actions: { toggle: { set: 'details-open', cycle: ['0', '1'] } },
-      layout: [['t']],
+      root: { h: ['t'] },
     }`,
   ],
   [
@@ -152,11 +152,13 @@ const BAD_STRUCTURAL: ReadonlyArray<readonly [string, string]> = [
   ["bad direction enum", `{ root: { kind: 'container', direction: 'diagonal', children: [] } }`],
   ["unknown variable kind", `{ variables: { x: { kind: 'bogus' } } }`],
   ["non-string palette", `{ globals: { palette: 5 } }`],
-  ["legacy flat layout", `{ segments: { a: { template: 'a' } }, layout: ['a', 'b'] }`],
+  // `layout:` was removed in 2de.19 — schema rejects (unknown key via additionalProperties),
+  // loader rejects (migration error). Both surfaces correctly reject it.
+  ["removed layout key", `{ segments: { a: { template: 'a' } }, layout: [['a', 'b']] }`],
   // A node must carry its mandatory fields — the loader reports a missing
   // direction/name (→ throws), so the schema must require them too. The empty
-  // object once passed all three arms vacuously; the layout specs' required-ness
-  // closes that, keeping schema and loader in lockstep.
+  // object once passed all three arms vacuously; the required-ness closes that,
+  // keeping schema and loader in lockstep.
   ["bare container node (missing direction/children)", `{ root: { kind: 'container' } }`],
   ["bare segment node (missing name)", `{ root: { kind: 'segment' } }`],
   // Schema-checkable cycle shape: type + minItems. (Uniqueness/emptiness/slash
@@ -164,11 +166,11 @@ const BAD_STRUCTURAL: ReadonlyArray<readonly [string, string]> = [
   // can express them.)
   [
     "one-member cycle",
-    `{ segments: { t: { template: '{{ action "a" "x" }}' } }, actions: { a: { set: 'k', cycle: ['solo'] } }, layout: [['t']] }`,
+    `{ segments: { t: { template: '{{ action "a" "x" }}' } }, actions: { a: { set: 'k', cycle: ['solo'] } }, root: { h: ['t'] } }`,
   ],
   [
     "non-array cycle",
-    `{ segments: { t: { template: '{{ action "a" "x" }}' } }, actions: { a: { set: 'k', cycle: 'ab' } }, layout: [['t']] }`,
+    `{ segments: { t: { template: '{{ action "a" "x" }}' } }, actions: { a: { set: 'k', cycle: 'ab' } }, root: { h: ['t'] } }`,
   ],
   [
     "group node missing label/children",
@@ -228,7 +230,7 @@ describe("config JSON Schema", () => {
   // schema (shape is fine) and fail the loader (meaning is wrong) — proving the
   // two layers are complementary, not redundant.
   it("schema accepts but loader rejects a dangling reference", () => {
-    const source = `{ segments: { a: { template: 'a' } }, layout: [['a', 'does-not-exist']] }`;
+    const source = `{ segments: { a: { template: 'a' } }, root: { h: ['a', 'does-not-exist'] } }`;
     expect(schemaAccepts(source)).toBe(true);
     expect(loaderAccepts(source)).toBe(false);
   });

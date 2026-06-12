@@ -1079,37 +1079,6 @@
         "additionalProperties": false
       }
     },
-    "layout": {
-      "type": "array",
-      "items": {
-        "anyOf": [
-          {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          {
-            "type": "object",
-            "properties": {
-              "when": {
-                "type": "string"
-              },
-              "segments": {
-                "type": "array",
-                "items": {
-                  "type": "string"
-                }
-              }
-            },
-            "required": [
-              "segments"
-            ],
-            "additionalProperties": false
-          }
-        ]
-      }
-    },
     "root": {
       "$ref": "#/definitions/LayoutNode"
     },
@@ -1299,28 +1268,6 @@
           "required": [
             "kind",
             "name"
-          ],
-          "additionalProperties": false
-        },
-        {
-          "type": "object",
-          "properties": {
-            "kind": {
-              "const": "cells"
-            },
-            "segments": {
-              "type": "array",
-              "items": {
-                "type": "string"
-              }
-            },
-            "when": {
-              "type": "string"
-            }
-          },
-          "required": [
-            "kind",
-            "segments"
           ],
           "additionalProperties": false
         },

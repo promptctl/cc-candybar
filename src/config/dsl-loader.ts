@@ -1,13 +1,13 @@
 // [LAW:one-type-per-behavior] Three primitives, three concerns:
 //
 //   parseDslConfig (text → RawDslConfig)
-//     JSON5 syntax + per-record structural validation. Preserves absence of
-//     top-level keys — `raw.layout === undefined` is distinct from `raw.layout
-//     === []`. Throws ConfigError on syntax / structural problems.
+//     JSON5 syntax + per-record structural validation. Rejects the removed
+//     `layout:` key and `kind:"cells"` node with migration-pointing errors.
+//     Throws ConfigError on syntax / structural problems.
 //
 //   mergeWithDefault (RawDslConfig + DslConfig → DslConfig)
 //     Cascade: shallow merge globals fields, by-name merge variables and
-//     segments, wholesale layout replacement when present. Pure function.
+//     segments, wholesale root replacement when present. Pure function.
 //
 //   validateConfig (DslConfig → ValidatedConfig)
 //     Cross-references + cycle detection on the merged shape. Sole producer
@@ -47,11 +47,7 @@ import { mergeWithDefault } from "./loader/merge.js";
 import { validateGlobals } from "./loader/globals.js";
 import { validateVariables } from "./loader/variables.js";
 import { validateSegments } from "./loader/segments.js";
-import {
-  synthesizeGroupDecls,
-  validateLayout,
-  validateRoot,
-} from "./loader/layout.js";
+import { synthesizeGroupDecls, validateRoot } from "./loader/layout.js";
 import { validateActions } from "./loader/actions.js";
 import { validateHelpers } from "./loader/helpers.js";
 import { validateCrossReferences } from "./loader/cross-ref.js";
@@ -71,7 +67,6 @@ export {
   detectConfigCollisions,
 } from "./loader/discovery.js";
 export { mergeWithDefault } from "./loader/merge.js";
-export { layoutRowsToNode } from "./loader/layout.js";
 export {
   extractTemplateRefs,
   extractActionRefs,
@@ -142,8 +137,7 @@ export function validateConfig(
  * record structural validation. Cross-references and cycles are NOT checked
  * here — they belong to validateConfig, which runs on the merged shape.
  *
- * Returned shape preserves absence: a user file with no `layout` key yields
- * `raw.layout === undefined`, distinct from an explicit `layout: []`.
+ * Returned shape preserves absence: top-level keys are optional in RawDslConfig.
  *
  * `allowedPalettes` is the set of palette names a `palette:` field may name.
  * It defaults to every name that resolves to a concrete Palette, so production
@@ -231,19 +225,20 @@ function validateTopLevel(
     out.variables = validateVariables(ctx, "variables", raw.variables);
   if (raw.segments !== undefined)
     out.segments = validateSegments(ctx, raw.segments);
-  if (raw.layout !== undefined) out.layout = validateLayout(ctx, raw.layout);
-  if (raw.root !== undefined) out.root = validateRoot(ctx, "root", raw.root);
-  // [LAW:one-source-of-truth] One canonical layout — a config authors EITHER the
-  // flat `layout` sugar OR the raw `root` node grammar, never both: two surfaces
-  // for the same tree could drift. Reject the ambiguity loudly rather than
-  // silently letting one win.
-  if (raw.layout !== undefined && raw.root !== undefined) {
+  // [LAW:no-silent-failure] `layout:` was removed in 2de.19. Reject loudly with
+  // a migration hint so the author knows exactly how to rewrite their config.
+  if (raw.layout !== undefined) {
     ctx.issues.push({
-      path: "root",
-      message: `a config declares either "layout" (the flat-row sugar) or "root" (the node grammar), not both`,
-      line: findKeyLine(ctx.source, ["root"]),
+      path: "layout",
+      message:
+        `"layout" is no longer supported — use "root" with the A-grammar instead.\n` +
+        `  Replace:  layout: [["seg1", "seg2"], ["seg3"]]\n` +
+        `  With:     root: { v: [{ h: ["seg1", "seg2"] }, "seg3"] }\n` +
+        `  Single-row example:  root: { h: ["seg1", "seg2"] }`,
+      line: findKeyLine(ctx.source, ["layout"]),
     });
   }
+  if (raw.root !== undefined) out.root = validateRoot(ctx, "root", raw.root);
   if (raw.actions !== undefined)
     out.actions = validateActions(ctx, raw.actions);
   if (raw.helpers !== undefined)
@@ -257,6 +252,8 @@ function validateTopLevel(
   return out;
 }
 
+// [LAW:no-silent-failure] `layout` is intentionally absent — a config that
+// writes it gets an explicit migration error, not an "unknown key" message.
 const TOP_LEVEL_KEYS = new Set([
   "globals",
   "variables",
