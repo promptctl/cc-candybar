@@ -60,13 +60,13 @@ afterEach(() => {
 
 describe("TmuxService — cache", () => {
   it(
-    "returns null without spawning when TMUX_PANE is unset",
+    "returns absent without spawning when TMUX_PANE is unset",
     withEnv({ TMUX_PANE: undefined, TMUX: undefined }, async () => {
       const { handle, starts } = spyStats();
       setLaunchStats(handle);
       const svc = new TmuxService();
-      const id = await svc.getSessionId();
-      expect(id).toBeNull();
+      const outcome = await svc.getSessionId();
+      expect(outcome.kind).toBe("absent");
       expect(starts).toEqual([]);
     }),
   );

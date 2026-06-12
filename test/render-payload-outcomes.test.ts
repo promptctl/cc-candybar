@@ -1,8 +1,8 @@
-// Boundary contract for the outcome-carrying provider lanes (git, cache):
-// buildRenderPayload is the ONE log site for their failures, and `absent`
-// and `failed` both project as MISSING payload fields — distinct from a real
-// 0/"" — so the DSL input fallback chain (default + last_error) fires.
-// [LAW:no-silent-failure][LAW:single-enforcer]
+// Boundary contract for the provider lanes — every lane carries a typed
+// Outcome and buildRenderPayload is the ONE log site for their failures;
+// `absent` and `failed` both project as MISSING payload fields — distinct
+// from a real 0/"" — so the DSL input fallback chain (default + last_error)
+// fires. [LAW:no-silent-failure][LAW:single-enforcer][LAW:one-type-per-behavior]
 
 import { chmodSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -18,18 +18,20 @@ type LogEntry = { level: string; msg: string };
 function depsWith(
   gitOutcome: Outcome<GitInfo>,
   logs: LogEntry[],
+  overrides: Record<string, unknown> = {},
 ): RenderPayloadDeps {
   return {
     gitProvider: { getGitInfo: async () => gitOutcome },
     usageStore: {
-      getUsageInfo: async () => null,
-      getTodayInfo: async () => null,
+      getUsageInfo: async () => ABSENT,
+      getTodayInfo: async () => ABSENT,
     },
-    contextProvider: { getContextInfo: async () => null },
-    metricsProvider: { getMetricsInfo: async () => null },
-    tmuxService: { getSessionId: async () => null },
+    contextProvider: { getContextInfo: async () => ABSENT },
+    metricsProvider: { getMetricsInfo: async () => ABSENT },
+    tmuxService: { getSessionId: async () => ABSENT },
     sessionState: { get: () => undefined },
     log: (level: string, msg: string) => logs.push({ level, msg }),
+    ...overrides,
   } as unknown as RenderPayloadDeps;
 }
 
@@ -180,5 +182,104 @@ describe("buildRenderPayload — cache outcome lane", () => {
       expiresAt: Math.floor(Date.parse(ts) / 1000) + 3600,
     });
     expect(logs).toEqual([]);
+  });
+});
+
+// The five lanes migrated after PR #96 (session/today/context/metrics/tmux)
+// share the exact same contract as git/cache — one behavior, one type.
+describe("buildRenderPayload — migrated lanes share the outcome contract", () => {
+  const LANE_PATHS = new Set([
+    "session.cost",
+    "today.cost",
+    "context.totalTokens",
+    "metrics.messageCount",
+    "tmux.session",
+  ]);
+
+  test("failed lanes each log one warn and project as missing fields", async () => {
+    const logs: LogEntry[] = [];
+    const deps = depsWith(ABSENT, logs, {
+      contextProvider: {
+        getContextInfo: async () => failed("context transcript: EACCES"),
+      },
+      metricsProvider: {
+        getMetricsInfo: async () => failed("metrics (s): boom"),
+      },
+    });
+
+    const payload = await buildRenderPayload(
+      hookData("/no/such/transcript.jsonl"),
+      deps,
+      undefined,
+      LANE_PATHS,
+    );
+
+    expect(payload.context).toBeUndefined();
+    expect(payload.metrics).toBeUndefined();
+    expect(logs).toEqual(
+      expect.arrayContaining([
+        {
+          level: "warn",
+          msg: "provider fetch failed: context transcript: EACCES",
+        },
+        { level: "warn", msg: "provider fetch failed: metrics (s): boom" },
+      ]),
+    );
+    expect(logs).toHaveLength(2);
+  });
+
+  test("ok lanes project values; absent lanes are missing with nothing logged", async () => {
+    const logs: LogEntry[] = [];
+    const deps = depsWith(ABSENT, logs, {
+      tmuxService: { getSessionId: async () => ok("main-session") },
+      usageStore: {
+        getUsageInfo: async () =>
+          ok({
+            session: {
+              cost: 1.25,
+              calculatedCost: 1.25,
+              officialCost: null,
+              tokens: 42,
+              tokenBreakdown: null,
+            },
+          }),
+        getTodayInfo: async () => ABSENT,
+      },
+    });
+
+    const payload = await buildRenderPayload(
+      hookData("/no/such/transcript.jsonl"),
+      deps,
+      undefined,
+      LANE_PATHS,
+    );
+
+    expect(payload.tmux).toEqual({ session: "main-session" });
+    expect(payload.session).toEqual({ cost: 1.25, tokens: 42 });
+    expect(payload.today).toBeUndefined();
+    expect(logs).toEqual([]);
+  });
+
+  test("a lane stub that THROWS is totalized to failed and logged with its lane name", async () => {
+    const logs: LogEntry[] = [];
+    const deps = depsWith(ABSENT, logs, {
+      tmuxService: {
+        getSessionId: async () => {
+          throw new Error("stub bug");
+        },
+      },
+    });
+
+    const payload = await buildRenderPayload(
+      hookData("/no/such/transcript.jsonl"),
+      deps,
+      undefined,
+      LANE_PATHS,
+    );
+
+    expect(payload.tmux).toBeUndefined();
+    expect(logs).toHaveLength(1);
+    expect(logs[0]!.msg).toContain("tmux:");
+    expect(logs[0]!.msg).toContain("stub bug");
   });
 });
