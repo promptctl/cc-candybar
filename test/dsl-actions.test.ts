@@ -130,7 +130,7 @@ describe("2de.12 — literal set action", () => {
     },
     actions: { pick: { set: 'flavor', to: 'chocolate' } },
     segments: { bar: { template: '{{.flavor}} {{ action "pick" "🍫" }}', bg: 'surface', fg: 'foreground' } },
-    layout: [['bar']],
+    root: 'bar',
   }`;
 
   test("renders one clickable region whose click sets the literal value", () => {
@@ -175,7 +175,7 @@ describe("2de.12 — set on a baseline key derives nothing", () => {
     variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
     actions: { dark: { set: 'theme', to: 'nord' } },
     segments: { bar: { template: '{{ action "dark" "🌙" }}', bg: 'surface', fg: 'foreground' } },
-    layout: [['bar']],
+    root: 'bar',
   }`;
 
   test("the theme literal reuses the permanent theme validator (no derived spec)", () => {
@@ -203,7 +203,7 @@ describe("2de.12 — option set action", () => {
     },
     actions: { choose: { set: 'sel', from: 'themes' } },
     segments: { bar: { template: '{{ range themes }}{{ action "choose" . }}{{ end }}', bg: 'surface', fg: 'foreground' } },
-    layout: [['bar']],
+    root: 'bar',
   }`;
 
   test("renders one clickable per option, each binding its value into the set", () => {
@@ -256,7 +256,7 @@ describe("2de.12 — option set action", () => {
       },
       actions: { choose: { set: 'sel', from: 'themes' } },
       segments: { bar: { template: '{{ action "choose" "🎨 fancy" "${target}" }}', bg: 'surface', fg: 'foreground' } },
-      layout: [['bar']],
+      root: 'bar',
     }`;
     const { render, click, sessionState, dispose } = buildRuntime(src);
     const out = render();
@@ -285,7 +285,7 @@ describe("2de.12 — bounded set action", () => {
       up: { set: 'hue', min: 0, max: 60, by: 2 },
     },
     segments: { bar: { template: '{{ action "down" "◀" }} {{.hue.step}} {{ action "up" "▶" }}', bg: 'surface', fg: 'foreground' } },
-    layout: [['bar']],
+    root: 'bar',
   }`;
 
   test("◀/▶ emit a RELATIVE step-state nudge (key + signed by), no absolute target; display is plain text", () => {
@@ -371,7 +371,7 @@ describe("2de.12 — copy / open actions derive no gate", () => {
       openDir: { open: '{{.project_dir}}' },
     },
     segments: { bar: { template: '{{ action "copyId" "⎘" }} {{ action "openDir" "📂" }}', bg: 'surface', fg: 'foreground' } },
-    layout: [['bar']],
+    root: 'bar',
   }`;
 
   test("copy/open contribute no validator spec", () => {
@@ -435,7 +435,7 @@ describe("2de.12 — derived specs feed the registerStateValidator lifecycle", (
         s2: { set: 'shared', to: 'fromTwo' },
       },
       segments: { bar: { template: '{{ action "wbtn" "W" }} {{ action "abtn" "A" }} {{ action "s1" "1" }} {{ action "s2" "2" }}', bg: 'surface', fg: 'foreground' } },
-      layout: [['bar']],
+      root: 'bar',
     }`;
     const config = parseAndValidate("<test>", src, ALLOWED);
     const merged = Object.fromEntries(
@@ -459,7 +459,7 @@ describe("2de.12 — loader proves the ActionDecl invariants", () => {
     variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' }, k: { kind: 'state', key: 'k', default: '' } },
     actions: ${actions},
     segments: { bar: { template: '{{ action "a" "x" }}${extra}', bg: 'surface', fg: 'foreground' } },
-    layout: [['bar']],
+    root: 'bar',
   }`;
 
   const expectIssue = (src: string, re: RegExp) => {
@@ -484,7 +484,7 @@ describe("2de.12 — loader proves the ActionDecl invariants", () => {
         op: { open: 'y' },
       },
       segments: { bar: { template: '{{ action "lit" "L" }}{{ action "opt" "O" }}{{ action "bnd" "B" }}{{ action "cp" "C" }}{{ action "op" "P" }}', bg: 'surface', fg: 'foreground' } },
-      layout: [['bar']],
+      root: 'bar',
     }`;
     expect(() => parseAndValidate("<test>", src, ALLOWED)).not.toThrow();
   });
@@ -542,7 +542,7 @@ describe("2de.12 — loader proves the ActionDecl invariants", () => {
       variables: { k: { kind: 'state', key: 'k', default: '' } },
       actions: { a: { set: 'k', to: 'v' } },
       segments: { bar: { template: '{{ action "a" "x" }}', bg: 'surface', fg: 'foreground' } },
-      layout: [['bar']],
+      root: 'bar',
     }`;
     expectIssue(src, /require a global "session\.id"/);
   });
@@ -553,7 +553,7 @@ describe("2de.12 — loader proves the ActionDecl invariants", () => {
       variables: {},
       actions: { a: { copy: 'literal' } },
       segments: { bar: { template: '{{ action "a" "⎘" }}', bg: 'surface', fg: 'foreground' } },
-      layout: [['bar']],
+      root: 'bar',
     }`;
     expect(() => parseAndValidate("<test>", src, ALLOWED)).not.toThrow();
   });
@@ -572,7 +572,7 @@ describe("2de.4 — cycle set action", () => {
     },
     actions: { toggle: { set: 'details-open', cycle: ['0', '1'] } },
     segments: { bar: { template: '{{ action "toggle" "▸ details" "▾ details" }}', bg: 'surface', fg: 'foreground' } },
-    layout: [['bar']],
+    root: 'bar',
   }`;
 
   test("renders the current member's display; the click writes the successor", () => {
@@ -627,7 +627,7 @@ describe("2de.4 — cycle set action", () => {
       },
       actions: { next: { set: 'mode', cycle: ['a', 'b', 'c'] } },
       segments: { bar: { template: '{{ action "next" "A" "B" }}', bg: 'surface', fg: 'foreground' } },
-      layout: [['bar']],
+      root: 'bar',
     }`;
     const { render, dispose } = buildRuntime(src);
     // [LAW:no-silent-failure] Arity errors surface as a visible ⚠ error cell
@@ -656,7 +656,7 @@ describe("2de.4 — cycle set action", () => {
       },
       actions: { next: { set: 'mode', cycle: ['off', 'low', 'high'] } },
       segments: { bar: { template: '{{ action "next" "○" "◐" "●" }}', bg: 'surface', fg: 'foreground' } },
-      layout: [['bar']],
+      root: 'bar',
     }`;
     const { render, click, sessionState, dispose } = buildRuntime(src);
     for (const [display, written] of [
@@ -689,7 +689,7 @@ describe("2de.4 — cycle set action", () => {
         toggleB: { set: 'menu', cycle: ['closed', 'b'] },
       },
       segments: { bar: { template: '{{ action "toggleA" "▸A" "▾A" }} {{ action "toggleB" "▸B" "▾B" }}', bg: 'surface', fg: 'foreground' } },
-      layout: [['bar']],
+      root: 'bar',
     }`;
     const config = parseAndValidate("<test>", src, ALLOWED);
     expect(deriveActionValidators(config)).toEqual([
@@ -723,7 +723,7 @@ describe("2de.4 — loader proves the cycle invariants", () => {
     variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' }, k: { kind: 'state', key: 'k', default: '' } },
     actions: ${actions},
     segments: { bar: { template: '{{ action "a" "x" }}', bg: 'surface', fg: 'foreground' } },
-    layout: [['bar']],
+    root: 'bar',
   }`;
 
   const expectIssue = (src: string, re: RegExp) => {

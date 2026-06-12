@@ -44,7 +44,7 @@ const CONFIG_SRC = `{
       fg: 'foreground',
     },
   },
-  layout: [['themeSeg']],
+  root: 'themeSeg',
 }`;
 
 // Strip ANSI so assertions can pin on the rendered text alone — color codes
@@ -111,7 +111,7 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
         segments: {
           seg: { template: ' x ', bg: 'primary', fg: 'foreground' },
         },
-        layout: [['seg']],
+        root: 'seg',
       }`,
       ALLOWED_PALETTES,
     );
@@ -227,7 +227,7 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
           themeSeg: { template: '{{ .theme }}', bg: 'surface', fg: 'foreground' },
           tbSeg: { template: '{{ .expanded }}', bg: 'surface', fg: 'foreground' },
         },
-        layout: [['themeSeg', 'tbSeg']],
+        root: { h: ['themeSeg', 'tbSeg'] },
       }`,
       ALLOWED_PALETTES,
     );
@@ -441,7 +441,7 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
         segments: {
           s: { template: '{{ .theme }}', bg: 'surface', fg: 'foreground' },
         },
-        layout: [['s']],
+        root: 's',
       }`,
       ALLOWED_PALETTES,
     );
@@ -566,7 +566,7 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
           segments: {
             s: { template: '{{ .theme }}', bg: 'surface', fg: 'foreground' },
           },
-          layout: [['s']],
+          root: 's',
         }`,
         ALLOWED_PALETTES,
       ),
@@ -596,7 +596,7 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
               },
             },
           },
-          layout: [['s']],
+          root: 's',
         }`,
         ALLOWED_PALETTES,
       ),
@@ -617,7 +617,7 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
         segments: {
           tb: { template: ' tb=[{{ .expanded }}] ', bg: 'surface', fg: 'foreground' },
         },
-        layout: [['tb']],
+        root: 'tb',
       }`,
       ALLOWED_PALETTES,
     );

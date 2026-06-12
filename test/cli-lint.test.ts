@@ -28,7 +28,7 @@ describe("lintConfig", () => {
   it("reports a valid config", () => {
     const p = write(
       "ok.json5",
-      `{ segments: { a: { template: 'a' } }, layout: [['a']] }`,
+      `{ segments: { a: { template: 'a' } }, root: { h: ['a'] } }`,
     );
     expect(lintConfig(p)).toEqual({ kind: "valid", path: p });
   });
@@ -46,7 +46,7 @@ describe("lintConfig", () => {
   it("reports a semantic (cross-ref) error — the daemon would surface the same", () => {
     const p = write(
       "dangling.json5",
-      `{ segments: { a: { template: 'a' } }, layout: [['a', 'nope']] }`,
+      `{ segments: { a: { template: 'a' } }, root: { h: ['a', 'nope'] } }`,
     );
     const outcome = lintConfig(p);
     expect(outcome.kind).toBe("invalid");
