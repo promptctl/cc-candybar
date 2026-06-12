@@ -45,7 +45,7 @@ const VALID_CFG = JSON.stringify({
   segments: {
     s: { template: " {{ .x }} ", bg: "surface", fg: "foreground" },
   },
-  layout: [["s"]],
+  root: "s",
 });
 
 describe("dslConfigCandidatePaths", () => {

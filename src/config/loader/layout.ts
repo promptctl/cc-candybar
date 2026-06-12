@@ -42,7 +42,6 @@ import {
   record,
   recordJson,
   requireString,
-  requireStringSpec,
   type FieldSpec,
   type JsonNode,
   type Mutable,

@@ -53,7 +53,7 @@ describe("renderDsl — multi-line layout", () => {
       globals: { palette: 'textual-dark' },
       variables: { x: { kind: 'literal', value: 'A' } },
       segments: { s: { template: ' {{ .x }} ', bg: 'surface', fg: 'foreground' } },
-      layout: [['s']],
+      root: 's',
     }`;
     const { config, compiled, store, registry } = buildRuntime(source);
     const out = renderDsl(config, compiled, store, registry, {}, basePalette(), OPTS);
@@ -72,7 +72,7 @@ describe("renderDsl — multi-line layout", () => {
         top: { template: ' {{ .a }} ', bg: 'surface', fg: 'foreground' },
         bot: { template: ' {{ .b }} ', bg: 'surface', fg: 'foreground' },
       },
-      layout: [['top'], ['bot']],
+      root: { v: ['top', 'bot'] },
     }`;
     const { config, compiled, store, registry } = buildRuntime(source);
     const out = renderDsl(config, compiled, store, registry, {}, basePalette(), OPTS);
@@ -100,7 +100,7 @@ describe("renderDsl — multi-line layout", () => {
         sc: { template: '{{ .c }}', bg: 'surface', fg: 'foreground' },
         sd: { template: '{{ .d }}', bg: 'surface', fg: 'foreground' },
       },
-      layout: [['sa', 'sb'], ['sc', 'sd']],
+      root: { v: [{ h: ['sa', 'sb'] }, { h: ['sc', 'sd'] }] },
     }`;
     const { config, compiled, store, registry } = buildRuntime(source);
     const out = renderDsl(config, compiled, store, registry, {}, basePalette(), OPTS);
@@ -153,7 +153,7 @@ describe("renderDsl — multi-line layout", () => {
         sb: { template: ' {{ .b }} ', bg: 'surface', fg: 'foreground' },
         sc: { template: ' {{ .c }} ', bg: 'surface', fg: 'foreground' },
       },
-      layout: [['sa', 'sb'], ['sc']],
+      root: { v: [{ h: ['sa', 'sb'] }, 'sc'] },
     }`;
     const { config, compiled, store, registry } = buildRuntime(source);
     const out = renderDsl(config, compiled, store, registry, {}, basePalette(), OPTS);
@@ -174,7 +174,7 @@ describe("renderDsl — multi-line layout", () => {
       globals: { palette: 'textual-dark' },
       variables: { x: { kind: 'literal', value: 'TOP\\nBOT' } },
       segments: { s: { template: '{{ .x }}', bg: 'surface', fg: 'foreground' } },
-      layout: [['s']],
+      root: 's',
     }`;
     const { config, compiled, store, registry } = buildRuntime(source);
     const out = renderDsl(config, compiled, store, registry, {}, basePalette(), OPTS);
@@ -197,7 +197,7 @@ describe("renderDsl — multi-line layout", () => {
       globals: { palette: 'textual-dark' },
       variables: { x: { kind: 'literal', value: 'ABCDE\\nFGHIJ' } },
       segments: { s: { template: '{{ .x }}', width: 5, bg: 'surface', fg: 'foreground' } },
-      layout: [['s']],
+      root: 's',
     }`;
     const { config, compiled, store, registry } = buildRuntime(source);
     const out = renderDsl(config, compiled, store, registry, {}, basePalette(), OPTS);
@@ -221,7 +221,7 @@ describe("renderDsl — multi-line layout", () => {
           bg: 'surface', fg: 'foreground',
         },
       },
-      layout: [['s']],
+      root: 's',
     }`;
     const { config, compiled, store, registry } = buildRuntime(source);
     const out = renderDsl(config, compiled, store, registry, {}, basePalette(), OPTS);

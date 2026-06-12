@@ -73,7 +73,7 @@ const TEST_CONFIG_SOURCE = `{
       fg: 'foreground',
     },
   },
-  layout: [['intro', 'plain']],
+  root: { h: ['intro', 'plain'] },
 }`;
 
 // [LAW:single-enforcer] env-state is managed at one place — these hooks —
@@ -369,16 +369,10 @@ describe("introspectConfig with populated state", () => {
     expect(config).not.toBeNull();
     expect(config?.root).toEqual({
       kind: "container",
-      direction: "vertical",
+      direction: "horizontal",
       children: [
-        {
-          kind: "container",
-          direction: "horizontal",
-          children: [
-            { kind: "segment", name: "intro" },
-            { kind: "segment", name: "plain" },
-          ],
-        },
+        { kind: "segment", name: "intro" },
+        { kind: "segment", name: "plain" },
       ],
     });
     expect(Object.keys(config?.variables ?? {}).sort()).toEqual([
@@ -401,16 +395,10 @@ describe("introspectConfig with populated state", () => {
     const wireShape = JSON.parse(JSON.stringify(config));
     expect(wireShape.root).toEqual({
       kind: "container",
-      direction: "vertical",
+      direction: "horizontal",
       children: [
-        {
-          kind: "container",
-          direction: "horizontal",
-          children: [
-            { kind: "segment", name: "intro" },
-            { kind: "segment", name: "plain" },
-          ],
-        },
+        { kind: "segment", name: "intro" },
+        { kind: "segment", name: "plain" },
       ],
     });
     expect(wireShape.variables.greeting.kind).toBe("literal");

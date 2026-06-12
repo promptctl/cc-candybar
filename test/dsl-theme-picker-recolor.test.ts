@@ -49,7 +49,7 @@ const SRC = `{
     plain: { template: ' ◆ here ', bg: 'surface', fg: 'foreground' },
     pickers: { template: '{{ range themes }}{{ action "applyTheme" . }}{{ end }}', bg: 'surface', fg: 'foreground' },
   },
-  layout: [['plain'], ['pickers']],
+  root: { v: ['plain', 'pickers'] },
 }`;
 
 const ALLOWED = new Set([BASE_THEME, PICKED_THEME]);

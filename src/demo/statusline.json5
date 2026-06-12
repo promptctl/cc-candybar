@@ -85,8 +85,8 @@
     },
   },
 
-  // ── Layout: an array of rows. Each row is joined left-to-right; rows are
-  // joined with newlines. Single-row layout is the `[[…]]` degenerate case
-  // of multi-row.
-  layout: [['user', 'directory', 'branch', 'model', 'session', 'clock']],
+  // ── Layout: Option A shape grammar — one horizontal row of segment refs.
+  // { v: [...] } for multiple rows; { h: ['a', 'b'], when: '...' } for a gated row;
+  // bare string 'segname' for a single segment ref.
+  root: { h: ['user', 'directory', 'branch', 'model', 'session', 'clock'] },
 }
