@@ -558,3 +558,226 @@ describe("2de.12 — loader proves the ActionDecl invariants", () => {
     expect(() => parseAndValidate("<test>", src, ALLOWED)).not.toThrow();
   });
 });
+
+// ─── Cycle set action (2de.4 — enumerated-domain stepper) ───────────────────────
+
+describe("2de.4 — cycle set action", () => {
+  // A collapsible-group toggle in the raw grammar: members ordered
+  // default-state-first, one display per member.
+  const SRC = `{
+    globals: {},
+    variables: {
+      'session.id': { kind: 'input', path: 'session_id', default: '' },
+      open: { kind: 'state', key: 'details-open', default: '0' },
+    },
+    actions: { toggle: { set: 'details-open', cycle: ['0', '1'] } },
+    segments: { bar: { template: '{{ action "toggle" "▸ details" "▾ details" }}', bg: 'surface', fg: 'foreground' } },
+    layout: [['bar']],
+  }`;
+
+  test("renders the current member's display; the click writes the successor", () => {
+    const { render, click, sessionState, dispose } = buildRuntime(SRC);
+    const out = render();
+    expect(stripAnsi(out)).toContain("▸ details");
+    const urls = extractUrls(out);
+    expect(urls).toHaveLength(1);
+    expect(effectsOf(urls[0]!)).toEqual([
+      { verb: "set-state", args: ["s1", "details-open", "1"] },
+    ]);
+    click(urls[0]!);
+    expect(sessionState.get("s1", "details-open")).toBe("1");
+    // Next render flips display AND write target (the toggle round trip).
+    const out2 = render();
+    expect(stripAnsi(out2)).toContain("▾ details");
+    expect(effectsOf(extractUrls(out2)[0]!)).toEqual([
+      { verb: "set-state", args: ["s1", "details-open", "0"] },
+    ]);
+    dispose();
+  });
+
+  test("a current value outside the domain counts as the first member", () => {
+    const { render, sessionState, dispose } = buildRuntime(SRC);
+    // Bypass the gate to simulate a foreign/legacy stored value.
+    sessionState.set("s1", "details-open", "garbage");
+    const out = render();
+    expect(stripAnsi(out)).toContain("▸ details");
+    expect(effectsOf(extractUrls(out)[0]!)).toEqual([
+      { verb: "set-state", args: ["s1", "details-open", "1"] },
+    ]);
+    dispose();
+  });
+
+  test("a single display is static across states (the bare-glyph toggle)", () => {
+    const src = SRC.replace('"▸ details" "▾ details"', '"⊕"');
+    const { render, click, sessionState, dispose } = buildRuntime(src);
+    const out = render();
+    expect(stripAnsi(out)).toContain("⊕");
+    click(extractUrls(out)[0]!);
+    expect(sessionState.get("s1", "details-open")).toBe("1");
+    expect(stripAnsi(render())).toContain("⊕");
+    dispose();
+  });
+
+  test("a display arity that is neither 1 nor the member count fails loudly", () => {
+    const src = `{
+      globals: {},
+      variables: {
+        'session.id': { kind: 'input', path: 'session_id', default: '' },
+        mode: { kind: 'state', key: 'mode', default: 'a' },
+      },
+      actions: { next: { set: 'mode', cycle: ['a', 'b', 'c'] } },
+      segments: { bar: { template: '{{ action "next" "A" "B" }}', bg: 'surface', fg: 'foreground' } },
+      layout: [['bar']],
+    }`;
+    const { render, dispose } = buildRuntime(src);
+    expect(() => render()).toThrow(/cycles 3 members.*got 2/);
+    dispose();
+  });
+
+  test("derives an allow-list gate of exactly the members", () => {
+    const config = parseAndValidate("<test>", SRC, ALLOWED);
+    expect(deriveActionValidators(config)).toEqual([
+      {
+        key: "details-open",
+        spec: { kind: "allow-list", allowed: ["0", "1"] },
+      },
+    ]);
+  });
+
+  test("a 3-state cycle advances in declaration order and wraps", () => {
+    const src = `{
+      globals: {},
+      variables: {
+        'session.id': { kind: 'input', path: 'session_id', default: '' },
+        mode: { kind: 'state', key: 'mode', default: 'off' },
+      },
+      actions: { next: { set: 'mode', cycle: ['off', 'low', 'high'] } },
+      segments: { bar: { template: '{{ action "next" "○" "◐" "●" }}', bg: 'surface', fg: 'foreground' } },
+      layout: [['bar']],
+    }`;
+    const { render, click, sessionState, dispose } = buildRuntime(src);
+    for (const [display, written] of [
+      ["○", "low"],
+      ["◐", "high"],
+      ["●", "off"],
+    ] as const) {
+      const out = render();
+      expect(stripAnsi(out)).toContain(display);
+      click(extractUrls(out)[0]!);
+      expect(sessionState.get("s1", "mode")).toBe(written);
+    }
+    dispose();
+  });
+
+  test("accordion: two cycles sharing a key — a sibling's path counts as closed, the gate is the union", () => {
+    // The 2de.4 accordion shape: each group's toggle is a 2-member cycle
+    // [parentPrefix, ownPath] over ONE shared key. Opening one group writes its
+    // own path, which is "outside the domain" of the sibling's cycle — so the
+    // sibling renders closed and its click expands itself (auto-closing the
+    // first, because one key holds one chain).
+    const src = `{
+      globals: {},
+      variables: {
+        'session.id': { kind: 'input', path: 'session_id', default: '' },
+        menu: { kind: 'state', key: 'menu', default: 'closed' },
+      },
+      actions: {
+        toggleA: { set: 'menu', cycle: ['closed', 'a'] },
+        toggleB: { set: 'menu', cycle: ['closed', 'b'] },
+      },
+      segments: { bar: { template: '{{ action "toggleA" "▸A" "▾A" }} {{ action "toggleB" "▸B" "▾B" }}', bg: 'surface', fg: 'foreground' } },
+      layout: [['bar']],
+    }`;
+    const config = parseAndValidate("<test>", src, ALLOWED);
+    expect(deriveActionValidators(config)).toEqual([
+      {
+        key: "menu",
+        spec: { kind: "allow-list", allowed: ["closed", "a", "b"] },
+      },
+    ]);
+    const { render, click, sessionState, dispose } = buildRuntime(src);
+    // Open A.
+    click(extractUrls(render())[0]!);
+    expect(sessionState.get("s1", "menu")).toBe("a");
+    // A renders open; B renders closed (current "a" is outside B's domain) and
+    // B's click writes "b" — expand B, auto-closing A.
+    const out = render();
+    expect(stripAnsi(out)).toContain("▾A");
+    expect(stripAnsi(out)).toContain("▸B");
+    click(extractUrls(out)[1]!);
+    expect(sessionState.get("s1", "menu")).toBe("b");
+    expect(stripAnsi(render())).toContain("▸A");
+    expect(stripAnsi(render())).toContain("▾B");
+    dispose();
+  });
+});
+
+// ─── Cycle loader invariants (2de.4) ─────────────────────────────────────────────
+
+describe("2de.4 — loader proves the cycle invariants", () => {
+  const base = (actions: string) => `{
+    globals: {},
+    variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' }, k: { kind: 'state', key: 'k', default: '' } },
+    actions: ${actions},
+    segments: { bar: { template: '{{ action "a" "x" }}', bg: 'surface', fg: 'foreground' } },
+    layout: [['bar']],
+  }`;
+
+  const expectIssue = (src: string, re: RegExp) => {
+    try {
+      parseAndValidate("<test>", src, ALLOWED);
+      throw new Error("expected ConfigError");
+    } catch (e) {
+      expect(e).toBeInstanceOf(ConfigError);
+      expect((e as ConfigError).message).toMatch(re);
+    }
+  };
+
+  test("a valid cycle parses", () => {
+    expect(() =>
+      parseAndValidate("<test>", base(`{ a: { set: 'k', cycle: ['0', '1'] } }`), ALLOWED),
+    ).not.toThrow();
+  });
+
+  test("fewer than two members is rejected", () => {
+    expectIssue(
+      base(`{ a: { set: 'k', cycle: ['solo'] } }`),
+      /at least two members/,
+    );
+  });
+
+  test("duplicate members are rejected", () => {
+    expectIssue(
+      base(`{ a: { set: 'k', cycle: ['x', 'y', 'x'] } }`),
+      /must be unique/,
+    );
+  });
+
+  test("an empty member is rejected", () => {
+    expectIssue(
+      base(`{ a: { set: 'k', cycle: ['', 'b'] } }`),
+      /non-empty/,
+    );
+  });
+
+  test("a slash-bearing member is rejected", () => {
+    expectIssue(
+      base(`{ a: { set: 'k', cycle: ['a/b', 'c'] } }`),
+      /slash-free/,
+    );
+  });
+
+  test("cycle plus another value source is rejected", () => {
+    expectIssue(
+      base(`{ a: { set: 'k', to: 'v', cycle: ['a', 'b'] } }`),
+      /exactly one value source/,
+    );
+  });
+
+  test("a non-array cycle is rejected", () => {
+    expectIssue(
+      base(`{ a: { set: 'k', cycle: 'ab' } }`),
+      /must be an array of strings/,
+    );
+  });
+});

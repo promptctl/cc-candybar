@@ -54,6 +54,14 @@ export type ActionKey = (typeof ACTION_KEYS)[number];
 //                         -> int gate (unbounded). The missing primitive a
 //                         width-paginated picker needs — its page key accepts any
 //                         integer, which no bounded/literal arm can express.
+//   set + cycle         — write the SUCCESSOR of the current value in the
+//                         member list, wrapping; a current value outside the
+//                         domain counts as the first member (so the second
+//                         member is the "first click" target — order members
+//                         default-state-first). The bounded stepper's sibling:
+//                         a stepper steps a range, a cycle steps an enumerated
+//                         domain (toggles, N-state cyclers, accordion paths)
+//                         -> allow-list {members}
 //   copy                — copy templated text to the clipboard -> no gate
 //   open                — open a templated target in the editor -> no gate
 //
@@ -70,6 +78,7 @@ export type ActionDecl =
       readonly by: number;
     }
   | { readonly set: string; readonly int: true }
+  | { readonly set: string; readonly cycle: readonly string[] }
   | { readonly copy: string }
   | { readonly open: string };
 

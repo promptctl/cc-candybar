@@ -5,13 +5,23 @@
 // …) is a DECLARATION built from these; changing a primitive changes every
 // validator uniformly. This file changes when the combinator vocabulary changes.
 
-import { SOURCE_KINDS, type SourceKind } from "../dsl-types.js";
+import {
+  SOURCE_KINDS,
+  type GroupSugarDecl,
+  type SourceKind,
+} from "../dsl-types.js";
 import { findKeyLine, type ConfigIssue } from "./diagnostics.js";
 
 export interface ValidateCtx {
   readonly source: string;
   readonly issues: ConfigIssue[];
   readonly allowedPalettes: ReadonlySet<string>;
+  // [LAW:one-source-of-truth] The `group` sugar nodes collected during the root
+  // walk — the single record the loader's synthesis pass (group state var +
+  // cycle action + toggle segment) derives from. Parse-time collection, post-
+  // walk synthesis: the walk owns positions, the synthesis owns cross-section
+  // emission.
+  readonly groups: GroupSugarDecl[];
 }
 
 export type Mutable<T> = { -readonly [K in keyof T]: T[K] };
@@ -518,6 +528,29 @@ export function optionalStringSpec(): FieldSpec<string> {
     json: { type: "string" },
     parse: (ctx, path, field, raw) =>
       optionalStringField(ctx, path, raw, field),
+  };
+}
+
+// [LAW:dataflow-not-control-flow] An optional boolean field: present-and-valid
+// is included, present-and-wrong reports an issue and omits, absent omits
+// silently — the boolean twin of `optionalStringSpec`.
+export function optionalBooleanSpec(): FieldSpec<boolean> {
+  return {
+    required: false,
+    json: { type: "boolean" },
+    parse: (ctx, path, field, raw) => {
+      const v = raw[field];
+      if (v === undefined) return undefined;
+      if (typeof v !== "boolean") {
+        ctx.issues.push({
+          path: `${path}.${field}`,
+          message: `${field} must be a boolean, got ${describeType(v)}`,
+          line: findKeyLine(ctx.source, [field]),
+        });
+        return undefined;
+      }
+      return v;
+    },
   };
 }
 
