@@ -618,7 +618,7 @@ describe("2de.4 — cycle set action", () => {
     dispose();
   });
 
-  test("a display arity that is neither 1 nor the member count fails loudly", () => {
+  test("a display arity that is neither 1 nor the member count surfaces as a visible error cell", () => {
     const src = `{
       globals: {},
       variables: {
@@ -630,7 +630,10 @@ describe("2de.4 — cycle set action", () => {
       layout: [['bar']],
     }`;
     const { render, dispose } = buildRuntime(src);
-    expect(() => render()).toThrow(/cycles 3 members.*got 2/);
+    // [LAW:no-silent-failure] Arity errors surface as a visible ⚠ error cell
+    // rather than crashing the bar — partial rendering keeps other segments alive.
+    const out = stripAnsi(render());
+    expect(out).toMatch(/⚠.*bar.*cycles 3 members/);
     dispose();
   });
 

@@ -66,6 +66,12 @@ import {
 export interface CompiledConfig {
   readonly segments: CompiledSegments;
   readonly root: CompiledNode;
+  // [LAW:types-are-the-program] Variable declaration failures that did NOT
+  // prevent the config from loading (type mismatches, bad defaults). The
+  // affected variables are absent from the store; segments that reference them
+  // render as error cells. Non-empty means "partial load" — the config is
+  // usable but degraded.
+  readonly loadWarnings: readonly string[];
 }
 
 // ─── CacheDecl → CachePolicy ─────────────────────────────────────────────────
@@ -314,15 +320,33 @@ export function registerDslConfig(
   // that references it read one value.
   actionRuntime.compiled = compileActions(parse, config.actions, stateKeyToVar);
 
+  // [LAW:dataflow-not-control-flow] One variable failing to declare does not
+  // abort the rest. Errors are data (accumulated in loadWarnings); the store
+  // simply lacks the broken variable. Segments that reference it get a
+  // MissingFieldError at render time and show an error cell. Segments that
+  // don't (e.g. configSwitcher) render normally.
+  const loadWarnings: string[] = [];
   for (const [name, decl] of Object.entries(config.variables)) {
-    declareOne(registry, name, decl, cwd);
+    try {
+      declareOne(registry, name, decl, cwd);
+    } catch (err) {
+      loadWarnings.push(
+        `Variable "${name}": ${(err as Error).message ?? String(err)}`,
+      );
+    }
   }
 
   // Segment-local vars stored under namespaced key segName.varName.
   for (const [segName, seg] of Object.entries(config.segments)) {
     if (!seg.vars) continue;
     for (const [varName, decl] of Object.entries(seg.vars)) {
-      declareOne(registry, `${segName}.${varName}`, decl, cwd);
+      try {
+        declareOne(registry, `${segName}.${varName}`, decl, cwd);
+      } catch (err) {
+        loadWarnings.push(
+          `Variable "${segName}.${varName}": ${(err as Error).message ?? String(err)}`,
+        );
+      }
     }
   }
 
@@ -393,7 +417,11 @@ export function registerDslConfig(
     return nodeType(node.kind).compile(node, cctx);
   };
 
-  return { segments: compiled, root: compileNode(config.root, "root") };
+  return {
+    segments: compiled,
+    root: compileNode(config.root, "root"),
+    loadWarnings,
+  };
 }
 
 // ─── renderDsl ───────────────────────────────────────────────────────────────

@@ -240,6 +240,16 @@ export class RenderCache {
     entry.state?.validatorDisposers.forEach((dispose) => dispose());
     entry.lastError = null;
     entry.state = newState;
+    // [LAW:dataflow-not-control-flow] Partial-load warnings (variable
+    // declaration failures that didn't abort the load) flow through the same
+    // warning channel as collision warnings, already set above. Append rather
+    // than replace so both can be visible at once.
+    if (newState.compiled.loadWarnings.length > 0) {
+      const vw = newState.compiled.loadWarnings.join("\n");
+      entry.lastWarning = entry.lastWarning
+        ? entry.lastWarning + "\n" + vw
+        : vw;
+    }
     this.refreshWatcher(entry, resolvedPath);
   }
 
