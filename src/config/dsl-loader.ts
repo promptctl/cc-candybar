@@ -47,7 +47,11 @@ import { mergeWithDefault } from "./loader/merge.js";
 import { validateGlobals } from "./loader/globals.js";
 import { validateVariables } from "./loader/variables.js";
 import { validateSegments } from "./loader/segments.js";
-import { validateLayout, validateRoot } from "./loader/layout.js";
+import {
+  synthesizeGroupDecls,
+  validateLayout,
+  validateRoot,
+} from "./loader/layout.js";
 import { validateActions } from "./loader/actions.js";
 import { validateHelpers } from "./loader/helpers.js";
 import { validateCrossReferences } from "./loader/cross-ref.js";
@@ -124,7 +128,7 @@ export function validateConfig(
   allowedPalettes: ReadonlySet<string> = new Set(listResolvablePaletteNames()),
 ): ValidatedConfig {
   const issues: ConfigIssue[] = [];
-  const ctx: ValidateCtx = { source, issues, allowedPalettes };
+  const ctx: ValidateCtx = { source, issues, allowedPalettes, groups: [] };
   validateCrossReferences(ctx, config);
   validateNoCycles(ctx, config);
   if (issues.length > 0) {
@@ -157,7 +161,7 @@ export function parseDslConfig(
   const raw = parseJson5OrThrow(filePath, source);
 
   const issues: ConfigIssue[] = [];
-  const ctx: ValidateCtx = { source, issues, allowedPalettes };
+  const ctx: ValidateCtx = { source, issues, allowedPalettes, groups: [] };
 
   // ── Stage 2: top-level shape + per-record shape. Absence survives as
   // `undefined` in the returned RawDslConfig.
@@ -244,6 +248,12 @@ function validateTopLevel(
     out.actions = validateActions(ctx, raw.actions);
   if (raw.helpers !== undefined)
     out.helpers = validateHelpers(ctx, raw.helpers);
+  // [LAW:one-source-of-truth] Group sugar synthesis runs AFTER every section
+  // parsed: each group collected during the root walk emits its state var +
+  // cycle action + toggle segment into the raw sections (so they merge over the
+  // default and cross-ref like any user declaration), and user names under the
+  // reserved namespace are rejected against the fully-parsed sections.
+  synthesizeGroupDecls(ctx, out);
   return out;
 }
 

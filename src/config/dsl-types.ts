@@ -122,6 +122,27 @@ export interface ContainerNode {
 
 export type LayoutNode = ContainerNode | SegmentNode;
 
+// [LAW:types-are-the-program] The `group` SUGAR as collected at parse — an
+// INPUT-only shape, never a canonical LayoutNode kind: arranging + gating are
+// behaviors `container` already has, so "group" may only be a spelling. The
+// loader lowers each group to container/segment nodes and SYNTHESIZES its state
+// var + cycle action + toggle segment under the reserved `groups.` namespace
+// (one declaration; every derived artifact single-sourced from it
+// [LAW:one-source-of-truth]). `path` records the node's tree position so the
+// nesting invariant (an ancestor and a descendant must not share a state key)
+// is checkable after the walk.
+export interface GroupSugarDecl {
+  readonly name: string;
+  readonly label: string;
+  readonly open?: boolean;
+  readonly direction?: Direction;
+  readonly key?: string;
+  readonly bg?: string;
+  readonly fg?: string;
+  readonly when?: string;
+  readonly path: string;
+}
+
 // [LAW:single-enforcer] THE one pre-order walk over a node tree. Every consumer
 // that needs "which segments / which `when` predicates does this layout name"
 // (the reachability closure, the debug dump, the cross-ref validator) iterates

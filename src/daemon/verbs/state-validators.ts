@@ -567,6 +567,8 @@ function mergeContributions(
 //     the displayed number);
 //   • an `int` `set` declares an unbounded int (a paged picker's page cursor —
 //     the renderer owns clamping; the gate requires integer shape);
+//   • a `cycle` `set` declares an allow-list of its members (the renderer only
+//     ever writes the successor member);
 //   • copy/open write nothing, so they declare no spec.
 // A new action arm is one new branch here, returning data the existing merge
 // folds — no consumer re-walks an action's shape.
@@ -591,6 +593,14 @@ function actionKeySpecs(
   // clamping to valid pages; the gate only requires integer shape.
   if ("int" in a) {
     return [{ key: a.set, spec: { kind: "int" } }];
+  }
+  // [LAW:one-source-of-truth] A cycle's members ARE its gate: the renderer only
+  // ever writes a member (the successor of the current value), and the
+  // allow-list admits exactly the members. Sharing groups' cycles on one key
+  // union here like any other allow-list contributions — that union IS the
+  // accordion's writable path set.
+  if ("cycle" in a) {
+    return [{ key: a.set, spec: { kind: "allow-list", allowed: a.cycle } }];
   }
   return [
     {

@@ -1195,6 +1195,28 @@
           {
             "type": "object",
             "properties": {
+              "set": {
+                "type": "string"
+              },
+              "cycle": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "minItems": 2,
+                "uniqueItems": true
+              }
+            },
+            "required": [
+              "set",
+              "cycle"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
               "copy": {
                 "type": "string"
               }
@@ -1296,6 +1318,57 @@
           "required": [
             "kind",
             "segments"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "group"
+            },
+            "name": {
+              "type": "string",
+              "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+            },
+            "label": {
+              "type": "string",
+              "pattern": "^[^\\n\\r]*$"
+            },
+            "open": {
+              "type": "boolean"
+            },
+            "direction": {
+              "enum": [
+                "vertical",
+                "horizontal"
+              ]
+            },
+            "key": {
+              "type": "string",
+              "minLength": 1
+            },
+            "bg": {
+              "type": "string"
+            },
+            "fg": {
+              "type": "string"
+            },
+            "when": {
+              "type": "string"
+            },
+            "children": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/LayoutNode"
+              }
+            }
+          },
+          "required": [
+            "kind",
+            "name",
+            "label",
+            "children"
           ],
           "additionalProperties": false
         }
