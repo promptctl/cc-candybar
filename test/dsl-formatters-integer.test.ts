@@ -50,7 +50,7 @@ function render(n: number): string {
   const source = `{
     variables: ${VARS},
     segments: { probe: { template: ${JSON.stringify("[{{ formatInteger .n }}]")} } },
-    layout: [["probe"]],
+    root: "probe",
   }`;
   const raw = parseDslConfig("<test>", source);
   const config = validateConfig(

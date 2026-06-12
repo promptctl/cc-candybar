@@ -74,13 +74,13 @@ Wire format lives in `src/daemon/protocol.ts`. The Rust client mirrors the wire 
 3. `<cwd>/.cc-candybar.json5` (then `.json`)
 4. `$XDG_CONFIG_HOME/cc-candybar/config.json5` (then `.json`; defaults to `~/.config/cc-candybar/config.json5`)
 
-Both `.json5` and `.json` are accepted (JSON ⊂ JSON5, same parser) — `.json5` wins when both exist at the same location, and `detectConfigCollisions` surfaces the shadowed sibling as a warning so the user removes the duplicate. If none exist, `RenderCache.reloadInto` falls back to `DEFAULT_DSL_CONFIG` (`src/config/default-dsl-config.ts`) — the bundled standard library, covering every built-in segment. **User files merge on top of the bundled default** (`mergeWithDefault` in `src/config/loader/merge.ts`): `globals` shallow-merge per field; `variables`, `segments`, `actions`, and `helpers` merge by name with user winning per name; and the canonical `root` layout tree replaces wholesale when present — a user `root` (the recursive `container`/`segment` grammar) wins, else the flat `layout` row sugar (`LayoutRowInput[]` — each row a bare `string[]` or `{ when?, segments }`) is compiled to a tree, else the default's tree (so an explicit `layout: []` renders no segments). So a user only needs to declare what differs — overriding one segment, one variable, or just the layout, without restating the rest. JSON5 supports inline comments.
+Both `.json5` and `.json` are accepted (JSON ⊂ JSON5, same parser) — `.json5` wins when both exist at the same location, and `detectConfigCollisions` surfaces the shadowed sibling as a warning so the user removes the duplicate. If none exist, `RenderCache.reloadInto` falls back to `DEFAULT_DSL_CONFIG` (`src/config/default-dsl-config.ts`) — the bundled standard library, covering every built-in segment. **User files merge on top of the bundled default** (`mergeWithDefault` in `src/config/loader/merge.ts`): `globals` shallow-merge per field; `variables`, `segments`, `actions`, and `helpers` merge by name with user winning per name; and the canonical `root` layout tree replaces wholesale when present. The authoring surface for `root` is the **Option A shape grammar**: a bare string names a segment (`"segname"`); `{ seg, when? }` is a gated segment ref; `{ h: [...], when? }` / `{ v: [...], when? }` spell horizontal and vertical containers recursively. The older flat `layout` row sugar (still accepted, deleted in 2de.19) and `cells` nodes lower to the same tree at load time. So a user only needs to declare what differs — overriding one segment, one variable, or just the root layout, without restating the rest. JSON5 supports inline comments.
 
 ### Renderer (`src/dsl/render.ts`)
 
 `registerDslConfig(config, registry, opts)` is the one-shot setup: declares every variable into the `SourceRegistry`, pre-parses every segment's `when` / `template` / `bg` / `fg` strings, and pre-resolves per-segment palette specs. Returns `CompiledSegments`.
 
-`renderDsl(config, compiled, store, registry, payload, basePalette, opts)` is the per-render hot path: pushes payload into input boxes (`registry.applyInput`), walks `config.layout` (a 2D `ReadonlyArray<readonly string[]>` — rows of segment names; single-line is the degenerate `[[…]]` case), evaluates each segment's compiled templates, builds `RichText` cells with per-segment palette colors, and joins each row via the powerline `Joiner` into an ANSI line; rows are joined with `\n`. `FlexStrip`'s width-based auto-wrap (bzh.10) still applies *within* each row as a soft overflow safety net.
+`renderDsl(config, compiled, store, registry, payload, basePalette, opts)` is the per-render hot path: pushes payload into input boxes (`registry.applyInput`), walks `config.root` (a `LayoutNode` tree — containers stack/zip their children; segments are the leaves), evaluates each segment's compiled templates, builds `RichText` cells with per-segment palette colors, and serializes each composed line through the powerline `Joiner`; rows (vertical container children) are joined with `\n`. `FlexStrip`'s width-based auto-wrap (bzh.10) still applies *within* each row as a soft overflow safety net.
 
 Both functions are called verbatim by the daemon — no parallel render path, no inline computation that diverges. The demo at `src/demo/dsl.ts` calls the same two functions.
 
@@ -142,11 +142,11 @@ segments: {
     bg: "surface", fg: "foreground",
   },
 },
-layout: [
-  ["directory", "git", "model", "context"],
-  ["trigger"],
-  { when: "{{ ge (int .themePage) 0 }}", segments: ["pickerMenu"] },  // row exists only when open
-],
+root: { v: [
+  { h: ["directory", "git", "model", "context"] },
+  "trigger",
+  { seg: "pickerMenu", when: "{{ ge (int .themePage) 0 }}" },  // row exists only when open
+] },
 ```
 
 ### Group sugar (`kind: "group"` in the `root` grammar)
@@ -175,7 +175,7 @@ The codebase cites laws inline (`[LAW:one-source-of-truth]`, `[LAW:dataflow-not-
 Recurring patterns enforced by these laws in this repo:
 
 - **One render path: `renderDsl`.** The daemon calls it verbatim; the demo calls it verbatim; tests call it verbatim. No parallel renderer, no "fallback" computation.
-- **One config shape: `DslConfig`.** No alternate input format. `loadConfig` merges the user file on top of `DEFAULT_DSL_CONFIG` (`mergeWithDefault`): `globals` shallow-merge per field; `variables`/`segments`/`actions`/`helpers` merge by name (user wins per name); only the canonical `root` layout tree replaces wholesale when present (a user `root` wins, else `layout` rows compile to a tree, else the default's tree) — so a user file only needs to declare what differs from the bundled default.
+- **One config shape: `DslConfig`.** No alternate input format. `loadConfig` merges the user file on top of `DEFAULT_DSL_CONFIG` (`mergeWithDefault`): `globals` shallow-merge per field; `variables`/`segments`/`actions`/`helpers` merge by name (user wins per name); the `root` layout tree replaces wholesale when present. Authoring surface is the Option A shape grammar (`{ h/v: [...], when? }`, bare string segment refs). The flat `layout` row sugar is still accepted (deleted in 2de.19) — so a user file only needs to declare what differs from the bundled default.
 - **Variability lives in data, not control flow.** The augmented payload (`src/daemon/render-payload.ts`) carries every value the templates can read; segments hide/show via `when` predicates on values, not branches in code.
 - **Errors are loud.** Bad config doesn't silently degrade — `composeWithDiagnostics` (`src/daemon/server.ts`) renders visible icons for both fatal errors and advisory warnings (the `.json5` vs `.json` collision detector emits a warning, for example). Don't add silent `|| defaults` that hide a broken state.
 

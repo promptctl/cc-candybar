@@ -542,30 +542,22 @@ export const DEFAULT_DSL_CONFIG = {
     },
   },
 
-  // Default layout — the canonical node tree: a vertical container holding one
-  // horizontal container of `segment` refs (the historical default-enabled
-  // segment list). The default authors `root` directly in the canonical
-  // `container | segment` grammar (rather than the `layout`/`cells` sugar) so the
-  // bundled config exercises the same surface every other config lowers to
-  // [LAW:one-source-of-truth]. Adding rows = appending more horizontal-container
-  // children; nesting = a deeper `container`. Every segment is already declared
-  // above, and the renderer walks the tree uniformly.
+  // Default layout — a single horizontal row of segment refs.
+  // A-grammar equivalent: { h: ["directory","git","model","session","today","context"] }
+  // [LAW:one-source-of-truth] The bundled default now authors the same terse
+  // surface every user config lowers to, so the default is the reference spelling.
+  // Adding rows = wrapping in { kind:"container", direction:"vertical", children:[...] };
+  // every segment is already declared above.
   root: {
     kind: "container",
-    direction: "vertical",
+    direction: "horizontal",
     children: [
-      {
-        kind: "container",
-        direction: "horizontal",
-        children: [
-          { kind: "segment", name: "directory" },
-          { kind: "segment", name: "git" },
-          { kind: "segment", name: "model" },
-          { kind: "segment", name: "session" },
-          { kind: "segment", name: "today" },
-          { kind: "segment", name: "context" },
-        ],
-      },
+      { kind: "segment", name: "directory" },
+      { kind: "segment", name: "git" },
+      { kind: "segment", name: "model" },
+      { kind: "segment", name: "session" },
+      { kind: "segment", name: "today" },
+      { kind: "segment", name: "context" },
     ],
   },
 

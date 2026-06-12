@@ -79,7 +79,7 @@ describe("bdi.2 — config-level shared helper templates", () => {
       variables: { x: { kind: "input", path: "x", type: "number" } },
       helpers: { money: '\${{ printf "%.2f" . }}' },
       segments: { cost: { template: '{{ template "money" .x }}' } },
-      layout: [["cost"]],
+      root: "cost",
     }`;
     expect(plain(render(source, { x: 1.5 }))).toContain("$1.50");
   });
@@ -96,7 +96,7 @@ describe("bdi.2 — config-level shared helper templates", () => {
         s1: { template: '{{ template "money" .a }}' },
         s2: { template: '{{ template "money" .b }}' },
       },
-      layout: [["s1", "s2"]],
+      root: { h: ["s1", "s2"] },
     }`;
     const out = plain(render(source, { a: 2, b: 10.005 }));
     expect(out).toContain("$2.00");
@@ -111,7 +111,7 @@ describe("bdi.2 — config-level shared helper templates", () => {
         labeled: 'cost={{ template "money" . }}',
       },
       segments: { c: { template: '{{ template "labeled" .x }}' } },
-      layout: [["c"]],
+      root: "c",
     }`;
     expect(plain(render(source, { x: 3 }))).toContain("cost=$3.00");
   });
@@ -126,7 +126,7 @@ describe("bdi.2 — config-level shared helper templates", () => {
       variables: { x: { kind: "input", path: "x", type: "number" } },
       helpers: { money: '€{{ printf "%.0f" . }}' },
       segments: { cost: { template: '{{ template "money" .x }}' } },
-      layout: [["cost"]],
+      root: "cost",
     }`;
     const out = plain(render(source, { x: 7 }, dflt));
     expect(out).toContain("€7");
@@ -153,7 +153,7 @@ describe("bdi.2 — config-level shared helper templates", () => {
     const source = `{
       helpers: { broken: '{{ printf "%.2f" }' },
       segments: { s: { template: 'x' } },
-      layout: [["s"]],
+      root: "s",
     }`;
     expect(() => build(source)).toThrow(/helpers\.broken/);
   });
@@ -162,7 +162,7 @@ describe("bdi.2 — config-level shared helper templates", () => {
     const source = `{
       variables: { x: { kind: "input", path: "x", type: "number" } },
       segments: { plain: { template: 'x={{ .x }}' } },
-      layout: [["plain"]],
+      root: "plain",
     }`;
     const { config } = build(source);
     expect(config.helpers).toEqual({});
@@ -176,12 +176,12 @@ describe("bdi.2 — config-level shared helper templates", () => {
       variables: { x: { kind: "input", path: "x", type: "number" } },
       helpers: { unused: 'NEVER' },
       segments: { plain: { template: 'x={{ .x }}' } },
-      layout: [["plain"]],
+      root: "plain",
     }`;
     const without = `{
       variables: { x: { kind: "input", path: "x", type: "number" } },
       segments: { plain: { template: 'x={{ .x }}' } },
-      layout: [["plain"]],
+      root: "plain",
     }`;
     expect(render(withHelper, { x: 9 })).toBe(render(without, { x: 9 }));
   });

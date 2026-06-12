@@ -53,7 +53,7 @@ function render(call: string, payload: Record<string, number>): string {
   const source = `{
     variables: ${VARS},
     segments: { probe: { template: ${JSON.stringify(call)} } },
-    layout: [["probe"]],
+    root: "probe",
   }`;
   const raw = parseDslConfig("<test>", source);
   const config = validateConfig(
