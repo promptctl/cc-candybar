@@ -1,0 +1,407 @@
+// cc-candybar: demo-variables.json5
+//
+// Demonstrates all 9 variable source kinds, all 5 cache policies,
+// segment-local vars, custom helpers, dynamic bg/fg expressions,
+// per-segment palette override, and width/justify/truncate controls.
+//
+// Point CC_CANDYBAR_CONFIG at this file to try it:
+//   CC_CANDYBAR_CONFIG=examples/demo-variables.json5 pnpm demo
+//
+// NOTE: kind:"file" and watch_file paths must be ABSOLUTE — ~ is not
+// expanded at runtime. Adjust paths to match your system before use.
+{
+  globals: {
+    palette: "dracula",               // base theme name
+    default_bg: "surface",            // fallback bg spec for segments with no bg:
+    default_fg: "foreground",         // fallback fg spec
+    default_empty_value: "–",         // rendered when a segment produces nothing
+    default_truncate_marker: "…",     // appended when a segment is clipped
+  },
+
+  // ── Helpers ─────────────────────────────────────────────────────────────
+  // Named template fragments, each DEFINED ONCE here and called from any
+  // segment via {{ template "name" .arg }}. [LAW:one-source-of-truth] —
+  // display policy for repeated formatting lives here, not scattered across
+  // segments.
+  helpers: {
+    // Wraps a string: empty or unset → a fallback label.
+    orUnset: '{{ if eq . "" }}(unset){{ else }}{{ . }}{{ end }}',
+
+    // Formats a byte count to human-readable units. Accepts a number.
+    fmtBytes: '{{ if ge . 1073741824 }}{{ printf "%.1f" (divf . 1073741824) }} GB{{ else if ge . 1048576 }}{{ printf "%.1f" (divf . 1048576) }} MB{{ else if ge . 1024 }}{{ printf "%.1f" (divf . 1024) }} KB{{ else }}{{ . }} B{{ end }}',
+
+    // Renders a work-mode glyph. Accepts a string ("focus"/"review"/"debug").
+    modeGlyph: '{{ if eq . "focus" }}🎯{{ else if eq . "review" }}🔍{{ else if eq . "debug" }}🐛{{ else }}◆{{ end }}',
+  },
+
+  // ── Variables ────────────────────────────────────────────────────────────
+  variables: {
+    // ── 1. literal ──────────────────────────────────────────────────────────
+    // A fixed value baked in at load time. Use for config constants the
+    // daemon should never re-read: thresholds, labels, magic numbers.
+    // The value can be a string, number, or boolean.
+    "demo.label":   { kind: "literal", value: "cc-candybar demo" },
+    "demo.version": { kind: "literal", value: "2.0" },
+    "demo.limit":   { kind: "literal", value: 100 },         // number literal
+    "demo.flag":    { kind: "literal", value: true },         // boolean literal
+
+    // ── 2. input ────────────────────────────────────────────────────────────
+    // Reads from the daemon's augmented render payload — the primary source
+    // for Claude Code hook data. `type` coerces the resolved value ("string",
+    // "number", or "boolean"). The default is the value used before the
+    // daemon sends a payload or when the field is absent.
+    "demo.cwd": {
+      kind: "input",
+      path: "workspace.current_dir",
+      default: "?",
+    },
+    "demo.sessionId": {
+      kind: "input",
+      path: "session_id",
+      default: "",
+    },
+    "demo.contextLeft": {
+      kind: "input",
+      path: "context.contextLeft",
+      type: "number",   // ensures numeric math works without explicit int() casts
+      default: 100,
+    },
+
+    // ── 3. env ──────────────────────────────────────────────────────────────
+    // Reads a process environment variable. Re-read each time the render-cache
+    // entry is rebuilt; not watched for mid-session changes.
+    "demo.editor": { kind: "env", name: "EDITOR", default: "(none)" },
+    "demo.user":   { kind: "env", name: "USER",   default: "?" },
+    "demo.shell":  { kind: "env", name: "SHELL",  default: "" },
+
+    // ── 4. file ─────────────────────────────────────────────────────────────
+    // Reads a file from disk. Paths MUST be absolute — ~ is not expanded.
+    //
+    // readMode:
+    //   "first-line"  — only the first line (default)
+    //   "whole"       — full file contents (newlines converted to spaces)
+    //
+    // regex: capture group 1 is extracted from the content when present.
+    //
+    // Cache options (pick one):
+    //   { watch_file: "/abs/path" }  — re-read on inotify/FSEvents change
+    //   { ttl: "30s" }               — re-read on a timer
+    //   { never: true }              — read once at startup, never again
+    //   { depends_on: ["varA"] }     — re-read when varA changes
+    //   { key: "{{ .demo.user }}" }  — re-read when the key template changes
+
+    // macOS: read the local hostname. watch_file means the segment updates
+    // instantly when you run `scutil --set HostName ...`.
+    "demo.hostname": {
+      kind: "file",
+      path: "/etc/hostname",          // adjust if your system uses a different path
+      readMode: "first-line",
+      cache: { watch_file: "/etc/hostname" },
+      default: "",
+    },
+
+    // /etc/shells is static — read once at startup (never cache).
+    // regex extracts just the shell name from the first path line.
+    "demo.defaultShell": {
+      kind: "file",
+      path: "/etc/shells",
+      readMode: "first-line",
+      regex: "([^/\\s]+)\\s*$",      // capture the trailing word after the last /
+      cache: { never: true },
+      default: "",
+    },
+
+    // ── 5. shell ────────────────────────────────────────────────────────────
+    // Spawns a subprocess in /bin/sh. stdout (trimmed) is the value.
+    // The minimum shell TTL is 10 s — shorter ttl values are clamped up.
+    //
+    // Same cache vocabulary as file. watch_file and ttl are most common.
+
+    // OS kernel name ("Darwin" on macOS, "Linux" on Linux). Static → never.
+    "demo.os": {
+      kind: "shell",
+      command: "uname -s",
+      cache: { never: true },
+      default: "?",
+    },
+
+    // Logical CPU count. Works on both macOS (sysctl) and Linux (nproc).
+    "demo.cpus": {
+      kind: "shell",
+      command: "nproc 2>/dev/null || sysctl -n hw.logicalcpu",
+      cache: { ttl: "60s" },       // re-run every minute
+      default: "?",
+    },
+
+    // Node.js version. key cache: re-run whenever the shell changes
+    // (e.g. after switching node versions via a version manager).
+    "demo.nodeVer": {
+      kind: "shell",
+      command: "node --version 2>/dev/null",
+      regex: "v?([0-9]+\\.[0-9]+)",  // extract "major.minor" from "v22.13.0"
+      cache: { key: "{{ .demo.shell }}" },
+      default: "",
+    },
+
+    // ── 6. template ─────────────────────────────────────────────────────────
+    // A Go template evaluated against the live variable store. MobX auto-
+    // tracks every variable read during evaluation — the invalidation graph
+    // builds itself. Use for display values derived from other variables.
+    //
+    // depends_on is an explicit optimisation: skip re-evaluation when
+    // unrelated variables change. Omitting it is correct but may over-trigger.
+
+    // Composed identity string: user@hostname (or user@os if no hostname file).
+    "demo.identity": {
+      kind: "template",
+      template:
+        "{{ .demo.user }}@{{ if .demo.hostname }}{{ .demo.hostname }}{{ else }}{{ .demo.os }}{{ end }}",
+      cache: { depends_on: ["demo.user", "demo.hostname", "demo.os"] },
+      default: "",
+    },
+
+    // Short session ID: first 8 chars.
+    "demo.shortId": {
+      kind: "template",
+      template: "{{ trunc 8 .demo.sessionId }}",
+      cache: { depends_on: ["demo.sessionId"] },
+      default: "",
+    },
+
+    // ── 7. time ─────────────────────────────────────────────────────────────
+    // Formats the current wall-clock time with a Go reference-time layout.
+    //
+    // Go's reference time (the "epoch" used as a mnemonic for tokens):
+    //   Mon Jan 2 15:04:05 MST 2006
+    //   →  day month year hours:minutes:seconds timezone
+    //
+    // Common layouts:
+    //   "15:04"         → "14:37"          (24h clock)
+    //   "3:04 PM"       → "2:37 PM"        (12h clock)
+    //   "2006-01-02"    → "2026-06-11"     (ISO date)
+    //   "Mon 02 Jan"    → "Wed 11 Jun"     (short weekday)
+    //   "January 2006"  → "June 2026"      (long month + year)
+    //
+    // cache: only { ttl: "..." } is valid for time vars.
+    "demo.clock": {
+      kind: "time",
+      layout: "15:04",
+      cache: { ttl: "30s" },
+      default: "--:--",
+    },
+    "demo.date": {
+      kind: "time",
+      layout: "Mon 02 Jan",
+      cache: { ttl: "300s" },
+      default: "",
+    },
+    "demo.isoDate": {
+      kind: "time",
+      layout: "2006-01-02",
+      cache: { ttl: "3600s" },
+      default: "",
+    },
+    "demo.time12h": {
+      kind: "time",
+      layout: "3:04 PM",
+      cache: { ttl: "30s" },
+      default: "",
+    },
+
+    // ── 8. git ──────────────────────────────────────────────────────────────
+    // Native git source. Covers 6 fields: branch, sha, dirty, ahead, behind, stash.
+    // The default config uses kind:"input" instead for the full 12-field
+    // GitInfo surface; kind:"git" is the lighter alternative when you only
+    // need one field and prefer the SourceRegistry's own cache/watcher.
+    "demo.git.branch": {
+      kind: "git",
+      field: "branch",
+      cache: { ttl: "10s" },
+      default: "",
+    },
+    "demo.git.ahead": {
+      kind: "git",
+      field: "ahead",
+      cache: { ttl: "10s" },
+      default: "0",
+    },
+    "demo.git.dirty": {
+      kind: "git",
+      field: "dirty",
+      cache: { ttl: "10s" },
+      default: "false",
+    },
+    "demo.git.stash": {
+      kind: "git",
+      field: "stash",
+      cache: { ttl: "10s" },
+      default: "0",
+    },
+
+    // ── 9. state ────────────────────────────────────────────────────────────
+    // Reads from the daemon's SessionState — a per-session key/value store
+    // that persists between renders and is mutated by action clicks.
+    // [LAW:one-source-of-truth] The SessionState key is the canonical store;
+    // this variable is a typed read-only view of it.
+    //
+    // The "demo-work-mode" key is written by the cycleMode action below.
+    // session.id must be declared for any config with `set` actions.
+    "session.id": { kind: "input", path: "session_id", default: "" },
+    "demo.workMode": {
+      kind: "state",
+      key: "demo-work-mode",
+      default: "focus",
+    },
+  },
+
+  // ── Segments ─────────────────────────────────────────────────────────────
+  segments: {
+    // ── Segment-local vars (vars: sub-block) ─────────────────────────────
+    // Variables declared inside a segment's `vars:` block are scoped to that
+    // segment. They live in the global store under the namespaced key
+    // "segmentName.varName" and are referenced in any template as
+    // .<segmentName>.<varName>. [LAW:one-source-of-truth] — segment-private
+    // state declared at its point of use, not polluting the global namespace.
+    //
+    // Use case: a display-only derived value that no other segment needs.
+    demoIdentity: {
+      template: " 👤 {{ .demoIdentity.badge }} ",
+      bg: "surface-active",
+      fg: "foreground",
+      vars: {
+        // Local template var composing three global vars. Only this segment
+        // and templates that explicitly write .demoIdentity.badge can see it.
+        badge: {
+          kind: "template",
+          template:
+            "{{ .demo.user }}@{{ if .demo.hostname }}{{ .demo.hostname }}{{ else }}{{ .demo.os }}{{ end }}",
+          cache: { depends_on: ["demo.user", "demo.hostname", "demo.os"] },
+        },
+      },
+    },
+
+    // ── Literal + input ───────────────────────────────────────────────────
+    demoLiterals: {
+      template: " ◈ {{ .demo.label }} v{{ .demo.version }}  ⌗{{ .demo.shortId }} ",
+      bg: "surface",
+      fg: "foreground",
+      when: '{{ ne .demo.sessionId "" }}',
+    },
+
+    // ── Env vars + helper call ────────────────────────────────────────────
+    demoEnv: {
+      // template "orUnset" calls the helper declared above
+      template: ' ✎ {{ template "orUnset" .demo.editor }}  🐚 {{ basename .demo.shell }} ',
+      bg: "panel",
+      fg: "foreground",
+    },
+
+    // ── File + shell + width/justify/truncate ─────────────────────────────
+    // Segment layout controls:
+    //   width:    "auto" expands to fill available space; number = fixed cols
+    //   justify:  "left" | "center" | "right" — padding inside the width
+    //   truncate: "right" | "left" | "middle" — which end gets clipped
+    demoSystem: {
+      template: " 🖥  {{ .demo.os }}  {{ .demo.cpus }}× cores  node {{ .demo.nodeVer }} ",
+      bg: "surface",
+      fg: "foreground",
+      width: "auto",
+      justify: "center",
+      truncate: "right",
+      when: '{{ ne .demo.nodeVer "" }}',
+    },
+
+    // ── Time variables ────────────────────────────────────────────────────
+    demoClock: {
+      template: " 🕐 {{ .demo.clock }}  {{ .demo.date }} ",
+      bg: "surface",
+      fg: "foreground",
+    },
+
+    // ── Git (native kind) vs input kind ──────────────────────────────────
+    // kind:"git" fields used here; the default config's `git` segment uses
+    // kind:"input" for the full 12-field payload surface.
+    demoGit: {
+      template: ' ⎇ {{ .demo.git.branch }}{{ if .demo.git.dirty }} ●{{ end }}{{ if .demo.git.ahead }} ↑{{ .demo.git.ahead }}{{ end }}{{ if gt (int .demo.git.stash) 0 }} ⧇{{ .demo.git.stash }}{{ end }} ',
+      bg: "surface-active",
+      fg: "foreground",
+      when: '{{ ne .demo.git.branch "" }}',
+    },
+
+    // ── Dynamic bg/fg (template expressions in color fields) ─────────────
+    // bg and fg accept the same Go-template syntax as `template` and `when`.
+    // [LAW:dataflow-not-control-flow] The color IS the value — no if-branch
+    // in the body, just a different palette spec name flowing through the
+    // same render path.
+    demoGitStatus: {
+      template: ' git: {{ .demo.git.branch }}{{ if .demo.git.dirty }} ● dirty{{ end }} ',
+      bg: '{{ if .demo.git.dirty }}warning{{ else }}surface-active{{ end }}',
+      fg: '{{ if .demo.git.dirty }}button-color-foreground{{ else }}foreground{{ end }}',
+      when: '{{ ne .demo.git.branch "" }}',
+    },
+
+    // ── Per-segment palette override ──────────────────────────────────────
+    // `palette` pins this segment to a named theme regardless of the active
+    // session theme. Useful when a segment's color carries fixed semantic
+    // meaning independent of the user's chosen theme.
+    demoFixed: {
+      template: " {{ .demo.cwd }} ",
+      bg: "panel",
+      fg: "foreground",
+      palette: "catppuccin-latte",  // always catppuccin-latte; ignores session theme
+    },
+
+    // ── State var + cycle action ──────────────────────────────────────────
+    // demoMode reads a state var written by the cycleMode action.
+    // Per-member display glyphs: {{ action "name" "d0" "d1" "d2" }}
+    // The CURRENT member's glyph renders; clicking delivers the successor.
+    // [LAW:dataflow-not-control-flow] — variability lives in the members
+    // list (data), not in whether the button renders.
+    demoMode: {
+      template: ' {{ action "cycleMode" "🎯 focus" "🔍 review" "🐛 debug" }} ',
+      bg: "panel",
+      fg: "foreground",
+    },
+
+    // Context percentage with helper call
+    demoContext: {
+      template: ' ◔ {{ .demo.contextLeft }}% left ',
+      bg: '{{ if le (int .demo.contextLeft) 20 }}error{{ else if le (int .demo.contextLeft) 40 }}warning{{ else }}surface{{ end }}',
+      fg: '{{ if le (int .demo.contextLeft) 40 }}button-color-foreground{{ else }}foreground{{ end }}',
+      when: '{{ gt (int .demo.contextLeft) 0 }}',
+    },
+
+    // ── Config switcher ───────────────────────────────────────────────────
+    // Three OSC-8 links that send load-config clicks to the daemon.
+    // "normal" clears the override (empty path); the other two load each
+    // demo config by absolute path. .home reads process.env.HOME.
+    // [LAW:effects-at-boundaries] the click writes daemon-global state;
+    // the render pipeline reads it at the cache-lookup boundary.
+    configSwitcher: {
+      template: ' {{ link (printf "cc-candybar://load-config/%s/" .session.id) "⚙ normal" }} {{ link (printf "cc-candybar://load-config/%s/%s" .session.id (urlEncode (printf "%s/code/cc-candybar/examples/demo-variables.json5" .home))) "📊 vars" }} {{ link (printf "cc-candybar://load-config/%s/%s" .session.id (urlEncode (printf "%s/code/cc-candybar/examples/demo-actions.json5" .home))) "🎬 actions" }} ',
+      bg: "surface",
+      fg: "foreground",
+    },
+  },
+
+  // ── Actions ──────────────────────────────────────────────────────────────
+  // The cycleMode action writes the same "demo-work-mode" key the demo.workMode
+  // state var reads from. One declaration drives both the segment display and
+  // the click behavior. [LAW:one-source-of-truth]
+  actions: {
+    cycleMode: { set: "demo-work-mode", cycle: ["focus", "review", "debug"] },
+  },
+
+  // ── Layout: flat string[] rows ────────────────────────────────────────────
+  // Each inner array is one horizontal powerline row. This is the shortest
+  // layout form — equivalent to the root grammar's vertical container of
+  // horizontal containers, compiled automatically by the loader.
+  layout: [
+    ["demoIdentity", "demoClock"],
+    ["demoLiterals", "demoEnv"],
+    ["demoSystem"],
+    ["demoGit", "demoGitStatus"],
+    ["demoMode", "demoContext", "demoFixed"],
+    ["configSwitcher"],
+  ],
+}

@@ -1,0 +1,345 @@
+// cc-candybar: demo-actions.json5
+//
+// Demonstrates all 8 action kinds, the picker widget, the link helper,
+// all layout forms (flat rows, predicate rows via raw root grammar,
+// group sugar), and all 3 group forms (standalone, accordion, nested).
+//
+// Point CC_CANDYBAR_CONFIG at this file to try it:
+//   CC_CANDYBAR_CONFIG=examples/demo-actions.json5 pnpm demo
+//
+// What to try:
+//   Click "▸ theme"  → open the theme picker; click any theme to apply.
+//   Click "◀"/"▶"   → step the hue rotation in 2° increments.
+//   Click "▸ style"  → open the style picker.
+//   Click "⟳ mode"   → cycle through focus / review / debug.
+//   Click "📂"       → OSC-8 link, opens current dir in VSCode.
+//   Click "⎘"        → copies session ID to clipboard.
+//   Click group toggles → open/close groups; accordion siblings auto-close.
+{
+  globals: {
+    palette: "dracula",
+  },
+
+  // ── Variables ─────────────────────────────────────────────────────────────
+  // session.id is required by every `set` action (SessionState is keyed by it).
+  // term.cols is required by the paged picker (knows the available terminal width).
+  variables: {
+    "session.id":  { kind: "input", path: "session_id",         default: "" },
+    "term.cols":   { kind: "input", path: "term.cols", type: "number", default: 80 },
+    "current_dir": { kind: "input", path: "workspace.current_dir", default: "" },
+    "session_id":  { kind: "input", path: "session_id",         default: "" },
+
+    // ── State vars: each written by one or more actions ────────────────────
+    // The `key` field names the SessionState slot.
+    // The `default` is the value before any click has fired.
+
+    // Active theme and style. Written by applyTheme/applyStyle (from:).
+    // Used in the themeControl/styleControl segment templates.
+    "activeTheme": { kind: "state", key: "theme",       default: "" },
+    "activeStyle": { kind: "state", key: "style",       default: "" },
+
+    // Hue rotation step (degrees). Written by hueUp/hueDown (bounded).
+    // renderDsl reads the conventional "hue.step" name (HUE_STEP_VAR) to
+    // apply per-segment hue transposition — this name is the contract.
+    // [LAW:types-are-the-program] Declared as `state` here (not `literal`)
+    // because the bounded stepper writes it; a literal is unwritable.
+    "hue.step": { kind: "state", key: "hue-step", default: "0" },
+
+    // Picker page cursors. Written by themePage/stylePage (int).
+    // -1 = closed; 0..N = open at page N.
+    "themePageCursor": { kind: "state", key: "theme-page", default: "-1" },
+    "stylePageCursor": { kind: "state", key: "style-page", default: "-1" },
+
+    // 3-state work mode. Written by cycleMode (cycle).
+    "workMode": { kind: "state", key: "work-mode", default: "focus" },
+  },
+
+  // ── Actions ───────────────────────────────────────────────────────────────
+  // [LAW:locality-or-seam] Actions are NAMED BEHAVIORS. The template binds a
+  // clickable region to a name; the name binds to a behavior here. Re-glyph a
+  // button without touching behavior; re-target behavior without touching the
+  // template. The name is the seam.
+  actions: {
+    // ── 1. set + to (literal set) ─────────────────────────────────────────
+    // Writes a fixed string to a SessionState key on click.
+    // Use for: opening menus to a known page, resetting state, jump-to-zero.
+    openThemeMenu:  { set: "theme-page", to: "0" },
+    closeThemeMenu: { set: "theme-page", to: "-1" },
+    openStyleMenu:  { set: "style-page", to: "0" },
+    closeStyleMenu: { set: "style-page", to: "-1" },
+
+    // ── 2. set + from: "themes" ───────────────────────────────────────────
+    // Writes the option value the picker binds at render.
+    // The option domain is the set of available theme palette names.
+    // Used with {{ picker "applyTheme" "themePage" … }} and
+    // {{ action "applyTheme" . }} (the dot is the picker-bound option).
+    applyTheme: { set: "theme", from: "themes" },
+
+    // ── 3. set + from: "styles" ───────────────────────────────────────────
+    // Same pattern but for the typography/style domain.
+    applyStyle: { set: "style", from: "styles" },
+
+    // ── 4. set + min/max/by (bounded stepper) ─────────────────────────────
+    // Writes wrap(current ± by) clamped to [min, max].
+    // The renderer emits the ABSOLUTE new value — rapid clicks accumulate
+    // without racing (unlike a relative "current+by" evaluated at click time).
+    hueUp:   { set: "hue-step", min: 0, max: 60, by: 2 },
+    hueDown: { set: "hue-step", min: 0, max: 60, by: -2 },
+
+    // ── 5. set + int (integer cursor) ─────────────────────────────────────
+    // Writes any integer the picker renders at the click site.
+    // Used by the paged picker to advance/retreat pages.
+    // Distinct from `bounded` because the page range is not known statically —
+    // the picker itself clamps; the action only expresses "any integer."
+    themePage: { set: "theme-page", int: true },
+    stylePage: { set: "style-page", int: true },
+
+    // ── 6. set + cycle ────────────────────────────────────────────────────
+    // Writes the SUCCESSOR of the current value from a fixed member list,
+    // wrapping around. A current value outside the list counts as the first
+    // member, so the first click always delivers member[1].
+    //
+    // Member ordering: default-state-first. An unset or reset key renders
+    // the first member's glyph and clicks to the second.
+    //
+    // [LAW:dataflow-not-control-flow] Variability lives in the members list
+    // (a value), not in control flow. {{ action "name" "d0" "d1" … }} gives
+    // each member a display glyph; the current member's glyph renders.
+    cycleMode: { set: "work-mode", cycle: ["focus", "review", "debug"] },
+
+    // ── 7. copy ───────────────────────────────────────────────────────────
+    // Evaluates a Go template at click time and copies the result to the
+    // clipboard. The template has access to the same variables as any segment.
+    copySessionId: { copy: "{{ .session_id }}" },
+    copyDir:       { copy: "{{ .current_dir }}" },
+
+    // ── 8. open ───────────────────────────────────────────────────────────
+    // Evaluates a Go template at click time and opens the result as a URL
+    // or file path (via the OS's default handler or the registered URL scheme).
+    openVscode: { open: "vscode://file/{{ urlEncode .current_dir }}" },
+    openGitHub: { open: "https://github.com" },
+  },
+
+  // ── Segments ──────────────────────────────────────────────────────────────
+  segments: {
+    // ── Theme control ──────────────────────────────────────────────────────
+    // set-literal (openThemeMenu), bounded steppers (hueUp/hueDown) in one row.
+    // {{ action "name" "display" }} — single display for all states.
+    themeControl: {
+      template: ' 🎨 {{ if .activeTheme }}{{ .activeTheme }}{{ else }}(default){{ end }} {{ action "openThemeMenu" "▸" }}  ⬡ {{ action "hueDown" "◀" }} {{ .hue.step }}° {{ action "hueUp" "▶" }} ',
+      bg: "surface",
+      fg: "foreground",
+    },
+
+    // ── Style control ──────────────────────────────────────────────────────
+    styleControl: {
+      template: ' ✦ {{ if .activeStyle }}{{ .activeStyle }}{{ else }}(default){{ end }} {{ action "openStyleMenu" "▸" }} ',
+      bg: "panel",
+      fg: "foreground",
+    },
+
+    // ── Theme picker ───────────────────────────────────────────────────────
+    // {{ picker "applyAction" "pageAction" closeOnPick paged }}
+    //
+    //   applyAction  — a set+from action; the picker draws one cell per option
+    //   pageAction   — a set+int action; drives ← → navigation
+    //   closeOnPick  — true: clicking an option also resets cursor to -1 (closes)
+    //   paged        — true: width-paginated with arrows; false: one full-width page
+    //
+    // The picker draws the domain from applyTheme's `from: "themes"` option list.
+    themePicker: {
+      template: '{{ picker "applyTheme" "themePage" true true }}',
+      bg: "surface",
+      fg: "foreground",
+    },
+
+    // ── Style picker ───────────────────────────────────────────────────────
+    // paged:false → all styles in one row (no page arrows).
+    stylePicker: {
+      template: '{{ picker "applyStyle" "stylePage" true false }}',
+      bg: "panel",
+      fg: "foreground",
+    },
+
+    // ── Link (OSC-8 hyperlink) + copy + open actions ───────────────────────
+    // {{ link url text }} emits an OSC-8 hyperlink span — no action declaration
+    // needed. The URL is a Go template; the text is the visible label.
+    // click follows the OSC-8 URL; the URL handler dispatches to copy/open verbs
+    // for cc-candybar:// URLs and to the OS default handler for everything else.
+    toolbar: {
+      template: ' {{ link (printf "cc-candybar://open-vscode/%s" (urlEncode .current_dir)) "📂" }} {{ action "copySessionId" "⎘ session" }} {{ action "copyDir" "⎘ dir" }} {{ action "openVscode" "↗ vscode" }} {{ action "openGitHub" "↗ github" }} ',
+      bg: "surface",
+      fg: "foreground",
+    },
+
+    // ── 3-state cycler with per-member display glyphs ─────────────────────
+    // {{ action "name" "d0" "d1" "d2" }}: positionally matched to cycle members.
+    // The current member's glyph renders. Click delivers the successor.
+    modeControl: {
+      template: ' {{ action "cycleMode" "🎯 focus" "🔍 review" "🐛 debug" }} ',
+      bg: "panel",
+      fg: "foreground",
+    },
+
+    // ── Accordion body segments ─────────────────────────────────────────────
+    // These are referenced inside group children below.
+    hueBody: {
+      template: ' ⬡ {{ action "hueDown" "◀" }} {{ .hue.step }}° {{ action "hueUp" "▶" }} (hue rotation demo) ',
+      bg: "surface",
+      fg: "foreground",
+    },
+    modeBody: {
+      template: ' Mode: {{ action "cycleMode" "🎯 focus" "🔍 review" "🐛 debug" }} ',
+      bg: "panel",
+      fg: "foreground",
+    },
+
+    // ── Nested group body segments ─────────────────────────────────────────
+    innerContent: {
+      template: ' 🔧 advanced tools: {{ action "copyDir" "⎘ cwd" }} {{ action "openVscode" "↗" }} ',
+      bg: "surface",
+      fg: "foreground",
+    },
+
+    // ── Config switcher ───────────────────────────────────────────────────
+    // Three OSC-8 links that send load-config clicks to the daemon.
+    // "normal" clears the override (empty path); the other two load each
+    // demo config by absolute path. .home reads process.env.HOME.
+    configSwitcher: {
+      template: ' {{ link (printf "cc-candybar://load-config/%s/" .session.id) "⚙ normal" }} {{ link (printf "cc-candybar://load-config/%s/%s" .session.id (urlEncode (printf "%s/code/cc-candybar/examples/demo-variables.json5" .home))) "📊 vars" }} {{ link (printf "cc-candybar://load-config/%s/%s" .session.id (urlEncode (printf "%s/code/cc-candybar/examples/demo-actions.json5" .home))) "🎬 actions" }} ',
+      bg: "surface",
+      fg: "foreground",
+    },
+  },
+
+  // ── Layout: raw root grammar ──────────────────────────────────────────────
+  // The canonical node tree. The loader lowers every layout form (flat rows,
+  // predicate rows, group sugar) to this grammar before rendering.
+  //
+  // Node kinds:
+  //   { kind: "container", direction: "horizontal"|"vertical", when?, children }
+  //   { kind: "segment", name: "segmentName" }
+  //   { kind: "group", name, label, key?, open?, direction?, bg?, fg?, when?, children }
+  //
+  // A container's `when` gates its entire subtree (hidden subtree emits no
+  // rows; segments inside still contribute to the hue-index sequence).
+  root: {
+    kind: "container",
+    direction: "vertical",
+    children: [
+
+      // ── Row 1: always-visible controls ─────────────────────────────────
+      {
+        kind: "container",
+        direction: "horizontal",
+        children: [
+          { kind: "segment", name: "themeControl" },
+          { kind: "segment", name: "styleControl" },
+          { kind: "segment", name: "modeControl" },
+          { kind: "segment", name: "toolbar" },
+        ],
+      },
+
+      // ── Row 2: theme picker — predicate container ──────────────────────
+      // A container's `when` is a predicate row in the raw grammar.
+      // The picker row appears only when themePageCursor ≥ 0 (menu is open).
+      // The picker itself provides ← / → arrows via the themePage action.
+      {
+        kind: "container",
+        direction: "horizontal",
+        when: "{{ ge (int .themePageCursor) 0 }}",
+        children: [{ kind: "segment", name: "themePicker" }],
+      },
+
+      // ── Row 3: style picker — predicate container ──────────────────────
+      {
+        kind: "container",
+        direction: "horizontal",
+        when: "{{ ge (int .stylePageCursor) 0 }}",
+        children: [{ kind: "segment", name: "stylePicker" }],
+      },
+
+      // ── Standalone group ───────────────────────────────────────────────
+      // No `key:` → the group manages its own key ("groups.hueTools").
+      // The synthesized toggle segment renders "▸ hue tools" / "▾ hue tools".
+      // Clicking cycles between "closed" and "hueTools".
+      // `open: true` → starts expanded.
+      {
+        kind: "group",
+        name: "hueTools",
+        label: "hue tools",
+        open: true,
+        children: [
+          { kind: "segment", name: "hueBody" },
+        ],
+      },
+
+      // ── Accordion pair ─────────────────────────────────────────────────
+      // Two siblings sharing `key: "controlPanel"`.
+      // Opening one auto-closes the other — the shared key holds exactly one
+      // open name at a time. This is not a mode: it's two cycle actions sharing
+      // one SessionState key; the semantics fall out of the existing same-key
+      // merge in the validator. [LAW:dataflow-not-control-flow]
+      {
+        kind: "container",
+        direction: "horizontal",
+        children: [
+          {
+            kind: "group",
+            name: "huePanel",          // opens when key == "huePanel"
+            label: "hue",
+            key: "controlPanel",       // shared accordion key
+            bg: "surface",
+            fg: "foreground",
+            children: [
+              { kind: "segment", name: "hueBody" },
+            ],
+          },
+          {
+            kind: "group",
+            name: "modePanel",         // opens when key == "modePanel"
+            label: "mode",
+            key: "controlPanel",       // same key → accordion sibling
+            bg: "panel",
+            fg: "foreground",
+            children: [
+              { kind: "segment", name: "modeBody" },
+            ],
+          },
+        ],
+      },
+
+      // ── Nested disclosure (distinct keys) ──────────────────────────────
+      // An outer group (key "outerPanel") wraps an inner group (key "innerPanel").
+      // Closing the outer hides the inner subtree entirely.
+      // An ancestor and descendant may NEVER share the same key — the loader
+      // rejects that combination because one key cannot represent "both open".
+      {
+        kind: "group",
+        name: "outerGroup",
+        label: "tools",
+        key: "outerPanel",             // outer disclosure key
+        children: [
+          {
+            kind: "group",
+            name: "innerGroup",
+            label: "advanced",
+            key: "innerPanel",         // distinct inner key
+            children: [
+              { kind: "segment", name: "innerContent" },
+            ],
+          },
+        ],
+      },
+
+      // ── Config switcher row ─────────────────────────────────────────────
+      // Always-visible row to switch between configs live.
+      {
+        kind: "container",
+        direction: "horizontal",
+        children: [{ kind: "segment", name: "configSwitcher" }],
+      },
+
+    ],
+  },
+}
