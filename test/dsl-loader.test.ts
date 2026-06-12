@@ -15,8 +15,7 @@ import type { LayoutNode } from "../src/config/dsl-types";
 
 const FILE = "/tmp/test.json5";
 
-// The canonical node tree a flat `layout` sugar compiles to: one vertical
-// container, one cells leaf per row. Pass `{ when }` to carry a row predicate.
+// Convenience builder for vertical stacks of horizontal rows.
 type Row = { segments: readonly string[]; when?: string };
 const vert = (...rows: (Row | readonly string[])[]): LayoutNode => ({
   kind: "container",
@@ -134,10 +133,12 @@ describe("loadDslConfig — top-level shape", () => {
     });
   });
 
-  test("layout must be an array", () => {
+  test("layout key emits migration error", () => {
+    // [LAW:no-silent-failure] `layout:` removed in 2de.19 — rejected loudly
+    // with an A-grammar rewrite hint rather than an "unknown key" message.
     expectIssue(`{ layout: "not-array" }`, {
       path: "layout",
-      message: "layout must be an array",
+      message: /no longer supported/,
     });
   });
 });
@@ -595,110 +596,49 @@ describe("loadDslConfig — palette switch", () => {
   });
 });
 
-// ─── Layout ──────────────────────────────────────────────────────────────────
+// ─── Layout migration errors (2de.19) ────────────────────────────────────────
+// [LAW:no-silent-failure] `layout:` was removed in 2de.19. Any config that
+// still uses it must receive a loud, migration-pointing error (not "unknown
+// key") so the author knows exactly how to rewrite their config.
 
-describe("loadDslConfig — layout", () => {
-  test("string entries must match a declared segment", () => {
-    // Cross-ref runs on the merged, normalized config — it walks the canonical
-    // node tree (the raw row form is already collapsed and the `layout`-vs-`root`
-    // authoring surface is unrecoverable post-merge), so it reports the canonical
-    // `layout` path and names the offending segment in the message.
+describe("loadDslConfig — layout (removed; migration errors)", () => {
+  test("any layout: value emits the A-grammar migration error", () => {
     expectIssue(
-      `{ segments: { cwd: { template: "t" } }, layout: [["cwd", "missing"]] }`,
+      `{ segments: { a: { template: "x" } }, layout: [["a"]] }`,
       {
         path: "layout",
-        message: 'layout entry "missing" does not match any declared segment',
+        message: /no longer supported/,
       },
     );
   });
 
-  test("non-string entries reported", () => {
+  test("migration error message shows A-grammar rewrite examples", () => {
+    const err = expectError(
+      `{ segments: { a: { template: "x" } }, layout: [["a"]] }`,
+    );
+    const issue = err.issues.find((i) => i.path === "layout")!;
+    expect(issue.message).toMatch(/root.*A-grammar/i);
+    expect(issue.message).toMatch(/{ v:/);
+    expect(issue.message).toMatch(/{ h:/);
+  });
+
+  test("kind: cells in root emits migration error", () => {
+    // [LAW:no-silent-failure] `kind: "cells"` was removed in 2de.19.
     expectIssue(
-      `{ segments: { cwd: { template: "t" } }, layout: [["cwd", 42]] }`,
+      `{ segments: { a: { template: "x" } }, root: { kind: "cells", segments: ["a"] } }`,
       {
-        path: "layout[0][1]",
-        message: "layout entries must be strings",
+        path: "root",
+        message: /kind: "cells" is no longer supported/,
       },
     );
   });
 
-  test("valid layout passes through", () => {
-    const cfg = parseAndValidate(
-      FILE,
-      `{ segments: { a: { template: "x" }, b: { template: "y" } }, layout: [["a", "b", "a"]] }`,
+  test("kind: cells migration error shows h-arm equivalent", () => {
+    const err = expectError(
+      `{ segments: { a: { template: "x" } }, root: { kind: "cells", segments: ["a"] } }`,
     );
-    expect(cfg.root).toEqual(vert(["a", "b", "a"]));
-  });
-
-  test("multi-row layout passes through (row order preserved)", () => {
-    const cfg = parseAndValidate(
-      FILE,
-      `{ segments: { a: { template: "x" }, b: { template: "y" }, c: { template: "z" } }, layout: [["a", "b"], ["c"]] }`,
-    );
-    expect(cfg.root).toEqual(vert(["a", "b"], ["c"]));
-  });
-
-  test("object-form row with when normalizes to { when, segments }", () => {
-    const cfg = parseAndValidate(
-      FILE,
-      `{ segments: { a: { template: "x" } }, layout: [{ when: '{{ true }}', segments: ["a"] }] }`,
-    );
-    expect(cfg.root).toEqual(vert({ when: "{{ true }}", segments: ["a"] }));
-  });
-
-  test("an explicit empty when is preserved (not silently dropped)", () => {
-    // A present-but-empty predicate is distinct from an absent one; the
-    // validated config must reflect the user's input faithfully.
-    const cfg = parseAndValidate(
-      FILE,
-      `{ segments: { a: { template: "x" } }, layout: [{ when: "", segments: ["a"] }] }`,
-    );
-    expect(cfg.root).toEqual(vert({ when: "", segments: ["a"] }));
-  });
-
-  test("unknown layout-row key is rejected", () => {
-    expectIssue(
-      `{ segments: { a: { template: "x" } }, layout: [{ rows: ["a"] }] }`,
-      { path: "layout[0].rows", message: "Unknown layout-row key" },
-    );
-  });
-
-  test("structural error path reflects the row form the user wrote", () => {
-    // [LAW:locality-or-seam] bare-array row → layout[r][c]; object row →
-    // layout[r].segments[c]. The path mirrors the input, never asserting a
-    // `.segments` key a sugar-form config never wrote.
-    expectIssue(`{ segments: { a: { template: "x" } }, layout: [["a", 42]] }`, {
-      path: "layout[0][1]",
-      message: "layout entries must be strings",
-    });
-    expectIssue(
-      `{ segments: { a: { template: "x" } }, layout: [{ segments: ["a", 42] }] }`,
-      { path: "layout[0].segments[1]", message: "layout entries must be strings" },
-    );
-  });
-
-  test("legacy flat string[] layout rejected with migration message", () => {
-    // [LAW:no-silent-fallbacks] A pre-multiline-layout-ilg config with a flat
-    // string[] layout must fail loudly. Auto-wrapping into [[...]] would
-    // silently convert an outdated file into a working one and hide the
-    // breaking change from users upgrading.
-    expectIssue(
-      `{ segments: { cwd: { template: "t" } }, layout: ["cwd"] }`,
-      {
-        path: "layout[0]",
-        message: "wrap your segment list in an outer []",
-      },
-    );
-  });
-
-  test("row entries must be arrays", () => {
-    expectIssue(
-      `{ segments: { cwd: { template: "t" } }, layout: [42] }`,
-      {
-        path: "layout[0]",
-        message: "layout row must be an array of segment names",
-      },
-    );
+    const issue = err.issues.find((i) => i.path === "root")!;
+    expect(issue.message).toMatch(/\{ h:/);
   });
 });
 
@@ -886,29 +826,12 @@ describe("loadDslConfig — A-grammar (seg/h/v)", () => {
 
 describe("loadDslConfig — cross-references", () => {
   test("root-authored config reports unknown segment under the `root` path", () => {
-    // The reported path follows the surface the user wrote — a root-authored
-    // config points at `root`, not the absent `layout` sugar.
     expectIssue(
       `{ segments: { cwd: { template: "t" } },
-         root: { kind: "cells", segments: ["cwd", "missing"] } }`,
+         root: { h: ["cwd", "missing"] } }`,
       {
         path: "root",
         message: 'root entry "missing" does not match any declared segment',
-      },
-    );
-  });
-
-  test("a nested key named `root` does not misclassify a layout-authored config", () => {
-    // A text-search discriminator would see the variable `root:` and wrongly
-    // report the `root` surface; the parsed-structure discriminator correctly
-    // reports `layout` because that is the top-level key the user authored.
-    expectIssue(
-      `{ variables: { root: { kind: "literal", value: "x" } },
-         segments: { cwd: { template: "t" } },
-         layout: [["cwd", "missing"]] }`,
-      {
-        path: "layout",
-        message: 'layout entry "missing" does not match any declared segment',
       },
     );
   });
@@ -917,7 +840,7 @@ describe("loadDslConfig — cross-references", () => {
     expectIssue(
       `{ segments: { cwd: { template: "t" } },
          root: { kind: "container", direction: "vertical", when: "{{ .nope }}",
-                 children: [{ kind: "cells", segments: ["cwd"] }] } }`,
+                 children: ["cwd"] } }`,
       {
         path: "root.when",
         message: 'Template references unknown variable ".nope"',
@@ -1412,14 +1335,17 @@ describe("loadDslConfig — valid corpus", () => {
           width: 8, justify: "right", truncate: "middle",
         },
       },
-      layout: [["cwd", "branch", "load"]],
+      root: { h: ["cwd", "branch", "load"] },
     }`;
     const cfg = parseAndValidate(FILE, source);
     expect(Object.keys(cfg.variables).sort()).toEqual([
       "branch", "constant", "cwd", "cwd_short", "home", "hostname",
       "load_avg", "now", "sid",
     ]);
-    expect(cfg.root).toEqual(vert(["cwd", "branch", "load"]));
+    expect(cfg.root).toEqual({
+      kind: "container", direction: "horizontal",
+      children: ["cwd", "branch", "load"].map((name) => ({ kind: "segment", name })),
+    });
   });
 
   test("minimal valid config loads to canonical empty shape", () => {

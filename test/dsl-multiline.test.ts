@@ -1,11 +1,10 @@
 // [LAW:single-enforcer] These tests pin the multi-line layout contract
 // directly against the render spine. renderDsl walks the canonical node tree
-// (renderNode); the flat `layout` sugar compiles to one vertical container of
-// cells leaves; leaves are joined with exactly one `\n`. Single-line is the
-// degenerate one-leaf case — not a separate code path. They also pin the two
-// vertical-line sources that feed the same join: an AUTHORED "\n" inside a
-// segment's cell stream (split on the cells, span-preserving) and the raw
-// `root` node grammar authored directly.
+// (renderNode); a vertical container stacks its children's rendered lines with
+// exactly one `\n` between them. Single-line is the degenerate one-child case —
+// not a separate code path. They also pin the two vertical-line sources: an
+// AUTHORED "\n" inside a segment's cell stream (split-before-layout) and the
+// raw `root` node grammar authored via the A-grammar (seg/h/v).
 //
 // [LAW:behavior-not-structure] Assertions pin observable output: line count,
 // segment-rendered-into-correct-line, exact newline separator, link survival.
@@ -112,24 +111,24 @@ describe("renderDsl — multi-line layout", () => {
     expect(lines[1]!.indexOf("C")).toBeLessThan(lines[1]!.indexOf("D"));
   });
 
-  test("empty layout produces empty string (no newlines, no segments)", () => {
+  test("empty root container produces empty string (no newlines, no segments)", () => {
     const source = `{
       globals: { palette: 'textual-dark' },
       variables: {},
       segments: {},
-      layout: [],
+      root: { v: [] },
     }`;
     const { config, compiled, store, registry } = buildRuntime(source);
     const out = renderDsl(config, compiled, store, registry, {}, basePalette(), OPTS);
     expect(out).toBe("");
   });
 
-  test("legacy flat string[] layout rejected at parse time", () => {
-    // [LAW:no-silent-fallbacks] Migration path is "wrap your list in []".
-    // The loader must reject the old shape so users see the breaking change.
+  test("layout: key is rejected with migration error (removed in 2de.19)", () => {
+    // [LAW:no-silent-failure] `layout:` was removed; the loader must surface the
+    // migration error so users know exactly how to rewrite their config.
     const source = `{
       segments: { s: { template: ' x ', bg: 'surface', fg: 'foreground' } },
-      layout: ['s'],
+      layout: [['s']],
     }`;
     expect(() =>
       parseAndValidate("<test>", source, ALLOWED_PALETTES),
@@ -233,9 +232,8 @@ describe("renderDsl — multi-line layout", () => {
     }
   });
 
-  test("raw root grammar: a cells leaf inside a vertical container renders", () => {
-    // The substrate's own authoring surface — no `layout` sugar. A vertical
-    // container of two cells leaves stacks them, identical to two sugar rows.
+  test("A-grammar v-arm with two children stacks them as two lines", () => {
+    // Direct test of the canonical v-arm spelling replacing the old `cells` leaf form.
     const source = `{
       globals: { palette: 'textual-dark' },
       variables: {
@@ -246,14 +244,7 @@ describe("renderDsl — multi-line layout", () => {
         top: { template: ' {{ .a }} ', bg: 'surface', fg: 'foreground' },
         bot: { template: ' {{ .b }} ', bg: 'surface', fg: 'foreground' },
       },
-      root: {
-        kind: 'container',
-        direction: 'vertical',
-        children: [
-          { kind: 'cells', segments: ['top'] },
-          { kind: 'cells', segments: ['bot'] },
-        ],
-      },
+      root: { v: ['top', 'bot'] },
     }`;
     const { config, compiled, store, registry } = buildRuntime(source);
     const out = renderDsl(config, compiled, store, registry, {}, basePalette(), OPTS);
@@ -263,11 +254,11 @@ describe("renderDsl — multi-line layout", () => {
     expect(lines[1]!).toContain("BOT");
   });
 
-  test("horizontal container of single-line leaves is byte-identical to one cells leaf (caps across the seam — no abut)", () => {
+  test("horizontal container of single-line leaves is byte-identical to h-arm (caps across the seam — no abut)", () => {
     // [LAW:behavior-not-structure] The defining contract of `horizontal`: it
     // composes CELLS (not serialized blocks), so the joiner caps across the
-    // seam exactly as if the segments lived in one leaf. Abut would serialize
-    // each leaf first and string-concat — producing a triangle-into-void seam
+    // seam exactly as if the segments lived in one node. Abut would serialize
+    // each child first and string-concat — producing a triangle-into-void seam
     // and DIFFERENT bytes. Byte-equality is the precise refutation of abut.
     const segs = `
       segments: {
@@ -279,18 +270,15 @@ describe("renderDsl — multi-line layout", () => {
         a: { kind: 'literal', value: 'AA' },
         b: { kind: 'literal', value: 'BB' },
       },`;
-    const leafSrc = `{ globals: { palette: 'textual-dark' },${vars}${segs}
-      root: { kind: 'cells', segments: ['sa', 'sb'] } }`;
+    const hArmSrc = `{ globals: { palette: 'textual-dark' },${vars}${segs}
+      root: { h: ['sa', 'sb'] } }`;
     const horizSrc = `{ globals: { palette: 'textual-dark' },${vars}${segs}
-      root: { kind: 'container', direction: 'horizontal', children: [
-        { kind: 'cells', segments: ['sa'] },
-        { kind: 'cells', segments: ['sb'] },
-      ] } }`;
-    const leaf = buildRuntime(leafSrc);
+      root: { kind: 'container', direction: 'horizontal', children: ['sa', 'sb'] } }`;
+    const hArm = buildRuntime(hArmSrc);
     const horiz = buildRuntime(horizSrc);
-    const leafOut = renderDsl(leaf.config, leaf.compiled, leaf.store, leaf.registry, {}, basePalette(), OPTS);
+    const hArmOut = renderDsl(hArm.config, hArm.compiled, hArm.store, hArm.registry, {}, basePalette(), OPTS);
     const horizOut = renderDsl(horiz.config, horiz.compiled, horiz.store, horiz.registry, {}, basePalette(), OPTS);
-    expect(horizOut).toBe(leafOut);
+    expect(horizOut).toBe(hArmOut);
     expect(horizOut.split("\n")).toHaveLength(1);
   });
 
@@ -312,13 +300,8 @@ describe("renderDsl — multi-line layout", () => {
         kind: 'container',
         direction: 'horizontal',
         children: [
-          { kind: 'container', direction: 'vertical', children: [
-            { kind: 'cells', segments: ['sl1'] },
-            { kind: 'cells', segments: ['sl2'] },
-          ] },
-          { kind: 'container', direction: 'vertical', children: [
-            { kind: 'cells', segments: ['sr1'] },
-          ] },
+          { v: ['sl1', 'sl2'] },
+          { v: ['sr1'] },
         ],
       },
     }`;
@@ -334,7 +317,7 @@ describe("renderDsl — multi-line layout", () => {
 
   test("a container's `when` gates its whole subtree (hidden → no line)", () => {
     // A false container contributes no lines; its descendants are still walked
-    // (hue stability) but emit nothing — the same contract a hidden row had.
+    // (hue stability) but emit nothing.
     const source = `{
       globals: { palette: 'textual-dark' },
       variables: {
@@ -346,15 +329,10 @@ describe("renderDsl — multi-line layout", () => {
         sa: { template: ' {{ .a }} ', bg: 'surface', fg: 'foreground' },
         sb: { template: ' {{ .b }} ', bg: 'surface', fg: 'foreground' },
       },
-      root: {
-        kind: 'container',
-        direction: 'vertical',
-        children: [
-          { kind: 'container', direction: 'vertical', when: '{{ ne .show "" }}',
-            children: [ { kind: 'cells', segments: ['sa'] } ] },
-          { kind: 'cells', segments: ['sb'] },
-        ],
-      },
+      root: { v: [
+        { v: ['sa'], when: '{{ ne .show "" }}' },
+        'sb',
+      ] },
     }`;
     const { config, compiled, store, registry } = buildRuntime(source);
     const out = renderDsl(config, compiled, store, registry, {}, basePalette(), OPTS);
@@ -362,18 +340,5 @@ describe("renderDsl — multi-line layout", () => {
     expect(lines).toHaveLength(1);
     expect(lines[0]!).toContain("B");
     expect(lines[0]!).not.toContain("A");
-  });
-
-  test("authoring both `layout` and `root` is rejected", () => {
-    // [LAW:one-source-of-truth] Two authoring surfaces for the same tree could
-    // diverge — the loader rejects the ambiguity loudly.
-    const source = `{
-      segments: { s: { template: ' x ', bg: 'surface', fg: 'foreground' } },
-      layout: [['s']],
-      root: { kind: 'cells', segments: ['s'] },
-    }`;
-    expect(() =>
-      parseAndValidate("<test>", source, ALLOWED_PALETTES),
-    ).toThrow(ConfigError);
   });
 });
