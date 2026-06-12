@@ -702,6 +702,186 @@ describe("loadDslConfig — layout", () => {
   });
 });
 
+// ─── Option A shape grammar (2de.15) ─────────────────────────────────────────
+
+describe("loadDslConfig — A-grammar (seg/h/v)", () => {
+  test("bare string lowers to a segment ref", () => {
+    const cfg = parseAndValidate(
+      FILE,
+      `{ segments: { a: { template: "x" } }, root: "a" }`,
+    );
+    expect(cfg.root).toEqual({ kind: "segment", name: "a" });
+  });
+
+  test("{ seg } lowers to a segment node", () => {
+    const cfg = parseAndValidate(
+      FILE,
+      `{ segments: { a: { template: "x" } }, root: { seg: "a" } }`,
+    );
+    expect(cfg.root).toEqual({ kind: "segment", name: "a" });
+  });
+
+  test("{ seg, when } preserves the predicate", () => {
+    const cfg = parseAndValidate(
+      FILE,
+      `{ segments: { a: { template: "x" } }, root: { seg: "a", when: "{{ true }}" } }`,
+    );
+    expect(cfg.root).toEqual({ kind: "segment", name: "a", when: "{{ true }}" });
+  });
+
+  test("{ h: [...] } lowers to a horizontal container", () => {
+    const cfg = parseAndValidate(
+      FILE,
+      `{ segments: { a: { template: "x" }, b: { template: "y" } }, root: { h: ["a", "b"] } }`,
+    );
+    expect(cfg.root).toEqual({
+      kind: "container",
+      direction: "horizontal",
+      children: [
+        { kind: "segment", name: "a" },
+        { kind: "segment", name: "b" },
+      ],
+    });
+  });
+
+  test("{ v: [...] } lowers to a vertical container", () => {
+    const cfg = parseAndValidate(
+      FILE,
+      `{ segments: { a: { template: "x" }, b: { template: "y" } }, root: { v: ["a", "b"] } }`,
+    );
+    expect(cfg.root).toEqual({
+      kind: "container",
+      direction: "vertical",
+      children: [
+        { kind: "segment", name: "a" },
+        { kind: "segment", name: "b" },
+      ],
+    });
+  });
+
+  test("nested h-in-v-in-h lowers to the expected canonical tree", () => {
+    const cfg = parseAndValidate(
+      FILE,
+      `{
+        segments: { a: { template: "x" }, b: { template: "y" }, c: { template: "z" } },
+        root: { h: [{ v: ["a", { h: ["b", "c"] }] }] },
+      }`,
+    );
+    expect(cfg.root).toEqual({
+      kind: "container",
+      direction: "horizontal",
+      children: [
+        {
+          kind: "container",
+          direction: "vertical",
+          children: [
+            { kind: "segment", name: "a" },
+            {
+              kind: "container",
+              direction: "horizontal",
+              children: [
+                { kind: "segment", name: "b" },
+                { kind: "segment", name: "c" },
+              ],
+            },
+          ],
+        },
+      ],
+    });
+  });
+
+  test("{ h, when } preserves the predicate on the container", () => {
+    const cfg = parseAndValidate(
+      FILE,
+      `{ segments: { a: { template: "x" } }, root: { h: ["a"], when: "{{ true }}" } }`,
+    );
+    expect(cfg.root).toEqual({
+      kind: "container",
+      direction: "horizontal",
+      children: [{ kind: "segment", name: "a" }],
+      when: "{{ true }}",
+    });
+  });
+
+  test("bijectivity: A-grammar and canonical spelling lower to identical trees", () => {
+    // [LAW:one-source-of-truth] Both spellings must produce the SAME canonical
+    // tree — they are two representations of one grammar, not two grammars.
+    const canonical = parseAndValidate(
+      FILE,
+      `{
+        segments: { a: { template: "x" }, b: { template: "y" }, c: { template: "z" } },
+        root: { kind: "container", direction: "vertical", children: [
+          { kind: "container", direction: "horizontal", children: [
+            { kind: "segment", name: "a" },
+            { kind: "segment", name: "b" },
+          ]},
+          { kind: "segment", name: "c" },
+        ]},
+      }`,
+    );
+    const terse = parseAndValidate(
+      FILE,
+      `{
+        segments: { a: { template: "x" }, b: { template: "y" }, c: { template: "z" } },
+        root: { v: [{ h: ["a", "b"] }, "c"] },
+      }`,
+    );
+    expect(terse.root).toEqual(canonical.root);
+  });
+
+  test("A-grammar inside group children composes correctly", () => {
+    const cfg = parseAndValidate(
+      FILE,
+      `{
+        segments: { m: { template: "M" }, n: { template: "N" } },
+        root: {
+          kind: "group", name: "g", label: "G",
+          children: [{ h: ["m", "n"] }],
+        },
+        variables: { "session.id": { kind: "input", path: "session_id", default: "" } },
+      }`,
+    );
+    // The group lowers to a vertical container whose body-container holds
+    // { h: ["m", "n"] } — a horizontal container of two segment refs.
+    expect(cfg.root.kind).toBe("container");
+    const root = cfg.root as import("../src/config/dsl-types").ContainerNode;
+    expect(root.children[1]).toMatchObject({
+      kind: "container",
+      children: [
+        {
+          kind: "container",
+          direction: "horizontal",
+          children: [
+            { kind: "segment", name: "m" },
+            { kind: "segment", name: "n" },
+          ],
+        },
+      ],
+    });
+  });
+
+  test("both h and v present is a load error", () => {
+    expectIssue(`{ root: { h: [], v: [] } }`, {
+      path: "root",
+      message: /exactly one of "seg", "h", or "v"/,
+    });
+  });
+
+  test("both seg and h present is a load error", () => {
+    expectIssue(
+      `{ segments: { a: { template: "x" } }, root: { seg: "a", h: ["a"] } }`,
+      { path: "root", message: /exactly one of "seg", "h", or "v"/ },
+    );
+  });
+
+  test("bare empty string is a load error", () => {
+    expectIssue(`{ root: "" }`, {
+      path: "root",
+      message: /non-empty segment name/,
+    });
+  });
+});
+
 // ─── Cross-reference validation ──────────────────────────────────────────────
 
 describe("loadDslConfig — cross-references", () => {
