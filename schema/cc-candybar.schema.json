@@ -1252,6 +1252,9 @@
     "LayoutNode": {
       "anyOf": [
         {
+          "type": "string"
+        },
+        {
           "type": "object",
           "properties": {
             "kind": {
@@ -1369,6 +1372,57 @@
             "name",
             "label",
             "children"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "seg": {
+              "type": "string"
+            },
+            "when": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "seg"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "h": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/LayoutNode"
+              }
+            },
+            "when": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "h"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "v": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/LayoutNode"
+              }
+            },
+            "when": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "v"
           ],
           "additionalProperties": false
         }

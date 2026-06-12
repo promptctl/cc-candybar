@@ -399,6 +399,73 @@ const CELLS_SCHEMA: RecordSchema<CellsNode> = {
   },
 };
 
+// ─── Option A shape grammar (seg / h / v) ────────────────────────────────────
+
+// [LAW:types-are-the-program] The terse bijective spellings of the canonical
+// tree: a bare string names a segment; an object with exactly one of "seg",
+// "h", or "v" spells a segment-ref-with-predicate, a horizontal container, or
+// a vertical container respectively. Every legal canonical node is expressible;
+// no illegal one is — bijectivity is the acceptance test. The key-count check
+// (exactly one of seg/h/v) is the dispatch-level invariant that makes the wrong
+// arm unrepresentable as a valid parse. [LAW:single-enforcer] — the loader is
+// the sole enforcer; the JSON Schema emitter mirrors it, but the loader's exit
+// code is the truth.
+
+interface SegArmNode {
+  readonly seg: string;
+  readonly when?: string;
+}
+
+function segArmSpec(): FieldSpec<string> {
+  return {
+    required: true,
+    json: { type: "string" },
+    parse: (ctx, path, field, raw) => {
+      const v = raw[field];
+      if (typeof v === "string" && v.length > 0) return v;
+      ctx.issues.push({
+        path: `${path}.${field}`,
+        message: `a "seg" node must have a non-empty segment name, got ${describeValue(v)}`,
+        line: findKeyLine(ctx.source, ["root"]),
+      });
+      return "";
+    },
+  };
+}
+
+const SEG_ARM_SCHEMA: RecordSchema<SegArmNode> = {
+  noun: "layout-node key",
+  fields: { seg: segArmSpec(), when: optionalStringSpec() },
+};
+
+interface HArmNode {
+  readonly h: readonly LayoutNode[];
+  readonly when?: string;
+}
+
+const H_ARM_SCHEMA: RecordSchema<HArmNode> = {
+  noun: "layout-node key",
+  fields: {
+    h: childrenSpec(lazy(() => validateRoot)),
+    when: optionalStringSpec(),
+  },
+};
+
+interface VArmNode {
+  readonly v: readonly LayoutNode[];
+  readonly when?: string;
+}
+
+const V_ARM_SCHEMA: RecordSchema<VArmNode> = {
+  noun: "layout-node key",
+  fields: {
+    v: childrenSpec(lazy(() => validateRoot)),
+    when: optionalStringSpec(),
+  },
+};
+
+// ─── validateRoot ────────────────────────────────────────────────────────────
+
 // [LAW:locality-or-seam] The boundary that turns the raw `root` grammar into a
 // validated LayoutNode tree. STRUCTURAL only — whether a segment name resolves and
 // whether a `when` ref exists are cross-ref concerns (validateCrossReferences runs
@@ -415,10 +482,24 @@ export const validateRoot = (
   path: string,
   raw: unknown,
 ): LayoutNode => {
+  // [LAW:types-are-the-program] A bare string is the terse segment-ref spelling.
+  // Checked before the object guard so the "not an object" error does not fire
+  // on a valid input.
+  if (typeof raw === "string") {
+    if (raw.length === 0) {
+      ctx.issues.push({
+        path,
+        message: `a bare-string layout node must be a non-empty segment name`,
+        line: findKeyLine(ctx.source, ["root"]),
+      });
+      return EMPTY_VERTICAL_NODE;
+    }
+    return { kind: "segment", name: raw };
+  }
   if (!isPlainObject(raw)) {
     ctx.issues.push({
       path,
-      message: `a layout node must be an object with "kind" of "container", "segment", "cells", or "group", got ${describeType(raw)}`,
+      message: `a layout node must be a string (segment name) or an object with "kind" / "seg" / "h" / "v", got ${describeType(raw)}`,
       line: findKeyLine(ctx.source, ["root"]),
     });
     return EMPTY_VERTICAL_NODE;
@@ -453,9 +534,54 @@ export const validateRoot = (
     });
     return lowerGroup(group);
   }
+  // [LAW:types-are-the-program] Option A terse arms: exactly one of "seg" / "h"
+  // / "v". Two or more present is an illegal state; zero means the object has
+  // neither a valid "kind" nor a valid terse arm — both are loud rejections.
+  const hasH = "h" in raw;
+  const hasV = "v" in raw;
+  const hasSeg = "seg" in raw;
+  const armCount = (hasH ? 1 : 0) + (hasV ? 1 : 0) + (hasSeg ? 1 : 0);
+  if (armCount > 1) {
+    const present = (["seg", "h", "v"] as const).filter((k) => k in raw);
+    ctx.issues.push({
+      path,
+      message: `a layout node may have exactly one of "seg", "h", or "v" — got ${present.map((k) => `"${k}"`).join(" and ")} together`,
+      line: findKeyLine(ctx.source, ["root"]),
+    });
+    return EMPTY_VERTICAL_NODE;
+  }
+  if (hasSeg) {
+    const arm = record(ctx, SEG_ARM_SCHEMA, path, raw);
+    if (arm === null) return EMPTY_VERTICAL_NODE;
+    return {
+      kind: "segment",
+      name: arm.seg,
+      ...(arm.when !== undefined && { when: arm.when }),
+    };
+  }
+  if (hasH) {
+    const arm = record(ctx, H_ARM_SCHEMA, path, raw);
+    if (arm === null) return EMPTY_VERTICAL_NODE;
+    return {
+      kind: "container",
+      direction: "horizontal",
+      children: arm.h,
+      ...(arm.when !== undefined && { when: arm.when }),
+    };
+  }
+  if (hasV) {
+    const arm = record(ctx, V_ARM_SCHEMA, path, raw);
+    if (arm === null) return EMPTY_VERTICAL_NODE;
+    return {
+      kind: "container",
+      direction: "vertical",
+      children: arm.v,
+      ...(arm.when !== undefined && { when: arm.when }),
+    };
+  }
   ctx.issues.push({
     path: `${path}.kind`,
-    message: `a layout node "kind" must be "container", "segment", "cells", or "group", got ${JSON.stringify(raw.kind)}`,
+    message: `a layout node "kind" must be "container", "segment", "cells", or "group", or use the terse form: a bare string, or an object with "seg", "h", or "v" (got ${JSON.stringify(raw.kind)})`,
     line: findKeyLine(ctx.source, ["root"]),
   });
   return EMPTY_VERTICAL_NODE;
@@ -745,21 +871,23 @@ export function synthesizeGroupDecls(
 
 // ─── Schema emit ─────────────────────────────────────────────────────────────
 
-// [LAW:one-source-of-truth] The LayoutNode definition: the anyOf of the three
-// kind-arms `validateRoot` dispatches over (container / segment / cells), each
-// derived from the SAME record schema the validator interprets. The `kind`
-// `const` on each arm keeps them disjoint; the container arm's `children` field
-// `$ref`s back here, closing the recursion. The emitter publishes this at
-// `LAYOUT_NODE_REF`, so a config writing `root` is validated by the same grammar
-// the loader enforces — `cells` sugar included (the old type-derived schema
-// omitted it; deriving from the loader declaration restores parity).
+// [LAW:one-source-of-truth] The LayoutNode definition: the anyOf of ALL arms
+// `validateRoot` dispatches over — kind-based (container / segment / cells /
+// group) and terse (bare string, seg-arm, h-arm, v-arm) — each derived from the
+// SAME schema the validator interprets. The `kind` const and the unique required
+// key keep arms disjoint; the container/h/v children `$ref` back here, closing
+// the recursion. `{ type: "string" }` covers the bare-string segment-ref form.
 export function layoutNodeJson(): JsonNode {
   return {
     anyOf: [
+      { type: "string" },
       recordJson(CONTAINER_SCHEMA),
       recordJson(SEGMENT_NODE_SCHEMA),
       recordJson(CELLS_SCHEMA),
       recordJson(GROUP_SCHEMA),
+      recordJson(SEG_ARM_SCHEMA),
+      recordJson(H_ARM_SCHEMA),
+      recordJson(V_ARM_SCHEMA),
     ],
   };
 }
