@@ -55,44 +55,29 @@ function buildMockDeps(): { deps: RenderPayloadDeps; counts: CallCounts } {
     usageStore: {
       getUsageInfo: async () => {
         counts.usage++;
-        return {
-          session: {
-            cost: 0,
-            calculatedCost: 0,
-            officialCost: 0,
-            tokens: 0,
-            tokenBreakdown: null,
-          },
-        };
+        return ABSENT;
       },
       getTodayInfo: async () => {
         counts.today++;
-        return { cost: 0, tokens: 0, tokenBreakdown: null, date: "" };
+        return ABSENT;
       },
     },
     contextProvider: {
       getContextInfo: async () => {
         counts.context++;
-        return null;
+        return ABSENT;
       },
     },
     metricsProvider: {
       getMetricsInfo: async () => {
         counts.metrics++;
-        return {
-          responseTime: null,
-          lastResponseTime: null,
-          sessionDuration: null,
-          messageCount: null,
-          linesAdded: null,
-          linesRemoved: null,
-        };
+        return ABSENT;
       },
     },
     tmuxService: {
       getSessionId: async () => {
         counts.tmux++;
-        return null;
+        return ABSENT;
       },
     },
     sessionState: {

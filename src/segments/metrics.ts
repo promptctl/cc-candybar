@@ -6,14 +6,19 @@ import type { ClaudeHookData, ParsedEntry } from "../utils/claude";
 // one cache; the multi-MB content arrays are dropped at parse time.
 import { parseJsonlFile } from "../utils/claude";
 import { debug } from "../utils/logger";
+import { ABSENT, failed, ok, type Outcome } from "../utils/outcome";
 
+// [LAW:types-are-the-program] An `ok` MetricsInfo carries real values — "no
+// cost data at all" is the `absent` outcome arm, not a bag of nulls. The one
+// remaining null is lastResponseTime, where the domain genuinely has no
+// answer (no qualifying user→assistant pair in the recent window).
 export interface MetricsInfo {
-  responseTime: number | null;
+  responseTime: number;
   lastResponseTime: number | null;
-  sessionDuration: number | null;
-  messageCount: number | null;
-  linesAdded: number | null;
-  linesRemoved: number | null;
+  sessionDuration: number;
+  messageCount: number;
+  linesAdded: number;
+  linesRemoved: number;
 }
 
 // A real user turn vs. a tool_result echoed back as a "user" line. The
@@ -56,23 +61,19 @@ export class MetricsProvider {
     return bestResponseTime;
   }
 
+  // [LAW:no-silent-failure] A hook payload with no cost block is `absent`
+  // (old clients); a transcript parse error is `failed`, carried to the
+  // payload boundary — the old catch dressed it as the same all-null record
+  // as "no data".
   async getMetricsInfo(
     sessionId: string,
     hookData: ClaudeHookData,
-  ): Promise<MetricsInfo> {
+  ): Promise<Outcome<MetricsInfo>> {
     try {
       debug(`Getting metrics from hook data for session: ${sessionId}`);
 
       if (!hookData.cost) {
-        debug(`No cost data available in hook data`);
-        return {
-          responseTime: null,
-          lastResponseTime: null,
-          sessionDuration: null,
-          messageCount: null,
-          linesAdded: null,
-          linesRemoved: null,
-        };
+        return ABSENT;
       }
 
       // parseJsonlFile keeps sidechain entries (usage needs them); metrics
@@ -83,27 +84,18 @@ export class MetricsProvider {
       const messageCount = this.calculateMessageCount(entries);
       const lastResponseTime = this.calculateLastResponseTime(entries);
 
-      return {
+      return ok({
         responseTime: hookData.cost.total_api_duration_ms / 1000,
         lastResponseTime,
         sessionDuration: hookData.cost.total_duration_ms / 1000,
         messageCount,
         linesAdded: hookData.cost.total_lines_added,
         linesRemoved: hookData.cost.total_lines_removed,
-      };
+      });
     } catch (error) {
-      debug(
-        `Error getting metrics from hook data for session ${sessionId}:`,
-        error,
+      return failed(
+        `metrics (${sessionId}): ${error instanceof Error ? error.message : String(error)}`,
       );
-      return {
-        responseTime: null,
-        lastResponseTime: null,
-        sessionDuration: null,
-        messageCount: null,
-        linesAdded: null,
-        linesRemoved: null,
-      };
     }
   }
 }

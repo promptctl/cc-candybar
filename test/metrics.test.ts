@@ -1,5 +1,11 @@
 import { MetricsProvider } from "../src/segments/metrics";
-import { writeFileSync, unlinkSync, mkdtempSync, utimesSync } from "fs";
+import {
+  writeFileSync,
+  unlinkSync,
+  mkdtempSync,
+  utimesSync,
+  chmodSync,
+} from "fs";
 import { join } from "path";
 import { tmpdir } from "os";
 import type { ClaudeHookData } from "../src/utils/claude";
@@ -62,11 +68,14 @@ describe("Metrics Provider", () => {
     writeFileSync(transcriptPath, transcriptContent);
 
     const mockHookData = createMockHookData("test-session", transcriptPath);
-    const metrics = await metricsProvider.getMetricsInfo(
+    const outcome = await metricsProvider.getMetricsInfo(
       "test-session",
       mockHookData
     );
 
+    expect(outcome.kind).toBe("ok");
+    if (outcome.kind !== "ok") return;
+    const metrics = outcome.value;
     expect(metrics.messageCount).toBe(2);
     expect(metrics.sessionDuration).toBe(120);
     expect(metrics.responseTime).toBe(5);
@@ -75,22 +84,60 @@ describe("Metrics Provider", () => {
     expect(metrics.linesRemoved).toBe(10);
   });
 
+  // A transcript that doesn't exist yet is the domain's "no entries" (new
+  // session pre-first-write): the cost-block fields are real, the
+  // transcript-derived counts are genuinely zero.
   it("handles missing transcript gracefully", async () => {
     const mockHookData = createMockHookData(
       "nonexistent-session",
       join(tempDir, "nonexistent.jsonl"),
     );
-    const metrics = await metricsProvider.getMetricsInfo(
+    const outcome = await metricsProvider.getMetricsInfo(
       "nonexistent-session",
       mockHookData
     );
 
-    expect(metrics.messageCount).toBe(0);
-    expect(metrics.sessionDuration).toBe(120);
-    expect(metrics.responseTime).toBe(5);
-    expect(metrics.lastResponseTime).toBeNull();
-    expect(metrics.linesAdded).toBe(25);
-    expect(metrics.linesRemoved).toBe(10);
+    expect(outcome.kind).toBe("ok");
+    if (outcome.kind !== "ok") return;
+    expect(outcome.value.messageCount).toBe(0);
+    expect(outcome.value.sessionDuration).toBe(120);
+    expect(outcome.value.responseTime).toBe(5);
+    expect(outcome.value.lastResponseTime).toBeNull();
+    expect(outcome.value.linesAdded).toBe(25);
+    expect(outcome.value.linesRemoved).toBe(10);
+  });
+
+  // [LAW:no-silent-failure] An UNREADABLE transcript (exists, can't be read)
+  // is a loud `failed` carrying the reason — not a confident record with
+  // zeros where the transcript-derived fields should be.
+  it("maps an unreadable transcript to a failed outcome", async () => {
+    const transcriptPath = join(tempDir, "test.jsonl");
+    writeFileSync(transcriptPath, `{"type":"user"}`);
+    chmodSync(transcriptPath, 0o000);
+
+    const mockHookData = createMockHookData("locked-session", transcriptPath);
+    const outcome = await metricsProvider.getMetricsInfo(
+      "locked-session",
+      mockHookData
+    );
+    chmodSync(transcriptPath, 0o644);
+
+    expect(outcome.kind).toBe("failed");
+    if (outcome.kind !== "failed") return;
+    expect(outcome.reason).toContain("locked-session");
+  });
+
+  it("reports absent when the hook data has no cost block", async () => {
+    const mockHookData = {
+      ...createMockHookData("no-cost-session", join(tempDir, "test.jsonl")),
+      cost: undefined,
+    };
+    const outcome = await metricsProvider.getMetricsInfo(
+      "no-cost-session",
+      mockHookData
+    );
+
+    expect(outcome.kind).toBe("absent");
   });
 
   it("reads through the shared parse cache — no re-read when mtime+size unchanged", async () => {
@@ -110,7 +157,7 @@ describe("Metrics Provider", () => {
     writeFileSync(transcriptPath, v1);
     utimesSync(transcriptPath, fixedMtime, fixedMtime);
     const warm = await metricsProvider.getMetricsInfo("cache-session", hookData);
-    expect(warm.messageCount).toBe(2);
+    expect(warm.kind === "ok" && warm.value.messageCount).toBe(2);
 
     // Mutate content but hold mtime+size identical: the cache key is unchanged,
     // so a correct shared-cache read returns the stale 2; a private re-read
@@ -122,7 +169,7 @@ describe("Metrics Provider", () => {
       "cache-session",
       hookData,
     );
-    expect(cached.messageCount).toBe(2);
+    expect(cached.kind === "ok" && cached.value.messageCount).toBe(2);
   });
 
   it("handles empty transcript gracefully", async () => {
@@ -130,16 +177,18 @@ describe("Metrics Provider", () => {
     writeFileSync(transcriptPath, "");
 
     const mockHookData = createMockHookData("empty-session", transcriptPath);
-    const metrics = await metricsProvider.getMetricsInfo(
+    const outcome = await metricsProvider.getMetricsInfo(
       "empty-session",
       mockHookData
     );
 
-    expect(metrics.messageCount).toBe(0);
-    expect(metrics.sessionDuration).toBe(120);
-    expect(metrics.responseTime).toBe(5);
-    expect(metrics.lastResponseTime).toBeNull();
-    expect(metrics.linesAdded).toBe(25);
-    expect(metrics.linesRemoved).toBe(10);
+    expect(outcome.kind).toBe("ok");
+    if (outcome.kind !== "ok") return;
+    expect(outcome.value.messageCount).toBe(0);
+    expect(outcome.value.sessionDuration).toBe(120);
+    expect(outcome.value.responseTime).toBe(5);
+    expect(outcome.value.lastResponseTime).toBeNull();
+    expect(outcome.value.linesAdded).toBe(25);
+    expect(outcome.value.linesRemoved).toBe(10);
   });
 });

@@ -41,12 +41,13 @@ describe("ContextProvider window-size sourcing", () => {
         },
       },
     });
-    const info = await provider.getContextInfo(hook);
-    expect(info).not.toBeNull();
+    const outcome = await provider.getContextInfo(hook);
+    expect(outcome.kind).toBe("ok");
+    if (outcome.kind !== "ok") return;
     // 168,912 of a 1M window is ~17% used → ~83% left. A 200k limit would have
     // reported 0% left (the bug).
-    expect(info!.maxTokens).toBe(1_000_000);
-    expect(info!.contextLeftPercentage).toBeGreaterThan(80);
+    expect(outcome.value.maxTokens).toBe(1_000_000);
+    expect(outcome.value.contextLeftPercentage).toBeGreaterThan(80);
   });
 
   it("uses native used_percentage and remaining_percentage verbatim, not a local buffer calc", async () => {
@@ -68,9 +69,11 @@ describe("ContextProvider window-size sourcing", () => {
         },
       },
     });
-    const info = await provider.getContextInfo(hook);
-    expect(info!.percentage).toBe(42);
-    expect(info!.contextLeftPercentage).toBe(58);
+    const outcome = await provider.getContextInfo(hook);
+    expect(outcome.kind).toBe("ok");
+    if (outcome.kind !== "ok") return;
+    expect(outcome.value.percentage).toBe(42);
+    expect(outcome.value.contextLeftPercentage).toBe(58);
   });
 
   it("falls back to a plain token-ratio (no auto-compact buffer) when native percentages are null", async () => {
@@ -89,10 +92,12 @@ describe("ContextProvider window-size sourcing", () => {
         },
       },
     });
-    const info = await provider.getContextInfo(hook);
+    const outcome = await provider.getContextInfo(hook);
+    expect(outcome.kind).toBe("ok");
+    if (outcome.kind !== "ok") return;
     // 200k / 1M = 20% used → 80% left, with NO 33k buffer skew.
-    expect(info!.percentage).toBe(20);
-    expect(info!.contextLeftPercentage).toBe(80);
+    expect(outcome.value.percentage).toBe(20);
+    expect(outcome.value.contextLeftPercentage).toBe(80);
   });
 
   it("falls back to context_window_size even when current_usage is null", async () => {
@@ -118,8 +123,10 @@ describe("ContextProvider window-size sourcing", () => {
         current_usage: null,
       },
     });
-    const info = await provider.getContextInfo(hook);
-    expect(info!.maxTokens).toBe(1_000_000);
+    const outcome = await provider.getContextInfo(hook);
+    expect(outcome.kind).toBe("ok");
+    if (outcome.kind !== "ok") return;
+    expect(outcome.value.maxTokens).toBe(1_000_000);
     rmSync(dir, { recursive: true, force: true });
   });
 });

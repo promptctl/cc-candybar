@@ -113,9 +113,11 @@ describe("SessionUsageStore — session projection", () => {
       // hook() carries no cost block → officialCost null → display the
       // transcript total.
       const info = await store.getUsageInfo("A", hook("A", t));
-      expect(info.session.cost).toBeCloseTo(0.03, 5);
-      expect(info.session.officialCost).toBeNull();
-      expect(info.session.calculatedCost).toBeCloseTo(0.03, 5);
+      expect(info.kind).toBe("ok");
+      if (info.kind !== "ok") return;
+      expect(info.value.session.cost).toBeCloseTo(0.03, 5);
+      expect(info.value.session.officialCost).toBeNull();
+      expect(info.value.session.calculatedCost).toBeCloseTo(0.03, 5);
     } finally {
       store.close();
     }
@@ -139,11 +141,13 @@ describe("SessionUsageStore — session projection", () => {
         total_lines_removed: 0,
       };
       const info = await store.getUsageInfo("A", hd);
+      expect(info.kind).toBe("ok");
+      if (info.kind !== "ok") return;
       // Displayed cost is the native number; the priced sum is retained
       // separately (it still feeds the cross-session `today` total).
-      expect(info.session.cost).toBeCloseTo(0.99, 5);
-      expect(info.session.officialCost).toBeCloseTo(0.99, 5);
-      expect(info.session.calculatedCost).toBeCloseTo(0.03, 5);
+      expect(info.value.session.cost).toBeCloseTo(0.99, 5);
+      expect(info.value.session.officialCost).toBeCloseTo(0.99, 5);
+      expect(info.value.session.calculatedCost).toBeCloseTo(0.03, 5);
     } finally {
       store.close();
     }
@@ -170,7 +174,9 @@ describe("SessionUsageStore — session projection", () => {
     const store = new SessionUsageStore({ sweepIntervalMs: 0 });
     try {
       const info = await store.getUsageInfo("", undefined);
-      expect(info.session.cost).toBeNull();
+      expect(info.kind).toBe("ok");
+      if (info.kind !== "ok") return;
+      expect(info.value.session.cost).toBeNull();
       expect(store.getStats()).toMatchObject({ size: 0, misses: 0, hits: 0 });
     } finally {
       store.close();
@@ -257,7 +263,9 @@ describe("SessionUsageStore — today projection (off the hot path)", () => {
     const store = new SessionUsageStore({ sweepIntervalMs: 0 });
     try {
       const info = await store.getTodayInfo(hook("sess-0-0", activePath));
-      expect(info.cost).toBeCloseTo(
+      expect(info.kind).toBe("ok");
+      if (info.kind !== "ok") return;
+      expect(info.value.cost).toBeCloseTo(
         PROJECTS * FILES_PER_PROJECT * COST_PER_FILE,
         5,
       );

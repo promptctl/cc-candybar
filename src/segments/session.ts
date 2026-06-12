@@ -1,5 +1,6 @@
 import { debug } from "../utils/logger";
 import { PricingService } from "./pricing";
+import { failed, ok, type Outcome } from "../utils/outcome";
 import {
   findAgentTranscripts,
   parseJsonlFile,
@@ -66,10 +67,15 @@ export class SessionProvider {
   // scan) and passes it straight here. There is no lookup-by-id path: recovering
   // a path we already hold by scanning every project dir is the data-duplication
   // this method exists to avoid.
+  // [LAW:no-silent-failure] A transcript that exists but can't be read or
+  // parsed is `failed`, not an empty session — the old catch-to-null dressed
+  // a read failure as "no usage", and the lie survived all the way to the
+  // rendered bar. An empty transcript is a real (zero-entry) usage, not
+  // absence.
   async getSessionUsageFromPath(
     sessionId: string,
     transcriptPath: string,
-  ): Promise<SessionUsage | null> {
+  ): Promise<Outcome<SessionUsage>> {
     try {
       debug(`Found transcript at: ${transcriptPath}`);
 
@@ -94,7 +100,7 @@ export class SessionProvider {
       const parsedEntries = [...mainEntries, ...agentEntries];
 
       if (parsedEntries.length === 0) {
-        return { totalCost: 0, entries: [] };
+        return ok({ totalCost: 0, entries: [] });
       }
 
       const entries: SessionUsageEntry[] = [];
@@ -119,10 +125,11 @@ export class SessionProvider {
       debug(
         `Parsed ${entries.length} usage entries, total cost: $${totalCost.toFixed(4)}`,
       );
-      return { totalCost, entries };
+      return ok({ totalCost, entries });
     } catch (error) {
-      debug(`Error reading session usage for ${sessionId}:`, error);
-      return null;
+      return failed(
+        `session transcript (${sessionId}): ${error instanceof Error ? error.message : String(error)}`,
+      );
     }
   }
 
@@ -145,8 +152,8 @@ export class SessionProvider {
   // [LAW:types-are-the-program] Pure projection SessionUsage → SessionInfo, no
   // I/O. The store computes it once per ingest from already-parsed usage; the
   // empty-usage arm yields the all-null SessionInfo (which the payload drops).
-  toSessionInfo(sessionUsage: SessionUsage | null): SessionInfo {
-    if (!sessionUsage || sessionUsage.entries.length === 0) {
+  toSessionInfo(sessionUsage: SessionUsage): SessionInfo {
+    if (sessionUsage.entries.length === 0) {
       return {
         cost: null,
         calculatedCost: null,

@@ -2,6 +2,7 @@ import type { ParsedEntry, ClaudeHookData } from "../utils/claude";
 
 import { debug } from "../utils/logger";
 import { parseJsonlFile } from "../utils/claude";
+import { ABSENT, failed, ok, type Outcome } from "../utils/outcome";
 
 export interface ContextInfo {
   totalTokens: number;
@@ -101,11 +102,15 @@ export class ContextProvider {
   /**
    * Calculate context tokens by parsing the transcript file (fallback).
    * Used for older Claude Code versions that don't provide context_window.
+   *
+   * [LAW:no-silent-failure] An unreadable transcript is `failed` (the payload
+   * boundary logs it); a transcript with no usable usage entry is `absent`.
+   * The old catch-to-null collapsed both into "no data".
    */
   async calculateContextTokensFromTranscript(
     transcriptPath: string,
     contextLimit: number,
-  ): Promise<ContextInfo | null> {
+  ): Promise<Outcome<ContextInfo>> {
     try {
       debug(`Calculating context tokens from transcript: ${transcriptPath}`);
 
@@ -113,7 +118,7 @@ export class ContextProvider {
 
       if (parsedEntries.length === 0) {
         debug("No entries in transcript");
-        return null;
+        return ABSENT;
       }
 
       let mostRecentEntry: ParsedEntry | null = null;
@@ -143,30 +148,31 @@ export class ContextProvider {
           `Most recent main chain context: ${totalTokens} tokens (limit: ${contextLimit})`,
         );
 
-        return {
+        return ok({
           totalTokens,
           maxTokens: contextLimit,
           ...this.ratioPercentages(totalTokens, contextLimit),
-        };
+        });
       }
 
       debug("No main chain entries with usage data found");
-      return null;
+      return ABSENT;
     } catch (error) {
-      debug(
-        `Error reading transcript: ${error instanceof Error ? error.message : String(error)}`,
+      return failed(
+        `context transcript: ${error instanceof Error ? error.message : String(error)}`,
       );
-      return null;
     }
   }
 
   /**
    * Get context info using native data if available, falling back to transcript parsing.
    */
-  async getContextInfo(hookData: ClaudeHookData): Promise<ContextInfo | null> {
+  async getContextInfo(
+    hookData: ClaudeHookData,
+  ): Promise<Outcome<ContextInfo>> {
     const nativeContext = this.calculateContextFromHookData(hookData);
     if (nativeContext) {
-      return nativeContext;
+      return ok(nativeContext);
     }
 
     // [LAW:one-source-of-truth] current_usage can be null (pre-first-call or
