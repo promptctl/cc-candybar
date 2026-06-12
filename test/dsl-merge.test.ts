@@ -1,8 +1,7 @@
 // [LAW:behavior-not-structure] These tests pin the merge cascade's contract:
-// per-key precedence for globals/variables/segments, the `layout` sugar
-// compiling to the canonical `root` tree (wholesale replace), and the brand
-// handoff at validateConfig. The renderer accepts only ValidatedConfig, so the
-// chain proven here is the chain used in production.
+// per-key precedence for globals/variables/segments, wholesale root replacement,
+// and the brand handoff at validateConfig. The renderer accepts only
+// ValidatedConfig, so the chain proven here is the chain used in production.
 
 import {
   mergeWithDefault,
@@ -16,8 +15,7 @@ import type {
   SegmentDecl,
 } from "../src/config/dsl-types";
 
-// One vertical container of cells leaves — the canonical shape the `layout`
-// sugar compiles to. Each argument is one leaf's segment list.
+// A vertical container of horizontal rows — convenience builder for test roots.
 const vert = (...rows: string[][]): LayoutNode => ({
   kind: "container",
   direction: "vertical",
@@ -87,21 +85,21 @@ describe("mergeWithDefault", () => {
     expect(out.segments.c!.template).toBe(" C ");
   });
 
-  test("layout sugar: user replaces wholesale, compiled to the root tree", () => {
-    const raw: RawDslConfig = { layout: [{ segments: ["b", "a"] }] };
+  test("root: user replaces wholesale", () => {
+    const raw: RawDslConfig = { root: vert(["b", "a"]) };
     expect(mergeWithDefault(raw, DFLT).root).toEqual(vert(["b", "a"]));
   });
 
-  test("layout absent → default root", () => {
+  test("root absent → default root", () => {
     expect(mergeWithDefault({}, DFLT).root).toEqual(vert(["a", "b"]));
   });
 
-  test("layout explicit [] → empty container (user suppresses all default segments)", () => {
-    // [LAW:types-are-the-program] RawDslConfig.layout carries three states
-    // (absent / [] / non-empty). The merge respects that discriminator —
-    // explicit [] compiles to a childless vertical container ("render no
-    // segments"), distinct from absent (inherit the default).
-    expect(mergeWithDefault({ layout: [] }, DFLT).root).toEqual(vert());
+  test("root explicit empty container suppresses all default segments", () => {
+    // An empty-children vertical container is a valid root — it renders nothing.
+    // Distinct from root absent (inherit the default).
+    expect(
+      mergeWithDefault({ root: vert() }, DFLT).root,
+    ).toEqual(vert());
   });
 
   test("raw root wins over the default and is used verbatim", () => {
