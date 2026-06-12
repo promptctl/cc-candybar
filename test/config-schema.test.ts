@@ -89,6 +89,60 @@ const GOOD: ReadonlyArray<readonly [string, string]> = [
       variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
     }`,
   ],
+  // ── Option A shape grammar (2de.15) ─────────────────────────────────────
+  [
+    "A-grammar bare string segment ref",
+    `{ segments: { a: { template: 'a' } }, root: "a" }`,
+  ],
+  [
+    "A-grammar { seg, when }",
+    `{ segments: { a: { template: 'a' } }, root: { seg: "a", when: "{{ true }}" } }`,
+  ],
+  [
+    "A-grammar { h: [...] } horizontal container",
+    `{
+      segments: { a: { template: 'a' }, b: { template: 'b' } },
+      root: { h: ["a", "b"] },
+    }`,
+  ],
+  [
+    "A-grammar { v: [...] } vertical container",
+    `{
+      segments: { a: { template: 'a' }, b: { template: 'b' } },
+      root: { v: ["a", "b"] },
+    }`,
+  ],
+  [
+    "A-grammar nested h-in-v-in-h",
+    `{
+      segments: { a: { template: 'a' }, b: { template: 'b' }, c: { template: 'c' } },
+      root: { h: [{ v: ["a", { h: ["b", "c"] }] }] },
+    }`,
+  ],
+  [
+    "A-grammar when on every node form",
+    `{
+      segments: { a: { template: 'a' }, b: { template: 'b' }, c: { template: 'c' } },
+      root: {
+        v: [
+          { seg: "a", when: "{{ true }}" },
+          { h: ["b", "c"], when: "{{ false }}" },
+          { v: ["a"], when: "{{ true }}" },
+        ],
+      },
+    }`,
+  ],
+  [
+    "A-grammar inside group children (2de.4 + 2de.15 compose)",
+    `{
+      segments: { m: { template: 'M' }, n: { template: 'N' } },
+      root: {
+        kind: 'group', name: 'g', label: 'G',
+        children: [{ h: ["m", "n"] }],
+      },
+      variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
+    }`,
+  ],
 ];
 
 // Structurally broken — schema rejects, loader rejects.
@@ -128,6 +182,11 @@ const BAD_STRUCTURAL: ReadonlyArray<readonly [string, string]> = [
     "group node label with embedded newline",
     `{ segments: { m: { template: 'M' } }, root: { kind: 'group', name: 'g', label: 'line1\\nline2', children: [{ kind: 'segment', name: 'm' }] } }`,
   ],
+  // ── Option A bad structural (2de.15) ─────────────────────────────────────
+  ["A-grammar both h and v present", `{ root: { h: [], v: [] } }`],
+  ["A-grammar both seg and h present", `{ segments: { a: { template: 'a' } }, root: { seg: 'a', h: ['a'] } }`],
+  ["A-grammar seg missing value (non-string)", `{ root: { seg: 42 } }`],
+  ["A-grammar h with non-array value", `{ root: { h: 'not-an-array' } }`],
 ];
 
 function schemaAccepts(source: string): boolean {
