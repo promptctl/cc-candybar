@@ -45,6 +45,11 @@ export const VERB_OPEN_VSCODE = "open-vscode";
 export const VERB_TOOLBAR_TOGGLE = "toolbar-toggle";
 export const VERB_SHOW_CONFIG_ERROR = "show-config-error";
 export const VERB_SHOW_CONFIG_WARNING = "show-config-warning";
+// [LAW:effects-at-boundaries] A daemon-global config override: the verb writes
+// the override path (or clears it with an empty value); the render pipeline
+// reads it at the cache-lookup boundary. Clicking a different config is a
+// side-effect isolated to the verb handler; the renderer only sees the result.
+export const VERB_LOAD_CONFIG = "load-config";
 
 // [LAW:types-are-the-program] An effect to EMIT: a verb plus its raw (unencoded)
 // positional args. The wire owns all encoding — callers never percent-encode.

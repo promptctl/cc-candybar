@@ -730,9 +730,15 @@ export class SourceRegistry {
   // drives when the snapshot is refreshed.
   declareGit(name: string, opts: GitOptions): void {
     const type = GIT_FIELD_TYPE[opts.field];
-    // Initialize to fallback; the async fetch will populate the real value.
+    // [LAW:single-enforcer] Coerce the user-supplied default to the field's
+    // native type — same logic projectGitField already applies to the
+    // defaultEmptyValue fallback. The schema constrains `default` to string,
+    // so `"0"` is the only legal form for number fields; coerce it here so
+    // defineBox receives a type-correct initial value.
     const initial =
-      opts.varDefault !== undefined ? opts.varDefault : zeroValue(type);
+      opts.varDefault !== undefined
+        ? coerceToType(opts.varDefault, type)
+        : zeroValue(type);
     this.store.defineBox(name, type, initial);
 
     let sub = this.gitSubscriptions.get(opts.cwd);

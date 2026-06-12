@@ -27,7 +27,7 @@ import { makeLimits, realLimitsDeps, type LimitsHandle } from "./limits";
 import { armParentWatchdog, anchorFromEnv, pidAlive } from "./parent-watchdog";
 import { SessionState } from "./session-state";
 import { FileSessionStorage } from "./session-state-file";
-import { VERBS, BadVerbArgs } from "./verbs";
+import { VERBS, BadVerbArgs, SESSION_CONFIG_OVERRIDE_KEY } from "./verbs";
 import {
   effectsUrl,
   VERB_SHOW_CONFIG_ERROR,
@@ -707,7 +707,16 @@ async function handleRequest(req: Request): Promise<HandledRequest> {
       // daemon's process.cwd(), so config resolution depends only on request
       // data — the daemon's own working directory must not influence output.
       const { configFile, unknownFlagsError } = parseRenderArgs(req.args);
-      const entry = renderCache.getOrCreate(projectDir, req.cwd, configFile);
+      // [LAW:effects-at-boundaries] The load-config verb writes per-session
+      // config overrides into SessionState; this is the one read point.
+      const sessionId = req.hookData.session_id;
+      const sessionConfigFile =
+        sessionState.get(sessionId, SESSION_CONFIG_OVERRIDE_KEY) ?? configFile;
+      const entry = renderCache.getOrCreate(
+        projectDir,
+        req.cwd,
+        sessionConfigFile,
+      );
       // [LAW:single-enforcer] Width capture lives at the wire boundary.
       // The client (Rust + TTY) is the only process that can see the real
       // terminal; the daemon is detached. We do NOT consult getTerminalWidth's
