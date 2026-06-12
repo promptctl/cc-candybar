@@ -1332,7 +1332,8 @@
               "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
             },
             "label": {
-              "type": "string"
+              "type": "string",
+              "pattern": "^[^\\n\\r]*$"
             },
             "open": {
               "type": "boolean"

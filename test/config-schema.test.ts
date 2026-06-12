@@ -124,6 +124,10 @@ const BAD_STRUCTURAL: ReadonlyArray<readonly [string, string]> = [
     "group node with non-identifier name",
     `{ segments: { m: { template: 'M' } }, root: { kind: 'group', name: 'my-group', label: 'x', children: [{ kind: 'segment', name: 'm' }] } }`,
   ],
+  [
+    "group node label with embedded newline",
+    `{ segments: { m: { template: 'M' } }, root: { kind: 'group', name: 'g', label: 'line1\\nline2', children: [{ kind: 'segment', name: 'm' }] } }`,
+  ],
 ];
 
 function schemaAccepts(source: string): boolean {

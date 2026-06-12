@@ -41,6 +41,7 @@ import {
   optionalStringSpec,
   record,
   recordJson,
+  requireString,
   requireStringSpec,
   type FieldSpec,
   type JsonNode,
@@ -548,12 +549,36 @@ interface GroupNodeInput {
   readonly children: readonly LayoutNode[];
 }
 
+// [LAW:no-silent-failure] Reject newlines at the validator boundary — a label
+// with \n or \r would reach escapeTemplateLiteral and produce a Go template
+// string literal with an embedded newline, which go-template-js forbids. Fail
+// loudly here so the loader surfaces the problem before synthesis runs.
+function groupLabelSpec(): FieldSpec<string> {
+  return {
+    required: true,
+    json: { type: "string", pattern: "^[^\\n\\r]*$" },
+    parse: (ctx, path, field, raw) => {
+      const s = requireString(ctx, path, raw, field);
+      if (s === null) return undefined;
+      if (/[\n\r]/.test(s)) {
+        ctx.issues.push({
+          path: `${path}.${field}`,
+          message: `${path}.${field}: group label must not contain newlines`,
+          line: findKeyLine(ctx.source, [...path.split("."), field]),
+        });
+        return undefined;
+      }
+      return s;
+    },
+  };
+}
+
 const GROUP_SCHEMA: RecordSchema<GroupNodeInput> = {
   noun: "layout-node key",
   fields: {
     kind: literalSpec("group"),
     name: groupNameSpec(),
-    label: requireStringSpec(),
+    label: groupLabelSpec(),
     open: optionalBooleanSpec(),
     direction: optionalEnumSpec(DIRECTIONS),
     key: groupKeySpec(),
