@@ -259,6 +259,18 @@ describe("2de.4 — nested groups (distinct keys)", () => {
     },
   }`;
 
+  test("nested group synthesizes toggle with depth-derived indent prefix", () => {
+    const config = parseAndValidate("<test>", SRC, ALLOWED);
+    // outer is depth-0: no indent
+    expect(config.segments["groups.outer"]?.template).toBe(
+      '{{ action "groups.outer" "▸ outer" "▾ outer" }}',
+    );
+    // inner is depth-1 (one ancestor group): 2-space indent
+    expect(config.segments["groups.inner"]?.template).toBe(
+      '{{ action "groups.inner" "  ▸ inner" "  ▾ inner" }}',
+    );
+  });
+
   test("a closed parent hides the whole subtree; child state persists invisibly", () => {
     const { render, clickToggle, dispose } = buildRuntime(SRC);
     // Closed outer: inner toggle not rendered at all.
