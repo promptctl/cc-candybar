@@ -1195,6 +1195,28 @@
           {
             "type": "object",
             "properties": {
+              "set": {
+                "type": "string"
+              },
+              "cycle": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "minItems": 2,
+                "uniqueItems": true
+              }
+            },
+            "required": [
+              "set",
+              "cycle"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
               "copy": {
                 "type": "string"
               }

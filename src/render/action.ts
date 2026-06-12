@@ -82,6 +82,21 @@ export type CompiledActionDecl =
       readonly key: string;
       readonly stateVar: string;
     }
+  | {
+      // [LAW:types-are-the-program] An enumerated-domain stepper: the click
+      // writes the SUCCESSOR of the current value in `members` (wrapping; a
+      // current value outside the domain counts as the first member). Unlike
+      // set-bounded — which emits a RELATIVE nudge so rapid clicks accumulate —
+      // a cycle emits the ABSOLUTE successor computed at render: the rendered
+      // display names the current state, so the click's meaning is "go to the
+      // successor of what I showed you". A stale link then lands on the state
+      // the user saw promised, not an extra flip past it — for toggles the
+      // absolute write IS the correct intent.
+      readonly kind: "set-cycle";
+      readonly key: string;
+      readonly stateVar: string;
+      readonly members: readonly string[];
+    }
   | { readonly kind: "copy"; readonly text: Template<RichText> }
   | { readonly kind: "open"; readonly target: Template<RichText> };
 
@@ -161,6 +176,14 @@ function compileAction(
     if ("int" in action) {
       return { kind: "set-int", key: action.set, stateVar };
     }
+    if ("cycle" in action) {
+      return {
+        kind: "set-cycle",
+        key: action.set,
+        stateVar,
+        members: action.cycle,
+      };
+    }
     return {
       kind: "set-bounded",
       key: action.set,
@@ -231,6 +254,18 @@ export function linkFragment(
   return rt;
 }
 
+// [LAW:one-source-of-truth] THE "unknown current counts as the first member"
+// rule — the one resolution both the display selection and the successor write
+// fold over. Members are ordered default-state-first, so an unset/foreign value
+// renders the first display and clicks to the second member (an accordion
+// sibling's path "counts as closed", a never-written toggle "counts as off").
+function cycleIndex(
+  c: Extract<CompiledActionDecl, { kind: "set-cycle" }>,
+  store: VariableStore,
+): number {
+  return Math.max(c.members.indexOf(readVar(store, c.stateVar)), 0);
+}
+
 // [LAW:dataflow-not-control-flow] The single total projection of a compiled action
 // onto (effect, active) — the click's wire effect plus whether this region is the
 // current selection. The template supplies `display` (the clickable text) and an
@@ -285,6 +320,17 @@ function realize(
         active: current === value,
       };
     }
+    case "set-cycle": {
+      // [LAW:one-source-of-truth] The same current-index resolution that picked
+      // the rendered display picks the write target — display and write derive
+      // from one read, so the click delivers exactly the transition the glyph
+      // promised.
+      const next = c.members[(cycleIndex(c, store) + 1) % c.members.length]!;
+      return {
+        effect: { verb: VERB_SET_STATE, args: [sessionId, c.key, next] },
+        active: false,
+      };
+    }
     case "set-bounded": {
       // [LAW:one-source-of-truth] Emit a RELATIVE nudge — the irreducible intent
       // (key + signed delta), never an absolute target derived from a render-time
@@ -319,12 +365,45 @@ function realize(
   }
 }
 
+// [LAW:dataflow-not-control-flow] Which text a region shows is a pure function
+// of (action kind, bound displays, current state). A cycle binds one display per
+// member positionally (the toggle/N-state-cycler form: `{{ action "t" "▸" "▾"
+// }}`) or one static display for all states; every other kind binds one display
+// plus an optional boundValue (the option-picker form). Wrong arity is an author
+// error surfaced loudly at render (composeWithDiagnostics shows it), never a
+// silently dropped argument.
+function selectDisplay(
+  name: string,
+  action: CompiledActionDecl,
+  displays: readonly string[],
+  store: VariableStore,
+): { display: string; boundValue: string | undefined } {
+  if (displays.length === 0) {
+    throw new Error(`action "${name}" needs a display (the clickable text)`);
+  }
+  if (action.kind === "set-cycle") {
+    if (displays.length !== 1 && displays.length !== action.members.length) {
+      throw new Error(
+        `action "${name}" cycles ${action.members.length} members; bind one display per member (${action.members.length}) or one static display, got ${displays.length}`,
+      );
+    }
+    const display =
+      displays.length === 1 ? displays[0]! : displays[cycleIndex(action, store)]!;
+    return { display, boundValue: undefined };
+  }
+  if (displays.length > 2) {
+    throw new Error(
+      `action "${name}" takes a display and an optional bound value, got ${displays.length} arguments (per-state displays are a cycle action's form)`,
+    );
+  }
+  return { display: displays[0]!, boundValue: displays[1] };
+}
+
 // Realize a named action against the live state into ONE clickable RichText. The
 // `action` template function delegates here.
 export function renderAction(
   name: string,
-  display: string,
-  boundValue: string | undefined,
+  displays: readonly string[],
   runtime: ActionRuntime,
 ): RichText {
   const action = runtime.compiled.get(name);
@@ -340,6 +419,7 @@ export function renderAction(
       `action "${name}" rendered without a VariableStore — registerDslConfig was not given one`,
     );
   }
+  const { display, boundValue } = selectDisplay(name, action, displays, store);
   const sessionId = readVar(store, "session.id");
   const { effect, active } = realize(
     action,
@@ -354,10 +434,12 @@ export function renderAction(
 // ─── FuncMap entry ─────────────────────────────────────────────────────────────
 
 // [LAW:dataflow-not-control-flow] One func; the action NAME selects which declared
-// effect fires, the `display` is the clickable text, the optional `boundValue` is
-// the value an option picker binds (absent ⇒ the option IS the display, the
-// common picker form `{{ action "applyTheme" . }}`). Returns T (RichText), the
-// single fragment go-template-js emits for `{{ action … }}`.
+// effect fires, the trailing strings are the bound displays. For most kinds that
+// is the clickable text plus an optional boundValue (absent ⇒ the option IS the
+// display, the common picker form `{{ action "applyTheme" . }}`); for a cycle it
+// is one display per member (the current member's display renders) or one static
+// display. Returns T (RichText), the single fragment go-template-js emits for
+// `{{ action … }}`.
 //
 // [LAW:one-way-deps] The caller injects this FuncMap into createCcCandybarEngine
 // (capabilities-over-context) so the generic engine never imports the action
@@ -365,9 +447,9 @@ export function renderAction(
 export function actionFuncs(runtime: ActionRuntime): FuncMap {
   return {
     action: {
-      fn: (name: string, display: string, boundValue?: string) =>
-        renderAction(name, display, boundValue, runtime),
-      argTypes: ["string", "string", "string"],
+      fn: (name: string, ...displays: string[]) =>
+        renderAction(name, displays, runtime),
+      argTypes: ["string", "string"],
       returnType: "T",
     },
   };

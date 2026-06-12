@@ -238,6 +238,9 @@ const BOUNDED_FIELDS: FieldSpecMap<{ min: number; max: number; by: number }> = {
   by: requireIntSpec(),
 };
 const INT_FIELDS: FieldSpecMap<{ int: true }> = { int: intMarkerSpec() };
+const CYCLE_FIELDS: FieldSpecMap<{ cycle: readonly string[] }> = {
+  cycle: cycleSpec(),
+};
 
 // [LAW:types-are-the-program] A bounded step is fully described by an integer
 // domain (min < max) and a non-zero integer increment (`by`; negative for a
@@ -321,11 +324,12 @@ const SET_ARMS: readonly SetArm[] = [
   setArm(FROM_FIELDS),
   setArm(BOUNDED_FIELDS, minLessThanMax, byNonZero),
   setArm(INT_FIELDS),
+  setArm(CYCLE_FIELDS),
 ];
 
 const VALUE_SOURCE_MESSAGE = `a set action declares exactly one value source: "to" (a literal value), "from" (an option domain: ${OPTION_SOURCES.join(
   "/",
-)}), "min"/"max"/"by" (a bounded step), or "int" (an unbounded integer cursor)`;
+)}), "min"/"max"/"by" (a bounded step), "int" (an unbounded integer cursor), or "cycle" (an enumerated domain stepped in order)`;
 
 // [LAW:dataflow-not-control-flow] The set sub-union eliminator: validate the
 // shared `set` key, count which value sources are present, require exactly one,
@@ -411,6 +415,73 @@ function fromSpec(): FieldSpec<OptionSource> {
         return undefined;
       }
       return from as OptionSource;
+    },
+  };
+}
+
+// [LAW:types-are-the-program] `cycle` is the enumerated domain a click steps
+// through: at least two members (one member has no successor to step to — that
+// is a literal `to`), each a deliverable set-state value (non-empty, slash-free
+// — the same wire shape `to` enforces), no duplicates (the successor of a
+// duplicated member is ambiguous). Members double as the derived allow-list
+// gate, so a member this spec admits is a value the wire delivers, by
+// construction.
+function cycleSpec(): FieldSpec<readonly string[]> {
+  return {
+    required: true,
+    json: {
+      type: "array",
+      items: { type: "string", minLength: 1 },
+      minItems: 2,
+      uniqueItems: true,
+    },
+    parse: (ctx, path, field, raw) => {
+      const v = raw[field];
+      const at = `${path}.${field}`;
+      if (!Array.isArray(v) || v.some((m) => typeof m !== "string")) {
+        issue(
+          ctx,
+          at,
+          `cycle must be an array of strings (the enumerated values a click steps through), got ${describeType(v)}`,
+        );
+        return undefined;
+      }
+      const members = v as string[];
+      if (members.length < 2) {
+        issue(
+          ctx,
+          at,
+          `cycle needs at least two members (one member has no successor — use a literal "to")`,
+        );
+        return undefined;
+      }
+      const empty = members.some((m) => m === "");
+      const slashed = members.filter((m) => m.includes("/"));
+      if (empty) {
+        issue(
+          ctx,
+          at,
+          `cycle members must be non-empty — an empty value cannot be delivered on the set-state wire`,
+        );
+        return undefined;
+      }
+      if (slashed.length > 0) {
+        issue(
+          ctx,
+          at,
+          `cycle member(s) ${slashed.map((m) => `"${m}"`).join(", ")} contain "/" — set values must be slash-free`,
+        );
+        return undefined;
+      }
+      if (new Set(members).size !== members.length) {
+        issue(
+          ctx,
+          at,
+          `cycle members must be unique — the successor of a duplicated member is ambiguous`,
+        );
+        return undefined;
+      }
+      return members;
     },
   };
 }
