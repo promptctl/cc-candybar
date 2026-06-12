@@ -20,6 +20,7 @@ import {
   stat as gatedStat,
 } from "../../utils/transcript-fs";
 import { SingleFlight } from "../../utils/single-flight";
+import { ABSENT, failed, ok, type Outcome } from "../../utils/outcome";
 import { dlog } from "../log";
 
 // [LAW:one-source-of-truth] The daemon's single owner of per-session usage.
@@ -37,10 +38,12 @@ import { dlog } from "../log";
 // seed records for sessions that did work before this daemon saw them; every
 // render after that is a single-file stat plus a fold.
 
+// [LAW:types-are-the-program] An `ok` TodayInfo always carries real totals —
+// "no usage recorded today" is the `absent` outcome arm, not a bag of nulls.
 export interface TodayInfo {
-  cost: number | null;
-  tokens: number | null;
-  tokenBreakdown: TokenBreakdown | null;
+  cost: number;
+  tokens: number;
+  tokenBreakdown: TokenBreakdown;
   date: string;
 }
 
@@ -204,12 +207,19 @@ export class SessionUsageStore {
   }
 
   // The `session` projection: whole-session totals for the active session.
+  // [LAW:no-silent-failure] A failed transcript parse flows out as `failed`
+  // (the payload boundary logs it); an unknown/empty session is the all-null
+  // SessionInfo whose fields the boundary drops per-field — top-level
+  // `absent` is reserved for ingest, since the native officialCost overlay
+  // applies even with no record.
   async getUsageInfo(
     sessionId: string,
     hookData?: ClaudeHookData,
-  ): Promise<UsageInfo> {
+  ): Promise<Outcome<UsageInfo>> {
     const record = await this.ingest(sessionId, hookData?.transcript_path);
-    const base = record?.sessionInfo ?? EMPTY_SESSION_INFO;
+    if (record.kind === "failed") return record;
+    const base =
+      record.kind === "ok" ? record.value.sessionInfo : EMPTY_SESSION_INFO;
     // [LAW:one-source-of-truth] Claude's reported total_cost_usd is the
     // authoritative cost of the active session. base.cost (transcript entries
     // priced by PricingService against a hand-maintained rate table) is a
@@ -220,19 +230,32 @@ export class SessionUsageStore {
     // record, because it changes every render while the transcript total moves
     // only when the file does.
     const officialCost = hookData?.cost?.total_cost_usd ?? null;
-    return {
+    return ok({
       session: { ...base, cost: officialCost ?? base.cost, officialCost },
-    };
+    });
   }
 
   // The `today` projection: cross-session sum of every record's today bucket.
-  async getTodayInfo(hookData?: ClaudeHookData): Promise<TodayInfo> {
+  // [LAW:no-silent-failure] A failed seed or a failed active-session ingest
+  // makes the whole projection `failed` — a total silently missing today's
+  // main work would be a confident wrong number, worse than a loud gap.
+  async getTodayInfo(hookData?: ClaudeHookData): Promise<Outcome<TodayInfo>> {
     const today = dayKey(new Date());
-    await this.ensureSeeded(today);
+    try {
+      await this.ensureSeeded(today);
+    } catch (error) {
+      return failed(
+        `usage seed: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
     // Keep the active session fresh: the seed runs once per day, so after it
     // every render's freshness for the active session comes from here (a hit
     // when its transcript is unchanged). Empty sessionId no-ops in ingest.
-    await this.ingest(hookData?.session_id ?? "", hookData?.transcript_path);
+    const active = await this.ingest(
+      hookData?.session_id ?? "",
+      hookData?.transcript_path,
+    );
+    if (active.kind === "failed") return active;
 
     const total: DayUsage = { ...EMPTY_DAY };
     let any = false;
@@ -246,10 +269,8 @@ export class SessionUsageStore {
       total.cacheRead += d.cacheRead;
     }
 
-    if (!any) {
-      return { cost: null, tokens: null, tokenBreakdown: null, date: today };
-    }
-    return {
+    if (!any) return ABSENT;
+    return ok({
       cost: total.cost,
       tokens:
         total.input + total.output + total.cacheCreation + total.cacheRead,
@@ -260,18 +281,20 @@ export class SessionUsageStore {
         cacheRead: total.cacheRead,
       },
       date: today,
-    };
+    });
   }
 
-  // mtime-gated, coalesced re-parse of ONE session. Returns its record, or the
-  // last-known record when no path is available, or null for an unknown empty
-  // session. This is the single write-path into the records map.
+  // mtime-gated, coalesced re-parse of ONE session. `ok` is its record,
+  // `absent` is an unknown empty session (or no sessionId), `failed` is a
+  // transcript that exists but couldn't be parsed — NOT cached (only ok
+  // records enter the map; the next render retries, same rule as the git
+  // cache). This is the single write-path into the records map.
   private async ingest(
     sessionId: string,
     transcriptPath: string | undefined,
     knownMtime?: number,
-  ): Promise<SessionRecord | null> {
-    if (!sessionId) return null;
+  ): Promise<Outcome<SessionRecord>> {
+    if (!sessionId) return ABSENT;
 
     const mtime = knownMtime ?? statMtimeMs(transcriptPath);
     const existing = this.entries.get(sessionId);
@@ -280,20 +303,21 @@ export class SessionUsageStore {
       this.entries.delete(sessionId);
       this.entries.set(sessionId, existing);
       this.hits++;
-      return existing;
+      return ok(existing);
     }
     // No path to read fresh content — preserve the last-known record rather
     // than blank it. (The session will refresh when its transcript reappears.)
-    if (!transcriptPath) return existing ?? null;
+    if (!transcriptPath) return existing ? ok(existing) : ABSENT;
 
     this.misses++;
     const aggregate = await this.flight.run(`${sessionId}:${mtime}`, () =>
       this.aggregate(sessionId, transcriptPath),
     );
+    if (aggregate.kind !== "ok") return aggregate;
     // Tag with the mtime observed AFTER the read so the next render that sees
     // the same mtime is a safe hit.
     const record: SessionRecord = {
-      ...aggregate,
+      ...aggregate.value,
       transcriptMtime: statMtimeMs(transcriptPath),
       transcriptPath,
       lastSeenAt: Date.now(),
@@ -301,21 +325,26 @@ export class SessionUsageStore {
     this.entries.delete(sessionId);
     this.entries.set(sessionId, record);
     this.evictIfNeeded();
-    return record;
+    return ok(record);
   }
 
   private async aggregate(
     sessionId: string,
     transcriptPath: string,
-  ): Promise<{ sessionInfo: SessionInfo; days: Map<string, DayUsage> }> {
+  ): Promise<
+    Outcome<{ sessionInfo: SessionInfo; days: Map<string, DayUsage> }>
+  > {
     const usage = await this.sessions.getSessionUsageFromPath(
       sessionId,
       transcriptPath,
     );
-    return {
-      sessionInfo: this.sessions.toSessionInfo(usage),
-      days: usage ? bucketByDay(usage) : new Map(),
-    };
+    // getSessionUsageFromPath never produces absent (an empty transcript is a
+    // real zero-entry usage); failed passes through to the boundary.
+    if (usage.kind !== "ok") return usage;
+    return ok({
+      sessionInfo: this.sessions.toSessionInfo(usage.value),
+      days: bucketByDay(usage.value),
+    });
   }
 
   private ensureSeeded(day: string): Promise<void> {
@@ -367,9 +396,15 @@ export class SessionUsageStore {
       }
     }
 
-    await mapPool(candidates, SEED_CONCURRENCY, (c) =>
-      this.ingest(c.sessionId, c.path, c.mtime),
-    );
+    // [LAW:no-silent-failure] The seed is its own effect edge (timer/lazy
+    // driven, no render boundary to carry the outcome to), so its per-session
+    // parse failures are logged here.
+    await mapPool(candidates, SEED_CONCURRENCY, async (c) => {
+      const outcome = await this.ingest(c.sessionId, c.path, c.mtime);
+      if (outcome.kind === "failed") {
+        dlog("warn", `usageStore seed: ${outcome.reason}`);
+      }
+    });
     this.seeds++;
     dlog("info", `usageStore seed sessions=${candidates.length}`);
   }

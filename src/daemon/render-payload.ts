@@ -154,9 +154,9 @@ export interface RenderPayloadDeps {
   readonly metricsProvider: MetricsProvider;
   readonly tmuxService: TmuxService;
   readonly sessionState: SessionStateRW;
-  // [LAW:single-enforcer] The log capability for the outcome-carrying lanes
-  // (git, cache): buildRenderPayload is the ONE place their failures are
-  // logged, so the providers' interiors never log and never double-log.
+  // [LAW:single-enforcer] The log capability for every provider lane:
+  // buildRenderPayload is the ONE place lane failures are logged, so the
+  // providers' interiors never log and never double-log.
   readonly log: DaemonLogger;
 }
 
@@ -333,16 +333,12 @@ function gitOptionsFromClosure(needed: ReadonlySet<string>): GitInfoOptions {
  * chain). No provider error propagates to the caller — a single broken
  * source must not blank the bar.
  *
- * [LAW:no-silent-failure][LAW:single-enforcer] Two failure-visibility
- * contracts meet here. The git and cache lanes carry typed outcomes
- * (ok | absent | failed) and THIS function is their one log site — `failed`
- * is logged through `deps.log` and projected as a missing field, `absent`
- * is a missing field with nothing to log. The remaining lanes
- * (session/today/context/metrics/tmux) log their own rejections in their
- * provider layer and surface here as catch-to-null. Either way an absent
- * field is the explicit signal the DSL input fallback uses: this function
- * never coerces an unknown to a zero — the default lives in the DSL
- * declaration's `default` field, owned by the config, not buried here.
+ * [LAW:no-silent-failure][LAW:single-enforcer] Every lane carries a typed
+ * outcome (ok | absent | failed) and THIS function is the one log site:
+ * `failed` is logged through `deps.log` and projected as a missing field,
+ * `absent` is a missing field with nothing to log — the default lives in
+ * the DSL declaration's `default` field, owned by the config, not buried
+ * here.
  */
 export async function buildRenderPayload(
   hookData: ClaudeHookData,
@@ -356,63 +352,71 @@ export async function buildRenderPayload(
   const wants = (prefix: string): boolean =>
     anyPathStartsWith(neededInputPaths, prefix);
 
-  // [LAW:dataflow-not-control-flow] Each provider lane is the same shape:
-  // "needed → call provider" or "not needed → resolve to its no-data value"
-  // (ABSENT for the outcome lanes, null for the rest). The skipped lanes
-  // resolve immediately; no variant means lanes are present/absent at the
-  // array level (which would change the destructure shape).
-  const nullP = <T>(): Promise<T | null> => Promise.resolve(null);
+  // [LAW:dataflow-not-control-flow][LAW:one-type-per-behavior] Every provider
+  // lane is ONE shape: "needed → call provider (whose contract is to never
+  // reject — the catch makes the lane total against bugs, mapping a throw
+  // into the same logged failure path)" or "not needed → ABSENT". The skipped
+  // lanes resolve immediately; no variant means lanes are present/absent at
+  // the array level (which would change the destructure shape).
+  const lane = <T>(
+    name: string,
+    needed: boolean,
+    run: () => Promise<Outcome<T>>,
+  ): Promise<Outcome<T>> =>
+    needed
+      ? run().catch((e: unknown) => failed(`${name}: ${String(e)}`))
+      : Promise.resolve(ABSENT);
 
   const [gitOutcome, usage, today, context, metrics, tmuxSession, cacheExpiry] =
     await Promise.all([
-      wants("git")
-        ? deps.gitProvider
-            .getGitInfo(
-              cwd ?? hookData.workspace?.current_dir,
-              gitOptionsFromClosure(neededInputPaths),
-              hookData.workspace?.project_dir,
-            )
-            // The provider's contract is "never rejects"; this catch makes
-            // the lane total against bugs, mapping the throw into the same
-            // logged failure path instead of swallowing it.
-            .catch((e: unknown) => failed(`git: ${String(e)}`))
-        : (Promise.resolve(ABSENT) as Promise<Outcome<GitInfo>>),
-      wants("session.cost") || wants("session.tokens")
-        ? deps.usageStore
-            .getUsageInfo(hookData.session_id, hookData)
-            .catch(() => null)
-        : nullP<Awaited<ReturnType<SessionUsageStore["getUsageInfo"]>>>(),
-      wants("today")
-        ? deps.usageStore.getTodayInfo(hookData).catch(() => null)
-        : nullP<Awaited<ReturnType<SessionUsageStore["getTodayInfo"]>>>(),
-      wants("context")
-        ? deps.contextProvider.getContextInfo(hookData).catch(() => null)
-        : nullP<Awaited<ReturnType<ContextProvider["getContextInfo"]>>>(),
-      wants("metrics")
-        ? deps.metricsProvider
-            .getMetricsInfo(hookData.session_id, hookData)
-            .catch(() => null)
-        : nullP<Awaited<ReturnType<MetricsProvider["getMetricsInfo"]>>>(),
-      wants("tmux")
-        ? deps.tmuxService.getSessionId().catch(() => null)
-        : nullP<string>(),
+      lane("git", wants("git"), () =>
+        deps.gitProvider.getGitInfo(
+          cwd ?? hookData.workspace?.current_dir,
+          gitOptionsFromClosure(neededInputPaths),
+          hookData.workspace?.project_dir,
+        ),
+      ),
+      lane("session", wants("session.cost") || wants("session.tokens"), () =>
+        deps.usageStore.getUsageInfo(hookData.session_id, hookData),
+      ),
+      lane("today", wants("today"), () =>
+        deps.usageStore.getTodayInfo(hookData),
+      ),
+      lane("context", wants("context"), () =>
+        deps.contextProvider.getContextInfo(hookData),
+      ),
+      lane("metrics", wants("metrics"), () =>
+        deps.metricsProvider.getMetricsInfo(hookData.session_id, hookData),
+      ),
+      lane("tmux", wants("tmux"), () => deps.tmuxService.getSessionId()),
       // Prompt-cache expiry: a bounded tail-read through the gated transcript-fs
       // seam, so it runs alongside the other providers and stays in the shared
       // in-flight budget rather than blocking the event loop on sync fs.
-      wants("cache")
-        ? cacheExpiresAt(hookData.transcript_path).catch((e: unknown) =>
-            failed(`cache: ${String(e)}`),
-          )
-        : (Promise.resolve(ABSENT) as Promise<Outcome<number>>),
+      lane("cache", wants("cache"), () =>
+        cacheExpiresAt(hookData.transcript_path),
+      ),
     ]);
-  // [LAW:effects-at-boundaries] The outcome lanes' projections are pure folds
-  // returning data (payload fragment + failure descriptions); the log effect
-  // happens once, here, at the edge.
+  // [LAW:effects-at-boundaries] The projections are pure folds returning data
+  // (payload fragment + failure descriptions); the log effect happens once,
+  // here, at the edge. `take` is the total fold for the single-value lanes:
+  // ok → value, absent → undefined, failed → undefined + a failure to log.
+  const failures: string[] = [];
+  const take = <T>(oc: Outcome<T>): T | undefined => {
+    if (oc.kind === "failed") {
+      failures.push(oc.reason);
+      return undefined;
+    }
+    return oc.kind === "ok" ? oc.value : undefined;
+  };
+
   const gitProjection = projectGitInfo(gitOutcome);
-  const failures = [
-    ...gitProjection.failures,
-    ...(cacheExpiry.kind === "failed" ? [cacheExpiry.reason] : []),
-  ];
+  failures.push(...gitProjection.failures);
+  const usageValue = take(usage);
+  const todayValue = take(today);
+  const contextValue = take(context);
+  const metricsValue = take(metrics);
+  const tmuxValue = take(tmuxSession);
+  const cacheValue = take(cacheExpiry);
   for (const f of failures) deps.log("warn", `provider fetch failed: ${f}`);
   // [LAW:dataflow-not-control-flow] block.* reads straight from hookData
   // alongside weekly. (The prior dedicated provider only re-derived
@@ -452,26 +456,26 @@ export async function buildRenderPayload(
   // null sub-fields become absent keys here; applyInput's fallback chain
   // fills in the declared DSL default and records a last_error per field.
   const sessionPayload: SessionPayload | undefined =
-    usage === null
+    usageValue === undefined
       ? undefined
       : pickNonNull({
-          cost: usage.session.cost,
-          tokens: usage.session.tokens,
+          cost: usageValue.session.cost,
+          tokens: usageValue.session.tokens,
         });
   const todayPayload: TodayPayload | undefined =
-    today === null
+    todayValue === undefined
       ? undefined
-      : pickNonNull({ cost: today.cost, tokens: today.tokens });
+      : { cost: todayValue.cost, tokens: todayValue.tokens };
   const metricsPayload: MetricsPayload | undefined =
-    metrics === null
+    metricsValue === undefined
       ? undefined
       : pickNonNull({
-          lastResponseTime: metrics.lastResponseTime,
-          responseTime: metrics.responseTime,
-          sessionDuration: metrics.sessionDuration,
-          messageCount: metrics.messageCount,
-          linesAdded: metrics.linesAdded,
-          linesRemoved: metrics.linesRemoved,
+          lastResponseTime: metricsValue.lastResponseTime,
+          responseTime: metricsValue.responseTime,
+          sessionDuration: metricsValue.sessionDuration,
+          messageCount: metricsValue.messageCount,
+          linesAdded: metricsValue.linesAdded,
+          linesRemoved: metricsValue.linesRemoved,
         });
 
   return {
@@ -479,7 +483,7 @@ export async function buildRenderPayload(
     ...(workspace !== undefined && { workspace }),
     ...(home !== undefined && { home }),
     ...(gitProjection.git !== undefined && { git: gitProjection.git }),
-    ...(tmuxSession !== null && { tmux: { session: tmuxSession } }),
+    ...(tmuxValue !== undefined && { tmux: { session: tmuxValue } }),
     ...(theme !== undefined && { theme }),
     ...(sessionPayload !== undefined && { session: sessionPayload }),
     ...(todayPayload !== undefined && { today: todayPayload }),
@@ -500,13 +504,13 @@ export async function buildRenderPayload(
         resetsAt: hookData.rate_limits.seven_day.resets_at,
       },
     }),
-    ...(cacheExpiry.kind === "ok" && {
-      cache: { expiresAt: cacheExpiry.value },
+    ...(cacheValue !== undefined && {
+      cache: { expiresAt: cacheValue },
     }),
-    ...(context !== null && {
+    ...(contextValue !== undefined && {
       context: {
-        totalTokens: context.totalTokens,
-        contextLeft: context.contextLeftPercentage,
+        totalTokens: contextValue.totalTokens,
+        contextLeft: contextValue.contextLeftPercentage,
       },
     }),
     ...(metricsPayload !== undefined && { metrics: metricsPayload }),

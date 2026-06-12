@@ -376,8 +376,16 @@ export async function parseJsonlFile(filePath: string): Promise<ParsedEntry[]> {
     });
     return entries;
   } catch (error) {
-    debug(`Failed to read file ${filePath}:`, error);
-    return [];
+    // [LAW:no-silent-failure] A transcript that doesn't exist yet is the
+    // domain's genuine "no entries" (new session pre-first-write) — every
+    // other read error propagates so the consuming provider classifies it
+    // as a failed outcome and the payload boundary logs it. The old
+    // catch-all-to-[] dressed EACCES/EIO as an empty session.
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      debug(`Transcript not present yet: ${filePath}`);
+      return [];
+    }
+    throw error;
   }
 }
 

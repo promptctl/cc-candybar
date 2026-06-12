@@ -52,15 +52,19 @@ describe("SessionProvider.getSessionUsageFromPath", () => {
   test("combines main + agents without double-counting on a warm parse cache", async () => {
     const sp = new SessionProvider();
     const first = await sp.getSessionUsageFromPath(sid, mainPath);
-    expect(first?.totalCost).toBeCloseTo(0.03, 5);
-    expect(first?.entries).toHaveLength(2);
+    expect(first.kind).toBe("ok");
+    if (first.kind !== "ok") return;
+    expect(first.value.totalCost).toBeCloseTo(0.03, 5);
+    expect(first.value.entries).toHaveLength(2);
 
     // Second call with the parse cache warm (same mtime) must yield the SAME
     // totals — the old push-into-cached-array mutated the main transcript's
     // cached entries, so this returned 0.05 / 3 entries.
     const second = await sp.getSessionUsageFromPath(sid, mainPath);
-    expect(second?.totalCost).toBeCloseTo(0.03, 5);
-    expect(second?.entries).toHaveLength(2);
+    expect(second.kind).toBe("ok");
+    if (second.kind !== "ok") return;
+    expect(second.value.totalCost).toBeCloseTo(0.03, 5);
+    expect(second.value.entries).toHaveLength(2);
   });
 
   test("does not corrupt the shared parse cache for the main transcript", async () => {
