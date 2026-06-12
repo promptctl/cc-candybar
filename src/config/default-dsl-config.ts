@@ -6,7 +6,7 @@
 //
 // [LAW:single-enforcer] One default. User configs merge on top via
 // `mergeWithDefault`: globals shallow-merge per field, variables/segments/
-// helpers/widgets merge by name (user wins per name), layout replaces
+// helpers/actions/helpers merge by name (user wins per name), root replaces
 // wholesale when present. A user file only needs to declare what differs —
 // overriding one segment or variable takes a few lines. JSON5 supports
 // inline comments so users can declare only the delta. The `.json` extension
@@ -14,10 +14,10 @@
 // both exist at the same location.
 //
 // [LAW:dataflow-not-control-flow] Every segment is declared regardless of
-// whether the default `layout` includes it — `layout` is the value that
-// chooses what renders. Switching a disabled segment on is a `layout`-array
-// edit, not new code. The same data flows through the same render path
-// whether layout has 1 entry or 16.
+// whether the default `root` includes it — `root` is the tree that
+// chooses what renders. Switching a disabled segment on is a root edit
+// (add its name to the children), not new code. The same data flows through
+// the same render path whether the root has 1 leaf or 16.
 //
 // [LAW:types-are-the-program] `satisfies DslConfig` (not an annotation)
 // preserves the literal's narrow keys for downstream consumers — every
