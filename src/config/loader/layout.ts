@@ -638,6 +638,13 @@ export function synthesizeGroupDecls(
     const name = GROUP_NS + g.name;
     const key = groupStateKey(g);
     const label = escapeTemplateLiteral(g.label);
+    // [LAW:dataflow-not-control-flow] Depth is a value derivable from the paths
+    // already in ctx.groups — no extra threading. Strict-prefix count gives
+    // nesting depth; the indent embeds as a string constant in the template.
+    const depth = groups.filter(
+      (other) => other !== g && g.path.startsWith(other.path + "."),
+    ).length;
+    const indent = "  ".repeat(depth);
     variables[name] = {
       kind: "state",
       key,
@@ -648,7 +655,7 @@ export function synthesizeGroupDecls(
     // clicks to its own name — expand, auto-closing the sibling on a shared key.
     actions[name] = { set: key, cycle: [GROUP_CLOSED, g.name] };
     segments[name] = {
-      template: `{{ action "${name}" "${GROUP_GLYPH_CLOSED} ${label}" "${GROUP_GLYPH_OPEN} ${label}" }}`,
+      template: `{{ action "${name}" "${indent}${GROUP_GLYPH_CLOSED} ${label}" "${indent}${GROUP_GLYPH_OPEN} ${label}" }}`,
       ...(g.bg !== undefined && { bg: g.bg }),
       ...(g.fg !== undefined && { fg: g.fg }),
     };
