@@ -26,27 +26,16 @@ export function validateCrossReferences(
   ctx: ValidateCtx,
   cfg: DslConfig,
 ): void {
-  // Set for depends_on validation only (bare + namespaced segment-local names).
-  // depends_on is a literal name list, not a template ref — its runtime
-  // resolution (store.read per name) and the bare-name admission here are a
-  // separate pre-existing contract, deliberately untouched by the
-  // template-scope tightening below.
-  const allVarNames = new Set<string>(Object.keys(cfg.variables));
-  for (const [segName, seg] of Object.entries(cfg.segments)) {
-    if (seg.vars) {
-      for (const v of Object.keys(seg.vars)) allVarNames.add(v);
-      for (const v of Object.keys(seg.vars)) allVarNames.add(`${segName}.${v}`);
-    }
-  }
-
-  // [LAW:one-source-of-truth] THE set of names a template may reference — a
+  // [LAW:one-source-of-truth] THE set of resolvable variable names — a
   // faithful mirror of the runtime store's key set (declareOne in
   // src/dsl/render.ts registers globals under their bare names and segment
   // locals under segName.varName, nothing else). The runtime scope proxy
   // (src/template-engine/scope.ts) resolves only keys literally present in
-  // the store, so exactly the names in this set resolve at render. One set
-  // for every template, wherever it appears: a ref's meaning is a pure
-  // function of the ref string, never of which segment is rendering.
+  // the store, and the depends_on reaction (src/var-system/sources.ts) calls
+  // store.read with each listed name verbatim — so exactly the names in this
+  // set exist at runtime. One set for every reference surface, template refs
+  // and depends_on lists alike: a name's meaning is a pure function of the
+  // name string, never of which segment declares or renders it.
   const templateScope = new Set<string>(Object.keys(cfg.variables));
   for (const [segName, seg] of Object.entries(cfg.segments)) {
     if (!seg.vars) continue;
@@ -156,9 +145,12 @@ export function validateCrossReferences(
     }
   }
 
-  // depends_on lists must point at declared variables.
+  // depends_on lists must point at declared variables — checked against the
+  // SAME templateScope as template refs, since both resolve against the one
+  // runtime store. The segment name is a diagnostic hint only, never a
+  // resolution rule, exactly as for templates.
   for (const [name, v] of Object.entries(cfg.variables)) {
-    checkDependsOn(ctx, `variables.${name}`, v, allVarNames);
+    checkDependsOn(ctx, `variables.${name}`, v, templateScope);
   }
   for (const [segName, seg] of Object.entries(cfg.segments)) {
     if (!seg.vars) continue;
@@ -167,7 +159,8 @@ export function validateCrossReferences(
         ctx,
         `segments.${segName}.vars.${vName}`,
         vDecl,
-        allVarNames,
+        templateScope,
+        segName,
       );
     }
   }
@@ -178,13 +171,11 @@ export function validateCrossReferences(
   // anchor at load time so the user fixes the config from a config-file
   // error message, not from a render-time ReferenceError.
   //
-  // [LAW:types-are-the-program] Check against `cfg.variables` directly, not
-  // `allVarNames`: a segment-local declaration named "session.id" registers
-  // at runtime as `<seg>.session.id` and does NOT satisfy declareState's
-  // read of the global `session.id` box. The accept/reject table for this
-  // predicate is "GLOBAL session.id declared" — `allVarNames` (which
-  // includes bare segment-local names by construction, for depends_on
-  // scope) is the wrong set.
+  // [LAW:types-are-the-program] Check against `cfg.variables` directly: the
+  // accept/reject table for this predicate is "GLOBAL session.id declared".
+  // A segment-local declaration named "session.id" registers at runtime as
+  // `<seg>.session.id` and does NOT satisfy declareState's read of the
+  // global `session.id` box.
   // [LAW:verifiable-goals] A widget `set` action composes a set-state click URL
   // whose first segment is `session.id` (read from the store at render). Without
   // a global session.id the URL is malformed and the daemon rejects the click
@@ -254,23 +245,33 @@ function checkDependsOn(
   declPath: string,
   v: VariableDecl,
   allVars: Set<string>,
+  segCtx?: string,
 ): void {
   if (!hasCacheField(v)) return;
   if (!v.cache) return;
   if (!("depends_on" in v.cache)) return;
   for (let i = 0; i < v.cache.depends_on.length; i++) {
     const target = v.cache.depends_on[i]!;
-    if (!allVars.has(target)) {
-      ctx.issues.push({
-        path: `${declPath}.cache.depends_on[${i}]`,
-        message: `cache.depends_on references unknown variable "${target}"`,
-        line: findKeyLine(ctx.source, [
-          ...declPath.split("."),
-          "cache",
-          "depends_on",
-        ]),
-      });
-    }
+    // [LAW:one-source-of-truth] Exact membership, not refResolves: the
+    // depends_on reaction calls store.read(name) with each listed name
+    // verbatim, and the store is an exact-key map. A dotted prefix that
+    // merely navigates INTO a value (resolvable in a template) is not a
+    // store key and would throw at runtime.
+    if (allVars.has(target)) continue;
+    const namespaced = segCtx !== undefined ? `${segCtx}.${target}` : undefined;
+    const hint =
+      namespaced !== undefined && allVars.has(namespaced)
+        ? ` (segment-local vars are namespaced — write "${namespaced}")`
+        : "";
+    ctx.issues.push({
+      path: `${declPath}.cache.depends_on[${i}]`,
+      message: `cache.depends_on references unknown variable "${target}"${hint}`,
+      line: findKeyLine(ctx.source, [
+        ...declPath.split("."),
+        "cache",
+        "depends_on",
+      ]),
+    });
   }
 }
 

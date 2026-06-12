@@ -849,6 +849,75 @@ describe("loadDslConfig — cross-references", () => {
     expect(cfg.variables.recent!.kind).toBe("shell");
   });
 
+  test("depends_on naming a sibling local in bare form is rejected with namespaced suggestion", () => {
+    // [LAW:one-source-of-truth] The depends_on reaction calls store.read with
+    // each listed name verbatim, and segment locals exist in the store only
+    // under segName.varName — a bare sibling name throws at runtime, so the
+    // validator rejects it at load and names the form that works.
+    expectIssue(
+      `{ segments: {
+        s: {
+          template: "{{ .s.recent }}",
+          vars: {
+            branch: { kind: "git", field: "branch", cache: { watch_file: ".git/HEAD" } },
+            recent: { kind: "shell", command: "echo", cache: { depends_on: ["branch"] } }
+          }
+        }
+      }}`,
+      {
+        path: "segments.s.vars.recent.cache.depends_on[0]",
+        message:
+          'cache.depends_on references unknown variable "branch" (segment-local vars are namespaced — write "s.branch")',
+      },
+    );
+  });
+
+  test("depends_on naming a bare segment-local from a global var is plainly unknown", () => {
+    // No owning segment — no namespaced hint, just the unknown-variable
+    // diagnostic (end-anchored to assert the hint's absence).
+    expectIssue(
+      `{ variables: {
+        g: { kind: "shell", command: "echo", cache: { depends_on: ["local"] } }
+      },
+      segments: {
+        s: { template: "{{ .s.local }}", vars: { local: { kind: "literal", value: "hi" } } }
+      }}`,
+      {
+        path: "variables.g.cache.depends_on[0]",
+        message: /cache\.depends_on references unknown variable "local"$/,
+      },
+    );
+  });
+
+  test("depends_on naming a namespaced segment-local passes", () => {
+    const cfg = parseAndValidate(
+      FILE,
+      `{ variables: {
+        g: { kind: "shell", command: "echo", cache: { depends_on: ["s.local"] } }
+      },
+      segments: {
+        s: { template: "{{ .s.local }}", vars: { local: { kind: "literal", value: "hi" } } }
+      }}`,
+    );
+    expect(cfg.variables.g!.kind).toBe("shell");
+  });
+
+  test("depends_on requires an exact store key, not a navigable prefix", () => {
+    // [LAW:one-source-of-truth] Template refs may name a dotted prefix and
+    // navigate INTO the value (refResolves), but depends_on entries are
+    // literal store.read keys — "x" is not a key when only "x.y" is declared.
+    expectIssue(
+      `{ variables: {
+        "x.y": { kind: "literal", value: "1" },
+        g: { kind: "shell", command: "echo", cache: { depends_on: ["x"] } }
+      }}`,
+      {
+        path: "variables.g.cache.depends_on[0]",
+        message: /cache\.depends_on references unknown variable "x"$/,
+      },
+    );
+  });
+
   test("bare ref to own segment-local var is rejected with namespaced suggestion", () => {
     // [LAW:one-source-of-truth] The runtime stores segment locals ONLY under
     // segName.varName and the scope proxy resolves only literal store keys —
