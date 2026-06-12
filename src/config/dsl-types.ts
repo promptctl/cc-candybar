@@ -34,47 +34,13 @@ import type { ActionDecl } from "./action.js";
 //                     can reach rendering." The brand is module-scoped via
 //                     `unique symbol`, so the only construction site is
 //                     `validateConfig` itself.
-// [LAW:types-are-the-program] `layout` is the strongest theorem we can write
-// about row/segment structure: an ordered list of rows, each row a predicate
-// (optional) plus an ordered list of segment names. Single-line config is the
-// degenerate `N=1` case; no separate "single-line" arm, no `null|undefined`
-// flag. A separator-sentinel form (e.g. `["a", "\n", "b"]`) would permit
-// illegal interleavings at the type level; the row objects make those
-// unrepresentable. *Single-line is multi-line with size 1.*
-//
-// [LAW:dataflow-not-control-flow] A row's `when` lifts the segment-level
-// visibility predicate to the row: the rendered ROW SET is a pure function of
-// state. A closed/absent row does not exist (no blank line) — the renderer
-// skips it exactly as it skips a hidden segment. The user-file sugar for a
-// predicate-less row is a bare `string[]`, normalized to `{ segments }` at the
-// loader boundary so this is the only row shape downstream.
-export interface LayoutRow {
-  // [LAW:dataflow-not-control-flow] Absent `when` ≡ always-rendered. A Go-
-  // template predicate string evaluated per render; false hides the whole row.
-  readonly when?: string;
-  readonly segments: readonly string[];
-}
-
-// [LAW:types-are-the-program] The user-file row domain — exactly what a config
-// may write for a `layout` row, no stronger. A predicate-less row is sugar'd as
-// a bare `string[]`; an explicit predicate uses the `{ when?, segments }` object.
-// Both are LEGAL input, so the honest type is their union — generating the JSON
-// Schema from a normalized `LayoutRow[]` would reject the bare-array form the
-// (maintainer's own) config uses. The parser preserves whichever the user wrote;
-// `layoutRowsToNode` is the single boundary that normalizes the bare form to an
-// object, so the sugar never leaks past lowering [LAW:one-source-of-truth].
-export type LayoutRowInput = readonly string[] | LayoutRow;
-
 // [LAW:types-are-the-program] The recursive layout substrate collapses to
 // exactly two kinds: a `segment` leaf (a ref into the named `segments` block —
 // THE unit of rendering, a single template that IS its content) or a
 // `container` whose `direction` is DATA that decides how its children map onto
 // the 2D plane. Both the bar and (a later child's) menu are projections of this
 // one tree — they differ only in `direction`, not in code path
-// [LAW:dataflow-not-control-flow]. `LayoutRow[]` and the `cells` form are
-// flat-vertical/horizontal SUGAR, lowered to this `container | segment` tree at
-// the loader boundary so no downstream consumer sees more than two node kinds
-// [LAW:one-source-of-truth].
+// [LAW:dataflow-not-control-flow].
 //
 // [LAW:types-are-the-program] `Direction` carries the projection a container
 // applies to its child blocks as DATA. `vertical` STACKS them (concat the
@@ -97,13 +63,11 @@ export type Direction = (typeof DIRECTIONS)[number];
 // `stepper` / `picker` node kind, because "make a node flexible enough for
 // whatever" = one template expresses anything. A segment renders to ONE strip
 // item; the powerline joiner joins items, never inside one. A horizontal run of
-// segments is `container(horizontal, [segment…])`; the `cells` authoring form
-// and `LayoutRow` are sugar that lower to exactly that at the loader.
+// segments is spelled `{ h: ["seg1", "seg2"] }` in the A-grammar.
 export interface SegmentNode {
   readonly kind: "segment";
-  // A name into the `segments` block — the same reference-by-name a LayoutRow's
-  // entry uses. The segment's own template/palette/layout/`when` live on its
-  // SegmentDecl, not here; this node is purely the position in the tree.
+  // A name into the `segments` block. The segment's own template/palette/`when`
+  // live on its SegmentDecl, not here; this node is purely the tree position.
   readonly name: string;
   // [LAW:dataflow-not-control-flow] Absent `when` ≡ always-rendered. A node-level
   // predicate, ANDed with the segment-decl's own `when` at render.
@@ -116,7 +80,7 @@ export interface ContainerNode {
   readonly children: readonly LayoutNode[];
   // A container's `when` gates the whole subtree: a hidden container emits no
   // lines, but its descendants are still walked so per-segment hue indices stay
-  // positionally stable (the same contract a hidden LayoutRow had).
+  // positionally stable.
   readonly when?: string;
 }
 
@@ -158,14 +122,6 @@ export interface RawDslConfig {
   readonly globals?: Partial<Globals>;
   readonly variables?: Readonly<Record<string, VariableDecl>>;
   readonly segments?: Readonly<Record<string, SegmentDecl>>;
-  // [LAW:types-are-the-program] Two authoring surfaces for the same canonical
-  // `root` tree, never both at once (the loader rejects a config that writes
-  // both): `layout` is the flat-vertical SUGAR (a list of rows, each a bare
-  // `string[]` or `{ when?, segments }`), `root` is the raw recursive grammar.
-  // Both collapse to one `LayoutNode` at the loader so downstream sees one shape.
-  // `layout` holds rows AS THE USER WROTE THEM (sugar preserved); normalization
-  // to the node tree happens in `layoutRowsToNode`, the single lowering boundary.
-  readonly layout?: readonly LayoutRowInput[];
   readonly root?: LayoutNode;
   readonly actions?: Readonly<Record<string, ActionDecl>>;
   // [LAW:single-enforcer] Config-level shared helper templates: name → Go-template
@@ -181,9 +137,9 @@ export interface DslConfig {
   readonly globals: Globals;
   readonly variables: Readonly<Record<string, VariableDecl>>;
   readonly segments: Readonly<Record<string, SegmentDecl>>;
-  // [LAW:one-source-of-truth] The SINGLE canonical layout representation. The
-  // user-file `layout` sugar is compiled into this `root` tree at load time;
-  // nothing downstream re-derives or carries the flat row form.
+  // [LAW:one-source-of-truth] The SINGLE canonical layout representation authored
+  // via the A-grammar (seg/h/v node arms, group sugar). No legacy sugar reaches
+  // this field; the loader rejects `layout:` and `kind:"cells"` with migration errors.
   readonly root: LayoutNode;
   // [LAW:locality-or-seam] The named seam between click BEHAVIOR and the
   // clickable REPRESENTATION. Each entry is a statically-declared effect a
