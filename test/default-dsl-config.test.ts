@@ -135,8 +135,9 @@ describe("DEFAULT_DSL_CONFIG", () => {
   });
 
   // [LAW:one-source-of-truth] Deep-nesting equivalence: { v: [{ h: [a, b] }, { h: [c, d] }] }
-  // is render-identical to layout: [["a","b"],["c","d"]] (the old sugar).
-  test("A-grammar deep nesting { v:[{ h:[...] }, { h:[...] }] } is render-equivalent to layout rows", () => {
+  // and { kind: 'container', direction: 'vertical', children: [...] } must render identically —
+  // both are spellings of the same canonical tree.
+  test("A-grammar terse form { v:[{ h:[...] }] } is render-equivalent to verbose kind+direction form", () => {
     const ALLOWED = new Set(listResolvablePaletteNames());
     const SEGMENTS = `{
       sa: { template: ' A ', bg: 'surface', fg: 'foreground' },
@@ -145,9 +146,17 @@ describe("DEFAULT_DSL_CONFIG", () => {
       sd: { template: ' D ', bg: 'surface', fg: 'foreground' },
     }`;
     const srcA = `{ segments: ${SEGMENTS}, root: { v: [{ h: ['sa','sb'] }, { h: ['sc','sd'] }] } }`;
-    const srcOld = `{ segments: ${SEGMENTS}, layout: [['sa','sb'],['sc','sd']] }`;
+    const srcVerbose = `{ segments: ${SEGMENTS}, root: {
+      kind: 'container', direction: 'vertical',
+      children: [
+        { kind: 'container', direction: 'horizontal',
+          children: [{ kind: 'segment', name: 'sa' }, { kind: 'segment', name: 'sb' }] },
+        { kind: 'container', direction: 'horizontal',
+          children: [{ kind: 'segment', name: 'sc' }, { kind: 'segment', name: 'sd' }] },
+      ],
+    } }`;
     const configA = parseAndValidate("<test>", srcA, ALLOWED);
-    const configOld = parseAndValidate("<test>", srcOld, ALLOWED);
+    const configVerbose = parseAndValidate("<test>", srcVerbose, ALLOWED);
 
     const payload = { hook_event_name: "Status", session_id: "x", cwd: "/tmp",
       model: { id: "x", display_name: "x" },
@@ -167,7 +176,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
       }
     }
 
-    expect(render(configA)).toBe(render(configOld));
+    expect(render(configA)).toBe(render(configVerbose));
   });
 
   // [LAW:verifiable-goals] The directory segment's template has boundary

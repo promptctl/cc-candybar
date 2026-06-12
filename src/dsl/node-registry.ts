@@ -8,8 +8,8 @@
 // named segments map, rendered to ONE strip item). Interaction, state-driven
 // display, and multi-region clickability all live in a segment's TEMPLATE, not
 // in extra node kinds — so there is no inline/stepper/picker node arm to add.
-// A horizontal run of segments is `container(horizontal, [segment…])`; the
-// `cells` form and `LayoutRow` are loader sugar that lower to exactly that.
+// A horizontal run of segments is spelled `{ h: ["seg1", "seg2"] }` in the
+// A-grammar (the `cells` form and `layout` rows were deleted in 2de.19).
 //
 // [LAW:one-way-deps] This module sits BELOW render.ts (the driver): it imports
 // the leaf render/template helpers directly and receives the two recursive

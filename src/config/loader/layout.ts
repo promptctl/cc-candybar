@@ -1,11 +1,13 @@
-// [LAW:one-source-of-truth] The two layout authoring surfaces — the flat `layout`
-// row sugar and the `root` node grammar (with its own `cells` sugar) — both lower
-// to ONE canonical `container | segment` tree here, so nothing downstream ever
-// sees a row, a cells node, or the union. STRUCTURAL validation only; whether a
-// name resolves is a cross-ref concern (it runs on the MERGED config). This file
-// changes when the layout grammar or its sugar changes.
+// [LAW:one-source-of-truth] The ONE layout authoring surface is the A-grammar
+// (a bare string = segment ref; { seg, when? } = segment ref with predicate;
+// { h: [...], when? } = horizontal container; { v: [...], when? } = vertical
+// container; { kind: "group", … } = collapsible group). ALL other shapes are
+// migration errors [LAW:no-silent-failure]:
 //
-// [LAW:types-are-the-program] Both surfaces are DATA schemas interpreted by the
+//   `layout:` top-level key (removed in 2de.19) → error with A-grammar rewrite
+//   `kind: "cells"` node (removed in 2de.19)     → error with { h: […] } rewrite
+//
+// [LAW:types-are-the-program] The node grammar is DATA schemas interpreted by the
 // generic `record` engine: each arm's shape is a FieldSpecMap, each bespoke
 // message lives on its field spec as data. The two things the generic engine does
 // NOT own stay local: the kind-dispatch (a node folds object-guard / missing-kind
@@ -22,8 +24,6 @@ import {
   type ContainerNode,
   type Direction,
   type LayoutNode,
-  type LayoutRow,
-  type LayoutRowInput,
   type RawDslConfig,
   type SegmentDecl,
   type SegmentNode,
@@ -56,200 +56,6 @@ import {
 // schema at this path; `childrenSpec` and the top-level `root` both point here.
 export const LAYOUT_NODE_REF = "#/definitions/LayoutNode";
 export const LAYOUT_NODE_DEF_NAME = "LayoutNode";
-
-// [LAW:one-source-of-truth] `layout` rows are flat-vertical SUGAR: each row
-// lowers to a horizontal container of segment refs (the row's `when` gates that
-// whole row-container), and the row list lowers to one vertical container of
-// those — the SAME `container | segment` tree the raw `root` grammar produces, so
-// nothing downstream sees the row form. `rowToHorizontal` is the one place a list
-// of segment names becomes a horizontal container, shared with `cells`-sugar
-// lowering in the validator.
-function rowToHorizontal(
-  segments: readonly string[],
-  when: string | undefined,
-): LayoutNode {
-  return {
-    kind: "container",
-    direction: "horizontal",
-    children: segments.map((name) => ({ kind: "segment", name })),
-    ...(when !== undefined && { when }),
-  };
-}
-
-// [LAW:single-enforcer] The ONE boundary that normalizes the user-file row sugar
-// (a bare `string[]` ≡ a predicate-less row) into the canonical node tree. The
-// parser preserves whichever form the user wrote (so the JSON Schema can describe
-// both); the sugar is collapsed here and never leaks past lowering.
-export function layoutRowsToNode(rows: readonly LayoutRowInput[]): LayoutNode {
-  return {
-    kind: "container",
-    direction: "vertical",
-    children: rows.map((row) => {
-      // A bare array is a predicate-less row; an object carries its own `when`.
-      const norm: LayoutRow = "segments" in row ? row : { segments: row };
-      return rowToHorizontal(norm.segments, norm.when);
-    }),
-  };
-}
-
-// ─── Shared leaf: a list of segment-name strings ─────────────────────────────
-
-// [LAW:locality-or-seam] `pathPrefix` is the caller's actual row path, so the
-// error path reflects the form the user wrote: `layout[r][c]` for a bare-array
-// row, `layout[r].segments[c]` for an object/cells row. The discriminator lives in
-// the caller (which knows which form it received); threading the prefix keeps the
-// error honest about the input rather than asserting a `.segments` key a sugar-form
-// config never wrote.
-function validateLayoutSegments(
-  ctx: ValidateCtx,
-  pathPrefix: string,
-  row: readonly unknown[],
-): readonly string[] {
-  const rowOut: string[] = [];
-  for (let c = 0; c < row.length; c++) {
-    const entry = row[c];
-    if (typeof entry !== "string") {
-      ctx.issues.push({
-        path: `${pathPrefix}[${c}]`,
-        message: `layout entries must be strings (segment names), got ${describeType(entry)}`,
-        line: findKeyLine(ctx.source, ["layout"]),
-      });
-      continue;
-    }
-    rowOut.push(entry);
-  }
-  return rowOut;
-}
-
-// [LAW:dataflow-not-control-flow] The `segments` field of an object-form layout
-// row: REQUIRED, so a missing/non-array value fails the record and the row drops
-// (the old `if (!Array.isArray) { push; return null }`). The bespoke message and
-// the `layout` line key are DATA on the spec.
-function rowSegmentsSpec(): FieldSpec<readonly string[]> {
-  return {
-    required: true,
-    json: { type: "array", items: { type: "string" } },
-    parse: (ctx, path, field, raw) => {
-      const v = raw[field];
-      if (!Array.isArray(v)) {
-        ctx.issues.push({
-          path: `${path}.${field}`,
-          message: `a layout row object must have a "segments" array of segment names, got ${describeType(v)}`,
-          line: findKeyLine(ctx.source, ["layout"]),
-        });
-        return undefined;
-      }
-      return validateLayoutSegments(ctx, `${path}.${field}`, v);
-    },
-  };
-}
-
-// [LAW:dataflow-not-control-flow] The `segments` field of a `cells` node: RECOVERS
-// to `[]` on a missing/non-array value (the old `return rowToHorizontal([], when)`)
-// rather than dropping the node, so traversal keeps collecting issues. Bespoke
-// message + `root` line key as DATA; distinct from `rowSegmentsSpec` only in those
-// data and in recover-vs-drop.
-function cellsSegmentsSpec(): FieldSpec<readonly string[]> {
-  return {
-    // [LAW:types-are-the-program] `required` has two readers: `fields` (fail when
-    // a required field's parse returns undefined) and `objectJson` (emit the field
-    // in the schema `required`). This parse RECOVERS (never returns undefined), so
-    // `required: true` is a no-op for `fields` — but it correctly tells the emitter
-    // the field is mandatory, matching the loader's behavior (a missing `segments`
-    // pushes an issue → parseDslConfig throws). `required: false` would lie to the
-    // emitter, weakening the schema below what the validator enforces.
-    required: true,
-    json: { type: "array", items: { type: "string" } },
-    parse: (ctx, path, field, raw) => {
-      const v = raw[field];
-      if (!Array.isArray(v)) {
-        ctx.issues.push({
-          path: `${path}.${field}`,
-          message: `a cells node must have a "segments" array of segment names, got ${describeType(v)}`,
-          line: findKeyLine(ctx.source, ["root"]),
-        });
-        return [];
-      }
-      return validateLayoutSegments(ctx, `${path}.${field}`, v);
-    },
-  };
-}
-
-// ─── Layout row sugar (`layout`) ─────────────────────────────────────────────
-
-// [LAW:types-are-the-program] An object-form row IS a record: `{ when?, segments }`
-// with unknown-key rejection. The `segments` field is required (a row without it
-// drops); `when` is preserved faithfully — an explicit `when: ""` is a present-if-
-// degenerate predicate, distinct from an absent one, which `optionalStringSpec`'s
-// present/absent split keeps (a truthiness check would silently drop "").
-const ROW_SCHEMA: RecordSchema<LayoutRow> = {
-  noun: "layout-row key",
-  fields: {
-    when: optionalStringSpec(),
-    segments: rowSegmentsSpec(),
-  },
-};
-
-// [LAW:locality-or-seam] One row → one validated row, IN THE FORM THE USER WROTE
-// IT (bare `string[]` stays an array; `{ when?, segments }` stays an object).
-// STRUCTURAL validation only — normalization to the node tree is `layoutRowsToNode`'s
-// job, the single lowering boundary, so the parsed shape can faithfully describe
-// the user-file domain the JSON Schema validates against. A bare string at the
-// outer level is the legacy flat layout — rejected with a wrap hint, not silently
-// shimmed [LAW:no-silent-fallbacks]. The array-vs-object-vs-string dispatch is a
-// structural shape union — it fits no generic combinator, so it stays local.
-function validateLayoutRow(
-  ctx: ValidateCtx,
-  r: number,
-  row: unknown,
-): LayoutRowInput | null {
-  if (typeof row === "string") {
-    ctx.issues.push({
-      path: `layout[${r}]`,
-      message: `layout is now an array of rows; wrap your segment list in an outer [] (e.g. [["${row}", ...]]). Single-line layouts use one row.`,
-      line: findKeyLine(ctx.source, ["layout"]),
-    });
-    return null;
-  }
-  if (Array.isArray(row)) {
-    return validateLayoutSegments(ctx, `layout[${r}]`, row);
-  }
-  if (isPlainObject(row)) {
-    return record(ctx, ROW_SCHEMA, `layout[${r}]`, row);
-  }
-  ctx.issues.push({
-    path: `layout[${r}]`,
-    message: `a layout row must be an array of segment names or a { when?, segments } object, got ${describeType(row)}`,
-    line: findKeyLine(ctx.source, ["layout"]),
-  });
-  return null;
-}
-
-// [LAW:types-are-the-program] Single-line is the degenerate `[[a, b, c]]` case.
-// A flat `string[]` (the pre-multiline shape) is rejected with a migration-
-// pointing message — no auto-wrap shim, because the shim would silently convert
-// "I forgot to wrap" into a working config and hide the breaking change.
-export function validateLayout(
-  ctx: ValidateCtx,
-  raw: unknown,
-): readonly LayoutRowInput[] {
-  if (raw === undefined) return [];
-  if (!Array.isArray(raw)) {
-    ctx.issues.push({
-      path: "layout",
-      message: `layout must be an array of rows (each row an array of segment names, or a { when?, segments } object), got ${describeType(raw)}`,
-      line: findKeyLine(ctx.source, ["layout"]),
-    });
-    return [];
-  }
-
-  const out: LayoutRowInput[] = [];
-  for (let r = 0; r < raw.length; r++) {
-    const row = validateLayoutRow(ctx, r, raw[r]);
-    if (row !== null) out.push(row);
-  }
-  return out;
-}
 
 // ─── Root node grammar (`root`) ──────────────────────────────────────────────
 
@@ -378,26 +184,6 @@ const CONTAINER_SCHEMA: RecordSchema<ContainerNode> = {
   },
 };
 
-// [LAW:one-source-of-truth] `cells` is authoring SUGAR for a horizontal run of
-// segments. The schema validates the raw `cells` shape; the dispatch LOWERS it to
-// `container(horizontal, [segment…])` — the canonical form — so no `cells` value
-// escapes the loader. The `when` (if any) gates the whole row-container, the same
-// as a `LayoutRow`'s.
-interface CellsNode {
-  readonly kind: "cells";
-  readonly segments: readonly string[];
-  readonly when?: string;
-}
-
-const CELLS_SCHEMA: RecordSchema<CellsNode> = {
-  noun: "layout-node key",
-  fields: {
-    kind: literalSpec("cells"),
-    segments: cellsSegmentsSpec(),
-    when: optionalStringSpec(),
-  },
-};
-
 // ─── Option A shape grammar (seg / h / v) ────────────────────────────────────
 
 // [LAW:types-are-the-program] The terse bijective spellings of the canonical
@@ -510,10 +296,14 @@ export const validateRoot = (
     return record(ctx, SEGMENT_NODE_SCHEMA, path, raw) ?? EMPTY_VERTICAL_NODE;
   }
   if (raw.kind === "cells") {
-    const cells = record(ctx, CELLS_SCHEMA, path, raw);
-    return cells === null
-      ? EMPTY_VERTICAL_NODE
-      : rowToHorizontal(cells.segments, cells.when);
+    // [LAW:no-silent-failure] `kind: "cells"` removed in 2de.19. Reject loudly
+    // with the A-grammar equivalent so the author knows exactly how to migrate.
+    ctx.issues.push({
+      path,
+      message: `kind: "cells" is no longer supported — use the h-arm spelling instead:\n  Old: { kind: "cells", segments: ["seg1", "seg2"] }\n  New: { h: ["seg1", "seg2"] }`,
+      line: findKeyLine(ctx.source, ["root"]),
+    });
+    return EMPTY_VERTICAL_NODE;
   }
   if (raw.kind === "group") {
     const group = record(ctx, GROUP_SCHEMA, path, raw);
@@ -580,7 +370,7 @@ export const validateRoot = (
   }
   ctx.issues.push({
     path: `${path}.kind`,
-    message: `a layout node "kind" must be "container", "segment", "cells", or "group", or use the terse form: a bare string, or an object with "seg", "h", or "v" (got ${JSON.stringify(raw.kind)})`,
+    message: `a layout node "kind" must be "container", "segment", or "group", or use the terse A-grammar: a bare string, or an object with "seg", "h", or "v" (got ${JSON.stringify(raw.kind)})`,
     line: findKeyLine(ctx.source, ["root"]),
   });
   return EMPTY_VERTICAL_NODE;
@@ -871,8 +661,8 @@ export function synthesizeGroupDecls(
 // ─── Schema emit ─────────────────────────────────────────────────────────────
 
 // [LAW:one-source-of-truth] The LayoutNode definition: the anyOf of ALL arms
-// `validateRoot` dispatches over — kind-based (container / segment / cells /
-// group) and terse (bare string, seg-arm, h-arm, v-arm) — each derived from the
+// `validateRoot` dispatches over — kind-based (container / segment / group) and
+// terse A-grammar (bare string, seg-arm, h-arm, v-arm) — each derived from the
 // SAME schema the validator interprets. The `kind` const and the unique required
 // key keep arms disjoint; the container/h/v children `$ref` back here, closing
 // the recursion. `{ type: "string" }` covers the bare-string segment-ref form.
@@ -882,28 +672,10 @@ export function layoutNodeJson(): JsonNode {
       { type: "string" },
       recordJson(CONTAINER_SCHEMA),
       recordJson(SEGMENT_NODE_SCHEMA),
-      recordJson(CELLS_SCHEMA),
       recordJson(GROUP_SCHEMA),
       recordJson(SEG_ARM_SCHEMA),
       recordJson(H_ARM_SCHEMA),
       recordJson(V_ARM_SCHEMA),
     ],
-  };
-}
-
-// [LAW:one-source-of-truth] The `layout` row-sugar surface: an array of rows,
-// each a bare `string[]` (a predicate-less row) OR a `{ when?, segments }`
-// object — the two forms `validateLayoutRow` dispatches over, derived from the
-// SAME ROW_SCHEMA. A bare string at the row level (the legacy flat layout) matches
-// neither and is rejected, the same boundary the validator draws.
-export function layoutRowsJson(): JsonNode {
-  return {
-    type: "array",
-    items: {
-      anyOf: [
-        { type: "array", items: { type: "string" } },
-        recordJson(ROW_SCHEMA),
-      ],
-    },
   };
 }

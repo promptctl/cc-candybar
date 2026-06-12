@@ -3,11 +3,8 @@
 // `validate*` functions to validate at runtime; `emitConfigSchema` composes the
 // per-module `*Json` functions to derive the editor-facing JSON Schema. Both read
 // the SAME module-private schema declarations (GLOBALS_SCHEMA, VARIABLE_SCHEMA,
-// SEGMENT_SCHEMA, CACHE_SCHEMA, SET_ARMS, the layout grammar), so the published
-// schema and the runtime validator can never describe a different grammar — the
-// drift this resolves was real: the old schema derived from `dsl-types.ts` (it
-// knew structure and enums, but not exactly-one-present for cache/actions, and it
-// omitted the `cells` sugar). Deriving from the declarations closes those gaps.
+// SEGMENT_SCHEMA, CACHE_SCHEMA, SET_ARMS, the A-grammar layout grammar), so the
+// published schema and the runtime validator can never describe a different grammar.
 //
 // What a JSON Schema still cannot express (by construction): cross-field
 // refinements (min<max, by≠0, input default matches type), palette-name
@@ -21,7 +18,6 @@ import { segmentsJson } from "./segments.js";
 import { actionsJson } from "./actions.js";
 import {
   layoutNodeJson,
-  layoutRowsJson,
   LAYOUT_NODE_DEF_NAME,
   LAYOUT_NODE_REF,
 } from "./layout.js";
@@ -35,10 +31,8 @@ export const SCHEMA_ID =
 // [LAW:dataflow-not-control-flow] The RawDslConfig schema: every top-level key is
 // optional (a user file declares only what differs from the bundled default), so
 // the object carries no `required`. Each property is one module's emitted shape —
-// the same composition `validateConfig` performs over the validators. The two
-// layout authoring surfaces (`layout` row sugar, `root` recursive node grammar)
-// emit independently; `root` references the LayoutNode definition that closes the
-// node recursion via `$ref`.
+// the same composition `validateConfig` performs over the validators. `root`
+// references the LayoutNode definition that closes the node recursion via `$ref`.
 export function emitConfigSchema(): JsonNode {
   return {
     $schema: "http://json-schema.org/draft-07/schema#",
@@ -50,7 +44,6 @@ export function emitConfigSchema(): JsonNode {
       globals: globalsJson(),
       variables: variablesMapJson(),
       segments: segmentsJson(),
-      layout: layoutRowsJson(),
       root: { $ref: LAYOUT_NODE_REF },
       actions: actionsJson(),
       helpers: { type: "object", additionalProperties: { type: "string" } },
