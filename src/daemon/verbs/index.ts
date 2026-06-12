@@ -31,6 +31,7 @@ import {
   VERB_COPY,
   VERB_DISPATCH,
   VERB_OPEN_VSCODE,
+  VERB_LOAD_CONFIG,
   VERB_SET_STATE,
   VERB_STEP_STATE,
   VERB_SHOW_CONFIG_ERROR,
@@ -337,8 +338,47 @@ const stepState: VerbHandler = (rawValue, ctx) => {
 // plain object would be a truthy hit on Object.prototype that then throws on
 // invocation (RENDER_FAILED instead of BAD_REQUEST). Map makes the wrong
 // dispatch unrepresentable, matching src/daemon/session-state.ts.
+// [LAW:effects-at-boundaries] Per-session config override stored in SessionState.
+// Wire value: `<sessionId>/<percent-encoded-path>`. An empty path clears the
+// override, restoring the request-derived config for that session only.
+// Split at the FIRST slash — the session ID is slash-free (requireSessionId),
+// and the path contains slashes that must not be split.
+// [LAW:no-silent-failure] Path validation is at the verb boundary so a bad path
+// fails the click (BAD_REQUEST), not the next render.
+export const SESSION_CONFIG_OVERRIDE_KEY = "config-override";
+const loadConfig: VerbHandler = (value, ctx) => {
+  const slash = value.indexOf("/");
+  if (slash === -1) {
+    throw new BadVerbArgs(
+      "load-config: expected <sessionId>/<path> (missing separator)",
+    );
+  }
+  const sid = requireSessionId(
+    decodeWire(() => decodeURIComponent(value.slice(0, slash))),
+  );
+  const p = decodeWire(() => decodeURIComponent(value.slice(slash + 1))).trim();
+  if (p !== "") {
+    if (!p.startsWith("/")) {
+      throw new BadVerbArgs(`load-config: path must be absolute, got "${p}"`);
+    }
+    if (!/\.(json5?|json)$/.test(p)) {
+      throw new BadVerbArgs(
+        `load-config: path must end with .json5 or .json, got "${p}"`,
+      );
+    }
+  }
+  if (p === "") {
+    ctx.sessionState.clear(sid, SESSION_CONFIG_OVERRIDE_KEY);
+    ctx.dlog("info", `load-config: override cleared (session=${sid})`);
+  } else {
+    ctx.sessionState.set(sid, SESSION_CONFIG_OVERRIDE_KEY, p);
+    ctx.dlog("info", `load-config: ${p} (session=${sid})`);
+  }
+};
+
 const LEAF_VERBS = new Map<string, VerbHandler>([
   [VERB_COPY, copy],
+  [VERB_LOAD_CONFIG, loadConfig],
   [VERB_OPEN_VSCODE, openVscode],
   [VERB_SET_STATE, setState],
   [VERB_STEP_STATE, stepState],

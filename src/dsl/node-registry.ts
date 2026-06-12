@@ -22,7 +22,7 @@
 // carries NO structural meaning — unit cohesion is structural (one segment = one
 // strip item), not a function of matching backgrounds.
 
-import type { RichText } from "@promptctl/rich-js";
+import { RichText } from "@promptctl/rich-js";
 import type { PaletteResolver } from "@promptctl/rich-js";
 import type { Template } from "@promptctl/go-template-js";
 import type {
@@ -203,44 +203,63 @@ const segmentType: NodeType<"segment"> = {
     // positionally-stable colors regardless of which segments are hidden.
     const hueShift = ctx.nextHueShift();
     if (!ctx.visible) return [];
-    if (!evaluateWhen(segCompiled.when, ctx.scope)) return [];
 
-    // [LAW:dataflow-not-control-flow] The per-segment variability is WHICH
-    // palette — the base resolver (per-segment override or basePalette)
-    // transposed by hueShift. bg and fg then resolve from this one palette.
-    const resolver = transposedResolver(
-      segCompiled.paletteResolver ?? ctx.basePalette,
-      hueShift,
-    );
-    const baseStyle = resolveSegmentColors(
-      resolver,
-      segCompiled.bg,
-      segCompiled.fg,
-      ctx.scope,
-    );
+    // [LAW:no-silent-failure] Wrap the whole render body in a try/catch so a
+    // partial-load consequence (e.g. a variable that failed to declare, leaving a
+    // MissingFieldError when the template or when-predicate accesses it) surfaces
+    // as a visible error cell rather than crashing the whole bar. The remaining
+    // segments render normally. This is the render-time complement to the per-
+    // variable catch in registerDslConfig — together they implement option-2
+    // partial rendering: the new config stays active, working segments render, and
+    // broken segments show an error cell.
+    try {
+      if (!evaluateWhen(segCompiled.when, ctx.scope)) return [];
 
-    const fragments = segCompiled.template.evaluate(ctx.scope);
-    const segCells = fragmentsToCells(fragments, baseStyle);
+      // [LAW:dataflow-not-control-flow] The per-segment variability is WHICH
+      // palette — the base resolver (per-segment override or basePalette)
+      // transposed by hueShift. bg and fg then resolve from this one palette.
+      const resolver = transposedResolver(
+        segCompiled.paletteResolver ?? ctx.basePalette,
+        hueShift,
+      );
+      const baseStyle = resolveSegmentColors(
+        resolver,
+        segCompiled.bg,
+        segCompiled.fg,
+        ctx.scope,
+      );
 
-    // [LAW:single-enforcer] Partition the segment's authored "\n" into visual
-    // lines BEFORE per-segment layout — width/justify/truncate then measure each
-    // line cleanly. A newline-free segment is the degenerate one-line case. Each
-    // laid line is ONE strip item: applySegmentLayout collapses a line's cells to
-    // 0-or-1 item (OSC-8 links survive as interior spans), so the joiner caps only
-    // at the segment's edges, never inside it.
-    const laidLines = splitCellsIntoLines(segCells).map((line) =>
-      applySegmentLayout(line, {
-        width: seg.width ?? "auto",
-        justify: seg.justify ?? "left",
-        truncate: seg.truncate ?? "right",
-        baseStyle,
-      }),
-    );
+      const fragments = segCompiled.template.evaluate(ctx.scope);
+      const segCells = fragmentsToCells(fragments, baseStyle);
 
-    if (ctx.perSegmentSink !== undefined) {
-      ctx.perSegmentSink.set(node.name, laidLines.flat());
+      // [LAW:single-enforcer] Partition the segment's authored "\n" into visual
+      // lines BEFORE per-segment layout — width/justify/truncate then measure each
+      // line cleanly. A newline-free segment is the degenerate one-line case. Each
+      // laid line is ONE strip item: applySegmentLayout collapses a line's cells to
+      // 0-or-1 item (OSC-8 links survive as interior spans), so the joiner caps only
+      // at the segment's edges, never inside it.
+      const laidLines = splitCellsIntoLines(segCells).map((line) =>
+        applySegmentLayout(line, {
+          width: seg.width ?? "auto",
+          justify: seg.justify ?? "left",
+          truncate: seg.truncate ?? "right",
+          baseStyle,
+        }),
+      );
+
+      if (ctx.perSegmentSink !== undefined) {
+        ctx.perSegmentSink.set(node.name, laidLines.flat());
+      }
+      return laidLines;
+    } catch (err) {
+      return [
+        [
+          new RichText(
+            `⚠ ${node.name}: ${(err as Error).message ?? String(err)}`,
+          ),
+        ],
+      ];
     }
-    return laidLines;
   },
 };
 
