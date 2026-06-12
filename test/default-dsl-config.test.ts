@@ -10,11 +10,17 @@
 
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { walkNodes } from "../src/config/dsl-types";
+import {
+  parseDslConfig,
+  mergeWithDefault,
+  validateConfig,
+} from "../src/config/dsl-loader";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { registerDslConfig, renderDsl } from "../src/dsl/render";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import { PaletteResolver, getThemePalette } from "@promptctl/rich-js";
+import { listResolvablePaletteNames } from "../src/themes/policy";
 
 const SERIALIZED = JSON.stringify(DEFAULT_DSL_CONFIG, null, 2);
 
@@ -85,6 +91,83 @@ describe("DEFAULT_DSL_CONFIG", () => {
     } finally {
       registry.dispose();
     }
+  });
+
+  // [LAW:one-source-of-truth] Equivalence pin: the A-grammar spelling
+  // { h: ["directory","git","model","session","today","context"] } must lower
+  // to a root that produces byte-identical ANSI to DEFAULT_DSL_CONFIG.root
+  // (a horizontal container of the same names). Migration changes spelling only.
+  test("A-grammar { h:[...] } spelling is render-equivalent to DEFAULT_DSL_CONFIG.root", () => {
+    const ALLOWED = new Set(listResolvablePaletteNames());
+    const A_SRC = `{ root: { h: ["directory","git","model","session","today","context"] } }`;
+    const rawA = parseDslConfig("<test>", A_SRC, ALLOWED);
+    const mergedA = mergeWithDefault(rawA, DEFAULT_DSL_CONFIG);
+    const configA = validateConfig(mergedA, "<test>", A_SRC, ALLOWED);
+
+    const configDefault = parseAndValidate("<default>", SERIALIZED, ALLOWED);
+
+    const payload = {
+      hook_event_name: "Status",
+      session_id: "equiv-pin-test",
+      cwd: "/tmp",
+      model: { id: "claude-sonnet-4-6", display_name: "Sonnet 4.6" },
+      workspace: { current_dir: "/tmp", project_dir: "/tmp", added_dirs: [] },
+    };
+    const opts = {
+      style: "powerline" as const,
+      colorCompatibility: "truecolor" as const,
+      width: Number.POSITIVE_INFINITY,
+    };
+
+    function render(cfg: typeof configA): string {
+      const store = new VariableStore();
+      const registry = new SourceRegistry(store);
+      try {
+        const compiled = registerDslConfig(cfg, registry, { cwd: "/tmp" });
+        const bp = new PaletteResolver(getThemePalette(cfg.globals.palette ?? "textual-dark")!);
+        return renderDsl(cfg, compiled, store, registry, payload, bp, opts);
+      } finally {
+        registry.dispose();
+      }
+    }
+
+    expect(render(configA)).toBe(render(configDefault));
+  });
+
+  // [LAW:one-source-of-truth] Deep-nesting equivalence: { v: [{ h: [a, b] }, { h: [c, d] }] }
+  // is render-identical to layout: [["a","b"],["c","d"]] (the old sugar).
+  test("A-grammar deep nesting { v:[{ h:[...] }, { h:[...] }] } is render-equivalent to layout rows", () => {
+    const ALLOWED = new Set(listResolvablePaletteNames());
+    const SEGMENTS = `{
+      sa: { template: ' A ', bg: 'surface', fg: 'foreground' },
+      sb: { template: ' B ', bg: 'surface', fg: 'foreground' },
+      sc: { template: ' C ', bg: 'surface', fg: 'foreground' },
+      sd: { template: ' D ', bg: 'surface', fg: 'foreground' },
+    }`;
+    const srcA = `{ segments: ${SEGMENTS}, root: { v: [{ h: ['sa','sb'] }, { h: ['sc','sd'] }] } }`;
+    const srcOld = `{ segments: ${SEGMENTS}, layout: [['sa','sb'],['sc','sd']] }`;
+    const configA = parseAndValidate("<test>", srcA, ALLOWED);
+    const configOld = parseAndValidate("<test>", srcOld, ALLOWED);
+
+    const payload = { hook_event_name: "Status", session_id: "x", cwd: "/tmp",
+      model: { id: "x", display_name: "x" },
+      workspace: { current_dir: "/tmp", project_dir: "/tmp", added_dirs: [] } };
+    const opts = { style: "powerline" as const, colorCompatibility: "truecolor" as const,
+      width: Number.POSITIVE_INFINITY };
+
+    function render(cfg: typeof configA): string {
+      const store = new VariableStore();
+      const registry = new SourceRegistry(store);
+      try {
+        const compiled = registerDslConfig(cfg, registry, { cwd: "/tmp" });
+        const bp = new PaletteResolver(getThemePalette("textual-dark")!);
+        return renderDsl(cfg, compiled, store, registry, payload, bp, opts);
+      } finally {
+        registry.dispose();
+      }
+    }
+
+    expect(render(configA)).toBe(render(configOld));
   });
 
   // [LAW:verifiable-goals] The directory segment's template has boundary

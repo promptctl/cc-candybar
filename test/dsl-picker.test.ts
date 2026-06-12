@@ -77,7 +77,7 @@ function pickerConfig(closeOnPick: boolean, paged: boolean): string {
         bg: 'surface', fg: 'foreground',
       },
     },
-    layout: [['trigger'], ['menu']],
+    root: { v: ['trigger', 'menu'] },
   }`;
 }
 
@@ -255,7 +255,7 @@ describe("2de.13 — picker loader validation", () => {
       variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
       actions: { applyTheme: { set: 'theme-pick', from: 'themes' } },
       segments: { menu: { template: '{{ picker "applyTheme" "nope" true true }}', bg: 'surface', fg: 'foreground' } },
-      layout: [['menu']],
+      root: 'menu',
     }`;
     expect(() => parseAndValidate("<test>", src, ALLOWED)).toThrow(ConfigError);
     expect(() => parseAndValidate("<test>", src, ALLOWED)).toThrow(/nope/);

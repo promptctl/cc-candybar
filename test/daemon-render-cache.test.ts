@@ -20,18 +20,11 @@ import { walkNodes, type LayoutNode } from "../src/config/dsl-types";
 const layoutSegments = (root: LayoutNode): string[] =>
   [...walkNodes(root)].flatMap((n) => (n.kind === "segment" ? [n.name] : []));
 
-// The canonical tree a one-row `layout: [[...]]` sugar compiles to: a vertical
-// container holding one horizontal container of segment refs.
+// One horizontal container of segment refs — what { h: [...names] } lowers to.
 const oneRow = (...segments: string[]): LayoutNode => ({
   kind: "container",
-  direction: "vertical",
-  children: [
-    {
-      kind: "container",
-      direction: "horizontal",
-      children: segments.map((name) => ({ kind: "segment" as const, name })),
-    },
-  ],
+  direction: "horizontal",
+  children: segments.map((name) => ({ kind: "segment" as const, name })),
 });
 
 function makeCache(): {
@@ -175,7 +168,7 @@ describe("RenderCache", () => {
           segments: {
             s: { template: " {{ .x }} ", bg: "surface", fg: "foreground" },
           },
-          layout: [["s"]],
+          root: { h: ["s"] },
         }),
       );
       const entry = cache.getOrCreate(dir, dir, undefined);
@@ -237,7 +230,7 @@ describe("RenderCache", () => {
               fg: "foreground",
             },
           },
-          layout: [["only"]],
+          root: { h: ["only"] },
         }),
       );
       // fs.watch is async and platform-debounced (50ms in our registry).
@@ -275,7 +268,7 @@ describe("RenderCache", () => {
               fg: "foreground",
             },
           },
-          layout: [["only"]],
+          root: { h: ["only"] },
         }),
       );
       const entry = cache.getOrCreate(dir, dir, undefined);
@@ -302,7 +295,7 @@ describe("RenderCache", () => {
         segments: {
           s: { template: " {{ .x }} ", bg: "surface", fg: "foreground" },
         },
-        layout: [["s"]],
+        root: { h: ["s"] },
       });
       writeFileSync(cfgJson5, validCfg);
       writeFileSync(cfgJson, validCfg);
@@ -393,7 +386,7 @@ describe("RenderCache", () => {
             fg: "foreground",
           },
         },
-        layout: [{ when: "{{ ge (int .page) 0 }}", segments: ["s"] }],
+        root: { seg: "s", when: "{{ ge (int .page) 0 }}" },
       }),
     );
     try {

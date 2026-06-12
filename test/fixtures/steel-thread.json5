@@ -29,5 +29,5 @@
       palette: 'gruvbox',
     },
   },
-  layout: [['directory', 'sessionId']],
+  root: { h: ['directory', 'sessionId'] },
 }

@@ -70,7 +70,7 @@ describe("segment is the rendering unit (2de.10)", () => {
           fg: 'foreground',
         },
       },
-      layout: [['actions']],
+      root: 'actions',
     }`;
     const out = render(src, {});
 
@@ -89,7 +89,7 @@ describe("segment is the rendering unit (2de.10)", () => {
     const src = `{
       globals: { palette: 'textual-dark' },
       segments: { empty: { template: '', bg: 'surface', fg: 'foreground' } },
-      layout: [['empty']],
+      root: 'empty',
     }`;
     const out = render(src, {});
 
@@ -112,7 +112,7 @@ describe("segment is the rendering unit (2de.10)", () => {
         a: { template: 'AAA', bg: 'surface', fg: 'foreground' },
         b: { template: 'BBB', bg: 'surface', fg: 'foreground' },
       },
-      layout: [['a', 'b']],
+      root: { h: ['a', 'b'] },
     }`;
     const out = render(src, { session_id: "s1" });
 
