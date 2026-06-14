@@ -26,7 +26,7 @@ import type { VariableStore } from "../var-system/store.js";
 import { toString as varToString } from "../var-system/types.js";
 import { buildScope } from "../template-engine/scope.js";
 import type { ActionDecl, OptionSource } from "../config/action.js";
-import { listResolvablePaletteNames, STYLE_ORDER } from "../themes/policy.js";
+import { listResolvablePaletteNames, STRIP_STYLES } from "../themes/policy.js";
 import {
   effectsUrl,
   VERB_COPY,
@@ -107,7 +107,7 @@ export type CompiledActions = ReadonlyMap<string, CompiledActionDecl>;
 // options and the gate cannot diverge. The render-side resolver (the daemon's
 // validator-derivation has its own that must agree, both reading themes/policy).
 export function optionDomain(src: OptionSource): readonly string[] {
-  return src === "themes" ? listResolvablePaletteNames() : STYLE_ORDER;
+  return src === "themes" ? listResolvablePaletteNames() : STRIP_STYLES;
 }
 
 // [LAW:locality-or-seam] The runtime holder the `action` template function closes

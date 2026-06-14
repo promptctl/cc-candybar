@@ -22,7 +22,7 @@ import {
   validateStateWrite,
   type ValidateResult,
 } from "../src/daemon/verbs/state-validators";
-import { listResolvablePaletteNames, STYLE_ORDER } from "../src/themes/policy";
+import { listResolvablePaletteNames, STRIP_STYLES } from "../src/themes/policy";
 
 describe("state-validators registry contract", () => {
   test("listStateKeys() exactly enumerates the baseline writable schema", () => {
@@ -51,8 +51,8 @@ describe("state-validators registry contract", () => {
     }
   });
 
-  test("style validator accepts every STYLE_ORDER entry", () => {
-    for (const styleName of STYLE_ORDER) {
+  test("style validator accepts every STRIP_STYLES entry", () => {
+    for (const styleName of STRIP_STYLES) {
       const result = validateStateWrite("style", styleName);
       expect(result.ok).toBe(true);
       if (result.ok) expect(result.value).toBe(styleName);

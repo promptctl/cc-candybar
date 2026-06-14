@@ -10,6 +10,7 @@ import {
   type Joiner,
   type ColorSystemSpec,
 } from "@promptctl/rich-js";
+import type { StripStyle } from "../themes/policy.js";
 
 export interface RenderedSegmentLike {
   type: string;
@@ -18,7 +19,11 @@ export interface RenderedSegmentLike {
   fgHex?: string;
 }
 
-export type StripStyle = "powerline" | "capsule" | "plain";
+// [LAW:one-source-of-truth] `StripStyle` and its value list live in
+// themes/policy.ts (the style-identifier policy module, importable by the
+// option-source machinery without a render→template-engine cycle). Re-exported
+// here so render-layer consumers can keep importing it from the strip module.
+export type { StripStyle };
 
 // [LAW:one-source-of-truth] Raw terminal cols we assume when the wire
 // didn't give us one (older client, env-stripped spawn). RAW — not
@@ -38,13 +43,22 @@ export interface BuildLineOptions {
 }
 
 function pickJoiner(style: StripStyle, separator?: string): Joiner {
-  // [LAW:dataflow-not-control-flow] joiner choice is data-driven; one branch
-  // per shape, no nested conditionals.
-  if (style === "capsule") return new CapsuleJoiner();
-  if (style === "plain") {
-    return new PlainJoiner(separator !== undefined ? { separator } : {});
+  // [LAW:dataflow-not-control-flow] joiner choice is data-driven; one arm per
+  // shape. [LAW:types-are-the-program] Total over StripStyle — the `never`
+  // default makes adding a STRIP_STYLES member a compile error here until it
+  // gets a joiner, so the picker's domain can never offer an unrenderable shape.
+  switch (style) {
+    case "capsule":
+      return new CapsuleJoiner();
+    case "plain":
+      return new PlainJoiner(separator !== undefined ? { separator } : {});
+    case "powerline":
+      return new PowerlineJoiner();
+    default: {
+      const _exhaustive: never = style;
+      return _exhaustive;
+    }
   }
-  return new PowerlineJoiner();
 }
 
 function toCell(seg: RenderedSegmentLike): RichText {

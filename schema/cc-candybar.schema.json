@@ -25,6 +25,13 @@
         },
         "palette": {
           "type": "string"
+        },
+        "style": {
+          "enum": [
+            "powerline",
+            "capsule",
+            "plain"
+          ]
         }
       },
       "additionalProperties": false
