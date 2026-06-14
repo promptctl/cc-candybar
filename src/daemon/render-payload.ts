@@ -64,6 +64,7 @@ export interface RenderPayload extends ClaudeHookData {
   // exactly like a missing top-level field.
   readonly session?: SessionPayload;
   readonly today?: TodayPayload;
+  readonly burn?: BurnPayload;
   readonly block?: BlockPayload;
   readonly weekly?: WeeklyPayload;
   readonly cache?: CachePayload;
@@ -105,14 +106,31 @@ export interface TodayPayload {
   readonly tokens?: number;
 }
 
+// [LAW:one-type-per-behavior] The burn rate is the session's spend velocity —
+// dollars per wall-clock hour — a derivative of the same cost the `session`
+// segment totals, so it is its own concept, not a field bolted onto the
+// totals. Optional because a too-young session yields no honest rate
+// ([LAW:no-silent-failure] — absence over a single-turn artifact).
+export interface BurnPayload {
+  readonly costPerHour?: number;
+}
+
 export interface BlockPayload {
   readonly nativeUtilization: number;
   readonly resetsAt: number;
+  // [LAW:types-are-the-program] Linear projection of nativeUtilization → 100%
+  // at the current rate, in whole minutes. Absent (not 0, not a sentinel
+  // in the type) when the window is too young or shows no usage to project
+  // from — the ETA's "we cannot say" state is unrepresentable as a number,
+  // so it travels as a missing field to the DSL default. [LAW:no-silent-failure]
+  readonly etaMinutes?: number;
 }
 
 export interface WeeklyPayload {
   readonly percentage: number;
   readonly resetsAt: number;
+  // Same projection as BlockPayload.etaMinutes over the seven-day window.
+  readonly etaMinutes?: number;
 }
 
 // Prompt-cache warmth. One field — the epoch-seconds expiry instant —
@@ -158,6 +176,64 @@ export interface RenderPayloadDeps {
   // buildRenderPayload is the ONE place lane failures are logged, so the
   // providers' interiors never log and never double-log.
   readonly log: DaemonLogger;
+  // [LAW:single-enforcer] The one clock the projection math reads "now" from —
+  // the same seam threaded to the template engine's `minutesUntilReset`, so
+  // an ETA and the reset countdown beside it agree on the instant. Omitted ⇒
+  // wall clock; tests inject a frozen clock for determinism.
+  readonly clock?: () => Date;
+}
+
+// ─── Rate-limit projection (pure) ──────────────────────────────────────────────
+//
+// [LAW:effects-at-boundaries] The math is pure — utilization, reset instant,
+// window length and `now` in; minutes-to-cap out. The only effect (reading the
+// clock) stays in buildRenderPayload; these stay testable in isolation.
+
+// Window lengths are facts of Claude's rate-limit cadence, not config: the
+// five-hour block and the seven-day window.
+const FIVE_HOUR_MS = 5 * 60 * 60 * 1000;
+const SEVEN_DAY_MS = 7 * 24 * 60 * 60 * 1000;
+// Below this much elapsed in a window, a linear projection from one early data
+// point is noise — surface no ETA rather than a confidently-wrong number.
+const MIN_PROJECTABLE_ELAPSED_MS = 5 * 60 * 1000;
+// The same floor for the spend rate: under a minute of session wall-clock,
+// $/hr is dominated by a single turn rather than a sustained burn.
+const MIN_BURN_SECONDS = 60;
+
+/**
+ * Linearly extrapolate a rate-limit window's utilization to its 100% cap.
+ * The window started `windowMs` before `resetsAtSec`; elapsed time and the
+ * used-% give a rate, and the remaining headroom divided by that rate is the
+ * minutes-to-cap. Returns undefined when the window is too young to project
+ * or shows no usage yet — the caller drops the field and the segment renders
+ * "—" rather than a fabricated ETA. [LAW:no-silent-failure]
+ */
+export function projectEtaMinutes(
+  usedPercentage: number,
+  resetsAtSec: number,
+  windowMs: number,
+  nowMs: number,
+): number | undefined {
+  const elapsedMs = windowMs - (resetsAtSec * 1000 - nowMs);
+  if (elapsedMs < MIN_PROJECTABLE_ELAPSED_MS || usedPercentage <= 0)
+    return undefined;
+  const pctPerMs = usedPercentage / elapsedMs;
+  const etaMs = (100 - usedPercentage) / pctPerMs;
+  return Math.max(0, Math.round(etaMs / 60000));
+}
+
+/**
+ * Session spend rate in dollars per hour: cost over wall-clock duration.
+ * Returns undefined under a wall-clock floor where the rate is a single-turn
+ * artifact, not a sustained burn. A real $0 over enough time is a true 0/hr,
+ * not absence. [LAW:no-silent-failure]
+ */
+export function projectCostPerHour(
+  cost: number,
+  durationSeconds: number,
+): number | undefined {
+  if (durationSeconds < MIN_BURN_SECONDS) return undefined;
+  return (cost * 3600) / durationSeconds;
 }
 
 // ─── Builder ─────────────────────────────────────────────────────────────────
@@ -376,8 +452,13 @@ export async function buildRenderPayload(
           hookData.workspace?.project_dir,
         ),
       ),
-      lane("session", wants("session.cost") || wants("session.tokens"), () =>
-        deps.usageStore.getUsageInfo(hookData.session_id, hookData),
+      // [LAW:dataflow-not-control-flow] The burn segment reads `burn.costPerHour`,
+      // a derivative of session cost and metrics duration — so wanting `burn`
+      // pulls in exactly the two lanes it is folded from.
+      lane(
+        "session",
+        wants("session.cost") || wants("session.tokens") || wants("burn"),
+        () => deps.usageStore.getUsageInfo(hookData.session_id, hookData),
       ),
       lane("today", wants("today"), () =>
         deps.usageStore.getTodayInfo(hookData),
@@ -385,7 +466,7 @@ export async function buildRenderPayload(
       lane("context", wants("context"), () =>
         deps.contextProvider.getContextInfo(hookData),
       ),
-      lane("metrics", wants("metrics"), () =>
+      lane("metrics", wants("metrics") || wants("burn"), () =>
         deps.metricsProvider.getMetricsInfo(hookData.session_id, hookData),
       ),
       lane("tmux", wants("tmux"), () => deps.tmuxService.getSessionId()),
@@ -423,6 +504,34 @@ export async function buildRenderPayload(
   // `minutesUntilReset(resets_at)`, which the DSL template composes via
   // the formatter func — a duplicate code path was retired.)
   const fiveHour = hookData.rate_limits?.five_hour;
+  const sevenDay = hookData.rate_limits?.seven_day;
+  // [LAW:single-enforcer] One clock read feeds every projection this render.
+  const nowMs = (deps.clock ?? (() => new Date()))().getTime();
+  const blockEta = fiveHour
+    ? projectEtaMinutes(
+        fiveHour.used_percentage,
+        fiveHour.resets_at,
+        FIVE_HOUR_MS,
+        nowMs,
+      )
+    : undefined;
+  const weeklyEta = sevenDay
+    ? projectEtaMinutes(
+        sevenDay.used_percentage,
+        sevenDay.resets_at,
+        SEVEN_DAY_MS,
+        nowMs,
+      )
+    : undefined;
+  // [LAW:dataflow-not-control-flow] Gated by `wants("burn")` so the rate is
+  // computed only when a layout segment reads it; absent cost/duration (lane
+  // skipped or provider empty) yields no rate, never a fabricated one.
+  const burnCost = usageValue?.session.cost;
+  const burnDuration = metricsValue?.sessionDuration;
+  const costPerHour =
+    wants("burn") && burnCost != null && burnDuration != null
+      ? projectCostPerHour(burnCost, burnDuration)
+      : undefined;
 
   // [LAW:one-source-of-truth] The theme variable surfaces the session's
   // resolved theme so the toolbar/tray DSL templates can encode it into
@@ -487,6 +596,7 @@ export async function buildRenderPayload(
     ...(theme !== undefined && { theme }),
     ...(sessionPayload !== undefined && { session: sessionPayload }),
     ...(todayPayload !== undefined && { today: todayPayload }),
+    ...(costPerHour !== undefined && { burn: { costPerHour } }),
     ...(wants("block") &&
       fiveHour !== undefined && {
         block: {
@@ -496,12 +606,14 @@ export async function buildRenderPayload(
           // projection rule, two segments.
           nativeUtilization: fiveHour.used_percentage,
           resetsAt: fiveHour.resets_at,
+          ...(blockEta !== undefined && { etaMinutes: blockEta }),
         },
       }),
-    ...(hookData.rate_limits?.seven_day !== undefined && {
+    ...(sevenDay !== undefined && {
       weekly: {
-        percentage: hookData.rate_limits.seven_day.used_percentage,
-        resetsAt: hookData.rate_limits.seven_day.resets_at,
+        percentage: sevenDay.used_percentage,
+        resetsAt: sevenDay.resets_at,
+        ...(weeklyEta !== undefined && { etaMinutes: weeklyEta }),
       },
     }),
     ...(cacheValue !== undefined && {

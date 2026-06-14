@@ -108,6 +108,29 @@ function blockLikeFg(pctRef: string): string {
   );
 }
 
+// [LAW:dataflow-not-control-flow] The burn segment heats as the cap NEARS, so
+// the cascade reads the projected minutes-to-cap (smaller = hotter), the
+// inverse direction of blockLikeBg's fuller-is-hotter. The not-projectable
+// sentinel (-1, sorts below every threshold) is caught first so "we cannot
+// project" colors calm, never error. Thresholds are var refs so a user
+// overrides them through the same by-name variables cascade.
+function etaHeatBg(etaRef: string, warnRef: string, errRef: string): string {
+  return (
+    `{{ if lt ${etaRef} 0 }}panel` +
+    `{{ else }}{{ if lt ${etaRef} ${errRef} }}error` +
+    `{{ else }}{{ if lt ${etaRef} ${warnRef} }}warning` +
+    `{{ else }}panel{{ end }}{{ end }}{{ end }}`
+  );
+}
+
+function etaHeatFg(etaRef: string, warnRef: string): string {
+  return (
+    `{{ if lt ${etaRef} 0 }}foreground` +
+    `{{ else }}{{ if lt ${etaRef} ${warnRef} }}button-color-foreground` +
+    `{{ else }}foreground{{ end }}{{ end }}`
+  );
+}
+
 // ─── The default config ──────────────────────────────────────────────────────
 
 export const DEFAULT_DSL_CONFIG = {
@@ -327,6 +350,34 @@ export const DEFAULT_DSL_CONFIG = {
     },
     "weekly.budget.warningThreshold": { kind: "literal", value: 80 },
 
+    // Burn rate + cap projection — daemon-derived (see render-payload.ts).
+    // Each projection is ABSENT when not projectable; the var-system fills the
+    // -1 default, a structurally-impossible value the burnrate helpers read as
+    // "—" [LAW:no-silent-failure] (0 minutes / $0-per-hr are real, displayable
+    // values, so they cannot double as the absence marker).
+    "burn.costPerHour": {
+      kind: "input",
+      path: "burn.costPerHour",
+      type: "number",
+      default: -1,
+    },
+    "block.etaMinutes": {
+      kind: "input",
+      path: "block.etaMinutes",
+      type: "number",
+      default: -1,
+    },
+    "weekly.etaMinutes": {
+      kind: "input",
+      path: "weekly.etaMinutes",
+      type: "number",
+      default: -1,
+    },
+    // ETA-heat thresholds (minutes-to-cap) — overridable per-config through the
+    // variables-merge-by-name cascade, like the *.budget.warningThreshold knobs.
+    "burn.eta.warnMinutes": { kind: "literal", value: 60 },
+    "burn.eta.errorMinutes": { kind: "literal", value: 30 },
+
     // Context — daemon fetches via ContextProvider; contextLeftPercentage.
     "context.totalTokens": {
       kind: "input",
@@ -486,6 +537,24 @@ export const DEFAULT_DSL_CONFIG = {
       fg: blockLikeFg(".weekly.percentage"),
       when: "{{ gt .weekly.resetsAt 0 }}",
     },
+    // Burn rate + cap projection: "$X/hr · Nm to 5h · Nd to wk". The headline
+    // number of a usage monitor — how fast you are spending and when you hit
+    // the wall. All math is daemon-side (render-payload.ts); the template only
+    // formats. Heats as the 5h cap nears (etaHeat*). Shown when either
+    // rate-limit window is active — the same signal block/weekly gate on.
+    burnrate: {
+      template:
+        ' ⚡ {{ template "formatRate" .burn.costPerHour }} · ' +
+        '{{ template "formatEta" .block.etaMinutes }} to 5h · ' +
+        '{{ template "formatEta" .weekly.etaMinutes }} to wk ',
+      bg: etaHeatBg(
+        ".block.etaMinutes",
+        ".burn.eta.warnMinutes",
+        ".burn.eta.errorMinutes",
+      ),
+      fg: etaHeatFg(".block.etaMinutes", ".burn.eta.warnMinutes"),
+      when: "{{ or (gt .block.resetsAt 0) (gt .weekly.resetsAt 0) }}",
+    },
     // Prompt-cache warmth countdown. minutesUntilReset clamps a past expiry
     // to 0, so an expired cache renders "cold" (and reads red via the ≤8
     // arm) rather than a negative number. [LAW:dataflow-not-control-flow]
@@ -592,6 +661,16 @@ export const DEFAULT_DSL_CONFIG = {
       '{{ else if ge . 1000 }}{{ printf "%.1f" (divf . 1000) }}K' +
       "{{ else }}{{ . }}{{ end }}",
     formatTokens: '{{ template "formatTokenCount" . }} tokens',
+    // Burn rate: "$X.XX/hr" when projectable, "—/hr" otherwise. The daemon
+    // emits -1 (a structurally-impossible rate) for not-projectable, so the
+    // branch reads a VALUE, never a hidden control-flow flag. Reuses formatCost
+    // so the dollar policy has one home.
+    formatRate:
+      '{{ if lt . 0 }}—/hr{{ else }}{{ template "formatCost" . }}/hr{{ end }}',
+    // ETA to a rate-limit cap: humanized minutes when projectable, "—" when the
+    // daemon could not project (-1 sentinel). Reuses the long-remaining cascade.
+    formatEta:
+      '{{ if lt . 0 }}—{{ else }}{{ template "formatLongTimeRemaining" . }}{{ end }}',
     // Breakdown over a dict {input, output, cacheCreation, cacheRead}; each present
     // part is formatted by the shared formatTokenCount and joined with " + ". A
     // `$first` flag (reassigned across if-frames) inserts the separator before all
