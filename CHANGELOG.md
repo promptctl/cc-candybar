@@ -1,3 +1,10 @@
+# [1.2.0](https://github.com/promptctl/cc-candybar/compare/v1.1.1...v1.2.0) (2026-06-14)
+
+
+### Features
+
+* **usage:** burn-rate + cap-projection segment ($/hr · ETA to 5h & weekly cap) ([#119](https://github.com/promptctl/cc-candybar/issues/119)) ([be28212](https://github.com/promptctl/cc-candybar/commit/be282128130a494bea3952a614971348f1b74933))
+
 ## [1.1.1](https://github.com/promptctl/cc-candybar/compare/v1.1.0...v1.1.1) (2026-06-14)
 
 
