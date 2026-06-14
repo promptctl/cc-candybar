@@ -8,13 +8,27 @@
 // Locally, bin/cc-candybar is gitignored — devs run `just install-rust` to
 // stage the real native binary there. This script is publish-time only.
 
-import { chmodSync, mkdirSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(__dirname, "..");
 const BIN_PATH = join(ROOT, "bin", "cc-candybar");
+
+// Never clobber an existing bin/cc-candybar. In a source checkout the dev's
+// real native binary lives here (placed by `just install-rust`) and must
+// survive a local `pnpm prepack`. In CI/publish the path is absent — it is
+// gitignored, so a fresh checkout never has it and nothing stages the root
+// bin before prepack — so the placeholder IS still written and the published
+// tarball gets its stub. [LAW:no-silent-failure] guarding on
+// rust-client/Cargo.toml (as postinstall.mjs does) would be wrong here: CI
+// checks out full source too, so that guard would skip during release and
+// ship a main package whose `bin` target is missing.
+if (existsSync(BIN_PATH)) {
+  console.log(`write-bin-placeholder: ${BIN_PATH} already present, leaving it untouched.`);
+  process.exit(0);
+}
 
 const SCRIPT = `#!/bin/sh
 echo "cc-candybar: native binary not installed." >&2
