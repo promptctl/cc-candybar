@@ -64,8 +64,20 @@ for (const p of PLATFORMS) {
 }
 
 // 3. Publish platform packages first so the main package's optionalDependencies
-// resolve when users install it.
+// resolve when users install it. Skip packages already at this version so
+// reruns after a partial failure don't abort on 403.
+import { execSync } from "node:child_process";
 for (const p of PLATFORMS) {
+  const pkgName = `@promptctl/cc-candybar-${p}`;
+  let alreadyPublished = false;
+  try {
+    const result = execSync(`npm view ${pkgName}@${version} version 2>/dev/null`, { encoding: "utf8" }).trim();
+    alreadyPublished = result === version;
+  } catch { /* not published yet */ }
+  if (alreadyPublished) {
+    console.log(`  skipping ${pkgName}@${version} (already published)`);
+    continue;
+  }
   const dir = resolve(ROOT, "npm", `cc-candybar-${p}`);
   console.log(`  publishing ${dir}`);
   execFileSync("npm", ["publish", "--access", "public"], {
