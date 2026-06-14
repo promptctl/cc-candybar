@@ -25,7 +25,10 @@ import type { GitInfo, GitInfoOptions } from "../segments/git.js";
 import { ABSENT, failed, type Outcome } from "../utils/outcome.js";
 import { cacheExpiresAt } from "../segments/cache.js";
 import type { DaemonLogger } from "./log.js";
-import type { SessionUsageStore } from "./cache/session-usage-store.js";
+import type {
+  SessionUsageStore,
+  SpeedObservation,
+} from "./cache/session-usage-store.js";
 import type { ContextProvider } from "../segments/context.js";
 import type { MetricsProvider } from "../segments/metrics.js";
 import type { TmuxService } from "../segments/tmux.js";
@@ -65,6 +68,7 @@ export interface RenderPayload extends ClaudeHookData {
   readonly session?: SessionPayload;
   readonly today?: TodayPayload;
   readonly burn?: BurnPayload;
+  readonly speed?: SpeedPayload;
   readonly block?: BlockPayload;
   readonly weekly?: WeeklyPayload;
   readonly cache?: CachePayload;
@@ -113,6 +117,19 @@ export interface TodayPayload {
 // ([LAW:no-silent-failure] — absence over a single-turn artifact).
 export interface BurnPayload {
   readonly costPerHour?: number;
+}
+
+// [LAW:one-type-per-behavior] Token throughput for the active turn — tokens per
+// second on each of three lanes (prompt-side input, generated output, their
+// total). Each lane is INDEPENDENTLY optional: during streaming `output` moves
+// while `input` (fixed at turn start) is idle, so an absent `input` rate beside a
+// live `output` rate is the honest shape, not a zero. Absence (no baseline yet,
+// idle between turns, or a too-stale prior sample) travels as a missing field to
+// the -1 default, which the `formatSpeed` helper reads as "—". [LAW:no-silent-failure]
+export interface SpeedPayload {
+  readonly input?: number;
+  readonly output?: number;
+  readonly total?: number;
 }
 
 export interface BlockPayload {
@@ -200,6 +217,15 @@ const MIN_PROJECTABLE_ELAPSED_MS = 5 * 60 * 1000;
 // $/hr is dominated by a single turn rather than a sustained burn.
 const MIN_BURN_SECONDS = 60;
 
+// tok/s is a delta between two successive render observations. The wall-time
+// between them must clear a tiny floor (the clock has to have advanced — below
+// it the rate is divide-by-near-zero noise) and stay under a ceiling: a gap
+// wider than this means the prior sample predates an idle stretch, so the rate
+// would be diluted by dead time. Both bounds → no reading (re-baseline silently
+// on the next render) rather than a misleading number. [LAW:no-silent-failure]
+const MIN_SPEED_SAMPLE_MS = 50;
+const MAX_SPEED_SAMPLE_MS = 10 * 1000;
+
 /**
  * Linearly extrapolate a rate-limit window's utilization to its 100% cap.
  * The window started `windowMs` before `resetsAtSec`; elapsed time and the
@@ -234,6 +260,64 @@ export function projectCostPerHour(
 ): number | undefined {
   if (durationSeconds < MIN_BURN_SECONDS) return undefined;
   return (cost * 3600) / durationSeconds;
+}
+
+/**
+ * Instantaneous tokens-per-second between two successive render observations of
+ * one cumulative token count. Returns undefined when the sample window is too
+ * small or too large to be honest (see the floor/ceiling constants) or when the
+ * count did not advance (idle / between turns — a true 0 over a real window is
+ * reported as 0, but a flat count carries no throughput to report). A real
+ * positive rate is always >= 0, so callers use -1 as the absence default — 0
+ * tok/s never doubles as the "no reading" marker. [LAW:no-silent-failure]
+ */
+export function projectTokensPerSecond(
+  prevTokens: number,
+  prevMs: number,
+  curTokens: number,
+  nowMs: number,
+): number | undefined {
+  const deltaMs = nowMs - prevMs;
+  if (deltaMs < MIN_SPEED_SAMPLE_MS || deltaMs > MAX_SPEED_SAMPLE_MS)
+    return undefined;
+  const deltaTokens = curTokens - prevTokens;
+  if (deltaTokens <= 0) return undefined;
+  return (deltaTokens * 1000) / deltaMs;
+}
+
+// [LAW:effects-at-boundaries] Pure fold of one speed observation into the
+// payload's three rate lanes. No baseline (first render of a session) or every
+// lane un-projectable → undefined (the whole `speed` key is dropped); otherwise
+// each lane that projects contributes its rate, each that doesn't is a missing
+// field → the -1 default → "—".
+function projectSpeed(obs: SpeedObservation): SpeedPayload | undefined {
+  const { prev, cur } = obs;
+  if (prev === undefined) return undefined;
+  const input = projectTokensPerSecond(
+    prev.input,
+    prev.atMs,
+    cur.input,
+    cur.atMs,
+  );
+  const output = projectTokensPerSecond(
+    prev.output,
+    prev.atMs,
+    cur.output,
+    cur.atMs,
+  );
+  const total = projectTokensPerSecond(
+    prev.total,
+    prev.atMs,
+    cur.total,
+    cur.atMs,
+  );
+  if (input === undefined && output === undefined && total === undefined)
+    return undefined;
+  return {
+    ...(input !== undefined && { input }),
+    ...(output !== undefined && { output }),
+    ...(total !== undefined && { total }),
+  };
 }
 
 // ─── Builder ─────────────────────────────────────────────────────────────────
@@ -428,6 +512,11 @@ export async function buildRenderPayload(
   const wants = (prefix: string): boolean =>
     anyPathStartsWith(neededInputPaths, prefix);
 
+  // [LAW:single-enforcer] One clock read feeds every projection this render —
+  // the ETA extrapolations below AND the tok/s sample window in the speed lane,
+  // so an ETA, a reset countdown, and a throughput figure all agree on "now".
+  const nowMs = (deps.clock ?? (() => new Date()))().getTime();
+
   // [LAW:dataflow-not-control-flow][LAW:one-type-per-behavior] Every provider
   // lane is ONE shape: "needed → call provider (whose contract is to never
   // reject — the catch makes the lane total against bugs, mapping a throw
@@ -443,40 +532,57 @@ export async function buildRenderPayload(
       ? run().catch((e: unknown) => failed(`${name}: ${String(e)}`))
       : Promise.resolve(ABSENT);
 
-  const [gitOutcome, usage, today, context, metrics, tmuxSession, cacheExpiry] =
-    await Promise.all([
-      lane("git", wants("git"), () =>
-        deps.gitProvider.getGitInfo(
-          cwd ?? hookData.workspace?.current_dir,
-          gitOptionsFromClosure(neededInputPaths),
-          hookData.workspace?.project_dir,
-        ),
+  const [
+    gitOutcome,
+    usage,
+    today,
+    context,
+    metrics,
+    tmuxSession,
+    cacheExpiry,
+    speed,
+  ] = await Promise.all([
+    lane("git", wants("git"), () =>
+      deps.gitProvider.getGitInfo(
+        cwd ?? hookData.workspace?.current_dir,
+        gitOptionsFromClosure(neededInputPaths),
+        hookData.workspace?.project_dir,
       ),
-      // [LAW:dataflow-not-control-flow] The burn segment reads `burn.costPerHour`,
-      // a derivative of session cost and metrics duration — so wanting `burn`
-      // pulls in exactly the two lanes it is folded from.
-      lane(
-        "session",
-        wants("session.cost") || wants("session.tokens") || wants("burn"),
-        () => deps.usageStore.getUsageInfo(hookData.session_id, hookData),
+    ),
+    // [LAW:dataflow-not-control-flow] The burn segment reads `burn.costPerHour`,
+    // a derivative of session cost and metrics duration — so wanting `burn`
+    // pulls in exactly the two lanes it is folded from.
+    lane(
+      "session",
+      wants("session.cost") || wants("session.tokens") || wants("burn"),
+      () => deps.usageStore.getUsageInfo(hookData.session_id, hookData),
+    ),
+    lane("today", wants("today"), () => deps.usageStore.getTodayInfo(hookData)),
+    lane("context", wants("context"), () =>
+      deps.contextProvider.getContextInfo(hookData),
+    ),
+    lane("metrics", wants("metrics") || wants("burn"), () =>
+      deps.metricsProvider.getMetricsInfo(hookData.session_id, hookData),
+    ),
+    lane("tmux", wants("tmux"), () => deps.tmuxService.getSessionId()),
+    // Prompt-cache expiry: a bounded tail-read through the gated transcript-fs
+    // seam, so it runs alongside the other providers and stays in the shared
+    // in-flight budget rather than blocking the event loop on sync fs.
+    lane("cache", wants("cache"), () =>
+      cacheExpiresAt(hookData.transcript_path),
+    ),
+    // [LAW:one-source-of-truth] tok/s folds from the SAME store the session
+    // lane reads — observeSpeed both reports the prior sample and records this
+    // render's, so it must run every render the speed segment is laid out (the
+    // first establishes the baseline that the second projects from).
+    lane("speed", wants("speed"), () =>
+      deps.usageStore.observeSpeed(
+        hookData.session_id,
+        hookData.transcript_path,
+        nowMs,
       ),
-      lane("today", wants("today"), () =>
-        deps.usageStore.getTodayInfo(hookData),
-      ),
-      lane("context", wants("context"), () =>
-        deps.contextProvider.getContextInfo(hookData),
-      ),
-      lane("metrics", wants("metrics") || wants("burn"), () =>
-        deps.metricsProvider.getMetricsInfo(hookData.session_id, hookData),
-      ),
-      lane("tmux", wants("tmux"), () => deps.tmuxService.getSessionId()),
-      // Prompt-cache expiry: a bounded tail-read through the gated transcript-fs
-      // seam, so it runs alongside the other providers and stays in the shared
-      // in-flight budget rather than blocking the event loop on sync fs.
-      lane("cache", wants("cache"), () =>
-        cacheExpiresAt(hookData.transcript_path),
-      ),
-    ]);
+    ),
+  ]);
   // [LAW:effects-at-boundaries] The projections are pure folds returning data
   // (payload fragment + failure descriptions); the log effect happens once,
   // here, at the edge. `take` is the total fold for the single-value lanes:
@@ -505,8 +611,6 @@ export async function buildRenderPayload(
   // the formatter func — a duplicate code path was retired.)
   const fiveHour = hookData.rate_limits?.five_hour;
   const sevenDay = hookData.rate_limits?.seven_day;
-  // [LAW:single-enforcer] One clock read feeds every projection this render.
-  const nowMs = (deps.clock ?? (() => new Date()))().getTime();
   const blockEta = fiveHour
     ? projectEtaMinutes(
         fiveHour.used_percentage,
@@ -532,6 +636,13 @@ export async function buildRenderPayload(
     wants("burn") && burnCost != null && burnDuration != null
       ? projectCostPerHour(burnCost, burnDuration)
       : undefined;
+  // [LAW:effects-at-boundaries] The store reported the prev+cur samples (an
+  // effect: it read state and advanced the baseline); the rate is a pure fold of
+  // that data here at the edge. Absent observation (lane skipped/failed) or no
+  // projectable lane → no `speed` key → every lane reads its -1 default.
+  const speedObs = take(speed);
+  const speedPayload =
+    speedObs !== undefined ? projectSpeed(speedObs) : undefined;
 
   // [LAW:one-source-of-truth] The theme variable surfaces the session's
   // resolved theme so the toolbar/tray DSL templates can encode it into
@@ -597,6 +708,7 @@ export async function buildRenderPayload(
     ...(sessionPayload !== undefined && { session: sessionPayload }),
     ...(todayPayload !== undefined && { today: todayPayload }),
     ...(costPerHour !== undefined && { burn: { costPerHour } }),
+    ...(speedPayload !== undefined && { speed: speedPayload }),
     ...(wants("block") &&
       fiveHour !== undefined && {
         block: {

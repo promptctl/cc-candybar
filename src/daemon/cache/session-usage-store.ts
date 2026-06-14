@@ -47,6 +47,42 @@ export interface TodayInfo {
   date: string;
 }
 
+// [LAW:one-source-of-truth] One observation of the active session's cumulative
+// token counts at a single instant. tok/s is the delta between two of these —
+// the prior sample lives in this store (the single owner of per-session token
+// totals), never in a parallel counter. `input` folds the cache lanes into the
+// prompt-side total so `total === input + output`. `atMs` is the render's clock
+// instant (the daemon's single-enforcer clock), so a frozen test clock makes
+// the rate deterministic.
+export interface SpeedSample {
+  readonly input: number;
+  readonly output: number;
+  readonly total: number;
+  readonly atMs: number;
+}
+
+// The prior observation (absent on the very first render of a session) and the
+// one just taken. The pure rate projection lives at the render-payload boundary;
+// this store only remembers and reports the pair.
+export interface SpeedObservation {
+  readonly prev?: SpeedSample;
+  readonly cur: SpeedSample;
+}
+
+function speedSampleOf(
+  breakdown: TokenBreakdown | null,
+  atMs: number,
+): SpeedSample {
+  // Prompt-side = raw input plus both cache lanes (all tokens fed to the model);
+  // output = generated. total = the same sum the store's `tokens` projection
+  // uses, so `total === input + output`. [LAW:one-source-of-truth]
+  const input = breakdown
+    ? breakdown.input + breakdown.cacheCreation + breakdown.cacheRead
+    : 0;
+  const output = breakdown ? breakdown.output : 0;
+  return { input, output, total: input + output, atMs };
+}
+
 // Per-(session, day) scalar contribution — the only granularity the today fold
 // needs. Raw entries are discarded after bucketing, so per-session retained
 // memory is O(retained-days), not O(entries).
@@ -166,6 +202,11 @@ export class SessionUsageStore {
   // first seed completes every later read awaits an already-settled promise —
   // zero rescan. A rejected seed is dropped so the next read retries.
   private readonly seeded = new Map<string, Promise<void>>();
+  // [LAW:one-source-of-truth] The prior tok/s observation per session. tok/s is
+  // a derivative of the SAME token totals the records map already owns; the
+  // baseline (prev counts + time) lives HERE, not in a parallel counter. One
+  // call to observeSpeed advances it; the pure delta math is render-payload's.
+  private readonly speedSamples = new Map<string, SpeedSample>();
   private readonly maxEntries: number;
   private readonly staleAgeMs: number;
   private hits = 0;
@@ -282,6 +323,28 @@ export class SessionUsageStore {
       },
       date: today,
     });
+  }
+
+  // Take one tok/s observation of the active session: ingest its current
+  // cumulative counts, return the prior sample alongside, and record this one as
+  // the new baseline. [LAW:no-silent-failure] A failed transcript parse flows out
+  // as `failed` (the boundary logs it and the segment reads "—"); an unknown
+  // session yields a zero-count sample, so a first-ever render establishes a
+  // baseline without fabricating a rate. `nowMs` is the caller's single-enforcer
+  // clock instant — the store never reads the clock for tok/s timing itself.
+  async observeSpeed(
+    sessionId: string,
+    transcriptPath: string | undefined,
+    nowMs: number,
+  ): Promise<Outcome<SpeedObservation>> {
+    const record = await this.ingest(sessionId, transcriptPath);
+    if (record.kind === "failed") return record;
+    const breakdown =
+      record.kind === "ok" ? record.value.sessionInfo.tokenBreakdown : null;
+    const cur = speedSampleOf(breakdown, nowMs);
+    const prev = this.speedSamples.get(sessionId);
+    this.speedSamples.set(sessionId, cur);
+    return ok({ ...(prev !== undefined && { prev }), cur });
   }
 
   // mtime-gated, coalesced re-parse of ONE session. `ok` is its record,
@@ -416,6 +479,7 @@ export class SessionUsageStore {
     for (const [sid, record] of this.entries) {
       if (now - record.lastSeenAt > this.staleAgeMs) {
         this.entries.delete(sid);
+        this.speedSamples.delete(sid);
         dropped++;
       }
     }
@@ -431,6 +495,7 @@ export class SessionUsageStore {
       const oldest = this.entries.keys().next().value;
       if (oldest === undefined) break;
       this.entries.delete(oldest);
+      this.speedSamples.delete(oldest);
       dlog("info", `usageStore evict ${oldest}`);
     }
   }
@@ -442,5 +507,6 @@ export class SessionUsageStore {
     }
     this.entries.clear();
     this.seeded.clear();
+    this.speedSamples.clear();
   }
 }
