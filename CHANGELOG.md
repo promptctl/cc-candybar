@@ -1,3 +1,15 @@
+# [1.1.0](https://github.com/promptctl/cc-candybar/compare/v1.0.3...v1.1.0) (2026-06-14)
+
+
+### Bug Fixes
+
+* **release:** retry lockfile re-sync until registry propagation completes ([#117](https://github.com/promptctl/cc-candybar/issues/117)) ([0ab785d](https://github.com/promptctl/cc-candybar/commit/0ab785d8bb86fc8d12ff6f37263872eb269da13e)), closes [#116](https://github.com/promptctl/cc-candybar/issues/116)
+
+
+### Features
+
+* **examples:** flagship "showcase" config exercising the full 2de substrate ([#114](https://github.com/promptctl/cc-candybar/issues/114)) ([595be22](https://github.com/promptctl/cc-candybar/commit/595be2243d28d4543491371debd8d37c9e00c01f))
+
 ## [1.0.3](https://github.com/promptctl/cc-candybar/compare/v1.0.2...v1.0.3) (2026-06-14)
 
 
