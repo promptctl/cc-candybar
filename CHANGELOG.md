@@ -1,3 +1,10 @@
+# [1.4.0](https://github.com/promptctl/cc-candybar/compare/v1.3.0...v1.4.0) (2026-06-14)
+
+
+### Features
+
+* **theming:** wire the style picker into the default bar (live powerline-shape switcher) ([#121](https://github.com/promptctl/cc-candybar/issues/121)) ([35a73f4](https://github.com/promptctl/cc-candybar/commit/35a73f4ba53fa252b6cedc0abff5a95d8a7eac3a))
+
 # [1.3.0](https://github.com/promptctl/cc-candybar/compare/v1.2.0...v1.3.0) (2026-06-14)
 
 
