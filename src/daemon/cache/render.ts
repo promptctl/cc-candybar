@@ -300,12 +300,11 @@ export class RenderCache {
     // reloadInto preserves the prior last-known-good with nothing half-installed.
     const validatorDisposers: Array<() => void> = [];
     try {
-      // [LAW:locality-or-seam] Pass the store so the config's `widget`
-      // references can read session.id + current picker values from the same
-      // source the rest of the render reads.
+      // [LAW:one-source-of-truth] The action runtime reads session.id + current
+      // picker values from registry.variableStore — the same store this entry's
+      // registry declares into — so no store reference is threaded separately.
       compiled = registerDslConfig(config, registry, {
         cwd: entry.cwd,
-        store,
       });
       // [LAW:one-source-of-truth] Derive the writable-key validators from the
       // config's action table (the sole interaction authority) through one

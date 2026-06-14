@@ -117,7 +117,11 @@ export function optionDomain(src: OptionSource): readonly string[] {
 // reads session.id and the current value from the same source the rest of the
 // render does.
 export interface ActionRuntime {
-  store: VariableStore | null;
+  // [LAW:types-are-the-program] Always present — registerDslConfig sources it
+  // from the registry it is handed (registry.variableStore), so "no store" is
+  // structurally unrepresentable. The action reads session.id and current
+  // values from the same store the renderer reads.
+  store: VariableStore;
   compiled: CompiledActions;
 }
 
@@ -416,11 +420,6 @@ export function renderAction(
     throw new Error(`action "${name}" is not declared in this config`);
   }
   const store = runtime.store;
-  if (!store) {
-    throw new Error(
-      `action "${name}" rendered without a VariableStore — registerDslConfig was not given one`,
-    );
-  }
   const { display, boundValue } = selectDisplay(name, action, displays, store);
   const sessionId = readVar(store, "session.id");
   const { effect, active } = realize(

@@ -79,7 +79,6 @@ const registry = new SourceRegistry(store);
 try {
   const compiled = registerDslConfig(config, registry, {
     cwd: process.cwd(),
-    store,
   });
 
   process.stdout.write(

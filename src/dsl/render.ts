@@ -252,7 +252,7 @@ function compileHelperPreamble(
 export function registerDslConfig(
   config: ValidatedConfig,
   registry: SourceRegistry,
-  opts?: { cwd?: string; store?: VariableStore; clock?: () => Date },
+  opts?: { cwd?: string; clock?: () => Date },
 ): CompiledConfig {
   const cwd = opts?.cwd ?? process.cwd();
 
@@ -262,11 +262,12 @@ export function registerDslConfig(
   // because the action set is config-scoped. The runtime holder is populated below
   // — the `action`/`picker` funcs reference the engine, and the compiled actions
   // reference the engine, so the holder breaks that cycle.
-  // [LAW:no-defensive-null-guards] store may be absent for compile-only callers
-  // with no actions; renderAction throws loudly if an action is actually used
-  // without a store, rather than silently rendering an empty click.
+  // [LAW:one-source-of-truth] The action runtime reads through the SAME store the
+  // registry declares into and the renderer reads back — sourced from the registry
+  // itself, not a redundant opts field a caller could forget (or pass a divergent
+  // store for). Every config has a registry, so the action store is never null.
   const actionRuntime: ActionRuntime = {
-    store: opts?.store ?? null,
+    store: registry.variableStore,
     compiled: new Map(),
   };
   // [LAW:one-way-deps] Inject action + picker feature funcs as data — the engine

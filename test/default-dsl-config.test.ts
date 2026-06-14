@@ -94,12 +94,12 @@ describe("DEFAULT_DSL_CONFIG", () => {
   });
 
   // [LAW:one-source-of-truth] Equivalence pin: the A-grammar spelling
-  // { h: ["directory","git","model","session","today","context"] } must lower
-  // to a root that produces byte-identical ANSI to DEFAULT_DSL_CONFIG.root
+  // { h: ["directory","git","model","session","today","context","toolbar"] } must
+  // lower to a root that produces byte-identical ANSI to DEFAULT_DSL_CONFIG.root
   // (a horizontal container of the same names). Migration changes spelling only.
   test("A-grammar { h:[...] } spelling is render-equivalent to DEFAULT_DSL_CONFIG.root", () => {
     const ALLOWED = new Set(listResolvablePaletteNames());
-    const A_SRC = `{ root: { h: ["directory","git","model","session","today","context"] } }`;
+    const A_SRC = `{ root: { h: ["directory","git","model","session","today","context","toolbar"] } }`;
     const rawA = parseDslConfig("<test>", A_SRC, ALLOWED);
     const mergedA = mergeWithDefault(rawA, DEFAULT_DSL_CONFIG);
     const configA = validateConfig(mergedA, "<test>", A_SRC, ALLOWED);
