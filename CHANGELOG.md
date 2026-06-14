@@ -1,3 +1,10 @@
+## [1.0.3](https://github.com/promptctl/cc-candybar/compare/v1.0.2...v1.0.3) (2026-06-14)
+
+
+### Bug Fixes
+
+* **deps:** lock platform binaries for all architectures via supportedArchitectures ([#116](https://github.com/promptctl/cc-candybar/issues/116)) ([4d2b7c1](https://github.com/promptctl/cc-candybar/commit/4d2b7c15970f66b26c339d5bc67307365cc6736c)), closes [#115](https://github.com/promptctl/cc-candybar/issues/115) [#115](https://github.com/promptctl/cc-candybar/issues/115)
+
 ## [1.0.2](https://github.com/promptctl/cc-candybar/compare/v1.0.1...v1.0.2) (2026-06-14)
 
 
