@@ -96,3 +96,20 @@ for (const p of PLATFORMS) {
 }
 writeFileSync(rootPkgPath, `${JSON.stringify(rootPkg, null, 2)}\n`);
 console.log(`release.mjs: optionalDependencies pinned to ${version}`);
+
+// 5. Regenerate pnpm-lock.yaml to match the optionalDependencies just written.
+// [LAW:one-source-of-truth] The lockfile mirrors package.json's dependency
+// specifiers; rewriting optionalDependencies (step 4) without re-syncing the
+// lockfile leaves them disagreeing, and @semantic-release/git commits the
+// manifest back to main. CI's first step is `pnpm install --frozen-lockfile`,
+// which then fails ERR_PNPM_OUTDATED_LOCKFILE on every branch cut after the
+// release — the drift recurs one version higher each release. Re-sync here, at
+// the single site that mutates the specifiers, and commit the lockfile via
+// .releaserc's git `assets`. The platform packages were published in step 3,
+// so resolving them at version ${version} succeeds. --ignore-scripts: this is a
+// metadata-only lockfile refresh; postinstall must not run.
+console.log(`release.mjs: re-syncing pnpm-lock.yaml to ${version}`);
+execFileSync("pnpm", ["install", "--lockfile-only", "--ignore-scripts"], {
+  cwd: ROOT,
+  stdio: "inherit",
+});
