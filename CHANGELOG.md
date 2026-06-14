@@ -1,3 +1,10 @@
+# [1.5.0](https://github.com/promptctl/cc-candybar/compare/v1.4.0...v1.5.0) (2026-06-14)
+
+
+### Features
+
+* **usage:** token-speed segment — input/output/total tok/s for the active turn ([#122](https://github.com/promptctl/cc-candybar/issues/122)) ([03920d2](https://github.com/promptctl/cc-candybar/commit/03920d2f21afc8a2015788b43395e2f2e7ca8c4e)), closes [#119](https://github.com/promptctl/cc-candybar/issues/119)
+
 # [1.4.0](https://github.com/promptctl/cc-candybar/compare/v1.3.0...v1.4.0) (2026-06-14)
 
 
