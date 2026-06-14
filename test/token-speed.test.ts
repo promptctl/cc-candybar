@@ -127,6 +127,42 @@ describe("SessionUsageStore.observeSpeed — prior-sample retention", () => {
       store.close();
     }
   });
+
+  test("concurrent same-state observations coalesce to ONE baseline transition", async () => {
+    const t = join(dir, "C.jsonl");
+    writeFileSync(t, usageLine("a", 10, 5));
+    utimesSync(t, new Date(1000), new Date(1000));
+    const store = new SessionUsageStore({ sweepIntervalMs: 0 });
+    try {
+      // Establish a baseline (output 5) at the first transcript state.
+      await store.observeSpeed("C", t, 1_000);
+
+      // Output grows to 25; bump mtime to the new state.
+      writeFileSync(t, usageLine("a", 10, 5) + usageLine("b", 10, 20));
+      utimesSync(t, new Date(2000), new Date(2000));
+
+      // Two renders observe the SAME new state concurrently. Without the
+      // single-flight, the second would see the first's just-committed sample
+      // (output 25) as its prev and degrade to a zero delta. Coalesced, both
+      // share ONE observation: prev = the baseline (5), cur = the new state (25).
+      const [a, b] = await Promise.all([
+        store.observeSpeed("C", t, 2_000),
+        store.observeSpeed("C", t, 2_000),
+      ]);
+      expect(a.kind).toBe("ok");
+      expect(b.kind).toBe("ok");
+      if (a.kind !== "ok" || b.kind !== "ok") return;
+      expect(a.value.prev?.output).toBe(5);
+      expect(b.value.prev?.output).toBe(5);
+      expect(a.value.cur.output).toBe(25);
+      expect(b.value.cur.output).toBe(25);
+      // Neither render lost its delta to a clobber (prev never the new state).
+      expect(a.value.prev?.output).not.toBe(25);
+      expect(b.value.prev?.output).not.toBe(25);
+    } finally {
+      store.close();
+    }
+  });
 });
 
 // ─── buildRenderPayload — speed lane ──────────────────────────────────────────

@@ -207,6 +207,12 @@ export class SessionUsageStore {
   // baseline (prev counts + time) lives HERE, not in a parallel counter. One
   // call to observeSpeed advances it; the pure delta math is render-payload's.
   private readonly speedSamples = new Map<string, SpeedSample>();
+  // [LAW:no-ambient-temporal-coupling] Explicit owner of observe/commit ordering
+  // for the speed sample. Concurrent renders observing the SAME transcript state
+  // (key = `${sessionId}:${mtime}`) share ONE observation and commit the baseline
+  // exactly once — so they return the same prev+cur and render identical,
+  // deterministic throughput instead of the second clobbering the first.
+  private readonly speedFlight = new SingleFlight();
   private readonly maxEntries: number;
   private readonly staleAgeMs: number;
   private hits = 0;
@@ -337,14 +343,23 @@ export class SessionUsageStore {
     transcriptPath: string | undefined,
     nowMs: number,
   ): Promise<Outcome<SpeedObservation>> {
-    const record = await this.ingest(sessionId, transcriptPath);
-    if (record.kind === "failed") return record;
-    const breakdown =
-      record.kind === "ok" ? record.value.sessionInfo.tokenBreakdown : null;
-    const cur = speedSampleOf(breakdown, nowMs);
-    const prev = this.speedSamples.get(sessionId);
-    this.speedSamples.set(sessionId, cur);
-    return ok({ ...(prev !== undefined && { prev }), cur });
+    // [LAW:no-ambient-temporal-coupling] Key the observation by the same
+    // (session, mtime) tuple ingest uses, so concurrent renders at one transcript
+    // state coalesce onto a single observe-and-commit — the read of `prev` and
+    // the write of `cur` happen exactly once for that state, with the flight as
+    // the sole owner of ordering. A distinct mtime is a genuinely new sample and
+    // gets its own key.
+    const mtime = statMtimeMs(transcriptPath);
+    return this.speedFlight.run(`${sessionId}:${mtime}`, async () => {
+      const record = await this.ingest(sessionId, transcriptPath, mtime);
+      if (record.kind === "failed") return record;
+      const breakdown =
+        record.kind === "ok" ? record.value.sessionInfo.tokenBreakdown : null;
+      const cur = speedSampleOf(breakdown, nowMs);
+      const prev = this.speedSamples.get(sessionId);
+      this.speedSamples.set(sessionId, cur);
+      return ok({ ...(prev !== undefined && { prev }), cur });
+    });
   }
 
   // mtime-gated, coalesced re-parse of ONE session. `ok` is its record,
