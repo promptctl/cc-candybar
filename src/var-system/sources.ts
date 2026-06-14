@@ -580,6 +580,15 @@ export class SourceRegistry {
     this.sessionState = sessionState;
   }
 
+  // [LAW:one-source-of-truth] The registry IS the owner of its store — every
+  // variable it declares lives there, and the renderer reads back through it.
+  // Exposing it read-only lets a caller that already holds the registry obtain
+  // the one store without threading a second reference that could diverge (the
+  // action runtime reads session.id/current values from this exact store).
+  get variableStore(): VariableStore {
+    return this.store;
+  }
+
   // ─── Synchronous source kinds ─────────────────────────────────────────────
 
   // literal: type inferred from value; box written once at declaration and never again.

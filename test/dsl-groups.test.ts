@@ -63,7 +63,7 @@ function buildRuntime(src: string, sessionId = "s1") {
   const sessionState = new SessionState();
   const store = new VariableStore();
   const registry = new SourceRegistry(store, "", undefined, sessionState);
-  const compiled = registerDslConfig(config, registry, { store });
+  const compiled = registerDslConfig(config, registry);
   const basePalette = new PaletteResolver(getThemePalette("textual-dark")!);
   const render = (): string =>
     renderDsl(

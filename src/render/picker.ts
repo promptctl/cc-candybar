@@ -144,11 +144,6 @@ function renderPicker(
     "an int action ({ set, int: true })",
   );
   const store = runtime.store;
-  if (!store) {
-    throw new Error(
-      `picker "${applyName}" rendered without a VariableStore — registerDslConfig was not given one`,
-    );
-  }
   const sessionId = readVar(store, "session.id");
   const current = readVar(store, apply.stateVar);
   const widths = apply.options.map(cellWidth);
