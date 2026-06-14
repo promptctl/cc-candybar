@@ -1076,6 +1076,9 @@ const payloadDeps = {
   // [LAW:single-enforcer] buildRenderPayload is the one log site for the
   // outcome-carrying provider lanes (git, cache).
   log: dlog,
+  // [LAW:single-enforcer] The daemon's wall clock — the same instant source
+  // the rate-limit ETA projection and the template's reset countdown read.
+  clock: () => new Date(),
 };
 
 function handleClick(verb: string, value: string): Response {
