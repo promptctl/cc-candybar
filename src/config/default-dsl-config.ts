@@ -437,6 +437,18 @@ export const DEFAULT_DSL_CONFIG = {
       type: "number",
       default: 0,
     },
+
+    // ── Style picker state (the live powerline-shape switcher) ───────────────
+    // [LAW:one-source-of-truth] `activeStyle` reads the SAME "style" SessionState
+    // key the daemon resolves into the strip joiner per render (see
+    // effectiveStripStyle wiring in src/daemon/server.ts) — the picker's write
+    // and the render's read are one value. Empty default ⇒ the daemon's
+    // "powerline" floor is in effect and styleControl shows "(default)".
+    activeStyle: { kind: "state", key: "style", default: "" },
+    // The style menu's page cursor: −1 closed / 0..N open, mirroring how a theme
+    // picker's page key gates its reveal row. The stylePage action declares the
+    // int gate; this var reads it back for the reveal `when`.
+    stylePage: { kind: "state", key: "style-page", default: "-1" },
   },
 
   // ─── Segments ──────────────────────────────────────────────────────────────
@@ -623,25 +635,60 @@ export const DEFAULT_DSL_CONFIG = {
         " .metrics.sessionDuration .metrics.messageCount" +
         " .metrics.linesAdded .metrics.linesRemoved }}",
     },
+    // Style control — the powerline-shape switcher's trigger. [LAW:locality-or-
+    // seam] The ✦ glyph + current-style label is the REPRESENTATION; the
+    // `openStyleMenu` action is the BEHAVIOR; the name is the seam. Shows the
+    // active shape (or "(default)" when unset) and a ▸ that opens the picker
+    // row. [LAW:dataflow-not-control-flow] No display state from the provider —
+    // the label is the one "style" value the click writes and the render reads.
+    styleControl: {
+      template:
+        "✦ {{ if .activeStyle }}{{ .activeStyle }}{{ else }}(default){{ end }} " +
+        '{{ action "openStyleMenu" "▸" }}',
+      bg: "surface",
+      fg: "foreground",
+    },
+    // The expanded style picker: one full-width page (paged=false) over the
+    // `applyStyle` option domain — the 3 powerline shapes. closeOnPick folds a
+    // page-reset into the apply, so a pick reshapes the bar and closes the row
+    // in one click. The active shape is marked by the picker helper.
+    stylePicker: {
+      template: '{{ picker "applyStyle" "stylePage" true false }}',
+      bg: "surface",
+      fg: "foreground",
+    },
   },
 
-  // Default layout — a single horizontal row of segment refs.
-  // A-grammar equivalent: { h: ["directory","git","model","session","today","context","toolbar"] }
-  // [LAW:one-source-of-truth] The bundled default now authors the same terse
-  // surface every user config lowers to, so the default is the reference spelling.
-  // Adding rows = wrapping in { kind:"container", direction:"vertical", children:[...] };
-  // every segment is already declared above.
+  // Default layout — the canonical LayoutNode tree (`satisfies DslConfig`
+  // requires the lowered form here; the terse Option-A `{ h/v/seg }` grammar is
+  // the loader's authoring surface for user JSON, not this typed literal).
+  // [LAW:dataflow-not-control-flow] Two rows: an always-on control row, and a
+  // picker reveal row that EXISTS only while the style menu cursor is ≥ 0 — the
+  // row's presence is a value test on stylePage, not a branch in render code.
+  // The picker itself draws the ✕/←/→ affordances from the page + term width.
   root: {
     kind: "container",
-    direction: "horizontal",
+    direction: "vertical",
     children: [
-      { kind: "segment", name: "directory" },
-      { kind: "segment", name: "git" },
-      { kind: "segment", name: "model" },
-      { kind: "segment", name: "session" },
-      { kind: "segment", name: "today" },
-      { kind: "segment", name: "context" },
-      { kind: "segment", name: "toolbar" },
+      {
+        kind: "container",
+        direction: "horizontal",
+        children: [
+          { kind: "segment", name: "directory" },
+          { kind: "segment", name: "git" },
+          { kind: "segment", name: "model" },
+          { kind: "segment", name: "session" },
+          { kind: "segment", name: "today" },
+          { kind: "segment", name: "context" },
+          { kind: "segment", name: "toolbar" },
+          { kind: "segment", name: "styleControl" },
+        ],
+      },
+      {
+        kind: "segment",
+        name: "stylePicker",
+        when: "{{ ge (int .stylePage) 0 }}",
+      },
     ],
   },
 
@@ -664,6 +711,17 @@ export const DEFAULT_DSL_CONFIG = {
     copyDir: { copy: "{{ .current_dir }}" },
     openProject: { open: "{{ .project_dir }}" },
     openTranscript: { open: "{{ .transcript_path }}" },
+
+    // [LAW:locality-or-seam] The style picker's behaviors, decoupled by NAME
+    // from styleControl/stylePicker above. Three declarations, all gated by
+    // derivation (deriveActionValidators): openStyleMenu/stylePage write the
+    // page cursor (a literal page-open subsumed by the int gate); applyStyle
+    // writes the chosen shape, gated to the STRIP_STYLES allow-list because its
+    // value source is `from: "styles"`. The rendered click and the wire gate
+    // share that one source — a template cannot smuggle an un-gated style write.
+    openStyleMenu: { set: "style-page", to: "0" },
+    applyStyle: { set: "style", from: "styles" },
+    stylePage: { set: "style-page", int: true },
   },
 
   // [LAW:single-enforcer] / [LAW:one-source-of-truth] Display-formatting policy

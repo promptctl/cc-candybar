@@ -24,7 +24,7 @@
 // numeric stepper with int-range bounds), this same shape extends — the
 // validator becomes the parsing boundary, the verb body the dataflow.
 
-import { listResolvablePaletteNames, STYLE_ORDER } from "../../themes/policy";
+import { listResolvablePaletteNames, STRIP_STYLES } from "../../themes/policy";
 import type { ActionDecl, OptionSource } from "../../config/action";
 import type { DslConfig } from "../../config/dsl-types";
 
@@ -88,13 +88,13 @@ export type DerivedValidatorSpec =
 //
 // [LAW:single-enforcer] Each validator's accepted-set is one constant
 // lookup structure — a Set for O(1) `has` (matching the BOOLEAN_*
-// validators below). The theme registry (rich-js THEMES) and STYLE_ORDER
+// validators below). The theme registry (rich-js THEMES) and STRIP_STYLES
 // are module-init-static, so caching at module load is correct by
 // construction; the (list, set) pair is built from the same source so
 // the error-message ordering and the lookup membership cannot drift.
 const RESOLVABLE_THEMES_LIST: readonly string[] = listResolvablePaletteNames();
 const RESOLVABLE_THEMES: ReadonlySet<string> = new Set(RESOLVABLE_THEMES_LIST);
-const RESOLVABLE_STYLES: ReadonlySet<string> = new Set(STYLE_ORDER);
+const RESOLVABLE_STYLES: ReadonlySet<string> = new Set(STRIP_STYLES);
 
 const validateTheme: KeyValidator = (raw) => {
   if (!raw) return { ok: false, reason: "theme name is required" };
@@ -112,7 +112,7 @@ const validateStyle: KeyValidator = (raw) => {
   if (!RESOLVABLE_STYLES.has(raw)) {
     return {
       ok: false,
-      reason: `unknown style "${raw}" (have: ${STYLE_ORDER.join(", ")})`,
+      reason: `unknown style "${raw}" (have: ${STRIP_STYLES.join(", ")})`,
     };
   }
   return { ok: true, value: raw };
@@ -446,7 +446,7 @@ export function makeRangeValidator(
 // style validators consult — the rendered options and the derived gate cannot
 // diverge because there is no second enumeration.
 function optionValuesFor(src: OptionSource): readonly string[] {
-  return src === "themes" ? RESOLVABLE_THEMES_LIST : STYLE_ORDER;
+  return src === "themes" ? RESOLVABLE_THEMES_LIST : STRIP_STYLES;
 }
 
 // [LAW:types-are-the-program] Collapse one key's spec contributions into the

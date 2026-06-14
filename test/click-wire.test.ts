@@ -149,11 +149,11 @@ describe("dispatch verb — run all, aggregate, no nesting", () => {
     const sessionState = new SessionState();
     const url = effectsUrl([
       { verb: VERB_SET_STATE, args: [SID, "theme", "textual-dark"] },
-      { verb: VERB_SET_STATE, args: [SID, "style", "muted"] },
+      { verb: VERB_SET_STATE, args: [SID, "style", "capsule"] },
     ]);
     clickUrl(url, ctx(sessionState));
     expect(sessionState.get(SID, "theme")).toBe("textual-dark");
-    expect(sessionState.get(SID, "style")).toBe("muted");
+    expect(sessionState.get(SID, "style")).toBe("capsule");
   });
 
   test("a nested dispatch effect is reported, never executed", () => {

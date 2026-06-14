@@ -42,9 +42,11 @@
     "hue.step": { kind: "state", key: "hue-step", default: "14" },
 
     // ── Style picker (companion to the theme picker) ────────────────────────
-    // The session style, written by applyStyle (from: "styles"). effectiveStyle
-    // resolves session-over-default exactly like the theme, so a style click
-    // reshapes the powerline live. Empty default renders as "(default)".
+    // The session powerline shape, written by applyStyle (from: "styles" ⇒ the
+    // STRIP_STYLES domain: powerline/capsule/plain). The daemon resolves it per
+    // render via effectiveStripStyle (session-over-globals.style-over-floor,
+    // exactly like the theme), so a style click reshapes the bar live. Empty
+    // default renders as "(default)" and leaves the "powerline" floor in effect.
     activeStyle: { kind: "state", key: "style", default: "" },
     // The style menu's page cursor (−1 closed / 0..N), mirroring themePage.
     stylePage: { kind: "state", key: "style-page", default: "-1" },
