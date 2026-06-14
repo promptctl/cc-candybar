@@ -95,5 +95,11 @@
     "@promptctl/cc-candybar-darwin-x64": "1.0.2",
     "@promptctl/cc-candybar-linux-x64": "1.0.2",
     "@promptctl/cc-candybar-linux-arm64": "1.0.2"
+  },
+  "pnpm": {
+    "supportedArchitectures": {
+      "os": ["darwin", "linux"],
+      "cpu": ["x64", "arm64"]
+    }
   }
 }
