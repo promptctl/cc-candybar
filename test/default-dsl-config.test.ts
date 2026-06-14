@@ -19,6 +19,7 @@ import { parseAndValidate } from "./helpers/parse-and-validate";
 import { registerDslConfig, renderDsl } from "../src/dsl/render";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
+import { SessionState } from "../src/daemon/session-state";
 import { PaletteResolver, getThemePalette } from "@promptctl/rich-js";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 
@@ -57,7 +58,9 @@ describe("DEFAULT_DSL_CONFIG", () => {
   test("registerDslConfig + renderDsl produce a non-empty line", () => {
     const parsed = parseAndValidate("<default>", SERIALIZED);
     const store = new VariableStore();
-    const registry = new SourceRegistry(store);
+    // The default now carries `kind: "state"` vars (the style picker); a
+    // SessionState is required to declare them, exactly as the daemon supplies.
+    const registry = new SourceRegistry(store, "", undefined, new SessionState());
     try {
       const compiled = registerDslConfig(parsed, registry, {
         cwd: process.cwd(),
@@ -93,13 +96,16 @@ describe("DEFAULT_DSL_CONFIG", () => {
     }
   });
 
-  // [LAW:one-source-of-truth] Equivalence pin: the A-grammar spelling
-  // { h: ["directory","git","model","session","today","context","toolbar"] } must
-  // lower to a root that produces byte-identical ANSI to DEFAULT_DSL_CONFIG.root
-  // (a horizontal container of the same names). Migration changes spelling only.
-  test("A-grammar { h:[...] } spelling is render-equivalent to DEFAULT_DSL_CONFIG.root", () => {
+  // [LAW:one-source-of-truth] Equivalence pin: the terse A-grammar spelling of
+  // the default's two-row layout (control row + gated style-picker reveal row)
+  // must lower to a root producing byte-identical ANSI to DEFAULT_DSL_CONFIG.root
+  // (the canonical container tree). Spelling differs; render does not.
+  test("A-grammar { v:[{ h:[...] }, { seg, when }] } spelling is render-equivalent to DEFAULT_DSL_CONFIG.root", () => {
     const ALLOWED = new Set(listResolvablePaletteNames());
-    const A_SRC = `{ root: { h: ["directory","git","model","session","today","context","toolbar"] } }`;
+    const A_SRC = `{ root: { v: [
+      { h: ["directory","git","model","session","today","context","toolbar","styleControl"] },
+      { seg: "stylePicker", when: "{{ ge (int .stylePage) 0 }}" }
+    ] } }`;
     const rawA = parseDslConfig("<test>", A_SRC, ALLOWED);
     const mergedA = mergeWithDefault(rawA, DEFAULT_DSL_CONFIG);
     const configA = validateConfig(mergedA, "<test>", A_SRC, ALLOWED);
@@ -121,7 +127,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
 
     function render(cfg: typeof configA): string {
       const store = new VariableStore();
-      const registry = new SourceRegistry(store);
+      const registry = new SourceRegistry(store, "", undefined, new SessionState());
       try {
         const compiled = registerDslConfig(cfg, registry, { cwd: "/tmp" });
         const bp = new PaletteResolver(getThemePalette(cfg.globals.palette ?? "textual-dark")!);

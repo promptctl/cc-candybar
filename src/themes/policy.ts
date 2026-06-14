@@ -55,8 +55,43 @@ export function listAvailableThemes(): string[] {
   return [...allNames].sort();
 }
 
-// --- Style identifiers ---
+// --- Powerline strip-style identifiers ---
 
+// [LAW:one-source-of-truth][LAW:types-are-the-program] The single canonical set
+// of powerline cap/separator shapes a render can take. The `StripStyle` type is
+// DERIVED from this const, so the picker's option domain, the SessionState
+// validator, the `styles()` template binding, and `pickJoiner`'s dispatch all
+// trace to one literal — adding a shape here forces a new `pickJoiner` arm at
+// compile time (the joiner switch is total over `StripStyle`). This is where the
+// drift between "what you can pick" and "what actually renders" is closed.
+export const STRIP_STYLES = ["powerline", "capsule", "plain"] as const;
+export type StripStyle = (typeof STRIP_STYLES)[number];
+
+// [LAW:types-are-the-program] The trust-boundary narrowing from a raw
+// SessionState string (or a config default) to the closed `StripStyle` union.
+export function isStripStyle(value: string): value is StripStyle {
+  return (STRIP_STYLES as readonly string[]).includes(value);
+}
+
+// The strip style a render should use, as data. [LAW:dataflow-not-control-flow]
+// [LAW:one-type-per-behavior] The exact shape of `effectiveThemeName`, one
+// dimension over: session choice over config default over the "powerline" floor,
+// no "if the session has a style" branch. A value outside the domain (a stale
+// SessionState entry from a prior option vocabulary) collapses to the floor —
+// `pickJoiner` would render it as powerline anyway, so the floor keeps the
+// returned type honest rather than silently widening.
+export function effectiveStripStyle(
+  sessionStyle: string | null,
+  globalsStyle: StripStyle | undefined,
+): StripStyle {
+  const chosen = sessionStyle ?? globalsStyle ?? "powerline";
+  return isStripStyle(chosen) ? chosen : "powerline";
+}
+
+// --- Legacy palette-preset identifiers (per-session random feature only) ---
+// [LAW:no-silent-failure] NOT the picker's style domain — these were the
+// pre-DSL bg/fg derivation presets, surviving only as the random pool for
+// session-random.ts. The interactive style picker resolves over STRIP_STYLES.
 export const STYLE_ORDER: readonly string[] = [
   "surface",
   "muted",

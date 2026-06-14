@@ -14,6 +14,7 @@
 // references it here. The dependency is one-way (this file → action.ts), never
 // the reverse, so that shape can be lifted out without a cycle.
 import type { ActionDecl } from "./action.js";
+import type { StripStyle } from "../themes/policy.js";
 
 // [LAW:types-are-the-program] Three stages, three names.
 //
@@ -180,6 +181,14 @@ export interface Globals {
   // `sessionState.theme ?? globals.palette ?? default`, and a per-segment
   // `palette` is an explicit override that ignores the session theme.
   readonly palette?: string;
+
+  // [LAW:one-type-per-behavior] The config default for the powerline cap/
+  // separator SHAPE — the exact twin of `palette` one dimension over: the
+  // daemon resolves the live strip style per render as
+  // `sessionState.style ?? globals.style ?? "powerline"` (effectiveStripStyle),
+  // so a style click reshapes the bar live and a config can set the default
+  // shape without an edit-per-session.
+  readonly style?: StripStyle;
 }
 
 // [LAW:one-type-per-behavior] One discriminated union covers every source

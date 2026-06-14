@@ -27,6 +27,7 @@ import {
 } from "../config/dsl-loader.js";
 import { VariableStore } from "../var-system/store.js";
 import { SourceRegistry } from "../var-system/sources.js";
+import { SessionState } from "../daemon/session-state.js";
 import { listResolvablePaletteNames } from "../themes/policy.js";
 import { effectiveThemeName, resolverForThemeName } from "../themes/index.js";
 import { registerDslConfig, renderDsl } from "../dsl/render.js";
@@ -75,7 +76,12 @@ const basePalette = resolverForThemeName(
 // registry, so dispose() must run even if registration or rendering throws —
 // otherwise those handles keep the process alive. try/finally guarantees it.
 const store = new VariableStore();
-const registry = new SourceRegistry(store);
+// [LAW:no-silent-failure] An EMPTY SessionState — `kind: "state"` variables
+// (the default config's style picker, any interactive config) require one at
+// registration; without it declareState fails and the segment renders an error
+// cell. The demo never clicks, so an empty store is correct: every state var
+// resolves to its declared default (closed pickers, "(default)" labels).
+const registry = new SourceRegistry(store, "", undefined, new SessionState());
 try {
   const compiled = registerDslConfig(config, registry, {
     cwd: process.cwd(),

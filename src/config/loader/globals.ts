@@ -4,7 +4,9 @@
 // add a key to GLOBALS_SCHEMA and Globals; the engine does the rest.
 
 import { type Globals } from "../dsl-types.js";
+import { STRIP_STYLES } from "../../themes/policy.js";
 import {
+  optionalEnumSpec,
   optionalStringSpec,
   paletteSpec,
   record,
@@ -23,6 +25,10 @@ const GLOBALS_SCHEMA: RecordSchema<Globals> = {
     default_separator: optionalStringSpec(),
     default_truncate_marker: optionalStringSpec(),
     palette: paletteSpec(),
+    // [LAW:types-are-the-program] The strip style is a CLOSED enum (the powerline
+    // shapes the joiner can render), unlike the open-ended palette NAME — so it
+    // validates by membership and emits a JSON-Schema `enum`.
+    style: optionalEnumSpec(STRIP_STYLES),
   },
 };
 

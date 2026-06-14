@@ -39,7 +39,11 @@ import { buildDebugSnapshot } from "./debug";
 import { DEBUG_WHATS, isDebugWhat } from "./debug-types";
 import { expandHome } from "../config/dsl-loader.js";
 import { renderDsl } from "../dsl/render.js";
-import { effectiveThemeName, resolverForThemeName } from "../themes/index.js";
+import {
+  effectiveStripStyle,
+  effectiveThemeName,
+  resolverForThemeName,
+} from "../themes/index.js";
 import {
   renderStripCells,
   DEFAULT_TERMINAL_WIDTH,
@@ -752,6 +756,16 @@ async function handleRequest(req: Request): Promise<HandledRequest> {
             sessionState.get(req.hookData.session_id, "theme"),
             entry.state.config.globals.palette,
           ),
+        );
+        // [LAW:one-type-per-behavior][LAW:dataflow-not-control-flow] The powerline
+        // cap/separator SHAPE, resolved per render the exact way the theme is: the
+        // session's clicked style (SessionState) over the config default over the
+        // "powerline" floor — so a style click reshapes the whole bar on the next
+        // render. The base style on renderOpts is only the floor; this is the live
+        // override fed to the one joiner dispatch in renderStripCells.
+        renderOpts.style = effectiveStripStyle(
+          sessionState.get(req.hookData.session_id, "style"),
+          entry.state.config.globals.style,
         );
         // [LAW:single-enforcer] renderDsl internally calls
         // `registry.applyInput(payload)` as its first step (see step 1 in

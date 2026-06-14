@@ -16,22 +16,22 @@ import {
   formatModelName,
   shortenModelName,
 } from "../utils/formatters.js";
-import { listResolvablePaletteNames, STYLE_ORDER } from "../themes/policy.js";
+import { listResolvablePaletteNames, STRIP_STYLES } from "../themes/policy.js";
 
 // [LAW:one-source-of-truth] The DSL `themes()` and `styles()` bindings
 // project the SAME canonical sources the set-state validator consults
-// (listResolvablePaletteNames / STYLE_ORDER). A picker (or a config that
+// (listResolvablePaletteNames / STRIP_STYLES). A picker (or a config that
 // `range`s over themes() to emit OSC-8 cells) iterates the allow-list the
 // validator will enforce on the resulting click — the list and the gate cannot
 // diverge because there is no second list.
 //
 // Module-init caching is correct by construction: rich-js THEMES is a
 // static import (no dynamic palette registration at runtime) and
-// STYLE_ORDER is a const array. The "reactivity" requirement from the
+// STRIP_STYLES is a const array. The "reactivity" requirement from the
 // ticket is satisfied vacuously — the lists never change during a
 // daemon lifetime, so a cached snapshot IS the current truth.
 const THEMES_LIST: readonly string[] = listResolvablePaletteNames();
-const STYLES_LIST: readonly string[] = [...STYLE_ORDER];
+const STYLES_LIST: readonly string[] = [...STRIP_STYLES];
 
 // Normalize an engine-supplied numeric argument. The "number" argType admits
 // both number and bigint (per @promptctl/go-template-js); the underlying
