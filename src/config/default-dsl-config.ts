@@ -386,6 +386,31 @@ export const DEFAULT_DSL_CONFIG = {
     "burn.eta.warnMinutes": { kind: "literal", value: 60 },
     "burn.eta.errorMinutes": { kind: "literal", value: 30 },
 
+    // Token throughput for the active turn — daemon-derived tok/s on three lanes
+    // (render-payload.ts: successive-render delta over the SessionUsageStore).
+    // Same absence idiom as burn: -1 is the structurally-impossible default the
+    // `formatSpeed` helper reads as "—" [LAW:no-silent-failure] (0 tok/s is a
+    // real reading, so it cannot double as the absence marker). Each lane is
+    // independently absent — `input` reads "—" mid-stream while `output` flows.
+    "speed.input": {
+      kind: "input",
+      path: "speed.input",
+      type: "number",
+      default: -1,
+    },
+    "speed.output": {
+      kind: "input",
+      path: "speed.output",
+      type: "number",
+      default: -1,
+    },
+    "speed.total": {
+      kind: "input",
+      path: "speed.total",
+      type: "number",
+      default: -1,
+    },
+
     // Context — daemon fetches via ContextProvider; contextLeftPercentage.
     "context.totalTokens": {
       kind: "input",
@@ -581,6 +606,23 @@ export const DEFAULT_DSL_CONFIG = {
       fg: etaHeatFg(".block.etaMinutes", ".burn.eta.warnMinutes"),
       when: "{{ or (gt .block.resetsAt 0) (gt .weekly.resetsAt 0) }}",
     },
+    // Token throughput for the active turn — output / input / total tok/s, each a
+    // successive-render delta computed daemon-side (render-payload.ts); the
+    // template only formats. Declared-but-opt-in (NOT in the default root, like
+    // block/weekly/burnrate): a user adds `speed` to their layout. Each lane reads
+    // "—" when idle/between turns ([LAW:no-silent-failure] — never a stale or
+    // divide-by-zero number). Visible once the session has done any work (stable,
+    // no layout flicker); `output` is the live generation rate, `input` spikes at
+    // turn start, `total` is their sum.
+    speed: {
+      template:
+        ' ⇅ out {{ template "formatSpeed" .speed.output }} · ' +
+        'in {{ template "formatSpeed" .speed.input }} · ' +
+        'tot {{ template "formatSpeed" .speed.total }} ',
+      bg: "panel",
+      fg: "foreground",
+      when: "{{ gt .session.tokens 0 }}",
+    },
     // Prompt-cache warmth countdown. minutesUntilReset clamps a past expiry
     // to 0, so an expired cache renders "cold" (and reads red via the ≤8
     // arm) rather than a negative number. [LAW:dataflow-not-control-flow]
@@ -759,6 +801,11 @@ export const DEFAULT_DSL_CONFIG = {
     // daemon could not project (-1 sentinel). Reuses the long-remaining cascade.
     formatEta:
       '{{ if lt . 0 }}—{{ else }}{{ template "formatLongTimeRemaining" . }}{{ end }}',
+    // Token throughput: "N/s" (K/M-scaled, rounded) when measured (>= 0), "—"
+    // when the daemon had no projectable sample (-1). Branches on the VALUE, like
+    // formatRate; reuses formatTokenCount so the K/M scale policy has one home.
+    formatSpeed:
+      '{{ if lt . 0 }}—{{ else }}{{ template "formatTokenCount" (round .) }}/s{{ end }}',
     // Breakdown over a dict {input, output, cacheCreation, cacheRead}; each present
     // part is formatted by the shared formatTokenCount and joined with " + ". A
     // `$first` flag (reassigned across if-frames) inserts the separator before all
