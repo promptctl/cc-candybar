@@ -78,6 +78,19 @@ importers:
       typescript:
         specifier: ^5.0.0
         version: 5.9.3
+    optionalDependencies:
+      '@promptctl/cc-candybar-darwin-arm64':
+        specifier: 1.0.0
+        version: 1.0.0
+      '@promptctl/cc-candybar-darwin-x64':
+        specifier: 1.0.0
+        version: 1.0.0
+      '@promptctl/cc-candybar-linux-arm64':
+        specifier: 1.0.0
+        version: 1.0.0
+      '@promptctl/cc-candybar-linux-x64':
+        specifier: 1.0.0
+        version: 1.0.0
 
 packages:
 
@@ -699,6 +712,26 @@ packages:
   '@pnpm/npm-conf@3.0.2':
     resolution: {integrity: sha512-h104Kh26rR8tm+a3Qkc5S4VLYint3FE48as7+/5oCEcKR2idC/pF1G6AhIXKI+eHPJa/3J9i5z0Al47IeGHPkA==}
     engines: {node: '>=12'}
+
+  '@promptctl/cc-candybar-darwin-arm64@1.0.0':
+    resolution: {integrity: sha512-qHzso7HDgdzWTBq0yGEDb95v3qKfy2rd10t1s8xJTcnr67G4Up8u+/JKR3CAfWnx/0RWAr3Eb+FKv4oEddlUnA==}
+    cpu: [arm64]
+    os: [darwin]
+
+  '@promptctl/cc-candybar-darwin-x64@1.0.0':
+    resolution: {integrity: sha512-/Oafh7NIBGkxoq2nKmbGIRfabCjnXuPcLJvetNGnfvQzPHK60AkYU+h3q67D1OmvTSLm3PFkCqj+V0XwEbgcjA==}
+    cpu: [x64]
+    os: [darwin]
+
+  '@promptctl/cc-candybar-linux-arm64@1.0.0':
+    resolution: {integrity: sha512-/9yGKgkfX1UlAjLfmS6rHZCjCX5acQfFCa09+aMDVPpGkHVW3Anl4jDJCaMkshOAedQ9PxTca7JVnD9drGgZBA==}
+    cpu: [arm64]
+    os: [linux]
+
+  '@promptctl/cc-candybar-linux-x64@1.0.0':
+    resolution: {integrity: sha512-ZX7JK3MBw8iQ/weLLsHtRxn4Fq/J0a/vhsqw22907ITasKydR5CaATAB84bUmjy/DelytEIMJ6IGZckSUudilQ==}
+    cpu: [x64]
+    os: [linux]
 
   '@promptctl/go-template-js@0.1.1':
     resolution: {integrity: sha512-1byySemUUj9s7HpIpoR9W5m20ukZyAak8y599XFPIMYZXSpvII5xL4N2YiNEZsGoP1B73Eq5g1gy9LwTLJWBIA==}
@@ -3890,6 +3923,18 @@ snapshots:
       '@pnpm/config.env-replace': 1.1.0
       '@pnpm/network.ca-file': 1.0.2
       config-chain: 1.1.13
+
+  '@promptctl/cc-candybar-darwin-arm64@1.0.0':
+    optional: true
+
+  '@promptctl/cc-candybar-darwin-x64@1.0.0':
+    optional: true
+
+  '@promptctl/cc-candybar-linux-arm64@1.0.0':
+    optional: true
+
+  '@promptctl/cc-candybar-linux-x64@1.0.0':
+    optional: true
 
   '@promptctl/go-template-js@0.1.1': {}
 
