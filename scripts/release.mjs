@@ -103,13 +103,46 @@ console.log(`release.mjs: optionalDependencies pinned to ${version}`);
 // lockfile leaves them disagreeing, and @semantic-release/git commits the
 // manifest back to main. CI's first step is `pnpm install --frozen-lockfile`,
 // which then fails ERR_PNPM_OUTDATED_LOCKFILE on every branch cut after the
-// release — the drift recurs one version higher each release. Re-sync here, at
-// the single site that mutates the specifiers, and commit the lockfile via
-// .releaserc's git `assets`. The platform packages were published in step 3,
-// so resolving them at version ${version} succeeds. --ignore-scripts: this is a
-// metadata-only lockfile refresh; postinstall must not run.
-console.log(`release.mjs: re-syncing pnpm-lock.yaml to ${version}`);
-execFileSync("pnpm", ["install", "--lockfile-only", "--ignore-scripts"], {
-  cwd: ROOT,
-  stdio: "inherit",
-});
+// release. Re-sync here, at the single site that mutates the specifiers, and
+// commit the lockfile via .releaserc's git `assets`. package.json's
+// pnpm.supportedArchitectures makes the regen lock all four os/cpu variants
+// regardless of this runner's platform. --ignore-scripts: metadata-only
+// refresh; postinstall must not run.
+//
+// [LAW:no-silent-failure] The four platform packages were published in step 3,
+// but npm registry propagation is NOT instant. A regen run immediately resolves
+// only the subset already live and SILENTLY DROPS the rest (they are optional),
+// shipping a lockfile missing architectures — which is exactly the recurring
+// breakage. So retry the regen until all four are present, and FAIL the release
+// (never ship a partial lockfile) if propagation hasn't completed in time.
+function lockfileSpecifier(platform) {
+  const lock = readFileSync(resolve(ROOT, "pnpm-lock.yaml"), "utf8");
+  const m = lock.match(
+    new RegExp(`'@promptctl/cc-candybar-${platform}':\\s*\\n\\s*specifier: (\\S+)`),
+  );
+  return m?.[1];
+}
+const REGEN_MAX_ATTEMPTS = 12;
+const REGEN_WAIT_S = 15;
+let synced = false;
+for (let attempt = 1; attempt <= REGEN_MAX_ATTEMPTS; attempt++) {
+  console.log(`release.mjs: re-syncing pnpm-lock.yaml to ${version} (attempt ${attempt}/${REGEN_MAX_ATTEMPTS})`);
+  execFileSync("pnpm", ["install", "--lockfile-only", "--ignore-scripts"], {
+    cwd: ROOT,
+    stdio: "inherit",
+  });
+  const missing = PLATFORMS.filter((p) => lockfileSpecifier(p) !== version);
+  if (missing.length === 0) {
+    synced = true;
+    break;
+  }
+  console.log(
+    `release.mjs: lockfile still missing [${missing.join(", ")}] at ${version} ` +
+      `(registry propagation lag); waiting ${REGEN_WAIT_S}s`,
+  );
+  execSync(`sleep ${REGEN_WAIT_S}`);
+}
+if (!synced) {
+  fail(`pnpm-lock.yaml missing platform optionalDependencies at ${version} after ${REGEN_MAX_ATTEMPTS} attempts`);
+}
+console.log(`release.mjs: pnpm-lock.yaml re-synced to ${version} with all ${PLATFORMS.length} platforms`);
