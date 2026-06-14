@@ -159,6 +159,14 @@ export const DEFAULT_DSL_CONFIG = {
       path: "workspace.project_dir",
       default: "",
     },
+    // Transcript path (a top-level hookData field, spread onto the payload
+    // root by buildRenderPayload). Read by the quick-action tray's
+    // openTranscript action — pass-through, no projection.
+    transcript_path: {
+      kind: "input",
+      path: "transcript_path",
+      default: "",
+    },
     "model.display_name": {
       kind: "input",
       path: "model.display_name",
@@ -497,10 +505,16 @@ export const DEFAULT_DSL_CONFIG = {
       fg: "foreground",
       when: '{{ ne .git.branch "" }}',
     },
+    // Quick-action tray — copy the session id / cwd, open the project dir /
+    // transcript in the editor. [LAW:locality-or-seam] The glyph is the
+    // REPRESENTATION; the named action (below) is the BEHAVIOR; the action
+    // name is the seam between them. Re-glyph without touching behavior;
+    // re-target without touching this template. Each `{{ action … }}` emits
+    // one OSC-8 clickable region whose URL the wire codec owns end-to-end.
     toolbar: {
       template:
-        ' {{ link (printf "cc-candybar://open-vscode/%s" (urlEncode .current_dir)) "\u{1F4C2}" }}' +
-        ' {{ link (printf "cc-candybar://copy/%s" (urlEncode (trunc 8 .session.id))) "⎘" }} ',
+        ' {{ action "copySession" "⎘ id" }} {{ action "copyDir" "⎘ cwd" }}' +
+        ' {{ action "openProject" "↗ proj" }} {{ action "openTranscript" "↗ log" }} ',
       bg: "surface",
       fg: "foreground",
     },
@@ -612,7 +626,7 @@ export const DEFAULT_DSL_CONFIG = {
   },
 
   // Default layout — a single horizontal row of segment refs.
-  // A-grammar equivalent: { h: ["directory","git","model","session","today","context"] }
+  // A-grammar equivalent: { h: ["directory","git","model","session","today","context","toolbar"] }
   // [LAW:one-source-of-truth] The bundled default now authors the same terse
   // surface every user config lowers to, so the default is the reference spelling.
   // Adding rows = wrapping in { kind:"container", direction:"vertical", children:[...] };
@@ -627,14 +641,30 @@ export const DEFAULT_DSL_CONFIG = {
       { kind: "segment", name: "session" },
       { kind: "segment", name: "today" },
       { kind: "segment", name: "context" },
+      { kind: "segment", name: "toolbar" },
     ],
   },
 
-  // [LAW:locality-or-seam] No decoupled actions in the bundled default either —
-  // the baseline statusline binds no clickable regions. A user config declares
-  // named actions and binds them from a segment template via
-  // `{{ action "name" … }}`; the merge cascade adds them by name.
-  actions: {},
+  // [LAW:locality-or-seam] The quick-action tray's behaviors, decoupled by NAME
+  // from the `toolbar` segment's glyphs above. copy/open evaluate a Go-template
+  // against the live render scope at click time and write NO SessionState, so
+  // they derive no state validator (no gate) — they are pure click effects.
+  //
+  // [LAW:single-enforcer] Each template emits a RAW value; the click-wire codec
+  // (effectsUrl → encodeSegments) owns ALL percent-encoding and the verb's
+  // `oneArg` owns the single matching decode — so the template never hand-rolls
+  // a `urlEncode`, and the path round-trips untouched through one codec.
+  //
+  // open* route through the open-vscode verb (`open -a "Visual Studio Code"
+  // <path>`), so they pass a bare filesystem path — a directory or a file the
+  // editor opens directly — NOT a `vscode://` URL (which `open -a` would treat
+  // as a literal filename, not a deep link).
+  actions: {
+    copySession: { copy: "{{ .session.id }}" },
+    copyDir: { copy: "{{ .current_dir }}" },
+    openProject: { open: "{{ .project_dir }}" },
+    openTranscript: { open: "{{ .transcript_path }}" },
+  },
 
   // [LAW:single-enforcer] / [LAW:one-source-of-truth] Display-formatting policy
   // for the cost/token/budget family lives here as named template helpers, each
