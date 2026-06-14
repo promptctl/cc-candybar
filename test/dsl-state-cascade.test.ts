@@ -314,8 +314,8 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
     // separate named verb before this epic.
     const { sessionState } = buildRuntime();
     const ctx = { sessionState, dlog: () => {} };
-    VERBS.get("set-state")!(`${SESSION_ID}/style/muted`, ctx);
-    expect(sessionState.get(SESSION_ID, "style")).toBe("muted");
+    VERBS.get("set-state")!(`${SESSION_ID}/style/capsule`, ctx);
+    expect(sessionState.get(SESSION_ID, "style")).toBe("capsule");
   });
 
   test("set-state rejects an unknown style value with the allowed-list", () => {
@@ -323,7 +323,7 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
     const ctx = { sessionState, dlog: () => {} };
     expect(() =>
       VERBS.get("set-state")!(`${SESSION_ID}/style/not-a-style`, ctx),
-    ).toThrow(/unknown style "not-a-style" \(have: .*muted.*\)/);
+    ).toThrow(/unknown style "not-a-style" \(have: .*capsule.*\)/);
   });
 
   test("set-state normalizes boolean-ish toolbar-expanded values", () => {
