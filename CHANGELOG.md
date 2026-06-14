@@ -1,3 +1,10 @@
+# [1.3.0](https://github.com/promptctl/cc-candybar/compare/v1.2.0...v1.3.0) (2026-06-14)
+
+
+### Features
+
+* **actions:** quick-action tray in the default bar (copy id/cwd, open project/transcript) ([#120](https://github.com/promptctl/cc-candybar/issues/120)) ([e05a4fc](https://github.com/promptctl/cc-candybar/commit/e05a4fc9382b9b8d4a03960ccb3cd69330e4ae7f))
+
 # [1.2.0](https://github.com/promptctl/cc-candybar/compare/v1.1.1...v1.2.0) (2026-06-14)
 
 
