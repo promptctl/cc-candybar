@@ -1,0 +1,189 @@
+// cc-candybar: showcase.json5
+//
+// The flagship "dope" config — a tasteful, real-world bar that exercises the
+// full 2de layout substrate (container | segment, decoupled named actions).
+// Where demo-actions.json5 is the kitchen-sink that shows EVERY feature in
+// isolation, this is what a polished daily-driver looks like: dense but clean
+// by default, depth on click.
+//
+// Try it (real path — this bar is interactive, so it needs a running daemon,
+// not the static `pnpm demo`, which has no SessionState to resolve state vars):
+//   cp examples/showcase.json5 ~/.config/cc-candybar/config.json5
+// then click around in any Claude Code session's status line.
+//
+// What's on the bar:
+//   Row 1 (always)  — directory · git · model · context · cache warmth · 5h & 7d quota
+//   Row 2 (always)  — 🎨 theme + hue stepper · ✦ style · 🎯 work-mode chip · ⎘/↗ quick actions
+//   Reveal rows     — theme picker / style picker (each appears only while open)
+//   Accordion       — "session details" / "links" panels (open one, the other closes)
+//
+// Everything merges on top of DEFAULT_DSL_CONFIG, so only what differs from the
+// bundled default is declared here.
+{
+  // [LAW:one-source-of-truth] Pin the config-default palette so the FIRST render
+  // (before any theme click) paints with the same name the trigger shows as
+  // active — effectiveThemeName falls back to globals.palette when SessionState
+  // holds no theme yet, so without this the active mark and the colors could
+  // disagree until the first pick.
+  globals: { palette: "catppuccin-mocha" },
+
+  variables: {
+    // The picker-bound session theme. kind:'state' reads the SAME 'theme' key
+    // the daemon reads to resolve the rendered basePalette, so the active mark
+    // and the bar's colors are one source of truth — they cannot disagree.
+    theme: { kind: "state", key: "theme", default: "catppuccin-mocha" },
+    // The theme menu's page index: -1 (default) = CLOSED, >=0 = open at that
+    // page. One value carries open/closed/which-page; the int gate for the
+    // 'theme-page' key is derived from the picker at load.
+    themePage: { kind: "state", key: "theme-page", default: "-1" },
+    // The per-segment hue-rotation step renderDsl reads (HUE_STEP_VAR), a
+    // kind:'state' var (over the bundled literal) so the stepper drives it LIVE
+    // (session over default). The range gate (0..60) is derived from the stepper.
+    "hue.step": { kind: "state", key: "hue-step", default: "14" },
+
+    // ── Style picker (companion to the theme picker) ────────────────────────
+    // The session style, written by applyStyle (from: "styles"). effectiveStyle
+    // resolves session-over-default exactly like the theme, so a style click
+    // reshapes the powerline live. Empty default renders as "(default)".
+    activeStyle: { kind: "state", key: "style", default: "" },
+    // The style menu's page cursor (−1 closed / 0..N), mirroring themePage.
+    stylePage: { kind: "state", key: "style-page", default: "-1" },
+
+    // ── Work-mode chip (the cycle-action showcase) ──────────────────────────
+    // A 3-state status the cycleMode action advances; the glyph names the
+    // current state and the click delivers its successor.
+    workMode: { kind: "state", key: "work-mode", default: "focus" },
+
+    // ── Quick-action targets (copy / open) ──────────────────────────────────
+    // Projected straight off the hook payload, read by the toolbar's copy/open
+    // actions. session.id is already declared by the bundled default.
+    current_dir: { kind: "input", path: "workspace.current_dir", default: "" },
+    project_dir: { kind: "input", path: "workspace.project_dir", default: "" },
+    transcript_path: { kind: "input", path: "transcript_path", default: "" },
+  },
+
+  // Decoupled, named actions — the sole interaction surface. The clickable
+  // REPRESENTATION lives in the segment templates below; each binds a region to
+  // one of these by NAME. The writable-key gate derives from this table.
+  actions: {
+    // Open the theme menu at page 0. A literal write to the int page key.
+    openMenu: { set: "theme-page", to: "0" },
+    // The hue stepper: two bounded actions over 'hue-step', 0..60. ◀ steps −2 /
+    // ▶ steps +2, WRAPPING at the bounds; renderDsl reads the same value to
+    // rotate hue. The range gate owns the bounds.
+    hueDown: { set: "hue-step", min: 0, max: 60, by: -2 },
+    hueUp: { set: "hue-step", min: 0, max: 60, by: 2 },
+    // Apply a theme — the picker binds each option's value into this set.
+    applyTheme: { set: "theme", from: "themes" },
+    // The theme picker's page cursor: an unbounded int (−1 closed / 0..N).
+    themePage: { set: "theme-page", int: true },
+
+    // ── Style picker (mirror of the theme trio over the 'styles' domain) ────
+    openStyleMenu: { set: "style-page", to: "0" },
+    applyStyle: { set: "style", from: "styles" },
+    stylePage: { set: "style-page", int: true },
+
+    // ── Work-mode cycler ────────────────────────────────────────────────────
+    // Writes the successor of the current value, wrapping; members are ordered
+    // default-state-first. The chip binds one display glyph per member.
+    cycleMode: { set: "work-mode", cycle: ["focus", "review", "debug"] },
+
+    // ── Quick actions (no SessionState write → no gate derived) ─────────────
+    // copy/open evaluate a Go-template at click time against the live scope.
+    copySession: { copy: "{{ .session.id }}" },
+    copyDir: { copy: "{{ .current_dir }}" },
+    openProject: { open: "vscode://file/{{ urlEncode .project_dir }}" },
+    openTranscript: { open: "vscode://file/{{ urlEncode .transcript_path }}" },
+  },
+
+  segments: {
+    // Theme control + hue stepper. No per-segment `palette:` override on purpose:
+    // that would pin a static theme and stop it following the session pick. bg/fg
+    // resolve against the live basePalette, so the control recolors with the bar.
+    trigger: {
+      template: '🎨 {{ .theme }} {{ action "openMenu" "▸" }}  ⬡ {{ action "hueDown" "◀" }} {{ printf "%2s" .hue.step }}° {{ action "hueUp" "▶" }}',
+      bg: "surface",
+      fg: "foreground",
+    },
+    // The expanded theme picker: one width-paginated page (paged=true). Clicking
+    // a theme APPLIES it AND CLOSES the menu (closeOnPick=true) in one atomic
+    // set-state; the ←/→/✕ affordances + URLs derive from the page + term width.
+    pickerMenu: {
+      template: '{{ picker "applyTheme" "themePage" true true }}',
+      bg: "surface",
+      fg: "foreground",
+    },
+
+    // The style control — the theme trio's twin over the 'styles' domain.
+    styleControl: {
+      template: '✦ {{ if .activeStyle }}{{ .activeStyle }}{{ else }}(default){{ end }} {{ action "openStyleMenu" "▸" }}',
+      bg: "surface",
+      fg: "foreground",
+    },
+    // The style picker: paged=false → one full-width page (the style domain is
+    // small; FlexStrip soft-wraps if needed). closeOnPick=true like the themes.
+    stylePicker: {
+      template: '{{ picker "applyStyle" "stylePage" true false }}',
+      bg: "surface",
+      fg: "foreground",
+    },
+
+    // Work-mode chip: one cycle action, one display glyph per member. The glyph
+    // names the CURRENT state; the click delivers the successor it promises.
+    modeControl: {
+      template: ' {{ action "cycleMode" "🎯 focus" "🔍 review" "🐛 debug" }} ',
+      bg: "surface",
+      fg: "foreground",
+    },
+
+    // Quick actions — copy the session id / cwd, open the project dir / transcript
+    // in the editor. The glyph is the representation; the action is the behavior;
+    // the name is the seam between them [LAW:locality-or-seam].
+    toolbar: {
+      template: ' {{ action "copySession" "⎘ id" }} {{ action "copyDir" "⎘ cwd" }} {{ action "openProject" "↗ proj" }} {{ action "openTranscript" "↗ log" }} ',
+      bg: "surface",
+      fg: "foreground",
+    },
+
+    // Verbose session info — too noisy for the always-on rows, surfaced on demand
+    // inside the accordion "details" panel.
+    sessionDetails: {
+      template: ' 🪪 {{ trunc 8 .session.id }}   📂 {{ .project_dir }}   📄 {{ .transcript_path }} ',
+      bg: "surface",
+      fg: "foreground",
+    },
+
+    // A small links panel for the "links" accordion sibling.
+    links: {
+      template: ' {{ link "https://github.com/promptctl/cc-candybar" "↗ repo" }}   {{ link "https://code.claude.com/docs/en/statusline" "↗ statusline docs" }} ',
+      bg: "surface",
+      fg: "foreground",
+    },
+  },
+
+  // root REPLACES the default wholesale (Option A shape grammar). Clean by
+  // default, depth on click: two always-on rows, two reveal-on-open picker rows,
+  // and a two-panel accordion drawer.
+  //   gitTaculous = custom git line (operation, sha, working-tree, upstream,
+  //     stash, time-since-commit); cacheTimer = prompt-cache warmth (◴ Nm/cold);
+  //     block = 5h quota + reset; weekly = 7d quota + reset.
+  root: { v: [
+    // Dense info row (always on).
+    { h: ["directory", "gitTaculous", "model", "context", "cacheTimer", "block", "weekly"] },
+    // Control bar (always on): theme control + hue stepper, style control,
+    // work-mode chip, quick-action toolbar.
+    { h: ["trigger", "styleControl", "modeControl", "toolbar"] },
+    // Picker reveal rows — each exists only while its menu cursor is ≥ 0. The
+    // pickers themselves draw the ←/→/✕ affordances from the page + term width.
+    { seg: "pickerMenu", when: "{{ ge (int .themePage) 0 }}" },
+    { seg: "stylePicker", when: "{{ ge (int .stylePage) 0 }}" },
+    // Accordion drawer: two sibling groups sharing the "drawer" key, so opening
+    // one auto-closes the other — one key holds one open name, no accordion
+    // "mode" [LAW:dataflow-not-control-flow]. The group sugar synthesizes each
+    // toggle (▸/▾), its state var, and its cycle action under groups.*.
+    { h: [
+      { kind: "group", name: "details", label: "session details", key: "drawer", children: ["sessionDetails"] },
+      { kind: "group", name: "links", label: "links", key: "drawer", children: ["links"] },
+    ] },
+  ] },
+}
