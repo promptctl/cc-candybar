@@ -1,3 +1,10 @@
+## [1.1.1](https://github.com/promptctl/cc-candybar/compare/v1.1.0...v1.1.1) (2026-06-14)
+
+
+### Bug Fixes
+
+* **ci:** migrate code review action to OpenAI/Codex provider ([b4c215a](https://github.com/promptctl/cc-candybar/commit/b4c215a7679fa4242f7ef54404dad81b7601fee3))
+
 # [1.1.0](https://github.com/promptctl/cc-candybar/compare/v1.0.3...v1.1.0) (2026-06-14)
 
 
