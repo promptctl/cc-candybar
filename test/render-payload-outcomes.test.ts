@@ -283,3 +283,102 @@ describe("buildRenderPayload — migrated lanes share the outcome contract", () 
     expect(logs[0]!.msg).toContain("stub bug");
   });
 });
+
+describe("buildRenderPayload — git PR projection", () => {
+  // [LAW:no-silent-failure] The PR field is the one git field whose `failed`
+  // does NOT collapse to a missing key: it surfaces as `prError` (a visible
+  // render value) AND logs, so a forge outage is distinct from "no PR".
+  const PR_PATHS = new Set([
+    "git.branch",
+    "git.prNumber",
+    "git.prUrl",
+    "git.prError",
+  ]);
+
+  test("open PR (ok) → prNumber/prState/prUrl projected, nothing logged", async () => {
+    const logs: LogEntry[] = [];
+    const deps = depsWith(
+      ok({
+        branch: "feature",
+        status: "clean",
+        aheadBehind: ABSENT,
+        pullRequest: ok({
+          number: 76,
+          state: "OPEN",
+          url: "https://github.com/x/y/pull/76",
+        }),
+      }),
+      logs,
+    );
+
+    const payload = await buildRenderPayload(
+      hookData("/no/such/transcript.jsonl"),
+      deps,
+      undefined,
+      PR_PATHS,
+    );
+
+    expect(payload.git).toMatchObject({
+      prNumber: 76,
+      prState: "OPEN",
+      prUrl: "https://github.com/x/y/pull/76",
+    });
+    expect("prError" in payload.git!).toBe(false);
+    expect(logs).toEqual([]);
+  });
+
+  test("lookup failed → prError surfaced AND logged (visible, distinct)", async () => {
+    const logs: LogEntry[] = [];
+    const deps = depsWith(
+      ok({
+        branch: "feature",
+        status: "clean",
+        aheadBehind: ABSENT,
+        pullRequest: failed("gh pr view: non-zero, exit 1, HTTP 401"),
+      }),
+      logs,
+    );
+
+    const payload = await buildRenderPayload(
+      hookData("/no/such/transcript.jsonl"),
+      deps,
+      undefined,
+      PR_PATHS,
+    );
+
+    expect(payload.git!.prError).toBe("gh pr view: non-zero, exit 1, HTTP 401");
+    expect("prNumber" in payload.git!).toBe(false);
+    expect("prUrl" in payload.git!).toBe(false);
+    expect(logs).toEqual([
+      {
+        level: "warn",
+        msg: "provider fetch failed: git.pr: gh pr view: non-zero, exit 1, HTTP 401",
+      },
+    ]);
+  });
+
+  test("no PR (absent) → no pr* fields, nothing logged", async () => {
+    const logs: LogEntry[] = [];
+    const deps = depsWith(
+      ok({
+        branch: "feature",
+        status: "clean",
+        aheadBehind: ABSENT,
+        pullRequest: ABSENT,
+      }),
+      logs,
+    );
+
+    const payload = await buildRenderPayload(
+      hookData("/no/such/transcript.jsonl"),
+      deps,
+      undefined,
+      PR_PATHS,
+    );
+
+    expect("prNumber" in payload.git!).toBe(false);
+    expect("prUrl" in payload.git!).toBe(false);
+    expect("prError" in payload.git!).toBe(false);
+    expect(logs).toEqual([]);
+  });
+});
