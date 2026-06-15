@@ -369,9 +369,25 @@ export class SessionUsageStore {
         record.kind === "ok" ? record.value.sessionInfo.tokenBreakdown : null;
       const cur = speedSampleOf(breakdown, nowMs);
       const ring = this.speedRings.get(sessionId) ?? [];
-      const prev = ring.length > 0 ? ring[ring.length - 1] : undefined;
+      // [LAW:no-ambient-temporal-coupling] Observation time (atMs, the render
+      // clock) owns ring order — NOT ingest-completion order. Two concurrent
+      // observes with different mtimes don't coalesce in speedFlight and each
+      // awaits ingest before this mutation, so a plain append would record
+      // samples in whichever-ingest-settled-first order and invert oldest→newest.
+      // prev is the latest sample strictly before this observation; the post-
+      // insert sort by atMs makes the ring's order independent of completion
+      // order. (get→insert→set is synchronous after the await, so each resumed
+      // continuation mutates atomically — no lost update.)
+      let prev: SpeedSample | undefined;
+      for (const s of ring) {
+        if (s.atMs < cur.atMs && (prev === undefined || s.atMs > prev.atMs)) {
+          prev = s;
+        }
+      }
       ring.push(cur);
-      // Drop oldest beyond the cap — a tail window, not an archive.
+      ring.sort((a, b) => a.atMs - b.atMs);
+      // Drop oldest (smallest atMs ⇒ ring[0]) beyond the cap — a tail window,
+      // not an archive.
       if (ring.length > SPEED_RING_CAPACITY) ring.shift();
       this.speedRings.set(sessionId, ring);
       return ok({

@@ -193,6 +193,37 @@ describe("SessionUsageStore.observeSpeed — prior-sample retention", () => {
       store.close();
     }
   });
+
+  test("ring order follows observation time, not insertion order", async () => {
+    // [LAW:no-ambient-temporal-coupling] Regression for the concurrency hazard:
+    // two non-coalesced observes (distinct mtimes) can reach the ring mutation in
+    // ingest-completion order. Here the second observe carries an EARLIER render
+    // clock (atMs 1000) than the first (atMs 3000) — simulating that inversion —
+    // and the ring must still come back sorted oldest→newest by atMs, not by the
+    // order the samples were inserted.
+    const t = join(dir, "O.jsonl");
+    const store = new SessionUsageStore({ sweepIntervalMs: 0 });
+    try {
+      writeFileSync(t, usageLine("a", 10, 5));
+      utimesSync(t, new Date(1000), new Date(1000));
+      const first = await store.observeSpeed("O", t, 3_000); // inserted first, atMs 3000
+      expect(first.kind).toBe("ok");
+
+      writeFileSync(t, usageLine("a", 10, 5) + usageLine("b", 10, 5));
+      utimesSync(t, new Date(2000), new Date(2000));
+      const second = await store.observeSpeed("O", t, 1_000); // inserted second, atMs 1000
+      expect(second.kind).toBe("ok");
+      if (second.kind !== "ok") return;
+
+      // Sorted by atMs despite reverse insertion order.
+      expect(second.value.samples.map((s) => s.atMs)).toEqual([1000, 3000]);
+      // No existing sample is strictly before atMs 1000, so this observe has no
+      // baseline — completion order never fabricates one.
+      expect(second.value.prev).toBeUndefined();
+    } finally {
+      store.close();
+    }
+  });
 });
 
 // ─── buildRenderPayload — speed lane ──────────────────────────────────────────
