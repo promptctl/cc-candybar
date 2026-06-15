@@ -30,48 +30,52 @@ function evalText(source: string, scope: object = {}): string {
 }
 
 // ────────────────────────────────────────────────────────────────
-// 0. num() bigint normalization (single-enforcer of bigint→number)
+// 0. Numeric argType gate (validation lives at ONE boundary)
 // ────────────────────────────────────────────────────────────────
 
-// [LAW:no-silent-fallbacks] The wrappers' shared num() helper must throw
-// for bigint inputs that cannot round-trip to JS number without precision
-// loss or overflow — otherwise a formatter silently produces wrong output.
-// The check is at the conversion boundary, not at each formatter, so it's
-// tested through any formatter wrapper that takes a numeric arg (`round`
-// chosen as a stable single-arg numeric wrapper).
-describe("num() bigint range guard", () => {
-  test("accepts bigint within safe-integer range (round-trips)", () => {
-    // Engine encodes Go-template numeric literals as bigint when ambiguous;
-    // values inside ±Number.MAX_SAFE_INTEGER (2^53 − 1) are safe to collapse.
-    const tpl = createCcCandybarEngine().parse("{{ round 1000000000 }}");
+// [LAW:no-silent-failure][LAW:single-enforcer] Integer formatters declare the
+// `int` argType, whose gate (@promptctl/go-template-js) rejects a bigint that
+// cannot round-trip to a JS number without precision loss — so a corrupted
+// integer fails loudly AT THE BOUNDARY instead of feeding a wrong value into the
+// formatter. This replaces the old per-wrapper `num()` runtime guard: the same
+// guarantee, moved to the gate that owns numeric carriers. (`formatInteger`
+// chosen as a stable single-arg int wrapper.) `round` declares `float`, which
+// accepts any finite number (it takes fractional values).
+describe("numeric argType gate — precision-losing bigint rejected at the boundary", () => {
+  test("int accepts a bigint within safe-integer range", () => {
+    // Engine encodes ambiguous Go-template numeric literals as bigint; values
+    // inside ±Number.MAX_SAFE_INTEGER (2^53 − 1) round-trip safely.
+    const tpl = createCcCandybarEngine().parse("{{ formatInteger 1000000000 }}");
     expect(() => tpl.evaluate({})).not.toThrow();
   });
 
-  test("rejects bigint above MAX_SAFE_INTEGER with informative TypeError", () => {
-    // Number.MAX_SAFE_INTEGER + 1n is the smallest positive bigint that loses
-    // precision in Number. Template literal forces engine to bigint encoding
-    // for values above the safe-integer range.
+  test("int rejects a bigint above MAX_SAFE_INTEGER", () => {
     const huge = String(BigInt(Number.MAX_SAFE_INTEGER) + 1n);
-    const tpl = createCcCandybarEngine().parse(`{{ round ${huge} }}`);
-    expect(() => tpl.evaluate({})).toThrow(TypeError);
-    expect(() => tpl.evaluate({})).toThrow(/safe-integer range/);
+    const tpl = createCcCandybarEngine().parse(`{{ formatInteger ${huge} }}`);
+    expect(() => tpl.evaluate({})).toThrow();
   });
 
-  test("rejects bigint below MIN_SAFE_INTEGER", () => {
+  test("int rejects a bigint below MIN_SAFE_INTEGER", () => {
     const tiny = String(BigInt(Number.MIN_SAFE_INTEGER) - 1n);
-    const tpl = createCcCandybarEngine().parse(`{{ round ${tiny} }}`);
-    expect(() => tpl.evaluate({})).toThrow(TypeError);
+    const tpl = createCcCandybarEngine().parse(`{{ formatInteger ${tiny} }}`);
+    expect(() => tpl.evaluate({})).toThrow();
   });
 
-  test("accepts the safe-integer boundaries themselves", () => {
+  test("int accepts the safe-integer boundaries themselves", () => {
     const maxTpl = createCcCandybarEngine().parse(
-      `{{ round ${Number.MAX_SAFE_INTEGER} }}`,
+      `{{ formatInteger ${Number.MAX_SAFE_INTEGER} }}`,
     );
     const minTpl = createCcCandybarEngine().parse(
-      `{{ round ${Number.MIN_SAFE_INTEGER} }}`,
+      `{{ formatInteger ${Number.MIN_SAFE_INTEGER} }}`,
     );
     expect(() => maxTpl.evaluate({})).not.toThrow();
     expect(() => minTpl.evaluate({})).not.toThrow();
+  });
+
+  test("float (round) accepts a large finite value without a precision guard", () => {
+    // float is intentionally lossy-tolerant — a big literal converts, not throws.
+    const tpl = createCcCandybarEngine().parse("{{ round 1000000000 }}");
+    expect(() => tpl.evaluate({})).not.toThrow();
   });
 });
 
