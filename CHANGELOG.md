@@ -1,3 +1,10 @@
+# [1.8.0](https://github.com/promptctl/cc-candybar/compare/v1.7.3...v1.8.0) (2026-06-15)
+
+
+### Features
+
+* **render:** horizontal compose stacks drops; embeddable {{ menu }} disclosure (pdu.9) ([#131](https://github.com/promptctl/cc-candybar/issues/131)) ([60f1976](https://github.com/promptctl/cc-candybar/commit/60f1976a87515fe56bcc4509f59059bcfff804a0))
+
 ## [1.7.3](https://github.com/promptctl/cc-candybar/compare/v1.7.2...v1.7.3) (2026-06-15)
 
 
