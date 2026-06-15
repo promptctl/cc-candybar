@@ -14,6 +14,7 @@ import { SourceRegistry } from "../src/var-system/sources";
 import { SessionState } from "../src/daemon/session-state";
 import { registerDslConfig, renderDsl } from "../src/dsl/render";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
+import { listResolvablePaletteNames } from "../src/themes/policy";
 
 // Fires every interior-colored branch: staged→green "S", unstaged→red "U",
 // ahead→green "+1", behind→red "-1".
@@ -72,12 +73,27 @@ function foregroundKey(sgr: string): string | null {
   return null;
 }
 
+// The background a run sets (truecolor `48;2;r;g;b` or basic 40-47/100-107) —
+// compositing means every interior glyph keeps the SEGMENT's bg, so this must
+// match across the segment and its colored glyphs.
+function backgroundKey(sgr: string): string | null {
+  const params = sgr.split(";");
+  for (let i = 0; i < params.length; i++) {
+    if (params[i] === "48" && params[i + 1] === "2") {
+      return `tc:${params[i + 2]};${params[i + 3]};${params[i + 4]}`;
+    }
+    const n = Number(params[i]);
+    if ((n >= 40 && n <= 47) || (n >= 100 && n <= 107)) return `basic:${n}`;
+  }
+  return null;
+}
+
 function render(): string {
   const userSource = JSON.stringify({ root: { seg: "gitTaculous" } });
   const config = parseAndValidate(
     "<interior-color>",
     userSource,
-    new Set(["textual-dark"]),
+    new Set(listResolvablePaletteNames()),
     DEFAULT_DSL_CONFIG,
   );
 
@@ -129,10 +145,10 @@ describe("interior per-part colors survive powerline serialization (pdu.3)", () 
   });
 
   test("every colored glyph is painted over the segment bg (composited, not bare)", () => {
-    const segBg = segmentRun!.sgr.match(/48;2;[0-9;]+?(?=;38|;39|$|m)/);
+    const segBg = backgroundKey(segmentRun!.sgr);
     expect(segBg).not.toBeNull();
     for (const glyph of ["S", "U", "+1", "-1"]) {
-      expect(runFor(glyph)!.sgr).toContain("48;2;");
+      expect(backgroundKey(runFor(glyph)!.sgr)).toBe(segBg);
     }
   });
 });
