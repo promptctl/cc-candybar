@@ -1,3 +1,10 @@
+## [1.7.3](https://github.com/promptctl/cc-candybar/compare/v1.7.2...v1.7.3) (2026-06-15)
+
+
+### Bug Fixes
+
+* **loader:** group toggle disclosure glyph trails the label it gates (pdu.8) ([#130](https://github.com/promptctl/cc-candybar/issues/130)) ([99a12e9](https://github.com/promptctl/cc-candybar/commit/99a12e931a6cbd577050c558621d0b51763652bf))
+
 ## [1.7.2](https://github.com/promptctl/cc-candybar/compare/v1.7.1...v1.7.2) (2026-06-15)
 
 
