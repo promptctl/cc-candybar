@@ -11,13 +11,21 @@
 // Variability lives in the inputs (hint set or not, env set or not, stderr a
 // TTY or not), never in whether work runs.
 
-// @info Reserves characters for Claude Code's right-side UI messages
-// (e.g., "Current: 2.1.78 · latest: 2.1.78", "Thinking off")
-const RESERVED_CHARS = 45;
+// @info Reserves columns for Claude Code's statusline left gutter. Claude Code
+// prints each statusline row inset by a fixed left margin, so a row rendered at
+// the full raw column count would be shifted right past the terminal edge and
+// soft-wrap its trailing cells. The reserve is exactly that left margin — NOT a
+// right-side overlay budget. The version/autoupdate/"Remote Control" hints render
+// on their own right-aligned lines below the bar and never overlap a statusline
+// row, so they cost zero usable width here. Verified empirically against a live
+// Claude Code statusline (the older value of 45 was a guess for a right-side
+// overlay that does not sit on the statusline row); re-measure if Claude Code's
+// statusline gutter changes.
+const RESERVED_CHARS = 2;
 
 // [LAW:single-enforcer] The canonical raw-cols → usable-cols transform.
-// Every consumer that needs to honor Claude Code's overlay routes through
-// here; there is no parallel `cols - 45` math anywhere. Exposed so callers
+// Every consumer that needs to honor Claude Code's statusline gutter routes
+// through here; there is no parallel `cols - N` math anywhere. Exposed so callers
 // that already have a raw width (e.g. the daemon's wire-fallback path,
 // the demo reading process.stdout.columns) can apply the reserve without
 // re-entering the env/stderr resolution chain in getTerminalWidth.
