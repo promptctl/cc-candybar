@@ -48,6 +48,7 @@ import { validateGlobals } from "./loader/globals.js";
 import { validateVariables } from "./loader/variables.js";
 import { validateSegments } from "./loader/segments.js";
 import { synthesizeGroupDecls, validateRoot } from "./loader/layout.js";
+import { synthesizeMenuDecls } from "./loader/menu-synth.js";
 import { validateActions } from "./loader/actions.js";
 import { validateHelpers } from "./loader/helpers.js";
 import { validateCrossReferences } from "./loader/cross-ref.js";
@@ -249,6 +250,13 @@ function validateTopLevel(
   // default and cross-ref like any user declaration), and user names under the
   // reserved namespace are rejected against the fully-parsed sections.
   synthesizeGroupDecls(ctx, out);
+  // [LAW:one-source-of-truth] Menu synthesis runs AFTER group synthesis (a group
+  // body may host menu-bearing segments) and after every section parsed: each
+  // menu placement detected in the root walk emits its state var + cycle action
+  // into the raw sections, so they merge over the default, derive the click gate
+  // through deriveActionValidators, and collide loudly with any user name under
+  // the reserved namespace.
+  synthesizeMenuDecls(ctx, out);
   return out;
 }
 

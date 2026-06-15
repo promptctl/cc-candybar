@@ -12,6 +12,7 @@
 // govern output, not whether operations run.
 
 import type { RichText, PaletteResolver } from "@promptctl/rich-js";
+import { ColorSpec, Style, lighten } from "@promptctl/rich-js";
 import type { Engine, Template } from "@promptctl/go-template-js";
 import type {
   ValidatedConfig,
@@ -38,9 +39,12 @@ import {
 import {
   compileActions,
   actionFuncs,
+  readVar,
   type ActionRuntime,
 } from "../render/action.js";
 import { pickerFuncs } from "../render/picker.js";
+import { menuFuncs, type MenuRuntime } from "../render/menu.js";
+import { forEachSegmentPlacement, menuStateKey } from "../config/menu-keys.js";
 // [LAW:one-way-deps] The node-type registry sits below this driver: it owns the
 // compiled node shapes + each kind's compile/render, dispatched via nodeType().
 // render.ts threads the recursion (compileChild/renderChild) + the hue counter in
@@ -66,6 +70,13 @@ import {
 export interface CompiledConfig {
   readonly segments: CompiledSegments;
   readonly root: CompiledNode;
+  // [LAW:locality-or-seam] The menu runtime the engine's `menu` func closes over,
+  // surfaced here so renderDsl can publish each segment's placement into it before
+  // that segment's template evaluates. One instance per compiled config; its
+  // `current` is mutated synchronously within a single renderDsl walk (renders are
+  // sequential + synchronous, so no cross-render leak) — the spatial cousin of the
+  // hue cursor, one owner. [LAW:no-ambient-temporal-coupling]
+  readonly menuRuntime: MenuRuntime;
   // [LAW:types-are-the-program] Variable declaration failures that did NOT
   // prevent the config from loading (type mismatches, bad defaults). The
   // affected variables are absent from the store; segments that reference them
@@ -276,11 +287,17 @@ export function registerDslConfig(
   // [LAW:single-enforcer] Forward the caller's clock (the daemon's `() => new
   // Date()`, a test's frozen clock) to the one engine. Omitted ⇒ undefined ⇒
   // createCcCandybarEngine applies its single default; no second default literal.
+  // [LAW:locality-or-seam] The menu runtime shares the action runtime (a menu's
+  // glyph + body resolve from the same compiled table + store) and carries the
+  // walk-published current placement. Built before the engine so the `menu` func
+  // can close over it; `current` stays null until a render walk publishes one.
+  const menuRuntime: MenuRuntime = { action: actionRuntime, current: null };
   const engine = createCcCandybarEngine(
     undefined,
     {
       ...actionFuncs(actionRuntime),
       ...pickerFuncs(actionRuntime),
+      ...menuFuncs(menuRuntime),
     },
     opts?.clock,
   );
@@ -406,6 +423,14 @@ export function registerDslConfig(
       );
     }
   };
+  // [LAW:one-source-of-truth] Precompute every segment placement's menu row key
+  // from the SAME walk the loader synthesis used, so the compiled segment node's
+  // rowKey is provably the key the loader declared a state var + gate for. Each
+  // segment node reads its own entry by path in compile.
+  const rowKeyByPath = new Map<string, string>();
+  forEachSegmentPlacement(config.root, (_segName, rowKey, ownPath) => {
+    rowKeyByPath.set(ownPath, rowKey);
+  });
   const compileNode = (node: LayoutNode, path: string): CompiledNode => {
     const cctx: NodeCompileCtx = {
       path,
@@ -413,6 +438,7 @@ export function registerDslConfig(
         node.when === undefined
           ? undefined
           : parseNodeField(node.when, path, "when"),
+      rowKeyByPath,
       compileChild: compileNode,
     };
     return nodeType(node.kind).compile(node, cctx);
@@ -421,8 +447,25 @@ export function registerDslConfig(
   return {
     segments: compiled,
     root: compileNode(config.root, "root"),
+    menuRuntime,
     loadWarnings,
   };
+}
+
+// [LAW:dataflow-not-control-flow] The focus tint: when a segment's own menu is
+// open it is "focused", so its base background is lightened (rich-js owns the
+// math — see [[rich-js-owns-color-math]]). The transform is RELATIVE to the
+// resolved background, so any host theme tints to a consistent step above its own
+// surface; a segment with no background (transparent) has nothing to lighten and
+// passes through unchanged. One level ≈ 10% lightness — a subtle "this is active".
+const MENU_FOCUS_LIGHTEN_LEVELS = 1;
+function focusTint(style: Style): Style {
+  const bg = style.bgcolor;
+  if (bg === undefined) return style;
+  const lit = ColorSpec.fromRgba(
+    lighten(bg.getTruecolor(), MENU_FOCUS_LIGHTEN_LEVELS),
+  );
+  return new Style({ bgcolor: lit, color: style.color });
 }
 
 // ─── renderDsl ───────────────────────────────────────────────────────────────
@@ -525,6 +568,23 @@ export function renderDsl(
       : undefined;
   };
 
+  // [LAW:single-enforcer] The menu seam, owned here: publish the placement the
+  // about-to-evaluate segment template needs (so a `{{ menu }}` resolves its
+  // accordion identity) and, when this segment's own menu is open, focus-tint its
+  // baseStyle so the whole segment (inline trigger + dropped body band) reads as
+  // highlighted. [LAW:no-defensive-null-guards] "menu never opened" is a real
+  // state — has() discriminates an unset key (no menu in this row) from a value.
+  const prepareSegment = (
+    segName: string,
+    rowKey: string,
+    baseStyle: Style,
+  ): Style => {
+    compiled.menuRuntime.current = { rowKey, segName };
+    const stateKey = menuStateKey(rowKey);
+    const open = store.has(stateKey) && readVar(store, stateKey) === segName;
+    return open ? focusTint(baseStyle) : baseStyle;
+  };
+
   // [LAW:dataflow-not-control-flow] ONE walk renders any node to LINES OF CELLS
   // (serialization deferred to the root). The driver owns the cross-cutting
   // `when`: `visible` ANDs the node's own predicate with its ancestors'. It then
@@ -542,6 +602,7 @@ export function renderDsl(
       visible,
       nextHueShift,
       perSegmentSink,
+      prepareSegment,
       lookupSegment,
       renderChild: renderNode,
     };

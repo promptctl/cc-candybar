@@ -34,34 +34,17 @@ import { renderSparkline, parseSeries } from "./sparkline.js";
 const THEMES_LIST: readonly string[] = listResolvablePaletteNames();
 const STYLES_LIST: readonly string[] = [...STRIP_STYLES];
 
-// Normalize an engine-supplied numeric argument. The "number" argType admits
-// both number and bigint (per @promptctl/go-template-js); the underlying
-// formatters take a JS number, so collapse bigint here. [LAW:single-enforcer]
-// every formatter wrapper goes through this — no per-wrapper bigint check.
-//
-// [LAW:no-silent-fallbacks] A bigint outside JS's safe-integer range cannot
-// round-trip through Number without silent precision loss (53-bit mantissa)
-// or overflow to ±Infinity. Either would feed a wrong value into a formatter
-// (e.g. formatDuration) and produce confidently-wrong output. Throw at the
-// conversion boundary so the failure surfaces where the conversion happens,
-// not deep inside a formatter doing math on a corrupted number.
-function num(v: number | bigint): number {
-  if (typeof v === "bigint") {
-    if (
-      v > BigInt(Number.MAX_SAFE_INTEGER) ||
-      v < BigInt(Number.MIN_SAFE_INTEGER)
-    ) {
-      throw new TypeError(
-        `Numeric argument ${v}n is outside JS safe-integer range ` +
-          `(|v| > Number.MAX_SAFE_INTEGER = ${Number.MAX_SAFE_INTEGER}); ` +
-          `Number(v) would lose precision or overflow. ` +
-          `Pass a value within ±Number.MAX_SAFE_INTEGER.`,
-      );
-    }
-    return Number(v);
-  }
-  return v;
-}
+// [LAW:single-enforcer] Numeric validation lives at ONE boundary — the engine's
+// `int`/`float` argType gate (@promptctl/go-template-js), which proves membership
+// and normalizes the carrier to a JS `number` before the func body runs. `int`
+// admits only finite integer-valued numbers + safe-integer bigints (rejecting
+// fractionals and precision-losing/overflowing bigints loudly at the gate);
+// `float` admits any finite number. So a formatter wrapper receives a clean
+// `number` and needs no bigint guard of its own — the prior `num()` helper was a
+// second enforcer of what the gate now owns, removed when the formatters adopted
+// int/float. [LAW:no-silent-failure] the gate's rejection is the loud failure on
+// a precision-losing integer input; this is not weaker than the old runtime
+// check, it is the same guarantee moved to the true boundary.
 
 // cc-candybar-specific functions not already covered by sprig or Go builtins.
 // The engine also includes sprigDefaults(), sprigStrings(), and sprigLists()
@@ -185,11 +168,13 @@ export function formatterFuncs(clock: () => Date = () => new Date()): FuncMap {
     // segments (`formatLongTimeRemaining (minutesUntilReset .resetsAt)`) and the
     // cacheTimer warmth countdown (numeric `le` thresholds).
     minutesUntilReset: {
-      fn: (epochSeconds: number | bigint) =>
+      fn: (epochSeconds: number) =>
         Math.round(
-          Math.max(0, num(epochSeconds) * 1000 - clock().getTime()) / 60000,
+          Math.max(0, epochSeconds * 1000 - clock().getTime()) / 60000,
         ),
-      argTypes: ["number"],
+      // [LAW:types-are-the-program] An epoch is integer-valued; `int` rejects a
+      // fractional or precision-losing carrier at the gate.
+      argTypes: ["int"],
     },
 
     // ─── Locale-grouped integer (context's "50,000") ──────────────────
@@ -200,8 +185,10 @@ export function formatterFuncs(clock: () => Date = () => new Date()): FuncMap {
     // of grouping policy — same parsing/formatting boundary that keeps
     // formatModelName here.
     formatInteger: {
-      fn: (n: number | bigint) => formatInteger(num(n)),
-      argTypes: ["number"],
+      fn: (n: number) => formatInteger(n),
+      // [LAW:types-are-the-program] Integer grouping is meaningful only for an
+      // integer; `int` rejects a fractional/precision-losing carrier at the gate.
+      argTypes: ["int"],
     },
 
     // ─── Numeric helper (block/weekly's Math.round of pct) ────────────
@@ -210,8 +197,10 @@ export function formatterFuncs(clock: () => Date = () => new Date()): FuncMap {
     // formatters.ts module documents domain-meaningful rules; rounding is
     // not domain-meaningful, so it stays here.
     round: {
-      fn: (n: number | bigint) => Math.round(num(n)),
-      argTypes: ["number"],
+      fn: (n: number) => Math.round(n),
+      // [LAW:types-are-the-program] round takes a fractional value (e.g. a
+      // percentage) → `float` admits any finite number.
+      argTypes: ["float"],
     },
 
     // ─── Model-name normalizers (chunk-7 model dsl-pending → dsl-parity) ─
