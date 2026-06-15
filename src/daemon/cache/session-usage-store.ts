@@ -61,13 +61,23 @@ export interface SpeedSample {
   readonly atMs: number;
 }
 
-// The prior observation (absent on the very first render of a session) and the
-// one just taken. The pure rate projection lives at the render-payload boundary;
-// this store only remembers and reports the pair.
+// The prior observation (absent on the very first render of a session), the one
+// just taken, and the recent ring (oldest→newest, INCLUDING `cur`). The pure
+// projections live at the render-payload boundary; this store only remembers and
+// reports. [LAW:one-source-of-truth] `prev === samples[samples.length - 2]` — the
+// tok/s baseline and the burn-rate history fold from the SAME owned ring, not two
+// parallel stores. tok/s reads the last pair; the sparkline reads every pair.
 export interface SpeedObservation {
   readonly prev?: SpeedSample;
   readonly cur: SpeedSample;
+  readonly samples: readonly SpeedSample[];
 }
+
+// How many recent samples the burn-rate ring retains per session. A render-cadence
+// trend, not an archive: enough to fill a wide sparkline cell, capped so an
+// idle-but-alive session can't grow it without bound. The window the sparkline
+// draws is a tail slice of this (the `width` arg), so this only sets the ceiling.
+const SPEED_RING_CAPACITY = 64;
 
 function speedSampleOf(
   breakdown: TokenBreakdown | null,
@@ -202,11 +212,13 @@ export class SessionUsageStore {
   // first seed completes every later read awaits an already-settled promise —
   // zero rescan. A rejected seed is dropped so the next read retries.
   private readonly seeded = new Map<string, Promise<void>>();
-  // [LAW:one-source-of-truth] The prior tok/s observation per session. tok/s is
-  // a derivative of the SAME token totals the records map already owns; the
-  // baseline (prev counts + time) lives HERE, not in a parallel counter. One
-  // call to observeSpeed advances it; the pure delta math is render-payload's.
-  private readonly speedSamples = new Map<string, SpeedSample>();
+  // [LAW:one-source-of-truth] The recent tok/s observations per session, a
+  // bounded ring (oldest→newest). tok/s is a derivative of the SAME token totals
+  // the records map already owns; the baseline (prior counts + time) is the ring's
+  // last element, not a parallel counter. The burn-rate sparkline folds over the
+  // whole ring; tok/s folds over its final pair. One call to observeSpeed appends;
+  // the pure delta math is render-payload's.
+  private readonly speedRings = new Map<string, SpeedSample[]>();
   // [LAW:no-ambient-temporal-coupling] Explicit owner of observe/commit ordering
   // for the speed sample. Concurrent renders observing the SAME transcript state
   // (key = `${sessionId}:${mtime}`) share ONE observation and commit the baseline
@@ -356,9 +368,33 @@ export class SessionUsageStore {
       const breakdown =
         record.kind === "ok" ? record.value.sessionInfo.tokenBreakdown : null;
       const cur = speedSampleOf(breakdown, nowMs);
-      const prev = this.speedSamples.get(sessionId);
-      this.speedSamples.set(sessionId, cur);
-      return ok({ ...(prev !== undefined && { prev }), cur });
+      const ring = this.speedRings.get(sessionId) ?? [];
+      // [LAW:no-ambient-temporal-coupling] Observation time (atMs, the render
+      // clock) owns ring order — NOT ingest-completion order. Two concurrent
+      // observes with different mtimes don't coalesce in speedFlight and each
+      // awaits ingest before this mutation, so a plain append would record
+      // samples in whichever-ingest-settled-first order and invert oldest→newest.
+      // prev is the latest sample strictly before this observation; the post-
+      // insert sort by atMs makes the ring's order independent of completion
+      // order. (get→insert→set is synchronous after the await, so each resumed
+      // continuation mutates atomically — no lost update.)
+      let prev: SpeedSample | undefined;
+      for (const s of ring) {
+        if (s.atMs < cur.atMs && (prev === undefined || s.atMs > prev.atMs)) {
+          prev = s;
+        }
+      }
+      ring.push(cur);
+      ring.sort((a, b) => a.atMs - b.atMs);
+      // Drop oldest (smallest atMs ⇒ ring[0]) beyond the cap — a tail window,
+      // not an archive.
+      if (ring.length > SPEED_RING_CAPACITY) ring.shift();
+      this.speedRings.set(sessionId, ring);
+      return ok({
+        ...(prev !== undefined && { prev }),
+        cur,
+        samples: [...ring],
+      });
     });
   }
 
@@ -494,7 +530,7 @@ export class SessionUsageStore {
     for (const [sid, record] of this.entries) {
       if (now - record.lastSeenAt > this.staleAgeMs) {
         this.entries.delete(sid);
-        this.speedSamples.delete(sid);
+        this.speedRings.delete(sid);
         dropped++;
       }
     }
@@ -510,7 +546,7 @@ export class SessionUsageStore {
       const oldest = this.entries.keys().next().value;
       if (oldest === undefined) break;
       this.entries.delete(oldest);
-      this.speedSamples.delete(oldest);
+      this.speedRings.delete(oldest);
       dlog("info", `usageStore evict ${oldest}`);
     }
   }
@@ -522,6 +558,6 @@ export class SessionUsageStore {
     }
     this.entries.clear();
     this.seeded.clear();
-    this.speedSamples.clear();
+    this.speedRings.clear();
   }
 }
