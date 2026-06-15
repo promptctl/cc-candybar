@@ -1,3 +1,10 @@
+# [1.7.0](https://github.com/promptctl/cc-candybar/compare/v1.6.0...v1.7.0) (2026-06-15)
+
+
+### Features
+
+* **helpers:** sparkline template helper — inline unicode burn-rate mini-graph ([#124](https://github.com/promptctl/cc-candybar/issues/124)) ([43f0378](https://github.com/promptctl/cc-candybar/commit/43f037856f0c520e595c89a361dac606eee29c62))
+
 # [1.6.0](https://github.com/promptctl/cc-candybar/compare/v1.5.0...v1.6.0) (2026-06-15)
 
 
