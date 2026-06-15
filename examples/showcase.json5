@@ -166,12 +166,12 @@
   // root REPLACES the default wholesale (Option A shape grammar). Clean by
   // default, depth on click: two always-on rows, two reveal-on-open picker rows,
   // and a two-panel accordion drawer.
-  //   gitTaculous = custom git line (operation, sha, working-tree, upstream,
+  //   gitaculous = custom git line (operation, sha, working-tree, upstream,
   //     stash, time-since-commit); cacheTimer = prompt-cache warmth (◴ Nm/cold);
   //     block = 5h quota + reset; weekly = 7d quota + reset.
   root: { v: [
     // Dense info row (always on).
-    { h: ["directory", "gitTaculous", "model", "context", "cacheTimer", "block", "weekly"] },
+    { h: ["directory", "gitaculous", "model", "context", "cacheTimer", "block", "weekly"] },
     // Control bar (always on): theme control + hue stepper, style control,
     // work-mode chip, quick-action toolbar.
     { h: ["trigger", "styleControl", "modeControl", "toolbar"] },
