@@ -143,18 +143,24 @@
     //
     //   applyAction  — a set+from action; the picker draws one cell per option
     //   pageAction   — a set+int action; drives ← → navigation
-    //   closeOnPick  — true: clicking an option also resets cursor to -1 (closes)
-    //   paged        — true: width-paginated with arrows; false: one full-width page
+    //   closeOnPick  — DEFAULT false (stay-open): a pick recolors live and leaves
+    //                  the menu open; the ✕ closes. true: a pick ALSO resets the
+    //                  cursor to -1 (auto-close — the opt-in, see stylePicker).
+    //   paged        — DEFAULT false (one full-width page); true: width-paginated
+    //                  with arrows. Both bools are optional trailing values.
     //
     // The picker draws the domain from applyTheme's `from: "themes"` option list.
+    // Stay-open (closeOnPick=false) so several themes can be tried in a row.
     themePicker: {
-      template: '{{ picker "applyTheme" "themePage" true true }}',
+      template: '{{ picker "applyTheme" "themePage" false true }}',
       bg: "surface",
       fg: "foreground",
     },
 
     // ── Style picker ───────────────────────────────────────────────────────
-    // paged:false → all styles in one row (no page arrows).
+    // paged:false → all styles in one row (no page arrows). closeOnPick=true here
+    // demonstrates the auto-close OPT-IN: picking a shape reshapes the bar and
+    // closes the row in one atomic write.
     stylePicker: {
       template: '{{ picker "applyStyle" "stylePage" true false }}',
       bg: "panel",
