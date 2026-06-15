@@ -97,6 +97,10 @@
     "@promptctl/cc-candybar-linux-arm64": "1.7.3"
   },
   "pnpm": {
+    "overrides": {
+      "@promptctl/go-template-js": "link:../go-template-js",
+      "@promptctl/rich-js": "link:../rich-js"
+    },
     "supportedArchitectures": {
       "os": [
         "darwin",
