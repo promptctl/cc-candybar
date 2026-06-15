@@ -30,7 +30,7 @@ import type { DslConfig } from "./dsl-types.js";
 //
 // Factored out of the segments' `template` fields so:
 //   (1) the git working-tree counts and status icon can be shared by the two
-//       git-style segments (git, gitTaculous) without duplication, and
+//       git-style segments (git, gitaculous) without duplication, and
 //   (2) the block/weekly threshold cascade can be parameterized on the
 //       variable name without resorting to runtime string surgery.
 
@@ -543,7 +543,7 @@ export const DEFAULT_DSL_CONFIG = {
       fg: "foreground",
       when: '{{ ne .git.branch "" }}',
     },
-    gitTaculous: {
+    gitaculous: {
       template:
         " (git)" +
         '{{ if ne .git.repoName "" }} {{ .git.repoName }}{{ end }}' +

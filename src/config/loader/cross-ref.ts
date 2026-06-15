@@ -22,6 +22,16 @@ import {
   refResolves,
 } from "./refs.js";
 
+// [LAW:one-source-of-truth] The renamed built-in segments: old name → current
+// name. A user config (which merges on top of the bundled default) that names a
+// renamed segment in `root` finds no matching declaration and would otherwise
+// get the generic "does not match any declared segment" error. This map turns
+// that into a migration pointer [LAW:no-silent-failure] — data, not a per-name
+// branch, so a future rename is one row here, not new control flow.
+export const RENAMED_SEGMENTS: Readonly<Record<string, string>> = {
+  gitTaculous: "gitaculous",
+};
+
 export function validateCrossReferences(
   ctx: ValidateCtx,
   cfg: DslConfig,
@@ -69,9 +79,14 @@ export function validateCrossReferences(
     }
     if (node.kind !== "segment") continue;
     if (!Object.prototype.hasOwnProperty.call(cfg.segments, node.name)) {
+      const renamed = RENAMED_SEGMENTS[node.name];
+      const hint =
+        renamed !== undefined
+          ? ` (the built-in segment "${node.name}" was renamed to "${renamed}" — update this reference)`
+          : "";
       ctx.issues.push({
         path: layoutKey,
-        message: `${layoutKey} entry "${node.name}" does not match any declared segment`,
+        message: `${layoutKey} entry "${node.name}" does not match any declared segment${hint}`,
         line: layoutLine,
       });
     }
