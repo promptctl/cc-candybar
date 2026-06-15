@@ -750,11 +750,12 @@ export const DEFAULT_DSL_CONFIG = {
       fg: "foreground",
     },
     // The expanded style picker: one full-width page (paged=false) over the
-    // `applyStyle` option domain — the 3 powerline shapes. closeOnPick folds a
-    // page-reset into the apply, so a pick reshapes the bar and closes the row
-    // in one click. The active shape is marked by the picker helper.
+    // `applyStyle` option domain — the 3 powerline shapes. closeOnPick defaults
+    // false (omitted here), so a pick reshapes the bar live and LEAVES THE ROW
+    // OPEN — shapes can be tried in a row; the ✕ affordance closes. The active
+    // shape is marked by the picker helper.
     stylePicker: {
-      template: '{{ picker "applyStyle" "stylePage" true false }}',
+      template: '{{ picker "applyStyle" "stylePage" }}',
       bg: "surface",
       fg: "foreground",
     },

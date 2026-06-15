@@ -7,7 +7,8 @@
 //      option cells over named actions, with ✕/←/→ navigating the page cursor.
 //   2. paged=true slices to term.cols with ←/→; paged=false emits one page (wrap).
 //   3. closeOnPick=true makes an option click apply AND reset the page key in ONE
-//      atomic set-state; closeOnPick=false applies only.
+//      atomic set-state; closeOnPick=false (and the OMITTED default) applies only
+//      — the menu stays open so themes can be tried in a row.
 //   4. The page key gates as an unbounded int DERIVED from the `int` action arm;
 //      the apply key gates as the resolved option allow-list.
 //   5. The active option (current value) renders bold.
@@ -179,6 +180,27 @@ describe("2de.13 — picker: open / apply-and-close / page nav", () => {
     });
     expect(themeUrl).toBeDefined();
     // Apply only: the page key is NOT in the write.
+    expect(effectsOf(themeUrl!)[0]!.args).not.toContain("theme-page");
+    dispose();
+  });
+
+  test("default (closeOnPick omitted) is stay-open: a theme click applies only, menu still renders", () => {
+    // The trailing bools are optional; omitting closeOnPick must default to
+    // false (stay-open), NOT silently close. The picker still renders open.
+    const src = pickerConfig(true, true).replace(
+      '{{ picker "applyTheme" "themePage" true true }}',
+      '{{ picker "applyTheme" "themePage" }}',
+    );
+    const { render, sessionState, dispose } = buildRuntime(src);
+    sessionState.set("s1", "theme-page", "0");
+    const open = render(80);
+    expect(stripAnsi(open)).toContain("✕"); // open: the close affordance is present
+    const themeUrl = extractUrls(open).find((u) => {
+      const e = effectsOf(u)[0]!;
+      return e.verb === "set-state" && e.args.includes("theme-pick");
+    });
+    expect(themeUrl).toBeDefined();
+    // Default closeOnPick=false ⇒ the page key is NOT written (menu stays open).
     expect(effectsOf(themeUrl!)[0]!.args).not.toContain("theme-page");
     dispose();
   });

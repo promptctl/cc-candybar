@@ -108,10 +108,11 @@
       fg: "foreground",
     },
     // The expanded theme picker: one width-paginated page (paged=true). Clicking
-    // a theme APPLIES it AND CLOSES the menu (closeOnPick=true) in one atomic
-    // set-state; the ←/→/✕ affordances + URLs derive from the page + term width.
+    // a theme recolors the bar live and LEAVES THE MENU OPEN (closeOnPick=false,
+    // the stay-open default) so themes can be tried in a row; the ✕ closes. The
+    // ←/→/✕ affordances + URLs derive from the page + term width.
     pickerMenu: {
-      template: '{{ picker "applyTheme" "themePage" true true }}',
+      template: '{{ picker "applyTheme" "themePage" false true }}',
       bg: "surface",
       fg: "foreground",
     },
@@ -123,9 +124,10 @@
       fg: "foreground",
     },
     // The style picker: paged=false → one full-width page (the style domain is
-    // small; FlexStrip soft-wraps if needed). closeOnPick=true like the themes.
+    // small; FlexStrip soft-wraps if needed). Stay-open like the themes
+    // (closeOnPick defaults false, omitted here); the ✕ closes.
     stylePicker: {
-      template: '{{ picker "applyStyle" "stylePage" true false }}',
+      template: '{{ picker "applyStyle" "stylePage" }}',
       bg: "surface",
       fg: "foreground",
     },
