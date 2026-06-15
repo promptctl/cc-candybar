@@ -1,11 +1,12 @@
 // [LAW:behavior-not-structure] These tests assert the post-kz8.4 contract:
 // getTerminalWidth is a pure resolver — no subprocess, no shell-out. The hint
 // from the wire boundary wins over ambient state; ambient state wins over
-// nothing. The reserve for Claude Code's right-side UI applies uniformly.
+// nothing. The reserve for Claude Code's statusline left gutter applies
+// uniformly (its value is verified empirically in src/utils/terminal-width.ts).
 
 import { getTerminalWidth } from "../src/utils/terminal-width";
 
-const RESERVE = 45;
+const RESERVE = 2;
 
 describe("getTerminalWidth (post-kz8.4: pure, no-spawn)", () => {
   let savedColumns: string | undefined;
@@ -75,7 +76,10 @@ describe("getTerminalWidth (post-kz8.4: pure, no-spawn)", () => {
   });
 
   it("clamps reserved width to a minimum of 1", () => {
-    expect(getTerminalWidth(10)).toBe(1);
+    // A raw width at or below the reserve would go non-positive; the floor
+    // keeps it at 1 rather than 0/negative.
+    expect(getTerminalWidth(2)).toBe(1);
+    expect(getTerminalWidth(1)).toBe(1);
   });
 
   it("ignores malformed COLUMNS env values", () => {
