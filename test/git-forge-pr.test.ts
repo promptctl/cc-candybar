@@ -86,10 +86,18 @@ describe("classifyForgePr (github)", () => {
     expect(classify(r)).toEqual({ kind: "absent" });
   });
 
-  test("gh not installed (spawn-error) → absent, not failed", () => {
+  test("gh not installed (ENOENT spawn-error) → absent, not failed", () => {
     expect(classify(failResult("spawn-error", "", "spawn gh ENOENT"))).toEqual({
       kind: "absent",
     });
+  });
+
+  test("gh present but unlaunchable (EACCES spawn-error) → failed (visible)", () => {
+    // [LAW:no-silent-failure] Only a MISSING binary is absent; a CLI that
+    // exists but can't launch is a real failure, not "no PR".
+    const r = classify(failResult("spawn-error", "", "spawn gh EACCES"));
+    expect(r.kind).toBe("failed");
+    if (r.kind === "failed") expect(r.reason).toMatch(/gh pr view/);
   });
 
   test("auth failure (exit 1, HTTP 401) → failed (visible, distinct)", () => {

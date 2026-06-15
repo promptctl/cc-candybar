@@ -124,7 +124,8 @@ function nonEmpty(o: Outcome<string>): Outcome<string> {
 //   ok + parse ok (not open)        → absent        (branch's PR is done)
 //   ok + parse fails                → failed        (forge answered garbage)
 //   non-zero + no-PR stderr         → absent        (genuine "none for branch")
-//   spawn-error (CLI not installed) → absent        (no forge integration)
+//   spawn-error ENOENT (no CLI)     → absent        (no forge integration)
+//   spawn-error other (EACCES, …)   → failed        (CLI present but unlaunchable)
 //   non-zero (auth/net/not-a-repo)  → failed        (forge couldn't answer)
 //   timeout / signal / rate-limited → failed        (forge couldn't answer)
 export type ForgeName = "github" | "gitlab";
@@ -143,9 +144,13 @@ export function classifyForgePr(
   parse: (stdout: string) => Outcome<PullRequest>,
 ): Outcome<PullRequest> {
   if (result.ok) return parse(result.stdout);
-  // No forge CLI on PATH is a static configuration absence, not a transient
-  // lookup failure — it never showed a PR, so showing nothing costs nothing.
-  if (result.reason === "spawn-error") return ABSENT;
+  // ENOENT (no forge CLI on PATH) is a static configuration absence, not a
+  // transient lookup failure — it never showed a PR, so showing nothing costs
+  // nothing. [LAW:no-silent-failure] Every OTHER spawn failure (EACCES,
+  // resource limits) means the CLI is present but could not launch — a real
+  // failure that must stay visible, so it falls through to the `failed` path.
+  if (result.reason === "spawn-error" && /ENOENT/i.test(result.error ?? ""))
+    return ABSENT;
   if (result.reason === "non-zero" && noPrPattern.test(result.stderr))
     return ABSENT;
   const detail = [
@@ -577,10 +582,12 @@ export class GitService {
   // remote or no recognized forge; the CLI dispatch then classifies the rest.
   async resolvePullRequest(workingDir: string): Promise<Outcome<PullRequest>> {
     const remote = await this.getRemoteOriginUrlAsync(workingDir);
-    // No remote (absent) or a config read that genuinely failed: either way
-    // there is no forge PR to show. A local config read does not transport-
-    // fail, so collapsing both to absent does not hide a network problem.
-    if (remote.kind !== "ok") return ABSENT;
+    // [LAW:no-silent-failure] A `failed` remote read (git itself couldn't run —
+    // timeout, spawn-error) is a real failure that must surface, NOT collapse
+    // into "no PR". Only `absent` (no remote configured) means there is
+    // genuinely no forge PR to show.
+    if (remote.kind === "failed") return remote;
+    if (remote.kind === "absent") return ABSENT;
 
     const forge = detectForge(remote.value);
     if (forge === "github") {
