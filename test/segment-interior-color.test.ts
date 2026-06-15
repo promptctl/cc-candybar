@@ -4,7 +4,7 @@
 // ROOT A — the same lossy-serialization root as the pdu.1 link bleed). This
 // pins that so the collapse can't silently return. Merging onto the real
 // DEFAULT_DSL_CONFIG (not a hand-rolled template) is deliberate: a synthetic
-// segment could pass while the SHIPPED gitTaculous regresses.
+// segment could pass while the SHIPPED gitaculous regresses.
 
 import { PaletteResolver, getThemePalette } from "@promptctl/rich-js";
 
@@ -89,7 +89,7 @@ function backgroundKey(sgr: string): string | null {
 }
 
 function render(): string {
-  const userSource = JSON.stringify({ root: { seg: "gitTaculous" } });
+  const userSource = JSON.stringify({ root: { seg: "gitaculous" } });
   const config = parseAndValidate(
     "<interior-color>",
     userSource,

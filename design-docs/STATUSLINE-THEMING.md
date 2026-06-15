@@ -101,7 +101,7 @@ type PaletteMapping = Record<string /* segment name */, SegmentColors>;
 const defaultMapping: PaletteMapping = {
   directory:   { bg: "primary-background",  fg: "foreground" },
   git:         { bg: "success-muted",       fg: "foreground" },
-  gitTaculous: { bg: "success-muted",       fg: "foreground" },
+  gitaculous:  { bg: "success-muted",       fg: "foreground" },
   model:       { bg: "accent",              fg: "button-color-foreground" },
   session:     { bg: "panel",               fg: "footer-foreground" },
   context:     { bg: "boost",               fg: "foreground" },
