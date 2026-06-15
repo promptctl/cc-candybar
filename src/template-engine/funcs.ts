@@ -17,6 +17,7 @@ import {
   shortenModelName,
 } from "../utils/formatters.js";
 import { listResolvablePaletteNames, STRIP_STYLES } from "../themes/policy.js";
+import { renderSparkline, parseSeries } from "./sparkline.js";
 
 // [LAW:one-source-of-truth] The DSL `themes()` and `styles()` bindings
 // project the SAME canonical sources the set-state validator consults
@@ -127,6 +128,22 @@ export function ccCandybarFuncs(): FuncMap {
     styles: {
       fn: () => STYLES_LIST,
       argTypes: [],
+    },
+
+    // [LAW:effects-at-boundaries] Pure trend renderer: a numeric series (the
+    // daemon-owned ring, projected through the payload as a delimited string)
+    // becomes a unicode mini-graph. The series crosses the scalar var-system
+    // seam as a string, so the FuncMap slot is "string"; `parseSeries` decodes
+    // it and `renderSparkline` draws it — neither accumulates state. The
+    // optional trailing "int" slot caps the glyph count to fit a cell (the
+    // evaluator validates only supplied args, so `{{ sparkline .series }}` and
+    // `{{ sparkline .series 24 }}` are both well-typed). Returns a bare string;
+    // the engine lifts it to RichText so the segment's fg/bg palette colors the
+    // whole graph — no per-glyph color math here.
+    sparkline: {
+      fn: (series: string, width?: number) =>
+        renderSparkline(parseSeries(series), width),
+      argTypes: ["string", "int"],
     },
   };
 }

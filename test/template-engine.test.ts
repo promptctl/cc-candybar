@@ -315,6 +315,7 @@ describe("ccCandybarFuncs registry", () => {
       "bool",
       "dirname",
       "int",
+      "sparkline",
       "string",
       "styles",
       "themes",
