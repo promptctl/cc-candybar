@@ -1,5 +1,9 @@
 import { GitDataProvider } from "../src/daemon/cache/git";
-import { GitService, type GitInfo } from "../src/segments/git";
+import {
+  GitService,
+  type GitInfo,
+  type PullRequest,
+} from "../src/segments/git";
 import { ABSENT, ok, type Outcome } from "../src/utils/outcome";
 
 class StubGitService extends GitService {
@@ -21,6 +25,19 @@ class StubGitService extends GitService {
     status: "clean",
     aheadBehind: ok({ ahead: 0, behind: 0 }),
   };
+  public prCalls: string[] = [];
+  public stubPr: Outcome<PullRequest> = ok({
+    number: 7,
+    state: "OPEN",
+    url: "https://example.test/pull/7",
+  });
+
+  override async resolvePullRequest(
+    workingDir: string,
+  ): Promise<Outcome<PullRequest>> {
+    this.prCalls.push(workingDir);
+    return this.stubPr;
+  }
 
   override async findGitRoot(workingDir: string): Promise<Outcome<string>> {
     const root = this.repoRootByDir[workingDir] ?? null;
@@ -416,5 +433,72 @@ describe("GitDataProvider.subscribe", () => {
       2,
     );
     unsub();
+  });
+});
+
+describe("GitDataProvider PR cache", () => {
+  test("showPullRequest off → resolvePullRequest never called, no PR attached", async () => {
+    const { svc, inner } = makeCache();
+    inner.repoRootByDir = { "/repo": "/repo" };
+
+    const out = await svc.getGitInfo("/repo", {});
+    expect(out.kind).toBe("ok");
+    if (out.kind !== "ok") return;
+    expect(out.value.pullRequest).toBeUndefined();
+    expect(inner.prCalls).toHaveLength(0);
+  });
+
+  test("showPullRequest on → PR attached to GitInfo", async () => {
+    const { svc, inner } = makeCache();
+    inner.repoRootByDir = { "/repo": "/repo" };
+
+    const out = await svc.getGitInfo("/repo", { showPullRequest: true });
+    expect(out.kind).toBe("ok");
+    if (out.kind !== "ok") return;
+    expect(out.value.pullRequest).toEqual(
+      ok({ number: 7, state: "OPEN", url: "https://example.test/pull/7" }),
+    );
+    expect(inner.prCalls).toHaveLength(1);
+  });
+
+  test("PR cache survives GitInfo refetch — one forge call across many renders", async () => {
+    // ttlMs:0 forces a GitInfo miss every call (doFetch runs each time), so
+    // this isolates the PR cache: its own (long) TTL means the forge lookup
+    // fires once even as the local GitInfo is recomputed repeatedly.
+    const { svc, inner } = makeCache({ ttlMs: 0 });
+    inner.repoRootByDir = { "/repo": "/repo" };
+
+    await svc.getGitInfo("/repo", { showPullRequest: true });
+    await svc.getGitInfo("/repo", { showPullRequest: true });
+    await svc.getGitInfo("/repo", { showPullRequest: true });
+
+    expect(inner.computeCalls.length).toBeGreaterThanOrEqual(3);
+    expect(inner.prCalls).toHaveLength(1);
+  });
+
+  test("branch switch → PR re-fetched (branch is part of the key)", async () => {
+    const { svc, inner } = makeCache({ ttlMs: 0 });
+    inner.repoRootByDir = { "/repo": "/repo" };
+
+    inner.stubInfo = { ...inner.stubInfo, branch: "feature-a" };
+    await svc.getGitInfo("/repo", { showPullRequest: true });
+    inner.stubInfo = { ...inner.stubInfo, branch: "feature-b" };
+    await svc.getGitInfo("/repo", { showPullRequest: true });
+
+    expect(inner.prCalls).toHaveLength(2);
+  });
+
+  test("a failed forge lookup is attached as failed (surfaced, not dropped)", async () => {
+    const { svc, inner } = makeCache();
+    inner.repoRootByDir = { "/repo": "/repo" };
+    inner.stubPr = { kind: "failed", reason: "gh pr view: non-zero, HTTP 401" };
+
+    const out = await svc.getGitInfo("/repo", { showPullRequest: true });
+    expect(out.kind).toBe("ok");
+    if (out.kind !== "ok") return;
+    expect(out.value.pullRequest).toEqual({
+      kind: "failed",
+      reason: "gh pr view: non-zero, HTTP 401",
+    });
   });
 });

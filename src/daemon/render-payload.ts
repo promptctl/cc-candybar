@@ -98,6 +98,16 @@ export interface GitPayload {
   readonly status?: string;
   readonly operation?: string;
   readonly timeSinceCommit?: number;
+  // Forge PR/MR. [LAW:no-silent-failure] Unlike every other git field (where
+  // `failed` collapses to a missing key), the PR's failure is surfaced as
+  // `prError` so the segment can render a VISIBLY DISTINCT marker — a forge
+  // outage must not look like "no PR". The three render-distinguishable states:
+  // open PR (prNumber/prState/prUrl present), lookup failed (prError present),
+  // no PR (all absent → segment when-gated off).
+  readonly prNumber?: number;
+  readonly prState?: string;
+  readonly prUrl?: string;
+  readonly prError?: string;
 }
 
 export interface SessionPayload {
@@ -472,6 +482,12 @@ function gitOptionsFromClosure(needed: ReadonlySet<string>): GitInfoOptions {
     ...(has("git.repoName") && { showRepoName: true }),
     ...(has("git.operation") && { showOperation: true }),
     ...(has("git.timeSinceCommit") && { showTimeSinceCommit: true }),
+    // Any PR field laid out turns on the (network) forge lookup. Keep these in
+    // lockstep with the projected `git.pr*` fields below.
+    ...((has("git.prNumber") ||
+      has("git.prState") ||
+      has("git.prUrl") ||
+      has("git.prError")) && { showPullRequest: true }),
   };
 }
 
@@ -809,6 +825,28 @@ function projectGitInfo(outcome: Outcome<GitInfo>): {
   const upstream = field("upstream", info.upstream);
   const repoName = field("repoName", info.repoName);
 
+  // [LAW:no-silent-failure] The PR deliberately breaks the `field` pattern: a
+  // `failed` lookup is NOT dropped to a missing key (which the template can't
+  // tell apart from "no PR"). It is BOTH logged AND surfaced as `prError` so
+  // the segment renders a distinct marker. `absent` is still a missing key (no
+  // PR / no forge → segment off). The reason is the gate value the template
+  // tests; the same reason is logged for the operator.
+  const pr = info.pullRequest;
+  const prFields: {
+    prNumber?: number;
+    prState?: string;
+    prUrl?: string;
+    prError?: string;
+  } = {};
+  if (pr?.kind === "ok") {
+    prFields.prNumber = pr.value.number;
+    prFields.prState = pr.value.state;
+    prFields.prUrl = pr.value.url;
+  } else if (pr?.kind === "failed") {
+    failures.push(`git.pr: ${pr.reason}`);
+    prFields.prError = pr.reason;
+  }
+
   return {
     git: {
       branch: info.branch,
@@ -829,6 +867,7 @@ function projectGitInfo(outcome: Outcome<GitInfo>): {
       ...(stash !== undefined && { stash }),
       ...(upstream !== undefined && { upstream }),
       ...(repoName !== undefined && { repoName }),
+      ...prFields,
     },
     failures,
   };

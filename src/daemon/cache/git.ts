@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { GitService, type GitInfo } from "../../segments/git";
+import { GitService, type GitInfo, type PullRequest } from "../../segments/git";
 import { ok, type Outcome } from "../../utils/outcome";
 import { debug } from "../../utils/logger";
 import { WatcherRegistry, type WatcherHandle } from "./watchers";
@@ -44,6 +44,17 @@ const DEFAULT_TTL_MS = 30_000;
 const DEFAULT_MAX_ENTRIES = 64;
 const SANITY_INTERVAL_MS = 5 * 60_000;
 
+// [LAW:decomposition] The forge PR lookup is a network resource with a
+// different lifecycle than local git state: it changes ~twice in a PR's life
+// and the fs watchers on .git/HEAD|index say nothing about remote PR state. So
+// it gets its OWN cache + TTL — independent of the 30s GitInfo TTL — so the
+// per-render git fetch stays all-local and the gh/glab spawn happens at most
+// once per window (or on branch switch, via the branch in the key). A `failed`
+// lookup caches for a SHORTER window so a transient forge outage is retried
+// soon, not pinned to the bar for the full ok-TTL.
+const PR_TTL_OK_MS = 5 * 60_000;
+const PR_TTL_FAIL_MS = 45_000;
+
 // Options applied to subscribe()'s internal getInfo() call. var-system's six
 // GitField values (branch, sha, dirty, ahead, behind, stash) all project from
 // these flags — keep them in lockstep with the projection in
@@ -58,6 +69,11 @@ const SUBSCRIBE_OPTIONS = {
 interface MtimeSnapshot {
   head: number;
   index: number;
+}
+
+interface PrCacheEntry {
+  pr: Outcome<PullRequest>;
+  computedAt: number;
 }
 
 interface GitCacheEntry {
@@ -147,6 +163,16 @@ export class GitDataProvider extends GitService {
   // here; subsequent concurrent callers await the same promise and resolve in
   // lockstep.
   private readonly fetchInFlight = new Map<string, Promise<Outcome<GitInfo>>>();
+  // [LAW:one-source-of-truth] The forge PR cache, keyed by `repoRoot|branch`
+  // (a branch switch is a new key, so its PR is fetched fresh; the old branch's
+  // entry ages out). Separate from `entries` because it carries its own TTL.
+  private readonly prCache = new Map<string, PrCacheEntry>();
+  // [LAW:single-enforcer] Coalesce concurrent PR misses on the same key — same
+  // role as fetchInFlight for the GitInfo path, but for the network forge call.
+  private readonly prFetchInFlight = new Map<
+    string,
+    Promise<Outcome<PullRequest>>
+  >();
   // [LAW:single-enforcer] Coalesce overlapping refreshes for the same repo.
   // `refreshing` holds the repoRoots whose refresh loop is currently
   // executing; `refreshAgain` is the trailing-edge flag: if a new
@@ -292,6 +318,15 @@ export class GitDataProvider extends GitService {
     if (outcome.kind !== "ok") return outcome;
     const info = outcome.value;
 
+    // [LAW:decomposition] The inner GitService never resolves the PR — the
+    // cache layer owns that lookup so it can give it an independent TTL. On the
+    // 30s GitInfo refetch the prCache is almost always warm, so attaching the
+    // PR here is a memory read; the gh/glab spawn only fires when the prCache
+    // entry has aged past its (outcome-dependent) TTL or the branch changed.
+    if (options.showPullRequest) {
+      info.pullRequest = await this.getPullRequestCached(repoRoot, info.branch);
+    }
+
     // Drop any prior entry for this exact key before re-inserting (so we
     // release its watcher refcount cleanly).
     this.dropEntry(key);
@@ -313,6 +348,53 @@ export class GitDataProvider extends GitService {
     });
     this.evictIfNeeded();
     return outcome;
+  }
+
+  // [LAW:single-enforcer] The one read path for a branch's PR. TTL is
+  // outcome-dependent (a `failed` retries sooner). Concurrent misses coalesce
+  // through prFetchInFlight. The fetch delegates to inner.resolvePullRequest —
+  // this layer is cache + lifecycle only, never forge knowledge.
+  private getPullRequestCached(
+    repoRoot: string,
+    branch: string,
+  ): Promise<Outcome<PullRequest>> {
+    const key = `${repoRoot}|${branch}`;
+    const now = Date.now();
+
+    const existing = this.prCache.get(key);
+    if (existing) {
+      const ttl = existing.pr.kind === "failed" ? PR_TTL_FAIL_MS : PR_TTL_OK_MS;
+      if (now - existing.computedAt < ttl) {
+        // LRU touch so the active branch's PR survives eviction.
+        this.prCache.delete(key);
+        this.prCache.set(key, existing);
+        return Promise.resolve(existing.pr);
+      }
+    }
+
+    const pending = this.prFetchInFlight.get(key);
+    if (pending) return pending;
+
+    const promise = this.inner
+      .resolvePullRequest(repoRoot)
+      .then((pr) => {
+        this.prCache.set(key, { pr, computedAt: Date.now() });
+        this.evictPrIfNeeded();
+        return pr;
+      })
+      .finally(() => {
+        this.prFetchInFlight.delete(key);
+      });
+    this.prFetchInFlight.set(key, promise);
+    return promise;
+  }
+
+  private evictPrIfNeeded(): void {
+    while (this.prCache.size > this.maxEntries) {
+      const oldest = this.prCache.keys().next().value;
+      if (oldest === undefined) break;
+      this.prCache.delete(oldest);
+    }
   }
 
   // [LAW:effects-at-boundaries] The subscribe surface's edge: fold the typed
@@ -548,6 +630,10 @@ export class GitDataProvider extends GitService {
     this.refreshing.clear();
     this.refreshAgain.clear();
     this.fetchInFlight.clear();
+    // In-flight PR fetches resolve naturally; clearing the maps means the next
+    // caller starts fresh (the prCache is rebuilt cold like every other cache).
+    this.prCache.clear();
+    this.prFetchInFlight.clear();
     if (this.ownsWatchers) this.watchers.closeAll();
   }
 }
