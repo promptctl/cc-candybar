@@ -147,6 +147,26 @@ describe("pdu.9 — menu synthesis (derived, reserved namespace)", () => {
     });
   });
 
+  test("a {{ menu }} inside a helper is rejected at load (no per-placement identity)", () => {
+    const src = `{
+      globals: {},
+      variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
+      actions: { applyTheme: { set: 'theme', from: 'themes' }, themePage: { set: 'theme-page', int: true } },
+      helpers: { mkMenu: '{{ menu "applyTheme" "themePage" }}' },
+      segments: { s: { template: '{{ template "mkMenu" . }}', bg: 'surface', fg: 'foreground' } },
+      root: { h: ['s'] },
+    }`;
+    try {
+      parseAndValidate("<test>", src, ALLOWED);
+      throw new Error("expected ConfigError");
+    } catch (e) {
+      expect(e).toBeInstanceOf(ConfigError);
+      expect((e as ConfigError).message).toMatch(
+        /helper "mkMenu" uses \{\{ menu \}\}/,
+      );
+    }
+  });
+
   test("a user name under the reserved namespace is rejected", () => {
     const src = MENU_SRC.replace(
       "'session.id': { kind: 'input', path: 'session_id', default: '' }",

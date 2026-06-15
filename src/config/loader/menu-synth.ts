@@ -60,6 +60,23 @@ export function synthesizeMenuDecls(
   ctx: ValidateCtx,
   out: Mutable<RawDslConfig>,
 ): void {
+  // [LAW:no-silent-failure] A menu derives its accordion identity from its host
+  // SEGMENT's tree position; a `{{ define }}` helper is shared and placement-
+  // agnostic, so a `{{ menu }}` reached through one has no row to key on and would
+  // never get its backing state var/cycle action synthesized — failing at render.
+  // Reject it loudly at load, pointing the author to inline the menu in a segment.
+  // [LAW:no-mode-explosion] We reject rather than build helper-call-graph
+  // resolution speculatively; revisit only if a real shared-menu need appears.
+  for (const [name, body] of Object.entries(out.helpers ?? {})) {
+    if (segmentReferencesMenu(body)) {
+      ctx.issues.push({
+        path: `helpers.${name}`,
+        message: `helper "${name}" uses {{ menu }}, but a menu must live directly in a segment template — its accordion identity is derived from the segment's position in the layout, which a shared helper does not have. Inline the {{ menu }} call into each segment that needs it.`,
+        line: findKeyLine(ctx.source, ["helpers", name]),
+      });
+    }
+  }
+
   if (out.root === undefined) return;
   const segments = out.segments ?? {};
 
