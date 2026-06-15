@@ -280,6 +280,21 @@ export const DEFAULT_DSL_CONFIG = {
       default: 0,
     },
 
+    // Forge PR/MR — the daemon's git provider resolves the branch's open PR via
+    // gh/glab and projects it here. Declaring any of these turns on the network
+    // lookup. [LAW:no-silent-failure] prError is non-empty ONLY when the forge
+    // was asked but couldn't answer (auth/network) — distinct from "no PR"
+    // (every field empty). prNumber 0 (default) ⇒ no open PR.
+    "git.prNumber": {
+      kind: "input",
+      path: "git.prNumber",
+      type: "number",
+      default: 0,
+    },
+    "git.prState": { kind: "input", path: "git.prState", default: "" },
+    "git.prUrl": { kind: "input", path: "git.prUrl", default: "" },
+    "git.prError": { kind: "input", path: "git.prError", default: "" },
+
     // Prompt-cache expiry — epoch seconds, projected by the cache provider.
     // Same unit/shape as block/weekly resetsAt so the cacheTimer segment
     // composes `minutesUntilReset` identically. 0 (default) ⇒ no cache
@@ -541,6 +556,24 @@ export const DEFAULT_DSL_CONFIG = {
       bg: "surface-active",
       fg: "foreground",
       when: '{{ ne .git.branch "" }}',
+    },
+    // Git PR/MR — the branch's open pull/merge request as a clickable link.
+    // OPT-IN: declared but NOT in the default root (it adds a network gh/glab
+    // call). Add "gitPr" to a container's children to enable it. The `{{ link
+    // url text }}` emits ONE OSC-8 region carrying the https PR url, so the
+    // CLICK is handled by the terminal/OS (opens the browser) — no daemon verb.
+    // [LAW:no-silent-failure] Three render states from the data: an open PR
+    // (prUrl set) renders the link; a lookup FAILURE (prError set, prUrl empty)
+    // renders a distinct ⚠ marker so an outage is not mistaken for "no PR";
+    // no PR (both empty) leaves the `when` gate false and the segment absent.
+    gitPr: {
+      template:
+        '{{ if ne .git.prUrl "" }}' +
+        '{{ link .git.prUrl (printf " ⇆ #%v " .git.prNumber) }}' +
+        "{{ else }} ⚠ PR {{ end }}",
+      bg: "surface-active",
+      fg: "foreground",
+      when: '{{ or (ne .git.prUrl "") (ne .git.prError "") }}',
     },
     // Quick-action tray — copy the session id / cwd, open the project dir /
     // transcript in the editor. [LAW:locality-or-seam] The glyph is the

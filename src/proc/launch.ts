@@ -31,6 +31,10 @@ import type { LaunchStatsHandle } from "./stats-handle";
 // pattern. [LAW:no-mode-explosion]: no per-site escape hatch.
 export const LAUNCH_CATEGORIES = [
   "git",
+  // Forge CLIs (gh / glab) for the PR/MR lookup. A network-bound spawn,
+  // separate from "git" so daemon-stats attributes it independently and a
+  // future rate limit can target it without throttling local git.
+  "forge",
   "user-shell",
   "tmux",
   "click.pbcopy",

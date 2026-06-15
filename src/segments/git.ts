@@ -16,6 +16,17 @@ export interface AheadBehind {
   behind: number;
 }
 
+// [LAW:types-are-the-program] The branch's open PR/MR as the forge reports it.
+// `number` and `url` are the click target; `state` is the forge's status string
+// (GitHub "OPEN", GitLab "opened") — carried so a consumer can color/label it,
+// though resolvePullRequest only ever returns a PR whose state is open (a
+// merged/closed PR for the branch is the domain's `absent`, not a value).
+export interface PullRequest {
+  number: number;
+  state: string;
+  url: string;
+}
+
 // [LAW:types-are-the-program] Every on-demand field is an Outcome, so "this
 // value is unknown because the fetch failed" is representable distinct from
 // a real 0/""/basename — the states the old catch-and-substitute blocks
@@ -37,6 +48,13 @@ export interface GitInfo {
   upstream?: Outcome<string>;
   repoName?: Outcome<string>;
   isWorktree?: boolean;
+  // [LAW:no-silent-failure] The forge lookup's three outcomes are all kept
+  // distinct here: `ok` is an open PR, `absent` is "this branch has none / no
+  // forge / no forge CLI", `failed` is "the forge was asked but couldn't
+  // answer" (auth, network, API error). The render boundary surfaces `failed`
+  // as a VISIBLE marker — collapsing it to `absent` would make a transient
+  // outage look like the PR vanished. Undefined = `showPullRequest` was off.
+  pullRequest?: Outcome<PullRequest>;
 }
 
 // [LAW:one-source-of-truth] The one shape of getGitInfo's `show*` toggles. Each
@@ -53,6 +71,11 @@ export interface GitInfoOptions {
   showStashCount?: boolean;
   showUpstream?: boolean;
   showRepoName?: boolean;
+  // Opts into the forge (gh/glab) PR/MR lookup — a network call, so it is the
+  // one option whose fetch the daemon caches on a longer, independent TTL than
+  // the rest of GitInfo (see src/daemon/cache/git.ts). Never resolved by the
+  // inner GitService's computeGitInfo; the cache layer owns the lookup+cache.
+  showPullRequest?: boolean;
 }
 
 // [LAW:dataflow-not-control-flow] One classifier for every git invocation.
@@ -87,6 +110,134 @@ function nonEmpty(o: Outcome<string>): Outcome<string> {
   if (o.kind !== "ok") return o;
   const v = o.value.trim();
   return v ? ok(v) : ABSENT;
+}
+
+// [LAW:one-type-per-behavior] `gh` and `glab` are two instances of one act:
+// "ask a forge CLI for the branch's PR, fold the typed launch result into an
+// Outcome<PullRequest>." The accept/reject shape table is identical across
+// both — only the no-PR stderr signature and the JSON field names differ — so
+// the classification lives here once and each forge supplies its own
+// (noPrPattern, parse) as data.
+//
+// [LAW:no-silent-failure] The full shape table, enumerated so no input leaks:
+//   ok + parse ok (open PR)         → ok            (the value)
+//   ok + parse ok (not open)        → absent        (branch's PR is done)
+//   ok + parse fails                → failed        (forge answered garbage)
+//   non-zero + no-PR stderr         → absent        (genuine "none for branch")
+//   spawn-error ENOENT (no CLI)     → absent        (no forge integration)
+//   spawn-error other (EACCES, …)   → failed        (CLI present but unlaunchable)
+//   non-zero (auth/net/not-a-repo)  → failed        (forge couldn't answer)
+//   timeout / signal / rate-limited → failed        (forge couldn't answer)
+export type ForgeName = "github" | "gitlab";
+
+// [LAW:types-are-the-program] Extract the host from a git remote, handling the
+// two shapes git uses: scp-like `[user@]host:path` and URL `scheme://[user@]
+// host[:port]/path`. The URL form is checked first — its `host` in a scp regex
+// would mis-capture the scheme (`https` before `://`). Returns null for an
+// unrecognized shape (local path, unknown syntax).
+function remoteHost(remoteUrl: string): string | null {
+  const url = remoteUrl.trim();
+  const proto = url.match(/^[a-z][a-z0-9+.-]*:\/\/(?:[^@/]+@)?([^/:]+)/i);
+  if (proto) return proto[1]!.toLowerCase();
+  const scp = url.match(/^(?:[^@/]+@)?([^/:]+):/);
+  if (scp) return scp[1]!.toLowerCase();
+  return null;
+}
+
+// [LAW:types-are-the-program] Branch on the HOST, not a substring of the whole
+// URL — a non-GitLab remote whose path merely contains "gitlab" (a repo named
+// `gitlab`) must not dispatch to glab. Self-hosted GitLab is detected by a
+// `gitlab.`-prefixed host label (gitlab.example.com); a GitLab on an arbitrary
+// hostname is undetectable here and falls through to null (absent), same as
+// GitHub Enterprise on a custom domain.
+export function detectForge(remoteUrl: string): ForgeName | null {
+  const host = remoteHost(remoteUrl);
+  if (!host) return null;
+  if (host === "github.com" || host.endsWith(".github.com")) return "github";
+  if (/(^|\.)gitlab\./.test(host)) return "gitlab";
+  return null;
+}
+
+export function classifyForgePr(
+  label: string,
+  result: LaunchResult,
+  noPrPattern: RegExp,
+  parse: (stdout: string) => Outcome<PullRequest>,
+): Outcome<PullRequest> {
+  if (result.ok) return parse(result.stdout);
+  // ENOENT (no forge CLI on PATH) is a static configuration absence, not a
+  // transient lookup failure — it never showed a PR, so showing nothing costs
+  // nothing. [LAW:no-silent-failure] Every OTHER spawn failure (EACCES,
+  // resource limits) means the CLI is present but could not launch — a real
+  // failure that must stay visible, so it falls through to the `failed` path.
+  if (result.reason === "spawn-error" && /ENOENT/i.test(result.error ?? ""))
+    return ABSENT;
+  if (result.reason === "non-zero" && noPrPattern.test(result.stderr))
+    return ABSENT;
+  const detail = [
+    result.reason,
+    result.exitCode != null ? `exit ${result.exitCode}` : null,
+    result.error ?? firstLine(result.stderr),
+  ]
+    .filter(Boolean)
+    .join(", ");
+  return failed(`${label}: ${detail}`);
+}
+
+function isRecord(v: unknown): v is Record<string, unknown> {
+  return typeof v === "object" && v !== null && !Array.isArray(v);
+}
+
+// `gh pr view --json number,state,url` → one JSON object. Only an OPEN PR is a
+// value; a MERGED/CLOSED PR for the branch is the domain's `absent`.
+export function parseGithubPr(stdout: string): Outcome<PullRequest> {
+  let json: unknown;
+  try {
+    json = JSON.parse(stdout);
+  } catch (e) {
+    return failed(
+      `gh pr view: unparseable JSON (${e instanceof Error ? e.message : String(e)})`,
+    );
+  }
+  if (!isRecord(json)) return failed("gh pr view: JSON is not an object");
+  const { number, state, url } = json;
+  if (
+    typeof number !== "number" ||
+    typeof state !== "string" ||
+    typeof url !== "string"
+  ) {
+    return failed("gh pr view: missing number/state/url");
+  }
+  if (state.toUpperCase() !== "OPEN") return ABSENT;
+  return ok({ number, state, url });
+}
+
+// `glab mr view --output json` → one JSON object (iid / state / web_url). State
+// "opened" is the open MR; anything else is `absent`. NOTE: verified against
+// glab's documented JSON shape, not runtime-exercised here (glab not installed
+// on the dev machine) — the github path is the runtime-verified one.
+export function parseGitlabMr(stdout: string): Outcome<PullRequest> {
+  let json: unknown;
+  try {
+    json = JSON.parse(stdout);
+  } catch (e) {
+    return failed(
+      `glab mr view: unparseable JSON (${e instanceof Error ? e.message : String(e)})`,
+    );
+  }
+  if (!isRecord(json)) return failed("glab mr view: JSON is not an object");
+  const iid = json.iid;
+  const state = json.state;
+  const url = json.web_url;
+  if (
+    typeof iid !== "number" ||
+    typeof state !== "string" ||
+    typeof url !== "string"
+  ) {
+    return failed("glab mr view: missing iid/state/web_url");
+  }
+  if (state.toLowerCase() !== "opened") return ABSENT;
+  return ok({ number: iid, state, url });
 }
 
 export class GitService {
@@ -405,6 +556,83 @@ export class GitService {
 
     const match = remoteUrl.match(/\/([^/]+?)(\.git)?$/);
     return ok(match?.[1] || path.basename(workingDir));
+  }
+
+  // [LAW:locality-or-seam] Public so the daemon's GitDataProvider can read the
+  // remote to fold into its PR cache key (the PR value depends on the remote;
+  // a re-pointed origin must be a new key). Raw origin URL (unparsed) — the
+  // forge detector reads the host from it. `config --get` exits 1 when unset →
+  // `absent` (no remote, hence no forge PR concept), distinct from a failure.
+  async getRemoteOriginUrl(workingDir: string): Promise<Outcome<string>> {
+    return nonEmpty(
+      classify(
+        "git config remote.origin.url",
+        await this.execGitAsync(["config", "--get", "remote.origin.url"], {
+          cwd: workingDir,
+          timeout: 2000,
+        }),
+        "absent",
+      ),
+    );
+  }
+
+  // [LAW:single-enforcer] One boundary for forge-CLI spawns. Mirrors
+  // execGitAsync but carries the "forge" launch category and a longer timeout
+  // (this is a network call, not a local git read). Returns the typed
+  // LaunchResult so classifyForgePr maps every termination cause to an Outcome.
+  private async execForgeAsync(
+    bin: string,
+    args: readonly string[],
+    options: { cwd: string; timeout: number },
+  ): Promise<LaunchResult> {
+    return launch({
+      bin,
+      args: [...args],
+      cwd: options.cwd,
+      env: { ...process.env },
+      timeoutMs: options.timeout,
+      category: "forge",
+    });
+  }
+
+  // [LAW:effects-at-boundaries] Resolve the branch's open PR/MR via the forge
+  // CLI. Pure dispatch over a remote the CALLER has already read: pick the
+  // forge by host, run its CLI, fold the launch result into an Outcome. The
+  // remote is a parameter (not read here) so the cache layer can fold it into
+  // its key in the same read — no caching here; the daemon's GitDataProvider
+  // owns the PR cache + TTL (a network resource wants a longer, independent
+  // lifecycle than local git state). `absent` when the host is no recognized
+  // forge; the CLI dispatch then classifies the rest.
+  async resolvePullRequest(
+    workingDir: string,
+    remoteUrl: string,
+  ): Promise<Outcome<PullRequest>> {
+    const forge = detectForge(remoteUrl);
+    if (forge === "github") {
+      return classifyForgePr(
+        "gh pr view",
+        await this.execForgeAsync(
+          "gh",
+          ["pr", "view", "--json", "number,state,url"],
+          { cwd: workingDir, timeout: 5000 },
+        ),
+        /no (open )?pull requests? found/i,
+        parseGithubPr,
+      );
+    }
+    if (forge === "gitlab") {
+      return classifyForgePr(
+        "glab mr view",
+        await this.execForgeAsync("glab", ["mr", "view", "--output", "json"], {
+          cwd: workingDir,
+          timeout: 5000,
+        }),
+        /no (open )?merge requests? (found|available)/i,
+        parseGitlabMr,
+      );
+    }
+    // Recognized neither host → no forge integration for this remote.
+    return ABSENT;
   }
 
   private isWorktree(workingDir: string): boolean {
