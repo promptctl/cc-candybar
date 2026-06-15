@@ -23,7 +23,7 @@
 // strip item), not a function of matching backgrounds.
 
 import { RichText } from "@promptctl/rich-js";
-import type { PaletteResolver } from "@promptctl/rich-js";
+import type { PaletteResolver, Style } from "@promptctl/rich-js";
 import type { Template } from "@promptctl/go-template-js";
 import type {
   LayoutNode,
@@ -49,6 +49,12 @@ export interface CompiledSegmentNode {
   readonly kind: "segment";
   readonly when?: Template<RichText>;
   readonly name: string;
+  // [LAW:one-source-of-truth] The menu accordion row key for THIS placement —
+  // the nearest enclosing horizontal container's path, or this segment's own path
+  // (singleton). Computed once at compile from the SAME walk the loader synthesis
+  // uses (menu-keys/forEachSegmentPlacement), so the key a `{{ menu }}` toggle
+  // writes is provably the key the loader declared a state var + gate for.
+  readonly rowKey: string;
 }
 export interface CompiledContainerNode {
   readonly kind: "container";
@@ -88,6 +94,11 @@ export interface NodeCompileCtx {
   readonly path: string;
   // The node's own `when`, already parsed by the driver (one parse-when site).
   readonly when?: Template<RichText>;
+  // [LAW:one-source-of-truth] Path → menu row key, precomputed by the driver from
+  // the SAME structural walk the loader synthesis uses. A segment node reads its
+  // own rowKey here rather than re-deriving the nearest-horizontal rule, so the
+  // two walks cannot drift.
+  readonly rowKeyByPath: ReadonlyMap<string, string>;
   // Compile a child node (the recursion, injected so this module needn't import
   // the driver).
   compileChild(node: LayoutNode, path: string): CompiledNode;
@@ -104,6 +115,15 @@ export interface NodeRenderCtx {
   // Advance the walk-owned hue cursor by one unit and return that unit's shift.
   nextHueShift(): number;
   readonly perSegmentSink?: Map<string, readonly RichText[]>;
+  // [LAW:locality-or-seam] The menu seam, injected as a capability so this module
+  // never imports the menu feature. Called once per segment render, BEFORE its
+  // template evaluates: it publishes this placement (segName + rowKey) so a
+  // `{{ menu }}` in the template can resolve its accordion identity, and returns
+  // the baseStyle to use — lightened when this segment's own menu is open, so the
+  // whole focused segment (inline trigger + dropped body band) reads as
+  // highlighted. The driver owns the menu runtime + state read; this module only
+  // hands it the values it has (name, compiled rowKey, resolved baseStyle).
+  prepareSegment(segName: string, rowKey: string, baseStyle: Style): Style;
   // Resolve a segment name to its decl + compiled form (the driver closes over
   // config.segments + the compiled segments).
   lookupSegment(
@@ -120,9 +140,17 @@ export interface NodeRenderCtx {
 // [LAW:dataflow-not-control-flow] A container's `direction` is the projection it
 // applies to its already-rendered child blocks — DATA selecting a fold, not a
 // branch that skips work. `vertical` STACKS (concatenate the children's line-
-// lists); `horizontal` ZIPS (row i is every child's row-i cells concatenated, so
-// the joiner caps ACROSS the seam — there is no abut). The switch is exhaustive
-// over `Direction`; adding `outline` to DIRECTIONS forces a new arm here.
+// lists). The switch is exhaustive over `Direction`; adding `outline` to
+// DIRECTIONS forces a new arm here.
+//
+// [LAW:decomposition] `horizontal` composes ONLY row 0 across the seam — row 0 is
+// every child's FIRST line zipped (the inline powerline run, so the joiner caps
+// across the seam, no abut). Every line BELOW row 0 is a child's DROP (a menu body
+// dropping below its trigger, a genuinely multi-line segment): drops STACK full-
+// width in child order, never zipped. Multi-line side-by-side column alignment is
+// explicitly UNSUPPORTED — aligning two children's row-i cells would require
+// background-as-structure, and bg is never structural. For an all-single-line row
+// (no child has a drop) this is byte-identical to a plain per-row zip.
 function composeBlocks(
   direction: Direction,
   blocks: readonly RenderedLines[],
@@ -131,12 +159,15 @@ function composeBlocks(
     case "vertical":
       return blocks.flatMap((b) => b);
     case "horizontal": {
+      // [LAW:dataflow-not-control-flow] height 0 (every child hidden/empty) ⇒ the
+      // container contributes NO line — not one empty row. This is the value-driven
+      // identity of the fold, preserved from the per-row zip it replaces; a stray
+      // [[]] here would render as a spurious blank line.
       const height = blocks.reduce((m, b) => Math.max(m, b.length), 0);
-      const rows: RichText[][] = [];
-      for (let i = 0; i < height; i++) {
-        rows.push(blocks.flatMap((b) => b[i] ?? []));
-      }
-      return rows;
+      if (height === 0) return [];
+      const row0 = blocks.flatMap((b) => b[0] ?? []);
+      const drops = blocks.flatMap((b) => b.slice(1));
+      return [row0, ...drops];
     }
   }
 }
@@ -185,7 +216,15 @@ const containerType: NodeType<"container"> = {
 
 const segmentType: NodeType<"segment"> = {
   compile(node, cctx) {
-    return { kind: "segment", when: cctx.when, name: node.name };
+    return {
+      kind: "segment",
+      when: cctx.when,
+      name: node.name,
+      // [LAW:no-defensive-null-guards] Every segment path is visited by the
+      // driver's placement walk, so the map has it; the `?? path` is the singleton
+      // degenerate (a segment outside any horizontal container is its own row).
+      rowKey: cctx.rowKeyByPath.get(cctx.path) ?? cctx.path,
+    };
   },
   render(node, ctx) {
     const found = ctx.lookupSegment(node.name);
@@ -222,11 +261,20 @@ const segmentType: NodeType<"segment"> = {
         segCompiled.paletteResolver ?? ctx.basePalette,
         hueShift,
       );
-      const baseStyle = resolveSegmentColors(
+      const resolvedStyle = resolveSegmentColors(
         resolver,
         segCompiled.bg,
         segCompiled.fg,
         ctx.scope,
+      );
+      // [LAW:single-enforcer] Publish this placement to the menu seam and adopt
+      // its baseStyle (focus-lightened iff this segment's menu is open) BEFORE
+      // evaluating the template — a `{{ menu }}` inside reads the placement, and
+      // the (possibly tinted) baseStyle flows into every cell + the line fill.
+      const baseStyle = ctx.prepareSegment(
+        node.name,
+        node.rowKey,
+        resolvedStyle,
       );
 
       const fragments = segCompiled.template.evaluate(ctx.scope);
