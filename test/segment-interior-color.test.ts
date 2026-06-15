@@ -1,16 +1,10 @@
-// [LAW:behavior-not-structure] Regression guard for render-bugs-pdu.3:
-// interior per-part color directives ({{ green "S" }} / {{ red "U" }}) must
-// survive the full renderDsl powerline serialization as DISTINCT colored runs
-// — NOT collapse to the segment-level fg. The bug was the color twin of the
-// OSC-8 link-bleed (pdu.1); both share ROOT A (lossy span serialization in the
-// powerline join), fixed by the bzh.9 StripCell→RichText migration. This pins
-// that fix through the REAL spine (registerDslConfig + renderDsl on the bundled
-// gitTaculous segment), asserting the colored output — not the call shape.
-//
-// [LAW:single-enforcer] Drives the production cascade: a user file overriding
-// only `root` merges onto DEFAULT_DSL_CONFIG, so the gitTaculous segment and
-// every git.* variable come from the bundled default exactly as the daemon
-// loads them. No hand-seeded store, no synthetic single-segment template.
+// [LAW:behavior-not-structure] Regression net for render-bugs-pdu.3, a STALE
+// bug: per-part colors were reported collapsing to the segment fg, but the
+// interior spans already survive (bzh.9's StripCell→RichText migration fixed
+// ROOT A — the same lossy-serialization root as the pdu.1 link bleed). This
+// pins that so the collapse can't silently return. Merging onto the real
+// DEFAULT_DSL_CONFIG (not a hand-rolled template) is deliberate: a synthetic
+// segment could pass while the SHIPPED gitTaculous regresses.
 
 import { PaletteResolver, getThemePalette } from "@promptctl/rich-js";
 
@@ -21,9 +15,8 @@ import { SessionState } from "../src/daemon/session-state";
 import { registerDslConfig, renderDsl } from "../src/dsl/render";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 
-// A git payload that fires every interior-colored branch of gitTaculous:
-// staged>0 → green "S", unstaged>0 → red "U", ahead>0 → green "+1",
-// behind>0 → red "-1".
+// Fires every interior-colored branch: staged→green "S", unstaged→red "U",
+// ahead→green "+1", behind→red "-1".
 const GIT_PAYLOAD = {
   hook_event_name: "Status",
   session_id: "deadbeef-1234-5678-9abc-def012345678",
@@ -48,9 +41,6 @@ const GIT_PAYLOAD = {
   },
 };
 
-// One ANSI-styled run: the SGR parameters that opened it and the literal text
-// it painted, before the next `ESC[...m`. Empty-text runs (bare resets, the
-// powerline separator's own color) are dropped — we assert over visible glyphs.
 interface Run {
   readonly sgr: string;
   readonly text: string;
@@ -67,10 +57,9 @@ function parseRuns(ansi: string): Run[] {
   return runs;
 }
 
-// The foreground color an SGR run sets: either a truecolor `38;2;r;g;b` triple
-// or a basic ANSI fg code (30-37 / 90-97). `null` = no explicit fg (inherits).
-// This is the value pdu.3's defect collapsed; comparing it across runs is the
-// behavioral invariant ("interior colors are distinct from the segment fg").
+// The foreground a run sets — the value pdu.3's defect collapsed to a single
+// segment fg; comparing it across runs is the behavioral invariant. Both the
+// truecolor `38;2;r;g;b` form and a basic ANSI code (30-37/90-97) count.
 function foregroundKey(sgr: string): string | null {
   const params = sgr.split(";");
   for (let i = 0; i < params.length; i++) {
@@ -84,7 +73,6 @@ function foregroundKey(sgr: string): string | null {
 }
 
 function render(): string {
-  // User file overrides only the root; everything else is the bundled default.
   const userSource = JSON.stringify({ root: { seg: "gitTaculous" } });
   const config = parseAndValidate(
     "<interior-color>",
@@ -112,16 +100,14 @@ describe("interior per-part colors survive powerline serialization (pdu.3)", () 
   const runs = parseRuns(render());
   const runFor = (glyph: string): Run | undefined =>
     runs.find((r) => r.text.trim() === glyph);
-  // The segment's default fg — the color of an un-styled run (the "(git)"
-  // prefix text). pdu.3's defect was every interior run collapsing to THIS.
   const segmentRun = runs.find((r) => r.text.includes("(git)"));
 
   test("the segment renders a default-fg run and the colored glyphs as separate runs", () => {
     expect(segmentRun).toBeDefined();
-    expect(runFor("S")).toBeDefined(); // staged
-    expect(runFor("U")).toBeDefined(); // unstaged
-    expect(runFor("+1")).toBeDefined(); // ahead
-    expect(runFor("-1")).toBeDefined(); // behind
+    expect(runFor("S")).toBeDefined();
+    expect(runFor("U")).toBeDefined();
+    expect(runFor("+1")).toBeDefined();
+    expect(runFor("-1")).toBeDefined();
   });
 
   test("each interior-colored glyph's fg is DISTINCT from the segment fg (no collapse)", () => {
@@ -130,7 +116,7 @@ describe("interior per-part colors survive powerline serialization (pdu.3)", () 
     for (const glyph of ["S", "U", "+1", "-1"]) {
       const fg = foregroundKey(runFor(glyph)!.sgr);
       expect(fg).not.toBeNull();
-      expect(fg).not.toBe(segFg); // the defect: fg === segFg for all of them
+      expect(fg).not.toBe(segFg);
     }
   });
 
@@ -138,14 +124,11 @@ describe("interior per-part colors survive powerline serialization (pdu.3)", () 
     const green = foregroundKey(runFor("S")!.sgr);
     const red = foregroundKey(runFor("U")!.sgr);
     expect(green).not.toBe(red);
-    // The two same-color pairs agree: staged/ahead share green, unstaged/behind red.
     expect(foregroundKey(runFor("+1")!.sgr)).toBe(green);
     expect(foregroundKey(runFor("-1")!.sgr)).toBe(red);
   });
 
   test("every colored glyph is painted over the segment bg (composited, not bare)", () => {
-    // [LAW:representation] Interior runs keep the segment background — they are
-    // composited over it, not emitted as bare un-backgrounded text.
     const segBg = segmentRun!.sgr.match(/48;2;[0-9;]+?(?=;38|;39|$|m)/);
     expect(segBg).not.toBeNull();
     for (const glyph of ["S", "U", "+1", "-1"]) {
