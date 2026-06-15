@@ -1,3 +1,10 @@
+## [1.7.2](https://github.com/promptctl/cc-candybar/compare/v1.7.1...v1.7.2) (2026-06-15)
+
+
+### Bug Fixes
+
+* **render:** theme/style picker stays open on pick by default (closeOnPick) ([#129](https://github.com/promptctl/cc-candybar/issues/129)) ([fc17b42](https://github.com/promptctl/cc-candybar/commit/fc17b42280a61592682bcdef63f3d4a2a1049345))
+
 ## [1.7.1](https://github.com/promptctl/cc-candybar/compare/v1.7.0...v1.7.1) (2026-06-15)
 
 
