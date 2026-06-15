@@ -4,20 +4,16 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
-overrides:
-  '@promptctl/go-template-js': link:../go-template-js
-  '@promptctl/rich-js': link:../rich-js
-
 importers:
 
   .:
     dependencies:
       '@promptctl/go-template-js':
-        specifier: link:../go-template-js
-        version: link:../go-template-js
+        specifier: ^0.5.0
+        version: 0.5.0
       '@promptctl/rich-js':
-        specifier: link:../rich-js
-        version: link:../rich-js
+        specifier: ^0.6.0
+        version: 0.6.0
       json5:
         specifier: ^2.2.3
         version: 2.2.3
@@ -642,6 +638,10 @@ packages:
       '@emnapi/core': ^1.7.1
       '@emnapi/runtime': ^1.7.1
 
+  '@noble/hashes@2.2.0':
+    resolution: {integrity: sha512-IYqDGiTXab6FniAgnSdZwgWbomxpy9FtYvLKs7wCUs2a8RkITG+DFGO1DM9cr+E3/RgADRpFjrKVaJ1z6sjtEg==}
+    engines: {node: '>= 20.19.0'}
+
   '@octokit/auth-token@6.0.0':
     resolution: {integrity: sha512-P4YJBPdPSpWTQ1NU4XYdvHvXJJDxM6YwpS0FZHRgP7YFkdVxsWcpWGy/NVqlAA7PcPCnMacXlRm1y2PFZRWL/w==}
     engines: {node: '>= 20'}
@@ -732,6 +732,14 @@ packages:
     resolution: {integrity: sha512-kV6ja1ybVX1CkSDx82WlLiOWZjpfPqsooDhg9bbB/dPBbZCBO+F1vQCwjH2U0m8KZ2Nrq1x5OBKNqYMITMdlsg==}
     cpu: [x64]
     os: [linux]
+
+  '@promptctl/go-template-js@0.5.0':
+    resolution: {integrity: sha512-oX02iwjsfjMzbcPKaAT0RDFVxI12toAL4S9ztm/VxS+HWima9PtnvpkFgyFah2TZ0uNTG0rrzBFswYL/DamZEw==}
+    engines: {node: '>=20.19.0'}
+
+  '@promptctl/rich-js@0.6.0':
+    resolution: {integrity: sha512-LaaHvAP1enfap5j5LwX/9aVVDRB6KPLyZuWutU2GaLuxLFoRhasnHDk2M9naiJeU9DZ7WK5GWmllMX3fNUnkPg==}
+    engines: {node: ^20.19.0 || >=22.12.0}
 
   '@quansync/fs@1.0.0':
     resolution: {integrity: sha512-4TJ3DFtlf1L5LDMaM6CanJ/0lckGNtJcMjQ1NAV6zDmA0tEHKZtxNKin8EgPaVX1YzljbxckyT2tJrpQKAtngQ==}
@@ -2826,6 +2834,10 @@ packages:
     resolution: {integrity: sha512-tsaTIkKW9b4N+AEj+SVA+WhJzV7/zMhcSu78mLKWSk7cXMOSHsBKFWUs0fWwq8QyK3MgJBQRX6Gbi4kYbdvGkQ==}
     engines: {node: '>=18'}
 
+  string-width@8.2.1:
+    resolution: {integrity: sha512-IIaP0g3iy9Cyy18w3M9YcaDudujEAVHKt3a3QJg1+sr/oX96TbaGUubG0hJyCjCBThFH+tFpcIyoUHUn1ogaLA==}
+    engines: {node: '>=20'}
+
   string_decoder@1.1.1:
     resolution: {integrity: sha512-n/ShnvDi6FHbbVfviro+WojiFzv+s8MPMHBczVePfUpDJLwoLT0ht1l4YwBCbi8pJAveEEdnkHyPyTP/mzRfwg==}
 
@@ -3827,6 +3839,8 @@ snapshots:
       '@tybys/wasm-util': 0.10.2
     optional: true
 
+  '@noble/hashes@2.2.0': {}
+
   '@octokit/auth-token@6.0.0': {}
 
   '@octokit/core@7.0.6':
@@ -3917,6 +3931,17 @@ snapshots:
 
   '@promptctl/cc-candybar-linux-x64@1.7.3':
     optional: true
+
+  '@promptctl/go-template-js@0.5.0':
+    dependencies:
+      '@noble/hashes': 2.2.0
+
+  '@promptctl/rich-js@0.6.0':
+    dependencies:
+      '@promptctl/go-template-js': 0.5.0
+      mobx: 6.15.1
+      string-width: 8.2.1
+      strip-ansi: 7.2.0
 
   '@quansync/fs@1.0.0':
     dependencies:
@@ -6112,6 +6137,11 @@ snapshots:
   string-width@7.2.0:
     dependencies:
       emoji-regex: 10.6.0
+      get-east-asian-width: 1.5.0
+      strip-ansi: 7.2.0
+
+  string-width@8.2.1:
+    dependencies:
       get-east-asian-width: 1.5.0
       strip-ansi: 7.2.0
 

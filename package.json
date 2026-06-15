@@ -85,8 +85,8 @@
     "typescript": "^5.0.0"
   },
   "dependencies": {
-    "@promptctl/go-template-js": "^0.3.0",
-    "@promptctl/rich-js": "^0.5.2",
+    "@promptctl/go-template-js": "^0.5.0",
+    "@promptctl/rich-js": "^0.6.0",
     "json5": "^2.2.3",
     "mobx": "^6.15.0"
   },
@@ -97,10 +97,6 @@
     "@promptctl/cc-candybar-linux-arm64": "1.7.3"
   },
   "pnpm": {
-    "overrides": {
-      "@promptctl/go-template-js": "link:../go-template-js",
-      "@promptctl/rich-js": "link:../rich-js"
-    },
     "supportedArchitectures": {
       "os": [
         "darwin",
