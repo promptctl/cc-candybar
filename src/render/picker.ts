@@ -208,6 +208,17 @@ function renderPicker(
 // (closeOnPick, paged). Returns T (RichText), the single fragment go-template-js
 // emits for `{{ picker … }}`.
 //
+// [LAW:no-mode-explosion] Both bools are OPTIONAL trailing values with a
+// documented default of `false`: `closeOnPick=false` is stay-open (a pick
+// recolors live and LEAVES THE MENU OPEN so themes can be tried in a row — the
+// baseline UX; the ✕ affordance closes), `closeOnPick=true` is the opt-in where a
+// pick ALSO writes the page key closed; `paged=false` is one wrapping page,
+// `paged=true` slices into ←/→ pages at the live width. `enforceArgTypes`
+// validates only the values actually passed (it loops over arity), so an omitted
+// trailing bool arrives `undefined` and resolves to the default here — no arity
+// error, and order is preserved so existing callers (which pass both) are
+// untouched. Authoring stay-open + paged is `{{ picker "a" "p" false true }}`.
+//
 // [LAW:one-way-deps] The caller injects this FuncMap into createCcCandybarEngine
 // (capabilities-over-context) so the generic engine never imports the picker.
 export function pickerFuncs(runtime: ActionRuntime): FuncMap {
@@ -216,9 +227,16 @@ export function pickerFuncs(runtime: ActionRuntime): FuncMap {
       fn: (
         applyName: string,
         pageName: string,
-        closeOnPick: boolean,
-        paged: boolean,
-      ) => renderPicker(applyName, pageName, closeOnPick, paged, runtime),
+        closeOnPick?: boolean,
+        paged?: boolean,
+      ) =>
+        renderPicker(
+          applyName,
+          pageName,
+          closeOnPick === true,
+          paged === true,
+          runtime,
+        ),
       argTypes: ["string", "string", "bool", "bool"],
       returnType: "T",
     },
