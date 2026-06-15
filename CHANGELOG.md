@@ -1,3 +1,10 @@
+## [1.7.1](https://github.com/promptctl/cc-candybar/compare/v1.7.0...v1.7.1) (2026-06-15)
+
+
+### Bug Fixes
+
+* **render:** correct over-reserved terminal width (45→2 cols) (render-bugs-pdu.2) ([#126](https://github.com/promptctl/cc-candybar/issues/126)) ([8b15249](https://github.com/promptctl/cc-candybar/commit/8b1524985a2860492810b59eabb25f5a7d84da5c))
+
 # [1.7.0](https://github.com/promptctl/cc-candybar/compare/v1.6.0...v1.7.0) (2026-06-15)
 
 
