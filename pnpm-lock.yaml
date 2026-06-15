@@ -9,11 +9,11 @@ importers:
   .:
     dependencies:
       '@promptctl/go-template-js':
-        specifier: ^0.3.0
-        version: 0.3.0
+        specifier: ^0.5.0
+        version: 0.5.0
       '@promptctl/rich-js':
-        specifier: ^0.5.2
-        version: 0.5.2
+        specifier: ^0.6.0
+        version: 0.6.0
       json5:
         specifier: ^2.2.3
         version: 2.2.3
@@ -733,16 +733,12 @@ packages:
     cpu: [x64]
     os: [linux]
 
-  '@promptctl/go-template-js@0.1.1':
-    resolution: {integrity: sha512-1byySemUUj9s7HpIpoR9W5m20ukZyAak8y599XFPIMYZXSpvII5xL4N2YiNEZsGoP1B73Eq5g1gy9LwTLJWBIA==}
-    engines: {node: '>=20'}
-
-  '@promptctl/go-template-js@0.3.0':
-    resolution: {integrity: sha512-u6AlJSH137gfTIOUfpfvadixSoFV07JqeU6D2nyfKVE+2E0UCUCJvQ1KeKyuRA0/+r8Q3vIXYPbmVUQgOnE6Yg==}
+  '@promptctl/go-template-js@0.5.0':
+    resolution: {integrity: sha512-oX02iwjsfjMzbcPKaAT0RDFVxI12toAL4S9ztm/VxS+HWima9PtnvpkFgyFah2TZ0uNTG0rrzBFswYL/DamZEw==}
     engines: {node: '>=20.19.0'}
 
-  '@promptctl/rich-js@0.5.2':
-    resolution: {integrity: sha512-KZe+Lmj0ng3RZHBVzBMKEgHctvFQ16QX/plRuInk1GJPSXS+cIWmzU6WDh60KsdIEntxXGrzOm5iUcpRQO/33w==}
+  '@promptctl/rich-js@0.6.0':
+    resolution: {integrity: sha512-LaaHvAP1enfap5j5LwX/9aVVDRB6KPLyZuWutU2GaLuxLFoRhasnHDk2M9naiJeU9DZ7WK5GWmllMX3fNUnkPg==}
     engines: {node: ^20.19.0 || >=22.12.0}
 
   '@quansync/fs@1.0.0':
@@ -3936,15 +3932,13 @@ snapshots:
   '@promptctl/cc-candybar-linux-x64@1.7.3':
     optional: true
 
-  '@promptctl/go-template-js@0.1.1': {}
-
-  '@promptctl/go-template-js@0.3.0':
+  '@promptctl/go-template-js@0.5.0':
     dependencies:
       '@noble/hashes': 2.2.0
 
-  '@promptctl/rich-js@0.5.2':
+  '@promptctl/rich-js@0.6.0':
     dependencies:
-      '@promptctl/go-template-js': 0.1.1
+      '@promptctl/go-template-js': 0.5.0
       mobx: 6.15.1
       string-width: 8.2.1
       strip-ansi: 7.2.0
