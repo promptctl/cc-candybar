@@ -300,7 +300,7 @@ describe("baseStyle merge — fragment style wins on overlap", () => {
 });
 
 describe("baseStyle merge preserves per-fragment fg as cell parts", () => {
-  // This is the gitTaculous-shaped case the structural fix targets: multiple
+  // This is the gitaculous-shaped case the structural fix targets: multiple
   // fragments with their own fg, under a shared segment bg, must coalesce into
   // ONE cell (single bg) while each fragment's fg survives as a part. The OLD
   // layout-time merge would rebuild as `new StripCell(text, mergedStyle)` and

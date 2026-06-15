@@ -11,9 +11,19 @@ import {
   findKeyLine,
 } from "../src/config/dsl-loader";
 import { parseAndValidate } from "./helpers/parse-and-validate";
+import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
+import { listResolvablePaletteNames } from "../src/themes/policy";
 import type { LayoutNode } from "../src/config/dsl-types";
 
 const FILE = "/tmp/test.json5";
+
+// The bundled default supplies `gitaculous`; merging a user file on top of it is
+// the real production cascade. Palettes must be allow-listed because the default
+// declares `globals.palette`.
+const ALL_PALETTES = new Set(listResolvablePaletteNames());
+function validateAgainstDefault(source: string) {
+  return parseAndValidate(FILE, source, ALL_PALETTES, DEFAULT_DSL_CONFIG);
+}
 
 // Convenience builder for vertical stacks of horizontal rows.
 type Row = { segments: readonly string[]; when?: string };
@@ -639,6 +649,35 @@ describe("loadDslConfig — layout (removed; migration errors)", () => {
     );
     const issue = err.issues.find((i) => i.path === "root")!;
     expect(issue.message).toMatch(/\{ h:/);
+  });
+});
+
+// ─── Segment rename migration (pdu.4: gitTaculous → gitaculous) ───────────────
+// [LAW:no-silent-failure] The built-in segment was renamed. A user config that
+// still names the old key (merged on top of the bundled default, which now
+// declares `gitaculous`) must get a loud, migration-POINTING error — not the
+// generic "does not match" nor a silent empty render.
+
+describe("loadDslConfig — renamed built-in segment", () => {
+  test("a root ref to the old name errors with a pointer to the new name", () => {
+    const err = (() => {
+      try {
+        validateAgainstDefault(`{ root: { seg: "gitTaculous" } }`);
+      } catch (e) {
+        if (e instanceof ConfigError) return e;
+        throw e;
+      }
+      throw new Error("expected ConfigError, got success");
+    })();
+    const issue = err.issues.find((i) => i.path === "root")!;
+    expect(issue.message).toMatch(/gitTaculous/);
+    expect(issue.message).toMatch(/renamed to "gitaculous"/);
+  });
+
+  test("the new name resolves against the bundled default", () => {
+    expect(() =>
+      validateAgainstDefault(`{ root: { seg: "gitaculous" } }`),
+    ).not.toThrow();
   });
 });
 
