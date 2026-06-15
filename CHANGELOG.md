@@ -1,3 +1,10 @@
+# [1.6.0](https://github.com/promptctl/cc-candybar/compare/v1.5.0...v1.6.0) (2026-06-15)
+
+
+### Features
+
+* **git:** forge PR/MR segment — clickable open-PR link for the branch ([#123](https://github.com/promptctl/cc-candybar/issues/123)) ([4b67f7b](https://github.com/promptctl/cc-candybar/commit/4b67f7b6cfe871d7cf591ecc283b9b09e537ed23))
+
 # [1.5.0](https://github.com/promptctl/cc-candybar/compare/v1.4.0...v1.5.0) (2026-06-14)
 
 
