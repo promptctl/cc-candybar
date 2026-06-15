@@ -124,7 +124,11 @@ function requireKind<K extends CompiledActionDecl["kind"]>(
 // click APPLIES its option AND (when closeOnPick) resets the page key to -1 in one
 // atomic set-state — the picker owns the page key, so it derives the close-write
 // rather than the author re-stating the key.
-function renderPicker(
+// [LAW:single-enforcer] Exported so the `{{ menu }}` helper renders its body
+// through the SAME picker renderer — a menu body IS a picker grid; there is no
+// second grid implementation to drift. The menu adds only the disclosure
+// wrapper, never a parallel picker.
+export function renderPicker(
   applyName: string,
   pageName: string,
   closeOnPick: boolean,
