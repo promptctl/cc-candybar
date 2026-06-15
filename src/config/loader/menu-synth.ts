@@ -60,6 +60,23 @@ export function synthesizeMenuDecls(
   ctx: ValidateCtx,
   out: Mutable<RawDslConfig>,
 ): void {
+  // [LAW:single-enforcer] The `menus.` namespace is reserved UNCONDITIONALLY — a
+  // user name under it is rejected whether or not any menu is placed this load, so
+  // the reservation is a stable contract ("you never author menus.*"), not a rule
+  // that only switches on when synthesis happens to collide. Runs before any early
+  // return so a `menus.*` user name can never load silently.
+  for (const section of ["variables", "actions", "segments"] as const) {
+    for (const name of Object.keys(out[section] ?? {})) {
+      if (name.startsWith(MENU_NS)) {
+        menuIssue(
+          ctx,
+          `${section}.${name}`,
+          `"${name}" is in the reserved "${MENU_NS}" namespace (synthesized by {{ menu }} helpers) — rename it`,
+        );
+      }
+    }
+  }
+
   // [LAW:no-silent-failure] A menu derives its accordion identity from its host
   // SEGMENT's tree position; a `{{ define }}` helper is shared and placement-
   // agnostic, so a `{{ menu }}` reached through one has no row to key on and would
@@ -98,6 +115,19 @@ export function synthesizeMenuDecls(
   const actions: Record<string, ActionDecl> = {};
   forEachSegmentPlacement(out.root, (segName, rowKey) => {
     if (!referencesMenu(segName)) return;
+    // [LAW:types-are-the-program] A menu's member name IS its host segment name;
+    // a segment named exactly the closed-state sentinel would make the cycle
+    // [closed, "closed"] — two identical members, so the toggle could never leave
+    // the closed state. Reject that one collision at load (the only segment name
+    // that breaks a menu), rather than silently synthesizing an unopenable menu.
+    if (segName === MENU_CLOSED) {
+      menuIssue(
+        ctx,
+        `segments.${segName}`,
+        `segment "${segName}" hosts a {{ menu }}, but a menu cannot live in a segment named "${MENU_CLOSED}" — that name collides with the menu's closed-state sentinel, leaving the menu unopenable. Rename the segment.`,
+      );
+      return;
+    }
     const stateKey = menuStateKey(rowKey);
     stateKeys.set(stateKey, rowKey);
     // [LAW:one-source-of-truth] Members ordered closed-first: an unset/foreign
@@ -111,21 +141,6 @@ export function synthesizeMenuDecls(
   });
 
   if (stateKeys.size === 0) return;
-
-  // [LAW:one-source-of-truth] Reject user names under the reserved namespace AFTER
-  // the user sections parsed, so synthesis can never silently overwrite an
-  // authored declaration (mirrors group sugar's collision guard).
-  for (const section of ["variables", "actions", "segments"] as const) {
-    for (const name of Object.keys(out[section] ?? {})) {
-      if (name.startsWith(MENU_NS)) {
-        menuIssue(
-          ctx,
-          `${section}.${name}`,
-          `"${name}" is in the reserved "${MENU_NS}" namespace (synthesized by {{ menu }} helpers) — rename it`,
-        );
-      }
-    }
-  }
 
   const variables: Record<string, VariableDecl> = {};
   for (const stateKey of stateKeys.keys()) {
