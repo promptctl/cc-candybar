@@ -140,6 +140,14 @@ export interface SpeedPayload {
   readonly input?: number;
   readonly output?: number;
   readonly total?: number;
+  // [LAW:one-type-per-behavior] The recent burn-rate trend: a delimited series
+  // of total-lane tok/s over the store's sample ring, for the `sparkline` helper.
+  // It rides the speed lane because it folds from the SAME observation the three
+  // instantaneous rates do, but it is INDEPENDENTLY optional — a session that
+  // burst then went idle has no current rate yet still has a history to draw. It
+  // travels as a string because a series cannot cross the scalar var-system seam;
+  // the helper decodes it. Absent (no measurable in-window pair) → missing → "".
+  readonly history?: string;
 }
 
 export interface BlockPayload {
@@ -328,6 +336,42 @@ function projectSpeed(obs: SpeedObservation): SpeedPayload | undefined {
     ...(output !== undefined && { output }),
     ...(total !== undefined && { total }),
   };
+}
+
+// [LAW:effects-at-boundaries] Pure fold of the observation's sample ring into the
+// burn-rate history string. Each adjacent pair becomes one total-lane tok/s; an
+// un-projectable pair (no new tokens, or a gap outside the sample window) is a
+// real ZERO-throughput interval, not absence — the series is a string of numbers,
+// and 0 is the honest value for "burned nothing here" ([LAW:no-silent-failure] —
+// the gap is reported, not dropped to misalign the graph). Fewer than two samples
+// ⇒ no pair ⇒ undefined (the whole field drops to the "" default).
+function projectSpeedHistory(obs: SpeedObservation): string | undefined {
+  const { samples } = obs;
+  const rates: number[] = [];
+  for (let i = 1; i < samples.length; i++) {
+    const prev = samples[i - 1]!;
+    const cur = samples[i]!;
+    // [LAW:no-silent-failure] Only an in-window interval is a measurable reading.
+    // An out-of-window pair — samples too close to time a rate reliably, or a
+    // stale gap spanning idle time — is UNMEASURABLE, not zero burn, so it is
+    // SKIPPED rather than fabricated as a 0 bar that would read as real activity.
+    // projectTokensPerSecond stays the single formula+window authority (same
+    // module constants); this classifier disambiguates its undefined: out-of-
+    // window ⇒ skip, in-window ⇒ undefined means a non-positive token delta, a
+    // genuine zero-burn reading that stays 0.
+    const deltaMs = cur.atMs - prev.atMs;
+    if (deltaMs < MIN_SPEED_SAMPLE_MS || deltaMs > MAX_SPEED_SAMPLE_MS)
+      continue;
+    const rate = projectTokensPerSecond(
+      prev.total,
+      prev.atMs,
+      cur.total,
+      cur.atMs,
+    );
+    rates.push(rate ?? 0);
+  }
+  if (rates.length === 0) return undefined;
+  return rates.join(",");
 }
 
 // ─── Builder ─────────────────────────────────────────────────────────────────
@@ -657,8 +701,22 @@ export async function buildRenderPayload(
   // that data here at the edge. Absent observation (lane skipped/failed) or no
   // projectable lane → no `speed` key → every lane reads its -1 default.
   const speedObs = take(speed);
-  const speedPayload =
+  // [LAW:dataflow-not-control-flow] The instantaneous rates and the burn-rate
+  // history fold independently from one observation — either can be present
+  // without the other (a fresh burst has rates but a one-sample history; an
+  // idle-after-burst session has a history but no current rate). Merge whatever
+  // each yields; the whole `speed` key drops only when both are absent.
+  const speedRates =
     speedObs !== undefined ? projectSpeed(speedObs) : undefined;
+  const speedHistory =
+    speedObs !== undefined ? projectSpeedHistory(speedObs) : undefined;
+  const speedPayload =
+    speedRates !== undefined || speedHistory !== undefined
+      ? {
+          ...speedRates,
+          ...(speedHistory !== undefined && { history: speedHistory }),
+        }
+      : undefined;
 
   // [LAW:one-source-of-truth] The theme variable surfaces the session's
   // resolved theme so the toolbar/tray DSL templates can encode it into
