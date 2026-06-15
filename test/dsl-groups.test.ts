@@ -5,9 +5,9 @@
 //   1. `{ kind: "group" }` lowers to canonical container/segment nodes and
 //      SYNTHESIZES its state var + cycle action + toggle segment under the
 //      reserved `groups.` namespace — one declaration, every artifact derived.
-//   2. The toggle round trip: closed renders "▸ label" and no body; the click
-//      writes the group's name; the next render shows "▾ label" + body; the
-//      second click writes "closed".
+//   2. The toggle round trip: closed renders "label ▸" and no body; the click
+//      writes the group's name; the next render shows "label ▾" + body; the
+//      second click writes "closed". The glyph TRAILS the label it gates.
 //   3. Accordion = sibling groups sharing `key`: one key holds one open name,
 //      so opening B auto-closes A — no accordion mode, just the shared value.
 //   4. Nested disclosure = nested groups with DISTINCT keys; a closed parent
@@ -123,7 +123,7 @@ describe("2de.4 — group sugar: toggle round trip", () => {
   test("closed by default: toggle renders ▸, body absent (no blank line)", () => {
     const { render, dispose } = buildRuntime(DETAILS_SRC);
     const out = stripAnsi(render());
-    expect(out).toContain("▸ details");
+    expect(out).toContain("details ▸");
     expect(out).not.toContain("METRICS-BODY");
     expect(out.split("\n")).toHaveLength(1);
     dispose();
@@ -135,7 +135,7 @@ describe("2de.4 — group sugar: toggle round trip", () => {
     clickToggle(render(), "groups.details", "details");
     expect(sessionState.get("s1", "groups.details")).toBe("details");
     const open = stripAnsi(render());
-    expect(open).toContain("▾ details");
+    expect(open).toContain("details ▾");
     expect(open).toContain("METRICS-BODY");
     clickToggle(render(), "groups.details", "closed");
     expect(stripAnsi(render())).not.toContain("METRICS-BODY");
@@ -149,7 +149,7 @@ describe("2de.4 — group sugar: toggle round trip", () => {
     );
     const { render, dispose } = buildRuntime(src);
     const out = stripAnsi(render());
-    expect(out).toContain("▾ details");
+    expect(out).toContain("details ▾");
     expect(out).toContain("METRICS-BODY");
     dispose();
   });
@@ -166,7 +166,7 @@ describe("2de.4 — group sugar: toggle round trip", () => {
       cycle: ["closed", "details"],
     });
     expect(config.segments["groups.details"]?.template).toBe(
-      '{{ action "groups.details" "▸ details" "▾ details" }}',
+      '{{ action "groups.details" "details ▸" "details ▾" }}',
     );
     expect(deriveActionValidators(config)).toEqual([
       {
@@ -182,7 +182,7 @@ describe("2de.4 — group sugar: toggle round trip", () => {
       `label: 'say "hi" \\\\ ok',`,
     );
     const { render, dispose } = buildRuntime(src);
-    expect(stripAnsi(render())).toContain('▸ say "hi" \\ ok');
+    expect(stripAnsi(render())).toContain('say "hi" \\ ok ▸');
     dispose();
   });
 });
@@ -213,17 +213,17 @@ describe("2de.4 — accordion (shared key)", () => {
     const { render, clickToggle, dispose } = buildRuntime(ACCORDION_SRC);
     clickToggle(render(), "menu", "files");
     let out = stripAnsi(render());
-    expect(out).toContain("▾ files");
+    expect(out).toContain("files ▾");
     expect(out).toContain("FILES-BODY");
-    expect(out).toContain("▸ tools");
+    expect(out).toContain("tools ▸");
     expect(out).not.toContain("TOOLS-BODY");
     // B's toggle renders closed (current "files" is outside its cycle domain),
     // so its click writes "tools" — expand B, auto-closing A on the shared key.
     clickToggle(render(), "menu", "tools");
     out = stripAnsi(render());
-    expect(out).toContain("▸ files");
+    expect(out).toContain("files ▸");
     expect(out).not.toContain("FILES-BODY");
-    expect(out).toContain("▾ tools");
+    expect(out).toContain("tools ▾");
     expect(out).toContain("TOOLS-BODY");
     dispose();
   });
@@ -263,11 +263,11 @@ describe("2de.4 — nested groups (distinct keys)", () => {
     const config = parseAndValidate("<test>", SRC, ALLOWED);
     // outer is depth-0: no indent
     expect(config.segments["groups.outer"]?.template).toBe(
-      '{{ action "groups.outer" "▸ outer" "▾ outer" }}',
+      '{{ action "groups.outer" "outer ▸" "outer ▾" }}',
     );
-    // inner is depth-1 (one ancestor group): 2-space indent
+    // inner is depth-1 (one ancestor group): 2-space leading indent, glyph trails
     expect(config.segments["groups.inner"]?.template).toBe(
-      '{{ action "groups.inner" "  ▸ inner" "  ▾ inner" }}',
+      '{{ action "groups.inner" "  inner ▸" "  inner ▾" }}',
     );
   });
 
@@ -277,7 +277,7 @@ describe("2de.4 — nested groups (distinct keys)", () => {
     expect(stripAnsi(render())).not.toContain("inner");
     clickToggle(render(), "groups.outer", "outer");
     let out = stripAnsi(render());
-    expect(out).toContain("▸ inner");
+    expect(out).toContain("inner ▸");
     expect(out).not.toContain("LEAF-BODY");
     clickToggle(render(), "groups.inner", "inner");
     expect(stripAnsi(render())).toContain("LEAF-BODY");
