@@ -34,10 +34,11 @@ import { renderSparkline, parseSeries } from "./sparkline.js";
 const THEMES_LIST: readonly string[] = listResolvablePaletteNames();
 const STYLES_LIST: readonly string[] = [...STRIP_STYLES];
 
-// Normalize an engine-supplied numeric argument. The "number" argType admits
-// both number and bigint (per @promptctl/go-template-js); the underlying
-// formatters take a JS number, so collapse bigint here. [LAW:single-enforcer]
-// every formatter wrapper goes through this — no per-wrapper bigint check.
+// Normalize an engine-supplied numeric argument. The "int"/"float" argTypes
+// (per @promptctl/go-template-js) admit number and bigint carriers; the
+// underlying formatters take a JS number, so collapse bigint here.
+// [LAW:single-enforcer] every formatter wrapper goes through this — no
+// per-wrapper bigint check.
 //
 // [LAW:no-silent-fallbacks] A bigint outside JS's safe-integer range cannot
 // round-trip through Number without silent precision loss (53-bit mantissa)
@@ -189,7 +190,7 @@ export function formatterFuncs(clock: () => Date = () => new Date()): FuncMap {
         Math.round(
           Math.max(0, num(epochSeconds) * 1000 - clock().getTime()) / 60000,
         ),
-      argTypes: ["number"],
+      argTypes: ["float"],
     },
 
     // ─── Locale-grouped integer (context's "50,000") ──────────────────
@@ -201,7 +202,7 @@ export function formatterFuncs(clock: () => Date = () => new Date()): FuncMap {
     // formatModelName here.
     formatInteger: {
       fn: (n: number | bigint) => formatInteger(num(n)),
-      argTypes: ["number"],
+      argTypes: ["float"],
     },
 
     // ─── Numeric helper (block/weekly's Math.round of pct) ────────────
@@ -211,7 +212,7 @@ export function formatterFuncs(clock: () => Date = () => new Date()): FuncMap {
     // not domain-meaningful, so it stays here.
     round: {
       fn: (n: number | bigint) => Math.round(num(n)),
-      argTypes: ["number"],
+      argTypes: ["float"],
     },
 
     // ─── Model-name normalizers (chunk-7 model dsl-pending → dsl-parity) ─
