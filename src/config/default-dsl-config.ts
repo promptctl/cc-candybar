@@ -425,6 +425,17 @@ export const DEFAULT_DSL_CONFIG = {
       type: "number",
       default: -1,
     },
+    // Recent burn-rate trend: a comma-delimited series of total-lane tok/s the
+    // daemon folds from its sample ring (render-payload.ts). A series cannot
+    // cross the scalar var-system seam, so it travels as a string the
+    // `sparkline` helper decodes. Default "" is the genuine "no history yet"
+    // form (the helper renders nothing); the segment gates on it being present.
+    "speed.history": {
+      kind: "input",
+      path: "speed.history",
+      type: "string",
+      default: "",
+    },
 
     // Context — daemon fetches via ContextProvider; contextLeftPercentage.
     "context.totalTokens": {
@@ -655,6 +666,21 @@ export const DEFAULT_DSL_CONFIG = {
       bg: "panel",
       fg: "foreground",
       when: "{{ gt .session.tokens 0 }}",
+    },
+    // Burn-rate sparkline: the recent total-lane tok/s trend as a unicode
+    // mini-graph. Declared-but-opt-in (NOT in the default root, like speed /
+    // block / weekly): a user adds `tokenSparkline` to their layout. The
+    // `sparkline` helper decodes the daemon-owned series and draws it; `24`
+    // caps the glyph count to the cell, showing the live tail of the ring. The
+    // segment's fg colors the whole graph (no per-glyph color). Gated on the
+    // history being present so the cell never renders empty (the series needs
+    // two samples before its first bar). [LAW:effects-at-boundaries] — all the
+    // history lives in the daemon ring, the template only draws.
+    tokenSparkline: {
+      template: " ⚡ {{ sparkline .speed.history 24 }} ",
+      bg: "panel",
+      fg: "foreground",
+      when: '{{ ne .speed.history "" }}',
     },
     // Prompt-cache warmth countdown. minutesUntilReset clamps a past expiry
     // to 0, so an expired cache renders "cold" (and reads red via the ≤8

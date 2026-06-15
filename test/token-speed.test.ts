@@ -163,6 +163,36 @@ describe("SessionUsageStore.observeSpeed — prior-sample retention", () => {
       store.close();
     }
   });
+
+  test("the ring accumulates recent samples oldest→newest; prev is its last", async () => {
+    const t = join(dir, "R.jsonl");
+    const store = new SessionUsageStore({ sweepIntervalMs: 0 });
+    try {
+      // Three growing transcript states, each a distinct mtime ⇒ a new sample.
+      let lines = "";
+      const outputs = [5, 12, 30];
+      const results = [];
+      for (let i = 0; i < outputs.length; i++) {
+        lines += usageLine(`t${i}`, 10, outputs[i]! - (outputs[i - 1] ?? 0));
+        const ms = (i + 1) * 1000;
+        writeFileSync(t, lines);
+        utimesSync(t, new Date(ms), new Date(ms));
+        const r = await store.observeSpeed("R", t, ms);
+        expect(r.kind).toBe("ok");
+        if (r.kind !== "ok") return;
+        results.push(r.value);
+      }
+      // The ring grows by one each observation, ordered oldest→newest.
+      expect(results.map((r) => r.samples.length)).toEqual([1, 2, 3]);
+      const last = results[2]!;
+      expect(last.samples.map((s) => s.atMs)).toEqual([1000, 2000, 3000]);
+      // [LAW:one-source-of-truth] prev is exactly the ring's penultimate sample —
+      // the tok/s baseline and the history fold read the same owned ring.
+      expect(last.prev).toBe(last.samples[last.samples.length - 2]);
+    } finally {
+      store.close();
+    }
+  });
 });
 
 // ─── buildRenderPayload — speed lane ──────────────────────────────────────────
@@ -175,11 +205,11 @@ function depsWith(
     usageStore: {
       getUsageInfo: async () => ok({ session: { cost: 1, tokens: 1500 } }),
       getTodayInfo: async () => ABSENT,
-      observeSpeed: async () =>
-        ok({
-          prev: { input: 1000, output: 1000, total: 2000, atMs: 0 },
-          cur: { input: 1000, output: 1500, total: 2500, atMs: 1000 },
-        }),
+      observeSpeed: async () => {
+        const prev = { input: 1000, output: 1000, total: 2000, atMs: 0 };
+        const cur = { input: 1000, output: 1500, total: 2500, atMs: 1000 };
+        return ok({ prev, cur, samples: [prev, cur] });
+      },
     },
     contextProvider: { getContextInfo: async () => ABSENT },
     metricsProvider: { getMetricsInfo: async () => ABSENT },
@@ -230,12 +260,62 @@ describe("buildRenderPayload — speed lane", () => {
         usageStore: {
           getUsageInfo: async () => ok({ session: { cost: 1, tokens: 1500 } }),
           getTodayInfo: async () => ABSENT,
-          observeSpeed: async () =>
-            ok({ cur: { input: 10, output: 5, total: 15, atMs: 1000 } }),
+          observeSpeed: async () => {
+            const cur = { input: 10, output: 5, total: 15, atMs: 1000 };
+            return ok({ cur, samples: [cur] });
+          },
         } as unknown as RenderPayloadDeps["usageStore"],
       }),
       undefined,
       SPEED_PATHS,
+    );
+    expect(payload.speed).toBeUndefined();
+  });
+
+  test("burn-rate history projects each adjacent total-lane pair; idle gaps are 0", async () => {
+    const payload = await buildRenderPayload(
+      hook(),
+      depsWith({
+        usageStore: {
+          getUsageInfo: async () => ok({ session: { cost: 1, tokens: 1500 } }),
+          getTodayInfo: async () => ABSENT,
+          observeSpeed: async () => {
+            // total/atMs: 0@0, 100@1s (+100/s), 100@2s (idle ⇒ 0), 400@3s (+300/s).
+            const samples = [
+              { input: 0, output: 0, total: 0, atMs: 0 },
+              { input: 0, output: 100, total: 100, atMs: 1000 },
+              { input: 0, output: 100, total: 100, atMs: 2000 },
+              { input: 0, output: 400, total: 400, atMs: 3000 },
+            ];
+            return ok({
+              prev: samples[2],
+              cur: samples[3]!,
+              samples,
+            });
+          },
+        } as unknown as RenderPayloadDeps["usageStore"],
+      }),
+      undefined,
+      new Set(["speed.history"]),
+    );
+    expect(payload.speed?.history).toBe("100,0,300");
+  });
+
+  test("a single-sample ring yields no history (needs two samples for one bar)", async () => {
+    const payload = await buildRenderPayload(
+      hook(),
+      depsWith({
+        usageStore: {
+          getUsageInfo: async () => ok({ session: { cost: 1, tokens: 1500 } }),
+          getTodayInfo: async () => ABSENT,
+          observeSpeed: async () => {
+            const cur = { input: 10, output: 5, total: 15, atMs: 1000 };
+            return ok({ cur, samples: [cur] });
+          },
+        } as unknown as RenderPayloadDeps["usageStore"],
+      }),
+      undefined,
+      new Set(["speed.history"]),
     );
     expect(payload.speed).toBeUndefined();
   });

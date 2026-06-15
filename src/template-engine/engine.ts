@@ -20,7 +20,8 @@
 //    `dict` lets a helper take multiple named inputs through its one dot arg.
 //  • richTextFuncs: bold, italic, red, green, … (styling from rich-js).
 //  • paletteFuncs (when resolver provided): primary, accent, palette, paletteOver, auto.
-//  • ccCandybarFuncs: basename, dirname, int, string, bool, urlEncode.
+//  • ccCandybarFuncs: basename, dirname, int, string, bool, urlEncode,
+//    themes, styles, sparkline.
 //  • formatterFuncs: minutesUntilReset (clock-reading numeric primitive),
 //    formatInteger, round, formatModelName, shortenModelName. (The cost/token/
 //    budget AND duration/time-remaining formatters moved to DSL helper templates
