@@ -147,6 +147,39 @@ describe("pdu.9 — menu synthesis (derived, reserved namespace)", () => {
     });
   });
 
+  test("a user menus.* name is rejected even when NO menu is placed (unconditional reservation)", () => {
+    const src = `{
+      globals: {},
+      variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' }, 'menus.mine': { kind: 'literal', value: 'v' } },
+      segments: { plain: { template: 'X', bg: 'surface', fg: 'foreground' } },
+      root: { h: ['plain'] },
+    }`;
+    try {
+      parseAndValidate("<test>", src, ALLOWED);
+      throw new Error("expected ConfigError");
+    } catch (e) {
+      expect(e).toBeInstanceOf(ConfigError);
+      expect((e as ConfigError).message).toMatch(/reserved "menus\." namespace/);
+    }
+  });
+
+  test('a {{ menu }} on a segment named "closed" is rejected (sentinel collision)', () => {
+    const src = `{
+      globals: {},
+      variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
+      actions: { applyTheme: { set: 'theme', from: 'themes' }, themePage: { set: 'theme-page', int: true } },
+      segments: { closed: { template: '{{ menu "applyTheme" "themePage" }}', bg: 'surface', fg: 'foreground' } },
+      root: { h: ['closed'] },
+    }`;
+    try {
+      parseAndValidate("<test>", src, ALLOWED);
+      throw new Error("expected ConfigError");
+    } catch (e) {
+      expect(e).toBeInstanceOf(ConfigError);
+      expect((e as ConfigError).message).toMatch(/cannot live in a segment named "closed"/);
+    }
+  });
+
   test("a {{ menu }} inside a helper is rejected at load (no per-placement identity)", () => {
     const src = `{
       globals: {},
