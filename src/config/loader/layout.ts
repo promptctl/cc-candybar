@@ -654,8 +654,13 @@ export function synthesizeGroupDecls(
     // sibling-held key counts as the first member, so the toggle renders ▸ and
     // clicks to its own name — expand, auto-closing the sibling on a shared key.
     actions[name] = { set: key, cycle: [GROUP_CLOSED, g.name] };
+    // [LAW:representation] The disclosure glyph trails the label it gates, so an
+    // arrow reads as belonging to the text on its LEFT — adjacent toggles
+    // ("details ▸" "links ▸") stay unambiguous even when abutted. `indent` is a
+    // structural left-margin (nesting depth) and stays leading; the glyph is a
+    // trailing affordance on the label, never a prefix.
     segments[name] = {
-      template: `{{ action "${name}" "${indent}${GROUP_GLYPH_CLOSED} ${label}" "${indent}${GROUP_GLYPH_OPEN} ${label}" }}`,
+      template: `{{ action "${name}" "${indent}${label} ${GROUP_GLYPH_CLOSED}" "${indent}${label} ${GROUP_GLYPH_OPEN}" }}`,
       ...(g.bg !== undefined && { bg: g.bg }),
       ...(g.fg !== undefined && { fg: g.fg }),
     };
