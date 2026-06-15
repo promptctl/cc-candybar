@@ -332,6 +332,34 @@ describe("buildRenderPayload — speed lane", () => {
     expect(payload.speed?.history).toBe("100,0,300");
   });
 
+  test("history skips unmeasurable (out-of-window) pairs instead of fabricating a 0 bar", async () => {
+    const payload = await buildRenderPayload(
+      hook(),
+      depsWith({
+        usageStore: {
+          getUsageInfo: async () => ok({ session: { cost: 1, tokens: 1500 } }),
+          getTodayInfo: async () => ABSENT,
+          observeSpeed: async () => {
+            // total/atMs: 0@0, 100@1s (+100/s, in-window), 400@30s (29s gap ⇒
+            // stale, out-of-window), 410@30.005s (5ms ⇒ rapid, out-of-window).
+            const samples = [
+              { input: 0, output: 0, total: 0, atMs: 0 },
+              { input: 0, output: 100, total: 100, atMs: 1000 },
+              { input: 0, output: 400, total: 400, atMs: 30000 },
+              { input: 0, output: 410, total: 410, atMs: 30005 },
+            ];
+            return ok({ prev: samples[2], cur: samples[3]!, samples });
+          },
+        } as unknown as RenderPayloadDeps["usageStore"],
+      }),
+      undefined,
+      new Set(["speed.history"]),
+    );
+    // Only the single in-window pair survives; the stale and rapid gaps are
+    // dropped, never shown as 0.
+    expect(payload.speed?.history).toBe("100");
+  });
+
   test("a single-sample ring yields no history (needs two samples for one bar)", async () => {
     const payload = await buildRenderPayload(
       hook(),

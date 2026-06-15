@@ -146,7 +146,7 @@ export interface SpeedPayload {
   // instantaneous rates do, but it is INDEPENDENTLY optional — a session that
   // burst then went idle has no current rate yet still has a history to draw. It
   // travels as a string because a series cannot cross the scalar var-system seam;
-  // the helper decodes it. Absent (fewer than two samples) → missing field → "".
+  // the helper decodes it. Absent (no measurable in-window pair) → missing → "".
   readonly history?: string;
 }
 
@@ -347,11 +347,21 @@ function projectSpeed(obs: SpeedObservation): SpeedPayload | undefined {
 // ⇒ no pair ⇒ undefined (the whole field drops to the "" default).
 function projectSpeedHistory(obs: SpeedObservation): string | undefined {
   const { samples } = obs;
-  if (samples.length < 2) return undefined;
   const rates: number[] = [];
   for (let i = 1; i < samples.length; i++) {
     const prev = samples[i - 1]!;
     const cur = samples[i]!;
+    // [LAW:no-silent-failure] Only an in-window interval is a measurable reading.
+    // An out-of-window pair — samples too close to time a rate reliably, or a
+    // stale gap spanning idle time — is UNMEASURABLE, not zero burn, so it is
+    // SKIPPED rather than fabricated as a 0 bar that would read as real activity.
+    // projectTokensPerSecond stays the single formula+window authority (same
+    // module constants); this classifier disambiguates its undefined: out-of-
+    // window ⇒ skip, in-window ⇒ undefined means a non-positive token delta, a
+    // genuine zero-burn reading that stays 0.
+    const deltaMs = cur.atMs - prev.atMs;
+    if (deltaMs < MIN_SPEED_SAMPLE_MS || deltaMs > MAX_SPEED_SAMPLE_MS)
+      continue;
     const rate = projectTokensPerSecond(
       prev.total,
       prev.atMs,
@@ -360,6 +370,7 @@ function projectSpeedHistory(obs: SpeedObservation): string | undefined {
     );
     rates.push(rate ?? 0);
   }
+  if (rates.length === 0) return undefined;
   return rates.join(",");
 }
 
