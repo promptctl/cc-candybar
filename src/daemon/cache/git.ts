@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { GitService, type GitInfo, type PullRequest } from "../../segments/git";
-import { ok, type Outcome } from "../../utils/outcome";
+import { ABSENT, ok, type Outcome } from "../../utils/outcome";
 import { debug } from "../../utils/logger";
 import { WatcherRegistry, type WatcherHandle } from "./watchers";
 
@@ -350,15 +350,25 @@ export class GitDataProvider extends GitService {
     return outcome;
   }
 
-  // [LAW:single-enforcer] The one read path for a branch's PR. TTL is
-  // outcome-dependent (a `failed` retries sooner). Concurrent misses coalesce
-  // through prFetchInFlight. The fetch delegates to inner.resolvePullRequest —
+  // [LAW:single-enforcer] The one read path for a branch's PR. Reads the remote
+  // (cheap local git) so the cache key reflects every input the PR value
+  // depends on — `repoRoot|branch|remote` — and a re-pointed origin is a fresh
+  // key, not a stale hit ([LAW:one-source-of-truth]). TTL is outcome-dependent
+  // (a `failed` retries sooner). Concurrent misses coalesce through
+  // prFetchInFlight. The forge dispatch delegates to inner.resolvePullRequest —
   // this layer is cache + lifecycle only, never forge knowledge.
-  private getPullRequestCached(
+  private async getPullRequestCached(
     repoRoot: string,
     branch: string,
   ): Promise<Outcome<PullRequest>> {
-    const key = `${repoRoot}|${branch}`;
+    // [LAW:no-silent-failure] A `failed` remote read (git couldn't run) must
+    // surface; only `absent` (no remote configured) means "no forge PR".
+    const remote = await this.inner.getRemoteOriginUrl(repoRoot);
+    if (remote.kind === "failed") return remote;
+    if (remote.kind === "absent") return ABSENT;
+    const remoteUrl = remote.value;
+
+    const key = `${repoRoot}|${branch}|${remoteUrl}`;
     const now = Date.now();
 
     const existing = this.prCache.get(key);
@@ -368,7 +378,7 @@ export class GitDataProvider extends GitService {
         // LRU touch so the active branch's PR survives eviction.
         this.prCache.delete(key);
         this.prCache.set(key, existing);
-        return Promise.resolve(existing.pr);
+        return existing.pr;
       }
     }
 
@@ -376,7 +386,7 @@ export class GitDataProvider extends GitService {
     if (pending) return pending;
 
     const promise = this.inner
-      .resolvePullRequest(repoRoot)
+      .resolvePullRequest(repoRoot, remoteUrl)
       .then((pr) => {
         this.prCache.set(key, { pr, computedAt: Date.now() });
         this.evictPrIfNeeded();

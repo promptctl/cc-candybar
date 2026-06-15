@@ -25,17 +25,25 @@ class StubGitService extends GitService {
     status: "clean",
     aheadBehind: ok({ ahead: 0, behind: 0 }),
   };
-  public prCalls: string[] = [];
+  public prCalls: Array<{ workingDir: string; remoteUrl: string }> = [];
   public stubPr: Outcome<PullRequest> = ok({
     number: 7,
     state: "OPEN",
     url: "https://example.test/pull/7",
   });
+  public stubRemote: Outcome<string> = ok("git@github.com:acme/widget.git");
+
+  override async getRemoteOriginUrl(
+    _workingDir: string,
+  ): Promise<Outcome<string>> {
+    return this.stubRemote;
+  }
 
   override async resolvePullRequest(
     workingDir: string,
+    remoteUrl: string,
   ): Promise<Outcome<PullRequest>> {
-    this.prCalls.push(workingDir);
+    this.prCalls.push({ workingDir, remoteUrl });
     return this.stubPr;
   }
 
@@ -500,5 +508,49 @@ describe("GitDataProvider PR cache", () => {
       kind: "failed",
       reason: "gh pr view: non-zero, HTTP 401",
     });
+  });
+
+  test("remote change → new key → PR re-fetched (remote is part of the key)", async () => {
+    const { svc, inner } = makeCache({ ttlMs: 0 });
+    inner.repoRootByDir = { "/repo": "/repo" };
+
+    inner.stubRemote = ok("git@github.com:acme/widget.git");
+    await svc.getGitInfo("/repo", { showPullRequest: true });
+    // Re-point origin to a different forge/repo on the same branch.
+    inner.stubRemote = ok("git@gitlab.com:acme/widget.git");
+    await svc.getGitInfo("/repo", { showPullRequest: true });
+
+    expect(inner.prCalls).toHaveLength(2);
+    expect(inner.prCalls.map((c) => c.remoteUrl)).toEqual([
+      "git@github.com:acme/widget.git",
+      "git@gitlab.com:acme/widget.git",
+    ]);
+  });
+
+  test("failed remote read → PR failed (surfaced); no forge call", async () => {
+    const { svc, inner } = makeCache();
+    inner.repoRootByDir = { "/repo": "/repo" };
+    inner.stubRemote = { kind: "failed", reason: "git config: timeout" };
+
+    const out = await svc.getGitInfo("/repo", { showPullRequest: true });
+    expect(out.kind).toBe("ok");
+    if (out.kind !== "ok") return;
+    expect(out.value.pullRequest).toEqual({
+      kind: "failed",
+      reason: "git config: timeout",
+    });
+    expect(inner.prCalls).toHaveLength(0);
+  });
+
+  test("no remote (absent) → PR absent; no forge call", async () => {
+    const { svc, inner } = makeCache();
+    inner.repoRootByDir = { "/repo": "/repo" };
+    inner.stubRemote = ABSENT;
+
+    const out = await svc.getGitInfo("/repo", { showPullRequest: true });
+    expect(out.kind).toBe("ok");
+    if (out.kind !== "ok") return;
+    expect(out.value.pullRequest).toEqual(ABSENT);
+    expect(inner.prCalls).toHaveLength(0);
   });
 });

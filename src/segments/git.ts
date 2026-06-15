@@ -130,10 +130,31 @@ function nonEmpty(o: Outcome<string>): Outcome<string> {
 //   timeout / signal / rate-limited → failed        (forge couldn't answer)
 export type ForgeName = "github" | "gitlab";
 
+// [LAW:types-are-the-program] Extract the host from a git remote, handling the
+// two shapes git uses: scp-like `[user@]host:path` and URL `scheme://[user@]
+// host[:port]/path`. The URL form is checked first — its `host` in a scp regex
+// would mis-capture the scheme (`https` before `://`). Returns null for an
+// unrecognized shape (local path, unknown syntax).
+function remoteHost(remoteUrl: string): string | null {
+  const url = remoteUrl.trim();
+  const proto = url.match(/^[a-z][a-z0-9+.-]*:\/\/(?:[^@/]+@)?([^/:]+)/i);
+  if (proto) return proto[1]!.toLowerCase();
+  const scp = url.match(/^(?:[^@/]+@)?([^/:]+):/);
+  if (scp) return scp[1]!.toLowerCase();
+  return null;
+}
+
+// [LAW:types-are-the-program] Branch on the HOST, not a substring of the whole
+// URL — a non-GitLab remote whose path merely contains "gitlab" (a repo named
+// `gitlab`) must not dispatch to glab. Self-hosted GitLab is detected by a
+// `gitlab.`-prefixed host label (gitlab.example.com); a GitLab on an arbitrary
+// hostname is undetectable here and falls through to null (absent), same as
+// GitHub Enterprise on a custom domain.
 export function detectForge(remoteUrl: string): ForgeName | null {
-  if (/github\.com/i.test(remoteUrl)) return "github";
-  // Matches gitlab.com and self-hosted GitLab (gitlab.example.com).
-  if (/gitlab/i.test(remoteUrl)) return "gitlab";
+  const host = remoteHost(remoteUrl);
+  if (!host) return null;
+  if (host === "github.com" || host.endsWith(".github.com")) return "github";
+  if (/(^|\.)gitlab\./.test(host)) return "gitlab";
   return null;
 }
 
@@ -537,12 +558,12 @@ export class GitService {
     return ok(match?.[1] || path.basename(workingDir));
   }
 
-  // Raw origin URL (unparsed) — the forge detector reads the host from it.
-  // `config --get` exits 1 when unset → `absent` (no remote, hence no forge PR
-  // concept), distinct from a real failure.
-  private async getRemoteOriginUrlAsync(
-    workingDir: string,
-  ): Promise<Outcome<string>> {
+  // [LAW:locality-or-seam] Public so the daemon's GitDataProvider can read the
+  // remote to fold into its PR cache key (the PR value depends on the remote;
+  // a re-pointed origin must be a new key). Raw origin URL (unparsed) — the
+  // forge detector reads the host from it. `config --get` exits 1 when unset →
+  // `absent` (no remote, hence no forge PR concept), distinct from a failure.
+  async getRemoteOriginUrl(workingDir: string): Promise<Outcome<string>> {
     return nonEmpty(
       classify(
         "git config remote.origin.url",
@@ -575,21 +596,18 @@ export class GitService {
   }
 
   // [LAW:effects-at-boundaries] Resolve the branch's open PR/MR via the forge
-  // CLI. Pure dispatch: read the remote, pick the forge by host, run its CLI,
-  // fold the launch result into an Outcome. No caching here — the daemon's
-  // GitDataProvider owns the PR cache + TTL (a network resource wants a longer,
-  // independent lifecycle than local git state). `absent` when there is no
-  // remote or no recognized forge; the CLI dispatch then classifies the rest.
-  async resolvePullRequest(workingDir: string): Promise<Outcome<PullRequest>> {
-    const remote = await this.getRemoteOriginUrlAsync(workingDir);
-    // [LAW:no-silent-failure] A `failed` remote read (git itself couldn't run —
-    // timeout, spawn-error) is a real failure that must surface, NOT collapse
-    // into "no PR". Only `absent` (no remote configured) means there is
-    // genuinely no forge PR to show.
-    if (remote.kind === "failed") return remote;
-    if (remote.kind === "absent") return ABSENT;
-
-    const forge = detectForge(remote.value);
+  // CLI. Pure dispatch over a remote the CALLER has already read: pick the
+  // forge by host, run its CLI, fold the launch result into an Outcome. The
+  // remote is a parameter (not read here) so the cache layer can fold it into
+  // its key in the same read — no caching here; the daemon's GitDataProvider
+  // owns the PR cache + TTL (a network resource wants a longer, independent
+  // lifecycle than local git state). `absent` when the host is no recognized
+  // forge; the CLI dispatch then classifies the rest.
+  async resolvePullRequest(
+    workingDir: string,
+    remoteUrl: string,
+  ): Promise<Outcome<PullRequest>> {
+    const forge = detectForge(remoteUrl);
     if (forge === "github") {
       return classifyForgePr(
         "gh pr view",

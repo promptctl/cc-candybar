@@ -44,6 +44,12 @@ describe("detectForge", () => {
     ["https://gitlab.example.com/group/proj.git", "gitlab"],
     ["git@bitbucket.org:team/repo.git", null],
     ["https://git.sr.ht/~user/repo", null],
+    ["ssh://git@gitlab.example.com:22/group/proj.git", "gitlab"],
+    // Host-based, not substring: a repo NAMED gitlab/github on another host
+    // must NOT misdispatch (the bug a whole-URL substring match would have).
+    ["git@github.com:foo/gitlab-mirror.git", "github"],
+    ["git@example.com:team/gitlab.git", null],
+    ["https://example.com/org/github.com-clone.git", null],
   ])("%s → %s", (url, expected) => {
     expect(detectForge(url)).toBe(expected);
   });
