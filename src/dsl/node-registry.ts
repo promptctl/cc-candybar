@@ -49,12 +49,6 @@ export interface CompiledSegmentNode {
   readonly kind: "segment";
   readonly when?: Template<RichText>;
   readonly name: string;
-  // [LAW:one-source-of-truth] The menu accordion row key for THIS placement —
-  // the nearest enclosing horizontal container's path, or this segment's own path
-  // (singleton). Computed once at compile from the SAME walk the loader synthesis
-  // uses (menu-keys/forEachSegmentPlacement), so the key a `{{ menu }}` toggle
-  // writes is provably the key the loader declared a state var + gate for.
-  readonly rowKey: string;
 }
 export interface CompiledContainerNode {
   readonly kind: "container";
@@ -94,11 +88,6 @@ export interface NodeCompileCtx {
   readonly path: string;
   // The node's own `when`, already parsed by the driver (one parse-when site).
   readonly when?: Template<RichText>;
-  // [LAW:one-source-of-truth] Path → menu row key, precomputed by the driver from
-  // the SAME structural walk the loader synthesis uses. A segment node reads its
-  // own rowKey here rather than re-deriving the nearest-horizontal rule, so the
-  // two walks cannot drift.
-  readonly rowKeyByPath: ReadonlyMap<string, string>;
   // Compile a child node (the recursion, injected so this module needn't import
   // the driver).
   compileChild(node: LayoutNode, path: string): CompiledNode;
@@ -115,15 +104,20 @@ export interface NodeRenderCtx {
   // Advance the walk-owned hue cursor by one unit and return that unit's shift.
   nextHueShift(): number;
   readonly perSegmentSink?: Map<string, readonly RichText[]>;
-  // [LAW:locality-or-seam] The menu seam, injected as a capability so this module
-  // never imports the menu feature. Called once per segment render, BEFORE its
-  // template evaluates: it publishes this placement (segName + rowKey) so a
-  // `{{ menu }}` in the template can resolve its accordion identity, and returns
-  // the baseStyle to use — lightened when this segment's own menu is open, so the
-  // whole focused segment (inline trigger + dropped body band) reads as
-  // highlighted. The driver owns the menu runtime + state read; this module only
-  // hands it the values it has (name, compiled rowKey, resolved baseStyle).
-  prepareSegment(segName: string, rowKey: string, baseStyle: Style): Style;
+  // [LAW:locality-or-seam] The menu seam, injected as capabilities so this module
+  // never imports the menu feature. `beginSegment` runs BEFORE a segment template
+  // evaluates: it publishes the segment name so a `{{ menu }}` can derive its
+  // identity. `collectDrops` runs AFTER eval: it reads the open menu bodies the
+  // menus carried as metadata on the evaluated fragments (template order) for the
+  // boundary to stack below the row, and clears the published placement. The
+  // driver owns the menu runtime; this module only hands it the fragments.
+  beginSegment(segName: string): void;
+  collectDrops(fragments: readonly RichText[]): readonly RichText[];
+  // [LAW:locality-or-seam] The focus transform, injected as a capability (rich-js
+  // owns the color math — see render.ts). Applied to the segment's baseStyle when
+  // it has an open menu (it contributed drops), so the whole focused segment —
+  // inline trigger + dropped body band — reads as highlighted.
+  focusTint(style: Style): Style;
   // Resolve a segment name to its decl + compiled form (the driver closes over
   // config.segments + the compiled segments).
   lookupSegment(
@@ -220,10 +214,6 @@ const segmentType: NodeType<"segment"> = {
       kind: "segment",
       when: cctx.when,
       name: node.name,
-      // [LAW:no-defensive-null-guards] Every segment path is visited by the
-      // driver's placement walk, so the map has it; the `?? path` is the singleton
-      // degenerate (a segment outside any horizontal container is its own row).
-      rowKey: cctx.rowKeyByPath.get(cctx.path) ?? cctx.path,
     };
   },
   render(node, ctx) {
@@ -254,6 +244,17 @@ const segmentType: NodeType<"segment"> = {
     try {
       if (!evaluateWhen(segCompiled.when, ctx.scope)) return [];
 
+      // [LAW:single-enforcer] Publish the segment name + clear the drop sink
+      // BEFORE evaluating the template — a `{{ menu }}` inside reads the name to
+      // derive its identity and contributes its open body to the sink.
+      ctx.beginSegment(node.name);
+      const fragments = segCompiled.template.evaluate(ctx.scope);
+      // [LAW:decomposition] The open menu bodies, carried as out-of-band metadata
+      // on the evaluated fragments — invisible to the inline render, so a menu can
+      // sit anywhere in the template and content after it stays inline. Each
+      // becomes one full-width line stacked below the segment's row.
+      const drops = ctx.collectDrops(fragments);
+
       // [LAW:dataflow-not-control-flow] The per-segment variability is WHICH
       // palette — the base resolver (per-segment override or basePalette)
       // transposed by hueShift. bg and fg then resolve from this one palette.
@@ -267,18 +268,18 @@ const segmentType: NodeType<"segment"> = {
         segCompiled.fg,
         ctx.scope,
       );
-      // [LAW:single-enforcer] Publish this placement to the menu seam and adopt
-      // its baseStyle (focus-lightened iff this segment's menu is open) BEFORE
-      // evaluating the template — a `{{ menu }}` inside reads the placement, and
-      // the (possibly tinted) baseStyle flows into every cell + the line fill.
-      const baseStyle = ctx.prepareSegment(
-        node.name,
-        node.rowKey,
-        resolvedStyle,
-      );
-
-      const fragments = segCompiled.template.evaluate(ctx.scope);
-      const segCells = fragmentsToCells(fragments, baseStyle);
+      // [LAW:dataflow-not-control-flow] Focus is the PRESENCE of a drop: a segment
+      // with an open menu (it contributed a body) lightens, so the whole focused
+      // segment — inline trigger + dropped band — reads as highlighted. No state
+      // re-read; the drop list IS the open-menu signal.
+      const baseStyle =
+        drops.length > 0 ? ctx.focusTint(resolvedStyle) : resolvedStyle;
+      const layout = {
+        width: seg.width ?? "auto",
+        justify: seg.justify ?? "left",
+        truncate: seg.truncate ?? "right",
+        baseStyle,
+      } as const;
 
       // [LAW:single-enforcer] Partition the segment's authored "\n" into visual
       // lines BEFORE per-segment layout — width/justify/truncate then measure each
@@ -286,14 +287,16 @@ const segmentType: NodeType<"segment"> = {
       // laid line is ONE strip item: applySegmentLayout collapses a line's cells to
       // 0-or-1 item (OSC-8 links survive as interior spans), so the joiner caps only
       // at the segment's edges, never inside it.
-      const laidLines = splitCellsIntoLines(segCells).map((line) =>
-        applySegmentLayout(line, {
-          width: seg.width ?? "auto",
-          justify: seg.justify ?? "left",
-          truncate: seg.truncate ?? "right",
-          baseStyle,
-        }),
+      const inlineLines = splitCellsIntoLines(
+        fragmentsToCells(fragments, baseStyle),
+      ).map((line) => applySegmentLayout(line, layout));
+      // Each open menu body is one full-width dropped line, in the segment's
+      // (focus-tinted) bg, stacked after the inline row(s). composeBlocks then
+      // drops every line below row 0 below the enclosing horizontal row.
+      const dropLines = drops.map((body) =>
+        applySegmentLayout(fragmentsToCells([body], baseStyle), layout),
       );
+      const laidLines = [...inlineLines, ...dropLines];
 
       if (ctx.perSegmentSink !== undefined) {
         ctx.perSegmentSink.set(node.name, laidLines.flat());

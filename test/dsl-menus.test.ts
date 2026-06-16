@@ -1,20 +1,25 @@
-// [LAW:verifiable-goals] Self-contained menu acceptance (render-bugs-pdu.9),
-// driven through the real spine (registerDslConfig + renderDsl), the real loader
-// (parse → validate → menu synthesis), and the real set-state gate — never a
-// parallel rig. Folds in .5 (disclosure toggle) and .7 (menu position):
+// [LAW:verifiable-goals] Self-contained menu acceptance, driven through the real
+// spine (registerDslConfig + renderDsl), the real loader (parse → validate → menu
+// synthesis), and the real set-state gate — never a parallel rig. Covers the
+// pdu.5/.7/.9 redesign: a menu's body rides a SEPARATE drop channel (not a `\n`
+// in the inline stream), so a menu may sit ANYWHERE in a segment and a segment
+// may hold ANY NUMBER of menus; identity is (stateKey, member=apply-name) with an
+// INDEPENDENT default key and an OPT-IN shared key for accordion grouping.
 //
-//   1. A `{{ menu }}` in a segment template SYNTHESIZES its accordion state var +
-//      cycle action under the reserved `menus.` namespace, keyed by the segment's
-//      enclosing-horizontal-container path (the row IS the key) — the author
-//      names neither the key nor the menu. The gate derives through the one path.
+//   1. A `{{ menu }}` SYNTHESIZES a state var + cycle action under the reserved
+//      `menus.` namespace, identity = (segment + apply name); the gate derives
+//      through the one path. No author-named key (independent) by default.
 //   2. Toggle round trip: closed renders ▸ and no body; the click writes the
-//      menu's member name; the next render shows ▾ + the picker body dropped onto
-//      its own line BELOW the row (compose stacks drops); the second click closes.
-//   3. Auto-scoped accordion: two menus in one horizontal row share the derived
-//      row key with ZERO key authoring, so opening one closes the other.
-//   4. The open menu's segment is focus-tinted (its background lightened).
-//   5. composeBlocks: a drop stacks full-width below row 0; all-single-line rows
-//      are unchanged (no spurious blank line, neighbors unmoved).
+//      member; the next render shows ▾ + the picker body dropped BELOW the row;
+//      a second click closes.
+//   3. Independent default: two menus (no key) are not mutually exclusive — both
+//      can be open at once. Opt-in shared key: two menus sharing a key are an
+//      accordion (opening one closes the other).
+//   4. N menus in ONE segment (the "theme tester"): each is a distinct, addressable
+//      disclosure; mid-segment menus keep content after them inline on row 0; all
+//      bodies stack below the row.
+//   5. The open menu's segment is focus-tinted; composeBlocks stacks drops while
+//      all-single-line rows are unchanged.
 
 import { PaletteResolver, getThemePalette } from "@promptctl/rich-js";
 import { parseAndValidate } from "./helpers/parse-and-validate";
@@ -110,8 +115,9 @@ function buildRuntime(src: string, sessionId = "s1") {
   return { config, store, sessionState, render, click, clickToggle, dispose };
 }
 
-// A theme picker menu beside a plain label, in one horizontal row. The row IS
-// `root` (a horizontal container), so the derived row key is `menus.root`.
+// A theme picker menu beside a plain label, in one horizontal row. Identity is
+// (segment "themepicker" + apply "applyTheme"), independent ⇒ key
+// `menus.themepicker.applyTheme`, member `applyTheme`.
 const MENU_SRC = `{
   globals: {},
   variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
@@ -126,24 +132,24 @@ const MENU_SRC = `{
   root: { h: ['label', 'themepicker'] },
 }`;
 
-describe("pdu.9 — menu synthesis (derived, reserved namespace)", () => {
-  test("synthesizes a state var + cycle action under menus.*, and the gate derives", () => {
+const TKEY = "menus.themepicker.applyTheme";
+
+describe("menu synthesis (derived identity, reserved namespace)", () => {
+  test("synthesizes a state var + cycle action keyed by (segment, apply); gate derives", () => {
     const config = parseAndValidate("<test>", MENU_SRC, ALLOWED);
-    expect(config.variables["menus.root"]).toEqual({
+    expect(config.variables[TKEY]).toEqual({
       kind: "state",
-      key: "menus.root",
+      key: TKEY,
       default: "closed",
     });
-    expect(config.actions["menus.root.themepicker"]).toEqual({
-      set: "menus.root",
-      cycle: ["closed", "themepicker"],
+    expect(config.actions[`${TKEY}.applyTheme`]).toEqual({
+      set: TKEY,
+      cycle: ["closed", "applyTheme"],
     });
-    const gate = deriveActionValidators(config).find(
-      (g) => g.key === "menus.root",
-    );
+    const gate = deriveActionValidators(config).find((g) => g.key === TKEY);
     expect(gate?.spec).toEqual({
       kind: "allow-list",
-      allowed: ["closed", "themepicker"],
+      allowed: ["closed", "applyTheme"],
     });
   });
 
@@ -163,24 +169,155 @@ describe("pdu.9 — menu synthesis (derived, reserved namespace)", () => {
     }
   });
 
-  test('a {{ menu }} on a segment named "closed" is rejected (sentinel collision)', () => {
+  test('a {{ menu }} whose apply action is named "closed" is rejected (sentinel collision)', () => {
     const src = `{
       globals: {},
       variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
-      actions: { applyTheme: { set: 'theme', from: 'themes' }, themePage: { set: 'theme-page', int: true } },
-      segments: { closed: { template: '{{ menu "applyTheme" "themePage" }}', bg: 'surface', fg: 'foreground' } },
-      root: { h: ['closed'] },
+      actions: { closed: { set: 'theme', from: 'themes' }, themePage: { set: 'theme-page', int: true } },
+      segments: { s: { template: '{{ menu "closed" "themePage" }}', bg: 'surface', fg: 'foreground' } },
+      root: { h: ['s'] },
     }`;
     try {
       parseAndValidate("<test>", src, ALLOWED);
       throw new Error("expected ConfigError");
     } catch (e) {
       expect(e).toBeInstanceOf(ConfigError);
-      expect((e as ConfigError).message).toMatch(/cannot live in a segment named "closed"/);
+      expect((e as ConfigError).message).toMatch(/named "closed"/);
     }
   });
 
-  test("a {{ menu }} inside a helper is rejected at load (no per-placement identity)", () => {
+  test("a {{ menu }} with a non-literal apply action is rejected (cannot gate at load)", () => {
+    const src = `{
+      globals: {},
+      variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' }, applyVar: { kind: 'literal', value: 'applyTheme' } },
+      actions: { applyTheme: { set: 'theme', from: 'themes' }, themePage: { set: 'theme-page', int: true } },
+      segments: { s: { template: '{{ menu .applyVar "themePage" }}', bg: 'surface', fg: 'foreground' } },
+      root: { h: ['s'] },
+    }`;
+    try {
+      parseAndValidate("<test>", src, ALLOWED);
+      throw new Error("expected ConfigError");
+    } catch (e) {
+      expect(e).toBeInstanceOf(ConfigError);
+      expect((e as ConfigError).message).toMatch(/not a string literal/);
+    }
+  });
+
+  test("two menus whose names normalize to the same state key are rejected (lossy ident)", () => {
+    // segment "s" with apply actions "a-b" and "a_b" both normalize to
+    // menus.s.a_b; without the collision guard they would silently share open
+    // state (an unintended accordion). It must be a loud load error.
+    const src = `{
+      globals: {},
+      variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
+      actions: {
+        'a-b': { set: 'theme', from: 'themes' },
+        'a_b': { set: 'style', from: 'styles' },
+        themePage: { set: 'theme-page', int: true },
+        stylePage: { set: 'style-page', int: true },
+      },
+      segments: { s: { template: 'S {{ menu "a-b" "themePage" }} {{ menu "a_b" "stylePage" }}', bg: 'surface', fg: 'foreground' } },
+      root: { h: ['s'] },
+    }`;
+    try {
+      parseAndValidate("<test>", src, ALLOWED);
+      throw new Error("expected ConfigError");
+    } catch (e) {
+      expect(e).toBeInstanceOf(ConfigError);
+      expect((e as ConfigError).message).toMatch(
+        /normalize to the same state key/,
+      );
+    }
+  });
+
+  test("a {{ menu }} with an empty apply name is rejected (member aliases absent sentinel)", () => {
+    const src = `{
+      globals: {},
+      variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
+      actions: { themePage: { set: 'theme-page', int: true } },
+      segments: { s: { template: '{{ menu "" "themePage" }}', bg: 'surface', fg: 'foreground' } },
+      root: { h: ['s'] },
+    }`;
+    try {
+      parseAndValidate("<test>", src, ALLOWED);
+      throw new Error("expected ConfigError");
+    } catch (e) {
+      expect(e).toBeInstanceOf(ConfigError);
+      expect((e as ConfigError).message).toMatch(/empty apply-action name/);
+    }
+  });
+
+  test("a {{ menu }} referencing an unknown apply/page action is a LOAD error (not render-time)", () => {
+    // The menu binds (apply, page) just like a picker; cross-ref must catch a
+    // missing action at load, not defer to renderPicker.requireKind on open.
+    const src = `{
+      globals: {},
+      variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
+      actions: { applyTheme: { set: 'theme', from: 'themes' }, themePage: { set: 'theme-page', int: true } },
+      segments: { s: { template: '{{ menu "applyTheme" "noSuchPage" }}', bg: 'surface', fg: 'foreground' } },
+      root: { h: ['s'] },
+    }`;
+    try {
+      parseAndValidate("<test>", src, ALLOWED);
+      throw new Error("expected ConfigError");
+    } catch (e) {
+      expect(e).toBeInstanceOf(ConfigError);
+      expect((e as ConfigError).message).toMatch(/unknown action "noSuchPage" \(in a picker or menu\)/);
+    }
+  });
+
+  test("a {{ menu }} with an empty shared key is rejected (bare menus. key)", () => {
+    const src = `{
+      globals: {},
+      variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
+      actions: { applyTheme: { set: 'theme', from: 'themes' }, themePage: { set: 'theme-page', int: true } },
+      segments: { s: { template: '{{ menu "applyTheme" "themePage" false false "" }}', bg: 'surface', fg: 'foreground' } },
+      root: { h: ['s'] },
+    }`;
+    try {
+      parseAndValidate("<test>", src, ALLOWED);
+      throw new Error("expected ConfigError");
+    } catch (e) {
+      expect(e).toBeInstanceOf(ConfigError);
+      expect((e as ConfigError).message).toMatch(/empty accordion key/);
+    }
+  });
+
+  test("a {{ menu }} in a segment bg/fg/when field is rejected (template-only seam)", () => {
+    const src = `{
+      globals: {},
+      variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
+      actions: { applyTheme: { set: 'theme', from: 'themes' }, themePage: { set: 'theme-page', int: true } },
+      segments: { s: { template: 'X', bg: '{{ menu "applyTheme" "themePage" }}', fg: 'foreground' } },
+      root: { h: ['s'] },
+    }`;
+    try {
+      parseAndValidate("<test>", src, ALLOWED);
+      throw new Error("expected ConfigError");
+    } catch (e) {
+      expect(e).toBeInstanceOf(ConfigError);
+      expect((e as ConfigError).message).toMatch(/only valid in a segment's "template"/);
+    }
+  });
+
+  test("a menu-bearing segment placed more than once is rejected (shared open-state)", () => {
+    const src = `{
+      globals: {},
+      variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
+      actions: { applyTheme: { set: 'theme', from: 'themes' }, themePage: { set: 'theme-page', int: true } },
+      segments: { m: { template: 'M {{ menu "applyTheme" "themePage" }}', bg: 'surface', fg: 'foreground' } },
+      root: { v: [ { h: ['m'] }, { h: ['m'] } ] },
+    }`;
+    try {
+      parseAndValidate("<test>", src, ALLOWED);
+      throw new Error("expected ConfigError");
+    } catch (e) {
+      expect(e).toBeInstanceOf(ConfigError);
+      expect((e as ConfigError).message).toMatch(/placed in the layout more than once/);
+    }
+  });
+
+  test("a {{ menu }} inside a helper is rejected at load (no per-segment identity)", () => {
     const src = `{
       globals: {},
       variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
@@ -199,23 +336,9 @@ describe("pdu.9 — menu synthesis (derived, reserved namespace)", () => {
       );
     }
   });
-
-  test("a user name under the reserved namespace is rejected", () => {
-    const src = MENU_SRC.replace(
-      "'session.id': { kind: 'input', path: 'session_id', default: '' }",
-      "'session.id': { kind: 'input', path: 'session_id', default: '' }, 'menus.mine': { kind: 'literal', value: 'v' }",
-    );
-    try {
-      parseAndValidate("<test>", src, ALLOWED);
-      throw new Error("expected ConfigError");
-    } catch (e) {
-      expect(e).toBeInstanceOf(ConfigError);
-      expect((e as ConfigError).message).toMatch(/reserved "menus\." namespace/);
-    }
-  });
 });
 
-describe("pdu.9 — toggle round trip + drop stacking", () => {
+describe("toggle round trip + drop stacking", () => {
   test("closed: glyph ▸ inline, no body, single line, neighbor present", () => {
     const { render, dispose } = buildRuntime(MENU_SRC);
     const out = stripAnsi(render());
@@ -228,8 +351,8 @@ describe("pdu.9 — toggle round trip + drop stacking", () => {
 
   test("click opens: ▾ + body dropped BELOW the row; row 0 keeps the neighbor", () => {
     const { render, clickToggle, sessionState, dispose } = buildRuntime(MENU_SRC);
-    clickToggle(render(), "menus.root", "themepicker");
-    expect(sessionState.get("s1", "menus.root")).toBe("themepicker");
+    clickToggle(render(), TKEY, "applyTheme");
+    expect(sessionState.get("s1", TKEY)).toBe("applyTheme");
     const lines = stripAnsi(render()).split("\n");
     expect(lines).toHaveLength(2); // row 0 + the dropped body
     expect(lines[0]).toContain("PICK"); // neighbor unmoved on row 0
@@ -237,7 +360,7 @@ describe("pdu.9 — toggle round trip + drop stacking", () => {
     expect(lines[0]).not.toContain("✕"); // body is NOT zipped onto row 0
     expect(lines[1]).toContain("✕"); // body dropped onto its own full-width line
     // second click closes
-    clickToggle(render(), "menus.root", "closed");
+    clickToggle(render(), TKEY, "closed");
     expect(stripAnsi(render()).split("\n")).toHaveLength(1);
     dispose();
   });
@@ -245,18 +368,16 @@ describe("pdu.9 — toggle round trip + drop stacking", () => {
   test("the open menu's segment is focus-tinted (a new background appears)", () => {
     const { render, clickToggle, dispose } = buildRuntime(MENU_SRC);
     const closedBgs = bgCodes(render());
-    clickToggle(render(), "menus.root", "themepicker");
+    clickToggle(render(), TKEY, "applyTheme");
     const openBgs = bgCodes(render());
-    // Opening lightens the menu segment's surface → a background present open
-    // that was not present closed.
     const added = [...openBgs].filter((c) => !closedBgs.has(c));
     expect(added.length).toBeGreaterThan(0);
     dispose();
   });
 });
 
-// Two theme/style menus in ONE horizontal row, neither naming a key.
-const ACCORDION_SRC = `{
+// Two menus in ONE row, neither naming a key ⇒ INDEPENDENT.
+const INDEPENDENT_SRC = `{
   globals: {},
   variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
   actions: {
@@ -272,41 +393,165 @@ const ACCORDION_SRC = `{
   root: { h: ['themeMenu', 'styleMenu'] },
 }`;
 
-describe("pdu.9 — auto-scoped accordion (one open per row, zero key authoring)", () => {
-  test("both menus share the derived row key; opening one closes the other", () => {
+describe("independent default (no shared key)", () => {
+  test("two menus have distinct keys; both can be open at once", () => {
+    const { config, render, clickToggle, dispose } =
+      buildRuntime(INDEPENDENT_SRC);
+    // Distinct keys — neither click writes the other's key.
+    expect(config.variables["menus.themeMenu.applyTheme"]).toBeDefined();
+    expect(config.variables["menus.styleMenu.applyStyle"]).toBeDefined();
+
+    clickToggle(render(), "menus.themeMenu.applyTheme", "applyTheme");
+    let out = stripAnsi(render());
+    expect(out).toContain("T ▾");
+    expect(out).toContain("S ▸"); // style still closed — independence
+    // Open style too: theme stays open (NOT mutually exclusive).
+    clickToggle(render(), "menus.styleMenu.applyStyle", "applyStyle");
+    out = stripAnsi(render());
+    expect(out).toContain("T ▾");
+    expect(out).toContain("S ▾"); // both open
+    expect(stripAnsi(render()).split("\n").length).toBeGreaterThanOrEqual(3); // row0 + 2 drops
+    dispose();
+  });
+});
+
+// Two menus in ONE row sharing the key "pickers" ⇒ ACCORDION.
+const ACCORDION_SRC = `{
+  globals: {},
+  variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
+  actions: {
+    applyTheme: { set: 'theme', from: 'themes' },
+    themePage: { set: 'theme-page', int: true },
+    applyStyle: { set: 'style', from: 'styles' },
+    stylePage: { set: 'style-page', int: true },
+  },
+  segments: {
+    themeMenu: { template: 'T {{ menu "applyTheme" "themePage" false false "pickers" }}', bg: 'surface', fg: 'foreground' },
+    styleMenu: { template: 'S {{ menu "applyStyle" "stylePage" false false "pickers" }}', bg: 'surface', fg: 'foreground' },
+  },
+  root: { h: ['themeMenu', 'styleMenu'] },
+}`;
+
+describe("opt-in accordion (shared key, one open at a time)", () => {
+  test("both menus share the key; the gate unions members; opening one closes the other", () => {
     const { config, render, clickToggle, dispose } = buildRuntime(ACCORDION_SRC);
-    // Both cycle actions write the SAME derived key (the row), unioned into one gate.
-    expect(config.actions["menus.root.themeMenu"]).toEqual({
-      set: "menus.root",
-      cycle: ["closed", "themeMenu"],
+    expect(config.actions["menus.pickers.applyTheme"]).toEqual({
+      set: "menus.pickers",
+      cycle: ["closed", "applyTheme"],
     });
-    expect(config.actions["menus.root.styleMenu"]).toEqual({
-      set: "menus.root",
-      cycle: ["closed", "styleMenu"],
+    expect(config.actions["menus.pickers.applyStyle"]).toEqual({
+      set: "menus.pickers",
+      cycle: ["closed", "applyStyle"],
     });
     const gate = deriveActionValidators(config).find(
-      (g) => g.key === "menus.root",
+      (g) => g.key === "menus.pickers",
     );
     expect(gate?.spec).toEqual({
       kind: "allow-list",
-      allowed: ["closed", "themeMenu", "styleMenu"],
+      allowed: ["closed", "applyTheme", "applyStyle"],
     });
 
-    clickToggle(render(), "menus.root", "themeMenu");
+    clickToggle(render(), "menus.pickers", "applyTheme");
     let out = stripAnsi(render());
     expect(out).toContain("T ▾");
     expect(out).toContain("S ▸");
-    // styleMenu's toggle renders closed (current "themeMenu" is outside its
-    // cycle), so its click writes "styleMenu" — opening it auto-closes the theme.
-    clickToggle(render(), "menus.root", "styleMenu");
+    // styleMenu renders closed (current "applyTheme" is outside its cycle), so
+    // its click writes "applyStyle" — opening it auto-closes the theme.
+    clickToggle(render(), "menus.pickers", "applyStyle");
     out = stripAnsi(render());
     expect(out).toContain("T ▸");
     expect(out).toContain("S ▾");
     dispose();
   });
+
+  test("two menus sharing a key with the SAME apply action are rejected (identity clash)", () => {
+    const src = `{
+      globals: {},
+      variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
+      actions: { applyTheme: { set: 'theme', from: 'themes' }, themePage: { set: 'theme-page', int: true } },
+      segments: {
+        a: { template: 'A {{ menu "applyTheme" "themePage" false false "k" }}', bg: 'surface', fg: 'foreground' },
+        b: { template: 'B {{ menu "applyTheme" "themePage" false false "k" }}', bg: 'surface', fg: 'foreground' },
+      },
+      root: { h: ['a', 'b'] },
+    }`;
+    try {
+      parseAndValidate("<test>", src, ALLOWED);
+      throw new Error("expected ConfigError");
+    } catch (e) {
+      expect(e).toBeInstanceOf(ConfigError);
+      expect((e as ConfigError).message).toMatch(/same identity/);
+    }
+  });
 });
 
-describe("pdu.9 — compose substrate (drops stack, single-line rows unchanged)", () => {
+// THE "theme tester": three menus in ONE segment, with content between/after.
+const TESTER_SRC = `{
+  globals: {},
+  variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
+  actions: {
+    applyTheme: { set: 'theme', from: 'themes' },
+    tp: { set: 'theme-page', int: true },
+    applyStyle: { set: 'style', from: 'styles' },
+    sp: { set: 'style-page', int: true },
+    applyTheme2: { set: 'theme', from: 'themes' },
+    fp: { set: 'font-page', int: true },
+  },
+  segments: {
+    tester: { template: 'TEST {{ menu "applyTheme" "tp" }} | {{ menu "applyStyle" "sp" }} | {{ menu "applyTheme2" "fp" }} END', bg: 'surface', fg: 'foreground' },
+  },
+  root: { h: ['tester'] },
+}`;
+
+describe('the "theme tester" — N menus in one segment', () => {
+  test("each menu is a DISTINCT addressable disclosure (no identity collision)", () => {
+    const config = parseAndValidate("<test>", TESTER_SRC, ALLOWED);
+    expect(config.variables["menus.tester.applyTheme"]).toBeDefined();
+    expect(config.variables["menus.tester.applyStyle"]).toBeDefined();
+    expect(config.variables["menus.tester.applyTheme2"]).toBeDefined();
+    // Three distinct state keys synthesized from one segment — the old
+    // (rowKey,segName) identity would have collapsed all three to one.
+    const menuKeys = Object.keys(config.variables).filter((k) =>
+      k.startsWith("menus."),
+    );
+    expect(menuKeys).toHaveLength(3);
+  });
+
+  test("closed: all three glyphs inline with the separators + END on one row", () => {
+    const { render, dispose } = buildRuntime(TESTER_SRC);
+    const lines = stripAnsi(render()).split("\n");
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toContain("TEST ▸ | ▸ | ▸ END"); // mid-segment content stays inline
+    dispose();
+  });
+
+  test("a mid-segment menu keeps content AFTER it on row 0; its body drops below", () => {
+    const { render, clickToggle, dispose } = buildRuntime(TESTER_SRC);
+    // Open only the FIRST menu (mid-segment, followed by ' | ▸ | ▸ END').
+    clickToggle(render(), "menus.tester.applyTheme", "applyTheme");
+    const lines = stripAnsi(render()).split("\n");
+    expect(lines).toHaveLength(2); // row 0 + one drop
+    // The first glyph flipped, and EVERYTHING after it is still on row 0 —
+    // the defect this redesign fixes (no `\n` dragging the tail down).
+    expect(lines[0]).toContain("TEST ▾ | ▸ | ▸ END");
+    expect(lines[0]).not.toContain("✕"); // the opened body is not on row 0
+    expect(lines[1]).toContain("✕"); // it dropped below
+    dispose();
+  });
+
+  test("all three open independently: three bodies stack below one inline row", () => {
+    const { render, clickToggle, dispose } = buildRuntime(TESTER_SRC);
+    clickToggle(render(), "menus.tester.applyTheme", "applyTheme");
+    clickToggle(render(), "menus.tester.applyStyle", "applyStyle");
+    clickToggle(render(), "menus.tester.applyTheme2", "applyTheme2");
+    const lines = stripAnsi(render()).split("\n");
+    expect(lines[0]).toContain("TEST ▾ | ▾ | ▾ END"); // all three open, all inline
+    expect(lines).toHaveLength(4); // row 0 + three dropped bodies
+    dispose();
+  });
+});
+
+describe("compose substrate (drops stack, single-line rows unchanged)", () => {
   // A genuinely 2-line segment (authored "\n") beside a single-line neighbor.
   const TWOLINE_SRC = `{
     globals: {},

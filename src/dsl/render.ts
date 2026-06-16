@@ -39,12 +39,14 @@ import {
 import {
   compileActions,
   actionFuncs,
-  readVar,
   type ActionRuntime,
 } from "../render/action.js";
 import { pickerFuncs } from "../render/picker.js";
-import { menuFuncs, type MenuRuntime } from "../render/menu.js";
-import { forEachSegmentPlacement, menuStateKey } from "../config/menu-keys.js";
+import {
+  menuFuncs,
+  collectMenuDrops,
+  type MenuRuntime,
+} from "../render/menu.js";
 // [LAW:one-way-deps] The node-type registry sits below this driver: it owns the
 // compiled node shapes + each kind's compile/render, dispatched via nodeType().
 // render.ts threads the recursion (compileChild/renderChild) + the hue counter in
@@ -291,7 +293,10 @@ export function registerDslConfig(
   // glyph + body resolve from the same compiled table + store) and carries the
   // walk-published current placement. Built before the engine so the `menu` func
   // can close over it; `current` stays null until a render walk publishes one.
-  const menuRuntime: MenuRuntime = { action: actionRuntime, current: null };
+  const menuRuntime: MenuRuntime = {
+    action: actionRuntime,
+    current: null,
+  };
   const engine = createCcCandybarEngine(
     undefined,
     {
@@ -423,14 +428,6 @@ export function registerDslConfig(
       );
     }
   };
-  // [LAW:one-source-of-truth] Precompute every segment placement's menu row key
-  // from the SAME walk the loader synthesis used, so the compiled segment node's
-  // rowKey is provably the key the loader declared a state var + gate for. Each
-  // segment node reads its own entry by path in compile.
-  const rowKeyByPath = new Map<string, string>();
-  forEachSegmentPlacement(config.root, (_segName, rowKey, ownPath) => {
-    rowKeyByPath.set(ownPath, rowKey);
-  });
   const compileNode = (node: LayoutNode, path: string): CompiledNode => {
     const cctx: NodeCompileCtx = {
       path,
@@ -438,7 +435,6 @@ export function registerDslConfig(
         node.when === undefined
           ? undefined
           : parseNodeField(node.when, path, "when"),
-      rowKeyByPath,
       compileChild: compileNode,
     };
     return nodeType(node.kind).compile(node, cctx);
@@ -568,21 +564,20 @@ export function renderDsl(
       : undefined;
   };
 
-  // [LAW:single-enforcer] The menu seam, owned here: publish the placement the
-  // about-to-evaluate segment template needs (so a `{{ menu }}` resolves its
-  // accordion identity) and, when this segment's own menu is open, focus-tint its
-  // baseStyle so the whole segment (inline trigger + dropped body band) reads as
-  // highlighted. [LAW:no-defensive-null-guards] "menu never opened" is a real
-  // state — has() discriminates an unset key (no menu in this row) from a value.
-  const prepareSegment = (
-    segName: string,
-    rowKey: string,
-    baseStyle: Style,
-  ): Style => {
-    compiled.menuRuntime.current = { rowKey, segName };
-    const stateKey = menuStateKey(rowKey);
-    const open = store.has(stateKey) && readVar(store, stateKey) === segName;
-    return open ? focusTint(baseStyle) : baseStyle;
+  // [LAW:single-enforcer] The menu seam, owned here. `beginSegment` publishes the
+  // segment name a `{{ menu }}` needs to derive its identity; `collectDrops` reads
+  // the open bodies the menus carried as metadata on their evaluated fragments and
+  // clears the published placement. The runtime's `current` is set/cleared around
+  // each segment eval by the walk only — never ambient.
+  // [LAW:no-ambient-temporal-coupling]
+  const beginSegment = (segName: string): void => {
+    compiled.menuRuntime.current = { segName };
+  };
+  const collectDrops = (
+    fragments: readonly RichText[],
+  ): readonly RichText[] => {
+    compiled.menuRuntime.current = null;
+    return collectMenuDrops(fragments);
   };
 
   // [LAW:dataflow-not-control-flow] ONE walk renders any node to LINES OF CELLS
@@ -602,7 +597,9 @@ export function renderDsl(
       visible,
       nextHueShift,
       perSegmentSink,
-      prepareSegment,
+      beginSegment,
+      collectDrops,
+      focusTint,
       lookupSegment,
       renderChild: renderNode,
     };
