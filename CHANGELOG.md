@@ -1,3 +1,10 @@
+## [1.8.2](https://github.com/promptctl/cc-candybar/compare/v1.8.1...v1.8.2) (2026-06-16)
+
+
+### Bug Fixes
+
+* **menu:** inline/drop channels + name-derived identity — N menus per segment, anywhere (pdu.5) ([#133](https://github.com/promptctl/cc-candybar/issues/133)) ([f0878af](https://github.com/promptctl/cc-candybar/commit/f0878afb5010b94d27b606199bf09c3f9555fdb2))
+
 ## [1.8.1](https://github.com/promptctl/cc-candybar/compare/v1.8.0...v1.8.1) (2026-06-16)
 
 
