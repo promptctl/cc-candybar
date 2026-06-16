@@ -177,6 +177,17 @@ export function synthesizeMenuDecls(
         );
         continue;
       }
+      // [LAW:types-are-the-program] An empty shared key collapses the state key to
+      // the bare reserved `menus.` namespace (and a `menus..member` action name).
+      // Reject it — a shared key, when present, must name a group.
+      if (call.key === "") {
+        menuIssue(
+          ctx,
+          `segments.${segName}`,
+          `segment "${segName}" has a {{ menu }} with an empty accordion key — a shared key must be a non-empty name (or omit it for an independent menu).`,
+        );
+        continue;
+      }
       // [LAW:types-are-the-program] An empty apply name → empty member, and the
       // store returns "" for an absent state key, so `open = read === member`
       // would be true before any click — the menu would render open spuriously.

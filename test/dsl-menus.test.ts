@@ -247,6 +247,42 @@ describe("menu synthesis (derived identity, reserved namespace)", () => {
     }
   });
 
+  test("a {{ menu }} referencing an unknown apply/page action is a LOAD error (not render-time)", () => {
+    // The menu binds (apply, page) just like a picker; cross-ref must catch a
+    // missing action at load, not defer to renderPicker.requireKind on open.
+    const src = `{
+      globals: {},
+      variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
+      actions: { applyTheme: { set: 'theme', from: 'themes' }, themePage: { set: 'theme-page', int: true } },
+      segments: { s: { template: '{{ menu "applyTheme" "noSuchPage" }}', bg: 'surface', fg: 'foreground' } },
+      root: { h: ['s'] },
+    }`;
+    try {
+      parseAndValidate("<test>", src, ALLOWED);
+      throw new Error("expected ConfigError");
+    } catch (e) {
+      expect(e).toBeInstanceOf(ConfigError);
+      expect((e as ConfigError).message).toMatch(/unknown action "noSuchPage" \(in a picker or menu\)/);
+    }
+  });
+
+  test("a {{ menu }} with an empty shared key is rejected (bare menus. key)", () => {
+    const src = `{
+      globals: {},
+      variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
+      actions: { applyTheme: { set: 'theme', from: 'themes' }, themePage: { set: 'theme-page', int: true } },
+      segments: { s: { template: '{{ menu "applyTheme" "themePage" false false "" }}', bg: 'surface', fg: 'foreground' } },
+      root: { h: ['s'] },
+    }`;
+    try {
+      parseAndValidate("<test>", src, ALLOWED);
+      throw new Error("expected ConfigError");
+    } catch (e) {
+      expect(e).toBeInstanceOf(ConfigError);
+      expect((e as ConfigError).message).toMatch(/empty accordion key/);
+    }
+  });
+
   test("a {{ menu }} inside a helper is rejected at load (no per-segment identity)", () => {
     const src = `{
       globals: {},
