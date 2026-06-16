@@ -177,6 +177,18 @@ export function synthesizeMenuDecls(
         );
         continue;
       }
+      // [LAW:types-are-the-program] An empty apply name → empty member, and the
+      // store returns "" for an absent state key, so `open = read === member`
+      // would be true before any click — the menu would render open spuriously.
+      // Reject it (the member must never alias the absent-state sentinel).
+      if (call.apply === "") {
+        menuIssue(
+          ctx,
+          `segments.${segName}`,
+          `segment "${segName}" has a {{ menu }} with an empty apply-action name — an empty member aliases the absent-state sentinel ("") so the menu would render open before any click. Name the apply action.`,
+        );
+        continue;
+      }
       const member = menuMember(call.apply);
       // [LAW:types-are-the-program] A member equal to the closed sentinel makes
       // the cycle [closed, "closed"] — two identical members, leaving the menu

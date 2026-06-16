@@ -230,6 +230,23 @@ describe("menu synthesis (derived identity, reserved namespace)", () => {
     }
   });
 
+  test("a {{ menu }} with an empty apply name is rejected (member aliases absent sentinel)", () => {
+    const src = `{
+      globals: {},
+      variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
+      actions: { themePage: { set: 'theme-page', int: true } },
+      segments: { s: { template: '{{ menu "" "themePage" }}', bg: 'surface', fg: 'foreground' } },
+      root: { h: ['s'] },
+    }`;
+    try {
+      parseAndValidate("<test>", src, ALLOWED);
+      throw new Error("expected ConfigError");
+    } catch (e) {
+      expect(e).toBeInstanceOf(ConfigError);
+      expect((e as ConfigError).message).toMatch(/empty apply-action name/);
+    }
+  });
+
   test("a {{ menu }} inside a helper is rejected at load (no per-segment identity)", () => {
     const src = `{
       globals: {},
