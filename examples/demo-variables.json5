@@ -392,16 +392,16 @@
     cycleMode: { set: "demo-work-mode", cycle: ["focus", "review", "debug"] },
   },
 
-  // ── Layout: flat string[] rows ────────────────────────────────────────────
-  // Each inner array is one horizontal powerline row. This is the shortest
-  // layout form — equivalent to the root grammar's vertical container of
-  // horizontal containers, compiled automatically by the loader.
-  layout: [
-    ["demoIdentity", "demoClock"],
-    ["demoLiterals", "demoEnv"],
-    ["demoSystem"],
-    ["demoGit", "demoGitStatus"],
-    ["demoMode", "demoContext", "demoFixed"],
-    ["configSwitcher"],
-  ],
+  // ── Layout: the Option A shape grammar ────────────────────────────────────
+  // `root` is a LayoutNode tree. `{ v: [...] }` is a vertical container (the
+  // row stack); `{ h: [...] }` is a horizontal powerline row; a bare string
+  // names a segment leaf. Single-segment rows are just the bare leaf.
+  root: { v: [
+    { h: ["demoIdentity", "demoClock"] },
+    { h: ["demoLiterals", "demoEnv"] },
+    "demoSystem",
+    { h: ["demoGit", "demoGitStatus"] },
+    { h: ["demoMode", "demoContext", "demoFixed"] },
+    "configSwitcher",
+  ] },
 }
