@@ -1,3 +1,10 @@
+## [1.8.1](https://github.com/promptctl/cc-candybar/compare/v1.8.0...v1.8.1) (2026-06-16)
+
+
+### Bug Fixes
+
+* **examples:** migrate demo-variables.json5 to root A-grammar (pdu.10) ([#132](https://github.com/promptctl/cc-candybar/issues/132)) ([3ce7a77](https://github.com/promptctl/cc-candybar/commit/3ce7a778b46b25bfe60acd0ab9775dc09cf6c924))
+
 # [1.8.0](https://github.com/promptctl/cc-candybar/compare/v1.7.3...v1.8.0) (2026-06-15)
 
 
