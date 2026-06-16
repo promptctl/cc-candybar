@@ -42,7 +42,11 @@ import {
   type ActionRuntime,
 } from "../render/action.js";
 import { pickerFuncs } from "../render/picker.js";
-import { menuFuncs, type MenuRuntime } from "../render/menu.js";
+import {
+  menuFuncs,
+  collectMenuDrops,
+  type MenuRuntime,
+} from "../render/menu.js";
 // [LAW:one-way-deps] The node-type registry sits below this driver: it owns the
 // compiled node shapes + each kind's compile/render, dispatched via nodeType().
 // render.ts threads the recursion (compileChild/renderChild) + the hue counter in
@@ -292,7 +296,6 @@ export function registerDslConfig(
   const menuRuntime: MenuRuntime = {
     action: actionRuntime,
     current: null,
-    drops: [],
   };
   const engine = createCcCandybarEngine(
     undefined,
@@ -562,18 +565,19 @@ export function renderDsl(
   };
 
   // [LAW:single-enforcer] The menu seam, owned here. `beginSegment` publishes the
-  // segment name a `{{ menu }}` needs to derive its identity and clears the drop
-  // sink; `endSegment` returns whatever open bodies the template contributed. One
-  // mutator of the runtime's `current`/`drops`, set/read around each segment eval
-  // by the walk — never ambient. [LAW:no-ambient-temporal-coupling]
+  // segment name a `{{ menu }}` needs to derive its identity; `collectDrops` reads
+  // the open bodies the menus carried as metadata on their evaluated fragments and
+  // clears the published placement. The runtime's `current` is set/cleared around
+  // each segment eval by the walk only — never ambient.
+  // [LAW:no-ambient-temporal-coupling]
   const beginSegment = (segName: string): void => {
     compiled.menuRuntime.current = { segName };
-    compiled.menuRuntime.drops = [];
   };
-  const endSegment = (): readonly RichText[] => {
-    const drops = compiled.menuRuntime.drops;
+  const collectDrops = (
+    fragments: readonly RichText[],
+  ): readonly RichText[] => {
     compiled.menuRuntime.current = null;
-    return drops;
+    return collectMenuDrops(fragments);
   };
 
   // [LAW:dataflow-not-control-flow] ONE walk renders any node to LINES OF CELLS
@@ -594,7 +598,7 @@ export function renderDsl(
       nextHueShift,
       perSegmentSink,
       beginSegment,
-      endSegment,
+      collectDrops,
       focusTint,
       lookupSegment,
       renderChild: renderNode,

@@ -6,13 +6,20 @@
 // synthesized cycle action (`renderAction`), the body through the one picker
 // renderer (`renderPicker`).
 //
-// [LAW:decomposition] The glyph and the body travel on SEPARATE channels. The
-// helper RETURNS only the inline glyph, and CONTRIBUTES the open body to the
-// walk-owned per-segment drop sink. The segment boundary stacks the sink's blocks
-// below the row. This is the fix for the old `\n`-in-the-stream representation:
-// because the body never enters the inline text stream, a menu may sit ANYWHERE
-// in a segment template (content after it stays inline on row 0), and a segment
-// may contain ANY NUMBER of menus (each contributes its own drop block).
+// [LAW:effects-at-boundaries] The helper is a PURE function of its inputs (the
+// walk-published placement + the live store): it computes the inline glyph and,
+// when open, the body, and RETURNS them together — the glyph as the fragment, the
+// body carried as out-of-band metadata on that returned RichText (a symbol the
+// segment boundary reads). It mutates no shared sink; the EFFECT of placing the
+// body below the row is performed at the boundary (collectMenuDrops + the segment
+// walk). Pure core returns a description; the edge performs it.
+//
+// [LAW:decomposition] The glyph and the body travel on SEPARATE channels: the
+// glyph is the visible fragment, the body rides as metadata invisible to the
+// inline render. This is the fix for the old `\n`-in-the-stream representation —
+// the body never enters the visible inline text, so a menu may sit ANYWHERE in a
+// template (content after it stays inline on row 0), and a segment may contain
+// ANY NUMBER of menus (each returned glyph carries its own body).
 //
 // [LAW:one-source-of-truth] A menu is CONTEXT-FREE about its NAME in the template
 // (it cannot see the segment it sits in), so the host segment name is published
@@ -24,8 +31,7 @@
 //
 // [LAW:dataflow-not-control-flow] Openness is the value of the menu's state key,
 // not a when-gated reveal: open ⇔ the state key holds THIS menu's member name.
-// Open contributes one drop block; closed contributes none. One expression, one
-// returned RichText (the glyph); the body rides the side channel.
+// The body metadata is a list whose length carries open/closed (1 open, 0 closed).
 
 import type { RichText } from "@promptctl/rich-js";
 import type { FuncMap } from "@promptctl/go-template-js";
@@ -49,23 +55,35 @@ export interface MenuPlacement {
 
 // [LAW:locality-or-seam] The runtime the `menu` func closes over. It shares the
 // ACTION runtime (the menu's glyph and body resolve their actions/state from the
-// same compiled table + store as every other helper), reads the walk-published
-// current placement, and pushes open bodies to `drops`. Both `current` and
-// `drops` are mutated by the single owner (the render walk: it sets `current` and
-// clears `drops` immediately before each segment template eval, then reads
-// `drops` after) — the spatial cousin of the hue cursor, one mutator, never
-// ambient. [LAW:no-ambient-temporal-coupling]
+// same compiled table + store as every other helper) and READS the walk-published
+// current placement — both inputs, never written by the helper. `current` is
+// mutated only by the single owner (the render walk, before each segment eval) —
+// the spatial cousin of the hue cursor, one mutator, never ambient.
+// [LAW:no-ambient-temporal-coupling]
 export interface MenuRuntime {
   readonly action: ActionRuntime;
   current: MenuPlacement | null;
-  // The open menu bodies contributed by the segment currently evaluating, in
-  // template order. The walk clears this before each segment and stacks whatever
-  // it holds below the segment's inline row.
-  drops: RichText[];
+}
+
+// [LAW:effects-at-boundaries] The body a `{{ menu }}` drops below its row rides as
+// out-of-band metadata on the returned glyph (a symbol the boundary reads), so the
+// helper returns a description rather than mutating a shared sink. A list whose
+// length carries open/closed — `[body]` open, `[]` closed.
+const MENU_DROP = Symbol("cc-candybar.menuDrop");
+type GlyphWithDrop = RichText & { [MENU_DROP]?: readonly RichText[] };
+
+// [LAW:single-enforcer] THE reader of the drop metadata, used by the segment
+// boundary (injected by the driver — node-registry never imports this module).
+// Scans a segment's evaluated fragments in template order and returns every menu
+// body carried on them; a fragment with no metadata contributes nothing.
+export function collectMenuDrops(
+  fragments: readonly RichText[],
+): readonly RichText[] {
+  return fragments.flatMap((f) => (f as GlyphWithDrop)[MENU_DROP] ?? []);
 }
 
 // Realize a `{{ menu }}` against the live placement + state: return its inline
-// glyph and, when open, push its body to the drop sink.
+// glyph, carrying the (open) body as out-of-band metadata for the boundary.
 function renderMenu(
   applyName: string,
   pageName: string,
@@ -98,16 +116,15 @@ function renderMenu(
   );
 
   // [LAW:dataflow-not-control-flow] Open ⇔ the state key holds this menu's member.
-  // The drop contribution is a VALUE whose length carries open/closed — closed ⇒
-  // an empty list, open ⇒ one body — and the push is UNCONDITIONAL: the effect
-  // always runs, only the list it appends varies. (renderPicker is pure, so it is
-  // only built when open — that skips wasted computation, it does not gate the
-  // effect.) The segment boundary places whatever was appended below the row.
+  // The body is a VALUE whose length carries open/closed — `[body]` open, `[]`
+  // closed — attached to the glyph the helper returns. No shared mutation: the
+  // boundary reads this metadata to place the body. (renderPicker is pure, so it
+  // is only built when open — skipping wasted computation, gating no effect.)
   const open = readVar(action.store, stateKey) === member;
   const bodyLines = open
     ? [renderPicker(applyName, pageName, closeOnPick, paged, action)]
     : [];
-  runtime.drops.push(...bodyLines);
+  (glyph as GlyphWithDrop)[MENU_DROP] = bodyLines;
   return glyph;
 }
 

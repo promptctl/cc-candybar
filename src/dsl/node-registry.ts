@@ -106,12 +106,13 @@ export interface NodeRenderCtx {
   readonly perSegmentSink?: Map<string, readonly RichText[]>;
   // [LAW:locality-or-seam] The menu seam, injected as capabilities so this module
   // never imports the menu feature. `beginSegment` runs BEFORE a segment template
-  // evaluates: it publishes the segment name (so a `{{ menu }}` can derive its
-  // identity) and clears the drop sink. `endSegment` runs AFTER eval and returns
-  // the open menu bodies the template contributed, in template order, for the
-  // boundary to stack below the row. The driver owns the menu runtime + state.
+  // evaluates: it publishes the segment name so a `{{ menu }}` can derive its
+  // identity. `collectDrops` runs AFTER eval: it reads the open menu bodies the
+  // menus carried as metadata on the evaluated fragments (template order) for the
+  // boundary to stack below the row, and clears the published placement. The
+  // driver owns the menu runtime; this module only hands it the fragments.
   beginSegment(segName: string): void;
-  endSegment(): readonly RichText[];
+  collectDrops(fragments: readonly RichText[]): readonly RichText[];
   // [LAW:locality-or-seam] The focus transform, injected as a capability (rich-js
   // owns the color math — see render.ts). Applied to the segment's baseStyle when
   // it has an open menu (it contributed drops), so the whole focused segment —
@@ -248,11 +249,11 @@ const segmentType: NodeType<"segment"> = {
       // derive its identity and contributes its open body to the sink.
       ctx.beginSegment(node.name);
       const fragments = segCompiled.template.evaluate(ctx.scope);
-      // [LAW:decomposition] The open menu bodies the template contributed, on the
-      // SEPARATE drop channel — they never entered `fragments` (the inline stream),
-      // so a menu can sit anywhere in the template and content after it stays
-      // inline. Each becomes one full-width line stacked below the segment's row.
-      const drops = ctx.endSegment();
+      // [LAW:decomposition] The open menu bodies, carried as out-of-band metadata
+      // on the evaluated fragments — invisible to the inline render, so a menu can
+      // sit anywhere in the template and content after it stays inline. Each
+      // becomes one full-width line stacked below the segment's row.
+      const drops = ctx.collectDrops(fragments);
 
       // [LAW:dataflow-not-control-flow] The per-segment variability is WHICH
       // palette — the base resolver (per-segment override or basePalette)
