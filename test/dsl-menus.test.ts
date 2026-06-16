@@ -203,6 +203,33 @@ describe("menu synthesis (derived identity, reserved namespace)", () => {
     }
   });
 
+  test("two menus whose names normalize to the same state key are rejected (lossy ident)", () => {
+    // segment "s" with apply actions "a-b" and "a_b" both normalize to
+    // menus.s.a_b; without the collision guard they would silently share open
+    // state (an unintended accordion). It must be a loud load error.
+    const src = `{
+      globals: {},
+      variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
+      actions: {
+        'a-b': { set: 'theme', from: 'themes' },
+        'a_b': { set: 'style', from: 'styles' },
+        themePage: { set: 'theme-page', int: true },
+        stylePage: { set: 'style-page', int: true },
+      },
+      segments: { s: { template: 'S {{ menu "a-b" "themePage" }} {{ menu "a_b" "stylePage" }}', bg: 'surface', fg: 'foreground' } },
+      root: { h: ['s'] },
+    }`;
+    try {
+      parseAndValidate("<test>", src, ALLOWED);
+      throw new Error("expected ConfigError");
+    } catch (e) {
+      expect(e).toBeInstanceOf(ConfigError);
+      expect((e as ConfigError).message).toMatch(
+        /normalize to the same state key/,
+      );
+    }
+  });
+
   test("a {{ menu }} inside a helper is rejected at load (no per-segment identity)", () => {
     const src = `{
       globals: {},

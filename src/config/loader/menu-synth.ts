@@ -146,6 +146,15 @@ export function synthesizeMenuDecls(
   // segment; for shared-key menus it means two menus with the same apply name
   // sharing a key — neither can be addressed distinctly, so reject.
   const claimed = new Set<string>();
+  // [LAW:types-are-the-program] The state key is `ident()`-normalized so it carries
+  // no separators; that normalization is lossy (`a-b` and `a_b` collapse), so two
+  // DISTINCT declarations could map to one key and silently share open-state (an
+  // unintended accordion). Track the raw "owner" each key legitimately belongs to
+  // — a shared key is owned by its raw key string (every sibling agrees); an
+  // independent menu by its raw (segment, apply). A second owner on the same key
+  // is a normalization collision, rejected at load so it is unrepresentable
+  // [LAW:no-silent-failure] rather than corrupting grouping.
+  const ownerByStateKey = new Map<string, string>();
 
   for (const [segName, seg] of Object.entries(segments)) {
     if (!segmentReferencesMenu(seg.template)) continue;
@@ -181,6 +190,23 @@ export function synthesizeMenuDecls(
         continue;
       }
       const stateKey = menuStateKey(segName, call.apply, call.key);
+      // The raw declaration this key legitimately belongs to. Shared-key siblings
+      // all share one owner (their raw key); an independent menu owns its key alone
+      // (its raw segment+apply, NUL-joined so the two parts can't run together).
+      const owner =
+        call.key !== undefined
+          ? `key ${call.key}`
+          : `ind ${segName} ${call.apply}`;
+      const priorOwner = ownerByStateKey.get(stateKey);
+      if (priorOwner !== undefined && priorOwner !== owner) {
+        menuIssue(
+          ctx,
+          `segments.${segName}`,
+          `two {{ menu }} disclosures normalize to the same state key ("${stateKey}") but were declared differently — distinct names that differ only by non-alphanumeric characters (e.g. "a-b" vs "a_b") collapse to one key and would silently share open-state. Rename so they don't collide.`,
+        );
+        continue;
+      }
+      ownerByStateKey.set(stateKey, owner);
       const identity = menuActionName(stateKey, member);
       if (claimed.has(identity)) {
         menuIssue(
