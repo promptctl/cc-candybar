@@ -13,8 +13,11 @@
 //
 // What's on the bar:
 //   Row 1 (always)  — directory · git · model · context · cache warmth · 5h & 7d quota
-//   Row 2 (always)  — 🎨 theme + hue stepper · ✦ style · 🎯 work-mode chip · ⎘/↗ quick actions
-//   Reveal rows     — theme picker / style picker (each appears only while open)
+//   Row 2 (always)  — 🎨 theme ▸ · ⬡ hue stepper · ✦ style ▸ · 🎯 work-mode chip · ⎘/↗ quick actions
+//   Disclosures     — the theme/style ▸ glyphs toggle ▸↔▾; an open menu drops its
+//                     picker body directly below row 2. Each {{ menu }} is
+//                     INDEPENDENT (no shared key), so theme and style can be open
+//                     at once — pass a shared key to make a set mutually exclusive.
 //   Accordion       — "session details" / "links" panels (open one, the other closes)
 //
 // Everything merges on top of DEFAULT_DSL_CONFIG, so only what differs from the
@@ -32,10 +35,12 @@
     // the daemon reads to resolve the rendered basePalette, so the active mark
     // and the bar's colors are one source of truth — they cannot disagree.
     theme: { kind: "state", key: "theme", default: "catppuccin-mocha" },
-    // The theme menu's page index: -1 (default) = CLOSED, >=0 = open at that
-    // page. One value carries open/closed/which-page; the int gate for the
-    // 'theme-page' key is derived from the picker at load.
-    themePage: { kind: "state", key: "theme-page", default: "-1" },
+    // The theme picker's page cursor. With {{ menu }}, open/closed is the
+    // synthesized menus.* accordion key (derived from the control row), NOT this
+    // var — so this is purely the page index the picker paginates by; an unset or
+    // -1 value clamps to page 0. The int gate for 'theme-page' is derived from
+    // the picker's page action at load.
+    themePage: { kind: "state", key: "theme-page", default: "0" },
     // The per-segment hue-rotation step renderDsl reads (HUE_STEP_VAR), a
     // kind:'state' var (over the bundled literal) so the stepper drives it LIVE
     // (session over default). The range gate (0..60) is derived from the stepper.
@@ -48,8 +53,9 @@
     // exactly like the theme), so a style click reshapes the bar live. Empty
     // default renders as "(default)" and leaves the "powerline" floor in effect.
     activeStyle: { kind: "state", key: "style", default: "" },
-    // The style menu's page cursor (−1 closed / 0..N), mirroring themePage.
-    stylePage: { kind: "state", key: "style-page", default: "-1" },
+    // The style picker's page cursor, mirroring themePage — open/closed is the
+    // menus.* accordion key, this is just the page index.
+    stylePage: { kind: "state", key: "style-page", default: "0" },
 
     // ── Work-mode chip (the cycle-action showcase) ──────────────────────────
     // A 3-state status the cycleMode action advances; the glyph names the
@@ -68,8 +74,6 @@
   // REPRESENTATION lives in the segment templates below; each binds a region to
   // one of these by NAME. The writable-key gate derives from this table.
   actions: {
-    // Open the theme menu at page 0. A literal write to the int page key.
-    openMenu: { set: "theme-page", to: "0" },
     // The hue stepper: two bounded actions over 'hue-step', 0..60. ◀ steps −2 /
     // ▶ steps +2, WRAPPING at the bounds; renderDsl reads the same value to
     // rotate hue. The range gate owns the bounds.
@@ -80,8 +84,7 @@
     // The theme picker's page cursor: an unbounded int (−1 closed / 0..N).
     themePage: { set: "theme-page", int: true },
 
-    // ── Style picker (mirror of the theme trio over the 'styles' domain) ────
-    openStyleMenu: { set: "style-page", to: "0" },
+    // ── Style picker (mirror of the theme pair over the 'styles' domain) ────
     applyStyle: { set: "style", from: "styles" },
     stylePage: { set: "style-page", int: true },
 
@@ -99,35 +102,40 @@
   },
 
   segments: {
-    // Theme control + hue stepper. No per-segment `palette:` override on purpose:
-    // that would pin a static theme and stop it following the session pick. bg/fg
-    // resolve against the live basePalette, so the control recolors with the bar.
+    // Theme control: the name + a self-contained {{ menu }} disclosure. The menu
+    // emits a toggling glyph (▸ closed / ▾ open) that trails the label it gates
+    // (pdu.8), and — when open — drops its picker body full-width onto the line
+    // BELOW this control row (compose stacks drops; row 0 neighbours unmoved).
+    // No per-segment `palette:` override on purpose: that would pin a static
+    // theme and stop it following the session pick. bg/fg resolve against the
+    // live basePalette, so the control recolors with the bar.
+    //   {{ menu apply page closeOnPick paged }} — closeOnPick=false (stay-open,
+    //   try themes in a row), paged=true (slice into ←/→ pages at term width).
+    //   The disclosure's identity is DERIVED from this segment + the apply action
+    //   name, so nothing here names the menu or a key — see menu-keys.ts.
     trigger: {
-      template: '🎨 {{ .theme }} {{ action "openMenu" "▸" }}  ⬡ {{ action "hueDown" "◀" }} {{ printf "%2s" .hue.step }}° {{ action "hueUp" "▶" }}',
+      template: '🎨 {{ .theme }} {{ menu "applyTheme" "themePage" false true }}',
       bg: "surface",
       fg: "foreground",
     },
-    // The expanded theme picker: one width-paginated page (paged=true). Clicking
-    // a theme recolors the bar live and LEAVES THE MENU OPEN (closeOnPick=false,
-    // the stay-open default) so themes can be tried in a row; the ✕ closes. The
-    // ←/→/✕ affordances + URLs derive from the page + term width.
-    pickerMenu: {
-      template: '{{ picker "applyTheme" "themePage" false true }}',
+    // The hue stepper, its own segment now (the menu must be the last token in
+    // the theme control — its dropped body would otherwise carry these controls
+    // below the row). ⬡ ◀ −2 / ▶ +2 over 'hue-step', wrapping; renderDsl reads
+    // the same value to rotate per-segment hue.
+    hueStepper: {
+      template: '⬡ {{ action "hueDown" "◀" }} {{ printf "%2s" .hue.step }}° {{ action "hueUp" "▶" }}',
       bg: "surface",
       fg: "foreground",
     },
 
-    // The style control — the theme trio's twin over the 'styles' domain.
+    // The style control — the theme control's twin over the 'styles' domain, also
+    // a self-contained {{ menu }}. paged omitted ⇒ false ⇒ one full-width page
+    // (the style domain is small; FlexStrip soft-wraps if needed). No shared key,
+    // so this menu is INDEPENDENT of the theme menu — both can be open at once.
+    // (To make a set of menus mutually exclusive, pass the same trailing key
+    // string to each: {{ menu "applyStyle" "stylePage" false false "pickers" }}.)
     styleControl: {
-      template: '✦ {{ if .activeStyle }}{{ .activeStyle }}{{ else }}(default){{ end }} {{ action "openStyleMenu" "▸" }}',
-      bg: "surface",
-      fg: "foreground",
-    },
-    // The style picker: paged=false → one full-width page (the style domain is
-    // small; FlexStrip soft-wraps if needed). Stay-open like the themes
-    // (closeOnPick defaults false, omitted here); the ✕ closes.
-    stylePicker: {
-      template: '{{ picker "applyStyle" "stylePage" }}',
+      template: '✦ {{ if .activeStyle }}{{ .activeStyle }}{{ else }}(default){{ end }} {{ menu "applyStyle" "stylePage" }}',
       bg: "surface",
       fg: "foreground",
     },
@@ -166,21 +174,21 @@
   },
 
   // root REPLACES the default wholesale (Option A shape grammar). Clean by
-  // default, depth on click: two always-on rows, two reveal-on-open picker rows,
-  // and a two-panel accordion drawer.
+  // default, depth on click: two always-on rows (the second carrying the theme/
+  // style {{ menu }} disclosures, whose bodies drop in below it on open) and a
+  // two-panel accordion drawer.
   //   gitaculous = custom git line (operation, sha, working-tree, upstream,
   //     stash, time-since-commit); cacheTimer = prompt-cache warmth (◴ Nm/cold);
   //     block = 5h quota + reset; weekly = 7d quota + reset.
   root: { v: [
     // Dense info row (always on).
     { h: ["directory", "gitaculous", "model", "context", "cacheTimer", "block", "weekly"] },
-    // Control bar (always on): theme control + hue stepper, style control,
-    // work-mode chip, quick-action toolbar.
-    { h: ["trigger", "styleControl", "modeControl", "toolbar"] },
-    // Picker reveal rows — each exists only while its menu cursor is ≥ 0. The
-    // pickers themselves draw the ←/→/✕ affordances from the page + term width.
-    { seg: "pickerMenu", when: "{{ ge (int .themePage) 0 }}" },
-    { seg: "stylePicker", when: "{{ ge (int .stylePage) 0 }}" },
+    // Control bar (always on): theme control, hue stepper, style control,
+    // work-mode chip, quick-action toolbar. The theme/style {{ menu }} disclosures
+    // live here; when one opens, its picker body drops onto the line directly
+    // below this row (no separate when-gated reveal row — openness is the value of
+    // the derived menus.* key, not a gated reveal [LAW:dataflow-not-control-flow]).
+    { h: ["trigger", "hueStepper", "styleControl", "modeControl", "toolbar"] },
     // Accordion drawer: two sibling groups sharing the "drawer" key, so opening
     // one auto-closes the other — one key holds one open name, no accordion
     // "mode" [LAW:dataflow-not-control-flow]. The group sugar synthesizes each

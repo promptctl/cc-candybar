@@ -71,7 +71,7 @@ export { mergeWithDefault } from "./loader/merge.js";
 export {
   extractTemplateRefs,
   extractActionRefs,
-  extractPickerRefs,
+  extractPickerMenuRefs,
 } from "./loader/refs.js";
 
 // ─── Three-stage pipeline ────────────────────────────────────────────────────

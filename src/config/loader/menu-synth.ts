@@ -2,8 +2,8 @@
 // `{{ menu }}` render helper. A menu is the group-accordion mechanism with its
 // trigger living inside an arbitrary user segment rather than a synthesized
 // toggle segment — so this emits exactly what group sugar does MINUS the segment
-// (the helper IS the trigger): one `state` var per row key (default "closed")
-// and one `cycle` action per (row, menu-bearing segment) under the reserved
+// (the helper IS the trigger): one `state` var per menu state key (default
+// "closed") and one `cycle` action per (state key, member) under the reserved
 // `menus.` namespace. Both land in the raw sections so they merge over the
 // default and, crucially, so `deriveActionValidators(config.actions)` derives the
 // click gate from them through the ONE existing path — a menu toggle is gated
@@ -12,12 +12,15 @@
 // Runs in `parseDslConfig` after group synthesis and after every section parsed,
 // so the reserved-namespace collision check sees the fully-parsed user sections.
 //
-// [LAW:types-are-the-program] WHICH segments host a menu is read from the parsed
-// AST (`referencedFunctions`), not a source-text scan — robust against whitespace,
-// pipelines, and `.menu`/"menu" lookalikes. Detection bare-parses the segment
-// template; a parse failure here is treated as "no menu" because the authoritative
-// parse error is surfaced loudly by `registerDslConfig` when it compiles the same
-// template (so this pass never swallows a real error, it just declines to guess).
+// [LAW:types-are-the-program] WHICH segments host a menu, and with WHAT apply
+// action + optional shared key, is read from the parsed AST (`referencedCalls`),
+// not a source-text scan — robust against whitespace, pipelines, and
+// `.menu`/"menu" lookalikes, and it yields each call's literal string arguments
+// so a menu's identity (member = apply name; key = optional shared key) is the
+// SAME fact the render helper reads from those same argument positions. A parse
+// failure here is treated as "no menu" because the authoritative parse error is
+// surfaced loudly by `registerDslConfig` when it compiles the same template (so
+// this pass never swallows a real error, it just declines to guess).
 
 import { createEngine } from "@promptctl/go-template-js";
 import type { ActionDecl } from "../action.js";
@@ -25,11 +28,15 @@ import type { Mutable, ValidateCtx } from "./validate-core.js";
 import {
   MENU_CLOSED,
   MENU_NS,
-  forEachSegmentPlacement,
   menuActionName,
+  menuMember,
   menuStateKey,
 } from "../menu-keys.js";
-import type { RawDslConfig, VariableDecl } from "../dsl-types.js";
+import {
+  walkNodes,
+  type RawDslConfig,
+  type VariableDecl,
+} from "../dsl-types.js";
 import { findKeyLine } from "./diagnostics.js";
 
 // [LAW:single-enforcer] The helper-name a `{{ menu … }}` call uses — the same
@@ -37,17 +44,52 @@ import { findKeyLine } from "./diagnostics.js";
 // references this function.
 const MENU_FUNC = "menu";
 
+// [LAW:types-are-the-program] The `{{ menu }}` argument positions, mirroring the
+// render helper's signature `menu apply page closeOnPick paged key`. Only the
+// apply name (identity member) and the optional shared key (accordion grouping)
+// affect synthesis; page/closeOnPick/paged are render-only and ignored here.
+const ARG_APPLY = 0;
+const ARG_KEY = 4;
+
+// [LAW:types-are-the-program] One menu call's identity-bearing arguments. Each
+// arg has three states the synthesis must tell apart: a literal string (usable),
+// `null` (a slot present but non-literal — its value is eval-time, so it cannot
+// be gated at load → author error), and `undefined` (the slot was omitted). The
+// apply slot is required; the key slot is optional (undefined ⇒ independent menu).
+interface MenuCall {
+  readonly apply: string | null;
+  readonly key: string | null | undefined;
+}
+
 // [LAW:no-defensive-null-guards] A bare engine purely for AST introspection: it
 // never evaluates, so `fromString` is identity and no funcs are registered (parse
 // does not resolve function existence — that is an eval-time concern).
+function parseCalls(template: string): readonly MenuCall[] | "parse-failed" {
+  const engine = createEngine<string>({ fromString: (s) => s });
+  try {
+    return engine
+      .parse(template)
+      .referencedCalls()
+      .filter((c) => c.name === MENU_FUNC)
+      .map((c) => ({
+        apply: c.args[ARG_APPLY] ?? null,
+        // `referencedCalls` reports an omitted positional slot as absent and a
+        // present non-literal as null; preserve that distinction.
+        key: c.args.length > ARG_KEY ? c.args[ARG_KEY] : undefined,
+      }));
+  } catch {
+    // A malformed template can host no usable menu; registerDslConfig re-parses
+    // and reports the real error. [LAW:no-silent-failure] — not swallowed, just
+    // not the place that reports it.
+    return "parse-failed";
+  }
+}
+
 function segmentReferencesMenu(template: string): boolean {
   const engine = createEngine<string>({ fromString: (s) => s });
   try {
     return engine.parse(template).referencedFunctions().has(MENU_FUNC);
   } catch {
-    // A malformed template can host no usable menu; registerDslConfig re-parses
-    // and reports the real error. [LAW:no-silent-failure] — not swallowed, just
-    // not the place that reports it.
     return false;
   }
 }
@@ -77,73 +119,204 @@ export function synthesizeMenuDecls(
     }
   }
 
-  // [LAW:no-silent-failure] A menu derives its accordion identity from its host
-  // SEGMENT's tree position; a `{{ define }}` helper is shared and placement-
-  // agnostic, so a `{{ menu }}` reached through one has no row to key on and would
-  // never get its backing state var/cycle action synthesized — failing at render.
-  // Reject it loudly at load, pointing the author to inline the menu in a segment.
-  // [LAW:no-mode-explosion] We reject rather than build helper-call-graph
-  // resolution speculatively; revisit only if a real shared-menu need appears.
+  // [LAW:no-silent-failure] A menu derives its identity from the SEGMENT it sits
+  // in (the published segment name) plus its own apply arg; a `{{ define }}`
+  // helper is shared across segments, so the synthesis pass — which scans each
+  // segment's own template — cannot see a menu reached only through `{{ template
+  // }}` and would never synthesize its backing state var/cycle action, failing at
+  // render. Reject it loudly at load, pointing the author to inline the menu.
+  // [LAW:no-mode-explosion] We reject rather than resolve the helper call graph
+  // speculatively; revisit only if a real shared-menu need appears.
   for (const [name, body] of Object.entries(out.helpers ?? {})) {
     if (segmentReferencesMenu(body)) {
       ctx.issues.push({
         path: `helpers.${name}`,
-        message: `helper "${name}" uses {{ menu }}, but a menu must live directly in a segment template — its accordion identity is derived from the segment's position in the layout, which a shared helper does not have. Inline the {{ menu }} call into each segment that needs it.`,
+        message: `helper "${name}" uses {{ menu }}, but a menu must live directly in a segment template — its identity is derived from the segment it sits in, which a shared helper does not have. Inline the {{ menu }} call into each segment that needs it.`,
         line: findKeyLine(ctx.source, ["helpers", name]),
       });
     }
   }
 
-  if (out.root === undefined) return;
   const segments = out.segments ?? {};
 
-  // [LAW:dataflow-not-control-flow] Memoize detection by segment name — a segment
-  // placed in N rows is parsed once, then each placement reads the cached verdict.
-  const hostsMenu = new Map<string, boolean>();
-  const referencesMenu = (segName: string): boolean => {
-    const cached = hostsMenu.get(segName);
-    if (cached !== undefined) return cached;
-    const seg = segments[segName];
-    const result =
-      seg !== undefined ? segmentReferencesMenu(seg.template) : false;
-    hostsMenu.set(segName, result);
-    return result;
-  };
+  // [LAW:locality-or-seam] A menu publishes its placement ONLY around the segment
+  // `template` eval; bg/fg evaluate after that window and a node/segment `when`
+  // before it, so a {{ menu }} in any of them throws at render. The template is
+  // the menu's one valid seam — reject it anywhere else at load, rather than
+  // admit a config that parses but crashes on render.
+  for (const [segName, seg] of Object.entries(segments)) {
+    for (const field of ["bg", "fg", "when"] as const) {
+      const tpl = seg[field];
+      if (typeof tpl === "string" && segmentReferencesMenu(tpl)) {
+        menuIssue(
+          ctx,
+          `segments.${segName}.${field}`,
+          `segment "${segName}" uses {{ menu }} in its "${field}" — a menu is only valid in a segment's "template" (its placement is published only there; "${field}" needs a ${field === "when" ? "predicate" : "color"}). Move the {{ menu }} into the template.`,
+        );
+      }
+    }
+  }
 
-  // One state key per row (default "closed"); one cycle action per (row,segment).
-  const stateKeys = new Map<string, string>(); // stateKey → rowKey (for vars)
-  const actions: Record<string, ActionDecl> = {};
-  forEachSegmentPlacement(out.root, (segName, rowKey) => {
-    if (!referencesMenu(segName)) return;
-    // [LAW:types-are-the-program] A menu's member name IS its host segment name;
-    // a segment named exactly the closed-state sentinel would make the cycle
-    // [closed, "closed"] — two identical members, so the toggle could never leave
-    // the closed state. Reject that one collision at load (the only segment name
-    // that breaks a menu), rather than silently synthesizing an unopenable menu.
-    if (segName === MENU_CLOSED) {
+  // One walk over the layout: reject {{ menu }} in node `when` predicates (same
+  // template-only rule), and count each segment's placements for the reuse check.
+  const placementCounts = new Map<string, number>();
+  if (out.root !== undefined) {
+    for (const node of walkNodes(out.root)) {
+      if (typeof node.when === "string" && segmentReferencesMenu(node.when)) {
+        menuIssue(
+          ctx,
+          "root",
+          `a layout node's "when" predicate uses {{ menu }} — a menu is only valid in a segment's "template", not a node predicate. Move it into a segment.`,
+        );
+      }
+      if (node.kind === "segment") {
+        placementCounts.set(
+          node.name,
+          (placementCounts.get(node.name) ?? 0) + 1,
+        );
+      }
+    }
+  }
+
+  // [LAW:types-are-the-program] A menu-bearing segment placed in more than one
+  // layout slot is ambiguous: its disclosure open-state is keyed by segment name
+  // (one state for the segment), so two placements would share it and a click on
+  // one would toggle both. Reject the repeated placement — the ambiguity is
+  // unrepresentable, and identity stays name-derived (no placement path threaded
+  // into the key). Two independent disclosures = two named segments.
+  for (const [segName, seg] of Object.entries(segments)) {
+    if (!segmentReferencesMenu(seg.template)) continue;
+    if ((placementCounts.get(segName) ?? 0) > 1) {
       menuIssue(
         ctx,
         `segments.${segName}`,
-        `segment "${segName}" hosts a {{ menu }}, but a menu cannot live in a segment named "${MENU_CLOSED}" — that name collides with the menu's closed-state sentinel, leaving the menu unopenable. Rename the segment.`,
+        `segment "${segName}" hosts a {{ menu }} and is placed in the layout more than once — a menu's open-state is keyed by segment name, so the copies would share one state (clicking one would toggle both). Give each placement its own named segment.`,
       );
-      return;
     }
-    const stateKey = menuStateKey(rowKey);
-    stateKeys.set(stateKey, rowKey);
-    // [LAW:one-source-of-truth] Members ordered closed-first: an unset/foreign
-    // value counts as the first member (the cycle's "unknown ⇒ first" rule), so a
-    // never-clicked menu renders ▸ and a click opens it, auto-closing a row-mate
-    // because the shared key can hold only one member name.
-    actions[menuActionName(rowKey, segName)] = {
-      set: stateKey,
-      cycle: [MENU_CLOSED, segName],
-    };
-  });
+  }
+
+  // One state var per state key (default "closed"); one cycle action per
+  // (stateKey, member). [LAW:dataflow-not-control-flow] Independent menus each
+  // contribute their own key; shared-key menus contribute distinct members to one
+  // key, and the same-key validator merge unions them into one accordion gate.
+  const stateKeys = new Set<string>();
+  const actions: Record<string, ActionDecl> = {};
+  // Guard against two menus claiming one identity (same key + same member): for
+  // independent menus that means the literal same `{{ menu }}` twice in a
+  // segment; for shared-key menus it means two menus with the same apply name
+  // sharing a key — neither can be addressed distinctly, so reject.
+  const claimed = new Set<string>();
+  // [LAW:types-are-the-program] The state key is `ident()`-normalized so it carries
+  // no separators; that normalization is lossy (`a-b` and `a_b` collapse), so two
+  // DISTINCT declarations could map to one key and silently share open-state (an
+  // unintended accordion). Track the raw "owner" each key legitimately belongs to
+  // — a shared key is owned by its raw key string (every sibling agrees); an
+  // independent menu by its raw (segment, apply). A second owner on the same key
+  // is a normalization collision, rejected at load so it is unrepresentable
+  // [LAW:no-silent-failure] rather than corrupting grouping.
+  const ownerByStateKey = new Map<string, string>();
+
+  for (const [segName, seg] of Object.entries(segments)) {
+    if (!segmentReferencesMenu(seg.template)) continue;
+    const calls = parseCalls(seg.template);
+    if (calls === "parse-failed") continue;
+    for (const call of calls) {
+      if (call.apply === null) {
+        menuIssue(
+          ctx,
+          `segments.${segName}`,
+          `segment "${segName}" has a {{ menu }} whose apply action is not a string literal — a menu's identity is its apply-action name, which must be a literal so it can be gated at load (e.g. {{ menu "applyTheme" "themePage" }}).`,
+        );
+        continue;
+      }
+      if (call.key === null) {
+        menuIssue(
+          ctx,
+          `segments.${segName}`,
+          `segment "${segName}" has a {{ menu }} whose accordion key is not a string literal — a shared key must be a literal so the mutually-exclusive group can be gated at load (e.g. {{ menu "applyTheme" "themePage" false false "pickers" }}).`,
+        );
+        continue;
+      }
+      // [LAW:types-are-the-program] An empty shared key collapses the state key to
+      // the bare reserved `menus.` namespace (and a `menus..member` action name).
+      // Reject it — a shared key, when present, must name a group.
+      if (call.key === "") {
+        menuIssue(
+          ctx,
+          `segments.${segName}`,
+          `segment "${segName}" has a {{ menu }} with an empty accordion key — a shared key must be a non-empty name (or omit it for an independent menu).`,
+        );
+        continue;
+      }
+      // [LAW:types-are-the-program] An empty apply name → empty member, and the
+      // store returns "" for an absent state key, so `open = read === member`
+      // would be true before any click — the menu would render open spuriously.
+      // Reject it (the member must never alias the absent-state sentinel).
+      if (call.apply === "") {
+        menuIssue(
+          ctx,
+          `segments.${segName}`,
+          `segment "${segName}" has a {{ menu }} with an empty apply-action name — an empty member aliases the absent-state sentinel ("") so the menu would render open before any click. Name the apply action.`,
+        );
+        continue;
+      }
+      const member = menuMember(call.apply);
+      // [LAW:types-are-the-program] A member equal to the closed sentinel makes
+      // the cycle [closed, "closed"] — two identical members, leaving the menu
+      // unopenable. The only apply name that breaks a menu; reject it at load.
+      if (member === MENU_CLOSED) {
+        menuIssue(
+          ctx,
+          `segments.${segName}`,
+          `segment "${segName}" has a {{ menu }} whose apply action is named "${MENU_CLOSED}", which collides with the menu's closed-state sentinel and leaves it unopenable. Rename the action.`,
+        );
+        continue;
+      }
+      const stateKey = menuStateKey(segName, call.apply, call.key);
+      // The raw declaration this key legitimately belongs to. Shared-key siblings
+      // all share one owner (their raw key); an independent menu owns its key alone
+      // (its raw segment+apply, NUL-joined so the two parts can't run together).
+      const owner =
+        call.key !== undefined
+          ? `key ${call.key}`
+          : `ind ${segName} ${call.apply}`;
+      const priorOwner = ownerByStateKey.get(stateKey);
+      if (priorOwner !== undefined && priorOwner !== owner) {
+        menuIssue(
+          ctx,
+          `segments.${segName}`,
+          `two {{ menu }} disclosures normalize to the same state key ("${stateKey}") but were declared differently — distinct names that differ only by non-alphanumeric characters (e.g. "a-b" vs "a_b") collapse to one key and would silently share open-state. Rename so they don't collide.`,
+        );
+        continue;
+      }
+      ownerByStateKey.set(stateKey, owner);
+      const identity = menuActionName(stateKey, member);
+      if (claimed.has(identity)) {
+        menuIssue(
+          ctx,
+          `segments.${segName}`,
+          `two {{ menu }} disclosures resolve to the same identity ("${identity}") — ${
+            call.key !== undefined
+              ? `menus sharing key "${call.key}" must have distinct apply actions`
+              : `a segment cannot contain two menus over the same apply action "${call.apply}"`
+          }.`,
+        );
+        continue;
+      }
+      claimed.add(identity);
+      stateKeys.add(stateKey);
+      // [LAW:one-source-of-truth] Members ordered closed-first: an unset/foreign
+      // value counts as the first member (the cycle's "unknown ⇒ first" rule), so
+      // a never-clicked menu renders ▸ and a click opens it; a shared key holding
+      // one member auto-closes its siblings.
+      actions[identity] = { set: stateKey, cycle: [MENU_CLOSED, member] };
+    }
+  }
 
   if (stateKeys.size === 0) return;
 
   const variables: Record<string, VariableDecl> = {};
-  for (const stateKey of stateKeys.keys()) {
+  for (const stateKey of stateKeys) {
     variables[stateKey] = {
       kind: "state",
       key: stateKey,
