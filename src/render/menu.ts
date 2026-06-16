@@ -97,15 +97,17 @@ function renderMenu(
     action,
   );
 
-  // [LAW:dataflow-not-control-flow] Open ⇔ the state key holds this menu's
-  // member. Closed ⇒ just the glyph; open ⇒ glyph inline + body contributed to
-  // the drop sink (placed below the row by the segment boundary).
+  // [LAW:dataflow-not-control-flow] Open ⇔ the state key holds this menu's member.
+  // The drop contribution is a VALUE whose length carries open/closed — closed ⇒
+  // an empty list, open ⇒ one body — and the push is UNCONDITIONAL: the effect
+  // always runs, only the list it appends varies. (renderPicker is pure, so it is
+  // only built when open — that skips wasted computation, it does not gate the
+  // effect.) The segment boundary places whatever was appended below the row.
   const open = readVar(action.store, stateKey) === member;
-  if (open) {
-    runtime.drops.push(
-      renderPicker(applyName, pageName, closeOnPick, paged, action),
-    );
-  }
+  const bodyLines = open
+    ? [renderPicker(applyName, pageName, closeOnPick, paged, action)]
+    : [];
+  runtime.drops.push(...bodyLines);
   return glyph;
 }
 
