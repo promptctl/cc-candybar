@@ -283,6 +283,40 @@ describe("menu synthesis (derived identity, reserved namespace)", () => {
     }
   });
 
+  test("a {{ menu }} in a segment bg/fg/when field is rejected (template-only seam)", () => {
+    const src = `{
+      globals: {},
+      variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
+      actions: { applyTheme: { set: 'theme', from: 'themes' }, themePage: { set: 'theme-page', int: true } },
+      segments: { s: { template: 'X', bg: '{{ menu "applyTheme" "themePage" }}', fg: 'foreground' } },
+      root: { h: ['s'] },
+    }`;
+    try {
+      parseAndValidate("<test>", src, ALLOWED);
+      throw new Error("expected ConfigError");
+    } catch (e) {
+      expect(e).toBeInstanceOf(ConfigError);
+      expect((e as ConfigError).message).toMatch(/only valid in a segment's "template"/);
+    }
+  });
+
+  test("a menu-bearing segment placed more than once is rejected (shared open-state)", () => {
+    const src = `{
+      globals: {},
+      variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
+      actions: { applyTheme: { set: 'theme', from: 'themes' }, themePage: { set: 'theme-page', int: true } },
+      segments: { m: { template: 'M {{ menu "applyTheme" "themePage" }}', bg: 'surface', fg: 'foreground' } },
+      root: { v: [ { h: ['m'] }, { h: ['m'] } ] },
+    }`;
+    try {
+      parseAndValidate("<test>", src, ALLOWED);
+      throw new Error("expected ConfigError");
+    } catch (e) {
+      expect(e).toBeInstanceOf(ConfigError);
+      expect((e as ConfigError).message).toMatch(/placed in the layout more than once/);
+    }
+  });
+
   test("a {{ menu }} inside a helper is rejected at load (no per-segment identity)", () => {
     const src = `{
       globals: {},

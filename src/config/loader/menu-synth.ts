@@ -32,7 +32,11 @@ import {
   menuMember,
   menuStateKey,
 } from "../menu-keys.js";
-import type { RawDslConfig, VariableDecl } from "../dsl-types.js";
+import {
+  walkNodes,
+  type RawDslConfig,
+  type VariableDecl,
+} from "../dsl-types.js";
 import { findKeyLine } from "./diagnostics.js";
 
 // [LAW:single-enforcer] The helper-name a `{{ menu … }}` call uses — the same
@@ -134,6 +138,62 @@ export function synthesizeMenuDecls(
   }
 
   const segments = out.segments ?? {};
+
+  // [LAW:locality-or-seam] A menu publishes its placement ONLY around the segment
+  // `template` eval; bg/fg evaluate after that window and a node/segment `when`
+  // before it, so a {{ menu }} in any of them throws at render. The template is
+  // the menu's one valid seam — reject it anywhere else at load, rather than
+  // admit a config that parses but crashes on render.
+  for (const [segName, seg] of Object.entries(segments)) {
+    for (const field of ["bg", "fg", "when"] as const) {
+      const tpl = seg[field];
+      if (typeof tpl === "string" && segmentReferencesMenu(tpl)) {
+        menuIssue(
+          ctx,
+          `segments.${segName}.${field}`,
+          `segment "${segName}" uses {{ menu }} in its "${field}" — a menu is only valid in a segment's "template" (its placement is published only there; "${field}" needs a ${field === "when" ? "predicate" : "color"}). Move the {{ menu }} into the template.`,
+        );
+      }
+    }
+  }
+
+  // One walk over the layout: reject {{ menu }} in node `when` predicates (same
+  // template-only rule), and count each segment's placements for the reuse check.
+  const placementCounts = new Map<string, number>();
+  if (out.root !== undefined) {
+    for (const node of walkNodes(out.root)) {
+      if (typeof node.when === "string" && segmentReferencesMenu(node.when)) {
+        menuIssue(
+          ctx,
+          "root",
+          `a layout node's "when" predicate uses {{ menu }} — a menu is only valid in a segment's "template", not a node predicate. Move it into a segment.`,
+        );
+      }
+      if (node.kind === "segment") {
+        placementCounts.set(
+          node.name,
+          (placementCounts.get(node.name) ?? 0) + 1,
+        );
+      }
+    }
+  }
+
+  // [LAW:types-are-the-program] A menu-bearing segment placed in more than one
+  // layout slot is ambiguous: its disclosure open-state is keyed by segment name
+  // (one state for the segment), so two placements would share it and a click on
+  // one would toggle both. Reject the repeated placement — the ambiguity is
+  // unrepresentable, and identity stays name-derived (no placement path threaded
+  // into the key). Two independent disclosures = two named segments.
+  for (const [segName, seg] of Object.entries(segments)) {
+    if (!segmentReferencesMenu(seg.template)) continue;
+    if ((placementCounts.get(segName) ?? 0) > 1) {
+      menuIssue(
+        ctx,
+        `segments.${segName}`,
+        `segment "${segName}" hosts a {{ menu }} and is placed in the layout more than once — a menu's open-state is keyed by segment name, so the copies would share one state (clicking one would toggle both). Give each placement its own named segment.`,
+      );
+    }
+  }
 
   // One state var per state key (default "closed"); one cycle action per
   // (stateKey, member). [LAW:dataflow-not-control-flow] Independent menus each
