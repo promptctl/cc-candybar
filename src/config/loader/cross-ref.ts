@@ -17,7 +17,7 @@ import { findKeyLine } from "./diagnostics.js";
 import { isPlainObject, type ValidateCtx } from "./validate-core.js";
 import {
   extractActionRefs,
-  extractPickerRefs,
+  extractPickerMenuRefs,
   extractTemplateRefs,
   refResolves,
 } from "./refs.js";
@@ -145,14 +145,16 @@ export function validateCrossReferences(
           });
         }
       }
-      // [LAW:locality-or-seam] A `{{ picker "apply" "page" … }}` references two
-      // named actions — both resolve against the action table at load, same
-      // existence-check shape as a bare action ref.
-      for (const pref of extractPickerRefs(tpl)) {
+      // [LAW:locality-or-seam] A `{{ picker "apply" "page" … }}` OR `{{ menu
+      // "apply" "page" … }}` references two named actions — both resolve against
+      // the action table at load, same existence-check shape as a bare action ref.
+      // A menu binds the same pair as a picker, so it routes through the SAME
+      // check rather than failing only when the disclosure is opened.
+      for (const pref of extractPickerMenuRefs(tpl)) {
         if (!Object.prototype.hasOwnProperty.call(cfg.actions, pref)) {
           ctx.issues.push({
             path: `segments.${segName}.${field}`,
-            message: `${field} references unknown action "${pref}" (in a picker)`,
+            message: `${field} references unknown action "${pref}" (in a picker or menu)`,
             line: findKeyLine(ctx.source, ["segments", segName, field]),
           });
         }

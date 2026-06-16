@@ -9,8 +9,8 @@ importers:
   .:
     dependencies:
       '@promptctl/go-template-js':
-        specifier: ^0.5.0
-        version: 0.5.0
+        specifier: ^0.6.0
+        version: 0.6.0
       '@promptctl/rich-js':
         specifier: ^0.6.0
         version: 0.6.0
@@ -735,6 +735,10 @@ packages:
 
   '@promptctl/go-template-js@0.5.0':
     resolution: {integrity: sha512-oX02iwjsfjMzbcPKaAT0RDFVxI12toAL4S9ztm/VxS+HWima9PtnvpkFgyFah2TZ0uNTG0rrzBFswYL/DamZEw==}
+    engines: {node: '>=20.19.0'}
+
+  '@promptctl/go-template-js@0.6.0':
+    resolution: {integrity: sha512-V7FPjAiHFd7Na82T+BRMXl0ntATPs82Lpub75aT65RADNsjyRmyVcECVhHzFM66nhFbpNET9xUzoltO+MtOxhA==}
     engines: {node: '>=20.19.0'}
 
   '@promptctl/rich-js@0.6.0':
@@ -3933,6 +3937,10 @@ snapshots:
     optional: true
 
   '@promptctl/go-template-js@0.5.0':
+    dependencies:
+      '@noble/hashes': 2.2.0
+
+  '@promptctl/go-template-js@0.6.0':
     dependencies:
       '@noble/hashes': 2.2.0
 

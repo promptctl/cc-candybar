@@ -54,25 +54,28 @@ export function extractActionRefs(template: string): Set<string> {
   return refs;
 }
 
-// [LAW:dataflow-not-control-flow] Extract the action names a `picker` call
-// references — its FIRST TWO string-literal args are the apply action and the
-// page action (`{{ picker "applyTheme" "themePage" true true }}`). Same code/
-// string-span walk as extractActionRefs; the picker keyword arms the next literal
-// as the apply name and the one after it as the page name (the trailing bool args
-// are not string literals, so they are never captured).
-const PICKER_ARG_RE = /\bpicker\s+$/;
-export function extractPickerRefs(template: string): Set<string> {
+// [LAW:dataflow-not-control-flow] Extract the action names a `picker` OR `menu`
+// call references — both bind the SAME (apply, page) action pair as their FIRST
+// TWO string-literal args (`{{ picker "applyTheme" "themePage" true true }}`,
+// `{{ menu "applyTheme" "themePage" false true "key" }}`). A menu's body IS a
+// picker, so the existence check on those two refs is identical; one extractor
+// arms on either keyword [LAW:single-enforcer]. Same code/string-span walk as
+// extractActionRefs; the keyword arms the next literal as the apply name and the
+// one after as the page name (trailing bools/the menu key are captured only if
+// they fall in the first two literal slots, which they never do).
+const PICKER_OR_MENU_ARG_RE = /\b(?:picker|menu)\s+$/;
+export function extractPickerMenuRefs(template: string): Set<string> {
   const refs = new Set<string>();
   TEMPLATE_BLOCK_RE.lastIndex = 0;
   let m: RegExpExecArray | null;
   while ((m = TEMPLATE_BLOCK_RE.exec(template)) !== null) {
     const block = m[1]!;
     let cursor = 0;
-    let pending = 0; // remaining name args to capture for the current picker call
+    let pending = 0; // remaining name args to capture for the current call
     let s: RegExpExecArray | null;
     STRING_LITERAL_RE.lastIndex = 0;
     while ((s = STRING_LITERAL_RE.exec(block)) !== null) {
-      if (PICKER_ARG_RE.test(block.slice(cursor, s.index))) pending = 2;
+      if (PICKER_OR_MENU_ARG_RE.test(block.slice(cursor, s.index))) pending = 2;
       if (pending > 0) {
         refs.add(s[0].slice(1, -1));
         pending--;
