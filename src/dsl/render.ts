@@ -29,7 +29,7 @@ import {
   type GitField,
 } from "../var-system/sources.js";
 import type { BuildLineOptions } from "../render/strip.js";
-import { renderStripCells, stripChromeCols } from "../render/strip.js";
+import { renderStripCells } from "../render/strip.js";
 import { resolverForThemeName } from "../themes/index.js";
 import { buildScope } from "../template-engine/scope.js";
 import {
@@ -282,6 +282,10 @@ export function registerDslConfig(
   const actionRuntime: ActionRuntime = {
     store: registry.variableStore,
     compiled: new Map(),
+    // [LAW:types-are-the-program] Always present — renderDsl republishes the live
+    // style each render; "powerline" is the registration-time default so a
+    // compile-only path (no render) still has a valid value.
+    stripStyle: "powerline",
   };
   // [LAW:one-way-deps] Inject action + picker feature funcs as data — the engine
   // stays generic. The picker shares the ACTION runtime (it resolves its
@@ -518,21 +522,21 @@ export function renderDsl(
 ): string {
   // [LAW:one-source-of-truth] Inject the usable width as `term.cols` from the
   // SAME opts.width the strip wraps to (below), so a width-paginated widget reads
-  // the exact wrap width — never a cached or independently-measured copy.
-  // [FRAMING:representation] The honest budget for a full-width widget is the
-  // wrap width MINUS the strip's structural chrome: FlexStrip paints the joiner's
-  // end-caps OUTSIDE the width budget (powerline's trailing separator, capsule's
-  // two caps), so a row whose content fills opts.width exactly is pushed past it
-  // by the caps. Subtracting stripChromeCols here makes term.cols mean "content a
-  // styled full-width row may hold and still fit opts.width after its caps" — the
-  // exact budget the picker paginates against (was the bug: it packed to the raw
-  // wrap width, so maximally-packed pages overflowed by the cap width and the
-  // terminal ate the trailing → affordance). Infinity − chrome stays Infinity, so
-  // the unbounded (wrap) render is unaffected.
+  // the exact wrap width — never a cached or independently-measured copy. This is
+  // the RAW usable width (terminal cols minus the Claude-Code reserve), the honest
+  // meaning every template — incl. user configs reading `.term.cols` — expects.
+  // The picker's strip-chrome reservation is NOT folded in here: that is a
+  // picker-local concern (the strip's end-caps wrap the picker's row, not every
+  // segment), applied at the pagination seam in renderPicker. [LAW:locality-or-seam]
   // Spreading a non-object payload yields no keys (compile-only callers), so the
   // width is set regardless without a trust-boundary guard.
-  const contentCols = Math.max(1, opts.width - stripChromeCols(opts.style));
-  registry.applyInput({ ...(payload as object), term: { cols: contentCols } });
+  registry.applyInput({ ...(payload as object), term: { cols: opts.width } });
+  // [LAW:single-enforcer] Publish the render's strip style onto the shared action
+  // runtime so the picker can reserve the joiner's end-cap chrome at its
+  // pagination seam (the menu body renders through the same renderPicker). Set
+  // once per render here — the same one-owner, per-render-mutation idiom as the
+  // menu placement cursor below. [LAW:no-ambient-temporal-coupling]
+  compiled.menuRuntime.action.stripStyle = opts.style;
 
   const scope = buildScope(store);
   // [LAW:one-source-of-truth] hueStep is a value in the store like every other

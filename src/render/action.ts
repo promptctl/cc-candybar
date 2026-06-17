@@ -26,7 +26,11 @@ import type { VariableStore } from "../var-system/store.js";
 import { toString as varToString } from "../var-system/types.js";
 import { buildScope } from "../template-engine/scope.js";
 import type { ActionDecl, OptionSource } from "../config/action.js";
-import { listResolvablePaletteNames, STRIP_STYLES } from "../themes/policy.js";
+import {
+  listResolvablePaletteNames,
+  STRIP_STYLES,
+  type StripStyle,
+} from "../themes/policy.js";
 import {
   effectsUrl,
   VERB_COPY,
@@ -123,6 +127,13 @@ export interface ActionRuntime {
   // values from the same store the renderer reads.
   store: VariableStore;
   compiled: CompiledActions;
+  // [LAW:locality-or-seam] The current render's strip style, published per render
+  // by renderDsl. The picker reads it to reserve the joiner's end-cap chrome at
+  // its pagination seam — the one place that needs strip geometry, kept off the
+  // shared `term.cols` budget. Defaulted at registration; renders are sequential
+  // and synchronous, so the per-render write never leaks across renders.
+  // [LAW:no-ambient-temporal-coupling]
+  stripStyle: StripStyle;
 }
 
 // ─── Compilation ───────────────────────────────────────────────────────────────
