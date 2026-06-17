@@ -61,6 +61,35 @@ function pickJoiner(style: StripStyle, separator?: string): Joiner {
   }
 }
 
+// [LAW:single-enforcer] Strip geometry has one owner — this module builds every
+// joiner (pickJoiner) and so alone knows the structural chrome a styled row costs
+// beyond its content: the joiner's end-caps, which FlexStrip paints OUTSIDE the
+// width budget. A single full-width row's content can occupy only `width - chrome`
+// before the caps push the line past `width`. Returned per style so a width-fit
+// widget (the picker) can reserve it and never overflow the wrapped line.
+//
+// [LAW:dataflow-not-control-flow] / [LAW:types-are-the-program] Total over
+// StripStyle — the `never` default makes adding a STRIP_STYLES member a compile
+// error here until its chrome is declared, the same guard pickJoiner carries. The
+// numbers are the default cap glyphs pickJoiner constructs: powerline appends ONE
+// trailing separator (U+E0B0, 1 col); capsule brackets BOTH edges (U+E0B6 +
+// U+E0B4, 2 cols); plain has no caps. test/picker-pagination.test.ts measures the
+// real rendered chrome against these so the declaration cannot drift from rich-js.
+export function stripChromeCols(style: StripStyle): number {
+  switch (style) {
+    case "powerline":
+      return 1;
+    case "capsule":
+      return 2;
+    case "plain":
+      return 0;
+    default: {
+      const _exhaustive: never = style;
+      return _exhaustive;
+    }
+  }
+}
+
 function toCell(seg: RenderedSegmentLike): RichText {
   // Padding mirrors the legacy buildLineFromSegments: one space on each side
   // of the segment text. The joiners sit between cells; padding sits inside.
