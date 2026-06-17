@@ -1,3 +1,10 @@
+## [1.8.3](https://github.com/promptctl/cc-candybar/compare/v1.8.2...v1.8.3) (2026-06-17)
+
+
+### Bug Fixes
+
+* **menu:** migrate theme/style menus to the {{ menu }} disclosure; reset page on toggle (arq) ([#134](https://github.com/promptctl/cc-candybar/issues/134)) ([457d5be](https://github.com/promptctl/cc-candybar/commit/457d5be0051125f840e808959eb01023b9645cd9))
+
 ## [1.8.2](https://github.com/promptctl/cc-candybar/compare/v1.8.1...v1.8.2) (2026-06-16)
 
 
