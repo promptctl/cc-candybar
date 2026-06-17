@@ -26,6 +26,7 @@
 import { RichText } from "@promptctl/rich-js";
 import type { FuncMap } from "@promptctl/go-template-js";
 import { toNumber } from "../var-system/types.js";
+import { stripChromeCols } from "./strip.js";
 import { TERM_COLS_VAR } from "../config/dsl-types.js";
 import { effectsUrl, VERB_SET_STATE } from "../click/wire.js";
 import {
@@ -157,7 +158,23 @@ export function renderPicker(
   // unconditionally is self-fulfilling (a run that fits with just ✕ could be
   // forced to split, making arrows appear unnecessarily). In wrap mode
   // (available = Infinity) paginate yields one page, so neither pass splits.
-  const available = paged ? toNumber(store.read(TERM_COLS_VAR)) : Infinity;
+  //
+  // [LAW:locality-or-seam] term.cols is the raw usable width the strip wraps to;
+  // the picker's row is itself a styled strip segment, so the joiner brackets it
+  // with end-caps (powerline's trailing separator, capsule's two caps) painted
+  // OUTSIDE that width. A page packed to the full term.cols is pushed past it by
+  // the caps — the maximally-packed middle pages overflowed and the terminal ate
+  // the trailing → (page 0 fit, page N did not). Reserve the chrome HERE, at the
+  // pagination seam, rather than shrinking the shared term.cols every template
+  // reads. stripChromeCols owns the per-style geometry; Infinity − chrome stays
+  // Infinity, so wrap mode is unaffected.
+  const available = paged
+    ? Math.max(
+        1,
+        toNumber(store.read(TERM_COLS_VAR)) -
+          stripChromeCols(runtime.stripStyle),
+      )
+    : Infinity;
   const closeReserve = cellWidth(PICKER_CLOSE) + 1;
   const arrowReserve = cellWidth(PICKER_PREV) + 1 + cellWidth(PICKER_NEXT) + 1;
   const firstPass = paginate(widths, available, closeReserve);
