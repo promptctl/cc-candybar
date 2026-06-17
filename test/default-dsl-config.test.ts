@@ -96,15 +96,15 @@ describe("DEFAULT_DSL_CONFIG", () => {
     }
   });
 
-  // [LAW:one-source-of-truth] Equivalence pin: the terse A-grammar spelling of
-  // the default's two-row layout (control row + gated style-picker reveal row)
-  // must lower to a root producing byte-identical ANSI to DEFAULT_DSL_CONFIG.root
-  // (the canonical container tree). Spelling differs; render does not.
-  test("A-grammar { v:[{ h:[...] }, { seg, when }] } spelling is render-equivalent to DEFAULT_DSL_CONFIG.root", () => {
+  // [LAW:one-source-of-truth] Equivalence pin: the terse A-grammar spelling of the
+  // default's single control row (the styleControl {{ menu }} drops its picker
+  // body below it on open — no when-gated reveal row) must lower to a root
+  // producing byte-identical ANSI to DEFAULT_DSL_CONFIG.root (the canonical
+  // container tree). Spelling differs; render does not.
+  test("A-grammar { v:[{ h:[...] }] } spelling is render-equivalent to DEFAULT_DSL_CONFIG.root", () => {
     const ALLOWED = new Set(listResolvablePaletteNames());
     const A_SRC = `{ root: { v: [
-      { h: ["directory","git","model","session","today","context","toolbar","styleControl"] },
-      { seg: "stylePicker", when: "{{ ge (int .stylePage) 0 }}" }
+      { h: ["directory","git","model","session","today","context","toolbar","styleControl"] }
     ] } }`;
     const rawA = parseDslConfig("<test>", A_SRC, ALLOWED);
     const mergedA = mergeWithDefault(rawA, DEFAULT_DSL_CONFIG);
