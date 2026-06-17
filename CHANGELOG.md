@@ -1,3 +1,10 @@
+## [1.8.4](https://github.com/promptctl/cc-candybar/compare/v1.8.3...v1.8.4) (2026-06-17)
+
+
+### Bug Fixes
+
+* **picker:** paged menus overflow term width on pages after the first (abg) ([#135](https://github.com/promptctl/cc-candybar/issues/135)) ([b5cdaf4](https://github.com/promptctl/cc-candybar/commit/b5cdaf44f56b988b597d3932452ad81dbd8e3065))
+
 ## [1.8.3](https://github.com/promptctl/cc-candybar/compare/v1.8.2...v1.8.3) (2026-06-17)
 
 
