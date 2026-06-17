@@ -374,6 +374,23 @@ describe("toggle round trip + drop stacking", () => {
     expect(added.length).toBeGreaterThan(0);
     dispose();
   });
+
+  // [LAW:verifiable-goals] The pagination-reset contract: the disclosure click is
+  // ONE atomic set-state that toggles the open-state AND resets the page cursor to
+  // page 0 — mirroring the picker's closeOnPick page-reset fold — so a reopened
+  // menu is never stranded on a stale page left by ←/→ before the last close.
+  test("disclosure click resets the page cursor to 0 in the same atomic write", () => {
+    const { render, dispose } = buildRuntime(MENU_SRC);
+    const url = extractUrls(render()).find((u) =>
+      effectsOf(u).some((e) => e.args[1] === TKEY),
+    );
+    if (!url) throw new Error("no disclosure toggle rendered");
+    const eff = effectsOf(url)[0]!;
+    // [sessionId, openStateKey, successor, pageKey, "0"] — open-state + page reset
+    // in one batch. Both keys are independently gated; the batch passes one gate.
+    expect(eff.args.slice(1)).toEqual([TKEY, "applyTheme", "theme-page", "0"]);
+    dispose();
+  });
 });
 
 // Two menus in ONE row, neither naming a key ⇒ INDEPENDENT.

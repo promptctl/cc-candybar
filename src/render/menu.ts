@@ -1,10 +1,10 @@
 // [LAW:locality-or-seam] The runtime half of the `{{ menu }}` seam — sibling to
 // `{{ action }}`/`{{ picker }}`. A menu is a self-contained disclosure: an inline
 // glyph that toggles open/closed, and (when open) its body — a picker grid —
-// that DROPS onto the line(s) below the enclosing row. It composes the two
-// existing helpers, adding only the disclosure: the glyph is realized through the
-// synthesized cycle action (`renderAction`), the body through the one picker
-// renderer (`renderPicker`).
+// that DROPS onto the line(s) below the enclosing row. The body is the one picker
+// renderer (`renderPicker`); the glyph is a coupled set-state the menu composes
+// directly (like the picker's closeOnPick) — it toggles the open-state AND resets
+// the page cursor in one atomic batch, gated by the synthesized cycle action.
 //
 // [LAW:effects-at-boundaries] The helper is a PURE function of its inputs (the
 // walk-published placement + the live store): it computes the inline glyph and,
@@ -36,13 +36,14 @@
 import type { RichText } from "@promptctl/rich-js";
 import type { FuncMap } from "@promptctl/go-template-js";
 import {
+  MENU_CLOSED,
   MENU_GLYPH_CLOSED,
   MENU_GLYPH_OPEN,
-  menuActionName,
   menuMember,
   menuStateKey,
 } from "../config/menu-keys.js";
-import { readVar, renderAction, type ActionRuntime } from "./action.js";
+import { effectsUrl, VERB_SET_STATE } from "../click/wire.js";
+import { linkFragment, readVar, type ActionRuntime } from "./action.js";
 import { renderPicker } from "./picker.js";
 
 // [LAW:types-are-the-program] One menu placement: the structural fact a context-
@@ -82,6 +83,22 @@ export function collectMenuDrops(
   return fragments.flatMap((f) => (f as GlyphWithDrop)[MENU_DROP] ?? []);
 }
 
+// [LAW:single-enforcer] The page cursor's SessionState key, resolved from the page
+// ACTION name the menu binds (its second arg). renderPicker proves pageName is a
+// set-int when it builds the body, but the disclosure must reset the page even
+// while CLOSED (no body is built then), so it resolves the key here too — the SAME
+// set-int action, one source. A non-int page arg is an author error surfaced
+// loudly (composeWithDiagnostics shows it), never a silent skipped reset.
+function pageKeyOf(action: ActionRuntime, pageName: string): string {
+  const page = action.compiled.get(pageName);
+  if (!page || page.kind !== "set-int") {
+    throw new Error(
+      `{{ menu }} page action "${pageName}" must be an int action ({ set, int: true })`,
+    );
+  }
+  return page.key;
+}
+
 // Realize a `{{ menu }}` against the live placement + state: return its inline
 // glyph, carrying the (open) body as out-of-band metadata for the boundary.
 function renderMenu(
@@ -106,25 +123,51 @@ function renderMenu(
   const stateKey = menuStateKey(placement.segName, applyName, sharedKey);
   const member = menuMember(applyName);
 
-  // [LAW:single-enforcer] The disclosure glyph IS the synthesized cycle action —
-  // displays bound one-per-member (closed ▸ / open ▾), the current member's glyph
-  // renders, the click writes the successor. Same toggle as group sugar.
-  const glyph = renderAction(
-    menuActionName(stateKey, member),
-    [MENU_GLYPH_CLOSED, MENU_GLYPH_OPEN],
-    action,
-  );
-
   // [LAW:dataflow-not-control-flow] Open ⇔ the state key holds this menu's member.
-  // The body is a VALUE whose length carries open/closed — `[body]` open, `[]`
-  // closed — attached to the glyph the helper returns. No shared mutation: the
-  // boundary reads this metadata to place the body. (renderPicker is pure, so it
-  // is only built when open — skipping wasted computation, gating no effect.)
+  // A foreign value (an accordion sibling's member under a shared key) reads as
+  // closed here — exactly the binary [closed, member] cycle the synthesized action
+  // gates. This ONE read drives both the glyph and the body, so what the glyph
+  // promises and what drops below cannot disagree.
   const open = readVar(action.store, stateKey) === member;
-  const bodyLines = open
+
+  // [LAW:one-source-of-truth] / [LAW:locality-or-seam] The disclosure click is ONE
+  // atomic set-state that keeps the two split keys coherent: it toggles the open-
+  // state (the binary cycle — successor is closed when open, the member when
+  // closed) AND resets the page cursor to page 0, in one batch. So a reopened menu
+  // is never stranded on a stale page left by ←/→ before the last close. This
+  // mirrors the picker's closeOnPick page-reset fold: the picker builds its set-
+  // state URLs directly (not via renderAction) so it can couple two writes; the
+  // menu — the one part that knows BOTH the open-state key and the page key
+  // [LAW:decomposition] — does the same. The synthesized cycle action stays the
+  // GATE source (deriveActionValidators); both keys are independently gated, so the
+  // coupled batch passes the same wire gate every click does [LAW:single-enforcer].
+  const sessionId = readVar(action.store, "session.id");
+  const successor = open ? MENU_CLOSED : member;
+  const glyph = linkFragment(
+    open ? MENU_GLYPH_OPEN : MENU_GLYPH_CLOSED,
+    effectsUrl([
+      {
+        verb: VERB_SET_STATE,
+        args: [
+          sessionId,
+          stateKey,
+          successor,
+          pageKeyOf(action, pageName),
+          "0",
+        ],
+      },
+    ]),
+    false,
+  ) as GlyphWithDrop;
+
+  // [LAW:effects-at-boundaries] The body is a VALUE whose length carries open/
+  // closed — `[body]` open, `[]` closed — attached to the glyph the helper returns.
+  // No shared mutation: the boundary reads this metadata to place the body.
+  // (renderPicker is pure, so it is only built when open — skipping wasted
+  // computation, gating no effect.)
+  glyph[MENU_DROP] = open
     ? [renderPicker(applyName, pageName, closeOnPick, paged, action)]
     : [];
-  (glyph as GlyphWithDrop)[MENU_DROP] = bodyLines;
   return glyph;
 }
 
