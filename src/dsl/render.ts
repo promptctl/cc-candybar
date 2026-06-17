@@ -282,6 +282,10 @@ export function registerDslConfig(
   const actionRuntime: ActionRuntime = {
     store: registry.variableStore,
     compiled: new Map(),
+    // [LAW:types-are-the-program] Always present — renderDsl republishes the live
+    // style each render; "powerline" is the registration-time default so a
+    // compile-only path (no render) still has a valid value.
+    stripStyle: "powerline",
   };
   // [LAW:one-way-deps] Inject action + picker feature funcs as data — the engine
   // stays generic. The picker shares the ACTION runtime (it resolves its
@@ -517,11 +521,22 @@ export function renderDsl(
   perSegmentSink?: Map<string, readonly RichText[]>,
 ): string {
   // [LAW:one-source-of-truth] Inject the usable width as `term.cols` from the
-  // SAME opts.width the strip wraps to (below), so a width-paginated widget
-  // reads the exact wrap width — never a cached or independently-measured copy.
+  // SAME opts.width the strip wraps to (below), so a width-paginated widget reads
+  // the exact wrap width — never a cached or independently-measured copy. This is
+  // the RAW usable width (terminal cols minus the Claude-Code reserve), the honest
+  // meaning every template — incl. user configs reading `.term.cols` — expects.
+  // The picker's strip-chrome reservation is NOT folded in here: that is a
+  // picker-local concern (the strip's end-caps wrap the picker's row, not every
+  // segment), applied at the pagination seam in renderPicker. [LAW:locality-or-seam]
   // Spreading a non-object payload yields no keys (compile-only callers), so the
   // width is set regardless without a trust-boundary guard.
   registry.applyInput({ ...(payload as object), term: { cols: opts.width } });
+  // [LAW:single-enforcer] Publish the render's strip style onto the shared action
+  // runtime so the picker can reserve the joiner's end-cap chrome at its
+  // pagination seam (the menu body renders through the same renderPicker). Set
+  // once per render here — the same one-owner, per-render-mutation idiom as the
+  // menu placement cursor below. [LAW:no-ambient-temporal-coupling]
+  compiled.menuRuntime.action.stripStyle = opts.style;
 
   const scope = buildScope(store);
   // [LAW:one-source-of-truth] hueStep is a value in the store like every other
