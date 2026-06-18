@@ -9,11 +9,7 @@ export {
   effectiveStripStyle,
   isStripStyle,
   listResolvablePaletteNames,
-  listAvailableThemes,
-  pickRandomTheme,
   STRIP_STYLES,
-  STYLE_ORDER,
-  DISPLAY_STYLES,
 } from "./policy.js";
 export type { StripStyle } from "./policy.js";
 
