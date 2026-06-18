@@ -81,10 +81,10 @@ export type DerivedValidatorSpec =
     };
 
 // [LAW:one-source-of-truth] listResolvablePaletteNames is THE set whose
-// members resolve to a concrete Palette. The broader listAvailableThemes
-// includes the "custom" sentinel (read inline colors) which is not a
-// renderable theme name; accepting "custom" here would persist an
-// unrenderable value into SessionState and break the next render.
+// members resolve to a concrete Palette. It deliberately excludes the "custom"
+// sentinel (which needs inline colors and is not a renderable theme name):
+// accepting "custom" here would persist an unrenderable value into SessionState
+// and break the next render.
 //
 // [LAW:single-enforcer] Each validator's accepted-set is one constant
 // lookup structure — a Set for O(1) `has` (matching the BOOLEAN_*
