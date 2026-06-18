@@ -47,14 +47,6 @@ export function listResolvablePaletteNames(): readonly string[] {
   return [...listThemePalettes(), ...listThemeAliases()];
 }
 
-// Selectable theme names for the random pool + picker: registry names plus the
-// "custom" sentinel. Aliases are excluded — they duplicate registry entries.
-export function listAvailableThemes(): string[] {
-  const allNames = new Set<string>(listThemePalettes() as readonly string[]);
-  allNames.add("custom");
-  return [...allNames].sort();
-}
-
 // --- Powerline strip-style identifiers ---
 
 // [LAW:one-source-of-truth][LAW:types-are-the-program] The single canonical set
@@ -86,29 +78,4 @@ export function effectiveStripStyle(
 ): StripStyle {
   const chosen = sessionStyle ?? globalsStyle ?? "powerline";
   return isStripStyle(chosen) ? chosen : "powerline";
-}
-
-// --- Legacy palette-preset identifiers (per-session random feature only) ---
-// [LAW:no-silent-failure] NOT the picker's style domain — these were the
-// pre-DSL bg/fg derivation presets, surviving only as the random pool for
-// session-random.ts. The interactive style picker resolves over STRIP_STYLES.
-export const STYLE_ORDER: readonly string[] = [
-  "surface",
-  "muted",
-  "button",
-  "hue",
-];
-
-export const DISPLAY_STYLES: ReadonlyArray<
-  "minimal" | "powerline" | "capsule"
-> = ["minimal", "powerline", "capsule"];
-
-// --- Session-random pick ---
-
-// [LAW:one-source-of-truth] The random pool derives from the same registry the
-// rest of the system uses. "custom" is excluded because it requires inline
-// colors.custom to be defined.
-export function pickRandomTheme(): string {
-  const themes = listAvailableThemes().filter((t) => t !== "custom");
-  return themes[Math.floor(Math.random() * themes.length)]!;
 }
