@@ -39,6 +39,15 @@ import type { DslConfig } from "./dsl-types.js";
 // template-level `:=` (a `kind: "template"` var would express it once, but adds
 // noise for a single use).
 //
+// [LAW:one-source-of-truth] This path computation is the `dirDisplay` template
+// var (see variables) — its single home. The directory segment renders it
+// through `fishPath` (fish is the default abbreviation), and any config wanting
+// full paths overrides the segment to `{{ .dirDisplay }}` without re-deriving
+// the ~/project-relative logic. The factoring is forced, not cosmetic: the body
+// below is an `{{ if }}` block that *writes output*, so it cannot be passed as a
+// value to `fishPath`; binding it as a computed var turns it into the string
+// argument `fishPath` requires. [LAW:types-are-the-program]
+//
 // Prefix checks are boundary-safe: a path is "under" a base iff it equals the
 // base OR starts with `base + "/"`. The naive `hasPrefix base path` is a
 // string match — it would treat `/home/alice` as a child of `/home/al`.
@@ -51,12 +60,15 @@ import type { DslConfig } from "./dsl-types.js";
 // (project_dir), so the project root renders as `<repo-name>` instead of the
 // full absolute path. Same logic handles equal home & current_dir → just "~".
 const DIR_REL = 'trimPrefix "/" (trimPrefix .project_dir .current_dir)';
-const DIR_TEMPLATE =
-  ' {{ if and (ne .home "") (or (eq .home .current_dir) (hasPrefix (printf "%s/" .home) .current_dir)) }}~{{ trimPrefix .home .current_dir }}' +
+// The display path only — no surrounding spaces and no fish abbreviation. Bound
+// as the `dirDisplay` template var; the directory segment frames it with spaces
+// and applies `fishPath`.
+const DIR_DISPLAY =
+  '{{ if and (ne .home "") (or (eq .home .current_dir) (hasPrefix (printf "%s/" .home) .current_dir)) }}~{{ trimPrefix .home .current_dir }}' +
   "{{ else }}" +
   '{{ if or (eq .project_dir .current_dir) (hasPrefix (printf "%s/" .project_dir) .current_dir) }}' +
   `{{ ternary (${DIR_REL}) (basename .project_dir) (ne (${DIR_REL}) "") }}` +
-  "{{ else }}{{ .current_dir }}{{ end }}{{ end }} ";
+  "{{ else }}{{ .current_dir }}{{ end }}{{ end }}";
 
 // Git working-tree counts — leading-space-then-trim idiom: each present count
 // contributes " +N", trim drops the leading space, survivors single-spaced.
@@ -208,6 +220,13 @@ export const DEFAULT_DSL_CONFIG = {
     // name: "HOME"` makes the directory `~` collapse work on every
     // platform without per-platform config edits.
     home: { kind: "input", path: "home", default: "" },
+
+    // [LAW:one-source-of-truth] The directory display path, computed ONCE here
+    // and consumed by the directory segment. Declared after its inputs (home,
+    // current_dir, project_dir) so declareTemplate's eager read resolves them.
+    // A kind:"template" var binds the {{ if }} cascade's output as a string
+    // value, which is what fishPath (and a full-path override) take as an arg.
+    dirDisplay: { kind: "template", template: DIR_DISPLAY },
 
     // Tmux session id flows through the daemon's augmented payload
     // (TmuxService caches by socket and never re-spawns for the lifetime of
@@ -511,7 +530,11 @@ export const DEFAULT_DSL_CONFIG = {
   // field, no env var, no tmux, no rate-limit window).
   segments: {
     directory: {
-      template: DIR_TEMPLATE,
+      // [LAW:no-mode-explosion] Fish abbreviation is the default, expressed as
+      // value composition over dirDisplay — not a style enum. Override to
+      // `{{ .dirDisplay }}` for full paths or `{{ basename .dirDisplay }}` for
+      // basename-only; no second copy of the ~/project-relative logic.
+      template: " {{ fishPath .dirDisplay }} ",
       bg: "surface",
       fg: "foreground",
     },

@@ -166,6 +166,46 @@ describe("path functions", () => {
 });
 
 // ────────────────────────────────────────────────────────────────
+// 4a. Fish-style path abbreviation (cc-candybar custom)
+// ────────────────────────────────────────────────────────────────
+
+// [LAW:no-mode-explosion] Ported verbatim from the retired renderer's
+// `abbreviateFishStyle` (the legacy `directory { style: "fish" }` arm), now a
+// pure path→path helper composed over the directory display string instead of
+// an enum mode. Output must be byte-identical to the legacy form.
+describe("fishPath", () => {
+  test("collapses every component but the last to its first character", () => {
+    expect(evalText('{{ fishPath "~/code/claude/cc-candybar" }}', {})).toBe(
+      "~/c/c/cc-candybar",
+    );
+  });
+
+  test("preserves ~ and the empty leading-slash segment", () => {
+    expect(evalText('{{ fishPath "/home/alice/work" }}', {})).toBe("/h/a/work");
+    expect(evalText('{{ fishPath "~/projects/app" }}', {})).toBe("~/p/app");
+  });
+
+  test("a single component (basename / project root) is unchanged", () => {
+    expect(evalText('{{ fishPath "myproject" }}', {})).toBe("myproject");
+    expect(evalText('{{ fishPath "~" }}', {})).toBe("~");
+  });
+
+  test("a relative path abbreviates its leading components", () => {
+    expect(evalText('{{ fishPath "src/foo" }}', {})).toBe("s/foo");
+  });
+
+  test("a leading dot is taken as the abbreviated character (legacy parity)", () => {
+    // charAt(0) of `.config` is "." — the legacy impl did not special-case
+    // hidden dirs, so neither do we.
+    expect(evalText('{{ fishPath "~/.config/app" }}', {})).toBe("~/./app");
+  });
+
+  test("piped from field", () => {
+    expect(evalText("{{ fishPath .dir }}", { dir: "~/a/b/c" })).toBe("~/a/b/c");
+  });
+});
+
+// ────────────────────────────────────────────────────────────────
 // 4b. URL-encoding (cc-candybar custom)
 // ────────────────────────────────────────────────────────────────
 
@@ -314,6 +354,7 @@ describe("ccCandybarFuncs registry", () => {
       "basename",
       "bool",
       "dirname",
+      "fishPath",
       "int",
       "sparkline",
       "string",

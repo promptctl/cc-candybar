@@ -63,6 +63,29 @@ export function ccCandybarFuncs(): FuncMap {
       argTypes: ["string"],
     },
 
+    // [LAW:no-mode-explosion] The retired renderer expressed this as a
+    // `directory { style: "fish" }` enum arm; the DSL expresses it as value
+    // composition — a pure path→path transform applied to whatever display
+    // string the directory template already produced. Every component except
+    // the last collapses to its first character (`~/code/claude/cc-candybar`
+    // → `~/c/c/cc-candybar`); `~` and the empty segment left by a leading "/"
+    // pass through. Ported verbatim from the legacy `abbreviateFishStyle` so
+    // output is byte-identical. Splits on "/" (not path.sep): the DSL
+    // directory path is always "/"-joined regardless of host OS, so a
+    // sep-split would be both OS-coupled and wrong on a "/"-display.
+    fishPath: {
+      fn: (dirPath: string) =>
+        dirPath
+          .split("/")
+          .map((part, index, parts) =>
+            index === parts.length - 1 || part === "~" || part === ""
+              ? part
+              : part.charAt(0),
+          )
+          .join("/"),
+      argTypes: ["string"],
+    },
+
     // [LAW:single-enforcer] Type casts delegate to var-system/types.ts.
     // "value" argType: these funcs enforce their own constraints and emit
     // a useful TypeError on ambiguous input — no need for the engine gate

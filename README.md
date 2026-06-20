@@ -95,7 +95,7 @@ Saving the file triggers a hot-reload of every active session.
 
 | Segment | Shows | Symbol |
 |---------|-------|--------|
-| directory | CWD name (`full`, `fish`, `basename`) | — |
+| directory | CWD, fish-abbreviated by default (`~/c/c/cc-candybar`) | — |
 | git | Branch, SHA, working tree, upstream, stash, tags | `⎇` |
 | model | Current Claude model | `✱` |
 | session | Per-session cost/tokens/breakdown | `§` |
@@ -110,6 +110,13 @@ Saving the file triggers a hot-reload of every active session.
 | env | Arbitrary environment variable | `⚙` |
 
 Each segment is a DSL declaration with a `template` (text + interpolation + style functions), a `bg`/`fg` palette spec, and optional `when` predicate. Templates compose freely — every formatter in the bundled function library (`formatCost`, `formatTokens`, `formatLongTimeRemaining`, `budgetStatus`, `link`, `urlEncode`, the sprig string/list/dict library, …) is available in every segment.
+
+The `directory` segment renders the `dirDisplay` variable (the ~-collapsed, project-relative path, computed once) through `fishPath`, which abbreviates every component but the last to its first character. Override the segment's `template` to choose a different form without re-deriving the path:
+
+```js
+directory: { template: ' {{ .dirDisplay }} ' }            // full: ~/code/claude/cc-candybar
+directory: { template: ' {{ basename .dirDisplay }} ' }   // basename: cc-candybar
+```
 
 ## Themes
 

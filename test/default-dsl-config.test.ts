@@ -255,25 +255,41 @@ describe("DEFAULT_DSL_CONFIG", () => {
       expect(visible).not.toContain("/Users/alice/code");
     });
 
-    test("subdir of project renders as project-relative path", () => {
+    test("subdir of project renders as fish-abbreviated project-relative path", () => {
+      // Project-relative `src/foo`, then fish-abbreviated (default): every
+      // component but the last collapses to its first character.
       const visible = renderDirectoryText({
         home: "",
         project_dir: "/Users/alice/code/myproject",
         current_dir: "/Users/alice/code/myproject/src/foo",
       });
-      expect(visible).toContain("src/foo");
+      expect(visible).toContain("s/foo");
       expect(visible).not.toContain("/Users/alice");
     });
 
     test("hasPrefix boundary safety: /home/al is NOT a prefix of /home/alice", () => {
-      // If hasPrefix were used naively, `/home/alice/work` would falsely
-      // match `/home/al` and try to render relative to it.
+      // If hasPrefix were used naively, `/home/alice/work` would falsely match
+      // `/home/al` and render relative to it (`ice/work`). The raw absolute
+      // path is taken instead, then fish-abbreviated to `/h/a/work`.
       const visible = renderDirectoryText({
         home: "",
         project_dir: "/home/al",
         current_dir: "/home/alice/work",
       });
-      expect(visible).toContain("/home/alice/work");
+      expect(visible).toContain("/h/a/work");
+      expect(visible).not.toContain("ice/work");
+    });
+
+    test("home subdir renders fish-abbreviated under ~ (default style)", () => {
+      // The canonical fish form: ~-collapsed, every component but the last
+      // reduced to its first character. End-to-end through the daemon spine.
+      const visible = renderDirectoryText({
+        home: "/Users/alice",
+        project_dir: "/whatever",
+        current_dir: "/Users/alice/code/claude/cc-candybar",
+      });
+      expect(visible).toContain("~/c/c/cc-candybar");
+      expect(visible).not.toContain("code/claude");
     });
 
     test("home === current_dir renders as just ~", () => {
