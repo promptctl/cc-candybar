@@ -71,7 +71,7 @@ describe("shipped examples load and render through the real cascade", () => {
       basePalette,
       {
         style: "powerline",
-        colorCompatibility: "truecolor",
+        colorCompatibility: "truecolor", wrap: true,
         width: 200,
       },
     );

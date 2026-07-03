@@ -189,6 +189,13 @@ export interface Globals {
   // so a style click reshapes the bar live and a config can set the default
   // shape without an edit-per-session.
   readonly style?: StripStyle;
+
+  // The legacy display.autoWrap knob: whether FlexStrip soft-wraps a root
+  // row that exceeds the usable width. Default true (current behavior);
+  // false renders each row as one unbounded line, overflow off-screen.
+  // [config-only] Unlike palette/style there is no SessionState/click half —
+  // the daemon resolves `globals.autoWrap ?? true` into renderOpts.wrap.
+  readonly autoWrap?: boolean;
 }
 
 // [LAW:one-type-per-behavior] One discriminated union covers every source

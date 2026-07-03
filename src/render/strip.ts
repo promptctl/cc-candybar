@@ -32,14 +32,27 @@ export type { StripStyle };
 // applyClaudeCodeReserve from src/utils/terminal-width).
 export const DEFAULT_TERMINAL_WIDTH = 120;
 
+// [LAW:one-source-of-truth] The one statement of the globals.autoWrap
+// default (on — current behavior). Every resolver of the config global
+// (`globals.autoWrap ?? DEFAULT_WRAP`) derives from this constant.
+export const DEFAULT_WRAP = true;
+
 export interface BuildLineOptions {
   style: StripStyle;
   colorCompatibility: ColorSystemSpec;
   separator?: string;
-  // [LAW:types-are-the-program] Every render carries a width. Finite values
-  // wrap via FlexStrip; Number.POSITIVE_INFINITY renders one unbounded line.
-  // Required (not optional) so callers cannot silently drop the wire's value.
+  // [LAW:types-are-the-program] Every render carries a width. Required (not
+  // optional) so callers cannot silently drop the wire's value.
+  // [LAW:one-source-of-truth] Width is a FACT (usable cells) feeding two
+  // consumers — FlexStrip's wrap limit AND the picker's pagination
+  // (`term.cols`). It stays finite even when wrapping is off; `wrap` below is
+  // the separate POLICY of whether rows may soft-break at that width.
   width: number;
+  // [LAW:types-are-the-program] Required for the same reason as width: the
+  // wrap decision (globals.autoWrap, default on) must reach every render
+  // explicitly — encoding "no wrap" as width=Infinity would corrupt the
+  // picker's pagination, which reads the same width value.
+  wrap: boolean;
 }
 
 function pickJoiner(style: StripStyle, separator?: string): Joiner {
@@ -106,12 +119,13 @@ function toCell(seg: RenderedSegmentLike): RichText {
  * string. Every render path (DSL RichText[] via the template-engine
  * pipeline, buildLineStrip's input-shape adapter, debug per-segment
  * serialization) flows through here. The wrap dispatch lives here too:
- * finite width → FlexStrip (rich-js owns the wrap algebra); infinite
- * width → Strip.
+ * wrap enabled at a finite width → FlexStrip (rich-js owns the wrap
+ * algebra); otherwise → Strip, one unbounded line.
  *
- * [LAW:dataflow-not-control-flow] The dispatch is on the value, not on a
- * flag. There is no `wrap: boolean` knob; presence of a finite width IS
- * the decision.
+ * [LAW:dataflow-not-control-flow] The dispatch is on values, not on caller
+ * branches: `wrap` (the globals.autoWrap policy) gates whether the finite
+ * width acts as a break limit. An infinite width has nothing to break at,
+ * so it renders unbounded regardless of `wrap`.
  */
 export function renderStripCells(
   cells: readonly RichText[],
@@ -119,7 +133,7 @@ export function renderStripCells(
 ): string {
   if (cells.length === 0) return "";
   const joiner = pickJoiner(options.style, options.separator);
-  if (Number.isFinite(options.width)) {
+  if (options.wrap && Number.isFinite(options.width)) {
     const flex = new FlexStrip([...cells], { joiner });
     const out = renderToString(flex, {
       width: options.width,
