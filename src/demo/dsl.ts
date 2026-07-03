@@ -32,6 +32,7 @@ import { listResolvablePaletteNames } from "../themes/policy.js";
 import { effectiveThemeName, resolverForThemeName } from "../themes/index.js";
 import { registerDslConfig, renderDsl } from "../dsl/render.js";
 import {
+  DEFAULT_CHARSET,
   DEFAULT_PADDING,
   DEFAULT_TERMINAL_WIDTH,
   DEFAULT_WRAP,
@@ -118,6 +119,7 @@ try {
         // default-on floor.
         wrap: config.globals.autoWrap ?? DEFAULT_WRAP,
         padding: config.globals.padding ?? DEFAULT_PADDING,
+        charset: config.globals.charset ?? DEFAULT_CHARSET,
       },
     );
     process.stdout.write(`  ${line}\n`);

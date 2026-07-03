@@ -215,6 +215,20 @@ describe("loadDslConfig — globals", () => {
       });
     }
   });
+
+  test("charset accepts each closed-enum member", () => {
+    const cfg = parseAndValidate(FILE, `{ globals: { charset: "ascii" } }`);
+    expect(cfg.globals.charset).toBe("ascii");
+    const cfg2 = parseAndValidate(FILE, `{ globals: { charset: "unicode" } }`);
+    expect(cfg2.globals.charset).toBe("unicode");
+  });
+
+  test("a charset outside the enum is rejected", () => {
+    expectIssue(`{ globals: { charset: "latin1" } }`, {
+      path: "globals.charset",
+      message: "globals.charset must be one of: unicode, ascii",
+    });
+  });
 });
 
 // ─── Variable kinds ──────────────────────────────────────────────────────────

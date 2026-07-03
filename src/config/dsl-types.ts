@@ -14,7 +14,7 @@
 // references it here. The dependency is one-way (this file → action.ts), never
 // the reverse, so that shape can be lifted out without a cycle.
 import type { ActionDecl } from "./action.js";
-import type { StripStyle } from "../themes/policy.js";
+import type { Charset, StripStyle } from "../themes/policy.js";
 
 // [LAW:types-are-the-program] Three stages, three names.
 //
@@ -204,6 +204,15 @@ export interface Globals {
   // [config-only] The daemon resolves `globals.padding ?? 1` into
   // renderOpts.padding; no SessionState/click half.
   readonly padding?: number;
+
+  // The legacy display.charset knob: which glyph vocabulary the strip joiners
+  // render with. Default "unicode" (current behavior — rich-js's powerline
+  // caps, U+E0Bx). "ascii" swaps the caps for single-column ASCII glyphs so
+  // terminals/fonts without powerline glyphs render cleanly instead of tofu.
+  // Orthogonal to `style`: style picks the joiner shape, charset the glyphs.
+  // [config-only] The daemon resolves `globals.charset ?? "unicode"` into
+  // renderOpts.charset; no SessionState/click half.
+  readonly charset?: Charset;
 }
 
 // [LAW:one-type-per-behavior] One discriminated union covers every source
