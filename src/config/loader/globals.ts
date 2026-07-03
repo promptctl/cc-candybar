@@ -6,6 +6,7 @@
 import { type Globals } from "../dsl-types.js";
 import { STRIP_STYLES } from "../../themes/policy.js";
 import {
+  optionalBooleanSpec,
   optionalEnumSpec,
   optionalStringSpec,
   paletteSpec,
@@ -29,6 +30,7 @@ const GLOBALS_SCHEMA: RecordSchema<Globals> = {
     // shapes the joiner can render), unlike the open-ended palette NAME — so it
     // validates by membership and emits a JSON-Schema `enum`.
     style: optionalEnumSpec(STRIP_STYLES),
+    autoWrap: optionalBooleanSpec(),
   },
 };
 

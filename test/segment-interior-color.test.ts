@@ -104,7 +104,7 @@ function render(): string {
     const basePalette = new PaletteResolver(getThemePalette("textual-dark")!);
     return renderDsl(config, compiled, store, registry, GIT_PAYLOAD, basePalette, {
       style: "powerline",
-      colorCompatibility: "truecolor",
+      colorCompatibility: "truecolor", wrap: true,
       width: Number.POSITIVE_INFINITY,
     });
   } finally {

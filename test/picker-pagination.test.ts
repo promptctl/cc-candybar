@@ -72,7 +72,7 @@ function buildRuntime(style: StripStyle) {
   const registry = new SourceRegistry(store, "", undefined, sessionState);
   const compiled = registerDslConfig(config, registry);
   const basePalette = new PaletteResolver(getThemePalette("textual-dark")!);
-  const renderPage = (width: number, page: number): string => {
+  const renderPage = (width: number, page: number, wrap = true): string => {
     sessionState.set("s1", "theme-page", String(page));
     return renderDsl(
       config,
@@ -81,7 +81,7 @@ function buildRuntime(style: StripStyle) {
       registry,
       { session_id: "s1", project_dir: "/tmp/proj" },
       basePalette,
-      { style, colorCompatibility: "truecolor" as const, width },
+      { style, colorCompatibility: "truecolor" as const, wrap, width },
     );
   };
   return { renderPage };
@@ -100,7 +100,7 @@ describe("brandon-menu-abg — paged menu fits every page within term.cols", () 
     const out = stripAnsi(
       renderStripCells([cell], {
         style,
-        colorCompatibility: "truecolor",
+        colorCompatibility: "truecolor", wrap: true,
         width: 60,
       }),
     );
@@ -154,5 +154,23 @@ describe("brandon-menu-abg — paged menu fits every page within term.cols", () 
     }
     const missing = THEMES.filter((t) => !shown.has(t));
     expect(missing).toEqual([]);
+  });
+
+  // brandon-display-dam.1: globals.autoWrap=false must disable ONLY the
+  // FlexStrip row-wrap. The picker paginates from the same finite width
+  // (term.cols), so every page renders byte-identically with wrap off —
+  // proof that no-wrap is not implemented as width=Infinity, which would
+  // collapse pagination to one infinite page.
+  test.each(STYLES)("pagination is unaffected by wrap:false (%s)", (style) => {
+    const { renderPage } = buildRuntime(style);
+    for (const width of [FLOOR, 34, 60]) {
+      for (let p = 0; p < 40; p++) {
+        const wrapped = renderPage(width, p, true);
+        const unwrapped = renderPage(width, p, false);
+        expect(unwrapped).toBe(wrapped);
+        // Stop after the cursor clamps to the last page.
+        if (p > 0 && wrapped === renderPage(width, p - 1, true)) break;
+      }
+    }
   });
 });

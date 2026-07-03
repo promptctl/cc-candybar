@@ -187,6 +187,18 @@ describe("loadDslConfig — globals", () => {
       message: "globals.default_bg must be a string",
     });
   });
+
+  test("autoWrap accepts a boolean", () => {
+    const cfg = parseAndValidate(FILE, `{ globals: { autoWrap: false } }`);
+    expect(cfg.globals.autoWrap).toBe(false);
+  });
+
+  test("non-boolean autoWrap is rejected", () => {
+    expectIssue(`{ globals: { autoWrap: "yes" } }`, {
+      path: "globals.autoWrap",
+      message: "autoWrap must be a boolean, got string",
+    });
+  });
 });
 
 // ─── Variable kinds ──────────────────────────────────────────────────────────

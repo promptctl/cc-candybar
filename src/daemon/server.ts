@@ -47,6 +47,7 @@ import {
 import {
   renderStripCells,
   DEFAULT_TERMINAL_WIDTH,
+  DEFAULT_WRAP,
   type BuildLineOptions,
 } from "../render/strip.js";
 import { applyClaudeCodeReserve } from "../utils/terminal-width.js";
@@ -767,6 +768,11 @@ async function handleRequest(req: Request): Promise<HandledRequest> {
           sessionState.get(req.hookData.session_id, "style"),
           entry.state.config.globals.style,
         );
+        // [config-only] globals.autoWrap has no SessionState half (no click
+        // verb) — the config global over the base floor is the whole
+        // resolution. Width stays finite regardless: it also feeds the
+        // picker's pagination (term.cols), which no-wrap must not break.
+        renderOpts.wrap = entry.state.config.globals.autoWrap ?? DEFAULT_WRAP;
         // [LAW:single-enforcer] renderDsl internally calls
         // `registry.applyInput(payload)` as its first step (see step 1 in
         // src/dsl/render.ts). The daemon must not pre-apply — doing so
@@ -1057,6 +1063,7 @@ const verbCtx = { sessionState, dlog };
 const RENDER_OPTS_BASE = {
   style: "powerline" as const,
   colorCompatibility: "truecolor" as const,
+  wrap: DEFAULT_WRAP,
 };
 const DEBUG_RENDER_OPTS: BuildLineOptions = {
   ...RENDER_OPTS_BASE,
