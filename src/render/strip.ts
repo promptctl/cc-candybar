@@ -37,6 +37,12 @@ export const DEFAULT_TERMINAL_WIDTH = 120;
 // (`globals.autoWrap ?? DEFAULT_WRAP`) derives from this constant.
 export const DEFAULT_WRAP = true;
 
+// [LAW:one-source-of-truth] The one statement of the globals.padding
+// default (one space per side inside each segment cell — current behavior,
+// matching the legacy display.padding). Every resolver of the config global
+// (`globals.padding ?? DEFAULT_PADDING`) derives from this constant.
+export const DEFAULT_PADDING = 1;
+
 export interface BuildLineOptions {
   style: StripStyle;
   colorCompatibility: ColorSystemSpec;
@@ -53,6 +59,12 @@ export interface BuildLineOptions {
   // explicitly — encoding "no wrap" as width=Infinity would corrupt the
   // picker's pagination, which reads the same width value.
   wrap: boolean;
+  // [LAW:one-source-of-truth] Spaces inside each segment cell per side
+  // (globals.padding, default 1 — the legacy display.padding, intra-cell,
+  // not rich-js FlexStrip's inter-item gap). Required so every construction
+  // site states the resolved value; the cell builders derive from it and
+  // never re-default.
+  padding: number;
 }
 
 function pickJoiner(style: StripStyle, separator?: string): Joiner {
@@ -103,15 +115,15 @@ export function stripChromeCols(style: StripStyle): number {
   }
 }
 
-function toCell(seg: RenderedSegmentLike): RichText {
-  // Padding mirrors the legacy buildLineFromSegments: one space on each side
-  // of the segment text. The joiners sit between cells; padding sits inside.
-  const padded = ` ${seg.text} `;
+function toCell(seg: RenderedSegmentLike, padding: number): RichText {
+  // [LAW:one-source-of-truth] Intra-cell padding derives from the one resolved
+  // globals.padding value on BuildLineOptions — the joiners sit between cells;
+  // padding sits inside, inheriting the cell's wrapping style (bg fill).
   const style = new Style({
     bgcolor: seg.bgHex || undefined,
     color: seg.fgHex || undefined,
   });
-  return new RichText(padded, { style, end: "", noWrap: true });
+  return new RichText(seg.text, { style, end: "", noWrap: true }).pad(padding);
 }
 
 /**
@@ -156,5 +168,8 @@ export function buildLineStrip(
   segments: readonly RenderedSegmentLike[],
   options: BuildLineOptions,
 ): string {
-  return renderStripCells(segments.map(toCell), options);
+  return renderStripCells(
+    segments.map((seg) => toCell(seg, options.padding)),
+    options,
+  );
 }

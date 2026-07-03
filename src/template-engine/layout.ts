@@ -30,6 +30,15 @@ export interface SegmentLayoutOptions {
   justify: JustifyMode;
   /** Overflow strategy when content exceeds a fixed width. Ignored when "auto". */
   truncate: TruncateMode;
+  /**
+   * Spaces synthesized inside the collapsed cell on each side (the resolved
+   * globals.padding). [LAW:types-are-the-program] Required so every layout
+   * site states the value — the walk threads the one render-wide resolution;
+   * there is no per-site re-default. Applied BEFORE width sizing, so padding
+   * sits inside a fixed `width` (the legacy intra-cell semantics: the joiners
+   * sit between cells; padding sits inside the bg fill).
+   */
+  padding: number;
   /** Glyph inserted at the overflow cut point. Default "…". */
   truncateMarker?: string;
   /**
@@ -95,11 +104,23 @@ export function applySegmentLayout(
   cells: readonly RichText[],
   options: SegmentLayoutOptions,
 ): RichText[] {
-  const { width, justify, truncate, truncateMarker = "…", baseStyle } = options;
+  const {
+    width,
+    justify,
+    truncate,
+    truncateMarker = "…",
+    baseStyle,
+    padding,
+  } = options;
 
   if (cells.length === 0) return [];
 
-  const cell = collapseToCell(cells, baseStyle);
+  // [LAW:one-source-of-truth] The DSL path's ONE intra-cell padding
+  // application — the same rich-js pad primitive toCell (render/strip.ts)
+  // uses on the legacy shape, threading the same resolved globals.padding.
+  // pad() shifts spans, so OSC-8 link regions survive; the spaces inherit
+  // the cell's wrapping style, so the segment bg is continuous.
+  const cell = collapseToCell(cells, baseStyle).pad(padding);
   if (width === "auto") return [cell];
 
   if (cell.cellLength > width) {

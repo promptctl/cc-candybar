@@ -411,7 +411,7 @@ function renderSpeed(payload: Record<string, unknown>): string {
     );
     return renderDsl(cfg, compiled, store, registry, payload, bp, {
       style: "powerline",
-      colorCompatibility: "none", wrap: true,
+      colorCompatibility: "none", wrap: true, padding: 0,
       width: Number.POSITIVE_INFINITY,
     });
   } finally {

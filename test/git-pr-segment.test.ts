@@ -18,7 +18,7 @@ const SERIALIZED = JSON.stringify(DEFAULT_DSL_CONFIG, null, 2);
 
 const OPTS = {
   style: "powerline" as const,
-  colorCompatibility: "truecolor" as const, wrap: true,
+  colorCompatibility: "truecolor" as const, wrap: true, padding: 1,
   width: Number.POSITIVE_INFINITY,
 };
 

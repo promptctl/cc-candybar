@@ -134,6 +134,12 @@ export interface ActionRuntime {
   // and synchronous, so the per-render write never leaks across renders.
   // [LAW:no-ambient-temporal-coupling]
   stripStyle: StripStyle;
+  // [LAW:locality-or-seam] The current render's intra-cell padding (resolved
+  // globals.padding), published per render by renderDsl exactly like
+  // stripStyle. The picker reserves 2×padding at its pagination seam — the
+  // segment layout pads every line it emits, so a page packed to the full
+  // budget would otherwise be pushed past the width by the pad spaces.
+  padding: number;
 }
 
 // ─── Compilation ───────────────────────────────────────────────────────────────

@@ -101,6 +101,10 @@ export interface NodeRenderCtx {
   readonly scope: object;
   readonly basePalette: PaletteResolver;
   readonly visible: boolean;
+  // [LAW:one-source-of-truth] The render-wide intra-cell padding (resolved
+  // globals.padding), threaded by the driver from BuildLineOptions into every
+  // segment's layout — one value per render, never re-defaulted per node.
+  readonly padding: number;
   // Advance the walk-owned hue cursor by one unit and return that unit's shift.
   nextHueShift(): number;
   readonly perSegmentSink?: Map<string, readonly RichText[]>;
@@ -279,6 +283,11 @@ const segmentType: NodeType<"segment"> = {
         justify: seg.justify ?? "left",
         truncate: seg.truncate ?? "right",
         baseStyle,
+        // [LAW:dataflow-not-control-flow] Padding is uniform across every line
+        // a segment contributes — inline rows AND dropped menu bands — one
+        // value, no per-line-kind branch. The picker reserves 2×padding at its
+        // pagination seam so a padded band still fits the width budget.
+        padding: ctx.padding,
       } as const;
 
       // [LAW:single-enforcer] Partition the segment's authored "\n" into visual
