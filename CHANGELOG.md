@@ -1,3 +1,10 @@
+# [1.9.0](https://github.com/promptctl/cc-candybar/compare/v1.8.4...v1.9.0) (2026-07-03)
+
+
+### Features
+
+* **config:** restore globals.autoWrap — toggle FlexStrip width-based soft-wrap (brandon-display-dam.1) ([#137](https://github.com/promptctl/cc-candybar/issues/137)) ([f856a7e](https://github.com/promptctl/cc-candybar/commit/f856a7edd3473026b0486a8eb5cb87d36c0b73a6))
+
 ## [1.8.4](https://github.com/promptctl/cc-candybar/compare/v1.8.3...v1.8.4) (2026-06-17)
 
 
