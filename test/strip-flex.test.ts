@@ -236,4 +236,41 @@ describe("renderStripCells wrap behavior (via buildLineStrip adapter)", () => {
       expect(out).toBe(" aaa  ::  bbb ");
     });
   });
+
+  // brandon-display-dam.4: globals.colorCompatibility picks the depth rich-js
+  // downsamples to. One truecolor-authored segment, four depths — the SGR
+  // vocabulary in the output is the observable contract, not rich-js internals.
+  describe("colorCompatibility", () => {
+    const colored = [{ type: "x", text: "aaa", bgHex: "#445566" }];
+    const at = (colorCompatibility: "truecolor" | "256" | "ansi" | "none") =>
+      buildLineStrip(colored, {
+        style: "plain",
+        colorCompatibility,
+        wrap: true,
+        padding: 1,
+        charset: "unicode",
+        width: 200,
+      });
+
+    it("truecolor emits 24-bit SGR for a hex background", () => {
+      expect(at("truecolor")).toMatch(/\x1b\[48;2;68;85;102m/);
+    });
+
+    it("256 downsamples to the 8-bit palette (no 24-bit SGR)", () => {
+      const out = at("256");
+      expect(out).toMatch(/\x1b\[48;5;\d+m/);
+      expect(out).not.toMatch(/48;2;/);
+    });
+
+    it("ansi downsamples to the 16-color vocabulary (no 24-bit, no 8-bit)", () => {
+      const out = at("ansi");
+      expect(out).not.toMatch(/48;2;/);
+      expect(out).not.toMatch(/48;5;/);
+      expect(out).toMatch(/\x1b\[/);
+    });
+
+    it("none strips color entirely", () => {
+      expect(at("none")).toBe(" aaa ");
+    });
+  });
 });

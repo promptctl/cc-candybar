@@ -5,7 +5,7 @@
 // PaletteResolver, no ColorRgba, no hex. The semantic/anchor knowledge
 // (which tokens keep their hue) stays in rich-js (ANCHORED_ROOTS), not here.
 
-import { listThemePalettes } from "@promptctl/rich-js";
+import { listThemePalettes, type ColorSystemSpec } from "@promptctl/rich-js";
 
 // --- Theme name aliasing ---
 
@@ -96,3 +96,28 @@ export function effectiveStripStyle(
 // is the whole resolution.
 export const CHARSETS = ["unicode", "ascii"] as const;
 export type Charset = (typeof CHARSETS)[number];
+
+// --- Color-depth identifiers ---
+
+// [LAW:one-source-of-truth][LAW:types-are-the-program] The single canonical set
+// of color depths a config can pin (the legacy display.colorCompatibility).
+// Same species as CHARSETS: a closed render-vocabulary enum hosted in this leaf
+// policy module so the config loader (validation + JSON-schema emit) and the
+// render layer both derive from one literal without a config↔render cycle
+// [LAW:one-way-deps]. `satisfies` ties every member to rich-js's
+// ColorSystemSpec at compile time WITHOUT widening the derived union — if
+// rich-js renames a depth, this literal fails to compile rather than drifting.
+//
+// Deliberately NARROWER than ColorSystemSpec: "auto" (and null) are excluded.
+// The daemon is long-lived and detached, so its process env is NOT the client
+// terminal's — rich-js env detection would silently downsample against the
+// wrong terminal [LAW:no-silent-failure]. Honoring "auto" needs a client
+// capability hint over the wire (the termCols pattern); until that lands, the
+// loader rejects "auto" with a pointer instead of shipping a lie.
+export const COLOR_COMPATIBILITIES = [
+  "truecolor",
+  "256",
+  "ansi",
+  "none",
+] as const satisfies readonly ColorSystemSpec[];
+export type ColorCompatibility = (typeof COLOR_COMPATIBILITIES)[number];

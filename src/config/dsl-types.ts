@@ -14,7 +14,11 @@
 // references it here. The dependency is one-way (this file → action.ts), never
 // the reverse, so that shape can be lifted out without a cycle.
 import type { ActionDecl } from "./action.js";
-import type { Charset, StripStyle } from "../themes/policy.js";
+import type {
+  Charset,
+  ColorCompatibility,
+  StripStyle,
+} from "../themes/policy.js";
 
 // [LAW:types-are-the-program] Three stages, three names.
 //
@@ -213,6 +217,15 @@ export interface Globals {
   // [config-only] The daemon resolves `globals.charset ?? "unicode"` into
   // renderOpts.charset; no SessionState/click half.
   readonly charset?: Charset;
+
+  // The legacy display.colorCompatibility knob: the color depth rich-js
+  // downsamples output to. Default "truecolor" (current behavior — NOT the
+  // legacy "auto" default, which would change rendering for existing users).
+  // The type excludes "auto" entirely: the daemon is detached, so env
+  // detection would read the wrong terminal — see COLOR_COMPATIBILITIES.
+  // [config-only] The daemon resolves `globals.colorCompatibility ??
+  // "truecolor"` into renderOpts.colorCompatibility; no SessionState/click half.
+  readonly colorCompatibility?: ColorCompatibility;
 }
 
 // [LAW:one-type-per-behavior] One discriminated union covers every source
