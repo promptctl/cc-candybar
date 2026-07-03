@@ -494,4 +494,108 @@ describe("DEFAULT_DSL_CONFIG", () => {
       expect(visible).not.toContain("◆");
     });
   });
+
+  // brandon-budget-kry: session-level budget warning — the session segment is
+  // the second instance of the shared budgetStatus helper (today is the first).
+  describe("session budget warning", () => {
+    // Render ONLY the session segment, with optional user-file overrides
+    // merged through the real mergeWithDefault path — the same cascade a
+    // user's config file flows through.
+    const renderSession = (
+      payload: Record<string, unknown>,
+      userSource?: string,
+    ): string => {
+      const merged = mergeWithDefault(
+        parseDslConfig("<user>", userSource ?? "{}"),
+        DEFAULT_DSL_CONFIG,
+      );
+      const config = validateConfig(merged, "<merged>", SERIALIZED);
+      const sessionOnly = { ...config, root: oneSegmentRoot("session") };
+      const store = new VariableStore();
+      const registry = new SourceRegistry(store);
+      try {
+        const compiled = registerDslConfig(sessionOnly, registry, {
+          cwd: process.cwd(),
+        });
+        const basePalette = new PaletteResolver(
+          getThemePalette(sessionOnly.globals.palette ?? "textual-dark")!,
+        );
+        return renderDsl(
+          sessionOnly,
+          compiled,
+          store,
+          registry,
+          {
+            hook_event_name: "Status",
+            session_id: "x",
+            cwd: "/tmp",
+            model: { id: "x", display_name: "x" },
+            workspace: {
+              current_dir: "/tmp",
+              project_dir: "/tmp",
+              added_dirs: [],
+            },
+            ...payload,
+          },
+          basePalette,
+          { style: "powerline", colorCompatibility: "truecolor", wrap: true, padding: 1, charset: "unicode", width: Number.POSITIVE_INFINITY },
+        );
+      } finally {
+        registry.dispose();
+      }
+    };
+
+    const PAYLOAD = { session: { cost: 8.5, tokens: 1000 } };
+
+    test("absent session-budget config renders byte-identically to the pre-budget template", () => {
+      // [LAW:dataflow-not-control-flow] The default amount is 0 — the
+      // budgetStatus helper's non-displayable value — so the suffix
+      // contributes zero bytes through the same unconditional template.
+      // Oracle: the same segment with the retired (suffix-less) template.
+      const preBudget = renderSession(PAYLOAD, JSON.stringify({
+        segments: {
+          session: {
+            template:
+              '§ {{ template "formatCost" .session.cost }} ({{ template "formatTokens" .session.tokens }})',
+            bg: "surface",
+            fg: "foreground",
+          },
+        },
+      }));
+      expect(renderSession(PAYLOAD)).toEqual(preBudget);
+    });
+
+    test("user override of session.budget.amount surfaces the budgetStatus suffix", () => {
+      // [LAW:one-source-of-truth] The knob lives in one variable declaration;
+      // the user file's override flows through mergeWithDefault's
+      // variables-by-name spread. cost 8.5 / amount 10 = 85% ≥ warn 80 → " !85%".
+      const line = renderSession(PAYLOAD, JSON.stringify({
+        variables: {
+          "session.budget.amount": { kind: "literal", value: 10 },
+        },
+      }));
+      expect(line).toContain("!85%");
+    });
+
+    test("user override of session.budget.warningThreshold reclassifies the suffix", () => {
+      // cost 6 / amount 10 = 60%: below the default warn 80 → " +60%";
+      // with warn 50 the same spend reads " !60%". Same cost, different
+      // threshold → different bytes, proving the template reads the variable,
+      // not a baked-in literal.
+      const spend = { session: { cost: 6, tokens: 1000 } };
+      const defaultWarn = renderSession(spend, JSON.stringify({
+        variables: {
+          "session.budget.amount": { kind: "literal", value: 10 },
+        },
+      }));
+      const tightWarn = renderSession(spend, JSON.stringify({
+        variables: {
+          "session.budget.amount": { kind: "literal", value: 10 },
+          "session.budget.warningThreshold": { kind: "literal", value: 50 },
+        },
+      }));
+      expect(defaultWarn).toContain("+60%");
+      expect(tightWarn).toContain("!60%");
+    });
+  });
 });
