@@ -8,11 +8,14 @@ import {
   FlexStrip,
   renderToString,
   type Joiner,
-  type ColorSystemSpec,
   type PowerlineJoinerOptions,
   type CapsuleJoinerOptions,
 } from "@promptctl/rich-js";
-import type { Charset, StripStyle } from "../themes/policy.js";
+import type {
+  Charset,
+  ColorCompatibility,
+  StripStyle,
+} from "../themes/policy.js";
 
 export interface RenderedSegmentLike {
   type: string;
@@ -25,7 +28,7 @@ export interface RenderedSegmentLike {
 // in themes/policy.ts (the render-identifier policy module, importable by the
 // option-source machinery without a render→template-engine cycle). Re-exported
 // here so render-layer consumers can keep importing them from the strip module.
-export type { Charset, StripStyle };
+export type { Charset, ColorCompatibility, StripStyle };
 
 // [LAW:one-source-of-truth] Raw terminal cols we assume when the wire
 // didn't give us one (older client, env-stripped spawn). RAW — not
@@ -51,9 +54,21 @@ export const DEFAULT_PADDING = 1;
 // (`globals.charset ?? DEFAULT_CHARSET`) derives from this constant.
 export const DEFAULT_CHARSET: Charset = "unicode";
 
+// [LAW:one-source-of-truth] The one statement of the globals.colorCompatibility
+// default (truecolor — the CURRENT pinned value, deliberately NOT the legacy
+// "auto" default, which would change rendering for existing users). Every
+// resolver of the config global (`globals.colorCompatibility ??
+// DEFAULT_COLOR_COMPATIBILITY`) derives from this constant.
+export const DEFAULT_COLOR_COMPATIBILITY: ColorCompatibility = "truecolor";
+
 export interface BuildLineOptions {
   style: StripStyle;
-  colorCompatibility: ColorSystemSpec;
+  // [LAW:types-are-the-program] Narrower than rich-js ColorSystemSpec on
+  // purpose: the four explicit depths only. "auto"/null never reach a render —
+  // the daemon is detached, so env detection would read the wrong terminal;
+  // the loader rejects "auto" at the trust boundary (see COLOR_COMPATIBILITIES
+  // in themes/policy.ts), and every construction site states a resolved depth.
+  colorCompatibility: ColorCompatibility;
   separator?: string;
   // [LAW:types-are-the-program] Every render carries a width. Required (not
   // optional) so callers cannot silently drop the wire's value.

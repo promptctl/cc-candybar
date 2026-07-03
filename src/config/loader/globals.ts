@@ -4,19 +4,54 @@
 // add a key to GLOBALS_SCHEMA and Globals; the engine does the rest.
 
 import { type Globals } from "../dsl-types.js";
-import { CHARSETS, STRIP_STYLES } from "../../themes/policy.js";
+import {
+  CHARSETS,
+  COLOR_COMPATIBILITIES,
+  STRIP_STYLES,
+  type ColorCompatibility,
+} from "../../themes/policy.js";
 import {
   optionalBooleanSpec,
+  optionalEnum,
   optionalEnumSpec,
   optionalIntSpec,
   optionalStringSpec,
   paletteSpec,
   record,
   recordJson,
+  type FieldSpec,
   type JsonNode,
   type RecordSchema,
   type ValidateCtx,
 } from "./validate-core.js";
+import { findKeyLine } from "./diagnostics.js";
+
+// [LAW:types-are-the-program] Closed enum like `charset`, plus one
+// migration-pointing rejection: "auto" was the LEGACY default, so migrating
+// configs will carry it — but the daemon runs detached, so rich-js env
+// detection would downsample against the daemon's terminal, not the client's.
+// Rather than ship that silent lie [LAW:no-silent-failure], "auto" is outside
+// the ColorCompatibility domain and gets an error that says why (same species
+// as the removed-layout migration errors in layout.ts). The json emit and the
+// membership check derive from the same COLOR_COMPATIBILITIES literal.
+const colorCompatibilitySpec: FieldSpec<ColorCompatibility> = {
+  required: false,
+  json: { enum: [...COLOR_COMPATIBILITIES] },
+  parse: (ctx, path, field, raw) => {
+    if (raw[field] === "auto") {
+      ctx.issues.push({
+        path: `${path}.${field}`,
+        message:
+          `${path}.${field}: "auto" is not supported — the render daemon runs detached, ` +
+          `so terminal detection would read the daemon's environment, not your terminal's. ` +
+          `Pick an explicit depth: ${COLOR_COMPATIBILITIES.join(", ")}`,
+        line: findKeyLine(ctx.source, [...path.split("."), field]),
+      });
+      return undefined;
+    }
+    return optionalEnum(ctx, path, raw, field, COLOR_COMPATIBILITIES);
+  },
+};
 
 const GLOBALS_SCHEMA: RecordSchema<Globals> = {
   noun: "globals key",
@@ -41,6 +76,8 @@ const GLOBALS_SCHEMA: RecordSchema<Globals> = {
     // vocabularies pickJoiner can render — validates by membership, emits a
     // JSON-Schema `enum` from the same CHARSETS literal.
     charset: optionalEnumSpec(CHARSETS),
+    // Closed enum with a bespoke "auto" rejection — see colorCompatibilitySpec.
+    colorCompatibility: colorCompatibilitySpec,
   },
 };
 
