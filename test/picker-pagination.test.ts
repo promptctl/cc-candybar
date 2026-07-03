@@ -65,7 +65,7 @@ function pickerConfig(): string {
   }`;
 }
 
-function buildRuntime(style: StripStyle) {
+function buildRuntime(style: StripStyle, padding = 0) {
   const config = parseAndValidate("<test>", pickerConfig(), ALLOWED);
   const sessionState = new SessionState();
   const store = new VariableStore();
@@ -81,7 +81,7 @@ function buildRuntime(style: StripStyle) {
       registry,
       { session_id: "s1", project_dir: "/tmp/proj" },
       basePalette,
-      { style, colorCompatibility: "truecolor" as const, wrap, width },
+      { style, colorCompatibility: "truecolor" as const, wrap, width, padding },
     );
   };
   return { renderPage };
@@ -100,7 +100,7 @@ describe("brandon-menu-abg — paged menu fits every page within term.cols", () 
     const out = stripAnsi(
       renderStripCells([cell], {
         style,
-        colorCompatibility: "truecolor", wrap: true,
+        colorCompatibility: "truecolor", wrap: true, padding: 0,
         width: 60,
       }),
     );
@@ -171,6 +171,28 @@ describe("brandon-menu-abg — paged menu fits every page within term.cols", () 
         // Stop after the cursor clamps to the last page.
         if (p > 0 && wrapped === renderPage(width, p - 1, true)) break;
       }
+    }
+  });
+
+  // brandon-display-dam.2: the segment layout pads EVERY line it emits (the
+  // picker's included) by globals.padding, and the picker reserves 2×padding
+  // at its pagination seam beside the joiner chrome — so a maximally-packed
+  // page still fits term.cols at any padding, not just the default.
+  test.each(STYLES)("every page fits at padding 2 (%s)", (style) => {
+    const PAD = 2;
+    const { renderPage } = buildRuntime(style, PAD);
+    for (let width = FLOOR + 2 * PAD; width <= 60; width++) {
+      const seen: string[] = [];
+      for (let p = 0; p < 40; p++) {
+        const line = stripAnsi(renderPage(width, p)).split("\n")[0] ?? "";
+        if (seen.length > 0 && line === seen[seen.length - 1]) break;
+        seen.push(line);
+      }
+      seen.forEach((line) => {
+        expect(cw(line)).toBeLessThanOrEqual(width);
+        // The band itself is padded (cap glyphs sit outside the cell).
+        expect(stripCaps(line).startsWith("  ")).toBe(true);
+      });
     }
   });
 });

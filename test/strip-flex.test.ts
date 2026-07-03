@@ -8,7 +8,7 @@ describe("renderStripCells wrap behavior (via buildLineStrip adapter)", () => {
       const out = buildLineStrip([seg("alpha"), seg("beta"), seg("gamma")], {
         style: "plain",
         colorCompatibility: "none",
-        wrap: true,
+        wrap: true, padding: 1,
         width: 200,
       });
       expect(out.split("\n")).toHaveLength(1);
@@ -23,7 +23,7 @@ describe("renderStripCells wrap behavior (via buildLineStrip adapter)", () => {
       const out = buildLineStrip([seg("alpha"), seg("beta"), seg("gamma")], {
         style: "plain",
         colorCompatibility: "none",
-        wrap: true,
+        wrap: true, padding: 1,
         width: oneLine.length,
       });
       expect(out.split("\n")).toHaveLength(1);
@@ -35,7 +35,7 @@ describe("renderStripCells wrap behavior (via buildLineStrip adapter)", () => {
       const out = buildLineStrip([seg("alpha"), seg("beta"), seg("gamma")], {
         style: "plain",
         colorCompatibility: "none",
-        wrap: true,
+        wrap: true, padding: 1,
         width: 16,
       });
       const rows = out.split("\n");
@@ -45,13 +45,37 @@ describe("renderStripCells wrap behavior (via buildLineStrip adapter)", () => {
       }
     });
 
+    // brandon-display-dam.2: intra-cell padding derives from the one resolved
+    // globals.padding on BuildLineOptions — 0 renders flush, N widens N per side.
+    it("padding: 0 renders cells flush (no synthesized spaces)", () => {
+      const out = buildLineStrip([seg("alpha"), seg("beta")], {
+        style: "plain",
+        colorCompatibility: "none",
+        wrap: true,
+        padding: 0,
+        width: 200,
+      });
+      expect(out).toBe("alpha | beta");
+    });
+
+    it("padding: 2 widens each cell by two spaces per side", () => {
+      const out = buildLineStrip([seg("alpha"), seg("beta")], {
+        style: "plain",
+        colorCompatibility: "none",
+        wrap: true,
+        padding: 2,
+        width: 200,
+      });
+      expect(out).toBe("  alpha   |   beta  ");
+    });
+
     it("wrap:false keeps a too-wide row on one unbounded line", () => {
       // Same narrow width that forces wrapping above; disabling wrap must
       // render one line with overflow allowed, NOT clip or break.
       const out = buildLineStrip([seg("alpha"), seg("beta"), seg("gamma")], {
         style: "plain",
         colorCompatibility: "none",
-        wrap: false,
+        wrap: false, padding: 1,
         width: 16,
       });
       expect(out.split("\n")).toHaveLength(1);
@@ -68,12 +92,12 @@ describe("renderStripCells wrap behavior (via buildLineStrip adapter)", () => {
       };
       const noWrap = buildLineStrip(segments, {
         ...base,
-        wrap: false,
+        wrap: false, padding: 1,
         width: 16,
       });
       const unbounded = buildLineStrip(segments, {
         ...base,
-        wrap: true,
+        wrap: true, padding: 1,
         width: Number.POSITIVE_INFINITY,
       });
       expect(noWrap).toBe(unbounded);
@@ -83,7 +107,7 @@ describe("renderStripCells wrap behavior (via buildLineStrip adapter)", () => {
       const base = {
         style: "plain" as const,
         colorCompatibility: "none" as const,
-        wrap: true,
+        wrap: true, padding: 1,
       };
       const segments = [seg("a"), seg("bb"), seg("ccc")];
       const unbounded = buildLineStrip(segments, {
@@ -98,7 +122,7 @@ describe("renderStripCells wrap behavior (via buildLineStrip adapter)", () => {
       const out = buildLineStrip([], {
         style: "plain",
         colorCompatibility: "none",
-        wrap: true,
+        wrap: true, padding: 1,
         width: 80,
       });
       expect(out).toBe("");
@@ -108,13 +132,13 @@ describe("renderStripCells wrap behavior (via buildLineStrip adapter)", () => {
       const wide = buildLineStrip([seg("a")], {
         style: "plain",
         colorCompatibility: "none",
-        wrap: true,
+        wrap: true, padding: 1,
         width: 80,
       });
       const wrapped = buildLineStrip([seg("alpha"), seg("beta")], {
         style: "plain",
         colorCompatibility: "none",
-        wrap: true,
+        wrap: true, padding: 1,
         width: 8,
       });
       expect(wide.endsWith("\n")).toBe(false);
@@ -131,7 +155,7 @@ describe("renderStripCells wrap behavior (via buildLineStrip adapter)", () => {
       const out = buildLineStrip([lit("aaa"), lit("bbb"), lit("ccc")], {
         style: "powerline",
         colorCompatibility: "none",
-        wrap: true,
+        wrap: true, padding: 1,
         width: 8,
       });
       const rows = out.split("\n");

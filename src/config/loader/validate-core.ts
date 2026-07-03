@@ -554,6 +554,34 @@ export function optionalBooleanSpec(): FieldSpec<boolean> {
   };
 }
 
+// [LAW:dataflow-not-control-flow] An optional bounded-integer field: the bounds
+// are DATA feeding both interpreters — `parse` checks them and interpolates them
+// into the one message, `json` emits them as minimum/maximum — so the validator
+// and the editor-facing schema cannot describe different ranges.
+export function optionalIntSpec(bounds: {
+  readonly min: number;
+  readonly max: number;
+}): FieldSpec<number> {
+  const { min, max } = bounds;
+  return {
+    required: false,
+    json: { type: "integer", minimum: min, maximum: max },
+    parse: (ctx, path, field, raw) => {
+      const v = raw[field];
+      if (v === undefined) return undefined;
+      if (typeof v !== "number" || !Number.isInteger(v) || v < min || v > max) {
+        ctx.issues.push({
+          path: `${path}.${field}`,
+          message: `${field} must be an integer between ${min} and ${max}, got ${describeValue(v)}`,
+          line: findKeyLine(ctx.source, [field]),
+        });
+        return undefined;
+      }
+      return v;
+    },
+  };
+}
+
 // [LAW:single-enforcer] The palette field defers to the one palette-name
 // authority; the field key is conventionally "palette", which validatePaletteName
 // reads directly.

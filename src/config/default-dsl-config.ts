@@ -52,11 +52,11 @@ import type { DslConfig } from "./dsl-types.js";
 // full absolute path. Same logic handles equal home & current_dir → just "~".
 const DIR_REL = 'trimPrefix "/" (trimPrefix .project_dir .current_dir)';
 const DIR_TEMPLATE =
-  ' {{ if and (ne .home "") (or (eq .home .current_dir) (hasPrefix (printf "%s/" .home) .current_dir)) }}~{{ trimPrefix .home .current_dir }}' +
+  '{{ if and (ne .home "") (or (eq .home .current_dir) (hasPrefix (printf "%s/" .home) .current_dir)) }}~{{ trimPrefix .home .current_dir }}' +
   "{{ else }}" +
   '{{ if or (eq .project_dir .current_dir) (hasPrefix (printf "%s/" .project_dir) .current_dir) }}' +
   `{{ ternary (${DIR_REL}) (basename .project_dir) (ne (${DIR_REL}) "") }}` +
-  "{{ else }}{{ .current_dir }}{{ end }}{{ end }} ";
+  "{{ else }}{{ .current_dir }}{{ end }}{{ end }}";
 
 // Git working-tree counts — leading-space-then-trim idiom: each present count
 // contributes " +N", trim drops the leading space, survivors single-spaced.
@@ -74,7 +74,7 @@ const GIT_STATUS =
   '{{ if eq .git.status "dirty" }}●{{ else }}✓{{ end }}{{ end }}';
 
 const GIT_TEMPLATE =
-  ' {{ if ne .git.repoName "" }}{{ .git.repoName }} {{ end }}⎇ {{ .git.branch }}' +
+  '{{ if ne .git.repoName "" }}{{ .git.repoName }} {{ end }}⎇ {{ .git.branch }}' +
   "{{ if .git.sha }} ♯ {{ .git.sha }}{{ end }}" +
   "{{ if or (gt .git.ahead 0) (gt .git.behind 0) }}" +
   " {{ if gt .git.ahead 0 }}↑{{ .git.ahead }}{{ end }}" +
@@ -83,8 +83,7 @@ const GIT_TEMPLATE =
   "{{ if .git.upstream }} →{{ .git.upstream }}{{ end }}" +
   "{{ if gt .git.stash 0 }} ⧇ {{ .git.stash }}{{ end }}" +
   " " +
-  GIT_STATUS +
-  " ";
+  GIT_STATUS;
 
 // [LAW:dataflow-not-control-flow] block and weekly share the same threshold
 // cascade (≥warningThreshold → error, ≥50 → warning, else panel) on a numeric
@@ -509,6 +508,12 @@ export const DEFAULT_DSL_CONFIG = {
   // palette spec names resolved against the active theme. `when` predicates
   // hide a segment when its primary signal is absent (no git repo, no version
   // field, no env var, no tmux, no rate-limit window).
+  //
+  // [LAW:one-source-of-truth] Templates author CONTENT only — the intra-cell
+  // padding (the space each side of a cell) is render chrome synthesized
+  // structurally from the one resolved globals.padding (default 1), never
+  // authored here. A template with leading/trailing spaces would render them
+  // IN ADDITION to the structural padding.
   segments: {
     directory: {
       template: DIR_TEMPLATE,
@@ -516,25 +521,25 @@ export const DEFAULT_DSL_CONFIG = {
       fg: "foreground",
     },
     model: {
-      template: " ✱ {{ formatModelName .model.display_name }} ",
+      template: "✱ {{ formatModelName .model.display_name }}",
       bg: "panel",
       fg: "foreground",
       when: '{{ ne .model.display_name "" }}',
     },
     sessionId: {
-      template: " ⌗{{ trunc 8 .session.id }} ",
+      template: "⌗{{ trunc 8 .session.id }}",
       bg: "surface",
       fg: "foreground",
       when: '{{ ne .session.id "" }}',
     },
     version: {
-      template: " ◈ v{{ .version }} ",
+      template: "◈ v{{ .version }}",
       bg: "surface",
       fg: "foreground",
       when: '{{ ne .version "" }}',
     },
     tmux: {
-      template: ' tmux:{{ .tmux.session | default "none" }} ',
+      template: 'tmux:{{ .tmux.session | default "none" }}',
       bg: "surface-active",
       fg: "foreground",
       when: '{{ ne .tmux.session "" }}',
@@ -547,7 +552,7 @@ export const DEFAULT_DSL_CONFIG = {
     },
     gitaculous: {
       template:
-        " (git)" +
+        "(git)" +
         '{{ if ne .git.repoName "" }} {{ .git.repoName }}{{ end }}' +
         '{{ if ne .git.operation "" }} [{{ .git.operation }}]{{ end }}' +
         '{{ if ne .git.sha "" }} {{ .git.sha }}{{ end }}' +
@@ -564,8 +569,7 @@ export const DEFAULT_DSL_CONFIG = {
         '{{ if gt .git.behind 0 }}{{ red (printf "-%v" .git.behind) }}{{ end }}' +
         "{{ end }}]{{ end }}" +
         "{{ if gt .git.stash 0 }} ({{ .git.stash }} stashed){{ end }}" +
-        '{{ if gt .git.timeSinceCommit 0 }} ◷ {{ template "formatTimeSince" .git.timeSinceCommit }}{{ end }}' +
-        " ",
+        '{{ if gt .git.timeSinceCommit 0 }} ◷ {{ template "formatTimeSince" .git.timeSinceCommit }}{{ end }}',
       bg: "surface-active",
       fg: "foreground",
       when: '{{ ne .git.branch "" }}',
@@ -580,10 +584,12 @@ export const DEFAULT_DSL_CONFIG = {
     // renders a distinct ⚠ marker so an outage is not mistaken for "no PR";
     // no PR (both empty) leaves the `when` gate false and the segment absent.
     gitPr: {
+      // The pad spaces are structural chrome now, OUTSIDE the OSC-8 link
+      // region — the clickable area is the glyph text itself.
       template:
         '{{ if ne .git.prUrl "" }}' +
-        '{{ link .git.prUrl (printf " ⇆ #%v " .git.prNumber) }}' +
-        "{{ else }} ⚠ PR {{ end }}",
+        '{{ link .git.prUrl (printf "⇆ #%v" .git.prNumber) }}' +
+        "{{ else }}⚠ PR{{ end }}",
       bg: "surface-active",
       fg: "foreground",
       when: '{{ or (ne .git.prUrl "") (ne .git.prError "") }}',
@@ -596,28 +602,28 @@ export const DEFAULT_DSL_CONFIG = {
     // one OSC-8 clickable region whose URL the wire codec owns end-to-end.
     toolbar: {
       template:
-        ' {{ action "copySession" "⎘ id" }} {{ action "copyDir" "⎘ cwd" }}' +
-        ' {{ action "openProject" "↗ proj" }} {{ action "openTranscript" "↗ log" }} ',
+        '{{ action "copySession" "⎘ id" }} {{ action "copyDir" "⎘ cwd" }}' +
+        ' {{ action "openProject" "↗ proj" }} {{ action "openTranscript" "↗ log" }}',
       bg: "surface",
       fg: "foreground",
     },
     session: {
       template:
-        ' § {{ template "formatCost" .session.cost }} ({{ template "formatTokens" .session.tokens }}) ',
+        '§ {{ template "formatCost" .session.cost }} ({{ template "formatTokens" .session.tokens }})',
       bg: "surface",
       fg: "foreground",
     },
     today: {
       template:
-        ' ☉ {{ template "formatCost" .today.cost }} ({{ template "formatTokens" .today.tokens }})' +
-        '{{ template "budgetStatus" (dict "cost" .today.cost "budget" .today.budget.amount "warn" .today.budget.warningThreshold) }} ',
+        '☉ {{ template "formatCost" .today.cost }} ({{ template "formatTokens" .today.tokens }})' +
+        '{{ template "budgetStatus" (dict "cost" .today.cost "budget" .today.budget.amount "warn" .today.budget.warningThreshold) }}',
       bg: "surface",
       fg: "foreground",
     },
     block: {
       template:
-        " ◱ {{ round .block.nativeUtilization }}% " +
-        '({{ template "formatLongTimeRemaining" (minutesUntilReset .block.resetsAt) }}) ',
+        "◱ {{ round .block.nativeUtilization }}% " +
+        '({{ template "formatLongTimeRemaining" (minutesUntilReset .block.resetsAt) }})',
       bg: blockLikeBg(
         ".block.nativeUtilization",
         ".block.budget.warningThreshold",
@@ -628,8 +634,8 @@ export const DEFAULT_DSL_CONFIG = {
     },
     weekly: {
       template:
-        " ◑ {{ round .weekly.percentage }}% " +
-        '({{ template "formatLongTimeRemaining" (minutesUntilReset .weekly.resetsAt) }}) ',
+        "◑ {{ round .weekly.percentage }}% " +
+        '({{ template "formatLongTimeRemaining" (minutesUntilReset .weekly.resetsAt) }})',
       bg: blockLikeBg(".weekly.percentage", ".weekly.budget.warningThreshold"),
       fg: blockLikeFg(".weekly.percentage"),
       when: "{{ gt .weekly.resetsAt 0 }}",
@@ -641,9 +647,9 @@ export const DEFAULT_DSL_CONFIG = {
     // rate-limit window is active — the same signal block/weekly gate on.
     burnrate: {
       template:
-        ' ⚡ {{ template "formatRate" .burn.costPerHour }} · ' +
+        '⚡ {{ template "formatRate" .burn.costPerHour }} · ' +
         '{{ template "formatEta" .block.etaMinutes }} to 5h · ' +
-        '{{ template "formatEta" .weekly.etaMinutes }} to wk ',
+        '{{ template "formatEta" .weekly.etaMinutes }} to wk',
       bg: etaHeatBg(
         ".block.etaMinutes",
         ".burn.eta.warnMinutes",
@@ -662,9 +668,9 @@ export const DEFAULT_DSL_CONFIG = {
     // turn start, `total` is their sum.
     speed: {
       template:
-        ' ⇅ out {{ template "formatSpeed" .speed.output }} · ' +
+        '⇅ out {{ template "formatSpeed" .speed.output }} · ' +
         'in {{ template "formatSpeed" .speed.input }} · ' +
-        'tot {{ template "formatSpeed" .speed.total }} ',
+        'tot {{ template "formatSpeed" .speed.total }}',
       bg: "panel",
       fg: "foreground",
       when: "{{ gt .session.tokens 0 }}",
@@ -679,7 +685,7 @@ export const DEFAULT_DSL_CONFIG = {
     // two samples before its first bar). [LAW:effects-at-boundaries] — all the
     // history lives in the daemon ring, the template only draws.
     tokenSparkline: {
-      template: " ⚡ {{ sparkline .speed.history 24 }} ",
+      template: "⚡ {{ sparkline .speed.history 24 }}",
       bg: "panel",
       fg: "foreground",
       when: '{{ ne .speed.history "" }}',
@@ -693,8 +699,8 @@ export const DEFAULT_DSL_CONFIG = {
     // (warm = normal, ≤20m = warning, ≤8m/cold = error).
     cacheTimer: {
       template:
-        " ◴ {{ if le (minutesUntilReset .cache.expiresAt) 0 }}cold" +
-        "{{ else }}{{ minutesUntilReset .cache.expiresAt }}m{{ end }} ",
+        "◴ {{ if le (minutesUntilReset .cache.expiresAt) 0 }}cold" +
+        "{{ else }}{{ minutesUntilReset .cache.expiresAt }}m{{ end }}",
       bg: "surface",
       fg:
         "{{ if le (minutesUntilReset .cache.expiresAt) 8 }}error" +
@@ -704,7 +710,7 @@ export const DEFAULT_DSL_CONFIG = {
     },
     context: {
       template:
-        " ◔ {{ formatInteger .context.totalTokens }} ({{ .context.contextLeft }}%) ",
+        "◔ {{ formatInteger .context.totalTokens }} ({{ .context.contextLeft }}%)",
       bg:
         "{{ if le .context.contextLeft 20 }}error" +
         "{{ else }}{{ if le .context.contextLeft 40 }}warning" +
@@ -724,6 +730,12 @@ export const DEFAULT_DSL_CONFIG = {
       // level `when` survives as a weak any-present check so a payload
       // with zero metrics data renders no cell at all (an empty template
       // would otherwise produce a single-space bg-styled cell).
+      //
+      // [LAW:one-source-of-truth] exception: each arm's leading space is the
+      // SEPARATOR between present parts (only data can decide which part is
+      // first, so no static strip can remove just the first one), and the
+      // trailing space mirrors it for symmetry. At the default padding this
+      // cell therefore reads one space wider per side than its siblings.
       template:
         '{{ if .metrics.lastResponseTime }} Δ {{ template "formatResponseTime" .metrics.lastResponseTime }}{{ end }}' +
         '{{ if .metrics.responseTime }} ⧖ {{ template "formatResponseTime" .metrics.responseTime }}{{ end }}' +

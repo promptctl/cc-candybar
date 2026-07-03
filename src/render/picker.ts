@@ -168,11 +168,15 @@ export function renderPicker(
   // pagination seam, rather than shrinking the shared term.cols every template
   // reads. stripChromeCols owns the per-style geometry; Infinity − chrome stays
   // Infinity, so wrap mode is unaffected.
+  // The pad spaces the segment layout synthesizes around the picker's line
+  // (2 × the render's intra-cell padding) consume the same width budget the
+  // joiner chrome does — reserve both here, at the pagination seam.
   const available = paged
     ? Math.max(
         1,
         toNumber(store.read(TERM_COLS_VAR)) -
-          stripChromeCols(runtime.stripStyle),
+          stripChromeCols(runtime.stripStyle) -
+          2 * runtime.padding,
       )
     : Infinity;
   const closeReserve = cellWidth(PICKER_CLOSE) + 1;

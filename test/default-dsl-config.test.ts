@@ -86,7 +86,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
         registry,
         payload,
         basePalette,
-        { style: "powerline", colorCompatibility: "truecolor", wrap: true, width: Number.POSITIVE_INFINITY },
+        { style: "powerline", colorCompatibility: "truecolor", wrap: true, padding: 1, width: Number.POSITIVE_INFINITY },
       );
       // Hidden segments (no git repo, no usage data) drop out; the
       // directory and model segments remain, so the line is non-empty.
@@ -94,6 +94,46 @@ describe("DEFAULT_DSL_CONFIG", () => {
     } finally {
       registry.dispose();
     }
+  });
+
+  // brandon-display-dam.2: templates author content; the intra-cell padding is
+  // structural (globals.padding → BuildLineOptions.padding). With the bundled
+  // default, padding 0 renders visibly tighter than 1, and 2 wider — the value
+  // genuinely drives the chrome instead of spaces baked into templates.
+  test("padding 0 / 1 / 2 render strictly increasing visible widths", () => {
+    const parsed = parseAndValidate("<default>", SERIALIZED);
+    const payload = {
+      hook_event_name: "Status",
+      session_id: "pad-derivation-test",
+      cwd: "/tmp",
+      model: { id: "claude-opus-4-7", display_name: "Opus 4.7" },
+      workspace: { current_dir: "/tmp", project_dir: "/tmp", added_dirs: [] },
+    };
+    // eslint-disable-next-line no-control-regex
+    const ANSI = /\x1b\[[0-9;]*m|\x1b\]8;;[^\x1b]*\x1b\\/g;
+    const render = (padding: number): string => {
+      const store = new VariableStore();
+      const registry = new SourceRegistry(store, "", undefined, new SessionState());
+      try {
+        const compiled = registerDslConfig(parsed, registry, { cwd: "/tmp" });
+        const bp = new PaletteResolver(getThemePalette("textual-dark")!);
+        return renderDsl(parsed, compiled, store, registry, payload, bp, {
+          style: "powerline",
+          colorCompatibility: "truecolor",
+          wrap: true,
+          padding,
+          width: Number.POSITIVE_INFINITY,
+        }).replace(ANSI, "");
+      } finally {
+        registry.dispose();
+      }
+    };
+    const [w0, w1, w2] = [render(0).length, render(1).length, render(2).length];
+    expect(w0).toBeLessThan(w1);
+    expect(w1).toBeLessThan(w2);
+    // One space per visible segment per side: the deltas are equal and
+    // positive — padding scales linearly, not incidentally.
+    expect(w1 - w0).toBe(w2 - w1);
   });
 
   // [LAW:one-source-of-truth] Equivalence pin: the terse A-grammar spelling of the
@@ -121,7 +161,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
     };
     const opts = {
       style: "powerline" as const,
-      colorCompatibility: "truecolor" as const, wrap: true,
+      colorCompatibility: "truecolor" as const, wrap: true, padding: 1,
       width: Number.POSITIVE_INFINITY,
     };
 
@@ -167,7 +207,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
     const payload = { hook_event_name: "Status", session_id: "x", cwd: "/tmp",
       model: { id: "x", display_name: "x" },
       workspace: { current_dir: "/tmp", project_dir: "/tmp", added_dirs: [] } };
-    const opts = { style: "powerline" as const, colorCompatibility: "truecolor" as const, wrap: true,
+    const opts = { style: "powerline" as const, colorCompatibility: "truecolor" as const, wrap: true, padding: 1,
       width: Number.POSITIVE_INFINITY };
 
     function render(cfg: typeof configA): string {
@@ -230,7 +270,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
           registry,
           payload,
           basePalette,
-          { style: "powerline", colorCompatibility: "truecolor", wrap: true, width: Number.POSITIVE_INFINITY },
+          { style: "powerline", colorCompatibility: "truecolor", wrap: true, padding: 1, width: Number.POSITIVE_INFINITY },
         );
         // Strip ANSI escapes AND the Powerline joiner glyphs
         // (U+E0B0..U+E0BC range) so assertions can probe visible
@@ -337,7 +377,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
           registry,
           payload,
           basePalette,
-          { style: "powerline", colorCompatibility: "truecolor", wrap: true, width: Number.POSITIVE_INFINITY },
+          { style: "powerline", colorCompatibility: "truecolor", wrap: true, padding: 1, width: Number.POSITIVE_INFINITY },
         );
         return line.replace(
           // eslint-disable-next-line no-control-regex
@@ -434,7 +474,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
             registry,
             payload,
             basePalette,
-            { style: "powerline", colorCompatibility: "truecolor", wrap: true, width: Number.POSITIVE_INFINITY },
+            { style: "powerline", colorCompatibility: "truecolor", wrap: true, padding: 1, width: Number.POSITIVE_INFINITY },
           );
         } finally {
           registry.dispose();
