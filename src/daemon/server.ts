@@ -1107,7 +1107,10 @@ function serializeSegmentCells(
 ): Map<string, string> {
   const out = new Map<string, string>();
   for (const [name, segCells] of cells) {
-    out.set(name, renderStripCells(segCells, { ...DEBUG_RENDER_OPTS, charset }));
+    out.set(
+      name,
+      renderStripCells(segCells, { ...DEBUG_RENDER_OPTS, charset }),
+    );
   }
   return out;
 }
