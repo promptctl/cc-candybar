@@ -79,3 +79,20 @@ export function effectiveStripStyle(
   const chosen = sessionStyle ?? globalsStyle ?? "powerline";
   return isStripStyle(chosen) ? chosen : "powerline";
 }
+
+// --- Joiner charset identifiers ---
+
+// [LAW:one-source-of-truth][LAW:types-are-the-program] The single canonical set
+// of glyph vocabularies the strip joiners can render with (the legacy
+// display.charset). Same species as STRIP_STYLES — a closed render-vocabulary
+// enum hosted in this leaf policy module so the config loader (validation +
+// JSON-schema emit) and the render layer (glyph dispatch) both derive from one
+// literal without a config↔render cycle [LAW:one-way-deps]. "ascii" swaps the
+// powerline-private-use cap glyphs (U+E0Bx — tofu without a Nerd Font) for
+// plain-ASCII equivalents; it is orthogonal to StripStyle: style picks the
+// joiner SHAPE, charset picks the glyph VALUES fed to it.
+// [config-only] Unlike STRIP_STYLES there is no SessionState/click half, so no
+// narrowing guard or effective* resolver — the config global over the default
+// is the whole resolution.
+export const CHARSETS = ["unicode", "ascii"] as const;
+export type Charset = (typeof CHARSETS)[number];

@@ -46,6 +46,7 @@ import {
 } from "../themes/index.js";
 import {
   renderStripCells,
+  DEFAULT_CHARSET,
   DEFAULT_PADDING,
   DEFAULT_TERMINAL_WIDTH,
   DEFAULT_WRAP,
@@ -780,6 +781,12 @@ async function handleRequest(req: Request): Promise<HandledRequest> {
         // reserve) derives from. [LAW:one-source-of-truth]
         renderOpts.padding =
           entry.state.config.globals.padding ?? DEFAULT_PADDING;
+        // [config-only] globals.charset, same shape as autoWrap/padding: the
+        // config global over the base floor is the whole resolution — the ONE
+        // home of the glyph-vocabulary choice pickJoiner derives from.
+        // [LAW:one-source-of-truth]
+        renderOpts.charset =
+          entry.state.config.globals.charset ?? DEFAULT_CHARSET;
         // [LAW:single-enforcer] renderDsl internally calls
         // `registry.applyInput(payload)` as its first step (see step 1 in
         // src/dsl/render.ts). The daemon must not pre-apply — doing so
@@ -1072,6 +1079,7 @@ const RENDER_OPTS_BASE = {
   colorCompatibility: "truecolor" as const,
   wrap: DEFAULT_WRAP,
   padding: DEFAULT_PADDING,
+  charset: DEFAULT_CHARSET,
 };
 const DEBUG_RENDER_OPTS: BuildLineOptions = {
   ...RENDER_OPTS_BASE,

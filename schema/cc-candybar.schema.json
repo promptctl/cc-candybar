@@ -40,6 +40,12 @@
           "type": "integer",
           "minimum": 0,
           "maximum": 16
+        },
+        "charset": {
+          "enum": [
+            "unicode",
+            "ascii"
+          ]
         }
       },
       "additionalProperties": false

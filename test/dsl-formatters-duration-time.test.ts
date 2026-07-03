@@ -34,7 +34,7 @@ import { registerDslConfig, renderDsl } from "../src/dsl/render";
 
 const OPTS = {
   style: "powerline" as const,
-  colorCompatibility: "truecolor" as const, wrap: true, padding: 0,
+  colorCompatibility: "truecolor" as const, wrap: true, padding: 0, charset: "unicode" as const,
   width: Number.POSITIVE_INFINITY,
 };
 const BASE_PALETTE = new PaletteResolver(getThemePalette("textual-dark")!);
