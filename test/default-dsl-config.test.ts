@@ -86,7 +86,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
         registry,
         payload,
         basePalette,
-        { style: "powerline", colorCompatibility: "truecolor", wrap: true, padding: 1, width: Number.POSITIVE_INFINITY },
+        { style: "powerline", colorCompatibility: "truecolor", wrap: true, padding: 1, charset: "unicode", width: Number.POSITIVE_INFINITY },
       );
       // Hidden segments (no git repo, no usage data) drop out; the
       // directory and model segments remain, so the line is non-empty.
@@ -122,6 +122,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
           colorCompatibility: "truecolor",
           wrap: true,
           padding,
+          charset: "unicode",
           width: Number.POSITIVE_INFINITY,
         }).replace(ANSI, "");
       } finally {
@@ -161,7 +162,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
     };
     const opts = {
       style: "powerline" as const,
-      colorCompatibility: "truecolor" as const, wrap: true, padding: 1,
+      colorCompatibility: "truecolor" as const, wrap: true, padding: 1, charset: "unicode" as const,
       width: Number.POSITIVE_INFINITY,
     };
 
@@ -207,7 +208,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
     const payload = { hook_event_name: "Status", session_id: "x", cwd: "/tmp",
       model: { id: "x", display_name: "x" },
       workspace: { current_dir: "/tmp", project_dir: "/tmp", added_dirs: [] } };
-    const opts = { style: "powerline" as const, colorCompatibility: "truecolor" as const, wrap: true, padding: 1,
+    const opts = { style: "powerline" as const, colorCompatibility: "truecolor" as const, wrap: true, padding: 1, charset: "unicode" as const,
       width: Number.POSITIVE_INFINITY };
 
     function render(cfg: typeof configA): string {
@@ -270,7 +271,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
           registry,
           payload,
           basePalette,
-          { style: "powerline", colorCompatibility: "truecolor", wrap: true, padding: 1, width: Number.POSITIVE_INFINITY },
+          { style: "powerline", colorCompatibility: "truecolor", wrap: true, padding: 1, charset: "unicode", width: Number.POSITIVE_INFINITY },
         );
         // Strip ANSI escapes AND the Powerline joiner glyphs
         // (U+E0B0..U+E0BC range) so assertions can probe visible
@@ -377,7 +378,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
           registry,
           payload,
           basePalette,
-          { style: "powerline", colorCompatibility: "truecolor", wrap: true, padding: 1, width: Number.POSITIVE_INFINITY },
+          { style: "powerline", colorCompatibility: "truecolor", wrap: true, padding: 1, charset: "unicode", width: Number.POSITIVE_INFINITY },
         );
         return line.replace(
           // eslint-disable-next-line no-control-regex
@@ -474,7 +475,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
             registry,
             payload,
             basePalette,
-            { style: "powerline", colorCompatibility: "truecolor", wrap: true, padding: 1, width: Number.POSITIVE_INFINITY },
+            { style: "powerline", colorCompatibility: "truecolor", wrap: true, padding: 1, charset: "unicode", width: Number.POSITIVE_INFINITY },
           );
         } finally {
           registry.dispose();

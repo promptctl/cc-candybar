@@ -4,7 +4,7 @@
 // add a key to GLOBALS_SCHEMA and Globals; the engine does the rest.
 
 import { type Globals } from "../dsl-types.js";
-import { STRIP_STYLES } from "../../themes/policy.js";
+import { CHARSETS, STRIP_STYLES } from "../../themes/policy.js";
 import {
   optionalBooleanSpec,
   optionalEnumSpec,
@@ -37,6 +37,10 @@ const GLOBALS_SCHEMA: RecordSchema<Globals> = {
     // [LAW:no-silent-failure] — an absurd value is a loud load error, not a
     // silently-huge render.
     padding: optionalIntSpec({ min: 0, max: 16 }),
+    // [LAW:types-are-the-program] Closed enum like `style`: the joiner glyph
+    // vocabularies pickJoiner can render — validates by membership, emits a
+    // JSON-Schema `enum` from the same CHARSETS literal.
+    charset: optionalEnumSpec(CHARSETS),
   },
 };
 
