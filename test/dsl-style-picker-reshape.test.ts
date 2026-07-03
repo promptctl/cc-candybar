@@ -66,7 +66,7 @@ function buildRuntime() {
         sessionState.get(SID, "style"),
         config.globals.style,
       ),
-      colorCompatibility: "truecolor" as const,
+      colorCompatibility: "truecolor" as const, wrap: true,
       width: Number.POSITIVE_INFINITY,
     });
 

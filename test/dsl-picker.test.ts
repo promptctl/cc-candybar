@@ -36,7 +36,7 @@ const THEMES = listResolvablePaletteNames();
 function opts(width: number) {
   return {
     style: "powerline" as const,
-    colorCompatibility: "truecolor" as const,
+    colorCompatibility: "truecolor" as const, wrap: true,
     width,
   };
 }

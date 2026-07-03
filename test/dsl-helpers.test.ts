@@ -22,7 +22,7 @@ import { registerDslConfig, renderDsl } from "../src/dsl/render";
 // each render a single line so substring assertions are stable.
 const OPTS = {
   style: "powerline" as const,
-  colorCompatibility: "truecolor" as const,
+  colorCompatibility: "truecolor" as const, wrap: true,
   width: Number.POSITIVE_INFINITY,
 };
 

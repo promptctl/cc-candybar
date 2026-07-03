@@ -36,7 +36,7 @@ import { formatInteger } from "../src/utils/formatters";
 
 const OPTS = {
   style: "powerline" as const,
-  colorCompatibility: "truecolor" as const,
+  colorCompatibility: "truecolor" as const, wrap: true,
   width: Number.POSITIVE_INFINITY,
 };
 const BASE_PALETTE = new PaletteResolver(getThemePalette("textual-dark")!);
