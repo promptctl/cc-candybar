@@ -46,6 +46,14 @@
             "unicode",
             "ascii"
           ]
+        },
+        "colorCompatibility": {
+          "enum": [
+            "truecolor",
+            "256",
+            "ansi",
+            "none"
+          ]
         }
       },
       "additionalProperties": false
