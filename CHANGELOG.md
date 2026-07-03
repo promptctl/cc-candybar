@@ -1,3 +1,10 @@
+# [1.11.0](https://github.com/promptctl/cc-candybar/compare/v1.10.0...v1.11.0) (2026-07-03)
+
+
+### Features
+
+* **config:** restore globals.charset — ASCII fallback for powerline joiner glyphs (brandon-display-dam.3) ([#139](https://github.com/promptctl/cc-candybar/issues/139)) ([5d9fef2](https://github.com/promptctl/cc-candybar/commit/5d9fef247f7f59fdaf420c87265836c120ff7cfa))
+
 # [1.10.0](https://github.com/promptctl/cc-candybar/compare/v1.9.0...v1.10.0) (2026-07-03)
 
 
