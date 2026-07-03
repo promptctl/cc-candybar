@@ -52,7 +52,7 @@ const FIXTURE_SOURCE = readFileSync(
 // is tested in test/strip-flex.test.ts (the renderStripCells wrap path).
 const OPTS = {
   style: "powerline" as const,
-  colorCompatibility: "truecolor" as const,
+  colorCompatibility: "truecolor" as const, wrap: true,
   width: Number.POSITIVE_INFINITY,
 };
 
