@@ -196,6 +196,14 @@ export interface Globals {
   // [config-only] Unlike palette/style there is no SessionState/click half —
   // the daemon resolves `globals.autoWrap ?? true` into renderOpts.wrap.
   readonly autoWrap?: boolean;
+
+  // The legacy display.padding knob: spaces synthesized INSIDE each segment
+  // cell per side (intra-cell, within the bg fill — not rich-js FlexStrip's
+  // inter-item gap). Default 1 (current behavior). Templates author content;
+  // this chrome is applied structurally at the cell-formation seam.
+  // [config-only] The daemon resolves `globals.padding ?? 1` into
+  // renderOpts.padding; no SessionState/click half.
+  readonly padding?: number;
 }
 
 // [LAW:one-type-per-behavior] One discriminated union covers every source

@@ -35,6 +35,11 @@
         },
         "autoWrap": {
           "type": "boolean"
+        },
+        "padding": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 16
         }
       },
       "additionalProperties": false
