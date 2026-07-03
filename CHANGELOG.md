@@ -1,3 +1,10 @@
+# [1.12.0](https://github.com/promptctl/cc-candybar/compare/v1.11.0...v1.12.0) (2026-07-03)
+
+
+### Features
+
+* **config:** restore globals.colorCompatibility — color depth / downsampling control (brandon-display-dam.4) ([#140](https://github.com/promptctl/cc-candybar/issues/140)) ([0a425f0](https://github.com/promptctl/cc-candybar/commit/0a425f02904deb6cd0e5cb4b997b073c80fdb13d)), closes [#139](https://github.com/promptctl/cc-candybar/issues/139)
+
 # [1.11.0](https://github.com/promptctl/cc-candybar/compare/v1.10.0...v1.11.0) (2026-07-03)
 
 
