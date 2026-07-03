@@ -29,7 +29,7 @@ import {
   type GitField,
 } from "../var-system/sources.js";
 import type { BuildLineOptions } from "../render/strip.js";
-import { renderStripCells } from "../render/strip.js";
+import { DEFAULT_PADDING, renderStripCells } from "../render/strip.js";
 import { resolverForThemeName } from "../themes/index.js";
 import { buildScope } from "../template-engine/scope.js";
 import {
@@ -286,6 +286,9 @@ export function registerDslConfig(
     // style each render; "powerline" is the registration-time default so a
     // compile-only path (no render) still has a valid value.
     stripStyle: "powerline",
+    // Same contract as stripStyle: renderDsl republishes the live resolved
+    // globals.padding each render; the constant is only the compile-only floor.
+    padding: DEFAULT_PADDING,
   };
   // [LAW:one-way-deps] Inject action + picker feature funcs as data — the engine
   // stays generic. The picker shares the ACTION runtime (it resolves its
@@ -537,6 +540,10 @@ export function renderDsl(
   // once per render here — the same one-owner, per-render-mutation idiom as the
   // menu placement cursor below. [LAW:no-ambient-temporal-coupling]
   compiled.menuRuntime.action.stripStyle = opts.style;
+  // [LAW:one-source-of-truth] Publish the render's intra-cell padding beside the
+  // style: the picker reserves 2×padding at its pagination seam, the same seam
+  // that reserves the joiner chrome — one resolved value, read where needed.
+  compiled.menuRuntime.action.padding = opts.padding;
 
   const scope = buildScope(store);
   // [LAW:one-source-of-truth] hueStep is a value in the store like every other
@@ -610,6 +617,7 @@ export function renderDsl(
       scope,
       basePalette,
       visible,
+      padding: opts.padding,
       nextHueShift,
       perSegmentSink,
       beginSegment,

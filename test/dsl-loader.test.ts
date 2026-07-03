@@ -199,6 +199,22 @@ describe("loadDslConfig — globals", () => {
       message: "autoWrap must be a boolean, got string",
     });
   });
+
+  test("padding accepts an integer in range (0 is a legal value)", () => {
+    const cfg = parseAndValidate(FILE, `{ globals: { padding: 0 } }`);
+    expect(cfg.globals.padding).toBe(0);
+    const cfg2 = parseAndValidate(FILE, `{ globals: { padding: 3 } }`);
+    expect(cfg2.globals.padding).toBe(3);
+  });
+
+  test("non-integer or out-of-range padding is rejected", () => {
+    for (const bad of ['"2"', "1.5", "-1", "17"]) {
+      expectIssue(`{ globals: { padding: ${bad} } }`, {
+        path: "globals.padding",
+        message: "padding must be an integer between 0 and 16",
+      });
+    }
+  });
 });
 
 // ─── Variable kinds ──────────────────────────────────────────────────────────

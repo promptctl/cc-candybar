@@ -31,7 +31,11 @@ import { SessionState } from "../daemon/session-state.js";
 import { listResolvablePaletteNames } from "../themes/policy.js";
 import { effectiveThemeName, resolverForThemeName } from "../themes/index.js";
 import { registerDslConfig, renderDsl } from "../dsl/render.js";
-import { DEFAULT_TERMINAL_WIDTH, DEFAULT_WRAP } from "../render/strip.js";
+import {
+  DEFAULT_PADDING,
+  DEFAULT_TERMINAL_WIDTH,
+  DEFAULT_WRAP,
+} from "../render/strip.js";
 import { applyClaudeCodeReserve } from "../utils/terminal-width.js";
 
 const FRAMES = 4;
@@ -113,6 +117,7 @@ try {
         // Same resolution the daemon applies: the config global over the
         // default-on floor.
         wrap: config.globals.autoWrap ?? DEFAULT_WRAP,
+        padding: config.globals.padding ?? DEFAULT_PADDING,
       },
     );
     process.stdout.write(`  ${line}\n`);

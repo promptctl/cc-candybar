@@ -46,6 +46,7 @@ import {
 } from "../themes/index.js";
 import {
   renderStripCells,
+  DEFAULT_PADDING,
   DEFAULT_TERMINAL_WIDTH,
   DEFAULT_WRAP,
   type BuildLineOptions,
@@ -773,6 +774,12 @@ async function handleRequest(req: Request): Promise<HandledRequest> {
         // resolution. Width stays finite regardless: it also feeds the
         // picker's pagination (term.cols), which no-wrap must not break.
         renderOpts.wrap = entry.state.config.globals.autoWrap ?? DEFAULT_WRAP;
+        // [config-only] globals.padding, same shape as autoWrap: the config
+        // global over the base floor is the whole resolution — the ONE home
+        // of the value every cell builder (and the picker's pagination
+        // reserve) derives from. [LAW:one-source-of-truth]
+        renderOpts.padding =
+          entry.state.config.globals.padding ?? DEFAULT_PADDING;
         // [LAW:single-enforcer] renderDsl internally calls
         // `registry.applyInput(payload)` as its first step (see step 1 in
         // src/dsl/render.ts). The daemon must not pre-apply — doing so
@@ -1064,6 +1071,7 @@ const RENDER_OPTS_BASE = {
   style: "powerline" as const,
   colorCompatibility: "truecolor" as const,
   wrap: DEFAULT_WRAP,
+  padding: DEFAULT_PADDING,
 };
 const DEBUG_RENDER_OPTS: BuildLineOptions = {
   ...RENDER_OPTS_BASE,

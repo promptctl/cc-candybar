@@ -8,6 +8,7 @@ import { STRIP_STYLES } from "../../themes/policy.js";
 import {
   optionalBooleanSpec,
   optionalEnumSpec,
+  optionalIntSpec,
   optionalStringSpec,
   paletteSpec,
   record,
@@ -31,6 +32,11 @@ const GLOBALS_SCHEMA: RecordSchema<Globals> = {
     // validates by membership and emits a JSON-Schema `enum`.
     style: optionalEnumSpec(STRIP_STYLES),
     autoWrap: optionalBooleanSpec(),
+    // Intra-cell spaces per side. Bounded above so a config value can never
+    // drive an unbounded `" ".repeat` allocation in the daemon
+    // [LAW:no-silent-failure] — an absurd value is a loud load error, not a
+    // silently-huge render.
+    padding: optionalIntSpec({ min: 0, max: 16 }),
   },
 };
 

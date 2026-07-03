@@ -30,7 +30,7 @@ const CHEVRON = "\uE0B0";
 // joiner walk's output — no width-driven wrap to perturb it.
 const OPTS = {
   style: "powerline" as const,
-  colorCompatibility: "truecolor" as const, wrap: true,
+  colorCompatibility: "truecolor" as const, wrap: true, padding: 0,
   width: Number.POSITIVE_INFINITY,
 };
 

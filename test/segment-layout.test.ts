@@ -29,6 +29,7 @@ function texts(cells: readonly RichText[]): string[] {
 const autoOptions = {
   width: "auto" as const,
   justify: "left" as const,
+  padding: 0,
   truncate: "right" as const,
 };
 
@@ -93,6 +94,37 @@ describe("auto width — collapse to one cell, no width constraint", () => {
 });
 
 // ────────────────────────────────────────────────────────────────────────────
+// 2b. Padding — brandon-display-dam.2: intra-cell spaces from globals.padding
+// ────────────────────────────────────────────────────────────────────────────
+
+describe("padding — synthesized inside the collapsed cell, before sizing", () => {
+  test("pads the collapsed cell on both sides", () => {
+    const result = applySegmentLayout([cell("hi")], {
+      ...autoOptions,
+      padding: 2,
+    });
+    expect(texts(result)).toEqual(["  hi  "]);
+  });
+
+  test("padding sits INSIDE a fixed width (pad first, then size)", () => {
+    const result = applySegmentLayout([cell("hi")], {
+      width: 8,
+      justify: "left",
+      truncate: "right",
+      padding: 1,
+    });
+    expect(texts(result)).toEqual([" hi     "]);
+    expect(totalWidth(result)).toBe(8);
+  });
+
+  test("empty input stays empty regardless of padding (no phantom pill)", () => {
+    expect(
+      applySegmentLayout([], { ...autoOptions, padding: 2 }),
+    ).toHaveLength(0);
+  });
+});
+
+// ────────────────────────────────────────────────────────────────────────────
 // 3. Fixed width — exact fit
 // ────────────────────────────────────────────────────────────────────────────
 
@@ -101,6 +133,7 @@ describe("fixed width — exact fit", () => {
     const result = applySegmentLayout([cell("hello")], {
       width: 5,
       justify: "left",
+      padding: 0,
       truncate: "right",
     });
     expect(totalWidth(result)).toBe(5);
@@ -117,6 +150,7 @@ describe("justify — left", () => {
     const result = applySegmentLayout([cell("hi")], {
       width: 5,
       justify: "left",
+      padding: 0,
       truncate: "right",
     });
     expect(totalWidth(result)).toBe(5);
@@ -129,6 +163,7 @@ describe("justify — right", () => {
     const result = applySegmentLayout([cell("hi")], {
       width: 5,
       justify: "right",
+      padding: 0,
       truncate: "right",
     });
     expect(totalWidth(result)).toBe(5);
@@ -141,6 +176,7 @@ describe("justify — center", () => {
     const result = applySegmentLayout([cell("hi")], {
       width: 6,
       justify: "center",
+      padding: 0,
       truncate: "right",
     });
     expect(totalWidth(result)).toBe(6);
@@ -151,6 +187,7 @@ describe("justify — center", () => {
     const result = applySegmentLayout([cell("hi")], {
       width: 5,
       justify: "center",
+      padding: 0,
       truncate: "right",
     });
     expect(totalWidth(result)).toBe(5);
@@ -167,6 +204,7 @@ describe("truncate — right", () => {
     const result = applySegmentLayout([cell("hello world")], {
       width: 6,
       justify: "left",
+      padding: 0,
       truncate: "right",
     });
     expect(totalWidth(result)).toBe(6);
@@ -179,6 +217,7 @@ describe("truncate — left", () => {
     const result = applySegmentLayout([cell("hello world")], {
       width: 6,
       justify: "left",
+      padding: 0,
       truncate: "left",
     });
     expect(totalWidth(result)).toBe(6);
@@ -191,6 +230,7 @@ describe("truncate — middle", () => {
     const result = applySegmentLayout([cell("hello world!")], {
       width: 6,
       justify: "left",
+      padding: 0,
       truncate: "middle",
     });
     expect(totalWidth(result)).toBe(6);
@@ -208,6 +248,7 @@ describe("multi-cell truncation", () => {
     const result = applySegmentLayout(cells, {
       width: 8,
       justify: "left",
+      padding: 0,
       truncate: "right",
     });
     expect(result).toHaveLength(1);
@@ -225,6 +266,7 @@ describe("custom truncate marker", () => {
     const result = applySegmentLayout([cell("hello world")], {
       width: 7,
       justify: "left",
+      padding: 0,
       truncate: "right",
       truncateMarker: ">>",
     });
@@ -242,6 +284,7 @@ describe("baseStyle on the merged cell", () => {
     const result = applySegmentLayout([cell("hi", baseStyle)], {
       width: 5,
       justify: "left",
+      padding: 0,
       truncate: "right",
       baseStyle,
     });
@@ -263,6 +306,7 @@ describe("baseStyle on the merged cell", () => {
     const result = applySegmentLayout([cell("hello world", baseStyle)], {
       width: 6,
       justify: "left",
+      padding: 0,
       truncate: "right",
       baseStyle,
     });
@@ -295,6 +339,7 @@ describe("truncation preserves per-character styling through the cut", () => {
     const result = applySegmentLayout([cell], {
       width: 6,
       justify: "left",
+      padding: 0,
       truncate: "right",
     });
     expect(result[0]!.plain).toBe("hello…");
@@ -311,6 +356,7 @@ describe("truncation preserves per-character styling through the cut", () => {
     const result = applySegmentLayout([cell], {
       width: 6,
       justify: "left",
+      padding: 0,
       truncate: "left",
     });
     expect(result[0]!.plain).toBe("…world");
