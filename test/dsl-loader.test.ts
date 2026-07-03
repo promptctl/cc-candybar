@@ -229,6 +229,38 @@ describe("loadDslConfig — globals", () => {
       message: "globals.charset must be one of: unicode, ascii",
     });
   });
+
+  test("colorCompatibility accepts each closed-enum member", () => {
+    for (const depth of ["truecolor", "256", "ansi", "none"] as const) {
+      const cfg = parseAndValidate(
+        FILE,
+        `{ globals: { colorCompatibility: "${depth}" } }`,
+      );
+      expect(cfg.globals.colorCompatibility).toBe(depth);
+    }
+  });
+
+  test("a colorCompatibility outside the enum is rejected", () => {
+    expectIssue(`{ globals: { colorCompatibility: "16m" } }`, {
+      path: "globals.colorCompatibility",
+      message:
+        "globals.colorCompatibility must be one of: truecolor, 256, ansi, none",
+    });
+  });
+
+  // brandon-display-dam.4: "auto" was the LEGACY display.colorCompatibility
+  // default, so migrating configs will carry it. It gets a pointed rejection
+  // explaining WHY (daemon env ≠ client terminal), not the generic enum list.
+  test('the legacy "auto" is rejected with a migration pointer', () => {
+    expectIssue(`{ globals: { colorCompatibility: "auto" } }`, {
+      path: "globals.colorCompatibility",
+      message: '"auto" is not supported',
+    });
+    expectIssue(`{ globals: { colorCompatibility: "auto" } }`, {
+      path: "globals.colorCompatibility",
+      message: "not your terminal's",
+    });
+  });
 });
 
 // ─── Variable kinds ──────────────────────────────────────────────────────────

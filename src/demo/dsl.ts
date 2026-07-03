@@ -33,6 +33,7 @@ import { effectiveThemeName, resolverForThemeName } from "../themes/index.js";
 import { registerDslConfig, renderDsl } from "../dsl/render.js";
 import {
   DEFAULT_CHARSET,
+  DEFAULT_COLOR_COMPATIBILITY,
   DEFAULT_PADDING,
   DEFAULT_TERMINAL_WIDTH,
   DEFAULT_WRAP,
@@ -108,7 +109,10 @@ try {
       basePalette,
       {
         style: "powerline",
-        colorCompatibility: "truecolor",
+        // Same resolution the daemon applies: the config global over the
+        // truecolor default floor.
+        colorCompatibility:
+          config.globals.colorCompatibility ?? DEFAULT_COLOR_COMPATIBILITY,
         // [LAW:one-source-of-truth] Demo applies the same Claude-Code-UI
         // reserve the daemon does so demo output matches the bytes a real
         // statusline would emit at the same terminal width.
