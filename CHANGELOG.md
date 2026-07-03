@@ -1,3 +1,10 @@
+# [1.10.0](https://github.com/promptctl/cc-candybar/compare/v1.9.0...v1.10.0) (2026-07-03)
+
+
+### Features
+
+* **config:** restore globals.padding — structural intra-cell segment padding (brandon-display-dam.2) ([#138](https://github.com/promptctl/cc-candybar/issues/138)) ([042c655](https://github.com/promptctl/cc-candybar/commit/042c655708be12250638ce9c7d285d4addba6632))
+
 # [1.9.0](https://github.com/promptctl/cc-candybar/compare/v1.8.4...v1.9.0) (2026-07-03)
 
 
