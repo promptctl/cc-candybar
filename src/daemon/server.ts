@@ -46,10 +46,12 @@ import {
 } from "../themes/index.js";
 import {
   renderStripCells,
+  DEFAULT_CHARSET,
   DEFAULT_PADDING,
   DEFAULT_TERMINAL_WIDTH,
   DEFAULT_WRAP,
   type BuildLineOptions,
+  type Charset,
 } from "../render/strip.js";
 import { applyClaudeCodeReserve } from "../utils/terminal-width.js";
 import type { RichText } from "@promptctl/rich-js";
@@ -780,6 +782,12 @@ async function handleRequest(req: Request): Promise<HandledRequest> {
         // reserve) derives from. [LAW:one-source-of-truth]
         renderOpts.padding =
           entry.state.config.globals.padding ?? DEFAULT_PADDING;
+        // [config-only] globals.charset, same shape as autoWrap/padding: the
+        // config global over the base floor is the whole resolution — the ONE
+        // home of the glyph-vocabulary choice pickJoiner derives from.
+        // [LAW:one-source-of-truth]
+        renderOpts.charset =
+          entry.state.config.globals.charset ?? DEFAULT_CHARSET;
         // [LAW:single-enforcer] renderDsl internally calls
         // `registry.applyInput(payload)` as its first step (see step 1 in
         // src/dsl/render.ts). The daemon must not pre-apply — doing so
@@ -884,7 +892,10 @@ async function handleRequest(req: Request): Promise<HandledRequest> {
             compiled: dbgEntry.compiled,
             lastRenderBySegment:
               req.what === "segments"
-                ? serializeSegmentCells(dbgEntry.lastRenderCellsBySegment)
+                ? serializeSegmentCells(
+                    dbgEntry.lastRenderCellsBySegment,
+                    dbgEntry.config.globals.charset ?? DEFAULT_CHARSET,
+                  )
                 : EMPTY_RENDER_MAP,
           };
     return stay({ ok: true, debug: buildDebugSnapshot(req.what, dbgState) });
@@ -1072,6 +1083,7 @@ const RENDER_OPTS_BASE = {
   colorCompatibility: "truecolor" as const,
   wrap: DEFAULT_WRAP,
   padding: DEFAULT_PADDING,
+  charset: DEFAULT_CHARSET,
 };
 const DEBUG_RENDER_OPTS: BuildLineOptions = {
   ...RENDER_OPTS_BASE,
@@ -1083,12 +1095,22 @@ const DEBUG_RENDER_OPTS: BuildLineOptions = {
 // the DaemonDslState type requires the field.
 const EMPTY_RENDER_MAP = new Map<string, string>();
 
+// [LAW:one-source-of-truth] The joiner glyph vocabulary is a serialization-time
+// choice, and charset is config-only (no SessionState half) — so the faithful
+// value is fully derivable from the sampled entry's config, unlike style, whose
+// live session-over-config resolution needs a session a debug request doesn't
+// carry. The caller threads the entry-resolved charset; this serializer never
+// re-defaults it.
 function serializeSegmentCells(
   cells: ReadonlyMap<string, readonly RichText[]>,
+  charset: Charset,
 ): Map<string, string> {
   const out = new Map<string, string>();
   for (const [name, segCells] of cells) {
-    out.set(name, renderStripCells(segCells, DEBUG_RENDER_OPTS));
+    out.set(
+      name,
+      renderStripCells(segCells, { ...DEBUG_RENDER_OPTS, charset }),
+    );
   }
   return out;
 }

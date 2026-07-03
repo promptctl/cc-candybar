@@ -96,7 +96,7 @@ describe("OSC-8 closure (render-bugs-pdu.1)", () => {
     test(`every link is closed and output never ends mid-link (width=${width})`, () => {
       const out = render(TOOLBAR, {
         style: "powerline",
-        colorCompatibility: "truecolor", wrap: true, padding: 0,
+        colorCompatibility: "truecolor", wrap: true, padding: 0, charset: "unicode" as const,
         width,
       });
       const { opens, closes, endsLinked } = osc8Walk(out);
@@ -130,7 +130,7 @@ describe("OSC-8 closure (render-bugs-pdu.1)", () => {
     }`;
     const out = render(src, {
       style: "powerline",
-      colorCompatibility: "truecolor", wrap: true, padding: 0,
+      colorCompatibility: "truecolor", wrap: true, padding: 0, charset: "unicode" as const,
       width: Number.POSITIVE_INFINITY,
     });
     const { opens, closes, endsLinked } = osc8Walk(out);

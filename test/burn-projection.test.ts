@@ -187,7 +187,7 @@ function renderBurnrate(payload: Record<string, unknown>): string {
     );
     return renderDsl(cfg, compiled, store, registry, payload, bp, {
       style: "powerline",
-      colorCompatibility: "none", wrap: true, padding: 0,
+      colorCompatibility: "none", wrap: true, padding: 0, charset: "unicode" as const,
       width: Number.POSITIVE_INFINITY,
     });
   } finally {
