@@ -13,7 +13,7 @@
 import { readFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { homedir } from "node:os";
-import { basename } from "node:path";
+import { basename, sep } from "node:path";
 
 // --- effects at the edges -------------------------------------------------
 
@@ -45,11 +45,14 @@ function git(cwd, args) {
 function gitInfo(cwd) {
   const root = git(cwd, ["rev-parse", "--show-toplevel"]);
   if (!root) return null; // not inside a repo — absent, no segment
+  // stashed: number of stashes, or null when the lookup itself failed —
+  // "no stashes" and "couldn't check" are distinct, neither fabricates a 0.
+  const stashOut = git(cwd, ["stash", "list"]);
   return {
     name: basename(root),
     sha: git(cwd, ["rev-parse", "--short", "HEAD"]) ?? "",
     branch: git(cwd, ["branch", "--show-current"]) || "detached",
-    stashed: (git(cwd, ["stash", "list"]) ?? "").split("\n").filter(Boolean)
+    stashed: stashOut === null ? null : stashOut.split("\n").filter(Boolean)
       .length,
   };
 }
@@ -68,12 +71,16 @@ function tokens(n) {
 function dir(p) {
   if (!p) return "";
   const home = homedir();
-  return p.startsWith(home) ? `~${p.slice(home.length)}` : p;
+  if (p === home) return "~";
+  // Boundary check: `/home/bob2` must not become `~2` under `$HOME=/home/bob`.
+  if (p.startsWith(home + sep)) return `~${p.slice(home.length)}`;
+  return p;
 }
 
 function gitSegment(g) {
   if (!g) return "";
-  const stash = g.stashed > 0 ? ` (${g.stashed} stashed)` : "";
+  // null (lookup failed) and 0 (none) both render no suffix.
+  const stash = g.stashed ? ` (${g.stashed} stashed)` : "";
   return c("32", `(git) ${g.name} ${g.sha} ⎇ ${g.branch}${stash}`);
 }
 
@@ -109,8 +116,7 @@ function contextTokens(cw) {
   return { session, context };
 }
 
-function render(data, g) {
-  const cwd = data.workspace?.current_dir ?? data.cwd ?? "";
+function render(data, cwd, g) {
   const { session, context } = contextTokens(data.context_window);
   return [
     c("34", dir(cwd)),
@@ -126,5 +132,8 @@ function render(data, g) {
 // --- wiring ---------------------------------------------------------------
 
 const data = readPayload();
+// [LAW:one-source-of-truth] one cwd, derived once, feeds both the rendered
+// directory segment and the git lookup — they can never disagree, even when
+// the payload is empty/malformed (both then use process.cwd()).
 const cwd = data.workspace?.current_dir ?? data.cwd ?? process.cwd();
-process.stdout.write(render(data, gitInfo(cwd)) + "\n");
+process.stdout.write(render(data, cwd, gitInfo(cwd)) + "\n");
