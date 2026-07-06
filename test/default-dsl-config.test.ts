@@ -512,7 +512,13 @@ describe("DEFAULT_DSL_CONFIG", () => {
       const config = validateConfig(merged, "<merged>", SERIALIZED);
       const sessionOnly = { ...config, root: oneSegmentRoot("session") };
       const store = new VariableStore();
-      const registry = new SourceRegistry(store);
+      // The merged bundled default declares `activeStyle`/`stylePage` as state
+      // vars; SessionState is required to declare them, exactly as the daemon
+      // supplies (matching the other full-default render helpers above). Without
+      // it those two vars silently fail to declare into loadWarnings — harmless
+      // for the session segment here, but the fixture should exercise the
+      // genuinely-complete default config, not a partially-registered one.
+      const registry = new SourceRegistry(store, "", undefined, new SessionState());
       try {
         const compiled = registerDslConfig(sessionOnly, registry, {
           cwd: process.cwd(),
