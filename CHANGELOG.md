@@ -1,3 +1,10 @@
+# [1.13.0](https://github.com/promptctl/cc-candybar/compare/v1.12.0...v1.13.0) (2026-07-06)
+
+
+### Features
+
+* standalone candybar-lite statusline script ([#142](https://github.com/promptctl/cc-candybar/issues/142)) ([8b1e7f2](https://github.com/promptctl/cc-candybar/commit/8b1e7f2e3572080acf92ab0bda389968be72d7c9))
+
 # [1.12.0](https://github.com/promptctl/cc-candybar/compare/v1.11.0...v1.12.0) (2026-07-03)
 
 
