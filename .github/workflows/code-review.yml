@@ -1,4 +1,4 @@
-name: AI Code Review with Z.ai
+name: AI Code Review
 
 on:
   pull_request:
@@ -15,12 +15,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout pull request
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           ref: ${{ github.event.pull_request.head.sha }}
 
       - name: Code Review
-        uses: brandon-fryslie/zai-coding-agent-review@v1
+        uses: brandon-fryslie/coding-agent-review@v1
         with:
-          PROVIDER: codex
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
