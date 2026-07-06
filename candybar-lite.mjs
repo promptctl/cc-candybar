@@ -109,7 +109,8 @@ function sessionSegment(cost, ctx) {
 
 function contextSegment(ctx) {
   if (!ctx) return "";
-  const pct = Math.round((ctx.used / ctx.max) * 100);
+  // Cap at 100 — usage over the window is still just "full", not 105%.
+  const pct = Math.min(100, Math.round((ctx.used / ctx.max) * 100));
   return c("36", `ctx ${tokens(ctx.used)}/${tokens(ctx.max)} (${pct}%)`);
 }
 
