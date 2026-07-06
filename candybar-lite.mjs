@@ -17,13 +17,26 @@ import { basename, sep } from "node:path";
 
 // --- effects at the edges -------------------------------------------------
 
-// The whole hook payload, or {} if stdin was empty / unparseable.
+// The whole hook payload. Empty stdin is a legitimate "no data" → {}. But a
+// non-empty, unparseable payload is a real upstream break — surface it loudly
+// rather than render a plausible bar from the launcher dir.
+// [LAW:no-silent-failure]
 function readPayload() {
+  let raw = "";
   try {
-    const raw = readFileSync(0, "utf8").trim();
-    return raw ? JSON.parse(raw) : {};
+    raw = readFileSync(0, "utf8").trim();
   } catch {
-    return {};
+    return {}; // no stdin at all — nothing to render from, legitimately empty
+  }
+  if (!raw) return {};
+  try {
+    return JSON.parse(raw);
+  } catch (e) {
+    process.stdout.write(c("31", "⚠ candybar-lite: unparseable hook JSON") + "\n");
+    process.stderr.write(
+      `candybar-lite: ${e instanceof Error ? e.message : String(e)}\n`,
+    );
+    process.exit(1);
   }
 }
 
@@ -50,7 +63,8 @@ function gitInfo(cwd) {
   const stashOut = git(cwd, ["stash", "list"]);
   return {
     name: basename(root),
-    sha: git(cwd, ["rev-parse", "--short", "HEAD"]) ?? "",
+    // null in a repo with no commits (HEAD unresolvable) — omitted, not blank.
+    sha: git(cwd, ["rev-parse", "--short", "HEAD"]),
     branch: git(cwd, ["branch", "--show-current"]) || "detached",
     stashed: stashOut === null ? null : stashOut.split("\n").filter(Boolean)
       .length,
@@ -79,9 +93,11 @@ function dir(p) {
 
 function gitSegment(g) {
   if (!g) return "";
-  // null (lookup failed) and 0 (none) both render no suffix.
-  const stash = g.stashed ? ` (${g.stashed} stashed)` : "";
-  return c("32", `(git) ${g.name} ${g.sha} ⎇ ${g.branch}${stash}`);
+  // Build from non-empty parts: a null sha (no-commit repo) or null/0 stash
+  // count simply drop out — no blank gaps, no fabricated values.
+  const stash = g.stashed ? `(${g.stashed} stashed)` : "";
+  const parts = ["(git)", g.name, g.sha, "⎇", g.branch, stash].filter(Boolean);
+  return c("32", parts.join(" "));
 }
 
 function sessionSegment(cost, ctx) {
@@ -101,15 +117,19 @@ function contextSegment(ctx) {
 function contextTokens(cw) {
   if (!cw) return { session: null, context: null };
   const u = cw.current_usage;
-  const context = u
-    ? {
-        used:
-          (u.input_tokens || 0) +
-          (u.cache_creation_input_tokens || 0) +
-          (u.cache_read_input_tokens || 0),
-        max: cw.context_window_size,
-      }
-    : null;
+  const max = cw.context_window_size;
+  // Require both live usage and a valid window size — a partial/malformed
+  // payload drops the segment rather than printing `ctx 10/undefined (NaN%)`.
+  const context =
+    u && typeof max === "number" && max > 0
+      ? {
+          used:
+            (u.input_tokens || 0) +
+            (u.cache_creation_input_tokens || 0) +
+            (u.cache_read_input_tokens || 0),
+          max,
+        }
+      : null;
   const session = {
     total: (cw.total_input_tokens || 0) + (cw.total_output_tokens || 0),
   };
