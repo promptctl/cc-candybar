@@ -1,3 +1,10 @@
+# [1.15.0](https://github.com/promptctl/cc-candybar/compare/v1.14.0...v1.15.0) (2026-07-07)
+
+
+### Features
+
+* **directory:** fish-style abbreviated paths as the default rendering ([#143](https://github.com/promptctl/cc-candybar/issues/143)) ([3869218](https://github.com/promptctl/cc-candybar/commit/3869218a98871906c49159e7da12247c4f373ba5))
+
 # [1.14.0](https://github.com/promptctl/cc-candybar/compare/v1.13.0...v1.14.0) (2026-07-07)
 
 
