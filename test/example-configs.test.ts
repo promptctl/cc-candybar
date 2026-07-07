@@ -122,26 +122,34 @@ function renderExample(file: string): string {
     const basePalette = resolverForThemeName(
       effectiveThemeName(null, config.globals.palette),
     );
+    // [LAW:one-source-of-truth] Resolve the render options from the merged
+    // config's globals with the DEFAULT_* floor as fallback — the exact
+    // resolution the daemon (src/daemon/server.ts) and src/demo/dsl.ts apply.
+    // Hardcoding DEFAULT_* would render legacy-parity's globals.autoWrap:false
+    // (and padding/charset) as their defaults, not as the config declares them.
     return renderDsl(config, compiled, store, registry, payload, basePalette, {
       style: "powerline",
       width: 200,
-      colorCompatibility: DEFAULT_COLOR_COMPATIBILITY,
-      wrap: DEFAULT_WRAP,
-      padding: DEFAULT_PADDING,
-      charset: DEFAULT_CHARSET,
+      colorCompatibility:
+        config.globals.colorCompatibility ?? DEFAULT_COLOR_COMPATIBILITY,
+      wrap: config.globals.autoWrap ?? DEFAULT_WRAP,
+      padding: config.globals.padding ?? DEFAULT_PADDING,
+      charset: config.globals.charset ?? DEFAULT_CHARSET,
     });
   } finally {
     registry.dispose();
   }
 }
 
-// ANSI SGR + OSC-8 hyperlink stripped, leaving the visible glyph text.
+// ANSI SGR + OSC-8 hyperlink stripped, leaving the visible glyph text. The
+// OSC-8 introducer is terminated by EITHER ST (ESC \) or BEL (\x07) per spec —
+// match both so the helper strips a valid sequence regardless of terminator.
 function visible(line: string): string {
   return line
     // eslint-disable-next-line no-control-regex
     .replace(/\x1b\[[0-9;]*m/g, "")
     // eslint-disable-next-line no-control-regex
-    .replace(/\x1b\]8;;[^\x1b]*\x1b\\/g, "");
+    .replace(/\x1b\]8;;[^\x07\x1b]*(?:\x1b\\|\x07)/g, "");
 }
 
 describe("shipped example configs (examples/*.json5)", () => {
