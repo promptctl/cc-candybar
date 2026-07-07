@@ -1,3 +1,10 @@
+# [1.16.0](https://github.com/promptctl/cc-candybar/compare/v1.15.0...v1.16.0) (2026-07-07)
+
+
+### Features
+
+* **config:** legacy-parity example config (brandon-config-aoi) ([#144](https://github.com/promptctl/cc-candybar/issues/144)) ([0698e35](https://github.com/promptctl/cc-candybar/commit/0698e357d961d95bb38ff6a4301137854e7c50db))
+
 # [1.15.0](https://github.com/promptctl/cc-candybar/compare/v1.14.0...v1.15.0) (2026-07-07)
 
 
