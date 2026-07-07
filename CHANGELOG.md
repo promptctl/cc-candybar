@@ -1,3 +1,10 @@
+# [1.14.0](https://github.com/promptctl/cc-candybar/compare/v1.13.0...v1.14.0) (2026-07-07)
+
+
+### Features
+
+* **config:** restore session-level budget warning (brandon-budget-kry) ([#141](https://github.com/promptctl/cc-candybar/issues/141)) ([5895f5b](https://github.com/promptctl/cc-candybar/commit/5895f5bd2af27628840ba6e9f14554d3b818465c))
+
 # [1.13.0](https://github.com/promptctl/cc-candybar/compare/v1.12.0...v1.13.0) (2026-07-06)
 
 
