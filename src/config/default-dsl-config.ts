@@ -318,6 +318,15 @@ export const DEFAULT_DSL_CONFIG = {
       type: "number",
       default: 0,
     },
+    // Budget knobs — pure config constants, user overrides in their file.
+    // [LAW:dataflow-not-control-flow] amount defaults 0, the budgetStatus
+    // helper's non-displayable value, so with no user override the session
+    // segment renders byte-identically to its pre-budget form through the
+    // same unconditional template — opt-in is a value, not a config mode.
+    // Matches the legacy shipped default (budget.session had a threshold but
+    // no amount ⇒ suffix off until the user sets an amount).
+    "session.budget.amount": { kind: "literal", value: 0 },
+    "session.budget.warningThreshold": { kind: "literal", value: 80 },
 
     // Today — daemon folds today's cross-session total from the SessionUsageStore.
     "today.cost": {
@@ -609,7 +618,8 @@ export const DEFAULT_DSL_CONFIG = {
     },
     session: {
       template:
-        '§ {{ template "formatCost" .session.cost }} ({{ template "formatTokens" .session.tokens }})',
+        '§ {{ template "formatCost" .session.cost }} ({{ template "formatTokens" .session.tokens }})' +
+        '{{ template "budgetStatus" (dict "cost" .session.cost "budget" .session.budget.amount "warn" .session.budget.warningThreshold) }}',
       bg: "surface",
       fg: "foreground",
     },
