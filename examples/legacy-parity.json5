@@ -1,0 +1,239 @@
+// cc-candybar: legacy-parity.json5
+//
+// THE MIGRATION-COMPLETENESS PROOF (brandon-config-aoi).
+//
+// This config faithfully reproduces the FULL pre-DSL ("legacy") cc-candybar
+// bar — the maintainer's busy five-line layout and every segment/option in it —
+// expressed entirely through the current DSL. It is the concrete answer to the
+// question "did the legacy→DSL migration actually close every gap?"
+// [LAW:verifiable-goals] The answer is a config that renders the legacy bar's
+// full information set on the real installed daemon.
+//
+// Unlike showcase.json5 (the curated daily-driver that deliberately trims the
+// legacy set down to a clean two-row bar), this file is DELIBERATELY DENSE: it
+// mirrors the legacy layout row-for-row so parity is auditable at a glance.
+//
+// Try it (interactive — needs a running daemon, not the static `pnpm demo`):
+//   cp examples/legacy-parity.json5 ~/.config/cc-candybar/config.json5
+//
+// Everything merges on top of DEFAULT_DSL_CONFIG, so only what differs from the
+// bundled default is declared. The bundled default already ships every legacy
+// segment as a DSL declaration — most of the reproduction is the `root` layout
+// arranging those existing segments; the deltas below are the few things the
+// default doesn't carry (the theme picker) or carries differently (two template
+// overrides, the today budget amount, the display globals).
+//
+// ─── REPRODUCE-OR-DROP ACCOUNTING ──────────────────────────────────────────
+// [LAW:no-silent-failure] Every legacy element is reproduced OR dropped with a
+// stated reason — never silently omitted. The legacy source is the commented
+// block in ~/.config/cc-candybar/config.json5.
+//
+// display block:
+//   padding: 1            → globals.padding (== default; declared for parity)
+//   charset: "unicode"    → globals.charset (== default; declared for parity)
+//   colorCompatibility:"auto"
+//                         → DROPPED → "truecolor". The daemon is DETACHED, so
+//                           env-based "auto" detection would read the daemon's
+//                           terminal, not the client's. "auto" is deliberately
+//                           unrepresentable in the DSL (the loader rejects it);
+//                           true client-aware auto needs a wire capability hint.
+//   autoWrap: false       → globals.autoWrap: false (reproduced)
+//
+// Line 1 — directory[fish] · model · session[both] · today[both]:
+//   directory[fish]       → `directory` (fish abbreviation is now the DEFAULT)
+//   model                 → `model`
+//   session[both,
+//     costSource:calculated]
+//                         → `session` (§ cost (tokens) == "both"). costSource
+//                           DROPPED — cost comes from native hook fields now;
+//                           there is no client-side calculated/native choice.
+//   today[both]           → `today` (☉ cost (tokens))
+//
+// Line 2 — block · version · metrics[all] · context · tmux[off]:
+//   block[type:weighted,
+//     burnType:tokens]    → `block`. weighted/burnType DROPPED — block now reads
+//                           native rate_limits.five_hour utilization %; the
+//                           token-weighted burn math is obsolete.
+//   version               → `version`
+//   metrics[all 6 flags]  → `metrics` (default template shows all six:
+//                           response Δ/⧖, duration ⧗, messages ◆, +/- lines)
+//   context               → `context`
+//   tmux[enabled:false]   → OMITTED from the layout (reproduces "off"). The
+//                           segment exists in the default; its own `when` gate
+//                           would hide it outside tmux regardless.
+//
+// Line 3 — git[worktree/upstream/time]:
+//   git[showWorkingTree,
+//     showUpstream,
+//     showTimeSinceCommit]→ `git` OVERRIDDEN below to append the ◷ time-since-
+//                           commit affordance (the default `git` shows working-
+//                           tree + upstream but not time). This demonstrates the
+//                           merge-by-name TEMPLATE-OVERRIDE seam.
+//
+// Line 4 — directory(plain) · gitaculous[sha/wt/upstream/stash/operation]:
+//   directory (plain)     → `directoryFull` (a NEW segment): the default DIR
+//                           template with the fish `abbreviatePath` wrapper
+//                           dropped, so the full/relative path shows. Two
+//                           `directory` renderings can't share one name, so the
+//                           unabbreviated variant is its own segment.
+//   gitaculous[sha,wt,
+//     upstream,stash,
+//     operation;
+//     timeSince:false,
+//     tag:false]          → `gitaculous`. The default matches (sha/wt/upstream/
+//                           stash/operation, no tag). showTimeSinceCommit:false
+//                           is a DOCUMENTED MINOR DIVERGENCE: the DSL gitaculous
+//                           shows ◷ only when a commit is recent; suppressing it
+//                           would mean forking the whole 13-line template to drop
+//                           one cosmetic clause, and Line 3's git already carries
+//                           time-since. Kept native rather than duplicate-and-fork.
+//
+// Line 5 — model · context · block · weekly · sessionId[8,click] · tray[toggle]:
+//   model/context/block   → repeated segment refs (the compiled tree mirrors
+//                           root 1:1, so a name can appear at multiple positions)
+//   weekly[text]          → `weekly`
+//   sessionId[length:8,
+//     copy sessionId,
+//     open-vscode
+//       transcriptPath 📄,
+//     open-vscode
+//       projectDir 📂]     → `sessionId` OVERRIDDEN below to add three clickable
+//                           regions bound to the bundled copySession / open-
+//                           Transcript / openProject actions (open* route through
+//                           the open-vscode verb — `open -a "Visual Studio Code"`).
+//   tray[toolbar-toggle]  → the `tray` GROUP wrapping the bundled `toolbar`
+//                           (quick actions). The group's synthesized ▸/▾ toggle
+//                           is the modern toolbar-toggle; clicking it reveals the
+//                           quick-action toolbar below.
+//
+// budget block:
+//   session.warningThreshold:80
+//                         → == default (session.budget.warningThreshold); not
+//                           redeclared.
+//   today{amount:5.0,
+//     warningThreshold:80}→ today.budget.amount OVERRIDDEN to 5 (default is 50);
+//                           threshold == default.
+//   block{amount:20000000,
+//     type:tokens,
+//     warningThreshold:80}→ token AMOUNT/type DROPPED — block is native % now;
+//                           threshold == default (block.budget.warningThreshold).
+//
+// panel block (the pop-up control panel):
+//   theme-cycle 🎨 ${theme}→ the `trigger` theme control + `{{ menu }}` picker
+//                           (the "cycle" became a full paged picker).
+//   style-cycle 🖌 ${style}→ the bundled `styleControl` + its `{{ menu }}` picker.
+//
+// modelContextLimits.sonnet:200000
+//                         → DROPPED — context %/tokens come from native hook
+//                           fields (context.contextLeft); no client-side model→
+//                           limit table is needed.
+// ────────────────────────────────────────────────────────────────────────────
+{
+  globals: {
+    // [LAW:one-source-of-truth] Pin the config-default palette so the FIRST
+    // render (before any theme click) paints with the same name the trigger
+    // shows as active — effectiveThemeName falls back to globals.palette when
+    // SessionState holds no theme yet. Legacy declared no palette; the theme
+    // picker needs a starting theme, so palette and the `theme` var default are
+    // pinned to the same name.
+    palette: "catppuccin-mocha",
+    // Legacy display block, faithfully. colorCompatibility is intentionally
+    // absent — see the DROP note above ("auto" is unrepresentable; "truecolor"
+    // is the default).
+    padding: 1,
+    charset: "unicode",
+    autoWrap: false,
+  },
+
+  variables: {
+    // ── Theme picker (the legacy panel's theme-cycle, now a full picker) ─────
+    // kind:'state' reads the SAME 'theme' key the daemon reads to resolve the
+    // rendered basePalette, so the active mark and the bar's colors are one
+    // source of truth. Default pinned to globals.palette above.
+    theme: { kind: "state", key: "theme", default: "catppuccin-mocha" },
+    // The theme picker's page cursor (open/closed is the synthesized menus.* key
+    // the trigger's {{ menu }} owns — NOT this var). Default page 0; the
+    // disclosure resets it to 0 on every toggle.
+    themePage: { kind: "state", key: "theme-page", default: "0" },
+
+    // ── Budget (legacy today.amount = 5.0; default is 50) ────────────────────
+    "today.budget.amount": { kind: "literal", value: 5 },
+  },
+
+  actions: {
+    // ── Theme picker behaviors (decoupled by name from the trigger segment) ──
+    // applyTheme's option domain is the theme name list; the picker binds each
+    // option's value into this set. themePage is the picker's int page cursor.
+    applyTheme: { set: "theme", from: "themes" },
+    themePage: { set: "theme-page", int: true },
+  },
+
+  segments: {
+    // Line 3 git — the default GIT_TEMPLATE with the ◷ time-since-commit
+    // affordance appended (legacy showTimeSinceCommit:true). Inlined because the
+    // merge replaces the template string wholesale; this demonstrates the
+    // template-override migration seam. The body up to the status glyph is
+    // byte-for-byte the bundled default; only the trailing ` ◷ …` clause is new.
+    git: {
+      template: '{{ if ne .git.repoName "" }}{{ .git.repoName }} {{ end }}⎇ {{ .git.branch }}{{ if .git.sha }} ♯ {{ .git.sha }}{{ end }}{{ if or (gt .git.ahead 0) (gt .git.behind 0) }} {{ if gt .git.ahead 0 }}↑{{ .git.ahead }}{{ end }}{{ if gt .git.behind 0 }}↓{{ .git.behind }}{{ end }}{{ end }}{{ if or (gt .git.staged 0) (gt .git.unstaged 0) (gt .git.untracked 0) (gt .git.conflicts 0) }} ({{ printf "%s%s%s%s" (ternary (printf " +%v" .git.staged) "" (gt .git.staged 0)) (ternary (printf " ~%v" .git.unstaged) "" (gt .git.unstaged 0)) (ternary (printf " ?%v" .git.untracked) "" (gt .git.untracked 0)) (ternary (printf " !%v" .git.conflicts) "" (gt .git.conflicts 0)) | trim }}){{ end }}{{ if .git.upstream }} →{{ .git.upstream }}{{ end }}{{ if gt .git.stash 0 }} ⧇ {{ .git.stash }}{{ end }} {{ if eq .git.status "conflicts" }}⚠{{ else }}{{ if eq .git.status "dirty" }}●{{ else }}✓{{ end }}{{ end }}{{ if gt .git.timeSinceCommit 0 }} ◷ {{ template "formatTimeSince" .git.timeSinceCommit }}{{ end }}',
+      bg: "surface-active",
+      fg: "foreground",
+      when: '{{ ne .git.branch "" }}',
+    },
+
+    // Line 4 plain directory — the default DIR template with the fish
+    // `abbreviatePath` wrapper dropped (legacy line-4 directory was
+    // unabbreviated). Ends in the collapsed `$dir` (~-relative, else project-
+    // relative, else absolute) instead of `abbreviatePath $dir`.
+    directoryFull: {
+      template: '{{ $dir := .current_dir }}{{ if and (ne .home "") (or (eq .home .current_dir) (hasPrefix (printf "%s/" .home) .current_dir)) }}{{ $dir = printf "~%s" (trimPrefix .home .current_dir) }}{{ else }}{{ if or (eq .project_dir .current_dir) (hasPrefix (printf "%s/" .project_dir) .current_dir) }}{{ $dir = ternary (trimPrefix "/" (trimPrefix .project_dir .current_dir)) (basename .project_dir) (ne (trimPrefix "/" (trimPrefix .project_dir .current_dir)) "") }}{{ end }}{{ end }}{{ $dir }}',
+      bg: "surface",
+      fg: "foreground",
+    },
+
+    // Line 5 sessionId — the default ⌗id glyph plus the three legacy click
+    // affordances, bound BY NAME to the bundled copySession / openTranscript /
+    // openProject actions [LAW:locality-or-seam]. copy → pbcopy; open* →
+    // open-vscode (`open -a "Visual Studio Code" <bare path>`).
+    sessionId: {
+      template: '⌗{{ trunc 8 .session.id }} {{ action "copySession" "⎘" }} {{ action "openTranscript" "📄" }} {{ action "openProject" "📂" }}',
+      bg: "surface",
+      fg: "foreground",
+      when: '{{ ne .session.id "" }}',
+    },
+
+    // The legacy panel's theme-cycle, now a self-contained {{ menu }} disclosure.
+    // 🎨 name + a ▸/▾ toggle whose picker body drops full-width onto the line
+    // below when open (closeOnPick=false stay-open so themes can be tried in a
+    // row; paged=true slices into ←/→ pages at term width). No per-segment
+    // `palette:` override — that would pin a static theme and stop it following
+    // the session pick.
+    trigger: {
+      template: '🎨 {{ .theme }} {{ menu "applyTheme" "themePage" false true }}',
+      bg: "surface",
+      fg: "foreground",
+    },
+  },
+
+  // root REPLACES the default wholesale (Option A shape grammar). Five dense
+  // rows mirroring the legacy display.lines, plus the legacy panel controls.
+  root: { v: [
+    // Line 1 — directory · model · session · today
+    { h: ["directory", "model", "session", "today"] },
+    // Line 2 — block · version · metrics · context   (tmux: off → omitted)
+    { h: ["block", "version", "metrics", "context"] },
+    // Line 3 — git (compact, with ◷ time-since-commit)
+    { h: ["git"] },
+    // Line 4 — plain directory · gitaculous
+    { h: ["directoryFull", "gitaculous"] },
+    // Line 5 — model · context · block · weekly · sessionId(click) · tray(toggle)
+    { h: [
+      "model", "context", "block", "weekly", "sessionId",
+      { kind: "group", name: "tray", label: "actions", children: ["toolbar"] },
+    ] },
+    // The legacy `panel` control popup — theme picker + style picker. Each
+    // {{ menu }} is INDEPENDENT (no shared key): both can be open at once. An
+    // open picker drops its body onto the line directly below this row.
+    { h: ["trigger", "styleControl"] },
+  ] },
+}
