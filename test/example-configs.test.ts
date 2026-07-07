@@ -40,21 +40,109 @@ import {
 const examplesDir = path.join(__dirname, "..", "examples");
 const ALLOWED = new Set(listResolvablePaletteNames());
 
-// One faked Claude Code hook event — the same minimal shape the demo uses. The
-// `input` vars read out of it; absent data gates its segments off, which is a
-// valid render, not a failure.
+// One faked Claude Code hook event, shaped like the daemon's augmented payload
+// (see src/daemon/render-payload.ts) — the `input` vars read out of it by their
+// dotted `path`. [LAW:verifiable-goals] It is deliberately RICH (dirty git with
+// every worktree count, an upstream, a stash, a recent commit; home set; live
+// session/today/context/metrics/rate-limit data) so the gated segments actually
+// RENDER their content instead of gating off. A minimal payload would let a
+// field-name typo in the git/directory/metrics/budget branches slip through —
+// those branches only run when their data is present.
+const home = "/home/tester";
+const nowSec = Math.floor(Date.now() / 1000);
 const payload = {
   hook_event_name: "Status",
   session_id: "test0a1b-2c3d-4e5f-6a7b-8c9d0e1f2a3b",
-  cwd: process.cwd(),
+  version: "1.15.0",
+  home,
+  cwd: `${home}/code/cc-candybar/src`,
+  transcript_path: `${home}/.claude/projects/x/test.jsonl`,
   model: { id: "claude-opus-4-8", display_name: "Opus 4.8" },
-  workspace: { current_dir: process.cwd(), project_dir: process.cwd() },
+  workspace: {
+    current_dir: `${home}/code/cc-candybar/src`,
+    project_dir: `${home}/code/cc-candybar`,
+  },
+  git: {
+    repoName: "cc-candybar",
+    branch: "main",
+    sha: "abc1234",
+    ahead: 2,
+    behind: 1,
+    staged: 3,
+    unstaged: 2,
+    untracked: 1,
+    conflicts: 0,
+    upstream: "origin/main",
+    stash: 1,
+    status: "dirty",
+    operation: "rebase",
+    timeSinceCommit: 780,
+  },
+  session: { cost: 0.39, tokens: 241400 },
+  today: { cost: 12.5, tokens: 3_400_000 },
+  context: { totalTokens: 48487, contextLeft: 24 },
+  metrics: {
+    lastResponseTime: 8.2,
+    responseTime: 4.2,
+    sessionDuration: 930,
+    messageCount: 8,
+    linesAdded: 512,
+    linesRemoved: 88,
+  },
+  block: { nativeUtilization: 63, resetsAt: nowSec + 2 * 3600 },
+  weekly: { percentage: 21, resetsAt: nowSec + 5 * 86400 },
+  cache: { expiresAt: nowSec + 15 * 60 },
+  tmux: { session: "work" },
 };
 
 const exampleFiles = fs
   .readdirSync(examplesDir)
   .filter((f) => f.endsWith(".json5"))
   .sort();
+
+// The full production pipeline for one example file: parse → merge on the REAL
+// bundled default (examples declare only deltas and reference bundled segments)
+// → validate → register → render against the rich payload. Returns the rendered
+// line. register+render is the step that surfaces template parse errors in
+// inline overrides AND (with a rich payload) runtime field-access errors —
+// go-template-js throws MissingFieldError on a mistyped `.git.xxx` path.
+function renderExample(file: string): string {
+  const filePath = path.join(examplesDir, file);
+  const source = fs.readFileSync(filePath, "utf-8");
+  const raw = parseDslConfig(filePath, source, ALLOWED);
+  const merged = mergeWithDefault(raw, DEFAULT_DSL_CONFIG);
+  const config = validateConfig(merged, filePath, source, ALLOWED);
+
+  const store = new VariableStore();
+  const registry = new SourceRegistry(store, "", undefined, new SessionState());
+  try {
+    const compiled = registerDslConfig(config, registry, {
+      cwd: process.cwd(),
+    });
+    const basePalette = resolverForThemeName(
+      effectiveThemeName(null, config.globals.palette),
+    );
+    return renderDsl(config, compiled, store, registry, payload, basePalette, {
+      style: "powerline",
+      width: 200,
+      colorCompatibility: DEFAULT_COLOR_COMPATIBILITY,
+      wrap: DEFAULT_WRAP,
+      padding: DEFAULT_PADDING,
+      charset: DEFAULT_CHARSET,
+    });
+  } finally {
+    registry.dispose();
+  }
+}
+
+// ANSI SGR + OSC-8 hyperlink stripped, leaving the visible glyph text.
+function visible(line: string): string {
+  return line
+    // eslint-disable-next-line no-control-regex
+    .replace(/\x1b\[[0-9;]*m/g, "")
+    // eslint-disable-next-line no-control-regex
+    .replace(/\x1b\]8;;[^\x1b]*\x1b\\/g, "");
+}
 
 describe("shipped example configs (examples/*.json5)", () => {
   // Guard against the glob silently matching nothing (a moved directory would
@@ -73,52 +161,32 @@ describe("shipped example configs (examples/*.json5)", () => {
   test.each(exampleFiles)(
     "%s loads, validates, and renders on the production pipeline",
     (file) => {
-      const filePath = path.join(examplesDir, file);
-      const source = fs.readFileSync(filePath, "utf-8");
-
-      // parse → merge on the REAL bundled default (examples declare only deltas
-      // and reference bundled segments) → validate.
-      const raw = parseDslConfig(filePath, source, ALLOWED);
-      const merged = mergeWithDefault(raw, DEFAULT_DSL_CONFIG);
-      const config = validateConfig(merged, filePath, source, ALLOWED);
-
-      // register + render — the step that surfaces template parse errors in
-      // inline overrides (validateConfig alone does not compile templates).
-      const store = new VariableStore();
-      const registry = new SourceRegistry(
-        store,
-        "",
-        undefined,
-        new SessionState(),
-      );
-      try {
-        const compiled = registerDslConfig(config, registry, {
-          cwd: process.cwd(),
-        });
-        const basePalette = resolverForThemeName(
-          effectiveThemeName(null, config.globals.palette),
-        );
-        const line = renderDsl(
-          config,
-          compiled,
-          store,
-          registry,
-          payload,
-          basePalette,
-          {
-            style: "powerline",
-            width: 200,
-            colorCompatibility: DEFAULT_COLOR_COMPATIBILITY,
-            wrap: DEFAULT_WRAP,
-            padding: DEFAULT_PADDING,
-            charset: DEFAULT_CHARSET,
-          },
-        );
-        expect(typeof line).toBe("string");
-        expect(line.length).toBeGreaterThan(0);
-      } finally {
-        registry.dispose();
-      }
+      const line = renderExample(file);
+      expect(typeof line).toBe("string");
+      expect(line.length).toBeGreaterThan(0);
     },
   );
+
+  // [LAW:behavior-not-structure] The capstone parity config: assert the rich
+  // template branches actually render their content, not merely that render
+  // doesn't throw. This is the guard for the git-with-◷ override, both directory
+  // forms (fish-abbreviated + unabbreviated), and the metrics segment — the
+  // exact branches a minimal payload would gate off.
+  test("legacy-parity renders the full legacy information set", () => {
+    const out = visible(renderExample("legacy-parity.json5"));
+    // git (line 3) with the ◷ time-since-commit override → "13m" from 780s.
+    expect(out).toContain("⎇ main");
+    expect(out).toContain("◷ 13m");
+    // fish-abbreviated directory (line 1) AND the unabbreviated directoryFull
+    // (line 4) both derive from home — distinct forms prove both branches ran.
+    expect(out).toContain("~/c/c/src"); // fish: leaf full, ancestors to leading char
+    expect(out).toContain("~/code/cc-candybar/src"); // directoryFull: unabbreviated
+    // metrics segment (line 2) — all six flags render from the cost/transcript.
+    expect(out).toContain("◆ 8");
+    expect(out).toContain("+ 512");
+    // session/today cost + block/weekly quota + version.
+    expect(out).toContain("§ $0.39");
+    expect(out).toContain("v1.15.0");
+    expect(out).toContain("63%"); // block utilization
+  });
 });
