@@ -311,6 +311,7 @@ describe("ccCandybarFuncs registry", () => {
   test("registers exactly the expected names", () => {
     const funcs = ccCandybarFuncs();
     expect(Object.keys(funcs).sort()).toEqual([
+      "abbreviatePath",
       "basename",
       "bool",
       "dirname",
