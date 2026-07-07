@@ -509,7 +509,10 @@ describe("DEFAULT_DSL_CONFIG", () => {
         parseDslConfig("<user>", userSource ?? "{}"),
         DEFAULT_DSL_CONFIG,
       );
-      const config = validateConfig(merged, "<merged>", SERIALIZED);
+      // [FRAMING:representation] `source` is the text validation errors quote
+      // from — it must be the config actually being validated (`merged`), not
+      // the bundled default's serialization.
+      const config = validateConfig(merged, "<merged>", JSON.stringify(merged, null, 2));
       const sessionOnly = { ...config, root: oneSegmentRoot("session") };
       const store = new VariableStore();
       // The merged bundled default declares `activeStyle`/`stylePage` as state
