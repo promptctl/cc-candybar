@@ -296,25 +296,29 @@ describe("DEFAULT_DSL_CONFIG", () => {
       expect(visible).not.toContain("/Users/alice/code");
     });
 
-    test("subdir of project renders as project-relative path", () => {
+    test("subdir of project renders as project-relative path (fish-abbreviated)", () => {
+      // brandon-directory-781: the project-relative collapse still holds; the
+      // survivor is then fish-abbreviated (`src/foo` → `s/foo`), the leaf full.
       const visible = renderDirectoryText({
         home: "",
         project_dir: "/Users/alice/code/myproject",
         current_dir: "/Users/alice/code/myproject/src/foo",
       });
-      expect(visible).toContain("src/foo");
+      expect(visible).toContain("s/foo");
       expect(visible).not.toContain("/Users/alice");
     });
 
     test("hasPrefix boundary safety: /home/al is NOT a prefix of /home/alice", () => {
       // If hasPrefix were used naively, `/home/alice/work` would falsely
-      // match `/home/al` and try to render relative to it.
+      // match `/home/al` and try to render relative to it. The path falls
+      // through to absolute, then fish-abbreviates to `/h/a/work` (leaf full) —
+      // a relative match would have produced a different, non-slash-led string.
       const visible = renderDirectoryText({
         home: "",
         project_dir: "/home/al",
         current_dir: "/home/alice/work",
       });
-      expect(visible).toContain("/home/alice/work");
+      expect(visible).toContain("/h/a/work");
     });
 
     test("home === current_dir renders as just ~", () => {
