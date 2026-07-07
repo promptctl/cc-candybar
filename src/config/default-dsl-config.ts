@@ -51,12 +51,24 @@ import type { DslConfig } from "./dsl-types.js";
 // (project_dir), so the project root renders as `<repo-name>` instead of the
 // full absolute path. Same logic handles equal home & current_dir → just "~".
 const DIR_REL = 'trimPrefix "/" (trimPrefix .project_dir .current_dir)';
+// [LAW:decomposition] Two separable concerns: (1) COLLAPSE the absolute cwd to a
+// short display form (`~`-relative, else project-relative, else absolute) and
+// (2) ABBREVIATE fish-style. Collapse stays in the template (its inputs are the
+// payload's home/project_dir/current_dir); abbreviation is a single helper
+// applied to the collapsed result. `$dir` carries the collapsed path between the
+// two — default is the absolute cwd, overridden only when it lives under home or
+// the project root. brandon-directory-781 makes fish-abbreviation the DEFAULT;
+// a user restores the full path by overriding `segments.directory.template`
+// (drop the `abbreviatePath` wrapper) — the existing merge-by-name seam.
 const DIR_TEMPLATE =
-  '{{ if and (ne .home "") (or (eq .home .current_dir) (hasPrefix (printf "%s/" .home) .current_dir)) }}~{{ trimPrefix .home .current_dir }}' +
+  "{{ $dir := .current_dir }}" +
+  '{{ if and (ne .home "") (or (eq .home .current_dir) (hasPrefix (printf "%s/" .home) .current_dir)) }}' +
+  `{{ $dir = printf "~%s" (trimPrefix .home .current_dir) }}` +
   "{{ else }}" +
   '{{ if or (eq .project_dir .current_dir) (hasPrefix (printf "%s/" .project_dir) .current_dir) }}' +
-  `{{ ternary (${DIR_REL}) (basename .project_dir) (ne (${DIR_REL}) "") }}` +
-  "{{ else }}{{ .current_dir }}{{ end }}{{ end }}";
+  `{{ $dir = ternary (${DIR_REL}) (basename .project_dir) (ne (${DIR_REL}) "") }}` +
+  "{{ end }}{{ end }}" +
+  "{{ abbreviatePath $dir }}";
 
 // Git working-tree counts — leading-space-then-trim idiom: each present count
 // contributes " +N", trim drops the leading space, survivors single-spaced.

@@ -63,6 +63,28 @@ export function shortenModelName(formatted: string): string {
   return `${initial}${version}`;
 }
 
+// [LAW:decomposition] Fish-shell `prompt_pwd` abbreviation: collapse every path
+// segment EXCEPT the leaf to its leading character, keeping any leading dots so
+// `.config` → `.c`. A pure string→string transform that knows nothing about
+// home-collapse or project-relative logic — those live in the directory
+// template and this abbreviates whatever collapsed display path they produce.
+// `~/code/cc-candybar` → `~/c/cc-candybar`; a leading "/" is preserved because
+// the empty pre-slash segment abbreviates to empty (`/usr/local/bin` → `/u/l/bin`).
+export function abbreviatePath(path: string): string {
+  const segments = path.split("/");
+  const lastIndex = segments.length - 1;
+  return segments
+    .map((seg, i) => {
+      if (i === lastIndex) return seg;
+      // Leading dot-run plus the first following char (fish keeps dotfiles
+      // legible: `.config` → `.c`, `..` → `..`). No following char (empty
+      // segment) means no match — return it unchanged.
+      const abbreviated = seg.match(/^\.*./);
+      return abbreviated ? abbreviated[0] : seg;
+    })
+    .join("/");
+}
+
 // [LAW:one-source-of-truth] Locale-grouped integer rendering. Callers that
 // want "50,000" instead of "50000" go through this rather than calling
 // toLocaleString() ad-hoc — the legacy context segment used the latter

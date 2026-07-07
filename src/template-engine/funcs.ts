@@ -12,6 +12,7 @@ import {
   type VarValue,
 } from "../var-system/types.js";
 import {
+  abbreviatePath,
   formatInteger,
   formatModelName,
   shortenModelName,
@@ -60,6 +61,15 @@ export function ccCandybarFuncs(): FuncMap {
     },
     dirname: {
       fn: (s: string) => pathDirname(s),
+      argTypes: ["string"],
+    },
+
+    // [LAW:decomposition] Fish-style path abbreviation — one thing: shorten
+    // every segment but the leaf. Composes over the directory template's
+    // already-collapsed output (`~`/project-relative), never duplicating that
+    // logic. Impl in utils/formatters.ts, mirroring formatModelName's split.
+    abbreviatePath: {
+      fn: (s: string) => abbreviatePath(s),
       argTypes: ["string"],
     },
 
