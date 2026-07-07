@@ -130,12 +130,20 @@
 // ────────────────────────────────────────────────────────────────────────────
 {
   globals: {
-    // [LAW:one-source-of-truth] Pin the config-default palette so the FIRST
-    // render (before any theme click) paints with the same name the trigger
-    // shows as active — effectiveThemeName falls back to globals.palette when
-    // SessionState holds no theme yet. Legacy declared no palette; the theme
-    // picker needs a starting theme, so palette and the `theme` var default are
-    // pinned to the same name.
+    // The config-default palette. The daemon resolves the rendered basePalette
+    // via effectiveThemeName(sessionState.theme, globals.palette), so before any
+    // theme click this name is BOTH what the bar paints with AND (via the pinned
+    // `theme` var default below) what the trigger displays as active.
+    //
+    // [FRAMING:representation] Honest caveat, NOT one-source-of-truth: this name
+    // is manually pinned to `variables.theme.default` (line ~155). Two literals
+    // that must agree ARE two sources — edit one without the other and the
+    // trigger's `🎨 {{ .theme }}` label would disagree with the actual colors
+    // until the first pick. A JSON5 file is pure data with no interpolation to
+    // derive one from the other. The true single-source fix is a runtime one —
+    // expose the daemon-resolved effective theme name as an input var so the
+    // trigger reads it directly and this default disappears (tracked as a
+    // follow-up; the same pin lives in showcase.json5 and would be fixed with it).
     palette: "catppuccin-mocha",
     // Legacy display block, faithfully. colorCompatibility is intentionally
     // absent — see the DROP note above ("auto" is unrepresentable; "truecolor"
@@ -148,8 +156,11 @@
   variables: {
     // ── Theme picker (the legacy panel's theme-cycle, now a full picker) ─────
     // kind:'state' reads the SAME 'theme' key the daemon reads to resolve the
-    // rendered basePalette, so the active mark and the bar's colors are one
-    // source of truth. Default pinned to globals.palette above.
+    // rendered basePalette, so a click recolors the bar live and the active mark
+    // tracks the colors. The `default` is the display seed for the pre-click
+    // render — manually pinned to globals.palette above (see the [FRAMING:
+    // representation] caveat there; it is a documented duplication, not a
+    // single source).
     theme: { kind: "state", key: "theme", default: "catppuccin-mocha" },
     // The theme picker's page cursor (open/closed is the synthesized menus.* key
     // the trigger's {{ menu }} owns — NOT this var). Default page 0; the
