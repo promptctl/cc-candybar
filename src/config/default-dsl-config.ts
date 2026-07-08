@@ -185,6 +185,18 @@ export const DEFAULT_DSL_CONFIG = {
     },
     "session.id": { kind: "input", path: "session_id", default: "" },
     version: { kind: "input", path: "version", default: "" },
+    // [LAW:one-source-of-truth] The daemon-resolved effective theme name —
+    // effectiveThemeName(sessionState.theme, globals.palette), the SAME name the
+    // rendered basePalette is built from. A theme-picker config's trigger reads
+    // `{{ .theme.effective }}` to show the active theme, so the label and the
+    // colors trace to one resolution and cannot drift — no per-config restating
+    // of the initial theme (which JSON5, being inert data, cannot derive). The
+    // daemon always provides it; the "" default is the unreachable-absence floor.
+    "theme.effective": {
+      kind: "input",
+      path: "theme.effective",
+      default: "",
+    },
 
     // [LAW:one-source-of-truth] The usable terminal width for THIS render —
     // the exact post-reserve cell count FlexStrip wraps to. renderDsl injects

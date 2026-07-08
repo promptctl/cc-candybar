@@ -33,7 +33,6 @@ import type { ContextProvider } from "../segments/context.js";
 import type { MetricsProvider } from "../segments/metrics.js";
 import type { TmuxService } from "../segments/tmux.js";
 import type { GitDataProvider } from "./cache/git.js";
-import type { SessionStateRW } from "./session-state.js";
 
 // ─── Augmented payload shape ─────────────────────────────────────────────────
 
@@ -54,7 +53,13 @@ export interface RenderPayload extends ClaudeHookData {
 
   readonly git?: GitPayload;
   readonly tmux?: { readonly session: string };
-  readonly theme?: string;
+  // [LAW:one-source-of-truth] The daemon-resolved effective theme name —
+  // effectiveThemeName(sessionState.theme, globals.palette). The SAME value the
+  // rendered basePalette is built from, surfaced so a trigger label can display
+  // the active theme WITHOUT the config restating it (the label and the colors
+  // trace to one resolution and cannot drift). Always present: the daemon
+  // resolves it every render regardless of session/config state.
+  readonly theme?: { readonly effective: string };
 
   // Usage-family. Each provider returns null when it has no data (no
   // transcript yet, no rate-limit window active, etc.); we drop the field
@@ -206,7 +211,6 @@ export interface RenderPayloadDeps {
   readonly contextProvider: ContextProvider;
   readonly metricsProvider: MetricsProvider;
   readonly tmuxService: TmuxService;
-  readonly sessionState: SessionStateRW;
   // [LAW:single-enforcer] The log capability for every provider lane:
   // buildRenderPayload is the ONE place lane failures are logged, so the
   // providers' interiors never log and never double-log.
@@ -568,6 +572,13 @@ export async function buildRenderPayload(
   // registration; passing it in (rather than recomputing per render) keeps
   // the hot path free of the BFS + extractTemplateRefs cost.
   neededInputPaths: ReadonlySet<string>,
+  // [LAW:one-source-of-truth] The effective theme name, resolved ONCE by the
+  // daemon (effectiveThemeName(sessionState.theme, globals.palette)) and used
+  // for BOTH the rendered basePalette and this payload field — so a trigger
+  // label reading `.theme.effective` can never disagree with the colors. Passed
+  // in (not re-resolved here) because the daemon already computes it for the
+  // palette; this is that same value, threaded to the sole payload assembler.
+  effectiveTheme: string,
 ): Promise<RenderPayload> {
   const wants = (prefix: string): boolean =>
     anyPathStartsWith(neededInputPaths, prefix);
@@ -718,15 +729,6 @@ export async function buildRenderPayload(
         }
       : undefined;
 
-  // [LAW:one-source-of-truth] The theme variable surfaces the session's
-  // resolved theme so the toolbar/tray DSL templates can encode it into
-  // cc-candybar:// URLs without re-resolving. SessionState owns the value;
-  // we mirror it onto the payload, not redeclare it.
-  const themeRaw = wants("theme")
-    ? deps.sessionState.get(hookData.session_id, "theme")
-    : undefined;
-  const theme = typeof themeRaw === "string" ? themeRaw : undefined;
-
   // home is always available — it's a single env-var read, no I/O cost.
   // Letting the gate skip it would add a branch with no win.
   // [LAW:single-enforcer] All path-shaped payload fields are normalized
@@ -778,7 +780,11 @@ export async function buildRenderPayload(
     ...(home !== undefined && { home }),
     ...(gitProjection.git !== undefined && { git: gitProjection.git }),
     ...(tmuxValue !== undefined && { tmux: { session: tmuxValue } }),
-    ...(theme !== undefined && { theme }),
+    // [LAW:one-source-of-truth] Always present — the daemon resolves the
+    // effective theme every render (for basePalette), and this is that value.
+    // No `wants` gate: it costs nothing (a string already in hand) and a
+    // config that reads `.theme.effective` must always find it.
+    theme: { effective: effectiveTheme },
     ...(sessionPayload !== undefined && { session: sessionPayload }),
     ...(todayPayload !== undefined && { today: todayPayload }),
     ...(costPerHour !== undefined && { burn: { costPerHour } }),

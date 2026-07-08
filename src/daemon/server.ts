@@ -745,24 +745,30 @@ async function handleRequest(req: Request): Promise<HandledRequest> {
       // No special-case branches — same composition every render.
       let body = "";
       if (entry.state !== null) {
+        // [LAW:one-source-of-truth] Resolve the effective theme ONCE — the
+        // session's chosen theme (SessionState) over the config default. This
+        // single name drives BOTH the payload's `theme.effective` field (the
+        // trigger label reads it) AND the rendered basePalette below, so a label
+        // and the colors can never disagree. Resolved here, before the payload
+        // build, so it can be threaded into the sole payload assembler.
+        const effectiveTheme = effectiveThemeName(
+          sessionState.get(req.hookData.session_id, "theme"),
+          entry.state.config.globals.palette,
+        );
         const payload = await buildRenderPayload(
           req.hookData,
           payloadDeps,
           req.cwd,
           entry.state.neededInputPaths,
+          effectiveTheme,
         );
         // [LAW:one-source-of-truth][LAW:dataflow-not-control-flow] basePalette
-        // is derived per render from the effective theme — the session's chosen
-        // theme (SessionState) over the config default — so a theme click
-        // recolors the whole bar on the next render. Not frozen on the cache
-        // entry (one entry serves many sessions). resolverForThemeName memoizes,
-        // so the per-render cost is one Map lookup once the theme is warm.
-        const basePalette = resolverForThemeName(
-          effectiveThemeName(
-            sessionState.get(req.hookData.session_id, "theme"),
-            entry.state.config.globals.palette,
-          ),
-        );
+        // is derived from the same effective theme resolved above — so a theme
+        // click recolors the whole bar on the next render. Not frozen on the
+        // cache entry (one entry serves many sessions). resolverForThemeName
+        // memoizes, so the per-render cost is one Map lookup once the theme is
+        // warm.
+        const basePalette = resolverForThemeName(effectiveTheme);
         // [LAW:one-type-per-behavior][LAW:dataflow-not-control-flow] The powerline
         // cap/separator SHAPE, resolved per render the exact way the theme is: the
         // session's clicked style (SessionState) over the config default over the
@@ -1139,7 +1145,6 @@ const payloadDeps = {
   contextProvider,
   metricsProvider,
   tmuxService,
-  sessionState,
   // [LAW:single-enforcer] buildRenderPayload is the one log site for the
   // outcome-carrying provider lanes (git, cache).
   log: dlog,
