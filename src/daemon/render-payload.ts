@@ -57,9 +57,12 @@ export interface RenderPayload extends ClaudeHookData {
   // effectiveThemeName(sessionState.theme, globals.palette). The SAME value the
   // rendered basePalette is built from, surfaced so a trigger label can display
   // the active theme WITHOUT the config restating it (the label and the colors
-  // trace to one resolution and cannot drift). Always present: the daemon
-  // resolves it every render regardless of session/config state.
-  readonly theme?: { readonly effective: string };
+  // trace to one resolution and cannot drift).
+  // [LAW:types-are-the-program] REQUIRED, not optional: the daemon resolves it
+  // every render and buildRenderPayload includes it unconditionally, so the
+  // domain truth is "always present". A `?` here would let a callsite believe it
+  // could be undefined and guard defensively against an impossibility.
+  readonly theme: { readonly effective: string };
 
   // Usage-family. Each provider returns null when it has no data (no
   // transcript yet, no rate-limit window active, etc.); we drop the field
