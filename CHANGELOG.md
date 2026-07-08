@@ -1,3 +1,10 @@
+# [1.17.0](https://github.com/promptctl/cc-candybar/compare/v1.16.0...v1.17.0) (2026-07-08)
+
+
+### Features
+
+* **config:** expose daemon-resolved effective theme name as `theme.effective` (brandon-config-b9j) ([#145](https://github.com/promptctl/cc-candybar/issues/145)) ([15fa29f](https://github.com/promptctl/cc-candybar/commit/15fa29fbba152519dbd8c12c99cbb443d6f8ec4c))
+
 # [1.16.0](https://github.com/promptctl/cc-candybar/compare/v1.15.0...v1.16.0) (2026-07-07)
 
 
