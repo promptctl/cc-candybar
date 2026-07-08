@@ -23,18 +23,18 @@
 // Everything merges on top of DEFAULT_DSL_CONFIG, so only what differs from the
 // bundled default is declared here.
 {
-  // [LAW:one-source-of-truth] Pin the config-default palette so the FIRST render
-  // (before any theme click) paints with the same name the trigger shows as
-  // active — effectiveThemeName falls back to globals.palette when SessionState
-  // holds no theme yet, so without this the active mark and the colors could
-  // disagree until the first pick.
+  // [LAW:one-source-of-truth] The config-default palette AND the single place the
+  // initial theme is stated. effectiveThemeName folds the session pick over this
+  // name every render; the daemon surfaces that resolved name as `theme.effective`
+  // (bundled default input var), which the trigger reads — so the active-theme
+  // label and the bar's colors trace to one resolution and cannot drift. No
+  // separate `variables.theme.default` to hand-sync with this name.
   globals: { palette: "catppuccin-mocha" },
 
   variables: {
-    // The picker-bound session theme. kind:'state' reads the SAME 'theme' key
-    // the daemon reads to resolve the rendered basePalette, so the active mark
-    // and the bar's colors are one source of truth — they cannot disagree.
-    theme: { kind: "state", key: "theme", default: "catppuccin-mocha" },
+    // No `theme` display var: the trigger reads the daemon-resolved
+    // `theme.effective` (bundled default). applyTheme writes the SessionState
+    // 'theme' key directly; effectiveThemeName folds that over globals.palette.
     // The theme picker's page cursor. With {{ menu }}, open/closed is the
     // synthesized menus.* accordion key (derived from the control row), NOT this
     // var — so this is purely the page index the picker paginates by; an unset or
@@ -114,7 +114,7 @@
     //   The disclosure's identity is DERIVED from this segment + the apply action
     //   name, so nothing here names the menu or a key — see menu-keys.ts.
     trigger: {
-      template: '🎨 {{ .theme }} {{ menu "applyTheme" "themePage" false true }}',
+      template: '🎨 {{ .theme.effective }} {{ menu "applyTheme" "themePage" false true }}',
       bg: "surface",
       fg: "foreground",
     },

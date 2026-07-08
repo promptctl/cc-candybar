@@ -245,7 +245,6 @@ function depsWith(
     contextProvider: { getContextInfo: async () => ABSENT },
     metricsProvider: { getMetricsInfo: async () => ABSENT },
     tmuxService: { getSessionId: async () => ABSENT },
-    sessionState: { get: () => undefined },
     log: () => {},
     clock: () => new Date(1000),
     ...overrides,
@@ -258,6 +257,10 @@ const SPEED_PATHS = new Set([
   "speed.total",
   "session.tokens",
 ]);
+
+// The daemon-resolved effective theme; these speed-lane tests don't exercise
+// it, so any resolvable name satisfies the required argument.
+const EFFECTIVE_THEME = "textual-dark";
 
 function hook(): ClaudeHookData {
   return {
@@ -277,6 +280,7 @@ describe("buildRenderPayload — speed lane", () => {
       depsWith(),
       undefined,
       SPEED_PATHS,
+      EFFECTIVE_THEME,
     );
     // Δoutput 500 / 1s = 500; Δtotal 500 / 1s = 500; Δinput 0 ⇒ absent.
     expect(payload.speed?.output).toBe(500);
@@ -299,6 +303,7 @@ describe("buildRenderPayload — speed lane", () => {
       }),
       undefined,
       SPEED_PATHS,
+      EFFECTIVE_THEME,
     );
     expect(payload.speed).toBeUndefined();
   });
@@ -328,6 +333,7 @@ describe("buildRenderPayload — speed lane", () => {
       }),
       undefined,
       new Set(["speed.history"]),
+      EFFECTIVE_THEME,
     );
     expect(payload.speed?.history).toBe("100,0,300");
   });
@@ -354,6 +360,7 @@ describe("buildRenderPayload — speed lane", () => {
       }),
       undefined,
       new Set(["speed.history"]),
+      EFFECTIVE_THEME,
     );
     // Only the single in-window pair survives; the stale and rapid gaps are
     // dropped, never shown as 0.
@@ -375,6 +382,7 @@ describe("buildRenderPayload — speed lane", () => {
       }),
       undefined,
       new Set(["speed.history"]),
+      EFFECTIVE_THEME,
     );
     expect(payload.speed).toBeUndefined();
   });
@@ -385,6 +393,7 @@ describe("buildRenderPayload — speed lane", () => {
       depsWith(),
       undefined,
       new Set(["session.tokens"]),
+      EFFECTIVE_THEME,
     );
     expect(payload.speed).toBeUndefined();
   });

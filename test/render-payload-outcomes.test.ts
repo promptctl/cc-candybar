@@ -29,11 +29,14 @@ function depsWith(
     contextProvider: { getContextInfo: async () => ABSENT },
     metricsProvider: { getMetricsInfo: async () => ABSENT },
     tmuxService: { getSessionId: async () => ABSENT },
-    sessionState: { get: () => undefined },
     log: (level: string, msg: string) => logs.push({ level, msg }),
     ...overrides,
   } as unknown as RenderPayloadDeps;
 }
+
+// The effective theme the daemon resolves per render; these lane tests don't
+// exercise it, so any resolvable name serves as the required argument.
+const EFFECTIVE_THEME = "textual-dark";
 
 const GIT_PATHS = new Set([
   "git.branch",
@@ -64,6 +67,7 @@ describe("buildRenderPayload — git outcome lane", () => {
       deps,
       undefined,
       GIT_PATHS,
+      EFFECTIVE_THEME,
     );
 
     expect(payload.git).toBeUndefined();
@@ -84,6 +88,7 @@ describe("buildRenderPayload — git outcome lane", () => {
       deps,
       undefined,
       GIT_PATHS,
+      EFFECTIVE_THEME,
     );
 
     expect(payload.git).toBeUndefined();
@@ -109,6 +114,7 @@ describe("buildRenderPayload — git outcome lane", () => {
       deps,
       undefined,
       GIT_PATHS,
+      EFFECTIVE_THEME,
     );
 
     // ok fields project as values; the failed field is MISSING (the DSL
@@ -148,6 +154,7 @@ describe("buildRenderPayload — cache outcome lane", () => {
       deps,
       undefined,
       CACHE_PATHS,
+      EFFECTIVE_THEME,
     );
     chmodSync(transcript, 0o644);
 
@@ -176,6 +183,7 @@ describe("buildRenderPayload — cache outcome lane", () => {
       deps,
       undefined,
       CACHE_PATHS,
+      EFFECTIVE_THEME,
     );
 
     expect(payload.cache).toEqual({
@@ -212,6 +220,7 @@ describe("buildRenderPayload — migrated lanes share the outcome contract", () 
       deps,
       undefined,
       LANE_PATHS,
+      EFFECTIVE_THEME,
     );
 
     expect(payload.context).toBeUndefined();
@@ -252,6 +261,7 @@ describe("buildRenderPayload — migrated lanes share the outcome contract", () 
       deps,
       undefined,
       LANE_PATHS,
+      EFFECTIVE_THEME,
     );
 
     expect(payload.tmux).toEqual({ session: "main-session" });
@@ -275,6 +285,7 @@ describe("buildRenderPayload — migrated lanes share the outcome contract", () 
       deps,
       undefined,
       LANE_PATHS,
+      EFFECTIVE_THEME,
     );
 
     expect(payload.tmux).toBeUndefined();
@@ -316,6 +327,7 @@ describe("buildRenderPayload — git PR projection", () => {
       deps,
       undefined,
       PR_PATHS,
+      EFFECTIVE_THEME,
     );
 
     expect(payload.git).toMatchObject({
@@ -344,6 +356,7 @@ describe("buildRenderPayload — git PR projection", () => {
       deps,
       undefined,
       PR_PATHS,
+      EFFECTIVE_THEME,
     );
 
     expect(payload.git!.prError).toBe("gh pr view: non-zero, exit 1, HTTP 401");
@@ -374,6 +387,7 @@ describe("buildRenderPayload — git PR projection", () => {
       deps,
       undefined,
       PR_PATHS,
+      EFFECTIVE_THEME,
     );
 
     expect("prNumber" in payload.git!).toBe(false);
