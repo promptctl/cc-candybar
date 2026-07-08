@@ -91,7 +91,6 @@ function depsWith(
         }),
     },
     tmuxService: { getSessionId: async () => ABSENT },
-    sessionState: { get: () => undefined },
     log: () => {},
     clock: () => new Date(NOW_MS),
     ...overrides,
@@ -124,6 +123,10 @@ const BURN_PATHS = new Set([
   "weekly.etaMinutes",
 ]);
 
+// The daemon-resolved effective theme; these burn-lane tests don't exercise it,
+// so any resolvable name satisfies the required argument.
+const EFFECTIVE_THEME = "textual-dark";
+
 describe("buildRenderPayload — burn projection lane", () => {
   test("projectable: burn rate + block & weekly ETAs land in the payload", async () => {
     const payload = await buildRenderPayload(
@@ -131,6 +134,7 @@ describe("buildRenderPayload — burn projection lane", () => {
       depsWith(),
       undefined,
       BURN_PATHS,
+      EFFECTIVE_THEME,
     );
     expect(payload.burn?.costPerHour).toBe(12);
     expect(payload.block?.etaMinutes).toBe(240);
@@ -146,6 +150,7 @@ describe("buildRenderPayload — burn projection lane", () => {
       depsWith(),
       undefined,
       BURN_PATHS,
+      EFFECTIVE_THEME,
     );
     expect(payload.block?.nativeUtilization).toBe(20);
     expect(payload.block?.etaMinutes).toBeUndefined();
@@ -157,6 +162,7 @@ describe("buildRenderPayload — burn projection lane", () => {
       depsWith(),
       undefined,
       new Set(["block.resetsAt", "weekly.resetsAt"]),
+      EFFECTIVE_THEME,
     );
     expect(payload.burn).toBeUndefined();
   });

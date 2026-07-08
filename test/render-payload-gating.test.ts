@@ -32,7 +32,6 @@ interface CallCounts {
   context: number;
   metrics: number;
   tmux: number;
-  theme: number;
 }
 
 function buildMockDeps(): { deps: RenderPayloadDeps; counts: CallCounts } {
@@ -43,7 +42,6 @@ function buildMockDeps(): { deps: RenderPayloadDeps; counts: CallCounts } {
     context: 0,
     metrics: 0,
     tmux: 0,
-    theme: 0,
   };
   const deps = {
     gitProvider: {
@@ -80,16 +78,14 @@ function buildMockDeps(): { deps: RenderPayloadDeps; counts: CallCounts } {
         return ABSENT;
       },
     },
-    sessionState: {
-      get: (_sid: string, _key: string) => {
-        counts.theme++;
-        return undefined;
-      },
-    },
     log: () => {},
   } as unknown as RenderPayloadDeps;
   return { deps, counts };
 }
+
+// The daemon-resolved effective theme; the gating tests assert provider CALL
+// COUNTS, not theme, so any resolvable name satisfies the required argument.
+const EFFECTIVE_THEME = "textual-dark";
 
 const HOOK_DATA = {
   hook_event_name: "Status",
@@ -159,6 +155,7 @@ describe("buildRenderPayload — layout-driven provider gating", () => {
       deps,
       undefined,
       buildNeededPrefixes(CONFIG_WITHOUT_METRICS),
+      EFFECTIVE_THEME,
     );
     expect(counts.git).toBe(1);
     // No segment in layout reads metrics.* / tmux.* / today.* / etc., so
@@ -177,6 +174,7 @@ describe("buildRenderPayload — layout-driven provider gating", () => {
       deps,
       undefined,
       buildNeededPrefixes(CONFIG_WITH_METRICS),
+      EFFECTIVE_THEME,
     );
     expect(counts.git).toBe(1);
     expect(counts.metrics).toBe(1);
