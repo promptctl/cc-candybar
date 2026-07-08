@@ -93,6 +93,10 @@ const payload = {
   weekly: { percentage: 21, resetsAt: nowSec + 5 * 86400 },
   cache: { expiresAt: nowSec + 15 * 60 },
   tmux: { session: "work" },
+  // The daemon-resolved effective theme name (effectiveThemeName folds the
+  // session pick over globals.palette). The showcase/legacy-parity triggers read
+  // `.theme.effective` to show the active theme single-sourced from the palette.
+  theme: { effective: "catppuccin-mocha" },
 };
 
 const exampleFiles = fs
@@ -192,6 +196,11 @@ describe("shipped example configs (examples/*.json5)", () => {
     // metrics segment (line 2) — all six flags render from the cost/transcript.
     expect(out).toContain("◆ 8");
     expect(out).toContain("+ 512");
+    // [LAW:one-source-of-truth] The theme trigger reads the daemon-resolved
+    // `theme.effective` var — the label is single-sourced from globals.palette
+    // (no pinned `variables.theme.default` restatement), so it renders the
+    // effective theme name the payload carries.
+    expect(out).toContain("🎨 catppuccin-mocha");
     // session/today cost + block/weekly quota + version.
     expect(out).toContain("§ $0.39");
     expect(out).toContain("v1.15.0");
