@@ -231,6 +231,12 @@ function handleAddressInUse(server: net.Server, sockPath: string): void {
   if (decision.kind === "attach-and-exit") {
     dlog("info", `EADDRINUSE: ${decision.reason} — exiting`);
     process.exit(0);
+    // [LAW:no-ambient-temporal-coupling] process.exit() halts synchronously, so
+    // the reclaim below is already unreachable — but the explicit return makes
+    // that structural, matching the sibling `retried` branch, so no future
+    // refactor of the exit path can accidentally fall through to unlinking a
+    // live daemon's socket.
+    return;
   }
   dlog(
     "warn",
