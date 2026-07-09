@@ -303,6 +303,84 @@ describe("obtainDaemon (bind-based singleton)", () => {
       }
     });
   });
+
+  // ─── spawn cooldown on the async path (ticket 2b3.3) ───────────────────────
+  // obtainDaemon respects the same global rate bound as the kick: when a spawn
+  // was recorded within SPAWN_COOLDOWN_MS, it must NOT add another process — it
+  // waits for the in-flight boot instead.
+
+  test("on cooldown, does not spawn — fails when no daemon binds in the window", async () => {
+    await withTempState(async () => {
+      jest.resetModules();
+      const { obtainDaemon } = await import("../src/daemon/acquire");
+      const { spawnCooldownPath, daemonDir } = await import(
+        "../src/daemon/paths"
+      );
+
+      fs.mkdirSync(daemonDir(), { recursive: true });
+      // A spawn was recorded moments ago (fresh mtime) — an attempt is in flight.
+      fs.writeFileSync(spawnCooldownPath(), `${process.pid} ${Date.now()}\n`);
+
+      let spawned = 0;
+      const result = await obtainDaemon({
+        spawn: () => {
+          spawned++;
+          return true;
+        },
+        spawnReadyTimeoutMs: 200,
+        totalTimeoutMs: 400,
+      });
+      // The rate bound blocked the spawn; no daemon came up, so we time out the
+      // poll and report it as a cooldown failure (not a spawn failure).
+      expect(spawned).toBe(0);
+      expect(result.kind).toBe("failed");
+      if (result.kind === "failed") {
+        expect(result.reason).toMatch(/cooldown/);
+      }
+    });
+  });
+
+  test("on cooldown, attaches to the in-flight daemon without spawning", async () => {
+    await withTempState(async () => {
+      jest.resetModules();
+      const { obtainDaemon } = await import("../src/daemon/acquire");
+      const { spawnCooldownPath, socketPath, daemonDir } = await import(
+        "../src/daemon/paths"
+      );
+
+      fs.mkdirSync(daemonDir(), { recursive: true });
+      fs.writeFileSync(spawnCooldownPath(), `${process.pid} ${Date.now()}\n`);
+
+      // The daemon someone else spawned finishes booting during our poll. Bring
+      // it up shortly AFTER the initial fast-path probe so we exercise the
+      // cooldown branch, not the top-level attach.
+      let server: net.Server | null = null;
+      setTimeout(() => {
+        startFakeDaemon(socketPath())
+          .then((s) => {
+            server = s;
+          })
+          .catch(() => {});
+      }, 40);
+
+      let spawned = 0;
+      const result = await obtainDaemon({
+        spawn: () => {
+          spawned++;
+          return true;
+        },
+        spawnReadyTimeoutMs: 500,
+        totalTimeoutMs: 800,
+      });
+      try {
+        // We did NOT add a process — the in-flight daemon was attached to.
+        expect(spawned).toBe(0);
+        expect(result.kind).toBe("attached");
+      } finally {
+        if (server) await closeServer(server);
+      }
+    });
+  });
 });
 
 describe("obtainDaemonKick (synchronous fire-and-forget)", () => {
