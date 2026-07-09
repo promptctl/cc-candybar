@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import process from "node:process";
 
 // ─── Socket ownership lease ──────────────────────────────────────────────────
 //
@@ -51,12 +52,24 @@ export interface LeaseRecord {
 //                    daemon left a stale socket; prefer availability)
 //   unreadable     → reclaim (can't prove a live owner — same)
 //
-// Failure directions: false-alive (pid reuse) only makes us not start this tick
-// (safe); false-dead (steal a live socket) is made self-healing by the
-// ownership self-check in brandon-daemon-lifecycle-2b3.2. Reclaiming on
-// missing/unreadable is the availability-preferring direction — a stale socket
-// with no reclaimer is a hard no-service stall, strictly worse than a transient
-// double-serve that self-heals.
+// Failure directions:
+//   false-dead (steal a live socket) — made self-healing by the ownership
+//     self-check (brandon-daemon-lifecycle-2b3.2).
+//   false-alive (the lease pid is alive but is NOT this daemon — a crashed
+//     daemon's pid recycled to an unrelated process) — we attach-and-exit
+//     without serving. Short-lived recycle self-corrects next tick; a LONG-LIVED
+//     recycle reads alive on every start, so no daemon comes up until the stale
+//     lease is cleared. Fully closing this needs a pid-identity fingerprint
+//     (process start-time, or an fd/flock held for the daemon's lifetime) — the
+//     lock-based liveness the epic deferred. connect() can't substitute: it
+//     can't tell a busy-live daemon with a full accept backlog (ECONNREFUSED —
+//     the exact storm this replaces) from a recycled non-daemon pid. It is
+//     strictly rarer than that storm (needs an unclean death skipping lease
+//     cleanup AND a pid recycle to a long-lived process within the respawn
+//     window).
+// Reclaiming on missing/unreadable is the availability-preferring direction — a
+// stale socket with no reclaimer is a hard no-service stall, strictly worse than
+// a transient double-serve that self-heals.
 export function arbitrateSocket(
   read: LeaseRead,
   isAlive: (pid: number) => boolean,
@@ -113,19 +126,32 @@ export function readLease(leasePath: string): LeaseRead {
 }
 
 // Write our lease after we win the bind. Overwrite-on-write: whoever holds the
-// socket right now overwrites whatever stale lease a dead owner left. 0600 both
-// on create (mode) and via explicit chmod (mode arg to writeFileSync only
-// applies at creation, so a stale broader-permission file would keep its mode
-// without the chmod). Returns null on success, a reason on failure.
+// socket right now replaces whatever stale lease a dead owner left.
+//
+// [LAW:no-ambient-temporal-coupling] Atomic publish: write a uniquely-named temp
+// sibling then rename onto the lease path. POSIX rename within a directory is
+// atomic, so a concurrent reader (a second daemon's EADDRINUSE arbitration) sees
+// either the old lease or the complete new one — never a truncated/empty file
+// mid-write, which would read as `unreadable` and force a false reclaim of this
+// daemon's live socket. The unique temp name means it is always freshly created,
+// so its 0600 mode always applies (0600 has no group/world bits for any umask to
+// need re-tightening) and rename carries that mode across. Returns null on
+// success, a reason on failure.
 export function writeLease(
   leasePath: string,
   record: LeaseRecord,
 ): string | null {
+  const tmp = `${leasePath}.${process.pid}.tmp`;
   try {
-    fs.writeFileSync(leasePath, JSON.stringify(record), { mode: 0o600 });
-    fs.chmodSync(leasePath, 0o600);
+    fs.writeFileSync(tmp, JSON.stringify(record), { mode: 0o600 });
+    fs.renameSync(tmp, leasePath);
     return null;
   } catch (e) {
+    try {
+      fs.unlinkSync(tmp);
+    } catch {
+      // Temp may not exist (write failed before create); nothing to clean.
+    }
     return (e as Error).message;
   }
 }

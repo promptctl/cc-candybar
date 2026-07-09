@@ -7,6 +7,7 @@ import {
   daemonDir,
   ensureSocketParentSafe,
   leasePath,
+  leasePathFor,
   socketPath,
   sessionStatePath,
 } from "./paths";
@@ -227,7 +228,10 @@ function bindOrAttachAndExit(
 // over the lease read + injected pidAlive; the kill / unlink / rebind effects
 // are performed here at the edge.
 function handleAddressInUse(server: net.Server, sockPath: string): void {
-  const decision = arbitrateSocket(readLease(leasePath()), pidAlive);
+  // [LAW:one-source-of-truth] Derive the lease from the SAME sockPath threaded
+  // through unlink + rebind below, not the re-derived global — one identity
+  // source for the whole arbitration.
+  const decision = arbitrateSocket(readLease(leasePathFor(sockPath)), pidAlive);
   if (decision.kind === "attach-and-exit") {
     dlog("info", `EADDRINUSE: ${decision.reason} — exiting`);
     process.exit(0);
