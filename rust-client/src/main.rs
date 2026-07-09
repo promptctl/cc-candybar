@@ -669,18 +669,42 @@ fn spawn_daemon_rate_limited() {
 // no content to misparse.
 fn claim_spawn_cooldown() -> bool {
     let path = spawn_cooldown_path();
-    if let Some(age) = cooldown_age_ms(&path) {
-        if age < -(STALE_LOCK_MS as i128) {
+    match cooldown_decision(cooldown_age_ms(&path)) {
+        CooldownDecision::Deny => false,
+        CooldownDecision::AllowFutureGarbage(future_ms) => {
             eprintln!(
-                "cc-candybar: spawn.cooldown mtime is {}ms in the future — ignoring and spawning",
-                -age
+                "cc-candybar: spawn.cooldown mtime is {future_ms}ms in the future — ignoring and spawning"
             );
-        } else if age < SPAWN_COOLDOWN_MS as i128 {
-            return false;
+            record_spawn_attempt(&path);
+            true
+        }
+        CooldownDecision::Allow => {
+            record_spawn_attempt(&path);
+            true
         }
     }
-    record_spawn_attempt(&path);
-    true
+}
+
+// [LAW:effects-at-boundaries] The window arithmetic — the subtle part: a
+// future-mtime garbage record (beyond the stale-lock window) must not pin the
+// cooldown forever, while a small negative age is just precision skew between
+// the wall clock and the fs mtime and still counts as a just-recorded attempt —
+// is a pure function of the record's age, extracted from the fs read so it is
+// unit-tested without touching the filesystem. AllowFutureGarbage carries the
+// forward delta so the caller can warn loudly.
+#[derive(Debug)]
+enum CooldownDecision {
+    Allow,
+    AllowFutureGarbage(i128),
+    Deny,
+}
+
+fn cooldown_decision(age_ms: Option<i128>) -> CooldownDecision {
+    match age_ms {
+        Some(age) if age < -(STALE_LOCK_MS as i128) => CooldownDecision::AllowFutureGarbage(-age),
+        Some(age) if age < SPAWN_COOLDOWN_MS as i128 => CooldownDecision::Deny,
+        _ => CooldownDecision::Allow,
+    }
 }
 
 fn spawn_cooldown_path() -> PathBuf {
@@ -849,6 +873,66 @@ mod tests {
     fn dispatch_keeps_render_invocation_local() {
         assert!(!should_dispatch_to_node(&argv(&["cc-candybar", "--style=powerline"]), false));
         assert!(!should_dispatch_to_node(&argv(&["cc-candybar"]), false));
+    }
+
+    // [LAW:behavior-not-structure] Pin the cooldown window arithmetic — the
+    // boundary between "just-recorded attempt" (Deny) and "future-mtime garbage
+    // that must not wedge the spawn path" (AllowFutureGarbage) — matching the TS
+    // mirror's dedicated cooldown tests. Pure over the age; no filesystem.
+    #[test]
+    fn cooldown_absent_record_allows() {
+        assert!(matches!(cooldown_decision(None), CooldownDecision::Allow));
+    }
+
+    #[test]
+    fn cooldown_within_window_denies() {
+        // 0 and anything up to (but not including) SPAWN_COOLDOWN_MS is a recent
+        // attempt — deny.
+        assert!(matches!(cooldown_decision(Some(0)), CooldownDecision::Deny));
+        assert!(matches!(
+            cooldown_decision(Some(SPAWN_COOLDOWN_MS as i128 - 1)),
+            CooldownDecision::Deny
+        ));
+    }
+
+    #[test]
+    fn cooldown_at_and_past_window_allows() {
+        // The window is half-open: exactly SPAWN_COOLDOWN_MS old has expired.
+        assert!(matches!(
+            cooldown_decision(Some(SPAWN_COOLDOWN_MS as i128)),
+            CooldownDecision::Allow
+        ));
+        assert!(matches!(
+            cooldown_decision(Some(SPAWN_COOLDOWN_MS as i128 + 5_000)),
+            CooldownDecision::Allow
+        ));
+    }
+
+    #[test]
+    fn cooldown_small_future_is_precision_skew_denies() {
+        // A slightly-future mtime (wall clock vs fs precision) is NOT garbage —
+        // it is a just-recorded attempt. Deny, do not treat as garbage.
+        assert!(matches!(cooldown_decision(Some(-1)), CooldownDecision::Deny));
+        assert!(matches!(
+            cooldown_decision(Some(-(STALE_LOCK_MS as i128))),
+            CooldownDecision::Deny
+        ));
+    }
+
+    #[test]
+    fn cooldown_far_future_is_garbage_allows_loudly() {
+        // Beyond the stale-lock window in the future = clock skew / touched file.
+        // Allow the spawn, carrying the forward delta for the warning.
+        match cooldown_decision(Some(-(STALE_LOCK_MS as i128) - 1)) {
+            CooldownDecision::AllowFutureGarbage(ms) => {
+                assert_eq!(ms, STALE_LOCK_MS as i128 + 1)
+            }
+            other => panic!("expected AllowFutureGarbage, got {other:?}"),
+        }
+        assert!(matches!(
+            cooldown_decision(Some(-3_600_000)),
+            CooldownDecision::AllowFutureGarbage(_)
+        ));
     }
 
     #[test]
