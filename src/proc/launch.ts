@@ -45,6 +45,10 @@ export const LAUNCH_CATEGORIES = [
   "install.pbcopy",
   "install.open",
   "daemon-spawn",
+  // Process start-time fingerprint (`ps -o lstart=`) for socket-lease liveness
+  // (process-fingerprint.ts). Spawned only at daemon start + EADDRINUSE
+  // arbitration — never per render — so it needs no rate limit.
+  "process-fingerprint",
 ] as const;
 
 export type LaunchCategory = (typeof LAUNCH_CATEGORIES)[number];

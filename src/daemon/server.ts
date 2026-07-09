@@ -22,6 +22,11 @@ import {
   readSocketIdentity,
   type SocketIdentity,
 } from "./socket-ownership";
+import {
+  readStartTime,
+  readOwnStartTime,
+  sameLiveProcess,
+} from "./process-fingerprint";
 import { dlog, closeLog } from "./log";
 import {
   PROTOCOL_VERSION,
@@ -127,8 +132,16 @@ const BIN_CHECK_INTERVAL_MS = 60 * 1000;
 // connection. Any uncaught error exits non-zero; the next client obtains a
 // fresh daemon via obtainDaemonKick() (fire-and-forget caller) or
 // obtainDaemon() (caller waits for readiness) in src/daemon/acquire.ts.
+// [LAW:one-source-of-truth] Our own kernel start-time, read once at startup and
+// stamped into our lease so a future daemon's arbitration can prove whether our
+// pid still names THIS process or a recycled ghost (process-fingerprint.ts).
+// null when this host cannot fingerprint (no `ps`) — readers then fall back to
+// kill(pid,0), no worse than before the fingerprint existed.
+let myStartTime: string | null = null;
+
 export function runDaemon(): void {
   fs.mkdirSync(daemonDir(), { recursive: true });
+  myStartTime = readOwnStartTime(process.pid);
   // [LAW:single-enforcer] Verify the socket parent is uid==me + mode 0700 +
   // not a symlink before we bind. Without this check, a same-host attacker
   // could pre-create the predictable `/tmp/cc-candybar-<uid>` directory and
@@ -236,7 +249,11 @@ function handleAddressInUse(server: net.Server, sockPath: string): void {
   // [LAW:one-source-of-truth] Derive the lease from the SAME sockPath threaded
   // through unlink + rebind below, not the re-derived global — one identity
   // source for the whole arbitration.
-  const decision = arbitrateSocket(readLease(leasePathFor(sockPath)), pidAlive);
+  const decision = arbitrateSocket(
+    readLease(leasePathFor(sockPath)),
+    (pid, startTime) =>
+      sameLiveProcess(pid, startTime, { readStartTime, pidAlive }),
+  );
   if (decision.kind === "attach-and-exit") {
     dlog("info", `EADDRINUSE: ${decision.reason} — exiting`);
     process.exit(0);
@@ -280,20 +297,19 @@ function onListening(sockPath: string): void {
   // the FD yields no path-comparable identity. stat(path), taken as close to the
   // bind as possible, is the only path-comparable truth available.
   //
-  // [FRAMING:representation] Be honest about the ONE window this capture cannot
-  // close. It catches an absent/unreadable path (below): we could not form a
-  // fingerprint, so we have no proof of ownership and exit toward the SAFE
-  // direction (a false-displaced daemon just lets whoever holds the path serve —
-  // no orphan) WITHOUT writing a lease that would stomp a thief's. It does NOT
-  // catch a path that is present but already holds a THIEF's socket — if a second
-  // daemon completed its full EADDRINUSE → read-lease → unlink → rebind cycle in
-  // the single event-loop tick between bind() and this 'listening' callback, we
-  // fingerprint the thief's identity and the self-check reads `owned` forever
-  // (the orphan this module exists to kill). That race is irreducible at this
-  // layer (no race-free handle on our own socket's path-identity exists) and
-  // vanishingly narrow; fully closing it needs the lock-based liveness the epic
-  // deferred (a flock/start-time fingerprint) — the same residual sibling .1's
-  // arbitrateSocket documents for its false-alive direction.
+  // [FRAMING:representation] This inode capture still cannot close the capture
+  // race on its own: if a second daemon completed its full EADDRINUSE →
+  // read-lease → unlink → rebind cycle in the single event-loop tick between
+  // bind() and this 'listening' callback, we stat the path and capture the
+  // THIEF's inode as "ours". No race-free handle on our own socket's path
+  // identity exists (an AF_UNIX listener's fstat is a different namespace's
+  // inode), so the captured inode cannot be made trustworthy. But that is no
+  // longer the immortal orphan it was (brandon-daemon-lifecycle-2b3.4 RESIDUAL
+  // 2): the ownership self-check now ALSO requires the lease to still name us,
+  // and a real thief writes its own pid into the lease — so a displaced daemon
+  // drains within a bounded number of intervals instead of reading `owned`
+  // forever (see checkOwnership). The absent/unreadable case below still exits
+  // toward the SAFE direction without writing a lease that would stomp a thief's.
   const boundRead = readSocketIdentity(sockPath);
   if (boundRead.kind !== "present") {
     dlog(
@@ -330,15 +346,20 @@ function onListening(sockPath: string): void {
 // --- socket-ownership self-check ---
 //
 // [LAW:single-enforcer] The sole enforcer of "serving implies owning the socket
-// path over time" (brandon-daemon-lifecycle-2b3.2). Periodically re-stats the
-// path; if its kernel identity no longer matches what we bound, we were
-// displaced (its socket unlinked + rebound by a reclaimer) and drain through the
-// SAME shutdown funnel as signals, the RSS backstop, and the watchdog — no
-// parallel exit path.
+// path over time" (brandon-daemon-lifecycle-2b3.2). Each interval it re-reads
+// BOTH representations a displacer can touch — the path's kernel identity (still
+// the inode we bound?) and the lease (still names our pid?) — and drains through
+// the SAME shutdown funnel as signals, the RSS backstop, and the watchdog on
+// either mismatch. The lease arm closes the capture race (RESIDUAL 2): a thief
+// that stole our socket inside the bind→listening tick, which the inode arm
+// cannot see because we captured the thief's inode, is caught the moment the
+// thief writes its own pid into the lease. No parallel exit path.
 function armOwnershipWatch(sockPath: string, bound: SocketIdentity): void {
   makeOwnershipWatch({
     bound,
+    myPid: process.pid,
     readIdentity: () => readSocketIdentity(sockPath),
+    readLease: () => readLease(leasePathFor(sockPath)),
     shutdown: (code) => shutdown(code),
     log: dlog,
   }).arm();
@@ -418,7 +439,7 @@ function writeLeaseFile(sockPath: string): void {
     pid: process.pid,
     version: PROTOCOL_VERSION,
     binPath: process.argv[1],
-    startedAt: new Date().toISOString(),
+    startTime: myStartTime,
   });
   if (reason !== null) dlog("warn", `lease write failed: ${reason}`);
 }
