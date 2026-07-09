@@ -579,6 +579,15 @@ const SPAWN_COOLDOWN_MS: u128 = 3_000;
 // runtimes must name the SAME file or the rate bound splits in two.
 const SPAWN_COOLDOWN_FILE: &str = "spawn.cooldown";
 
+// [LAW:one-source-of-truth] The staleness window shared by two spawn-side
+// policies: try_acquire_spawn_lock reclaims a spawn.lock older than this, and
+// claim_spawn_cooldown treats a spawn.cooldown mtime more than this in the
+// future as garbage. One fact, one constant (mirrors Node's module-level
+// STALE_LOCK_MS in src/daemon/acquire.ts). Not check-protocol'd because it does
+// not cross the wire — only the two runtimes' cooldown/lock windows must each be
+// internally single-sourced.
+const STALE_LOCK_MS: u64 = 10_000;
+
 // [LAW:one-type-per-behavior] Mirror of Node's LockOutcome — both runtimes
 // distinguish "held / contended / error" so a Rust kick and a Node kick
 // recover from the same failure modes at the same rates.
@@ -658,10 +667,9 @@ fn spawn_daemon_rate_limited() {
 // [-STALE_LOCK_MS, SPAWN_COOLDOWN_MS). The mtime IS the timestamp, so there is
 // no content to misparse.
 fn claim_spawn_cooldown() -> bool {
-    const STALE_LOCK_MS: i128 = 10_000;
     let path = spawn_cooldown_path();
     if let Some(age) = cooldown_age_ms(&path) {
-        if age < -STALE_LOCK_MS {
+        if age < -(STALE_LOCK_MS as i128) {
             eprintln!(
                 "cc-candybar: spawn.cooldown mtime is {}ms in the future — ignoring and spawning",
                 -age
@@ -717,7 +725,7 @@ fn spawn_lock_age_ms() -> Option<u128> {
 //
 // Staleness window matches Node's STALE_LOCK_MS (10s).
 fn try_acquire_spawn_lock() -> LockOutcome {
-    const STALE_LOCK: Duration = Duration::from_secs(10);
+    const STALE_LOCK: Duration = Duration::from_millis(STALE_LOCK_MS);
     let path = state_dir().join("spawn.lock");
     // Ensure state_dir exists; mkdir is idempotent.
     if let Some(parent) = path.parent() {
