@@ -273,17 +273,32 @@ function handleAddressInUse(server: net.Server, sockPath: string): void {
 
 function onListening(sockPath: string): void {
   // [LAW:no-ambient-temporal-coupling] Capture the bound socket's kernel
-  // identity (dev+ino) BEFORE claiming the lease — it is the fingerprint the
-  // ownership self-check re-stats against. If the path is already not-ours here,
-  // a second daemon displaced us inside the bind→callback window: exit toward
-  // the SAFE direction (a false-displaced daemon just lets the thief serve — no
-  // orphan) and, crucially, do NOT write a lease that would stomp the thief's.
-  // Serving must imply owning; we never proved ownership, so we never serve.
+  // identity (dev+ino) as the fingerprint the ownership self-check re-stats
+  // against, BEFORE claiming the lease. Captured from the PATH, not the bound
+  // FD: for an AF_UNIX listener, fstat(fd) reports the socket's inode in the
+  // socket namespace — not the filesystem-entry inode that stat(path) sees — so
+  // the FD yields no path-comparable identity. stat(path), taken as close to the
+  // bind as possible, is the only path-comparable truth available.
+  //
+  // [FRAMING:representation] Be honest about the ONE window this capture cannot
+  // close. It catches an absent/unreadable path (below): we could not form a
+  // fingerprint, so we have no proof of ownership and exit toward the SAFE
+  // direction (a false-displaced daemon just lets whoever holds the path serve —
+  // no orphan) WITHOUT writing a lease that would stomp a thief's. It does NOT
+  // catch a path that is present but already holds a THIEF's socket — if a second
+  // daemon completed its full EADDRINUSE → read-lease → unlink → rebind cycle in
+  // the single event-loop tick between bind() and this 'listening' callback, we
+  // fingerprint the thief's identity and the self-check reads `owned` forever
+  // (the orphan this module exists to kill). That race is irreducible at this
+  // layer (no race-free handle on our own socket's path-identity exists) and
+  // vanishingly narrow; fully closing it needs the lock-based liveness the epic
+  // deferred (a flock/start-time fingerprint) — the same residual sibling .1's
+  // arbitrateSocket documents for its false-alive direction.
   const boundRead = readSocketIdentity(sockPath);
   if (boundRead.kind !== "present") {
     dlog(
       "warn",
-      `displaced during bind window (socket ${boundRead.kind}); exiting`,
+      `no ownable socket at bind callback (${boundRead.kind}); exiting`,
     );
     shutdown(0);
     return;
