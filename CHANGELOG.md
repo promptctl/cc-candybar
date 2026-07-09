@@ -1,3 +1,10 @@
+## [1.17.4](https://github.com/promptctl/cc-candybar/compare/v1.17.3...v1.17.4) (2026-07-09)
+
+
+### Bug Fixes
+
+* **daemon:** pid+start-time fingerprint closes the two socket-lease residuals (brandon-daemon-lifecycle-2b3.4) ([#149](https://github.com/promptctl/cc-candybar/issues/149)) ([d45e24b](https://github.com/promptctl/cc-candybar/commit/d45e24bc7137f2ff1629b22c9e4ca838a56c322a))
+
 ## [1.17.3](https://github.com/promptctl/cc-candybar/compare/v1.17.2...v1.17.3) (2026-07-09)
 
 
