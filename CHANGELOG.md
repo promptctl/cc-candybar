@@ -1,3 +1,10 @@
+## [1.17.1](https://github.com/promptctl/cc-candybar/compare/v1.17.0...v1.17.1) (2026-07-09)
+
+
+### Bug Fixes
+
+* **daemon:** pid lease replaces connect-probe as socket-reclaim authority (brandon-daemon-lifecycle-2b3.1) ([#146](https://github.com/promptctl/cc-candybar/issues/146)) ([85b1bf6](https://github.com/promptctl/cc-candybar/commit/85b1bf6f4121fc29209bbc3cda91f6b90a1ff3a2))
+
 # [1.17.0](https://github.com/promptctl/cc-candybar/compare/v1.16.0...v1.17.0) (2026-07-08)
 
 
