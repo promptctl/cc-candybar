@@ -19,17 +19,23 @@ import { launchSync, type LaunchOpts, type LaunchResult } from "../proc/launch";
 // [FRAMING:representation]: a producer/consumer parse mismatch is unrepresentable
 // when neither side parses.
 
-// A read of a pid's kernel start-time. Three outcomes, kept distinct because
-// each drives a different liveness verdict:
-//   start       — the pid is live and this is its start-time token.
-//   gone        — the pid names no live process (safe to treat as dead).
-//   unavailable — this host cannot answer (`ps` missing/errored). We must NOT
-//                 read this as `gone` — that would reclaim a live daemon's
-//                 socket on a stripped host — so callers fall back to a weaker
-//                 liveness signal (kill(pid,0)) instead.
+// A read of a pid's kernel start-time. Only TWO outcomes, because nothing
+// derivable from a `ps` exit code can SOUNDLY prove a process is dead — a
+// non-zero exit means "no start-time to report", which conflates a genuinely
+// absent pid with an access failure (hardened `/proc`/`hidepid`, a
+// permission-denied read of a live process). A `gone` state produced from that
+// would be an over-claim ([LAW:types-are-the-program]) that could false-dead a
+// live owner and reclaim its socket. So:
+//   start       — the pid is live and this is its start-time token (the ONLY
+//                 thing `ps` can assert soundly: it printed a row).
+//   unavailable — `ps` reported no start-time (absent OR unreadable OR errored).
+//                 Callers defer to kill(pid,0), the sound liveness test, which
+//                 correctly reclaims a truly-dead pid and spares a live one.
+// The fingerprint's unique contribution is the `start`+mismatch case (a recycled
+// pid whose live start-time differs from the lease); everything else falls back
+// to kill, no worse than before the fingerprint existed.
 export type StartTimeRead =
   | { kind: "start"; token: string }
-  | { kind: "gone" }
   | { kind: "unavailable"; detail: string };
 
 // The subprocess boundary, injected so the parse/branch logic is exercised by
@@ -37,12 +43,12 @@ export type StartTimeRead =
 export type Launcher = (opts: LaunchOpts) => LaunchResult;
 
 // [LAW:effects-at-boundaries][LAW:single-enforcer] The sole effect (spawning
-// `ps`) goes through the one subprocess enforcer, `launchSync`. `ps` prints a
-// start-time row ONLY for a live pid, so a non-empty trimmed stdout is the live
-// signal; a clean non-zero exit with empty stdout is `ps`'s confirmed "no such
-// process"; a spawn-error (no `ps`) or an ambiguous failure degrades to
-// `unavailable` so the caller falls back to kill(pid,0) rather than risk
-// declaring a live owner dead [LAW:no-silent-failure].
+// `ps`) goes through the one subprocess enforcer, `launchSync`. The ONLY sound
+// signal `ps` gives is a printed start-time row (a live pid we could read);
+// [LAW:no-silent-failure] every other outcome — absent pid, access failure,
+// spawn-error, timeout — is `unavailable`, deferring the alive/dead call to
+// kill(pid,0) rather than risk declaring a live owner dead from a `ps` exit
+// code that cannot distinguish "gone" from "cannot read".
 export function readStartTime(
   pid: number,
   launch: Launcher = launchSync,
@@ -55,22 +61,16 @@ export function readStartTime(
   });
   if (res.ok) {
     const token = res.stdout.trim();
-    // Exit 0 with empty output would be anomalous (a live pid always lists);
-    // treat it as `gone` rather than minting an empty-string fingerprint.
-    return token.length > 0 ? { kind: "start", token } : { kind: "gone" };
+    if (token.length > 0) return { kind: "start", token };
+    // Exit 0 with empty output is anomalous (a live pid always lists) — don't
+    // mint an empty-string fingerprint; defer to kill.
+    return { kind: "unavailable", detail: "ps produced no start-time" };
   }
-  // `ps` absent (spawn-error) → this host cannot fingerprint at all.
-  if (res.reason === "spawn-error") {
-    return { kind: "unavailable", detail: res.error ?? "ps spawn failed" };
-  }
-  // A clean non-zero exit with EMPTY stdout is the definitive dead-pid case; a
-  // non-zero exit that still produced output, or a timeout/signal, is ambiguous.
-  if (res.reason === "non-zero") {
-    return res.stdout.trim().length === 0
-      ? { kind: "gone" }
-      : { kind: "unavailable", detail: `ps exit ${res.exitCode}` };
-  }
-  return { kind: "unavailable", detail: `ps ${res.reason}` };
+  const detail =
+    res.reason === "spawn-error"
+      ? (res.error ?? "ps spawn failed")
+      : `ps ${res.reason} (exit ${res.exitCode})`;
+  return { kind: "unavailable", detail };
 }
 
 export interface LivenessDeps {
@@ -83,17 +83,18 @@ export interface LivenessDeps {
 //   read=start + token matches lease   → true  (same process still alive)
 //   read=start + token differs         → false (a DIFFERENT process holds the
 //                                        pid — a recycle, or a restarted daemon)
-//   read=gone                          → false (no live process)
-//   read=unavailable                   → kill(pid,0) fallback (can't fingerprint
-//                                        → preserve .1's theft protection; only
-//                                        the recycle-detection is lost)
+//   read=unavailable                   → kill(pid,0) fallback (the sound
+//                                        alive/dead test: a truly-dead pid →
+//                                        false → reclaim; a live pid ps couldn't
+//                                        read → true → spared)
 //   lease token = null (unfingerprinted at write, e.g. a host without `ps`) →
 //                                        kill(pid,0) fallback for the same reason
 //
-// [LAW:no-silent-failure] The fallback is chosen so the DANGEROUS direction
-// (declaring a live daemon dead → stealing its socket, the storm this epic
-// fights) never happens merely because a host cannot fingerprint; the only thing
-// forfeited without `ps` is detecting a recycled pid.
+// [LAW:no-silent-failure] Only the `start`+mismatch case comes from the
+// fingerprint; every ambiguous `ps` outcome defers to kill, so the DANGEROUS
+// direction (declaring a live daemon dead → stealing its socket, the storm this
+// epic fights) never happens merely because `ps` could not answer. The only
+// thing forfeited when `ps` cannot answer is detecting a recycled pid.
 export function sameLiveProcess(
   pid: number,
   leaseToken: string | null,
@@ -104,8 +105,6 @@ export function sameLiveProcess(
   switch (read.kind) {
     case "start":
       return read.token === leaseToken;
-    case "gone":
-      return false;
     case "unavailable":
       return deps.pidAlive(pid);
   }

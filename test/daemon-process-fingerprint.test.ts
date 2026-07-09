@@ -33,12 +33,14 @@ describe("readStartTime (real ps)", () => {
     if (r.kind === "start") expect(r.token.length).toBeGreaterThan(0);
   });
 
-  test("a dead pid → gone (ps lists no such process)", async () => {
+  // A dead pid yields no start-time row → `unavailable` (NOT a `gone` claim `ps`
+  // cannot soundly make); sameLiveProcess then defers to kill(pid,0).
+  test("a dead pid → unavailable (ps reports no start-time)", async () => {
     const child = spawn(process.execPath, ["-e", ""], { stdio: "ignore" });
     const deadPid: number = await new Promise((resolve) => {
       child.once("exit", () => resolve(child.pid as number));
     });
-    expect(readStartTime(deadPid).kind).toBe("gone");
+    expect(readStartTime(deadPid).kind).toBe("unavailable");
   });
 });
 
@@ -56,23 +58,24 @@ describe("readStartTime (injected launcher — the unavailable branches)", () =>
     signal: null,
   });
 
-  test("ps binary missing (spawn-error) → unavailable, NOT gone", () => {
+  test("ps binary missing (spawn-error) → unavailable", () => {
     expect(
       readStartTime(123, launcher(fail("spawn-error", "", null))).kind,
     ).toBe("unavailable");
   });
 
-  // A clean non-zero exit with EMPTY stdout is ps's confirmed "no such process".
-  test("non-zero exit + empty stdout → gone", () => {
+  // A non-zero exit CANNOT soundly distinguish "no such process" from "cannot
+  // read a live process" (hardened /proc, permission-denied) — so it is always
+  // `unavailable` and the alive/dead call defers to kill(pid,0). This is the
+  // edge the code-review flagged: never false-dead a live owner from a `ps`
+  // exit code.
+  test("non-zero exit + empty stdout → unavailable (could be an access failure, not death)", () => {
     expect(readStartTime(123, launcher(fail("non-zero", ""))).kind).toBe(
-      "gone",
+      "unavailable",
     );
   });
 
-  // A non-zero exit that still produced output is ambiguous — we must NOT read
-  // it as a dead process (that could steal a live socket); degrade to
-  // unavailable so the caller falls back to kill(pid,0).
-  test("non-zero exit + non-empty stdout → unavailable (ambiguous, not gone)", () => {
+  test("non-zero exit + non-empty stdout → unavailable", () => {
     expect(
       readStartTime(123, launcher(fail("non-zero", "Mon Jan  1 00:00:00 2024")))
         .kind,
@@ -85,10 +88,12 @@ describe("readStartTime (injected launcher — the unavailable branches)", () =>
     );
   });
 
-  // Exit 0 with empty output is anomalous — treat as gone rather than minting an
-  // empty-string fingerprint that would spuriously match another empty read.
-  test("exit 0 + empty stdout → gone (no empty-string fingerprint)", () => {
-    expect(readStartTime(123, launcher(okStdout("  \n"))).kind).toBe("gone");
+  // Exit 0 with empty output is anomalous — don't mint an empty-string
+  // fingerprint that would spuriously match another empty read; defer to kill.
+  test("exit 0 + empty stdout → unavailable (no empty-string fingerprint)", () => {
+    expect(readStartTime(123, launcher(okStdout("  \n"))).kind).toBe(
+      "unavailable",
+    );
   });
 });
 
@@ -122,10 +127,6 @@ describe("sameLiveProcess (pure fold over injected reads)", () => {
     expect(d.pidAliveCalls).toBe(0);
   });
 
-  test("gone → false (no live process)", () => {
-    expect(sameLiveProcess(10, "T", deps({ kind: "gone" }, true))).toBe(false);
-  });
-
   test("unavailable → falls back to kill(pid,0)", () => {
     expect(
       sameLiveProcess(10, "T", deps({ kind: "unavailable", detail: "x" }, true)),
@@ -143,7 +144,10 @@ describe("sameLiveProcess (pure fold over injected reads)", () => {
   // start-time at all — fall straight back to kill(pid,0), preserving .1's
   // theft protection on a host without `ps`.
   test("null lease token → kill(pid,0) fallback without reading start-time", () => {
-    const read = jest.fn<StartTimeRead, [number]>(() => ({ kind: "gone" }));
+    const read = jest.fn<StartTimeRead, [number]>(() => ({
+      kind: "unavailable",
+      detail: "unused",
+    }));
     const d = { readStartTime: read, pidAlive: () => true };
     expect(sameLiveProcess(10, null, d)).toBe(true);
     expect(read).not.toHaveBeenCalled();
