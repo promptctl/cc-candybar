@@ -508,11 +508,13 @@ describe("daemon startup (bind-based singleton)", () => {
       const { socketPath } = await import("../src/daemon/paths");
       fs.mkdirSync(path.dirname(socketPath()), { recursive: true });
 
-      // Plant a stale socket file (just a plain file, no listener). Per the
-      // round-8 server.ts probeSocket, only ENOTSOCK/ECONNREFUSED/ENOENT
-      // count as "definitively dead" — verify the kernel returns one of
-      // those (so the stale-socket recovery path in handleAddressInUse will
-      // actually fire).
+      // Plant a stale socket file (just a plain file, no listener). This test
+      // pins the kernel MECHANICS the daemon's recovery relies on: a plain file
+      // at the socket path makes bind() fail EADDRINUSE and connect() fail
+      // ENOTSOCK/ECONNREFUSED. The daemon's actual arbitration no longer
+      // consults connect() at all (it reads the socket-derived pid lease — see
+      // daemon-socket-lease.test.ts); this only verifies the unlink+rebind
+      // recovery still binds a working socket.
       fs.writeFileSync(socketPath(), "");
 
       const connectErr: NodeJS.ErrnoException = await new Promise(

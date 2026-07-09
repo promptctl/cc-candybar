@@ -106,8 +106,16 @@ export function ensureSocketParentSafe(sockPath: string): void {
   }
 }
 
-export function pidPath(): string {
-  return path.join(stateDir(), "pid");
+// [LAW:one-source-of-truth] The socket-ownership lease is DERIVED FROM the
+// socket path, so it shares the socket's identity root. The old diagnostic
+// pidfile lived under $XDG_STATE_HOME while the socket lived under /tmp — two
+// identity roots for one instance, and CC_CANDYBAR_SOCKET isolated only one of
+// them. Anchoring the lease to socketPath() means test/dev isolation via
+// CC_CANDYBAR_SOCKET isolates the lease too. The lease subsumes the old
+// diagnostic pidfile: it carries the owner pid (the reclaim authority) plus the
+// same diagnostic fields.
+export function leasePath(): string {
+  return `${socketPath()}.lease`;
 }
 
 export function sessionStatePath(): string {
