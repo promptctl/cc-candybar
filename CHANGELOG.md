@@ -1,3 +1,10 @@
+## [1.17.2](https://github.com/promptctl/cc-candybar/compare/v1.17.1...v1.17.2) (2026-07-09)
+
+
+### Bug Fixes
+
+* **daemon:** ownership self-check exits a displaced daemon within one interval (brandon-daemon-lifecycle-2b3.2) ([#147](https://github.com/promptctl/cc-candybar/issues/147)) ([d00221a](https://github.com/promptctl/cc-candybar/commit/d00221a3d659ce840a45ba5401db2c560e3b950e))
+
 ## [1.17.1](https://github.com/promptctl/cc-candybar/compare/v1.17.0...v1.17.1) (2026-07-09)
 
 
