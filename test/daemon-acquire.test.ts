@@ -50,6 +50,57 @@ function closeServer(server: net.Server): Promise<void> {
   });
 }
 
+// [LAW:behavior-not-structure] Pin the cooldown window arithmetic at its exact
+// boundaries — the same conditions the Rust unit tests pin — so a TS↔Rust
+// decision divergence at a threshold is caught even though check-protocol only
+// diffs the constants' values. Pure over the age; no filesystem.
+describe("cooldownDecision (pure window arithmetic)", () => {
+  test("absent record allows (first spawn)", async () => {
+    const { cooldownDecision } = await import("../src/daemon/acquire");
+    expect(cooldownDecision(null)).toEqual({ kind: "allow" });
+  });
+
+  test("within [0, SPAWN_COOLDOWN_MS) denies", async () => {
+    const { cooldownDecision, SPAWN_COOLDOWN_MS } = await import(
+      "../src/daemon/acquire"
+    );
+    expect(cooldownDecision(0)).toEqual({ kind: "deny" });
+    expect(cooldownDecision(SPAWN_COOLDOWN_MS - 1)).toEqual({ kind: "deny" });
+  });
+
+  test("at and past SPAWN_COOLDOWN_MS allows (half-open window)", async () => {
+    const { cooldownDecision, SPAWN_COOLDOWN_MS } = await import(
+      "../src/daemon/acquire"
+    );
+    expect(cooldownDecision(SPAWN_COOLDOWN_MS)).toEqual({ kind: "allow" });
+    expect(cooldownDecision(SPAWN_COOLDOWN_MS + 5_000)).toEqual({
+      kind: "allow",
+    });
+  });
+
+  test("small negative age is precision skew, not garbage — denies", async () => {
+    const { cooldownDecision, STALE_LOCK_MS } = await import(
+      "../src/daemon/acquire"
+    );
+    expect(cooldownDecision(-1)).toEqual({ kind: "deny" });
+    expect(cooldownDecision(-STALE_LOCK_MS)).toEqual({ kind: "deny" });
+  });
+
+  test("beyond the stale-lock window in the future is garbage — allows loudly", async () => {
+    const { cooldownDecision, STALE_LOCK_MS } = await import(
+      "../src/daemon/acquire"
+    );
+    expect(cooldownDecision(-STALE_LOCK_MS - 1)).toEqual({
+      kind: "allow-future-garbage",
+      futureMs: STALE_LOCK_MS + 1,
+    });
+    expect(cooldownDecision(-3_600_000)).toEqual({
+      kind: "allow-future-garbage",
+      futureMs: 3_600_000,
+    });
+  });
+});
+
 describe("obtainDaemon (bind-based singleton)", () => {
   test("attaches when a daemon is already listening — no spawn", async () => {
     await withTempState(async (stateDir) => {
@@ -351,9 +402,12 @@ describe("obtainDaemon (bind-based singleton)", () => {
       fs.mkdirSync(daemonDir(), { recursive: true });
       fs.writeFileSync(spawnCooldownPath(), `${process.pid} ${Date.now()}\n`);
 
-      // The daemon someone else spawned finishes booting during our poll. Bring
-      // it up shortly AFTER the initial fast-path probe so we exercise the
-      // cooldown branch, not the top-level attach.
+      // The daemon someone else spawned finishes booting during our poll. It
+      // must appear AFTER obtainDaemon's initial fast-path probe AND its
+      // post-lock re-check (acquire.ts) — otherwise the test would attach at the
+      // top level instead of exercising the cooldown-poll branch. Those two
+      // checks are ~2 microtask ticks apart with no I/O between them (sub-ms), so
+      // a 150ms appearance lands deterministically in the cooldown-poll phase.
       let server: net.Server | null = null;
       setTimeout(() => {
         startFakeDaemon(socketPath())
@@ -361,7 +415,7 @@ describe("obtainDaemon (bind-based singleton)", () => {
             server = s;
           })
           .catch(() => {});
-      }, 40);
+      }, 150);
 
       let spawned = 0;
       const result = await obtainDaemon({
