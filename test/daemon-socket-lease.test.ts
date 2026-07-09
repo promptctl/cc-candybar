@@ -263,13 +263,17 @@ describe("daemon EADDRINUSE arbitration (integration)", () => {
     const fx = makeFixture();
     const holder = spawnLiveHolder();
     try {
+      // A missing pid would make the lease omit `pid` → readLease `unreadable`
+      // → reclaim, passing this test for the wrong reason. Assert it up front.
+      expect(holder.pid).toBeDefined();
+      const holderPid = holder.pid as number;
       // Plant a stale plain file at the socket path (bind → EADDRINUSE; connect
       // → ENOTSOCK/ECONNREFUSED, i.e. the old probe's "dead" verdict) plus a
       // lease naming the LIVE holder pid.
       const MARKER = "INCUMBENT-SOCKET-DO-NOT-DELETE";
       fs.writeFileSync(fx.sockPath, MARKER);
       writeLease(fx.leasePath, {
-        pid: holder.pid!,
+        pid: holderPid,
         version: 2,
         binPath: "/incumbent",
         startedAt: new Date().toISOString(),
@@ -297,7 +301,8 @@ describe("daemon EADDRINUSE arbitration (integration)", () => {
     try {
       // A holder we kill, so its pid is dead when the daemon reads the lease.
       const holder = spawnLiveHolder();
-      const deadPid = holder.pid!;
+      expect(holder.pid).toBeDefined();
+      const deadPid = holder.pid as number;
       holder.kill("SIGKILL");
       await waitForExit(holder);
 
