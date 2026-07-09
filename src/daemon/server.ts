@@ -17,6 +17,11 @@ import {
   removeLeaseIfOwned,
   writeLease,
 } from "./socket-lease";
+import {
+  makeOwnershipWatch,
+  readSocketIdentity,
+  type SocketIdentity,
+} from "./socket-ownership";
 import { dlog, closeLog } from "./log";
 import {
   PROTOCOL_VERSION,
@@ -267,12 +272,44 @@ function handleAddressInUse(server: net.Server, sockPath: string): void {
 }
 
 function onListening(sockPath: string): void {
-  // [LAW:no-ambient-temporal-coupling] Claim ownership FIRST — before chmod or
-  // any other post-bind work — so the window between winning the bind and the
-  // lease naming us is as small as possible. A second daemon that binds in that
-  // sub-ms gap reads an absent lease and reclaims (displacing us); the
-  // ownership self-check (brandon-daemon-lifecycle-2b3.2) makes that
-  // self-healing, but keeping the window minimal keeps it vanishingly rare.
+  // [LAW:no-ambient-temporal-coupling] Capture the bound socket's kernel
+  // identity (dev+ino) as the fingerprint the ownership self-check re-stats
+  // against, BEFORE claiming the lease. Captured from the PATH, not the bound
+  // FD: for an AF_UNIX listener, fstat(fd) reports the socket's inode in the
+  // socket namespace — not the filesystem-entry inode that stat(path) sees — so
+  // the FD yields no path-comparable identity. stat(path), taken as close to the
+  // bind as possible, is the only path-comparable truth available.
+  //
+  // [FRAMING:representation] Be honest about the ONE window this capture cannot
+  // close. It catches an absent/unreadable path (below): we could not form a
+  // fingerprint, so we have no proof of ownership and exit toward the SAFE
+  // direction (a false-displaced daemon just lets whoever holds the path serve —
+  // no orphan) WITHOUT writing a lease that would stomp a thief's. It does NOT
+  // catch a path that is present but already holds a THIEF's socket — if a second
+  // daemon completed its full EADDRINUSE → read-lease → unlink → rebind cycle in
+  // the single event-loop tick between bind() and this 'listening' callback, we
+  // fingerprint the thief's identity and the self-check reads `owned` forever
+  // (the orphan this module exists to kill). That race is irreducible at this
+  // layer (no race-free handle on our own socket's path-identity exists) and
+  // vanishingly narrow; fully closing it needs the lock-based liveness the epic
+  // deferred (a flock/start-time fingerprint) — the same residual sibling .1's
+  // arbitrateSocket documents for its false-alive direction.
+  const boundRead = readSocketIdentity(sockPath);
+  if (boundRead.kind !== "present") {
+    dlog(
+      "warn",
+      `no ownable socket at bind callback (${boundRead.kind}); exiting`,
+    );
+    shutdown(0);
+    return;
+  }
+
+  // [LAW:no-ambient-temporal-coupling] Claim ownership FIRST among the post-bind
+  // effects — before chmod or any other work — so the window between winning the
+  // bind and the lease naming us is as small as possible. A second daemon that
+  // binds in that sub-ms gap reads an absent lease and reclaims (displacing us);
+  // the ownership self-check below makes that self-healing, but keeping the
+  // window minimal keeps it vanishingly rare.
   // [LAW:one-source-of-truth] Derive the lease from the same sockPath we bound,
   // matching handleAddressInUse's read — one identity source across write + read.
   writeLeaseFile(sockPath);
@@ -287,6 +324,24 @@ function onListening(sockPath: string): void {
   );
   armBinaryWatch();
   armLimits();
+  armOwnershipWatch(sockPath, boundRead.identity);
+}
+
+// --- socket-ownership self-check ---
+//
+// [LAW:single-enforcer] The sole enforcer of "serving implies owning the socket
+// path over time" (brandon-daemon-lifecycle-2b3.2). Periodically re-stats the
+// path; if its kernel identity no longer matches what we bound, we were
+// displaced (its socket unlinked + rebound by a reclaimer) and drain through the
+// SAME shutdown funnel as signals, the RSS backstop, and the watchdog — no
+// parallel exit path.
+function armOwnershipWatch(sockPath: string, bound: SocketIdentity): void {
+  makeOwnershipWatch({
+    bound,
+    readIdentity: () => readSocketIdentity(sockPath),
+    shutdown: (code) => shutdown(code),
+    log: dlog,
+  }).arm();
 }
 
 // --- binary-mtime self-restart ---
