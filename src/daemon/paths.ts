@@ -146,6 +146,17 @@ export function spawnLockPath(): string {
   return path.join(stateDir(), "spawn.lock");
 }
 
+// [LAW:one-source-of-truth] The spawn-RATE bound (as distinct from spawn.lock's
+// instantaneous dedup) is anchored to one file's mtime beside spawn.lock: the
+// time of the last daemon-spawn ATTEMPT. Both runtimes gate on the SAME file, so
+// the filename is mirrored TS↔Rust (rust-client/src/main.rs SPAWN_COOLDOWN_FILE)
+// and diffed by scripts/check-protocol.mjs — a drift would silently split the
+// rate bound in two.
+const SPAWN_COOLDOWN_FILE = "spawn.cooldown";
+export function spawnCooldownPath(): string {
+  return path.join(stateDir(), SPAWN_COOLDOWN_FILE);
+}
+
 export function logPath(): string {
   return path.join(stateDir(), "daemon.log");
 }

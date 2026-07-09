@@ -565,6 +565,30 @@ fn connect_with_timeout(path: &Path, timeout: Duration) -> io::Result<UnixStream
 // mid-spawn and overrides — bind() inside the daemon arbitrates duplicates.
 const KICK_CONTENDED_OVERRIDE_MS: u128 = 2_000;
 
+// [LAW:one-source-of-truth] The spawn-RATE bound. spawn.lock dedups spawns at one
+// INSTANT; this bounds them over TIME. The kick releases spawn.lock milliseconds
+// after forking, before the 0.5-3s Node boot window, so during an outage every
+// render tick re-spawns (spawn rate ≈ tick rate → process-table exhaustion). One
+// file's mtime (SPAWN_COOLDOWN_FILE) records the last spawn ATTEMPT; both runtimes
+// consult it. Mirrors src/daemon/acquire.ts SPAWN_COOLDOWN_MS — check-protocol
+// diffs this value so a drift fails prepublishOnly.
+const SPAWN_COOLDOWN_MS: u128 = 3_000;
+
+// Mirrors src/daemon/paths.ts SPAWN_COOLDOWN_FILE (diffed by check-protocol).
+// The cooldown file lives beside spawn.lock in the daemon state dir; both
+// runtimes must name the SAME file or the rate bound splits in two.
+const SPAWN_COOLDOWN_FILE: &str = "spawn.cooldown";
+
+// [LAW:one-source-of-truth] The staleness window shared by two spawn-side
+// policies: try_acquire_spawn_lock reclaims a spawn.lock older than this, and
+// claim_spawn_cooldown treats a spawn.cooldown mtime more than this in the
+// future as garbage. One fact, one constant (mirrors Node's module-level
+// STALE_LOCK_MS in src/daemon/acquire.ts). Mirrored TS↔Rust and diffed by
+// check-protocol: claim_spawn_cooldown applies it to the SAME shared
+// spawn.cooldown file both runtimes read, so a drift would make them disagree
+// on whether to spawn given identical on-disk state.
+const STALE_LOCK_MS: u64 = 10_000;
+
 // [LAW:one-type-per-behavior] Mirror of Node's LockOutcome — both runtimes
 // distinguish "held / contended / error" so a Rust kick and a Node kick
 // recover from the same failure modes at the same rates.
@@ -586,7 +610,7 @@ fn obtain_daemon_kick() {
             // Re-check connect — a daemon may have come up between our
             // first probe and our lock acquisition.
             if !can_connect(&socket_path(), Duration::from_millis(20)) {
-                spawn_daemon_detached();
+                spawn_daemon_rate_limited();
             }
             // [LAW:one-type-per-behavior] Release by unlinking — Node uses
             // the same semantics so a Rust kick and a Node kick agree on
@@ -603,7 +627,7 @@ fn obtain_daemon_kick() {
                     eprintln!(
                         "cc-candybar: spawn-lock held {age_ms}ms (likely crashed holder) — spawning unlocked"
                     );
-                    spawn_daemon_detached();
+                    spawn_daemon_rate_limited();
                 }
             }
         }
@@ -612,8 +636,104 @@ fn obtain_daemon_kick() {
             // stop on availability — spawn.lock is an optimization, bind()
             // is load-bearing. Mirror Node's obtainDaemonKick behavior.
             eprintln!("cc-candybar: spawn-lock unavailable ({reason}) — spawning unlocked");
-            spawn_daemon_detached();
+            spawn_daemon_rate_limited();
         }
+    }
+}
+
+// [LAW:single-enforcer] Every Rust spawn site routes through here so the
+// spawn-rate bound is applied at exactly one boundary — mirror of Node's
+// cooldownGatedSpawn in src/daemon/acquire.ts. On cooldown we do nothing: a
+// spawn was attempted within SPAWN_COOLDOWN_MS and is likely still booting, and
+// the kick is fire-and-forget so "already in flight" is a complete answer.
+fn spawn_daemon_rate_limited() {
+    if !claim_spawn_cooldown() {
+        return;
+    }
+    spawn_daemon_detached();
+}
+
+// [LAW:one-source-of-truth] Mirror of Node's claimSpawnCooldown. Returns true —
+// and RECORDS the attempt (writing spawn.cooldown, updating its mtime to now) —
+// when a spawn is permitted; false when an attempt was recorded within
+// SPAWN_COOLDOWN_MS. Recording-on-grant (BEFORE the fork) means a failed fork
+// still counts, so a broken binary is not retried in a tight loop.
+//
+// [LAW:no-silent-failure] A record whose mtime is more than the stale-lock
+// window (10s, matching try_acquire_spawn_lock) in the future is garbage (clock
+// skew, a touched file); it would otherwise read as "cooldown active forever"
+// and wedge the spawn path. We warn and fail toward ALLOWING the spawn. A small
+// negative age is just precision skew between the wall clock and the fs mtime —
+// that still counts as a just-recorded attempt, so the cooldown window is
+// [-STALE_LOCK_MS, SPAWN_COOLDOWN_MS). The mtime IS the timestamp, so there is
+// no content to misparse.
+fn claim_spawn_cooldown() -> bool {
+    let path = spawn_cooldown_path();
+    match cooldown_decision(cooldown_age_ms(&path)) {
+        CooldownDecision::Deny => false,
+        CooldownDecision::AllowFutureGarbage(future_ms) => {
+            eprintln!(
+                "cc-candybar: spawn.cooldown mtime is {future_ms}ms in the future — ignoring and spawning"
+            );
+            record_spawn_attempt(&path);
+            true
+        }
+        CooldownDecision::Allow => {
+            record_spawn_attempt(&path);
+            true
+        }
+    }
+}
+
+// [LAW:effects-at-boundaries] The window arithmetic — the subtle part: a
+// future-mtime garbage record (beyond the stale-lock window) must not pin the
+// cooldown forever, while a small negative age is just precision skew between
+// the wall clock and the fs mtime and still counts as a just-recorded attempt —
+// is a pure function of the record's age, extracted from the fs read so it is
+// unit-tested without touching the filesystem. AllowFutureGarbage carries the
+// forward delta so the caller can warn loudly.
+#[derive(Debug)]
+enum CooldownDecision {
+    Allow,
+    AllowFutureGarbage(i128),
+    Deny,
+}
+
+fn cooldown_decision(age_ms: Option<i128>) -> CooldownDecision {
+    match age_ms {
+        Some(age) if age < -(STALE_LOCK_MS as i128) => CooldownDecision::AllowFutureGarbage(-age),
+        Some(age) if age < SPAWN_COOLDOWN_MS as i128 => CooldownDecision::Deny,
+        _ => CooldownDecision::Allow,
+    }
+}
+
+fn spawn_cooldown_path() -> PathBuf {
+    state_dir().join(SPAWN_COOLDOWN_FILE)
+}
+
+// now - mtime, in ms. Positive when the file is in the past; negative for a
+// future mtime (SystemTimeError carries the forward delta).
+fn cooldown_age_ms(path: &Path) -> Option<i128> {
+    let modified = std::fs::metadata(path).and_then(|m| m.modified()).ok()?;
+    match modified.elapsed() {
+        Ok(d) => Some(d.as_millis() as i128),
+        Err(e) => Some(-(e.duration().as_millis() as i128)),
+    }
+}
+
+fn record_spawn_attempt(path: &Path) {
+    if let Some(parent) = path.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    // Content is human-diagnostic; the mtime is the authority. A write failure
+    // means no cooldown recorded — worst case one extra spawn, which bind()
+    // arbitrates — but surface it loudly rather than silently un-bound the rate.
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis())
+        .unwrap_or(0);
+    if let Err(e) = std::fs::write(path, format!("{} {}\n", std::process::id(), now)) {
+        eprintln!("cc-candybar: could not record spawn.cooldown: {e}");
     }
 }
 
@@ -630,7 +750,7 @@ fn spawn_lock_age_ms() -> Option<u128> {
 //
 // Staleness window matches Node's STALE_LOCK_MS (10s).
 fn try_acquire_spawn_lock() -> LockOutcome {
-    const STALE_LOCK: Duration = Duration::from_secs(10);
+    const STALE_LOCK: Duration = Duration::from_millis(STALE_LOCK_MS);
     let path = state_dir().join("spawn.lock");
     // Ensure state_dir exists; mkdir is idempotent.
     if let Some(parent) = path.parent() {
@@ -753,6 +873,66 @@ mod tests {
     fn dispatch_keeps_render_invocation_local() {
         assert!(!should_dispatch_to_node(&argv(&["cc-candybar", "--style=powerline"]), false));
         assert!(!should_dispatch_to_node(&argv(&["cc-candybar"]), false));
+    }
+
+    // [LAW:behavior-not-structure] Pin the cooldown window arithmetic — the
+    // boundary between "just-recorded attempt" (Deny) and "future-mtime garbage
+    // that must not wedge the spawn path" (AllowFutureGarbage) — matching the TS
+    // mirror's dedicated cooldown tests. Pure over the age; no filesystem.
+    #[test]
+    fn cooldown_absent_record_allows() {
+        assert!(matches!(cooldown_decision(None), CooldownDecision::Allow));
+    }
+
+    #[test]
+    fn cooldown_within_window_denies() {
+        // 0 and anything up to (but not including) SPAWN_COOLDOWN_MS is a recent
+        // attempt — deny.
+        assert!(matches!(cooldown_decision(Some(0)), CooldownDecision::Deny));
+        assert!(matches!(
+            cooldown_decision(Some(SPAWN_COOLDOWN_MS as i128 - 1)),
+            CooldownDecision::Deny
+        ));
+    }
+
+    #[test]
+    fn cooldown_at_and_past_window_allows() {
+        // The window is half-open: exactly SPAWN_COOLDOWN_MS old has expired.
+        assert!(matches!(
+            cooldown_decision(Some(SPAWN_COOLDOWN_MS as i128)),
+            CooldownDecision::Allow
+        ));
+        assert!(matches!(
+            cooldown_decision(Some(SPAWN_COOLDOWN_MS as i128 + 5_000)),
+            CooldownDecision::Allow
+        ));
+    }
+
+    #[test]
+    fn cooldown_small_future_is_precision_skew_denies() {
+        // A slightly-future mtime (wall clock vs fs precision) is NOT garbage —
+        // it is a just-recorded attempt. Deny, do not treat as garbage.
+        assert!(matches!(cooldown_decision(Some(-1)), CooldownDecision::Deny));
+        assert!(matches!(
+            cooldown_decision(Some(-(STALE_LOCK_MS as i128))),
+            CooldownDecision::Deny
+        ));
+    }
+
+    #[test]
+    fn cooldown_far_future_is_garbage_allows_loudly() {
+        // Beyond the stale-lock window in the future = clock skew / touched file.
+        // Allow the spawn, carrying the forward delta for the warning.
+        match cooldown_decision(Some(-(STALE_LOCK_MS as i128) - 1)) {
+            CooldownDecision::AllowFutureGarbage(ms) => {
+                assert_eq!(ms, STALE_LOCK_MS as i128 + 1)
+            }
+            other => panic!("expected AllowFutureGarbage, got {other:?}"),
+        }
+        assert!(matches!(
+            cooldown_decision(Some(-3_600_000)),
+            CooldownDecision::AllowFutureGarbage(_)
+        ));
     }
 
     #[test]
