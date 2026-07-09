@@ -273,7 +273,9 @@ function onListening(sockPath: string): void {
   // sub-ms gap reads an absent lease and reclaims (displacing us); the
   // ownership self-check (brandon-daemon-lifecycle-2b3.2) makes that
   // self-healing, but keeping the window minimal keeps it vanishingly rare.
-  writeLeaseFile();
+  // [LAW:one-source-of-truth] Derive the lease from the same sockPath we bound,
+  // matching handleAddressInUse's read — one identity source across write + read.
+  writeLeaseFile(sockPath);
   try {
     fs.chmodSync(sockPath, 0o600);
   } catch (e) {
@@ -356,8 +358,8 @@ function armLimits(): void {
 // bind()'s hard exclusion; a missing lease degrades a future arbitration to
 // "reclaim" (unlink + rebind), never to a wrong attach.
 
-function writeLeaseFile(): void {
-  const reason = writeLease(leasePath(), {
+function writeLeaseFile(sockPath: string): void {
+  const reason = writeLease(leasePathFor(sockPath), {
     pid: process.pid,
     version: PROTOCOL_VERSION,
     binPath: process.argv[1],
