@@ -89,6 +89,7 @@ describe("checkOwnership (pure fold)", () => {
       detail: "bad JSON",
     });
     expect(d.kind).toBe("displaced");
+    expect(d.kind === "displaced" && d.reason).toContain("unreadable");
   });
 });
 

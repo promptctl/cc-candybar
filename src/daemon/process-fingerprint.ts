@@ -18,11 +18,12 @@ import { launchSync, type LaunchOpts, type LaunchResult } from "../proc/launch";
 // equality, never parsed — so there is no date-format representation to drift
 // [FRAMING:representation]: a producer/consumer parse mismatch is unrepresentable
 // when neither side parses. That opaque-equality invariant holds ONLY if the
-// GENERATOR is deterministic: `ps -o lstart=` is strftime-formatted under
-// `LC_TIME`, so a daemon that wrote the lease under one locale and one reading it
-// under another would see the same process render two different tokens. We pin
-// `LC_ALL=C` on the `ps` subprocess (LC_ALL dominates any ambient LC_TIME/LC_ALL)
-// so the token is locale-independent and equality is sound.
+// GENERATOR is deterministic. `ps -o lstart=` is strftime-formatted (locale) via
+// `localtime()` (timezone), so the SAME process renders different tokens across a
+// locale change OR a timezone change (TZ env, DST, tzdata update). We pin BOTH on
+// the `ps` subprocess — `LC_ALL=C` (dominates any ambient LC_TIME/LC_ALL) and
+// `TZ=UTC` — so the token is a locale- and timezone-invariant UTC rendering of
+// the start instant, and equality is sound.
 
 // A read of a pid's kernel start-time. Only TWO outcomes, because nothing
 // derivable from a `ps` exit code can SOUNDLY prove a process is dead — a
@@ -63,10 +64,12 @@ export function readStartTime(
     args: ["-o", "lstart=", "-p", String(pid)],
     category: "process-fingerprint",
     timeoutMs: 2000,
-    // [FRAMING:representation] Pin the locale so the strftime-formatted token is
+    // [FRAMING:representation] Pin BOTH locale and timezone so the token is
     // deterministic across daemons — the writer and reader must render the same
-    // process identically for opaque string equality to be sound.
-    env: { ...process.env, LC_ALL: "C" },
+    // process identically for opaque string equality to be sound. LC_ALL=C fixes
+    // the strftime format; TZ=UTC fixes localtime(), so DST / TZ / tzdata changes
+    // can't make one live process render two different start-time strings.
+    env: { ...process.env, LC_ALL: "C", TZ: "UTC" },
   });
   if (res.ok) {
     const token = res.stdout.trim();

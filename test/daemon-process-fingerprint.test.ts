@@ -59,8 +59,9 @@ describe("readStartTime (injected launcher — the unavailable branches)", () =>
   });
 
   // [FRAMING:representation] The token is only sound as an opaque equality key if
-  // `ps` renders it deterministically — so the subprocess must pin LC_ALL=C.
-  test("pins LC_ALL=C on the ps subprocess (locale-independent token)", () => {
+  // `ps` renders it deterministically — so the subprocess must pin BOTH the
+  // locale (strftime format) and the timezone (localtime rendering).
+  test("pins LC_ALL=C and TZ=UTC on the ps subprocess (locale- and tz-independent token)", () => {
     let seenEnv: NodeJS.ProcessEnv | undefined;
     const capture: Launcher = (opts) => {
       seenEnv = opts.env;
@@ -68,6 +69,7 @@ describe("readStartTime (injected launcher — the unavailable branches)", () =>
     };
     readStartTime(123, capture);
     expect(seenEnv?.LC_ALL).toBe("C");
+    expect(seenEnv?.TZ).toBe("UTC");
   });
 
   test("ps binary missing (spawn-error) → unavailable", () => {
