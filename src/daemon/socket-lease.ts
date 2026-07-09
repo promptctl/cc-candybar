@@ -147,12 +147,19 @@ export function writeLease(
     fs.renameSync(tmp, leasePath);
     return null;
   } catch (e) {
+    const reason = (e as Error).message;
+    // [LAW:no-silent-failure] Best-effort temp cleanup, but don't swallow a real
+    // failure: ENOENT means the temp was never created (write failed first) —
+    // benign; any other unlink error means the temp WAS created and now leaks,
+    // so append it to the reason rather than hiding it behind the primary error.
     try {
       fs.unlinkSync(tmp);
-    } catch {
-      // Temp may not exist (write failed before create); nothing to clean.
+    } catch (cleanupErr) {
+      if ((cleanupErr as NodeJS.ErrnoException).code !== "ENOENT") {
+        return `${reason}; also failed to remove temp ${tmp}: ${(cleanupErr as Error).message}`;
+      }
     }
-    return (e as Error).message;
+    return reason;
   }
 }
 
