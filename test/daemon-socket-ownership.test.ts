@@ -9,45 +9,87 @@ import {
   type OwnershipWatchDeps,
   type SocketIdentity,
 } from "../src/daemon/socket-ownership";
+import { type LeaseRead } from "../src/daemon/socket-lease";
 
 const BOUND: SocketIdentity = { dev: 1, ino: 100 };
+const MY_PID = 4242;
+// The socket identity + lease state that PROVE ownership: still our inode, lease
+// still names us.
+const HELD: IdentityRead = { kind: "present", identity: { dev: 1, ino: 100 } };
+const MINE: LeaseRead = { kind: "owned", pid: MY_PID, startTime: "st" };
 
-// The full input enumeration of the pure fold: only `present + same identity`
-// proves ownership; every other input fails toward exit (`displaced`).
+// The full input enumeration of the pure fold: ownership is the CONJUNCTION of
+// "still my inode" AND "lease still names me"; either failing → displaced.
 describe("checkOwnership (pure fold)", () => {
-  test("present + same identity → owned", () => {
-    expect(
-      checkOwnership(BOUND, { kind: "present", identity: { dev: 1, ino: 100 } }),
-    ).toEqual({ kind: "owned" });
+  test("held inode + lease names me → owned", () => {
+    expect(checkOwnership(BOUND, HELD, MY_PID, MINE)).toEqual({ kind: "owned" });
   });
 
   test("present + different inode → displaced", () => {
-    const d = checkOwnership(BOUND, {
-      kind: "present",
-      identity: { dev: 1, ino: 200 },
-    });
+    const d = checkOwnership(
+      BOUND,
+      { kind: "present", identity: { dev: 1, ino: 200 } },
+      MY_PID,
+      MINE,
+    );
     expect(d.kind).toBe("displaced");
     expect(d.kind === "displaced" && d.reason).toContain("ino=200");
   });
 
   test("present + different dev → displaced (dev+ino, not ino alone)", () => {
-    const d = checkOwnership(BOUND, {
-      kind: "present",
-      identity: { dev: 2, ino: 100 },
-    });
+    const d = checkOwnership(
+      BOUND,
+      { kind: "present", identity: { dev: 2, ino: 100 } },
+      MY_PID,
+      MINE,
+    );
     expect(d.kind).toBe("displaced");
   });
 
   test("absent (ENOENT) → displaced", () => {
-    const d = checkOwnership(BOUND, { kind: "absent" });
+    const d = checkOwnership(BOUND, { kind: "absent" }, MY_PID, MINE);
     expect(d.kind).toBe("displaced");
     expect(d.kind === "displaced" && d.reason).toContain("ENOENT");
   });
 
   test("unreadable → displaced (cannot prove ownership → err toward exit)", () => {
-    const d = checkOwnership(BOUND, { kind: "unreadable", detail: "EIO boom" });
+    const d = checkOwnership(
+      BOUND,
+      { kind: "unreadable", detail: "EIO boom" },
+      MY_PID,
+      MINE,
+    );
     expect(d.kind).toBe("displaced");
     expect(d.kind === "displaced" && d.reason).toContain("EIO boom");
+  });
+
+  // RESIDUAL 2 (brandon-daemon-lifecycle-2b3.4): the inode still matches (we
+  // captured a thief's inode inside the bind→listening tick), but a real thief
+  // wrote its own pid into the lease. The lease arm catches what the inode arm
+  // cannot — draining the orphan.
+  test("held inode BUT lease reassigned to another pid → displaced", () => {
+    const d = checkOwnership(BOUND, HELD, MY_PID, {
+      kind: "owned",
+      pid: 9999,
+      startTime: "other",
+    });
+    expect(d.kind).toBe("displaced");
+    expect(d.kind === "displaced" && d.reason).toContain("9999");
+  });
+
+  test("held inode BUT lease absent → displaced (no longer hold the authority)", () => {
+    const d = checkOwnership(BOUND, HELD, MY_PID, { kind: "absent" });
+    expect(d.kind).toBe("displaced");
+    expect(d.kind === "displaced" && d.reason).toContain("absent");
+  });
+
+  test("held inode BUT lease unreadable → displaced", () => {
+    const d = checkOwnership(BOUND, HELD, MY_PID, {
+      kind: "unreadable",
+      detail: "bad JSON",
+    });
+    expect(d.kind).toBe("displaced");
+    expect(d.kind === "displaced" && d.reason).toContain("unreadable");
   });
 });
 
@@ -107,7 +149,8 @@ describe("readSocketIdentity (fs boundary)", () => {
 
     expect(
       bound.kind === "present" &&
-        checkOwnership(bound.identity, readSocketIdentity(p)).kind,
+        checkOwnership(bound.identity, readSocketIdentity(p), MY_PID, MINE)
+          .kind,
     ).toBe("displaced");
   });
 });
@@ -122,6 +165,10 @@ describe("makeOwnershipWatch (armed self-check → single shutdown funnel)", () 
       shutdownCalls,
       deps: {
         bound: BOUND,
+        myPid: MY_PID,
+        // Default: the lease still names us (isolates the inode arm unless a
+        // test overrides readLease to exercise the lease arm).
+        readLease: () => MINE,
         shutdown: (code) => shutdownCalls.push(code),
         log: () => {},
         intervalMs: 1000,
@@ -181,6 +228,26 @@ describe("makeOwnershipWatch (armed self-check → single shutdown funnel)", () 
     expect(shutdownCalls).toEqual([]);
     current = { kind: "absent" };
     expect(w.check().kind).toBe("displaced");
+    expect(shutdownCalls).toEqual([0]);
+  });
+
+  // RESIDUAL 2 armed behavior: the inode still matches (we captured a thief's
+  // inode), so only the lease arm can drain us. A thief writing its own pid into
+  // the lease fires shutdown within one interval.
+  test("lease reassigned under an armed watch (inode unchanged) → exits within one interval", () => {
+    jest.useFakeTimers();
+    let lease: LeaseRead = MINE;
+    const { deps, shutdownCalls } = watchDeps({
+      readIdentity: () => HELD, // inode never changes — the thief kept our inode
+      readLease: () => lease,
+    });
+    makeOwnershipWatch(deps).arm();
+
+    jest.advanceTimersByTime(1000 * 3);
+    expect(shutdownCalls).toEqual([]); // lease still names us
+
+    lease = { kind: "owned", pid: 9999, startTime: "thief" }; // thief overwrote
+    jest.advanceTimersByTime(1000);
     expect(shutdownCalls).toEqual([0]);
   });
 

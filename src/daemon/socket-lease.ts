@@ -12,18 +12,25 @@ import process from "node:process";
 // their sockets were stolen, minting immortal orphans (see
 // brandon-daemon-lifecycle-2b3).
 //
-// [FRAMING:representation] The lease records the owner's pid; liveness is
-// kill(pid, 0) — the kernel's process table, which is load-independent truth
-// about process existence. A connect sample is load-dependent hearsay and must
-// never be the authority that destroys another daemon's socket.
+// [FRAMING:representation] The lease records the owner's pid AND its kernel
+// start-time (see process-fingerprint.ts). Liveness is "the SAME process is
+// still alive" — kill(pid,0) alone lies when a crashed daemon's pid is recycled
+// to an unrelated live process (reads `alive` forever → no daemon ever comes up,
+// brandon-daemon-lifecycle-2b3.4 RESIDUAL 1). Comparing the start-time makes a
+// recycled pid provably a different process. Both signals are the kernel's
+// load-independent truth about process identity; a connect sample is
+// load-dependent hearsay and must never be the authority that destroys another
+// daemon's socket.
 
 // What a lease read yielded. Distinguishing absent / unreadable / owned keeps
 // the arbitration decision a full enumeration over raw inputs (see
-// arbitrateSocket) rather than collapsing the ambiguous cases early.
+// arbitrateSocket) rather than collapsing the ambiguous cases early. `startTime`
+// is the owner's kernel start-time fingerprint, or null when the writing host
+// could not fingerprint (no `ps`) — the reader then falls back to kill(pid,0).
 export type LeaseRead =
   | { kind: "absent" }
   | { kind: "unreadable"; detail: string }
-  | { kind: "owned"; pid: number };
+  | { kind: "owned"; pid: number; startTime: string | null };
 
 // The EADDRINUSE arbitration outcome. The path already exists (something bound
 // it or a stale file remains); this says whether a LIVE owner holds it.
@@ -31,56 +38,61 @@ export type SocketArbitration =
   | { kind: "attach-and-exit"; reason: string }
   | { kind: "reclaim"; reason: string };
 
-// Diagnostic-rich lease payload. `pid` is the authority (liveness); the rest is
-// operator diagnostics carried in the same file so the lease subsumes the old
-// diagnostic pidfile — one file, one identity root.
+// Diagnostic-rich lease payload. `(pid, startTime)` is the authority (process
+// identity → liveness); the rest is operator diagnostics carried in the same
+// file so the lease subsumes the old diagnostic pidfile — one file, one identity
+// root. `startTime` is the kernel start-time token (also human-readable, so it
+// doubles as the "daemon started at" diagnostic the old `startedAt` gave), or
+// null when this host could not fingerprint.
 export interface LeaseRecord {
   pid: number;
   version: number;
   binPath: string | undefined;
-  startedAt: string;
+  startTime: string | null;
 }
 
 // [LAW:effects-at-boundaries][LAW:dataflow-not-control-flow] The whole
 // arbitration is a pure fold: (raw lease read, injected liveness predicate) →
-// decision. kill(2) is the sole effect and it is injected, so every branch is
-// exercised by input enumeration with no real processes. Full input space:
-//   owned + alive  → attach-and-exit (a live owner holds the path; we are a
-//                    duplicate — exit so the incumbent keeps serving)
-//   owned + dead   → reclaim (owner crashed; the socket is stale)
-//   absent         → reclaim (no lease to consult — a pre-lease or crashed
-//                    daemon left a stale socket; prefer availability)
-//   unreadable     → reclaim (can't prove a live owner — same)
+// decision. Reading process identity is the sole effect and it is injected via
+// `isSameLiveProcess`, so every branch is exercised by input enumeration with no
+// real processes. Full input space:
+//   owned + same-live  → attach-and-exit (the SAME live owner holds the path; we
+//                        are a duplicate — exit so the incumbent keeps serving)
+//   owned + not-same   → reclaim (owner crashed, OR its pid was recycled to an
+//                        unrelated process — either way the socket is stale)
+//   absent             → reclaim (no lease to consult — a pre-lease or crashed
+//                        daemon left a stale socket; prefer availability)
+//   unreadable         → reclaim (can't prove a live owner — same)
+//
+// [LAW:one-source-of-truth] `isSameLiveProcess(pid, startTime)` consults the
+// kernel's process identity ((pid, start-time), see process-fingerprint.ts), not
+// a bare pid. This closes RESIDUAL 1: a crashed daemon's pid recycled to a
+// long-lived process now reads NOT-same (different start-time) → reclaim, so a
+// daemon comes up instead of every start attaching to a ghost forever.
 //
 // Failure directions:
 //   false-dead (steal a live socket) — made self-healing by the ownership
-//     self-check (brandon-daemon-lifecycle-2b3.2).
-//   false-alive (the lease pid is alive but is NOT this daemon — a crashed
-//     daemon's pid recycled to an unrelated process) — we attach-and-exit
-//     without serving. Short-lived recycle self-corrects next tick; a LONG-LIVED
-//     recycle reads alive on every start, so no daemon comes up until the stale
-//     lease is cleared. Fully closing this needs a pid-identity fingerprint
-//     (process start-time, or an fd/flock held for the daemon's lifetime) — the
-//     lock-based liveness the epic deferred. connect() can't substitute: it
-//     can't tell a busy-live daemon with a full accept backlog (ECONNREFUSED —
-//     the exact storm this replaces) from a recycled non-daemon pid. It is
-//     strictly rarer than that storm (needs an unclean death skipping lease
-//     cleanup AND a pid recycle to a long-lived process within the respawn
-//     window).
+//     self-check (brandon-daemon-lifecycle-2b3.2), and now far rarer: the
+//     start-time match will not false-negative a live owner unless the host
+//     cannot fingerprint at all, in which case sameLiveProcess falls back to
+//     kill(pid,0) — the prior behavior, no worse.
 // Reclaiming on missing/unreadable is the availability-preferring direction — a
 // stale socket with no reclaimer is a hard no-service stall, strictly worse than
 // a transient double-serve that self-heals.
 export function arbitrateSocket(
   read: LeaseRead,
-  isAlive: (pid: number) => boolean,
+  isSameLiveProcess: (pid: number, startTime: string | null) => boolean,
 ): SocketArbitration {
   if (read.kind === "owned") {
-    return isAlive(read.pid)
+    return isSameLiveProcess(read.pid, read.startTime)
       ? {
           kind: "attach-and-exit",
           reason: `live owner pid=${read.pid} holds the socket`,
         }
-      : { kind: "reclaim", reason: `owner pid=${read.pid} is gone (ESRCH)` };
+      : {
+          kind: "reclaim",
+          reason: `owner pid=${read.pid} is gone or recycled`,
+        };
   }
   if (read.kind === "absent") {
     return {
@@ -115,14 +127,30 @@ export function readLease(leasePath: string): LeaseRead {
   } catch (e) {
     return { kind: "unreadable", detail: `bad JSON: ${(e as Error).message}` };
   }
-  const pid = (parsed as { pid?: unknown } | null)?.pid;
+  const record = parsed as { pid?: unknown; startTime?: unknown } | null;
+  const pid = record?.pid;
   if (typeof pid !== "number" || !Number.isInteger(pid) || pid <= 0) {
     return {
       kind: "unreadable",
       detail: `no valid pid (got ${JSON.stringify(pid)})`,
     };
   }
-  return { kind: "owned", pid };
+  // startTime is the process fingerprint. A present value must be a string;
+  // absent/null means "unfingerprinted" (an older lease, or a host without
+  // `ps`) and the reader falls back to kill(pid,0). A present-but-non-string is
+  // malformed → unreadable (never silently coerce a lie into a fingerprint).
+  const rawStartTime = record?.startTime;
+  if (
+    rawStartTime !== undefined &&
+    rawStartTime !== null &&
+    typeof rawStartTime !== "string"
+  ) {
+    return {
+      kind: "unreadable",
+      detail: `invalid startTime (got ${JSON.stringify(rawStartTime)})`,
+    };
+  }
+  return { kind: "owned", pid, startTime: rawStartTime ?? null };
 }
 
 // Write our lease after we win the bind. Overwrite-on-write: whoever holds the
