@@ -1,3 +1,10 @@
+## [1.17.3](https://github.com/promptctl/cc-candybar/compare/v1.17.2...v1.17.3) (2026-07-09)
+
+
+### Bug Fixes
+
+* **daemon:** spawn cooldown bounds daemon-spawn rate during outages (brandon-daemon-lifecycle-2b3.3) ([#148](https://github.com/promptctl/cc-candybar/issues/148)) ([3f261c4](https://github.com/promptctl/cc-candybar/commit/3f261c411adce4af7243227da4c9b0346c20734e))
+
 ## [1.17.2](https://github.com/promptctl/cc-candybar/compare/v1.17.1...v1.17.2) (2026-07-09)
 
 
