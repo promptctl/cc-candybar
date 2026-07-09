@@ -17,7 +17,12 @@ import { launchSync, type LaunchOpts, type LaunchResult } from "../proc/launch";
 // (darwin + linux). The reported token is treated as OPAQUE — compared by string
 // equality, never parsed — so there is no date-format representation to drift
 // [FRAMING:representation]: a producer/consumer parse mismatch is unrepresentable
-// when neither side parses.
+// when neither side parses. That opaque-equality invariant holds ONLY if the
+// GENERATOR is deterministic: `ps -o lstart=` is strftime-formatted under
+// `LC_TIME`, so a daemon that wrote the lease under one locale and one reading it
+// under another would see the same process render two different tokens. We pin
+// `LC_ALL=C` on the `ps` subprocess (LC_ALL dominates any ambient LC_TIME/LC_ALL)
+// so the token is locale-independent and equality is sound.
 
 // A read of a pid's kernel start-time. Only TWO outcomes, because nothing
 // derivable from a `ps` exit code can SOUNDLY prove a process is dead — a
@@ -58,6 +63,10 @@ export function readStartTime(
     args: ["-o", "lstart=", "-p", String(pid)],
     category: "process-fingerprint",
     timeoutMs: 2000,
+    // [FRAMING:representation] Pin the locale so the strftime-formatted token is
+    // deterministic across daemons — the writer and reader must render the same
+    // process identically for opaque string equality to be sound.
+    env: { ...process.env, LC_ALL: "C" },
   });
   if (res.ok) {
     const token = res.stdout.trim();
