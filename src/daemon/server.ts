@@ -17,6 +17,11 @@ import {
   removeLeaseIfOwned,
   writeLease,
 } from "./socket-lease";
+import {
+  makeOwnershipWatch,
+  readSocketIdentity,
+  type SocketIdentity,
+} from "./socket-ownership";
 import { dlog, closeLog } from "./log";
 import {
   PROTOCOL_VERSION,
@@ -267,12 +272,29 @@ function handleAddressInUse(server: net.Server, sockPath: string): void {
 }
 
 function onListening(sockPath: string): void {
-  // [LAW:no-ambient-temporal-coupling] Claim ownership FIRST — before chmod or
-  // any other post-bind work — so the window between winning the bind and the
-  // lease naming us is as small as possible. A second daemon that binds in that
-  // sub-ms gap reads an absent lease and reclaims (displacing us); the
-  // ownership self-check (brandon-daemon-lifecycle-2b3.2) makes that
-  // self-healing, but keeping the window minimal keeps it vanishingly rare.
+  // [LAW:no-ambient-temporal-coupling] Capture the bound socket's kernel
+  // identity (dev+ino) BEFORE claiming the lease — it is the fingerprint the
+  // ownership self-check re-stats against. If the path is already not-ours here,
+  // a second daemon displaced us inside the bind→callback window: exit toward
+  // the SAFE direction (a false-displaced daemon just lets the thief serve — no
+  // orphan) and, crucially, do NOT write a lease that would stomp the thief's.
+  // Serving must imply owning; we never proved ownership, so we never serve.
+  const boundRead = readSocketIdentity(sockPath);
+  if (boundRead.kind !== "present") {
+    dlog(
+      "warn",
+      `displaced during bind window (socket ${boundRead.kind}); exiting`,
+    );
+    shutdown(0);
+    return;
+  }
+
+  // [LAW:no-ambient-temporal-coupling] Claim ownership FIRST among the post-bind
+  // effects — before chmod or any other work — so the window between winning the
+  // bind and the lease naming us is as small as possible. A second daemon that
+  // binds in that sub-ms gap reads an absent lease and reclaims (displacing us);
+  // the ownership self-check below makes that self-healing, but keeping the
+  // window minimal keeps it vanishingly rare.
   // [LAW:one-source-of-truth] Derive the lease from the same sockPath we bound,
   // matching handleAddressInUse's read — one identity source across write + read.
   writeLeaseFile(sockPath);
@@ -287,6 +309,24 @@ function onListening(sockPath: string): void {
   );
   armBinaryWatch();
   armLimits();
+  armOwnershipWatch(sockPath, boundRead.identity);
+}
+
+// --- socket-ownership self-check ---
+//
+// [LAW:single-enforcer] The sole enforcer of "serving implies owning the socket
+// path over time" (brandon-daemon-lifecycle-2b3.2). Periodically re-stats the
+// path; if its kernel identity no longer matches what we bound, we were
+// displaced (its socket unlinked + rebound by a reclaimer) and drain through the
+// SAME shutdown funnel as signals, the RSS backstop, and the watchdog — no
+// parallel exit path.
+function armOwnershipWatch(sockPath: string, bound: SocketIdentity): void {
+  makeOwnershipWatch({
+    bound,
+    readIdentity: () => readSocketIdentity(sockPath),
+    shutdown: (code) => shutdown(code),
+    log: dlog,
+  }).arm();
 }
 
 // --- binary-mtime self-restart ---
