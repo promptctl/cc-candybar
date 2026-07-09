@@ -2,7 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import crypto from "node:crypto";
-import { ensureSocketParentSafe } from "../src/daemon/paths";
+import { ensureSocketParentSafe, leasePathFor } from "../src/daemon/paths";
 
 function freshDir(): string {
   return path.join(os.tmpdir(), `cc-candybar-safety-${crypto.randomUUID()}`);
@@ -67,7 +67,25 @@ describe("ensureSocketParentSafe", () => {
     fs.writeFileSync(target, "");
     const sock = path.join(dir, "socket");
     fs.symlinkSync(target, sock);
-    expect(() => ensureSocketParentSafe(sock)).toThrow(/socket path is a symlink/);
+    expect(() => ensureSocketParentSafe(sock)).toThrow(
+      /path is a symlink: .*socket$/,
+    );
+    fs.rmSync(dir, { recursive: true });
+  });
+
+  // The lease is load-bearing (socket-ownership authority) and gets the same
+  // symlink gate as the socket — a planted `lease → …` would make readLease
+  // follow it and force a false reclaim.
+  it("refuses when the lease path is a symlink", () => {
+    const dir = freshDir();
+    fs.mkdirSync(dir, { mode: 0o700 });
+    const target = path.join(dir, "real-target");
+    fs.writeFileSync(target, "");
+    const sock = path.join(dir, "socket");
+    fs.symlinkSync(target, leasePathFor(sock));
+    expect(() => ensureSocketParentSafe(sock)).toThrow(
+      /path is a symlink: .*socket\.lease$/,
+    );
     fs.rmSync(dir, { recursive: true });
   });
 

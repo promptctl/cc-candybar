@@ -95,19 +95,43 @@ export function ensureSocketParentSafe(sockPath: string): void {
   // If a stale socket file is a symlink, refuse — an attacker who briefly
   // had write access to a previously-permissive dir could have planted a
   // symlink even after we tighten perms.
-  try {
-    const sst = fs.lstatSync(sockPath);
-    if (sst.isSymbolicLink()) {
-      throw new Error(`socket path is a symlink: ${sockPath}`);
+  //
+  // [LAW:single-enforcer] The lease (`${sockPath}.lease`) gets the SAME gate:
+  // it is now load-bearing (ownership authority — readLease follows a symlink
+  // and a planted `lease → /dev/null` would read `absent`/`unreadable`, forcing
+  // a false reclaim that unlinks a live daemon's socket). One enforcer certifies
+  // every path we bind/read/write under this parent, so the socket and its lease
+  // can never diverge on "is this a symlink".
+  for (const p of [sockPath, leasePathFor(sockPath)]) {
+    try {
+      if (fs.lstatSync(p).isSymbolicLink()) {
+        throw new Error(`path is a symlink: ${p}`);
+      }
+    } catch (e) {
+      const code = (e as NodeJS.ErrnoException).code;
+      if (code !== "ENOENT") throw e;
     }
-  } catch (e) {
-    const code = (e as NodeJS.ErrnoException).code;
-    if (code !== "ENOENT") throw e;
   }
 }
 
-export function pidPath(): string {
-  return path.join(stateDir(), "pid");
+// [LAW:one-source-of-truth] The socket-ownership lease is DERIVED FROM the
+// socket path, so it shares the socket's identity root. The old diagnostic
+// pidfile lived under $XDG_STATE_HOME while the socket lived under /tmp — two
+// identity roots for one instance, and CC_CANDYBAR_SOCKET isolated only one of
+// them. Anchoring the lease to socketPath() means test/dev isolation via
+// CC_CANDYBAR_SOCKET isolates the lease too. The lease subsumes the old
+// diagnostic pidfile: it carries the owner pid (the reclaim authority) plus the
+// same diagnostic fields.
+// [LAW:one-source-of-truth] The socket→lease derivation lives here alone, so
+// leasePath() (the runtime authority path) and ensureSocketParentSafe's symlink
+// gate agree by construction. Takes the socket path explicitly so the safety
+// check certifies the exact path it was handed, not a re-derived one.
+export function leasePathFor(sockPath: string): string {
+  return `${sockPath}.lease`;
+}
+
+export function leasePath(): string {
+  return leasePathFor(socketPath());
 }
 
 export function sessionStatePath(): string {
