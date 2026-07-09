@@ -2,7 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import crypto from "node:crypto";
-import { ensureSocketParentSafe } from "../src/daemon/paths";
+import { ensureSocketParentSafe, leasePathFor } from "../src/daemon/paths";
 
 function freshDir(): string {
   return path.join(os.tmpdir(), `cc-candybar-safety-${crypto.randomUUID()}`);
@@ -82,7 +82,7 @@ describe("ensureSocketParentSafe", () => {
     const target = path.join(dir, "real-target");
     fs.writeFileSync(target, "");
     const sock = path.join(dir, "socket");
-    fs.symlinkSync(target, `${sock}.lease`);
+    fs.symlinkSync(target, leasePathFor(sock));
     expect(() => ensureSocketParentSafe(sock)).toThrow(
       /path is a symlink: .*socket\.lease$/,
     );
