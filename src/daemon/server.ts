@@ -6,10 +6,16 @@ import { parseArgs } from "node:util";
 import {
   daemonDir,
   ensureSocketParentSafe,
-  pidPath,
+  leasePath,
   socketPath,
   sessionStatePath,
 } from "./paths";
+import {
+  arbitrateSocket,
+  readLease,
+  removeLeaseIfOwned,
+  writeLease,
+} from "./socket-lease";
 import { dlog, closeLog } from "./log";
 import {
   PROTOCOL_VERSION,
@@ -184,6 +190,13 @@ function bindOrAttachAndExit(
   retried: boolean,
 ): void {
   server.removeAllListeners("error");
+  // [LAW:no-ambient-temporal-coupling] server.listen(path, cb) registers cb as
+  // a ONE-TIME 'listening' listener. A first listen that fails EADDRINUSE never
+  // fires 'listening', so its callback stays pending; the reclaim retry adds a
+  // second. Without clearing the stale one, a successful rebind fires BOTH and
+  // onListening runs twice — double-arming the RSS backstop + watchers. Clear
+  // pending 'listening' listeners so exactly one onListening fires per bind.
+  server.removeAllListeners("listening");
   server.once("error", (err) => {
     const code = (err as NodeJS.ErrnoException).code;
     if (code !== "EADDRINUSE") {
@@ -198,36 +211,31 @@ function bindOrAttachAndExit(
       process.exit(0);
       return;
     }
-    void handleAddressInUse(server, sockPath);
+    handleAddressInUse(server, sockPath);
   });
   server.listen(sockPath, () => onListening(sockPath));
 }
 
-async function handleAddressInUse(
-  server: net.Server,
-  sockPath: string,
-): Promise<void> {
-  // EADDRINUSE: either a live daemon (we are a duplicate — exit), or a stale
-  // socket file from a crashed prior daemon (unlink + rebind).
-  const alive = await isSocketAlive(sockPath);
-  if (alive) {
-    dlog("info", "another daemon is listening on socket — exiting");
+// [LAW:one-source-of-truth] EADDRINUSE arbitration consults the socket-derived
+// pid lease, NEVER a connect probe. The path already exists (a live daemon, or
+// a stale file from a crashed one); the lease's owner pid + kill(pid,0) decides
+// which. This is fully synchronous — reading the lease and testing liveness are
+// both sync — so there is no await gap for a concurrent recoverer to race
+// through (the old async probe had two such gaps and a hand-rolled re-check).
+//
+// [LAW:effects-at-boundaries] The decision is the pure arbitrateSocket fold
+// over the lease read + injected pidAlive; the kill / unlink / rebind effects
+// are performed here at the edge.
+function handleAddressInUse(server: net.Server, sockPath: string): void {
+  const decision = arbitrateSocket(readLease(leasePath()), pidAlive);
+  if (decision.kind === "attach-and-exit") {
+    dlog("info", `EADDRINUSE: ${decision.reason} — exiting`);
     process.exit(0);
   }
-  // Race-window guard: between our first `isSocketAlive` returning false and
-  // our `unlinkSync` running, another concurrent recoverer could unlink+bind
-  // the path. Without re-checking, our unlink would remove their *live*
-  // socket, leaving two daemons (one orphaned-but-listening, one freshly
-  // bound). Re-check immediately before unlink. If a live listener appeared
-  // between checks, exit instead of stomping on it.
-  if (await isSocketAlive(sockPath)) {
-    dlog(
-      "info",
-      "race: another daemon claimed the socket during recovery — exiting",
-    );
-    process.exit(0);
-  }
-  dlog("warn", "stale socket from crashed daemon — unlinking and rebinding");
+  dlog(
+    "warn",
+    `EADDRINUSE: ${decision.reason} — unlinking stale socket and rebinding`,
+  );
   // [LAW:no-defensive-null-guards] If unlink fails (permissions, read-only
   // FS), the retry will hit EADDRINUSE again, exit 0, and leave the system
   // in the worst state: no daemon + stale socket blocking future starts.
@@ -248,61 +256,19 @@ async function handleAddressInUse(
   bindOrAttachAndExit(server, sockPath, /* retried */ true);
 }
 
-// [LAW:no-defensive-null-guards] Three-state outcome distinguishes
-// "definitely no listener" from "probably alive but slow." Callers that
-// might destroy state on "no listener" (the stale-socket unlink path) must
-// treat "unknown" as alive to avoid stomping on a slow live daemon.
-type SocketAliveness = "alive" | "dead" | "unknown";
-
-function probeSocket(sockPath: string): Promise<SocketAliveness> {
-  return new Promise((resolve) => {
-    const sock = net.connect(sockPath);
-    let settled = false;
-    let timer: ReturnType<typeof setTimeout> | null = null;
-    const done = (result: SocketAliveness): void => {
-      if (settled) return;
-      settled = true;
-      if (timer) clearTimeout(timer);
-      sock.removeAllListeners();
-      sock.destroy();
-      resolve(result);
-    };
-    sock.once("connect", () => done("alive"));
-    sock.once("error", (err) => {
-      // Only these error codes definitively mean "no listener at this path":
-      //   ECONNREFUSED — socket file present, kernel rejected connect
-      //   ENOENT       — socket file absent
-      //   ENOTSOCK     — path exists but isn't a socket
-      // Anything else (EPERM, EACCES, EAGAIN, …) is ambiguous — assume the
-      // daemon is alive to avoid destructive false negatives.
-      const code = (err as NodeJS.ErrnoException).code;
-      const dead =
-        code === "ECONNREFUSED" || code === "ENOENT" || code === "ENOTSOCK";
-      done(dead ? "dead" : "unknown");
-    });
-    // 50ms is generous; localhost AF_UNIX connect is sub-ms when a listener
-    // exists. Timeout means "we couldn't tell" — treat as unknown so the
-    // stale-socket recovery path doesn't unlink a live (but slow) daemon's
-    // socket.
-    timer = setTimeout(() => done("unknown"), 50);
-    timer.unref();
-  });
-}
-
-// Convenience: callers that just want "is something listening" treat
-// "unknown" as alive (conservative — used by the EADDRINUSE attach branch).
-async function isSocketAlive(sockPath: string): Promise<boolean> {
-  const result = await probeSocket(sockPath);
-  return result !== "dead";
-}
-
 function onListening(sockPath: string): void {
+  // [LAW:no-ambient-temporal-coupling] Claim ownership FIRST — before chmod or
+  // any other post-bind work — so the window between winning the bind and the
+  // lease naming us is as small as possible. A second daemon that binds in that
+  // sub-ms gap reads an absent lease and reclaims (displacing us); the
+  // ownership self-check (brandon-daemon-lifecycle-2b3.2) makes that
+  // self-healing, but keeping the window minimal keeps it vanishingly rare.
+  writeLeaseFile();
   try {
     fs.chmodSync(sockPath, 0o600);
   } catch (e) {
     dlog("warn", `chmod socket failed: ${(e as Error).message}`);
   }
-  writePidfileDiagnostic();
   dlog(
     "info",
     `daemon up: pid=${process.pid} v=${PROTOCOL_VERSION} sock=${sockPath}`,
@@ -365,40 +331,29 @@ function armLimits(): void {
   limits.arm();
 }
 
-// --- diagnostic pidfile ---
+// --- socket-ownership lease ---
 //
-// [LAW:one-source-of-truth] The pidfile is *diagnostic only*. It records who
-// the running daemon is so `daemon-stats` can report it; it plays no role in
-// exclusion. Exclusion is the atomic bind() in bindOrAttachAndExit().
+// [LAW:one-source-of-truth] The lease is the authority for socket ownership —
+// its owner pid + kill(pid,0) is what the next daemon's EADDRINUSE arbitration
+// consults (handleAddressInUse). Exclusion RIGHT NOW is still the atomic bind()
+// in bindOrAttachAndExit(); the lease answers the separate question "may I
+// destroy this existing path" over time. It also carries the same diagnostic
+// fields the old pidfile did, so one file serves both roles.
 //
-// Overwrite-on-write (no EEXIST check). If a stale pidfile exists from a
-// crashed prior daemon, we replace it. The bind() above already proved no
-// other daemon is alive.
+// Overwrite-on-write (no EEXIST check). We only reach onListening after winning
+// the bind, so whatever stale lease a dead owner left is ours to replace. Write
+// failure is non-fatal: the lease is best-effort ownership signalling on top of
+// bind()'s hard exclusion; a missing lease degrades a future arbitration to
+// "reclaim" (unlink + rebind), never to a wrong attach.
 
-function writePidfileDiagnostic(): void {
-  const payload = JSON.stringify({
+function writeLeaseFile(): void {
+  const reason = writeLease(leasePath(), {
     pid: process.pid,
     version: PROTOCOL_VERSION,
     binPath: process.argv[1],
     startedAt: new Date().toISOString(),
   });
-  try {
-    fs.writeFileSync(pidPath(), payload, { mode: 0o600 });
-    // [LAW:single-enforcer] writeFileSync's `mode` only applies when the file
-    // is created. If a stale pidfile from a prior run was left with broader
-    // permissions, the write above won't tighten them — chmod explicitly so
-    // 0600 is the invariant regardless of prior state.
-    fs.chmodSync(pidPath(), 0o600);
-  } catch (e) {
-    // Diagnostic only — failure does not block the daemon from serving.
-    dlog("warn", `pidfile write failed: ${(e as Error).message}`);
-  }
-}
-
-function removePidfileDiagnostic(): void {
-  try {
-    fs.unlinkSync(pidPath());
-  } catch {}
+  if (reason !== null) dlog("warn", `lease write failed: ${reason}`);
 }
 
 let inFlight = 0;
@@ -465,7 +420,11 @@ function shutdown(code: number): void {
   } catch (e) {
     dlog("warn", `sessionState flush failed: ${(e as Error).message}`);
   }
-  removePidfileDiagnostic();
+  // [LAW:one-source-of-truth] Remove the lease only if it still names us. A
+  // displaced daemon (socket stolen, thief wrote its own lease) must not delete
+  // the live owner's lease on its way out, or the next EADDRINUSE would read
+  // `absent` and reclaim the thief's live socket — cascading the theft.
+  removeLeaseIfOwned(leasePath(), process.pid);
   closeLog();
   process.exit(code);
 }
