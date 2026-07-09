@@ -75,6 +75,20 @@ describe("readSocketIdentity (fs boundary)", () => {
     expect(readSocketIdentity(path.join(dir, "nope")).kind).toBe("absent");
   });
 
+  test("non-ENOENT stat error → unreadable (ENOENT is NOT the catch-all)", () => {
+    // A path whose parent component is a regular file makes statSync throw
+    // ENOTDIR — a real, deterministic non-ENOENT error. This guards the ENOENT
+    // discriminator in the catch: drop it and every error would collapse to
+    // `absent`, which checkOwnership treats identically here (both → displaced)
+    // but which would misreport WHY, and mask a genuinely unreadable path as a
+    // benign miss. [LAW:no-silent-failure]
+    const file = path.join(dir, "afile");
+    fs.writeFileSync(file, "");
+    const r = readSocketIdentity(path.join(file, "under-a-file"));
+    expect(r.kind).toBe("unreadable");
+    expect(r.kind === "unreadable" && r.detail.length).toBeGreaterThan(0);
+  });
+
   test("path replaced by a distinct fs entry → checkOwnership sees displaced", () => {
     // A regular file suffices: readSocketIdentity reads (dev, ino), the identity
     // of a filesystem entry regardless of its type. Replacing via a coexisting
