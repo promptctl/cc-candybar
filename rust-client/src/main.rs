@@ -583,9 +583,10 @@ const SPAWN_COOLDOWN_FILE: &str = "spawn.cooldown";
 // policies: try_acquire_spawn_lock reclaims a spawn.lock older than this, and
 // claim_spawn_cooldown treats a spawn.cooldown mtime more than this in the
 // future as garbage. One fact, one constant (mirrors Node's module-level
-// STALE_LOCK_MS in src/daemon/acquire.ts). Not check-protocol'd because it does
-// not cross the wire — only the two runtimes' cooldown/lock windows must each be
-// internally single-sourced.
+// STALE_LOCK_MS in src/daemon/acquire.ts). Mirrored TS↔Rust and diffed by
+// check-protocol: claim_spawn_cooldown applies it to the SAME shared
+// spawn.cooldown file both runtimes read, so a drift would make them disagree
+// on whether to spawn given identical on-disk state.
 const STALE_LOCK_MS: u64 = 10_000;
 
 // [LAW:one-type-per-behavior] Mirror of Node's LockOutcome — both runtimes

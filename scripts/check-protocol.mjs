@@ -185,6 +185,15 @@ const CHECKS = [
     ts: lit(TS_PATHS, /const SPAWN_COOLDOWN_FILE = "((?:[^"\\]|\\.)*)";/),
     rust: lit(RS_MAIN, /const SPAWN_COOLDOWN_FILE: &str = "((?:[^"\\]|\\.)*)";/),
   },
+  {
+    // The left boundary of the shared cooldown window [-STALE_LOCK_MS,
+    // SPAWN_COOLDOWN_MS): both runtimes read the SAME spawn.cooldown file's
+    // mtime and use this to decide future-mtime garbage. A drift would make
+    // them disagree on whether to spawn given identical on-disk state.
+    label: "stale-lock window (ms)",
+    ts: num(TS_ACQUIRE, /const STALE_LOCK_MS = ([\d\s*_]+);/),
+    rust: num(RS_MAIN, /const STALE_LOCK_MS: u64 = ([\d\s*_]+);/),
+  },
 ];
 
 // --- runner ----------------------------------------------------------------
