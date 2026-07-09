@@ -42,7 +42,9 @@ function num(relPath, regex) {
   return () => {
     const m = read(relPath).match(regex);
     if (!m) return null;
-    const factors = m[1].split("*").map((s) => s.trim());
+    // Strip digit-group separators (`3_000`) so both runtimes' idiomatic
+    // spellings compare by value, not by punctuation.
+    const factors = m[1].split("*").map((s) => s.trim().replace(/_/g, ""));
     if (!factors.every((f) => /^\d+$/.test(f))) return null;
     return String(factors.reduce((acc, f) => acc * Number(f), 1));
   };
@@ -93,6 +95,8 @@ const TS_PROTOCOL = "src/daemon/protocol.ts";
 const TS_CLIENT = "src/daemon/client.ts";
 const TS_GLYPH = "src/render/error-glyph.ts";
 const TS_STYLE = "src/render/diagnostic-style.ts";
+const TS_PATHS = "src/daemon/paths.ts";
+const TS_ACQUIRE = "src/daemon/acquire.ts";
 const RS_MAIN = "rust-client/src/main.rs";
 const RS_GLYPH = "rust-client/src/error_glyph.rs";
 
@@ -170,6 +174,16 @@ const CHECKS = [
     label: "glyph MAX_MESSAGE_LEN",
     ts: num(TS_GLYPH, /const MAX_MESSAGE_LEN = ([\d\s*]+);/),
     rust: num(RS_GLYPH, /const MAX_MESSAGE_LEN: usize = ([\d\s*]+);/),
+  },
+  {
+    label: "spawn-cooldown (ms)",
+    ts: num(TS_ACQUIRE, /const SPAWN_COOLDOWN_MS = ([\d\s*_]+);/),
+    rust: num(RS_MAIN, /const SPAWN_COOLDOWN_MS: u128 = ([\d\s*_]+);/),
+  },
+  {
+    label: "spawn-cooldown filename",
+    ts: lit(TS_PATHS, /const SPAWN_COOLDOWN_FILE = "((?:[^"\\]|\\.)*)";/),
+    rust: lit(RS_MAIN, /const SPAWN_COOLDOWN_FILE: &str = "((?:[^"\\]|\\.)*)";/),
   },
 ];
 

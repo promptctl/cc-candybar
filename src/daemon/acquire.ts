@@ -2,7 +2,12 @@ import fs from "node:fs";
 import net from "node:net";
 import { launchDetachedSync } from "../proc/launch";
 import process from "node:process";
-import { socketPath, spawnLockPath, daemonDir } from "./paths";
+import {
+  socketPath,
+  spawnLockPath,
+  spawnCooldownPath,
+  daemonDir,
+} from "./paths";
 
 // [LAW:single-enforcer] One primitive per runtime that owns the entire
 // "obtain a daemon" verb. Every spawn site in the Node runtime now flows
@@ -133,6 +138,25 @@ async function spawnAndWaitForReady(
   outerDeadline: number,
   reasonSuffix: string,
 ): Promise<ObtainResult> {
+  const readyDeadline = Math.min(
+    Date.now() + spawnReadyTimeoutMs,
+    outerDeadline,
+  );
+
+  // [LAW:dataflow-not-control-flow] The spawn-rate bound is consulted as data,
+  // not a mode. If a spawn was attempted within SPAWN_COOLDOWN_MS, one is
+  // already in flight — do NOT add another Node process; wait for the in-flight
+  // boot. This keeps obtainDaemon under the same global rate cap as the kick
+  // path, so the rate bound holds for EVERY spawn site [LAW:one-source-of-truth].
+  if (!claimSpawnCooldown()) {
+    return (await pollUntilReady(connectTimeoutMs, readyDeadline))
+      ? { kind: "attached" }
+      : {
+          kind: "failed",
+          reason: `spawn on cooldown; daemon did not bind in time${reasonSuffix}`,
+        };
+  }
+
   // [LAW:no-defensive-null-guards] obtainDaemon is typed Promise<ObtainResult>.
   // A synchronous throw from child_process.spawn (ENOENT, invalid options)
   // must become a typed failure, not a rejected promise.
@@ -151,20 +175,27 @@ async function spawnAndWaitForReady(
       reason: `spawn returned false${reasonSuffix}`,
     };
   }
-  const readyDeadline = Math.min(
-    Date.now() + spawnReadyTimeoutMs,
-    outerDeadline,
-  );
+  return (await pollUntilReady(connectTimeoutMs, readyDeadline))
+    ? { kind: "started" }
+    : {
+        kind: "failed",
+        reason: `daemon did not bind in time${reasonSuffix}`,
+      };
+}
+
+// Poll the socket until a daemon answers or the deadline elapses. Shared by the
+// spawn path (→ "started") and the cooldown-blocked wait path (→ "attached"):
+// both need "did a daemon come up in time", they differ only in how they label
+// the outcome.
+async function pollUntilReady(
+  connectTimeoutMs: number,
+  readyDeadline: number,
+): Promise<boolean> {
   while (Date.now() < readyDeadline) {
-    if (await canConnect(socketPath(), connectTimeoutMs)) {
-      return { kind: "started" };
-    }
+    if (await canConnect(socketPath(), connectTimeoutMs)) return true;
     await sleep(20);
   }
-  return {
-    kind: "failed",
-    reason: `daemon did not bind in time${reasonSuffix}`,
-  };
+  return false;
 }
 
 // Synchronous fire-and-forget kick — used for "daemon-miss" recovery where
@@ -214,7 +245,7 @@ export function obtainDaemonKick(opts: { spawn?: () => boolean } = {}): void {
       process.stderr.write(
         `cc-candybar: spawn-lock held ${ageMs}ms (likely crashed holder) — spawning unlocked\n`,
       );
-      safeSpawn(spawnFn);
+      cooldownGatedSpawn(spawnFn);
     }
     return;
   }
@@ -222,14 +253,24 @@ export function obtainDaemonKick(opts: { spawn?: () => boolean } = {}): void {
     process.stderr.write(
       `cc-candybar: spawn-lock unavailable (${lock.reason}) — spawning unlocked\n`,
     );
-    safeSpawn(spawnFn);
+    cooldownGatedSpawn(spawnFn);
     return;
   }
   try {
-    safeSpawn(spawnFn);
+    cooldownGatedSpawn(spawnFn);
   } finally {
     releaseSpawnLock();
   }
+}
+
+// [LAW:single-enforcer] Every kick spawn site routes through here, so the
+// spawn-rate bound is applied at exactly one boundary — mirror of Rust's
+// spawn_daemon_rate_limited. On cooldown we do nothing: a spawn was attempted
+// within SPAWN_COOLDOWN_MS and is likely still booting; the kick is
+// fire-and-forget, so "already in flight" is a complete answer.
+function cooldownGatedSpawn(spawnFn: () => boolean): void {
+  if (!claimSpawnCooldown()) return;
+  safeSpawn(spawnFn);
 }
 
 function spawnLockAgeMs(): number | null {
@@ -256,6 +297,72 @@ function safeSpawn(spawnFn: () => boolean): void {
   } catch (e) {
     process.stderr.write(
       `cc-candybar: daemon spawn failed: ${(e as Error).message}\n`,
+    );
+  }
+}
+
+// ─── Spawn cooldown (shared spawn-RATE bound) ────────────────────────────────
+//
+// [LAW:one-source-of-truth] spawn.lock dedups spawns at one INSTANT; the
+// cooldown bounds them over TIME. Without it, the Rust kick — which releases
+// spawn.lock milliseconds after forking, before the 0.5-3s Node boot window —
+// re-spawns on every render tick during an outage (spawn rate ≈ tick rate:
+// dozens/sec, process-table exhaustion). One file's mtime records the last spawn
+// ATTEMPT; both runtimes consult it. The constant and filename are mirrored TS↔
+// Rust (scripts/check-protocol.mjs). Worst case with the bound: ~20 spawns/min
+// globally, each of which exits cleanly via the sibling socket-lease defenses.
+const SPAWN_COOLDOWN_MS = 3_000;
+
+// [LAW:single-enforcer] The sole authority on daemon-spawn RATE. Returns true —
+// and RECORDS the attempt (updating spawn.cooldown's mtime to now) — when a
+// spawn is permitted; false when an attempt was recorded within
+// SPAWN_COOLDOWN_MS. Recording-on-grant (BEFORE the caller spawns) is
+// load-bearing: a spawn that then throws or returns false still counts against
+// the rate, so a broken binary is not retried in a tight loop.
+//
+// [LAW:no-silent-failure] A record whose mtime is more than the stale-lock
+// window in the future is garbage (clock skew, a touched file); it would
+// otherwise read as "cooldown active forever" and wedge the spawn path —
+// availability lost. We warn on stderr and fail toward ALLOWING the spawn. A
+// small negative age is just ms-truncation of Date.now() against the higher-
+// precision fs mtime — that still counts as a just-recorded attempt, so the
+// cooldown window is [-STALE_LOCK_MS, SPAWN_COOLDOWN_MS). A missing/unreadable
+// file also allows (first spawn). The mtime IS the timestamp, so "unparseable
+// timestamp" is unrepresentable by construction.
+function claimSpawnCooldown(): boolean {
+  const path = spawnCooldownPath();
+  const ageMs = cooldownAgeMs(path);
+  if (ageMs !== null) {
+    if (ageMs < -STALE_LOCK_MS) {
+      process.stderr.write(
+        `cc-candybar: spawn.cooldown mtime is ${-ageMs}ms in the future — ignoring and spawning\n`,
+      );
+    } else if (ageMs < SPAWN_COOLDOWN_MS) {
+      return false;
+    }
+  }
+  recordSpawnAttempt(path);
+  return true;
+}
+
+function cooldownAgeMs(path: string): number | null {
+  try {
+    return Date.now() - fs.statSync(path).mtimeMs;
+  } catch {
+    return null;
+  }
+}
+
+function recordSpawnAttempt(path: string): void {
+  // Content is human-diagnostic only; the mtime is the authority. A write
+  // failure means no cooldown recorded — worst case one extra spawn, which
+  // bind() arbitrates — but surface it loudly rather than silently un-bound the
+  // rate [LAW:no-silent-failure].
+  try {
+    fs.writeFileSync(path, `${process.pid} ${Date.now()}\n`, { mode: 0o600 });
+  } catch (e) {
+    process.stderr.write(
+      `cc-candybar: could not record spawn.cooldown: ${(e as Error).message}\n`,
     );
   }
 }

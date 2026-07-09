@@ -475,6 +475,131 @@ describe("obtainDaemonKick (synchronous fire-and-forget)", () => {
       expect(asyncRan).toBe(false);
     });
   });
+
+  // ─── spawn cooldown (shared spawn-RATE bound, ticket 2b3.3) ────────────────
+
+  test("second kick within the cooldown does not spawn again", async () => {
+    await withTempState(async () => {
+      jest.resetModules();
+      const { obtainDaemonKick } = await import("../src/daemon/acquire");
+
+      let spawned = 0;
+      const spawn = (): boolean => {
+        spawned++;
+        return true;
+      };
+      // First kick: no prior attempt → spawns and records the cooldown.
+      obtainDaemonKick({ spawn });
+      expect(spawned).toBe(1);
+      // Second kick, immediately after: an attempt was recorded well within
+      // SPAWN_COOLDOWN_MS → the herd is damped, no second spawn.
+      obtainDaemonKick({ spawn });
+      expect(spawned).toBe(1);
+    });
+  });
+
+  test("kick spawns again once the cooldown has elapsed", async () => {
+    await withTempState(async () => {
+      jest.resetModules();
+      const { obtainDaemonKick } = await import("../src/daemon/acquire");
+      const { spawnCooldownPath } = await import("../src/daemon/paths");
+
+      let spawned = 0;
+      const spawn = (): boolean => {
+        spawned++;
+        return true;
+      };
+      obtainDaemonKick({ spawn });
+      expect(spawned).toBe(1);
+
+      // Simulate the cooldown window elapsing by backdating the record's mtime
+      // past SPAWN_COOLDOWN_MS (3s) — the same technique the stale-lock tests
+      // use. The next kick is no longer rate-limited.
+      const old = new Date(Date.now() - 5_000);
+      fs.utimesSync(spawnCooldownPath(), old, old);
+
+      obtainDaemonKick({ spawn });
+      expect(spawned).toBe(2);
+    });
+  });
+
+  test("cooldown is recorded even when the spawn throws (record-on-grant)", async () => {
+    await withTempState(async () => {
+      jest.resetModules();
+      const { obtainDaemonKick } = await import("../src/daemon/acquire");
+      const { spawnCooldownPath } = await import("../src/daemon/paths");
+
+      // Suppress the expected "daemon spawn failed" stderr from the throwing
+      // spawn so the test output stays clean.
+      const stderrSpy = jest
+        .spyOn(process.stderr, "write")
+        .mockImplementation(() => true);
+      try {
+        // A broken binary: the spawn throws every time. The cooldown must be
+        // recorded BEFORE the spawn runs, so a broken binary is not retried in
+        // a tight loop.
+        obtainDaemonKick({
+          spawn: () => {
+            throw new Error("simulated ENOENT for node binary");
+          },
+        });
+        expect(fs.existsSync(spawnCooldownPath())).toBe(true);
+
+        // A second kick with a would-succeed spawn is still rate-limited by the
+        // record the throwing attempt left behind.
+        let spawned = 0;
+        obtainDaemonKick({
+          spawn: () => {
+            spawned++;
+            return true;
+          },
+        });
+        expect(spawned).toBe(0);
+      } finally {
+        stderrSpy.mockRestore();
+      }
+    });
+  });
+
+  test("garbage cooldown file (future mtime) fails toward allowing a spawn, loudly", async () => {
+    await withTempState(async () => {
+      jest.resetModules();
+      const { obtainDaemonKick } = await import("../src/daemon/acquire");
+      const { spawnCooldownPath, daemonDir } = await import(
+        "../src/daemon/paths"
+      );
+
+      fs.mkdirSync(daemonDir(), { recursive: true });
+      // Plant a cooldown record with an mtime far in the future (clock skew or a
+      // touched file). A naive `now - mtime < COOLDOWN` test would read this as
+      // "cooldown active" forever and wedge the spawn path — availability lost.
+      fs.writeFileSync(spawnCooldownPath(), "garbage\n");
+      const future = new Date(Date.now() + 3_600_000);
+      fs.utimesSync(spawnCooldownPath(), future, future);
+
+      const stderrSpy = jest
+        .spyOn(process.stderr, "write")
+        .mockImplementation(() => true);
+      try {
+        let spawned = 0;
+        obtainDaemonKick({
+          spawn: () => {
+            spawned++;
+            return true;
+          },
+        });
+        // Availability over strictness: a garbage timestamp must not block.
+        expect(spawned).toBe(1);
+        // ...and it must be loud, not silent.
+        const warned = stderrSpy.mock.calls
+          .map((c) => String(c[0]))
+          .join("");
+        expect(warned).toMatch(/in the future/);
+      } finally {
+        stderrSpy.mockRestore();
+      }
+    });
+  });
 });
 
 describe("daemon startup (bind-based singleton)", () => {

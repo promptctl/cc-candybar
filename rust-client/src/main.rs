@@ -565,6 +565,20 @@ fn connect_with_timeout(path: &Path, timeout: Duration) -> io::Result<UnixStream
 // mid-spawn and overrides — bind() inside the daemon arbitrates duplicates.
 const KICK_CONTENDED_OVERRIDE_MS: u128 = 2_000;
 
+// [LAW:one-source-of-truth] The spawn-RATE bound. spawn.lock dedups spawns at one
+// INSTANT; this bounds them over TIME. The kick releases spawn.lock milliseconds
+// after forking, before the 0.5-3s Node boot window, so during an outage every
+// render tick re-spawns (spawn rate ≈ tick rate → process-table exhaustion). One
+// file's mtime (SPAWN_COOLDOWN_FILE) records the last spawn ATTEMPT; both runtimes
+// consult it. Mirrors src/daemon/acquire.ts SPAWN_COOLDOWN_MS — check-protocol
+// diffs this value so a drift fails prepublishOnly.
+const SPAWN_COOLDOWN_MS: u128 = 3_000;
+
+// Mirrors src/daemon/paths.ts SPAWN_COOLDOWN_FILE (diffed by check-protocol).
+// The cooldown file lives beside spawn.lock in the daemon state dir; both
+// runtimes must name the SAME file or the rate bound splits in two.
+const SPAWN_COOLDOWN_FILE: &str = "spawn.cooldown";
+
 // [LAW:one-type-per-behavior] Mirror of Node's LockOutcome — both runtimes
 // distinguish "held / contended / error" so a Rust kick and a Node kick
 // recover from the same failure modes at the same rates.
@@ -586,7 +600,7 @@ fn obtain_daemon_kick() {
             // Re-check connect — a daemon may have come up between our
             // first probe and our lock acquisition.
             if !can_connect(&socket_path(), Duration::from_millis(20)) {
-                spawn_daemon_detached();
+                spawn_daemon_rate_limited();
             }
             // [LAW:one-type-per-behavior] Release by unlinking — Node uses
             // the same semantics so a Rust kick and a Node kick agree on
@@ -603,7 +617,7 @@ fn obtain_daemon_kick() {
                     eprintln!(
                         "cc-candybar: spawn-lock held {age_ms}ms (likely crashed holder) — spawning unlocked"
                     );
-                    spawn_daemon_detached();
+                    spawn_daemon_rate_limited();
                 }
             }
         }
@@ -612,8 +626,81 @@ fn obtain_daemon_kick() {
             // stop on availability — spawn.lock is an optimization, bind()
             // is load-bearing. Mirror Node's obtainDaemonKick behavior.
             eprintln!("cc-candybar: spawn-lock unavailable ({reason}) — spawning unlocked");
-            spawn_daemon_detached();
+            spawn_daemon_rate_limited();
         }
+    }
+}
+
+// [LAW:single-enforcer] Every Rust spawn site routes through here so the
+// spawn-rate bound is applied at exactly one boundary — mirror of Node's
+// cooldownGatedSpawn in src/daemon/acquire.ts. On cooldown we do nothing: a
+// spawn was attempted within SPAWN_COOLDOWN_MS and is likely still booting, and
+// the kick is fire-and-forget so "already in flight" is a complete answer.
+fn spawn_daemon_rate_limited() {
+    if !claim_spawn_cooldown() {
+        return;
+    }
+    spawn_daemon_detached();
+}
+
+// [LAW:one-source-of-truth] Mirror of Node's claimSpawnCooldown. Returns true —
+// and RECORDS the attempt (writing spawn.cooldown, updating its mtime to now) —
+// when a spawn is permitted; false when an attempt was recorded within
+// SPAWN_COOLDOWN_MS. Recording-on-grant (BEFORE the fork) means a failed fork
+// still counts, so a broken binary is not retried in a tight loop.
+//
+// [LAW:no-silent-failure] A record whose mtime is more than the stale-lock
+// window (10s, matching try_acquire_spawn_lock) in the future is garbage (clock
+// skew, a touched file); it would otherwise read as "cooldown active forever"
+// and wedge the spawn path. We warn and fail toward ALLOWING the spawn. A small
+// negative age is just precision skew between the wall clock and the fs mtime —
+// that still counts as a just-recorded attempt, so the cooldown window is
+// [-STALE_LOCK_MS, SPAWN_COOLDOWN_MS). The mtime IS the timestamp, so there is
+// no content to misparse.
+fn claim_spawn_cooldown() -> bool {
+    const STALE_LOCK_MS: i128 = 10_000;
+    let path = spawn_cooldown_path();
+    if let Some(age) = cooldown_age_ms(&path) {
+        if age < -STALE_LOCK_MS {
+            eprintln!(
+                "cc-candybar: spawn.cooldown mtime is {}ms in the future — ignoring and spawning",
+                -age
+            );
+        } else if age < SPAWN_COOLDOWN_MS as i128 {
+            return false;
+        }
+    }
+    record_spawn_attempt(&path);
+    true
+}
+
+fn spawn_cooldown_path() -> PathBuf {
+    state_dir().join(SPAWN_COOLDOWN_FILE)
+}
+
+// now - mtime, in ms. Positive when the file is in the past; negative for a
+// future mtime (SystemTimeError carries the forward delta).
+fn cooldown_age_ms(path: &Path) -> Option<i128> {
+    let modified = std::fs::metadata(path).and_then(|m| m.modified()).ok()?;
+    match modified.elapsed() {
+        Ok(d) => Some(d.as_millis() as i128),
+        Err(e) => Some(-(e.duration().as_millis() as i128)),
+    }
+}
+
+fn record_spawn_attempt(path: &Path) {
+    if let Some(parent) = path.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    // Content is human-diagnostic; the mtime is the authority. A write failure
+    // means no cooldown recorded — worst case one extra spawn, which bind()
+    // arbitrates — but surface it loudly rather than silently un-bound the rate.
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis())
+        .unwrap_or(0);
+    if let Err(e) = std::fs::write(path, format!("{} {}\n", std::process::id(), now)) {
+        eprintln!("cc-candybar: could not record spawn.cooldown: {e}");
     }
 }
 
