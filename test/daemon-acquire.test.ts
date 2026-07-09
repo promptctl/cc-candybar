@@ -50,6 +50,57 @@ function closeServer(server: net.Server): Promise<void> {
   });
 }
 
+// [LAW:behavior-not-structure] Pin the cooldown window arithmetic at its exact
+// boundaries — the same conditions the Rust unit tests pin — so a TS↔Rust
+// decision divergence at a threshold is caught even though check-protocol only
+// diffs the constants' values. Pure over the age; no filesystem.
+describe("cooldownDecision (pure window arithmetic)", () => {
+  test("absent record allows (first spawn)", async () => {
+    const { cooldownDecision } = await import("../src/daemon/acquire");
+    expect(cooldownDecision(null)).toEqual({ kind: "allow" });
+  });
+
+  test("within [0, SPAWN_COOLDOWN_MS) denies", async () => {
+    const { cooldownDecision, SPAWN_COOLDOWN_MS } = await import(
+      "../src/daemon/acquire"
+    );
+    expect(cooldownDecision(0)).toEqual({ kind: "deny" });
+    expect(cooldownDecision(SPAWN_COOLDOWN_MS - 1)).toEqual({ kind: "deny" });
+  });
+
+  test("at and past SPAWN_COOLDOWN_MS allows (half-open window)", async () => {
+    const { cooldownDecision, SPAWN_COOLDOWN_MS } = await import(
+      "../src/daemon/acquire"
+    );
+    expect(cooldownDecision(SPAWN_COOLDOWN_MS)).toEqual({ kind: "allow" });
+    expect(cooldownDecision(SPAWN_COOLDOWN_MS + 5_000)).toEqual({
+      kind: "allow",
+    });
+  });
+
+  test("small negative age is precision skew, not garbage — denies", async () => {
+    const { cooldownDecision, STALE_LOCK_MS } = await import(
+      "../src/daemon/acquire"
+    );
+    expect(cooldownDecision(-1)).toEqual({ kind: "deny" });
+    expect(cooldownDecision(-STALE_LOCK_MS)).toEqual({ kind: "deny" });
+  });
+
+  test("beyond the stale-lock window in the future is garbage — allows loudly", async () => {
+    const { cooldownDecision, STALE_LOCK_MS } = await import(
+      "../src/daemon/acquire"
+    );
+    expect(cooldownDecision(-STALE_LOCK_MS - 1)).toEqual({
+      kind: "allow-future-garbage",
+      futureMs: STALE_LOCK_MS + 1,
+    });
+    expect(cooldownDecision(-3_600_000)).toEqual({
+      kind: "allow-future-garbage",
+      futureMs: 3_600_000,
+    });
+  });
+});
+
 describe("obtainDaemon (bind-based singleton)", () => {
   test("attaches when a daemon is already listening — no spawn", async () => {
     await withTempState(async (stateDir) => {
@@ -303,6 +354,177 @@ describe("obtainDaemon (bind-based singleton)", () => {
       }
     });
   });
+
+  // ─── spawn cooldown on the async path (ticket 2b3.3) ───────────────────────
+  // obtainDaemon respects the same global rate bound as the kick: when a spawn
+  // was recorded within SPAWN_COOLDOWN_MS, it must NOT add another process — it
+  // waits for the in-flight boot instead.
+
+  test("on cooldown, does not spawn — fails when no daemon binds in the window", async () => {
+    await withTempState(async () => {
+      jest.resetModules();
+      const { obtainDaemon } = await import("../src/daemon/acquire");
+      const { spawnCooldownPath, daemonDir } = await import(
+        "../src/daemon/paths"
+      );
+
+      fs.mkdirSync(daemonDir(), { recursive: true });
+      // A spawn was recorded moments ago (fresh mtime) — an attempt is in flight.
+      fs.writeFileSync(spawnCooldownPath(), `${process.pid} ${Date.now()}\n`);
+
+      let spawned = 0;
+      const result = await obtainDaemon({
+        spawn: () => {
+          spawned++;
+          return true;
+        },
+        spawnReadyTimeoutMs: 200,
+        totalTimeoutMs: 400,
+      });
+      // The rate bound blocked the spawn; no daemon came up, so we time out the
+      // poll and report it as a cooldown failure (not a spawn failure).
+      expect(spawned).toBe(0);
+      expect(result.kind).toBe("failed");
+      if (result.kind === "failed") {
+        expect(result.reason).toMatch(/cooldown/);
+      }
+    });
+  });
+
+  test("on cooldown, attaches to the in-flight daemon without spawning", async () => {
+    await withTempState(async () => {
+      jest.resetModules();
+      const { obtainDaemon } = await import("../src/daemon/acquire");
+      const { spawnCooldownPath, socketPath, daemonDir } = await import(
+        "../src/daemon/paths"
+      );
+
+      fs.mkdirSync(daemonDir(), { recursive: true });
+      fs.writeFileSync(spawnCooldownPath(), `${process.pid} ${Date.now()}\n`);
+
+      // The daemon someone else spawned finishes booting during our poll. It
+      // must appear AFTER obtainDaemon's initial fast-path probe AND its
+      // post-lock re-check (acquire.ts) — otherwise the test would attach at the
+      // top level instead of exercising the cooldown-poll branch. Those two
+      // checks are ~2 microtask ticks apart with no I/O between them (sub-ms), so
+      // a 150ms appearance lands deterministically in the cooldown-poll phase.
+      let server: net.Server | null = null;
+      setTimeout(() => {
+        startFakeDaemon(socketPath())
+          .then((s) => {
+            server = s;
+          })
+          .catch(() => {});
+      }, 150);
+
+      let spawned = 0;
+      const result = await obtainDaemon({
+        spawn: () => {
+          spawned++;
+          return true;
+        },
+        spawnReadyTimeoutMs: 500,
+        totalTimeoutMs: 800,
+      });
+      try {
+        // We did NOT add a process — the in-flight daemon was attached to.
+        expect(spawned).toBe(0);
+        expect(result.kind).toBe("attached");
+      } finally {
+        if (server) await closeServer(server);
+      }
+    });
+  });
+
+  test("on cooldown via the lock-fallback path: no spawn, cooldown cause with no lock suffix", async () => {
+    await withTempState(async () => {
+      jest.resetModules();
+      const { obtainDaemon } = await import("../src/daemon/acquire");
+      const { spawnCooldownPath, spawnLockPath, daemonDir } = await import(
+        "../src/daemon/paths"
+      );
+
+      fs.mkdirSync(daemonDir(), { recursive: true });
+      // A fresh foreign spawn.lock we can't acquire → forces the lock-fallback
+      // path once contention exceeds lockFallbackMs.
+      fs.writeFileSync(
+        spawnLockPath(),
+        JSON.stringify({ pid: 999999, ts: Date.now() }),
+      );
+      // And a fresh spawn-attempt record → the cooldown gate is active.
+      fs.writeFileSync(spawnCooldownPath(), `${process.pid} ${Date.now()}\n`);
+
+      let spawned = 0;
+      const result = await obtainDaemon({
+        spawn: () => {
+          spawned++;
+          return true;
+        },
+        lockFallbackMs: 50,
+        spawnReadyTimeoutMs: 150,
+        totalTimeoutMs: 600,
+      });
+      // The cooldown gate applies on the lock-fallback path too — no spawn.
+      expect(spawned).toBe(0);
+      expect(result.kind).toBe("failed");
+      if (result.kind === "failed") {
+        expect(result.reason).toMatch(/cooldown/);
+        // The failure names the cooldown cause, not the lock provenance.
+        expect(result.reason).not.toMatch(/lock-fallback/);
+      }
+    });
+  });
+
+  test("future-mtime cooldown file on the async path allows the spawn (started)", async () => {
+    await withTempState(async () => {
+      jest.resetModules();
+      const { obtainDaemon } = await import("../src/daemon/acquire");
+      const { spawnCooldownPath, socketPath, daemonDir } = await import(
+        "../src/daemon/paths"
+      );
+
+      fs.mkdirSync(daemonDir(), { recursive: true });
+      // A garbage record whose mtime is far in the future must NOT wedge the
+      // async path — the spawn is ALLOWED (the opposite of a fresh record).
+      fs.writeFileSync(spawnCooldownPath(), "garbage\n");
+      const future = new Date(Date.now() + 3_600_000);
+      fs.utimesSync(spawnCooldownPath(), future, future);
+
+      const stderrSpy = jest
+        .spyOn(process.stderr, "write")
+        .mockImplementation(() => true);
+      try {
+        let spawned = 0;
+        let server: net.Server | null = null;
+        const result = await obtainDaemon({
+          spawn: () => {
+            spawned++;
+            startFakeDaemon(socketPath())
+              .then((s) => {
+                server = s;
+              })
+              .catch(() => {});
+            return true;
+          },
+          spawnReadyTimeoutMs: 500,
+          totalTimeoutMs: 800,
+        });
+        try {
+          // Garbage cooldown ⇒ the spawn proceeded and the daemon came up.
+          expect(spawned).toBe(1);
+          expect(result.kind).toBe("started");
+          const warned = stderrSpy.mock.calls
+            .map((c) => String(c[0]))
+            .join("");
+          expect(warned).toMatch(/in the future/);
+        } finally {
+          if (server) await closeServer(server);
+        }
+      } finally {
+        stderrSpy.mockRestore();
+      }
+    });
+  });
 });
 
 describe("obtainDaemonKick (synchronous fire-and-forget)", () => {
@@ -473,6 +695,131 @@ describe("obtainDaemonKick (synchronous fire-and-forget)", () => {
       // process.exit(0), so an async chain inside would never run.
       obtainDaemonKick({ spawn: () => true });
       expect(asyncRan).toBe(false);
+    });
+  });
+
+  // ─── spawn cooldown (shared spawn-RATE bound, ticket 2b3.3) ────────────────
+
+  test("second kick within the cooldown does not spawn again", async () => {
+    await withTempState(async () => {
+      jest.resetModules();
+      const { obtainDaemonKick } = await import("../src/daemon/acquire");
+
+      let spawned = 0;
+      const spawn = (): boolean => {
+        spawned++;
+        return true;
+      };
+      // First kick: no prior attempt → spawns and records the cooldown.
+      obtainDaemonKick({ spawn });
+      expect(spawned).toBe(1);
+      // Second kick, immediately after: an attempt was recorded well within
+      // SPAWN_COOLDOWN_MS → the herd is damped, no second spawn.
+      obtainDaemonKick({ spawn });
+      expect(spawned).toBe(1);
+    });
+  });
+
+  test("kick spawns again once the cooldown has elapsed", async () => {
+    await withTempState(async () => {
+      jest.resetModules();
+      const { obtainDaemonKick } = await import("../src/daemon/acquire");
+      const { spawnCooldownPath } = await import("../src/daemon/paths");
+
+      let spawned = 0;
+      const spawn = (): boolean => {
+        spawned++;
+        return true;
+      };
+      obtainDaemonKick({ spawn });
+      expect(spawned).toBe(1);
+
+      // Simulate the cooldown window elapsing by backdating the record's mtime
+      // past SPAWN_COOLDOWN_MS (3s) — the same technique the stale-lock tests
+      // use. The next kick is no longer rate-limited.
+      const old = new Date(Date.now() - 5_000);
+      fs.utimesSync(spawnCooldownPath(), old, old);
+
+      obtainDaemonKick({ spawn });
+      expect(spawned).toBe(2);
+    });
+  });
+
+  test("cooldown is recorded even when the spawn throws (record-on-grant)", async () => {
+    await withTempState(async () => {
+      jest.resetModules();
+      const { obtainDaemonKick } = await import("../src/daemon/acquire");
+      const { spawnCooldownPath } = await import("../src/daemon/paths");
+
+      // Suppress the expected "daemon spawn failed" stderr from the throwing
+      // spawn so the test output stays clean.
+      const stderrSpy = jest
+        .spyOn(process.stderr, "write")
+        .mockImplementation(() => true);
+      try {
+        // A broken binary: the spawn throws every time. The cooldown must be
+        // recorded BEFORE the spawn runs, so a broken binary is not retried in
+        // a tight loop.
+        obtainDaemonKick({
+          spawn: () => {
+            throw new Error("simulated ENOENT for node binary");
+          },
+        });
+        expect(fs.existsSync(spawnCooldownPath())).toBe(true);
+
+        // A second kick with a would-succeed spawn is still rate-limited by the
+        // record the throwing attempt left behind.
+        let spawned = 0;
+        obtainDaemonKick({
+          spawn: () => {
+            spawned++;
+            return true;
+          },
+        });
+        expect(spawned).toBe(0);
+      } finally {
+        stderrSpy.mockRestore();
+      }
+    });
+  });
+
+  test("garbage cooldown file (future mtime) fails toward allowing a spawn, loudly", async () => {
+    await withTempState(async () => {
+      jest.resetModules();
+      const { obtainDaemonKick } = await import("../src/daemon/acquire");
+      const { spawnCooldownPath, daemonDir } = await import(
+        "../src/daemon/paths"
+      );
+
+      fs.mkdirSync(daemonDir(), { recursive: true });
+      // Plant a cooldown record with an mtime far in the future (clock skew or a
+      // touched file). A naive `now - mtime < COOLDOWN` test would read this as
+      // "cooldown active" forever and wedge the spawn path — availability lost.
+      fs.writeFileSync(spawnCooldownPath(), "garbage\n");
+      const future = new Date(Date.now() + 3_600_000);
+      fs.utimesSync(spawnCooldownPath(), future, future);
+
+      const stderrSpy = jest
+        .spyOn(process.stderr, "write")
+        .mockImplementation(() => true);
+      try {
+        let spawned = 0;
+        obtainDaemonKick({
+          spawn: () => {
+            spawned++;
+            return true;
+          },
+        });
+        // Availability over strictness: a garbage timestamp must not block.
+        expect(spawned).toBe(1);
+        // ...and it must be loud, not silent.
+        const warned = stderrSpy.mock.calls
+          .map((c) => String(c[0]))
+          .join("");
+        expect(warned).toMatch(/in the future/);
+      } finally {
+        stderrSpy.mockRestore();
+      }
     });
   });
 });
