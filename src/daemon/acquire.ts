@@ -149,11 +149,14 @@ async function spawnAndWaitForReady(
   // boot. This keeps obtainDaemon under the same global rate cap as the kick
   // path, so the rate bound holds for EVERY spawn site [LAW:one-source-of-truth].
   if (!claimSpawnCooldown()) {
+    // [LAW:no-silent-failure] This failure's cause is the cooldown gate, not the
+    // lock path we arrived through — so it does NOT inherit reasonSuffix (which
+    // tags lock-held vs lock-fallback *spawn* provenance). We never spawned here.
     return (await pollUntilReady(connectTimeoutMs, readyDeadline))
       ? { kind: "attached" }
       : {
           kind: "failed",
-          reason: `spawn on cooldown; daemon did not bind in time${reasonSuffix}`,
+          reason: "spawn on cooldown; no daemon became ready during the wait",
         };
   }
 

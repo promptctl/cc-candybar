@@ -381,6 +381,96 @@ describe("obtainDaemon (bind-based singleton)", () => {
       }
     });
   });
+
+  test("on cooldown via the lock-fallback path: no spawn, cooldown cause with no lock suffix", async () => {
+    await withTempState(async () => {
+      jest.resetModules();
+      const { obtainDaemon } = await import("../src/daemon/acquire");
+      const { spawnCooldownPath, spawnLockPath, daemonDir } = await import(
+        "../src/daemon/paths"
+      );
+
+      fs.mkdirSync(daemonDir(), { recursive: true });
+      // A fresh foreign spawn.lock we can't acquire → forces the lock-fallback
+      // path once contention exceeds lockFallbackMs.
+      fs.writeFileSync(
+        spawnLockPath(),
+        JSON.stringify({ pid: 999999, ts: Date.now() }),
+      );
+      // And a fresh spawn-attempt record → the cooldown gate is active.
+      fs.writeFileSync(spawnCooldownPath(), `${process.pid} ${Date.now()}\n`);
+
+      let spawned = 0;
+      const result = await obtainDaemon({
+        spawn: () => {
+          spawned++;
+          return true;
+        },
+        lockFallbackMs: 50,
+        spawnReadyTimeoutMs: 150,
+        totalTimeoutMs: 600,
+      });
+      // The cooldown gate applies on the lock-fallback path too — no spawn.
+      expect(spawned).toBe(0);
+      expect(result.kind).toBe("failed");
+      if (result.kind === "failed") {
+        expect(result.reason).toMatch(/cooldown/);
+        // The failure names the cooldown cause, not the lock provenance.
+        expect(result.reason).not.toMatch(/lock-fallback/);
+      }
+    });
+  });
+
+  test("future-mtime cooldown file on the async path allows the spawn (started)", async () => {
+    await withTempState(async () => {
+      jest.resetModules();
+      const { obtainDaemon } = await import("../src/daemon/acquire");
+      const { spawnCooldownPath, socketPath, daemonDir } = await import(
+        "../src/daemon/paths"
+      );
+
+      fs.mkdirSync(daemonDir(), { recursive: true });
+      // A garbage record whose mtime is far in the future must NOT wedge the
+      // async path — the spawn is ALLOWED (the opposite of a fresh record).
+      fs.writeFileSync(spawnCooldownPath(), "garbage\n");
+      const future = new Date(Date.now() + 3_600_000);
+      fs.utimesSync(spawnCooldownPath(), future, future);
+
+      const stderrSpy = jest
+        .spyOn(process.stderr, "write")
+        .mockImplementation(() => true);
+      try {
+        let spawned = 0;
+        let server: net.Server | null = null;
+        const result = await obtainDaemon({
+          spawn: () => {
+            spawned++;
+            startFakeDaemon(socketPath())
+              .then((s) => {
+                server = s;
+              })
+              .catch(() => {});
+            return true;
+          },
+          spawnReadyTimeoutMs: 500,
+          totalTimeoutMs: 800,
+        });
+        try {
+          // Garbage cooldown ⇒ the spawn proceeded and the daemon came up.
+          expect(spawned).toBe(1);
+          expect(result.kind).toBe("started");
+          const warned = stderrSpy.mock.calls
+            .map((c) => String(c[0]))
+            .join("");
+          expect(warned).toMatch(/in the future/);
+        } finally {
+          if (server) await closeServer(server);
+        }
+      } finally {
+        stderrSpy.mockRestore();
+      }
+    });
+  });
 });
 
 describe("obtainDaemonKick (synchronous fire-and-forget)", () => {
