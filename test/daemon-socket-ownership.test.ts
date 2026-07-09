@@ -144,24 +144,33 @@ describe("makeOwnershipWatch (armed self-check → single shutdown funnel)", () 
     expect(shutdownCalls).toEqual([]);
   });
 
-  test("displacement fires shutdown(0) within one interval, exactly once", () => {
+  test("displacement fires shutdown(0) within one interval, then self-disarms", () => {
     jest.useFakeTimers();
     let current: IdentityRead = { kind: "present", identity: { ...BOUND } };
+    let reads = 0;
     const { deps, shutdownCalls } = watchDeps({
-      readIdentity: () => current,
+      readIdentity: () => {
+        reads++;
+        return current;
+      },
     });
     makeOwnershipWatch(deps).arm();
 
     jest.advanceTimersByTime(1000);
     expect(shutdownCalls).toEqual([]); // still owning
+    const readsWhileOwning = reads; // 1
 
     current = { kind: "present", identity: { dev: 1, ino: 999 } }; // displaced
     jest.advanceTimersByTime(1000); // one interval
     expect(shutdownCalls).toEqual([0]);
+    const readsAtDisplacement = reads;
 
-    // Persistent displacement must not re-funnel — one exit, one log line.
+    // Self-disarmed: the timer stops after firing its one shutdown, so no more
+    // reads (no zombie statSync) and no re-funnel across many further intervals.
     jest.advanceTimersByTime(1000 * 5);
     expect(shutdownCalls).toEqual([0]);
+    expect(reads).toBe(readsAtDisplacement);
+    expect(readsAtDisplacement).toBe(readsWhileOwning + 1);
   });
 
   test("check() returns the decision and is timer-independent", () => {

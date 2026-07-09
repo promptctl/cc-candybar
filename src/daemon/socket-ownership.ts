@@ -148,10 +148,15 @@ export function makeOwnershipWatch(
     intervalMs: number = deps.intervalMs ?? DEFAULT_OWNERSHIP_CHECK_INTERVAL_MS,
   ): { disarm(): void } {
     const timer = setInterval(() => {
-      check();
+      // [LAW:no-ambient-temporal-coupling] Self-disarm once displaced: the watch
+      // has funneled its single shutdown, so stop polling — no zombie statSync
+      // fires during the shutdown window (a hung shutdown reaches its SIGKILL
+      // backstop at 500ms). The timer's whole lifecycle lives here in arm(),
+      // mirroring armBinaryWatch which clears its interval before shutting down.
+      if (check().kind === "displaced") clearInterval(timer);
     }, intervalMs);
-    // [LAW:no-ambient-temporal-coupling] unref so the check never keeps the
-    // process alive on its own — it only ever hastens an exit, never delays one.
+    // unref so the check never keeps the process alive on its own — it only ever
+    // hastens an exit, never delays one.
     timer.unref();
     return { disarm: () => clearInterval(timer) };
   }
