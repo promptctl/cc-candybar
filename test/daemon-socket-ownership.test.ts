@@ -86,7 +86,9 @@ describe("readSocketIdentity (fs boundary)", () => {
     fs.writeFileSync(file, "");
     const r = readSocketIdentity(path.join(file, "under-a-file"));
     expect(r.kind).toBe("unreadable");
-    expect(r.kind === "unreadable" && r.detail.length).toBeGreaterThan(0);
+    if (r.kind === "unreadable") {
+      expect(r.detail.length).toBeGreaterThan(0);
+    }
   });
 
   test("path replaced by a distinct fs entry → checkOwnership sees displaced", () => {
