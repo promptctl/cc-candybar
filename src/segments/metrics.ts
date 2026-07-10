@@ -122,12 +122,13 @@ export class MetricsProvider {
     if (read.kind === "failed") return read;
     if (read.kind === "absent") {
       // No transcript yet (fresh session) — keep prior if any, don't cache a
-      // cursor so the next render retries when the file appears.
+      // cursor so the next render retries when the file appears. Copy the ring
+      // (like the hit/miss paths) so no stored reference escapes.
       return {
         kind: "ok",
         value: {
           messageCount: prior?.messageCount ?? 0,
-          recent: prior?.recent ?? [],
+          recent: [...(prior?.recent ?? [])],
         },
       };
     }
