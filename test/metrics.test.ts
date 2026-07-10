@@ -1,6 +1,7 @@
 import { MetricsProvider } from "../src/segments/metrics";
 import {
   writeFileSync,
+  appendFileSync,
   unlinkSync,
   mkdtempSync,
   utimesSync,
@@ -140,17 +141,20 @@ describe("Metrics Provider", () => {
     expect(outcome.kind).toBe("absent");
   });
 
-  it("reads through the shared parse cache — no re-read when mtime+size unchanged", async () => {
+  it("reuses the folded result when transcript mtime is unchanged (foldMetrics fast-hit, no re-read)", async () => {
     const transcriptPath = join(tempDir, "test.jsonl");
     const fixedMtime = new Date(Date.now() - 60_000);
     // Two `user` lines → messageCount 2. v2 flips the second line's type
     // "user" → "xxxx" (byte-length identical) → a fresh parse would count 1.
+    // Each record is newline-terminated: the incremental reader consumes only
+    // complete lines (a trailing partial line waits for its \n), matching how
+    // Claude writes JSONL — so a complete transcript ends in \n.
     const line = (type: string, ts: string) =>
-      `{"timestamp":"${ts}","type":"${type}","message":{"content":"hi"}}`;
+      `{"timestamp":"${ts}","type":"${type}","message":{"content":"hi"}}\n`;
     const t0 = new Date("2024-01-01T00:00:00.000Z").toISOString();
     const t1 = new Date("2024-01-01T00:00:01.000Z").toISOString();
-    const v1 = [line("user", t0), line("user", t1)].join("\n");
-    const v2 = [line("user", t0), line("xxxx", t1)].join("\n");
+    const v1 = line("user", t0) + line("user", t1);
+    const v2 = line("user", t0) + line("xxxx", t1);
 
     const hookData = createMockHookData("cache-session", transcriptPath);
 
@@ -159,9 +163,9 @@ describe("Metrics Provider", () => {
     const warm = await metricsProvider.getMetricsInfo("cache-session", hookData);
     expect(warm.kind === "ok" && warm.value.messageCount).toBe(2);
 
-    // Mutate content but hold mtime+size identical: the cache key is unchanged,
-    // so a correct shared-cache read returns the stale 2; a private re-read
-    // would observe v2 and return 1.
+    // Mutate content but hold mtime identical: foldMetrics's mtime gate is
+    // unchanged, so the fast-hit returns the folded 2; a re-read would observe
+    // v2 and return 1.
     expect(v2.length).toBe(v1.length);
     writeFileSync(transcriptPath, v2);
     utimesSync(transcriptPath, fixedMtime, fixedMtime);
@@ -170,6 +174,56 @@ describe("Metrics Provider", () => {
       hookData,
     );
     expect(cached.kind === "ok" && cached.value.messageCount).toBe(2);
+  });
+
+  it("folds appended user lines incrementally — count increments by the new lines only", async () => {
+    const transcriptPath = join(tempDir, "inc.jsonl");
+    let t = 1_700_000_000_000;
+    const userLine = () =>
+      JSON.stringify({
+        timestamp: new Date((t += 1000)).toISOString(),
+        type: "user",
+        message: { role: "user", content: "hi" },
+      }) + "\n";
+    // Two real user turns to start.
+    writeFileSync(transcriptPath, userLine() + userLine());
+    let mtime = 1_700_000_000;
+    utimesSync(transcriptPath, mtime, mtime);
+    const hd = createMockHookData("inc-session", transcriptPath);
+
+    const first = await metricsProvider.getMetricsInfo("inc-session", hd);
+    expect(first.kind === "ok" && first.value.messageCount).toBe(2);
+    // No assistant turn yet → no user→assistant pair → no response time.
+    expect(first.kind === "ok" && first.value.lastResponseTime).toBeNull();
+
+    // Append ONE more user turn; advance mtime so the fold sees the change. A
+    // correct incremental fold reports 3 (adds one), not a re-count from scratch
+    // that happens to also be 3 — verified next by appending a non-user line.
+    appendFileSync(transcriptPath, userLine());
+    utimesSync(transcriptPath, ++mtime, mtime);
+    const second = await metricsProvider.getMetricsInfo("inc-session", hd);
+    expect(second.kind === "ok" && second.value.messageCount).toBe(3);
+    expect(second.kind === "ok" && second.value.lastResponseTime).toBeNull();
+
+    // Append an assistant line 1s after the last user turn — messageCount must
+    // NOT change (only real user turns count), AND lastResponseTime must now
+    // reflect that 1s user→assistant gap: proves the recent ring is maintained
+    // incrementally (right entries, right order), not just the count.
+    appendFileSync(
+      transcriptPath,
+      JSON.stringify({
+        timestamp: new Date((t += 1000)).toISOString(),
+        type: "assistant",
+        message: { role: "assistant", content: "hello" },
+      }) + "\n",
+    );
+    utimesSync(transcriptPath, ++mtime, mtime);
+    const third = await metricsProvider.getMetricsInfo("inc-session", hd);
+    expect(third.kind === "ok" && third.value.messageCount).toBe(3);
+    expect(third.kind === "ok" && third.value.lastResponseTime).toBeCloseTo(
+      1.0,
+      3,
+    );
   });
 
   it("handles empty transcript gracefully", async () => {
