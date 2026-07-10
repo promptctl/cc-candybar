@@ -5,8 +5,25 @@ import {
   stat as fsStat,
 } from "node:fs/promises";
 import type { FileHandle } from "node:fs/promises";
+import { statSync } from "node:fs";
 
 import { ABSENT, failed, ok, type Outcome } from "./outcome";
+import { debug } from "./logger";
+
+// [LAW:single-enforcer] The one per-render freshness probe: a SYNC single-file
+// stat's mtimeMs (0 when the file is absent or unreadable). Sync by design — the
+// mtime gate must resolve before deciding whether to read, and a sync stat
+// consumes no gate slot (the async `readAppended`/`readFile` bulk reads are what
+// the limiter bounds). Both the usage store and the metrics provider key their
+// incremental fold off this one helper so the ENOENT→0 policy lives in one place.
+export function statMtimeMs(filePath: string | undefined): number {
+  if (!filePath) return 0;
+  try {
+    return statSync(filePath).mtimeMs;
+  } catch {
+    return 0;
+  }
+}
 
 // [LAW:single-enforcer] One owner of the transcript-scanning in-flight-I/O
 // budget. Every readdir/stat/readFile over the ~/.claude/projects tree passes
@@ -120,6 +137,97 @@ export const stat = gated(fsStat);
 // (permissions, I/O) is a real read failure — `failed`, carrying its reason
 // to whichever boundary owns the log effect. Folding both into one null made
 // a broken transcript indistinguishable from a missing one.
+// [LAW:single-enforcer] The forward complement of readTail, through the SAME
+// gate: read the bytes of an append-only file from `priorOffset` to EOF (the
+// whole file when `priorOffset` is undefined). One open→stat→read→close per
+// gate slot, exactly like readTail. A transcript scanner that maintains a byte
+// cursor to re-read only what was appended MUST use this, not raw node:fs, or it
+// reintroduces the unbounded-fs state the gate forbids.
+//
+// [LAW:one-source-of-truth] `reset` is the single signal that the file shrank
+// below the caller's cursor — a truncation or /compact rewrite — so the caller
+// discards its prior fold for this file and re-folds from the returned bytes
+// (which then start at offset 0). Append-only monotonicity makes every other
+// case a pure suffix read: `start..size` is exactly what's new.
+//
+// [LAW:no-silent-failure] ENOENT (fresh session, no transcript yet) is `absent`;
+// any other error is `failed`, carrying its reason to the boundary that logs.
+export async function readAppended(
+  path: string,
+  prior: { offset: number; ino: number } | undefined,
+): Promise<
+  Outcome<{
+    buf: Buffer;
+    start: number;
+    size: number;
+    mtimeMs: number;
+    ino: number;
+    reset: boolean;
+  }>
+> {
+  return gate.run(async () => {
+    let fh: FileHandle | null = null;
+    try {
+      fh = await fsOpen(path, "r");
+      const { size, mtimeMs, ino } = await fh.stat();
+      // [LAW:one-source-of-truth] The prior fold is a valid PREFIX of this file
+      // only while the file stays append-only. Two independent signals break
+      // that: the inode changed (a rename-based /compact or log rotation swapped
+      // the file under the path — the realistic rewrite mechanism), or the file
+      // shrank below our cursor (an in-place truncate). Either ⇒ re-read from 0;
+      // the suffix-only read would otherwise splice new bytes onto a fold of a
+      // file that no longer exists. (A cursor-only size check missed a rewrite
+      // that grew back to ≥ the cursor.)
+      const reset =
+        prior !== undefined && (ino !== prior.ino || size < prior.offset);
+      const start = reset || prior === undefined ? 0 : prior.offset;
+      if (start >= size) {
+        return ok({ buf: Buffer.alloc(0), start, size, mtimeMs, ino, reset });
+      }
+      const buf = Buffer.alloc(size - start);
+      // [LAW:no-silent-fallbacks] A single read may return short — parsing a
+      // zero-padded tail would fabricate entries. Loop until the window fills or
+      // EOF; on a short final read (the file shrank under us) return only the
+      // bytes actually read, never the zero padding.
+      let off = 0;
+      while (off < buf.length) {
+        const { bytesRead } = await fh.read(
+          buf,
+          off,
+          buf.length - off,
+          start + off,
+        );
+        if (bytesRead === 0) break;
+        off += bytesRead;
+      }
+      return ok({
+        buf: off === buf.length ? buf : buf.subarray(0, off),
+        start,
+        size,
+        mtimeMs,
+        ino,
+        reset,
+      });
+    } catch (e) {
+      if ((e as NodeJS.ErrnoException).code === "ENOENT") return ABSENT;
+      return failed(
+        `readAppended ${path}: ${e instanceof Error ? e.message : String(e)}`,
+      );
+    } finally {
+      // [LAW:no-silent-failure] A close() rejection must NOT override the typed
+      // Outcome the try returned — callers await this and read `.kind`, so a raw
+      // rejection would escape every failed-guard. A failed close after a good
+      // read doesn't invalidate the read, but it can signal a real fs problem
+      // (ENOSPC on fsync), so log it at debug rather than swallowing it blind.
+      await fh?.close().catch((e: unknown) => {
+        debug(
+          `transcript-fs: close failed: ${e instanceof Error ? e.message : String(e)}`,
+        );
+      });
+    }
+  });
+}
+
 export async function readTail(
   path: string,
   maxBytes: number,
@@ -156,7 +264,16 @@ export async function readTail(
         `readTail ${path}: ${e instanceof Error ? e.message : String(e)}`,
       );
     } finally {
-      await fh?.close();
+      // [LAW:no-silent-failure] A close() rejection must NOT override the typed
+      // Outcome the try returned — callers await this and read `.kind`, so a raw
+      // rejection would escape every failed-guard. A failed close after a good
+      // read doesn't invalidate the read, but it can signal a real fs problem
+      // (ENOSPC on fsync), so log it at debug rather than swallowing it blind.
+      await fh?.close().catch((e: unknown) => {
+        debug(
+          `transcript-fs: close failed: ${e instanceof Error ? e.message : String(e)}`,
+        );
+      });
     }
   });
 }
