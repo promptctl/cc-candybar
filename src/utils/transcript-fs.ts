@@ -120,6 +120,79 @@ export const stat = gated(fsStat);
 // (permissions, I/O) is a real read failure — `failed`, carrying its reason
 // to whichever boundary owns the log effect. Folding both into one null made
 // a broken transcript indistinguishable from a missing one.
+// [LAW:single-enforcer] The forward complement of readTail, through the SAME
+// gate: read the bytes of an append-only file from `priorOffset` to EOF (the
+// whole file when `priorOffset` is undefined). One open→stat→read→close per
+// gate slot, exactly like readTail. A transcript scanner that maintains a byte
+// cursor to re-read only what was appended MUST use this, not raw node:fs, or it
+// reintroduces the unbounded-fs state the gate forbids.
+//
+// [LAW:one-source-of-truth] `reset` is the single signal that the file shrank
+// below the caller's cursor — a truncation or /compact rewrite — so the caller
+// discards its prior fold for this file and re-folds from the returned bytes
+// (which then start at offset 0). Append-only monotonicity makes every other
+// case a pure suffix read: `start..size` is exactly what's new.
+//
+// [LAW:no-silent-failure] ENOENT (fresh session, no transcript yet) is `absent`;
+// any other error is `failed`, carrying its reason to the boundary that logs.
+export async function readAppended(
+  path: string,
+  priorOffset: number | undefined,
+): Promise<
+  Outcome<{
+    buf: Buffer;
+    start: number;
+    size: number;
+    mtimeMs: number;
+    reset: boolean;
+  }>
+> {
+  return gate.run(async () => {
+    let fh: FileHandle | null = null;
+    try {
+      fh = await fsOpen(path, "r");
+      const { size, mtimeMs } = await fh.stat();
+      // The file shrank below where we last read → it was rewritten, not
+      // appended. Re-read from the start; the prior fold is stale.
+      const reset = priorOffset !== undefined && size < priorOffset;
+      const start = reset ? 0 : (priorOffset ?? 0);
+      if (start >= size) {
+        return ok({ buf: Buffer.alloc(0), start, size, mtimeMs, reset });
+      }
+      const buf = Buffer.alloc(size - start);
+      // [LAW:no-silent-fallbacks] A single read may return short — parsing a
+      // zero-padded tail would fabricate entries. Loop until the window fills or
+      // EOF; on a short final read (the file shrank under us) return only the
+      // bytes actually read, never the zero padding.
+      let off = 0;
+      while (off < buf.length) {
+        const { bytesRead } = await fh.read(
+          buf,
+          off,
+          buf.length - off,
+          start + off,
+        );
+        if (bytesRead === 0) break;
+        off += bytesRead;
+      }
+      return ok({
+        buf: off === buf.length ? buf : buf.subarray(0, off),
+        start,
+        size,
+        mtimeMs,
+        reset,
+      });
+    } catch (e) {
+      if ((e as NodeJS.ErrnoException).code === "ENOENT") return ABSENT;
+      return failed(
+        `readAppended ${path}: ${e instanceof Error ? e.message : String(e)}`,
+      );
+    } finally {
+      await fh?.close();
+    }
+  });
+}
+
 export async function readTail(
   path: string,
   maxBytes: number,
