@@ -313,11 +313,25 @@ async function spawnDaemon(stateRoot: string): Promise<DaemonHandle> {
           [...nodeFlags, path.join(REPO_ROOT, "dist", "index.mjs"), "daemon"],
         ];
 
-  const child = spawn(cmd, args, {
-    cwd: REPO_ROOT,
-    env,
-    stdio: ["ignore", "pipe", "pipe"],
-  });
+  // [LAW:effects-at-boundaries] The XDG temp dirs already exist (created in `env`
+  // above); if spawn itself throws (EMFILE/ENOMEM) we're before the cleanup
+  // closure, so reap them here or they leak in /tmp.
+  let child;
+  try {
+    child = spawn(cmd, args, {
+      cwd: REPO_ROOT,
+      env,
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+  } catch (e) {
+    for (const d of [env.XDG_CACHE_HOME, env.XDG_CONFIG_HOME, profileDir]) {
+      if (d)
+        try {
+          fs.rmSync(d, { recursive: true, force: true });
+        } catch {}
+    }
+    throw e;
+  }
   child.stdout?.on("data", () => {});
   child.stderr?.on("data", (b: Buffer) =>
     process.stderr.write(`[daemon] ${b}`),
@@ -640,4 +654,12 @@ async function main(): Promise<void> {
   process.exit(exitCode);
 }
 
-void main();
+// [LAW:no-silent-failure] main() exits explicitly on its own paths, but an
+// unexpected throw would skip process.exit and leave the exit code to Node's
+// default. Force a loud non-zero exit so a crashed harness can never look like a
+// pass to a CI gate reading the exit code.
+main().catch((e: unknown) => {
+  // eslint-disable-next-line no-console
+  console.error("harness crashed:", e);
+  process.exit(1);
+});

@@ -154,6 +154,19 @@ describe("readAppendedEntries — the incremental reader primitive", () => {
     const res = await readAppendedEntries(join(dir, "missing.jsonl"), undefined);
     expect(res.kind).toBe("absent");
   });
+
+  test("a prior cursor on an unchanged file yields zero new entries", async () => {
+    const t = join(dir, "A.jsonl");
+    writeFileSync(t, line(new Date(), 0.01) + line(new Date(), 0.02));
+    const first = await readAppendedEntries(t, undefined);
+    if (first.kind !== "ok") throw new Error("expected ok");
+    // Nothing appended → the same cursor reads nothing, no reset.
+    const again = await readAppendedEntries(t, first.value.cursor);
+    if (again.kind !== "ok") throw new Error("expected ok");
+    expect(again.value.entries).toHaveLength(0);
+    expect(again.value.reset).toBe(false);
+    expect(again.value.cursor.offset).toBe(first.value.cursor.offset);
+  });
 });
 
 describe("SessionUsageStore — incremental fold equals from-scratch", () => {
@@ -307,6 +320,52 @@ describe("SessionUsageStore — incremental fold equals from-scratch", () => {
       expect(second.value.session.cost).toBeCloseTo(0.03, 5);
     } finally {
       store.close();
+    }
+  });
+
+  test("day cost includes the PRICED value for entries lacking costUSD (matches session cost)", async () => {
+    // Regression guard: the old path mutated costUSD to the priced value before
+    // bucketing, so an un-costed entry contributed its priced cost to `today`.
+    // foldFile must do the same — session and day cost agree for such entries.
+    // Isolate the seed to an empty CLAUDE_CONFIG_DIR so `today` folds only the
+    // active session.
+    const savedConfig = process.env.CLAUDE_CONFIG_DIR;
+    const cfgRoot = mkdtempSync(join(tmpdir(), "cc-candybar-inc-cfg-"));
+    process.env.CLAUDE_CONFIG_DIR = cfgRoot;
+    try {
+      const t = join(dir, "P.jsonl");
+      // No costUSD → priced by the unknown-model fallback (input $3/M, output
+      // $15/M): 1M input + 1M output ⇒ $3 + $15 = $18.
+      writeFileSync(
+        t,
+        JSON.stringify({
+          timestamp: new Date().toISOString(),
+          requestId: "req-p",
+          model: "claude-test-model",
+          message: {
+            id: "msg-p",
+            model: "claude-test-model",
+            usage: { input_tokens: 1_000_000, output_tokens: 1_000_000 },
+          },
+        }) + "\n",
+      );
+      const store = new SessionUsageStore({ sweepIntervalMs: 0 });
+      try {
+        const usage = await store.getUsageInfo("P", hook("P", t));
+        const today = await store.getTodayInfo(hook("P", t));
+        if (usage.kind !== "ok" || today.kind !== "ok")
+          throw new Error("expected ok");
+        expect(usage.value.session.cost).toBeCloseTo(18, 5);
+        // The regression this pins: today MUST equal the session's priced cost,
+        // not 0 (which the pre-fix `costUSD ?? 0` day bucket produced).
+        expect(today.value.cost).toBeCloseTo(18, 5);
+      } finally {
+        store.close();
+      }
+    } finally {
+      if (savedConfig === undefined) delete process.env.CLAUDE_CONFIG_DIR;
+      else process.env.CLAUDE_CONFIG_DIR = savedConfig;
+      rmSync(cfgRoot, { recursive: true, force: true });
     }
   });
 
