@@ -1,3 +1,10 @@
+## [1.17.5](https://github.com/promptctl/cc-candybar/compare/v1.17.4...v1.17.5) (2026-07-10)
+
+
+### Performance Improvements
+
+* **daemon:** incremental append-only transcript fold (brandon-daemon-perf-bb9) ([#150](https://github.com/promptctl/cc-candybar/issues/150)) ([c39d90e](https://github.com/promptctl/cc-candybar/commit/c39d90e4f45c78af660824c57710a92a8f0c09b3))
+
 ## [1.17.4](https://github.com/promptctl/cc-candybar/compare/v1.17.3...v1.17.4) (2026-07-09)
 
 
