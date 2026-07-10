@@ -532,9 +532,26 @@ export class SessionUsageStore {
     // one whole-file re-fold — still correct, just non-incremental that once.
     // (Eviction only fires after a successful write, so this can bite only on a
     // first miss under cap pressure.)
-    const outcome = await this.flight.run(`${sessionId}:${mtime}`, () =>
-      this.refold(sessionId, transcriptPath, this.entries.get(sessionId)),
-    );
+    // [LAW:no-silent-failure] ingest MUST stay total — every caller reads
+    // `.kind`, so a rejected promise (e.g. PricingService.calculateCostForEntry
+    // throwing on a bad rate table or network hiccup inside foldFile) would
+    // escape the Outcome contract entirely. The deleted getSessionUsageFromPath
+    // wrapped this; keep that guarantee by mapping any throw to `failed`.
+    let outcome: Outcome<{
+      files: Map<string, FileFold>;
+      sessionInfo: SessionInfo;
+      days: Map<string, DayUsage>;
+      mainMtime: number;
+    }>;
+    try {
+      outcome = await this.flight.run(`${sessionId}:${mtime}`, () =>
+        this.refold(sessionId, transcriptPath, this.entries.get(sessionId)),
+      );
+    } catch (error) {
+      return failed(
+        `usage refold (${sessionId}): ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
     if (outcome.kind !== "ok") return outcome;
     const record: SessionRecord = {
       files: outcome.value.files,

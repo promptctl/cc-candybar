@@ -102,6 +102,12 @@ export class MetricsProvider {
     // [LAW:no-ambient-temporal-coupling] Fast hit: the transcript is unchanged
     // since we last folded it, so the message count + ring stand.
     if (prior && mtime !== 0 && prior.cursor.mtimeMs === mtime) {
+      // [LAW:no-ambient-temporal-coupling] Re-order on the hit so LRU eviction
+      // reflects READ recency, not just write recency — an active session whose
+      // transcript is momentarily unchanged must not be evicted ahead of idle
+      // ones (matches the usage store's hit path).
+      this.state.delete(sessionId);
+      this.state.set(sessionId, prior);
       // [LAW:no-shared-mutable-globals] Return a COPY of the stored ring, never
       // the reference — the miss path already does, and a caller mutating the
       // returned array would silently corrupt the retained state (a heisenbug in

@@ -335,6 +335,14 @@ async function spawnDaemon(stateRoot: string): Promise<DaemonHandle> {
           fs.rmSync(d, { recursive: true, force: true });
         } catch {}
     }
+    // Remove profileDir only when it holds no .cpuprofile — a failed --profile
+    // run leaves an empty dir to reap; a successful run preserves the profiles
+    // for the operator to inspect.
+    if (profileDir)
+      try {
+        if (fs.readdirSync(profileDir).length === 0)
+          fs.rmSync(profileDir, { recursive: true, force: true });
+      } catch {}
   };
 
   const deadline = Date.now() + 8000;
@@ -407,12 +415,13 @@ function shutdownDaemon(sockPath: string): Promise<void> {
 }
 
 // ─── Percentiles ──────────────────────────────────────────────────────────────
+// Standard nearest-rank: the p-th percentile is the ceil((p/100)·N)-th value
+// (1-based). floor(...) mis-assigns the max to p99 for small N; nearest-rank
+// makes p100 the only index that is the max.
 function pct(sorted: number[], p: number): number {
   if (sorted.length === 0) return 0;
-  const idx = Math.min(
-    sorted.length - 1,
-    Math.floor((p / 100) * sorted.length),
-  );
+  const rank = Math.ceil((p / 100) * sorted.length) - 1;
+  const idx = Math.min(sorted.length - 1, Math.max(0, rank));
   return sorted[idx]!;
 }
 
@@ -581,12 +590,19 @@ async function main(): Promise<void> {
       // point — a saturated backlog (connect_timeout), a refused socket, or a
       // broken pipe are each unacceptable, ramp or not.
       pass:
+        // [LAW:no-silent-failure] Never a vacuous pass: a run with no steady
+        // samples (e.g. interval > duration) measured nothing and cannot pass a
+        // sustained-load gate.
+        steady.length > 0 &&
         pct(totals, 99) <= TOTAL_BUDGET_MS &&
         steadyOver === 0 &&
         byOutcome("render_error") === 0 &&
         byOutcome("epipe") === 0 &&
         byOutcome("connect_timeout") === 0 &&
-        byOutcome("econnrefused") === 0,
+        byOutcome("econnrefused") === 0 &&
+        // `other` = framing errors or unexpected socket codes (EMFILE, EACCES…);
+        // a daemon sending garbage or hitting an fd limit must fail the gate.
+        byOutcome("other") === 0,
     };
 
     if (values.json) {

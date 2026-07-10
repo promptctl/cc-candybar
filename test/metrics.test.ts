@@ -193,6 +193,8 @@ describe("Metrics Provider", () => {
 
     const first = await metricsProvider.getMetricsInfo("inc-session", hd);
     expect(first.kind === "ok" && first.value.messageCount).toBe(2);
+    // No assistant turn yet → no user→assistant pair → no response time.
+    expect(first.kind === "ok" && first.value.lastResponseTime).toBeNull();
 
     // Append ONE more user turn; advance mtime so the fold sees the change. A
     // correct incremental fold reports 3 (adds one), not a re-count from scratch
@@ -201,9 +203,12 @@ describe("Metrics Provider", () => {
     utimesSync(transcriptPath, ++mtime, mtime);
     const second = await metricsProvider.getMetricsInfo("inc-session", hd);
     expect(second.kind === "ok" && second.value.messageCount).toBe(3);
+    expect(second.kind === "ok" && second.value.lastResponseTime).toBeNull();
 
-    // Append an assistant line — messageCount must NOT change (only real user
-    // turns count), proving the fold classifies appended entries, not re-counts.
+    // Append an assistant line 1s after the last user turn — messageCount must
+    // NOT change (only real user turns count), AND lastResponseTime must now
+    // reflect that 1s user→assistant gap: proves the recent ring is maintained
+    // incrementally (right entries, right order), not just the count.
     appendFileSync(
       transcriptPath,
       JSON.stringify({
@@ -215,6 +220,10 @@ describe("Metrics Provider", () => {
     utimesSync(transcriptPath, ++mtime, mtime);
     const third = await metricsProvider.getMetricsInfo("inc-session", hd);
     expect(third.kind === "ok" && third.value.messageCount).toBe(3);
+    expect(third.kind === "ok" && third.value.lastResponseTime).toBeCloseTo(
+      1.0,
+      3,
+    );
   });
 
   it("handles empty transcript gracefully", async () => {
