@@ -1,11 +1,12 @@
 import { existsSync, createReadStream } from "node:fs";
 // [LAW:single-enforcer] readdir/readFile/stat come from the gated transcript-fs
 // owner, not node:fs/promises — the in-flight-I/O bound lives at one seam.
-import { readdir, readFile, stat } from "./transcript-fs";
+import { readdir, readFile, readAppended, stat } from "./transcript-fs";
 import { join } from "node:path";
 import { homedir } from "node:os";
 import { createInterface } from "node:readline";
 import { debug } from "./logger";
+import { ok, type Outcome } from "./outcome";
 
 export interface ClaudeHookData {
   // cc-candybar internal — not part of Anthropic's schema
@@ -147,6 +148,12 @@ export async function findProjectPaths(
 export async function findAgentTranscripts(
   sessionId: string,
   projectPath: string,
+  // [LAW:one-source-of-truth] Agent-file session identity is IMMUTABLE — a file
+  // that belonged to this session never changes owner. Paths in `verified` skip
+  // the first-line readFile, so an incremental refold (which passes its prior
+  // file set) pays the O(file) verification only for NEWLY-appeared sidechains,
+  // not every sidechain every render. The readdir still runs (cheap).
+  verified?: ReadonlySet<string>,
 ): Promise<string[]> {
   const agentFiles: string[] = [];
 
@@ -160,6 +167,10 @@ export async function findAgentTranscripts(
 
     for (const fileName of agentFileNames) {
       const filePath = join(subagentsDir, fileName);
+      if (verified?.has(filePath)) {
+        agentFiles.push(filePath);
+        continue;
+      }
       try {
         const content = await readFile(filePath, "utf-8");
         const firstLine = content.split("\n")[0];
@@ -436,17 +447,13 @@ function makeEntry(parsed: Record<string, unknown>): ParsedEntry | null {
   };
 }
 
-async function parseJsonlFileInMemory(
-  filePath: string,
-): Promise<ParsedEntry[]> {
-  const content = await readFile(filePath, "utf-8");
-  const lines = content
-    .trim()
-    .split("\n")
-    .filter((line) => line.trim());
+// [LAW:one-source-of-truth] The one line→entry loop. Both the whole-file parse
+// and the incremental append reader frame their text into lines through here, so
+// a malformed-line policy or a projected field can never diverge between the two.
+function parseJsonlLines(text: string): ParsedEntry[] {
   const entries: ParsedEntry[] = [];
-
-  for (const line of lines) {
+  for (const line of text.split("\n")) {
+    if (!line.trim()) continue;
     try {
       const entry = makeEntry(JSON.parse(line));
       if (entry) entries.push(entry);
@@ -455,8 +462,68 @@ async function parseJsonlFileInMemory(
       continue;
     }
   }
-
   return entries;
+}
+
+async function parseJsonlFileInMemory(
+  filePath: string,
+): Promise<ParsedEntry[]> {
+  const content = await readFile(filePath, "utf-8");
+  return parseJsonlLines(content);
+}
+
+// A byte cursor into an append-only transcript: the offset consumed through the
+// last complete line, the mtime observed at that read, and the inode. The store
+// keys its per-file fold by this — `offset` bounds the next read to only what's
+// new; `mtimeMs` lets an unchanged file skip the read entirely; `ino` detects a
+// rewrite (a rename-based /compact swaps the inode) so the fold resets instead
+// of splicing new bytes onto a stale prefix.
+export interface TranscriptCursor {
+  readonly offset: number;
+  readonly mtimeMs: number;
+  readonly ino: number;
+}
+
+// [LAW:dataflow-not-control-flow][LAW:one-source-of-truth] Read only the entries
+// appended to an append-only transcript since `prior`. The returned `entries`
+// are TRANSIENT — the caller folds them into its own compact aggregate and drops
+// them, so this reader (unlike the retained parseCache) pins no O(file) memory:
+// its cost is O(bytes appended since last render), which is the whole point.
+//
+// A partial trailing line (a render observing the file mid-write, before its
+// newline) is NOT consumed: the cursor advances only through the last complete
+// line, so the partial line is re-read intact once its newline lands. Cutting at
+// a newline also guarantees clean UTF-8 boundaries (0x0A is never a continuation
+// byte), so no multibyte codepoint is split across reads.
+//
+// `reset` (from readAppended) means the file shrank/was rewritten (a /compact):
+// `entries` then cover the whole new file from offset 0 and the caller discards
+// its prior fold for this file. Absent/failed pass straight through.
+export async function readAppendedEntries(
+  filePath: string,
+  prior: TranscriptCursor | undefined,
+): Promise<
+  Outcome<{ entries: ParsedEntry[]; cursor: TranscriptCursor; reset: boolean }>
+> {
+  const r = await readAppended(
+    filePath,
+    prior === undefined ? undefined : { offset: prior.offset, ino: prior.ino },
+  );
+  if (r.kind !== "ok") return r;
+  const { buf, start, mtimeMs, ino, reset } = r.value;
+  // Consume only through the last newline; a trailing partial line waits.
+  const lastNl = buf.lastIndexOf(0x0a);
+  if (lastNl < 0) {
+    return ok({ entries: [], cursor: { offset: start, mtimeMs, ino }, reset });
+  }
+  const entries = parseJsonlLines(
+    buf.subarray(0, lastNl + 1).toString("utf-8"),
+  );
+  return ok({
+    entries,
+    cursor: { offset: start + lastNl + 1, mtimeMs, ino },
+    reset,
+  });
 }
 
 async function parseJsonlFileStreaming(

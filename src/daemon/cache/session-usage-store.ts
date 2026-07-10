@@ -1,23 +1,26 @@
-import fs from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 
 import {
-  SessionProvider,
   type SessionInfo,
-  type SessionUsage,
   type UsageInfo,
   type TokenBreakdown,
 } from "../../segments/session";
+import { PricingService } from "../../segments/pricing";
 import {
   getClaudePaths,
   findProjectPaths,
+  findAgentTranscripts,
+  readAppendedEntries,
   type ClaudeHookData,
+  type ParsedEntry,
+  type TranscriptCursor,
 } from "../../utils/claude";
 // [LAW:single-enforcer] The once-per-day seed's directory walk shares the same
 // in-flight-I/O budget (gn4.2) as every other transcript scan.
 import {
   readdir as gatedReaddir,
   stat as gatedStat,
+  statMtimeMs,
 } from "../../utils/transcript-fs";
 import { SingleFlight } from "../../utils/single-flight";
 import { ABSENT, failed, ok, type Outcome } from "../../utils/outcome";
@@ -105,6 +108,10 @@ interface DayUsage {
 }
 
 interface SessionRecord {
+  // [LAW:one-source-of-truth] `files` is canonical (main transcript + agent
+  // sidechains, each its own incremental FileFold); `sessionInfo`/`days` are
+  // derived from mergeFolds and re-synced on every ingest — the single writer.
+  files: Map<string, FileFold>;
   sessionInfo: SessionInfo;
   days: Map<string, DayUsage>;
   transcriptMtime: number;
@@ -152,33 +159,119 @@ function seedCutoffMs(): number {
   return d.getTime();
 }
 
-function statMtimeMs(filePath: string | undefined): number {
-  if (!filePath) return 0;
-  try {
-    return fs.statSync(filePath).mtimeMs;
-  } catch {
-    return 0;
-  }
+function emptyBreakdown(): TokenBreakdown {
+  return { input: 0, output: 0, cacheCreation: 0, cacheRead: 0 };
 }
 
-// dayKey strings sort lexically == chronologically, so "keep recent" is a
-// string comparison against yesterday's key.
-function bucketByDay(usage: SessionUsage): Map<string, DayUsage> {
+// [LAW:one-source-of-truth] The incremental fold of ONE append-only transcript
+// file (a session's main transcript or one agent sidechain). `cursor` marks the
+// bytes already folded; the sums run over every usage-bearing entry seen so far.
+// The session aggregate is the MERGE of its files' folds (mergeFolds), so a file
+// rewritten by /compact re-folds in isolation without disturbing the others.
+interface FileFold {
+  cursor: TranscriptCursor;
+  entries: number; // usage-bearing entries folded (0 ⇒ empty session, all-null)
+  cost: number;
+  breakdown: TokenBreakdown;
+  days: Map<string, DayUsage>; // keys >= seed cutoff only (pruned on fold)
+}
+
+// [LAW:effects-at-boundaries] Pure fold of NEW entries onto a prior file fold.
+// Returns a FRESH FileFold (prior is never mutated) so two concurrent refolds
+// sharing one prior snapshot can't corrupt each other. `reset` (file rewritten)
+// discards the prior sums and folds `entries` — the whole new file — from zero.
+//
+// [LAW:one-source-of-truth] Session cost and day cost use the SAME priced value:
+// an entry lacking costUSD is priced once (PricingService) and that figure feeds
+// BOTH the session total and its day bucket. This matches the old path exactly —
+// it mutated entry.costUSD to the priced cost before bucketByDay read it — so
+// `today` is not silently under-counted for un-costed entries.
+async function foldFile(
+  prior: FileFold | undefined,
+  reset: boolean,
+  entries: readonly ParsedEntry[],
+  cursor: TranscriptCursor,
+): Promise<FileFold> {
+  // dayKey strings sort lexically == chronologically, so "keep recent" is a
+  // string comparison against yesterday's key.
   const keep = dayKey(new Date(seedCutoffMs()));
+  const base = prior && !reset ? prior : undefined;
+  let count = base?.entries ?? 0;
+  let cost = base?.cost ?? 0;
+  const breakdown = base ? { ...base.breakdown } : emptyBreakdown();
   const days = new Map<string, DayUsage>();
-  for (const entry of usage.entries) {
+  if (base) {
+    for (const [k, v] of base.days) if (k >= keep) days.set(k, { ...v });
+  }
+  for (const entry of entries) {
+    const u = entry.message?.usage;
+    if (!u) continue;
+    count++;
+    const priced =
+      entry.costUSD ?? (await PricingService.calculateCostForEntry(entry.raw));
+    cost += priced;
+    breakdown.input += u.input_tokens || 0;
+    breakdown.output += u.output_tokens || 0;
+    breakdown.cacheCreation += u.cache_creation_input_tokens || 0;
+    breakdown.cacheRead += u.cache_read_input_tokens || 0;
     const key = dayKey(new Date(entry.timestamp));
     if (key < keep) continue;
     const d = days.get(key) ?? { ...EMPTY_DAY };
-    const u = entry.message.usage;
-    d.cost += entry.costUSD ?? 0;
+    // [LAW:one-source-of-truth] Day cost uses the PRICED value, same as session
+    // cost — the old path mutated entry.costUSD to the priced cost before
+    // bucketByDay read it, so an un-costed entry contributed its priced value to
+    // `today`, not 0. Using `priced` here preserves that (session and day agree).
+    d.cost += priced;
     d.input += u.input_tokens || 0;
     d.output += u.output_tokens || 0;
     d.cacheCreation += u.cache_creation_input_tokens || 0;
     d.cacheRead += u.cache_read_input_tokens || 0;
     days.set(key, d);
   }
-  return days;
+  return { cursor, entries: count, cost, breakdown, days };
+}
+
+// [LAW:effects-at-boundaries] Pure merge of a session's file folds into the
+// derived record shape the read path serves. `entries === 0` across all files is
+// the empty session (all-null SessionInfo, whose fields the payload drops) — the
+// same distinction the old `entries.length === 0` arm carried.
+function mergeFolds(files: ReadonlyMap<string, FileFold>): {
+  sessionInfo: SessionInfo;
+  days: Map<string, DayUsage>;
+} {
+  let count = 0;
+  let cost = 0;
+  const bd = emptyBreakdown();
+  const days = new Map<string, DayUsage>();
+  for (const f of files.values()) {
+    count += f.entries;
+    cost += f.cost;
+    bd.input += f.breakdown.input;
+    bd.output += f.breakdown.output;
+    bd.cacheCreation += f.breakdown.cacheCreation;
+    bd.cacheRead += f.breakdown.cacheRead;
+    for (const [k, v] of f.days) {
+      const d = days.get(k) ?? { ...EMPTY_DAY };
+      d.cost += v.cost;
+      d.input += v.input;
+      d.output += v.output;
+      d.cacheCreation += v.cacheCreation;
+      d.cacheRead += v.cacheRead;
+      days.set(k, d);
+    }
+  }
+  if (count === 0) return { sessionInfo: EMPTY_SESSION_INFO, days };
+  const tokens = bd.input + bd.output + bd.cacheCreation + bd.cacheRead;
+  return {
+    sessionInfo: {
+      cost,
+      calculatedCost: cost,
+      officialCost: null,
+      tokens,
+      tokenBreakdown: bd,
+    },
+    days,
+  };
 }
 
 // Bounded-concurrency fan-out for the seed: at most `limit` parses in flight.
@@ -201,7 +294,6 @@ async function mapPool<T>(
 }
 
 export class SessionUsageStore {
-  private readonly sessions = new SessionProvider();
   private readonly entries = new Map<string, SessionRecord>();
   // [LAW:one-source-of-truth] Coalesces concurrent MISSES for the same
   // (session, observed mtime) onto one parse; cleared on settle (a coalescer,
@@ -424,15 +516,49 @@ export class SessionUsageStore {
     if (!transcriptPath) return existing ? ok(existing) : ABSENT;
 
     this.misses++;
-    const aggregate = await this.flight.run(`${sessionId}:${mtime}`, () =>
-      this.aggregate(sessionId, transcriptPath),
-    );
-    if (aggregate.kind !== "ok") return aggregate;
-    // Tag with the mtime observed AFTER the read so the next render that sees
-    // the same mtime is a safe hit.
+    // [LAW:no-ambient-temporal-coupling] The flight thunk snapshots the prior
+    // record when it RUNS (first caller); coalesced callers share that one
+    // refold. Two concurrent DIFFERENT-mtime refolds each read the same prior and
+    // last-writer-wins. This is safe — and specifically NOT a double-count —
+    // because `refold` writes the byte cursor and the fold as ONE atomic pair
+    // (both from a single refold result), and the fold always covers exactly
+    // [0, cursor). A losing writer's fold is discarded WITH its cursor, not left
+    // beside a stale one. So even when last-writer-wins rewinds the stored cursor,
+    // it rewinds the paired fold with it; the next refold folds [cursor, end) onto
+    // a fold that lacks those bytes — each byte folded once. `foldFile` is pure
+    // (fresh FileFold, prior never mutated), so the shared prior can't corrupt.
+    // Pinned by the concurrency test in test/transcript-incremental.test.ts.
+    // The prior is read when the thunk RUNS. If evictIfNeeded dropped this
+    // session between thunk creation and run, prior is undefined and refold does
+    // one whole-file re-fold — still correct, just non-incremental that once.
+    // (Eviction only fires after a successful write, so this can bite only on a
+    // first miss under cap pressure.)
+    // [LAW:no-silent-failure] ingest MUST stay total — every caller reads
+    // `.kind`, so a rejected promise (e.g. PricingService.calculateCostForEntry
+    // throwing on a bad rate table or network hiccup inside foldFile) would
+    // escape the Outcome contract entirely. The deleted getSessionUsageFromPath
+    // wrapped this; keep that guarantee by mapping any throw to `failed`.
+    let outcome: Outcome<{
+      files: Map<string, FileFold>;
+      sessionInfo: SessionInfo;
+      days: Map<string, DayUsage>;
+      mainMtime: number;
+    }>;
+    try {
+      outcome = await this.flight.run(`${sessionId}:${mtime}`, () =>
+        this.refold(sessionId, transcriptPath, this.entries.get(sessionId)),
+      );
+    } catch (error) {
+      return failed(
+        `usage refold (${sessionId}): ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+    if (outcome.kind !== "ok") return outcome;
     const record: SessionRecord = {
-      ...aggregate.value,
-      transcriptMtime: statMtimeMs(transcriptPath),
+      files: outcome.value.files,
+      sessionInfo: outcome.value.sessionInfo,
+      days: outcome.value.days,
+      transcriptMtime: outcome.value.mainMtime,
       transcriptPath,
       lastSeenAt: Date.now(),
     };
@@ -442,23 +568,54 @@ export class SessionUsageStore {
     return ok(record);
   }
 
-  private async aggregate(
+  // [LAW:dataflow-not-control-flow] Re-fold ONLY the bytes appended since the
+  // prior record — the transcript (and each agent sidechain) is append-only, so
+  // per-render work is O(new bytes), not O(file). The whole-file case (cold
+  // record, or a first-ever read) is the same path with an empty prior: the
+  // reader yields the whole file from offset 0. A `failed` read on any file
+  // fails the fold (the boundary logs it); an `absent` file (not yet written /
+  // agent removed) keeps its prior fold and contributes nothing new.
+  private async refold(
     sessionId: string,
     transcriptPath: string,
+    prior: SessionRecord | undefined,
   ): Promise<
-    Outcome<{ sessionInfo: SessionInfo; days: Map<string, DayUsage> }>
+    Outcome<{
+      files: Map<string, FileFold>;
+      sessionInfo: SessionInfo;
+      days: Map<string, DayUsage>;
+      mainMtime: number;
+    }>
   > {
-    const usage = await this.sessions.getSessionUsageFromPath(
+    // File set for this fold: the main transcript plus the session's current
+    // agent sidechains. Files no longer in the set (a removed sidechain) drop
+    // out of `newFiles`, so a rewritten/renamed file cannot linger in the merge.
+    // Pass the prior file set so already-verified agent sidechains skip their
+    // first-line re-read — per-render agent discovery is O(new sidechains).
+    const agentPaths = await findAgentTranscripts(
       sessionId,
-      transcriptPath,
+      dirname(transcriptPath),
+      prior === undefined ? undefined : new Set(prior.files.keys()),
     );
-    // getSessionUsageFromPath never produces absent (an empty transcript is a
-    // real zero-entry usage); failed passes through to the boundary.
-    if (usage.kind !== "ok") return usage;
-    return ok({
-      sessionInfo: this.sessions.toSessionInfo(usage.value),
-      days: bucketByDay(usage.value),
-    });
+    const newFiles = new Map<string, FileFold>();
+    let mainMtime = 0;
+    for (const filePath of [transcriptPath, ...agentPaths]) {
+      const priorFold = prior?.files.get(filePath);
+      const read = await readAppendedEntries(filePath, priorFold?.cursor);
+      if (read.kind === "failed") return read;
+      if (read.kind === "absent") {
+        // The file has no bytes yet (fresh main) or vanished (removed agent
+        // sidechain). Carry a prior fold forward; otherwise it contributes
+        // nothing. The main transcript's absence leaves mainMtime 0, so the next
+        // render's mtime gate re-attempts rather than caching an empty read.
+        if (priorFold) newFiles.set(filePath, priorFold);
+        continue;
+      }
+      const { entries, cursor, reset } = read.value;
+      newFiles.set(filePath, await foldFile(priorFold, reset, entries, cursor));
+      if (filePath === transcriptPath) mainMtime = cursor.mtimeMs;
+    }
+    return ok({ files: newFiles, ...mergeFolds(newFiles), mainMtime });
   }
 
   private ensureSeeded(day: string): Promise<void> {
