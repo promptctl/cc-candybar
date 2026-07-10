@@ -145,12 +145,15 @@ describe("Metrics Provider", () => {
     const fixedMtime = new Date(Date.now() - 60_000);
     // Two `user` lines → messageCount 2. v2 flips the second line's type
     // "user" → "xxxx" (byte-length identical) → a fresh parse would count 1.
+    // Each record is newline-terminated: the incremental reader consumes only
+    // complete lines (a trailing partial line waits for its \n), matching how
+    // Claude writes JSONL — so a complete transcript ends in \n.
     const line = (type: string, ts: string) =>
-      `{"timestamp":"${ts}","type":"${type}","message":{"content":"hi"}}`;
+      `{"timestamp":"${ts}","type":"${type}","message":{"content":"hi"}}\n`;
     const t0 = new Date("2024-01-01T00:00:00.000Z").toISOString();
     const t1 = new Date("2024-01-01T00:00:01.000Z").toISOString();
-    const v1 = [line("user", t0), line("user", t1)].join("\n");
-    const v2 = [line("user", t0), line("xxxx", t1)].join("\n");
+    const v1 = line("user", t0) + line("user", t1);
+    const v2 = line("user", t0) + line("xxxx", t1);
 
     const hookData = createMockHookData("cache-session", transcriptPath);
 
