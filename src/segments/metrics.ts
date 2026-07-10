@@ -109,9 +109,9 @@ export class MetricsProvider {
       this.state.delete(sessionId);
       this.state.set(sessionId, prior);
       // [LAW:no-shared-mutable-globals] Return a COPY of the stored ring, never
-      // the reference — the miss path already does, and a caller mutating the
-      // returned array would silently corrupt the retained state (a heisenbug in
-      // the next render's lastResponseTime). 20 entries; negligible.
+      // the reference — a caller mutating the returned array would silently
+      // corrupt the retained state (a heisenbug in the next render's
+      // lastResponseTime). Every path (hit/miss/absent) copies. 20 entries.
       return {
         kind: "ok",
         value: { messageCount: prior.messageCount, recent: [...prior.recent] },
@@ -151,7 +151,9 @@ export class MetricsProvider {
       if (oldest === undefined) break;
       this.state.delete(oldest);
     }
-    return { kind: "ok", value: { messageCount, recent } };
+    // [LAW:no-shared-mutable-globals] `recent` is now the STORED array — copy it
+    // out so the returned value shares no reference with retained state.
+    return { kind: "ok", value: { messageCount, recent: [...recent] } };
   }
 
   // [LAW:no-silent-failure] A hook payload with no cost block is `absent`

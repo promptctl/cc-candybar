@@ -181,14 +181,11 @@ interface FileFold {
 // sharing one prior snapshot can't corrupt each other. `reset` (file rewritten)
 // discards the prior sums and folds `entries` — the whole new file — from zero.
 //
-// [LAW:one-source-of-truth] Cost has two tracks — and they legitimately DIVERGE
-// for an entry lacking costUSD: the SESSION cost prices it (PricingService),
-// while a DAY bucket counts costUSD only (0 when absent). This asymmetry is
-// PRE-EXISTING, not introduced here — the old code's toSessionInfo priced
-// un-costed entries while bucketByDay used `costUSD ?? 0`. "Preserved exactly"
-// below means the incremental output equals that old whole-file output for BOTH
-// tracks; it does NOT mean session and day agree (they never did). A perf change
-// must not silently re-price `today`, so the divergence is carried as-is.
+// [LAW:one-source-of-truth] Session cost and day cost use the SAME priced value:
+// an entry lacking costUSD is priced once (PricingService) and that figure feeds
+// BOTH the session total and its day bucket. This matches the old path exactly —
+// it mutated entry.costUSD to the priced cost before bucketByDay read it — so
+// `today` is not silently under-counted for un-costed entries.
 async function foldFile(
   prior: FileFold | undefined,
   reset: boolean,
@@ -220,7 +217,11 @@ async function foldFile(
     const key = dayKey(new Date(entry.timestamp));
     if (key < keep) continue;
     const d = days.get(key) ?? { ...EMPTY_DAY };
-    d.cost += entry.costUSD ?? 0;
+    // [LAW:one-source-of-truth] Day cost uses the PRICED value, same as session
+    // cost — the old path mutated entry.costUSD to the priced cost before
+    // bucketByDay read it, so an un-costed entry contributed its priced value to
+    // `today`, not 0. Using `priced` here preserves that (session and day agree).
+    d.cost += priced;
     d.input += u.input_tokens || 0;
     d.output += u.output_tokens || 0;
     d.cacheCreation += u.cache_creation_input_tokens || 0;

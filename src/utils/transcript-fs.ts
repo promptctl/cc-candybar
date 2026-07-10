@@ -8,6 +8,7 @@ import type { FileHandle } from "node:fs/promises";
 import { statSync } from "node:fs";
 
 import { ABSENT, failed, ok, type Outcome } from "./outcome";
+import { debug } from "./logger";
 
 // [LAW:single-enforcer] The one per-render freshness probe: a SYNC single-file
 // stat's mtimeMs (0 when the file is absent or unreadable). Sync by design — the
@@ -216,8 +217,13 @@ export async function readAppended(
       // [LAW:no-silent-failure] A close() rejection must NOT override the typed
       // Outcome the try returned — callers await this and read `.kind`, so a raw
       // rejection would escape every failed-guard. A failed close after a good
-      // read doesn't invalidate the read; swallow it (the fd is abandoned to GC).
-      await fh?.close().catch(() => {});
+      // read doesn't invalidate the read, but it can signal a real fs problem
+      // (ENOSPC on fsync), so log it at debug rather than swallowing it blind.
+      await fh?.close().catch((e: unknown) => {
+        debug(
+          `transcript-fs: close failed: ${e instanceof Error ? e.message : String(e)}`,
+        );
+      });
     }
   });
 }
@@ -261,8 +267,13 @@ export async function readTail(
       // [LAW:no-silent-failure] A close() rejection must NOT override the typed
       // Outcome the try returned — callers await this and read `.kind`, so a raw
       // rejection would escape every failed-guard. A failed close after a good
-      // read doesn't invalidate the read; swallow it (the fd is abandoned to GC).
-      await fh?.close().catch(() => {});
+      // read doesn't invalidate the read, but it can signal a real fs problem
+      // (ENOSPC on fsync), so log it at debug rather than swallowing it blind.
+      await fh?.close().catch((e: unknown) => {
+        debug(
+          `transcript-fs: close failed: ${e instanceof Error ? e.message : String(e)}`,
+        );
+      });
     }
   });
 }
