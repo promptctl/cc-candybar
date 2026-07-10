@@ -137,13 +137,14 @@ export const stat = gated(fsStat);
 // any other error is `failed`, carrying its reason to the boundary that logs.
 export async function readAppended(
   path: string,
-  priorOffset: number | undefined,
+  prior: { offset: number; ino: number } | undefined,
 ): Promise<
   Outcome<{
     buf: Buffer;
     start: number;
     size: number;
     mtimeMs: number;
+    ino: number;
     reset: boolean;
   }>
 > {
@@ -151,13 +152,20 @@ export async function readAppended(
     let fh: FileHandle | null = null;
     try {
       fh = await fsOpen(path, "r");
-      const { size, mtimeMs } = await fh.stat();
-      // The file shrank below where we last read → it was rewritten, not
-      // appended. Re-read from the start; the prior fold is stale.
-      const reset = priorOffset !== undefined && size < priorOffset;
-      const start = reset ? 0 : (priorOffset ?? 0);
+      const { size, mtimeMs, ino } = await fh.stat();
+      // [LAW:one-source-of-truth] The prior fold is a valid PREFIX of this file
+      // only while the file stays append-only. Two independent signals break
+      // that: the inode changed (a rename-based /compact or log rotation swapped
+      // the file under the path — the realistic rewrite mechanism), or the file
+      // shrank below our cursor (an in-place truncate). Either ⇒ re-read from 0;
+      // the suffix-only read would otherwise splice new bytes onto a fold of a
+      // file that no longer exists. (A cursor-only size check missed a rewrite
+      // that grew back to ≥ the cursor.)
+      const reset =
+        prior !== undefined && (ino !== prior.ino || size < prior.offset);
+      const start = reset || prior === undefined ? 0 : prior.offset;
       if (start >= size) {
-        return ok({ buf: Buffer.alloc(0), start, size, mtimeMs, reset });
+        return ok({ buf: Buffer.alloc(0), start, size, mtimeMs, ino, reset });
       }
       const buf = Buffer.alloc(size - start);
       // [LAW:no-silent-fallbacks] A single read may return short — parsing a
@@ -180,6 +188,7 @@ export async function readAppended(
         start,
         size,
         mtimeMs,
+        ino,
         reset,
       });
     } catch (e) {

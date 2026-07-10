@@ -50,7 +50,10 @@ import {
 const CONNECT_TIMEOUT_MS = 50;
 const TOTAL_BUDGET_MS = 150;
 
-const REPO_ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..");
+const REPO_ROOT = path.resolve(
+  path.dirname(new URL(import.meta.url).pathname),
+  "..",
+);
 
 // ─── CLI ────────────────────────────────────────────────────────────────────
 const { values } = parseArgs({
@@ -82,7 +85,18 @@ const TRANSCRIPT_LINES = Number(values["transcript-lines"]);
 interface Sample {
   totalMs: number;
   connectMs: number;
-  outcome: "ok" | "budget_exceeded" | "econnrefused" | "epipe" | "other";
+  // [LAW:types-are-the-program] connect_timeout (couldn't accept within 50ms —
+  // daemon alive but its accept backlog is saturated) is a DISTINCT failure from
+  // econnrefused (kernel refused — daemon not listening at all). Conflating them
+  // would recreate the exact misdiagnosis that drove the storm, so the harness
+  // that exists to tell failure modes apart must keep them apart.
+  outcome:
+    | "ok"
+    | "budget_exceeded"
+    | "connect_timeout"
+    | "econnrefused"
+    | "epipe"
+    | "other";
   atMs: number; // elapsed since measurement start, for cold-start vs steady-state
 }
 
@@ -117,8 +131,14 @@ function oneRender(
         atMs: runStart > 0 ? performance.now() - runStart : 0,
       });
     };
-    const connectTimer = setTimeout(() => finish("econnrefused"), CONNECT_TIMEOUT_MS);
-    const totalTimer = setTimeout(() => finish("budget_exceeded"), TOTAL_BUDGET_MS);
+    const connectTimer = setTimeout(
+      () => finish("connect_timeout"),
+      CONNECT_TIMEOUT_MS,
+    );
+    const totalTimer = setTimeout(
+      () => finish("budget_exceeded"),
+      TOTAL_BUDGET_MS,
+    );
 
     sock.once("connect", () => {
       connectMs = performance.now() - t0;
@@ -141,7 +161,8 @@ function oneRender(
     });
     sock.on("error", (err: NodeJS.ErrnoException) => {
       if (err.code === "ECONNREFUSED") finish("econnrefused");
-      else if (err.code === "EPIPE" || err.code === "ECONNRESET") finish("epipe");
+      else if (err.code === "EPIPE" || err.code === "ECONNRESET")
+        finish("epipe");
       else finish("other");
     });
   });
@@ -173,7 +194,12 @@ function writeTranscript(file: string, lines: number): void {
   fs.writeFileSync(file, rows.join("\n") + "\n");
 }
 
-function makeHookData(sessionId: string, transcriptPath: string, cwd: string, projectDir: string): unknown {
+function makeHookData(
+  sessionId: string,
+  transcriptPath: string,
+  cwd: string,
+  projectDir: string,
+): unknown {
   const nowSec = Math.floor(Date.now() / 1000);
   return {
     hook_event_name: "Status",
@@ -247,19 +273,42 @@ async function spawnDaemon(stateRoot: string): Promise<DaemonHandle> {
     : [];
   const [cmd, args] =
     values.daemon === "tsx"
-      ? [process.execPath, ["--import", "tsx", ...nodeFlags, path.join(REPO_ROOT, "src", "index.ts"), "daemon"]]
-      : [process.execPath, [...nodeFlags, path.join(REPO_ROOT, "dist", "index.mjs"), "daemon"]];
+      ? [
+          process.execPath,
+          [
+            "--import",
+            "tsx",
+            ...nodeFlags,
+            path.join(REPO_ROOT, "src", "index.ts"),
+            "daemon",
+          ],
+        ]
+      : [
+          process.execPath,
+          [...nodeFlags, path.join(REPO_ROOT, "dist", "index.mjs"), "daemon"],
+        ];
 
-  const child = spawn(cmd, args, { cwd: REPO_ROOT, env, stdio: ["ignore", "pipe", "pipe"] });
+  const child = spawn(cmd, args, {
+    cwd: REPO_ROOT,
+    env,
+    stdio: ["ignore", "pipe", "pipe"],
+  });
   child.stdout?.on("data", () => {});
-  child.stderr?.on("data", (b: Buffer) => process.stderr.write(`[daemon] ${b}`));
+  child.stderr?.on("data", (b: Buffer) =>
+    process.stderr.write(`[daemon] ${b}`),
+  );
 
   const cleanup = (): void => {
     if (child.exitCode === null && child.signalCode === null) {
-      try { child.kill("SIGKILL"); } catch {}
+      try {
+        child.kill("SIGKILL");
+      } catch {}
     }
     for (const d of [env.XDG_CACHE_HOME, env.XDG_CONFIG_HOME]) {
-      if (d) try { fs.rmSync(d, { recursive: true, force: true }); } catch {}
+      if (d)
+        try {
+          fs.rmSync(d, { recursive: true, force: true });
+        } catch {}
     }
   };
 
@@ -269,13 +318,19 @@ async function spawnDaemon(stateRoot: string): Promise<DaemonHandle> {
     if (fs.existsSync(sockPath)) {
       alive = await new Promise<boolean>((resolve) => {
         const s = net.connect(sockPath);
-        s.once("connect", () => { s.destroy(); resolve(true); });
+        s.once("connect", () => {
+          s.destroy();
+          resolve(true);
+        });
         s.once("error", () => resolve(false));
       });
     }
     if (!alive) await new Promise((r) => setTimeout(r, 25));
   }
-  if (!alive) { cleanup(); throw new Error("daemon did not accept within 8s"); }
+  if (!alive) {
+    cleanup();
+    throw new Error("daemon did not accept within 8s");
+  }
   return { child, sockPath, profileDir, cleanup };
 }
 
@@ -284,9 +339,17 @@ function fetchStats(sockPath: string): Promise<unknown> {
   return new Promise((resolve) => {
     const sock = net.connect(sockPath);
     let done = false;
-    const finish = (v: unknown): void => { if (done) return; done = true; sock.destroy(); resolve(v); };
+    const finish = (v: unknown): void => {
+      if (done) return;
+      done = true;
+      sock.destroy();
+      resolve(v);
+    };
     sock.once("connect", () => {
-      const reader = makeFrameReader((f) => finish(f), () => finish(null));
+      const reader = makeFrameReader(
+        (f) => finish(f),
+        () => finish(null),
+      );
       sock.on("data", reader);
       sock.write(encodeFrame({ v: PROTOCOL_VERSION, kind: "stats" }));
     });
@@ -299,9 +362,17 @@ function shutdownDaemon(sockPath: string): Promise<void> {
   return new Promise((resolve) => {
     const sock = net.connect(sockPath);
     let done = false;
-    const finish = (): void => { if (done) return; done = true; sock.destroy(); resolve(); };
+    const finish = (): void => {
+      if (done) return;
+      done = true;
+      sock.destroy();
+      resolve();
+    };
     sock.once("connect", () => {
-      const reader = makeFrameReader(() => finish(), () => finish());
+      const reader = makeFrameReader(
+        () => finish(),
+        () => finish(),
+      );
       sock.on("data", reader);
       sock.write(encodeFrame({ v: PROTOCOL_VERSION, kind: "shutdown" }));
     });
@@ -313,175 +384,214 @@ function shutdownDaemon(sockPath: string): Promise<void> {
 // ─── Percentiles ──────────────────────────────────────────────────────────────
 function pct(sorted: number[], p: number): number {
   if (sorted.length === 0) return 0;
-  const idx = Math.min(sorted.length - 1, Math.floor((p / 100) * sorted.length));
+  const idx = Math.min(
+    sorted.length - 1,
+    Math.floor((p / 100) * sorted.length),
+  );
   return sorted[idx]!;
 }
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
 async function main(): Promise<void> {
   const stateRoot = fs.mkdtempSync(path.join(os.tmpdir(), "cbh-state-"));
-  const transcriptDir = fs.mkdtempSync(path.join(os.tmpdir(), "cbh-transcripts-"));
-
-  // Each synthetic session: distinct id + transcript; cwd/project_dir = the real
-  // repo so git actually runs.
-  const sessions = Array.from({ length: SESSIONS }, (_, i) => {
-    const id = `load-sess-${i}-${process.pid}`;
-    const transcriptPath = path.join(transcriptDir, `${id}.jsonl`);
-    writeTranscript(transcriptPath, TRANSCRIPT_LINES);
-    return {
-      id,
-      transcriptPath,
-      hookData: makeHookData(id, transcriptPath, REPO_ROOT, REPO_ROOT),
-    };
-  });
-
-  const handle = await spawnDaemon(stateRoot);
-  // eslint-disable-next-line no-console
-  console.error(
-    `daemon up (${values.daemon}${values.profile ? " +cpuprof" : ""}); ` +
-      `${SESSIONS} sessions @ ${INTERVAL_MS}ms for ${DURATION_MS / 1000}s` +
-      `${values.churn ? " (churn)" : ""}`,
+  const transcriptDir = fs.mkdtempSync(
+    path.join(os.tmpdir(), "cbh-transcripts-"),
   );
+  // [LAW:effects-at-boundaries] The caller owns these two temp dirs; a
+  // spawnDaemon throw (readiness timeout) mid-run must not leak them in /tmp.
+  // spawnDaemon already tears down its own child + cache/config dirs on failure;
+  // this finally covers stateRoot + transcriptDir on every exit path.
+  let exitCode = 1;
+  try {
+    // Each synthetic session: distinct id + transcript; cwd/project_dir = the real
+    // repo so git actually runs.
+    const sessions = Array.from({ length: SESSIONS }, (_, i) => {
+      const id = `load-sess-${i}-${process.pid}`;
+      const transcriptPath = path.join(transcriptDir, `${id}.jsonl`);
+      writeTranscript(transcriptPath, TRANSCRIPT_LINES);
+      return {
+        id,
+        transcriptPath,
+        hookData: makeHookData(id, transcriptPath, REPO_ROOT, REPO_ROOT),
+      };
+    });
 
-  // Warm-up: establish every session's byte cursor and let the one-time cold
-  // full-read (O(transcript length), once per session per daemon lifetime) plus
-  // its GC settle BEFORE measurement. Steady state — incremental O(new bytes) —
-  // is what production renders are and what this gate measures; the cold read is
-  // amortized over a session's hundreds of renders and must not dominate p99.
-  for (let round = 0; round < 3; round++) {
-    await Promise.all(
-      sessions.map((s) => oneRender(handle.sockPath, s.hookData, REPO_ROOT)),
+    const handle = await spawnDaemon(stateRoot);
+    // eslint-disable-next-line no-console
+    console.error(
+      `daemon up (${values.daemon}${values.profile ? " +cpuprof" : ""}); ` +
+        `${SESSIONS} sessions @ ${INTERVAL_MS}ms for ${DURATION_MS / 1000}s` +
+        `${values.churn ? " (churn)" : ""}`,
     );
-  }
-  await new Promise((r) => setTimeout(r, 250));
 
-  const start = performance.now();
-  runStart = start;
-  const timers: NodeJS.Timeout[] = [];
-  let churnCounter = 0;
-  await new Promise<void>((resolveRun) => {
-    for (const s of sessions) {
-      const tick = setInterval(() => {
-        if (values.churn) {
-          // Append a line → transcript mtime bumps → next fold re-parses.
-          churnCounter++;
-          fs.appendFileSync(
-            s.transcriptPath,
-            JSON.stringify({
-              timestamp: new Date().toISOString(),
-              costUSD: 0.001,
-              message: { usage: { input_tokens: 10, output_tokens: 5, cache_creation_input_tokens: 0, cache_read_input_tokens: 0 } },
-            }) + "\n",
-          );
-        }
-        void oneRender(handle.sockPath, s.hookData, REPO_ROOT).then((sample) => samples.push(sample));
-      }, INTERVAL_MS);
-      timers.push(tick);
+    // Warm-up: establish every session's byte cursor and let the one-time cold
+    // full-read (O(transcript length), once per session per daemon lifetime) plus
+    // its GC settle BEFORE measurement. Steady state — incremental O(new bytes) —
+    // is what production renders are and what this gate measures; the cold read is
+    // amortized over a session's hundreds of renders and must not dominate p99.
+    for (let round = 0; round < 3; round++) {
+      await Promise.all(
+        sessions.map((s) => oneRender(handle.sockPath, s.hookData, REPO_ROOT)),
+      );
     }
-    setTimeout(() => {
-      for (const t of timers) clearInterval(t);
-      resolveRun();
-    }, DURATION_MS);
-  });
-  const elapsedS = (performance.now() - start) / 1000;
-  // Let any in-flight renders settle.
-  await new Promise((r) => setTimeout(r, TOTAL_BUDGET_MS + 50));
+    await new Promise((r) => setTimeout(r, 250));
 
-  const stats = await fetchStats(handle.sockPath);
+    const start = performance.now();
+    runStart = start;
+    const timers: NodeJS.Timeout[] = [];
+    let churnCounter = 0;
+    await new Promise<void>((resolveRun) => {
+      for (const s of sessions) {
+        const tick = setInterval(() => {
+          if (values.churn) {
+            // Append a line → transcript mtime bumps → next fold re-parses.
+            churnCounter++;
+            fs.appendFileSync(
+              s.transcriptPath,
+              JSON.stringify({
+                timestamp: new Date().toISOString(),
+                costUSD: 0.001,
+                message: {
+                  usage: {
+                    input_tokens: 10,
+                    output_tokens: 5,
+                    cache_creation_input_tokens: 0,
+                    cache_read_input_tokens: 0,
+                  },
+                },
+              }) + "\n",
+            );
+          }
+          void oneRender(handle.sockPath, s.hookData, REPO_ROOT).then(
+            (sample) => samples.push(sample),
+          );
+        }, INTERVAL_MS);
+        timers.push(tick);
+      }
+      setTimeout(() => {
+        for (const t of timers) clearInterval(t);
+        resolveRun();
+      }, DURATION_MS);
+    });
+    const elapsedS = (performance.now() - start) / 1000;
+    // Let any in-flight renders settle.
+    await new Promise((r) => setTimeout(r, TOTAL_BUDGET_MS + 50));
 
-  // ─── Report ─────────────────────────────────────────────────────────────
-  // [LAW:verifiable-goals] The ticket's bar is "under SUSTAINED load". A daemon's
-  // first seconds pay a one-time O(transcript length) cold read per session per
-  // provider (plus the GC of those transient parses) — real, but amortized over a
-  // session's hundreds of renders, NOT a sustained stall. So the gate scores
-  // STEADY-STATE (renders after the cold-start ramp); the ramp is reported
-  // separately, never hidden. A regression that slows steady renders still trips
-  // the gate; a slow cold start shows up as a large ramp count for the operator.
-  const RAMP_MS = 3000;
-  const steady = samples.filter((s) => s.atMs >= RAMP_MS);
-  const ramp = samples.filter((s) => s.atMs < RAMP_MS);
-  const totals = steady.map((s) => s.totalMs).sort((a, b) => a - b);
-  const connects = samples.map((s) => s.connectMs).filter((c) => c > 0).sort((a, b) => a - b);
-  const byOutcome = (o: Sample["outcome"]): number => samples.filter((s) => s.outcome === o).length;
-  const steadyOver = steady.filter((s) => s.outcome === "budget_exceeded").length;
-  const summary = {
-    sessions: SESSIONS,
-    intervalMs: INTERVAL_MS,
-    churn: values.churn,
-    transcriptLines: TRANSCRIPT_LINES,
-    daemon: values.daemon,
-    config: values.config ?? "default",
-    elapsedS: Number(elapsedS.toFixed(1)),
-    renders: samples.length,
-    achievedRatePerSec: Number((samples.length / elapsedS).toFixed(1)),
-    // Steady-state (post-ramp) round-trip — the sustained-load figure the gate
-    // scores against the Rust client's 150ms TOTAL_BUDGET.
-    steadyLatencyMs: {
-      p50: Number(pct(totals, 50).toFixed(1)),
-      p95: Number(pct(totals, 95).toFixed(1)),
-      p99: Number(pct(totals, 99).toFixed(1)),
-      max: Number((totals[totals.length - 1] ?? 0).toFixed(1)),
-      renders: steady.length,
-    },
-    connectMs: {
-      p50: Number(pct(connects, 50).toFixed(1)),
-      p99: Number(pct(connects, 99).toFixed(1)),
-      max: Number((connects[connects.length - 1] ?? 0).toFixed(1)),
-    },
-    outcomes: {
-      ok: byOutcome("ok"),
-      budget_exceeded: byOutcome("budget_exceeded"),
-      econnrefused: byOutcome("econnrefused"),
-      epipe: byOutcome("epipe"),
-      other: byOutcome("other"),
-    },
-    // The one-time startup ramp (first RAMP_MS): its render count and how many of
-    // those exceeded budget. Large numbers here mean slow cold reads, not a
-    // sustained-load regression.
-    coldStart: {
-      rampMs: RAMP_MS,
-      renders: ramp.length,
-      overBudget: ramp.filter((s) => s.outcome === "budget_exceeded").length,
-    },
-    // Timestamps (ms since measurement start) of any STEADY over-budget render —
-    // spread ⇒ a real periodic stall to chase; isolated/absent ⇒ scheduler noise.
-    steadyOverAtMs: steady
-      .filter((s) => s.outcome === "budget_exceeded")
-      .map((s) => Math.round(s.atMs)),
-    churnAppends: churnCounter,
-    budgetMs: TOTAL_BUDGET_MS,
-    // Pass = the ticket's acceptance under SUSTAINED load: steady p99 within the
-    // client budget, zero steady over-budget, and zero connection failures at any
-    // point (a refused/broken socket is never acceptable, ramp or not).
-    pass:
-      pct(totals, 99) <= TOTAL_BUDGET_MS &&
-      steadyOver === 0 &&
-      byOutcome("epipe") === 0 &&
-      byOutcome("econnrefused") === 0,
-  };
+    const stats = await fetchStats(handle.sockPath);
 
-  if (values.json) {
-    // eslint-disable-next-line no-console
-    console.log(JSON.stringify({ summary, daemonStats: stats }));
-  } else {
-    // eslint-disable-next-line no-console
-    console.log("\n─── load-harness summary ───");
-    // eslint-disable-next-line no-console
-    console.log(JSON.stringify(summary, null, 2));
+    // ─── Report ─────────────────────────────────────────────────────────────
+    // [LAW:verifiable-goals] The ticket's bar is "under SUSTAINED load". A daemon's
+    // first seconds pay a one-time O(transcript length) cold read per session per
+    // provider (plus the GC of those transient parses) — real, but amortized over a
+    // session's hundreds of renders, NOT a sustained stall. So the gate scores
+    // STEADY-STATE (renders after the cold-start ramp); the ramp is reported
+    // separately, never hidden. A regression that slows steady renders still trips
+    // the gate; a slow cold start shows up as a large ramp count for the operator.
+    const RAMP_MS = 3000;
+    const steady = samples.filter((s) => s.atMs >= RAMP_MS);
+    const ramp = samples.filter((s) => s.atMs < RAMP_MS);
+    const totals = steady.map((s) => s.totalMs).sort((a, b) => a - b);
+    const connects = samples
+      .map((s) => s.connectMs)
+      .filter((c) => c > 0)
+      .sort((a, b) => a - b);
+    const byOutcome = (o: Sample["outcome"]): number =>
+      samples.filter((s) => s.outcome === o).length;
+    const steadyOver = steady.filter(
+      (s) => s.outcome === "budget_exceeded",
+    ).length;
+    const summary = {
+      sessions: SESSIONS,
+      intervalMs: INTERVAL_MS,
+      churn: values.churn,
+      transcriptLines: TRANSCRIPT_LINES,
+      daemon: values.daemon,
+      config: values.config ?? "default",
+      elapsedS: Number(elapsedS.toFixed(1)),
+      renders: samples.length,
+      achievedRatePerSec: Number((samples.length / elapsedS).toFixed(1)),
+      // Steady-state (post-ramp) round-trip — the sustained-load figure the gate
+      // scores against the Rust client's 150ms TOTAL_BUDGET.
+      steadyLatencyMs: {
+        p50: Number(pct(totals, 50).toFixed(1)),
+        p95: Number(pct(totals, 95).toFixed(1)),
+        p99: Number(pct(totals, 99).toFixed(1)),
+        max: Number((totals[totals.length - 1] ?? 0).toFixed(1)),
+        renders: steady.length,
+      },
+      connectMs: {
+        p50: Number(pct(connects, 50).toFixed(1)),
+        p99: Number(pct(connects, 99).toFixed(1)),
+        max: Number((connects[connects.length - 1] ?? 0).toFixed(1)),
+      },
+      outcomes: {
+        ok: byOutcome("ok"),
+        budget_exceeded: byOutcome("budget_exceeded"),
+        connect_timeout: byOutcome("connect_timeout"),
+        econnrefused: byOutcome("econnrefused"),
+        epipe: byOutcome("epipe"),
+        other: byOutcome("other"),
+      },
+      // The one-time startup ramp (first RAMP_MS): its render count and how many of
+      // those exceeded budget. Large numbers here mean slow cold reads, not a
+      // sustained-load regression.
+      coldStart: {
+        rampMs: RAMP_MS,
+        renders: ramp.length,
+        overBudget: ramp.filter((s) => s.outcome === "budget_exceeded").length,
+      },
+      // Timestamps (ms since measurement start) of any STEADY over-budget render —
+      // spread ⇒ a real periodic stall to chase; isolated/absent ⇒ scheduler noise.
+      steadyOverAtMs: steady
+        .filter((s) => s.outcome === "budget_exceeded")
+        .map((s) => Math.round(s.atMs)),
+      churnAppends: churnCounter,
+      budgetMs: TOTAL_BUDGET_MS,
+      // Pass = the ticket's acceptance under SUSTAINED load: steady p99 within the
+      // client budget, zero steady over-budget, and zero connection failures at any
+      // point — a saturated backlog (connect_timeout), a refused socket, or a
+      // broken pipe are each unacceptable, ramp or not.
+      pass:
+        pct(totals, 99) <= TOTAL_BUDGET_MS &&
+        steadyOver === 0 &&
+        byOutcome("epipe") === 0 &&
+        byOutcome("connect_timeout") === 0 &&
+        byOutcome("econnrefused") === 0,
+    };
+
+    if (values.json) {
+      // eslint-disable-next-line no-console
+      console.log(JSON.stringify({ summary, daemonStats: stats }));
+    } else {
+      // eslint-disable-next-line no-console
+      console.log("\n─── load-harness summary ───");
+      // eslint-disable-next-line no-console
+      console.log(JSON.stringify(summary, null, 2));
+    }
+
+    if (handle.profileDir) {
+      await shutdownDaemon(handle.sockPath);
+      await new Promise((r) => setTimeout(r, 500));
+      const profiles = fs.existsSync(handle.profileDir)
+        ? fs.readdirSync(handle.profileDir)
+        : [];
+      // eslint-disable-next-line no-console
+      console.error(
+        `cpu profiles: ${profiles.map((p) => path.join(handle.profileDir!, p)).join(", ")}`,
+      );
+    }
+
+    handle.cleanup();
+    exitCode = summary.pass ? 0 : 1;
+  } finally {
+    try {
+      fs.rmSync(stateRoot, { recursive: true, force: true });
+    } catch {}
+    try {
+      fs.rmSync(transcriptDir, { recursive: true, force: true });
+    } catch {}
   }
-
-  if (handle.profileDir) {
-    await shutdownDaemon(handle.sockPath);
-    await new Promise((r) => setTimeout(r, 500));
-    const profiles = fs.existsSync(handle.profileDir) ? fs.readdirSync(handle.profileDir) : [];
-    // eslint-disable-next-line no-console
-    console.error(`cpu profiles: ${profiles.map((p) => path.join(handle.profileDir!, p)).join(", ")}`);
-  }
-
-  handle.cleanup();
-  try { fs.rmSync(stateRoot, { recursive: true, force: true }); } catch {}
-  try { fs.rmSync(transcriptDir, { recursive: true, force: true }); } catch {}
-  process.exit(summary.pass ? 0 : 1);
+  process.exit(exitCode);
 }
 
 void main();

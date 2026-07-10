@@ -463,12 +463,15 @@ async function parseJsonlFileInMemory(
 }
 
 // A byte cursor into an append-only transcript: the offset consumed through the
-// last complete line, plus the mtime observed at that read. The store keys its
-// per-file fold by this — `offset` bounds the next read to only what's new;
-// `mtimeMs` lets an unchanged file skip the read entirely.
+// last complete line, the mtime observed at that read, and the inode. The store
+// keys its per-file fold by this — `offset` bounds the next read to only what's
+// new; `mtimeMs` lets an unchanged file skip the read entirely; `ino` detects a
+// rewrite (a rename-based /compact swaps the inode) so the fold resets instead
+// of splicing new bytes onto a stale prefix.
 export interface TranscriptCursor {
   readonly offset: number;
   readonly mtimeMs: number;
+  readonly ino: number;
 }
 
 // [LAW:dataflow-not-control-flow][LAW:one-source-of-truth] Read only the entries
@@ -492,20 +495,23 @@ export async function readAppendedEntries(
 ): Promise<
   Outcome<{ entries: ParsedEntry[]; cursor: TranscriptCursor; reset: boolean }>
 > {
-  const r = await readAppended(filePath, prior?.offset);
+  const r = await readAppended(
+    filePath,
+    prior === undefined ? undefined : { offset: prior.offset, ino: prior.ino },
+  );
   if (r.kind !== "ok") return r;
-  const { buf, start, mtimeMs, reset } = r.value;
+  const { buf, start, mtimeMs, ino, reset } = r.value;
   // Consume only through the last newline; a trailing partial line waits.
   const lastNl = buf.lastIndexOf(0x0a);
   if (lastNl < 0) {
-    return ok({ entries: [], cursor: { offset: start, mtimeMs }, reset });
+    return ok({ entries: [], cursor: { offset: start, mtimeMs, ino }, reset });
   }
   const entries = parseJsonlLines(
     buf.subarray(0, lastNl + 1).toString("utf-8"),
   );
   return ok({
     entries,
-    cursor: { offset: start + lastNl + 1, mtimeMs },
+    cursor: { offset: start + lastNl + 1, mtimeMs, ino },
     reset,
   });
 }

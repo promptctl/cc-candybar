@@ -11,6 +11,7 @@ import {
   mkdirSync,
   writeFileSync,
   appendFileSync,
+  renameSync,
   rmSync,
   utimesSync,
 } from "node:fs";
@@ -114,13 +115,39 @@ describe("readAppendedEntries — the incremental reader primitive", () => {
     if (first.kind !== "ok") throw new Error("expected ok");
     expect(first.value.entries).toHaveLength(3);
 
-    // /compact rewrites the transcript smaller than our cursor.
-    writeFileSync(t, line(new Date(), 0.09));
+    // /compact rewrites the transcript smaller than our cursor. Capture the
+    // exact bytes written so the offset assertion pins the real content length,
+    // not an incidentally-equal-length regenerated line.
+    const compacted = line(new Date(), 0.09);
+    writeFileSync(t, compacted);
     const after = await readAppendedEntries(t, first.value.cursor);
     if (after.kind !== "ok") throw new Error("expected ok");
     expect(after.value.reset).toBe(true);
     expect(after.value.entries).toHaveLength(1); // the whole new file
-    expect(after.value.cursor.offset).toBe(Buffer.byteLength(line(new Date(), 0.09)));
+    expect(after.value.cursor.offset).toBe(Buffer.byteLength(compacted));
+  });
+
+  test("an inode change (rename-based rewrite) signals reset even when size >= cursor", async () => {
+    const t = join(dir, "A.jsonl");
+    writeFileSync(t, line(new Date(), 0.01) + line(new Date(), 0.02));
+    const first = await readAppendedEntries(t, undefined);
+    if (first.kind !== "ok") throw new Error("expected ok");
+    const priorOffset = first.value.cursor.offset;
+
+    // Atomic rewrite: write a DIFFERENT file (>= the old size, so a size-only
+    // check would miss it) and rename it over the path → new inode, same-or-
+    // larger size, different content. Only the inode signal catches this.
+    const other = join(dir, "A.new.jsonl");
+    const rewritten =
+      line(new Date(), 0.03) + line(new Date(), 0.04) + line(new Date(), 0.05);
+    writeFileSync(other, rewritten);
+    expect(Buffer.byteLength(rewritten)).toBeGreaterThanOrEqual(priorOffset);
+    renameSync(other, t);
+
+    const after = await readAppendedEntries(t, first.value.cursor);
+    if (after.kind !== "ok") throw new Error("expected ok");
+    expect(after.value.reset).toBe(true);
+    expect(after.value.entries).toHaveLength(3); // the whole new file, not a suffix
   });
 
   test("absent file (fresh session) is the absent outcome, not an error", async () => {
@@ -184,6 +211,64 @@ describe("SessionUsageStore — incremental fold equals from-scratch", () => {
     expect(incInfo.value.session.tokens).toBe(freshInfo.value.session.tokens);
     expect(incInfo.value.session.cost).toBeCloseTo(0.1, 5);
     expect(incInfo.value.session.tokens).toBe(1000 + 200); // inputs + outputs
+  });
+
+  test("concurrent different-mtime refolds do not double-count (last-writer-wins is consistent)", async () => {
+    // The race the reviewer flagged: two renders observing DIFFERENT mtimes hit
+    // different SingleFlight keys, both read the same prior, and last-writer-wins.
+    // The invariant that makes it safe: `refold` writes the byte cursor and the
+    // fold as one atomic pair, so whoever wins leaves a consistent (cursor, fold)
+    // covering exactly [0, cursor); the next ingest extends from there. This test
+    // pins the OBSERVABLE consequence — no matter which racer wins, a final read
+    // equals a from-scratch read of the same file (a double-count would exceed it).
+    const t = join(dir, "R.jsonl");
+    const l1 = line(new Date(), 0.01, 100, 20);
+    const l2 = line(new Date(), 0.02, 200, 40);
+    const l3 = line(new Date(), 0.03, 300, 60);
+
+    const store = new SessionUsageStore({ sweepIntervalMs: 0 });
+    try {
+      // Prior established.
+      writeFileSync(t, l1);
+      touch(t);
+      await store.getUsageInfo("R", hook("R", t));
+
+      // Grow to mtime M1, fire A (sees M1) WITHOUT awaiting.
+      appendFileSync(t, l2);
+      touch(t);
+      const a = store.getUsageInfo("R", hook("R", t));
+      // Grow again to mtime M2, fire B (sees M2) WITHOUT awaiting → different
+      // flight keys, both racing off the same prior.
+      appendFileSync(t, l3);
+      touch(t);
+      const b = store.getUsageInfo("R", hook("R", t));
+      await Promise.all([a, b]);
+
+      // A settling read must reflect the whole file regardless of who won.
+      const finalInfo = await store.getUsageInfo("R", hook("R", t));
+      if (finalInfo.kind !== "ok") throw new Error("expected ok");
+
+      const fullPath = join(dir, "Rfull.jsonl");
+      writeFileSync(fullPath, l1 + l2 + l3);
+      const fresh = new SessionUsageStore({ sweepIntervalMs: 0 });
+      try {
+        const freshInfo = await fresh.getUsageInfo("Rf", hook("Rf", fullPath));
+        if (freshInfo.kind !== "ok") throw new Error("expected ok");
+        expect(finalInfo.value.session.cost).toBeCloseTo(
+          freshInfo.value.session.cost!,
+          5,
+        );
+        expect(finalInfo.value.session.tokens).toBe(
+          freshInfo.value.session.tokens,
+        );
+        // And concretely: 0.06 total, 660 input+output tokens — folded once.
+        expect(finalInfo.value.session.cost).toBeCloseTo(0.06, 5);
+      } finally {
+        fresh.close();
+      }
+    } finally {
+      store.close();
+    }
   });
 
   test("combines main + agent transcripts and a warm re-read does not double-count", async () => {

@@ -140,7 +140,7 @@ describe("Metrics Provider", () => {
     expect(outcome.kind).toBe("absent");
   });
 
-  it("reads through the shared parse cache — no re-read when mtime+size unchanged", async () => {
+  it("reuses the folded result when transcript mtime is unchanged (foldMetrics fast-hit, no re-read)", async () => {
     const transcriptPath = join(tempDir, "test.jsonl");
     const fixedMtime = new Date(Date.now() - 60_000);
     // Two `user` lines → messageCount 2. v2 flips the second line's type
@@ -162,9 +162,9 @@ describe("Metrics Provider", () => {
     const warm = await metricsProvider.getMetricsInfo("cache-session", hookData);
     expect(warm.kind === "ok" && warm.value.messageCount).toBe(2);
 
-    // Mutate content but hold mtime+size identical: the cache key is unchanged,
-    // so a correct shared-cache read returns the stale 2; a private re-read
-    // would observe v2 and return 1.
+    // Mutate content but hold mtime identical: foldMetrics's mtime gate is
+    // unchanged, so the fast-hit returns the folded 2; a re-read would observe
+    // v2 and return 1.
     expect(v2.length).toBe(v1.length);
     writeFileSync(transcriptPath, v2);
     utimesSync(transcriptPath, fixedMtime, fixedMtime);

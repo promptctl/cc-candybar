@@ -522,11 +522,16 @@ export class SessionUsageStore {
     this.misses++;
     // [LAW:no-ambient-temporal-coupling] The flight thunk snapshots the prior
     // record when it RUNS (first caller); coalesced callers share that one
-    // refold. Two concurrent DIFFERENT-mtime refolds each read the current
-    // record and last-writer-wins — safe because folding always resumes from the
-    // winner's byte cursor, so a stale winner only means the next render re-reads
-    // the small gap (never a double-count: the cursor never rewinds over folded
-    // bytes).
+    // refold. Two concurrent DIFFERENT-mtime refolds each read the same prior and
+    // last-writer-wins. This is safe — and specifically NOT a double-count —
+    // because `refold` writes the byte cursor and the fold as ONE atomic pair
+    // (both from a single refold result), and the fold always covers exactly
+    // [0, cursor). A losing writer's fold is discarded WITH its cursor, not left
+    // beside a stale one. So even when last-writer-wins rewinds the stored cursor,
+    // it rewinds the paired fold with it; the next refold folds [cursor, end) onto
+    // a fold that lacks those bytes — each byte folded once. `foldFile` is pure
+    // (fresh FileFold, prior never mutated), so the shared prior can't corrupt.
+    // Pinned by the concurrency test in test/transcript-incremental.test.ts.
     const outcome = await this.flight.run(`${sessionId}:${mtime}`, () =>
       this.refold(sessionId, transcriptPath, this.entries.get(sessionId)),
     );
