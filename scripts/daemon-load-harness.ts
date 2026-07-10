@@ -73,10 +73,24 @@ const { values } = parseArgs({
   },
 });
 
-const SESSIONS = Number(values.sessions);
-const INTERVAL_MS = Number(values.interval);
-const DURATION_MS = Number(values.duration) * 1000;
-const TRANSCRIPT_LINES = Number(values["transcript-lines"]);
+// [LAW:no-silent-failure] Validate each numeric arg. `Number("abc")` is NaN and
+// `Array.from({length: NaN})` silently yields [] — the harness would "pass" a
+// load test that ran zero sessions. A gate that lies about not running is worse
+// than a crash; reject non-finite / non-positive values loudly.
+function posInt(name: string, raw: string | undefined): number {
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n <= 0 || !Number.isInteger(n)) {
+    // eslint-disable-next-line no-console
+    console.error(`--${name} must be a positive integer, got: ${raw}`);
+    process.exit(2);
+  }
+  return n;
+}
+
+const SESSIONS = posInt("sessions", values.sessions);
+const INTERVAL_MS = posInt("interval", values.interval);
+const DURATION_MS = posInt("duration", values.duration) * 1000;
+const TRANSCRIPT_LINES = posInt("transcript-lines", values["transcript-lines"]);
 
 // ─── Outcome classification ─────────────────────────────────────────────────
 // [LAW:types-are-the-program] Every render lands in exactly one bucket. The
@@ -92,6 +106,7 @@ interface Sample {
   // that exists to tell failure modes apart must keep them apart.
   outcome:
     | "ok"
+    | "render_error" // daemon answered with {ok:false} — a fast failure, not health
     | "budget_exceeded"
     | "connect_timeout"
     | "econnrefused"
@@ -144,7 +159,17 @@ function oneRender(
       connectMs = performance.now() - t0;
       clearTimeout(connectTimer);
       const reader = makeFrameReader(
-        () => finish("ok"),
+        // [LAW:no-silent-failure] Inspect the frame — a daemon that fast-fails
+        // ({ ok:false }) returns quickly, so counting it "ok" would report
+        // misleadingly healthy latency under a failure storm. Classify it apart.
+        (frame) =>
+          finish(
+            frame &&
+              typeof frame === "object" &&
+              (frame as { ok?: unknown }).ok === false
+              ? "render_error"
+              : "ok",
+          ),
         () => finish("other"),
       );
       sock.on("data", reader);
@@ -397,11 +422,14 @@ async function main(): Promise<void> {
   const transcriptDir = fs.mkdtempSync(
     path.join(os.tmpdir(), "cbh-transcripts-"),
   );
-  // [LAW:effects-at-boundaries] The caller owns these two temp dirs; a
-  // spawnDaemon throw (readiness timeout) mid-run must not leak them in /tmp.
-  // spawnDaemon already tears down its own child + cache/config dirs on failure;
-  // this finally covers stateRoot + transcriptDir on every exit path.
+  // [LAW:effects-at-boundaries] The caller owns these temp dirs and the daemon
+  // handle; ANY throw between spawn and the end (a failing warmup render, a
+  // fetchStats error, a rejected measurement promise) must not orphan the daemon
+  // child or leak temp dirs. The finally kills the daemon (handle.cleanup, which
+  // also removes its XDG cache/config dirs) and removes the caller-owned
+  // stateRoot + transcriptDir on every exit path.
   let exitCode = 1;
+  let handle: DaemonHandle | null = null;
   try {
     // Each synthetic session: distinct id + transcript; cwd/project_dir = the real
     // repo so git actually runs.
@@ -416,7 +444,7 @@ async function main(): Promise<void> {
       };
     });
 
-    const handle = await spawnDaemon(stateRoot);
+    handle = await spawnDaemon(stateRoot);
     // eslint-disable-next-line no-console
     console.error(
       `daemon up (${values.daemon}${values.profile ? " +cpuprof" : ""}); ` +
@@ -526,6 +554,7 @@ async function main(): Promise<void> {
       },
       outcomes: {
         ok: byOutcome("ok"),
+        render_error: byOutcome("render_error"),
         budget_exceeded: byOutcome("budget_exceeded"),
         connect_timeout: byOutcome("connect_timeout"),
         econnrefused: byOutcome("econnrefused"),
@@ -554,6 +583,7 @@ async function main(): Promise<void> {
       pass:
         pct(totals, 99) <= TOTAL_BUDGET_MS &&
         steadyOver === 0 &&
+        byOutcome("render_error") === 0 &&
         byOutcome("epipe") === 0 &&
         byOutcome("connect_timeout") === 0 &&
         byOutcome("econnrefused") === 0,
@@ -581,9 +611,9 @@ async function main(): Promise<void> {
       );
     }
 
-    handle.cleanup();
     exitCode = summary.pass ? 0 : 1;
   } finally {
+    handle?.cleanup();
     try {
       fs.rmSync(stateRoot, { recursive: true, force: true });
     } catch {}

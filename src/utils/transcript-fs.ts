@@ -5,8 +5,24 @@ import {
   stat as fsStat,
 } from "node:fs/promises";
 import type { FileHandle } from "node:fs/promises";
+import { statSync } from "node:fs";
 
 import { ABSENT, failed, ok, type Outcome } from "./outcome";
+
+// [LAW:single-enforcer] The one per-render freshness probe: a SYNC single-file
+// stat's mtimeMs (0 when the file is absent or unreadable). Sync by design — the
+// mtime gate must resolve before deciding whether to read, and a sync stat
+// consumes no gate slot (the async `readAppended`/`readFile` bulk reads are what
+// the limiter bounds). Both the usage store and the metrics provider key their
+// incremental fold off this one helper so the ENOENT→0 policy lives in one place.
+export function statMtimeMs(filePath: string | undefined): number {
+  if (!filePath) return 0;
+  try {
+    return statSync(filePath).mtimeMs;
+  } catch {
+    return 0;
+  }
+}
 
 // [LAW:single-enforcer] One owner of the transcript-scanning in-flight-I/O
 // budget. Every readdir/stat/readFile over the ~/.claude/projects tree passes
@@ -197,7 +213,11 @@ export async function readAppended(
         `readAppended ${path}: ${e instanceof Error ? e.message : String(e)}`,
       );
     } finally {
-      await fh?.close();
+      // [LAW:no-silent-failure] A close() rejection must NOT override the typed
+      // Outcome the try returned — callers await this and read `.kind`, so a raw
+      // rejection would escape every failed-guard. A failed close after a good
+      // read doesn't invalidate the read; swallow it (the fd is abandoned to GC).
+      await fh?.close().catch(() => {});
     }
   });
 }
@@ -238,7 +258,11 @@ export async function readTail(
         `readTail ${path}: ${e instanceof Error ? e.message : String(e)}`,
       );
     } finally {
-      await fh?.close();
+      // [LAW:no-silent-failure] A close() rejection must NOT override the typed
+      // Outcome the try returned — callers await this and read `.kind`, so a raw
+      // rejection would escape every failed-guard. A failed close after a good
+      // read doesn't invalidate the read; swallow it (the fd is abandoned to GC).
+      await fh?.close().catch(() => {});
     }
   });
 }
