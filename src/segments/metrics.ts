@@ -1,4 +1,3 @@
-import fs from "node:fs";
 import type { ClaudeHookData, ParsedEntry } from "../utils/claude";
 
 // [LAW:one-source-of-truth] Metrics reads the transcript through the SAME
@@ -9,6 +8,7 @@ import type { ClaudeHookData, ParsedEntry } from "../utils/claude";
 // once the store went incremental, a full re-parse here would have re-inherited
 // the very stall the store fix removed. Now both consumers are O(new bytes).
 import { readAppendedEntries, type TranscriptCursor } from "../utils/claude";
+import { statMtimeMs } from "../utils/transcript-fs";
 import { debug } from "../utils/logger";
 import { ABSENT, failed, ok, type Outcome } from "../utils/outcome";
 
@@ -51,14 +51,6 @@ function isRealUserMessage(entry: ParsedEntry): boolean {
   const isToolResult =
     entry.type === "user" && entry.message?.firstContentType === "tool_result";
   return messageType === "user" && !isToolResult;
-}
-
-function statMtimeMs(filePath: string): number {
-  try {
-    return fs.statSync(filePath).mtimeMs;
-  } catch {
-    return 0;
-  }
 }
 
 export class MetricsProvider {
@@ -110,9 +102,13 @@ export class MetricsProvider {
     // [LAW:no-ambient-temporal-coupling] Fast hit: the transcript is unchanged
     // since we last folded it, so the message count + ring stand.
     if (prior && mtime !== 0 && prior.cursor.mtimeMs === mtime) {
+      // [LAW:no-shared-mutable-globals] Return a COPY of the stored ring, never
+      // the reference — the miss path already does, and a caller mutating the
+      // returned array would silently corrupt the retained state (a heisenbug in
+      // the next render's lastResponseTime). 20 entries; negligible.
       return {
         kind: "ok",
-        value: { messageCount: prior.messageCount, recent: prior.recent },
+        value: { messageCount: prior.messageCount, recent: [...prior.recent] },
       };
     }
 

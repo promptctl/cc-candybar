@@ -148,6 +148,12 @@ export async function findProjectPaths(
 export async function findAgentTranscripts(
   sessionId: string,
   projectPath: string,
+  // [LAW:one-source-of-truth] Agent-file session identity is IMMUTABLE — a file
+  // that belonged to this session never changes owner. Paths in `verified` skip
+  // the first-line readFile, so an incremental refold (which passes its prior
+  // file set) pays the O(file) verification only for NEWLY-appeared sidechains,
+  // not every sidechain every render. The readdir still runs (cheap).
+  verified?: ReadonlySet<string>,
 ): Promise<string[]> {
   const agentFiles: string[] = [];
 
@@ -161,6 +167,10 @@ export async function findAgentTranscripts(
 
     for (const fileName of agentFileNames) {
       const filePath = join(subagentsDir, fileName);
+      if (verified?.has(filePath)) {
+        agentFiles.push(filePath);
+        continue;
+      }
       try {
         const content = await readFile(filePath, "utf-8");
         const firstLine = content.split("\n")[0];

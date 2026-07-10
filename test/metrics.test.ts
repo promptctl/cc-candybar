@@ -1,6 +1,7 @@
 import { MetricsProvider } from "../src/segments/metrics";
 import {
   writeFileSync,
+  appendFileSync,
   unlinkSync,
   mkdtempSync,
   utimesSync,
@@ -173,6 +174,47 @@ describe("Metrics Provider", () => {
       hookData,
     );
     expect(cached.kind === "ok" && cached.value.messageCount).toBe(2);
+  });
+
+  it("folds appended user lines incrementally — count increments by the new lines only", async () => {
+    const transcriptPath = join(tempDir, "inc.jsonl");
+    let t = 1_700_000_000_000;
+    const userLine = () =>
+      JSON.stringify({
+        timestamp: new Date((t += 1000)).toISOString(),
+        type: "user",
+        message: { role: "user", content: "hi" },
+      }) + "\n";
+    // Two real user turns to start.
+    writeFileSync(transcriptPath, userLine() + userLine());
+    let mtime = 1_700_000_000;
+    utimesSync(transcriptPath, mtime, mtime);
+    const hd = createMockHookData("inc-session", transcriptPath);
+
+    const first = await metricsProvider.getMetricsInfo("inc-session", hd);
+    expect(first.kind === "ok" && first.value.messageCount).toBe(2);
+
+    // Append ONE more user turn; advance mtime so the fold sees the change. A
+    // correct incremental fold reports 3 (adds one), not a re-count from scratch
+    // that happens to also be 3 — verified next by appending a non-user line.
+    appendFileSync(transcriptPath, userLine());
+    utimesSync(transcriptPath, ++mtime, mtime);
+    const second = await metricsProvider.getMetricsInfo("inc-session", hd);
+    expect(second.kind === "ok" && second.value.messageCount).toBe(3);
+
+    // Append an assistant line — messageCount must NOT change (only real user
+    // turns count), proving the fold classifies appended entries, not re-counts.
+    appendFileSync(
+      transcriptPath,
+      JSON.stringify({
+        timestamp: new Date((t += 1000)).toISOString(),
+        type: "assistant",
+        message: { role: "assistant", content: "hello" },
+      }) + "\n",
+    );
+    utimesSync(transcriptPath, ++mtime, mtime);
+    const third = await metricsProvider.getMetricsInfo("inc-session", hd);
+    expect(third.kind === "ok" && third.value.messageCount).toBe(3);
   });
 
   it("handles empty transcript gracefully", async () => {

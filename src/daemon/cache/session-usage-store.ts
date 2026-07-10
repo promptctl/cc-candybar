@@ -1,4 +1,3 @@
-import fs from "node:fs";
 import { dirname, join } from "node:path";
 
 import {
@@ -21,6 +20,7 @@ import {
 import {
   readdir as gatedReaddir,
   stat as gatedStat,
+  statMtimeMs,
 } from "../../utils/transcript-fs";
 import { SingleFlight } from "../../utils/single-flight";
 import { ABSENT, failed, ok, type Outcome } from "../../utils/outcome";
@@ -159,15 +159,6 @@ function seedCutoffMs(): number {
   return d.getTime();
 }
 
-function statMtimeMs(filePath: string | undefined): number {
-  if (!filePath) return 0;
-  try {
-    return fs.statSync(filePath).mtimeMs;
-  } catch {
-    return 0;
-  }
-}
-
 function emptyBreakdown(): TokenBreakdown {
   return { input: 0, output: 0, cacheCreation: 0, cacheRead: 0 };
 }
@@ -190,10 +181,14 @@ interface FileFold {
 // sharing one prior snapshot can't corrupt each other. `reset` (file rewritten)
 // discards the prior sums and folds `entries` — the whole new file — from zero.
 //
-// [LAW:one-source-of-truth] Cost has two tracks the from-scratch code also kept:
-// the SESSION cost prices an entry lacking costUSD (PricingService), while a DAY
-// bucket counts costUSD only (0 when absent). Preserved exactly so incremental
-// output equals the old whole-file recompute.
+// [LAW:one-source-of-truth] Cost has two tracks — and they legitimately DIVERGE
+// for an entry lacking costUSD: the SESSION cost prices it (PricingService),
+// while a DAY bucket counts costUSD only (0 when absent). This asymmetry is
+// PRE-EXISTING, not introduced here — the old code's toSessionInfo priced
+// un-costed entries while bucketByDay used `costUSD ?? 0`. "Preserved exactly"
+// below means the incremental output equals that old whole-file output for BOTH
+// tracks; it does NOT mean session and day agree (they never did). A perf change
+// must not silently re-price `today`, so the divergence is carried as-is.
 async function foldFile(
   prior: FileFold | undefined,
   reset: boolean,
@@ -532,6 +527,11 @@ export class SessionUsageStore {
     // a fold that lacks those bytes — each byte folded once. `foldFile` is pure
     // (fresh FileFold, prior never mutated), so the shared prior can't corrupt.
     // Pinned by the concurrency test in test/transcript-incremental.test.ts.
+    // The prior is read when the thunk RUNS. If evictIfNeeded dropped this
+    // session between thunk creation and run, prior is undefined and refold does
+    // one whole-file re-fold — still correct, just non-incremental that once.
+    // (Eviction only fires after a successful write, so this can bite only on a
+    // first miss under cap pressure.)
     const outcome = await this.flight.run(`${sessionId}:${mtime}`, () =>
       this.refold(sessionId, transcriptPath, this.entries.get(sessionId)),
     );
@@ -572,9 +572,12 @@ export class SessionUsageStore {
     // File set for this fold: the main transcript plus the session's current
     // agent sidechains. Files no longer in the set (a removed sidechain) drop
     // out of `newFiles`, so a rewritten/renamed file cannot linger in the merge.
+    // Pass the prior file set so already-verified agent sidechains skip their
+    // first-line re-read — per-render agent discovery is O(new sidechains).
     const agentPaths = await findAgentTranscripts(
       sessionId,
       dirname(transcriptPath),
+      prior === undefined ? undefined : new Set(prior.files.keys()),
     );
     const newFiles = new Map<string, FileFold>();
     let mainMtime = 0;
