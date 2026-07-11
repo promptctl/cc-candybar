@@ -91,7 +91,7 @@ Add a new built-in segment by:
 1. Adding the data provider under `src/segments/` (if it needs daemon-side fetching). Project its shape into `RenderPayload` (`src/daemon/render-payload.ts`).
 2. Declaring the relevant input variables in `DEFAULT_DSL_CONFIG.variables` (`src/config/default-dsl-config.ts`), with `path` strings matching the payload shape.
 3. Declaring the segment in `DEFAULT_DSL_CONFIG.segments` with a `template`, `bg`/`fg` palette spec names, and (optionally) `when` for visibility gating.
-4. Optionally adding the segment name to `DEFAULT_DSL_CONFIG.root` if it should render by default (edit the `children` array of the default horizontal container).
+4. Optionally adding the segment name to `DEFAULT_DSL_CONFIG.root` if it should render by default (the default `root` is a vertical container of two horizontal rows — an identity row `directory · gitaculous` over a status row `model · context · cacheTimer · block · weekly` — so add the segment to the `children` array of whichever row it belongs in).
 
 ### Themes (`src/themes/`)
 

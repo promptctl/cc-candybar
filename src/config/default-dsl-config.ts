@@ -627,15 +627,18 @@ export const DEFAULT_DSL_CONFIG = {
       fg: "foreground",
       when: '{{ or (ne .git.prUrl "") (ne .git.prError "") }}',
     },
-    // Quick-action tray — copy the session id / cwd, open the project dir /
-    // transcript in the editor. [LAW:locality-or-seam] The glyph is the
-    // REPRESENTATION; the named action (below) is the BEHAVIOR; the action
-    // name is the seam between them. Re-glyph without touching behavior;
-    // re-target without touching this template. Each `{{ action … }}` emits
-    // one OSC-8 clickable region whose URL the wire codec owns end-to-end.
+    // Quick-action tray — the default bar's interactivity: copy the session id,
+    // open the project dir / transcript (this session's jsonl) in the editor.
+    // (copyDir — copy the cwd — stays declared as an action below for users who
+    // want a fourth glyph; it is simply not in the default tray.)
+    // [LAW:locality-or-seam] The glyph is the REPRESENTATION; the named action
+    // (below) is the BEHAVIOR; the action name is the seam between them. Re-glyph
+    // without touching behavior; re-target without touching this template. Each
+    // `{{ action … }}` emits one OSC-8 clickable region whose URL the wire codec
+    // owns end-to-end.
     toolbar: {
       template:
-        '{{ action "copySession" "⎘ id" }} {{ action "copyDir" "⎘ cwd" }}' +
+        '{{ action "copySession" "⎘ id" }}' +
         ' {{ action "openProject" "↗ proj" }} {{ action "openTranscript" "↗ log" }}',
       bg: "surface",
       fg: "foreground",
@@ -808,11 +811,24 @@ export const DEFAULT_DSL_CONFIG = {
   // Default layout — the canonical LayoutNode tree (`satisfies DslConfig`
   // requires the lowered form here; the terse Option-A `{ h/v/seg }` grammar is
   // the loader's authoring surface for user JSON, not this typed literal).
-  // [LAW:dataflow-not-control-flow] One always-on control row. The styleControl's
-  // {{ menu }} disclosure drops its picker body onto the line directly below this
-  // row when open — openness is the value of the derived menus.* key, NOT a when-
-  // gated reveal row. The picker draws the ✕/←/→ affordances from the page + term
-  // width; the vertical container stacks the dropped body under row 0.
+  //
+  // Two rows stacked by the vertical container: an IDENTITY + ACTIONS row
+  // (where am I / what can I do here — the directory, the verbose `gitaculous`
+  // line (repo, sha, working-tree, upstream, stash, time-since-commit), then the
+  // quick-action tray: copy session id, open project / transcript in the editor)
+  // over a STATUS row (what's happening now — model, context-window fill,
+  // prompt-cache warmth, and the 5h / 7d rate-limit quotas). The tray sits on
+  // the identity row because its actions are workspace-scoped (this session,
+  // this project), not usage metrics. Each row zips its segments through the
+  // powerline joiner; `\n` separates the rows.
+  //
+  // [LAW:dataflow-not-control-flow] Every status segment is when-gated on its
+  // own signal (no repo → the identity row is just the directory + tray; no
+  // active rate-limit window → block/weekly drop; no cache activity → cacheTimer
+  // drops). A row therefore only ever shows the segments that have real data —
+  // the layout is chosen by the data, not by branches — so the default never
+  // paints an empty or placeholder cell. The directory and the tray have no
+  // `when`, so row 1 always anchors the bar.
   root: {
     kind: "container",
     direction: "vertical",
@@ -822,13 +838,19 @@ export const DEFAULT_DSL_CONFIG = {
         direction: "horizontal",
         children: [
           { kind: "segment", name: "directory" },
-          { kind: "segment", name: "git" },
-          { kind: "segment", name: "model" },
-          { kind: "segment", name: "session" },
-          { kind: "segment", name: "today" },
-          { kind: "segment", name: "context" },
+          { kind: "segment", name: "gitaculous" },
           { kind: "segment", name: "toolbar" },
-          { kind: "segment", name: "styleControl" },
+        ],
+      },
+      {
+        kind: "container",
+        direction: "horizontal",
+        children: [
+          { kind: "segment", name: "model" },
+          { kind: "segment", name: "context" },
+          { kind: "segment", name: "cacheTimer" },
+          { kind: "segment", name: "block" },
+          { kind: "segment", name: "weekly" },
         ],
       },
     ],
