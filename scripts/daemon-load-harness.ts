@@ -52,6 +52,13 @@ import {
 const CONNECT_TIMEOUT_MS = 50;
 const TOTAL_BUDGET_MS = 150;
 
+// git-churn fires one HEAD rewrite per this interval. It sits at the daemon's
+// invalidation-debounce floor (WatcherRegistry DEBOUNCE_MS = 50): churning
+// faster is wasted (the daemon collapses sub-50ms bursts anyway), so this is
+// the maximum-useful invalidation rate — the strongest realistic ".git churn"
+// stressor for the fan-out on the render hot path.
+const GIT_CHURN_INTERVAL_MS = 50;
+
 const REPO_ROOT = path.resolve(
   path.dirname(new URL(import.meta.url).pathname),
   "..",
@@ -575,6 +582,21 @@ async function main(): Promise<void> {
     let gitChurnCounter = 0;
     const headContent = fs.readFileSync(gitFixture.headPath);
     await new Promise<void>((resolveRun) => {
+      // [LAW:decomposition] git-churn is a REPO-level stressor, not a session
+      // one: one HEAD rewrite invalidates the shared git-cache entry for every
+      // session at once. Driving it from a single interval (rather than inside
+      // each session's tick) keeps gitChurnWrites an honest count of file ops
+      // and keeps the redundant writes the daemon would just debounce away off
+      // the per-render hot path. Content-identical rewrite → fs.watch fires →
+      // the cache drops its entry (debounced) → the next render misses and pays
+      // the full subprocess fan-out. Safe: HEAD stays a valid ref.
+      if (values["git-churn"]) {
+        const gitChurn = setInterval(() => {
+          gitChurnCounter++;
+          fs.writeFileSync(gitFixture!.headPath, headContent);
+        }, GIT_CHURN_INTERVAL_MS);
+        timers.push(gitChurn);
+      }
       for (const s of sessions) {
         const tick = setInterval(() => {
           if (values.churn) {
@@ -595,14 +617,6 @@ async function main(): Promise<void> {
                 },
               }) + "\n",
             );
-          }
-          if (values["git-churn"]) {
-            // Content-identical HEAD rewrite → fs.watch fires → the git cache
-            // drops its entry (debounced) → the next render misses and pays the
-            // full subprocess fan-out. This is the invalidation-burst stressor
-            // the fan-out reduction targets. Safe: HEAD stays a valid ref.
-            gitChurnCounter++;
-            fs.writeFileSync(gitFixture!.headPath, headContent);
           }
           void oneRender(handle.sockPath, s.hookData, gitTarget).then(
             (sample) => samples.push(sample),

@@ -9,6 +9,19 @@ import { parseStatusV2 } from "../src/segments/git";
 import { ABSENT, ok } from "../src/utils/outcome";
 
 describe("parseStatusV2", () => {
+  test("empty input → benign default (detached/clean, all absent), never a crash", () => {
+    // Not reachable in production (getCoreAsync only parses a successful git
+    // exit), but locks the pure parser's degenerate-input contract.
+    expect(parseStatusV2("")).toEqual({
+      branch: "detached",
+      status: "clean",
+      aheadBehind: ABSENT,
+      sha: ABSENT,
+      upstream: ABSENT,
+      workingTree: { staged: 0, unstaged: 0, untracked: 0, conflicts: 0 },
+    });
+  });
+
   test("clean tracking branch, up to date", () => {
     const out = [
       "# branch.oid 0b0b58b683ccf6d126c5587730a4bb286e23919f",
