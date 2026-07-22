@@ -256,22 +256,39 @@ function setupGitFixture(): GitFixture {
       },
     });
   };
-  git(["init", "-q", "-b", "main"], repoDir);
-  git(["commit", "-q", "--allow-empty", "-m", "base"], repoDir);
-  // A bare upstream + push -u so the default subscribe/render path resolves
-  // upstream and ahead/behind for real (the folded porcelain-v2 fields).
-  git(["init", "-q", "--bare", upstream], root);
-  git(["remote", "add", "origin", upstream], repoDir);
-  git(["push", "-q", "-u", "origin", "main"], repoDir);
-  // One commit ahead of upstream so `# branch.ab` is a non-trivial "+1 -0".
-  git(["commit", "-q", "--allow-empty", "-m", "ahead"], repoDir);
+  // [LAW:effects-at-boundaries] `root` exists the moment mkdtempSync returns, so
+  // any git command throwing mid-setup (git absent, disk full, permissions)
+  // would exit before returning a GitFixture — leaving main's cleanup a no-op
+  // and the temp dir leaked. Reap `root` on any partial-init failure before
+  // rethrowing, the same guard the harness applies around spawnDaemon.
+  try {
+    git(["init", "-q", "-b", "main"], repoDir);
+    git(["commit", "-q", "--allow-empty", "-m", "base"], repoDir);
+    // A bare upstream + push -u so the default subscribe/render path resolves
+    // upstream and ahead/behind for real (the folded porcelain-v2 fields).
+    git(["init", "-q", "--bare", upstream], root);
+    git(["remote", "add", "origin", upstream], repoDir);
+    git(["push", "-q", "-u", "origin", "main"], repoDir);
+    // One commit ahead of upstream so `# branch.ab` is a non-trivial "+1 -0".
+    git(["commit", "-q", "--allow-empty", "-m", "ahead"], repoDir);
+  } catch (e) {
+    try {
+      fs.rmSync(root, { recursive: true, force: true });
+    } catch {}
+    throw e;
+  }
   return {
     repoDir,
     headPath: path.join(repoDir, ".git", "HEAD"),
     cleanup: () => {
       try {
         fs.rmSync(root, { recursive: true, force: true });
-      } catch {}
+      } catch (e) {
+        // [LAW:no-silent-failure] Best-effort temp cleanup, but a failure still
+        // leaves a signal (a leaked cbh-gitfix- dir) rather than vanishing.
+        // eslint-disable-next-line no-console
+        console.error(`gitFixture cleanup failed (${root}): ${String(e)}`);
+      }
     },
   };
 }

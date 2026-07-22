@@ -130,6 +130,30 @@ describe("parseStatusV2", () => {
     expect(r.workingTree.conflicts).toBe(1);
   });
 
+  test("upstream present but branch.ab absent → upstream ok, aheadBehind absent", () => {
+    // Reachable: upstream configured but the remote-tracking ref is missing, so
+    // git emits `# branch.upstream` yet omits `# branch.ab` (can't compute).
+    // aheadBehind must stay absent — not a fabricated "+0 -0".
+    const out = [
+      "# branch.oid d737dfec86b2ac139ae9f50310151acb9cea6378",
+      "# branch.head master",
+      "# branch.upstream origin/master",
+    ].join("\n");
+    const r = parseStatusV2(out);
+    expect(r.upstream).toEqual(ok("origin/master"));
+    expect(r.aheadBehind).toEqual(ABSENT);
+  });
+
+  test("malformed branch.ab line → aheadBehind stays absent, never fabricated", () => {
+    const out = [
+      "# branch.oid 726672d263635fbbb3346e4e19883bba0298905d",
+      "# branch.head main",
+      "# branch.upstream origin/main",
+      "# branch.ab garbage",
+    ].join("\n");
+    expect(parseStatusV2(out).aheadBehind).toEqual(ABSENT);
+  });
+
   test("rename '2' line counts staged from its XY", () => {
     // A pure rename is staged (R.); its XY columns parse like an ordinary change.
     const out = [
