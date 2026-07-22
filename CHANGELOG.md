@@ -1,3 +1,10 @@
+# [1.18.0](https://github.com/promptctl/cc-candybar/compare/v1.17.5...v1.18.0) (2026-07-22)
+
+
+### Features
+
+* **config:** two-row informational default bar (brandon-segments-4uy) ([#151](https://github.com/promptctl/cc-candybar/issues/151)) ([04ffc7a](https://github.com/promptctl/cc-candybar/commit/04ffc7a34c6ca53ea75aefc53ce3504700756a08))
+
 ## [1.17.5](https://github.com/promptctl/cc-candybar/compare/v1.17.4...v1.17.5) (2026-07-10)
 
 
