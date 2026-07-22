@@ -55,6 +55,50 @@ describe("DEFAULT_DSL_CONFIG", () => {
     }
   });
 
+  // The bundled default is the maintainer's two rows: an identity+actions row
+  // (directory, the verbose gitaculous line, and the quick-action tray: copy
+  // session id, open project / transcript in the editor) over a status row
+  // (model, context, prompt-cache warmth, the 5h/7d rate-limit quotas). This pins the
+  // chosen segment set — which segments graduated into the default bar and which
+  // stay declared-but-opt-in — so a future layout edit is a deliberate, reviewed
+  // change rather than an accidental drift. block/weekly are IN (their when-gates
+  // hide them when no rate-limit window is active); toolbar is IN (the default's
+  // interactivity); the cost segments (session/today), the speed/sparkline/
+  // burnrate telemetry, and the style-picker affordance stay opt-in.
+  test("default root renders exactly the two-row identity+status segment set", () => {
+    const laidOut = new Set<string>();
+    for (const node of walkNodes(DEFAULT_DSL_CONFIG.root)) {
+      if (node.kind === "segment") laidOut.add(node.name);
+    }
+    expect([...laidOut].sort()).toEqual(
+      [
+        "directory",
+        "gitaculous",
+        "model",
+        "context",
+        "cacheTimer",
+        "block",
+        "weekly",
+        "toolbar",
+      ].sort(),
+    );
+    // Declared-but-opt-in: present in `segments` for reference/user opt-in, but
+    // deliberately absent from the default `root`.
+    for (const optIn of [
+      "git",
+      "session",
+      "today",
+      "styleControl",
+      "speed",
+      "tokenSparkline",
+      "burnrate",
+      "gitPr",
+    ]) {
+      expect(DEFAULT_DSL_CONFIG.segments).toHaveProperty(optIn);
+      expect(laidOut.has(optIn)).toBe(false);
+    }
+  });
+
   test("registerDslConfig + renderDsl produce a non-empty line", () => {
     const parsed = parseAndValidate("<default>", SERIALIZED);
     const store = new VariableStore();
@@ -138,14 +182,14 @@ describe("DEFAULT_DSL_CONFIG", () => {
   });
 
   // [LAW:one-source-of-truth] Equivalence pin: the terse A-grammar spelling of the
-  // default's single control row (the styleControl {{ menu }} drops its picker
-  // body below it on open — no when-gated reveal row) must lower to a root
-  // producing byte-identical ANSI to DEFAULT_DSL_CONFIG.root (the canonical
+  // default's two informational rows (identity row over status row) must lower to
+  // a root producing byte-identical ANSI to DEFAULT_DSL_CONFIG.root (the canonical
   // container tree). Spelling differs; render does not.
   test("A-grammar { v:[{ h:[...] }] } spelling is render-equivalent to DEFAULT_DSL_CONFIG.root", () => {
     const ALLOWED = new Set(listResolvablePaletteNames());
     const A_SRC = `{ root: { v: [
-      { h: ["directory","git","model","session","today","context","toolbar","styleControl"] }
+      { h: ["directory","gitaculous","toolbar"] },
+      { h: ["model","context","cacheTimer","block","weekly"] }
     ] } }`;
     const rawA = parseDslConfig("<test>", A_SRC, ALLOWED);
     const mergedA = mergeWithDefault(rawA, DEFAULT_DSL_CONFIG);
