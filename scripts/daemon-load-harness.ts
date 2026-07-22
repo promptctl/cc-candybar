@@ -52,12 +52,15 @@ import {
 const CONNECT_TIMEOUT_MS = 50;
 const TOTAL_BUDGET_MS = 150;
 
-// git-churn fires one HEAD rewrite per this interval. It sits at the daemon's
-// invalidation-debounce floor (WatcherRegistry DEBOUNCE_MS = 50): churning
-// faster is wasted (the daemon collapses sub-50ms bursts anyway), so this is
-// the maximum-useful invalidation rate — the strongest realistic ".git churn"
-// stressor for the fan-out on the render hot path.
-const GIT_CHURN_INTERVAL_MS = 50;
+// git-churn fires one HEAD rewrite per this interval — set just ABOVE the
+// daemon's invalidation-debounce floor (WatcherRegistry DEBOUNCE_MS = 50) so
+// each write deterministically lands in its own debounce window and fires an
+// invalidation. Churning faster than the floor is wasted (the daemon collapses
+// sub-window bursts); churning AT the floor would race the leading-edge timer
+// at the boundary. 60ms keeps a clear gap, making the stressor's every-write-
+// invalidates behavior explicit rather than timing-dependent — the strongest
+// deterministic ".git churn" for the fan-out on the render hot path.
+const GIT_CHURN_INTERVAL_MS = 60;
 
 const REPO_ROOT = path.resolve(
   path.dirname(new URL(import.meta.url).pathname),
