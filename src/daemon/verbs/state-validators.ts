@@ -196,42 +196,35 @@ export function listStateKeys(): readonly string[] {
   return [..._STATE_VALIDATORS.keys()];
 }
 
-// [LAW:types-are-the-program] The validator is RESIDUE of the live specs: given
-// the (uniform) kind and every live registration's content, the validator is
-// forced. An int key builds a parse-boundary validator; an allow-list key builds
-// one from the UNION of every live registration's members — so a value any live
-// config can legitimately render is a value the wire accepts, by construction.
-// The label is a pure function of (key, kind) so the built validator is identical
-// across registrations of one key. makeIntValidator/makeAllowListValidator are
-// the single validator constructors (re-validating slash/empty values), so a
-// merged allow-list that somehow held an undeliverable value would throw HERE,
-// at config-load, not at the operator's first click.
+// [LAW:types-are-the-program] The validator is RESIDUE of a SETTLED spec: given
+// one merged spec, its validator is forced. This is a pure projection — kind ⇒
+// constructor — with NO union or widen of its own. The label is a pure function
+// of (key, kind) so the built validator is identical across registrations of one
+// key. makeIntValidator/makeRangeValidator/makeAllowListValidator are the single
+// validator constructors (re-validating slash/empty values), so a merged spec
+// that somehow held an undeliverable value would throw HERE, at config-load, not
+// at the operator's first click.
+function validatorForSpec(
+  key: string,
+  spec: DerivedValidatorSpec,
+): KeyValidator {
+  if (spec.kind === "int") return makeIntValidator(`menu page "${key}"`);
+  if (spec.kind === "range")
+    return makeRangeValidator(spec.min, spec.max, `stepper "${key}"`);
+  return makeAllowListValidator(spec.allowed, `state "${key}"`);
+}
+
+// [LAW:one-source-of-truth] The validator for a key's live registrations, built
+// through the ONE collapse: mergeKeySpecs unions allow-list members, widens range
+// bounds, clamps the seed, and absorbs integer members — so the union/widen logic
+// lives in exactly one place and this builder is pure plumbing (collapse → project).
+// A value any live config can legitimately render is a value the wire accepts, by
+// construction, because the rendered options and the derived gate read one merge.
 function buildValidatorFromSpecs(
   key: string,
-  kind: DerivedValidatorSpec["kind"],
   specs: readonly DerivedValidatorSpec[],
 ): KeyValidator {
-  if (kind === "int") return makeIntValidator(`menu page "${key}"`);
-  if (kind === "range") {
-    // [LAW:types-are-the-program] Two configs declaring one stepper key with
-    // different bounds widen to the UNION range — parity with allow-list's
-    // member union: a value any live config can legitimately render (step into)
-    // is a value the wire accepts. The clamp is to the widest live bounds, so
-    // the gate never rejects a write a narrower co-resident stepper could make.
-    const mins = specs.flatMap((s) => (s.kind === "range" ? [s.min] : []));
-    const maxs = specs.flatMap((s) => (s.kind === "range" ? [s.max] : []));
-    return makeRangeValidator(
-      Math.min(...mins),
-      Math.max(...maxs),
-      `stepper "${key}"`,
-    );
-  }
-  const allowed = [
-    ...new Set(
-      specs.flatMap((s) => (s.kind === "allow-list" ? s.allowed : [])),
-    ),
-  ];
-  return makeAllowListValidator(allowed, `state "${key}"`);
+  return validatorForSpec(key, mergeKeySpecs(key, specs));
 }
 
 // [LAW:locality-or-seam] The widget config (a config-load consumer) owns the
@@ -292,17 +285,13 @@ export function registerStateValidator(
       );
     }
     existing.specs.push(spec);
-    existing.validator = buildValidatorFromSpecs(
-      key,
-      existing.kind,
-      existing.specs,
-    );
+    existing.validator = buildValidatorFromSpecs(key, existing.specs);
   } else {
     const specs = [spec];
     _STATE_VALIDATORS.set(key, {
       permanent: false,
       kind: spec.kind,
-      validator: buildValidatorFromSpecs(key, spec.kind, specs),
+      validator: buildValidatorFromSpecs(key, specs),
       specs,
     });
   }
@@ -317,7 +306,7 @@ export function registerStateValidator(
     if (entry.specs.length === 0) {
       _STATE_VALIDATORS.delete(key);
     } else {
-      entry.validator = buildValidatorFromSpecs(key, entry.kind, entry.specs);
+      entry.validator = buildValidatorFromSpecs(key, entry.specs);
     }
   };
 }
@@ -700,9 +689,17 @@ export interface RangeParams {
 export function rangeParamsFor(key: string): RangeParams | null {
   const entry = _STATE_VALIDATORS.get(key);
   if (!entry || entry.permanent || entry.kind !== "range") return null;
-  const ranges = entry.specs.flatMap((s) => (s.kind === "range" ? [s] : []));
-  if (ranges.length === 0) return null;
-  const min = Math.min(...ranges.map((r) => r.min));
-  const max = Math.max(...ranges.map((r) => r.max));
-  return { min, max, seed: clampSeed(ranges[0]!.seed, min, max) };
+  // [LAW:one-source-of-truth] The bounds/seed come from THE same collapse the
+  // validator is built from (mergeKeySpecs) — no second widen/clamp lives here.
+  const spec = mergeKeySpecs(key, entry.specs);
+  // [LAW:no-silent-failure] entry.kind === "range" means every live spec is a
+  // range (registration rejects a kind change), so the collapse is a range too;
+  // a non-range here is a broken invariant, surfaced loudly, not a silent null.
+  if (spec.kind !== "range") {
+    throw new Error(
+      `rangeParamsFor: key "${key}" holds range specs but the merge produced ` +
+        `a ${spec.kind} spec — the entry-kind invariant is broken.`,
+    );
+  }
+  return { min: spec.min, max: spec.max, seed: spec.seed };
 }
