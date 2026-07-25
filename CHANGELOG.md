@@ -1,3 +1,10 @@
+## [1.18.1](https://github.com/promptctl/cc-candybar/compare/v1.18.0...v1.18.1) (2026-07-25)
+
+
+### Performance Improvements
+
+* **git:** collapse core git fan-out into one porcelain=v2 read (brandon-daemon-perf-bb9.1) ([#152](https://github.com/promptctl/cc-candybar/issues/152)) ([f3ba999](https://github.com/promptctl/cc-candybar/commit/f3ba99934a8bd56f4747816491b00cb65744138a))
+
 # [1.18.0](https://github.com/promptctl/cc-candybar/compare/v1.17.5...v1.18.0) (2026-07-22)
 
 
