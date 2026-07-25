@@ -333,7 +333,13 @@ function realize(
     case "set-int": {
       // The render binds the integer to write (a picker's page nav passes the
       // target page as boundValue; a bare `{{ action }}` passes its display).
-      // The unbounded int gate accepts it; active when the key already holds it.
+      // [LAW:no-silent-failure] A bare `{{ action }}` on a set-int MUST render a
+      // NUMERIC display (the manual "open at page 0" pattern: `{{ action "openMenu"
+      // "0" }}`) — the display IS the value written, and the int gate
+      // (makeIntValidator) rejects a non-integer at click with a loud "must be an
+      // integer" BAD_REQUEST. There is no load-time check because the display is a
+      // template evaluated at render (it may be dynamic), so the shape is enforced
+      // at the wire, not silently coerced. active when the key already holds it.
       const value = boundValue ?? display;
       const current = readVar(store, c.stateVar);
       return {
