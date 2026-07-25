@@ -188,6 +188,110 @@ function isRecord(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null && !Array.isArray(v);
 }
 
+// [LAW:decomposition] The core git snapshot as a SINGLE `git status
+// --porcelain=v2 --branch` yields it. That one invocation reports branch,
+// short SHA, upstream, ahead/behind, and the full worktree status — so the
+// prior fan-out (status -b + two rev-list + a branch-fallback + rev-parse HEAD
+// + rev-parse @{u}, up to six spawns) collapses to one. Fewer spawns per cache
+// miss is the whole point of brandon-daemon-perf-bb9.1; folding these also
+// makes ahead/behind SHARE FATE with status (same subprocess) instead of being
+// an independently-failable partial state ([LAW:types-are-the-program]).
+interface CoreStatus {
+  branch: string;
+  status: "clean" | "dirty" | "conflicts";
+  workingTree: WorkingTree;
+  // Each an Outcome so "no upstream / unborn HEAD" (absent) stays distinct from
+  // a value — the same three-state contract every on-demand field carries.
+  aheadBehind: Outcome<AheadBehind>;
+  sha: Outcome<string>;
+  upstream: Outcome<string>;
+}
+
+// [LAW:effects-at-boundaries] Pure text→data: the subprocess (the effect) lives
+// in getCoreAsync; this parses its stdout. Exported so the accept/reject shape
+// table is unit-testable without spawning git.
+//
+// Porcelain v2 header lines (`# branch.<field> <value>`) carry branch/oid/
+// upstream/ab; entry lines classify the worktree:
+//   `1 XY …` ordinary change  → XY[0]=index, XY[1]=worktree ('.' = unmodified)
+//   `2 XY …` rename/copy       → same XY columns
+//   `u …`    unmerged          → a conflict
+//   `? path` untracked
+//   `! path` ignored (never requested here; skipped)
+// The `(initial)` oid (unborn HEAD) and `(detached)` head are git's sentinels
+// for "no commit yet" and "detached" — mapped to absent-sha and the "detached"
+// branch label respectively, matching the prior fallback-chain behavior.
+export function parseStatusV2(stdout: string): CoreStatus {
+  let branch = "detached";
+  let sha: Outcome<string> = ABSENT;
+  let upstream: Outcome<string> = ABSENT;
+  let aheadBehind: Outcome<AheadBehind> = ABSENT;
+  let staged = 0;
+  let unstaged = 0;
+  let untracked = 0;
+  let conflicts = 0;
+
+  for (const line of stdout.split("\n")) {
+    if (!line) continue;
+
+    if (line.startsWith("# ")) {
+      const rest = line.slice(2);
+      if (rest.startsWith("branch.oid ")) {
+        const v = rest.slice("branch.oid ".length).trim();
+        // Fixed 7-char truncation is the display contract. `git rev-parse
+        // --short` auto-lengthens on collision, but re-spawning it here to
+        // recover that would undo this segment's whole point — one porcelain=v2
+        // read instead of a fan-out. The sha is display-only (never a lookup
+        // key), so a 7-char ambiguity in a >1M-object repo is cosmetic.
+        sha = v === "(initial)" ? ABSENT : ok(v.slice(0, 7));
+      } else if (rest.startsWith("branch.head ")) {
+        const v = rest.slice("branch.head ".length).trim();
+        branch = v === "(detached)" ? "detached" : v;
+      } else if (rest.startsWith("branch.upstream ")) {
+        upstream = ok(rest.slice("branch.upstream ".length).trim());
+      } else if (rest.startsWith("branch.ab ")) {
+        // Format is exactly "+<ahead> -<behind>"; a shape mismatch leaves
+        // aheadBehind absent rather than fabricating a count.
+        const m = rest
+          .slice("branch.ab ".length)
+          .trim()
+          .match(/^\+(\d+)\s+-(\d+)$/);
+        if (m) {
+          aheadBehind = ok({
+            ahead: parseInt(m[1]!, 10),
+            behind: parseInt(m[2]!, 10),
+          });
+        }
+      }
+      continue;
+    }
+
+    const kind = line[0];
+    if (kind === "1" || kind === "2") {
+      const xy = line.slice(2, 4);
+      if (xy[0] !== ".") staged++;
+      if (xy[1] !== ".") unstaged++;
+    } else if (kind === "u") {
+      conflicts++;
+    } else if (kind === "?") {
+      untracked++;
+    }
+  }
+
+  let status: "clean" | "dirty" | "conflicts" = "clean";
+  if (conflicts > 0) status = "conflicts";
+  else if (staged || unstaged || untracked) status = "dirty";
+
+  return {
+    branch,
+    status,
+    aheadBehind,
+    sha,
+    upstream,
+    workingTree: { staged, unstaged, untracked, conflicts },
+  };
+}
+
 // `gh pr view --json number,state,url` → one JSON object. Only an OPEN PR is a
 // value; a MERGED/CLOSED PR for the branch is the domain's `absent`.
 export function parseGithubPr(stdout: string): Outcome<PullRequest> {
@@ -346,28 +450,27 @@ export class GitService {
       gitDir = foundGitRoot.value;
     }
 
-    // branch/status are the core: without them there is no useful GitInfo,
-    // so a failed core fetch fails the whole outcome rather than dressing
-    // up as a clean repo on a fallback branch.
-    const core = await this.getStatusWithBranchAsync(gitDir);
+    // branch/status/ahead-behind/sha/upstream are the core, and one
+    // `git status --porcelain=v2 --branch` yields them all: without branch and
+    // status there is no useful GitInfo, so a failed core fetch fails the whole
+    // outcome rather than dressing up as a clean repo on a fallback branch.
+    const core = await this.getCoreAsync(gitDir);
     if (core.kind !== "ok") return core;
-    const aheadBehind = await this.getAheadBehindAsync(gitDir);
 
     const result: GitInfo = {
       branch: core.value.branch,
       status: core.value.status,
-      aheadBehind,
+      aheadBehind: core.value.aheadBehind,
     };
 
-    if (options.showWorkingTree) {
-      result.workingTree = core.value.workingTree;
-    }
+    // sha, upstream, and the worktree counts all rode in on the core call —
+    // attaching them here is a memory read, not another spawn.
+    if (options.showWorkingTree) result.workingTree = core.value.workingTree;
+    if (options.showSha) result.sha = core.value.sha;
+    if (options.showUpstream) result.upstream = core.value.upstream;
 
     // Heavy operations stay serial — each is an expensive git invocation and
     // running them one at a time bounds concurrent git load per fetch.
-    if (options.showSha) {
-      result.sha = await this.getShaAsync(gitDir);
-    }
     if (options.showTag) {
       result.tag = await this.getNearestTagAsync(gitDir);
     }
@@ -378,13 +481,11 @@ export class GitService {
     // Light operations run in parallel. Helpers never reject — failure is a
     // value in the outcome — so plain Promise.all replaces the allSettled +
     // untyped resultMap machinery the swallowing design required.
-    const [stashCount, upstream, repoName] = await Promise.all([
+    const [stashCount, repoName] = await Promise.all([
       options.showStashCount ? this.getStashCountAsync(gitDir) : undefined,
-      options.showUpstream ? this.getUpstreamAsync(gitDir) : undefined,
       options.showRepoName ? this.getRepoNameAsync(gitDir) : undefined,
     ]);
     if (stashCount !== undefined) result.stashCount = stashCount;
-    if (upstream !== undefined) result.upstream = upstream;
     if (repoName !== undefined) {
       result.repoName = repoName;
       result.isWorktree = isWorktreeDir;
@@ -395,20 +496,6 @@ export class GitService {
     }
 
     return ok(result);
-  }
-
-  private async getShaAsync(workingDir: string): Promise<Outcome<string>> {
-    // non-zero = no HEAD to resolve (empty repo) — a domain answer.
-    return nonEmpty(
-      classify(
-        "git rev-parse HEAD",
-        await this.execGitAsync(["rev-parse", "--short=7", "HEAD"], {
-          cwd: workingDir,
-          timeout: 2000,
-        }),
-        "absent",
-      ),
-    );
   }
 
   // [LAW:locality-or-seam] Public so the daemon-side provider can watch the
@@ -519,20 +606,6 @@ export class GitService {
     if (r.kind !== "ok") return r;
     const stashList = r.value.trim();
     return ok(stashList ? stashList.split("\n").length : 0);
-  }
-
-  private async getUpstreamAsync(workingDir: string): Promise<Outcome<string>> {
-    // non-zero = no upstream configured — the everyday domain answer.
-    return nonEmpty(
-      classify(
-        "git rev-parse @{u}",
-        await this.execGitAsync(["rev-parse", "--abbrev-ref", "@{u}"], {
-          cwd: workingDir,
-          timeout: 2000,
-        }),
-        "absent",
-      ),
-    );
   }
 
   private async getRepoNameAsync(workingDir: string): Promise<Outcome<string>> {
@@ -647,17 +720,16 @@ export class GitService {
     }
   }
 
-  private async getStatusWithBranchAsync(workingDir: string): Promise<
-    Outcome<{
-      branch: string;
-      status: "clean" | "dirty" | "conflicts";
-      workingTree: WorkingTree;
-    }>
-  > {
-    debug(`[GIT-EXEC] Running git status in ${workingDir}`);
+  // [LAW:single-enforcer] The one core git read. `git status --porcelain=v2
+  // --branch` reports branch, short SHA, upstream, ahead/behind, and worktree
+  // status in a single subprocess — the fan-out this method replaces spawned up
+  // to six (status -b, two rev-list, a branch fallback, rev-parse HEAD, rev-parse
+  // @{u}). Parsing is delegated to the pure `parseStatusV2`.
+  private async getCoreAsync(workingDir: string): Promise<Outcome<CoreStatus>> {
+    debug(`[GIT-EXEC] Running git status --porcelain=v2 in ${workingDir}`);
     const r = classify(
-      "git status --porcelain -b",
-      await this.execGitAsync(["status", "--porcelain", "-b"], {
+      "git status --porcelain=v2 --branch",
+      await this.execGitAsync(["status", "--porcelain=v2", "--branch"], {
         cwd: workingDir,
         timeout: 2000,
       }),
@@ -666,124 +738,6 @@ export class GitService {
       "failed",
     );
     if (r.kind !== "ok") return r;
-
-    const lines = r.value.split("\n");
-
-    let branch: string | null = null;
-    let status: "clean" | "dirty" | "conflicts" = "clean";
-    let staged = 0;
-    let unstaged = 0;
-    let untracked = 0;
-    let conflicts = 0;
-
-    for (const line of lines) {
-      if (!line) continue;
-
-      if (line.startsWith("## ")) {
-        const branchLine = line.substring(3);
-        const branchMatch = branchLine.split("...")[0];
-        if (branchMatch && branchMatch !== "HEAD (no branch)") {
-          branch = branchMatch;
-        }
-        continue;
-      }
-
-      if (line.length >= 2) {
-        const indexStatus = line.charAt(0);
-        const worktreeStatus = line.charAt(1);
-
-        if (indexStatus === "?" && worktreeStatus === "?") {
-          untracked++;
-          if (status === "clean") status = "dirty";
-          continue;
-        }
-
-        const statusPair = indexStatus + worktreeStatus;
-        if (["DD", "AU", "UD", "UA", "DU", "AA", "UU"].includes(statusPair)) {
-          conflicts++;
-          status = "conflicts";
-          continue;
-        }
-
-        if (indexStatus !== " " && indexStatus !== "?") {
-          staged++;
-          if (status === "clean") status = "dirty";
-        }
-        if (worktreeStatus !== " " && worktreeStatus !== "?") {
-          unstaged++;
-          if (status === "clean") status = "dirty";
-        }
-      }
-    }
-
-    if (branch === null) {
-      const fallback = await this.getFallbackBranch(workingDir);
-      // A transport failure resolving the branch fails the core: rendering
-      // a fake "detached" for a repo whose branch merely couldn't be read
-      // would be the same meaning-erasure this type exists to forbid.
-      if (fallback.kind === "failed") return fallback;
-      branch = fallback.kind === "ok" ? fallback.value : "detached";
-    }
-
-    return ok({
-      branch,
-      status,
-      workingTree: { staged, unstaged, untracked, conflicts },
-    });
-  }
-
-  private async getFallbackBranch(
-    workingDir: string,
-  ): Promise<Outcome<string>> {
-    // Both commands answer "detached" with a non-zero exit (symbolic-ref) or
-    // empty output (show-current) — `absent` means genuinely detached.
-    const primary = nonEmpty(
-      classify(
-        "git branch --show-current",
-        await this.execGitAsync(["branch", "--show-current"], {
-          cwd: workingDir,
-          timeout: 2000,
-        }),
-        "absent",
-      ),
-    );
-    if (primary.kind !== "absent") return primary;
-    return nonEmpty(
-      classify(
-        "git symbolic-ref HEAD",
-        await this.execGitAsync(["symbolic-ref", "--short", "HEAD"], {
-          cwd: workingDir,
-          timeout: 2000,
-        }),
-        "absent",
-      ),
-    );
-  }
-
-  private async getAheadBehindAsync(
-    workingDir: string,
-  ): Promise<Outcome<AheadBehind>> {
-    debug(`[GIT-EXEC] Running git ahead/behind in ${workingDir}`);
-    const [aheadResult, behindResult] = await Promise.all([
-      this.execGitAsync(["rev-list", "--count", "@{u}..HEAD"], {
-        cwd: workingDir,
-        timeout: 2000,
-      }),
-      this.execGitAsync(["rev-list", "--count", "HEAD..@{u}"], {
-        cwd: workingDir,
-        timeout: 2000,
-      }),
-    ]);
-    // non-zero = no upstream to compare against — the domain answer for any
-    // local-only branch, distinct from a transport failure.
-    const ahead = classify("git rev-list @{u}..HEAD", aheadResult, "absent");
-    const behind = classify("git rev-list HEAD..@{u}", behindResult, "absent");
-    if (ahead.kind === "failed") return ahead;
-    if (behind.kind === "failed") return behind;
-    if (ahead.kind === "absent" || behind.kind === "absent") return ABSENT;
-    return ok({
-      ahead: parseInt(ahead.value.trim()) || 0,
-      behind: parseInt(behind.value.trim()) || 0,
-    });
+    return ok(parseStatusV2(r.value));
   }
 }

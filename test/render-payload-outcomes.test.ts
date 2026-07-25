@@ -60,7 +60,7 @@ function hookData(transcriptPath: string) {
 describe("buildRenderPayload — git outcome lane", () => {
   test("whole-fetch failure: no git key, exactly one warn log with the reason", async () => {
     const logs: LogEntry[] = [];
-    const deps = depsWith(failed("git status --porcelain -b: timeout"), logs);
+    const deps = depsWith(failed("git status --porcelain=v2 --branch: timeout"), logs);
 
     const payload = await buildRenderPayload(
       hookData("/no/such/transcript.jsonl"),
@@ -74,7 +74,7 @@ describe("buildRenderPayload — git outcome lane", () => {
     expect(logs).toEqual([
       {
         level: "warn",
-        msg: "provider fetch failed: git status --porcelain -b: timeout",
+        msg: "provider fetch failed: git status --porcelain=v2 --branch: timeout",
       },
     ]);
   });
