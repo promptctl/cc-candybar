@@ -27,7 +27,7 @@
     "preloadtest": "pnpm build",
     "loadtest": "node --import tsx scripts/daemon-load-harness.ts",
     "preloadtest:gate": "pnpm build",
-    "loadtest:gate": "node --import tsx scripts/daemon-load-harness.ts --sessions 25 --interval 300 --duration 20 --churn --transcript-lines 5000",
+    "loadtest:gate": "node --import tsx scripts/daemon-load-harness.ts --sessions 25 --interval 300 --duration 20 --churn --git-churn --transcript-lines 5000",
     "check:protocol": "node scripts/check-protocol.mjs",
     "gen:schema": "tsx scripts/gen-schema.ts",
     "check:schema": "tsx scripts/check-schema.ts",
