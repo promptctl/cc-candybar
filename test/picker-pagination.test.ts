@@ -225,3 +225,172 @@ describe("brandon-menu-abg — paged menu fits every page within term.cols", () 
     }
   });
 });
+
+// [LAW:verifiable-goals] brandon-menus-bn5.3 (I2): the abg/#135 reserve must hold
+// on the OTHER geometry the same picker renders through — a `{{ menu }}` body that
+// DROPS onto its own full-width line below the enclosing horizontal row
+// (composeBlocks, src/dsl/node-registry.ts), and MULTIPLE open menus in one row
+// (each body drops onto its own line). The pre-existing coverage tested only a
+// standalone picker segment in a VERTICAL root (line 0, no drop); dsl-menus tested
+// the drop path but only at width=Infinity (never a finite-width fit). This crosses
+// the two: the drop path AND a finite width AND every style × charset.
+//
+// [LAW:behavior-not-structure] Driven through the real spine (registerDslConfig +
+// renderDsl + the real menu synthesis) and the real strip serializer; asserts the
+// rendered geometry (every line ≤ width; the → the abg bug ate is present on each
+// non-last dropped page), never the internal pagination shape.
+describe("brandon-menus-bn5.3 I2 — {{ menu }} DROP body fits within term.cols", () => {
+  // Two independent menus (no shared key) beside each other in ONE horizontal row.
+  // Each is `paged: true` so its body slices into ←/→ pages at the live width. The
+  // theme menu draws the large `themes` domain (the interesting pagination); the
+  // style menu draws the small `styles` domain. Opening a menu = writing its
+  // derived state key to its member (menus.<seg>.<apply> = <apply>); the page
+  // cursor is its <page> action's key (theme-page / style-page).
+  function menuRowConfig(): string {
+    return `{
+      globals: {},
+      variables: {
+        'session.id': { kind: 'input', path: 'session_id', default: '' },
+        'term.cols': { kind: 'input', path: 'term.cols', type: 'number', default: 80 },
+        // The page cursors: a paged menu needs a 'state' VARIABLE bound to each
+        // page key so renderPicker can READ the live page (the action of the same
+        // name gates the WRITE). This mirrors examples/showcase.json5 — omitting
+        // it makes the picker read "" and freeze on page 0.
+        themePage: { kind: 'state', key: 'theme-page', default: '0' },
+        stylePage: { kind: 'state', key: 'style-page', default: '0' },
+      },
+      actions: {
+        applyTheme: { set: 'theme', from: 'themes' },
+        themePage: { set: 'theme-page', int: true },
+        applyStyle: { set: 'style', from: 'styles' },
+        stylePage: { set: 'style-page', int: true },
+      },
+      segments: {
+        label: { template: 'L', bg: 'surface', fg: 'foreground' },
+        themeMenu: { template: 'T {{ menu "applyTheme" "themePage" false true }}', bg: 'surface', fg: 'foreground' },
+        styleMenu: { template: 'S {{ menu "applyStyle" "stylePage" false true }}', bg: 'surface', fg: 'foreground' },
+      },
+      root: { h: ['label', 'themeMenu', 'styleMenu'] },
+    }`;
+  }
+
+  const THEME_OPEN = "menus.themeMenu.applyTheme";
+  const STYLE_OPEN = "menus.styleMenu.applyStyle";
+
+  function buildMenuRuntime(
+    style: StripStyle,
+    charset: Charset = "unicode",
+    padding = 0,
+  ) {
+    const config = parseAndValidate("<test>", menuRowConfig(), ALLOWED);
+    const sessionState = new SessionState();
+    const store = new VariableStore();
+    const registry = new SourceRegistry(store, "", undefined, sessionState);
+    const compiled = registerDslConfig(config, registry);
+    const basePalette = new PaletteResolver(getThemePalette("textual-dark")!);
+    // openStyle: also open the style menu (its own page cursor) so BOTH bodies
+    // drop in one render — the multiple-open-menus-in-one-row case.
+    const render = (
+      width: number,
+      themePage: number,
+      openStyle = false,
+    ): string => {
+      sessionState.set("s1", THEME_OPEN, "applyTheme");
+      sessionState.set("s1", "theme-page", String(themePage));
+      if (openStyle) {
+        sessionState.set("s1", STYLE_OPEN, "applyStyle");
+        sessionState.set("s1", "style-page", "0");
+      }
+      return renderDsl(
+        config,
+        compiled,
+        store,
+        registry,
+        { session_id: "s1", project_dir: "/tmp/proj" },
+        basePalette,
+        {
+          style,
+          colorCompatibility: "truecolor" as const,
+          wrap: true,
+          width,
+          padding,
+          charset,
+        },
+      );
+    };
+    return { render };
+  }
+
+  // The single-menu drop: walk every page of the theme body at a range of widths;
+  // assert each rendered line (the inline trigger row AND the dropped body) fits,
+  // and the dropped body keeps the nav arrows a page should show. The dropped body
+  // is the line carrying the picker's ✕ affordance.
+  test.each(STYLE_CHARSET)(
+    "every dropped page fits and keeps its nav arrows (%s, charset %s)",
+    (style, charset) => {
+      const { render } = buildMenuRuntime(style, charset);
+      for (let width = FLOOR; width <= 80; width++) {
+        const bodies: string[] = [];
+        for (let p = 0; p < 40; p++) {
+          const lines = stripAnsi(render(width, p)).split("\n");
+          // Every emitted line — inline trigger row 0 AND the dropped body — must
+          // fit the width budget; the reserve is what makes the padded, capped
+          // dropped band fit even when packed to the full page.
+          for (const line of lines) expect(cw(line)).toBeLessThanOrEqual(width);
+          // The dropped body is the line with the ✕ affordance (row 0 is the
+          // inline "L T ▾ S ▸" trigger row and never carries the body).
+          const body = lines.find((l) => l.includes("✕")) ?? "";
+          expect(body).not.toBe(""); // the menu IS open → a body dropped
+          if (bodies.length > 0 && body === bodies[bodies.length - 1]) break;
+          bodies.push(body);
+        }
+        const lastIdx = bodies.length - 1;
+        bodies.forEach((body, p) => {
+          if (p > 0) expect(body).toContain("←");
+          if (p < lastIdx) expect(body).toContain("→"); // the arrow abg ate
+        });
+        // Narrow widths actually paginate (the multi-page / bug regime).
+        if (width <= 40) expect(bodies.length).toBeGreaterThan(1);
+      }
+    },
+  );
+
+  // Multiple open menus in ONE horizontal row: both bodies drop, each onto its own
+  // full-width line (composeBlocks stacks drops, never zips them side by side), so
+  // EACH must fit term.cols independently. A regression that zipped two bodies onto
+  // one line, or dropped the per-body reserve, would overflow here.
+  test.each(STYLE_CHARSET)(
+    "two open menus in one row each drop full-width and fit (%s, charset %s)",
+    (style, charset) => {
+      const { render } = buildMenuRuntime(style, charset);
+      for (let width = FLOOR; width <= 80; width++) {
+        for (let p = 0; p < 12; p++) {
+          const lines = stripAnsi(render(width, p, true)).split("\n");
+          // row 0 (inline triggers) + one dropped body per open menu = ≥ 3 lines.
+          expect(lines.length).toBeGreaterThanOrEqual(3);
+          for (const line of lines) expect(cw(line)).toBeLessThanOrEqual(width);
+          // Both menus are open: two dropped bodies, each carrying its own ✕.
+          const dropped = lines.filter((l) => l.includes("✕"));
+          expect(dropped.length).toBe(2);
+        }
+      }
+    },
+  );
+
+  // The reserve must also absorb padding on the DROP path (the abg/#135 pad half
+  // of the reserve), exactly as it does for a standalone picker segment.
+  test.each(STYLES)("dropped pages fit at padding 2 (%s)", (style) => {
+    const PAD = 2;
+    const { render } = buildMenuRuntime(style, "unicode", PAD);
+    for (let width = FLOOR + 2 * PAD; width <= 60; width++) {
+      for (let p = 0; p < 40; p++) {
+        const lines = stripAnsi(render(width, p)).split("\n");
+        for (const line of lines) expect(cw(line)).toBeLessThanOrEqual(width);
+        const body = lines.find((l) => l.includes("✕")) ?? "";
+        if (p > 0 && body === "") break;
+        // Past the last page the body repeats; a cheap stop that still sweeps all.
+        if (p > 6) break;
+      }
+    }
+  });
+});
