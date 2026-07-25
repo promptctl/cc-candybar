@@ -18,7 +18,11 @@ const defaultLogger: WatcherLogger = (_level, message) => debug(message);
 // (git cache, config cache, ...). Scattered watchers across modules would leak
 // FDs and miss cleanup at shutdown.
 
-const DEBOUNCE_MS = 50;
+// [LAW:one-source-of-truth] Exported: the invalidation-debounce floor is the
+// single source consumers derive from (e.g. the load harness's git-churn
+// interval must sit above it). Restating "50" anywhere else would let the two
+// drift silently.
+export const DEBOUNCE_MS = 50;
 const DEFAULT_MAX_WATCHERS = 128;
 
 // Absolute filesystem paths the consumer wants invalidation for.
