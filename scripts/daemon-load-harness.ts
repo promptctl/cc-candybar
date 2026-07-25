@@ -29,17 +29,20 @@
 //
 // Run: pnpm build && node --import tsx scripts/daemon-load-harness.ts --sessions 25
 // Flags: --sessions N --interval MS --duration S --transcript-lines N
-//        --churn (append a transcript line each tick → invalidation bursts)
+//        --churn (append a transcript line each tick → transcript-fold bursts)
+//        --git-churn (rewrite the fixture repo's .git/HEAD each tick → git
+//                     cache-invalidation bursts, the fan-out stressor)
 //        --daemon dist|tsx (which daemon artifact; default dist)
 //        --profile (spawn daemon under --cpu-prof; writes .cpuprofile on exit)
 //        --json (emit the summary as one JSON line for regression gating)
 
-import { spawn, type ChildProcess } from "node:child_process";
+import { execFileSync, spawn, type ChildProcess } from "node:child_process";
 import fs from "node:fs";
 import net from "node:net";
 import os from "node:os";
 import path from "node:path";
 import { parseArgs } from "node:util";
+import { DEBOUNCE_MS } from "../src/daemon/cache/watchers.js";
 import {
   PROTOCOL_VERSION,
   encodeFrame,
@@ -49,6 +52,16 @@ import {
 // ─── Client budget (mirror of rust-client/src/main.rs) ──────────────────────
 const CONNECT_TIMEOUT_MS = 50;
 const TOTAL_BUDGET_MS = 150;
+
+// git-churn fires one HEAD rewrite per this interval — derived from the
+// daemon's invalidation-debounce floor ([LAW:one-source-of-truth] — the sole
+// DEBOUNCE_MS lives in the watcher registry) so each write deterministically
+// lands in its own debounce window and fires an invalidation. Churning faster
+// than the floor is wasted (the daemon collapses sub-window bursts); churning
+// AT the floor would race the leading-edge timer at the boundary. The +10
+// keeps a clear gap, making the stressor's every-write-invalidates behavior
+// explicit rather than timing-dependent, and tracks the floor if it ever moves.
+const GIT_CHURN_INTERVAL_MS = DEBOUNCE_MS + 10;
 
 const REPO_ROOT = path.resolve(
   path.dirname(new URL(import.meta.url).pathname),
@@ -63,6 +76,7 @@ const { values } = parseArgs({
     duration: { type: "string", default: "20" },
     "transcript-lines": { type: "string", default: "800" },
     churn: { type: "boolean", default: false },
+    "git-churn": { type: "boolean", default: false },
     daemon: { type: "string", default: "dist" },
     profile: { type: "boolean", default: false },
     json: { type: "boolean", default: false },
@@ -217,6 +231,84 @@ function writeTranscript(file: string, lines: number): void {
     );
   }
   fs.writeFileSync(file, rows.join("\n") + "\n");
+}
+
+// ─── Disposable git fixture ───────────────────────────────────────────────────
+// [LAW:effects-at-boundaries] The harness owns the world edge, so it owns a
+// THROWAWAY repo rather than pointing sessions at the developer's live checkout.
+// Two reasons this matters for a git-churn gate: (1) mutating a real .git/HEAD
+// to force invalidation would corrupt the working tree; (2) measuring git cost
+// against the checkout makes the number depend on the dev's uncommitted state —
+// non-hermetic for a regression gate. A fresh repo with a commit + a pushed
+// upstream exercises the git provider identically (same spawn fan-out) while
+// being safe to churn and reproducible run to run.
+interface GitFixture {
+  repoDir: string;
+  headPath: string;
+  cleanup(): void;
+}
+
+function setupGitFixture(): GitFixture {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "cbh-gitfix-"));
+  const repoDir = path.join(root, "repo");
+  const upstream = path.join(root, "upstream.git");
+  fs.mkdirSync(repoDir);
+  const git = (args: string[], cwd: string): void => {
+    execFileSync("git", args, {
+      cwd,
+      stdio: "pipe",
+      // [LAW:effects-at-boundaries] Deterministic identity + a hermetic git:
+      // GIT_CONFIG_GLOBAL=/dev/null and GIT_CONFIG_NOSYSTEM neutralize the
+      // dev's ~/.gitconfig and system config, so a non-standard global
+      // core.hooksPath or a failing user commit hook can't leak in and crash
+      // the gate with an opaque trace. Identity overrides alone control only
+      // the commit author; the config env vars are what actually seal the box.
+      env: {
+        ...process.env,
+        GIT_CONFIG_GLOBAL: "/dev/null",
+        GIT_CONFIG_NOSYSTEM: "1",
+        GIT_AUTHOR_NAME: "cbh",
+        GIT_AUTHOR_EMAIL: "cbh@t.t",
+        GIT_COMMITTER_NAME: "cbh",
+        GIT_COMMITTER_EMAIL: "cbh@t.t",
+      },
+    });
+  };
+  // [LAW:effects-at-boundaries] `root` exists the moment mkdtempSync returns, so
+  // any git command throwing mid-setup (git absent, disk full, permissions)
+  // would exit before returning a GitFixture — leaving main's cleanup a no-op
+  // and the temp dir leaked. Reap `root` on any partial-init failure before
+  // rethrowing, the same guard the harness applies around spawnDaemon.
+  try {
+    git(["init", "-q", "-b", "main"], repoDir);
+    git(["commit", "-q", "--allow-empty", "-m", "base"], repoDir);
+    // A bare upstream + push -u so the default subscribe/render path resolves
+    // upstream and ahead/behind for real (the folded porcelain-v2 fields).
+    git(["init", "-q", "--bare", upstream], root);
+    git(["remote", "add", "origin", upstream], repoDir);
+    git(["push", "-q", "-u", "origin", "main"], repoDir);
+    // One commit ahead of upstream so `# branch.ab` is a non-trivial "+1 -0".
+    git(["commit", "-q", "--allow-empty", "-m", "ahead"], repoDir);
+  } catch (e) {
+    try {
+      fs.rmSync(root, { recursive: true, force: true });
+    } catch {}
+    throw e;
+  }
+  return {
+    repoDir,
+    headPath: path.join(repoDir, ".git", "HEAD"),
+    cleanup: () => {
+      try {
+        fs.rmSync(root, { recursive: true, force: true });
+      } catch (e) {
+        // [LAW:no-silent-failure] Best-effort temp cleanup, but a failure still
+        // leaves a signal (a leaked cbh-gitfix- dir) rather than vanishing.
+        // eslint-disable-next-line no-console
+        console.error(`gitFixture cleanup failed (${root}): ${String(e)}`);
+      }
+    },
+  };
 }
 
 function makeHookData(
@@ -453,9 +545,15 @@ async function main(): Promise<void> {
   // stateRoot + transcriptDir on every exit path.
   let exitCode = 1;
   let handle: DaemonHandle | null = null;
+  let gitFixture: GitFixture | null = null;
   try {
-    // Each synthetic session: distinct id + transcript; cwd/project_dir = the real
-    // repo so git actually runs.
+    // A hermetic throwaway repo is the git target for every session — safe to
+    // churn, and independent of the developer's checkout state.
+    gitFixture = setupGitFixture();
+    const gitTarget = gitFixture.repoDir;
+
+    // Each synthetic session: distinct id + transcript; cwd/project_dir = the
+    // fixture repo so git actually runs against real (churnable) state.
     const sessions = Array.from({ length: SESSIONS }, (_, i) => {
       const id = `load-sess-${i}-${process.pid}`;
       const transcriptPath = path.join(transcriptDir, `${id}.jsonl`);
@@ -463,7 +561,7 @@ async function main(): Promise<void> {
       return {
         id,
         transcriptPath,
-        hookData: makeHookData(id, transcriptPath, REPO_ROOT, REPO_ROOT),
+        hookData: makeHookData(id, transcriptPath, gitTarget, gitTarget),
       };
     });
 
@@ -472,7 +570,8 @@ async function main(): Promise<void> {
     console.error(
       `daemon up (${values.daemon}${values.profile ? " +cpuprof" : ""}); ` +
         `${SESSIONS} sessions @ ${INTERVAL_MS}ms for ${DURATION_MS / 1000}s` +
-        `${values.churn ? " (churn)" : ""}`,
+        `${values.churn ? " (churn)" : ""}` +
+        `${values["git-churn"] ? " (git-churn)" : ""}`,
     );
 
     // Warm-up: establish every session's byte cursor and let the one-time cold
@@ -482,7 +581,7 @@ async function main(): Promise<void> {
     // amortized over a session's hundreds of renders and must not dominate p99.
     for (let round = 0; round < 3; round++) {
       await Promise.all(
-        sessions.map((s) => oneRender(handle.sockPath, s.hookData, REPO_ROOT)),
+        sessions.map((s) => oneRender(handle.sockPath, s.hookData, gitTarget)),
       );
     }
     await new Promise((r) => setTimeout(r, 250));
@@ -491,7 +590,24 @@ async function main(): Promise<void> {
     runStart = start;
     const timers: NodeJS.Timeout[] = [];
     let churnCounter = 0;
+    let gitChurnCounter = 0;
+    const headContent = fs.readFileSync(gitFixture.headPath);
     await new Promise<void>((resolveRun) => {
+      // [LAW:decomposition] git-churn is a REPO-level stressor, not a session
+      // one: one HEAD rewrite invalidates the shared git-cache entry for every
+      // session at once. Driving it from a single interval (rather than inside
+      // each session's tick) keeps gitChurnWrites an honest count of file ops
+      // and keeps the redundant writes the daemon would just debounce away off
+      // the per-render hot path. Content-identical rewrite → fs.watch fires →
+      // the cache drops its entry (debounced) → the next render misses and pays
+      // the full subprocess fan-out. Safe: HEAD stays a valid ref.
+      if (values["git-churn"]) {
+        const gitChurn = setInterval(() => {
+          gitChurnCounter++;
+          fs.writeFileSync(gitFixture!.headPath, headContent);
+        }, GIT_CHURN_INTERVAL_MS);
+        timers.push(gitChurn);
+      }
       for (const s of sessions) {
         const tick = setInterval(() => {
           if (values.churn) {
@@ -513,7 +629,7 @@ async function main(): Promise<void> {
               }) + "\n",
             );
           }
-          void oneRender(handle.sockPath, s.hookData, REPO_ROOT).then(
+          void oneRender(handle.sockPath, s.hookData, gitTarget).then(
             (sample) => samples.push(sample),
           );
         }, INTERVAL_MS);
@@ -555,6 +671,7 @@ async function main(): Promise<void> {
       sessions: SESSIONS,
       intervalMs: INTERVAL_MS,
       churn: values.churn,
+      gitChurn: values["git-churn"],
       transcriptLines: TRANSCRIPT_LINES,
       daemon: values.daemon,
       config: values.config ?? "default",
@@ -598,6 +715,7 @@ async function main(): Promise<void> {
         .filter((s) => s.outcome === "budget_exceeded")
         .map((s) => Math.round(s.atMs)),
       churnAppends: churnCounter,
+      gitChurnWrites: gitChurnCounter,
       budgetMs: TOTAL_BUDGET_MS,
       // Pass = the ticket's acceptance under SUSTAINED load: steady p99 within the
       // client budget, zero steady over-budget, and zero connection failures at any
@@ -644,6 +762,7 @@ async function main(): Promise<void> {
     exitCode = summary.pass ? 0 : 1;
   } finally {
     handle?.cleanup();
+    gitFixture?.cleanup();
     try {
       fs.rmSync(stateRoot, { recursive: true, force: true });
     } catch {}
