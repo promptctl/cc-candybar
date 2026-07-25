@@ -256,9 +256,16 @@ function setupGitFixture(): GitFixture {
     execFileSync("git", args, {
       cwd,
       stdio: "pipe",
-      // Deterministic identity + no user hooks/config bleeding in.
+      // [LAW:effects-at-boundaries] Deterministic identity + a hermetic git:
+      // GIT_CONFIG_GLOBAL=/dev/null and GIT_CONFIG_NOSYSTEM neutralize the
+      // dev's ~/.gitconfig and system config, so a non-standard global
+      // core.hooksPath or a failing user commit hook can't leak in and crash
+      // the gate with an opaque trace. Identity overrides alone control only
+      // the commit author; the config env vars are what actually seal the box.
       env: {
         ...process.env,
+        GIT_CONFIG_GLOBAL: "/dev/null",
+        GIT_CONFIG_NOSYSTEM: "1",
         GIT_AUTHOR_NAME: "cbh",
         GIT_AUTHOR_EMAIL: "cbh@t.t",
         GIT_COMMITTER_NAME: "cbh",

@@ -238,6 +238,11 @@ export function parseStatusV2(stdout: string): CoreStatus {
       const rest = line.slice(2);
       if (rest.startsWith("branch.oid ")) {
         const v = rest.slice("branch.oid ".length).trim();
+        // Fixed 7-char truncation is the display contract. `git rev-parse
+        // --short` auto-lengthens on collision, but re-spawning it here to
+        // recover that would undo this segment's whole point — one porcelain=v2
+        // read instead of a fan-out. The sha is display-only (never a lookup
+        // key), so a 7-char ambiguity in a >1M-object repo is cosmetic.
         sha = v === "(initial)" ? ABSENT : ok(v.slice(0, 7));
       } else if (rest.startsWith("branch.head ")) {
         const v = rest.slice("branch.head ".length).trim();
