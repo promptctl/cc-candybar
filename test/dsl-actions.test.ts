@@ -357,6 +357,69 @@ describe("2de.12 — bounded set action", () => {
   });
 });
 
+// ─── bare set-int action (numeric-display caveat) ───────────────────────────────
+
+// [LAW:no-silent-failure] brandon-menus-bn5.3 (I3): a set-int gates as an UNBOUNDED
+// int; a BARE `{{ action }}` on it writes its display verbatim as the value (the
+// picker/menu supplies the page via boundValue, but a manual button supplies the
+// display — the "open at page 0" pattern). The display IS the written value, so it
+// must be NUMERIC; a non-numeric display is not caught at load (the display is a
+// render-time template, possibly dynamic) but is rejected LOUDLY at the wire by the
+// int gate. These lock in that contract end-to-end (realize → gate → verb throw).
+describe("brandon-menus-bn5.3 I3 — bare set-int action requires a numeric display", () => {
+  const SRC = `{
+    globals: {},
+    variables: {
+      'session.id': { kind: 'input', path: 'session_id', default: '' },
+      page: { kind: 'state', key: 'theme-page', default: '-1' },
+    },
+    actions: {
+      openAt0: { set: 'theme-page', int: true },
+    },
+    segments: {
+      ok:  { template: '{{ action "openAt0" "0" }}',  bg: 'surface', fg: 'foreground' },
+      bad: { template: '{{ action "openAt0" "▸" }}', bg: 'surface', fg: 'foreground' },
+    },
+    root: { v: ['ok', 'bad'] },
+  }`;
+
+  const urlWriting = (out: string, value: string): string => {
+    const url = extractUrls(out).find((u) =>
+      effectsOf(u).some(
+        (e) => e.args[1] === "theme-page" && e.args[2] === value,
+      ),
+    );
+    if (!url) throw new Error(`no clickable writing theme-page=${value}`);
+    return url;
+  };
+
+  test("a NUMERIC bare display writes the page index (the manual open-at-page pattern)", () => {
+    const { render, click, sessionState, dispose } = buildRuntime(SRC);
+    click(urlWriting(render(), "0"));
+    expect(sessionState.get("s1", "theme-page")).toBe("0");
+    dispose();
+  });
+
+  test("a NON-numeric bare display is rejected LOUDLY at the wire (must be an integer)", () => {
+    const { render, click, sessionState, dispose } = buildRuntime(SRC);
+    const bad = urlWriting(render(), "▸");
+    // The realize path DID emit the click (the display becomes the value); the int
+    // gate rejects it at apply time — the verb throws BAD_REQUEST, not a silent no-op.
+    expect(() => click(bad)).toThrow(/must be an integer/);
+    // And state is untouched — the rejection is loud, never a silent corruption.
+    expect(sessionState.get("s1", "theme-page")).toBeNull();
+    dispose();
+  });
+
+  test("the derived int gate rejects a non-integer directly (clear reason)", () => {
+    const { dispose } = buildRuntime(SRC); // registers the theme-page int gate
+    const res = validateStateWrite("theme-page", "▸");
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.reason).toMatch(/must be an integer, got "▸"/);
+    dispose();
+  });
+});
+
 // ─── copy / open actions ────────────────────────────────────────────────────────
 
 describe("2de.12 — copy / open actions derive no gate", () => {
