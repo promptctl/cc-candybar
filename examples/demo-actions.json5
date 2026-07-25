@@ -1,8 +1,26 @@
 // cc-candybar: demo-actions.json5
 //
-// Demonstrates all 8 action kinds, the picker widget, the link helper,
-// all layout forms (flat rows, predicate rows via raw root grammar,
-// group sugar), and all 3 group forms (standalone, accordion, nested).
+// The DEMO CATALOG — it deliberately spells out every primitive form the
+// interaction substrate is built from, including the low-level ones a real
+// config should never hand-assemble. It is NOT the canonical way to write a bar;
+// the bundled default (src/config/default-dsl-config.ts) is. Demonstrates all 8
+// action kinds, the {{ picker }} helper, the link helper, all layout forms (flat
+// rows, predicate rows via raw root grammar, group sugar), and all 3 group forms
+// (standalone, accordion, nested).
+//
+// CANONICAL vs DEMO (recorded for brandon-menus-bn5 IMPROVE/FOCUS — the curated
+// surface an author actually reaches for vs. the mechanism this file exposes):
+//   CANONICAL (stdlib — what a real config uses):
+//     • {{ menu "apply" "page" [closeOnPick] [paged] [key] }} — THE picker
+//       disclosure. One call = trigger glyph + drop-below picker body + synthesized
+//       open-state (see the "Theme picker" section for the desugaring it replaces).
+//     • {{ action "name" … }} for copy/open (clipboard, links) and set:from/int.
+//     • kind: "group" — the disclosure for an ARBITRARY layout body (not a picker).
+//   DEMO-ONLY (shown here to teach the mechanism; not the tool to reach for):
+//     • the manual picker disclosure: a {set,to} open/close action + a standalone
+//       {{ picker }} segment + a when-gated row — i.e. {{ menu }} written out by
+//       hand (Theme/Style picker sections below).
+//     • steppers ({set,min,max,by}) and cyclers ({set,cycle}) as bare {{ action }}.
 //
 // Point CC_CANDYBAR_CONFIG at this file to try it:
 //   CC_CANDYBAR_CONFIG=examples/demo-actions.json5 pnpm demo
@@ -139,6 +157,15 @@
     },
 
     // ── Theme picker ───────────────────────────────────────────────────────
+    // DEMO-ONLY: this is the manual disclosure that {{ menu }} desugars TO. The
+    // canonical form is one call — `{{ menu "applyTheme" "themePage" false true }}`
+    // in a trigger segment — which synthesizes the open-state var + toggle and
+    // drops the picker below the row. The three parts spelled out here (the
+    // openThemeMenu {set,to} action on themeControl above, this standalone
+    // {{ picker }} segment, and the when-gated row in root) are exactly what that
+    // one call replaces. See the bundled default's styleControl for the canonical
+    // {{ menu }} in use. Kept here to show the mechanism, not as a form to copy.
+    //
     // {{ picker "applyAction" "pageAction" closeOnPick paged }}
     //
     //   applyAction  — a set+from action; the picker draws one cell per option

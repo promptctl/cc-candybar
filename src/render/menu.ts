@@ -35,13 +35,12 @@
 
 import type { RichText } from "@promptctl/rich-js";
 import type { FuncMap } from "@promptctl/go-template-js";
+import { menuMember, menuStateKey } from "../config/menu-keys.js";
 import {
-  MENU_CLOSED,
-  MENU_GLYPH_CLOSED,
-  MENU_GLYPH_OPEN,
-  menuMember,
-  menuStateKey,
-} from "../config/menu-keys.js";
+  DISCLOSURE_CLOSED,
+  DISCLOSURE_GLYPH_CLOSED,
+  DISCLOSURE_GLYPH_OPEN,
+} from "../config/disclosure.js";
 import { effectsUrl, VERB_SET_STATE } from "../click/wire.js";
 import { linkFragment, readVar, type ActionRuntime } from "./action.js";
 import { renderPicker } from "./picker.js";
@@ -142,9 +141,9 @@ function renderMenu(
   // GATE source (deriveActionValidators); both keys are independently gated, so the
   // coupled batch passes the same wire gate every click does [LAW:single-enforcer].
   const sessionId = readVar(action.store, "session.id");
-  const successor = open ? MENU_CLOSED : member;
+  const successor = open ? DISCLOSURE_CLOSED : member;
   const glyph = linkFragment(
-    open ? MENU_GLYPH_OPEN : MENU_GLYPH_CLOSED,
+    open ? DISCLOSURE_GLYPH_OPEN : DISCLOSURE_GLYPH_CLOSED,
     effectsUrl([
       {
         verb: VERB_SET_STATE,
