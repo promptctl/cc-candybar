@@ -26,18 +26,23 @@ import { createEngine } from "@promptctl/go-template-js";
 import type { ActionDecl } from "../action.js";
 import type { Mutable, ValidateCtx } from "./validate-core.js";
 import {
-  MENU_CLOSED,
   MENU_NS,
   menuActionName,
   menuMember,
   menuStateKey,
 } from "../menu-keys.js";
 import {
+  DISCLOSURE_CLOSED,
+  disclosureCycleAction,
+  disclosureStateVar,
+} from "../disclosure.js";
+import {
   walkNodes,
   type RawDslConfig,
   type VariableDecl,
 } from "../dsl-types.js";
 import { findKeyLine } from "./diagnostics.js";
+import { reservedNamespaceCollisions } from "./reserved-namespace.js";
 
 // [LAW:single-enforcer] The helper-name a `{{ menu … }}` call uses — the same
 // string the render FuncMap registers. A segment "hosts a menu" iff its template
@@ -106,18 +111,9 @@ export function synthesizeMenuDecls(
   // user name under it is rejected whether or not any menu is placed this load, so
   // the reservation is a stable contract ("you never author menus.*"), not a rule
   // that only switches on when synthesis happens to collide. Runs before any early
-  // return so a `menus.*` user name can never load silently.
-  for (const section of ["variables", "actions", "segments"] as const) {
-    for (const name of Object.keys(out[section] ?? {})) {
-      if (name.startsWith(MENU_NS)) {
-        menuIssue(
-          ctx,
-          `${section}.${name}`,
-          `"${name}" is in the reserved "${MENU_NS}" namespace (synthesized by {{ menu }} helpers) — rename it`,
-        );
-      }
-    }
-  }
+  // return so a `menus.*` user name can never load silently. The check is the
+  // disclosure primitive's shared enforcer (mirroring group sugar's `groups.`).
+  reservedNamespaceCollisions(ctx, out, MENU_NS, "{{ menu }} helpers");
 
   // [LAW:no-silent-failure] A menu derives its identity from the SEGMENT it sits
   // in (the published segment name) plus its own apply arg; a `{{ define }}`
@@ -264,11 +260,11 @@ export function synthesizeMenuDecls(
       // [LAW:types-are-the-program] A member equal to the closed sentinel makes
       // the cycle [closed, "closed"] — two identical members, leaving the menu
       // unopenable. The only apply name that breaks a menu; reject it at load.
-      if (member === MENU_CLOSED) {
+      if (member === DISCLOSURE_CLOSED) {
         menuIssue(
           ctx,
           `segments.${segName}`,
-          `segment "${segName}" has a {{ menu }} whose apply action is named "${MENU_CLOSED}", which collides with the menu's closed-state sentinel and leaves it unopenable. Rename the action.`,
+          `segment "${segName}" has a {{ menu }} whose apply action is named "${DISCLOSURE_CLOSED}", which collides with the menu's closed-state sentinel and leaves it unopenable. Rename the action.`,
         );
         continue;
       }
@@ -305,11 +301,11 @@ export function synthesizeMenuDecls(
       }
       claimed.add(identity);
       stateKeys.add(stateKey);
-      // [LAW:one-source-of-truth] Members ordered closed-first: an unset/foreign
-      // value counts as the first member (the cycle's "unknown ⇒ first" rule), so
-      // a never-clicked menu renders ▸ and a click opens it; a shared key holding
-      // one member auto-closes its siblings.
-      actions[identity] = { set: stateKey, cycle: [MENU_CLOSED, member] };
+      // [LAW:one-source-of-truth] The shared disclosure toggle: members ordered
+      // closed-first (an unset/foreign value counts as the first member — the
+      // cycle's "unknown ⇒ first" rule — so a never-clicked menu renders ▸ and a
+      // click opens it; a shared key holding one member auto-closes its siblings).
+      actions[identity] = disclosureCycleAction(stateKey, member);
     }
   }
 
@@ -317,11 +313,7 @@ export function synthesizeMenuDecls(
 
   const variables: Record<string, VariableDecl> = {};
   for (const stateKey of stateKeys) {
-    variables[stateKey] = {
-      kind: "state",
-      key: stateKey,
-      default: MENU_CLOSED,
-    };
+    variables[stateKey] = disclosureStateVar(stateKey, DISCLOSURE_CLOSED);
   }
 
   out.variables = { ...(out.variables ?? {}), ...variables };

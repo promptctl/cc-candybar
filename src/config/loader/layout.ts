@@ -30,7 +30,15 @@ import {
   type VariableDecl,
 } from "../dsl-types.js";
 import type { ActionDecl } from "../action.js";
+import {
+  DISCLOSURE_CLOSED,
+  DISCLOSURE_GLYPH_CLOSED,
+  DISCLOSURE_GLYPH_OPEN,
+  disclosureCycleAction,
+  disclosureStateVar,
+} from "../disclosure.js";
 import { findKeyLine } from "./diagnostics.js";
+import { reservedNamespaceCollisions } from "./reserved-namespace.js";
 import {
   describeType,
   describeValue,
@@ -385,9 +393,11 @@ export const validateRoot = (
 // prefix is rejected so synthesis can never silently collide.
 export const GROUP_NS = "groups.";
 
-// The "no group open" sentinel a group's cycle starts from. Group names are
-// forbidden from equaling it, so a cycle's two members are always distinct.
-const GROUP_CLOSED = "closed";
+// [LAW:one-source-of-truth] The closed sentinel and ▸/▾ glyphs are the shared
+// disclosure primitive (src/config/disclosure.ts) — a group is one of its two
+// body-kinds, so it reuses DISCLOSURE_CLOSED / DISCLOSURE_GLYPH_* rather than
+// keeping a second copy that could drift from the menu's. Group names are
+// forbidden from equaling the sentinel, so a cycle's two members are distinct.
 
 // [LAW:types-are-the-program] A group name must be template-addressable — it is
 // spliced into the synthesized `when` predicate and toggle template as
@@ -395,9 +405,6 @@ const GROUP_CLOSED = "closed";
 // only. The pattern IS that constraint; it also excludes quotes, slashes, and
 // dots, so a name needs no escaping anywhere it is spliced.
 const GROUP_NAME_RE = /^[A-Za-z_][A-Za-z0-9_]*$/;
-
-const GROUP_GLYPH_CLOSED = "▸";
-const GROUP_GLYPH_OPEN = "▾";
 
 function groupNameSpec(): FieldSpec<string> {
   return {
@@ -408,11 +415,11 @@ function groupNameSpec(): FieldSpec<string> {
       if (
         typeof v !== "string" ||
         !GROUP_NAME_RE.test(v) ||
-        v === GROUP_CLOSED
+        v === DISCLOSURE_CLOSED
       ) {
         ctx.issues.push({
           path: `${path}.${field}`,
-          message: `a group "name" must be an identifier (letters, digits, _; not starting with a digit) and not the reserved "${GROUP_CLOSED}", got ${describeValue(v)}`,
+          message: `a group "name" must be an identifier (letters, digits, _; not starting with a digit) and not the reserved "${DISCLOSURE_CLOSED}", got ${describeValue(v)}`,
           line: findKeyLine(ctx.source, ["root"]),
         });
         return undefined;
@@ -571,17 +578,10 @@ export function synthesizeGroupDecls(
   const groups = ctx.groups;
   if (groups.length === 0) return;
 
-  for (const section of ["variables", "actions", "segments"] as const) {
-    for (const name of Object.keys(out[section] ?? {})) {
-      if (name.startsWith(GROUP_NS)) {
-        groupIssue(
-          ctx,
-          `${section}.${name}`,
-          `"${name}" is in the reserved "${GROUP_NS}" namespace (synthesized by group nodes) — rename it`,
-        );
-      }
-    }
-  }
+  // [LAW:single-enforcer] The disclosure primitive's shared reserved-namespace
+  // enforcer (mirroring {{ menu }}'s `menus.`) — a user name under `groups.`
+  // would silently shadow a synthesized artifact.
+  reservedNamespaceCollisions(ctx, out, GROUP_NS, "group nodes");
 
   const seen = new Set<string>();
   for (const g of groups) {
@@ -617,10 +617,10 @@ export function synthesizeGroupDecls(
   const defaultByKey = new Map<string, string>();
   for (const g of groups) {
     const key = groupStateKey(g);
-    if (!defaultByKey.has(key)) defaultByKey.set(key, GROUP_CLOSED);
+    if (!defaultByKey.has(key)) defaultByKey.set(key, DISCLOSURE_CLOSED);
     if (g.open === true) {
       const prior = defaultByKey.get(key)!;
-      if (prior !== GROUP_CLOSED) {
+      if (prior !== DISCLOSURE_CLOSED) {
         groupIssue(
           ctx,
           g.path,
@@ -645,22 +645,20 @@ export function synthesizeGroupDecls(
       (other) => other !== g && g.path.startsWith(other.path + "."),
     ).length;
     const indent = "  ".repeat(depth);
-    variables[name] = {
-      kind: "state",
-      key,
-      default: defaultByKey.get(key)!,
-    };
-    // Members are ordered default-state-first ("closed" first): an unset or
-    // sibling-held key counts as the first member, so the toggle renders ▸ and
-    // clicks to its own name — expand, auto-closing the sibling on a shared key.
-    actions[name] = { set: key, cycle: [GROUP_CLOSED, g.name] };
+    // [LAW:one-source-of-truth] The shared disclosure toggle: one state var + one
+    // binary cycle action, both from the primitive. Members are ordered default-
+    // state-first (closed first): an unset or sibling-held key counts as the first
+    // member, so the toggle renders ▸ and clicks to its own name — expand, auto-
+    // closing the sibling on a shared key.
+    variables[name] = disclosureStateVar(key, defaultByKey.get(key)!);
+    actions[name] = disclosureCycleAction(key, g.name);
     // [LAW:representation] The disclosure glyph trails the label it gates, so an
     // arrow reads as belonging to the text on its LEFT — adjacent toggles
     // ("details ▸" "links ▸") stay unambiguous even when abutted. `indent` is a
     // structural left-margin (nesting depth) and stays leading; the glyph is a
     // trailing affordance on the label, never a prefix.
     segments[name] = {
-      template: `{{ action "${name}" "${indent}${label} ${GROUP_GLYPH_CLOSED}" "${indent}${label} ${GROUP_GLYPH_OPEN}" }}`,
+      template: `{{ action "${name}" "${indent}${label} ${DISCLOSURE_GLYPH_CLOSED}" "${indent}${label} ${DISCLOSURE_GLYPH_OPEN}" }}`,
       ...(g.bg !== undefined && { bg: g.bg }),
       ...(g.fg !== undefined && { fg: g.fg }),
     };

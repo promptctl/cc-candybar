@@ -28,17 +28,11 @@
 // can never silently collide.
 export const MENU_NS = "menus.";
 
-// The "no menu open" sentinel a key starts from and returns to on close. A
-// menu's member name is its apply-action name; an apply action named exactly
-// this would make the cycle [closed, "closed"] (two identical members, never
-// openable), which the synthesis pass rejects.
-export const MENU_CLOSED = "closed";
-
-// [LAW:representation] Disclosure glyph vocabulary — identical to group sugar so
-// every disclosure across the bar reads the same (trailing the label/content it
-// gates, per pdu.8): collapsed ▸, expanded ▾.
-export const MENU_GLYPH_CLOSED = "▸";
-export const MENU_GLYPH_OPEN = "▾";
+// [LAW:one-source-of-truth] The closed sentinel and the ▸/▾ glyphs are the shared
+// disclosure primitive, not menu-specific — they live in src/config/disclosure.ts
+// (DISCLOSURE_CLOSED / DISCLOSURE_GLYPH_*) so group sugar and {{ menu }} cannot
+// drift. This module keeps only the menu's own IDENTITY derivation (member = apply
+// name; key = optional shared key), which group sugar derives differently.
 
 // [LAW:types-are-the-program] Collapse an arbitrary name to an identifier-shaped
 // id so the synthesized var/action/SessionState-key names carry no dots or
