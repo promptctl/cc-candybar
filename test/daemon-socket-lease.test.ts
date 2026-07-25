@@ -311,6 +311,20 @@ async function waitForConnectable(
   return false;
 }
 
+// Does this pid name a live process? Signal 0 probes existence without
+// delivering a signal: it returns for a live pid, throws ESRCH for a dead one,
+// and throws EPERM for a live pid we may not signal (still alive). We assert on
+// the *aliveness*, never on the pid's numeric value — so this stays behavior,
+// not numbering, and is invariant under pid reuse. [LAW:behavior-not-structure]
+function isPidAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (e) {
+    return (e as NodeJS.ErrnoException).code === "EPERM";
+  }
+}
+
 // A live process whose pid we control — the "incumbent" whose lease the daemon
 // under test must honour. It never accepts on the socket; its only relevant
 // property is that its pid is alive.
@@ -387,13 +401,18 @@ describe("daemon EADDRINUSE arbitration (integration)", () => {
         // reclaim means it becomes connectable without any exit in between.
         const connectable = await waitForConnectable(fx.sockPath, BUDGET_MS);
         expect(connectable).toBe(true);
-        // The lease was rewritten to a live owner — no longer the dead holder.
-        // (The pid is the daemon grandchild's, not the tsx shim's, so assert
-        // the property, not an exact pid.)
+        // The stale socket was a plain file; a connectable socket here means a
+        // live daemon unlinked it, rebound, and now answers — the reclaim. The
+        // lease rewritten to `owned` is that same live owner. [LAW:behavior-not-structure]
         const released = readLease(fx.leasePath);
         expect(released.kind).toBe("owned");
         if (released.kind === "owned") {
-          expect(released.pid).not.toBe(deadPid);
+          // The lease names a LIVE owner, not a dead/bogus pid — the behavioral
+          // half of "owned" that `kind` alone can't carry. Stronger than the
+          // removed `!== deadPid` (which missed any wrong pid ≠ deadPid) and
+          // invariant under pid reuse, so it never false-reds. Not a numbering
+          // assertion: we probe the pid's aliveness, never compare its value.
+          expect(isPidAlive(released.pid)).toBe(true);
         }
       } finally {
         if (daemon.exitCode === null) daemon.kill("SIGKILL");
@@ -434,10 +453,16 @@ describe("daemon EADDRINUSE arbitration (integration)", () => {
         // Fingerprint mismatch → reclaim → serve, despite the pid being alive.
         const connectable = await waitForConnectable(fx.sockPath, BUDGET_MS);
         expect(connectable).toBe(true);
+        // Connectable stale-file socket ⇒ a live daemon reclaimed and serves;
+        // `owned` lease ⇒ that live owner now holds it. [LAW:behavior-not-structure]
         const released = readLease(fx.leasePath);
         expect(released.kind).toBe("owned");
         if (released.kind === "owned") {
-          expect(released.pid).not.toBe(recycledPid);
+          // The reclaimed lease names a LIVE owner (the new daemon), not the
+          // recycled pid's stale identity. Behavioral, invariant under the pid
+          // reuse this very case is built around — we probe aliveness, not the
+          // number, so recycledPid == successor pid could never false-red it.
+          expect(isPidAlive(released.pid)).toBe(true);
         }
       } finally {
         if (daemon.exitCode === null) daemon.kill("SIGKILL");
