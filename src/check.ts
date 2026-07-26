@@ -265,7 +265,15 @@ function loadRegisterRender(
     // resolution is null — the config default over the floor, exactly what the
     // daemon renders for a session that has never clicked.
     const effectiveTheme = effectiveThemeName(null, config.globals.palette);
-    return renderDsl(
+    // [LAW:no-silent-failure] A segment whose template THROWS while evaluating
+    // (an `{{ action }}` display-arity mismatch, a MissingFieldError from a
+    // partially-declared variable) renders as a visible ⚠ error cell — partial
+    // rendering, the daemon's channel for a human looking at the bar. The blind
+    // authoring agent is not looking at the bar; check collects the same errors
+    // through the render's observer seam and fails the verdict, so exit 0 never
+    // blesses a bar that renders ⚠.
+    const segmentErrors: string[] = [];
+    const rendered = renderDsl(
       config,
       compiled,
       store,
@@ -281,7 +289,19 @@ function loadRegisterRender(
         padding: config.globals.padding ?? DEFAULT_PADDING,
         charset: config.globals.charset ?? DEFAULT_CHARSET,
       },
+      undefined,
+      (segName, message) =>
+        segmentErrors.push(`segment "${segName}": ${message}`),
     );
+    if (segmentErrors.length > 0) {
+      throw new Error(
+        `config renders with ${segmentErrors.length} segment error${
+          segmentErrors.length === 1 ? "" : "s"
+        } (the daemon would render ⚠ error cells):\n` +
+          segmentErrors.map((m) => `  ${m}`).join("\n"),
+      );
+    }
+    return rendered;
   } finally {
     // [LAW:single-enforcer] The registry owns every async handle the config
     // declared (timers, fs watchers, git subscriptions); a one-shot check must

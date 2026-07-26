@@ -108,6 +108,12 @@ export interface NodeRenderCtx {
   // Advance the walk-owned hue cursor by one unit and return that unit's shift.
   nextHueShift(): number;
   readonly perSegmentSink?: Map<string, readonly RichText[]>;
+  // [LAW:no-silent-failure] Optional observer for the per-segment render catch
+  // below: a caught evaluation error renders as a visible ⚠ error cell (partial
+  // rendering — the daemon's channel), AND is reported here so a headless caller
+  // (`cc-candybar check`, a blind authoring agent's eyes) can turn it into a
+  // text verdict instead of blessing a bar it cannot see.
+  readonly onSegmentError?: (segName: string, message: string) => void;
   // [LAW:locality-or-seam] The menu seam, injected as capabilities so this module
   // never imports the menu feature. `beginSegment` runs BEFORE a segment template
   // evaluates: it publishes the segment name so a `{{ menu }}` can derive its
@@ -312,13 +318,9 @@ const segmentType: NodeType<"segment"> = {
       }
       return laidLines;
     } catch (err) {
-      return [
-        [
-          new RichText(
-            `⚠ ${node.name}: ${(err as Error).message ?? String(err)}`,
-          ),
-        ],
-      ];
+      const message = (err as Error).message ?? String(err);
+      ctx.onSegmentError?.(node.name, message);
+      return [[new RichText(`⚠ ${node.name}: ${message}`)]];
     }
   },
 };

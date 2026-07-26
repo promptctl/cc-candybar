@@ -522,6 +522,12 @@ export function renderDsl(
   // place in a one-segment render), but for debug visibility this is the
   // natural per-segment shape.
   perSegmentSink?: Map<string, readonly RichText[]>,
+  // [LAW:no-silent-failure] Optional observer for per-segment evaluation errors.
+  // A failing segment renders as a visible ⚠ error cell (partial rendering, the
+  // daemon's author-facing channel) — a headless caller with no one looking at
+  // the bar (`cc-candybar check`) passes this to receive the same errors as
+  // data and fold them into its text verdict.
+  onSegmentError?: (segName: string, message: string) => void,
 ): string {
   // [LAW:one-source-of-truth] Inject the usable width as `term.cols` from the
   // SAME opts.width the strip wraps to (below), so a width-paginated widget reads
@@ -620,6 +626,7 @@ export function renderDsl(
       padding: opts.padding,
       nextHueShift,
       perSegmentSink,
+      onSegmentError,
       beginSegment,
       collectDrops,
       focusTint,
