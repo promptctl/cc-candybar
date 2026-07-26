@@ -153,21 +153,19 @@
     // label is single-sourced from globals.palette + the session pick. The
     // applyTheme action writes the SessionState 'theme' key directly (see below);
     // effectiveThemeName folds that pick over globals.palette every render.
-    // The theme picker's page cursor (open/closed is the synthesized menus.* key
-    // the trigger's {{ menu }} owns — NOT this var). Default page 0; the
-    // disclosure resets it to 0 on every toggle.
-    themePage: { kind: "state", key: "theme-page", default: "0" },
+    // No page-cursor var: the trigger's {{ menu }} synthesizes its own page
+    // cursor (state var + int action) under the reserved menus.* namespace,
+    // reset to 0 on every disclosure toggle.
 
     // ── Budget (legacy today.amount = 5.0; default is 50) ────────────────────
     "today.budget.amount": { kind: "literal", value: 5 },
   },
 
   actions: {
-    // ── Theme picker behaviors (decoupled by name from the trigger segment) ──
+    // ── Theme picker behavior (decoupled by name from the trigger segment) ───
     // applyTheme's option domain is the theme name list; the picker binds each
-    // option's value into this set. themePage is the picker's int page cursor.
+    // option's value into this set. Its {{ menu }} synthesizes the page cursor.
     applyTheme: { set: "theme", from: "themes" },
-    themePage: { set: "theme-page", int: true },
   },
 
   segments: {
@@ -206,12 +204,13 @@
 
     // The legacy panel's theme-cycle, now a self-contained {{ menu }} disclosure.
     // 🎨 name + a ▸/▾ toggle whose picker body drops full-width onto the line
-    // below when open (closeOnPick=false stay-open so themes can be tried in a
-    // row; paged=true slices into ←/→ pages at term width). No per-segment
-    // `palette:` override — that would pin a static theme and stop it following
-    // the session pick.
+    // below when open. The defaults are exactly the legacy behavior — stay-open
+    // so themes can be tried in a row, paged into ←/→ pages at term width — so
+    // the apply name is the whole declaration (the page cursor is synthesized).
+    // No per-segment `palette:` override — that would pin a static theme and
+    // stop it following the session pick.
     trigger: {
-      template: '🎨 {{ .theme.effective }} {{ menu "applyTheme" "themePage" false true }}',
+      template: '🎨 {{ .theme.effective }} {{ menu "applyTheme" }}',
       bg: "surface",
       fg: "foreground",
     },

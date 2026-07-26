@@ -55,15 +55,15 @@ export function extractActionRefs(template: string): Set<string> {
 }
 
 // [LAW:dataflow-not-control-flow] Extract the action names a `picker` OR `menu`
-// call references — both bind the SAME (apply, page) action pair as their FIRST
-// TWO string-literal args (`{{ picker "applyTheme" "themePage" true true }}`,
-// `{{ menu "applyTheme" "themePage" false true "key" }}`). A menu's body IS a
-// picker, so the existence check on those two refs is identical; one extractor
-// arms on either keyword [LAW:single-enforcer]. Same code/string-span walk as
-// extractActionRefs; the keyword arms the next literal as the apply name and the
-// one after as the page name (trailing bools/the menu key are captured only if
-// they fall in the first two literal slots, which they never do).
-const PICKER_OR_MENU_ARG_RE = /\b(?:picker|menu)\s+$/;
+// call references, for the load-time existence check. A `picker` binds an
+// (apply, page) action pair as its first two string-literal args
+// (`{{ picker "applyTheme" "themePage" true true }}`); a `menu` binds ONLY its
+// apply action (`{{ menu "applyTheme" (dict …) }}`) — its page cursor is
+// synthesized from identity, and the dict's option-name literals must never be
+// misread as action refs. A menu's body IS a picker, so the existence check is
+// identical; one extractor arms on either keyword with the keyword's own arg
+// count [LAW:single-enforcer]. Same code/string-span walk as extractActionRefs.
+const PICKER_OR_MENU_ARG_RE = /\b(picker|menu)\s+$/;
 export function extractPickerMenuRefs(template: string): Set<string> {
   const refs = new Set<string>();
   TEMPLATE_BLOCK_RE.lastIndex = 0;
@@ -75,7 +75,8 @@ export function extractPickerMenuRefs(template: string): Set<string> {
     let s: RegExpExecArray | null;
     STRING_LITERAL_RE.lastIndex = 0;
     while ((s = STRING_LITERAL_RE.exec(block)) !== null) {
-      if (PICKER_OR_MENU_ARG_RE.test(block.slice(cursor, s.index))) pending = 2;
+      const kw = PICKER_OR_MENU_ARG_RE.exec(block.slice(cursor, s.index));
+      if (kw !== null) pending = kw[1] === "picker" ? 2 : 1;
       if (pending > 0) {
         refs.add(s[0].slice(1, -1));
         pending--;

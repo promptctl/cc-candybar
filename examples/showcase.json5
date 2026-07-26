@@ -35,12 +35,9 @@
     // No `theme` display var: the trigger reads the daemon-resolved
     // `theme.effective` (bundled default). applyTheme writes the SessionState
     // 'theme' key directly; effectiveThemeName folds that over globals.palette.
-    // The theme picker's page cursor. With {{ menu }}, open/closed is the
-    // synthesized menus.* accordion key (derived from the control row), NOT this
-    // var — so this is purely the page index the picker paginates by; an unset or
-    // -1 value clamps to page 0. The int gate for 'theme-page' is derived from
-    // the picker's page action at load.
-    themePage: { kind: "state", key: "theme-page", default: "0" },
+    // No page-cursor var either: each {{ menu }} synthesizes its own page
+    // cursor (state var + int action) under the reserved menus.* namespace,
+    // alongside its open-state.
     // The per-segment hue-rotation step renderDsl reads (HUE_STEP_VAR), a
     // kind:'state' var (over the bundled literal) so the stepper drives it LIVE
     // (session over default). The range gate (0..60) is derived from the stepper.
@@ -53,9 +50,6 @@
     // exactly like the theme), so a style click reshapes the bar live. Empty
     // default renders as "(default)" and leaves the "powerline" floor in effect.
     activeStyle: { kind: "state", key: "style", default: "" },
-    // The style picker's page cursor, mirroring themePage — open/closed is the
-    // menus.* accordion key, this is just the page index.
-    stylePage: { kind: "state", key: "style-page", default: "0" },
 
     // ── Work-mode chip (the cycle-action showcase) ──────────────────────────
     // A 3-state status the cycleMode action advances; the glyph names the
@@ -79,14 +73,12 @@
     // rotate hue. The range gate owns the bounds.
     hueDown: { set: "hue-step", min: 0, max: 60, by: -2 },
     hueUp: { set: "hue-step", min: 0, max: 60, by: 2 },
-    // Apply a theme — the picker binds each option's value into this set.
+    // Apply a theme — the picker binds each option's value into this set. The
+    // {{ menu }} it feeds synthesizes its own page cursor; no page action here.
     applyTheme: { set: "theme", from: "themes" },
-    // The theme picker's page cursor: an unbounded int (−1 closed / 0..N).
-    themePage: { set: "theme-page", int: true },
 
-    // ── Style picker (mirror of the theme pair over the 'styles' domain) ────
+    // ── Style picker (mirror of the theme apply over the 'styles' domain) ───
     applyStyle: { set: "style", from: "styles" },
-    stylePage: { set: "style-page", int: true },
 
     // ── Work-mode cycler ────────────────────────────────────────────────────
     // Writes the successor of the current value, wrapping; members are ordered
@@ -109,12 +101,13 @@
     // No per-segment `palette:` override on purpose: that would pin a static
     // theme and stop it following the session pick. bg/fg resolve against the
     // live basePalette, so the control recolors with the bar.
-    //   {{ menu apply page closeOnPick paged }} — closeOnPick=false (stay-open,
-    //   try themes in a row), paged=true (slice into ←/→ pages at term width).
-    //   The disclosure's identity is DERIVED from this segment + the apply action
+    //   {{ menu "applyTheme" }} — the apply name is the whole declaration; the
+    //   page cursor is synthesized, and the defaults are the canonical path:
+    //   stay-open (try themes in a row) + paged (←/→ pages at term width). The
+    //   disclosure's identity is DERIVED from this segment + the apply action
     //   name, so nothing here names the menu or a key — see menu-keys.ts.
     trigger: {
-      template: '🎨 {{ .theme.effective }} {{ menu "applyTheme" "themePage" false true }}',
+      template: '🎨 {{ .theme.effective }} {{ menu "applyTheme" }}',
       bg: "surface",
       fg: "foreground",
     },
@@ -129,13 +122,14 @@
     },
 
     // The style control — the theme control's twin over the 'styles' domain, also
-    // a self-contained {{ menu }}. paged omitted ⇒ false ⇒ one full-width page
-    // (the style domain is small; FlexStrip soft-wraps if needed). No shared key,
-    // so this menu is INDEPENDENT of the theme menu — both can be open at once.
-    // (To make a set of menus mutually exclusive, pass the same trailing key
-    // string to each: {{ menu "applyStyle" "stylePage" false false "pickers" }}.)
+    // a self-contained {{ menu }}. The small style domain paginates to one page,
+    // so no arrows render under the paged default. No shared key, so this menu
+    // is INDEPENDENT of the theme menu — both can be open at once. (Rare knobs
+    // are named options in ONE trailing dict — to make a set of menus mutually
+    // exclusive, give each the same key: {{ menu "applyStyle" (dict "key"
+    // "pickers") }}; to wrap instead of paginate: (dict "paged" false).)
     styleControl: {
-      template: '✦ {{ if .activeStyle }}{{ .activeStyle }}{{ else }}(default){{ end }} {{ menu "applyStyle" "stylePage" }}',
+      template: '✦ {{ if .activeStyle }}{{ .activeStyle }}{{ else }}(default){{ end }} {{ menu "applyStyle" }}',
       bg: "surface",
       fg: "foreground",
     },

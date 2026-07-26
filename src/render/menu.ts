@@ -35,7 +35,13 @@
 
 import type { RichText } from "@promptctl/rich-js";
 import type { FuncMap } from "@promptctl/go-template-js";
-import { menuMember, menuStateKey } from "../config/menu-keys.js";
+import {
+  menuMember,
+  menuPageKey,
+  menuStateKey,
+  parseMenuOptions,
+  type MenuOptions,
+} from "../config/menu-keys.js";
 import {
   DISCLOSURE_CLOSED,
   DISCLOSURE_GLYPH_CLOSED,
@@ -82,30 +88,11 @@ export function collectMenuDrops(
   return fragments.flatMap((f) => (f as GlyphWithDrop)[MENU_DROP] ?? []);
 }
 
-// [LAW:single-enforcer] The page cursor's SessionState key, resolved from the page
-// ACTION name the menu binds (its second arg). renderPicker proves pageName is a
-// set-int when it builds the body, but the disclosure must reset the page even
-// while CLOSED (no body is built then), so it resolves the key here too — the SAME
-// set-int action, one source. A non-int page arg is an author error surfaced
-// loudly (composeWithDiagnostics shows it), never a silent skipped reset.
-function pageKeyOf(action: ActionRuntime, pageName: string): string {
-  const page = action.compiled.get(pageName);
-  if (!page || page.kind !== "set-int") {
-    throw new Error(
-      `{{ menu }} page action "${pageName}" must be an int action ({ set, int: true })`,
-    );
-  }
-  return page.key;
-}
-
 // Realize a `{{ menu }}` against the live placement + state: return its inline
 // glyph, carrying the (open) body as out-of-band metadata for the boundary.
 function renderMenu(
   applyName: string,
-  pageName: string,
-  closeOnPick: boolean,
-  paged: boolean,
-  sharedKey: string | undefined,
+  options: MenuOptions,
   runtime: MenuRuntime,
 ): RichText {
   const placement = runtime.current;
@@ -119,7 +106,12 @@ function renderMenu(
     );
   }
   const action = runtime.action;
-  const stateKey = menuStateKey(placement.segName, applyName, sharedKey);
+  // [LAW:one-source-of-truth] Identity — and the page-cursor key derived from it
+  // — comes from the SAME menu-keys derivation the loader synthesis used, so the
+  // key this render reads/writes is the key whose state var + int gate the
+  // loader emitted. No page-action argument to mis-wire.
+  const stateKey = menuStateKey(placement.segName, applyName, options.key);
+  const pageKey = menuPageKey(stateKey);
   const member = menuMember(applyName);
 
   // [LAW:dataflow-not-control-flow] Open ⇔ the state key holds this menu's member.
@@ -147,13 +139,7 @@ function renderMenu(
     effectsUrl([
       {
         verb: VERB_SET_STATE,
-        args: [
-          sessionId,
-          stateKey,
-          successor,
-          pageKeyOf(action, pageName),
-          "0",
-        ],
+        args: [sessionId, stateKey, successor, pageKey, "0"],
       },
     ]),
     false,
@@ -164,40 +150,48 @@ function renderMenu(
   // No shared mutation: the boundary reads this metadata to place the body.
   // (renderPicker is pure, so it is only built when open — skipping wasted
   // computation, gating no effect.)
+  // [LAW:one-source-of-truth] The body's page cursor is the identity-derived
+  // key (its synthesized state var is named by it, the disclosure-var
+  // convention), and CLOSING — the ✕ affordance or a closeOnPick pick — writes
+  // the disclosure back to the closed sentinel and resets the page, the same
+  // coupled pair the toggle glyph above writes. What the ▾ promised, ✕ delivers.
   glyph[MENU_DROP] = open
-    ? [renderPicker(applyName, pageName, closeOnPick, paged, action)]
+    ? [
+        renderPicker(
+          applyName,
+          { key: pageKey, stateVar: pageKey },
+          [
+            [stateKey, DISCLOSURE_CLOSED],
+            [pageKey, "0"],
+          ],
+          options.closeOnPick,
+          options.paged,
+          action,
+        ),
+      ]
     : [];
   return glyph;
 }
 
-// [LAW:dataflow-not-control-flow] One func; the two action NAMES select the
-// body's apply/page effects, the two optional bools are the bounded author
-// choices (closeOnPick, paged) — identical to `{{ picker }}`, since the body IS a
-// picker — and the optional trailing key is the accordion grouping: omitted ⇒ the
-// menu is independent (its own key), present ⇒ it shares that key with siblings
-// (mutually exclusive). One value, not a mode.
+// [LAW:dataflow-not-control-flow] One func; the apply-action NAME is the menu's
+// whole identity (the page cursor is derived from it, not passed), and the rare
+// knobs travel as ONE optional trailing `(dict …)` — closeOnPick (default
+// false: stay-open), paged (default true: a drop menu wants bounded height),
+// key (accordion grouping: omitted ⇒ independent, present ⇒ mutually exclusive
+// with siblings sharing it). Values, not modes. The loader gates the same dict
+// statically (staticDictEntries), so an old positional tail never reaches this
+// fn — it is a migration-pointing load error.
 //
 // [LAW:one-way-deps] Injected into the engine by registerDslConfig as data; the
 // generic engine never imports this module.
 export function menuFuncs(runtime: MenuRuntime): FuncMap {
   return {
     menu: {
-      fn: (
-        applyName: string,
-        pageName: string,
-        closeOnPick?: boolean,
-        paged?: boolean,
-        key?: string,
-      ) =>
-        renderMenu(
-          applyName,
-          pageName,
-          closeOnPick === true,
-          paged === true,
-          key,
-          runtime,
-        ),
-      argTypes: ["string", "string", "bool", "bool", "string"],
+      fn: (applyName: string, opts?: Record<string, unknown>) =>
+        // [LAW:one-source-of-truth] The same option reader the loader folds
+        // over the static dict — vocabulary, types, defaults live once.
+        renderMenu(applyName, parseMenuOptions(opts ?? {}), runtime),
+      argTypes: ["string", "dict"],
       returnType: "T",
     },
   };

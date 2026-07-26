@@ -240,35 +240,30 @@ describe("brandon-menu-abg — paged menu fits every page within term.cols", () 
 // rendered geometry (every line ≤ width; the → the abg bug ate is present on each
 // non-last dropped page), never the internal pagination shape.
 describe("brandon-menus-bn5.3 I2 — {{ menu }} DROP body fits within term.cols", () => {
-  // Two independent menus (no shared key) beside each other in ONE horizontal row.
-  // Each is `paged: true` so its body slices into ←/→ pages at the live width. The
-  // theme menu draws the large `themes` domain (the interesting pagination); the
-  // style menu draws the small `styles` domain. Opening a menu = writing its
-  // derived state key to its member (menus.<seg>.<apply> = <apply>); the page
-  // cursor is its <page> action's key (theme-page / style-page).
+  // Two independent menus (no shared key) beside each other in ONE horizontal
+  // row, each declaring ONLY its apply action — the bn5.6 acceptance shape. The
+  // default `paged: true` slices each body into ←/→ pages at the live width,
+  // and the page cursor (state var + int action) is SYNTHESIZED per state key
+  // (menuPageKey) — the hand-declared page var+action pair whose omission used
+  // to silently freeze the picker on page 0 no longer exists to forget. The
+  // theme menu draws the large `themes` domain (the interesting pagination);
+  // the style menu draws the small `styles` domain. Opening a menu = writing
+  // its derived state key to its member (menus.<seg>.<apply> = <apply>).
   function menuRowConfig(): string {
     return `{
       globals: {},
       variables: {
         'session.id': { kind: 'input', path: 'session_id', default: '' },
         'term.cols': { kind: 'input', path: 'term.cols', type: 'number', default: 80 },
-        // The page cursors: a paged menu needs a 'state' VARIABLE bound to each
-        // page key so renderPicker can READ the live page (the action of the same
-        // name gates the WRITE). This mirrors examples/showcase.json5 — omitting
-        // it makes the picker read "" and freeze on page 0.
-        themePage: { kind: 'state', key: 'theme-page', default: '0' },
-        stylePage: { kind: 'state', key: 'style-page', default: '0' },
       },
       actions: {
         applyTheme: { set: 'theme', from: 'themes' },
-        themePage: { set: 'theme-page', int: true },
         applyStyle: { set: 'style', from: 'styles' },
-        stylePage: { set: 'style-page', int: true },
       },
       segments: {
         label: { template: 'L', bg: 'surface', fg: 'foreground' },
-        themeMenu: { template: 'T {{ menu "applyTheme" "themePage" false true }}', bg: 'surface', fg: 'foreground' },
-        styleMenu: { template: 'S {{ menu "applyStyle" "stylePage" false true }}', bg: 'surface', fg: 'foreground' },
+        themeMenu: { template: 'T {{ menu "applyTheme" }}', bg: 'surface', fg: 'foreground' },
+        styleMenu: { template: 'S {{ menu "applyStyle" }}', bg: 'surface', fg: 'foreground' },
       },
       root: { h: ['label', 'themeMenu', 'styleMenu'] },
     }`;
@@ -276,6 +271,10 @@ describe("brandon-menus-bn5.3 I2 — {{ menu }} DROP body fits within term.cols"
 
   const THEME_OPEN = "menus.themeMenu.applyTheme";
   const STYLE_OPEN = "menus.styleMenu.applyStyle";
+  // The synthesized page cursors: derived from identity (menuPageKey), one per
+  // disclosure state key.
+  const THEME_PAGE = `${THEME_OPEN}.page`;
+  const STYLE_PAGE = `${STYLE_OPEN}.page`;
 
   function buildMenuRuntime(
     style: StripStyle,
@@ -296,10 +295,10 @@ describe("brandon-menus-bn5.3 I2 — {{ menu }} DROP body fits within term.cols"
       openStyle = false,
     ): string => {
       sessionState.set("s1", THEME_OPEN, "applyTheme");
-      sessionState.set("s1", "theme-page", String(themePage));
+      sessionState.set("s1", THEME_PAGE, String(themePage));
       if (openStyle) {
         sessionState.set("s1", STYLE_OPEN, "applyStyle");
-        sessionState.set("s1", "style-page", "0");
+        sessionState.set("s1", STYLE_PAGE, "0");
       }
       return renderDsl(
         config,
