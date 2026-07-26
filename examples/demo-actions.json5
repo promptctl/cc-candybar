@@ -11,9 +11,10 @@
 // CANONICAL vs DEMO (recorded for brandon-menus-bn5 IMPROVE/FOCUS — the curated
 // surface an author actually reaches for vs. the mechanism this file exposes):
 //   CANONICAL (stdlib — what a real config uses):
-//     • {{ menu "apply" "page" [closeOnPick] [paged] [key] }} — THE picker
-//       disclosure. One call = trigger glyph + drop-below picker body + synthesized
-//       open-state (see the "Theme picker" section for the desugaring it replaces).
+//     • {{ menu "apply" [(dict "closeOnPick" bool "paged" bool "key" str)] }} —
+//       THE picker disclosure. One call = trigger glyph + drop-below picker body
+//       + synthesized open-state AND page cursor (see the "Theme picker" section
+//       for the desugaring it replaces).
 //     • {{ action "name" … }} for copy/open (clipboard, links) and set:from/int.
 //     • kind: "group" — the disclosure for an ARBITRARY layout body (not a picker).
 //   DEMO-ONLY (shown here to teach the mechanism; not the tool to reach for):
@@ -158,12 +159,13 @@
 
     // ── Theme picker ───────────────────────────────────────────────────────
     // DEMO-ONLY: this is the manual disclosure that {{ menu }} desugars TO. The
-    // canonical form is one call — `{{ menu "applyTheme" "themePage" false true }}`
-    // in a trigger segment — which synthesizes the open-state var + toggle and
-    // drops the picker below the row. The three parts spelled out here (the
-    // openThemeMenu {set,to} action on themeControl above, this standalone
-    // {{ picker }} segment, and the when-gated row in root) are exactly what that
-    // one call replaces. See the bundled default's styleControl for the canonical
+    // canonical form is one call — `{{ menu "applyTheme" }}` in a trigger
+    // segment — which synthesizes the open-state var + toggle AND the page
+    // cursor (var + int action) and drops the picker below the row. The parts
+    // spelled out here (the openThemeMenu {set,to} action on themeControl above,
+    // the hand-declared themePage var+action pair, this standalone {{ picker }}
+    // segment, and the when-gated row in root) are exactly what that one call
+    // replaces. See the bundled default's styleControl for the canonical
     // {{ menu }} in use. Kept here to show the mechanism, not as a form to copy.
     //
     // {{ picker "applyAction" "pageAction" closeOnPick paged }}

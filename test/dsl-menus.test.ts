@@ -1,25 +1,28 @@
 // [LAW:verifiable-goals] Self-contained menu acceptance, driven through the real
 // spine (registerDslConfig + renderDsl), the real loader (parse → validate → menu
 // synthesis), and the real set-state gate — never a parallel rig. Covers the
-// pdu.5/.7/.9 redesign: a menu's body rides a SEPARATE drop channel (not a `\n`
-// in the inline stream), so a menu may sit ANYWHERE in a segment and a segment
-// may hold ANY NUMBER of menus; identity is (stateKey, member=apply-name) with an
-// INDEPENDENT default key and an OPT-IN shared key for accordion grouping.
+// pdu.5/.7/.9 redesign (drop-channel bodies, name-derived identity) plus the
+// bn5.6 surface: `{{ menu "apply" }}` is the COMPLETE common case — the loader
+// synthesizes the open-state var + cycle action AND the page cursor (state var +
+// int action) under the reserved `menus.` namespace — and rare knobs are ONE
+// trailing `(dict …)` (closeOnPick / paged / key). The removed positional tail
+// fails at load with a migration-pointing error.
 //
-//   1. A `{{ menu }}` SYNTHESIZES a state var + cycle action under the reserved
-//      `menus.` namespace, identity = (segment + apply name); the gate derives
-//      through the one path. No author-named key (independent) by default.
+//   1. A `{{ menu }}` SYNTHESIZES a state var + cycle action + page cursor under
+//      the reserved `menus.` namespace, identity = (segment + apply name); both
+//      gates derive through the one path. No author-named key (independent) by
+//      default, no hand-declared page var/action ever.
 //   2. Toggle round trip: closed renders ▸ and no body; the click writes the
 //      member; the next render shows ▾ + the picker body dropped BELOW the row;
-//      a second click closes.
+//      a second click closes; the body's ✕ closes too (disclosure back to
+//      "closed" + page reset, the same coupled write the toggle promises).
 //   3. Independent default: two menus (no key) are not mutually exclusive — both
-//      can be open at once. Opt-in shared key: two menus sharing a key are an
-//      accordion (opening one closes the other).
-//   4. N menus in ONE segment (the "theme tester"): each is a distinct, addressable
-//      disclosure; mid-segment menus keep content after them inline on row 0; all
-//      bodies stack below the row.
-//   5. The open menu's segment is focus-tinted; composeBlocks stacks drops while
-//      all-single-line rows are unchanged.
+//      can be open at once. Opt-in shared key ((dict "key" …)): an accordion.
+//   4. N menus in ONE segment (the "theme tester"): each is a distinct,
+//      addressable disclosure; mid-segment menus keep content after them inline
+//      on row 0; all bodies stack below the row.
+//   5. Old spellings (positional page/bools/key) and malformed option dicts are
+//      LOAD errors naming the new form — never silently reinterpreted.
 
 import { PaletteResolver, getThemePalette } from "@promptctl/rich-js";
 import { parseAndValidate } from "./helpers/parse-and-validate";
@@ -117,25 +120,32 @@ function buildRuntime(src: string, sessionId = "s1") {
 
 // A theme picker menu beside a plain label, in one horizontal row. Identity is
 // (segment "themepicker" + apply "applyTheme"), independent ⇒ key
-// `menus.themepicker.applyTheme`, member `applyTheme`.
+// `menus.themepicker.applyTheme`, member `applyTheme`. The apply action is the
+// WHOLE declaration — no page var/action anywhere (bn5.6 synthesizes both).
+// term.cols is declared because the default paged=true reads the live width
+// (the bundled default declares it for real configs; bare fixtures declare it
+// themselves, exactly like the pagination harness).
 const MENU_SRC = `{
   globals: {},
-  variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
+  variables: {
+    'session.id': { kind: 'input', path: 'session_id', default: '' },
+    'term.cols': { kind: 'input', path: 'term.cols', type: 'number', default: 80 },
+  },
   actions: {
     applyTheme: { set: 'theme', from: 'themes' },
-    themePage: { set: 'theme-page', int: true },
   },
   segments: {
     label: { template: 'PICK', bg: 'surface', fg: 'foreground' },
-    themepicker: { template: '🎨 {{ menu "applyTheme" "themePage" }}', bg: 'surface', fg: 'foreground' },
+    themepicker: { template: '🎨 {{ menu "applyTheme" }}', bg: 'surface', fg: 'foreground' },
   },
   root: { h: ['label', 'themepicker'] },
 }`;
 
 const TKEY = "menus.themepicker.applyTheme";
+const PKEY = `${TKEY}.page`;
 
 describe("menu synthesis (derived identity, reserved namespace)", () => {
-  test("synthesizes a state var + cycle action keyed by (segment, apply); gate derives", () => {
+  test("synthesizes state var + cycle action + page cursor keyed by (segment, apply); both gates derive", () => {
     const config = parseAndValidate("<test>", MENU_SRC, ALLOWED);
     expect(config.variables[TKEY]).toEqual({
       kind: "state",
@@ -146,11 +156,22 @@ describe("menu synthesis (derived identity, reserved namespace)", () => {
       set: TKEY,
       cycle: ["closed", "applyTheme"],
     });
-    const gate = deriveActionValidators(config).find((g) => g.key === TKEY);
-    expect(gate?.spec).toEqual({
+    // bn5.6: the page cursor is synthesized as a PAIR — the state var the
+    // renderer reads the live page through AND the int action the wire gate
+    // derives from. Forgetting one half (the silent page-0 freeze) is now
+    // unrepresentable: the author declares neither.
+    expect(config.variables[PKEY]).toEqual({
+      kind: "state",
+      key: PKEY,
+      default: "0",
+    });
+    expect(config.actions[PKEY]).toEqual({ set: PKEY, int: true });
+    const gates = deriveActionValidators(config);
+    expect(gates.find((g) => g.key === TKEY)?.spec).toEqual({
       kind: "allow-list",
       allowed: ["closed", "applyTheme"],
     });
+    expect(gates.find((g) => g.key === PKEY)?.spec).toEqual({ kind: "int" });
   });
 
   test("a user menus.* name is rejected even when NO menu is placed (unconditional reservation)", () => {
@@ -173,8 +194,8 @@ describe("menu synthesis (derived identity, reserved namespace)", () => {
     const src = `{
       globals: {},
       variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
-      actions: { closed: { set: 'theme', from: 'themes' }, themePage: { set: 'theme-page', int: true } },
-      segments: { s: { template: '{{ menu "closed" "themePage" }}', bg: 'surface', fg: 'foreground' } },
+      actions: { closed: { set: 'theme', from: 'themes' } },
+      segments: { s: { template: '{{ menu "closed" }}', bg: 'surface', fg: 'foreground' } },
       root: { h: ['s'] },
     }`;
     try {
@@ -190,8 +211,8 @@ describe("menu synthesis (derived identity, reserved namespace)", () => {
     const src = `{
       globals: {},
       variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' }, applyVar: { kind: 'literal', value: 'applyTheme' } },
-      actions: { applyTheme: { set: 'theme', from: 'themes' }, themePage: { set: 'theme-page', int: true } },
-      segments: { s: { template: '{{ menu .applyVar "themePage" }}', bg: 'surface', fg: 'foreground' } },
+      actions: { applyTheme: { set: 'theme', from: 'themes' } },
+      segments: { s: { template: '{{ menu .applyVar }}', bg: 'surface', fg: 'foreground' } },
       root: { h: ['s'] },
     }`;
     try {
@@ -213,10 +234,8 @@ describe("menu synthesis (derived identity, reserved namespace)", () => {
       actions: {
         'a-b': { set: 'theme', from: 'themes' },
         'a_b': { set: 'style', from: 'styles' },
-        themePage: { set: 'theme-page', int: true },
-        stylePage: { set: 'style-page', int: true },
       },
-      segments: { s: { template: 'S {{ menu "a-b" "themePage" }} {{ menu "a_b" "stylePage" }}', bg: 'surface', fg: 'foreground' } },
+      segments: { s: { template: 'S {{ menu "a-b" }} {{ menu "a_b" }}', bg: 'surface', fg: 'foreground' } },
       root: { h: ['s'] },
     }`;
     try {
@@ -234,8 +253,7 @@ describe("menu synthesis (derived identity, reserved namespace)", () => {
     const src = `{
       globals: {},
       variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
-      actions: { themePage: { set: 'theme-page', int: true } },
-      segments: { s: { template: '{{ menu "" "themePage" }}', bg: 'surface', fg: 'foreground' } },
+      segments: { s: { template: '{{ menu "" }}', bg: 'surface', fg: 'foreground' } },
       root: { h: ['s'] },
     }`;
     try {
@@ -247,14 +265,13 @@ describe("menu synthesis (derived identity, reserved namespace)", () => {
     }
   });
 
-  test("a {{ menu }} referencing an unknown apply/page action is a LOAD error (not render-time)", () => {
-    // The menu binds (apply, page) just like a picker; cross-ref must catch a
+  test("a {{ menu }} referencing an unknown apply action is a LOAD error (not render-time)", () => {
+    // The menu binds its apply action like a picker; cross-ref must catch a
     // missing action at load, not defer to renderPicker.requireKind on open.
     const src = `{
       globals: {},
       variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
-      actions: { applyTheme: { set: 'theme', from: 'themes' }, themePage: { set: 'theme-page', int: true } },
-      segments: { s: { template: '{{ menu "applyTheme" "noSuchPage" }}', bg: 'surface', fg: 'foreground' } },
+      segments: { s: { template: '{{ menu "noSuchApply" }}', bg: 'surface', fg: 'foreground' } },
       root: { h: ['s'] },
     }`;
     try {
@@ -262,16 +279,16 @@ describe("menu synthesis (derived identity, reserved namespace)", () => {
       throw new Error("expected ConfigError");
     } catch (e) {
       expect(e).toBeInstanceOf(ConfigError);
-      expect((e as ConfigError).message).toMatch(/unknown action "noSuchPage" \(in a picker or menu\)/);
+      expect((e as ConfigError).message).toMatch(/unknown action "noSuchApply" \(in a picker or menu\)/);
     }
   });
 
-  test("a {{ menu }} with an empty shared key is rejected (bare menus. key)", () => {
+  test("a {{ menu }} with an empty accordion key is rejected (bare menus. key)", () => {
     const src = `{
       globals: {},
       variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
-      actions: { applyTheme: { set: 'theme', from: 'themes' }, themePage: { set: 'theme-page', int: true } },
-      segments: { s: { template: '{{ menu "applyTheme" "themePage" false false "" }}', bg: 'surface', fg: 'foreground' } },
+      actions: { applyTheme: { set: 'theme', from: 'themes' } },
+      segments: { s: { template: '{{ menu "applyTheme" (dict "key" "") }}', bg: 'surface', fg: 'foreground' } },
       root: { h: ['s'] },
     }`;
     try {
@@ -287,8 +304,8 @@ describe("menu synthesis (derived identity, reserved namespace)", () => {
     const src = `{
       globals: {},
       variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
-      actions: { applyTheme: { set: 'theme', from: 'themes' }, themePage: { set: 'theme-page', int: true } },
-      segments: { s: { template: 'X', bg: '{{ menu "applyTheme" "themePage" }}', fg: 'foreground' } },
+      actions: { applyTheme: { set: 'theme', from: 'themes' } },
+      segments: { s: { template: 'X', bg: '{{ menu "applyTheme" }}', fg: 'foreground' } },
       root: { h: ['s'] },
     }`;
     try {
@@ -304,8 +321,8 @@ describe("menu synthesis (derived identity, reserved namespace)", () => {
     const src = `{
       globals: {},
       variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
-      actions: { applyTheme: { set: 'theme', from: 'themes' }, themePage: { set: 'theme-page', int: true } },
-      segments: { m: { template: 'M {{ menu "applyTheme" "themePage" }}', bg: 'surface', fg: 'foreground' } },
+      actions: { applyTheme: { set: 'theme', from: 'themes' } },
+      segments: { m: { template: 'M {{ menu "applyTheme" }}', bg: 'surface', fg: 'foreground' } },
       root: { v: [ { h: ['m'] }, { h: ['m'] } ] },
     }`;
     try {
@@ -321,8 +338,8 @@ describe("menu synthesis (derived identity, reserved namespace)", () => {
     const src = `{
       globals: {},
       variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
-      actions: { applyTheme: { set: 'theme', from: 'themes' }, themePage: { set: 'theme-page', int: true } },
-      helpers: { mkMenu: '{{ menu "applyTheme" "themePage" }}' },
+      actions: { applyTheme: { set: 'theme', from: 'themes' } },
+      helpers: { mkMenu: '{{ menu "applyTheme" }}' },
       segments: { s: { template: '{{ template "mkMenu" . }}', bg: 'surface', fg: 'foreground' } },
       root: { h: ['s'] },
     }`;
@@ -335,6 +352,66 @@ describe("menu synthesis (derived identity, reserved namespace)", () => {
         /helper "mkMenu" uses \{\{ menu \}\}/,
       );
     }
+  });
+});
+
+// [LAW:no-silent-failure] The removed spellings and malformed option dicts must
+// fail AT LOAD with text naming the new form — a blind authoring agent's only
+// channel. A silently reinterpreted tail (e.g. the old page-action string read
+// as an option) would be the exact failure class bn5.6 exists to kill.
+describe("bn5.6 — old spellings and bad option dicts are migration-pointing LOAD errors", () => {
+  const load = (segTemplate: string, extraVars = ""): (() => void) => {
+    const src = `{
+      globals: {},
+      variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' }${extraVars} },
+      actions: { applyTheme: { set: 'theme', from: 'themes' }, themePage: { set: 'theme-page', int: true } },
+      segments: { s: { template: '${segTemplate}', bg: 'surface', fg: 'foreground' } },
+      root: { h: ['s'] },
+    }`;
+    return () => parseAndValidate("<test>", src, ALLOWED);
+  };
+
+  test("the full old positional form fails load naming the new form (acceptance)", () => {
+    try {
+      load('{{ menu "applyTheme" "themePage" false true }}')();
+      throw new Error("expected ConfigError");
+    } catch (e) {
+      expect(e).toBeInstanceOf(ConfigError);
+      const msg = (e as ConfigError).message;
+      expect(msg).toMatch(/positional tail .* was removed/);
+      expect(msg).toMatch(/\{\{ menu "applyTheme" \}\}/); // the new form, named
+      expect(msg).toMatch(/dict "closeOnPick"/); // …and the options spelling
+    }
+  });
+
+  test("a bare page-action second string arg fails load (never reinterpreted)", () => {
+    expect(load('{{ menu "applyTheme" "themePage" }}')).toThrow(
+      /positional tail .* was removed/,
+    );
+  });
+
+  test("an unknown option name fails load (transposition guard)", () => {
+    expect(load('{{ menu "applyTheme" (dict "closeonpick" true) }}')).toThrow(
+      /unknown \{\{ menu \}\} option "closeonpick"/,
+    );
+  });
+
+  test("a mistyped option value fails load (bool where string / string where bool)", () => {
+    expect(load('{{ menu "applyTheme" (dict "paged" "yes") }}')).toThrow(
+      /"paged" must be a boolean/,
+    );
+    expect(load('{{ menu "applyTheme" (dict "key" true) }}')).toThrow(
+      /"key" must be a string/,
+    );
+  });
+
+  test("a dynamic dict entry fails load (cannot gate at load)", () => {
+    expect(
+      load(
+        '{{ menu "applyTheme" (dict "key" .someVar) }}',
+        ", someVar: { kind: 'literal', value: 'k' }",
+      ),
+    ).toThrow(/not fully literal/);
   });
 });
 
@@ -376,10 +453,11 @@ describe("toggle round trip + drop stacking", () => {
   });
 
   // [LAW:verifiable-goals] The pagination-reset contract: the disclosure click is
-  // ONE atomic set-state that toggles the open-state AND resets the page cursor to
-  // page 0 — mirroring the picker's closeOnPick page-reset fold — so a reopened
-  // menu is never stranded on a stale page left by ←/→ before the last close.
-  test("disclosure click resets the page cursor to 0 in the same atomic write", () => {
+  // ONE atomic set-state that toggles the open-state AND resets the SYNTHESIZED
+  // page cursor to page 0 — so a reopened menu is never stranded on a stale page
+  // left by ←/→ before the last close. The page key is derived from identity
+  // (menuPageKey), never from a page-action argument.
+  test("disclosure click resets the synthesized page cursor to 0 in the same atomic write", () => {
     const { render, dispose } = buildRuntime(MENU_SRC);
     const url = extractUrls(render()).find((u) =>
       effectsOf(u).some((e) => e.args[1] === TKEY),
@@ -388,7 +466,58 @@ describe("toggle round trip + drop stacking", () => {
     const eff = effectsOf(url)[0]!;
     // [sessionId, openStateKey, successor, pageKey, "0"] — open-state + page reset
     // in one batch. Both keys are independently gated; the batch passes one gate.
-    expect(eff.args.slice(1)).toEqual([TKEY, "applyTheme", "theme-page", "0"]);
+    expect(eff.args.slice(1)).toEqual([TKEY, "applyTheme", PKEY, "0"]);
+    dispose();
+  });
+
+  // The body's ✕ delivers the SAME close the ▾ glyph promises: disclosure back
+  // to "closed" + page reset, one atomic write — not the standalone picker's
+  // page=-1 idiom (which cannot close a disclosure-keyed menu).
+  test("the dropped body's ✕ closes the disclosure (and resets the page)", () => {
+    const { render, click, clickToggle, sessionState, dispose } =
+      buildRuntime(MENU_SRC);
+    clickToggle(render(), TKEY, "applyTheme");
+    const open = render();
+    expect(stripAnsi(open).split("\n")).toHaveLength(2);
+    const closeUrl = extractUrls(open).find((u) =>
+      effectsOf(u).some(
+        (e) =>
+          e.args[1] === TKEY &&
+          e.args[2] === "closed" &&
+          e.args[3] === PKEY &&
+          e.args[4] === "0",
+      ),
+    );
+    if (!closeUrl) throw new Error("no close write rendered");
+    click(closeUrl);
+    expect(sessionState.get("s1", TKEY)).toBe("closed");
+    expect(sessionState.get("s1", PKEY)).toBe("0");
+    expect(stripAnsi(render()).split("\n")).toHaveLength(1); // body gone
+    dispose();
+  });
+
+  // closeOnPick folds the SAME close pair into the option's apply write — one
+  // atomic pick+close, exercised through the dict option end-to-end.
+  test('(dict "closeOnPick" true): picking an option applies it AND closes the menu', () => {
+    const src = MENU_SRC.replace(
+      '{{ menu "applyTheme" }}',
+      '{{ menu "applyTheme" (dict "closeOnPick" true) }}',
+    );
+    const { render, click, clickToggle, sessionState, dispose } =
+      buildRuntime(src);
+    clickToggle(render(), TKEY, "applyTheme");
+    const open = render();
+    const pickUrl = extractUrls(open).find((u) =>
+      effectsOf(u).some((e) => e.args[1] === "theme" && e.args[3] === TKEY),
+    );
+    if (!pickUrl) throw new Error("no pick+close option write rendered");
+    const eff = effectsOf(pickUrl)[0]!;
+    // [sessionId, themeKey, option, stateKey, "closed", pageKey, "0"]
+    expect(eff.args.slice(3)).toEqual([TKEY, "closed", PKEY, "0"]);
+    click(pickUrl);
+    expect(sessionState.get("s1", TKEY)).toBe("closed");
+    expect(sessionState.get("s1", "theme")).toBe(eff.args[2]);
+    expect(stripAnsi(render()).split("\n")).toHaveLength(1); // closed on pick
     dispose();
   });
 });
@@ -396,27 +525,31 @@ describe("toggle round trip + drop stacking", () => {
 // Two menus in ONE row, neither naming a key ⇒ INDEPENDENT.
 const INDEPENDENT_SRC = `{
   globals: {},
-  variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
+  variables: {
+    'session.id': { kind: 'input', path: 'session_id', default: '' },
+    'term.cols': { kind: 'input', path: 'term.cols', type: 'number', default: 80 },
+  },
   actions: {
     applyTheme: { set: 'theme', from: 'themes' },
-    themePage: { set: 'theme-page', int: true },
     applyStyle: { set: 'style', from: 'styles' },
-    stylePage: { set: 'style-page', int: true },
   },
   segments: {
-    themeMenu: { template: 'T {{ menu "applyTheme" "themePage" }}', bg: 'surface', fg: 'foreground' },
-    styleMenu: { template: 'S {{ menu "applyStyle" "stylePage" }}', bg: 'surface', fg: 'foreground' },
+    themeMenu: { template: 'T {{ menu "applyTheme" }}', bg: 'surface', fg: 'foreground' },
+    styleMenu: { template: 'S {{ menu "applyStyle" }}', bg: 'surface', fg: 'foreground' },
   },
   root: { h: ['themeMenu', 'styleMenu'] },
 }`;
 
 describe("independent default (no shared key)", () => {
-  test("two menus have distinct keys; both can be open at once", () => {
+  test("two menus have distinct keys (and page cursors); both can be open at once", () => {
     const { config, render, clickToggle, dispose } =
       buildRuntime(INDEPENDENT_SRC);
-    // Distinct keys — neither click writes the other's key.
+    // Distinct keys — neither click writes the other's key — and each key
+    // brings its own synthesized page cursor.
     expect(config.variables["menus.themeMenu.applyTheme"]).toBeDefined();
     expect(config.variables["menus.styleMenu.applyStyle"]).toBeDefined();
+    expect(config.variables["menus.themeMenu.applyTheme.page"]).toBeDefined();
+    expect(config.variables["menus.styleMenu.applyStyle.page"]).toBeDefined();
 
     clickToggle(render(), "menus.themeMenu.applyTheme", "applyTheme");
     let out = stripAnsi(render());
@@ -432,25 +565,26 @@ describe("independent default (no shared key)", () => {
   });
 });
 
-// Two menus in ONE row sharing the key "pickers" ⇒ ACCORDION.
+// Two menus in ONE row sharing the key "pickers" (the dict option) ⇒ ACCORDION.
 const ACCORDION_SRC = `{
   globals: {},
-  variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
+  variables: {
+    'session.id': { kind: 'input', path: 'session_id', default: '' },
+    'term.cols': { kind: 'input', path: 'term.cols', type: 'number', default: 80 },
+  },
   actions: {
     applyTheme: { set: 'theme', from: 'themes' },
-    themePage: { set: 'theme-page', int: true },
     applyStyle: { set: 'style', from: 'styles' },
-    stylePage: { set: 'style-page', int: true },
   },
   segments: {
-    themeMenu: { template: 'T {{ menu "applyTheme" "themePage" false false "pickers" }}', bg: 'surface', fg: 'foreground' },
-    styleMenu: { template: 'S {{ menu "applyStyle" "stylePage" false false "pickers" }}', bg: 'surface', fg: 'foreground' },
+    themeMenu: { template: 'T {{ menu "applyTheme" (dict "key" "pickers") }}', bg: 'surface', fg: 'foreground' },
+    styleMenu: { template: 'S {{ menu "applyStyle" (dict "key" "pickers") }}', bg: 'surface', fg: 'foreground' },
   },
   root: { h: ['themeMenu', 'styleMenu'] },
 }`;
 
 describe("opt-in accordion (shared key, one open at a time)", () => {
-  test("both menus share the key; the gate unions members; opening one closes the other", () => {
+  test("both menus share the key; the gate unions members; ONE shared page cursor; opening one closes the other", () => {
     const { config, render, clickToggle, dispose } = buildRuntime(ACCORDION_SRC);
     expect(config.actions["menus.pickers.applyTheme"]).toEqual({
       set: "menus.pickers",
@@ -466,6 +600,13 @@ describe("opt-in accordion (shared key, one open at a time)", () => {
     expect(gate?.spec).toEqual({
       kind: "allow-list",
       allowed: ["closed", "applyTheme", "applyStyle"],
+    });
+    // One page cursor per disclosure key: the accordion holds at most one open
+    // body, so its one cursor is exact — and every toggle resets it to 0.
+    expect(config.variables["menus.pickers.page"]).toEqual({
+      kind: "state",
+      key: "menus.pickers.page",
+      default: "0",
     });
 
     clickToggle(render(), "menus.pickers", "applyTheme");
@@ -485,10 +626,10 @@ describe("opt-in accordion (shared key, one open at a time)", () => {
     const src = `{
       globals: {},
       variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
-      actions: { applyTheme: { set: 'theme', from: 'themes' }, themePage: { set: 'theme-page', int: true } },
+      actions: { applyTheme: { set: 'theme', from: 'themes' } },
       segments: {
-        a: { template: 'A {{ menu "applyTheme" "themePage" false false "k" }}', bg: 'surface', fg: 'foreground' },
-        b: { template: 'B {{ menu "applyTheme" "themePage" false false "k" }}', bg: 'surface', fg: 'foreground' },
+        a: { template: 'A {{ menu "applyTheme" (dict "key" "k") }}', bg: 'surface', fg: 'foreground' },
+        b: { template: 'B {{ menu "applyTheme" (dict "key" "k") }}', bg: 'surface', fg: 'foreground' },
       },
       root: { h: ['a', 'b'] },
     }`;
@@ -505,17 +646,17 @@ describe("opt-in accordion (shared key, one open at a time)", () => {
 // THE "theme tester": three menus in ONE segment, with content between/after.
 const TESTER_SRC = `{
   globals: {},
-  variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
+  variables: {
+    'session.id': { kind: 'input', path: 'session_id', default: '' },
+    'term.cols': { kind: 'input', path: 'term.cols', type: 'number', default: 80 },
+  },
   actions: {
     applyTheme: { set: 'theme', from: 'themes' },
-    tp: { set: 'theme-page', int: true },
     applyStyle: { set: 'style', from: 'styles' },
-    sp: { set: 'style-page', int: true },
     applyTheme2: { set: 'theme', from: 'themes' },
-    fp: { set: 'font-page', int: true },
   },
   segments: {
-    tester: { template: 'TEST {{ menu "applyTheme" "tp" }} | {{ menu "applyStyle" "sp" }} | {{ menu "applyTheme2" "fp" }} END', bg: 'surface', fg: 'foreground' },
+    tester: { template: 'TEST {{ menu "applyTheme" }} | {{ menu "applyStyle" }} | {{ menu "applyTheme2" }} END', bg: 'surface', fg: 'foreground' },
   },
   root: { h: ['tester'] },
 }`;
@@ -526,12 +667,13 @@ describe('the "theme tester" — N menus in one segment', () => {
     expect(config.variables["menus.tester.applyTheme"]).toBeDefined();
     expect(config.variables["menus.tester.applyStyle"]).toBeDefined();
     expect(config.variables["menus.tester.applyTheme2"]).toBeDefined();
-    // Three distinct state keys synthesized from one segment — the old
-    // (rowKey,segName) identity would have collapsed all three to one.
+    // Three distinct state keys + their three page cursors, all synthesized
+    // from one segment — the old (rowKey,segName) identity would have
+    // collapsed all three to one.
     const menuKeys = Object.keys(config.variables).filter((k) =>
       k.startsWith("menus."),
     );
-    expect(menuKeys).toHaveLength(3);
+    expect(menuKeys).toHaveLength(6);
   });
 
   test("closed: all three glyphs inline with the separators + END on one row", () => {
