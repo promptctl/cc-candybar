@@ -105,6 +105,8 @@ Source kinds (`SourceRegistry.declare*`): `literal`, `input`, `env`, `file`, `sh
 
 ### Interactive actions (`src/config/action.ts`, top-level `actions:` block)
 
+**Authoring a config?** Read `docs/interaction-authoring.md` first — the agent-facing reference for actions/`{{ menu }}`/groups, with one canonical example per intent, the mistakes paired with the loader's real error text, and the `cc-candybar check` verification loop. Every snippet in it is CI-tested against the live loader (`test/doc-snippets.test.ts`), so it is always current; this section is the architecture view, that doc is the authoring view.
+
 Interaction is **decoupled by name**. The clickable *representation* (a region of a segment template) and the *behavior* (what the click does) are separate declarations joined by an action name. There is no widget type and no component kind (`[LAW:one-type-per-behavior]`) — there is one Segment, and whether it shows text, state-driven display, clickable regions, or all three falls out of what its template contains. The author binds a region to a named action, never to a validator or a hand-built URL. Re-glyph a button without touching behavior; re-target an action without touching the template (`[LAW:locality-or-seam]` — the name is the seam).
 
 - **Action** (`ActionDecl` in `src/config/action.ts`) — the click effect, discriminated by which key is present, and for `set` by its value *source*:
