@@ -89,7 +89,7 @@
     "typescript": "^5.0.0"
   },
   "dependencies": {
-    "@promptctl/go-template-js": "^0.6.0",
+    "@promptctl/go-template-js": "^0.7.0",
     "@promptctl/rich-js": "^0.6.0",
     "json5": "^2.2.3",
     "mobx": "^6.15.0"

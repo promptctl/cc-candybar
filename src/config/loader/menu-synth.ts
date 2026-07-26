@@ -3,33 +3,43 @@
 // trigger living inside an arbitrary user segment rather than a synthesized
 // toggle segment — so this emits exactly what group sugar does MINUS the segment
 // (the helper IS the trigger): one `state` var per menu state key (default
-// "closed") and one `cycle` action per (state key, member) under the reserved
-// `menus.` namespace. Both land in the raw sections so they merge over the
-// default and, crucially, so `deriveActionValidators(config.actions)` derives the
-// click gate from them through the ONE existing path — a menu toggle is gated
+// "closed"), one `cycle` action per (state key, member), AND — bn5.6 — the
+// picker body's page cursor (a `state` var + int action named by menuPageKey)
+// per state key, all under the reserved `menus.` namespace. Everything lands in
+// the raw sections so it merges over the default and, crucially, so
+// `deriveActionValidators(config.actions)` derives the click gates from them
+// through the ONE existing path — a menu toggle and its page cursor are gated
 // like every other set, no parallel verb. [LAW:single-enforcer]
 //
 // Runs in `parseDslConfig` after group synthesis and after every section parsed,
 // so the reserved-namespace collision check sees the fully-parsed user sections.
 //
 // [LAW:types-are-the-program] WHICH segments host a menu, and with WHAT apply
-// action + optional shared key, is read from the parsed AST (`referencedCalls`),
-// not a source-text scan — robust against whitespace, pipelines, and
-// `.menu`/"menu" lookalikes, and it yields each call's literal string arguments
-// so a menu's identity (member = apply name; key = optional shared key) is the
-// SAME fact the render helper reads from those same argument positions. A parse
-// failure here is treated as "no menu" because the authoritative parse error is
-// surfaced loudly by `registerDslConfig` when it compiles the same template (so
-// this pass never swallows a real error, it just declines to guess).
+// action + options, is read from the parsed AST (`referencedCalls` → `argExprs`
+// + `staticDictEntries`), not a source-text scan — robust against whitespace,
+// pipelines, and `.menu`/"menu" lookalikes, and it yields each call's literal
+// apply name and literal `(dict …)` options so a menu's identity (member =
+// apply name; key = the optional "key" option) is the SAME fact the render
+// helper reads from those same arguments. A parse failure here is treated as
+// "no menu" because the authoritative parse error is surfaced loudly by
+// `registerDslConfig` when it compiles the same template (so this pass never
+// swallows a real error, it just declines to guess).
 
-import { createEngine } from "@promptctl/go-template-js";
+import {
+  createEngine,
+  staticDictEntries,
+  type ReferencedCall,
+} from "@promptctl/go-template-js";
 import type { ActionDecl } from "../action.js";
 import type { Mutable, ValidateCtx } from "./validate-core.js";
 import {
   MENU_NS,
   menuActionName,
   menuMember,
+  menuPageKey,
   menuStateKey,
+  parseMenuOptions,
+  type MenuOptions,
 } from "../menu-keys.js";
 import {
   DISCLOSURE_CLOSED,
@@ -49,39 +59,84 @@ import { reservedNamespaceCollisions } from "./reserved-namespace.js";
 // references this function.
 const MENU_FUNC = "menu";
 
-// [LAW:types-are-the-program] The `{{ menu }}` argument positions, mirroring the
-// render helper's signature `menu apply page closeOnPick paged key`. Only the
-// apply name (identity member) and the optional shared key (accordion grouping)
-// affect synthesis; page/closeOnPick/paged are render-only and ignored here.
-const ARG_APPLY = 0;
-const ARG_KEY = 4;
+// [LAW:types-are-the-program] The `{{ menu }}` surface, mirroring the render
+// helper's signature `menu "apply" [(dict …)]`: the apply name (identity member,
+// a required string literal) and ONE optional trailing options dict —
+// closeOnPick / paged / key, all statically readable via `staticDictEntries`.
+// The removed positional tail (page-action string, bare bools, 5th-arg key) is
+// detected and rejected with a migration-pointing error, never silently
+// reinterpreted [LAW:no-silent-failure].
+const MIGRATION = `the positional tail ("pageAction" closeOnPick paged "key") was removed: the page cursor is now synthesized from the menu's identity, and rare knobs are named options in ONE trailing dict — write {{ menu "applyTheme" }} or {{ menu "applyTheme" (dict "closeOnPick" true "paged" false "key" "pickers") }} (defaults: closeOnPick false, paged true, no key)`;
 
-// [LAW:types-are-the-program] One menu call's identity-bearing arguments. Each
-// arg has three states the synthesis must tell apart: a literal string (usable),
-// `null` (a slot present but non-literal — its value is eval-time, so it cannot
-// be gated at load → author error), and `undefined` (the slot was omitted). The
-// apply slot is required; the key slot is optional (undefined ⇒ independent menu).
-interface MenuCall {
-  readonly apply: string | null;
-  readonly key: string | null | undefined;
+// [LAW:dataflow-not-control-flow] One total analysis of a `{{ menu }}` call site:
+// every reachable argument shape lands in exactly one arm — a usable identity
+// (apply + parsed options) or one load-error message (the tail after
+// `segment "<name>" has a {{ menu }} `). No shape falls through to render time.
+type MenuAnalysis =
+  | {
+      readonly kind: "ok";
+      readonly apply: string;
+      readonly options: MenuOptions;
+    }
+  | { readonly kind: "issue"; readonly message: string };
+
+function analyzeMenuCall(call: ReferencedCall): MenuAnalysis {
+  const issue = (message: string): MenuAnalysis => ({ kind: "issue", message });
+  const [applyArg, optsArg] = call.argExprs;
+  if (applyArg === undefined) {
+    return issue(
+      `with no arguments — it takes an apply-action name (e.g. {{ menu "applyTheme" }})`,
+    );
+  }
+  if (call.argExprs.length > 2) {
+    return issue(`with more than two arguments — ${MIGRATION}`);
+  }
+  if (applyArg.kind !== "literal" || typeof applyArg.value !== "string") {
+    return issue(
+      `whose apply action is not a string literal — a menu's identity is its apply-action name, which must be a literal so it can be gated at load (e.g. {{ menu "applyTheme" }})`,
+    );
+  }
+  if (
+    optsArg !== undefined &&
+    (optsArg.kind !== "call" || optsArg.name !== "dict")
+  ) {
+    // A literal (the old page-action string / positional bool), a dynamic value,
+    // or a non-dict call: none is an options dict — one migration error covers
+    // the whole family [LAW:one-type-per-behavior].
+    return issue(
+      `whose second argument is not an options (dict …) — ${MIGRATION}`,
+    );
+  }
+  const entries = optsArg === undefined ? {} : staticDictEntries(optsArg);
+  if (entries === null) {
+    return issue(
+      `whose options (dict …) is not fully literal — every option value must be a literal so the menu can be gated at load (a dynamic entry like (dict "key" .x) cannot)`,
+    );
+  }
+  try {
+    return {
+      kind: "ok",
+      apply: applyArg.value,
+      options: parseMenuOptions(entries),
+    };
+  } catch (e) {
+    return issue(`with invalid options — ${(e as Error).message}`);
+  }
 }
 
 // [LAW:no-defensive-null-guards] A bare engine purely for AST introspection: it
 // never evaluates, so `fromString` is identity and no funcs are registered (parse
 // does not resolve function existence — that is an eval-time concern).
-function parseCalls(template: string): readonly MenuCall[] | "parse-failed" {
+function parseCalls(
+  template: string,
+): readonly MenuAnalysis[] | "parse-failed" {
   const engine = createEngine<string>({ fromString: (s) => s });
   try {
     return engine
       .parse(template)
       .referencedCalls()
       .filter((c) => c.name === MENU_FUNC)
-      .map((c) => ({
-        apply: c.args[ARG_APPLY] ?? null,
-        // `referencedCalls` reports an omitted positional slot as absent and a
-        // present non-literal as null; preserve that distinction.
-        key: c.args.length > ARG_KEY ? c.args[ARG_KEY] : undefined,
-      }));
+      .map(analyzeMenuCall);
   } catch {
     // A malformed template can host no usable menu; registerDslConfig re-parses
     // and reports the real error. [LAW:no-silent-failure] — not swallowed, just
@@ -192,9 +247,10 @@ export function synthesizeMenuDecls(
   }
 
   // One state var per state key (default "closed"); one cycle action per
-  // (stateKey, member). [LAW:dataflow-not-control-flow] Independent menus each
-  // contribute their own key; shared-key menus contribute distinct members to one
-  // key, and the same-key validator merge unions them into one accordion gate.
+  // (stateKey, member); one page-cursor var + int action per state key.
+  // [LAW:dataflow-not-control-flow] Independent menus each contribute their own
+  // key; shared-key menus contribute distinct members to one key, and the
+  // same-key validator merge unions them into one accordion gate.
   const stateKeys = new Set<string>();
   const actions: Record<string, ActionDecl> = {};
   // Guard against two menus claiming one identity (same key + same member): for
@@ -202,53 +258,42 @@ export function synthesizeMenuDecls(
   // segment; for shared-key menus it means two menus with the same apply name
   // sharing a key — neither can be addressed distinctly, so reject.
   const claimed = new Set<string>();
-  // [LAW:types-are-the-program] The state key is `ident()`-normalized so it carries
-  // no separators; that normalization is lossy (`a-b` and `a_b` collapse), so two
-  // DISTINCT declarations could map to one key and silently share open-state (an
-  // unintended accordion). Track the raw "owner" each key legitimately belongs to
-  // — a shared key is owned by its raw key string (every sibling agrees); an
-  // independent menu by its raw (segment, apply). A second owner on the same key
-  // is a normalization collision, rejected at load so it is unrepresentable
-  // [LAW:no-silent-failure] rather than corrupting grouping.
-  const ownerByStateKey = new Map<string, string>();
+  // [LAW:types-are-the-program] A synthesized key is `ident()`-normalized so it
+  // carries no separators; that normalization is lossy (`a-b` and `a_b`
+  // collapse), so two DISTINCT declarations could map to one key and silently
+  // share state (an unintended accordion). Track the raw "owner" each
+  // synthesized name (state key AND its derived page key) legitimately belongs
+  // to — a shared key is owned by its raw key string (every sibling agrees); an
+  // independent menu by its raw (segment, apply). A second owner on the same
+  // name is a collision, rejected at load so it is unrepresentable
+  // [LAW:no-silent-failure] rather than corrupting grouping. Registering the
+  // page key too closes the cross-shape aliasing corner (e.g. an apply action
+  // named "page" in segment "s" vs the page cursor of a shared key "s").
+  const ownerBySynthKey = new Map<string, string>();
 
   for (const [segName, seg] of Object.entries(segments)) {
     if (!segmentReferencesMenu(seg.template)) continue;
     const calls = parseCalls(seg.template);
     if (calls === "parse-failed") continue;
     for (const call of calls) {
-      if (call.apply === null) {
+      // [LAW:no-silent-failure] Every non-ok argument shape (missing apply,
+      // non-literal apply, the removed positional tail, a non-literal or
+      // malformed options dict) surfaces here as one load error with the
+      // analysis's migration-pointing text.
+      if (call.kind === "issue") {
         menuIssue(
           ctx,
           `segments.${segName}`,
-          `segment "${segName}" has a {{ menu }} whose apply action is not a string literal — a menu's identity is its apply-action name, which must be a literal so it can be gated at load (e.g. {{ menu "applyTheme" "themePage" }}).`,
+          `segment "${segName}" has a {{ menu }} ${call.message}.`,
         );
         continue;
       }
-      if (call.key === null) {
-        menuIssue(
-          ctx,
-          `segments.${segName}`,
-          `segment "${segName}" has a {{ menu }} whose accordion key is not a string literal — a shared key must be a literal so the mutually-exclusive group can be gated at load (e.g. {{ menu "applyTheme" "themePage" false false "pickers" }}).`,
-        );
-        continue;
-      }
-      // [LAW:types-are-the-program] An empty shared key collapses the state key to
-      // the bare reserved `menus.` namespace (and a `menus..member` action name).
-      // Reject it — a shared key, when present, must name a group.
-      if (call.key === "") {
-        menuIssue(
-          ctx,
-          `segments.${segName}`,
-          `segment "${segName}" has a {{ menu }} with an empty accordion key — a shared key must be a non-empty name (or omit it for an independent menu).`,
-        );
-        continue;
-      }
+      const { apply, options } = call;
       // [LAW:types-are-the-program] An empty apply name → empty member, and the
       // store returns "" for an absent state key, so `open = read === member`
       // would be true before any click — the menu would render open spuriously.
       // Reject it (the member must never alias the absent-state sentinel).
-      if (call.apply === "") {
+      if (apply === "") {
         menuIssue(
           ctx,
           `segments.${segName}`,
@@ -256,7 +301,7 @@ export function synthesizeMenuDecls(
         );
         continue;
       }
-      const member = menuMember(call.apply);
+      const member = menuMember(apply);
       // [LAW:types-are-the-program] A member equal to the closed sentinel makes
       // the cycle [closed, "closed"] — two identical members, leaving the menu
       // unopenable. The only apply name that breaks a menu; reject it at load.
@@ -268,33 +313,39 @@ export function synthesizeMenuDecls(
         );
         continue;
       }
-      const stateKey = menuStateKey(segName, call.apply, call.key);
-      // The raw declaration this key legitimately belongs to. Shared-key siblings
-      // all share one owner (their raw key); an independent menu owns its key alone
-      // (its raw segment+apply, NUL-joined so the two parts can't run together).
+      const stateKey = menuStateKey(segName, apply, options.key);
+      const pageKey = menuPageKey(stateKey);
+      // The raw declaration these keys legitimately belong to. Shared-key
+      // siblings all share one owner (their raw key); an independent menu owns
+      // its keys alone (its raw segment+apply, NUL-joined so the two parts
+      // can't run together).
       const owner =
-        call.key !== undefined
-          ? `key ${call.key}`
-          : `ind ${segName} ${call.apply}`;
-      const priorOwner = ownerByStateKey.get(stateKey);
-      if (priorOwner !== undefined && priorOwner !== owner) {
+        options.key !== undefined
+          ? `key ${options.key}`
+          : `ind ${segName} ${apply}`;
+      const clashKey = [stateKey, pageKey].find((k) => {
+        const prior = ownerBySynthKey.get(k);
+        return prior !== undefined && prior !== owner;
+      });
+      if (clashKey !== undefined) {
         menuIssue(
           ctx,
           `segments.${segName}`,
-          `two {{ menu }} disclosures normalize to the same state key ("${stateKey}") but were declared differently — distinct names that differ only by non-alphanumeric characters (e.g. "a-b" vs "a_b") collapse to one key and would silently share open-state. Rename so they don't collide.`,
+          `two {{ menu }} disclosures normalize to the same state key ("${clashKey}") but were declared differently — distinct names that differ only by non-alphanumeric characters (e.g. "a-b" vs "a_b") collapse to one key and would silently share open-state. Rename so they don't collide.`,
         );
         continue;
       }
-      ownerByStateKey.set(stateKey, owner);
+      ownerBySynthKey.set(stateKey, owner);
+      ownerBySynthKey.set(pageKey, owner);
       const identity = menuActionName(stateKey, member);
       if (claimed.has(identity)) {
         menuIssue(
           ctx,
           `segments.${segName}`,
           `two {{ menu }} disclosures resolve to the same identity ("${identity}") — ${
-            call.key !== undefined
-              ? `menus sharing key "${call.key}" must have distinct apply actions`
-              : `a segment cannot contain two menus over the same apply action "${call.apply}"`
+            options.key !== undefined
+              ? `menus sharing key "${options.key}" must have distinct apply actions`
+              : `a segment cannot contain two menus over the same apply action "${apply}"`
           }.`,
         );
         continue;
@@ -314,6 +365,18 @@ export function synthesizeMenuDecls(
   const variables: Record<string, VariableDecl> = {};
   for (const stateKey of stateKeys) {
     variables[stateKey] = disclosureStateVar(stateKey, DISCLOSURE_CLOSED);
+    // [LAW:one-source-of-truth] The synthesized page cursor — the half a blind
+    // author used to hand-declare and forget, silently freezing the picker on
+    // page 0 (renderPicker read an unbound key as "" → clamp 0). Both halves
+    // are emitted together, named by menuPageKey, so the pairing is a
+    // construction, not a convention: the state VAR (named by the key, the
+    // disclosure-var convention) is what the renderer reads the live page
+    // through; the int ACTION is what deriveActionValidators derives the ←/→/✕
+    // wire gate from — the one existing path, no parallel gate
+    // [LAW:single-enforcer].
+    const pageKey = menuPageKey(stateKey);
+    variables[pageKey] = { kind: "state", key: pageKey, default: "0" };
+    actions[pageKey] = { set: pageKey, int: true };
   }
 
   out.variables = { ...(out.variables ?? {}), ...variables };

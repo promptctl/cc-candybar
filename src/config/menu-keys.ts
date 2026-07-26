@@ -70,3 +70,76 @@ export function menuStateKey(
 export function menuActionName(stateKey: string, member: string): string {
   return stateKey + "." + member;
 }
+
+// [LAW:single-enforcer] THE page-cursor key a menu's picker body paginates by —
+// synthesized by the loader (state var + int action, both named by this key)
+// and derived again by the renderer, so neither side hand-declares or restates
+// it. One cursor PER DISCLOSURE STATE KEY, not per menu: a shared (accordion)
+// key holds at most one open member, so its one open body is the only body the
+// cursor can belong to — sharing is exact by construction, not an
+// approximation — and the disclosure toggle's page-0 reset re-seeds it on
+// every open. [LAW:one-source-of-truth] The synthesized state VARIABLE is
+// named by this same string (the disclosure-var convention), so the renderer
+// reads the live page via this one name.
+export function menuPageKey(stateKey: string): string {
+  return stateKey + ".page";
+}
+
+// [LAW:types-are-the-program] The `{{ menu }}` rare-knob options, spelled as ONE
+// trailing `(dict …)` argument. Defaults are the canonical path: paged=true (a
+// drop menu wants bounded height; a short domain paginates to one page and shows
+// no arrows anyway), closeOnPick=false (stay-open so options can be tried in a
+// row), key omitted (an independent menu).
+export interface MenuOptions {
+  readonly closeOnPick: boolean;
+  readonly paged: boolean;
+  readonly key: string | undefined;
+}
+
+// [LAW:one-source-of-truth] THE reader of a menu's options dict — the loader
+// folds it over `staticDictEntries` (gating identity at load) and the renderer
+// folds it over the evaluated dict object (realizing the body), so the option
+// vocabulary, value types, and defaults live exactly once. An unknown name or a
+// mistyped value throws with text naming the legal shape — the blind authoring
+// agent's teaching channel [LAW:no-silent-failure]; the loader attaches segment
+// context, the renderer surfaces it via composeWithDiagnostics.
+export function parseMenuOptions(
+  entries: Readonly<Record<string, unknown>>,
+): MenuOptions {
+  for (const name of Object.keys(entries)) {
+    if (name !== "closeOnPick" && name !== "paged" && name !== "key") {
+      throw new Error(
+        `unknown {{ menu }} option "${name}" — the options dict takes "closeOnPick" (bool, default false), "paged" (bool, default true), "key" (string, accordion grouping)`,
+      );
+    }
+  }
+  const bool = (name: "closeOnPick" | "paged", def: boolean): boolean => {
+    const v = entries[name];
+    if (v === undefined) return def;
+    if (typeof v !== "boolean") {
+      throw new Error(
+        `{{ menu }} option "${name}" must be a boolean, got ${JSON.stringify(v)} (e.g. (dict "${name}" ${String(!def)}))`,
+      );
+    }
+    return v;
+  };
+  const key = entries["key"];
+  if (key !== undefined && typeof key !== "string") {
+    throw new Error(
+      `{{ menu }} option "key" must be a string naming the accordion group, got ${JSON.stringify(key)}`,
+    );
+  }
+  // [LAW:types-are-the-program] An empty shared key would collapse the state key
+  // to the bare reserved `menus.` namespace (and a `menus..member` action name) —
+  // a key, when present, must name a group.
+  if (key === "") {
+    throw new Error(
+      `{{ menu }} has an empty accordion key — a shared key must be a non-empty name (or omit "key" for an independent menu)`,
+    );
+  }
+  return {
+    closeOnPick: bool("closeOnPick", false),
+    paged: bool("paged", true),
+    key,
+  };
+}
