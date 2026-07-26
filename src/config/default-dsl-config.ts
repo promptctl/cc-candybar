@@ -528,12 +528,9 @@ export const DEFAULT_DSL_CONFIG = {
     // and the render's read are one value. Empty default ⇒ the daemon's
     // "powerline" floor is in effect and styleControl shows "(default)".
     activeStyle: { kind: "state", key: "style", default: "" },
-    // The style picker's page index. Open/closed is the synthesized menus.* key
-    // the styleControl's {{ menu }} owns — NOT this var, which is purely the page
-    // the picker paginates by (default page 0; the disclosure resets it to 0 on
-    // every toggle, so a reopened menu never lands on a stale page). The stylePage
-    // action below declares the int gate this var reads back.
-    stylePage: { kind: "state", key: "style-page", default: "0" },
+    // No page-cursor var: the styleControl {{ menu }} synthesizes its own page
+    // cursor (state var + int action, named by menuPageKey) under the reserved
+    // menus.* namespace, alongside its open-state.
   },
 
   // ─── Segments ──────────────────────────────────────────────────────────────
@@ -794,15 +791,16 @@ export const DEFAULT_DSL_CONFIG = {
     // onto the line below this row when open. [LAW:one-type-per-behavior] "a menu
     // that opens and closes" is one behavior the substrate already expresses — no
     // bespoke open-action + page-cursor-as-open-state + when-gated reveal row.
-    // paged omitted ⇒ false ⇒ one full-width page (the 3 powerline shapes are a
-    // small domain; FlexStrip soft-wraps if needed). closeOnPick omitted ⇒ false
-    // ⇒ stay-open, so shapes can be tried in a row; the ▾ collapses.
+    // The apply name is the whole declaration: the page cursor (state var + int
+    // gate) is synthesized from the menu's identity, and the defaults are the
+    // canonical path — paged (the 3 powerline shapes fit one page, so no arrows
+    // render) and stay-open, so shapes can be tried in a row; ▾/✕ collapse.
     // [LAW:dataflow-not-control-flow] No display state from the provider — the
     // label is the one "style" value the click writes and the render reads.
     styleControl: {
       template:
         "✦ {{ if .activeStyle }}{{ .activeStyle }}{{ else }}(default){{ end }} " +
-        '{{ menu "applyStyle" "stylePage" }}',
+        '{{ menu "applyStyle" }}',
       bg: "surface",
       fg: "foreground",
     },
@@ -876,18 +874,17 @@ export const DEFAULT_DSL_CONFIG = {
     openProject: { open: "{{ .project_dir }}" },
     openTranscript: { open: "{{ .transcript_path }}" },
 
-    // [LAW:locality-or-seam] The style menu's behaviors, decoupled by NAME from the
-    // styleControl {{ menu }} above. The disclosure's open-state toggle + its
-    // backing state var are SYNTHESIZED by the menu pass (under the reserved
-    // menus.* namespace) — no hand-authored open/close action. These two are the
-    // picker body's effects, both gated by derivation (deriveActionValidators):
-    // applyStyle writes the chosen shape, gated to the STRIP_STYLES allow-list
-    // because its value source is `from: "styles"`; stylePage is the page cursor's
-    // unbounded int gate (←/→ navigation + the disclosure's page-0 reset). The
+    // [LAW:locality-or-seam] The style menu's behavior, decoupled by NAME from the
+    // styleControl {{ menu }} above. The disclosure's open-state toggle, its
+    // backing state var, AND the picker body's page cursor (state var + int
+    // action) are all SYNTHESIZED by the menu pass (under the reserved menus.*
+    // namespace) — no hand-authored open/close or page plumbing. This one action
+    // is the picker body's apply effect, gated by derivation
+    // (deriveActionValidators): it writes the chosen shape, gated to the
+    // STRIP_STYLES allow-list because its value source is `from: "styles"`. The
     // rendered click and the wire gate share that one source — a template cannot
     // smuggle an un-gated style write.
     applyStyle: { set: "style", from: "styles" },
-    stylePage: { set: "style-page", int: true },
   },
 
   // [LAW:single-enforcer] / [LAW:one-source-of-truth] Display-formatting policy

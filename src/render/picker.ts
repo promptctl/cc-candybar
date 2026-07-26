@@ -99,6 +99,24 @@ function assemble(frags: readonly RichText[], paged: boolean): RichText {
   return assembled;
 }
 
+// [LAW:types-are-the-program] The page cursor a picker paginates by: the
+// SessionState `key` its ←/→/✕ clicks write and the `stateVar` that reads the
+// live page back. The standalone `{{ picker }}` resolves it from its named
+// set-int page action; a `{{ menu }}` derives it from the menu's identity
+// (menuPageKey) — one value shape, two provenances, one renderer.
+export interface PickerPage {
+  readonly key: string;
+  readonly stateVar: string;
+}
+
+// [LAW:dataflow-not-control-flow] What a "close" WRITES, as data — the (key,
+// value) pairs folded into one atomic set-state by both the ✕ affordance and a
+// closeOnPick option click. The standalone picker closes by paging to -1 (the
+// when-gate idiom); a menu closes by writing its disclosure key back to the
+// closed sentinel and resetting its page cursor. The picker itself never
+// branches on which world it is in — the writes flow in.
+export type CloseWrites = ReadonlyArray<readonly [key: string, value: string]>;
+
 // [LAW:no-defensive-null-guards] The loader proves both picker arg names resolve
 // to declared actions; this asserts the KIND each must be (apply ⇒ set-option,
 // page ⇒ set-int) — a wrong kind is an author error surfaced loudly at render
@@ -120,18 +138,19 @@ function requireKind<K extends CompiledActionDecl["kind"]>(
 
 // [LAW:dataflow-not-control-flow] The page value (and the live width) select
 // which option cells render and which boundary arrows exist — a boundary arrow is
-// an ABSENT fragment, never a skipped branch. Every affordance click is a `set`
-// on the page key: ←/→ navigate (render-computed p±1), ✕ closes (-1). Each option
-// click APPLIES its option AND (when closeOnPick) resets the page key to -1 in one
-// atomic set-state — the picker owns the page key, so it derives the close-write
-// rather than the author re-stating the key.
+// an ABSENT fragment, never a skipped branch. ←/→ navigate the page key
+// (render-computed p±1); ✕ performs the caller-supplied close writes; each
+// option click APPLIES its option AND (when closeOnPick) folds the same close
+// writes into one atomic set-state — the caller owns what closing means, so the
+// author never re-states a key.
 // [LAW:single-enforcer] Exported so the `{{ menu }}` helper renders its body
 // through the SAME picker renderer — a menu body IS a picker grid; there is no
 // second grid implementation to drift. The menu adds only the disclosure
 // wrapper, never a parallel picker.
 export function renderPicker(
   applyName: string,
-  pageName: string,
+  page: PickerPage,
+  close: CloseWrites,
   closeOnPick: boolean,
   paged: boolean,
   runtime: ActionRuntime,
@@ -141,12 +160,6 @@ export function renderPicker(
     applyName,
     "set-option",
     "a set-option action ({ set, from })",
-  );
-  const page = requireKind(
-    runtime,
-    pageName,
-    "set-int",
-    "an int action ({ set, int: true })",
   );
   const store = runtime.store;
   const sessionId = readVar(store, "session.id");
@@ -201,20 +214,23 @@ export function renderPicker(
     effectsUrl([
       { verb: VERB_SET_STATE, args: [sessionId, page.key, String(value)] },
     ]);
+  // [LAW:dataflow-not-control-flow] The close writes arrive as data (see
+  // CloseWrites); ✕ performs exactly them, and a closeOnPick option click folds
+  // the same pairs into its apply write — one atomic set-state either way, so
+  // "what closing means" cannot diverge between the two affordances.
+  const closeFlat = close.flatMap(([k, v]) => [k, v]);
+  const closeUrl = effectsUrl([
+    { verb: VERB_SET_STATE, args: [sessionId, ...closeFlat] },
+  ]);
   const optionUrl = (option: string): string =>
     effectsUrl([
       {
         verb: VERB_SET_STATE,
-        args: [
-          sessionId,
-          apply.key,
-          option,
-          ...(closeOnPick ? [page.key, "-1"] : []),
-        ],
+        args: [sessionId, apply.key, option, ...(closeOnPick ? closeFlat : [])],
       },
     ]);
 
-  const frags: RichText[] = [linkFragment(PICKER_CLOSE, pageUrl(-1), false)];
+  const frags: RichText[] = [linkFragment(PICKER_CLOSE, closeUrl, false)];
   if (pageIdx > 0) {
     frags.push(linkFragment(PICKER_PREV, pageUrl(pageIdx - 1), false));
   }
@@ -254,14 +270,26 @@ export function pickerFuncs(runtime: ActionRuntime): FuncMap {
         pageName: string,
         closeOnPick?: boolean,
         paged?: boolean,
-      ) =>
-        renderPicker(
-          applyName,
+      ) => {
+        // [LAW:one-source-of-truth] The standalone picker's page cursor comes
+        // from its NAMED set-int action (the documented desugaring surface);
+        // closing means paging to -1, the when-gate idiom its host row reads
+        // (`{{ ge (int .page) 0 }}`).
+        const page = requireKind(
+          runtime,
           pageName,
+          "set-int",
+          "an int action ({ set, int: true })",
+        );
+        return renderPicker(
+          applyName,
+          { key: page.key, stateVar: page.stateVar },
+          [[page.key, "-1"]],
           closeOnPick === true,
           paged === true,
           runtime,
-        ),
+        );
+      },
       argTypes: ["string", "string", "bool", "bool"],
       returnType: "T",
     },
