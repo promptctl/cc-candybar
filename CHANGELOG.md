@@ -1,3 +1,10 @@
+# [1.20.0](https://github.com/promptctl/cc-candybar/compare/v1.19.0...v1.20.0) (2026-07-26)
+
+
+### Features
+
+* **config:** cc-candybar check — full-pipeline config validation with a text/exit-code contract (brandon-menus-bn5.7) ([#157](https://github.com/promptctl/cc-candybar/issues/157)) ([c3efbcb](https://github.com/promptctl/cc-candybar/commit/c3efbcb8be072980b290a9343528d37a64aa7c45))
+
 # [1.19.0](https://github.com/promptctl/cc-candybar/compare/v1.18.1...v1.19.0) (2026-07-26)
 
 
