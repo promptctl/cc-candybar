@@ -575,13 +575,17 @@ export function synthesizeGroupDecls(
   ctx: ValidateCtx,
   out: Mutable<RawDslConfig>,
 ): void {
-  const groups = ctx.groups;
-  if (groups.length === 0) return;
-
   // [LAW:single-enforcer] The disclosure primitive's shared reserved-namespace
   // enforcer (mirroring {{ menu }}'s `menus.`) — a user name under `groups.`
-  // would silently shadow a synthesized artifact.
+  // would silently shadow a synthesized artifact. Reserved UNCONDITIONALLY,
+  // before the no-groups early return, so the reservation is a stable contract
+  // ("you never author groups.*"), not a rule that only switches on when a
+  // group node happens to be declared this load — same placement as the menus
+  // pass (synthesizeMenuDecls).
   reservedNamespaceCollisions(ctx, out, GROUP_NS, "group nodes");
+
+  const groups = ctx.groups;
+  if (groups.length === 0) return;
 
   const seen = new Set<string>();
   for (const g of groups) {
