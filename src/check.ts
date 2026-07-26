@@ -253,11 +253,13 @@ function loadRegisterRender(
   );
   try {
     const compiled = registerDslConfig(config, registry, { cwd });
+    // Registered before the validator pass so a derive throw (a key-kind
+    // clash) still carries the partial-load warnings into the fatal outcome.
+    warnings.push(...compiled.loadWarnings);
     // Derivation only (the throw-on-clash coherence pass over the action
     // table); the daemon additionally registers the results in its global
     // validator registry, which a one-shot check has no wire to serve.
     deriveActionValidators(config);
-    warnings.push(...compiled.loadWarnings);
 
     // Fresh session (no clicked theme/style), so the session half of each
     // resolution is null — the config default over the floor, exactly what the
