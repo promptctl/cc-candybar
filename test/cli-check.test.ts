@@ -213,6 +213,27 @@ describe("checkConfig — explicit target", () => {
     expect(checkConfig(p, dir).kind).toBe("fatal");
   });
 
+  // [LAW:no-silent-failure] An evaluation-stage author error (here: a cycle
+  // action bound to the wrong number of displays) renders as a visible ⚠ error
+  // cell in the daemon — partial rendering for a human looking at the bar. The
+  // blind authoring agent is NOT looking at the bar, so check must fold the
+  // same error into its text verdict: exit 1, never a blessed exit 0.
+  it("reports a segment whose template throws at evaluation (⚠ error cell) as fatal", () => {
+    const p = write(
+      "render-error-cell.json5",
+      `{
+        actions: { cycleMode: { set: "work-mode", cycle: ["focus", "review", "debug"] } },
+        segments: { chip: { template: '{{ action "cycleMode" "🎯 focus" "🔍 review" }}' } },
+        root: { h: ['chip'] },
+      }`,
+    );
+    const message = expectFatal(checkConfig(p, dir));
+    expect(message).toContain('segment "chip"');
+    expect(message).toContain(
+      'cycles 3 members; bind one display per member (3) or one static display, got 2',
+    );
+  });
+
   it("reports a template parse error in a segment override (register stage)", () => {
     const p = write(
       "template-parse.json5",
