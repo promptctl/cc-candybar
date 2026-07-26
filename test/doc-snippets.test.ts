@@ -147,13 +147,16 @@ describe("docs/interaction-authoring.md snippet contract", () => {
           `doc line ${f.line}: expected fatal, got ${outcome.kind}`,
         );
       }
-      expect(checkPlan(outcome).code).toBe(1);
-      // The doc quotes a substring of the actual message (the stable text
-      // after the [line • path] prefix) — asserted verbatim, not transcribed.
-      if (!outcome.message.includes(quoted)) {
+      const plan = checkPlan(outcome);
+      expect(plan.code).toBe(1);
+      // [LAW:one-source-of-truth] The doc's stated contract is "a substring of
+      // check's actual stderr" — assert against exactly that surface (the full
+      // fatal stderr checkPlan emits, which carries the message), so the doc's
+      // sentence and this assertion are one contract, not a stricter shadow.
+      if (!plan.stderr.includes(quoted)) {
         throw new Error(
-          `doc line ${next.line}: quoted error text does not match the loader's actual message.\n` +
-            `quoted:\n${quoted}\n\nactual:\n${outcome.message}`,
+          `doc line ${next.line}: quoted error text does not match check's actual stderr.\n` +
+            `quoted:\n${quoted}\n\nactual stderr:\n${plan.stderr}`,
         );
       }
     },
