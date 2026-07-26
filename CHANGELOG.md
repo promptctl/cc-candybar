@@ -1,3 +1,10 @@
+# [1.19.0](https://github.com/promptctl/cc-candybar/compare/v1.18.1...v1.19.0) (2026-07-26)
+
+
+### Features
+
+* **menus:** `{{ menu }}` synthesizes the page cursor; named options replace the positional tail (brandon-menus-bn5.6) ([#156](https://github.com/promptctl/cc-candybar/issues/156)) ([9bf8a35](https://github.com/promptctl/cc-candybar/commit/9bf8a358cf97a262f1d97e1d795b227e3cc5479a))
+
 ## [1.18.1](https://github.com/promptctl/cc-candybar/compare/v1.18.0...v1.18.1) (2026-07-25)
 
 
