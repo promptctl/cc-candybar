@@ -303,12 +303,15 @@ export function checkPlan(o: CheckOutcome): CheckPlan {
   }
 }
 
-// `cc-candybar check [path]` — the argv binding. Extra arguments are a usage
-// error (loud, not silently ignored — the likeliest cause is an unquoted path).
+// `cc-candybar check [path]` — the argv binding. Extra arguments and an empty
+// path argument are usage errors (loud, not silently ignored — the likeliest
+// cause is an unquoted or mis-expanded shell variable). An empty string is not
+// "no argument": `checkConfig(undefined)` means "resolve like the daemon",
+// while `""` is a malformed target that would otherwise EISDIR on the cwd.
 export function runCheck(args: readonly string[]): never {
-  if (args.length > 1) {
+  if (args.length > 1 || args[0] === "") {
     process.stderr.write(
-      "check: too many arguments\nUsage: cc-candybar check [config-file]\n",
+      "check: expected at most one non-empty path\nUsage: cc-candybar check [config-file]\n",
     );
     process.exit(EXIT_USAGE);
   }

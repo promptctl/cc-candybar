@@ -122,6 +122,7 @@ async function main(): Promise<void> {
     // old lint (same loader, plus register + render coverage).
     if (subcommand === "check" || subcommand === "lint") {
       runCheck(process.argv.slice(3)); // owns its own exit code (0/1/2)
+      return;
     }
     if (subcommand === "schema") {
       runSchema(); // owns its own exit code
