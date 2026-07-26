@@ -289,9 +289,10 @@ function loadRegisterRender(
         padding: config.globals.padding ?? DEFAULT_PADDING,
         charset: config.globals.charset ?? DEFAULT_CHARSET,
       },
-      undefined,
-      (segName, message) =>
-        segmentErrors.push(`segment "${segName}": ${message}`),
+      {
+        onSegmentError: (segName, message) =>
+          segmentErrors.push(`segment "${segName}": ${message}`),
+      },
     );
     if (segmentErrors.length > 0) {
       throw new Error(

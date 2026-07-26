@@ -112,7 +112,8 @@ export interface NodeRenderCtx {
   // below: a caught evaluation error renders as a visible ⚠ error cell (partial
   // rendering — the daemon's channel), AND is reported here so a headless caller
   // (`cc-candybar check`, a blind authoring agent's eyes) can turn it into a
-  // text verdict instead of blessing a bar it cannot see.
+  // text verdict instead of blessing a bar it cannot see. Trusted non-throwing
+  // (the registry-dispose contract) — see RenderObservers.onSegmentError.
   readonly onSegmentError?: (segName: string, message: string) => void;
   // [LAW:locality-or-seam] The menu seam, injected as capabilities so this module
   // never imports the menu feature. `beginSegment` runs BEFORE a segment template

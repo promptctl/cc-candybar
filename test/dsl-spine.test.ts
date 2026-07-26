@@ -157,7 +157,7 @@ describe("DSL render spine (bzh.7 steel thread)", () => {
       HOOK_DATA,
       basePalette,
       OPTS,
-      sink,
+      { perSegmentSink: sink },
     );
 
     // Stale entry from a previous render must be gone.

@@ -501,14 +501,11 @@ function focusTint(style: Style): Style {
  * into nested containers keeps every segment's color; toggling a node's
  * visibility does not recolor the nodes after it.
  */
-export function renderDsl(
-  config: ValidatedConfig,
-  compiled: CompiledConfig,
-  store: VariableStore,
-  registry: SourceRegistry,
-  payload: unknown,
-  basePalette: PaletteResolver,
-  opts: BuildLineOptions,
+// [LAW:locality-or-seam] The optional render observers, bundled as ONE named bag
+// so a caller states what it passes by name — no positional tail to count, no
+// `undefined` holes to reach a later observer, and a new observer is one field
+// here rather than a signature change every caller re-counts.
+export interface RenderObservers {
   // [LAW:dataflow-not-control-flow] Optional per-segment cell sink. When
   // present, each rendered segment's RichText array (post-layout, pre-
   // serialization) is written to this map under its segment name. Storing
@@ -521,14 +518,28 @@ export function renderDsl(
   // joined line (powerline joiners sit *between* segments and have no
   // place in a one-segment render), but for debug visibility this is the
   // natural per-segment shape.
-  perSegmentSink?: Map<string, readonly RichText[]>,
+  readonly perSegmentSink?: Map<string, readonly RichText[]>;
   // [LAW:no-silent-failure] Optional observer for per-segment evaluation errors.
   // A failing segment renders as a visible ⚠ error cell (partial rendering, the
   // daemon's author-facing channel) — a headless caller with no one looking at
   // the bar (`cc-candybar check`) passes this to receive the same errors as
-  // data and fold them into its text verdict.
-  onSegmentError?: (segName: string, message: string) => void,
+  // data and fold them into its text verdict. Trusted non-throwing (the
+  // registry-dispose contract): an observer that throws is a caller bug
+  // surfaced loudly, never caught and absorbed by the render walk.
+  readonly onSegmentError?: (segName: string, message: string) => void;
+}
+
+export function renderDsl(
+  config: ValidatedConfig,
+  compiled: CompiledConfig,
+  store: VariableStore,
+  registry: SourceRegistry,
+  payload: unknown,
+  basePalette: PaletteResolver,
+  opts: BuildLineOptions,
+  observers?: RenderObservers,
 ): string {
+  const { perSegmentSink, onSegmentError } = observers ?? {};
   // [LAW:one-source-of-truth] Inject the usable width as `term.cols` from the
   // SAME opts.width the strip wraps to (below), so a width-paginated widget reads
   // the exact wrap width — never a cached or independently-measured copy. This is

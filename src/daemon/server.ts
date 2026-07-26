@@ -869,7 +869,7 @@ async function handleRequest(req: Request): Promise<HandledRequest> {
           // in place. Cells are cheap (already computed during the render);
           // the per-segment ANSI serialization happens lazily inside the
           // debug handler so normal renders pay no extra serializer cost.
-          entry.state.lastRenderCellsBySegment,
+          { perSegmentSink: entry.state.lastRenderCellsBySegment },
         );
       }
       // [LAW:one-source-of-truth] Consume the transient click error written by
