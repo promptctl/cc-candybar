@@ -154,21 +154,26 @@ export function checkConfig(
   target: string | undefined,
   cwd: string = process.cwd(),
 ): CheckOutcome {
-  let configPath: string | null;
-  if (target !== undefined) {
-    const resolved = path.resolve(expandHome(target));
-    try {
-      fs.readFileSync(resolved, "utf-8");
-    } catch (e) {
+  // [LAW:one-source-of-truth] No pre-read: the ONE content read of the config
+  // file is the readFileSync inside loadConfig. Readability is established by
+  // the same read that parses (no double I/O); the catch below classifies its
+  // errno failure as `unreadable`. The explicit-target statSync is a metadata
+  // probe at the argv trust boundary, not a second read: a directory target
+  // (`check .`) fails read() with a path-less EISDIR the catch could not
+  // attribute, so the not-a-file usage error is decided here.
+  const configPath =
+    target !== undefined
+      ? path.resolve(expandHome(target))
+      : resolveDslConfigPath(cwd, cwd);
+  if (target !== undefined && configPath !== null) {
+    const st = fs.statSync(configPath, { throwIfNoEntry: false });
+    if (st !== undefined && !st.isFile()) {
       return {
         kind: "unreadable",
-        path: target,
-        message: e instanceof Error ? e.message : String(e),
+        path: configPath,
+        message: "not a file",
       };
     }
-    configPath = resolved;
-  } else {
-    configPath = resolveDslConfigPath(cwd, cwd);
   }
 
   // [LAW:dataflow-not-control-flow] Collision detection runs independent of
@@ -182,6 +187,24 @@ export function checkConfig(
     const rendered = loadRegisterRender(configPath, cwd, warnings);
     return { kind: "clean", configPath, warnings, rendered };
   } catch (e) {
+    // A filesystem error on the config file itself (ENOENT/EACCES from
+    // loadConfig's read — errno errors carry the failing `.path`, which is the
+    // discriminator against deeper fs failures) is the `unreadable` outcome:
+    // the named file could not be read at all, distinct from a file that read
+    // but is invalid. [LAW:no-silent-failure] — never a fall-through to the
+    // bundled default. Duck-typed, not `instanceof Error`: fs errors can cross
+    // a realm boundary (jest/graceful-fs), where instanceof lies.
+    const errno = e as Partial<NodeJS.ErrnoException> | null;
+    if (
+      configPath !== null &&
+      typeof errno === "object" &&
+      errno !== null &&
+      typeof errno.code === "string" &&
+      errno.path === configPath &&
+      typeof errno.message === "string"
+    ) {
+      return { kind: "unreadable", path: configPath, message: errno.message };
+    }
     // Same classification RenderCache.reloadInto applies: ConfigError and
     // register/render throws (template parse, MissingFieldError, action arity)
     // are all author-facing diagnostics — the daemon would surface each via

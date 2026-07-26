@@ -91,6 +91,12 @@ describe("checkConfig — explicit target", () => {
     expect(outcome.kind).toBe("unreadable");
   });
 
+  it("reports a directory target as unreadable (usage-shaped, exit 2), not invalid", () => {
+    const outcome = checkConfig(dir, dir);
+    expect(outcome.kind).toBe("unreadable");
+    expect(checkPlan(outcome).code).toBe(2);
+  });
+
   // Acceptance (a): a JSON5 syntax error is fatal and names the file.
   it("reports a JSON5 parse error naming the config path", () => {
     const p = write("syntax.json5", `{ segments: { a: `);
