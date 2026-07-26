@@ -11,7 +11,8 @@ import { tryRenderViaDaemon } from "./daemon/client";
 import { runDaemonStats } from "./daemon/client-stats";
 import { runDebug } from "./daemon/client-debug";
 import { isDebugWhat } from "./daemon/debug-types";
-import { runLint, runSchema } from "./config/cli";
+import { runSchema } from "./config/cli";
+import { runCheck } from "./check";
 import { obtainDaemonKick } from "./daemon/acquire";
 import { planOutcome } from "./render/outcome-plan";
 
@@ -66,8 +67,11 @@ Subcommands (macOS):
                            request totals. Does not spawn a daemon.
 
 Config tooling:
-  lint <config-file>       Validate a config file (parse + cross-refs + cycles)
-                           with no daemon. Exit 0 valid, 1 invalid, 2 unreadable.
+  check [config-file]      Validate a config on the full render pipeline (parse
+                           → merge → validate → register → render) with no
+                           daemon. With no path, checks the same file the daemon
+                           would load from here. Exit 0 clean (warnings on
+                           stderr), 1 invalid, 2 unreadable. "lint" is an alias.
   schema                   Print the JSON Schema for the config file shape
                            (.cc-candybar.json5). Point an editor's $schema at it
                            for autocomplete + structural validation.
@@ -113,9 +117,11 @@ async function main(): Promise<void> {
       await runDaemonStats(process.argv.slice(3));
       process.exit(0);
     }
-    if (subcommand === "lint") {
-      runLint(process.argv.slice(3)); // owns its own exit code (0/1/2)
-      return;
+    // [LAW:one-type-per-behavior] `lint` is an alias of `check` — one config
+    // verdict, one pipeline, one exit-code contract (0/1/2). check subsumes the
+    // old lint (same loader, plus register + render coverage).
+    if (subcommand === "check" || subcommand === "lint") {
+      runCheck(process.argv.slice(3)); // owns its own exit code (0/1/2)
     }
     if (subcommand === "schema") {
       runSchema(); // owns its own exit code
