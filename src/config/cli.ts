@@ -26,7 +26,19 @@ export function loadSchemaText(): string | null {
 // time (scripts/gen-schema.ts → emitConfigSchema); served verbatim here (the
 // emitter runs at build, not ship time).
 export function runSchema(): void {
-  const text = loadSchemaText();
+  // [LAW:no-silent-failure] A schema that exists but cannot be read (EACCES, a
+  // deletion racing the existsSync in locateSchema) is a distinct failure from
+  // schema-not-found — report it as what it is, not a misleading top-level
+  // render error.
+  let text: string | null;
+  try {
+    text = loadSchemaText();
+  } catch (e) {
+    process.stderr.write(
+      `schema: cannot read bundled schema: ${e instanceof Error ? e.message : String(e)}\n`,
+    );
+    process.exit(EXIT_USAGE);
+  }
   if (text === null) {
     process.stderr.write(
       "schema: bundled schema not found (expected schema/cc-candybar.schema.json). " +

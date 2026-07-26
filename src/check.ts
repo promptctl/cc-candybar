@@ -166,7 +166,19 @@ export function checkConfig(
       ? path.resolve(expandHome(target))
       : resolveDslConfigPath(cwd, cwd);
   if (target !== undefined && configPath !== null) {
-    const st = fs.statSync(configPath, { throwIfNoEntry: false });
+    // throwIfNoEntry suppresses only ENOENT (left for the content read to
+    // classify); EACCES/EPERM on the probe itself is equally "could not read
+    // the named file" — same outcome, not an uncaught stack.
+    let st: fs.Stats | undefined;
+    try {
+      st = fs.statSync(configPath, { throwIfNoEntry: false });
+    } catch (e) {
+      return {
+        kind: "unreadable",
+        path: configPath,
+        message: e instanceof Error ? e.message : String(e),
+      };
+    }
     if (st !== undefined && !st.isFile()) {
       return {
         kind: "unreadable",
