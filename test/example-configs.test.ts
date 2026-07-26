@@ -74,11 +74,15 @@ describe("shipped example configs (examples/*.json5)", () => {
     "%s is clean under `cc-candybar check` (exit 0) and renders",
     (file) => {
       const outcome = checkConfig(path.join(examplesDir, file));
-      expect(outcome.kind).toBe("clean");
-      expect(checkPlan(outcome).code).toBe(0);
-      if (outcome.kind === "clean") {
-        expect(outcome.rendered.length).toBeGreaterThan(0);
+      // Fail with the outcome's own diagnostic, not an opaque kind mismatch —
+      // a broken example should name its actual load error in the Jest output.
+      if (outcome.kind !== "clean") {
+        throw new Error(
+          `${file}: ${outcome.kind}: ${"message" in outcome ? outcome.message : ""}`,
+        );
       }
+      expect(checkPlan(outcome).code).toBe(0);
+      expect(outcome.rendered.length).toBeGreaterThan(0);
     },
   );
 
