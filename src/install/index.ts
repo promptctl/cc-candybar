@@ -235,9 +235,10 @@ function infoPlistPatch(): Array<{ key: string; xml: string }> {
   ];
 }
 
+// Callers establish the macOS precondition ([LAW:single-enforcer] — the
+// subcommand entry checks before any side effect; runInstall reaches here
+// only through its darwin dispatch).
 function installUrlHandlerFrom(stagedDist: string): void {
-  ensureMacOS();
-
   const bundle = appBundlePath();
   fs.mkdirSync(path.dirname(bundle), { recursive: true });
 
@@ -299,6 +300,9 @@ function installUrlHandlerFrom(stagedDist: string): void {
 }
 
 export function runInstallUrlHandler(): void {
+  // Precondition before any side effect: on a non-mac this fails with zero
+  // files written, not after staging the runtime.
+  ensureMacOS();
   const staged = runStageRuntime();
   installUrlHandlerFrom(staged.distPath);
 }
