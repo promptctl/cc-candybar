@@ -1,0 +1,16 @@
+#!/usr/bin/env node
+// The package's one committed entry point. Dynamic import is deliberate: an
+// extensionless file loads as CommonJS regardless of the package "type", and
+// import() is the one construct that reaches the ESM bundle from either
+// module system, resolving relative to this file no matter the cwd.
+// [LAW:composability] No install scripts, no staging ritual — this works the
+// moment any package manager lays the tarball on disk. The native fast-path
+// binary is a deploy-time optimization staged by `cc-candybar install`
+// (published) or `just install-rust` (source checkout, bin/cc-candybar-native).
+import("../dist/index.mjs").catch((err) => {
+  console.error(
+    "cc-candybar: failed to load dist/index.mjs — " +
+      (err && err.message ? err.message : String(err)),
+  );
+  process.exit(1);
+});

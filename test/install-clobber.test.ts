@@ -3,8 +3,24 @@ import path from "node:path";
 import os from "node:os";
 import { __test__ } from "../src/install";
 
-const { updateClaudeSettings, buildStatusLineCommand, DEFAULT_INSTALL_ARGS } =
-  __test__;
+const {
+  updateClaudeSettings,
+  buildStatusLineCommand,
+  DEFAULT_INSTALL_ARGS,
+  shellEscape,
+  stageFile,
+} = __test__;
+
+// A realistic staged path — the space in "Application Support" exercises the
+// quoting the real darwin path needs.
+const BIN = path.join(
+  os.homedir(),
+  "Library",
+  "Application Support",
+  "CCCandybar",
+  "bin",
+  "cc-candybar",
+);
 
 function tmpSettingsPath(): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "cpwl-install-test-"));
@@ -17,22 +33,53 @@ function readCommand(settingsPath: string): string | undefined {
   return s.statusLine?.command;
 }
 
+describe("buildStatusLineCommand", () => {
+  test("quotes a bin path containing spaces", () => {
+    const cmd = buildStatusLineCommand(BIN, []);
+    expect(cmd).toBe(shellEscape(BIN));
+    expect(cmd).toContain("'");
+  });
+
+  test("appends renderer args, each escaped", () => {
+    const cmd = buildStatusLineCommand("/opt/bin/cc-candybar", [
+      "--style=minimal",
+      "weird arg",
+    ]);
+    expect(cmd).toBe("/opt/bin/cc-candybar --style=minimal 'weird arg'");
+  });
+});
+
 describe("install — clobber protection", () => {
-  test("fresh install writes statusLine.command", () => {
+  test("fresh install writes the staged bin command", () => {
     const p = tmpSettingsPath();
-    updateClaudeSettings(DEFAULT_INSTALL_ARGS, false, p);
-    expect(readCommand(p)).toMatch(
-      /pnpm dlx @promptctl\/cc-candybar@/,
-    );
+    updateClaudeSettings(BIN, DEFAULT_INSTALL_ARGS, false, p);
+    expect(readCommand(p)).toBe(buildStatusLineCommand(BIN, []));
   });
 
   test("re-install overwrites our own prior command (version upgrade)", () => {
     const p = tmpSettingsPath();
-    updateClaudeSettings(["--style=minimal"], false, p);
+    updateClaudeSettings(BIN, ["--style=minimal"], false, p);
     expect(readCommand(p)).toContain("--style=minimal");
 
-    updateClaudeSettings(["--style=powerline"], false, p);
+    updateClaudeSettings(BIN, ["--style=powerline"], false, p);
     expect(readCommand(p)).toContain("--style=powerline");
+  });
+
+  test("legacy pnpm-dlx command is recognized as ours and upgraded", () => {
+    const p = tmpSettingsPath();
+    fs.mkdirSync(path.dirname(p), { recursive: true });
+    fs.writeFileSync(
+      p,
+      JSON.stringify({
+        statusLine: {
+          type: "command",
+          command: "pnpm dlx @promptctl/cc-candybar@1.17.5",
+        },
+      }),
+    );
+
+    updateClaudeSettings(BIN, DEFAULT_INSTALL_ARGS, false, p);
+    expect(readCommand(p)).toBe(buildStatusLineCommand(BIN, []));
   });
 
   test("refuses to overwrite user-customized command", () => {
@@ -56,7 +103,7 @@ describe("install — clobber protection", () => {
       stderr.push(String(chunk));
       return true;
     };
-    updateClaudeSettings(DEFAULT_INSTALL_ARGS, false, p);
+    updateClaudeSettings(BIN, DEFAULT_INSTALL_ARGS, false, p);
     process.stderr.write = origWrite;
 
     expect(readCommand(p)).toBe(
@@ -79,10 +126,8 @@ describe("install — clobber protection", () => {
       }),
     );
 
-    updateClaudeSettings(DEFAULT_INSTALL_ARGS, true, p);
-    expect(readCommand(p)).toMatch(
-      /pnpm dlx @promptctl\/cc-candybar@/,
-    );
+    updateClaudeSettings(BIN, DEFAULT_INSTALL_ARGS, true, p);
+    expect(readCommand(p)).toBe(buildStatusLineCommand(BIN, []));
   });
 
   test("empty settings.json gets statusLine written", () => {
@@ -90,10 +135,8 @@ describe("install — clobber protection", () => {
     fs.mkdirSync(path.dirname(p), { recursive: true });
     fs.writeFileSync(p, "{}");
 
-    updateClaudeSettings(DEFAULT_INSTALL_ARGS, false, p);
-    expect(readCommand(p)).toMatch(
-      /pnpm dlx @promptctl\/cc-candybar@/,
-    );
+    updateClaudeSettings(BIN, DEFAULT_INSTALL_ARGS, false, p);
+    expect(readCommand(p)).toBe(buildStatusLineCommand(BIN, []));
   });
 
   test("settings without statusLine gets statusLine written", () => {
@@ -101,9 +144,27 @@ describe("install — clobber protection", () => {
     fs.mkdirSync(path.dirname(p), { recursive: true });
     fs.writeFileSync(p, JSON.stringify({ someOtherKey: true }));
 
-    updateClaudeSettings(DEFAULT_INSTALL_ARGS, false, p);
-    expect(readCommand(p)).toMatch(
-      /pnpm dlx @promptctl\/cc-candybar@/,
-    );
+    updateClaudeSettings(BIN, DEFAULT_INSTALL_ARGS, false, p);
+    expect(readCommand(p)).toBe(buildStatusLineCommand(BIN, []));
+  });
+});
+
+describe("stageFile", () => {
+  test("copies source to dest", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "cpwl-stage-test-"));
+    const src = path.join(dir, "src.bin");
+    const dest = path.join(dir, "dest.bin");
+    fs.writeFileSync(src, "payload");
+    stageFile(src, dest);
+    expect(fs.readFileSync(dest, "utf-8")).toBe("payload");
+  });
+
+  test("identity staging is a no-op, never a truncation", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "cpwl-stage-test-"));
+    const f = path.join(dir, "same.bin");
+    fs.writeFileSync(f, "payload");
+    // Same file reached through a dot-dot detour — must not truncate it.
+    stageFile(f, path.join(dir, "..", path.basename(dir), "same.bin"));
+    expect(fs.readFileSync(f, "utf-8")).toBe("payload");
   });
 });
