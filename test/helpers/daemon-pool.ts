@@ -154,6 +154,15 @@ export function createDaemonPool(dir: string, size: number): DaemonPool {
     const myPid = process.pid;
     const myStartTime = readOwnStartTime(myPid);
     const deadline = Date.now() + timeoutMs;
+    // [LAW:no-silent-failure] Never spawn past the ceiling by falling back
+    // silently — a full pool means the caller MUST fail loudly so the
+    // regression (more concurrent real daemons than the asserted ceiling)
+    // is visible instead of quietly re-opening the storm.
+    const timeoutError = (): Error =>
+      new Error(
+        `daemon-pool: no free slot among ${size} within ${timeoutMs}ms ` +
+          `(${dir}) — too many concurrent real daemon spawns on this machine`,
+      );
     let claimed: number | null = null;
     for (;;) {
       for (let i = 0; i < size; i++) {
@@ -161,18 +170,15 @@ export function createDaemonPool(dir: string, size: number): DaemonPool {
           claimed = i;
           break;
         }
+        // Checked after EVERY tryClaim, not just once per full pass: each
+        // call shells out to `ps` (isSlotLive's liveness check) with its own
+        // 2000ms subprocess timeout, so a size-N pool's single pass could
+        // otherwise block up to N×2000ms before the deadline is even
+        // consulted — turning a caller's 300ms budget into seconds.
+        if (Date.now() >= deadline) throw timeoutError();
       }
       if (claimed !== null) break;
-      // [LAW:no-silent-failure] Never spawn past the ceiling by falling back
-      // silently — a full pool means the test MUST fail loudly so the
-      // regression (more concurrent real daemons than the asserted ceiling)
-      // is visible instead of quietly re-opening the storm.
-      if (Date.now() >= deadline) {
-        throw new Error(
-          `daemon-pool: no free slot among ${size} within ${timeoutMs}ms ` +
-            `(${dir}) — too many concurrent real daemon spawns on this machine`,
-        );
-      }
+      if (Date.now() >= deadline) throw timeoutError();
       await new Promise((r) => setTimeout(r, retryIntervalMs));
     }
     const slotIndex = claimed;
