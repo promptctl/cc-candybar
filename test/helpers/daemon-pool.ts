@@ -41,9 +41,13 @@ import { pidAlive } from "../../src/daemon/parent-watchdog";
 type SlotRecord = ProcessIdentity;
 
 export interface DaemonSlot {
-  // Idempotent. Removes the slot file only if it still names us — a slot we
-  // lost a reclaim race for (see tryClaim) must never be deleted out from
-  // under its new, legitimate owner.
+  // Idempotent. Removes the slot file only if it still named us AT THE TIME
+  // OF THE CHECK — same residual TOCTOU as tryClaim's reclaim (see its
+  // comment for the full rationale): a concurrent reclaimer's rename can
+  // land between our read and our unlink, in which case we delete their
+  // fresh record instead of our own stale one. Accepted for the same
+  // reason: test-only tooling, self-correcting (the next acquire's `wx`
+  // create just wins the now-empty slot), not a correctness hazard.
   release(): void;
 }
 
@@ -59,9 +63,14 @@ export interface DaemonPool {
   readonly dir: string;
   readonly size: number;
   acquire(opts?: AcquireOpts): Promise<DaemonSlot>;
-  // Removes every slot whose recorded owner is provably dead. Never removes a
-  // slot with a live owner — safe to call even while another concurrent
-  // worktree's suite is mid-run against this same shared pool.
+  // Removes every slot whose recorded owner is dead AT THE TIME OF THE
+  // CHECK. Same residual TOCTOU as tryClaim/release (see tryClaim's
+  // comment): a concurrent worktree's reclaim can land between the
+  // liveness check and the unlink, deleting their just-claimed live
+  // record instead of the dead one we checked. Safe to call during a
+  // concurrent worktree's run in the sense that matters — it never touches
+  // a slot that was already live when checked, and the rare race
+  // self-corrects on the next acquire.
   sweepStale(): void;
 }
 
