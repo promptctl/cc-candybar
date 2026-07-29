@@ -62,8 +62,13 @@ export interface BootDecision {
 
 const DEFAULT_CEILING = 16;
 
+// [LAW:no-silent-failure] `Number(...)`, not `parseInt(...)` — parseInt
+// truncates trailing garbage ("16o" reads as 16, silently accepting a typo
+// that likely meant 160) instead of surfacing it. `Number` requires the
+// WHOLE string to be numeric, so a typo becomes NaN and falls through to the
+// default like any other garbage value.
 export function daemonCeiling(): number {
-  const raw = parseInt(process.env["CC_CANDYBAR_DAEMON_CEILING"] ?? "", 10);
+  const raw = Number(process.env["CC_CANDYBAR_DAEMON_CEILING"] ?? "");
   return Number.isInteger(raw) && raw > 0 ? raw : DEFAULT_CEILING;
 }
 

@@ -129,6 +129,15 @@ describe("daemonCeiling", () => {
     expect(daemonCeiling()).toBe(16);
   });
 
+  test("falls back to default on trailing garbage — a typo must not silently truncate (e.g. '160' fat-fingered as '16o')", () => {
+    process.env["CC_CANDYBAR_DAEMON_CEILING"] = "16o";
+    expect(daemonCeiling()).toBe(16);
+    // Not the truncated 16 — DEFAULT_CEILING also happens to be 16, so pin a
+    // value where truncation and the default would visibly disagree.
+    process.env["CC_CANDYBAR_DAEMON_CEILING"] = "32o";
+    expect(daemonCeiling()).toBe(16);
+  });
+
   test("falls back to default on zero or negative (a ceiling of 0 would refuse everything)", () => {
     process.env["CC_CANDYBAR_DAEMON_CEILING"] = "0";
     expect(daemonCeiling()).toBe(16);
