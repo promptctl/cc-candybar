@@ -22,8 +22,8 @@
 // carries NO structural meaning — unit cohesion is structural (one segment = one
 // strip item), not a function of matching backgrounds.
 
-import { RichText } from "@promptctl/rich-js";
-import type { PaletteResolver, Style } from "@promptctl/rich-js";
+import { RichText, IDENTITY } from "@promptctl/rich-js";
+import type { PaletteResolver, Style, ThemeKey } from "@promptctl/rich-js";
 import type { Template } from "@promptctl/go-template-js";
 import type {
   LayoutNode,
@@ -100,6 +100,12 @@ export interface NodeCompileCtx {
 export interface NodeRenderCtx {
   readonly scope: object;
   readonly basePalette: PaletteResolver;
+  // [LAW:one-source-of-truth] The render-wide look (the session's chosen
+  // theme-adaptation, resolved by the caller via effectiveLookName →
+  // lookKeyByName), threaded by the driver — one ThemeKey per render, IDENTITY
+  // when no look is chosen. Composed with the per-segment hue shift into ONE
+  // transposition key at the segment leaf.
+  readonly look: ThemeKey;
   readonly visible: boolean;
   // [LAW:one-source-of-truth] The render-wide intra-cell padding (resolved
   // globals.padding), threaded by the driver from BuildLineOptions into every
@@ -268,10 +274,19 @@ const segmentType: NodeType<"segment"> = {
 
       // [LAW:dataflow-not-control-flow] The per-segment variability is WHICH
       // palette — the base resolver (per-segment override or basePalette)
-      // transposed by hueShift. bg and fg then resolve from this one palette.
+      // transposed by the render's look + this segment's hueShift, folded into
+      // ONE ThemeKey for a SINGLE transposePalette call (chaining two
+      // transpositions would double-pay OKLCH quantization and collide the
+      // transpose memo — see transposedResolver). bg and fg then resolve from
+      // this one palette. An explicit per-segment `palette:` pin IGNORES the
+      // look, exactly as it ignores the session theme: the pin's presence is
+      // the discriminator, and its arm carries the identity look — a value
+      // choice, not a skipped operation.
+      const lookKey =
+        segCompiled.paletteResolver !== undefined ? IDENTITY : ctx.look;
       const resolver = transposedResolver(
         segCompiled.paletteResolver ?? ctx.basePalette,
-        hueShift,
+        { ...lookKey, hueShift: lookKey.hueShift + hueShift },
       );
       const resolvedStyle = resolveSegmentColors(
         resolver,

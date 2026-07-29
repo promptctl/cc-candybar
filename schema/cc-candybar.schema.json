@@ -26,6 +26,9 @@
         "palette": {
           "type": "string"
         },
+        "look": {
+          "type": "string"
+        },
         "style": {
           "enum": [
             "powerline",
@@ -1140,7 +1143,8 @@
               "from": {
                 "enum": [
                   "themes",
-                  "styles"
+                  "styles",
+                  "looks"
                 ]
               }
             },
@@ -1237,6 +1241,28 @@
             "additionalProperties": false
           }
         ]
+      }
+    },
+    "looks": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "hueShift": {
+            "type": "number"
+          },
+          "chromaScale": {
+            "type": "number",
+            "minimum": 0
+          },
+          "lightnessScale": {
+            "type": "number"
+          },
+          "lightnessShift": {
+            "type": "number"
+          }
+        },
+        "additionalProperties": false
       }
     },
     "helpers": {

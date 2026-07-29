@@ -197,6 +197,16 @@ export const DEFAULT_DSL_CONFIG = {
       path: "theme.effective",
       default: "",
     },
+    // [LAW:one-type-per-behavior] The effective LOOK name, the exact twin of
+    // theme.effective one dimension over — effectiveLookName(sessionState.look,
+    // globals.look, looks), the SAME name whose ThemeKey adapts the rendered
+    // palette. A look-picker trigger reads `{{ .look.effective }}` for its
+    // label; the label and the colors trace to one resolution.
+    "look.effective": {
+      kind: "input",
+      path: "look.effective",
+      default: "",
+    },
 
     // [LAW:one-source-of-truth] The usable terminal width for THIS render —
     // the exact post-reserve cell count FlexStrip wraps to. renderDsl injects
@@ -885,6 +895,60 @@ export const DEFAULT_DSL_CONFIG = {
     // rendered click and the wire gate share that one source — a template cannot
     // smuggle an un-gated style write.
     applyStyle: { set: "style", from: "styles" },
+  },
+
+  // ─── Looks ───────────────────────────────────────────────────────────────
+  // Named theme ADAPTATIONS — each is a full rich-js ThemeKey applied on top
+  // of whatever base theme is active (a transform, not a palette), so every
+  // look composes with every theme: pick theme, then pick look. Selected per
+  // session via the `look` SessionState key (an action `{ set: "look", from:
+  // "looks" }` + a `{{ menu }}`), exactly the theme/style selection seam.
+  // [LAW:one-source-of-truth] Merges by name (user wins per name), so this
+  // stdlib — including the "none" identity floor effectiveLookName collapses
+  // to — is present in every merged config by construction.
+  looks: {
+    // [LAW:dataflow-not-control-flow] "none" is just the identity look — the
+    // resolution floor as a value, not a special case (rich-js's isIdentityKey
+    // fast-path makes it free). Spelled literally (not rich-js IDENTITY /
+    // INVERT_LIGHTNESS) so the bundled default remains inert JSON-shaped data
+    // a user file can mirror axis-for-axis; the loader normalizes user specs
+    // onto the same identity axes.
+    none: { hueShift: 0, chromaScale: 1, lightnessScale: 1, lightnessShift: 0 },
+    // Saturation up/down — chroma is multiplicative, hue and lightness held.
+    vivid: {
+      hueShift: 0,
+      chromaScale: 1.35,
+      lightnessScale: 1,
+      lightnessShift: 0,
+    },
+    muted: {
+      hueShift: 0,
+      chromaScale: 0.55,
+      lightnessScale: 1,
+      lightnessShift: 0,
+    },
+    // Lightness down (scale) / up (shift) — dim compresses toward black,
+    // bright lifts everything a step; anchors stay hue-locked by rich-js.
+    dim: {
+      hueShift: 0,
+      chromaScale: 1,
+      lightnessScale: 0.85,
+      lightnessShift: 0,
+    },
+    bright: {
+      hueShift: 0,
+      chromaScale: 1,
+      lightnessScale: 1,
+      lightnessShift: 0.08,
+    },
+    // The dark↔light "octave" flip (rich-js INVERT_LIGHTNESS: L' = 1 - L) —
+    // errors stay red, dark-on-light becomes light-on-dark.
+    inverted: {
+      hueShift: 0,
+      chromaScale: 1,
+      lightnessScale: -1,
+      lightnessShift: 1,
+    },
   },
 
   // [LAW:single-enforcer] / [LAW:one-source-of-truth] Display-formatting policy
