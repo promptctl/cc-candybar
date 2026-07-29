@@ -1,4 +1,4 @@
-import { spawn, type ChildProcess } from "node:child_process";
+import type { ChildProcess } from "node:child_process";
 import fs from "node:fs";
 import net from "node:net";
 import os from "node:os";
@@ -6,6 +6,7 @@ import path from "node:path";
 
 import { PROTOCOL_VERSION, encodeFrame, makeFrameReader } from "../src/daemon/protocol";
 import type { Response } from "../src/daemon/protocol";
+import { spawnTestDaemon } from "./helpers/spawn-test-daemon";
 
 // [LAW:verifiable-goals] Contract: a daemon that receives a `shutdown` request
 // MUST exit within a bounded wall-clock budget. The bound has to be tight
@@ -16,11 +17,6 @@ import type { Response } from "../src/daemon/protocol";
 // the 452-corpse incident violated — daemons logged "shutting down" but held
 // the socket FD 42 minutes later, so the invariant cannot be "process.exit
 // was reached" — it has to be "process is gone".
-
-// jest's rootDir is the repo root; resolve everything relative to it.
-const REPO_ROOT = process.cwd();
-const ENTRY = path.join(REPO_ROOT, "src", "index.ts");
-const TSX_BIN = path.join(REPO_ROOT, "node_modules", ".bin", "tsx");
 
 const SHUTDOWN_BUDGET_MS = 1500;
 
@@ -58,15 +54,7 @@ async function spawnDaemon(): Promise<DaemonHandle> {
     ),
   };
 
-  const child = spawn(TSX_BIN, [ENTRY, "daemon"], {
-    cwd: REPO_ROOT,
-    env,
-    stdio: ["ignore", "pipe", "pipe"],
-  });
-
-  // Drain stdio so the child's pipes don't fill and stall.
-  child.stdout?.on("data", () => {});
-  child.stderr?.on("data", () => {});
+  const { child, killTree, release } = await spawnTestDaemon(env);
 
   // [LAW:single-enforcer] One cleanup primitive that closes the child and
   // removes every tempdir we created. Called from both the success-path
@@ -75,11 +63,12 @@ async function spawnDaemon(): Promise<DaemonHandle> {
   // leak three tmpdirs per run (state/cache/config) and CI runners
   // accumulated them on every flake.
   const cleanup = (): void => {
-    if (child.exitCode === null && child.signalCode === null) {
-      try {
-        child.kill("SIGKILL");
-      } catch {}
-    }
+    // killTree signals the whole process group, not just the `tsx` wrapper
+    // `child` names — the wrapper forks its own worker (the process that
+    // actually binds the socket), which survives as an orphan if only the
+    // wrapper is signalled. Safe to call even after a graceful exit.
+    killTree();
+    release();
     try {
       fs.rmSync(stateRoot, { recursive: true, force: true });
     } catch {}

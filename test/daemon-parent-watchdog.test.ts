@@ -9,6 +9,7 @@ import {
   pidAlive,
   PARENT_PID_ENV,
 } from "../src/daemon/parent-watchdog";
+import { spawnTestDaemon } from "./helpers/spawn-test-daemon";
 
 // [LAW:verifiable-goals] The contract under test is the leak's negation: a
 // daemon spawned by a transient process MUST die when that process dies, even
@@ -110,12 +111,10 @@ describe("pidAlive", () => {
 // gap a killed Jest leaves. One controlled daemon, asserted dead, and force-
 // reaped in afterEach so this test can never itself contribute to the leak.
 describe("daemon dies with its spawner (integration)", () => {
-  const REPO_ROOT = process.cwd();
-  const ENTRY = path.join(REPO_ROOT, "src", "index.ts");
-  const TSX_BIN = path.join(REPO_ROOT, "node_modules", ".bin", "tsx");
-
   const spawned: ChildProcess[] = [];
   const tmpDirs: string[] = [];
+  const releases: Array<() => void> = [];
+  const killTrees: Array<() => void> = [];
 
   const track = (c: ChildProcess): ChildProcess => {
     spawned.push(c);
@@ -128,6 +127,12 @@ describe("daemon dies with its spawner (integration)", () => {
   };
 
   afterEach(() => {
+    // killTree first — it signals the daemon's WHOLE process group (the
+    // `tsx` wrapper AND the worker process it forks, which does the real
+    // daemon work and would otherwise survive as an orphan if only the
+    // wrapper were signalled). Safe to call even after a graceful exit.
+    for (const killTree of killTrees) killTree();
+    killTrees.length = 0;
     for (const c of spawned) {
       if (c.exitCode === null && c.signalCode === null) {
         try {
@@ -138,6 +143,8 @@ describe("daemon dies with its spawner (integration)", () => {
       }
     }
     spawned.length = 0;
+    for (const release of releases) release();
+    releases.length = 0;
     for (const d of tmpDirs) {
       try {
         fs.rmSync(d, { recursive: true, force: true });
@@ -162,24 +169,19 @@ describe("daemon dies with its spawner (integration)", () => {
     fs.mkdirSync(stateDir, { recursive: true, mode: 0o700 });
     const sockPath = path.join(stateDir, "socket");
 
-    const daemon = track(
-      spawn(TSX_BIN, [ENTRY, "daemon"], {
-        cwd: REPO_ROOT,
-        env: {
-          ...process.env,
-          CC_CANDYBAR_SOCKET: sockPath,
-          XDG_STATE_HOME: stateRoot,
-          XDG_CACHE_HOME: tmp("cc-candybar-watchdog-cache-"),
-          XDG_CONFIG_HOME: tmp("cc-candybar-watchdog-config-"),
-          // Anchor the daemon to the throwaway process, NOT this Jest worker, so
-          // killing the anchor (and only the anchor) exercises the watchdog.
-          [PARENT_PID_ENV]: String(anchorProc.pid),
-        },
-        stdio: ["ignore", "pipe", "pipe"],
-      }),
-    );
-    daemon.stdout?.on("data", () => {});
-    daemon.stderr?.on("data", () => {});
+    const { child: daemonChild, killTree, release } = await spawnTestDaemon({
+      ...process.env,
+      CC_CANDYBAR_SOCKET: sockPath,
+      XDG_STATE_HOME: stateRoot,
+      XDG_CACHE_HOME: tmp("cc-candybar-watchdog-cache-"),
+      XDG_CONFIG_HOME: tmp("cc-candybar-watchdog-config-"),
+      // Anchor the daemon to the throwaway process, NOT this Jest worker, so
+      // killing the anchor (and only the anchor) exercises the watchdog.
+      [PARENT_PID_ENV]: String(anchorProc.pid),
+    });
+    releases.push(release);
+    killTrees.push(killTree);
+    const daemon = track(daemonChild);
 
     // The socket file appears inside bind(), which runs strictly AFTER the
     // watchdog is armed — so its existence guarantees the watchdog is live.
@@ -196,9 +198,9 @@ describe("daemon dies with its spawner (integration)", () => {
 
     anchorProc.kill("SIGKILL");
 
-    // Poll interval is 1s + a 500ms shutdown backstop; 8s is a generous ceiling.
-    // Clear the deadline timer once the daemon exits so it can't outlive the
-    // test and hold Jest's event loop open.
+    // Poll interval is 250ms + a 500ms shutdown backstop; 8s is a generous
+    // ceiling. Clear the deadline timer once the daemon exits so it can't
+    // outlive the test and hold Jest's event loop open.
     let deadline: NodeJS.Timeout | undefined;
     const exitedInTime = await Promise.race([
       daemonExited.then(() => true),

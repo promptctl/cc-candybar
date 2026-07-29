@@ -20,7 +20,14 @@ import process from "node:process";
 
 export const PARENT_PID_ENV = "CC_CANDYBAR_PARENT_PID";
 
-const DEFAULT_POLL_INTERVAL_MS = 1000;
+// [LAW:verifiable-goals] Only ever consulted for an ANCHORED (test) daemon —
+// "outlives-nobody" (the production daemon) arms no timer at all, so
+// tightening this is invisible to production. A dead-runner orphan can live
+// at most one poll tick before the watchdog trips; 250ms (down from 1000ms,
+// brandon-daemon-lifecycle-gad.1) shrinks that window fourfold without
+// meaningfully increasing CPU — polling a single `kill(pid,0)` 4x/sec is
+// negligible next to the daemon work it guards.
+const DEFAULT_POLL_INTERVAL_MS = 250;
 
 export type LivenessAnchor =
   | { kind: "outlives-nobody" }
