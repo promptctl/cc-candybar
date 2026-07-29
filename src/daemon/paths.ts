@@ -66,32 +66,43 @@ export function socketPath(): string {
 // Throws on any unsafe state; callers are expected to let the daemon exit.
 // [LAW:no-silent-fallbacks] do NOT auto-rmdir + recreate — a wrong-owner dir
 // is hostile state, not a recoverable error.
-export function ensureSocketParentSafe(sockPath: string): void {
-  const parent = path.dirname(sockPath);
+// [LAW:one-source-of-truth] The owner/mode/symlink verification a private
+// per-uid directory needs is declared once here — both the socket parent
+// (below) and the fork-bomb breaker's daemon registry dir
+// (daemonRegistryDir(), fork-bomb-breaker.ts) sit under the same untrusted
+// shared /tmp root and must reject the identical attack (a pre-created
+// world-writable dir, a planted symlink), so they share one enforcer instead
+// of two copies that could silently drift apart on what "safe" means.
+export function ensureOwnedPrivateDir(dir: string): void {
   // mkdir with mode 0o700; harmless if already exists (mode is not applied
   // post-hoc — we verify it next).
-  fs.mkdirSync(parent, { recursive: true, mode: 0o700 });
+  fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
 
-  const st = fs.lstatSync(parent);
+  const st = fs.lstatSync(dir);
   if (st.isSymbolicLink()) {
-    throw new Error(`socket parent is a symlink: ${parent}`);
+    throw new Error(`directory is a symlink: ${dir}`);
   }
   if (!st.isDirectory()) {
-    throw new Error(`socket parent is not a directory: ${parent}`);
+    throw new Error(`not a directory: ${dir}`);
   }
   const myUid = os.userInfo().uid;
   // getuid is undefined on Windows; we don't ship there, but guard cheaply.
   if (typeof myUid === "number" && st.uid !== myUid) {
     throw new Error(
-      `socket parent is not owned by uid ${myUid}: ${parent} (owner uid=${st.uid})`,
+      `directory is not owned by uid ${myUid}: ${dir} (owner uid=${st.uid})`,
     );
   }
   // Reject any group/world bits — only the owner may traverse.
   if ((st.mode & 0o077) !== 0) {
     throw new Error(
-      `socket parent has unsafe permissions: ${parent} (mode=${(st.mode & 0o777).toString(8)}, expected 0700)`,
+      `directory has unsafe permissions: ${dir} (mode=${(st.mode & 0o777).toString(8)}, expected 0700)`,
     );
   }
+}
+
+export function ensureSocketParentSafe(sockPath: string): void {
+  const parent = path.dirname(sockPath);
+  ensureOwnedPrivateDir(parent);
   // If a stale socket file is a symlink, refuse — an attacker who briefly
   // had write access to a previously-permissive dir could have planted a
   // symlink even after we tighten perms.
@@ -136,6 +147,23 @@ export function leasePath(): string {
 
 export function sessionStatePath(): string {
   return path.join(stateDir(), "session-state.json");
+}
+
+// [LAW:one-source-of-truth] The fork-bomb breaker's daemon-population registry
+// (fork-bomb-breaker.ts) shares socketPath()'s UID-anchored /tmp root and, like
+// it, deliberately ignores XDG_STATE_HOME — the very isolation
+// `CC_CANDYBAR_SOCKET`/`XDG_STATE_HOME` overrides grant a test daemon is the
+// thing this registry exists to see THROUGH, so every daemon on this machine
+// (production and every isolated instance) that does not explicitly override
+// this path lands in the same directory and is counted together.
+// `CC_CANDYBAR_DAEMON_REGISTRY_DIR` is the explicit override, used only by
+// tests of the breaker itself so they don't contend over the machine's real
+// shared registry.
+export function daemonRegistryDir(): string {
+  const override = process.env.CC_CANDYBAR_DAEMON_REGISTRY_DIR;
+  if (override) return override;
+  const uid = os.userInfo().uid;
+  return path.join("/tmp", `cc-candybar-${uid}`, "daemons");
 }
 
 // [LAW:single-enforcer] Caller-side spawn dedup. Held by a client *only* during
