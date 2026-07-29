@@ -166,6 +166,78 @@ describe("effectiveCooldownMs (pure backoff arithmetic)", () => {
   });
 });
 
+// [LAW:behavior-not-structure] Tests the parsing-strictness contract directly
+// against planted file content, independent of any caller — the acceptance
+// test's own writes are always a clean integer, so a regression back to
+// parseInt (which truncates "5abc" to 5 instead of rejecting it) would not
+// fail that test. Matches the fork-bomb-breaker.ts precedent this function's
+// doc comment cites.
+describe("readBackoffStreak (parsing-strictness contract)", () => {
+  function withPlantedFile<T>(content: string | null, fn: (path: string) => T): T {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "cc-candybar-backoff-"));
+    const filePath = path.join(dir, "spawn.backoff");
+    if (content !== null) fs.writeFileSync(filePath, content);
+    try {
+      return fn(filePath);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  }
+
+  test("missing file reads as 0", async () => {
+    const { readBackoffStreak } = await import("../src/daemon/acquire");
+    withPlantedFile(null, (filePath) => {
+      expect(readBackoffStreak(filePath)).toBe(0);
+    });
+  });
+
+  test("non-numeric content fails closed to 0 (the parseInt-truncation regression)", async () => {
+    const { readBackoffStreak } = await import("../src/daemon/acquire");
+    // parseInt("5abc", 10) === 5 — the exact silent-truncation bug this
+    // function's Number(raw) is written to avoid.
+    withPlantedFile("5abc", (filePath) => {
+      expect(readBackoffStreak(filePath)).toBe(0);
+    });
+  });
+
+  test("whitespace-only content reads as 0", async () => {
+    const { readBackoffStreak } = await import("../src/daemon/acquire");
+    withPlantedFile("   \n", (filePath) => {
+      expect(readBackoffStreak(filePath)).toBe(0);
+    });
+  });
+
+  test("negative content reads as 0", async () => {
+    const { readBackoffStreak } = await import("../src/daemon/acquire");
+    withPlantedFile("-3", (filePath) => {
+      expect(readBackoffStreak(filePath)).toBe(0);
+    });
+  });
+
+  test("floating-point content reads as 0 (not truncated to an integer)", async () => {
+    const { readBackoffStreak } = await import("../src/daemon/acquire");
+    withPlantedFile("5.1", (filePath) => {
+      expect(readBackoffStreak(filePath)).toBe(0);
+    });
+  });
+
+  test("oversize content clamps to SPAWN_BACKOFF_MAX_STREAK", async () => {
+    const { readBackoffStreak, SPAWN_BACKOFF_MAX_STREAK } = await import(
+      "../src/daemon/acquire"
+    );
+    withPlantedFile("999", (filePath) => {
+      expect(readBackoffStreak(filePath)).toBe(SPAWN_BACKOFF_MAX_STREAK);
+    });
+  });
+
+  test("a valid in-range value round-trips correctly", async () => {
+    const { readBackoffStreak } = await import("../src/daemon/acquire");
+    withPlantedFile("3", (filePath) => {
+      expect(readBackoffStreak(filePath)).toBe(3);
+    });
+  });
+});
+
 describe("obtainDaemon (bind-based singleton)", () => {
   test("attaches when a daemon is already listening — no spawn", async () => {
     await withTempState(async (stateDir) => {
