@@ -7,6 +7,7 @@ import {
   socketPath,
   spawnLockPath,
   spawnCooldownPath,
+  spawnBackoffPath,
   daemonDir,
 } from "./paths";
 
@@ -335,32 +336,163 @@ export type CooldownDecision =
   | { kind: "allow-future-garbage"; futureMs: number }
   | { kind: "deny" };
 
-export function cooldownDecision(ageMs: number | null): CooldownDecision {
+// [LAW:types-are-the-program] `cooldownMs` is the required window, not a
+// captured constant — the decision is the same pure fold whether the caller
+// is checking against the base SPAWN_COOLDOWN_MS or a backed-off window from
+// effectiveCooldownMs(streak) below. Generalizing the threshold into a
+// parameter is what let brandon-daemon-lifecycle-gad.3 add exponential
+// backoff without touching this function's tested boundary arithmetic.
+export function cooldownDecision(
+  ageMs: number | null,
+  cooldownMs: number,
+): CooldownDecision {
   if (ageMs === null) return { kind: "allow" };
   if (ageMs < -STALE_LOCK_MS)
     return { kind: "allow-future-garbage", futureMs: -ageMs };
-  if (ageMs < SPAWN_COOLDOWN_MS) return { kind: "deny" };
+  if (ageMs < cooldownMs) return { kind: "deny" };
   return { kind: "allow" };
 }
 
+// ─── Spawn backoff (consecutive non-convergence widens the cooldown) ────────
+//
+// [LAW:one-source-of-truth] spawn.cooldown's mtime answers "when was a spawn
+// last attempted"; this streak answers "how many attempts in a row have
+// failed to converge on a live daemon" — a fact spawn.cooldown's mtime alone
+// cannot carry (mtime is overwritten on every attempt, losing the count). One
+// small file, one fact, read/written by both runtimes exactly like
+// spawn.cooldown itself.
+//
+// [LAW:single-enforcer] The daemon is the only process that can know
+// "convergence achieved" (it just bound the socket and is about to serve) —
+// see resetSpawnBackoff(), called once from server.ts's onListening(). A
+// client-side reset would need a full successful render round-trip on the
+// hot path to detect convergence, adding fs I/O to the common case for a
+// signal the daemon already has for free at boot.
+//
+// Growth is capped at SPAWN_BACKOFF_MAX_STREAK shifts so effectiveCooldownMs
+// never has to reason about an unbounded streak (a multi-day outage would
+// otherwise grow the stored integer without bound) and so Rust's mirrored
+// `<<` cannot overflow. 3_000ms << 5 = 96_000ms, already past the 60s cap, so
+// 5 is sufficient — not tuned to any particular outage length.
+export const SPAWN_BACKOFF_CAP_MS = 60_000;
+export const SPAWN_BACKOFF_MAX_STREAK = 5;
+
+// [LAW:behavior-not-structure] Pure over the streak; no filesystem. Mirrors
+// Rust's effective_cooldown_ms exactly (diffed by check-protocol for the two
+// constants; the arithmetic itself is pinned by the boundary unit tests on
+// both sides, matching cooldownDecision's existing pattern).
+export function effectiveCooldownMs(streak: number): number {
+  const capped = Math.min(Math.max(streak, 0), SPAWN_BACKOFF_MAX_STREAK);
+  return Math.min(SPAWN_COOLDOWN_MS * 2 ** capped, SPAWN_BACKOFF_CAP_MS);
+}
+
+// [LAW:no-defensive-null-guards] Number(raw) — not parseInt — so trailing
+// garbage ("5abc", "5.0") fails closed to NaN instead of being silently
+// truncated to a plausible-looking integer. parseInt's truncation is exactly
+// the bug daemonCeiling() (fork-bomb-breaker.ts, brandon-daemon-lifecycle-gad.2)
+// fixed for the same "small integer parsed from an untrusted local file" shape;
+// repeating parseInt here would reintroduce it. The clamp to
+// SPAWN_BACKOFF_MAX_STREAK also bounds every value this function can ever
+// return, so no caller — including `streak + 1` — needs its own re-clamp to
+// stay overflow-safe (Rust's mirror clamps at the identical boundary, since a
+// raw u32 parsed from disk has no such guarantee otherwise).
+function readBackoffStreak(filePath: string): number {
+  // [LAW:no-silent-failure] A missing or garbage streak file is NOT
+  // ambiguous the way a missing cooldown mtime is: falling back to 0 always
+  // fails toward the SAME safe direction as the rest of this module (spawn
+  // permitted at the base rate, never wedged) — matching cooldownDecision's
+  // own `ageMs === null → allow`. Never loud here; the failure mode is
+  // "one extra spawn," which bind() already arbitrates.
+  try {
+    const raw = fs.readFileSync(filePath, "utf8").trim();
+    const n = Number(raw);
+    if (!Number.isInteger(n) || n < 0) return 0;
+    return Math.min(n, SPAWN_BACKOFF_MAX_STREAK);
+  } catch {
+    return 0;
+  }
+}
+
+// [LAW:no-ambient-temporal-coupling] The read-then-write here (and in
+// claimSpawnCooldown below) is not atomic across process boundaries — two
+// client processes racing through a daemon-miss window can both read the
+// same streak and both write the same increment, undercounting by one. This
+// is an accepted, bounded trade, not an oversight: the ONLY failure direction
+// is undercounting (the streak can never advance faster than reality), so a
+// race just means backoff ramps a little slower than ideal — it can never
+// permit MORE spawning than a race-free count would. The hard rate ceiling
+// remains spawn.cooldown's mtime gate, which spawn.lock already serializes
+// for the common case; this file, like spawn.lock's own documented
+// thundering-herd tolerance, is a best-effort optimization on top of that,
+// not a second load-bearing lock.
+function writeBackoffStreak(filePath: string, streak: number): void {
+  try {
+    fs.mkdirSync(path.dirname(filePath), { recursive: true });
+    fs.writeFileSync(filePath, String(streak), { mode: 0o600 });
+  } catch (e) {
+    process.stderr.write(
+      `cc-candybar: could not record spawn.backoff: ${(e as Error).message}\n`,
+    );
+  }
+}
+
+// Called once by the daemon (server.ts onListening) the moment it binds the
+// socket — the one process-wide fact that answers "did an outage just end."
+// Deletes rather than writes "0": absence already reads as streak 0 via
+// readBackoffStreak's catch branch, so there is no separate reset format to
+// keep in sync with the normal write path.
+//
+// [LAW:no-ambient-temporal-coupling] This fires on bind, not on confirmed
+// sustained liveness — in the vanishingly rare socket-capture race
+// documented above armOwnershipWatch (server.ts), a daemon that only THINKS
+// it converged resets the streak early. That daemon self-heals the same way
+// ownership does (armOwnershipWatch drains it once the mismatch is detected);
+// worst case is one redundant reset in an already-rare race window, not a
+// wrong steady-state outcome.
+export function resetSpawnBackoff(): void {
+  try {
+    fs.unlinkSync(spawnBackoffPath());
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code !== "ENOENT") {
+      process.stderr.write(
+        `cc-candybar: could not reset spawn.backoff: ${(e as Error).message}\n`,
+      );
+    }
+  }
+}
+
 // [LAW:single-enforcer] The sole authority on daemon-spawn RATE. Returns true —
-// and RECORDS the attempt (updating spawn.cooldown's mtime to now) — when a
-// spawn is permitted; false when an attempt was recorded within
-// SPAWN_COOLDOWN_MS. Recording-on-grant (BEFORE the caller spawns) is
-// load-bearing: a spawn that then throws or returns false still counts against
-// the rate, so a broken binary is not retried in a tight loop. A future-mtime
-// garbage record warns loudly and falls toward ALLOWING the spawn
-// [LAW:no-silent-failure].
+// and RECORDS the attempt (updating spawn.cooldown's mtime to now, advancing
+// spawn.backoff's streak) — when a spawn is permitted; false when an attempt
+// was recorded within the EFFECTIVE cooldown window (SPAWN_COOLDOWN_MS,
+// widened by effectiveCooldownMs(streak) once consecutive attempts have
+// failed to converge — see brandon-daemon-lifecycle-gad.3). Recording-on-grant
+// (BEFORE the caller spawns) is load-bearing: a spawn that then throws or
+// returns false still counts against the rate, so a broken binary is not
+// retried in a tight loop. A future-mtime garbage record warns loudly and
+// falls toward ALLOWING the spawn [LAW:no-silent-failure].
 function claimSpawnCooldown(): boolean {
-  const path = spawnCooldownPath();
-  const decision = cooldownDecision(cooldownAgeMs(path));
+  const cooldownPath = spawnCooldownPath();
+  const backoffPath = spawnBackoffPath();
+  const streak = readBackoffStreak(backoffPath);
+  const decision = cooldownDecision(
+    cooldownAgeMs(cooldownPath),
+    effectiveCooldownMs(streak),
+  );
   if (decision.kind === "deny") return false;
   if (decision.kind === "allow-future-garbage") {
     process.stderr.write(
       `cc-candybar: spawn.cooldown mtime is ${decision.futureMs}ms in the future — ignoring and spawning\n`,
     );
   }
-  recordSpawnAttempt(path);
+  recordSpawnAttempt(cooldownPath);
+  // [LAW:dataflow-not-control-flow] Every granted spawn advances the streak
+  // by exactly one, unconditionally — the cap lives in the read side
+  // (effectiveCooldownMs) and here (Math.min), never as a skip.
+  writeBackoffStreak(
+    backoffPath,
+    Math.min(streak + 1, SPAWN_BACKOFF_MAX_STREAK),
+  );
   return true;
 }
 
