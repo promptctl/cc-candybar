@@ -418,6 +418,27 @@ describe("admitDaemon", () => {
     expect(result.decision.allow).toBe(true);
     expect(removeFile).toHaveBeenCalledWith("/fake/registry/pid-1.json");
   });
+
+  test("a pid-recycled ghost naming our OWN pid never counts as a live sibling, even when isSameLiveProcess says alive (the ps-unavailable fallback case)", () => {
+    // Simulates: a past incarnation crashed, left pid-999.json behind with a
+    // DIFFERENT startTime; the OS later recycled pid 999 to us; `ps` is
+    // unavailable so isSameLiveProcess's fallback (bare pidAlive) reads our
+    // own pid as alive and would misclassify this ghost as live — a genuine
+    // sibling would exhaust the ceiling of 1, but the ghost must not.
+    const isSameLiveProcess = jest.fn(() => true);
+    const result = admitDaemon(
+      baseDeps({
+        ceiling: 1,
+        pid: 999,
+        listFiles: () => ["/fake/registry/pid-999.json"],
+        readEntry: () => ({ pid: 999, startTime: "a-past-incarnations-time" }),
+        isSameLiveProcess,
+      }),
+    );
+    expect(result.decision.allow).toBe(true);
+    // Excluded before it ever reaches the liveness check at all.
+    expect(isSameLiveProcess).not.toHaveBeenCalled();
+  });
 });
 
 // ─── releaseRegistration: only remove if it still names us ─────────────────

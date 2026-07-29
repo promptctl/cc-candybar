@@ -223,7 +223,19 @@ export function admitDaemon(deps: BreakerDeps): BreakerResult {
   const entries: RegistryEntry[] = [];
   for (const filePath of deps.listFiles(deps.registryDir)) {
     const identity = deps.readEntry(filePath);
-    if (identity !== null) entries.push({ path: filePath, identity });
+    // [LAW:no-silent-failure] Exclude any entry named with OUR OWN pid,
+    // unconditionally — no other currently-live process can ever share it
+    // (the kernel guarantees pid uniqueness among live processes), so such an
+    // entry is always either a stale pid-recycled ghost from a past
+    // incarnation, or moot (we haven't written our own entry yet). This
+    // matters specifically when `ps` is unavailable: `isSameLiveProcess`'s
+    // fallback (bare `pidAlive`) would read OUR OWN pid as alive and
+    // misclassify the ghost as a live sibling, consuming a ceiling slot and
+    // risking a spurious refusal of the one daemon that pid actually names.
+    // Excluding it here means it never reaches that ambiguous check at all.
+    if (identity !== null && identity.pid !== deps.pid) {
+      entries.push({ path: filePath, identity });
+    }
   }
   const liveCount = countLiveEntries(
     entries,
