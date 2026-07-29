@@ -1,3 +1,10 @@
+# [1.22.0](https://github.com/promptctl/cc-candybar/compare/v1.21.0...v1.22.0) (2026-07-29)
+
+
+### Features
+
+* **daemon-lifecycle:** daemon-side fork-bomb circuit breaker ([#162](https://github.com/promptctl/cc-candybar/issues/162)) ([df50295](https://github.com/promptctl/cc-candybar/commit/df50295cf107e3ee70cd844491a5e538b6fbda9b))
+
 # [1.21.0](https://github.com/promptctl/cc-candybar/compare/v1.20.0...v1.21.0) (2026-07-29)
 
 
