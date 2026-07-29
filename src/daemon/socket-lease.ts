@@ -1,6 +1,8 @@
 import fs from "node:fs";
 import process from "node:process";
 
+import type { ProcessIdentity } from "./process-fingerprint";
+
 // ─── Socket ownership lease ──────────────────────────────────────────────────
 //
 // [LAW:one-source-of-truth] The authority for "who owns this socket path" is a
@@ -30,7 +32,7 @@ import process from "node:process";
 export type LeaseRead =
   | { kind: "absent" }
   | { kind: "unreadable"; detail: string }
-  | { kind: "owned"; pid: number; startTime: string | null };
+  | ({ kind: "owned" } & ProcessIdentity);
 
 // The EADDRINUSE arbitration outcome. The path already exists (something bound
 // it or a stale file remains); this says whether a LIVE owner holds it.
@@ -44,11 +46,9 @@ export type SocketArbitration =
 // root. `startTime` is the kernel start-time token (also human-readable, so it
 // doubles as the "daemon started at" diagnostic the old `startedAt` gave), or
 // null when this host could not fingerprint.
-export interface LeaseRecord {
-  pid: number;
+export interface LeaseRecord extends ProcessIdentity {
   version: number;
   binPath: string | undefined;
-  startTime: string | null;
 }
 
 // [LAW:effects-at-boundaries][LAW:dataflow-not-control-flow] The whole
