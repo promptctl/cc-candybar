@@ -285,10 +285,33 @@ export function realBreakerDeps(
         // best-effort
       }
     },
+    // [LAW:one-source-of-truth] Same write-tmp-then-rename shape as
+    // socket-lease.ts's writeLease, so it gets the same cleanup: if
+    // writeFileSync succeeds but renameSync fails, best-effort unlink the tmp
+    // file (tolerating ENOENT — writeFileSync itself may have been what
+    // failed) before rethrowing, so a write failure never leaves an orphaned
+    // `.tmp` file behind (listRegistryFiles only collects `*.json`, so a
+    // stray `.tmp` would never be swept).
     writeEntry: (filePath, identity) => {
       const tmp = `${filePath}.${identity.pid}.tmp`;
-      fs.writeFileSync(tmp, JSON.stringify(identity), { mode: 0o600 });
-      fs.renameSync(tmp, filePath);
+      try {
+        fs.writeFileSync(tmp, JSON.stringify(identity), { mode: 0o600 });
+        fs.renameSync(tmp, filePath);
+      } catch (e) {
+        try {
+          fs.unlinkSync(tmp);
+        } catch (cleanupErr) {
+          if ((cleanupErr as NodeJS.ErrnoException).code !== "ENOENT") {
+            // Best-effort cleanup failed for a reason other than "never
+            // created" — the original error is still the one that matters,
+            // so it is not swallowed; a leaked tmp file here is a secondary
+            // symptom the next admission's stale-sweep does not reclaim
+            // (only *.json is collected), but it is not this daemon's job to
+            // retry a failing filesystem.
+          }
+        }
+        throw e;
+      }
     },
     // [LAW:single-enforcer] Two levels, mirroring ensureSocketParentSafe's own
     // shape, but ONLY for the default (unoverridden) registry path: its

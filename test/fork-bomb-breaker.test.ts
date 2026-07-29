@@ -288,6 +288,38 @@ describe("realBreakerDeps ensureDirSafe (registry directory safety)", () => {
   });
 });
 
+// ─── realBreakerDeps.writeEntry: no orphaned tmp file on a rename failure ───
+//
+// [LAW:no-silent-failure] Mirrors socket-lease.ts's writeLease cleanup for
+// the identical write-tmp-then-rename shape: if the rename fails after the
+// tmp file was created, the tmp file must not be left behind (listRegistryFiles
+// only collects *.json, so a stray .tmp would never be swept by anything).
+
+describe("realBreakerDeps writeEntry (no orphaned tmp file)", () => {
+  test("rethrows and cleans up the tmp file when the rename target can't accept it", () => {
+    const dir = freshDir();
+    fs.mkdirSync(dir, { recursive: true });
+    const filePath = path.join(dir, "pid-123.json");
+    // writeFileSync(tmp) must SUCCEED (tmp is a sibling file in an existing
+    // dir) while renameSync(tmp, filePath) FAILS — isolating the rename step
+    // specifically. Renaming a file onto an existing directory is a
+    // reliable, platform-independent way to force exactly that: filePath
+    // itself is a directory, so the rename is rejected (EISDIR) without
+    // ever touching tmp's own write.
+    fs.mkdirSync(filePath);
+    const identity = { pid: 123, startTime: "st" };
+    const tmp = `${filePath}.${identity.pid}.tmp`;
+    try {
+      expect(() =>
+        realBreakerDeps(null).writeEntry(filePath, identity),
+      ).toThrow();
+      expect(fs.existsSync(tmp)).toBe(false);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
 // ─── admitDaemon: effect-layer orchestration over injected deps ────────────
 
 describe("admitDaemon", () => {
