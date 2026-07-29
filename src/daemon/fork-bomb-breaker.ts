@@ -39,6 +39,21 @@ import { pidAlive } from "./parent-watchdog";
 // against each other: the production daemon is exempt (and so always boots,
 // however many isolated instances are registered), and isolated instances
 // compete only with each other over the shared ceiling.
+//
+// [FRAMING:representation] admitDaemon's count-then-write (read the registry,
+// decide, write our own entry) is NOT a compare-and-swap — the same accepted
+// tradeoff as test/helpers/daemon-pool.ts's tryClaim. Two daemons starting in
+// the same instant can both observe the same below-ceiling count and both
+// admit, so the ceiling is a soft bound (liveCount can briefly overshoot by
+// the number of true simultaneous spawns), not a strict mutex. A real fix
+// needs a cross-process lock (flock, an O_EXCL pre-registration file); skipped
+// as disproportionate here — this is a load-independent BACKSTOP against a
+// 192-daemon storm, not a precision gate, and the ticket's own acceptance
+// criterion is "a small, asserted ceiling", never exact atomicity. The
+// failure mode of the race is a brief, bounded overshoot that the next boot's
+// stale-sweep does not even need to correct (the overshooting daemons are
+// live, not stale) — categorically smaller than the storm this breaker
+// exists to prevent.
 
 export interface BootDecision {
   allow: boolean;

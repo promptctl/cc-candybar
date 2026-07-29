@@ -155,8 +155,32 @@ let myStartTime: string | null = null;
 let breakerRegistryPath: string | null = null;
 
 export function runDaemon(): void {
-  // [LAW:single-enforcer] The fork-bomb circuit breaker runs FIRST, before any
-  // other resource is committed (no dir created, no socket touched, no session
+  // Catch-alls log + exit so the supervisor (the next client) can restart us.
+  // [LAW:no-defensive-null-guards] These are *trust boundaries* — we are
+  // catching all of unknown space, not skipping known optional values.
+  // [LAW:single-enforcer] Registered FIRST, before any of the startup calls
+  // below that can throw synchronously (admitDaemon's ensureDirSafe/writeEntry,
+  // ensureSocketParentSafe) — otherwise an early throw is a raw unhandled
+  // exception (stack trace to stderr, bypassing the clean shutdown(1) log +
+  // SIGKILL backstop) rather than funneling through the same death path as
+  // every other failure mode.
+  process.on("uncaughtException", (err) => {
+    dlog("error", `uncaughtException: ${err.stack || err.message}`);
+    shutdown(1);
+  });
+  process.on("unhandledRejection", (reason) => {
+    dlog("error", `unhandledRejection: ${String(reason)}`);
+    shutdown(1);
+  });
+  for (const sig of ["SIGINT", "SIGTERM", "SIGHUP"] as const) {
+    process.on(sig, () => {
+      dlog("info", `received ${sig}, shutting down`);
+      shutdown(0);
+    });
+  }
+
+  // [LAW:single-enforcer] The fork-bomb circuit breaker runs FIRST among the
+  // resource-committing steps (no dir created, no socket touched, no session
   // state loaded) — the whole point of a load-independent backstop is that it
   // holds even when everything downstream of it is thrashing. Own start-time
   // must be read first: it is both this check's identity and the lease's
@@ -190,24 +214,6 @@ export function runDaemon(): void {
   sessionState.useStorage(
     new FileSessionStorage(sessionStatePath(), 500, dlog),
   );
-
-  // Catch-alls log + exit so the supervisor (the next client) can restart us.
-  // [LAW:no-defensive-null-guards] These are *trust boundaries* — we are
-  // catching all of unknown space, not skipping known optional values.
-  process.on("uncaughtException", (err) => {
-    dlog("error", `uncaughtException: ${err.stack || err.message}`);
-    shutdown(1);
-  });
-  process.on("unhandledRejection", (reason) => {
-    dlog("error", `unhandledRejection: ${String(reason)}`);
-    shutdown(1);
-  });
-  for (const sig of ["SIGINT", "SIGTERM", "SIGHUP"] as const) {
-    process.on(sig, () => {
-      dlog("info", `received ${sig}, shutting down`);
-      shutdown(0);
-    });
-  }
 
   // [LAW:single-enforcer] Same death funnel as the signals and the RSS backstop:
   // the watchdog calls shutdown(0), it never exits on its own. A production
