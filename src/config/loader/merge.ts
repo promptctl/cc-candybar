@@ -32,6 +32,10 @@ export function mergeWithDefault(
     // declares only the actions that differ from the bundled default (which
     // ships none).
     actions: { ...dflt.actions, ...(raw.actions ?? {}) },
+    // [LAW:one-source-of-truth] looks merge by name, same cascade — a user
+    // overrides one adaptation by re-declaring its name; the bundled stdlib
+    // (incl. the "none" identity floor) survives every merge by construction.
+    looks: { ...dflt.looks, ...(raw.looks ?? {}) },
     // [LAW:one-source-of-truth] helpers merge by name, same cascade — a user
     // overrides one formatter helper by re-declaring its name; the rest inherit
     // from the bundled default.

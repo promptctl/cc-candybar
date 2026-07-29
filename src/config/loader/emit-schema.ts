@@ -16,6 +16,7 @@ import { globalsJson } from "./globals.js";
 import { variablesMapJson } from "./variables.js";
 import { segmentsJson } from "./segments.js";
 import { actionsJson } from "./actions.js";
+import { looksJson } from "./looks.js";
 import {
   layoutNodeJson,
   LAYOUT_NODE_DEF_NAME,
@@ -46,6 +47,7 @@ export function emitConfigSchema(): JsonNode {
       segments: segmentsJson(),
       root: { $ref: LAYOUT_NODE_REF },
       actions: actionsJson(),
+      looks: looksJson(),
       helpers: { type: "object", additionalProperties: { type: "string" } },
     },
     definitions: {

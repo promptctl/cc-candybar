@@ -126,6 +126,9 @@ const BURN_PATHS = new Set([
 // The daemon-resolved effective theme; these burn-lane tests don't exercise it,
 // so any resolvable name satisfies the required argument.
 const EFFECTIVE_THEME = "textual-dark";
+// The daemon-resolved effective look; "none" is the identity floor every merged
+// config carries.
+const EFFECTIVE_LOOK = "none";
 
 describe("buildRenderPayload — burn projection lane", () => {
   test("projectable: burn rate + block & weekly ETAs land in the payload", async () => {
@@ -135,6 +138,7 @@ describe("buildRenderPayload — burn projection lane", () => {
       undefined,
       BURN_PATHS,
       EFFECTIVE_THEME,
+      EFFECTIVE_LOOK,
     );
     expect(payload.burn?.costPerHour).toBe(12);
     expect(payload.block?.etaMinutes).toBe(240);
@@ -151,6 +155,7 @@ describe("buildRenderPayload — burn projection lane", () => {
       undefined,
       BURN_PATHS,
       EFFECTIVE_THEME,
+      EFFECTIVE_LOOK,
     );
     expect(payload.block?.nativeUtilization).toBe(20);
     expect(payload.block?.etaMinutes).toBeUndefined();
@@ -163,6 +168,7 @@ describe("buildRenderPayload — burn projection lane", () => {
       undefined,
       new Set(["block.resetsAt", "weekly.resetsAt"]),
       EFFECTIVE_THEME,
+      EFFECTIVE_LOOK,
     );
     expect(payload.burn).toBeUndefined();
   });

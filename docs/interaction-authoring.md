@@ -38,16 +38,17 @@ error cell in the bar. `cc-candybar lint` is an alias; `cc-candybar schema`
 prints the JSON Schema.
 
 A user config **merges onto the bundled default** by name (globals per-field;
-variables/segments/actions/helpers per-name; `root` replaces wholesale).
+variables/segments/actions/looks/helpers per-name; `root` replaces wholesale).
 Declare only what differs. The bundled default already declares `session.id`,
-`theme.effective`, `term.cols`, and every built-in segment — never re-declare
-them.
+`theme.effective`, `look.effective`, `term.cols`, every built-in segment, and a
+looks stdlib (`none`, `vivid`, `muted`, `dim`, `bright`, `inverted`) — never
+re-declare them.
 
 ## The decision rule
 
 One rule, applied once per interactive element:
 
-- **Pick a value from an option domain** (theme, style) → `{{ menu "applyAction" }}`
+- **Pick a value from an option domain** (theme, style, look) → `{{ menu "applyAction" }}`
   in a segment template. One call = trigger glyph + drop-below picker + all
   backing state, synthesized.
 - **Collapse/reveal arbitrary layout** (a details drawer, a links panel) →
@@ -72,7 +73,7 @@ exactly one value source:
 | declaration | click effect |
 |---|---|
 | `{ set: key, to: "value" }` | write the literal value |
-| `{ set: key, from: "themes" \| "styles" }` | write the option the template binds (picker/menu domain) |
+| `{ set: key, from: "themes" \| "styles" \| "looks" }` | write the option the template binds (picker/menu domain) |
 | `{ set: key, min: 0, max: 60, by: 2 }` | step the current value by `by`, wrapping in `[min, max]` |
 | `{ set: key, int: true }` | write any integer the render binds (a page cursor) |
 | `{ set: key, cycle: ["a", "b", "c"] }` | write the **successor** of the current value, wrapping; order members default-state-first |
@@ -199,6 +200,66 @@ menu:
     { h: ["themeControl", "styleControl"] },
   ] },
 }
+```
+
+## `looks`: named theme adaptations (the third option domain)
+
+A **look** is a named color *transform* applied on top of whatever base theme
+is active — not a palette. Because it is a transform, every look composes with
+every theme: pick theme, then pick look. Declare looks in the top-level
+`looks:` block; each axis mirrors a rich-js ThemeKey field verbatim, all
+optional, absent = identity:
+
+| axis | meaning |
+|---|---|
+| `hueShift` | degrees, additive rotation (error/success/warning stay hue-locked) |
+| `chromaScale` | saturation multiplier — `0` grayscale, `1` identity, must be `>= 0` |
+| `lightnessScale` | lightness multiplier — `1` identity, `-1` inverts |
+| `lightnessShift` | lightness additive, applied after the scale |
+
+Selection reuses the standard seam: one session key (`look`), one action with
+`from: "looks"`, one `{{ menu }}`. `globals.look` sets the config default
+(session pick wins); `.look.effective` is the daemon-resolved active name for
+trigger labels. The bundled stdlib (`none`, `vivid`, `muted`, `dim`, `bright`,
+`inverted`) merges under your names — `none` is the identity look and the
+resolution floor. A per-segment `palette:` pin ignores the look, exactly as it
+ignores the session theme.
+
+```json5 check:pass
+{
+  looks: {
+    vapor: { hueShift: 40, chromaScale: 1.2 },   // stdlib inherited beside it
+  },
+  actions: {
+    applyLook: { set: "look", from: "looks" },
+  },
+  segments: {
+    lookControl: {
+      template: '◐ {{ .look.effective }} {{ menu "applyLook" }}',
+      bg: "surface", fg: "foreground",
+    },
+  },
+  root: { v: [
+    { h: ["directory", "model"] },
+    "lookControl",
+  ] },
+}
+```
+
+The block validates loudly: axis names outside the four, non-finite numbers,
+and negative `chromaScale` are load errors, and `globals.look` must name a
+declared look (checked after the merge, so naming a stdlib look is fine):
+
+```json5 check:fail
+{
+  looks: {
+    neon: { saturation: 2, chromaScale: -1 },
+  },
+}
+```
+
+```error
+Unknown look key "saturation". Expected one of: hueShift, chromaScale, lightnessScale, lightnessShift
 ```
 
 ## `kind: "group"` — the layout disclosure
@@ -408,7 +469,7 @@ Template references unknown variable ".curent_dir"
 ```
 
 ```error
-a set action declares exactly one value source: "to" (a literal value), "from" (an option domain: themes/styles), "min"/"max"/"by" (a bounded step), "int" (an unbounded integer cursor), or "cycle" (an enumerated domain stepped in order) — found: to, from
+a set action declares exactly one value source: "to" (a literal value), "from" (an option domain: themes/styles/looks), "min"/"max"/"by" (a bounded step), "int" (an unbounded integer cursor), or "cycle" (an enumerated domain stepped in order) — found: to, from
 ```
 
 ### Wrong display count on a cycle action

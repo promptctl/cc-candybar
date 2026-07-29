@@ -5,7 +5,11 @@
 // PaletteResolver, no ColorRgba, no hex. The semantic/anchor knowledge
 // (which tokens keep their hue) stays in rich-js (ANCHORED_ROOTS), not here.
 
-import { listThemePalettes, type ColorSystemSpec } from "@promptctl/rich-js";
+import {
+  listThemePalettes,
+  type ColorSystemSpec,
+  type ThemeKey,
+} from "@promptctl/rich-js";
 
 // --- Theme name aliasing ---
 
@@ -45,6 +49,52 @@ function listThemeAliases(): readonly string[] {
 // must reuse this, not re-derive it.
 export function listResolvablePaletteNames(): readonly string[] {
   return [...listThemePalettes(), ...listThemeAliases()];
+}
+
+// --- Look (theme-adaptation) identifiers ---
+
+// The look name a render should use, as data. [LAW:dataflow-not-control-flow]
+// [LAW:one-type-per-behavior] The exact shape of `effectiveThemeName`, one
+// dimension over: session choice over config default over the "none" floor, no
+// "if the session has a look" branch. Unlike the registry-static theme/style
+// domains, the look domain is PER-CONFIG (the merged `looks` block), so the
+// declared names arrive as data. A value outside them (a stale SessionState
+// entry from a prior config's look vocabulary — config edits can orphan a
+// clicked name the per-config gate once admitted) collapses to "none", which
+// every merged DslConfig carries by construction (the bundled stdlib ships it;
+// merge-by-name cannot remove it) — the same collapse-to-floor that keeps
+// effectiveStripStyle's return honest rather than silently widening.
+export function effectiveLookName(
+  sessionLook: string | null,
+  globalsLook: string | undefined,
+  declaredLooks: Readonly<Record<string, unknown>>,
+): string {
+  const chosen = sessionLook ?? globalsLook ?? "none";
+  return Object.prototype.hasOwnProperty.call(declaredLooks, chosen)
+    ? chosen
+    : "none";
+}
+
+// [LAW:single-enforcer] The one place an effective look NAME becomes the
+// ThemeKey a render transposes with. By the time a name reaches here it must be
+// a member: effectiveLookName collapses unknown names to the "none" floor, and
+// mergeWithDefault guarantees the bundled "none" exists in every DslConfig.
+// [LAW:no-defensive-null-guards] the throw is the loud failure for that broken
+// invariant (a hand-built config missing the stdlib), never a silent identity
+// fallback that would hide the drift.
+export function lookKeyByName(
+  looks: Readonly<Record<string, ThemeKey>>,
+  name: string,
+): ThemeKey {
+  const key = looks[name];
+  if (key === undefined) {
+    throw new Error(
+      `Look "${name}" is not declared in this config — effectiveLookName ` +
+        `collapses unknown names to "none", and every merged config carries ` +
+        `"none"; a miss here is merge/policy drift`,
+    );
+  }
+  return key;
 }
 
 // --- Powerline strip-style identifiers ---

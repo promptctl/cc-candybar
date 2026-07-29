@@ -9,7 +9,7 @@ import {
   resolverForThemeName,
 } from "../src/themes/palette-resolvers";
 import type { Template } from "@promptctl/go-template-js";
-import type { RichText } from "@promptctl/rich-js";
+import type { RichText, ThemeKey } from "@promptctl/rich-js";
 
 // ─── Test palette + resolver ──────────────────────────────────────────────────
 
@@ -249,23 +249,31 @@ function maxChannelDelta(a: ColorRgba, b: ColorRgba): number {
 
 describe("per-segment hue via palette transposition", () => {
   const base = makeTestResolver();
+  // A hue-only ThemeKey — the shape renderDsl composes for a segment when no
+  // look is active (the other three axes identity).
+  const hueKey = (hueShift: number): ThemeKey => ({
+    hueShift,
+    chromaScale: 1,
+    lightnessScale: 1,
+    lightnessShift: 0,
+  });
 
   test("hueShift 0 → identity: resolved color is byte-exact to base", () => {
-    const shifted = transposedResolver(base, 0);
+    const shifted = transposedResolver(base, hueKey(0));
     const a = shifted.resolve("primary")!;
     const b = base.resolve("primary")!;
     expect(maxChannelDelta(a, b)).toBe(0);
   });
 
   test("hueShift 30 → non-anchored color shifts substantially", () => {
-    const shifted = transposedResolver(base, 30);
+    const shifted = transposedResolver(base, hueKey(30));
     const a = shifted.resolve("primary")!;
     const b = base.resolve("primary")!;
     expect(maxChannelDelta(a, b)).toBeGreaterThan(5);
   });
 
   test("hueShift 30 → anchored specs (error/success) keep their hue", () => {
-    const shifted = transposedResolver(base, 30);
+    const shifted = transposedResolver(base, hueKey(30));
     // error/success are in rich-js ANCHORED_ROOTS: hue-locked under transpose,
     // so they survive within round-trip tolerance while primary (above) moves.
     expect(maxChannelDelta(shifted.resolve("error")!, base.resolve("error")!)).toBeLessThanOrEqual(2);
@@ -275,21 +283,21 @@ describe("per-segment hue via palette transposition", () => {
   test("hueShift 30 → 'info' is NOT anchored (transposes like any color)", () => {
     // The old local SEMANTIC_SPECS list exempted 'info'; rich-js ANCHORED_ROOTS
     // does not. This is the drift the reshaping removed.
-    const shifted = transposedResolver(base, 30);
+    const shifted = transposedResolver(base, hueKey(30));
     expect(
       maxChannelDelta(shifted.resolve("info")!, base.resolve("info")!),
     ).toBeGreaterThan(5);
   });
 
   test("memoized: same (palette, hueShift) returns the same resolver instance", () => {
-    expect(transposedResolver(base, 30)).toBe(transposedResolver(base, 30));
+    expect(transposedResolver(base, hueKey(30))).toBe(transposedResolver(base, hueKey(30)));
   });
 
   test("literal fg is transposed too (bg/fg pair preserved, not output-only)", () => {
     // The key fix: transposing the whole palette means a LITERAL fg token
     // shifts alongside bg. The old output-only bg rotation left a literal fg
     // un-shifted, drifting the theme-designed bg/fg relationship apart.
-    const shifted = transposedResolver(base, 60);
+    const shifted = transposedResolver(base, hueKey(60));
     // fg is a chromatic literal token (not `auto`): under whole-palette
     // transposition it shifts with bg; the old bg-output-only rotation left it put.
     const bgTpl = parseTemplate("surface", shifted);

@@ -29,7 +29,12 @@ import { VariableStore } from "../var-system/store.js";
 import { SourceRegistry } from "../var-system/sources.js";
 import { SessionState } from "../daemon/session-state.js";
 import { listResolvablePaletteNames } from "../themes/policy.js";
-import { effectiveThemeName, resolverForThemeName } from "../themes/index.js";
+import {
+  effectiveThemeName,
+  effectiveLookName,
+  lookKeyByName,
+  resolverForThemeName,
+} from "../themes/index.js";
 import { registerDslConfig, renderDsl } from "../dsl/render.js";
 import {
   DEFAULT_CHARSET,
@@ -74,6 +79,13 @@ const payload = {
 // The demo has no SessionState; the effective theme is just the config default.
 const basePalette = resolverForThemeName(
   effectiveThemeName(null, config.globals.palette),
+);
+// Same fresh-session resolution one dimension over: the config-default look
+// over the "none" identity floor — the exact mirror of the daemon's per-render
+// effectiveLookName → lookKeyByName chain.
+const lookKey = lookKeyByName(
+  config.looks,
+  effectiveLookName(null, config.globals.look, config.looks),
 );
 
 // A fresh store + registry for this run. (A hot-reloading daemon would
@@ -125,6 +137,8 @@ try {
         padding: config.globals.padding ?? DEFAULT_PADDING,
         charset: config.globals.charset ?? DEFAULT_CHARSET,
       },
+      undefined,
+      lookKey,
     );
     process.stdout.write(`  ${line}\n`);
     if (frame < FRAMES - 1) await sleep(FRAME_INTERVAL_MS);

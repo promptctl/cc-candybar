@@ -25,11 +25,18 @@
 // discriminator the loader and the validator-derivation match on.
 
 // [LAW:one-source-of-truth] The domain lists a picker draws options from. Same
-// canonical sources the `themes()`/`styles()` bindings and the set-state
-// validators consult — the rendered options and the derived gate cannot diverge
-// because there is no second enumeration.
-export type OptionSource = "themes" | "styles";
-export const OPTION_SOURCES: readonly OptionSource[] = ["themes", "styles"];
+// canonical sources the `themes()`/`styles()`/`looks()` bindings and the
+// set-state validators consult — the rendered options and the derived gate
+// cannot diverge because there is no second enumeration. themes/styles are
+// static registry lists; "looks" is the one PER-CONFIG domain (the merged
+// `looks` block's names), so its resolution sites take the config's look names
+// as data rather than consulting a module constant.
+export type OptionSource = "themes" | "styles" | "looks";
+export const OPTION_SOURCES: readonly OptionSource[] = [
+  "themes",
+  "styles",
+  "looks",
+];
 
 // [LAW:types-are-the-program] The top-level discriminator of an ActionDecl — the
 // click effect is keyed by which of these is present. The loader proves
