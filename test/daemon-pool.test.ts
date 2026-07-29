@@ -12,9 +12,26 @@ import { spawnTestDaemon } from "./helpers/spawn-test-daemon";
 // the arbitrateSocket pure-fold test style: full input-space coverage of the
 // mechanism the fork-bomb epic (brandon-daemon-lifecycle-gad.1) needs to hold.
 
+// [LAW:single-enforcer] Every `tmpPoolDir()` call in this file is tracked
+// here and swept once in the file-level `afterAll` — the one cleanup site,
+// so no individual test needs its own dir-removal boilerplate.
+const createdPoolDirs: string[] = [];
 function tmpPoolDir(): string {
-  return fs.mkdtempSync(path.join(os.tmpdir(), "cc-candybar-pool-test-"));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "cc-candybar-pool-test-"));
+  createdPoolDirs.push(dir);
+  return dir;
 }
+
+afterAll(() => {
+  for (const dir of createdPoolDirs) {
+    try {
+      fs.rmSync(dir, { recursive: true, force: true });
+    } catch {
+      // best-effort
+    }
+  }
+  createdPoolDirs.length = 0;
+});
 
 describe("daemon pool", () => {
   test("acquires up to `size` slots concurrently, then blocks", async () => {
@@ -115,10 +132,13 @@ describe("daemon pool caps real daemon subprocesses (integration)", () => {
   interface Fixture {
     sockPath: string;
     env: NodeJS.ProcessEnv;
+    cleanup(): void;
   }
 
   function makeFixture(prefix: string): Fixture {
     const stateRoot = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
+    const cacheRoot = fs.mkdtempSync(path.join(os.tmpdir(), `${prefix}c-`));
+    const configRoot = fs.mkdtempSync(path.join(os.tmpdir(), `${prefix}g-`));
     const stateDir = path.join(stateRoot, "cc-candybar");
     fs.mkdirSync(stateDir, { recursive: true, mode: 0o700 });
     const sockPath = path.join(stateDir, "socket");
@@ -128,8 +148,17 @@ describe("daemon pool caps real daemon subprocesses (integration)", () => {
         ...process.env,
         CC_CANDYBAR_SOCKET: sockPath,
         XDG_STATE_HOME: stateRoot,
-        XDG_CACHE_HOME: fs.mkdtempSync(path.join(os.tmpdir(), `${prefix}c-`)),
-        XDG_CONFIG_HOME: fs.mkdtempSync(path.join(os.tmpdir(), `${prefix}g-`)),
+        XDG_CACHE_HOME: cacheRoot,
+        XDG_CONFIG_HOME: configRoot,
+      },
+      cleanup(): void {
+        for (const d of [stateRoot, cacheRoot, configRoot]) {
+          try {
+            fs.rmSync(d, { recursive: true, force: true });
+          } catch {
+            // best-effort
+          }
+        }
       },
     };
   }
@@ -167,48 +196,63 @@ describe("daemon pool caps real daemon subprocesses (integration)", () => {
     const fx2 = makeFixture("cc-candybar-poolit-2-");
     const fx3 = makeFixture("cc-candybar-poolit-3-");
 
-    const d1 = await spawnTestDaemon(fx1.env, pool);
-    const d2 = await spawnTestDaemon(fx2.env, pool);
     try {
-      expect(await waitUntil(() => isConnectable(fx1.sockPath), 5000)).toBe(
-        true,
-      );
-      expect(await waitUntil(() => isConnectable(fx2.sockPath), 5000)).toBe(
-        true,
-      );
-
-      // Pool is full (2/2). The 3rd spawn must not even start its daemon
-      // process until a slot frees — that's the ceiling this pool exists to
-      // enforce. spawnTestDaemon(..., { timeoutMs: 15000 }) isn't an option
-      // (the signature doesn't expose it), so race the acquire itself
-      // against a short "still blocked" probe.
-      const d3Promise = spawnTestDaemon(fx3.env, pool);
-      const stillBlocked = !(await waitUntil(
-        () => isConnectable(fx3.sockPath),
-        800,
-      ));
-      expect(stillBlocked).toBe(true);
-
-      // Free one slot — the 3rd daemon must now come up. killTree (not
-      // child.kill) — the `tsx` wrapper forks its own worker that holds the
-      // real socket, which survives as an orphan if only the wrapper dies.
-      d1.killTree();
-      d1.release();
-
-      const d3 = await d3Promise;
+      // Each spawn's own try/finally starts immediately after it succeeds —
+      // not after all three have been kicked off — so a later spawn (d2, d3)
+      // throwing can never leak an earlier one (d1) that already succeeded.
+      const d1 = await spawnTestDaemon(fx1.env, pool);
       try {
-        expect(
-          await waitUntil(() => isConnectable(fx3.sockPath), 5000),
-        ).toBe(true);
+        const d2 = await spawnTestDaemon(fx2.env, pool);
+        try {
+          expect(
+            await waitUntil(() => isConnectable(fx1.sockPath), 5000),
+          ).toBe(true);
+          expect(
+            await waitUntil(() => isConnectable(fx2.sockPath), 5000),
+          ).toBe(true);
+
+          // Pool is full (2/2). The 3rd spawn must not even start its daemon
+          // process until a slot frees — that's the ceiling this pool exists
+          // to enforce. spawnTestDaemon(..., { timeoutMs: 15000 }) isn't an
+          // option (the signature doesn't expose it), so race the acquire
+          // itself against a short "still blocked" probe.
+          const d3Promise = spawnTestDaemon(fx3.env, pool);
+          const stillBlocked = !(await waitUntil(
+            () => isConnectable(fx3.sockPath),
+            800,
+          ));
+          expect(stillBlocked).toBe(true);
+
+          // Free one slot — the 3rd daemon must now come up. killTree (not
+          // child.kill) — the `tsx` wrapper forks its own worker that holds
+          // the real socket, which survives as an orphan if only the
+          // wrapper dies.
+          d1.killTree();
+          d1.release();
+
+          const d3 = await d3Promise;
+          try {
+            expect(
+              await waitUntil(() => isConnectable(fx3.sockPath), 5000),
+            ).toBe(true);
+          } finally {
+            d3.killTree();
+            d3.release();
+          }
+        } finally {
+          d2.killTree();
+          d2.release();
+        }
       } finally {
-        d3.killTree();
-        d3.release();
+        // Idempotent — a no-op if the pool-full branch above already freed
+        // d1 (release() is guarded; killTree tolerates an already-dead group).
+        d1.killTree();
+        d1.release();
       }
     } finally {
-      d1.killTree();
-      d1.release();
-      d2.killTree();
-      d2.release();
+      fx1.cleanup();
+      fx2.cleanup();
+      fx3.cleanup();
     }
   });
 });

@@ -13,14 +13,17 @@
 // on the machine contends for the SAME small ceiling regardless of worker
 // count or how many worktrees are running suites at once.
 //
-// [FRAMING:representation] A slot's owner is (pid, kernel start-time) — the
-// same process-identity pair `src/daemon/socket-lease.ts` uses for socket
-// ownership. Reused here via `process-fingerprint.ts` (general process
-// identity, not socket-specific) rather than reusing `socket-lease.ts`
-// itself: a pool slot and a socket lease are different concepts that happen
-// to share one liveness primitive, not the same concept — forcing them
-// through one type would be the "wrong abstraction stretched over a shape it
-// wasn't designed for" the carrying-cost law warns against.
+// [FRAMING:representation] A slot's owner is a `ProcessIdentity` (pid, kernel
+// start-time) — the SAME type `src/daemon/socket-lease.ts` composes its
+// `LeaseRecord`/`LeaseRead.owned` from, imported from `process-fingerprint.ts`
+// (the module that owns the process-identity concept) so the two can never
+// drift on that shape [LAW:one-source-of-truth]. What's still NOT reused is
+// `LeaseRecord` itself (`version`/`binPath` are socket-lease diagnostics with
+// no meaning for a pool slot) or `socket-lease.ts`'s lease-file functions — a
+// pool slot and a socket lease are different concepts that happen to share
+// one identity shape and one liveness primitive, not the same concept;
+// forcing them through one type would be the "wrong abstraction stretched
+// over a shape it wasn't designed for" the carrying-cost law warns against.
 
 import fs from "node:fs";
 import os from "node:os";
@@ -31,13 +34,11 @@ import {
   readStartTime,
   readOwnStartTime,
   sameLiveProcess,
+  type ProcessIdentity,
 } from "../../src/daemon/process-fingerprint";
 import { pidAlive } from "../../src/daemon/parent-watchdog";
 
-interface SlotRecord {
-  pid: number;
-  startTime: string | null;
-}
+type SlotRecord = ProcessIdentity;
 
 export interface DaemonSlot {
   // Idempotent. Removes the slot file only if it still names us — a slot we
@@ -97,9 +98,16 @@ export function createDaemonPool(dir: string, size: number): DaemonPool {
   // is won by an atomic exclusive create — the OS admits exactly one winner.
   // A stale slot (dead or unreadable owner) is reclaimed by an atomic
   // write-tmp+rename publish, THEN read back to confirm we're still the
-  // named owner: two racing reclaimers can both "succeed" at the write, but
-  // only the one whose write landed last survives the read-back, so the loser
-  // correctly reports failure instead of believing it holds a slot it lost.
+  // named owner. This resolves the common case — a racing reclaimer's rename
+  // lands before our own read-back, so we correctly see their pid and report
+  // failure — but it is NOT a true compare-and-swap: if our read-back lands
+  // BEFORE a second racer's rename, we still report success, and that racer's
+  // later rename can silently overwrite us, leaving both callers believing
+  // they hold the same slot. A real fix needs a cross-process mutex (e.g. an
+  // O_EXCL lock dir); skipped here as disproportionate to the blast radius —
+  // this is test-only tooling guarding against a daemon storm, and the
+  // failure mode is a brief 1-slot overcapacity that self-corrects on the
+  // next release, not a correctness hazard.
   function tryClaim(i: number, myPid: number, myStartTime: string | null): boolean {
     const p = slotPath(i);
     const payload = JSON.stringify({ pid: myPid, startTime: myStartTime });

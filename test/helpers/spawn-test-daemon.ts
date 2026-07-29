@@ -23,6 +23,8 @@ export interface TestDaemonProcess {
   // `child.exitCode`. Callers that need the daemon actually gone (not just
   // the wrapper) MUST use `killTree`, which signals the whole process group
   // (spawned with `detached: true` for exactly this reason).
+  // Best-effort — never throws (matches the try/catch every kill in this
+  // suite's cleanup paths already wraps its process.kill in).
   killTree(signal?: NodeJS.Signals): void;
   // Idempotent, safe to call multiple times or not at all — the slot also
   // self-releases on the wrapper's `exit` event, so a test whose cleanup
@@ -70,13 +72,20 @@ export async function spawnTestDaemon(
   // (an assertion throw, a forgotten `finally`, a Jest timeout).
   child.once("exit", releaseOnce);
 
+  // [LAW:no-silent-failure] Best-effort by design, not by accident: this is a
+  // cleanup primitive, always called from a test's teardown path (a
+  // `finally`, an `afterEach`) where an unswallowed throw would mask the
+  // test's real failure and, worse, skip every cleanup step after it (the
+  // slot release, temp-dir removal) — the exact failure mode the old
+  // `try { child.kill(...) } catch {}` this replaces was already guarding
+  // against. ESRCH (group already gone) is the expected case; anything else
+  // (e.g. EPERM) is equally not actionable by a test, so it's swallowed too.
   const killTree = (signal: NodeJS.Signals = "SIGKILL"): void => {
     if (child.pid === undefined) return;
     try {
       process.kill(-child.pid, signal);
-    } catch (e) {
-      // ESRCH: the whole group is already gone — nothing to do.
-      if ((e as NodeJS.ErrnoException).code !== "ESRCH") throw e;
+    } catch {
+      // best-effort
     }
   };
 

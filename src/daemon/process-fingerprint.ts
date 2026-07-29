@@ -25,6 +25,17 @@ import { launchSync, type LaunchOpts, type LaunchResult } from "../proc/launch";
 // `TZ=UTC` — so the token is a locale- and timezone-invariant UTC rendering of
 // the start instant, and equality is sound.
 
+// [LAW:one-source-of-truth] The (pid, start-time) pair IS a process identity
+// (see the file header) — every owner-of-a-resource record in this codebase
+// (a socket lease, a test-pool slot) names its owner with exactly this shape.
+// Declared once here, the module that owns the process-identity concept, so
+// a future field addition to "what identifies a process" can't drift between
+// independent copies.
+export interface ProcessIdentity {
+  pid: number;
+  startTime: string | null;
+}
+
 // A read of a pid's kernel start-time. Only TWO outcomes, because nothing
 // derivable from a `ps` exit code can SOUNDLY prove a process is dead — a
 // non-zero exit means "no start-time to report", which conflates a genuinely
