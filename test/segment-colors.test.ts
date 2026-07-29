@@ -1,7 +1,7 @@
 // [LAW:behavior-not-structure] Tests assert observable output (resolved hex
 // values, Style fields, thrown errors) — never internal state.
 
-import { Palette, PaletteResolver, parseRgbHex, ColorSpec, ColorRgba } from "@promptctl/rich-js";
+import { Palette, PaletteResolver, parseRgbHex, ColorSpec, ColorRgba, Oklch } from "@promptctl/rich-js";
 import { createCcCandybarEngine } from "../src/template-engine/engine";
 import { resolveSegmentColors, ColorSpecError } from "../src/template-engine/colors";
 import {
@@ -305,6 +305,51 @@ describe("per-segment hue via palette transposition", () => {
     const style = resolveSegmentColors(shifted, bgTpl, fgTpl, {});
     const baseStyle = resolveSegmentColors(base, bgTpl, fgTpl, {});
     expect(style.color?.value?.hex).not.toBe(baseStyle.color?.value?.hex);
+  });
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// 9b. The other three ThemeKey axes — a look's chromaScale/lightnessScale/
+// lightnessShift, transposed through the same transposedResolver as hueShift
+// (brandon-themes-07p). Asserted in OKLCH terms (Oklch.fromRgba) so "the
+// saturation moved" is a checked number, not an inference from a differing hex.
+// ────────────────────────────────────────────────────────────────────────────
+
+describe("non-hue ThemeKey axes via palette transposition", () => {
+  const base = makeTestResolver();
+  const key = (overrides: Partial<ThemeKey>): ThemeKey => ({
+    hueShift: 0,
+    chromaScale: 1,
+    lightnessScale: 1,
+    lightnessShift: 0,
+    ...overrides,
+  });
+
+  test("chromaScale 0.5 desaturates a non-anchored color (chroma drops, hue holds)", () => {
+    const shifted = transposedResolver(base, key({ chromaScale: 0.5 }));
+    const a = Oklch.fromRgba(base.resolve("primary")!);
+    const b = Oklch.fromRgba(shifted.resolve("primary")!);
+    expect(b.c).toBeLessThan(a.c * 0.75);
+    expect(Math.abs(b.h - a.h)).toBeLessThanOrEqual(2);
+  });
+
+  test("lightnessScale -1 (INVERT_LIGHTNESS) flips lightness toward its complement", () => {
+    const shifted = transposedResolver(base, key({ lightnessScale: -1, lightnessShift: 1 }));
+    const a = Oklch.fromRgba(base.resolve("primary")!);
+    const b = Oklch.fromRgba(shifted.resolve("primary")!);
+    // L' = 1 - L: the inverted lightness lands near the complement, not near the original.
+    expect(Math.abs(b.l - (1 - a.l))).toBeLessThan(0.05);
+    expect(Math.abs(b.l - a.l)).toBeGreaterThan(0.1);
+  });
+
+  test("memoized: distinct chromaScale/lightnessScale values are distinct cache entries", () => {
+    // Guards the fix this PR made to transposedResolver's cache key — before it
+    // covered all four axes, two keys differing only on chroma/lightness would
+    // collide and silently share a resolver.
+    const vivid = transposedResolver(base, key({ chromaScale: 1.5 }));
+    const muted = transposedResolver(base, key({ chromaScale: 0.5 }));
+    expect(vivid).not.toBe(muted);
+    expect(vivid.resolve("primary")!.red).not.toBe(muted.resolve("primary")!.red);
   });
 });
 

@@ -67,7 +67,7 @@ export function listResolvablePaletteNames(): readonly string[] {
 export function effectiveLookName(
   sessionLook: string | null,
   globalsLook: string | undefined,
-  declaredLooks: Readonly<Record<string, unknown>>,
+  declaredLooks: Readonly<Record<string, ThemeKey>>,
 ): string {
   const chosen = sessionLook ?? globalsLook ?? "none";
   return Object.prototype.hasOwnProperty.call(declaredLooks, chosen)
