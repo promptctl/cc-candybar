@@ -6,6 +6,7 @@ import path from "node:path";
 
 import { createDaemonPool } from "./helpers/daemon-pool";
 import { spawnTestDaemon } from "./helpers/spawn-test-daemon";
+import { readStartTime } from "../src/daemon/process-fingerprint";
 
 // [LAW:verifiable-goals] Pins the shared-pool primitive's core contract in
 // isolation — no real cc-candybar daemon spawns, so this stays fast — mirroring
@@ -65,16 +66,28 @@ describe("daemon pool", () => {
   // fabricated pid risks colliding with a live unrelated process on the host,
   // which would make this test non-deterministic.
   test("reclaims a slot whose recorded owner is dead", async () => {
-    const dead = spawn(process.execPath, ["-e", "0"], { stdio: "ignore" });
-    await new Promise<void>((resolve) => dead.once("exit", () => resolve()));
+    // Kept alive briefly so its start-time can actually be read before it
+    // exits — a null startTime (as if unfingerprinted) would make isSlotLive
+    // fall back to bare kill(pid,0), which a recycled pid could satisfy
+    // within the 2000ms acquire budget on a host with aggressive pid reuse
+    // (low pid_max containers) and flake this test. Recording the real
+    // fingerprint exercises the same start-time-mismatch path production
+    // code relies on to distinguish a recycled pid from the true owner.
+    const dead = spawn(process.execPath, ["-e", "setTimeout(() => {}, 5000)"], {
+      stdio: "ignore",
+    });
     const deadPid = dead.pid!;
+    const startTimeRead = readStartTime(deadPid);
+    const deadStartTime = startTimeRead.kind === "start" ? startTimeRead.token : null;
+    dead.kill("SIGKILL");
+    await new Promise<void>((resolve) => dead.once("exit", () => resolve()));
 
     const pool = createDaemonPool(tmpPoolDir(), 1);
     // Plant a stale slot file directly, as if a prior (now-dead) process held it.
     fs.mkdirSync(pool.dir, { recursive: true });
     fs.writeFileSync(
       path.join(pool.dir, "slot-0.json"),
-      JSON.stringify({ pid: deadPid, startTime: null }),
+      JSON.stringify({ pid: deadPid, startTime: deadStartTime }),
     );
 
     const slot = await pool.acquire({ timeoutMs: 2000, retryIntervalMs: 50 });
@@ -217,27 +230,52 @@ describe("daemon pool caps real daemon subprocesses (integration)", () => {
           // option (the signature doesn't expose it), so race the acquire
           // itself against a short "still blocked" probe.
           const d3Promise = spawnTestDaemon(fx3.env, pool);
-          const stillBlocked = !(await waitUntil(
-            () => isConnectable(fx3.sockPath),
-            800,
-          ));
-          expect(stillBlocked).toBe(true);
-
-          // Free one slot — the 3rd daemon must now come up. killTree (not
-          // child.kill) — the `tsx` wrapper forks its own worker that holds
-          // the real socket, which survives as an orphan if only the
-          // wrapper dies.
-          d1.killTree();
-          d1.release();
-
-          const d3 = await d3Promise;
           try {
-            expect(
-              await waitUntil(() => isConnectable(fx3.sockPath), 5000),
-            ).toBe(true);
-          } finally {
-            d3.killTree();
-            d3.release();
+            try {
+              const stillBlocked = !(await waitUntil(
+                () => isConnectable(fx3.sockPath),
+                800,
+              ));
+              expect(stillBlocked).toBe(true);
+            } finally {
+              // Free one slot UNCONDITIONALLY — whether or not the
+              // "still blocked" assertion above passed. d3Promise can only
+              // resolve once a slot frees; releasing here (rather than
+              // after the assertion, which might throw first) guarantees
+              // the drain in the outer catch below always has a slot to
+              // resolve against instead of hanging on spawnTestDaemon's own
+              // ~20s acquire timeout. killTree (not child.kill) — the `tsx`
+              // wrapper forks its own worker that holds the real socket,
+              // which survives as an orphan if only the wrapper dies.
+              d1.killTree();
+              d1.release();
+            }
+
+            const d3 = await d3Promise;
+            try {
+              expect(
+                await waitUntil(() => isConnectable(fx3.sockPath), 5000),
+              ).toBe(true);
+            } finally {
+              d3.killTree();
+              d3.release();
+            }
+          } catch (err) {
+            // An assertion above threw before `d3Promise` was drained (or
+            // before its own cleanup ran) — d1's slot is already free (the
+            // finally above guarantees that unconditionally), so d3Promise
+            // is resolvable; drain and clean it up rather than abandoning
+            // the handle. Tolerate d3Promise itself rejecting (a genuine
+            // spawn failure) — spawnTestDaemon already releases its slot
+            // internally on that path, so there's nothing further to clean.
+            try {
+              const d3 = await d3Promise;
+              d3.killTree();
+              d3.release();
+            } catch {
+              // already handled internally by spawnTestDaemon
+            }
+            throw err;
           }
         } finally {
           d2.killTree();

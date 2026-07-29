@@ -102,6 +102,11 @@ function isSlotLive(record: SlotRecord): boolean {
 
 export function createDaemonPool(dir: string, size: number): DaemonPool {
   const slotPath = (i: number): string => path.join(dir, `slot-${i}.json`);
+  // Once per pool, not once per tryClaim: acquire's retry loop can call
+  // tryClaim up to `size` times per poll tick over a ~20s budget — hundreds
+  // of calls — and mkdirSync(..., {recursive:true}) is a no-op once the dir
+  // exists, so repeating it per call was pure waste.
+  fs.mkdirSync(dir, { recursive: true });
 
   // Attempt to claim slot `i` for (myPid, myStartTime). A genuinely free slot
   // is won by an atomic exclusive create — the OS admits exactly one winner.
@@ -120,7 +125,6 @@ export function createDaemonPool(dir: string, size: number): DaemonPool {
   function tryClaim(i: number, myPid: number, myStartTime: string | null): boolean {
     const p = slotPath(i);
     const payload = JSON.stringify({ pid: myPid, startTime: myStartTime });
-    fs.mkdirSync(dir, { recursive: true });
     try {
       fs.writeFileSync(p, payload, { flag: "wx", mode: 0o600 });
       return true;
