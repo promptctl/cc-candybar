@@ -83,10 +83,18 @@ function readSlot(p: string): SlotRecord | null {
   }
   try {
     const parsed = JSON.parse(raw) as Partial<SlotRecord> | null;
-    if (typeof parsed?.pid !== "number") return null;
+    const pid = parsed?.pid;
+    // [LAW:one-source-of-truth] Mirrors readLease's pid validation
+    // (socket-lease.ts) — a bare `typeof === "number"` accepts 0, negatives,
+    // and non-integers; `process.kill(0, 0)` signals the CALLER's own
+    // process group, not a specific owner, so a corrupted `pid: 0` slot
+    // must never be treated as a readable identity.
+    if (typeof pid !== "number" || !Number.isInteger(pid) || pid <= 0) {
+      return null;
+    }
     return {
-      pid: parsed.pid,
-      startTime: typeof parsed.startTime === "string" ? parsed.startTime : null,
+      pid,
+      startTime: typeof parsed?.startTime === "string" ? parsed.startTime : null,
     };
   } catch {
     return null;

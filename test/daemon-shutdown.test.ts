@@ -54,7 +54,36 @@ async function spawnDaemon(): Promise<DaemonHandle> {
     ),
   };
 
-  const { child, killTree, release } = await spawnTestDaemon(env);
+  // [LAW:single-enforcer] One tmpdir-removal primitive, used both by the
+  // pre-spawn failure path below AND by `cleanup` — without this, a
+  // `spawnTestDaemon` throw (e.g. pool-acquire timeout, spawn-error) leaked
+  // all three dirs, since the `cleanup` closure that removed them didn't
+  // exist yet at the point of the throw (the same class of leak the
+  // readiness-probe failure path below already guarded against).
+  const removeTmpDirs = (): void => {
+    try {
+      fs.rmSync(stateRoot, { recursive: true, force: true });
+    } catch {}
+    if (env.XDG_CACHE_HOME) {
+      try {
+        fs.rmSync(env.XDG_CACHE_HOME, { recursive: true, force: true });
+      } catch {}
+    }
+    if (env.XDG_CONFIG_HOME) {
+      try {
+        fs.rmSync(env.XDG_CONFIG_HOME, { recursive: true, force: true });
+      } catch {}
+    }
+  };
+
+  let daemon: Awaited<ReturnType<typeof spawnTestDaemon>>;
+  try {
+    daemon = await spawnTestDaemon(env);
+  } catch (e) {
+    removeTmpDirs();
+    throw e;
+  }
+  const { child, killTree, release } = daemon;
 
   // [LAW:single-enforcer] One cleanup primitive that closes the child and
   // removes every tempdir we created. Called from both the success-path
@@ -69,19 +98,7 @@ async function spawnDaemon(): Promise<DaemonHandle> {
     // wrapper is signalled. Safe to call even after a graceful exit.
     killTree();
     release();
-    try {
-      fs.rmSync(stateRoot, { recursive: true, force: true });
-    } catch {}
-    if (env.XDG_CACHE_HOME) {
-      try {
-        fs.rmSync(env.XDG_CACHE_HOME, { recursive: true, force: true });
-      } catch {}
-    }
-    if (env.XDG_CONFIG_HOME) {
-      try {
-        fs.rmSync(env.XDG_CONFIG_HOME, { recursive: true, force: true });
-      } catch {}
-    }
+    removeTmpDirs();
   };
 
   // [LAW:verifiable-goals] The readiness check has to assert the *load-bearing*

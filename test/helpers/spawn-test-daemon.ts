@@ -71,6 +71,14 @@ export async function spawnTestDaemon(
   // so a slot can never wedge because a test's own teardown was skipped
   // (an assertion throw, a forgotten `finally`, a Jest timeout).
   child.once("exit", releaseOnce);
+  // [LAW:no-silent-failure] `spawn()` can fail AFTER returning — e.g. ENOENT
+  // if the tsx binary is missing — by emitting 'error' asynchronously rather
+  // than throwing synchronously (the try/catch above only covers the
+  // synchronous case). A ChildProcess with no 'error' listener makes Node
+  // throw that error as unhandled, crashing the Jest worker; and since a
+  // failed spawn never emits 'exit', releaseOnce would otherwise never fire
+  // and the slot would wedge. One listener closes both gaps.
+  child.once("error", releaseOnce);
 
   // [LAW:no-silent-failure] Best-effort by design, not by accident: this is a
   // cleanup primitive, always called from a test's teardown path (a
