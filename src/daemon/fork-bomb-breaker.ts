@@ -206,6 +206,14 @@ export function admitDaemon(deps: BreakerDeps): BreakerResult {
   if (!deps.isolated) {
     return { decision: decideBoot(false, 0, deps.ceiling), registryPath: null };
   }
+  // [LAW:single-enforcer] `ensureDirSafe` — not a bare `ensureOwnedPrivateDir`
+  // call — because the safety boundary differs by registry: the default,
+  // UID-anchored registry sits under the same shared /tmp root the socket
+  // does and needs the two-level check `realBreakerDeps` builds for it (see
+  // its comment); an overridden registry (tests) is the caller's own
+  // directory and needs only the one-level leaf check. `admitDaemon` stays
+  // agnostic to which — it just asks the injected dependency to prove the
+  // directory is safe to use.
   deps.ensureDirSafe(deps.registryDir);
   const entries: RegistryEntry[] = [];
   for (const filePath of deps.listFiles(deps.registryDir)) {
@@ -277,7 +285,27 @@ export function realBreakerDeps(
       fs.writeFileSync(tmp, JSON.stringify(identity), { mode: 0o600 });
       fs.renameSync(tmp, filePath);
     },
-    ensureDirSafe: ensureOwnedPrivateDir,
+    // [LAW:single-enforcer] Two levels, mirroring ensureSocketParentSafe's own
+    // shape, but ONLY for the default (unoverridden) registry path: its
+    // parent is the shared UID-anchored /tmp root an attacker could pre-plant
+    // as a symlink before any daemon has ever run, and `lstatSync` only
+    // inspects a path's FINAL component — verifying the leaf alone lets a
+    // symlinked parent be silently followed by `mkdirSync({recursive:true})`,
+    // after which the freshly-created leaf looks perfectly clean (owned by
+    // us, 0700) despite living inside attacker-controlled storage. An
+    // OVERRIDDEN registry dir (CC_CANDYBAR_DAEMON_REGISTRY_DIR, tests only)
+    // has no such shared root by construction — its parent is whatever
+    // directory the caller happened to put it under (a system tmpdir on some
+    // platforms), which is not a boundary this breaker owns or should assert
+    // on; there the one-level leaf check alone is the correct, portable
+    // parity with how ensureSocketParentSafe treats an overridden
+    // CC_CANDYBAR_SOCKET (exactly one level, whatever that parent is).
+    ensureDirSafe: process.env["CC_CANDYBAR_DAEMON_REGISTRY_DIR"]
+      ? ensureOwnedPrivateDir
+      : (dir: string): void => {
+          ensureOwnedPrivateDir(path.dirname(dir));
+          ensureOwnedPrivateDir(dir);
+        },
     ...overrides,
   };
 }

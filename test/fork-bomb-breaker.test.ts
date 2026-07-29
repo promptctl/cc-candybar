@@ -10,6 +10,7 @@ import {
   decideBoot,
   listRegistryFiles,
   readRegistryEntry,
+  realBreakerDeps,
   releaseRegistration,
   type BreakerDeps,
   type RegistryEntry,
@@ -190,18 +191,91 @@ describe("readRegistryEntry", () => {
 });
 
 describe("listRegistryFiles", () => {
+  let dir: string;
+  beforeEach(() => {
+    dir = freshDir();
+  });
+  afterEach(() => {
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
   test("nonexistent dir → empty list, never throws", () => {
-    expect(listRegistryFiles(freshDir())).toEqual([]);
+    expect(listRegistryFiles(dir)).toEqual([]);
   });
 
   test("lists only .json files, full paths", () => {
-    const dir = freshDir();
     fs.mkdirSync(dir, { recursive: true });
     fs.writeFileSync(path.join(dir, "pid-1.json"), "{}");
     fs.writeFileSync(path.join(dir, "stray.tmp"), "junk");
     const files = listRegistryFiles(dir);
     expect(files).toEqual([path.join(dir, "pid-1.json")]);
-    fs.rmSync(dir, { recursive: true, force: true });
+  });
+});
+
+// ─── realBreakerDeps.ensureDirSafe: symlinked-parent hijack, default vs
+// override ────────────────────────────────────────────────────────────────
+//
+// [LAW:effects-at-boundaries] `lstatSync` only inspects a path's FINAL
+// component; verifying just the leaf registry dir lets a symlinked PARENT be
+// silently followed by `mkdirSync({recursive:true})`, after which the
+// freshly-created leaf looks perfectly clean despite living inside
+// attacker-controlled storage — the same class of attack
+// `ensureSocketParentSafe` guards against for the socket path. Mirrors
+// test/daemon-socket-safety.test.ts's style: real tmp dirs, a real symlink.
+
+describe("realBreakerDeps ensureDirSafe (registry directory safety)", () => {
+  const ORIGINAL = process.env["CC_CANDYBAR_DAEMON_REGISTRY_DIR"];
+  afterEach(() => {
+    if (ORIGINAL === undefined) {
+      delete process.env["CC_CANDYBAR_DAEMON_REGISTRY_DIR"];
+    } else {
+      process.env["CC_CANDYBAR_DAEMON_REGISTRY_DIR"] = ORIGINAL;
+    }
+  });
+
+  test("default (unoverridden) registry path refuses a symlinked parent", () => {
+    delete process.env["CC_CANDYBAR_DAEMON_REGISTRY_DIR"];
+    const real = freshDir();
+    fs.mkdirSync(real, { mode: 0o700 });
+    const link = freshDir();
+    fs.symlinkSync(real, link);
+    const registryDir = path.join(link, "daemons");
+    try {
+      expect(() => realBreakerDeps(null).ensureDirSafe(registryDir)).toThrow(
+        /symlink/,
+      );
+    } finally {
+      fs.unlinkSync(link);
+      fs.rmSync(real, { recursive: true, force: true });
+    }
+  });
+
+  test("default (unoverridden) registry path accepts a properly-owned parent", () => {
+    delete process.env["CC_CANDYBAR_DAEMON_REGISTRY_DIR"];
+    const root = freshDir();
+    fs.mkdirSync(root, { mode: 0o700 });
+    const registryDir = path.join(root, "daemons");
+    try {
+      expect(() =>
+        realBreakerDeps(null).ensureDirSafe(registryDir),
+      ).not.toThrow();
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("overridden registry path checks only the leaf, not its parent (a test tmpdir's parent is not a boundary this breaker owns)", () => {
+    const dir = freshDir();
+    fs.mkdirSync(dir, { mode: 0o700 });
+    process.env["CC_CANDYBAR_DAEMON_REGISTRY_DIR"] = dir;
+    try {
+      // The parent here is os.tmpdir() itself, which on a shared-/tmp
+      // platform would fail the two-level check — proving the override path
+      // deliberately does not apply it.
+      expect(() => realBreakerDeps(null).ensureDirSafe(dir)).not.toThrow();
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
   });
 });
 
