@@ -48,6 +48,7 @@ import { WatcherRegistry } from "./cache/watchers";
 import { RuntimeStats } from "./stats";
 import { makeLimits, realLimitsDeps, type LimitsHandle } from "./limits";
 import { armParentWatchdog, anchorFromEnv, pidAlive } from "./parent-watchdog";
+import { resetSpawnBackoff } from "./acquire";
 import { SessionState } from "./session-state";
 import { FileSessionStorage } from "./session-state-file";
 import { VERBS, BadVerbArgs, SESSION_CONFIG_OVERRIDE_KEY } from "./verbs";
@@ -377,6 +378,11 @@ function onListening(sockPath: string): void {
     "info",
     `daemon up: pid=${process.pid} v=${PROTOCOL_VERSION} sock=${sockPath}`,
   );
+  // [LAW:single-enforcer] This bind is the one process-wide fact that answers
+  // "did an outage just end" — see resetSpawnBackoff's doc comment in
+  // acquire.ts. Any consecutive-spawn backoff accumulated getting here no
+  // longer applies once a daemon is actually serving.
+  resetSpawnBackoff();
   armBinaryWatch();
   armLimits();
   armOwnershipWatch(sockPath, boundRead.identity);
