@@ -1,3 +1,10 @@
+# [1.21.0](https://github.com/promptctl/cc-candybar/compare/v1.20.0...v1.21.0) (2026-07-29)
+
+
+### Features
+
+* **themes:** "looks" — named theme adaptations composing over any theme ([#160](https://github.com/promptctl/cc-candybar/issues/160)) ([89ff4e8](https://github.com/promptctl/cc-candybar/commit/89ff4e8c1beb0a5910d3083aa19ae8246c6f724a))
+
 # [1.20.0](https://github.com/promptctl/cc-candybar/compare/v1.19.0...v1.20.0) (2026-07-26)
 
 
