@@ -27,6 +27,12 @@ import {
   readOwnStartTime,
   sameLiveProcess,
 } from "./process-fingerprint";
+import {
+  admitDaemon,
+  realBreakerDeps,
+  releaseRegistration,
+  readRegistryEntry,
+} from "./fork-bomb-breaker";
 import { dlog, closeLog } from "./log";
 import {
   PROTOCOL_VERSION,
@@ -141,9 +147,34 @@ const BIN_CHECK_INTERVAL_MS = 60 * 1000;
 // kill(pid,0), no worse than before the fingerprint existed.
 let myStartTime: string | null = null;
 
+// The registry path this daemon claimed in the fork-bomb breaker's population
+// registry (fork-bomb-breaker.ts), or null when exempt (the canonical
+// production socket) or never reached (refused before claiming one). Released
+// on shutdown so a graceful exit frees its slot immediately rather than
+// waiting for the next boot's stale-sweep.
+let breakerRegistryPath: string | null = null;
+
 export function runDaemon(): void {
-  fs.mkdirSync(daemonDir(), { recursive: true });
+  // [LAW:single-enforcer] The fork-bomb circuit breaker runs FIRST, before any
+  // other resource is committed (no dir created, no socket touched, no session
+  // state loaded) — the whole point of a load-independent backstop is that it
+  // holds even when everything downstream of it is thrashing. Own start-time
+  // must be read first: it is both this check's identity and the lease's
+  // fingerprint later, so it is read exactly once and threaded through both
+  // (see realBreakerDeps' doc comment).
   myStartTime = readOwnStartTime(process.pid);
+  const admission = admitDaemon(realBreakerDeps(myStartTime));
+  if (!admission.decision.allow) {
+    dlog(
+      "warn",
+      `fork-bomb breaker: ${admission.decision.reason}; refusing to boot`,
+    );
+    shutdown(1);
+    return;
+  }
+  breakerRegistryPath = admission.registryPath;
+
+  fs.mkdirSync(daemonDir(), { recursive: true });
   // [LAW:single-enforcer] Verify the socket parent is uid==me + mode 0700 +
   // not a symlink before we bind. Without this check, a same-host attacker
   // could pre-create the predictable `/tmp/cc-candybar-<uid>` directory and
@@ -515,6 +546,18 @@ function shutdown(code: number): void {
   // the live owner's lease on its way out, or the next EADDRINUSE would read
   // `absent` and reclaim the thief's live socket — cascading the theft.
   removeLeaseIfOwned(leasePath(), process.pid);
+  // [LAW:one-source-of-truth] Same "only if it still names us" guard as the
+  // lease above, reused via releaseRegistration — a slot this daemon never
+  // claimed (exempt production, or refused before claiming one) is null and
+  // skipped.
+  if (breakerRegistryPath !== null) {
+    releaseRegistration(
+      breakerRegistryPath,
+      process.pid,
+      readRegistryEntry,
+      (p) => fs.unlinkSync(p),
+    );
+  }
   closeLog();
   process.exit(code);
 }
