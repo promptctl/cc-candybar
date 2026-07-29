@@ -107,11 +107,18 @@ export type CompiledActionDecl =
 export type CompiledActions = ReadonlyMap<string, CompiledActionDecl>;
 
 // [LAW:one-source-of-truth] An option source resolves to the SAME canonical list
-// the `themes()`/`styles()` bindings and the derived gate consult — rendered
-// options and the gate cannot diverge. The render-side resolver (the daemon's
-// validator-derivation has its own that must agree, both reading themes/policy).
-export function optionDomain(src: OptionSource): readonly string[] {
-  return src === "themes" ? listResolvablePaletteNames() : STRIP_STYLES;
+// the `themes()`/`styles()`/`looks()` bindings and the derived gate consult —
+// rendered options and the gate cannot diverge. The render-side resolver (the
+// daemon's validator-derivation has its own that must agree — themes/styles from
+// themes/policy, looks from the config's merged look names, threaded in as data
+// because that one domain is per-config, not registry-static).
+export function optionDomain(
+  src: OptionSource,
+  lookNames: readonly string[],
+): readonly string[] {
+  if (src === "themes") return listResolvablePaletteNames();
+  if (src === "styles") return STRIP_STYLES;
+  return lookNames;
 }
 
 // [LAW:locality-or-seam] The runtime holder the `action` template function closes
@@ -158,10 +165,13 @@ export function compileActions(
   parse: (src: string) => Template<RichText>,
   actions: Readonly<Record<string, ActionDecl>>,
   stateKeyToVar: ReadonlyMap<string, string>,
+  // The config's look names — the one per-config option domain optionDomain
+  // resolves from (themes/styles stay registry-static).
+  lookNames: readonly string[],
 ): CompiledActions {
   const out = new Map<string, CompiledActionDecl>();
   for (const [name, action] of Object.entries(actions)) {
-    out.set(name, compileAction(parse, name, action, stateKeyToVar));
+    out.set(name, compileAction(parse, name, action, stateKeyToVar, lookNames));
   }
   return out;
 }
@@ -175,6 +185,7 @@ function compileAction(
   name: string,
   action: ActionDecl,
   stateKeyToVar: ReadonlyMap<string, string>,
+  lookNames: readonly string[],
 ): CompiledActionDecl {
   if ("set" in action) {
     const stateVar = stateKeyToVar.get(action.set) ?? action.set;
@@ -191,7 +202,7 @@ function compileAction(
         kind: "set-option",
         key: action.set,
         stateVar,
-        options: [...optionDomain(action.from)],
+        options: [...optionDomain(action.from, lookNames)],
       };
     }
     if ("int" in action) {

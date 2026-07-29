@@ -59,6 +59,8 @@ import { renderDsl } from "../dsl/render.js";
 import {
   effectiveStripStyle,
   effectiveThemeName,
+  effectiveLookName,
+  lookKeyByName,
   resolverForThemeName,
 } from "../themes/index.js";
 import {
@@ -802,12 +804,24 @@ async function handleRequest(req: Request): Promise<HandledRequest> {
           sessionState.get(req.hookData.session_id, "theme"),
           entry.state.config.globals.palette,
         );
+        // [LAW:one-type-per-behavior] The LOOK, resolved per render the exact
+        // way the theme is: the session's clicked look (SessionState) over the
+        // config default over the "none" floor — so a look click recolors the
+        // whole bar on the next render, composing with whatever theme is
+        // active. The name feeds the payload's `look.effective`; its ThemeKey
+        // (lookKeyByName) feeds renderDsl below — one resolution, two readers.
+        const effectiveLook = effectiveLookName(
+          sessionState.get(req.hookData.session_id, "look"),
+          entry.state.config.globals.look,
+          entry.state.config.looks,
+        );
         const payload = await buildRenderPayload(
           req.hookData,
           payloadDeps,
           req.cwd,
           entry.state.neededInputPaths,
           effectiveTheme,
+          effectiveLook,
         );
         // [LAW:one-source-of-truth][LAW:dataflow-not-control-flow] basePalette
         // is derived from the same effective theme resolved above — so a theme
@@ -870,6 +884,7 @@ async function handleRequest(req: Request): Promise<HandledRequest> {
           // the per-segment ANSI serialization happens lazily inside the
           // debug handler so normal renders pay no extra serializer cost.
           { perSegmentSink: entry.state.lastRenderCellsBySegment },
+          lookKeyByName(entry.state.config.looks, effectiveLook),
         );
       }
       // [LAW:one-source-of-truth] Consume the transient click error written by

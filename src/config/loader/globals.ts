@@ -62,6 +62,12 @@ const GLOBALS_SCHEMA: RecordSchema<Globals> = {
     default_separator: optionalStringSpec(),
     default_truncate_marker: optionalStringSpec(),
     palette: paletteSpec(),
+    // [LAW:types-are-the-program] The config-default LOOK name. Unlike the
+    // registry-static palette set, the look domain is per-config (the merged
+    // `looks` block), so membership is a cross-ref check on the MERGED config —
+    // a user's globals.look may name a default-provided look. Shape-only here,
+    // exactly the shape/meaning split paletteSpec's schema facet keeps.
+    look: optionalStringSpec(),
     // [LAW:types-are-the-program] The strip style is a CLOSED enum (the powerline
     // shapes the joiner can render), unlike the open-ended palette NAME — so it
     // validates by membership and emits a JSON-Schema `enum`.

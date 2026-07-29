@@ -431,11 +431,18 @@ export function makeRangeValidator(
 }
 
 // [LAW:one-source-of-truth] The option members a picker draws from ARE the same
-// canonical lists the `themes()`/`styles()` bindings and the baseline theme/
-// style validators consult — the rendered options and the derived gate cannot
-// diverge because there is no second enumeration.
-function optionValuesFor(src: OptionSource): readonly string[] {
-  return src === "themes" ? RESOLVABLE_THEMES_LIST : STRIP_STYLES;
+// canonical lists the `themes()`/`styles()`/`looks()` bindings and the baseline
+// theme/style validators consult — the rendered options and the derived gate
+// cannot diverge because there is no second enumeration. "looks" is the one
+// per-config domain: its names come from the config's merged looks block,
+// threaded in as data (the render-side optionDomain takes the same list).
+function optionValuesFor(
+  src: OptionSource,
+  lookNames: readonly string[],
+): readonly string[] {
+  if (src === "themes") return RESOLVABLE_THEMES_LIST;
+  if (src === "styles") return STRIP_STYLES;
+  return lookNames;
 }
 
 // [LAW:types-are-the-program] Collapse one key's spec contributions into the
@@ -564,6 +571,7 @@ function mergeContributions(
 function actionKeySpecs(
   a: ActionDecl,
   seeds: ReadonlyMap<string, number>,
+  lookNames: readonly string[],
 ): KeySpecContribution[] {
   if (!("set" in a)) return [];
   if ("to" in a) {
@@ -573,7 +581,10 @@ function actionKeySpecs(
     return [
       {
         key: a.set,
-        spec: { kind: "allow-list", allowed: optionValuesFor(a.from) },
+        spec: {
+          kind: "allow-list",
+          allowed: optionValuesFor(a.from, lookNames),
+        },
       },
     ];
   }
@@ -635,8 +646,11 @@ function stateKeySeeds(config: DslConfig): ReadonlyMap<string, number> {
 // realizes a click from are the gate the wire enforces.
 function actionContributions(config: DslConfig): KeySpecContribution[] {
   const seeds = stateKeySeeds(config);
+  const lookNames = Object.keys(config.looks);
   return dropBaselineAllowLists(
-    Object.values(config.actions).flatMap((a) => actionKeySpecs(a, seeds)),
+    Object.values(config.actions).flatMap((a) =>
+      actionKeySpecs(a, seeds, lookNames),
+    ),
   );
 }
 

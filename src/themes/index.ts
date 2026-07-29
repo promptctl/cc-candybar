@@ -6,6 +6,8 @@
 export {
   resolvePaletteName,
   effectiveThemeName,
+  effectiveLookName,
+  lookKeyByName,
   effectiveStripStyle,
   isStripStyle,
   listResolvablePaletteNames,

@@ -1,18 +1,20 @@
 // Memoized PaletteResolver construction over rich-js. cc-candybar moves theme
-// NAMES and hue shifts (data); rich-js owns every color value operation. Two
-// memos live here: a theme name -> base resolver, and a (base, hueShift) ->
+// NAMES and ThemeKey axes (data); rich-js owns every color value operation. Two
+// memos live here: a theme name -> base resolver, and a (base, ThemeKey) ->
 // transposed resolver. They compose — the per-render base palette feeds the
-// per-segment transposition.
+// per-segment transposition (the session look's axes + the segment's hue shift,
+// folded into one key by the caller).
 //
 // [LAW:no-shared-mutable-globals] Single owner: this module. Both Maps are pure
 // memos of pure rich-js functions, keyed by immutable inputs (resolved theme
-// name; palette name + hueShift). rich-js palettes are immutable registry
-// singletons, so a cached resolver never goes stale. Key spaces are bounded by
-// #themes and #themes × #distinct hueShifts (hueShift = segIndex*hueStep,
-// segIndex bounded by layout) — both small. Shared on purpose: a theme's base
-// resolver and its gruvbox+42° transposition are each computed once per process,
-// not once per RenderCache entry or per render. Read/written only through the
-// two functions below.
+// name; palette name + the four ThemeKey axes). rich-js palettes are immutable
+// registry singletons, so a cached resolver never goes stale. Key spaces are
+// bounded by #themes and #themes × #declared looks × #distinct hueShifts
+// (hueShift = look shift + segIndex*hueStep, segIndex bounded by layout; look
+// axes bounded by the loaded configs' looks blocks) — both small. Shared on
+// purpose: a theme's base resolver and its gruvbox+42° transposition are each
+// computed once per process, not once per RenderCache entry or per render.
+// Read/written only through the two functions below.
 
 import {
   PaletteResolver,
@@ -54,32 +56,36 @@ export function resolverForThemeName(name: string): PaletteResolver {
 }
 
 /**
- * The PaletteResolver for `base`'s palette transposed by `hueShift` degrees.
+ * The PaletteResolver for `base`'s palette transposed by a full ThemeKey — the
+ * adapted-resolver constructor: (base resolver, key) → resolver. The caller
+ * composes whatever axes it carries (a look's four axes, the per-segment hue
+ * shift) into ONE key and this makes ONE transposePalette call — never chain
+ * two transpositions: chaining double-pays OKLCH quantization AND collides this
+ * memo (a transposed palette keeps the base palette's name, so a re-transposed
+ * gruvbox-with-look and plain gruvbox would share cache keys).
  *
- * [LAW:dataflow-not-control-flow] hueShift is data; 0 flows through
- * transposePalette's identity fast-path (byte-exact, no round-trip) — no branch
- * here. Chroma and lightness are held identity: only hue rotates. rich-js
- * hue-locks ANCHORED_ROOTS (error/success/warning), so semantic meaning is
- * preserved by construction — no local exemption list to drift.
+ * [LAW:dataflow-not-control-flow] The key is data; the identity key flows
+ * through transposePalette's isIdentityKey fast-path (byte-exact, no
+ * round-trip) — no branch here. rich-js hue-locks ANCHORED_ROOTS
+ * (error/success/warning), so semantic meaning is preserved by construction —
+ * no local exemption list to drift.
  *
- * [LAW:single-enforcer] The sole place a transposed resolver is built. The memo
- * miss (undefined) is genuine optionality — not-yet-computed — not a defended
- * invariant.
+ * [LAW:single-enforcer] The sole place a transposed resolver is built — a
+ * future look `roles` remap is additive at this one seam. The memo miss
+ * (undefined) is genuine optionality — not-yet-computed — not a defended
+ * invariant. [LAW:one-source-of-truth] The cache key carries every axis of the
+ * ThemeKey: two keys differing on any axis are distinct palettes.
  */
 export function transposedResolver(
   base: PaletteResolver,
-  hueShift: number,
+  key: ThemeKey,
 ): PaletteResolver {
-  const cacheKey = `${base.palette.name} ${hueShift}`;
+  const cacheKey =
+    `${base.palette.name} ${key.hueShift} ${key.chromaScale} ` +
+    `${key.lightnessScale} ${key.lightnessShift}`;
   const hit = transposeCache.get(cacheKey);
   if (hit !== undefined) return hit;
 
-  const key: ThemeKey = {
-    hueShift,
-    chromaScale: 1,
-    lightnessScale: 1,
-    lightnessShift: 0,
-  };
   const resolver = new PaletteResolver(transposePalette(base.palette, key));
   transposeCache.set(cacheKey, resolver);
   return resolver;

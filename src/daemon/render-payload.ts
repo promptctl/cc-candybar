@@ -63,6 +63,12 @@ export interface RenderPayload extends ClaudeHookData {
   // domain truth is "always present". A `?` here would let a callsite believe it
   // could be undefined and guard defensively against an impossibility.
   readonly theme: { readonly effective: string };
+  // [LAW:one-type-per-behavior] The daemon-resolved effective LOOK name —
+  // effectiveLookName(sessionState.look, globals.look, looks) — the exact twin
+  // of `theme` one dimension over: the SAME name whose ThemeKey adapts the
+  // rendered palette, surfaced so a trigger label can display the active look.
+  // Required for the same reason as theme: resolved unconditionally per render.
+  readonly look: { readonly effective: string };
 
   // Usage-family. Each provider returns null when it has no data (no
   // transcript yet, no rate-limit window active, etc.); we drop the field
@@ -582,6 +588,11 @@ export async function buildRenderPayload(
   // in (not re-resolved here) because the daemon already computes it for the
   // palette; this is that same value, threaded to the sole payload assembler.
   effectiveTheme: string,
+  // [LAW:one-source-of-truth] The effective look name, resolved ONCE by the
+  // daemon beside the theme (effectiveLookName over SessionState/globals/looks)
+  // and used for BOTH the rendered adaptation and this payload field — so a
+  // trigger label reading `.look.effective` can never disagree with the colors.
+  effectiveLook: string,
 ): Promise<RenderPayload> {
   const wants = (prefix: string): boolean =>
     anyPathStartsWith(neededInputPaths, prefix);
@@ -788,6 +799,8 @@ export async function buildRenderPayload(
     // No `wants` gate: it costs nothing (a string already in hand) and a
     // config that reads `.theme.effective` must always find it.
     theme: { effective: effectiveTheme },
+    // Same contract as theme: always present, a string already in hand.
+    look: { effective: effectiveLook },
     ...(sessionPayload !== undefined && { session: sessionPayload }),
     ...(todayPayload !== undefined && { today: todayPayload }),
     ...(costPerHour !== undefined && { burn: { costPerHour } }),

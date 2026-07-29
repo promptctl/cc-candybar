@@ -36,6 +36,20 @@ export function validateCrossReferences(
   ctx: ValidateCtx,
   cfg: DslConfig,
 ): void {
+  // [LAW:locality-or-seam] globals.look names a member of the MERGED looks
+  // block (a user's default may be a bundled look — same reason every cross-ref
+  // runs post-merge). Same existence-check shape as layout→segments; an unknown
+  // name is a load error, never a silent identity fallback.
+  if (
+    cfg.globals.look !== undefined &&
+    !Object.prototype.hasOwnProperty.call(cfg.looks, cfg.globals.look)
+  ) {
+    ctx.issues.push({
+      path: "globals.look",
+      message: `globals.look "${cfg.globals.look}" does not match any declared look (have: ${Object.keys(cfg.looks).join(", ")})`,
+      line: findKeyLine(ctx.source, ["globals", "look"]),
+    });
+  }
   // [LAW:one-source-of-truth] THE set of resolvable variable names — a
   // faithful mirror of the runtime store's key set (declareOne in
   // src/dsl/render.ts registers globals under their bare names and segment

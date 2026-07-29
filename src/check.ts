@@ -30,7 +30,12 @@ import { SourceRegistry } from "./var-system/sources.js";
 import { SessionState } from "./daemon/session-state.js";
 import { registerDslConfig, renderDsl } from "./dsl/render.js";
 import { deriveActionValidators } from "./daemon/verbs/state-validators.js";
-import { effectiveThemeName, effectiveStripStyle } from "./themes/policy.js";
+import {
+  effectiveThemeName,
+  effectiveLookName,
+  lookKeyByName,
+  effectiveStripStyle,
+} from "./themes/policy.js";
 import { resolverForThemeName } from "./themes/palette-resolvers.js";
 import {
   DEFAULT_CHARSET,
@@ -61,7 +66,10 @@ const CHECK_WIDTH = 200;
 // test/example-configs.test.ts asserts rendered content against these literal
 // values (780s → "◷ 13m", cost $0.39, version 1.15.0, …); changing one here
 // fails that suite loudly rather than drifting silently.
-export function checkPayload(effectiveTheme: string): Record<string, unknown> {
+export function checkPayload(
+  effectiveTheme: string,
+  effectiveLook: string,
+): Record<string, unknown> {
   const home = "/home/tester";
   const nowSec = Math.floor(Date.now() / 1000);
   return {
@@ -108,6 +116,7 @@ export function checkPayload(effectiveTheme: string): Record<string, unknown> {
     cache: { expiresAt: nowSec + 15 * 60 },
     tmux: { session: "work" },
     theme: { effective: effectiveTheme },
+    look: { effective: effectiveLook },
   };
 }
 
@@ -265,6 +274,14 @@ function loadRegisterRender(
     // resolution is null — the config default over the floor, exactly what the
     // daemon renders for a session that has never clicked.
     const effectiveTheme = effectiveThemeName(null, config.globals.palette);
+    // Same fresh-session shape one dimension over: no clicked look, so the
+    // config default over the "none" floor — exactly what the daemon renders
+    // for a session that has never clicked.
+    const effectiveLook = effectiveLookName(
+      null,
+      config.globals.look,
+      config.looks,
+    );
     // [LAW:no-silent-failure] A segment whose template THROWS while evaluating
     // (an `{{ action }}` display-arity mismatch, a MissingFieldError from a
     // partially-declared variable) renders as a visible ⚠ error cell — partial
@@ -278,7 +295,7 @@ function loadRegisterRender(
       compiled,
       store,
       registry,
-      checkPayload(effectiveTheme),
+      checkPayload(effectiveTheme, effectiveLook),
       resolverForThemeName(effectiveTheme),
       {
         style: effectiveStripStyle(null, config.globals.style),
@@ -293,6 +310,7 @@ function loadRegisterRender(
         onSegmentError: (segName, message) =>
           segmentErrors.push(`segment "${segName}": ${message}`),
       },
+      lookKeyByName(config.looks, effectiveLook),
     );
     if (segmentErrors.length > 0) {
       throw new Error(

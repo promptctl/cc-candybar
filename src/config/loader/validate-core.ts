@@ -582,6 +582,41 @@ export function optionalIntSpec(bounds: {
   };
 }
 
+// [LAW:dataflow-not-control-flow] An optional finite-number field: the optional
+// lower bound is DATA feeding both interpreters — `parse` checks it and
+// interpolates it into the one message, `json` emits it as `minimum` — so the
+// validator and the editor-facing schema cannot describe different ranges.
+// Finite matters: JSON5 admits `NaN`/`Infinity` literals, and a non-finite axis
+// would corrupt every OKLCH channel it touches downstream.
+export function optionalNumberSpec(
+  bounds: { readonly min?: number } = {},
+): FieldSpec<number> {
+  const { min } = bounds;
+  return {
+    required: false,
+    json: { type: "number", ...(min !== undefined && { minimum: min }) },
+    parse: (ctx, path, field, raw) => {
+      const v = raw[field];
+      if (v === undefined) return undefined;
+      const bad =
+        typeof v !== "number" ||
+        !Number.isFinite(v) ||
+        (min !== undefined && v < min);
+      if (bad) {
+        const shape =
+          min !== undefined ? `a finite number >= ${min}` : "a finite number";
+        ctx.issues.push({
+          path: `${path}.${field}`,
+          message: `${field} must be ${shape}, got ${describeValue(v)}`,
+          line: findKeyLine(ctx.source, [field]),
+        });
+        return undefined;
+      }
+      return v;
+    },
+  };
+}
+
 // [LAW:single-enforcer] The palette field defers to the one palette-name
 // authority; the field key is conventionally "palette", which validatePaletteName
 // reads directly.
