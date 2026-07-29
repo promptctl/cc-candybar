@@ -86,6 +86,9 @@ function buildMockDeps(): { deps: RenderPayloadDeps; counts: CallCounts } {
 // The daemon-resolved effective theme; the gating tests assert provider CALL
 // COUNTS, not theme, so any resolvable name satisfies the required argument.
 const EFFECTIVE_THEME = "textual-dark";
+// The daemon-resolved effective look; "none" is the identity floor every merged
+// config carries.
+const EFFECTIVE_LOOK = "none";
 
 const HOOK_DATA = {
   hook_event_name: "Status",
@@ -135,6 +138,7 @@ const CONFIG_WITHOUT_METRICS: DslConfig = {
   segments: SHARED_SEGMENTS,
   root: rootOf("directory", "git"),
   actions: {},
+  looks: {},
   helpers: {},
 };
 
@@ -144,6 +148,7 @@ const CONFIG_WITH_METRICS: DslConfig = {
   segments: SHARED_SEGMENTS,
   root: rootOf("directory", "git", "metrics", "tmux"),
   actions: {},
+  looks: {},
   helpers: {},
 };
 
@@ -156,6 +161,7 @@ describe("buildRenderPayload — layout-driven provider gating", () => {
       undefined,
       buildNeededPrefixes(CONFIG_WITHOUT_METRICS),
       EFFECTIVE_THEME,
+      EFFECTIVE_LOOK,
     );
     expect(counts.git).toBe(1);
     // No segment in layout reads metrics.* / tmux.* / today.* / etc., so
@@ -175,6 +181,7 @@ describe("buildRenderPayload — layout-driven provider gating", () => {
       undefined,
       buildNeededPrefixes(CONFIG_WITH_METRICS),
       EFFECTIVE_THEME,
+      EFFECTIVE_LOOK,
     );
     expect(counts.git).toBe(1);
     expect(counts.metrics).toBe(1);
@@ -203,6 +210,7 @@ describe("buildRenderPayload — layout-driven provider gating", () => {
       },
       root: rootOf("gitDump"),
       actions: {},
+      looks: {},
       helpers: {},
     };
     const needed = buildNeededPrefixes(config);
@@ -228,6 +236,7 @@ describe("buildRenderPayload — layout-driven provider gating", () => {
         children: [{ kind: "segment", name: "directory" }],
       },
       actions: {},
+      looks: {},
       helpers: {},
     };
     const needed = buildNeededPrefixes(config);

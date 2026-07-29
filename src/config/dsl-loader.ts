@@ -50,6 +50,7 @@ import { validateSegments } from "./loader/segments.js";
 import { synthesizeGroupDecls, validateRoot } from "./loader/layout.js";
 import { synthesizeMenuDecls } from "./loader/menu-synth.js";
 import { validateActions } from "./loader/actions.js";
+import { validateLooks } from "./loader/looks.js";
 import { validateHelpers } from "./loader/helpers.js";
 import { validateCrossReferences } from "./loader/cross-ref.js";
 import { validateNoCycles } from "./loader/cycles.js";
@@ -242,6 +243,7 @@ function validateTopLevel(
   if (raw.root !== undefined) out.root = validateRoot(ctx, "root", raw.root);
   if (raw.actions !== undefined)
     out.actions = validateActions(ctx, raw.actions);
+  if (raw.looks !== undefined) out.looks = validateLooks(ctx, raw.looks);
   if (raw.helpers !== undefined)
     out.helpers = validateHelpers(ctx, raw.helpers);
   // [LAW:one-source-of-truth] Group sugar synthesis runs AFTER every section
@@ -269,5 +271,6 @@ const TOP_LEVEL_KEYS = new Set([
   "layout",
   "root",
   "actions",
+  "looks",
   "helpers",
 ]);

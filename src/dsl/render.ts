@@ -11,8 +11,8 @@
 // the input values (kind discriminators, layout length, palette presence)
 // govern output, not whether operations run.
 
-import type { RichText, PaletteResolver } from "@promptctl/rich-js";
-import { ColorSpec, Style, lighten } from "@promptctl/rich-js";
+import type { RichText, PaletteResolver, ThemeKey } from "@promptctl/rich-js";
+import { ColorSpec, Style, lighten, IDENTITY } from "@promptctl/rich-js";
 import type { Engine, Template } from "@promptctl/go-template-js";
 import type {
   ValidatedConfig,
@@ -304,12 +304,23 @@ export function registerDslConfig(
     action: actionRuntime,
     current: null,
   };
+  // [LAW:one-source-of-truth] The config's look names — the one PER-CONFIG
+  // option domain. Computed once here and fed to BOTH consumers (the compiled
+  // set-option domains below and the `looks()` binding), so the rendered
+  // options, a hand-authored `range looks`, and the derived click gate (which
+  // reads the same config in deriveActionValidators) trace to one map.
+  const lookNames = Object.keys(config.looks);
   const engine = createCcCandybarEngine(
     undefined,
     {
       ...actionFuncs(actionRuntime),
       ...pickerFuncs(actionRuntime),
       ...menuFuncs(menuRuntime),
+      // [LAW:one-type-per-behavior] The per-config sibling of the static
+      // themes()/styles() bindings (template-engine/funcs.ts): zero-arg
+      // projection of the "looks" option domain. Injected here — not in the
+      // static FuncMap — because the domain is this config's looks block.
+      looks: { fn: () => lookNames, argTypes: [] },
     },
     opts?.clock,
   );
@@ -348,7 +359,12 @@ export function registerDslConfig(
   // [LAW:one-source-of-truth] Actions resolve their set key → the reading
   // variable through the stateKeyToVar map, so an apply action and the picker
   // that references it read one value.
-  actionRuntime.compiled = compileActions(parse, config.actions, stateKeyToVar);
+  actionRuntime.compiled = compileActions(
+    parse,
+    config.actions,
+    stateKeyToVar,
+    lookNames,
+  );
 
   // [LAW:dataflow-not-control-flow] One variable failing to declare does not
   // abort the rest. Errors are data (accumulated in loadWarnings); the store
@@ -538,6 +554,13 @@ export function renderDsl(
   basePalette: PaletteResolver,
   opts: BuildLineOptions,
   observers?: RenderObservers,
+  // [LAW:dataflow-not-control-flow] The render's look (the session's chosen
+  // theme-adaptation), resolved per render by the caller — effectiveLookName
+  // over SessionState/globals, then lookKeyByName — exactly how basePalette
+  // resolves. IDENTITY is the domain's own no-adaptation element (the "none"
+  // look), so an omitting caller renders unadapted — a true default, not a
+  // fallback. Composed with each segment's hue shift into ONE transposition.
+  look: ThemeKey = IDENTITY,
 ): string {
   const { perSegmentSink, onSegmentError } = observers ?? {};
   // [LAW:one-source-of-truth] Inject the usable width as `term.cols` from the
@@ -633,6 +656,7 @@ export function renderDsl(
     const ctx: NodeRenderCtx = {
       scope,
       basePalette,
+      look,
       visible,
       padding: opts.padding,
       nextHueShift,

@@ -1,7 +1,7 @@
 // [LAW:behavior-not-structure] Tests assert observable output (resolved hex
 // values, Style fields, thrown errors) — never internal state.
 
-import { Palette, PaletteResolver, parseRgbHex, ColorSpec, ColorRgba } from "@promptctl/rich-js";
+import { Palette, PaletteResolver, parseRgbHex, ColorSpec, ColorRgba, Oklch } from "@promptctl/rich-js";
 import { createCcCandybarEngine } from "../src/template-engine/engine";
 import { resolveSegmentColors, ColorSpecError } from "../src/template-engine/colors";
 import {
@@ -9,7 +9,7 @@ import {
   resolverForThemeName,
 } from "../src/themes/palette-resolvers";
 import type { Template } from "@promptctl/go-template-js";
-import type { RichText } from "@promptctl/rich-js";
+import type { RichText, ThemeKey } from "@promptctl/rich-js";
 
 // ─── Test palette + resolver ──────────────────────────────────────────────────
 
@@ -249,23 +249,31 @@ function maxChannelDelta(a: ColorRgba, b: ColorRgba): number {
 
 describe("per-segment hue via palette transposition", () => {
   const base = makeTestResolver();
+  // A hue-only ThemeKey — the shape renderDsl composes for a segment when no
+  // look is active (the other three axes identity).
+  const hueKey = (hueShift: number): ThemeKey => ({
+    hueShift,
+    chromaScale: 1,
+    lightnessScale: 1,
+    lightnessShift: 0,
+  });
 
   test("hueShift 0 → identity: resolved color is byte-exact to base", () => {
-    const shifted = transposedResolver(base, 0);
+    const shifted = transposedResolver(base, hueKey(0));
     const a = shifted.resolve("primary")!;
     const b = base.resolve("primary")!;
     expect(maxChannelDelta(a, b)).toBe(0);
   });
 
   test("hueShift 30 → non-anchored color shifts substantially", () => {
-    const shifted = transposedResolver(base, 30);
+    const shifted = transposedResolver(base, hueKey(30));
     const a = shifted.resolve("primary")!;
     const b = base.resolve("primary")!;
     expect(maxChannelDelta(a, b)).toBeGreaterThan(5);
   });
 
   test("hueShift 30 → anchored specs (error/success) keep their hue", () => {
-    const shifted = transposedResolver(base, 30);
+    const shifted = transposedResolver(base, hueKey(30));
     // error/success are in rich-js ANCHORED_ROOTS: hue-locked under transpose,
     // so they survive within round-trip tolerance while primary (above) moves.
     expect(maxChannelDelta(shifted.resolve("error")!, base.resolve("error")!)).toBeLessThanOrEqual(2);
@@ -275,21 +283,21 @@ describe("per-segment hue via palette transposition", () => {
   test("hueShift 30 → 'info' is NOT anchored (transposes like any color)", () => {
     // The old local SEMANTIC_SPECS list exempted 'info'; rich-js ANCHORED_ROOTS
     // does not. This is the drift the reshaping removed.
-    const shifted = transposedResolver(base, 30);
+    const shifted = transposedResolver(base, hueKey(30));
     expect(
       maxChannelDelta(shifted.resolve("info")!, base.resolve("info")!),
     ).toBeGreaterThan(5);
   });
 
   test("memoized: same (palette, hueShift) returns the same resolver instance", () => {
-    expect(transposedResolver(base, 30)).toBe(transposedResolver(base, 30));
+    expect(transposedResolver(base, hueKey(30))).toBe(transposedResolver(base, hueKey(30)));
   });
 
   test("literal fg is transposed too (bg/fg pair preserved, not output-only)", () => {
     // The key fix: transposing the whole palette means a LITERAL fg token
     // shifts alongside bg. The old output-only bg rotation left a literal fg
     // un-shifted, drifting the theme-designed bg/fg relationship apart.
-    const shifted = transposedResolver(base, 60);
+    const shifted = transposedResolver(base, hueKey(60));
     // fg is a chromatic literal token (not `auto`): under whole-palette
     // transposition it shifts with bg; the old bg-output-only rotation left it put.
     const bgTpl = parseTemplate("surface", shifted);
@@ -297,6 +305,51 @@ describe("per-segment hue via palette transposition", () => {
     const style = resolveSegmentColors(shifted, bgTpl, fgTpl, {});
     const baseStyle = resolveSegmentColors(base, bgTpl, fgTpl, {});
     expect(style.color?.value?.hex).not.toBe(baseStyle.color?.value?.hex);
+  });
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// 9b. The other three ThemeKey axes — a look's chromaScale/lightnessScale/
+// lightnessShift, transposed through the same transposedResolver as hueShift
+// (brandon-themes-07p). Asserted in OKLCH terms (Oklch.fromRgba) so "the
+// saturation moved" is a checked number, not an inference from a differing hex.
+// ────────────────────────────────────────────────────────────────────────────
+
+describe("non-hue ThemeKey axes via palette transposition", () => {
+  const base = makeTestResolver();
+  const key = (overrides: Partial<ThemeKey>): ThemeKey => ({
+    hueShift: 0,
+    chromaScale: 1,
+    lightnessScale: 1,
+    lightnessShift: 0,
+    ...overrides,
+  });
+
+  test("chromaScale 0.5 desaturates a non-anchored color (chroma drops, hue holds)", () => {
+    const shifted = transposedResolver(base, key({ chromaScale: 0.5 }));
+    const a = Oklch.fromRgba(base.resolve("primary")!);
+    const b = Oklch.fromRgba(shifted.resolve("primary")!);
+    expect(b.c).toBeLessThan(a.c * 0.75);
+    expect(Math.abs(b.h - a.h)).toBeLessThanOrEqual(2);
+  });
+
+  test("lightnessScale -1 (INVERT_LIGHTNESS) flips lightness toward its complement", () => {
+    const shifted = transposedResolver(base, key({ lightnessScale: -1, lightnessShift: 1 }));
+    const a = Oklch.fromRgba(base.resolve("primary")!);
+    const b = Oklch.fromRgba(shifted.resolve("primary")!);
+    // L' = 1 - L: the inverted lightness lands near the complement, not near the original.
+    expect(Math.abs(b.l - (1 - a.l))).toBeLessThan(0.05);
+    expect(Math.abs(b.l - a.l)).toBeGreaterThan(0.1);
+  });
+
+  test("memoized: distinct chromaScale/lightnessScale values are distinct cache entries", () => {
+    // Guards the fix this PR made to transposedResolver's cache key — before it
+    // covered all four axes, two keys differing only on chroma/lightness would
+    // collide and silently share a resolver.
+    const vivid = transposedResolver(base, key({ chromaScale: 1.5 }));
+    const muted = transposedResolver(base, key({ chromaScale: 0.5 }));
+    expect(vivid).not.toBe(muted);
+    expect(vivid.resolve("primary")!.red).not.toBe(muted.resolve("primary")!.red);
   });
 });
 

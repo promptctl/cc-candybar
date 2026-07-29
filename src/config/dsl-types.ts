@@ -14,6 +14,12 @@
 // references it here. The dependency is one-way (this file → action.ts), never
 // the reverse, so that shape can be lifted out without a cycle.
 import type { ActionDecl } from "./action.js";
+// [LAW:one-source-of-truth] A look IS a rich-js ThemeKey (four numeric axes:
+// hueShift / chromaScale / lightnessScale / lightnessShift) — the config type
+// references the vocabulary owner's type verbatim, so a rich-js axis rename is
+// a compile error here, never silent drift. Type-only: no runtime rich-js
+// dependency enters the config layer.
+import type { ThemeKey } from "@promptctl/rich-js";
 import type {
   Charset,
   ColorCompatibility,
@@ -129,6 +135,11 @@ export interface RawDslConfig {
   readonly segments?: Readonly<Record<string, SegmentDecl>>;
   readonly root?: LayoutNode;
   readonly actions?: Readonly<Record<string, ActionDecl>>;
+  // Named theme-adaptation bundles ("looks"): each is a full ThemeKey (the
+  // loader normalizes absent axes to identity at parse). Applied ON TOP of the
+  // active theme at render — a transform composing with every theme, selected
+  // per session exactly like theme/style (session key `look`).
+  readonly looks?: Readonly<Record<string, ThemeKey>>;
   // [LAW:single-enforcer] Config-level shared helper templates: name → Go-template
   // body. Each compiles to one `{{ define "name" }}body{{ end }}` block, and the
   // whole set into a single output-neutral preamble prepended to every template
@@ -153,6 +164,13 @@ export interface DslConfig {
   // template cannot smuggle an un-gated write. Empty when no config declares
   // actions — an absent `actions` key merges to `{}`.
   readonly actions: Readonly<Record<string, ActionDecl>>;
+  // [LAW:one-source-of-truth] The effective look set: name → full ThemeKey.
+  // Merges by name with the bundled default (user wins per name), like
+  // segments/actions/variables — so the default's `none` (the identity look and
+  // the resolution floor of effectiveLookName) is present in EVERY merged
+  // config by construction. An action `{ set: …, from: "looks" }` ranges these
+  // names; the derived click gate and the rendered options read this one map.
+  readonly looks: Readonly<Record<string, ThemeKey>>;
   // [LAW:single-enforcer] The effective helper set: a name → template-body map
   // compiled to a defines-preamble at registerDslConfig. Empty when no config
   // declares helpers — an absent `helpers` key merges to `{}` (same cascade as
@@ -185,6 +203,16 @@ export interface Globals {
   // `sessionState.theme ?? globals.palette ?? default`, and a per-segment
   // `palette` is an explicit override that ignores the session theme.
   readonly palette?: string;
+
+  // [LAW:one-type-per-behavior] The config default for the LOOK (a named
+  // theme-adaptation from the `looks` block) — the exact twin of `palette` one
+  // dimension over: the daemon resolves the live look per render as
+  // `sessionState.look ?? globals.look ?? "none"` (effectiveLookName), so a
+  // look click recolors the bar live and a config can set a default adaptation
+  // without an edit-per-session. Membership in the merged `looks` map is
+  // validated post-merge (cross-ref) — a user's globals.look may name a
+  // default-provided look.
+  readonly look?: string;
 
   // [LAW:one-type-per-behavior] The config default for the powerline cap/
   // separator SHAPE — the exact twin of `palette` one dimension over: the

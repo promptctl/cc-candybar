@@ -41,6 +41,9 @@ const DFLT: DslConfig = {
   },
   root: vert(["a", "b"]),
   actions: {},
+  looks: {
+    none: { hueShift: 0, chromaScale: 1, lightnessScale: 1, lightnessShift: 0 },
+  },
   helpers: {},
 };
 
