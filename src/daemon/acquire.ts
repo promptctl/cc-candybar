@@ -396,7 +396,11 @@ export function effectiveCooldownMs(streak: number): number {
 // return, so no caller — including `streak + 1` — needs its own re-clamp to
 // stay overflow-safe (Rust's mirror clamps at the identical boundary, since a
 // raw u32 parsed from disk has no such guarantee otherwise).
-function readBackoffStreak(filePath: string): number {
+// Exported so the parsing-strictness contract (Number, not parseInt — see
+// the comment above) has a direct test independent of any caller's file
+// content, matching cooldownDecision/effectiveCooldownMs's own exported-for-
+// testing precedent.
+export function readBackoffStreak(filePath: string): number {
   // [LAW:no-silent-failure] A missing or garbage streak file is NOT
   // ambiguous the way a missing cooldown mtime is: falling back to 0 always
   // fails toward the SAME safe direction as the rest of this module (spawn
