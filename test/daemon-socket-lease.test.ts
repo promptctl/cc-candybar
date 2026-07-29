@@ -12,6 +12,7 @@ import {
   type LeaseRead,
 } from "../src/daemon/socket-lease";
 import { readStartTime } from "../src/daemon/process-fingerprint";
+import { spawnTestDaemon } from "./helpers/spawn-test-daemon";
 
 // The real kernel start-time of a live pid, so a planted lease matches the true
 // process identity the daemon's arbitration reads back via `ps`.
@@ -215,9 +216,6 @@ describe("lease file I/O", () => {
 // classified as "dead". So this is the bug's exact trigger; the lease is what
 // keeps the incumbent from being robbed.
 
-const REPO_ROOT = process.cwd();
-const ENTRY = path.join(REPO_ROOT, "src", "index.ts");
-const TSX_BIN = path.join(REPO_ROOT, "node_modules", ".bin", "tsx");
 const BUDGET_MS = 8000;
 
 interface Fixture {
@@ -254,17 +252,6 @@ function makeFixture(): Fixture {
       }
     },
   };
-}
-
-function spawnDaemon(env: NodeJS.ProcessEnv): ChildProcess {
-  const child = spawn(TSX_BIN, [ENTRY, "daemon"], {
-    cwd: REPO_ROOT,
-    env,
-    stdio: ["ignore", "pipe", "pipe"],
-  });
-  child.stdout?.on("data", () => {});
-  child.stderr?.on("data", () => {});
-  return child;
 }
 
 function waitForExit(
@@ -360,7 +347,7 @@ describe("daemon EADDRINUSE arbitration (integration)", () => {
         startTime: realStartTime(holderPid),
       });
 
-      const daemon = spawnDaemon(fx.env);
+      const { child: daemon, killTree, release } = await spawnTestDaemon(fx.env);
       try {
         const result = await raceExit(daemon, BUDGET_MS);
         // Exits cleanly (attach-and-exit), never SIGKILL/crash.
@@ -369,7 +356,12 @@ describe("daemon EADDRINUSE arbitration (integration)", () => {
         // The incumbent's socket file is untouched — no theft.
         expect(fs.readFileSync(fx.sockPath, "utf8")).toBe(MARKER);
       } finally {
-        if (daemon.exitCode === null) daemon.kill("SIGKILL");
+        // killTree signals the whole process group, not just the `tsx`
+        // wrapper `daemon` names — the wrapper forks its own worker (the
+        // process that actually binds the socket), which survives as an
+        // orphan if only the wrapper is signalled.
+        killTree();
+        release();
       }
     } finally {
       holder.kill("SIGKILL");
@@ -395,7 +387,7 @@ describe("daemon EADDRINUSE arbitration (integration)", () => {
         startTime: "Wed Jul  8 00:00:00 2026",
       });
 
-      const daemon = spawnDaemon(fx.env);
+      const { child: daemon, killTree, release } = await spawnTestDaemon(fx.env);
       try {
         // Reclaim → unlink stale socket → rebind → serve. First-attempt
         // reclaim means it becomes connectable without any exit in between.
@@ -415,8 +407,9 @@ describe("daemon EADDRINUSE arbitration (integration)", () => {
           expect(isPidAlive(released.pid)).toBe(true);
         }
       } finally {
-        if (daemon.exitCode === null) daemon.kill("SIGKILL");
+        killTree();
         await waitForExit(daemon);
+        release();
       }
     } finally {
       fx.cleanup();
@@ -448,7 +441,7 @@ describe("daemon EADDRINUSE arbitration (integration)", () => {
         startTime: "Thu Jan  1 00:00:00 1970",
       });
 
-      const daemon = spawnDaemon(fx.env);
+      const { child: daemon, killTree, release } = await spawnTestDaemon(fx.env);
       try {
         // Fingerprint mismatch → reclaim → serve, despite the pid being alive.
         const connectable = await waitForConnectable(fx.sockPath, BUDGET_MS);
@@ -465,8 +458,9 @@ describe("daemon EADDRINUSE arbitration (integration)", () => {
           expect(isPidAlive(released.pid)).toBe(true);
         }
       } finally {
-        if (daemon.exitCode === null) daemon.kill("SIGKILL");
+        killTree();
         await waitForExit(daemon);
+        release();
       }
     } finally {
       holder.kill("SIGKILL");
