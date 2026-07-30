@@ -185,6 +185,17 @@ export function spawnCooldownPath(): string {
   return path.join(stateDir(), SPAWN_COOLDOWN_FILE);
 }
 
+// [LAW:one-source-of-truth] Sibling of spawn.cooldown: that file's mtime
+// answers "when was a spawn last attempted"; this file's content answers
+// "how many attempts in a row have failed to converge on a live daemon" —
+// the consecutive-non-convergence streak that widens the cooldown window
+// (see effectiveCooldownMs in acquire.ts). Same filename mirrored TS↔Rust,
+// diffed by scripts/check-protocol.mjs.
+const SPAWN_BACKOFF_FILE = "spawn.backoff";
+export function spawnBackoffPath(): string {
+  return path.join(stateDir(), SPAWN_BACKOFF_FILE);
+}
+
 export function logPath(): string {
   return path.join(stateDir(), "daemon.log");
 }

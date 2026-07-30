@@ -194,6 +194,21 @@ const CHECKS = [
     ts: num(TS_ACQUIRE, /const STALE_LOCK_MS = ([\d\s*_]+);/),
     rust: num(RS_MAIN, /const STALE_LOCK_MS: u64 = ([\d\s*_]+);/),
   },
+  {
+    label: "spawn-backoff cap (ms)",
+    ts: num(TS_ACQUIRE, /export const SPAWN_BACKOFF_CAP_MS = ([\d\s*_]+);/),
+    rust: num(RS_MAIN, /const SPAWN_BACKOFF_CAP_MS: u128 = ([\d\s*_]+);/),
+  },
+  {
+    label: "spawn-backoff max streak",
+    ts: num(TS_ACQUIRE, /export const SPAWN_BACKOFF_MAX_STREAK = ([\d\s*_]+);/),
+    rust: num(RS_MAIN, /const SPAWN_BACKOFF_MAX_STREAK: u32 = ([\d\s*_]+);/),
+  },
+  {
+    label: "spawn-backoff filename",
+    ts: lit(TS_PATHS, /const SPAWN_BACKOFF_FILE = "((?:[^"\\]|\\.)*)";/),
+    rust: lit(RS_MAIN, /const SPAWN_BACKOFF_FILE: &str = "((?:[^"\\]|\\.)*)";/),
+  },
 ];
 
 // --- runner ----------------------------------------------------------------
