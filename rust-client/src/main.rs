@@ -696,13 +696,17 @@ fn claim_spawn_cooldown() -> bool {
         cooldown_age_ms(&cooldown_path),
         effective_cooldown_ms(streak),
     );
-    if let CooldownDecision::AllowFutureGarbage(future_ms) = decision {
-        eprintln!(
-            "cc-candybar: spawn.cooldown mtime is {future_ms}ms in the future — ignoring and spawning"
-        );
-    }
-    if matches!(decision, CooldownDecision::Deny) {
-        return false;
+    // [LAW:types-are-the-program] Exhaustive match, not `if let` + `matches!` —
+    // a fourth CooldownDecision variant must fail to compile here, not
+    // silently fall through to "allow spawn".
+    match decision {
+        CooldownDecision::Deny => return false,
+        CooldownDecision::AllowFutureGarbage(future_ms) => {
+            eprintln!(
+                "cc-candybar: spawn.cooldown mtime is {future_ms}ms in the future — ignoring and spawning"
+            );
+        }
+        CooldownDecision::Allow => {}
     }
     record_spawn_attempt(&cooldown_path);
     // [LAW:dataflow-not-control-flow] Every granted spawn advances the streak
