@@ -29,6 +29,7 @@ use std::ffi::OsString;
 use std::fs::File;
 use std::io::{self, Read, Write};
 use std::os::fd::IntoRawFd;
+use std::os::unix::fs::OpenOptionsExt;
 use std::os::unix::io::FromRawFd;
 use std::os::unix::net::UnixStream;
 use std::path::{Path, PathBuf};
@@ -579,6 +580,23 @@ const SPAWN_COOLDOWN_MS: u128 = 3_000;
 // runtimes must name the SAME file or the rate bound splits in two.
 const SPAWN_COOLDOWN_FILE: &str = "spawn.cooldown";
 
+// [LAW:one-source-of-truth] Sibling of spawn.cooldown: that file's mtime
+// answers "when was a spawn last attempted"; this file's content answers
+// "how many attempts in a row have failed to converge on a live daemon" — the
+// consecutive-non-convergence streak that widens the cooldown window (see
+// effective_cooldown_ms below). Mirrors src/daemon/paths.ts SPAWN_BACKOFF_FILE,
+// diffed by check-protocol. Only the Node daemon ever resets it (it's the only
+// process that knows "a daemon just bound the socket"); the Rust client only
+// reads and increments it.
+const SPAWN_BACKOFF_FILE: &str = "spawn.backoff";
+
+// Mirrors src/daemon/acquire.ts SPAWN_BACKOFF_CAP_MS / SPAWN_BACKOFF_MAX_STREAK
+// (diffed by check-protocol). 3_000ms << 5 = 96_000ms, already past the 60s
+// cap, so 5 is sufficient — not tuned to any particular outage length, just
+// enough to saturate before the shift could ever overflow u128.
+const SPAWN_BACKOFF_CAP_MS: u128 = 60_000;
+const SPAWN_BACKOFF_MAX_STREAK: u32 = 5;
+
 // [LAW:one-source-of-truth] The staleness window shared by two spawn-side
 // policies: try_acquire_spawn_lock reclaims a spawn.lock older than this, and
 // claim_spawn_cooldown treats a spawn.cooldown mtime more than this in the
@@ -654,10 +672,13 @@ fn spawn_daemon_rate_limited() {
 }
 
 // [LAW:one-source-of-truth] Mirror of Node's claimSpawnCooldown. Returns true —
-// and RECORDS the attempt (writing spawn.cooldown, updating its mtime to now) —
-// when a spawn is permitted; false when an attempt was recorded within
-// SPAWN_COOLDOWN_MS. Recording-on-grant (BEFORE the fork) means a failed fork
-// still counts, so a broken binary is not retried in a tight loop.
+// and RECORDS the attempt (updating spawn.cooldown's mtime to now, advancing
+// spawn.backoff's streak) — when a spawn is permitted; false when an attempt
+// was recorded within the EFFECTIVE cooldown window (SPAWN_COOLDOWN_MS,
+// widened by effective_cooldown_ms(streak) once consecutive attempts have
+// failed to converge — see brandon-daemon-lifecycle-gad.3). Recording-on-grant
+// (BEFORE the fork) means a failed fork still counts, so a broken binary is
+// not retried in a tight loop.
 //
 // [LAW:no-silent-failure] A record whose mtime is more than the stale-lock
 // window (10s, matching try_acquire_spawn_lock) in the future is garbage (clock
@@ -668,21 +689,31 @@ fn spawn_daemon_rate_limited() {
 // [-STALE_LOCK_MS, SPAWN_COOLDOWN_MS). The mtime IS the timestamp, so there is
 // no content to misparse.
 fn claim_spawn_cooldown() -> bool {
-    let path = spawn_cooldown_path();
-    match cooldown_decision(cooldown_age_ms(&path)) {
-        CooldownDecision::Deny => false,
+    let cooldown_path = spawn_cooldown_path();
+    let backoff_path = spawn_backoff_path();
+    let streak = read_backoff_streak(&backoff_path);
+    let decision = cooldown_decision(
+        cooldown_age_ms(&cooldown_path),
+        effective_cooldown_ms(streak),
+    );
+    // [LAW:types-are-the-program] Exhaustive match, not `if let` + `matches!` —
+    // a fourth CooldownDecision variant must fail to compile here, not
+    // silently fall through to "allow spawn".
+    match decision {
+        CooldownDecision::Deny => return false,
         CooldownDecision::AllowFutureGarbage(future_ms) => {
             eprintln!(
                 "cc-candybar: spawn.cooldown mtime is {future_ms}ms in the future — ignoring and spawning"
             );
-            record_spawn_attempt(&path);
-            true
         }
-        CooldownDecision::Allow => {
-            record_spawn_attempt(&path);
-            true
-        }
+        CooldownDecision::Allow => {}
     }
+    record_spawn_attempt(&cooldown_path);
+    // [LAW:dataflow-not-control-flow] Every granted spawn advances the streak
+    // by exactly one, unconditionally — the cap lives in the read side
+    // (effective_cooldown_ms) and in this min(), never as a skip.
+    write_backoff_streak(&backoff_path, (streak + 1).min(SPAWN_BACKOFF_MAX_STREAK));
+    true
 }
 
 // [LAW:effects-at-boundaries] The window arithmetic — the subtle part: a
@@ -699,11 +730,81 @@ enum CooldownDecision {
     Deny,
 }
 
-fn cooldown_decision(age_ms: Option<i128>) -> CooldownDecision {
+// [LAW:types-are-the-program] `cooldown_ms` is the required window, not a
+// captured constant — mirrors the TS generalization in acquire.ts. The same
+// pure fold serves both the base-rate check and a backed-off window from
+// effective_cooldown_ms below.
+fn cooldown_decision(age_ms: Option<i128>, cooldown_ms: u128) -> CooldownDecision {
     match age_ms {
         Some(age) if age < -(STALE_LOCK_MS as i128) => CooldownDecision::AllowFutureGarbage(-age),
-        Some(age) if age < SPAWN_COOLDOWN_MS as i128 => CooldownDecision::Deny,
+        Some(age) if age < cooldown_ms as i128 => CooldownDecision::Deny,
         _ => CooldownDecision::Allow,
+    }
+}
+
+// ─── Spawn backoff (consecutive non-convergence widens the cooldown) ──────
+//
+// [LAW:behavior-not-structure] Pure over the streak; no filesystem. Mirrors
+// TS's effectiveCooldownMs exactly (diffed by check-protocol for the two
+// constants; the arithmetic is pinned by the boundary unit tests on both
+// sides, matching cooldown_decision's existing pattern).
+fn effective_cooldown_ms(streak: u32) -> u128 {
+    let capped = streak.min(SPAWN_BACKOFF_MAX_STREAK);
+    (SPAWN_COOLDOWN_MS << capped).min(SPAWN_BACKOFF_CAP_MS)
+}
+
+fn spawn_backoff_path() -> PathBuf {
+    state_dir().join(SPAWN_BACKOFF_FILE)
+}
+
+// [LAW:no-silent-failure] A missing or garbage streak file fails toward 0 —
+// the same safe direction as a missing cooldown mtime (spawn permitted at the
+// base rate, never wedged). Never loud here; the failure mode is "one extra
+// spawn," which bind() already arbitrates.
+//
+// [LAW:no-defensive-null-guards] Every value this function can return is
+// clamped to SPAWN_BACKOFF_MAX_STREAK before it ever reaches a caller, so
+// `streak + 1` in claim_spawn_cooldown can never approach u32::MAX and
+// overflow — a spawn.backoff file containing a huge-but-parseable value
+// (corruption, a future writer bug) is treated the same as any other
+// out-of-range input, not specially. Mirrors TS's readBackoffStreak, which
+// clamps at the identical boundary for the identical reason.
+fn read_backoff_streak(path: &Path) -> u32 {
+    let streak = std::fs::read_to_string(path)
+        .ok()
+        .and_then(|s| s.trim().parse::<u32>().ok())
+        .unwrap_or(0);
+    streak.min(SPAWN_BACKOFF_MAX_STREAK)
+}
+
+// [LAW:no-ambient-temporal-coupling] The read-then-write here (and in
+// claim_spawn_cooldown above) is not atomic across process boundaries — two
+// client processes racing through a daemon-miss window can both read the
+// same streak and both write the same increment, undercounting by one. This
+// is an accepted, bounded trade, not an oversight: the ONLY failure
+// direction is undercounting (the streak can never advance faster than
+// reality), so a race just means backoff ramps a little slower than ideal —
+// it can never permit MORE spawning than a race-free count would. The hard
+// rate ceiling remains spawn.cooldown's mtime gate, which spawn.lock already
+// serializes for the common case; this file, like spawn.lock's own
+// documented thundering-herd tolerance, is a best-effort optimization on top
+// of that, not a second load-bearing lock.
+fn write_backoff_streak(path: &Path, streak: u32) {
+    if let Some(parent) = path.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    // Mirrors TS's writeBackoffStreak, which sets the same 0o600 mode — kept
+    // in lockstep so the file's permissions don't depend on which runtime
+    // happens to create it first.
+    let result = std::fs::OpenOptions::new()
+        .write(true)
+        .create(true)
+        .truncate(true)
+        .mode(0o600)
+        .open(path)
+        .and_then(|mut f| f.write_all(streak.to_string().as_bytes()));
+    if let Err(e) = result {
+        eprintln!("cc-candybar: could not record spawn.backoff: {e}");
     }
 }
 
@@ -881,16 +982,22 @@ mod tests {
     // mirror's dedicated cooldown tests. Pure over the age; no filesystem.
     #[test]
     fn cooldown_absent_record_allows() {
-        assert!(matches!(cooldown_decision(None), CooldownDecision::Allow));
+        assert!(matches!(
+            cooldown_decision(None, SPAWN_COOLDOWN_MS),
+            CooldownDecision::Allow
+        ));
     }
 
     #[test]
     fn cooldown_within_window_denies() {
         // 0 and anything up to (but not including) SPAWN_COOLDOWN_MS is a recent
         // attempt — deny.
-        assert!(matches!(cooldown_decision(Some(0)), CooldownDecision::Deny));
         assert!(matches!(
-            cooldown_decision(Some(SPAWN_COOLDOWN_MS as i128 - 1)),
+            cooldown_decision(Some(0), SPAWN_COOLDOWN_MS),
+            CooldownDecision::Deny
+        ));
+        assert!(matches!(
+            cooldown_decision(Some(SPAWN_COOLDOWN_MS as i128 - 1), SPAWN_COOLDOWN_MS),
             CooldownDecision::Deny
         ));
     }
@@ -899,11 +1006,11 @@ mod tests {
     fn cooldown_at_and_past_window_allows() {
         // The window is half-open: exactly SPAWN_COOLDOWN_MS old has expired.
         assert!(matches!(
-            cooldown_decision(Some(SPAWN_COOLDOWN_MS as i128)),
+            cooldown_decision(Some(SPAWN_COOLDOWN_MS as i128), SPAWN_COOLDOWN_MS),
             CooldownDecision::Allow
         ));
         assert!(matches!(
-            cooldown_decision(Some(SPAWN_COOLDOWN_MS as i128 + 5_000)),
+            cooldown_decision(Some(SPAWN_COOLDOWN_MS as i128 + 5_000), SPAWN_COOLDOWN_MS),
             CooldownDecision::Allow
         ));
     }
@@ -912,9 +1019,12 @@ mod tests {
     fn cooldown_small_future_is_precision_skew_denies() {
         // A slightly-future mtime (wall clock vs fs precision) is NOT garbage —
         // it is a just-recorded attempt. Deny, do not treat as garbage.
-        assert!(matches!(cooldown_decision(Some(-1)), CooldownDecision::Deny));
         assert!(matches!(
-            cooldown_decision(Some(-(STALE_LOCK_MS as i128))),
+            cooldown_decision(Some(-1), SPAWN_COOLDOWN_MS),
+            CooldownDecision::Deny
+        ));
+        assert!(matches!(
+            cooldown_decision(Some(-(STALE_LOCK_MS as i128)), SPAWN_COOLDOWN_MS),
             CooldownDecision::Deny
         ));
     }
@@ -923,16 +1033,60 @@ mod tests {
     fn cooldown_far_future_is_garbage_allows_loudly() {
         // Beyond the stale-lock window in the future = clock skew / touched file.
         // Allow the spawn, carrying the forward delta for the warning.
-        match cooldown_decision(Some(-(STALE_LOCK_MS as i128) - 1)) {
+        match cooldown_decision(Some(-(STALE_LOCK_MS as i128) - 1), SPAWN_COOLDOWN_MS) {
             CooldownDecision::AllowFutureGarbage(ms) => {
                 assert_eq!(ms, STALE_LOCK_MS as i128 + 1)
             }
             other => panic!("expected AllowFutureGarbage, got {other:?}"),
         }
         assert!(matches!(
-            cooldown_decision(Some(-3_600_000)),
+            cooldown_decision(Some(-3_600_000), SPAWN_COOLDOWN_MS),
             CooldownDecision::AllowFutureGarbage(_)
         ));
+    }
+
+    // The future-garbage boundary is anchored to STALE_LOCK_MS, NOT the
+    // cooldown window — it must stay fixed even when the caller passes a
+    // backed-off window far wider than STALE_LOCK_MS, so a genuinely stale
+    // clock-skewed mtime is never mistaken for "still cooling down." Mirrors
+    // the TS regression test of the same name.
+    #[test]
+    fn cooldown_future_garbage_boundary_independent_of_cooldown_window() {
+        match cooldown_decision(Some(-(STALE_LOCK_MS as i128) - 1), SPAWN_BACKOFF_CAP_MS) {
+            CooldownDecision::AllowFutureGarbage(ms) => {
+                assert_eq!(ms, STALE_LOCK_MS as i128 + 1)
+            }
+            other => panic!("expected AllowFutureGarbage, got {other:?}"),
+        }
+    }
+
+    // [LAW:behavior-not-structure] Pin the backoff arithmetic — the streak-to-
+    // window mapping and its cap — matching the TS mirror's dedicated tests.
+    // Pure over the streak; no filesystem.
+    #[test]
+    fn effective_cooldown_streak_zero_is_base_rate() {
+        assert_eq!(effective_cooldown_ms(0), SPAWN_COOLDOWN_MS);
+    }
+
+    #[test]
+    fn effective_cooldown_doubles_per_streak() {
+        assert_eq!(effective_cooldown_ms(1), SPAWN_COOLDOWN_MS * 2);
+        assert_eq!(effective_cooldown_ms(2), SPAWN_COOLDOWN_MS * 4);
+        assert_eq!(effective_cooldown_ms(3), SPAWN_COOLDOWN_MS * 8);
+    }
+
+    #[test]
+    fn effective_cooldown_caps_at_backoff_cap() {
+        assert_eq!(
+            effective_cooldown_ms(SPAWN_BACKOFF_MAX_STREAK),
+            SPAWN_BACKOFF_CAP_MS
+        );
+        // Streaks beyond the max must not overflow the shift or exceed the cap.
+        assert_eq!(
+            effective_cooldown_ms(SPAWN_BACKOFF_MAX_STREAK + 1),
+            SPAWN_BACKOFF_CAP_MS
+        );
+        assert_eq!(effective_cooldown_ms(1_000_000), SPAWN_BACKOFF_CAP_MS);
     }
 
     #[test]
