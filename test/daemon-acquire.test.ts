@@ -3,6 +3,8 @@ import net from "node:net";
 import os from "node:os";
 import path from "node:path";
 
+import { spawnTestDaemon } from "./helpers/spawn-test-daemon";
+
 // Each test creates its own isolated state root. CC_CANDYBAR_SOCKET isolates
 // the socket so concurrent tests don't race on the same bind path; XDG_STATE_HOME
 // isolates spawn.lock. Both are needed; setting only XDG would leave the socket
@@ -56,47 +58,184 @@ function closeServer(server: net.Server): Promise<void> {
 // diffs the constants' values. Pure over the age; no filesystem.
 describe("cooldownDecision (pure window arithmetic)", () => {
   test("absent record allows (first spawn)", async () => {
-    const { cooldownDecision } = await import("../src/daemon/acquire");
-    expect(cooldownDecision(null)).toEqual({ kind: "allow" });
-  });
-
-  test("within [0, SPAWN_COOLDOWN_MS) denies", async () => {
     const { cooldownDecision, SPAWN_COOLDOWN_MS } = await import(
       "../src/daemon/acquire"
     );
-    expect(cooldownDecision(0)).toEqual({ kind: "deny" });
-    expect(cooldownDecision(SPAWN_COOLDOWN_MS - 1)).toEqual({ kind: "deny" });
+    expect(cooldownDecision(null, SPAWN_COOLDOWN_MS)).toEqual({
+      kind: "allow",
+    });
   });
 
-  test("at and past SPAWN_COOLDOWN_MS allows (half-open window)", async () => {
+  test("within [0, cooldownMs) denies", async () => {
     const { cooldownDecision, SPAWN_COOLDOWN_MS } = await import(
       "../src/daemon/acquire"
     );
-    expect(cooldownDecision(SPAWN_COOLDOWN_MS)).toEqual({ kind: "allow" });
-    expect(cooldownDecision(SPAWN_COOLDOWN_MS + 5_000)).toEqual({
+    expect(cooldownDecision(0, SPAWN_COOLDOWN_MS)).toEqual({ kind: "deny" });
+    expect(cooldownDecision(SPAWN_COOLDOWN_MS - 1, SPAWN_COOLDOWN_MS)).toEqual(
+      { kind: "deny" },
+    );
+  });
+
+  test("at and past cooldownMs allows (half-open window)", async () => {
+    const { cooldownDecision, SPAWN_COOLDOWN_MS } = await import(
+      "../src/daemon/acquire"
+    );
+    expect(cooldownDecision(SPAWN_COOLDOWN_MS, SPAWN_COOLDOWN_MS)).toEqual({
+      kind: "allow",
+    });
+    expect(
+      cooldownDecision(SPAWN_COOLDOWN_MS + 5_000, SPAWN_COOLDOWN_MS),
+    ).toEqual({
       kind: "allow",
     });
   });
 
   test("small negative age is precision skew, not garbage — denies", async () => {
-    const { cooldownDecision, STALE_LOCK_MS } = await import(
-      "../src/daemon/acquire"
-    );
-    expect(cooldownDecision(-1)).toEqual({ kind: "deny" });
-    expect(cooldownDecision(-STALE_LOCK_MS)).toEqual({ kind: "deny" });
+    const { cooldownDecision, SPAWN_COOLDOWN_MS, STALE_LOCK_MS } =
+      await import("../src/daemon/acquire");
+    expect(cooldownDecision(-1, SPAWN_COOLDOWN_MS)).toEqual({ kind: "deny" });
+    expect(cooldownDecision(-STALE_LOCK_MS, SPAWN_COOLDOWN_MS)).toEqual({
+      kind: "deny",
+    });
   });
 
   test("beyond the stale-lock window in the future is garbage — allows loudly", async () => {
-    const { cooldownDecision, STALE_LOCK_MS } = await import(
-      "../src/daemon/acquire"
-    );
-    expect(cooldownDecision(-STALE_LOCK_MS - 1)).toEqual({
+    const { cooldownDecision, SPAWN_COOLDOWN_MS, STALE_LOCK_MS } =
+      await import("../src/daemon/acquire");
+    expect(cooldownDecision(-STALE_LOCK_MS - 1, SPAWN_COOLDOWN_MS)).toEqual({
       kind: "allow-future-garbage",
       futureMs: STALE_LOCK_MS + 1,
     });
-    expect(cooldownDecision(-3_600_000)).toEqual({
+    expect(cooldownDecision(-3_600_000, SPAWN_COOLDOWN_MS)).toEqual({
       kind: "allow-future-garbage",
       futureMs: 3_600_000,
+    });
+  });
+
+  // The future-garbage boundary is anchored to STALE_LOCK_MS, NOT the
+  // cooldown window — it must stay fixed even when the caller passes a
+  // backed-off window far wider than STALE_LOCK_MS, so a genuinely stale
+  // clock-skewed mtime is never mistaken for "still cooling down."
+  test("future-garbage boundary is independent of the cooldown window", async () => {
+    const { cooldownDecision, STALE_LOCK_MS, SPAWN_BACKOFF_CAP_MS } =
+      await import("../src/daemon/acquire");
+    expect(
+      cooldownDecision(-STALE_LOCK_MS - 1, SPAWN_BACKOFF_CAP_MS),
+    ).toEqual({
+      kind: "allow-future-garbage",
+      futureMs: STALE_LOCK_MS + 1,
+    });
+  });
+});
+
+// [LAW:behavior-not-structure] Pin the backoff arithmetic — the streak-to-
+// window mapping and its cap — matching the Rust mirror's dedicated tests.
+// Pure over the streak; no filesystem.
+describe("effectiveCooldownMs (pure backoff arithmetic)", () => {
+  test("streak zero is the base rate", async () => {
+    const { effectiveCooldownMs, SPAWN_COOLDOWN_MS } = await import(
+      "../src/daemon/acquire"
+    );
+    expect(effectiveCooldownMs(0)).toBe(SPAWN_COOLDOWN_MS);
+  });
+
+  test("doubles per streak", async () => {
+    const { effectiveCooldownMs, SPAWN_COOLDOWN_MS } = await import(
+      "../src/daemon/acquire"
+    );
+    expect(effectiveCooldownMs(1)).toBe(SPAWN_COOLDOWN_MS * 2);
+    expect(effectiveCooldownMs(2)).toBe(SPAWN_COOLDOWN_MS * 4);
+    expect(effectiveCooldownMs(3)).toBe(SPAWN_COOLDOWN_MS * 8);
+  });
+
+  test("caps at SPAWN_BACKOFF_CAP_MS and never exceeds it past the max streak", async () => {
+    const { effectiveCooldownMs, SPAWN_BACKOFF_CAP_MS, SPAWN_BACKOFF_MAX_STREAK } =
+      await import("../src/daemon/acquire");
+    expect(effectiveCooldownMs(SPAWN_BACKOFF_MAX_STREAK)).toBe(
+      SPAWN_BACKOFF_CAP_MS,
+    );
+    expect(effectiveCooldownMs(SPAWN_BACKOFF_MAX_STREAK + 1)).toBe(
+      SPAWN_BACKOFF_CAP_MS,
+    );
+    expect(effectiveCooldownMs(1_000_000)).toBe(SPAWN_BACKOFF_CAP_MS);
+  });
+
+  test("negative streak is treated as zero", async () => {
+    const { effectiveCooldownMs, SPAWN_COOLDOWN_MS } = await import(
+      "../src/daemon/acquire"
+    );
+    expect(effectiveCooldownMs(-5)).toBe(SPAWN_COOLDOWN_MS);
+  });
+});
+
+// [LAW:behavior-not-structure] Tests the parsing-strictness contract directly
+// against planted file content, independent of any caller — the acceptance
+// test's own writes are always a clean integer, so a regression back to
+// parseInt (which truncates "5abc" to 5 instead of rejecting it) would not
+// fail that test. Matches the fork-bomb-breaker.ts precedent this function's
+// doc comment cites.
+describe("readBackoffStreak (parsing-strictness contract)", () => {
+  function withPlantedFile<T>(content: string | null, fn: (path: string) => T): T {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "cc-candybar-backoff-"));
+    const filePath = path.join(dir, "spawn.backoff");
+    if (content !== null) fs.writeFileSync(filePath, content);
+    try {
+      return fn(filePath);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  }
+
+  test("missing file reads as 0", async () => {
+    const { readBackoffStreak } = await import("../src/daemon/acquire");
+    withPlantedFile(null, (filePath) => {
+      expect(readBackoffStreak(filePath)).toBe(0);
+    });
+  });
+
+  test("non-numeric content fails closed to 0 (the parseInt-truncation regression)", async () => {
+    const { readBackoffStreak } = await import("../src/daemon/acquire");
+    // parseInt("5abc", 10) === 5 — the exact silent-truncation bug this
+    // function's Number(raw) is written to avoid.
+    withPlantedFile("5abc", (filePath) => {
+      expect(readBackoffStreak(filePath)).toBe(0);
+    });
+  });
+
+  test("whitespace-only content reads as 0", async () => {
+    const { readBackoffStreak } = await import("../src/daemon/acquire");
+    withPlantedFile("   \n", (filePath) => {
+      expect(readBackoffStreak(filePath)).toBe(0);
+    });
+  });
+
+  test("negative content reads as 0", async () => {
+    const { readBackoffStreak } = await import("../src/daemon/acquire");
+    withPlantedFile("-3", (filePath) => {
+      expect(readBackoffStreak(filePath)).toBe(0);
+    });
+  });
+
+  test("floating-point content reads as 0 (not truncated to an integer)", async () => {
+    const { readBackoffStreak } = await import("../src/daemon/acquire");
+    withPlantedFile("5.1", (filePath) => {
+      expect(readBackoffStreak(filePath)).toBe(0);
+    });
+  });
+
+  test("oversize content clamps to SPAWN_BACKOFF_MAX_STREAK", async () => {
+    const { readBackoffStreak, SPAWN_BACKOFF_MAX_STREAK } = await import(
+      "../src/daemon/acquire"
+    );
+    withPlantedFile("999", (filePath) => {
+      expect(readBackoffStreak(filePath)).toBe(SPAWN_BACKOFF_MAX_STREAK);
+    });
+  });
+
+  test("a valid in-range value round-trips correctly", async () => {
+    const { readBackoffStreak } = await import("../src/daemon/acquire");
+    withPlantedFile("3", (filePath) => {
+      expect(readBackoffStreak(filePath)).toBe(3);
     });
   });
 });
@@ -734,10 +873,15 @@ describe("obtainDaemonKick (synchronous fire-and-forget)", () => {
       obtainDaemonKick({ spawn });
       expect(spawned).toBe(1);
 
-      // Simulate the cooldown window elapsing by backdating the record's mtime
-      // past SPAWN_COOLDOWN_MS (3s) — the same technique the stale-lock tests
-      // use. The next kick is no longer rate-limited.
-      const old = new Date(Date.now() - 5_000);
+      // Simulate the cooldown window elapsing by backdating the record's mtime.
+      // The first granted spawn advanced the backoff streak to 1
+      // (brandon-daemon-lifecycle-gad.3), so the REQUIRED window for the next
+      // spawn is effectiveCooldownMs(1), not the base SPAWN_COOLDOWN_MS —
+      // computed here (not hardcoded) so this test doesn't silently go stale
+      // if the backoff multiplier or base rate ever changes. +1s of margin,
+      // the same technique the stale-lock tests use.
+      const { effectiveCooldownMs } = await import("../src/daemon/acquire");
+      const old = new Date(Date.now() - effectiveCooldownMs(1) - 1_000);
       fs.utimesSync(spawnCooldownPath(), old, old);
 
       obtainDaemonKick({ spawn });
@@ -896,3 +1040,202 @@ describe("daemon startup (bind-based singleton)", () => {
     });
   });
 });
+
+// [LAW:verifiable-goals] Acceptance criterion for brandon-daemon-lifecycle-gad.3:
+// "A multi-window production-daemon outage under rapid statusline invocation
+// stays under the documented global spawn-rate bound (no fork drip beyond
+// ~20/min), ideally with backoff." The fixed-rate cooldown alone already
+// bounds the rate at ~20/min forever; these tests demonstrate the backoff
+// makes a SUSTAINED outage strictly better than that floor — the rate decays
+// toward ~1/min — and that a single successful bind (resetSpawnBackoff, wired
+// into server.ts onListening) restores the base rate immediately.
+//
+// The sibling acceptance criterion ("A demonstrated stale-bin / version-skew
+// scenario does not produce repeated daemon spawns") is already covered by
+// the kz8.5 work this ticket builds on: `test/daemon-version-mismatch.test.ts`
+// pins that every Permanent outcome — including version_mismatch — never
+// calls kick, at both the pure-decision level (planOutcome) and the live-daemon
+// level (shutdownObserved). No new production code was needed for that half;
+// this file adds nothing that duplicates it.
+describe("spawn backoff under sustained non-convergence (brandon-daemon-lifecycle-gad.3)", () => {
+  test("consecutive kicks that never converge widen the cooldown and cap it — never worse than the fixed 3s floor, decaying toward 1/min", async () => {
+    await withTempState(async () => {
+      jest.resetModules();
+      const { obtainDaemonKick } = await import("../src/daemon/acquire");
+      const { spawnCooldownPath } = await import("../src/daemon/paths");
+
+      // A spawn that "succeeds" (a process forked) but the daemon never binds
+      // — the fork-exhaustion scenario from the epic's incident report, where
+      // recovery itself is expensive and nothing ever converges.
+      let spawned = 0;
+      const spawn = (): boolean => {
+        spawned++;
+        return true;
+      };
+
+      const grantedAtSimulatedMs: number[] = [];
+      let simulatedElapsedMs = 0;
+      // Simulate 10 minutes of continuous statusline-tick pressure, probing
+      // once per simulated second (the natural render cadence).
+      for (let tick = 0; tick < 600; tick++) {
+        obtainDaemonKick({ spawn });
+        if (spawned > grantedAtSimulatedMs.length) {
+          grantedAtSimulatedMs.push(simulatedElapsedMs);
+        }
+        simulatedElapsedMs += 1_000;
+        // Advance the cooldown file's mtime into the past by the same amount
+        // real wall-clock time would have — the file's age is the only clock
+        // claimSpawnCooldown reads.
+        try {
+          const st = fs.statSync(spawnCooldownPath());
+          const backdated = new Date(st.mtimeMs - 1_000);
+          fs.utimesSync(spawnCooldownPath(), backdated, backdated);
+        } catch {
+          // No cooldown file yet on the very first iteration before any grant.
+        }
+      }
+
+      // Fixed-rate floor: one spawn every 3s for 600s ≈ 200 spawns. The
+      // backoff must never exceed that — it can only make a sustained,
+      // non-converging outage LESS aggressive, never more.
+      const FIXED_RATE_SPAWNS_OVER_10_MIN = 600_000 / 3_000;
+      expect(spawned).toBeLessThan(FIXED_RATE_SPAWNS_OVER_10_MIN);
+
+      // The gaps between grants must grow monotonically until they saturate
+      // at the 60s cap (SPAWN_BACKOFF_CAP_MS) — this is the actual backoff
+      // behavior, not just "fewer spawns" by coincidence.
+      const gaps: number[] = [];
+      for (let i = 1; i < grantedAtSimulatedMs.length; i++) {
+        gaps.push(grantedAtSimulatedMs[i]! - grantedAtSimulatedMs[i - 1]!);
+      }
+      for (let i = 1; i < gaps.length; i++) {
+        expect(gaps[i]!).toBeGreaterThanOrEqual(gaps[i - 1]!);
+      }
+      const { SPAWN_BACKOFF_CAP_MS } = await import("../src/daemon/acquire");
+      const lastGap = gaps[gaps.length - 1]!;
+      expect(lastGap).toBeLessThanOrEqual(SPAWN_BACKOFF_CAP_MS);
+      expect(lastGap).toBeGreaterThanOrEqual(SPAWN_BACKOFF_CAP_MS * 0.9);
+    });
+  });
+
+  test("a successful bind (resetSpawnBackoff) restores the base rate immediately", async () => {
+    await withTempState(async () => {
+      jest.resetModules();
+      const { obtainDaemonKick, resetSpawnBackoff, SPAWN_COOLDOWN_MS } =
+        await import("../src/daemon/acquire");
+      const { spawnCooldownPath } = await import("../src/daemon/paths");
+
+      let spawned = 0;
+      const spawn = (): boolean => {
+        spawned++;
+        return true;
+      };
+
+      // Three consecutive non-converging spawns — streak climbs to 3, so the
+      // required window is SPAWN_COOLDOWN_MS * 8.
+      for (let i = 0; i < 3; i++) {
+        obtainDaemonKick({ spawn });
+        const st = fs.statSync(spawnCooldownPath());
+        const backdated = new Date(st.mtimeMs - SPAWN_COOLDOWN_MS * 8 - 1_000);
+        fs.utimesSync(spawnCooldownPath(), backdated, backdated);
+      }
+      expect(spawned).toBe(3);
+
+      // The daemon FINALLY binds — server.ts's onListening calls this.
+      resetSpawnBackoff();
+
+      // Backdate by just past the BASE window (not the backed-off one) —
+      // if the reset didn't take effect, this kick would still be denied.
+      const st = fs.statSync(spawnCooldownPath());
+      const backdated = new Date(st.mtimeMs - SPAWN_COOLDOWN_MS - 500);
+      fs.utimesSync(spawnCooldownPath(), backdated, backdated);
+
+      obtainDaemonKick({ spawn });
+      expect(spawned).toBe(4);
+    });
+  });
+});
+
+// [LAW:behavior-not-structure] The unit tests above call resetSpawnBackoff()
+// directly — they pin its arithmetic but not its WIRING. This spawns a real
+// daemon and drives it through an actual bind, so a regression that drops or
+// reorders the resetSpawnBackoff() call inside server.ts's onListening (or
+// drops the import) fails THIS test even though every test above would still
+// pass unmodified.
+describe("resetSpawnBackoff wiring into onListening (integration: real daemon)", () => {
+  jest.setTimeout(30_000);
+
+  test("a real daemon bind deletes a pre-existing spawn.backoff streak file", async () => {
+    const stateRoot = fs.mkdtempSync(
+      path.join(os.tmpdir(), "cc-candybar-backoff-wire-"),
+    );
+    const stateDir = path.join(stateRoot, "cc-candybar");
+    fs.mkdirSync(stateDir, { recursive: true, mode: 0o700 });
+    const sockPath = path.join(stateDir, "socket");
+    const cacheHome = fs.mkdtempSync(
+      path.join(os.tmpdir(), "cc-candybar-backoff-wire-c-"),
+    );
+    const configHome = fs.mkdtempSync(
+      path.join(os.tmpdir(), "cc-candybar-backoff-wire-g-"),
+    );
+    const backoffPath = path.join(stateDir, "spawn.backoff");
+    // Plant a streak as if several prior kicks failed to converge — the exact
+    // state resetSpawnBackoff() must clear the moment this daemon binds.
+    fs.writeFileSync(backoffPath, "3", { mode: 0o600 });
+
+    const env: NodeJS.ProcessEnv = {
+      ...process.env,
+      CC_CANDYBAR_SOCKET: sockPath,
+      XDG_STATE_HOME: stateRoot,
+      XDG_CACHE_HOME: cacheHome,
+      XDG_CONFIG_HOME: configHome,
+    };
+
+    const { child: daemon, killTree, release } = await spawnTestDaemon(env);
+    try {
+      const connectable = await waitForBackoffWireConnectable(sockPath, 8000);
+      expect(connectable).toBe(true);
+      // The socket is live, which only happens after onListening runs to
+      // completion — resetSpawnBackoff is called from inside it, so the
+      // planted streak file must be gone.
+      expect(fs.existsSync(backoffPath)).toBe(false);
+    } finally {
+      killTree();
+      await new Promise<void>((resolve) => {
+        if (daemon.exitCode !== null || daemon.signalCode !== null) {
+          resolve();
+          return;
+        }
+        daemon.once("exit", () => resolve());
+      });
+      release();
+      for (const d of [stateRoot, cacheHome, configHome]) {
+        try {
+          fs.rmSync(d, { recursive: true, force: true });
+        } catch {
+          // best-effort cleanup
+        }
+      }
+    }
+  });
+});
+
+async function waitForBackoffWireConnectable(
+  sockPath: string,
+  budgetMs: number,
+): Promise<boolean> {
+  const deadline = Date.now() + budgetMs;
+  while (Date.now() < deadline) {
+    const ok = await new Promise<boolean>((resolve) => {
+      const s = net.connect(sockPath);
+      s.once("connect", () => {
+        s.destroy();
+        resolve(true);
+      });
+      s.once("error", () => resolve(false));
+    });
+    if (ok) return true;
+    await new Promise((r) => setTimeout(r, 25).unref());
+  }
+  return false;
+}
