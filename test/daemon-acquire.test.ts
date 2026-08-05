@@ -1195,10 +1195,14 @@ describe("resetSpawnBackoff wiring into onListening (integration: real daemon)",
     try {
       const connectable = await waitForBackoffWireConnectable(sockPath, 8000);
       expect(connectable).toBe(true);
-      // The socket is live, which only happens after onListening runs to
-      // completion — resetSpawnBackoff is called from inside it, so the
-      // planted streak file must be gone.
-      expect(fs.existsSync(backoffPath)).toBe(false);
+      // [LAW:no-ambient-temporal-coupling] Kernel connectability begins when
+      // listen(2) completes — BEFORE the daemon's 'listening' JS callback
+      // (where resetSpawnBackoff runs) has executed. An instant existsSync
+      // here races that callback and loses on slow CI runners. The contract
+      // is "a serving daemon promptly clears the streak", so await exactly
+      // that: the file's disappearance, within a bounded budget.
+      const cleared = await waitForBackoffWireGone(backoffPath, 8000);
+      expect(cleared).toBe(true);
     } finally {
       killTree();
       await new Promise<void>((resolve) => {
@@ -1235,6 +1239,18 @@ async function waitForBackoffWireConnectable(
       s.once("error", () => resolve(false));
     });
     if (ok) return true;
+    await new Promise((r) => setTimeout(r, 25).unref());
+  }
+  return false;
+}
+
+async function waitForBackoffWireGone(
+  filePath: string,
+  budgetMs: number,
+): Promise<boolean> {
+  const deadline = Date.now() + budgetMs;
+  while (Date.now() < deadline) {
+    if (!fs.existsSync(filePath)) return true;
     await new Promise((r) => setTimeout(r, 25).unref());
   }
   return false;
