@@ -163,6 +163,24 @@ function stageFile(source: string, dest: string): void {
   fs.copyFileSync(source, dest);
 }
 
+// [LAW:one-source-of-truth] The staged file is the authority on what got
+// staged. resolveRenderEntry's kind describes the *source lookup*, and on a
+// re-run from the staged runtime that lookup resolves the identity path
+// (source === dest), preserving whatever is on disk — possibly a native
+// binary from a prior install that the lookup couldn't see. So the announced
+// kind derives from the artifact itself: both flavors are ours, and the node
+// shim is a "#!" script while the native binary is Mach-O/ELF.
+function stagedEntryKind(binPath: string): RenderEntry["kind"] {
+  const fd = fs.openSync(binPath, "r");
+  try {
+    const magic = Buffer.alloc(2);
+    fs.readSync(fd, magic, 0, 2, 0);
+    return magic.toString("latin1") === "#!" ? "node-shim" : "native";
+  } finally {
+    fs.closeSync(fd);
+  }
+}
+
 export interface StagedRuntime {
   binPath: string;
   distPath: string;
@@ -198,16 +216,17 @@ export function runStageRuntime(): StagedRuntime {
   // can't drift. [LAW:one-source-of-truth]
   fs.rmSync(path.join(supportDir(), "url-handler.mjs"), { force: true });
 
+  const stagedKind = stagedEntryKind(stagedBinPath());
   process.stdout.write(
     `Staged cc-candybar v${PACKAGE_VERSION} runtime at ${supportDir()}\n` +
-      (entry.kind === "native"
+      (stagedKind === "native"
         ? `  render entry: native binary (${process.platform}-${process.arch})\n`
         : `  render entry: node shim (no native binary for ${process.platform}-${process.arch}; renders are correct but pay node startup)\n`),
   );
   return {
     binPath: stagedBinPath(),
     distPath: stagedDistPath(),
-    entryKind: entry.kind,
+    entryKind: stagedKind,
   };
 }
 
@@ -460,17 +479,19 @@ function updateClaudeSettings(
 
   const existing = settings.statusLine?.command as string | undefined;
   // [LAW:one-source-of-truth] Detection: a command we (or a prior version of
-  // us) wrote starts with the staged bin path — quoted or bare — or with the
-  // legacy `pnpm dlx` form. Any other value is a user customization we must
-  // not silently destroy.
-  const managedPrefixes = [
-    `pnpm dlx ${PACKAGE_NAME}@`,
-    binPath,
-    shellEscape(binPath),
-  ];
+  // us) wrote either starts with the legacy `pnpm dlx` form (an open prefix —
+  // a version suffix follows) or has the staged bin path — quoted or bare —
+  // as its entire first token. Any other value is a user customization we
+  // must not silently destroy.
+  // [LAW:types-are-the-program] Token, not prefix: a bare startsWith(binPath)
+  // would also claim `<binPath>-backup …` as ours and overwrite it.
+  const managedTokens = [binPath, shellEscape(binPath)];
   const isOurs =
     typeof existing === "string" &&
-    managedPrefixes.some((prefix) => existing.startsWith(prefix));
+    (existing.startsWith(`pnpm dlx ${PACKAGE_NAME}@`) ||
+      managedTokens.some(
+        (token) => existing === token || existing.startsWith(`${token} `),
+      ));
 
   if (existing && !isOurs && !force) {
     process.stderr.write(
@@ -498,4 +519,5 @@ export const __test__ = {
   updateClaudeSettings,
   resolveRenderEntry,
   stageFile,
+  stagedEntryKind,
 };

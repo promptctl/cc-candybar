@@ -9,6 +9,7 @@ const {
   DEFAULT_INSTALL_ARGS,
   shellEscape,
   stageFile,
+  stagedEntryKind,
 } = __test__;
 
 // A realistic staged path — the space in "Application Support" exercises the
@@ -113,6 +114,47 @@ describe("install — clobber protection", () => {
     expect(stderr.join("")).toContain("--force");
   });
 
+  test("a path-superset command (ours + suffix) is NOT claimed as ours", () => {
+    const p = tmpSettingsPath();
+    fs.mkdirSync(path.dirname(p), { recursive: true });
+    // Bare (unquoted) path whose string is a superset of the staged bin path:
+    // startsWith would match; the token-boundary rule must not.
+    const bareBin = "/opt/bin/cc-candybar";
+    fs.writeFileSync(
+      p,
+      JSON.stringify({
+        statusLine: { type: "command", command: `${bareBin}-backup --mine` },
+      }),
+    );
+
+    const stderr: string[] = [];
+    const origWrite = process.stderr.write.bind(process.stderr);
+    process.stderr.write = (chunk: string | Buffer) => {
+      stderr.push(String(chunk));
+      return true;
+    };
+    updateClaudeSettings(bareBin, DEFAULT_INSTALL_ARGS, false, p);
+    process.stderr.write = origWrite;
+
+    expect(readCommand(p)).toBe(`${bareBin}-backup --mine`);
+    expect(stderr.join("")).toContain("customized");
+  });
+
+  test("our bare command followed by args is still recognized as ours", () => {
+    const p = tmpSettingsPath();
+    fs.mkdirSync(path.dirname(p), { recursive: true });
+    const bareBin = "/opt/bin/cc-candybar";
+    fs.writeFileSync(
+      p,
+      JSON.stringify({
+        statusLine: { type: "command", command: `${bareBin} --style=minimal` },
+      }),
+    );
+
+    updateClaudeSettings(bareBin, DEFAULT_INSTALL_ARGS, false, p);
+    expect(readCommand(p)).toBe(buildStatusLineCommand(bareBin, []));
+  });
+
   test("--force overwrites user-customized command", () => {
     const p = tmpSettingsPath();
     fs.mkdirSync(path.dirname(p), { recursive: true });
@@ -146,6 +188,23 @@ describe("install — clobber protection", () => {
 
     updateClaudeSettings(BIN, DEFAULT_INSTALL_ARGS, false, p);
     expect(readCommand(p)).toBe(buildStatusLineCommand(BIN, []));
+  });
+});
+
+describe("stagedEntryKind", () => {
+  test("a '#!' script is the node shim", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "cpwl-kind-test-"));
+    const f = path.join(dir, "cc-candybar");
+    fs.writeFileSync(f, "#!/usr/bin/env node\nimport('../dist/index.mjs');\n");
+    expect(stagedEntryKind(f)).toBe("node-shim");
+  });
+
+  test("a binary (non-shebang) file is native", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "cpwl-kind-test-"));
+    const f = path.join(dir, "cc-candybar");
+    // Mach-O 64-bit magic — what a previously staged Rust binary starts with.
+    fs.writeFileSync(f, Buffer.from([0xcf, 0xfa, 0xed, 0xfe, 0x07, 0x00]));
+    expect(stagedEntryKind(f)).toBe("native");
   });
 });
 
