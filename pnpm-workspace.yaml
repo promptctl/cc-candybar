@@ -1,0 +1,19 @@
+# pnpm settings — the one home for both pnpm 10 (CI, mmu) and pnpm 11+.
+# pnpm 11 no longer reads the package.json "pnpm" field. [LAW:one-source-of-truth]
+
+# Install every platform's native package so release tooling can stage them.
+supportedArchitectures:
+  os: [ darwin, linux ]
+  cpu: [ x64, arm64 ]
+
+# esbuild and unrs-resolver ship prebuilt binaries via optionalDependencies;
+# their postinstall fallbacks are intentionally never run (allowBuilds is the
+# pnpm 11 key; pnpm 10 emits a cosmetic ignored-builds warning instead).
+allowBuilds:
+  esbuild: false
+  unrs-resolver: false
+
+# Our own packages are trusted at publish time — exempt them from the
+# supply-chain release-age delay so a fresh release installs immediately.
+minimumReleaseAgeExclude:
+  - "@promptctl/*"

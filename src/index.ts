@@ -53,12 +53,14 @@ Configuration:
   to point at a specific file. See the default config for all available options:
     node dist/index.mjs debug --project-dir . --cwd .
 
-Subcommands (macOS):
-  install                  One-shot setup: creates the URL handler app, registers
-                           the cc-candybar:// scheme, and writes the statusLine
-                           command into ~/.claude/settings.json.
-  install-url-handler      Just create + register the URL handler app
-                           (~/Applications/CCCandybarURLHandler.app).
+Subcommands:
+  install                  One-shot setup: stages the runtime (native render
+                           binary + dist bundle) at a stable path, creates the
+                           URL handler app + cc-candybar:// scheme (macOS), and
+                           writes the staged entry as the statusLine command in
+                           ~/.claude/settings.json. Re-run to update.
+  install-url-handler      Just stage the runtime and create + register the URL
+                           handler app (macOS only).
   url-handle URL           Internal — invoked by the URL handler app on
                            cmd-click. Parses cc-candybar://<verb>/<value> and
                            dispatches (currently: copy to clipboard).

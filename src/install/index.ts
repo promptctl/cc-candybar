@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
+import { createRequire } from "node:module";
 import { launchSync } from "../proc/launch";
 import { tryClickViaDaemon } from "../daemon/client";
 import type { PermanentOutcome } from "../daemon/client-transport";
@@ -8,9 +9,7 @@ import { obtainDaemonKick } from "../daemon/acquire";
 import { URL_SCHEME, VERB_COPY } from "../click/wire";
 
 // [LAW:one-source-of-truth] Replaced at build time by tsdown's `define` option
-// from package.json. The pinned version is what we write into settings.json so
-// pnpm's content-addressable cache key changes on every release — no stale
-// versions sticking around because of `@latest` resolution.
+// from package.json — the single version stamp install output reports.
 declare const __PACKAGE_VERSION__: string;
 const PACKAGE_VERSION =
   typeof __PACKAGE_VERSION__ !== "undefined" ? __PACKAGE_VERSION__ : "dev";
@@ -20,14 +19,20 @@ const BUNDLE_ID = "com.cccandybar.url-handler";
 const APP_NAME = "CCCandybarURLHandler";
 
 // [LAW:one-source-of-truth] `install` writes no renderer flags into
-// ~/.claude/settings.json. The previous CLI override apparatus (--layout,
-// --tray, --display, --show, --segment) is gone (bzh.2). All authoring now
-// lives in `.cc-candybar.json5` or `.cc-candybar.json` (see
-// resolveDslConfigPath — both extensions are accepted, .json5 preferred);
-// the install command's job is just to wire the URL handler and the daemon
-// entry. To customize, users edit a config file at one of the resolution
-// paths or copy src/demo/statusline.json5 as a starting point.
+// ~/.claude/settings.json. All authoring lives in `.cc-candybar.json5` or
+// `.cc-candybar.json` (see resolveDslConfigPath — both extensions accepted,
+// .json5 preferred); the install command's job is staging the runtime,
+// wiring the URL handler, and pointing settings at the staged entry.
 const DEFAULT_INSTALL_ARGS: readonly string[] = [];
+
+// [LAW:one-type-per-behavior] One platform → one package name; the render
+// entry is the same contract everywhere, only the artifact differs.
+const PLATFORM_PACKAGES: Record<string, string> = {
+  "darwin-arm64": "@promptctl/cc-candybar-darwin-arm64",
+  "darwin-x64": "@promptctl/cc-candybar-darwin-x64",
+  "linux-x64": "@promptctl/cc-candybar-linux-x64",
+  "linux-arm64": "@promptctl/cc-candybar-linux-arm64",
+};
 
 function shellEscape(arg: string): string {
   // Safe characters that don't need quoting in any reasonable shell.
@@ -35,13 +40,11 @@ function shellEscape(arg: string): string {
   return `'${arg.replace(/'/g, "'\\''")}'`;
 }
 
-function buildStatusLineCommand(rendererArgs: readonly string[]): string {
-  return [
-    "pnpm",
-    "dlx",
-    `${PACKAGE_NAME}@${PACKAGE_VERSION}`,
-    ...rendererArgs.map(shellEscape),
-  ].join(" ");
+function buildStatusLineCommand(
+  binPath: string,
+  rendererArgs: readonly string[],
+): string {
+  return [binPath, ...rendererArgs].map(shellEscape).join(" ");
 }
 
 function appBundlePath(): string {
@@ -60,51 +63,52 @@ function ensureMacOS(): void {
   }
 }
 
+// [LAW:one-source-of-truth] The staged runtime lives at ONE stable path per
+// platform, outside any package manager's store — pnpm cache pruning or a
+// version bump can never yank the files the statusline and daemon run from.
 function supportDir(): string {
-  return path.join(
-    os.homedir(),
-    "Library",
-    "Application Support",
-    "CCCandybar",
-  );
+  if (process.platform === "darwin") {
+    return path.join(
+      os.homedir(),
+      "Library",
+      "Application Support",
+      "CCCandybar",
+    );
+  }
+  const xdgData =
+    process.env.XDG_DATA_HOME ?? path.join(os.homedir(), ".local", "share");
+  return path.join(xdgData, "cc-candybar");
 }
 
-function stableScriptPath(): string {
-  return path.join(supportDir(), "url-handler.mjs");
+function stagedBinPath(): string {
+  return path.join(supportDir(), "bin", "cc-candybar");
 }
 
-function appleScriptSource(
-  nodePath: string,
-  scriptPath: string,
-  nodeModulesPath: string,
-): string {
-  // [LAW:no-shared-mutable-globals] Bake absolute paths into the AppleScript
-  // so click-time invocation doesn't depend on PATH, pnpm dlx cache state, or
-  // a global npm install. The script path is a stable copy under
-  // ~/Library/Application Support/CCCandybar that we own. NODE_PATH
-  // points at the project's node_modules so the handler can resolve deps
-  // (rich-js etc.) without being co-located with a package.json.
+function stagedDistPath(): string {
+  return path.join(supportDir(), "dist", "index.mjs");
+}
+
+function appleScriptSource(nodePath: string, scriptPath: string): string {
+  // Bake absolute paths into the AppleScript so click-time invocation doesn't
+  // depend on PATH or install-time cache state. The dist bundle is fully
+  // self-contained (tsdown noExternal), so no NODE_PATH is needed.
   const escNode = nodePath.replace(/"/g, '\\"');
   const escScript = scriptPath.replace(/"/g, '\\"');
-  const escModules = nodeModulesPath.replace(/"/g, '\\"');
   return [
     "on open location L",
-    `\tdo shell script "NODE_PATH='${escModules}' '${escNode}' '${escScript}' url-handle " & quoted form of L`,
+    `\tdo shell script "'${escNode}' '${escScript}' url-handle " & quoted form of L`,
     "end open location",
   ].join("\n");
 }
 
 // [LAW:one-source-of-truth] The bundle that contains *this* function is
-// the thing we need to copy to a stable location. Two invocation paths
-// reach us:
+// the thing we need to stage. Two invocation paths reach us:
 //   - via the bin shim: process.argv[1] = ".../bin/cc-candybar" which
-//     does `import '../dist/index.mjs'`. Copying the shim itself would
-//     break — its relative import wouldn't resolve from the new location.
-//     So resolve to the sibling dist/index.mjs.
+//     dynamically imports ../dist/index.mjs — resolve the sibling dist.
 //   - direct node:      process.argv[1] = ".../dist/index.mjs". Use as-is.
 export function locateBundledDist(argv1: string | undefined): string {
   if (!argv1) {
-    throw new Error("install-url-handler: process.argv[1] not set");
+    throw new Error("install: process.argv[1] not set");
   }
   if (argv1.endsWith(".mjs") || argv1.endsWith(".js")) {
     return argv1;
@@ -113,17 +117,126 @@ export function locateBundledDist(argv1: string | undefined): string {
   return path.resolve(path.dirname(argv1), "..", "dist", "index.mjs");
 }
 
-function copyDistToStableLocation(): string {
-  const source = locateBundledDist(process.argv[1]);
-  if (!fs.existsSync(source)) {
+// The staged render entry: the prebuilt native binary when this platform has
+// one, else the node bin shim. Same contract either way — read hookData on
+// stdin, resolve ../dist/index.mjs by adjacency — so downstream code never
+// cares which flavor was staged. [LAW:one-type-per-behavior]
+type RenderEntry =
+  | { kind: "native"; sourcePath: string }
+  | { kind: "node-shim"; sourcePath: string };
+
+function resolveRenderEntry(sourceDist: string): RenderEntry {
+  const key = `${process.platform}-${process.arch}`;
+  const pkgName = PLATFORM_PACKAGES[key];
+  if (pkgName) {
+    // Anchored to the bundle's real location, not this module's compiled
+    // form (which ts-jest loads as CJS where import.meta is illegal) — the
+    // platform package lives in node_modules beside the installed dist.
+    const require = createRequire(sourceDist);
+    try {
+      return {
+        kind: "native",
+        sourcePath: require.resolve(`${pkgName}/bin/cc-candybar`),
+      };
+    } catch {
+      // Optional dependency absent (unsupported install, pruned optionals).
+      // Falls through to the node shim — announced by the caller, never
+      // silent. [LAW:no-silent-failure]
+    }
+  }
+  return {
+    kind: "node-shim",
+    sourcePath: path.resolve(
+      path.dirname(sourceDist),
+      "..",
+      "bin",
+      "cc-candybar",
+    ),
+  };
+}
+
+function stageFile(source: string, dest: string): void {
+  // Re-running install FROM the staged runtime makes source === dest;
+  // copyFileSync would truncate the file onto itself. Identity is "already
+  // staged", not an error.
+  if (path.resolve(source) === path.resolve(dest)) return;
+  fs.copyFileSync(source, dest);
+}
+
+// [LAW:one-source-of-truth] The staged file is the authority on what got
+// staged. resolveRenderEntry's kind describes the *source lookup*, and on a
+// re-run from the staged runtime that lookup resolves the identity path
+// (source === dest), preserving whatever is on disk — possibly a native
+// binary from a prior install that the lookup couldn't see. So the announced
+// kind derives from the artifact itself: both flavors are ours, and the node
+// shim is a "#!" script while the native binary is Mach-O/ELF.
+function stagedEntryKind(binPath: string): RenderEntry["kind"] {
+  const fd = fs.openSync(binPath, "r");
+  try {
+    const magic = Buffer.alloc(2);
+    const bytesRead = fs.readSync(fd, magic, 0, 2, 0);
+    // [LAW:no-silent-failure] Under 2 bytes neither flavor exists — the file
+    // is a corrupt artifact (a crashed prior copy preserved by the identity
+    // path), not a native binary.
+    if (bytesRead < 2) {
+      throw new Error(
+        `install: staged render entry at ${binPath} is truncated ` +
+          `(${bytesRead} byte(s)). Re-run: pnpm dlx ${PACKAGE_NAME}@latest install`,
+      );
+    }
+    return magic.toString("latin1") === "#!" ? "node-shim" : "native";
+  } finally {
+    fs.closeSync(fd);
+  }
+}
+
+export interface StagedRuntime {
+  binPath: string;
+  distPath: string;
+  entryKind: RenderEntry["kind"];
+}
+
+// Stage the full runtime at the stable path: dist/index.mjs (daemon + CLI
+// bundle) and bin/cc-candybar (render entry) as adjacent files. Adjacency IS
+// the contract — every entry flavor locates the bundle via ../dist/index.mjs.
+export function runStageRuntime(): StagedRuntime {
+  const sourceDist = locateBundledDist(process.argv[1]);
+  if (!fs.existsSync(sourceDist)) {
     throw new Error(
-      `install-url-handler: bundled dist not found at ${source}. Reinstall the package.`,
+      `install: bundled dist not found at ${sourceDist}. Reinstall the package.`,
     );
   }
-  fs.mkdirSync(supportDir(), { recursive: true });
-  const dest = stableScriptPath();
-  fs.copyFileSync(source, dest);
-  return dest;
+
+  const entry = resolveRenderEntry(sourceDist);
+  if (!fs.existsSync(entry.sourcePath)) {
+    throw new Error(
+      `install: render entry not found at ${entry.sourcePath}. Reinstall the package.`,
+    );
+  }
+
+  fs.mkdirSync(path.dirname(stagedDistPath()), { recursive: true });
+  fs.mkdirSync(path.dirname(stagedBinPath()), { recursive: true });
+  stageFile(sourceDist, stagedDistPath());
+  stageFile(entry.sourcePath, stagedBinPath());
+  fs.chmodSync(stagedBinPath(), 0o755);
+
+  // The pre-1.21 layout kept a second copy of the bundle as url-handler.mjs;
+  // dist/index.mjs is the one staged bundle now. Remove the stale copy so it
+  // can't drift. [LAW:one-source-of-truth]
+  fs.rmSync(path.join(supportDir(), "url-handler.mjs"), { force: true });
+
+  const stagedKind = stagedEntryKind(stagedBinPath());
+  process.stdout.write(
+    `Staged cc-candybar v${PACKAGE_VERSION} runtime at ${supportDir()}\n` +
+      (stagedKind === "native"
+        ? `  render entry: native binary (${process.platform}-${process.arch})\n`
+        : `  render entry: node shim (no native binary for ${process.platform}-${process.arch}; renders are correct but pay node startup)\n`),
+  );
+  return {
+    binPath: stagedBinPath(),
+    distPath: stagedDistPath(),
+    entryKind: stagedKind,
+  };
 }
 
 function infoPlistPatch(): Array<{ key: string; xml: string }> {
@@ -150,23 +263,10 @@ function infoPlistPatch(): Array<{ key: string; xml: string }> {
   ];
 }
 
-export function runInstallUrlHandler(): void {
-  ensureMacOS();
-
-  const stableScript = copyDistToStableLocation();
-  process.stdout.write(`Copied dist to ${stableScript}\n`);
-
-  // [LAW:one-source-of-truth] Derive node_modules from the source dist path
-  // (dist/index.mjs → ../node_modules). The stable copy lives elsewhere but
-  // needs the same node_modules to resolve deps at click time.
-  const sourceDist = locateBundledDist(process.argv[1]);
-  const nodeModules = path.join(path.dirname(sourceDist), "..", "node_modules");
-  if (!fs.existsSync(nodeModules)) {
-    throw new Error(
-      `install-url-handler: node_modules not found at ${nodeModules}. Install deps first.`,
-    );
-  }
-
+// Callers establish the macOS precondition ([LAW:single-enforcer] — the
+// subcommand entry checks before any side effect; runInstall reaches here
+// only through its darwin dispatch).
+function installUrlHandlerFrom(stagedDist: string): void {
   const bundle = appBundlePath();
   fs.mkdirSync(path.dirname(bundle), { recursive: true });
 
@@ -178,12 +278,7 @@ export function runInstallUrlHandler(): void {
   process.stdout.write(`Building ${bundle}\n`);
   const osa = launchSync({
     bin: "/usr/bin/osacompile",
-    args: [
-      "-o",
-      bundle,
-      "-e",
-      appleScriptSource(process.execPath, stableScript, nodeModules),
-    ],
+    args: ["-o", bundle, "-e", appleScriptSource(process.execPath, stagedDist)],
     category: "install.osacompile",
   });
   if (!osa.ok) {
@@ -230,6 +325,14 @@ export function runInstallUrlHandler(): void {
   process.stdout.write(
     `  Test: open '${URL_SCHEME}://hello-world' && pbpaste\n`,
   );
+}
+
+export function runInstallUrlHandler(): void {
+  // Precondition before any side effect: on a non-mac this fails with zero
+  // files written, not after staging the runtime.
+  ensureMacOS();
+  const staged = runStageRuntime();
+  installUrlHandlerFrom(staged.distPath);
 }
 
 interface ParsedUrl {
@@ -338,16 +441,23 @@ function formatPermanent(outcome: PermanentOutcome): string {
 }
 
 export function runInstall(rendererArgs: string[]): void {
-  ensureMacOS();
-
   const force = rendererArgs.includes("--force");
   const filteredArgs = rendererArgs.filter((a) => a !== "--force");
 
   const argsToInstall =
     filteredArgs.length > 0 ? filteredArgs : [...DEFAULT_INSTALL_ARGS];
 
-  runInstallUrlHandler();
-  updateClaudeSettings(argsToInstall, force);
+  const staged = runStageRuntime();
+
+  if (process.platform === "darwin") {
+    installUrlHandlerFrom(staged.distPath);
+  } else {
+    process.stdout.write(
+      "Skipping URL handler (cmd-click verbs are macOS-only).\n",
+    );
+  }
+
+  updateClaudeSettings(staged.binPath, argsToInstall, force);
 
   process.stdout.write(`✓ install complete.\n`);
   process.stdout.write(
@@ -356,6 +466,7 @@ export function runInstall(rendererArgs: string[]): void {
 }
 
 function updateClaudeSettings(
+  binPath: string,
   rendererArgs: readonly string[],
   force: boolean,
   overridePath?: string,
@@ -376,12 +487,20 @@ function updateClaudeSettings(
   }
 
   const existing = settings.statusLine?.command as string | undefined;
-  // [LAW:one-source-of-truth] Detection: if the existing command starts with
-  // our package prefix, we (or a prior version of us) wrote it. Any other
-  // value is a user customization we must not silently destroy.
-  const managedPrefix = `pnpm dlx ${PACKAGE_NAME}@`;
+  // [LAW:one-source-of-truth] Detection: a command we (or a prior version of
+  // us) wrote either starts with the legacy `pnpm dlx` form (an open prefix —
+  // a version suffix follows) or has the staged bin path — quoted or bare —
+  // as its entire first token. Any other value is a user customization we
+  // must not silently destroy.
+  // [LAW:types-are-the-program] Token, not prefix: a bare startsWith(binPath)
+  // would also claim `<binPath>-backup …` as ours and overwrite it.
+  const managedTokens = [binPath, shellEscape(binPath)];
   const isOurs =
-    typeof existing === "string" && existing.startsWith(managedPrefix);
+    typeof existing === "string" &&
+    (existing.startsWith(`pnpm dlx ${PACKAGE_NAME}@`) ||
+      managedTokens.some(
+        (token) => existing === token || existing.startsWith(`${token} `),
+      ));
 
   if (existing && !isOurs && !force) {
     process.stderr.write(
@@ -394,7 +513,7 @@ function updateClaudeSettings(
 
   settings.statusLine = {
     type: "command",
-    command: buildStatusLineCommand(rendererArgs),
+    command: buildStatusLineCommand(binPath, rendererArgs),
   };
 
   fs.writeFileSync(target, JSON.stringify(settings, null, 2));
@@ -407,4 +526,7 @@ export const __test__ = {
   buildStatusLineCommand,
   DEFAULT_INSTALL_ARGS,
   updateClaudeSettings,
+  resolveRenderEntry,
+  stageFile,
+  stagedEntryKind,
 };
