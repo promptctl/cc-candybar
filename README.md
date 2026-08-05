@@ -134,7 +134,7 @@ Run the install once to stage the runtime, then point `~/.claude/settings.json` 
 
 ### Developing against a checkout
 
-`just deploy` (or `pnpm install && pnpm build` on a machine without cargo) builds `dist/index.mjs` and stages the native binary at `bin/cc-candybar-native`. Point your statusline command at the checkout's `bin/cc-candybar-native` (or the committed `bin/cc-candybar` node entry) and the bar renders HEAD; the daemon watches the built bundle and respawns itself on rebuild.
+`just deploy` builds `dist/index.mjs` and stages the native binary at `bin/cc-candybar-native` — point your statusline command at that path. On a machine without cargo, `pnpm install && pnpm build` builds only the bundle — point your statusline at the committed `bin/cc-candybar` node entry instead. Either way the bar renders HEAD; the daemon watches the built bundle and respawns itself on rebuild.
 
 ### Config file
 
