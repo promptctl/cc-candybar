@@ -1,3 +1,15 @@
+# [1.23.0](https://github.com/promptctl/cc-candybar/compare/v1.22.0...v1.23.0) (2026-08-05)
+
+
+### Bug Fixes
+
+* **deploy:** committed node bin + install-time staging replace postinstall machinery ([#159](https://github.com/promptctl/cc-candybar/issues/159)) ([10330e0](https://github.com/promptctl/cc-candybar/commit/10330e0c31f984f93887cb1268b6502966dcb236))
+
+
+### Features
+
+* **daemon-lifecycle:** exponential backoff on the spawn-cooldown rate bound ([#163](https://github.com/promptctl/cc-candybar/issues/163)) ([2298b27](https://github.com/promptctl/cc-candybar/commit/2298b27202edc931dadc9fdf957ed52161fb5d11))
+
 # [1.22.0](https://github.com/promptctl/cc-candybar/compare/v1.21.0...v1.22.0) (2026-07-29)
 
 
