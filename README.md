@@ -30,7 +30,7 @@ That single command (re-run it any time to update to the latest release):
 2. On macOS, builds `~/Applications/CCCandybarURLHandler.app` and registers the `cc-candybar://` URL scheme with Launch Services.
 3. Writes the staged `bin/cc-candybar` path as the statusline command into `~/.claude/settings.json` (skipped with a notice if you've customized the command; `--force` overwrites).
 
-Restart Claude Code. The statusline appears with the bundled default layout (directory, git, model, session, today, context). Cmd-clicking clickable cells fires `cc-candybar://` URL verbs that the daemon dispatches.
+Restart Claude Code. The statusline appears with the bundled default layout — an identity row (directory, gitaculous, toolbar) over a status row (model, context, cacheTimer, block, weekly). Cmd-clicking clickable cells fires `cc-candybar://` URL verbs that the daemon dispatches.
 
 ## Customization
 
@@ -117,7 +117,7 @@ The DSL config picks a base palette via `globals.palette` (e.g. `textual-dark`, 
 
 ## Installation
 
-Requires Node.js 18+, Claude Code, and Git 2.0+. For best display, install a [Nerd Font](https://www.nerdfonts.com/) so the powerline glyphs render correctly.
+Requires Node.js 20.19+ (within the 20.x line) or 22.12+, Claude Code, and Git 2.0+. For best display, install a [Nerd Font](https://www.nerdfonts.com/) so the powerline glyphs render correctly.
 
 ### Manual setup
 
