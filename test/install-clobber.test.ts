@@ -199,6 +199,13 @@ describe("stagedEntryKind", () => {
     expect(stagedEntryKind(f)).toBe("node-shim");
   });
 
+  test("a truncated (<2 byte) file throws instead of passing as native", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "cpwl-kind-test-"));
+    const f = path.join(dir, "cc-candybar");
+    fs.writeFileSync(f, "#");
+    expect(() => stagedEntryKind(f)).toThrow(/truncated/);
+  });
+
   test("a binary (non-shebang) file is native", () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "cpwl-kind-test-"));
     const f = path.join(dir, "cc-candybar");

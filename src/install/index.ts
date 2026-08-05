@@ -174,7 +174,16 @@ function stagedEntryKind(binPath: string): RenderEntry["kind"] {
   const fd = fs.openSync(binPath, "r");
   try {
     const magic = Buffer.alloc(2);
-    fs.readSync(fd, magic, 0, 2, 0);
+    const bytesRead = fs.readSync(fd, magic, 0, 2, 0);
+    // [LAW:no-silent-failure] Under 2 bytes neither flavor exists — the file
+    // is a corrupt artifact (a crashed prior copy preserved by the identity
+    // path), not a native binary.
+    if (bytesRead < 2) {
+      throw new Error(
+        `install: staged render entry at ${binPath} is truncated ` +
+          `(${bytesRead} byte(s)). Re-run: pnpm dlx ${PACKAGE_NAME}@latest install`,
+      );
+    }
     return magic.toString("latin1") === "#!" ? "node-shim" : "native";
   } finally {
     fs.closeSync(fd);
