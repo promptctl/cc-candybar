@@ -10,7 +10,21 @@ const {
   shellEscape,
   stageFile,
   stagedEntryKind,
+  resolveRenderEntry,
 } = __test__;
+
+// Every temp dir is registered here and removed once after the whole file, so
+// tests stay free to create as many as they need without leaking into /tmp.
+const tmpDirs: string[] = [];
+afterAll(() => {
+  for (const d of tmpDirs) fs.rmSync(d, { recursive: true, force: true });
+});
+
+function mkTmpDir(prefix: string): string {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
+  tmpDirs.push(dir);
+  return dir;
+}
 
 // A realistic staged path — the space in "Application Support" exercises the
 // quoting the real darwin path needs.
@@ -24,8 +38,7 @@ const BIN = path.join(
 );
 
 function tmpSettingsPath(): string {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "cpwl-install-test-"));
-  return path.join(dir, "settings.json");
+  return path.join(mkTmpDir("cpwl-install-test-"), "settings.json");
 }
 
 function readCommand(settingsPath: string): string | undefined {
@@ -191,23 +204,45 @@ describe("install — clobber protection", () => {
   });
 });
 
+describe("resolveRenderEntry", () => {
+  test("resolves the native binary from node_modules beside the dist", () => {
+    // The repo checkout installs every platform package (workspace-yaml
+    // supportedArchitectures), so the current platform's is always present.
+    const sourceDist = path.resolve(__dirname, "..", "dist", "index.mjs");
+    const entry = resolveRenderEntry(sourceDist);
+    expect(entry.kind).toBe("native");
+    expect(entry.sourcePath).toContain(
+      `cc-candybar-${process.platform}-${process.arch}`,
+    );
+    expect(fs.existsSync(entry.sourcePath)).toBe(true);
+  });
+
+  test("falls back to the sibling node shim when no platform package resolves", () => {
+    const dir = mkTmpDir("cpwl-entry-test-");
+    fs.mkdirSync(path.join(dir, "dist"));
+    const entry = resolveRenderEntry(path.join(dir, "dist", "index.mjs"));
+    expect(entry.kind).toBe("node-shim");
+    expect(entry.sourcePath).toBe(path.join(dir, "bin", "cc-candybar"));
+  });
+});
+
 describe("stagedEntryKind", () => {
   test("a '#!' script is the node shim", () => {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "cpwl-kind-test-"));
+    const dir = mkTmpDir("cpwl-kind-test-");
     const f = path.join(dir, "cc-candybar");
     fs.writeFileSync(f, "#!/usr/bin/env node\nimport('../dist/index.mjs');\n");
     expect(stagedEntryKind(f)).toBe("node-shim");
   });
 
   test("a truncated (<2 byte) file throws instead of passing as native", () => {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "cpwl-kind-test-"));
+    const dir = mkTmpDir("cpwl-kind-test-");
     const f = path.join(dir, "cc-candybar");
     fs.writeFileSync(f, "#");
     expect(() => stagedEntryKind(f)).toThrow(/truncated/);
   });
 
   test("a binary (non-shebang) file is native", () => {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "cpwl-kind-test-"));
+    const dir = mkTmpDir("cpwl-kind-test-");
     const f = path.join(dir, "cc-candybar");
     // Mach-O 64-bit magic — what a previously staged Rust binary starts with.
     fs.writeFileSync(f, Buffer.from([0xcf, 0xfa, 0xed, 0xfe, 0x07, 0x00]));
@@ -217,7 +252,7 @@ describe("stagedEntryKind", () => {
 
 describe("stageFile", () => {
   test("copies source to dest", () => {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "cpwl-stage-test-"));
+    const dir = mkTmpDir("cpwl-stage-test-");
     const src = path.join(dir, "src.bin");
     const dest = path.join(dir, "dest.bin");
     fs.writeFileSync(src, "payload");
@@ -226,7 +261,7 @@ describe("stageFile", () => {
   });
 
   test("identity staging is a no-op, never a truncation", () => {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "cpwl-stage-test-"));
+    const dir = mkTmpDir("cpwl-stage-test-");
     const f = path.join(dir, "same.bin");
     fs.writeFileSync(f, "payload");
     // Same file reached through a dot-dot detour — must not truncate it.
