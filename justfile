@@ -1,14 +1,22 @@
 demo:
     npx tsx src/demo/app.ts
 
-# Build the native render-path client and stage it at bin/cc-candybar so
-# the locally-installed statusline picks it up. The committed bin entry is
-# the placeholder stub; CI's postinstall does this same overwrite from
-# matrix-built artifacts.
+# Full local deploy: build the bundle and stage the native render-path
+# binary. After this, a statusline launcher pointing at the checkout
+# renders HEAD. On a machine without cargo, `pnpm install && pnpm build`
+# alone is a complete (node-entry) deploy.
+deploy:
+    pnpm install
+    pnpm build
+    just install-rust
+
+# Build the native render-path client and stage it at bin/cc-candybar-native.
+# The committed bin/cc-candybar node shim stays untouched — the native binary
+# is a separate, gitignored artifact. CI stages release binaries into the
+# per-platform npm packages instead (see .github/workflows/release.yml).
 install-rust:
     cd rust-client && cargo build --release
-    mkdir -p bin
-    cp rust-client/target/release/cc-candybar bin/cc-candybar
-    chmod +x bin/cc-candybar
-    @file bin/cc-candybar
-    @echo "Native binary staged at bin/cc-candybar."
+    cp rust-client/target/release/cc-candybar bin/cc-candybar-native
+    chmod +x bin/cc-candybar-native
+    @file bin/cc-candybar-native
+    @echo "Native binary staged at bin/cc-candybar-native."

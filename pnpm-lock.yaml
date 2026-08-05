@@ -7,23 +7,16 @@ settings:
 importers:
 
   .:
-    dependencies:
+    devDependencies:
+      '@eslint/js':
+        specifier: ^9.33.0
+        version: 9.39.4
       '@promptctl/go-template-js':
         specifier: ^0.7.0
         version: 0.7.0
       '@promptctl/rich-js':
         specifier: ^0.6.0
         version: 0.6.0
-      json5:
-        specifier: ^2.2.3
-        version: 2.2.3
-      mobx:
-        specifier: ^6.15.0
-        version: 6.15.1
-    devDependencies:
-      '@eslint/js':
-        specifier: ^9.33.0
-        version: 9.39.4
       '@semantic-release/changelog':
         specifier: ^6.0.3
         version: 6.0.3(semantic-release@25.0.3(typescript@5.9.3))
@@ -60,6 +53,12 @@ importers:
       jest:
         specifier: ^30.0.5
         version: 30.3.0(@types/node@20.19.39)
+      json5:
+        specifier: ^2.2.3
+        version: 2.2.3
+      mobx:
+        specifier: ^6.15.0
+        version: 6.15.1
       prettier:
         specifier: ^3.6.2
         version: 3.8.3
@@ -1032,6 +1031,7 @@ packages:
 
   '@ungap/structured-clone@1.3.0':
     resolution: {integrity: sha512-WmoN8qaIAo7WTYWbAZuG8PYEhn5fkz7dZrqTBZ7dtt//lL2Gwms1IcnQ5yHqjDfX8Ft5j4YzDM23f87zBfDe9g==}
+    deprecated: Potential CWE-502 - Update to 1.3.1 or higher
 
   '@unrs/resolver-binding-android-arm-eabi@1.11.1':
     resolution: {integrity: sha512-ppLRUgHVaGRWUx0R0Ut06Mjo9gBaBkg3v/8AxusGLhsIotbBLuRk51rAzqLC8gq6NyyAojEXglNjzf6R948DNw==}
