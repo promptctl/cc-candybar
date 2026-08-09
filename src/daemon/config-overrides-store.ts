@@ -180,10 +180,21 @@ function loadRawOverrides(
 // them out) — see projectSegmentPaletteOverrides for that half. A pure
 // projection over an already-read dict (not a filePath) so a caller wanting
 // BOTH views (loadOverrides below) pays for exactly one read.
+//
+// [LAW:no-defensive-null-guards] exception: `Object.create(null)` — the key
+// being assigned comes from the on-disk overrides file, which a `persist`
+// write only ever populates from a real Globals field name (isGlobalsField
+// already excludes "__proto__"), but the accumulator itself gets the same
+// null-prototype hygiene src/dsl/render.ts's segment-keyed accumulator uses
+// ("segment names come from user config; a null-prototype object prevents
+// __proto__/constructor/prototype from being treated as segment data") —
+// one guard at the object, not a per-caller property-name check.
 function projectGlobalsOverrides(
   raw: Readonly<Record<string, string | number | boolean>>,
 ): Partial<Globals> {
-  const out: Record<string, string | number | boolean> = {};
+  const out: Record<string, string | number | boolean> = Object.create(
+    null,
+  ) as Record<string, string | number | boolean>;
   for (const [key, value] of Object.entries(raw)) {
     if (isGlobalsField(key)) out[key] = value;
   }
@@ -199,10 +210,21 @@ function projectGlobalsOverrides(
 // onto the already-merged config's `segments[name].palette` field
 // (applySegmentPaletteOverrides in config/loader/merge.ts), never through
 // mergeWithDefault's wholesale per-name segment replacement.
+//
+// [LAW:no-defensive-null-guards] exception: `Object.create(null)` — unlike
+// projectGlobalsOverrides, the assigned key here (`target.segment`) is NOT
+// membership-checked against any closed set before the write (any string a
+// config declares as a segment name is legal), so a segment genuinely named
+// `__proto__` would otherwise hit the prototype setter on `out[key] =` —
+// the exact crash class the render.ts precedent (see above) already guards
+// against for segment-keyed objects.
 function projectSegmentPaletteOverrides(
   raw: Readonly<Record<string, string | number | boolean>>,
 ): Readonly<Record<string, string>> {
-  const out: Record<string, string> = {};
+  const out: Record<string, string> = Object.create(null) as Record<
+    string,
+    string
+  >;
   for (const [key, value] of Object.entries(raw)) {
     const target = parsePersistTarget(key);
     if (target?.scope === "segment-palette" && typeof value === "string") {

@@ -274,6 +274,29 @@ describe("config-overrides-store: segment-palette keys", () => {
       "nord",
     );
   });
+
+  // [LAW:no-defensive-null-guards] A segment literally named "__proto__" is
+  // an unlikely but legal config author choice — nothing rejects it as a
+  // segment name today. loadSegmentPaletteOverrides must not crash (a
+  // plain-object accumulator's `out["__proto__"] = value` would hit
+  // Object.prototype's __proto__ setter, which throws on a non-object value
+  // in strict-mode ESM) and must round-trip the entry like any other name.
+  test("a segment named __proto__ round-trips without crashing", () => {
+    const { path, cleanup } = tmpFile();
+    writeConfigOverride(path, "segments.__proto__.palette", "nord");
+    expect(() => loadSegmentPaletteOverrides(path)).not.toThrow();
+    const result = loadSegmentPaletteOverrides(path);
+    // `{ __proto__: "nord" }` as an object LITERAL is the special
+    // prototype-setting form (silently dropped, since "nord" isn't an
+    // object) — Object.fromEntries creates a genuine OWN data property
+    // instead, the correct comparison target for what a real round-trip
+    // must produce.
+    expect(result).toEqual(Object.fromEntries([["__proto__", "nord"]]));
+    expect(Object.prototype.hasOwnProperty.call(result, "__proto__")).toBe(
+      true,
+    );
+    cleanup();
+  });
 });
 
 // ─── applySegmentPaletteOverrides: the merge overlay ─────────────────────────
@@ -325,6 +348,27 @@ describe("applySegmentPaletteOverrides", () => {
   test("an empty overrides map returns the SAME config object (no needless copy)", () => {
     const before = baseConfig();
     expect(applySegmentPaletteOverrides(before, {})).toBe(before);
+  });
+
+  // [LAW:no-defensive-null-guards] The "stale override, segment since
+  // removed" no-op path (the test above) is exactly where a segment named
+  // `__proto__` is dangerous: `segments["__proto__"]` on a plain object with
+  // no OWN "__proto__" property reads the inherited accessor (not
+  // `undefined`), so a naive no-op guard wouldn't fire, and the following
+  // write would reach the setter. Must stay a genuine no-op, and the actual
+  // prototype chain must come out unharmed either way.
+  test("a stale override naming a since-removed segment called __proto__ is a no-op, not a prototype write", () => {
+    const before = baseConfig();
+    const overrides = Object.fromEntries([["__proto__", "nord"]]) as Record<
+      string,
+      string
+    >;
+    expect(() =>
+      applySegmentPaletteOverrides(before, overrides),
+    ).not.toThrow();
+    const out = applySegmentPaletteOverrides(before, overrides);
+    expect(out.segments).toEqual(before.segments);
+    expect(Object.getPrototypeOf({})).toBe(Object.prototype);
   });
 });
 

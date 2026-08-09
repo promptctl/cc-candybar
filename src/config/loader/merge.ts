@@ -13,7 +13,11 @@
 // specific consumer, a cycle. Callers who want "the bundled default" import
 // DEFAULT_DSL_CONFIG from default-dsl-config.ts and pass it explicitly.
 
-import { type DslConfig, type RawDslConfig } from "../dsl-types.js";
+import {
+  type DslConfig,
+  type RawDslConfig,
+  type SegmentDecl,
+} from "../dsl-types.js";
 
 /**
  * Merge a RawDslConfig on top of a default DslConfig. Pure function.
@@ -71,13 +75,26 @@ export function mergeWithDefault(
 // name a segment the config declares (cross-ref checks that at load time),
 // so a dangling entry here only happens after a later config edit removed
 // the segment, and there is nothing left for the override to apply to.
+//
+// [LAW:no-defensive-null-guards] exception: `Object.assign(Object.create(null),
+// ...)` instead of `{ ...config.segments }` — the SAME null-prototype hygiene
+// as the config-overrides-store.ts accumulators above (segment names come
+// from user config and this loop WRITES via bracket assignment, `segments[name]
+// = ...`, not a pure spread). Pure object spread never risks this (it defines
+// every key directly, never invoking an inherited setter), but a stale
+// override naming a since-removed segment `__proto__` hits exactly the
+// "no own property yet, so the read returns the inherited accessor and the
+// write invokes its setter" case a plain accumulator does not guard against.
 export function applySegmentPaletteOverrides(
   config: DslConfig,
   overrides: Readonly<Record<string, string>>,
 ): DslConfig {
   const entries = Object.entries(overrides);
   if (entries.length === 0) return config;
-  const segments = { ...config.segments };
+  const segments: Record<string, SegmentDecl> = Object.assign(
+    Object.create(null) as Record<string, SegmentDecl>,
+    config.segments,
+  );
   for (const [name, palette] of entries) {
     const seg = segments[name];
     if (seg === undefined) continue;
