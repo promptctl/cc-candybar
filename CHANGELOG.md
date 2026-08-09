@@ -1,3 +1,10 @@
+# [1.25.0](https://github.com/promptctl/cc-candybar/compare/v1.24.0...v1.25.0) (2026-08-09)
+
+
+### Features
+
+* **theming:** switch bundled default palette to tokyo-night ([#165](https://github.com/promptctl/cc-candybar/issues/165)) ([104a146](https://github.com/promptctl/cc-candybar/commit/104a146adfb2e45ab39933020cd803e1eeb4d4ac))
+
 # [1.24.0](https://github.com/promptctl/cc-candybar/compare/v1.23.0...v1.24.0) (2026-08-09)
 
 
