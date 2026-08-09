@@ -7,6 +7,7 @@ import { tryClickViaDaemon } from "../daemon/client";
 import type { PermanentOutcome } from "../daemon/client-transport";
 import { obtainDaemonKick } from "../daemon/acquire";
 import { URL_SCHEME, VERB_COPY } from "../click/wire";
+import { DISCLOSURE_GLYPH_CLOSED } from "../config/disclosure";
 
 // [LAW:one-source-of-truth] Replaced at build time by tsdown's `define` option
 // from package.json — the single version stamp install output reports.
@@ -440,6 +441,21 @@ function formatPermanent(outcome: PermanentOutcome): string {
   }
 }
 
+// [LAW:effects-at-boundaries] Pure string builder — runInstall performs the
+// actual write. Kept separate so the message content is testable without
+// driving the full (fs + Launch Services) install side effects.
+// [LAW:one-source-of-truth] The disclosure glyph comes from config/disclosure.ts,
+// the same constant the theme/look picker itself renders with, so this tip
+// can't drift from what the bundled default bar actually shows.
+function installSuccessMessage(): string {
+  return (
+    `✓ install complete.\n` +
+    `  Restart Claude Code to pick up the new statusline.\n` +
+    `  Tip: the default bar has a clickable theme/look picker — click\n` +
+    `  🎨 <theme> ${DISCLOSURE_GLYPH_CLOSED} or ◐ <look> ${DISCLOSURE_GLYPH_CLOSED} on the bar to switch palettes.\n`
+  );
+}
+
 export function runInstall(rendererArgs: string[]): void {
   const force = rendererArgs.includes("--force");
   const filteredArgs = rendererArgs.filter((a) => a !== "--force");
@@ -459,10 +475,7 @@ export function runInstall(rendererArgs: string[]): void {
 
   updateClaudeSettings(staged.binPath, argsToInstall, force);
 
-  process.stdout.write(`✓ install complete.\n`);
-  process.stdout.write(
-    `  Restart Claude Code to pick up the new statusline.\n`,
-  );
+  process.stdout.write(installSuccessMessage());
 }
 
 function updateClaudeSettings(
@@ -529,4 +542,5 @@ export const __test__ = {
   resolveRenderEntry,
   stageFile,
   stagedEntryKind,
+  installSuccessMessage,
 };
