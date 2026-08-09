@@ -394,18 +394,26 @@ function setLiteralSpec(): FieldSpec<string> {
 // [LAW:types-are-the-program] `from` is either a NAME (a non-empty string,
 // resolved against the option-domain registry) or an INLINE literal domain (a
 // non-empty array of deliverable set-state values — the same non-empty/
-// slash-free wire shape `to` and `cycle` members enforce). This arm proves
-// only the SHAPE; whether a named domain actually resolves needs the merged
-// config's per-config domains (e.g. "looks"), so that check is a cross-
-// reference concern (validateCrossReferences) — symmetric to how a layout
-// node's segment ref or a `{{ action }}` ref resolves post-merge.
+// slash-free wire shape `to` and `cycle` members enforce, plus the same
+// uniqueness `cycleSpec` requires: a duplicate has no successor-ambiguity
+// concern here, but it would render the same picker cell twice for no
+// benefit). This arm proves only the SHAPE; whether a named domain actually
+// resolves needs the merged config's per-config domains (e.g. "looks"), so
+// that check is a cross-reference concern (validateCrossReferences) —
+// symmetric to how a layout node's segment ref or a `{{ action }}` ref
+// resolves post-merge.
 function fromSpec(): FieldSpec<OptionDomain> {
   return {
     required: true,
     json: {
       anyOf: [
         { type: "string", minLength: 1 },
-        { type: "array", items: { type: "string", minLength: 1 }, minItems: 1 },
+        {
+          type: "array",
+          items: { type: "string", minLength: 1 },
+          minItems: 1,
+          uniqueItems: true,
+        },
       ],
     },
     parse: (ctx, path, field, raw) => {
@@ -442,6 +450,14 @@ function fromSpec(): FieldSpec<OptionDomain> {
             ctx,
             at,
             `from array member(s) ${slashed.map((m) => `"${m}"`).join(", ")} contain "/" — set values must be slash-free`,
+          );
+          return undefined;
+        }
+        if (new Set(members).size !== members.length) {
+          issue(
+            ctx,
+            at,
+            `from array members must be unique — a duplicated value would render the same picker option twice`,
           );
           return undefined;
         }

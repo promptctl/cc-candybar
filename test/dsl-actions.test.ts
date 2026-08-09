@@ -331,6 +331,30 @@ describe("71o.1 — inline literal option domain (from: [...])", () => {
     if (!res.ok) expect(res.reason).toMatch(/unknown state "sort-order"/);
     dispose();
   });
+
+  // [LAW:one-source-of-truth] Mirrors cycleSpec's duplicate-member rejection —
+  // a duplicate has no successor-ambiguity concern here (unlike cycle), but it
+  // would render the same picker cell twice for no benefit, so it is rejected
+  // at load like every other malformed array shape in this file.
+  test("duplicate inline values are rejected at load", () => {
+    const src = `{
+      globals: {},
+      variables: {
+        'session.id': { kind: 'input', path: 'session_id', default: '' },
+        k: { kind: 'state', key: 'k', default: '' },
+      },
+      actions: { a: { set: 'k', from: ['x', 'y', 'x'] } },
+      segments: { bar: { template: '{{ action "a" "x" }}', bg: 'surface', fg: 'foreground' } },
+      root: 'bar',
+    }`;
+    try {
+      parseAndValidate("<test>", src, ALLOWED);
+      throw new Error("expected ConfigError");
+    } catch (e) {
+      expect(e).toBeInstanceOf(ConfigError);
+      expect((e as ConfigError).message).toMatch(/from array members must be unique/);
+    }
+  });
 });
 
 // ─── Registry-backed domains are open (candybar-config-engine-71o.1) ───────────
