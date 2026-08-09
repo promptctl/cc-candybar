@@ -1,9 +1,11 @@
 import type { ChildProcess } from "node:child_process";
-import net from "node:net";
 
-import { PROTOCOL_VERSION, encodeFrame, makeFrameReader } from "../src/daemon/protocol";
-import type { Response } from "../src/daemon/protocol";
-import { spawnIsolatedDaemon } from "./helpers/spawn-isolated-daemon";
+import { PROTOCOL_VERSION } from "../src/daemon/protocol";
+import {
+  spawnIsolatedDaemon,
+  type IsolatedDaemonHandle,
+} from "./helpers/spawn-isolated-daemon";
+import { sendDaemonRequest, waitForExit } from "./helpers/daemon-wire";
 
 // [LAW:verifiable-goals] Contract: a daemon that receives a `shutdown` request
 // MUST exit within a bounded wall-clock budget. The bound has to be tight
@@ -17,14 +19,7 @@ import { spawnIsolatedDaemon } from "./helpers/spawn-isolated-daemon";
 
 const SHUTDOWN_BUDGET_MS = 1500;
 
-interface DaemonHandle {
-  child: ChildProcess;
-  sockPath: string;
-  stateDir: string;
-  cleanup(): void;
-}
-
-async function spawnDaemon(): Promise<DaemonHandle> {
+async function spawnDaemon(): Promise<IsolatedDaemonHandle> {
   return spawnIsolatedDaemon("cc-candybar-shutdown");
 }
 
@@ -35,48 +30,6 @@ async function spawnDaemon(): Promise<DaemonHandle> {
 // the response round-trip is part of that envelope, so REPLY_BUDGET_MS uses
 // the same number rather than a separate magic number.
 const REPLY_BUDGET_MS = SHUTDOWN_BUDGET_MS;
-
-function sendDaemonRequest(
-  sockPath: string,
-  req: Record<string, unknown>,
-): Promise<Response> {
-  return new Promise((resolve, reject) => {
-    const sock = net.connect(sockPath);
-    const timer = setTimeout(() => {
-      sock.destroy();
-      reject(
-        new Error(`daemon response did not arrive within ${REPLY_BUDGET_MS}ms`),
-      );
-    }, REPLY_BUDGET_MS);
-    const finish = (action: () => void): void => {
-      clearTimeout(timer);
-      sock.destroy();
-      action();
-    };
-    const reader = makeFrameReader(
-      (frame) => finish(() => resolve(frame as Response)),
-      (err) => finish(() => reject(err)),
-    );
-    sock.on("data", reader);
-    sock.once("error", (err) => finish(() => reject(err)));
-    sock.once("connect", () => {
-      sock.write(encodeFrame(req));
-    });
-  });
-}
-
-function waitForExit(child: ChildProcess): Promise<{
-  code: number | null;
-  signal: NodeJS.Signals | null;
-}> {
-  return new Promise((resolve) => {
-    if (child.exitCode !== null || child.signalCode !== null) {
-      resolve({ code: child.exitCode, signal: child.signalCode });
-      return;
-    }
-    child.once("exit", (code, signal) => resolve({ code, signal }));
-  });
-}
 
 // [LAW:verifiable-goals] The budget is enforced by the timer below: if the
 // daemon hasn't exited within SHUTDOWN_BUDGET_MS, Promise.race rejects with
@@ -127,10 +80,11 @@ describe("daemon shutdown contract", () => {
       // a premature exit kills the socket frameless. The contract under
       // test is ALSO the *process exit*, not just the response — the
       // 452-corpse incident produced responses but never produced exits.
-      const resp = await sendDaemonRequest(handle.sockPath, {
-        v: PROTOCOL_VERSION,
-        kind: "shutdown",
-      });
+      const resp = await sendDaemonRequest(
+        handle.sockPath,
+        { v: PROTOCOL_VERSION, kind: "shutdown" },
+        REPLY_BUDGET_MS,
+      );
       expect(resp).toEqual({ ok: true, output: "" });
       await expectExitWithinBudget(handle.child);
     } finally {
@@ -147,10 +101,11 @@ describe("daemon shutdown contract", () => {
       // classification is permanent/version_mismatch, never the
       // transient/io_error a frameless close would produce. Then the stale
       // daemon must actually exit so the next render respawns fresh.
-      const resp = await sendDaemonRequest(handle.sockPath, {
-        v: PROTOCOL_VERSION + 1,
-        kind: "render",
-      });
+      const resp = await sendDaemonRequest(
+        handle.sockPath,
+        { v: PROTOCOL_VERSION + 1, kind: "render" },
+        REPLY_BUDGET_MS,
+      );
       expect(resp.ok).toBe(false);
       if (!resp.ok) {
         expect(resp.code).toBe("VERSION_MISMATCH");

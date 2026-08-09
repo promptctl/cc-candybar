@@ -715,10 +715,12 @@ group "inner" shares key "drawer" with its ancestor group "outer" — a shared k
    drawer's convention — an undoable default is always undoable from the
    bar itself), and you verified it with an actual restart: render once,
    kill the daemon, start it fresh, render again with a brand-new
-   `session.id`. `check` only proves the config parses — it never clicks
-   anything, so it cannot catch a `persist` action that's wired to the wrong
-   Globals field or a `reset` that targets the wrong key. Watch out for the
-   session-pick trap specifically: if you're ALSO testing the matching `set`
-   action in the same session, that session's own pick will keep winning
-   over your persisted default (by design — see "persist / reset" above),
-   which can look like the persist write silently failed when it didn't.
+   `session.id`. `check` validates your config structurally (parse, merge,
+   validate, render) but never simulates clicks, so it cannot catch a
+   `persist` action that targets a valid but unintended Globals field (a
+   typo'd field name IS caught at load time — this is about a real field,
+   just the wrong one). Watch out for the session-pick trap specifically: if
+   you're ALSO testing the matching `set` action in the same session, that
+   session's own pick will keep winning over your persisted default (by
+   design — see "persist / reset" above), which can look like the persist
+   write silently failed when it didn't.

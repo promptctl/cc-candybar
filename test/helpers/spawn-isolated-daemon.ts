@@ -78,10 +78,22 @@ export interface RunningDaemon {
 // 452-corpse-adjacent incident this guards against: a daemon that bound but
 // hung before accept() would let a "file exists" check pass and the test
 // hang downstream on its first request).
+//
+// [LAW:one-source-of-truth] `sockPath` is read from `env.CC_CANDYBAR_SOCKET`
+// — the SAME env this spawns the daemon with — rather than taken as a
+// second parameter a caller could (even accidentally) pass out of sync with
+// the env. The readiness probe below polls the socket the daemon actually
+// binds, never a caller-supplied guess.
 export async function spawnDaemonWithEnv(
   env: NodeJS.ProcessEnv,
-  sockPath: string,
 ): Promise<RunningDaemon> {
+  const sockPath = env.CC_CANDYBAR_SOCKET;
+  if (!sockPath) {
+    throw new Error(
+      "spawnDaemonWithEnv: env.CC_CANDYBAR_SOCKET must be set (use " +
+        "prepareIsolatedDaemonEnv to build env)",
+    );
+  }
   const daemon = await spawnTestDaemon(env);
   const { child, killTree, release } = daemon;
 
@@ -128,7 +140,7 @@ export async function spawnIsolatedDaemon(
     prepareIsolatedDaemonEnv(tmpPrefix);
   let daemon: RunningDaemon;
   try {
-    daemon = await spawnDaemonWithEnv(env, sockPath);
+    daemon = await spawnDaemonWithEnv(env);
   } catch (e) {
     removeTmpDirs();
     throw e;

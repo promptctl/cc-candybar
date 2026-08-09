@@ -18,16 +18,10 @@
 // never the config file on disk).
 
 import { readFileSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import net from "node:net";
 import os from "node:os";
 import path from "node:path";
 
-import {
-  PROTOCOL_VERSION,
-  encodeFrame,
-  makeFrameReader,
-} from "../src/daemon/protocol";
-import type { Response } from "../src/daemon/protocol";
+import { PROTOCOL_VERSION } from "../src/daemon/protocol";
 import { parseHandlerUrl } from "../src/install/index";
 import { effectsUrl, VERB_SET_STATE } from "../src/click/wire";
 import { effectsOf } from "./helpers/click";
@@ -37,59 +31,35 @@ import {
   spawnDaemonWithEnv,
   type RunningDaemon,
 } from "./helpers/spawn-isolated-daemon";
+import { sendDaemonRequest, waitForExit } from "./helpers/daemon-wire";
 
 jest.setTimeout(30_000);
 
 const REPLY_BUDGET_MS = 5000;
-
-function sendDaemonRequest(
-  sockPath: string,
-  req: Record<string, unknown>,
-): Promise<Response> {
-  return new Promise((resolve, reject) => {
-    const sock = net.connect(sockPath);
-    const timer = setTimeout(() => {
-      sock.destroy();
-      reject(
-        new Error(`daemon response did not arrive within ${REPLY_BUDGET_MS}ms`),
-      );
-    }, REPLY_BUDGET_MS);
-    const finish = (action: () => void): void => {
-      clearTimeout(timer);
-      sock.destroy();
-      action();
-    };
-    const reader = makeFrameReader(
-      (frame) => finish(() => resolve(frame as Response)),
-      (err) => finish(() => reject(err)),
-    );
-    sock.on("data", reader);
-    sock.once("error", (err) => finish(() => reject(err)));
-    sock.once("connect", () => {
-      sock.write(encodeFrame(req));
-    });
-  });
-}
 
 async function render(
   sockPath: string,
   sessionId: string,
   cwd: string,
 ): Promise<string> {
-  const resp = await sendDaemonRequest(sockPath, {
-    v: PROTOCOL_VERSION,
-    kind: "render",
-    hookData: {
-      hook_event_name: "Status",
-      session_id: sessionId,
-      transcript_path: path.join(cwd, "transcript.jsonl"),
+  const resp = await sendDaemonRequest(
+    sockPath,
+    {
+      v: PROTOCOL_VERSION,
+      kind: "render",
+      hookData: {
+        hook_event_name: "Status",
+        session_id: sessionId,
+        transcript_path: path.join(cwd, "transcript.jsonl"),
+        cwd,
+        model: { id: "claude-opus-4-7", display_name: "Opus 4.7" },
+        workspace: { current_dir: cwd, project_dir: cwd, added_dirs: [] },
+      },
+      args: [],
       cwd,
-      model: { id: "claude-opus-4-7", display_name: "Opus 4.7" },
-      workspace: { current_dir: cwd, project_dir: cwd, added_dirs: [] },
     },
-    args: [],
-    cwd,
-  });
+    REPLY_BUDGET_MS,
+  );
   if (!resp.ok) {
     throw new Error(`render failed: ${resp.error} (${resp.code})`);
   }
@@ -101,12 +71,11 @@ async function render(
 
 async function click(sockPath: string, url: string): Promise<void> {
   const { verb, value } = parseHandlerUrl(url);
-  const resp = await sendDaemonRequest(sockPath, {
-    v: PROTOCOL_VERSION,
-    kind: "click",
-    verb,
-    value,
-  });
+  const resp = await sendDaemonRequest(
+    sockPath,
+    { v: PROTOCOL_VERSION, kind: "click", verb, value },
+    REPLY_BUDGET_MS,
+  );
   if (!resp.ok) {
     throw new Error(`click failed: ${resp.error} (${resp.code})`);
   }
@@ -122,9 +91,7 @@ function extractUrls(rendered: string): string[] {
 }
 
 async function killAndWait(daemon: RunningDaemon): Promise<void> {
-  const exited = new Promise<void>((resolve) => {
-    daemon.child.once("exit", () => resolve());
-  });
+  const exited = waitForExit(daemon.child);
   daemon.killTree();
   await exited;
 }
@@ -145,7 +112,7 @@ describe("candybar-config-engine-71o.5: real-daemon click → persist → restar
 
     let daemon: RunningDaemon | undefined;
     try {
-      daemon = await spawnDaemonWithEnv(env, sockPath);
+      daemon = await spawnDaemonWithEnv(env);
       const SID = "e2e-session-1";
 
       // A render warms the daemon's per-(projectDir,cwd) cache entry, which
@@ -277,7 +244,7 @@ describe("candybar-config-engine-71o.5: real-daemon click → persist → restar
       // (same overrides file) — a real cold restart, not an in-process
       // cache rebuild.
       await killAndWait(daemon);
-      daemon = await spawnDaemonWithEnv(env, sockPath);
+      daemon = await spawnDaemonWithEnv(env);
 
       // A brand-new session that never clicked anything. The persisted
       // theme is now every session's baseline PALETTE (colors the fresh
