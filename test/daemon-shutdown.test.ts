@@ -1,12 +1,9 @@
 import type { ChildProcess } from "node:child_process";
-import fs from "node:fs";
 import net from "node:net";
-import os from "node:os";
-import path from "node:path";
 
 import { PROTOCOL_VERSION, encodeFrame, makeFrameReader } from "../src/daemon/protocol";
 import type { Response } from "../src/daemon/protocol";
-import { spawnTestDaemon } from "./helpers/spawn-test-daemon";
+import { spawnIsolatedDaemon } from "./helpers/spawn-isolated-daemon";
 
 // [LAW:verifiable-goals] Contract: a daemon that receives a `shutdown` request
 // MUST exit within a bounded wall-clock budget. The bound has to be tight
@@ -28,112 +25,7 @@ interface DaemonHandle {
 }
 
 async function spawnDaemon(): Promise<DaemonHandle> {
-  const stateRoot = fs.mkdtempSync(
-    path.join(os.tmpdir(), "cc-candybar-shutdown-"),
-  );
-  const stateDir = path.join(stateRoot, "cc-candybar");
-  // [LAW:single-enforcer] Socket parent must satisfy ensureSocketParentSafe
-  // (uid==me + mode 0700). Pre-creating with default umask perms (0o755)
-  // would trip the daemon's bind-time refusal.
-  fs.mkdirSync(stateDir, { recursive: true, mode: 0o700 });
-  const sockPath = path.join(stateDir, "socket");
-
-  const env: NodeJS.ProcessEnv = {
-    ...process.env,
-    // CC_CANDYBAR_SOCKET isolates the socket — socketPath() ignores
-    // XDG_STATE_HOME, so this is the required per-test override.
-    CC_CANDYBAR_SOCKET: sockPath,
-    XDG_STATE_HOME: stateRoot,
-    // Isolate cache + config so the test daemon doesn't see the developer's
-    // real state. Each gets its own tempdir.
-    XDG_CACHE_HOME: fs.mkdtempSync(
-      path.join(os.tmpdir(), "cc-candybar-shutdown-cache-"),
-    ),
-    XDG_CONFIG_HOME: fs.mkdtempSync(
-      path.join(os.tmpdir(), "cc-candybar-shutdown-config-"),
-    ),
-  };
-
-  // [LAW:single-enforcer] One tmpdir-removal primitive, used both by the
-  // pre-spawn failure path below AND by `cleanup` — without this, a
-  // `spawnTestDaemon` throw (e.g. pool-acquire timeout, spawn-error) leaked
-  // all three dirs, since the `cleanup` closure that removed them didn't
-  // exist yet at the point of the throw (the same class of leak the
-  // readiness-probe failure path below already guarded against).
-  const removeTmpDirs = (): void => {
-    try {
-      fs.rmSync(stateRoot, { recursive: true, force: true });
-    } catch {}
-    if (env.XDG_CACHE_HOME) {
-      try {
-        fs.rmSync(env.XDG_CACHE_HOME, { recursive: true, force: true });
-      } catch {}
-    }
-    if (env.XDG_CONFIG_HOME) {
-      try {
-        fs.rmSync(env.XDG_CONFIG_HOME, { recursive: true, force: true });
-      } catch {}
-    }
-  };
-
-  let daemon: Awaited<ReturnType<typeof spawnTestDaemon>>;
-  try {
-    daemon = await spawnTestDaemon(env);
-  } catch (e) {
-    removeTmpDirs();
-    throw e;
-  }
-  const { child, killTree, release } = daemon;
-
-  // [LAW:single-enforcer] One cleanup primitive that closes the child and
-  // removes every tempdir we created. Called from both the success-path
-  // (returned as handle.cleanup, invoked by the test's finally) and the
-  // failure-path below — without this, a failed readiness probe used to
-  // leak three tmpdirs per run (state/cache/config) and CI runners
-  // accumulated them on every flake.
-  const cleanup = (): void => {
-    // killTree signals the whole process group, not just the `tsx` wrapper
-    // `child` names — the wrapper forks its own worker (the process that
-    // actually binds the socket), which survives as an orphan if only the
-    // wrapper is signalled. Safe to call even after a graceful exit.
-    killTree();
-    release();
-    removeTmpDirs();
-  };
-
-  // [LAW:verifiable-goals] The readiness check has to assert the *load-bearing*
-  // property — the daemon actually serves connections — not a proxy that can
-  // hold while the property doesn't. The socket file appears synchronously
-  // inside bind(), but bind() succeeding doesn't prove the accept() loop is
-  // running. A successful connect() round-trip does. If we let "file exists"
-  // pass as readiness, a daemon that bound but hung before accepting would
-  // let the test proceed and hang downstream on its first request.
-  const deadline = Date.now() + 5000;
-  let alive = false;
-  while (!alive && Date.now() < deadline) {
-    if (fs.existsSync(sockPath)) {
-      alive = await new Promise<boolean>((resolve) => {
-        const s = net.connect(sockPath);
-        s.once("connect", () => {
-          s.destroy();
-          resolve(true);
-        });
-        s.once("error", () => resolve(false));
-      });
-    }
-    if (!alive) {
-      await new Promise((r) => setTimeout(r, 25));
-    }
-  }
-  if (!alive) {
-    cleanup();
-    throw new Error(
-      "daemon did not accept connections within 5000ms (socket file" +
-        ` ${fs.existsSync(sockPath) ? "exists" : "absent"})`,
-    );
-  }
-
-  return { child, sockPath, stateDir, cleanup };
+  return spawnIsolatedDaemon("cc-candybar-shutdown");
 }
 
 // [LAW:verifiable-goals] Per-call timeout (not relying on Jest's global) so a
