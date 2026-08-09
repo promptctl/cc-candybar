@@ -628,6 +628,21 @@ describe("DEFAULT_DSL_CONFIG", () => {
       const distinct = distinctForegrounds(renderSegment("gitaculous"));
       expect(distinct.size).toBeGreaterThan(1);
     });
+
+    // GIT_WORKTREE's `$first` separator var is declared inside the outer
+    // `{{ if or ... }}` gate, not at the template's top level like
+    // DIR_TEMPLATE's `$dir` — a real structural difference a reviewer flagged.
+    // Reassignment via `=` (not `:=`) still walks up to the declaring frame
+    // regardless of nesting depth, so this asserts the actual observable
+    // behavior (single-space-separated counts, never concatenated) rather
+    // than trusting the analogy in the comment above GIT_WORKTREE.
+    test("worktree counts render single-space-separated, never concatenated", () => {
+      // eslint-disable-next-line no-control-regex
+      const ANSI = /\x1b\[[0-9;]*m|\x1b\]8;;[^\x1b]*\x1b\\|[\u{E0B0}-\u{E0BC}]/gu;
+      const visible = renderSegment("git").replace(ANSI, "");
+      expect(visible).toContain("+2 ~3 ?4 !1");
+      expect(visible).not.toMatch(/[+~?!]\d[+~?!]/);
+    });
   });
 
   // [LAW:dataflow-not-control-flow] The metrics segment renders parts

@@ -78,10 +78,16 @@ const DIR_TEMPLATE =
 // palette color (staged=success, unstaged=warning, untracked=accent,
 // conflicts=error) so a dirty tree reads at a glance, p10k/gitaculous-prompt
 // style, instead of one uniform segment fg. `$first` tracks whether a
-// separator space is still owed before the next present count — the same
-// reassign-in-nested-if idiom DIR_TEMPLATE uses for `$dir` above
+// separator space is still owed before the next present count.
 // [LAW:dataflow-not-control-flow]: one variable carries the "have we emitted
-// yet" state rather than four copies of positional space logic.
+// yet" state rather than four copies of positional space logic. `$first` is
+// declared inside the outer `{{ if or ... }}` gate (unlike DIR_TEMPLATE's
+// `$dir`, declared at the template's top level) and reassigned via `=` in
+// nested `{{ if }}` blocks below — Go template variable scoping walks up to
+// the declaring frame on `=` regardless of nesting depth, so this still
+// works, just at one more scope level than DIR_TEMPLATE's `$dir`. Verified
+// by test/default-dsl-config.test.ts's "worktree counts render
+// single-space-separated" test, not merely asserted here.
 const GIT_WORKTREE =
   "{{ if or (gt .git.staged 0) (gt .git.unstaged 0) (gt .git.untracked 0) (gt .git.conflicts 0) }}" +
   " ({{ $first := true }}" +
