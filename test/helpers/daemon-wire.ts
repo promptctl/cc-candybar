@@ -33,8 +33,26 @@ export function sendDaemonRequest(
 ): Promise<Response> {
   return new Promise((resolve, reject) => {
     const sock = net.connect(sockPath);
-    sock.once("error", reject);
+    // [LAW:no-ambient-temporal-coupling] Covers the connect phase, which
+    // sendOne (entered only after "connect") does not budget for — a hung
+    // connect() would otherwise wait forever with neither "error" nor
+    // "connect" firing.
+    const connectTimer = setTimeout(() => {
+      sock.destroy();
+      reject(new Error(`connect did not complete within ${timeoutMs}ms`));
+    }, timeoutMs);
+    // [LAW:locality-or-seam] Owned and removed by this wrapper on the
+    // connect handoff below — not left for sendOne's removeAllListeners to
+    // clean up incidentally, so this module's listener lifecycle doesn't
+    // depend on another module's internal implementation detail.
+    const onConnectError = (err: Error): void => {
+      clearTimeout(connectTimer);
+      reject(err);
+    };
+    sock.once("error", onConnectError);
     sock.once("connect", () => {
+      clearTimeout(connectTimer);
+      sock.removeListener("error", onConnectError);
       sendOne(sock, req as unknown as Request, timeoutMs).then(
         resolve,
         reject,
