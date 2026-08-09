@@ -12,7 +12,11 @@ import {
   type DslConfig,
   type VariableDecl,
 } from "../dsl-types.js";
-import { actionBindsSet } from "../action.js";
+import {
+  actionBindsPersist,
+  actionBindsReset,
+  actionBindsSet,
+} from "../action.js";
 import {
   knownOptionDomainNames,
   perConfigDomainsFor,
@@ -266,11 +270,15 @@ function hasStateKind(cfg: DslConfig): boolean {
   return false;
 }
 
-// [LAW:dataflow-not-control-flow] A config emits a set-state click — and so needs
-// session.id — when any declared action is a `set` (literal, option, or bounded).
+// [LAW:dataflow-not-control-flow] A config emits a set-state OR set-config
+// click — and so needs session.id — when any declared action is a `set`
+// (literal/option/bounded/cycle) or a `persist` (its config-overrides twin,
+// which also carries session.id on the wire for click-error surfacing).
 // copy/open actions write nothing, so they embed no session.id.
 function hasActionSetAction(cfg: DslConfig): boolean {
-  return Object.values(cfg.actions).some(actionBindsSet);
+  return Object.values(cfg.actions).some(
+    (a) => actionBindsSet(a) || actionBindsPersist(a) || actionBindsReset(a),
+  );
 }
 
 function checkVarRefs(

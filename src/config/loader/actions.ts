@@ -1,19 +1,22 @@
 // [LAW:types-are-the-program] The action-table schema. An ActionDecl is
-// discriminated by exactly-one-of set/copy/open; a `set` adds exactly-one value
-// SOURCE (to/from/min-max-by/int). The proof here is what lets every downstream
-// consumer (renderAction, deriveActionValidators) match on the present key with
-// no fallthrough. Whether a `{{ action "name" }}` reference resolves is a
-// cross-ref concern. This file changes when the action vocabulary changes.
+// discriminated by exactly-one-of set/persist/copy/open/reset; a `set` or
+// `persist` adds exactly-one value SOURCE (to/from/min-max-by/int — `persist`
+// excludes `int`). The proof here is what lets every downstream consumer
+// (renderAction, deriveActionValidators, deriveConfigActionValidators) match
+// on the present key with no fallthrough. Whether a `{{ action "name" }}`
+// reference resolves is a cross-ref concern. This file changes when the
+// action vocabulary changes.
 //
 // [LAW:no-mode-explosion] Unlike cache (single-key value-arms → oneOfPresent) and
 // variables (tag-by-field-value → taggedUnion), an action's arms are multi-key
-// RECORDS: a `set` carries `set` plus a value-source group (`to` | `from` |
-// `min`/`max`/`by` | `int`). A single key never selects an arm, so the shared
-// present-key engine doesn't fit — bending it to would mean per-arm sibling
-// allow-lists and bespoke unknown-key messages bolted on as modes. Instead the
-// leaf machinery is shared (`fields` + `refine` + field specs carry every arm's
-// shape and cross-field invariant as DATA) and this file owns only the thin total
-// present-key dispatch — the irreducible union eliminator.
+// RECORDS: a `set`/`persist` carries the discriminator plus a value-source group
+// (`to` | `from` | `min`/`max`/`by` | `int`). A single key never selects an arm, so
+// the shared present-key engine doesn't fit — bending it to would mean per-arm
+// sibling allow-lists and bespoke unknown-key messages bolted on as modes. Instead
+// the leaf machinery is shared (`fields` + `refine` + field specs carry every arm's
+// shape and cross-field invariant as DATA, parameterized by discriminator name so
+// `set` and `persist` share one field-map definition) and this file owns only the
+// thin total present-key dispatch — the irreducible union eliminator.
 
 import {
   ACTION_KEYS,
@@ -115,18 +118,38 @@ function validateActionDecl(
 }
 
 // [LAW:dataflow-not-control-flow] The top-level arm table as DATA: copy/open share
-// one template-arm shape (their key names the only difference); set delegates to
-// its value-source sub-union. The present key indexes this map — the eliminator
-// never branches on the key name.
+// one template-arm shape (their key names the only difference); set/persist
+// delegate to their value-source sub-union (the SAME field shapes, a different
+// discriminator key — see valueSourceAction); reset is copy/open's plain-string
+// sibling. The present key indexes this map — the eliminator never branches on
+// the key name.
 const ACTION_ARMS: Record<ActionKey, ArmParse<ActionDecl>> = {
-  set: validateSetAction,
+  set: (ctx, path, raw) =>
+    valueSourceAction(
+      ctx,
+      path,
+      raw,
+      "set",
+      SET_ARMS,
+      "the SessionState key to write",
+    ),
+  persist: (ctx, path, raw) =>
+    valueSourceAction(
+      ctx,
+      path,
+      raw,
+      "persist",
+      PERSIST_ARMS,
+      "the config globals field to write",
+    ),
   copy: templateArm("copy"),
   open: templateArm("open"),
+  reset: resetArm,
 };
 
 // [LAW:one-source-of-truth] A copy/open action emits the closed single-key
 // object its arm validates — symmetric to `templateArm(key)`'s parse.
-function templateArmJson(key: "copy" | "open"): JsonNode {
+function templateArmJson(key: "copy" | "open" | "reset"): JsonNode {
   return {
     type: "object",
     properties: { [key]: { type: "string" } },
@@ -135,16 +158,18 @@ function templateArmJson(key: "copy" | "open"): JsonNode {
   };
 }
 
-// [LAW:one-source-of-truth] One ActionDecl's schema: the set sub-union (each
-// arm's `json`, derived from SET_ARMS) joined with copy/open — the SAME members
-// `validateActionDecl` dispatches over. The `actions` block is a name → ActionDecl
-// map, symmetric to `validateActions`.
+// [LAW:one-source-of-truth] One ActionDecl's schema: the set/persist sub-unions
+// (each arm's `json`, derived from SET_ARMS/PERSIST_ARMS) joined with
+// copy/open/reset — the SAME members `validateActionDecl` dispatches over. The
+// `actions` block is a name → ActionDecl map, symmetric to `validateActions`.
 function actionDeclJson(): JsonNode {
   return {
     anyOf: [
       ...SET_ARMS.map((arm) => arm.json),
+      ...PERSIST_ARMS.map((arm) => arm.json),
       templateArmJson("copy"),
       templateArmJson("open"),
+      templateArmJson("reset"),
     ],
   };
 }
@@ -170,6 +195,37 @@ function templateArm(key: "copy" | "open"): ArmParse<ActionDecl> {
     const tmpl = requireString(ctx, path, raw, key);
     return tmpl === null ? null : ({ [key]: tmpl } as unknown as ActionDecl);
   };
+}
+
+// [LAW:one-type-per-behavior] `reset` is copy/open's shape (a single required
+// string, no other keys) but the string is a KEY (a config globals field name),
+// not a template — no Go-template parsing happens for it, so it reuses the
+// slash-free/non-empty shape `set`/`persist` keys share rather than
+// requireString's bare-presence check. A `function` declaration (not a const
+// arrow) so it is hoisted — ACTION_ARMS above references it directly, not
+// through a deferred closure.
+function resetArm(
+  ctx: ValidateCtx,
+  path: string,
+  raw: Record<string, unknown>,
+): ActionDecl | null {
+  for (const k of Object.keys(raw)) {
+    if (k !== "reset")
+      issue(
+        ctx,
+        `${path}.${k}`,
+        `Unknown key "${k}" on a reset action. Expected only: reset`,
+      );
+  }
+  const key = slashFreeString(
+    ctx,
+    path,
+    "reset",
+    raw,
+    `reset key must be non-empty (the config globals field to clear)`,
+    (v) => `reset key "${v}" contains "/" — keys must be slash-free`,
+  );
+  return key === null ? null : { reset: key };
 }
 
 // ─── The `set` value-source sub-union ────────────────────────────────────────
@@ -204,23 +260,26 @@ function slashFreeString(
   return v;
 }
 
-// [LAW:dataflow-not-control-flow] The `set` key is validated once for every value
-// source (it is shared across all set arms), before the source is detected — so a
-// bad key and an ambiguous source both surface in one pass, matching the
-// hand-rolled order. It is therefore NOT a field of any arm's `fields` map; the
-// arm parses only the value-source payload, and the dispatcher re-attaches `set`.
-function validateSetKey(
+// [LAW:dataflow-not-control-flow] The discriminator key ("set" or "persist")
+// is validated once for every value source (it is shared across all arms of
+// that discriminator), before the source is detected — so a bad key and an
+// ambiguous source both surface in one pass. It is therefore NOT a field of
+// any arm's `fields` map; the arm parses only the value-source payload, and
+// the dispatcher re-attaches the discriminator.
+function validateValueSourceKey(
   ctx: ValidateCtx,
   path: string,
   raw: Record<string, unknown>,
+  discriminator: "set" | "persist",
+  keyNoun: string,
 ): string | null {
   return slashFreeString(
     ctx,
     path,
-    "set",
+    discriminator,
     raw,
-    `set key must be non-empty (the SessionState key to write)`,
-    (v) => `set key "${v}" contains "/" — state keys must be slash-free`,
+    `${discriminator} key must be non-empty (${keyNoun})`,
+    (v) => `${discriminator} key "${v}" contains "/" — keys must be slash-free`,
   );
 }
 
@@ -269,29 +328,34 @@ const byNonZero: Refinement<BoundedPayload> = {
   }),
 };
 
-// [LAW:types-are-the-program] A set arm is its payload field map plus its
-// refinements; `detect` (the non-`set` keys whose presence selects it), `allowed`
-// (those keys plus `set`, the unknown-key allow-list), and `label` (the source
-// name in the exactly-one message — the detect keys joined by "/") all DERIVE from
-// the field map, so the field set is the single source for what the arm parses,
-// permits, and is named by.
-interface SetArm {
+// [LAW:types-are-the-program] A value-source arm is its payload field map plus
+// its refinements; `detect` (the non-discriminator keys whose presence
+// selects it), `allowed` (those keys plus the discriminator, the unknown-key
+// allow-list), and `label` (the source name in the exactly-one message — the
+// detect keys joined by "/") all DERIVE from the field map, so the field set
+// is the single source for what the arm parses, permits, and is named by.
+// Parameterized by `discriminator` ("set" | "persist") so `set` and `persist`
+// share the identical to/from/min-max-by/cycle shapes without duplicating
+// their field maps — only the discriminator's NAME differs in the emitted
+// object shape and the reconstructed member.
+interface ValueSourceArm {
   readonly detect: readonly string[];
   readonly allowed: readonly string[];
   readonly label: string;
-  // [LAW:one-source-of-truth] The arm's emit facet: the closed object schema for
-  // a `set` of this source — the shared `set` key plus the source's own fields,
-  // derived from the SAME field map `fields` validates. Cross-field refinements
-  // (min<max, by≠0) are unexpressible in JSON Schema, so only the structural
-  // shape is emitted — the shape/meaning split every refinement keeps.
+  // [LAW:one-source-of-truth] The arm's emit facet: the closed object schema
+  // for this discriminator's value source — the discriminator key plus the
+  // source's own fields, derived from the SAME field map `fields` validates.
+  // Cross-field refinements (min<max, by≠0) are unexpressible in JSON Schema,
+  // so only the structural shape is emitted.
   readonly json: JsonNode;
   readonly parse: ArmParse<Partial<ActionDecl>>;
 }
 
-function setArm<P extends object>(
+function valueSourceArm<P extends object>(
+  discriminator: "set" | "persist",
   fieldMap: FieldSpecMap<P>,
   ...checks: ReadonlyArray<Refinement<P>>
-): SetArm {
+): ValueSourceArm {
   const detect = Object.keys(fieldMap);
   const inner: ArmParse<P> = (ctx, path, raw) =>
     fields(ctx, fieldMap, path, raw);
@@ -301,12 +365,12 @@ function setArm<P extends object>(
   };
   return {
     detect,
-    allowed: ["set", ...detect],
+    allowed: [discriminator, ...detect],
     label: detect.join("/"),
     json: {
       type: "object",
-      properties: { set: { type: "string" }, ...source.properties },
-      required: ["set", ...(source.required ?? [])],
+      properties: { [discriminator]: { type: "string" }, ...source.properties },
+      required: [discriminator, ...(source.required ?? [])],
       additionalProperties: false,
     },
     parse: (checks.length
@@ -315,38 +379,60 @@ function setArm<P extends object>(
   };
 }
 
-// [LAW:dataflow-not-control-flow] The value-source arms in the order their labels
-// appear in the exactly-one message. A `set` declares exactly one of these; the
-// dispatcher counts presence over `detect` and reconstructs `{ set, ...payload }`.
-const SET_ARMS: readonly SetArm[] = [
-  setArm(TO_FIELDS),
-  setArm(FROM_FIELDS),
-  setArm(BOUNDED_FIELDS, minLessThanMax, byNonZero),
-  setArm(INT_FIELDS),
-  setArm(CYCLE_FIELDS),
+// [LAW:dataflow-not-control-flow] The value-source arms in the order their
+// labels appear in the exactly-one message. A `set` declares exactly one of
+// these; the dispatcher counts presence over `detect` and reconstructs
+// `{ set, ...payload }`.
+const SET_ARMS: readonly ValueSourceArm[] = [
+  valueSourceArm("set", TO_FIELDS),
+  valueSourceArm("set", FROM_FIELDS),
+  valueSourceArm("set", BOUNDED_FIELDS, minLessThanMax, byNonZero),
+  valueSourceArm("set", INT_FIELDS),
+  valueSourceArm("set", CYCLE_FIELDS),
 ];
 
-const VALUE_SOURCE_MESSAGE = `a set action declares exactly one value source: "to" (a literal value), "from" (an option domain — a registered domain name like "themes"/"styles"/"looks", or an inline array of literal values), "min"/"max"/"by" (a bounded step), "int" (an unbounded integer cursor), or "cycle" (an enumerated domain stepped in order)`;
+// [LAW:one-type-per-behavior] `persist` mirrors `set` minus the `int` arm — a
+// page cursor is a UI-only paging concept with no meaning as a persisted
+// config default (see action.ts's ActionDecl comment).
+const PERSIST_ARMS: readonly ValueSourceArm[] = [
+  valueSourceArm("persist", TO_FIELDS),
+  valueSourceArm("persist", FROM_FIELDS),
+  valueSourceArm("persist", BOUNDED_FIELDS, minLessThanMax, byNonZero),
+  valueSourceArm("persist", CYCLE_FIELDS),
+];
 
-// [LAW:dataflow-not-control-flow] The set sub-union eliminator: validate the
-// shared `set` key, count which value sources are present, require exactly one,
-// reject keys outside that arm's allow-list, parse the payload, reconstruct the
-// member. The variability (which arms, each arm's fields/refinements/allow-list)
-// is the SET_ARMS data; the only branches are the presence-count and the
-// null-threading both the key and the payload share.
-function validateSetAction(
+const VALUE_SOURCE_MESSAGE = (discriminator: "set" | "persist") =>
+  `a ${discriminator} action declares exactly one value source: "to" (a literal value), "from" (an option domain — a registered domain name like "themes"/"styles"/"looks", or an inline array of literal values), "min"/"max"/"by" (a bounded step)${discriminator === "set" ? `, "int" (an unbounded integer cursor)` : ""}, or "cycle" (an enumerated domain stepped in order)`;
+
+// [LAW:dataflow-not-control-flow] The set/persist sub-union eliminator:
+// validate the shared discriminator key, count which value sources are
+// present, require exactly one, reject keys outside that arm's allow-list,
+// parse the payload, reconstruct the member. The variability (which arms,
+// each arm's fields/refinements/allow-list) is the `arms` data; the only
+// branches are the presence-count and the null-threading both the key and
+// the payload share.
+function valueSourceAction(
   ctx: ValidateCtx,
   path: string,
   raw: Record<string, unknown>,
+  discriminator: "set" | "persist",
+  arms: readonly ValueSourceArm[],
+  keyNoun: string,
 ): ActionDecl | null {
-  const stateKey = validateSetKey(ctx, path, raw);
+  const stateKey = validateValueSourceKey(
+    ctx,
+    path,
+    raw,
+    discriminator,
+    keyNoun,
+  );
 
-  const present = SET_ARMS.filter((arm) => arm.detect.some((k) => k in raw));
+  const present = arms.filter((arm) => arm.detect.some((k) => k in raw));
   if (present.length !== 1) {
     issue(
       ctx,
       path,
-      `${VALUE_SOURCE_MESSAGE}${
+      `${VALUE_SOURCE_MESSAGE(discriminator)}${
         present.length > 1
           ? ` — found: ${present.map((a) => a.label).join(", ")}`
           : ""
@@ -361,14 +447,14 @@ function validateSetAction(
       issue(
         ctx,
         `${path}.${k}`,
-        `Unknown key "${k}" on this set action. Expected one of: ${arm.allowed.join(", ")}`,
+        `Unknown key "${k}" on this ${discriminator} action. Expected one of: ${arm.allowed.join(", ")}`,
       );
   }
 
   const payload = arm.parse(ctx, path, raw);
   return stateKey === null || payload === null
     ? null
-    : ({ set: stateKey, ...payload } as unknown as ActionDecl);
+    : ({ [discriminator]: stateKey, ...payload } as unknown as ActionDecl);
 }
 
 // [LAW:no-silent-fallbacks] A literal `to` and the `set` key share the

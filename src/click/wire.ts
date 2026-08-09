@@ -50,6 +50,22 @@ export const VERB_SHOW_CONFIG_WARNING = "show-config-warning";
 // reads it at the cache-lookup boundary. Clicking a different config is a
 // side-effect isolated to the verb handler; the renderer only sees the result.
 export const VERB_LOAD_CONFIG = "load-config";
+// [LAW:one-source-of-truth] `persist`'s twin of set-state/step-state: writes
+// land in the daemon-owned config-overrides layer (never the hand-authored
+// config file), which RenderCache merges on top of the user file every
+// reload — the SAME file-watcher path a hand edit already takes
+// (candybar-config-engine-71o.2). Args: `[sessionId, key, value]` — the
+// sessionId is carried only for click.error surfacing, exactly like
+// set-state; the write itself is daemon-global, not session-scoped.
+export const VERB_SET_CONFIG = "set-config";
+// [LAW:types-are-the-program] A RELATIVE nudge to a bounded config-overrides
+// key (e.g. a padding stepper) — the config twin of step-state. Args:
+// `[sessionId, key, by]`.
+export const VERB_STEP_CONFIG = "step-config";
+// [LAW:one-source-of-truth] The gated undo for `persist`: clears one
+// config-overrides key, restoring the user-file/bundled-default value on the
+// next reload. Args: `[sessionId, key]`.
+export const VERB_RESET_CONFIG = "reset-config";
 
 // [LAW:types-are-the-program] An effect to EMIT: a verb plus its raw (unencoded)
 // positional args. The wire owns all encoding — callers never percent-encode.

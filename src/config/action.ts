@@ -36,7 +36,14 @@ export type { OptionDomain } from "./option-domain.js";
 // [LAW:types-are-the-program] The top-level discriminator of an ActionDecl — the
 // click effect is keyed by which of these is present. The loader proves
 // exactly-one-of; the renderer and validator-derivation match with no fallthrough.
-export const ACTION_KEYS = ["set", "copy", "open"] as const;
+//
+// [LAW:one-source-of-truth] `persist` is `set`'s PERSISTENT twin
+// (candybar-config-engine-71o.2): `set` mutates per-session SessionState,
+// `persist` mutates the config's `globals` DEFAULT through the daemon-owned
+// overrides layer (never the hand-authored config file). `reset` clears one
+// persisted override — the gated undo `persist` needs, since a machine-owned
+// write with no way back would be a one-way ratchet.
+export const ACTION_KEYS = ["set", "persist", "copy", "open", "reset"] as const;
 export type ActionKey = (typeof ACTION_KEYS)[number];
 
 // [LAW:types-are-the-program] An ActionDecl is the click effect a named action
@@ -69,9 +76,17 @@ export type ActionKey = (typeof ACTION_KEYS)[number];
 //   copy                — copy templated text to the clipboard -> no gate
 //   open                — open a templated target in the editor -> no gate
 //
-// [LAW:one-source-of-truth] Only `set` writes SessionState, so only `set`
-// derives a validator. copy/open write nothing — they derive nothing. The
-// vocabulary grows by arms (a future `run`/`open-url`), not by validator plumbing.
+// [LAW:one-source-of-truth] `set` writes SessionState and `persist` writes
+// the config-overrides layer, so only those two derive a validator (through
+// the SAME shared registry algebra — see validator-registry.ts). copy/open/
+// reset write nothing SPEC-shaped (reset's target is gated by key membership,
+// not a value domain) — they derive nothing. The vocabulary grows by arms (a
+// future `run`/`open-url`), not by validator plumbing.
+//
+// [LAW:one-type-per-behavior] `persist` mirrors `set`'s four value-source
+// arms verbatim (to/from/min-max-by/cycle) MINUS `int`: an unbounded page
+// cursor is a UI-only paging concept (a picker's own navigation state) with
+// no meaning as a persisted config default.
 export type ActionDecl =
   | { readonly set: string; readonly to: string }
   | { readonly set: string; readonly from: OptionDomain }
@@ -83,13 +98,36 @@ export type ActionDecl =
     }
   | { readonly set: string; readonly int: true }
   | { readonly set: string; readonly cycle: readonly string[] }
+  | { readonly persist: string; readonly to: string }
+  | { readonly persist: string; readonly from: OptionDomain }
+  | {
+      readonly persist: string;
+      readonly min: number;
+      readonly max: number;
+      readonly by: number;
+    }
+  | { readonly persist: string; readonly cycle: readonly string[] }
   | { readonly copy: string }
-  | { readonly open: string };
+  | { readonly open: string }
+  | { readonly reset: string };
 
 // [LAW:dataflow-not-control-flow] Does this action write a SessionState key? A
 // `set` action composes a set-state click URL whose first segment is session.id;
-// copy/open embed none. One predicate the loader's session.id requirement folds
-// over — no per-arm branching at the callsite.
+// copy/open/persist/reset embed none. One predicate the loader's session.id
+// requirement folds over — no per-arm branching at the callsite.
 export function actionBindsSet(a: ActionDecl): boolean {
   return "set" in a;
+}
+
+// [LAW:dataflow-not-control-flow] Does this action write the config-overrides
+// layer? Mirrors actionBindsSet for the `persist` arm.
+export function actionBindsPersist(a: ActionDecl): boolean {
+  return "persist" in a;
+}
+
+// [LAW:dataflow-not-control-flow] Does this action clear a config-overrides
+// key? `reset` carries session.id on the wire too (for click-error surfacing,
+// same as set/persist), so it joins the same requirement.
+export function actionBindsReset(a: ActionDecl): boolean {
+  return "reset" in a;
 }
