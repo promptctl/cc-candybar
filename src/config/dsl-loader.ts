@@ -30,7 +30,6 @@ import {
   type RawDslConfig,
   type ValidatedConfig,
 } from "./dsl-types.js";
-import { DEFAULT_DSL_CONFIG } from "./default-dsl-config.js";
 import { listResolvablePaletteNames } from "../themes/policy.js";
 import {
   ConfigError,
@@ -78,13 +77,22 @@ export {
 // ─── Three-stage pipeline ────────────────────────────────────────────────────
 
 /**
- * Load a JSON5 DSL config file from disk and merge it with the bundled
+ * Load a JSON5 DSL config file from disk and merge it with the given
  * default. Returns the effective DslConfig AND the raw source text.
  *
- * `path = null` means "no user file exists" — returns the default unchanged
- * (uniform merge against an empty raw, which is deep-equal to the default) and
+ * `path = null` means "no user file exists" — returns `dflt` unchanged
+ * (uniform merge against an empty raw, which is deep-equal to `dflt`) and
  * an empty source. No consumer branches on file presence; that branch lives
  * inside loadConfig exactly once.
+ *
+ * [LAW:one-way-deps] `dflt` is a required parameter, not a default pointing at
+ * DEFAULT_DSL_CONFIG: this module is generic merge/parse machinery, and
+ * DEFAULT_DSL_CONFIG is a specific, higher-level instance built ON TOP of it
+ * (default-dsl-config.ts imports parseDslConfig/mergeWithDefault to
+ * synthesize itself — see that file). A default param here pointing back at
+ * DEFAULT_DSL_CONFIG would make this generic module depend on its own
+ * specific consumer — a cycle every caller who wants "the bundled default"
+ * resolves explicitly by importing DEFAULT_DSL_CONFIG themselves.
  *
  * [LAW:one-source-of-truth] The source is returned alongside the config so the
  * caller can hand it to validateConfig — cross-ref diagnostics (line numbers,
@@ -99,7 +107,7 @@ export {
  */
 export function loadConfig(
   path: string | null,
-  dflt: DslConfig = DEFAULT_DSL_CONFIG,
+  dflt: DslConfig,
   allowedPalettes?: ReadonlySet<string>,
 ): { config: DslConfig; source: string } {
   const source = path === null ? "" : fs.readFileSync(path, "utf-8");

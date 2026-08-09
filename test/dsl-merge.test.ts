@@ -109,13 +109,6 @@ describe("mergeWithDefault", () => {
     const raw: RawDslConfig = { root: vert(["a"], ["b"]) };
     expect(mergeWithDefault(raw, DFLT).root).toEqual(vert(["a"], ["b"]));
   });
-
-  test("default arg is DEFAULT_DSL_CONFIG when omitted (sanity)", () => {
-    // Without a `dflt` argument, mergeWithDefault uses the bundled default —
-    // a real ValidatedConfig fixture flows through without throwing.
-    const out = mergeWithDefault({});
-    expect(out.root.kind).toBe("container"); // bundled default has a root tree
-  });
 });
 
 describe("validateConfig", () => {

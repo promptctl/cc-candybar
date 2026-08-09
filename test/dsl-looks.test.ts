@@ -104,6 +104,7 @@ describe("looks block — loader validation", () => {
   test("globals.look must name a declared look on the MERGED config", () => {
     const merged = mergeWithDefault(
       parseDslConfig("<looks>", `{ globals: { look: "vapor" } }`, ALLOWED),
+      DEFAULT_DSL_CONFIG,
     );
     expect(() => validateConfig(merged, "<looks>", "", ALLOWED)).toThrow(
       /globals\.look "vapor" does not match any declared look \(have: none, vivid, muted, dim, bright, inverted\)/,
@@ -113,6 +114,7 @@ describe("looks block — loader validation", () => {
   test("globals.look naming a BUNDLED look passes (cross-ref runs post-merge)", () => {
     const merged = mergeWithDefault(
       parseDslConfig("<looks>", `{ globals: { look: "vivid" } }`, ALLOWED),
+      DEFAULT_DSL_CONFIG,
     );
     expect(() => validateConfig(merged, "<looks>", "", ALLOWED)).not.toThrow();
   });

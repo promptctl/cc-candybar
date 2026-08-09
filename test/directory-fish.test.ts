@@ -6,7 +6,7 @@
 // spine (registerDslConfig + renderDsl), the same two functions the daemon and
 // demo call — not a synthetic in-process transform.
 
-import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
+import { RAW_DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { registerDslConfig, renderDsl } from "../src/dsl/render";
 import { VariableStore } from "../src/var-system/store";
@@ -15,7 +15,10 @@ import { SessionState } from "../src/daemon/session-state";
 import { PaletteResolver, getThemePalette } from "@promptctl/rich-js";
 import { abbreviatePath } from "../src/utils/formatters";
 
-const SERIALIZED = JSON.stringify(DEFAULT_DSL_CONFIG, null, 2);
+// Reparse the AUTHORED literal (pre-synthesis) — see
+// test/default-dsl-config.test.ts for why this must be the raw form, not the
+// already-synthesized DEFAULT_DSL_CONFIG.
+const SERIALIZED = JSON.stringify(RAW_DEFAULT_DSL_CONFIG, null, 2);
 
 // Narrow the root to just the directory segment so the rendered line is exactly
 // that segment's text. Plain style + ascii + padding 0 strips all chrome, so

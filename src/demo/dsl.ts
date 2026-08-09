@@ -25,6 +25,7 @@ import {
   mergeWithDefault,
   validateConfig,
 } from "../config/dsl-loader.js";
+import { DEFAULT_DSL_CONFIG } from "../config/default-dsl-config.js";
 import { VariableStore } from "../var-system/store.js";
 import { SourceRegistry } from "../var-system/sources.js";
 import { SessionState } from "../daemon/session-state.js";
@@ -60,7 +61,7 @@ const source = readFileSync(configPath, "utf-8");
 // only `ValidatedConfig`, so the chain is type-enforced.
 const ALLOWED = new Set(listResolvablePaletteNames());
 const raw = parseDslConfig(configPath, source, ALLOWED);
-const merged = mergeWithDefault(raw);
+const merged = mergeWithDefault(raw, DEFAULT_DSL_CONFIG);
 const config = validateConfig(merged, configPath, source, ALLOWED);
 
 // One Claude Code status-line hook event, faked. The `input` vars in the
