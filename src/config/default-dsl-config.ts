@@ -159,9 +159,19 @@ function etaHeatFg(etaRef: string, warnRef: string): string {
 export const RAW_DEFAULT_DSL_CONFIG = {
   globals: {
     // Picked by the daemon's basePalette resolution; user overrides in their
-    // own config. catppuccin-latte ships every spec name the default
-    // segments reference (surface, panel, surface-active, foreground).
-    palette: "catppuccin-latte",
+    // own config. Every registry theme ships the same derived spec set
+    // (surface, panel, surface-active, foreground — see rich-js
+    // buildPalette), so this is a pure taste call, not a compatibility one.
+    // tokyo-night chosen (brandon-theming-8uj.2) over the prior
+    // catppuccin-latte — a light palette that landed as a drive-by in an
+    // unrelated formatting-cleanup commit and read poorly on the dark
+    // terminals most users run — after live-clicking every registry theme
+    // through the bundled themeControl picker: it stays legible as the
+    // per-row hue-step (see themeControl/lookControl below) shifts each
+    // row's hue, where warmer bases (gruvbox, dracula) drifted toward mud
+    // and the pastel ones (rose-pine, atom-one) washed out at this
+    // contrast.
+    palette: "tokyo-night",
   },
 
   // ─── Variables ─────────────────────────────────────────────────────────────
