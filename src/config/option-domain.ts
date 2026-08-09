@@ -26,7 +26,12 @@
 // the rendered options and the derived gate cannot diverge because there is
 // no second resolver.
 
-import { listResolvablePaletteNames, STRIP_STYLES } from "../themes/policy.js";
+import {
+  CHARSETS,
+  COLOR_COMPATIBILITIES,
+  listResolvablePaletteNames,
+  STRIP_STYLES,
+} from "../themes/policy.js";
 
 // [LAW:types-are-the-program] The authoring shape of a `set … from` value: a
 // bare string names a domain (resolved through the registry or a per-config
@@ -58,6 +63,13 @@ function registerBuiltinDomain(
 // STRIP_STYLES). No special-cased branch remains anywhere downstream.
 registerBuiltinDomain("themes", () => listResolvablePaletteNames());
 registerBuiltinDomain("styles", () => STRIP_STYLES);
+// [LAW:one-source-of-truth] Same shape as themes/styles: the exact consts
+// the loader's own field validation and the render layer's glyph/color-depth
+// dispatch already derive from (themes/policy.ts CHARSETS/COLOR_COMPATIBILITIES)
+// — a menu drawing from these can never enumerate a value the render layer
+// would reject.
+registerBuiltinDomain("charsets", () => CHARSETS);
+registerBuiltinDomain("colorCompatibilities", () => COLOR_COMPATIBILITIES);
 
 // [LAW:no-silent-fallbacks] A built-in domain can never be re-claimed — a
 // config or feature registering a custom domain named "themes" gets a loud

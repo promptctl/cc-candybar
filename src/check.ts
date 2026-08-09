@@ -44,6 +44,7 @@ import {
   DEFAULT_PADDING,
   DEFAULT_WRAP,
 } from "./render/strip.js";
+import type { EffectiveGlobals } from "./daemon/render-payload.js";
 
 // [LAW:no-ambient-temporal-coupling] A fixed width keeps the verdict a function
 // of the config alone, not of whichever terminal invoked the check. Templates
@@ -60,16 +61,16 @@ const CHECK_WIDTH = 200;
 // field-name typo in the git/directory/metrics/budget branches slip through —
 // those branches only run when their data is present.
 //
-// `effectiveTheme` is threaded in exactly as the daemon threads it (server.ts
-// resolves effectiveThemeName once and feeds BOTH the payload's
-// `theme.effective` field and the basePalette below) [LAW:one-source-of-truth].
+// `effective` is threaded in exactly as the daemon threads it (server.ts
+// resolves one EffectiveGlobals struct per render and feeds BOTH the
+// payload's `*.effective` fields and BuildLineOptions/basePalette below)
+// [LAW:one-source-of-truth].
 //
 // test/example-configs.test.ts asserts rendered content against these literal
 // values (780s → "◷ 13m", cost $0.39, version 1.15.0, …); changing one here
 // fails that suite loudly rather than drifting silently.
 export function checkPayload(
-  effectiveTheme: string,
-  effectiveLook: string,
+  effective: EffectiveGlobals,
 ): Record<string, unknown> {
   const home = "/home/tester";
   const nowSec = Math.floor(Date.now() / 1000);
@@ -116,8 +117,13 @@ export function checkPayload(
     weekly: { percentage: 21, resetsAt: nowSec + 5 * 86400 },
     cache: { expiresAt: nowSec + 15 * 60 },
     tmux: { session: "work" },
-    theme: { effective: effectiveTheme },
-    look: { effective: effectiveLook },
+    theme: { effective: effective.theme },
+    look: { effective: effective.look },
+    style: { effective: effective.style },
+    charset: { effective: effective.charset },
+    colorCompatibility: { effective: effective.colorCompatibility },
+    autoWrap: { effective: effective.autoWrap },
+    padding: { effective: effective.padding },
   };
 }
 
@@ -271,18 +277,19 @@ function loadRegisterRender(
     // validator registry, which a one-shot check has no wire to serve.
     deriveActionValidators(config);
 
-    // Fresh session (no clicked theme/style), so the session half of each
-    // resolution is null — the config default over the floor, exactly what the
-    // daemon renders for a session that has never clicked.
-    const effectiveTheme = effectiveThemeName(null, config.globals.palette);
-    // Same fresh-session shape one dimension over: no clicked look, so the
-    // config default over the "none" floor — exactly what the daemon renders
-    // for a session that has never clicked.
-    const effectiveLook = effectiveLookName(
-      null,
-      config.globals.look,
-      config.looks,
-    );
+    // Fresh session (no clicked theme/style/look), so the session half of
+    // each resolution is null — the config default over the floor, exactly
+    // what the daemon renders for a session that has never clicked.
+    const effective: EffectiveGlobals = {
+      theme: effectiveThemeName(null, config.globals.palette),
+      look: effectiveLookName(null, config.globals.look, config.looks),
+      style: effectiveStripStyle(null, config.globals.style),
+      autoWrap: config.globals.autoWrap ?? DEFAULT_WRAP,
+      padding: config.globals.padding ?? DEFAULT_PADDING,
+      charset: config.globals.charset ?? DEFAULT_CHARSET,
+      colorCompatibility:
+        config.globals.colorCompatibility ?? DEFAULT_COLOR_COMPATIBILITY,
+    };
     // [LAW:no-silent-failure] A segment whose template THROWS while evaluating
     // (an `{{ action }}` display-arity mismatch, a MissingFieldError from a
     // partially-declared variable) renders as a visible ⚠ error cell — partial
@@ -296,22 +303,21 @@ function loadRegisterRender(
       compiled,
       store,
       registry,
-      checkPayload(effectiveTheme, effectiveLook),
-      resolverForThemeName(effectiveTheme),
+      checkPayload(effective),
+      resolverForThemeName(effective.theme),
       {
-        style: effectiveStripStyle(null, config.globals.style),
+        style: effective.style,
         width: CHECK_WIDTH,
-        colorCompatibility:
-          config.globals.colorCompatibility ?? DEFAULT_COLOR_COMPATIBILITY,
-        wrap: config.globals.autoWrap ?? DEFAULT_WRAP,
-        padding: config.globals.padding ?? DEFAULT_PADDING,
-        charset: config.globals.charset ?? DEFAULT_CHARSET,
+        colorCompatibility: effective.colorCompatibility,
+        wrap: effective.autoWrap,
+        padding: effective.padding,
+        charset: effective.charset,
       },
       {
         onSegmentError: (segName, message) =>
           segmentErrors.push(`segment "${segName}": ${message}`),
       },
-      lookKeyByName(config.looks, effectiveLook),
+      lookKeyByName(config.looks, effective.look),
     );
     if (segmentErrors.length > 0) {
       throw new Error(
