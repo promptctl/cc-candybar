@@ -26,7 +26,10 @@
 
 import { listResolvablePaletteNames, STRIP_STYLES } from "../../themes/policy";
 import type { ActionDecl } from "../../config/action";
-import { resolveOptionDomain } from "../../config/option-domain";
+import {
+  perConfigDomainsFor,
+  resolveOptionDomain,
+} from "../../config/option-domain";
 import type { DslConfig } from "../../config/dsl-types";
 
 // [LAW:one-source-of-truth] One contribution shape — a (key, spec) pair — every
@@ -632,9 +635,7 @@ function stateKeySeeds(config: DslConfig): ReadonlyMap<string, number> {
 // realizes a click from are the gate the wire enforces.
 function actionContributions(config: DslConfig): KeySpecContribution[] {
   const seeds = stateKeySeeds(config);
-  const perConfigDomains = new Map<string, readonly string[]>([
-    ["looks", Object.keys(config.looks)],
-  ]);
+  const perConfigDomains = perConfigDomainsFor(config.looks);
   return dropBaselineAllowLists(
     Object.values(config.actions).flatMap((a) =>
       actionKeySpecs(a, seeds, perConfigDomains),

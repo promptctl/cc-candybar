@@ -87,6 +87,23 @@ export function registerOptionDomain(
   };
 }
 
+// [LAW:one-source-of-truth] THE single construction of a config's per-config
+// domain overrides — currently just "looks", the merged `looks:` block's
+// names. cross-ref.ts (checking a `from` name resolves), state-validators.ts
+// (deriving the click gate), and dsl/render.ts (compiling render-time
+// options) each need this map; before this function they each rebuilt it
+// independently, three sites that could silently drift if a future
+// per-config domain were added to only some of them. Takes the bare `looks`
+// record (not the full DslConfig) so this leaf module never imports
+// dsl-types.ts — that would cycle through dsl-types.ts -> action.ts ->
+// option-domain.ts (type-only, but still a cycle this module stays clear of,
+// per [LAW:one-way-deps]).
+export function perConfigDomainsFor(
+  looks: Readonly<Record<string, unknown>>,
+): ReadonlyMap<string, readonly string[]> {
+  return new Map([["looks", Object.keys(looks)]]);
+}
+
 // [LAW:one-source-of-truth] The full set of names `from` may legally name for
 // THIS config: every globally-registered domain plus this config's per-config
 // overrides (currently just "looks"). Used both to resolve a name and to spell

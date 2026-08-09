@@ -13,7 +13,10 @@ import {
   type VariableDecl,
 } from "../dsl-types.js";
 import { actionBindsSet } from "../action.js";
-import { knownOptionDomainNames } from "../option-domain.js";
+import {
+  knownOptionDomainNames,
+  perConfigDomainsFor,
+} from "../option-domain.js";
 import { findKeyLine } from "./diagnostics.js";
 import { isPlainObject, type ValidateCtx } from "./validate-core.js";
 import {
@@ -59,9 +62,7 @@ export function validateCrossReferences(
   // to resolve. Runs post-merge for the same reason globals.look does above:
   // "looks" isn't fully known until the user's looks: block has merged onto
   // the bundled stdlib.
-  const optionDomains = new Map<string, readonly string[]>([
-    ["looks", Object.keys(cfg.looks)],
-  ]);
+  const optionDomains = perConfigDomainsFor(cfg.looks);
   for (const [name, a] of Object.entries(cfg.actions)) {
     if (!("set" in a) || !("from" in a) || typeof a.from !== "string") continue;
     if (!knownOptionDomainNames(optionDomains).includes(a.from)) {

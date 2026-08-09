@@ -21,6 +21,7 @@ import type {
   LayoutNode,
 } from "../config/dsl-types.js";
 import { HUE_STEP_VAR } from "../config/dsl-types.js";
+import { perConfigDomainsFor } from "../config/option-domain.js";
 import type { VariableStore } from "../var-system/store.js";
 import type { SourceRegistry } from "../var-system/sources.js";
 import {
@@ -305,15 +306,14 @@ export function registerDslConfig(
     current: null,
   };
   // [LAW:one-source-of-truth] The config's look names — the one PER-CONFIG
-  // option domain. Computed once here and fed to every consumer (the `looks()`
-  // binding, and — wrapped as perConfigDomains — the compiled set-option
-  // domains below), so the rendered options, a hand-authored `range looks`,
-  // and the derived click gate (which reads the same config in
-  // deriveActionValidators) trace to one map.
+  // option domain. Fed to every consumer (the `looks()` binding below, and —
+  // via perConfigDomainsFor, the SAME construction cross-ref.ts and
+  // state-validators.ts use — the compiled set-option domains), so the
+  // rendered options, a hand-authored `range looks`, and the derived click
+  // gate (which reads the same config in deriveActionValidators) trace to
+  // one source.
   const lookNames = Object.keys(config.looks);
-  const perConfigDomains = new Map<string, readonly string[]>([
-    ["looks", lookNames],
-  ]);
+  const perConfigDomains = perConfigDomainsFor(config.looks);
   const engine = createCcCandybarEngine(
     undefined,
     {
