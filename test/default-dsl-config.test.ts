@@ -574,13 +574,23 @@ describe("DEFAULT_DSL_CONFIG", () => {
     // Distinct truecolor foregrounds (`38;2;r;g;b`) across the rendered
     // line — one per SGR-introduced run, deduped. A basic-code fg would also
     // count but every semantic palette function here resolves to truecolor.
+    // Walks params sequentially (not `indexOf("38")`) and SKIPS a recognized
+    // `48;2;r;g;b` background run's components before looking for `38` —
+    // otherwise a bg color whose component happens to equal 38 could be
+    // misread as the fg introducer, or (mirror bug) mask a real one that
+    // follows it. Same class of collision test/segment-interior-color.test.ts's
+    // skipTruecolorRun fixes.
     function distinctForegrounds(line: string): Set<string> {
       const fgs = new Set<string>();
       for (const m of line.matchAll(/\x1b\[([0-9;]*)m/g)) {
         const params = (m[1] ?? "").split(";");
-        const i = params.indexOf("38");
-        if (i >= 0 && params[i + 1] === "2") {
-          fgs.add(`${params[i + 2]};${params[i + 3]};${params[i + 4]}`);
+        for (let i = 0; i < params.length; i++) {
+          if (params[i] === "38" && params[i + 1] === "2") {
+            fgs.add(`${params[i + 2]};${params[i + 3]};${params[i + 4]}`);
+            i += 4;
+          } else if (params[i] === "48" && params[i + 1] === "2") {
+            i += 4;
+          }
         }
       }
       return fgs;

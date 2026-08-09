@@ -324,9 +324,17 @@ export function registerDslConfig(
   // "frozen at registration" contract `segments.<name>.palette` overrides
   // already have. A live session theme click still recolors every segment's
   // bg/fg (basePalette is re-resolved per render in renderDsl); only these
-  // in-body semantic color calls stay pinned to the config default, and the
-  // anchored semantic roots (error/success/warning) keep a stable hue across
-  // themes anyway, so the drift is cosmetic at worst.
+  // in-body semantic color calls stay pinned to the config default theme.
+  // KNOWN LIMITATION, not merely cosmetic: `error`/`success`/`warning` are
+  // hue-anchored across themes (rich-js ANCHORED_ROOTS) so they drift only
+  // slightly on a mid-session theme switch, but `primary`/`accent` are NOT
+  // anchored — a click from e.g. tokyo-night to gruvbox-dark can render a
+  // template's `{{ primary .git.branch }}` in tokyo-night's primary against
+  // gruvbox-dark's live bg/fg, a genuine color mismatch, not just a shade
+  // drift. Fixing this for real needs a per-render-rebound resolver (a rich-js
+  // paletteFuncs API that takes a live getter instead of a frozen resolver),
+  // which gives up the parse-once/evaluate-many contract this engine
+  // otherwise holds — out of scope here; tracked as a follow-up.
   const bodyPaletteResolver = resolverForThemeName(
     effectiveThemeName(null, config.globals.palette),
   );
