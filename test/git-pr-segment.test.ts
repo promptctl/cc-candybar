@@ -7,14 +7,17 @@
 
 import { PaletteResolver, getThemePalette } from "@promptctl/rich-js";
 
-import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
+import { RAW_DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import { SessionState } from "../src/daemon/session-state";
 import { registerDslConfig, renderDsl } from "../src/dsl/render";
 
-const SERIALIZED = JSON.stringify(DEFAULT_DSL_CONFIG, null, 2);
+// Reparse the AUTHORED literal (pre-synthesis) — see
+// test/default-dsl-config.test.ts for why this must be the raw form, not the
+// already-synthesized DEFAULT_DSL_CONFIG.
+const SERIALIZED = JSON.stringify(RAW_DEFAULT_DSL_CONFIG, null, 2);
 
 const OPTS = {
   style: "powerline" as const,
