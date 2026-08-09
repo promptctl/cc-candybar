@@ -56,7 +56,7 @@ import {
 } from "../src/daemon/verbs/state-validators";
 import {
   clearConfigOverride,
-  coerceGlobalsValue,
+  coercePersistValue,
   isGlobalsField,
   loadConfigOverrides,
   writeConfigOverride,
@@ -172,36 +172,36 @@ describe("config-overrides-store", () => {
     expect(isGlobalsField("__proto__")).toBe(false);
   });
 
-  test("coerceGlobalsValue coerces per-field type from the canonical wire string", () => {
-    expect(coerceGlobalsValue("palette", "nord")).toBe("nord");
-    expect(coerceGlobalsValue("padding", "3")).toBe(3);
-    expect(coerceGlobalsValue("autoWrap", "1")).toBe(true);
-    expect(coerceGlobalsValue("autoWrap", "")).toBe(false);
+  test("coercePersistValue coerces per-field type from the canonical wire string", () => {
+    expect(coercePersistValue("palette", "nord")).toBe("nord");
+    expect(coercePersistValue("padding", "3")).toBe(3);
+    expect(coercePersistValue("autoWrap", "1")).toBe(true);
+    expect(coercePersistValue("autoWrap", "")).toBe(false);
   });
 
   // [LAW:verifiable-goals] A `persist` boolean field's gate is an ALLOW-LIST
   // (a `cycle`/`to` action's declared members pass through membership-checked
   // but otherwise VERBATIM), not validateBoolean's own canonicalizing
   // SessionState validator — so a config author writing `cycle: ["true",
-  // "false"]` or `to: "0"` reaches coerceGlobalsValue with the raw member,
+  // "false"]` or `to: "0"` reaches coercePersistValue with the raw member,
   // not a pre-canonicalized "1"/"". All four canonical boolean-ish wire
   // strings must coerce, not just the canonical "1"/"" pair.
-  test("coerceGlobalsValue accepts every canonical boolean-ish wire string, not just 1/empty", () => {
-    expect(coerceGlobalsValue("autoWrap", "true")).toBe(true);
-    expect(coerceGlobalsValue("autoWrap", "1")).toBe(true);
-    expect(coerceGlobalsValue("autoWrap", "false")).toBe(false);
-    expect(coerceGlobalsValue("autoWrap", "0")).toBe(false);
-    expect(coerceGlobalsValue("autoWrap", "")).toBe(false);
+  test("coercePersistValue accepts every canonical boolean-ish wire string, not just 1/empty", () => {
+    expect(coercePersistValue("autoWrap", "true")).toBe(true);
+    expect(coercePersistValue("autoWrap", "1")).toBe(true);
+    expect(coercePersistValue("autoWrap", "false")).toBe(false);
+    expect(coercePersistValue("autoWrap", "0")).toBe(false);
+    expect(coercePersistValue("autoWrap", "")).toBe(false);
   });
 
-  test("coerceGlobalsValue throws loudly on an undeliverable numeric string", () => {
-    expect(() => coerceGlobalsValue("padding", "not-a-number")).toThrow(
+  test("coercePersistValue throws loudly on an undeliverable numeric string", () => {
+    expect(() => coercePersistValue("padding", "not-a-number")).toThrow(
       /expects a number/,
     );
   });
 
-  test("coerceGlobalsValue throws loudly on an undeliverable boolean string", () => {
-    expect(() => coerceGlobalsValue("autoWrap", "maybe")).toThrow(
+  test("coercePersistValue throws loudly on an undeliverable boolean string", () => {
+    expect(() => coercePersistValue("autoWrap", "maybe")).toThrow(
       /expects boolean-ish/,
     );
   });
@@ -721,7 +721,7 @@ describe("persist action click → durable overrides write", () => {
 
   // [LAW:verifiable-goals] candybar-config-engine-71o.3: autoWrap is the one
   // BOOLEAN field among the newly-exposed globals — proves a persist-cycle
-  // over it round-trips through coerceGlobalsValue's boolean branch (not
+  // over it round-trips through coercePersistValue's boolean branch (not
   // just its own unit test above) and lands as a real JS boolean in the
   // overrides file, not the string "false".
   test("clicking a persist-cycle action over the boolean autoWrap field writes a real boolean", () => {

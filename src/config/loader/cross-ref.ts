@@ -21,7 +21,8 @@ import {
   knownOptionDomainNames,
   perConfigDomainsFor,
 } from "../option-domain.js";
-import { isGlobalsField, listGlobalsFieldNames } from "./globals.js";
+import { listGlobalsFieldNames } from "./globals.js";
+import { parsePersistTarget } from "./persist-target.js";
 import { findKeyLine } from "./diagnostics.js";
 import { isPlainObject, type ValidateCtx } from "./validate-core.js";
 import {
@@ -79,25 +80,50 @@ export function validateCrossReferences(
     }
   }
   // [LAW:no-silent-failure] A `persist`/`reset` target must name a REAL
-  // Globals field — the loader's structural pass (loader/actions.ts) only
-  // proves the key is non-empty/slash-free, the same shape a `set` key needs
-  // for the wire, but a persist/reset key additionally has to land somewhere
-  // real in `globals`. Catching a typo (`persist: "pallete"`) here turns a
-  // confusing click-time "registration invariant broken" error into a clear
-  // load-time one naming the actual allowed fields — the same species of fix
-  // as the `from` domain check just above.
+  // Globals field OR a declared segment's `palette` (candybar-config-engine-
+  // 71o.6 — `segments.<name>.palette`, parsed by the one shared authority in
+  // persist-target.ts) — the loader's structural pass (loader/actions.ts)
+  // only proves the key is non-empty/slash-free, the same shape a `set` key
+  // needs for the wire, but a persist/reset key additionally has to land
+  // somewhere real. Catching a typo (`persist: "pallete"`) or a dangling
+  // segment name here turns a confusing click-time "registration invariant
+  // broken" error into a clear load-time one naming the actual allowed
+  // targets — the same species of fix as the `from` domain check just above.
   for (const [name, a] of Object.entries(cfg.actions)) {
     const key = "persist" in a ? a.persist : "reset" in a ? a.reset : null;
-    if (key === null || isGlobalsField(key)) continue;
-    ctx.issues.push({
-      path: `actions.${name}.${"persist" in a ? "persist" : "reset"}`,
-      message: `actions.${name}: "${key}" is not a config globals field (have: ${listGlobalsFieldNames().join(", ")})`,
-      line: findKeyLine(ctx.source, [
-        "actions",
-        name,
-        "persist" in a ? "persist" : "reset",
-      ]),
-    });
+    if (key === null) continue;
+    const discriminator = "persist" in a ? "persist" : "reset";
+    const target = parsePersistTarget(key);
+    if (target === null) {
+      ctx.issues.push({
+        path: `actions.${name}.${discriminator}`,
+        message: `actions.${name}: "${key}" is not a config globals field (have: ${listGlobalsFieldNames().join(", ")}) or a "segments.<name>.palette" target`,
+        line: findKeyLine(ctx.source, ["actions", name, discriminator]),
+      });
+      continue;
+    }
+    if (target.scope !== "segment-palette") continue;
+    if (!Object.prototype.hasOwnProperty.call(cfg.segments, target.segment)) {
+      ctx.issues.push({
+        path: `actions.${name}.${discriminator}`,
+        message: `actions.${name}: "${key}" names segment "${target.segment}" which is not declared (have segments: ${Object.keys(cfg.segments).join(", ")})`,
+        line: findKeyLine(ctx.source, ["actions", name, discriminator]),
+      });
+      continue;
+    }
+    // [LAW:types-are-the-program] A palette is a NAME, not a number — a
+    // bounded stepper (`min`/`max`/`by`) has no meaning over it, unlike a
+    // Globals field where nothing today enforces value/field-kind agreement
+    // either way. Rejecting it here (rather than tolerating a numeric-string
+    // palette name that only fails later at `resolverForThemeName`) keeps
+    // the failure at load time, next to the typo it actually is.
+    if ("min" in a) {
+      ctx.issues.push({
+        path: `actions.${name}.${discriminator}`,
+        message: `actions.${name}: "${key}" is a segment palette target and cannot use a bounded stepper (min/max/by) — use "to", "from", or "cycle" instead`,
+        line: findKeyLine(ctx.source, ["actions", name, discriminator]),
+      });
+    }
   }
   // [LAW:one-source-of-truth] THE set of resolvable variable names — a
   // faithful mirror of the runtime store's key set (declareOne in
