@@ -9,6 +9,7 @@ import {
   dslConfigCandidatePaths,
   detectConfigCollisions,
   mergeWithDefault,
+  applySegmentPaletteOverrides,
   ConfigError,
 } from "../../config/dsl-loader.js";
 import type { ValidatedConfig } from "../../config/dsl-types.js";
@@ -22,7 +23,7 @@ import {
   deriveConfigActionValidators,
   registerConfigValidator,
 } from "../verbs/config-validators.js";
-import { loadConfigOverrides } from "../config-overrides-store.js";
+import { loadOverrides } from "../config-overrides-store.js";
 import { configOverridesPath } from "../paths.js";
 import { VariableStore } from "../../var-system/store.js";
 import { SourceRegistry } from "../../var-system/sources.js";
@@ -292,10 +293,25 @@ export class RenderCache {
     // pick still overrides it per-session via effective* resolution,
     // unchanged). Always applied, even when the overrides file is empty —
     // an empty overrides object merges as a no-op, so there is no
-    // "has overrides?" branch [LAW:dataflow-not-control-flow].
-    const withOverrides = mergeWithDefault(
-      { globals: loadConfigOverrides(configOverridesPath(), dlog) },
+    // "has overrides?" branch [LAW:dataflow-not-control-flow]. One
+    // loadOverrides read serves BOTH halves below (globals + segment-palette)
+    // — the overrides file backs two different merge shapes, not two reads.
+    const overrides = loadOverrides(configOverridesPath(), dlog);
+    const withGlobalsOverrides = mergeWithDefault(
+      { globals: overrides.globals },
       merged,
+    );
+    // [LAW:one-source-of-truth] The segment-scoped half of the SAME overrides
+    // file (candybar-config-engine-71o.6) — a later, narrower merge step, not
+    // a second override layer: mergeWithDefault's `segments` cascade replaces
+    // a named segment WHOLESALE, so a one-field palette override rides its
+    // own overlay (applySegmentPaletteOverrides) against the already-merged
+    // config instead, patching `palette` without dropping the segment's other
+    // fields. Order versus the globals merge above doesn't matter — the two
+    // touch disjoint parts of the config (`globals` vs `segments[name]`).
+    const withOverrides = applySegmentPaletteOverrides(
+      withGlobalsOverrides,
+      overrides.segmentPalette,
     );
     const config = validateConfig(
       withOverrides,
