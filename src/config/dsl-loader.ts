@@ -67,7 +67,10 @@ export {
   resolveDslConfigPath,
   detectConfigCollisions,
 } from "./loader/discovery.js";
-export { mergeWithDefault } from "./loader/merge.js";
+export {
+  mergeWithDefault,
+  applySegmentPaletteOverrides,
+} from "./loader/merge.js";
 export {
   extractTemplateRefs,
   extractActionRefs,

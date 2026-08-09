@@ -11,11 +11,21 @@
 // atom) — there is no debounce to coalesce and no in-memory cache to keep
 // warm; RenderCache re-reads this file fresh on every reload, exactly as it
 // re-reads the user config file. One source, read where it's needed.
+//
+// [LAW:one-source-of-truth] The file is ONE flat dict keyed by whatever
+// string a `persist`/`reset` action names (candybar-config-engine-71o.6
+// generalized this from Globals-only fields to also admit
+// `segments.<name>.palette` keys — see loader/persist-target.ts, the shared
+// parser both this module and cross-ref.ts classify a key through). Keeping
+// ONE flat dict (rather than a nested `{globals, segments}` shape) means the
+// read-modify-write/atomic-rename plumbing below never needed to change
+// shape — only what keys/values count as valid grew.
 
 import fs from "node:fs";
 import path from "node:path";
 import type { Globals } from "../config/dsl-types.js";
 import { isGlobalsField } from "../config/loader/globals.js";
+import { parsePersistTarget } from "../config/loader/persist-target.js";
 import { debug } from "../utils/logger.js";
 import type { DaemonLogger } from "./log.js";
 
@@ -34,10 +44,12 @@ export { isGlobalsField } from "../config/loader/globals.js";
 // Globals, so a field added to/removed from that interface is a compile
 // error here until this table is updated. This is the ONE place a `persist`
 // write's canonical string is coerced to the JS type Globals actually
-// declares (padding: number, autoWrap: boolean, everything else: string).
-// Membership (which keys exist) is NOT re-declared here — see the
-// re-exported isGlobalsField above; this table only adds the per-field KIND
-// membership alone doesn't carry.
+// declares (padding: number, autoWrap: boolean, everything else: string). A
+// segment-palette target has no matching row: it's always a NAME, so its
+// kind is "string" unconditionally — see coercePersistValue below. Membership
+// (which keys exist) is NOT re-declared here — see the re-exported
+// isGlobalsField above; this table only adds the per-field KIND membership
+// alone doesn't carry.
 const GLOBALS_FIELD_KIND: Readonly<
   Record<keyof Globals, "string" | "number" | "boolean">
 > = {
@@ -68,21 +80,31 @@ const BOOLEAN_FALSY = new Set(["0", "false", ""]);
 
 // [LAW:no-silent-fallbacks] The `persist` write's validator canonicalizes to
 // a STRING (the same wire currency `set` uses) — this is the boundary that
-// lifts it into the typed value Globals declares. An out-of-range/non-numeric
-// string for a "number" field is a caller bug (the range validator already
-// canonicalized it), so it throws loudly rather than writing a silently-wrong
-// type into the overrides file.
-export function coerceGlobalsValue(
-  key: keyof Globals,
+// lifts it into the typed value its scope declares. An out-of-range/non-
+// numeric string for a "number" Globals field is a caller bug (the range
+// validator already canonicalized it), so it throws loudly rather than
+// writing a silently-wrong type into the overrides file. Replaces the old
+// Globals-only `coerceGlobalsValue`: a bare `string` key (not `keyof
+// Globals`) so a caller no longer needs a type-narrowing assertion before
+// calling this — parsePersistTarget does the classification internally.
+export function coercePersistValue(
+  key: string,
   raw: string,
-): Globals[keyof Globals] {
-  const kind = GLOBALS_FIELD_KIND[key];
+): string | number | boolean {
+  const target = parsePersistTarget(key);
+  if (target === null) {
+    throw new Error(
+      `coercePersistValue: "${key}" is not a valid persist target`,
+    );
+  }
+  if (target.scope === "segment-palette") return raw;
+  const kind = GLOBALS_FIELD_KIND[target.field];
   if (kind === "string") return raw;
   if (kind === "number") {
     const n = Number(raw);
     if (!Number.isFinite(n)) {
       throw new Error(
-        `coerceGlobalsValue: "${key}" expects a number, got "${raw}"`,
+        `coercePersistValue: "${key}" expects a number, got "${raw}"`,
       );
     }
     return n;
@@ -90,23 +112,30 @@ export function coerceGlobalsValue(
   if (BOOLEAN_TRUTHY.has(raw)) return true;
   if (BOOLEAN_FALSY.has(raw)) return false;
   throw new Error(
-    `coerceGlobalsValue: "${key}" expects boolean-ish (1, 0, true, false), got "${raw}"`,
+    `coercePersistValue: "${key}" expects boolean-ish (1, 0, true, false), got "${raw}"`,
   );
 }
 
-// [LAW:no-silent-fallbacks] Missing/corrupt/wrong-shape file → the empty
+// [LAW:no-silent-failure] Missing/corrupt/wrong-shape file → the empty
 // override set is the *defined* recovery (identical to a first-ever boot),
-// not a hidden fallback to different data. Every present key/value pair is
-// checked against GLOBALS_FIELD_KIND; a single malformed entry drops the
-// WHOLE file back to empty (mirrors FileSessionStorage's all-or-nothing
+// not a hidden fallback to different data. Every present key is classified
+// through parsePersistTarget (globals field or segment-palette) and its
+// value checked against that target's kind; a single malformed entry drops
+// the WHOLE file back to empty (mirrors FileSessionStorage's all-or-nothing
 // shape check) rather than guessing which entries to keep.
-function isValidOverrides(value: unknown): value is Partial<Globals> {
+function isValidOverrides(
+  value: unknown,
+): value is Readonly<Record<string, string | number | boolean>> {
   if (value === null || typeof value !== "object" || Array.isArray(value)) {
     return false;
   }
   for (const [key, v] of Object.entries(value)) {
-    if (!isGlobalsField(key)) return false;
-    const kind = GLOBALS_FIELD_KIND[key];
+    const target = parsePersistTarget(key);
+    if (target === null) return false;
+    const kind =
+      target.scope === "segment-palette"
+        ? "string"
+        : GLOBALS_FIELD_KIND[target.field];
     if (kind === "number" && typeof v !== "number") return false;
     if (kind === "boolean" && typeof v !== "boolean") return false;
     if (kind === "string" && typeof v !== "string") return false;
@@ -114,10 +143,14 @@ function isValidOverrides(value: unknown): value is Partial<Globals> {
   return true;
 }
 
-export function loadConfigOverrides(
+// [LAW:single-enforcer] The ONE reader of the on-disk shape — every scoped
+// view (loadConfigOverrides, loadSegmentPaletteOverrides) and every writer
+// (writeConfigOverride, clearConfigOverride) reads through this, so the
+// flat-dict shape and its recovery-to-empty behavior are decided exactly once.
+function loadRawOverrides(
   filePath: string,
-  logger: DaemonLogger = quietLogger,
-): Partial<Globals> {
+  logger: DaemonLogger,
+): Readonly<Record<string, string | number | boolean>> {
   let raw: string;
   try {
     raw = fs.readFileSync(filePath, "utf8");
@@ -139,6 +172,48 @@ export function loadConfigOverrides(
   }
 }
 
+// [LAW:one-source-of-truth] The Globals-scoped VIEW of the raw dict — kept as
+// `Partial<Globals>` so every existing caller (RenderCache's
+// mergeWithDefault({globals: ...}), stepConfig's range-seed lookup) keeps its
+// original, precisely-typed contract unchanged. Segment-palette entries in
+// the same file are invisible here by construction (isGlobalsField filters
+// them out) — see loadSegmentPaletteOverrides for that half.
+export function loadConfigOverrides(
+  filePath: string,
+  logger: DaemonLogger = quietLogger,
+): Partial<Globals> {
+  const raw = loadRawOverrides(filePath, logger);
+  const out: Record<string, string | number | boolean> = {};
+  for (const [key, value] of Object.entries(raw)) {
+    if (isGlobalsField(key)) out[key] = value;
+  }
+  // [LAW:no-silent-fallbacks] exception: isValidOverrides already proved every
+  // entry's runtime kind matches its target's declared kind (GLOBALS_FIELD_KIND)
+  // before it ever reached the file — this cast states that proof, it doesn't
+  // paper over an unchecked one.
+  return out as Partial<Globals>;
+}
+
+// [LAW:one-source-of-truth] The segment-palette-scoped VIEW of the SAME raw
+// dict — segment name -> persisted palette name. RenderCache overlays this
+// onto the already-merged config's `segments[name].palette` field
+// (applySegmentPaletteOverrides in config/loader/merge.ts), never through
+// mergeWithDefault's wholesale per-name segment replacement.
+export function loadSegmentPaletteOverrides(
+  filePath: string,
+  logger: DaemonLogger = quietLogger,
+): Readonly<Record<string, string>> {
+  const raw = loadRawOverrides(filePath, logger);
+  const out: Record<string, string> = {};
+  for (const [key, value] of Object.entries(raw)) {
+    const target = parsePersistTarget(key);
+    if (target?.scope === "segment-palette" && typeof value === "string") {
+      out[target.segment] = value;
+    }
+  }
+  return out;
+}
+
 // [LAW:no-silent-failure] Atomic write shared by set/clear: read the current
 // overrides, apply one mutation, write-to-temp + rename. Owner-only mode,
 // matching every other daemon runtime file (session-state.json, pid, lease).
@@ -150,7 +225,7 @@ export function loadConfigOverrides(
 // (the click) fails loudly instead of claiming a success that didn't happen.
 function writeOverrides(
   filePath: string,
-  overrides: Partial<Globals>,
+  overrides: Readonly<Record<string, string | number | boolean>>,
   logger: DaemonLogger,
 ): void {
   try {
@@ -168,11 +243,11 @@ function writeOverrides(
 
 export function writeConfigOverride(
   filePath: string,
-  key: keyof Globals,
-  value: Globals[keyof Globals],
+  key: string,
+  value: string | number | boolean,
   logger: DaemonLogger = quietLogger,
 ): void {
-  const overrides = loadConfigOverrides(filePath, logger);
+  const overrides = loadRawOverrides(filePath, logger);
   writeOverrides(filePath, { ...overrides, [key]: value }, logger);
 }
 
@@ -181,9 +256,9 @@ export function clearConfigOverride(
   key: string,
   logger: DaemonLogger = quietLogger,
 ): void {
-  const overrides = loadConfigOverrides(filePath, logger);
+  const overrides = loadRawOverrides(filePath, logger);
   if (!(key in overrides)) return;
   const next = { ...overrides };
-  delete next[key as keyof Globals];
+  delete next[key];
   writeOverrides(filePath, next, logger);
 }

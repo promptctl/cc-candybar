@@ -50,3 +50,38 @@ export function mergeWithDefault(
     helpers: { ...dflt.helpers, ...(raw.helpers ?? {}) },
   };
 }
+
+// [LAW:one-source-of-truth] The segment-scoped half of the config-overrides
+// layer's merge (candybar-config-engine-71o.6) — the SAME "changes the
+// DEFAULT, never the hand-authored file" precedence mergeWithDefault's
+// `globals` cascade already applies, but patches ONE field (`palette`)
+// inside an already-merged segment rather than replacing the segment
+// wholesale. mergeWithDefault's `segments` cascade is deliberately per-name
+// WHOLESALE replacement (a user overriding a segment restates it in full,
+// same as any other by-name merge in this file) — routing a one-field
+// override through that cascade would silently drop every other field the
+// segment declares (template, bg, fg, when, vars...). This runs AFTER
+// mergeWithDefault, directly against the already-merged config, so it never
+// fights that cascade; it is its own, later, narrower merge step.
+//
+// [LAW:no-silent-failure] exception: a stale override naming a segment the
+// config no longer declares is not a load-time error — the CONFIG, not the
+// override, is the source of truth for which segments exist. Skipping it is
+// a no-op, not a swallowed failure: a fresh `persist` write can only ever
+// name a segment the config declares (cross-ref checks that at load time),
+// so a dangling entry here only happens after a later config edit removed
+// the segment, and there is nothing left for the override to apply to.
+export function applySegmentPaletteOverrides(
+  config: DslConfig,
+  overrides: Readonly<Record<string, string>>,
+): DslConfig {
+  const entries = Object.entries(overrides);
+  if (entries.length === 0) return config;
+  const segments = { ...config.segments };
+  for (const [name, palette] of entries) {
+    const seg = segments[name];
+    if (seg === undefined) continue;
+    segments[name] = { ...seg, palette };
+  }
+  return { ...config, segments };
+}
