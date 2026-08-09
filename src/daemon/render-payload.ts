@@ -103,9 +103,14 @@ export interface RenderPayload extends ClaudeHookData {
   // BuildLineOptions every render, and this is that exact value, so a
   // trigger's "current selection" highlight and the render it describes
   // trace to one resolution. See EffectiveGlobals for how each is derived.
-  readonly style: { readonly effective: string };
-  readonly charset: { readonly effective: string };
-  readonly colorCompatibility: { readonly effective: string };
+  // [LAW:types-are-the-program] Unlike theme/look (open, registry-extensible
+  // names with no closed union to narrow to), style/charset/colorCompatibility
+  // DO have one (StripStyle/Charset/ColorCompatibility) — narrowed to it
+  // rather than widened to `string`, so a downstream `switch` over these
+  // fields gets real exhaustiveness checking.
+  readonly style: { readonly effective: StripStyle };
+  readonly charset: { readonly effective: Charset };
+  readonly colorCompatibility: { readonly effective: ColorCompatibility };
   readonly autoWrap: { readonly effective: boolean };
   readonly padding: { readonly effective: number };
 
