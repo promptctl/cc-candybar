@@ -269,9 +269,13 @@ else to it. The second, behind the 📌 glyph (`applyThemeForever` /
 `applyLookForever` / `applyStyleForever`, `persist`), pins the choice as the
 config DEFAULT every session opens into from then on, paired with a `↺`
 reset (`resetTheme` / `resetLook` / `resetStyle`) exactly like the four
-`persist` steppers. The two tiers use separate `{{ menu }}` accordion keys
-(`"pickers"` for the preview tier, `"pickersForever"` for the persist tier)
-so opening one never closes the other — they answer different questions
+`persist` steppers. The PERSIST tier shares one `{{ menu }}` accordion key
+(`"pickersForever"`) across all three controls, so opening one closes the
+others. The PREVIEW tier is narrower: `applyTheme` and `applyLook` share
+`"pickers"` (pre-dating this pairing — see the two-menu accordion example
+above), but `applyStyle`'s preview menu has no key at all — it's
+independent, opens alongside either. Either way, opening a preview menu
+never closes a persist menu or vice versa — they answer different questions
 ("what does THIS session look like" vs. "what should EVERY session default
 to") and closing one to open the other would conflate them. Precedence is
 unchanged either way: a session's own preview pick still wins over a

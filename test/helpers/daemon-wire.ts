@@ -10,17 +10,22 @@
 import type { ChildProcess } from "node:child_process";
 import net from "node:net";
 
-import { encodeFrame, makeFrameReader } from "../../src/daemon/protocol";
-import type { Response } from "../../src/daemon/protocol";
+import { sendOne } from "../../src/daemon/protocol";
+import type { Request, Response } from "../../src/daemon/protocol";
 
 const DEFAULT_REPLY_BUDGET_MS = 5000;
 
-// [LAW:no-silent-failure] Mirrors src/daemon/protocol.ts's own `sendOne`
-// contract: a `close` with no prior frame (the daemon crashed after
-// accepting the request but before writing a response) must reject
-// immediately, not silently wait out the full timeout budget — a daemon
-// crash mid-request would otherwise read as "slow", wasting the whole
-// budget per call instead of failing fast with a diagnosable cause.
+// [LAW:one-source-of-truth] A thin connect-then-delegate wrapper around
+// src/daemon/protocol.ts's own `sendOne` — the canonical, already-hardened
+// single-frame-request implementation (settled guard + `removeAllListeners`
+// on settle, so a `close` racing a just-arrived frame can never clobber an
+// already-resolved response). An earlier version of this helper hand-rolled
+// its own finish/timer/reader logic and reintroduced exactly the race
+// `sendOne` was written to close — delegating instead of re-deriving is the
+// fix, not patching the duplicate to match. `req` stays loosely typed (the
+// wire is untrusted JSON from the caller's perspective too) and is narrowed
+// at this one boundary, mirroring how the daemon's own request handler
+// treats incoming JSON.
 export function sendDaemonRequest(
   sockPath: string,
   req: Record<string, unknown>,
@@ -28,28 +33,12 @@ export function sendDaemonRequest(
 ): Promise<Response> {
   return new Promise((resolve, reject) => {
     const sock = net.connect(sockPath);
-    const timer = setTimeout(() => {
-      sock.destroy();
-      reject(new Error(`daemon response did not arrive within ${timeoutMs}ms`));
-    }, timeoutMs);
-    const finish = (action: () => void): void => {
-      clearTimeout(timer);
-      sock.destroy();
-      action();
-    };
-    const reader = makeFrameReader(
-      (frame) => finish(() => resolve(frame as Response)),
-      (err) => finish(() => reject(err)),
-    );
-    sock.on("data", reader);
-    sock.once("error", (err) => finish(() => reject(err)));
-    sock.once("close", () =>
-      finish(() =>
-        reject(new Error("daemon socket closed before a response arrived")),
-      ),
-    );
+    sock.once("error", reject);
     sock.once("connect", () => {
-      sock.write(encodeFrame(req));
+      sendOne(sock, req as unknown as Request, timeoutMs).then(
+        resolve,
+        reject,
+      );
     });
   });
 }
