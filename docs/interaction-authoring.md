@@ -256,12 +256,30 @@ wired into the bar, with zero authoring required: a `kind: "group"` named
 `settings` sits on the identity row beside the quick-action tray, collapsed by
 default (`⚙ settings ▸`, visually silent until clicked). Opening it drops a
 row of seven controls immediately below: `themeControl`, `lookControl`,
-`styleControl` (session `set`, same as a hand-authored theme picker), and
-`charsetControl` / `colorCompatControl` / `wrapToggleControl` /
-`paddingControl` (the four `persist` steppers from the section above). The
-group's own synthesized toggle lives under the reserved name
-`groups.settings` — see the `kind: "group"` section below for what a group
-name reserves.
+`styleControl` and `charsetControl` / `colorCompatControl` /
+`wrapToggleControl` / `paddingControl` (the four `persist` steppers from the
+section above). The group's own synthesized toggle lives under the reserved
+name `groups.settings` — see the `kind: "group"` section below for what a
+group name reserves.
+
+`themeControl` / `lookControl` / `styleControl` each carry TWO menus, one
+per tier: the first (`applyTheme` / `applyLook` / `applyStyle`, session
+`set`) is a per-conversation preview — try a theme without committing anyone
+else to it. The second, behind the 📌 glyph (`applyThemeForever` /
+`applyLookForever` / `applyStyleForever`, `persist`), pins the choice as the
+config DEFAULT every session opens into from then on, paired with a `↺`
+reset (`resetTheme` / `resetLook` / `resetStyle`) exactly like the four
+`persist` steppers. The PERSIST tier shares one `{{ menu }}` accordion key
+(`"pickersForever"`) across all three controls, so opening one closes the
+others. The PREVIEW tier is narrower: `applyTheme` and `applyLook` share
+`"pickers"` (pre-dating this pairing — see the two-menu accordion example
+above), but `applyStyle`'s preview menu has no key at all — it's
+independent, opens alongside either. Either way, opening a preview menu
+never closes a persist menu or vice versa — they answer different questions
+("what does THIS session look like" vs. "what should EVERY session default
+to") and closing one to open the other would conflate them. Precedence is
+unchanged either way: a session's own preview pick still wins over a
+persisted default for that one session.
 
 A user config's `root:` **replaces the bundled default's wholesale** (see the
 top-level project docs), so removing the drawer — or reshaping it — is a
@@ -279,8 +297,9 @@ reproduces the bundled default's two rows minus the drawer:
 
 The seven constituent segments (`themeControl` / `lookControl` /
 `styleControl` / `charsetControl` / `colorCompatControl` / `wrapToggleControl`
-/ `paddingControl`) and their backing actions (`applyTheme`, `applyLook`,
-`applyStyle`, `applyCharsetForever` + `resetCharset`,
+/ `paddingControl`) and their backing actions (`applyTheme` + `applyThemeForever`
++ `resetTheme`, `applyLook` + `applyLookForever` + `resetLook`, `applyStyle`
++ `applyStyleForever` + `resetStyle`, `applyCharsetForever` + `resetCharset`,
 `applyColorCompatForever` + `resetColorCompat`, `toggleWrapForever` +
 `resetAutoWrap`, `paddingDownForever` / `paddingUpForever` + `resetPadding`)
 stay declared in the merged config either way — merge-by-name lets you keep
@@ -696,3 +715,16 @@ group "inner" shares key "drawer" with its ancestor group "outer" — a shared k
 4. Anything you could not express with `{{ menu }}`, a group, or a named
    action: read examples/demo-actions.json5 for the raw mechanism before
    inventing a new shape.
+5. If you added a `persist` action, you paired it with a `reset` (the
+   drawer's convention — an undoable default is always undoable from the
+   bar itself), and you verified it with an actual restart: render once,
+   kill the daemon, start it fresh, render again with a brand-new
+   `session.id`. `check` validates your config structurally (parse, merge,
+   validate, render) but never simulates clicks, so it cannot catch a
+   `persist` action that targets a valid but unintended Globals field (a
+   typo'd field name IS caught at load time — this is about a real field,
+   just the wrong one). Watch out for the session-pick trap specifically: if
+   you're ALSO testing the matching `set` action in the same session, that
+   session's own pick will keep winning over your persisted default (by
+   design — see "persist / reset" above), which can look like the persist
+   write silently failed when it didn't.

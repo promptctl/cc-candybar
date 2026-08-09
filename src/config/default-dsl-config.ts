@@ -166,10 +166,12 @@ function etaHeatFg(etaRef: string, warnRef: string): string {
 // time — the type safety net just moves from tsc to that parse, never lost.
 //
 // One collapsed-by-default drawer holding every bar-mutable display default:
-// theme/style/look (session `set`, unchanged from before this ticket) plus
-// the four .3 globals steppers (persist-only, no SessionState half). Placed
-// as a sibling in row 1's horizontal container, toggled from beside the
-// quick-action tray — see `root` below.
+// theme/style/look (session `set` for a per-conversation preview, PLUS a
+// persist-forever twin — candybar-config-engine-71o.5 — for pinning the
+// choice as everyone's default) and the four .3 globals steppers
+// (persist-only, no SessionState half at all). Placed as a sibling in row
+// 1's horizontal container, toggled from beside the quick-action tray —
+// see `root` below.
 const settingsDrawer = {
   kind: "group",
   name: "settings",
@@ -904,10 +906,23 @@ export const RAW_DEFAULT_DSL_CONFIG = {
     // label is the one "style" value the click writes and the render reads.
     // Lives inside the settingsDrawer group (candybar-config-engine-71o.4) — not
     // on `root` directly — so it renders only while the drawer is open.
+    // The 📌 "make default" menu + ↺ reset, one per control below, is
+    // styleControl/themeControl/lookControl's PERSIST twin (candybar-config-
+    // engine-71o.5) — the exact pairing charsetControl/colorCompatControl/
+    // wrapToggleControl/paddingControl already use, since theme/style/look
+    // are the only three of the drawer's seven knobs with a session `set`
+    // half at all. Its own "pickersForever" accordion key keeps the
+    // persist tier visually distinct from the existing "pickers" try tier
+    // (opening a session preview and opening a "pin as default" picker are
+    // different intents; auto-closing one when the other opens would
+    // conflate them) without touching the already-shipped/tested "pickers"
+    // accordion's membership.
     styleControl: {
       template:
         "✦ {{ if .activeStyle }}{{ .activeStyle }}{{ else }}(default){{ end }} " +
-        '{{ menu "applyStyle" }}',
+        '{{ menu "applyStyle" }} ' +
+        '📌{{ menu "applyStyleForever" (dict "key" "pickersForever") }} ' +
+        '{{ action "resetStyle" "↺" }}',
       bg: "surface",
       fg: "foreground",
     },
@@ -927,7 +942,9 @@ export const RAW_DEFAULT_DSL_CONFIG = {
     themeControl: {
       template:
         "🎨 {{ .theme.effective }} " +
-        '{{ menu "applyTheme" (dict "key" "pickers") }}',
+        '{{ menu "applyTheme" (dict "key" "pickers") }} ' +
+        '📌{{ menu "applyThemeForever" (dict "key" "pickersForever") }} ' +
+        '{{ action "resetTheme" "↺" }}',
       bg: "surface",
       fg: "foreground",
     },
@@ -940,7 +957,9 @@ export const RAW_DEFAULT_DSL_CONFIG = {
     lookControl: {
       template:
         "◐ {{ .look.effective }} " +
-        '{{ menu "applyLook" (dict "key" "pickers" "closeOnPick" true) }}',
+        '{{ menu "applyLook" (dict "key" "pickers" "closeOnPick" true) }} ' +
+        '📌{{ menu "applyLookForever" (dict "key" "pickersForever" "closeOnPick" true) }} ' +
+        '{{ action "resetLook" "↺" }}',
       bg: "surface",
       fg: "foreground",
     },
@@ -1079,6 +1098,23 @@ export const RAW_DEFAULT_DSL_CONFIG = {
     // block's names — the same derivation test/dsl-looks.test.ts exercises.
     applyTheme: { set: "theme", from: "themes" },
     applyLook: { set: "look", from: "looks" },
+
+    // [LAW:one-source-of-truth] The persist-forever twins of applyTheme/
+    // applyStyle/applyLook above (candybar-config-engine-71o.5) — same
+    // domain sources (`from`), same picker mechanism, but the target is the
+    // Globals field the config DEFAULT reads (`palette`/`style`/`look`,
+    // isGlobalsField-checked at load), not the SessionState key the session
+    // preview writes. Precedence is unchanged: a session's own `set` pick
+    // (applyTheme/applyStyle/applyLook) still wins over a persisted default
+    // for that session — effectiveThemeName/effectiveStripStyle/
+    // effectiveLookName all read SessionState before globals. Paired with a
+    // `reset` each, per the docs' persist/reset convention.
+    applyThemeForever: { persist: "palette", from: "themes" },
+    resetTheme: { reset: "palette" },
+    applyStyleForever: { persist: "style", from: "styles" },
+    resetStyle: { reset: "style" },
+    applyLookForever: { persist: "look", from: "looks" },
+    resetLook: { reset: "look" },
 
     // [LAW:locality-or-seam] The settings-drawer steppers' behaviors
     // (candybar-config-engine-71o.4), decoupled by NAME from
