@@ -328,7 +328,7 @@ describe("71o.1 — inline literal option domain (from: [...])", () => {
     const { dispose } = buildRuntime(SRC); // registers the derived gate
     const res = validateStateWrite("sort-order", "bogus");
     expect(res.ok).toBe(false);
-    if (!res.ok) expect(res.reason).toMatch(/unknown state "sort-order"/);
+    if (!res.ok) expect(res.reason).toMatch(/unknown state "sort-order" "bogus"/);
     dispose();
   });
 
