@@ -283,21 +283,46 @@ function validateValueSourceKey(
   );
 }
 
+// [LAW:one-source-of-truth] The wire verb name a discriminator's writes
+// travel over — `set-state` for `set` (SessionState), `set-config` for
+// `persist` (the config-overrides layer). Threaded into the shared field
+// specs below so their "cannot be delivered on the X wire" messages name
+// the wire the value actually crosses, and the field/value noun ("set
+// value" / "persist value") names the actual action kind, not always `set`.
+function wireName(discriminator: "set" | "persist"): string {
+  return discriminator === "set" ? "set-state" : "set-config";
+}
+
 // [LAW:types-are-the-program] Each value source's payload as a field map — the
-// non-`set` keys that source carries. `fields` runs every spec (reporting all
-// issues) and fails the arm when a required field is absent or invalid; `refine`
-// adds the cross-field invariants `fields` cannot express. The reconstructed
-// payload IS the member minus `set`, which the dispatcher re-attaches.
-const TO_FIELDS: FieldSpecMap<{ to: string }> = { to: setLiteralSpec() };
-const FROM_FIELDS: FieldSpecMap<{ from: OptionDomain }> = { from: fromSpec() };
+// non-discriminator keys that source carries. `fields` runs every spec
+// (reporting all issues) and fails the arm when a required field is absent or
+// invalid; `refine` adds the cross-field invariants `fields` cannot express.
+// The reconstructed payload IS the member minus the discriminator, which the
+// dispatcher re-attaches. Built once per discriminator (`set`/`persist` share
+// field SHAPE but not error WORDING — see setLiteralSpec/fromSpec/cycleSpec).
+const TO_FIELDS_SET: FieldSpecMap<{ to: string }> = {
+  to: setLiteralSpec("set"),
+};
+const TO_FIELDS_PERSIST: FieldSpecMap<{ to: string }> = {
+  to: setLiteralSpec("persist"),
+};
+const FROM_FIELDS_SET: FieldSpecMap<{ from: OptionDomain }> = {
+  from: fromSpec("set"),
+};
+const FROM_FIELDS_PERSIST: FieldSpecMap<{ from: OptionDomain }> = {
+  from: fromSpec("persist"),
+};
 const BOUNDED_FIELDS: FieldSpecMap<{ min: number; max: number; by: number }> = {
   min: requireIntSpec(),
   max: requireIntSpec(),
   by: requireIntSpec(),
 };
 const INT_FIELDS: FieldSpecMap<{ int: true }> = { int: intMarkerSpec() };
-const CYCLE_FIELDS: FieldSpecMap<{ cycle: readonly string[] }> = {
-  cycle: cycleSpec(),
+const CYCLE_FIELDS_SET: FieldSpecMap<{ cycle: readonly string[] }> = {
+  cycle: cycleSpec("set"),
+};
+const CYCLE_FIELDS_PERSIST: FieldSpecMap<{ cycle: readonly string[] }> = {
+  cycle: cycleSpec("persist"),
 };
 
 // [LAW:types-are-the-program] A bounded step is fully described by an integer
@@ -384,21 +409,21 @@ function valueSourceArm<P extends object>(
 // these; the dispatcher counts presence over `detect` and reconstructs
 // `{ set, ...payload }`.
 const SET_ARMS: readonly ValueSourceArm[] = [
-  valueSourceArm("set", TO_FIELDS),
-  valueSourceArm("set", FROM_FIELDS),
+  valueSourceArm("set", TO_FIELDS_SET),
+  valueSourceArm("set", FROM_FIELDS_SET),
   valueSourceArm("set", BOUNDED_FIELDS, minLessThanMax, byNonZero),
   valueSourceArm("set", INT_FIELDS),
-  valueSourceArm("set", CYCLE_FIELDS),
+  valueSourceArm("set", CYCLE_FIELDS_SET),
 ];
 
 // [LAW:one-type-per-behavior] `persist` mirrors `set` minus the `int` arm — a
 // page cursor is a UI-only paging concept with no meaning as a persisted
 // config default (see action.ts's ActionDecl comment).
 const PERSIST_ARMS: readonly ValueSourceArm[] = [
-  valueSourceArm("persist", TO_FIELDS),
-  valueSourceArm("persist", FROM_FIELDS),
+  valueSourceArm("persist", TO_FIELDS_PERSIST),
+  valueSourceArm("persist", FROM_FIELDS_PERSIST),
   valueSourceArm("persist", BOUNDED_FIELDS, minLessThanMax, byNonZero),
-  valueSourceArm("persist", CYCLE_FIELDS),
+  valueSourceArm("persist", CYCLE_FIELDS_PERSIST),
 ];
 
 const VALUE_SOURCE_MESSAGE = (discriminator: "set" | "persist") =>
@@ -457,11 +482,14 @@ function valueSourceAction(
     : ({ [discriminator]: stateKey, ...payload } as unknown as ActionDecl);
 }
 
-// [LAW:no-silent-fallbacks] A literal `to` and the `set` key share the
-// non-empty/slash-free shape — the set-state wire rejects empty values and splits
-// on "/", so either is undeliverable. The empty/slash messages are this arm's,
-// the shape is the shared enforcer's.
-function setLiteralSpec(): FieldSpec<string> {
+// [LAW:no-silent-fallbacks] A literal `to` and the discriminator key share
+// the non-empty/slash-free shape — the wire rejects empty values and splits
+// on "/", so either is undeliverable. The empty/slash messages are this
+// arm's, the shape is the shared enforcer's. Built once per discriminator
+// (see TO_FIELDS_SET/TO_FIELDS_PERSIST) so a `persist` action's message names
+// "persist value" and the set-config wire, never `set`'s wording.
+function setLiteralSpec(discriminator: "set" | "persist"): FieldSpec<string> {
+  const wire = wireName(discriminator);
   return {
     required: true,
     json: { type: "string" },
@@ -471,15 +499,16 @@ function setLiteralSpec(): FieldSpec<string> {
         path,
         field,
         raw,
-        `set value must be non-empty — an empty value cannot be delivered on the set-state wire`,
-        (v) => `set value "${v}" contains "/" — set values must be slash-free`,
+        `${discriminator} value must be non-empty — an empty value cannot be delivered on the ${wire} wire`,
+        (v) =>
+          `${discriminator} value "${v}" contains "/" — ${discriminator} values must be slash-free`,
       ) ?? undefined,
   };
 }
 
 // [LAW:types-are-the-program] `from` is either a NAME (a non-empty string,
 // resolved against the option-domain registry) or an INLINE literal domain (a
-// non-empty array of deliverable set-state values — the same non-empty/
+// non-empty array of deliverable wire values — the same non-empty/
 // slash-free wire shape `to` and `cycle` members enforce, plus the same
 // uniqueness `cycleSpec` requires: a duplicate has no successor-ambiguity
 // concern here, but it would render the same picker cell twice for no
@@ -487,8 +516,10 @@ function setLiteralSpec(): FieldSpec<string> {
 // resolves needs the merged config's per-config domains (e.g. "looks"), so
 // that check is a cross-reference concern (validateCrossReferences) —
 // symmetric to how a layout node's segment ref or a `{{ action }}` ref
-// resolves post-merge.
-function fromSpec(): FieldSpec<OptionDomain> {
+// resolves post-merge. Built once per discriminator, same reason as
+// setLiteralSpec.
+function fromSpec(discriminator: "set" | "persist"): FieldSpec<OptionDomain> {
+  const wire = wireName(discriminator);
   return {
     required: true,
     json: {
@@ -526,7 +557,7 @@ function fromSpec(): FieldSpec<OptionDomain> {
           issue(
             ctx,
             at,
-            `from array members must be non-empty — an empty value cannot be delivered on the set-state wire`,
+            `from array members must be non-empty — an empty value cannot be delivered on the ${wire} wire`,
           );
           return undefined;
         }
@@ -535,7 +566,7 @@ function fromSpec(): FieldSpec<OptionDomain> {
           issue(
             ctx,
             at,
-            `from array member(s) ${slashed.map((m) => `"${m}"`).join(", ")} contain "/" — set values must be slash-free`,
+            `from array member(s) ${slashed.map((m) => `"${m}"`).join(", ")} contain "/" — ${discriminator} values must be slash-free`,
           );
           return undefined;
         }
@@ -561,12 +592,15 @@ function fromSpec(): FieldSpec<OptionDomain> {
 
 // [LAW:types-are-the-program] `cycle` is the enumerated domain a click steps
 // through: at least two members (one member has no successor to step to — that
-// is a literal `to`), each a deliverable set-state value (non-empty, slash-free
+// is a literal `to`), each a deliverable wire value (non-empty, slash-free
 // — the same wire shape `to` enforces), no duplicates (the successor of a
 // duplicated member is ambiguous). Members double as the derived allow-list
 // gate, so a member this spec admits is a value the wire delivers, by
-// construction.
-function cycleSpec(): FieldSpec<readonly string[]> {
+// construction. Built once per discriminator, same reason as setLiteralSpec.
+function cycleSpec(
+  discriminator: "set" | "persist",
+): FieldSpec<readonly string[]> {
+  const wire = wireName(discriminator);
   return {
     required: true,
     json: {
@@ -601,7 +635,7 @@ function cycleSpec(): FieldSpec<readonly string[]> {
         issue(
           ctx,
           at,
-          `cycle members must be non-empty — an empty value cannot be delivered on the set-state wire`,
+          `cycle members must be non-empty — an empty value cannot be delivered on the ${wire} wire`,
         );
         return undefined;
       }
@@ -609,7 +643,7 @@ function cycleSpec(): FieldSpec<readonly string[]> {
         issue(
           ctx,
           at,
-          `cycle member(s) ${slashed.map((m) => `"${m}"`).join(", ")} contain "/" — set values must be slash-free`,
+          `cycle member(s) ${slashed.map((m) => `"${m}"`).join(", ")} contain "/" — ${discriminator} values must be slash-free`,
         );
         return undefined;
       }

@@ -116,7 +116,7 @@ function actionContributions(config: DslConfig): KeySpecContribution[] {
 export function deriveConfigActionValidators(
   config: DslConfig,
 ): readonly KeySpecContribution[] {
-  return mergeContributions(actionContributions(config));
+  return mergeContributions(actionContributions(config), "config");
 }
 
 export function registerConfigValidator(

@@ -343,11 +343,13 @@ const stepState: VerbHandler = (rawValue, ctx) => {
 // [LAW:no-defensive-null-guards] validateConfigWrite already proved `key` is
 // a registered config-writable key and `key`'s registration only ever comes
 // from config-validators.ts's deriveConfigActionValidators, which reads the
-// key from a `persist` action's own `.persist` field — a value the action
-// LOADER (loader/actions.ts) validated is a real Globals field name at
-// config-load time (via the SAME isGlobalsField check). So a validated write
-// reaching here is a real Globals field by construction; this assertion is
-// the type-narrowing boundary, not a runtime possibility.
+// key from a `persist` action's own `.persist` field — a value the cross-ref
+// pass (loader/cross-ref.ts, via the SAME isGlobalsField check exported from
+// loader/globals.ts) already rejects at config-LOAD time when it doesn't
+// name a real Globals field, so a config with an invalid persist target
+// never reaches a live cache entry at all. So a validated write reaching
+// here is a real Globals field by construction; this assertion is the
+// type-narrowing boundary, not a runtime possibility.
 function assertGlobalsField(
   key: string,
 ): asserts key is Parameters<typeof coerceGlobalsValue>[0] {

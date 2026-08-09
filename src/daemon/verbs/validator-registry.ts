@@ -178,9 +178,17 @@ export function makeRangeValidator(
 // is a legal int write), and a NON-integer member aimed at it is the genuine
 // contradiction that throws. Two ranges widen-union; two allow-lists union;
 // an int and a range on one key conflict.
+// [LAW:one-source-of-truth] `noun` ("state"/"config") names the keyspace in
+// every thrown message — this function is the SAME merge both
+// deriveActionValidators (state-validators.ts) and deriveConfigActionValidators
+// (config-validators.ts) call, so a conflict thrown while merging a `persist`
+// action's contributions must say "config", never the SessionState-era
+// "state" wording (or the operator debugging a persist action gets pointed at
+// the wrong keyspace's mental model).
 export function mergeKeySpecs(
   key: string,
   specs: readonly DerivedValidatorSpec[],
+  noun: string = "state",
 ): DerivedValidatorSpec {
   type Range = Extract<DerivedValidatorSpec, { kind: "range" }>;
   const ranges = specs.filter((s): s is Range => s.kind === "range");
@@ -194,16 +202,16 @@ export function mergeKeySpecs(
   const nonInt = allowed.filter((v) => !INT_RE.test(v));
   if (nonInt.length > 0) {
     throw new Error(
-      `deriveActionValidators: key "${key}" is an integer spec (a paged ` +
+      `${noun} action table: key "${key}" is an integer spec (a paged ` +
         `cursor or a bounded value) but a click writes non-integer ` +
-        `value(s) to it (${nonInt.join(", ")}). A state key has one key ` +
+        `value(s) to it (${nonInt.join(", ")}). A ${noun} key has one key ` +
         `shape — point that click at a distinct key, or write an integer.`,
     );
   }
   if (hasInt && ranges.length > 0) {
     throw new Error(
-      `deriveActionValidators: key "${key}" is declared as both a paged ` +
-        `cursor (int) and a bounded value (range) — a state key has one key ` +
+      `${noun} action table: key "${key}" is declared as both a paged ` +
+        `cursor (int) and a bounded value (range) — a ${noun} key has one key ` +
         `shape. Use distinct keys.`,
     );
   }
@@ -216,7 +224,7 @@ export function mergeKeySpecs(
     });
     if (outOfRange.length > 0) {
       throw new Error(
-        `deriveActionValidators: key "${key}" is a bounded range [${min},${max}] ` +
+        `${noun} action table: key "${key}" is a bounded range [${min},${max}] ` +
           `but a click writes out-of-range value(s) to it ` +
           `(${outOfRange.join(", ")}). The range gate would clamp them, storing a ` +
           `different value than the click renders — write an in-range integer, ` +
@@ -252,13 +260,17 @@ function buildValidatorFromSpecs(
   specs: readonly DerivedValidatorSpec[],
   noun: string,
 ): KeyValidator {
-  return validatorForSpec(key, mergeKeySpecs(key, specs), noun);
+  return validatorForSpec(key, mergeKeySpecs(key, specs, noun), noun);
 }
 
 // [LAW:single-enforcer] THE coherence merge: group every contribution by key
-// and collapse each key's specs into the one spec that gates it.
+// and collapse each key's specs into the one spec that gates it. `noun`
+// names the keyspace (default "state" — the original, sole caller before
+// config-validators.ts's twin) so a conflict thrown mid-merge for a
+// `persist` action's contributions names the config keyspace, not state.
 export function mergeContributions(
   contributions: readonly KeySpecContribution[],
+  noun: string = "state",
 ): KeySpecContribution[] {
   const byKey = new Map<string, DerivedValidatorSpec[]>();
   for (const { key, spec } of contributions) {
@@ -268,7 +280,7 @@ export function mergeContributions(
   }
   return [...byKey].map(([key, specs]) => ({
     key,
-    spec: mergeKeySpecs(key, specs),
+    spec: mergeKeySpecs(key, specs, noun),
   }));
 }
 
@@ -411,7 +423,7 @@ export function createValidatorRegistry(
     rangeParamsFor(key) {
       const entry = entries.get(key);
       if (!entry || entry.permanent || entry.kind !== "range") return null;
-      const spec = mergeKeySpecs(key, entry.specs);
+      const spec = mergeKeySpecs(key, entry.specs, noun);
       if (spec.kind !== "range") {
         throw new Error(
           `rangeParamsFor: key "${key}" holds range specs but the merge ` +

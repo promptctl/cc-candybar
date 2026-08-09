@@ -21,6 +21,7 @@ import {
   knownOptionDomainNames,
   perConfigDomainsFor,
 } from "../option-domain.js";
+import { isGlobalsField, listGlobalsFieldNames } from "./globals.js";
 import { findKeyLine } from "./diagnostics.js";
 import { isPlainObject, type ValidateCtx } from "./validate-core.js";
 import {
@@ -76,6 +77,27 @@ export function validateCrossReferences(
         line: findKeyLine(ctx.source, ["actions", name, "from"]),
       });
     }
+  }
+  // [LAW:no-silent-failure] A `persist`/`reset` target must name a REAL
+  // Globals field — the loader's structural pass (loader/actions.ts) only
+  // proves the key is non-empty/slash-free, the same shape a `set` key needs
+  // for the wire, but a persist/reset key additionally has to land somewhere
+  // real in `globals`. Catching a typo (`persist: "pallete"`) here turns a
+  // confusing click-time "registration invariant broken" error into a clear
+  // load-time one naming the actual allowed fields — the same species of fix
+  // as the `from` domain check just above.
+  for (const [name, a] of Object.entries(cfg.actions)) {
+    const key = "persist" in a ? a.persist : "reset" in a ? a.reset : null;
+    if (key === null || isGlobalsField(key)) continue;
+    ctx.issues.push({
+      path: `actions.${name}.${"persist" in a ? "persist" : "reset"}`,
+      message: `actions.${name}: "${key}" is not a config globals field (have: ${listGlobalsFieldNames().join(", ")})`,
+      line: findKeyLine(ctx.source, [
+        "actions",
+        name,
+        "persist" in a ? "persist" : "reset",
+      ]),
+    });
   }
   // [LAW:one-source-of-truth] THE set of resolvable variable names — a
   // faithful mirror of the runtime store's key set (declareOne in
@@ -270,11 +292,12 @@ function hasStateKind(cfg: DslConfig): boolean {
   return false;
 }
 
-// [LAW:dataflow-not-control-flow] A config emits a set-state OR set-config
-// click — and so needs session.id — when any declared action is a `set`
-// (literal/option/bounded/cycle) or a `persist` (its config-overrides twin,
-// which also carries session.id on the wire for click-error surfacing).
-// copy/open actions write nothing, so they embed no session.id.
+// [LAW:dataflow-not-control-flow] A config emits a set-state, set-config, OR
+// reset-config click — and so needs session.id — when any declared action is
+// a `set` (literal/option/bounded/cycle), a `persist` (its config-overrides
+// twin), or a `reset` (persist's gated undo) — all three carry session.id on
+// the wire for click-error surfacing. copy/open actions write nothing, so
+// they embed no session.id.
 function hasActionSetAction(cfg: DslConfig): boolean {
   return Object.values(cfg.actions).some(
     (a) => actionBindsSet(a) || actionBindsPersist(a) || actionBindsReset(a),

@@ -387,6 +387,35 @@ describe("persist/reset action loader shape", () => {
       ),
     ).toThrow(/session\.id/);
   });
+
+  // [LAW:no-silent-failure] A typo'd persist/reset target must be a LOAD-time
+  // error naming the real field set, not a confusing click-time
+  // "registration invariant broken" message the operator can't act on.
+  test("persist targeting a non-Globals field is a load error naming the real fields", () => {
+    expect(() =>
+      parseAndValidate(
+        "<test>",
+        base(`{ a: { persist: 'pallete', to: 'nord' } }`),
+        ALLOWED,
+      ),
+    ).toThrow(/"pallete" is not a config globals field \(have: /);
+  });
+
+  test("reset targeting a non-Globals field is a load error naming the real fields", () => {
+    expect(() =>
+      parseAndValidate("<test>", base(`{ a: { reset: 'pallete' } }`), ALLOWED),
+    ).toThrow(/"pallete" is not a config globals field \(have: /);
+  });
+
+  test("persist targeting a real Globals field passes", () => {
+    expect(() =>
+      parseAndValidate(
+        "<test>",
+        base(`{ a: { persist: 'colorCompatibility', to: 'truecolor' } }`),
+        ALLOWED,
+      ),
+    ).not.toThrow();
+  });
 });
 
 // ─── end-to-end: click → durable write, through the real daemon handlers ─────
@@ -484,6 +513,68 @@ describe("persist action click → durable overrides write", () => {
     expect(effectsOf(resetUrl)[0]!.verb).toBe("reset-config");
     click(resetUrl);
     expect(loadConfigOverrides(overridesPath)).toEqual({});
+    dispose();
+  });
+
+  // [LAW:verifiable-goals] The end-to-end click→durable-write path exercised
+  // above only covers persist-option and reset. persist-literal, persist-cycle,
+  // and persist-bounded (routed through the distinct stepConfig handler —
+  // read current override, clamp, wrap, write) are non-trivial code paths of
+  // their own and need the same real-daemon-handler coverage.
+  const SRC2 = `{
+    globals: {},
+    variables: {
+      'session.id': { kind: 'input', path: 'session_id', default: '' },
+    },
+    actions: {
+      applyLookForever: { persist: 'look', to: 'vivid' },
+      cycleColorDepth: { persist: 'colorCompatibility', cycle: ['truecolor', '256'] },
+      bumpPadding: { persist: 'padding', min: 0, max: 16, by: 1 },
+    },
+    segments: { bar: { template: '{{ action "applyLookForever" "vivid" }} {{ action "cycleColorDepth" "cd" }} {{ action "bumpPadding" "+" }}', bg: 'surface', fg: 'foreground' } },
+    root: 'bar',
+  }`;
+
+  test("clicking a persist-literal (to) action writes the fixed value durably", () => {
+    const { render, click, dispose } = buildPersistRuntime(SRC2);
+    const urls = extractUrls(render());
+    const effect = effectsOf(urls[0]!)[0]!;
+    expect(effect.verb).toBe("set-config");
+    click(urls[0]!);
+    const overrides = loadConfigOverrides(
+      join(xdgStateDir, "cc-candybar", "config-overrides.json"),
+    );
+    expect(overrides).toEqual({ look: "vivid" });
+    dispose();
+  });
+
+  test("clicking a persist-cycle action writes the successor member durably", () => {
+    const { render, click, dispose } = buildPersistRuntime(SRC2);
+    const urls = extractUrls(render());
+    const effect = effectsOf(urls[1]!)[0]!;
+    expect(effect.verb).toBe("set-config");
+    click(urls[1]!);
+    // Unset counts as the first member ("truecolor"); the click writes the
+    // successor ("256") — same "unknown current counts as first" rule the
+    // renderer's cycleIndex uses.
+    const overrides = loadConfigOverrides(
+      join(xdgStateDir, "cc-candybar", "config-overrides.json"),
+    );
+    expect(overrides).toEqual({ colorCompatibility: "256" });
+    dispose();
+  });
+
+  test("clicking a persist-bounded action steps and persists via stepConfig", () => {
+    const { render, click, dispose } = buildPersistRuntime(SRC2);
+    const urls = extractUrls(render());
+    const effect = effectsOf(urls[2]!)[0]!;
+    expect(effect.verb).toBe("step-config");
+    click(urls[2]!); // unset seeds from min (0) + by (1) = 1
+    click(urls[2]!); // reads the just-written override (1) + by (1) = 2
+    const overrides = loadConfigOverrides(
+      join(xdgStateDir, "cc-candybar", "config-overrides.json"),
+    );
+    expect(overrides).toEqual({ padding: 2 });
     dispose();
   });
 
