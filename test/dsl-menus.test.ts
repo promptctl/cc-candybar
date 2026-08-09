@@ -34,6 +34,7 @@ import { listResolvablePaletteNames } from "../src/themes/policy";
 import {
   deriveActionValidators,
   registerStateValidator,
+  validateStateWrite,
 } from "../src/daemon/verbs/state-validators";
 import { ConfigError } from "../src/config/dsl-loader";
 import { effectsOf } from "./helpers/click";
@@ -750,6 +751,92 @@ describe("compose substrate (drops stack, single-line rows unchanged)", () => {
     expect(lines[0]).toContain("AAA");
     expect(lines[0]).toContain("BBB");
     expect(lines[0]).toContain("CCC");
+    dispose();
+  });
+});
+
+// ─── The open-domain claim, end to end (candybar-config-engine-71o.5) ────────
+//
+// [LAW:verifiable-goals] The epic's own acceptance bullet: "Adding a menu
+// over a NEW config field with an enumerable domain requires only config
+// data — zero engine edits." 71o.1 (test/dsl-actions.test.ts's "inline
+// literal option domain" describe block) already proved this for `{{ action
+// }}` bound directly to each value; this proves the SAME claim for
+// `{{ menu }}` — the picker DISCLOSURE a real settings surface actually
+// uses — which had never been exercised over an inline `from: [...]`
+// domain. "Zero engine edits" is asserted by construction: this file ships
+// only a JSON5 string (`SRC` below) and calls the same `buildRuntime`/
+// `parseAndValidate`/`registerDslConfig` every other test in this suite
+// calls — no src/ file changes accompany this test.
+
+describe("candybar-config-engine-71o.5 — a brand-new field gets a {{ menu }} via inline domain alone", () => {
+  // "sound-effects" is not a field any built-in segment, action, or domain
+  // registry knows about — proving the claim requires a field the engine
+  // has literally never seen, not one of the pre-registered "themes" /
+  // "styles" / "looks" domains.
+  const SRC = `{
+    globals: {},
+    variables: {
+      'session.id': { kind: 'input', path: 'session_id', default: '' },
+      'term.cols': { kind: 'input', path: 'term.cols', type: 'number', default: 80 },
+      soundEffects: { kind: 'state', key: 'sound-effects', default: 'chime' },
+    },
+    actions: {
+      applySound: { set: 'sound-effects', from: ['chime', 'buzz', 'silent'] },
+    },
+    segments: {
+      soundControl: {
+        template: '\u{1F50A} {{ .soundEffects }} {{ menu "applySound" }}',
+        bg: 'surface', fg: 'foreground',
+      },
+    },
+    root: 'soundControl',
+  }`;
+
+  test("the picker renders one option per inline domain member, once opened", () => {
+    const { render, click, dispose } = buildRuntime(SRC);
+    const closed = render();
+    expect(closed).not.toContain("buzz");
+    expect(closed).not.toContain("silent");
+
+    const toggleUrl = extractUrls(closed).find((u) =>
+      effectsOf(u).some((e) => e.args[2] === "applySound"),
+    );
+    expect(toggleUrl).toBeDefined();
+    click(toggleUrl!);
+
+    const opened = render();
+    for (const member of ["chime", "buzz", "silent"]) {
+      expect(opened).toContain(member);
+    }
+    dispose();
+  });
+
+  test("clicking an option mutates the field through the real gate — the domain's own allow-list, derived with zero engine edits", () => {
+    const { render, click, sessionState, dispose } = buildRuntime(SRC);
+    const toggleUrl = extractUrls(render()).find((u) =>
+      effectsOf(u).some((e) => e.args[2] === "applySound"),
+    );
+    expect(toggleUrl).toBeDefined();
+    click(toggleUrl!);
+
+    const opened = render();
+    const buzzUrl = extractUrls(opened).find((u) =>
+      effectsOf(u).some(
+        (e) => e.verb === "set-state" && e.args[2] === "buzz",
+      ),
+    );
+    expect(buzzUrl).toBeDefined();
+    click(buzzUrl!);
+
+    expect(sessionState.get("s1", "sound-effects")).toBe("buzz");
+
+    // The gate is the inline domain itself — an out-of-domain value is
+    // rejected loudly, proving the click passed a REAL derived allow-list
+    // (mirrors 71o.1's own "outside the inline domain is rejected loudly"
+    // assertion in test/dsl-actions.test.ts), not an unconditional write.
+    const rejected = validateStateWrite("sound-effects", "explosion");
+    expect(rejected.ok).toBe(false);
     dispose();
   });
 });
