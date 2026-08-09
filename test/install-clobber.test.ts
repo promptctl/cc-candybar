@@ -11,6 +11,7 @@ const {
   stageFile,
   stagedEntryKind,
   resolveRenderEntry,
+  installSuccessMessage,
 } = __test__;
 
 // Every temp dir is registered here and removed once after the whole file, so
@@ -201,6 +202,15 @@ describe("install — clobber protection", () => {
 
     updateClaudeSettings(BIN, DEFAULT_INSTALL_ARGS, false, p);
     expect(readCommand(p)).toBe(buildStatusLineCommand(BIN, []));
+  });
+});
+
+describe("installSuccessMessage", () => {
+  test("mentions the theme/look picker on the default bar", () => {
+    const msg = installSuccessMessage();
+    expect(msg).toMatch(/theme\/look picker/i);
+    expect(msg).toContain("🎨");
+    expect(msg).toContain("◐");
   });
 });
 
