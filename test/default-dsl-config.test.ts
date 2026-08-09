@@ -226,7 +226,14 @@ describe("DEFAULT_DSL_CONFIG", () => {
     try {
       const targetTheme = listResolvablePaletteNames().find(
         (name) => name !== parsed.globals.palette,
-      )!;
+      );
+      if (targetTheme === undefined) {
+        throw new Error(
+          "listResolvablePaletteNames() returned only the bundled default's own " +
+            `palette (${JSON.stringify(parsed.globals.palette)}) — need at least ` +
+            "one other resolvable theme to exercise a theme-switching click",
+        );
+      }
       const before = render();
       expect(before).not.toContain(targetTheme);
 
@@ -238,7 +245,15 @@ describe("DEFAULT_DSL_CONFIG", () => {
       expect(afterTheme).toContain(targetTheme);
       expect(afterTheme).not.toBe(before);
 
-      const targetLook = Object.keys(parsed.looks).find((name) => name !== "none")!;
+      const targetLook = Object.keys(parsed.looks).find(
+        (name) => name !== "none",
+      );
+      if (targetLook === undefined) {
+        throw new Error(
+          "the merged config's looks block held only the \"none\" identity floor " +
+            "— need at least one other declared look to exercise a look-switching click",
+        );
+      }
       clickUrl(
         effectsUrl([{ verb: VERB_SET_STATE, args: [SID, "look", targetLook] }]),
         { sessionState, dlog: () => {} },
