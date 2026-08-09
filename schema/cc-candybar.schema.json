@@ -1141,10 +1141,20 @@
                 "type": "string"
               },
               "from": {
-                "enum": [
-                  "themes",
-                  "styles",
-                  "looks"
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "minItems": 1,
+                    "uniqueItems": true
+                  }
                 ]
               }
             },

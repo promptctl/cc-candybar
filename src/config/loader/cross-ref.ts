@@ -13,6 +13,10 @@ import {
   type VariableDecl,
 } from "../dsl-types.js";
 import { actionBindsSet } from "../action.js";
+import {
+  knownOptionDomainNames,
+  perConfigDomainsFor,
+} from "../option-domain.js";
 import { findKeyLine } from "./diagnostics.js";
 import { isPlainObject, type ValidateCtx } from "./validate-core.js";
 import {
@@ -49,6 +53,25 @@ export function validateCrossReferences(
       message: `globals.look "${cfg.globals.look}" does not match any declared look (have: ${Object.keys(cfg.looks).join(", ")})`,
       line: findKeyLine(ctx.source, ["globals", "look"]),
     });
+  }
+  // [LAW:one-source-of-truth] A `set … from` NAME must resolve — checked
+  // against this config's per-config domains ("looks", the merged looks:
+  // block) plus the global registry (themes/styles, and any future
+  // registration), the SAME set resolveOptionDomain consults at render and
+  // gate-derivation time. An inline array `from` is its own domain — nothing
+  // to resolve. Runs post-merge for the same reason globals.look does above:
+  // "looks" isn't fully known until the user's looks: block has merged onto
+  // the bundled stdlib.
+  const optionDomains = perConfigDomainsFor(cfg.looks);
+  for (const [name, a] of Object.entries(cfg.actions)) {
+    if (!("set" in a) || !("from" in a) || typeof a.from !== "string") continue;
+    if (!knownOptionDomainNames(optionDomains).includes(a.from)) {
+      ctx.issues.push({
+        path: `actions.${name}.from`,
+        message: `actions.${name} from: references unknown option domain "${a.from}" (have: ${knownOptionDomainNames(optionDomains).join(", ")})`,
+        line: findKeyLine(ctx.source, ["actions", name, "from"]),
+      });
+    }
   }
   // [LAW:one-source-of-truth] THE set of resolvable variable names — a
   // faithful mirror of the runtime store's key set (declareOne in
