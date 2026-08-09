@@ -8,6 +8,7 @@ import {
   resolveDslConfigPath,
   dslConfigCandidatePaths,
   detectConfigCollisions,
+  mergeWithDefault,
   ConfigError,
 } from "../../config/dsl-loader.js";
 import type { ValidatedConfig } from "../../config/dsl-types.js";
@@ -17,6 +18,12 @@ import {
   deriveActionValidators,
   registerStateValidator,
 } from "../verbs/state-validators.js";
+import {
+  deriveConfigActionValidators,
+  registerConfigValidator,
+} from "../verbs/config-validators.js";
+import { loadConfigOverrides } from "../config-overrides-store.js";
+import { configOverridesPath } from "../paths.js";
 import { VariableStore } from "../../var-system/store.js";
 import { SourceRegistry } from "../../var-system/sources.js";
 import type { GitDataProvider } from "./git.js";
@@ -277,7 +284,24 @@ export class RenderCache {
       resolvedPath,
       DEFAULT_DSL_CONFIG,
     );
-    const config = validateConfig(merged, resolvedPath ?? "<default>", source);
+    // [LAW:one-source-of-truth] The persistent config-overrides layer
+    // (candybar-config-engine-71o.2) is a SECOND application of the SAME
+    // mergeWithDefault cascade the user file already went through — no new
+    // merge semantics, just one more layer at bundled-default < user-file <
+    // overrides precedence (a `persist` write changes the DEFAULT; a session
+    // pick still overrides it per-session via effective* resolution,
+    // unchanged). Always applied, even when the overrides file is empty —
+    // an empty overrides object merges as a no-op, so there is no
+    // "has overrides?" branch [LAW:dataflow-not-control-flow].
+    const withOverrides = mergeWithDefault(
+      { globals: loadConfigOverrides(configOverridesPath(), dlog) },
+      merged,
+    );
+    const config = validateConfig(
+      withOverrides,
+      resolvedPath ?? "<default>",
+      source,
+    );
 
     const store = new VariableStore();
     // [LAW:single-enforcer] Inject the daemon's shared GitDataProvider so
@@ -320,6 +344,14 @@ export class RenderCache {
       // roll the whole reload back.
       for (const { key, spec } of deriveActionValidators(config)) {
         validatorDisposers.push(registerStateValidator(key, spec));
+      }
+      // [LAW:one-source-of-truth] The `persist` action table's twin
+      // derivation, registered through the SAME dispose-before-swap
+      // transaction — a config's persistent-config-writable-key surface
+      // lives and dies with this cache entry exactly like its SessionState
+      // surface does.
+      for (const { key, spec } of deriveConfigActionValidators(config)) {
+        validatorDisposers.push(registerConfigValidator(key, spec));
       }
     } catch (err) {
       for (const dispose of validatorDisposers) dispose();
@@ -380,11 +412,17 @@ export class RenderCache {
     // covers the exact same set of paths the next reload would consult — a
     // `--config` override collapses to one candidate; absent, the precedence
     // chain unfolds in full.
-    const candidates = dslConfigCandidatePaths(
-      entry.projectDir,
-      entry.cwd,
-      entry.configFile,
-    );
+    //
+    // [LAW:dataflow-not-control-flow] configOverridesPath() rides the SAME
+    // candidate list, not a second watch branch: "reload rides the existing
+    // watcher" (candybar-config-engine-71o.2) means a persistent config write
+    // is just one more file in the resolution chain the loop below already
+    // handles uniformly (existence-gated, watched via its parent dir so the
+    // file's first-ever creation also triggers reload).
+    const candidates = [
+      ...dslConfigCandidatePaths(entry.projectDir, entry.cwd, entry.configFile),
+      configOverridesPath(),
+    ];
     const dirSet = new Map<string, Set<string>>();
     for (const candidate of candidates) {
       const dir = path.dirname(candidate);

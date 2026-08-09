@@ -101,3 +101,21 @@ export function validateGlobals(ctx: ValidateCtx, raw: unknown): Globals {
 export function globalsJson(): JsonNode {
   return recordJson(GLOBALS_SCHEMA);
 }
+
+// [LAW:one-source-of-truth] THE membership check for "is this a real Globals
+// field" — derived from GLOBALS_SCHEMA.fields, the same declaration
+// validateGlobals/globalsJson interpret, so a `persist`/`reset` action's
+// target key is checked against exactly the field set a hand-authored
+// `globals: {...}` block would be. Used by cross-ref.ts (candybar-config-
+// engine-71o.2) to catch a typo'd persist target at config-load time instead
+// of a confusing click-time "invariant broken" error.
+const GLOBALS_FIELD_NAMES: ReadonlySet<string> = new Set(
+  Object.keys(GLOBALS_SCHEMA.fields),
+);
+export function isGlobalsField(key: string): key is keyof Globals {
+  return GLOBALS_FIELD_NAMES.has(key);
+}
+
+export function listGlobalsFieldNames(): readonly string[] {
+  return [...GLOBALS_FIELD_NAMES];
+}
