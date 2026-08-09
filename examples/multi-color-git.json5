@@ -1,0 +1,52 @@
+// cc-candybar: multi-color-git.json5
+//
+// Reference pattern for per-field git segment coloring (brandon-segments-3eo):
+// each fact in the git segment — branch, staged/unstaged/untracked counts,
+// conflicts — gets its OWN semantic palette color instead of one uniform
+// segment `fg`, so a dirty tree reads at a glance without parsing the text
+// (the p10k / gitaculous-style terminal-prompt convention). This is what the
+// bundled default's `git`/`gitaculous` segment templates
+// (src/config/default-dsl-config.ts) already do; this file lifts that same
+// template body out into a standalone, heavily-annotated example so a
+// template author can copy the pattern without reading the DEFAULT_DSL_CONFIG
+// source.
+//
+// The key idea: color by NAME (primary/accent/success/warning/error), never
+// by hardcoded ANSI/hex value. A palette name resolves against whichever
+// theme/look is active, so the same template stays legible across every
+// theme a user picks — a hardcoded `red`/`green` would not.
+//
+// Try it (static demo, no click state needed — this example has no
+// interactive elements):
+//   pnpm demo examples/multi-color-git.json5
+// or point a real config at it:
+//   cp examples/multi-color-git.json5 ~/.config/cc-candybar/config.json5
+//
+// Everything else merges on top of DEFAULT_DSL_CONFIG; only `segments.git`
+// and `root` are declared here.
+{
+  segments: {
+    git: {
+      // Five distinct palette-name functions, one per fact:
+      //   primary  — the branch name (the identity of the segment)
+      //   success  — staged files (green-family: ready to commit) AND the
+      //              ahead count (green-family: unpushed local work)
+      //   warning  — unstaged files AND the behind count (both mean
+      //              "needs attention" — uncommitted edits / needs a pull)
+      //   accent   — untracked files (new, not yet in git's index at all —
+      //              distinct from "unstaged", which implies tracked+edited)
+      //   error    — merge conflicts (the one state that blocks a commit)
+      // Compare this to the bundled default's GIT_TEMPLATE/GIT_WORKTREE in
+      // src/config/default-dsl-config.ts — same coloring convention, just
+      // inlined here instead of factored through shared TS template-string
+      // constants (this file has no TS module to factor into).
+      template: '⎇ {{ primary .git.branch }}{{ if or (gt .git.ahead 0) (gt .git.behind 0) }} {{ if gt .git.ahead 0 }}{{ success (printf "↑%v" .git.ahead) }}{{ end }}{{ if gt .git.behind 0 }}{{ warning (printf "↓%v" .git.behind) }}{{ end }}{{ end }}{{ if or (gt .git.staged 0) (gt .git.unstaged 0) (gt .git.untracked 0) (gt .git.conflicts 0) }} ({{ $first := true }}{{ if gt .git.staged 0 }}{{ success (printf "+%v" .git.staged) }}{{ $first = false }}{{ end }}{{ if gt .git.unstaged 0 }}{{ if not $first }} {{ end }}{{ warning (printf "~%v" .git.unstaged) }}{{ $first = false }}{{ end }}{{ if gt .git.untracked 0 }}{{ if not $first }} {{ end }}{{ accent (printf "?%v" .git.untracked) }}{{ $first = false }}{{ end }}{{ if gt .git.conflicts 0 }}{{ if not $first }} {{ end }}{{ error (printf "!%v" .git.conflicts) }}{{ $first = false }}{{ end }}){{ end }}',
+      bg: "surface-active",
+      fg: "foreground",
+      when: '{{ ne .git.branch "" }}',
+    },
+  },
+
+  // A minimal, focused row — just the segment this example is about.
+  root: { h: ["directory", "git"] },
+}
