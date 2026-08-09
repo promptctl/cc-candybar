@@ -7,7 +7,10 @@ import {
   buildRenderPayload,
   buildNeededPrefixes,
 } from "../src/daemon/render-payload";
-import type { RenderPayloadDeps } from "../src/daemon/render-payload";
+import type {
+  EffectiveGlobals,
+  RenderPayloadDeps,
+} from "../src/daemon/render-payload";
 import type { DslConfig, LayoutNode } from "../src/config/dsl-types";
 import { ABSENT } from "../src/utils/outcome";
 
@@ -83,12 +86,18 @@ function buildMockDeps(): { deps: RenderPayloadDeps; counts: CallCounts } {
   return { deps, counts };
 }
 
-// The daemon-resolved effective theme; the gating tests assert provider CALL
-// COUNTS, not theme, so any resolvable name satisfies the required argument.
-const EFFECTIVE_THEME = "textual-dark";
-// The daemon-resolved effective look; "none" is the identity floor every merged
-// config carries.
-const EFFECTIVE_LOOK = "none";
+// The daemon-resolved effective globals; the gating tests assert provider CALL
+// COUNTS, not these values, so any well-formed struct satisfies the required
+// argument.
+const EFFECTIVE_GLOBALS: EffectiveGlobals = {
+  theme: "textual-dark",
+  look: "none",
+  style: "powerline",
+  charset: "unicode",
+  colorCompatibility: "truecolor",
+  autoWrap: true,
+  padding: 1,
+};
 
 const HOOK_DATA = {
   hook_event_name: "Status",
@@ -160,8 +169,7 @@ describe("buildRenderPayload — layout-driven provider gating", () => {
       deps,
       undefined,
       buildNeededPrefixes(CONFIG_WITHOUT_METRICS),
-      EFFECTIVE_THEME,
-      EFFECTIVE_LOOK,
+      EFFECTIVE_GLOBALS,
     );
     expect(counts.git).toBe(1);
     // No segment in layout reads metrics.* / tmux.* / today.* / etc., so
@@ -180,8 +188,7 @@ describe("buildRenderPayload — layout-driven provider gating", () => {
       deps,
       undefined,
       buildNeededPrefixes(CONFIG_WITH_METRICS),
-      EFFECTIVE_THEME,
-      EFFECTIVE_LOOK,
+      EFFECTIVE_GLOBALS,
     );
     expect(counts.git).toBe(1);
     expect(counts.metrics).toBe(1);

@@ -23,6 +23,7 @@ import { join } from "node:path";
 import {
   buildRenderPayload,
   projectTokensPerSecond,
+  type EffectiveGlobals,
   type RenderPayloadDeps,
 } from "../src/daemon/render-payload";
 import { SessionUsageStore } from "../src/daemon/cache/session-usage-store";
@@ -258,12 +259,17 @@ const SPEED_PATHS = new Set([
   "session.tokens",
 ]);
 
-// The daemon-resolved effective theme; these speed-lane tests don't exercise
-// it, so any resolvable name satisfies the required argument.
-const EFFECTIVE_THEME = "textual-dark";
-// The daemon-resolved effective look; "none" is the identity floor every merged
-// config carries.
-const EFFECTIVE_LOOK = "none";
+// The daemon-resolved effective globals; these speed-lane tests don't
+// exercise them, so any well-formed struct satisfies the required argument.
+const EFFECTIVE_GLOBALS: EffectiveGlobals = {
+  theme: "textual-dark",
+  look: "none",
+  style: "powerline",
+  charset: "unicode",
+  colorCompatibility: "truecolor",
+  autoWrap: true,
+  padding: 1,
+};
 
 function hook(): ClaudeHookData {
   return {
@@ -283,8 +289,7 @@ describe("buildRenderPayload — speed lane", () => {
       depsWith(),
       undefined,
       SPEED_PATHS,
-      EFFECTIVE_THEME,
-      EFFECTIVE_LOOK,
+      EFFECTIVE_GLOBALS,
     );
     // Δoutput 500 / 1s = 500; Δtotal 500 / 1s = 500; Δinput 0 ⇒ absent.
     expect(payload.speed?.output).toBe(500);
@@ -307,8 +312,7 @@ describe("buildRenderPayload — speed lane", () => {
       }),
       undefined,
       SPEED_PATHS,
-      EFFECTIVE_THEME,
-      EFFECTIVE_LOOK,
+      EFFECTIVE_GLOBALS,
     );
     expect(payload.speed).toBeUndefined();
   });
@@ -338,8 +342,7 @@ describe("buildRenderPayload — speed lane", () => {
       }),
       undefined,
       new Set(["speed.history"]),
-      EFFECTIVE_THEME,
-      EFFECTIVE_LOOK,
+      EFFECTIVE_GLOBALS,
     );
     expect(payload.speed?.history).toBe("100,0,300");
   });
@@ -366,8 +369,7 @@ describe("buildRenderPayload — speed lane", () => {
       }),
       undefined,
       new Set(["speed.history"]),
-      EFFECTIVE_THEME,
-      EFFECTIVE_LOOK,
+      EFFECTIVE_GLOBALS,
     );
     // Only the single in-window pair survives; the stale and rapid gaps are
     // dropped, never shown as 0.
@@ -389,8 +391,7 @@ describe("buildRenderPayload — speed lane", () => {
       }),
       undefined,
       new Set(["speed.history"]),
-      EFFECTIVE_THEME,
-      EFFECTIVE_LOOK,
+      EFFECTIVE_GLOBALS,
     );
     expect(payload.speed).toBeUndefined();
   });
@@ -401,8 +402,7 @@ describe("buildRenderPayload — speed lane", () => {
       depsWith(),
       undefined,
       new Set(["session.tokens"]),
-      EFFECTIVE_THEME,
-      EFFECTIVE_LOOK,
+      EFFECTIVE_GLOBALS,
     );
     expect(payload.speed).toBeUndefined();
   });

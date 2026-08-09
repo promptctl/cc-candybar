@@ -9,7 +9,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { buildRenderPayload } from "../src/daemon/render-payload";
-import type { RenderPayloadDeps } from "../src/daemon/render-payload";
+import type {
+  EffectiveGlobals,
+  RenderPayloadDeps,
+} from "../src/daemon/render-payload";
 import type { GitInfo } from "../src/segments/git";
 import { ABSENT, failed, ok, type Outcome } from "../src/utils/outcome";
 
@@ -34,12 +37,18 @@ function depsWith(
   } as unknown as RenderPayloadDeps;
 }
 
-// The effective theme the daemon resolves per render; these lane tests don't
-// exercise it, so any resolvable name serves as the required argument.
-const EFFECTIVE_THEME = "textual-dark";
-// The daemon-resolved effective look; "none" is the identity floor every merged
-// config carries.
-const EFFECTIVE_LOOK = "none";
+// The effective globals the daemon resolves per render; these lane tests
+// don't exercise them, so any well-formed struct serves as the required
+// argument.
+const EFFECTIVE_GLOBALS: EffectiveGlobals = {
+  theme: "textual-dark",
+  look: "none",
+  style: "powerline",
+  charset: "unicode",
+  colorCompatibility: "truecolor",
+  autoWrap: true,
+  padding: 1,
+};
 
 const GIT_PATHS = new Set([
   "git.branch",
@@ -70,8 +79,7 @@ describe("buildRenderPayload — git outcome lane", () => {
       deps,
       undefined,
       GIT_PATHS,
-      EFFECTIVE_THEME,
-      EFFECTIVE_LOOK,
+      EFFECTIVE_GLOBALS,
     );
 
     expect(payload.git).toBeUndefined();
@@ -92,8 +100,7 @@ describe("buildRenderPayload — git outcome lane", () => {
       deps,
       undefined,
       GIT_PATHS,
-      EFFECTIVE_THEME,
-      EFFECTIVE_LOOK,
+      EFFECTIVE_GLOBALS,
     );
 
     expect(payload.git).toBeUndefined();
@@ -119,8 +126,7 @@ describe("buildRenderPayload — git outcome lane", () => {
       deps,
       undefined,
       GIT_PATHS,
-      EFFECTIVE_THEME,
-      EFFECTIVE_LOOK,
+      EFFECTIVE_GLOBALS,
     );
 
     // ok fields project as values; the failed field is MISSING (the DSL
@@ -160,8 +166,7 @@ describe("buildRenderPayload — cache outcome lane", () => {
       deps,
       undefined,
       CACHE_PATHS,
-      EFFECTIVE_THEME,
-      EFFECTIVE_LOOK,
+      EFFECTIVE_GLOBALS,
     );
     chmodSync(transcript, 0o644);
 
@@ -190,8 +195,7 @@ describe("buildRenderPayload — cache outcome lane", () => {
       deps,
       undefined,
       CACHE_PATHS,
-      EFFECTIVE_THEME,
-      EFFECTIVE_LOOK,
+      EFFECTIVE_GLOBALS,
     );
 
     expect(payload.cache).toEqual({
@@ -228,8 +232,7 @@ describe("buildRenderPayload — migrated lanes share the outcome contract", () 
       deps,
       undefined,
       LANE_PATHS,
-      EFFECTIVE_THEME,
-      EFFECTIVE_LOOK,
+      EFFECTIVE_GLOBALS,
     );
 
     expect(payload.context).toBeUndefined();
@@ -270,8 +273,7 @@ describe("buildRenderPayload — migrated lanes share the outcome contract", () 
       deps,
       undefined,
       LANE_PATHS,
-      EFFECTIVE_THEME,
-      EFFECTIVE_LOOK,
+      EFFECTIVE_GLOBALS,
     );
 
     expect(payload.tmux).toEqual({ session: "main-session" });
@@ -295,14 +297,47 @@ describe("buildRenderPayload — migrated lanes share the outcome contract", () 
       deps,
       undefined,
       LANE_PATHS,
-      EFFECTIVE_THEME,
-      EFFECTIVE_LOOK,
+      EFFECTIVE_GLOBALS,
     );
 
     expect(payload.tmux).toBeUndefined();
     expect(logs).toHaveLength(1);
     expect(logs[0]!.msg).toContain("tmux:");
     expect(logs[0]!.msg).toContain("stub bug");
+  });
+});
+
+// [LAW:one-source-of-truth] candybar-config-engine-71o.3: style/charset/
+// colorCompatibility/autoWrap/padding are theme/look's twins — this pins
+// that buildRenderPayload projects the EffectiveGlobals struct into the
+// payload verbatim (no name typo, no dropped field, unconditionally present
+// with no `wants` gate — exactly like theme/look).
+describe("buildRenderPayload — effective globals projection", () => {
+  test("every EffectiveGlobals field lands under its own *.effective payload key, unconditionally", async () => {
+    const effective: EffectiveGlobals = {
+      theme: "nord",
+      look: "vivid",
+      style: "capsule",
+      charset: "ascii",
+      colorCompatibility: "256",
+      autoWrap: false,
+      padding: 3,
+    };
+    const logs: LogEntry[] = [];
+    const payload = await buildRenderPayload(
+      hookData("/no/such/transcript.jsonl"),
+      depsWith(ABSENT, logs),
+      undefined,
+      new Set(), // no provider lane needed for this projection
+      effective,
+    );
+    expect(payload.theme).toEqual({ effective: "nord" });
+    expect(payload.look).toEqual({ effective: "vivid" });
+    expect(payload.style).toEqual({ effective: "capsule" });
+    expect(payload.charset).toEqual({ effective: "ascii" });
+    expect(payload.colorCompatibility).toEqual({ effective: "256" });
+    expect(payload.autoWrap).toEqual({ effective: false });
+    expect(payload.padding).toEqual({ effective: 3 });
   });
 });
 
@@ -338,8 +373,7 @@ describe("buildRenderPayload — git PR projection", () => {
       deps,
       undefined,
       PR_PATHS,
-      EFFECTIVE_THEME,
-      EFFECTIVE_LOOK,
+      EFFECTIVE_GLOBALS,
     );
 
     expect(payload.git).toMatchObject({
@@ -368,8 +402,7 @@ describe("buildRenderPayload — git PR projection", () => {
       deps,
       undefined,
       PR_PATHS,
-      EFFECTIVE_THEME,
-      EFFECTIVE_LOOK,
+      EFFECTIVE_GLOBALS,
     );
 
     expect(payload.git!.prError).toBe("gh pr view: non-zero, exit 1, HTTP 401");
@@ -400,8 +433,7 @@ describe("buildRenderPayload — git PR projection", () => {
       deps,
       undefined,
       PR_PATHS,
-      EFFECTIVE_THEME,
-      EFFECTIVE_LOOK,
+      EFFECTIVE_GLOBALS,
     );
 
     expect("prNumber" in payload.git!).toBe(false);

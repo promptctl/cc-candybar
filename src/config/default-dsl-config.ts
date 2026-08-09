@@ -229,6 +229,39 @@ export const RAW_DEFAULT_DSL_CONFIG = {
       path: "look.effective",
       default: "",
     },
+    // [LAW:one-type-per-behavior] style/charset/colorCompatibility/autoWrap/
+    // padding are theme/look's twins over the remaining persistable globals
+    // (candybar-config-engine-71o.3) — the SAME values BuildLineOptions
+    // renders with, each read back through this projection so a `persist`
+    // action over the field shows a "current selection" highlight and a
+    // trigger label can display the active value without restating it.
+    "style.effective": {
+      kind: "input",
+      path: "style.effective",
+      default: "",
+    },
+    "charset.effective": {
+      kind: "input",
+      path: "charset.effective",
+      default: "",
+    },
+    "colorCompatibility.effective": {
+      kind: "input",
+      path: "colorCompatibility.effective",
+      default: "",
+    },
+    "autoWrap.effective": {
+      kind: "input",
+      path: "autoWrap.effective",
+      type: "boolean",
+      default: true,
+    },
+    "padding.effective": {
+      kind: "input",
+      path: "padding.effective",
+      type: "number",
+      default: 1,
+    },
 
     // [LAW:one-source-of-truth] The usable terminal width for THIS render —
     // the exact post-reserve cell count FlexStrip wraps to. renderDsl injects
