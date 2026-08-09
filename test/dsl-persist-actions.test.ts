@@ -295,6 +295,19 @@ describe("config-validators registry", () => {
       dispose();
     }
   });
+
+  // [LAW:one-source-of-truth] A slash-bearing allow-list member is rejected
+  // at REGISTRATION (config-load) time, and the thrown message must name the
+  // wire the config keyspace actually crosses (set-config), not the
+  // SessionState keyspace's set-state wire the shared factory defaults to.
+  test("a slash-bearing config allow-list member's rejection names the set-config wire", () => {
+    expect(() =>
+      registerConfigValidator("look", {
+        kind: "allow-list",
+        allowed: ["a/b"],
+      }),
+    ).toThrow(/set-config wire/);
+  });
 });
 
 // ─── loader: the `persist`/`reset` ActionDecl arms ────────────────────────────

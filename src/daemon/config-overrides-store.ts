@@ -15,17 +15,29 @@
 import fs from "node:fs";
 import path from "node:path";
 import type { Globals } from "../config/dsl-types.js";
+import { isGlobalsField } from "../config/loader/globals.js";
 import { debug } from "../utils/logger.js";
 import type { DaemonLogger } from "./log.js";
 
 const quietLogger: DaemonLogger = (_level, message) => debug(message);
 
-// [LAW:types-are-the-program] Every Globals field's primitive wire shape,
+// [LAW:one-source-of-truth] Re-exported so every existing importer
+// (verbs/index.ts, verbs/config-validators.ts) keeps reading membership
+// through this module — but the membership check itself now has exactly ONE
+// implementation (loader/globals.ts's isGlobalsField, derived from
+// GLOBALS_SCHEMA), not two independently-authored tables that TypeScript's
+// per-table exhaustiveness only coincidentally kept in agreement.
+export { isGlobalsField } from "../config/loader/globals.js";
+
+// [LAW:types-are-the-program] Every Globals field's primitive WIRE TYPE,
 // keyed by `keyof Globals` — TypeScript forces this map to stay total over
 // Globals, so a field added to/removed from that interface is a compile
 // error here until this table is updated. This is the ONE place a `persist`
 // write's canonical string is coerced to the JS type Globals actually
 // declares (padding: number, autoWrap: boolean, everything else: string).
+// Membership (which keys exist) is NOT re-declared here — see the
+// re-exported isGlobalsField above; this table only adds the per-field KIND
+// membership alone doesn't carry.
 const GLOBALS_FIELD_KIND: Readonly<
   Record<keyof Globals, "string" | "number" | "boolean">
 > = {
@@ -42,14 +54,6 @@ const GLOBALS_FIELD_KIND: Readonly<
   charset: "string",
   colorCompatibility: "string",
 };
-
-// [LAW:one-source-of-truth] Whether `key` names a real Globals field —
-// derived from GLOBALS_FIELD_KIND rather than a second hand-maintained list,
-// so "is this a legal persist target" and "what type does it coerce to"
-// cannot disagree.
-export function isGlobalsField(key: string): key is keyof Globals {
-  return Object.prototype.hasOwnProperty.call(GLOBALS_FIELD_KIND, key);
-}
 
 // [LAW:one-source-of-truth] The same four canonical boolean-ish inputs
 // validateBoolean (state-validators.ts) accepts — a `persist` action's gate

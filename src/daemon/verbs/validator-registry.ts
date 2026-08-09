@@ -93,9 +93,17 @@ export function clampSeed(
 //
 // [LAW:no-silent-fallbacks] Empty input is rejected with a label-referencing
 // reason rather than silently mapped to a default.
+//
+// [LAW:one-source-of-truth] `wire` names the ACTUAL wire this allow-list's
+// values travel over — "set-state" for SessionState keys, "set-config" for
+// config-overrides keys — so the slash-rejection message points at the wire
+// the operator is actually debugging. Defaults to "set-state" (this
+// factory's original, sole caller) so existing direct callers (tests) don't
+// need to pass it; validatorForSpec passes the correct wire for its noun.
 export function makeAllowListValidator(
   allowed: readonly string[],
   label: string,
+  wire: string = "set-state",
 ): KeyValidator {
   // [LAW:types-are-the-program] The factory's contract is "options = allow
   // list" — every value the picker can RENDER must also be a value the wire
@@ -108,7 +116,7 @@ export function makeAllowListValidator(
   const slashOffenders = allowed.filter((v) => v.includes("/"));
   if (slashOffenders.length > 0) {
     throw new Error(
-      `makeAllowListValidator(${label}): values contain "/" — the set-state ` +
+      `makeAllowListValidator(${label}): values contain "/" — the ${wire} ` +
         `wire shape splits values on "/" so slash-bearing options cannot ` +
         `be addressed. Offending values: ${slashOffenders.join(", ")}`,
     );
@@ -237,6 +245,15 @@ export function mergeKeySpecs(
   return { kind: "int" };
 }
 
+// [LAW:one-source-of-truth] The click-wire verb name a keyspace's writes
+// travel over — "set-state" for the SessionState keyspace, "set-config" for
+// config-overrides. Mirrors loader/actions.ts's wireName (same concept, the
+// loader's discriminator vocabulary is "set"/"persist" instead of
+// "state"/"config").
+function wireForNoun(noun: string): string {
+  return noun === "config" ? "set-config" : "set-state";
+}
+
 // [LAW:types-are-the-program] The validator is RESIDUE of a SETTLED spec:
 // given one merged spec, its validator is forced. Pure projection — kind ⇒
 // constructor — with NO union or widen of its own. `noun` ("state"/"config")
@@ -252,7 +269,11 @@ function validatorForSpec(
   if (spec.kind === "int") return makeIntValidator(`menu page "${key}"`);
   if (spec.kind === "range")
     return makeRangeValidator(spec.min, spec.max, `${noun} stepper "${key}"`);
-  return makeAllowListValidator(spec.allowed, `${noun} "${key}"`);
+  return makeAllowListValidator(
+    spec.allowed,
+    `${noun} "${key}"`,
+    wireForNoun(noun),
+  );
 }
 
 function buildValidatorFromSpecs(
