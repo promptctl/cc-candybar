@@ -83,7 +83,7 @@ import {
 } from "../render/strip.js";
 import { applyClaudeCodeReserve } from "../utils/terminal-width.js";
 import type { RichText } from "@promptctl/rich-js";
-import { buildRenderPayload } from "./render-payload.js";
+import { buildRenderPayload, type EffectiveGlobals } from "./render-payload.js";
 import { ContextProvider } from "../segments/context.js";
 import { MetricsProvider } from "../segments/metrics.js";
 import { TmuxService } from "../segments/tmux.js";
@@ -855,28 +855,44 @@ async function handleRequest(req: Request): Promise<HandledRequest> {
         // trigger label reads it) AND the rendered basePalette below, so a label
         // and the colors can never disagree. Resolved here, before the payload
         // build, so it can be threaded into the sole payload assembler.
-        const effectiveTheme = effectiveThemeName(
-          sessionState.get(req.hookData.session_id, "theme"),
-          entry.state.config.globals.palette,
-        );
-        // [LAW:one-type-per-behavior] The LOOK, resolved per render the exact
-        // way the theme is: the session's clicked look (SessionState) over the
-        // config default over the "none" floor — so a look click recolors the
-        // whole bar on the next render, composing with whatever theme is
-        // active. The name feeds the payload's `look.effective`; its ThemeKey
-        // (lookKeyByName) feeds renderDsl below — one resolution, two readers.
-        const effectiveLook = effectiveLookName(
-          sessionState.get(req.hookData.session_id, "look"),
-          entry.state.config.globals.look,
-          entry.state.config.looks,
-        );
+        //
+        // [LAW:one-source-of-truth] Every globals field a menu/stepper can
+        // persist (candybar-config-engine-71o.3), resolved ONCE into one
+        // struct: theme/look/style compose the session's click (SessionState)
+        // over the config default over a floor — a click recolors/reshapes the
+        // whole bar on the next render; charset/colorCompatibility/autoWrap/
+        // padding have no SessionState half today, so their "effective" value
+        // is just the config global over its floor constant. This struct feeds
+        // BOTH the payload's `*.effective` fields (trigger labels) AND
+        // renderOpts below (the actual render) — one resolution, two readers,
+        // so a label can never disagree with what was rendered.
+        const effective: EffectiveGlobals = {
+          theme: effectiveThemeName(
+            sessionState.get(req.hookData.session_id, "theme"),
+            entry.state.config.globals.palette,
+          ),
+          look: effectiveLookName(
+            sessionState.get(req.hookData.session_id, "look"),
+            entry.state.config.globals.look,
+            entry.state.config.looks,
+          ),
+          style: effectiveStripStyle(
+            sessionState.get(req.hookData.session_id, "style"),
+            entry.state.config.globals.style,
+          ),
+          autoWrap: entry.state.config.globals.autoWrap ?? DEFAULT_WRAP,
+          padding: entry.state.config.globals.padding ?? DEFAULT_PADDING,
+          charset: entry.state.config.globals.charset ?? DEFAULT_CHARSET,
+          colorCompatibility:
+            entry.state.config.globals.colorCompatibility ??
+            DEFAULT_COLOR_COMPATIBILITY,
+        };
         const payload = await buildRenderPayload(
           req.hookData,
           payloadDeps,
           req.cwd,
           entry.state.neededInputPaths,
-          effectiveTheme,
-          effectiveLook,
+          effective,
         );
         // [LAW:one-source-of-truth][LAW:dataflow-not-control-flow] basePalette
         // is derived from the same effective theme resolved above — so a theme
@@ -884,41 +900,15 @@ async function handleRequest(req: Request): Promise<HandledRequest> {
         // cache entry (one entry serves many sessions). resolverForThemeName
         // memoizes, so the per-render cost is one Map lookup once the theme is
         // warm.
-        const basePalette = resolverForThemeName(effectiveTheme);
-        // [LAW:one-type-per-behavior][LAW:dataflow-not-control-flow] The powerline
-        // cap/separator SHAPE, resolved per render the exact way the theme is: the
-        // session's clicked style (SessionState) over the config default over the
-        // "powerline" floor — so a style click reshapes the whole bar on the next
-        // render. The base style on renderOpts is only the floor; this is the live
-        // override fed to the one joiner dispatch in renderStripCells.
-        renderOpts.style = effectiveStripStyle(
-          sessionState.get(req.hookData.session_id, "style"),
-          entry.state.config.globals.style,
-        );
-        // [config-only] globals.autoWrap has no SessionState half (no click
-        // verb) — the config global over the base floor is the whole
-        // resolution. Width stays finite regardless: it also feeds the
-        // picker's pagination (term.cols), which no-wrap must not break.
-        renderOpts.wrap = entry.state.config.globals.autoWrap ?? DEFAULT_WRAP;
-        // [config-only] globals.padding, same shape as autoWrap: the config
-        // global over the base floor is the whole resolution — the ONE home
-        // of the value every cell builder (and the picker's pagination
-        // reserve) derives from. [LAW:one-source-of-truth]
-        renderOpts.padding =
-          entry.state.config.globals.padding ?? DEFAULT_PADDING;
-        // [config-only] globals.charset, same shape as autoWrap/padding: the
-        // config global over the base floor is the whole resolution — the ONE
-        // home of the glyph-vocabulary choice pickJoiner derives from.
-        // [LAW:one-source-of-truth]
-        renderOpts.charset =
-          entry.state.config.globals.charset ?? DEFAULT_CHARSET;
-        // [config-only] globals.colorCompatibility, same shape as charset:
-        // the config global over the base floor is the whole resolution —
-        // the ONE home of the color-depth choice rich-js downsamples to.
-        // [LAW:one-source-of-truth]
-        renderOpts.colorCompatibility =
-          entry.state.config.globals.colorCompatibility ??
-          DEFAULT_COLOR_COMPATIBILITY;
+        const basePalette = resolverForThemeName(effective.theme);
+        // [LAW:one-source-of-truth] Every renderOpts field below reuses the
+        // SAME `effective` struct the payload was just built from — no second
+        // `?? DEFAULT_X` computation to drift from it.
+        renderOpts.style = effective.style;
+        renderOpts.wrap = effective.autoWrap;
+        renderOpts.padding = effective.padding;
+        renderOpts.charset = effective.charset;
+        renderOpts.colorCompatibility = effective.colorCompatibility;
         // [LAW:single-enforcer] renderDsl internally calls
         // `registry.applyInput(payload)` as its first step (see step 1 in
         // src/dsl/render.ts). The daemon must not pre-apply — doing so
@@ -939,7 +929,7 @@ async function handleRequest(req: Request): Promise<HandledRequest> {
           // the per-segment ANSI serialization happens lazily inside the
           // debug handler so normal renders pay no extra serializer cost.
           { perSegmentSink: entry.state.lastRenderCellsBySegment },
-          lookKeyByName(entry.state.config.looks, effectiveLook),
+          lookKeyByName(entry.state.config.looks, effective.look),
         );
       }
       // [LAW:one-source-of-truth] Consume the transient click error written by

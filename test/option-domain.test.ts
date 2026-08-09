@@ -12,7 +12,12 @@ import {
   registerOptionDomain,
   resolveOptionDomain,
 } from "../src/config/option-domain";
-import { listResolvablePaletteNames, STRIP_STYLES } from "../src/themes/policy";
+import {
+  CHARSETS,
+  COLOR_COMPATIBILITIES,
+  listResolvablePaletteNames,
+  STRIP_STYLES,
+} from "../src/themes/policy";
 
 describe("option-domain registry", () => {
   test("themes/styles are built-in registrations, not special-cased branches", () => {
@@ -20,6 +25,18 @@ describe("option-domain registry", () => {
       listResolvablePaletteNames(),
     );
     expect(resolveOptionDomain("styles", new Map())).toEqual(STRIP_STYLES);
+  });
+
+  // [LAW:one-source-of-truth] candybar-config-engine-71o.3: charsets/
+  // colorCompatibilities must resolve to the EXACT same consts the loader's
+  // own globals.charset/globals.colorCompatibility field validation checks
+  // against (themes/policy.ts) — a menu drawing from these can never
+  // enumerate a value the loader or the render layer would reject.
+  test("charsets/colorCompatibilities are built-in registrations sourced from the loader's own enums", () => {
+    expect(resolveOptionDomain("charsets", new Map())).toEqual(CHARSETS);
+    expect(resolveOptionDomain("colorCompatibilities", new Map())).toEqual(
+      COLOR_COMPATIBILITIES,
+    );
   });
 
   test("an inline array IS its own domain — no registry lookup", () => {

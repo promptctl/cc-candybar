@@ -11,6 +11,7 @@ import {
   buildRenderPayload,
   projectCostPerHour,
   projectEtaMinutes,
+  type EffectiveGlobals,
   type RenderPayloadDeps,
 } from "../src/daemon/render-payload";
 import { ABSENT, ok } from "../src/utils/outcome";
@@ -123,12 +124,17 @@ const BURN_PATHS = new Set([
   "weekly.etaMinutes",
 ]);
 
-// The daemon-resolved effective theme; these burn-lane tests don't exercise it,
-// so any resolvable name satisfies the required argument.
-const EFFECTIVE_THEME = "textual-dark";
-// The daemon-resolved effective look; "none" is the identity floor every merged
-// config carries.
-const EFFECTIVE_LOOK = "none";
+// The daemon-resolved effective globals; these burn-lane tests don't exercise
+// them, so any well-formed struct satisfies the required argument.
+const EFFECTIVE_GLOBALS: EffectiveGlobals = {
+  theme: "textual-dark",
+  look: "none",
+  style: "powerline",
+  charset: "unicode",
+  colorCompatibility: "truecolor",
+  autoWrap: true,
+  padding: 1,
+};
 
 describe("buildRenderPayload — burn projection lane", () => {
   test("projectable: burn rate + block & weekly ETAs land in the payload", async () => {
@@ -137,8 +143,7 @@ describe("buildRenderPayload — burn projection lane", () => {
       depsWith(),
       undefined,
       BURN_PATHS,
-      EFFECTIVE_THEME,
-      EFFECTIVE_LOOK,
+      EFFECTIVE_GLOBALS,
     );
     expect(payload.burn?.costPerHour).toBe(12);
     expect(payload.block?.etaMinutes).toBe(240);
@@ -154,8 +159,7 @@ describe("buildRenderPayload — burn projection lane", () => {
       depsWith(),
       undefined,
       BURN_PATHS,
-      EFFECTIVE_THEME,
-      EFFECTIVE_LOOK,
+      EFFECTIVE_GLOBALS,
     );
     expect(payload.block?.nativeUtilization).toBe(20);
     expect(payload.block?.etaMinutes).toBeUndefined();
@@ -167,8 +171,7 @@ describe("buildRenderPayload — burn projection lane", () => {
       depsWith(),
       undefined,
       new Set(["block.resetsAt", "weekly.resetsAt"]),
-      EFFECTIVE_THEME,
-      EFFECTIVE_LOOK,
+      EFFECTIVE_GLOBALS,
     );
     expect(payload.burn).toBeUndefined();
   });

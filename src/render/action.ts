@@ -141,16 +141,25 @@ export type CompiledActions = ReadonlyMap<string, CompiledActionDecl>;
 
 // [LAW:one-source-of-truth] Globals fields whose CURRENT resolved value is
 // exposed to templates under a different var name than the field itself (the
-// daemon publishes the session-aware resolution once per render — e.g.
-// `theme.effective` for `palette`, src/daemon/render-payload.ts). A `persist`
-// action with no entry here reads back through its own key name as an input
-// var (mirrors compileActions' stateKeyToVar fallback) — most config-only
-// globals (padding, charset, colorCompatibility, ...) have no `.effective`
-// projection yet, so their "active" highlighting is inert until one exists;
-// the write path itself does not depend on this map.
+// daemon publishes this resolution once per render — e.g. `theme.effective`
+// for `palette`, src/daemon/render-payload.ts). A `persist` action with no
+// entry here reads back through its own key name as an input var (mirrors
+// compileActions' stateKeyToVar fallback), so every persistable globals field
+// needs an entry unless its `.effective` projection happens to be named
+// exactly the bare field (none are — every projection carries the
+// `.effective` suffix). Every field with a projection is listed
+// (candybar-config-engine-71o.3 added style/charset/colorCompatibility/
+// autoWrap/padding to palette/look's original two); a field with no entry
+// here still writes correctly on `persist` — only its "current selection"
+// highlight is inert (readVar falls back to "" since no such var exists).
 const CONFIG_KEY_TO_EFFECTIVE_VAR: ReadonlyMap<string, string> = new Map([
   ["palette", "theme.effective"],
   ["look", "look.effective"],
+  ["style", "style.effective"],
+  ["charset", "charset.effective"],
+  ["colorCompatibility", "colorCompatibility.effective"],
+  ["autoWrap", "autoWrap.effective"],
+  ["padding", "padding.effective"],
 ]);
 
 // [LAW:locality-or-seam] The runtime holder the `action` template function closes

@@ -39,7 +39,7 @@ import {
   listResolvablePaletteNames,
 } from "../src/themes/policy";
 import { ConfigError } from "../src/config/dsl-loader";
-import { effectsOf } from "./helpers/click";
+import { boldUrls, effectsOf } from "./helpers/click";
 import { parseHandlerUrl } from "../src/install/index";
 import { parseEffects, VERB_DISPATCH } from "../src/click/wire";
 import { VERBS } from "../src/daemon/verbs";
@@ -591,6 +591,58 @@ describe("persist action click → durable overrides write", () => {
     dispose();
   });
 
+  // [LAW:verifiable-goals] candybar-config-engine-71o.3: proves the NEW
+  // CONFIG_KEY_TO_EFFECTIVE_VAR entries (charset → charset.effective, …)
+  // actually drive the "current selection" bold marking — not just that the
+  // write lands (covered above), but that the render-side read-back works.
+  // Without the wiring this test would see NOTHING marked active (the stale
+  // fallback comment removed from render/action.ts): the stateVar would fall
+  // back to the bare key "charset", which no variable projects, so readVar
+  // would always see "".
+  test("a persist-option action over a newly-exposed field (charset) marks the matching link active via its *.effective projection", () => {
+    const { render, dispose } = buildPersistRuntime(`{
+      globals: {},
+      variables: {
+        'session.id': { kind: 'input', path: 'session_id', default: '' },
+        'charset.effective': { kind: 'literal', value: 'ascii' },
+      },
+      actions: { applyCharset: { persist: 'charset', from: 'charsets' } },
+      segments: {
+        bar: {
+          template: '{{ action "applyCharset" "ascii" }} {{ action "applyCharset" "unicode" }}',
+          bg: 'surface', fg: 'foreground',
+        },
+      },
+      root: 'bar',
+    }`);
+    const active = boldUrls(render()).map(effectsOf);
+    expect(active).toHaveLength(1);
+    expect(active[0]![0]!.args[2]).toBe("ascii");
+    dispose();
+  });
+
+  // [LAW:verifiable-goals] candybar-config-engine-71o.3: autoWrap is the one
+  // BOOLEAN field among the newly-exposed globals — proves a persist-cycle
+  // over it round-trips through coerceGlobalsValue's boolean branch (not
+  // just its own unit test above) and lands as a real JS boolean in the
+  // overrides file, not the string "false".
+  test("clicking a persist-cycle action over the boolean autoWrap field writes a real boolean", () => {
+    const { render, click, dispose } = buildPersistRuntime(`{
+      globals: {},
+      variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
+      actions: { toggleWrap: { persist: 'autoWrap', cycle: ['true', 'false'] } },
+      segments: { bar: { template: '{{ action "toggleWrap" "wrap" }}', bg: 'surface', fg: 'foreground' } },
+      root: 'bar',
+    }`);
+    const urls = extractUrls(render());
+    click(urls[0]!); // unset counts as "true" (first member); writes successor "false"
+    const overrides = loadConfigOverrides(
+      join(xdgStateDir, "cc-candybar", "config-overrides.json"),
+    );
+    expect(overrides).toEqual({ autoWrap: false });
+    dispose();
+  });
+
   test("an unknown config key is rejected loudly, not silently written", () => {
     const config = parseAndValidate(
       "<test>",
@@ -702,6 +754,50 @@ describe("RenderCache: persistent overrides merge into the effective config", ()
       expect(readFileSync(userConfigPath, "utf8")).toBe(userConfigBody);
     } finally {
       for (const fn of cleanups) fn();
+    }
+  });
+
+  // [LAW:verifiable-goals] candybar-config-engine-71o.3's epic acceptance,
+  // asserted for one of the newly-exposed fields (charset has no
+  // SessionState half at all — unlike palette, "every session sees it" is
+  // not even a precedence question, it's the ONLY resolution there is): a
+  // persisted override survives a REAL restart (a brand-new RenderCache +
+  // GitDataProvider + WatcherRegistry — exactly what the daemon process
+  // rebuilds from scratch on restart, reading nothing but the overrides file
+  // on disk) and a brand-new session/project pairing sees it too.
+  test("an override changes globals.charset without touching the user config file, and survives a restart", async () => {
+    const userConfigPath = join(projectDir, ".cc-candybar.json5");
+    const userConfigBody = JSON.stringify({
+      globals: { charset: "unicode" },
+      segments: {},
+    });
+    writeFileSync(userConfigPath, userConfigBody);
+
+    const overridesPath = join(
+      xdgStateDir,
+      "cc-candybar",
+      "config-overrides.json",
+    );
+    writeConfigOverride(overridesPath, "charset", "ascii");
+
+    const { cache, cleanups } = makeCache();
+    try {
+      const entry = cache.getOrCreate(projectDir, projectDir, undefined);
+      expect(entry.lastError).toBeNull();
+      expect(entry.state!.config.globals.charset).toBe("ascii");
+      expect(readFileSync(userConfigPath, "utf8")).toBe(userConfigBody);
+    } finally {
+      for (const fn of cleanups) fn();
+    }
+
+    // Restart: a fresh cache/services pair, reading only the overrides file
+    // on disk — no in-memory state carries over.
+    const { cache: restarted, cleanups: restartedCleanups } = makeCache();
+    try {
+      const entry = restarted.getOrCreate(projectDir, projectDir, undefined);
+      expect(entry.state!.config.globals.charset).toBe("ascii");
+    } finally {
+      for (const fn of restartedCleanups) fn();
     }
   });
 

@@ -33,6 +33,33 @@ import type { ContextProvider } from "../segments/context.js";
 import type { MetricsProvider } from "../segments/metrics.js";
 import type { TmuxService } from "../segments/tmux.js";
 import type { GitDataProvider } from "./cache/git.js";
+import type {
+  Charset,
+  ColorCompatibility,
+  StripStyle,
+} from "../themes/policy.js";
+
+// ─── Effective globals ─────────────────────────────────────────────────────
+
+// [LAW:one-source-of-truth] The daemon resolves each of these exactly ONCE
+// per render (server.ts, before both the payload build and renderDsl's
+// BuildLineOptions), so the value a trigger label displays and the value
+// that actually shaped the render can never disagree — the same reasoning
+// theme/look already followed, generalized to every globals field a menu or
+// stepper can persist. `theme`/`look`/`style` compose SessionState over the
+// config default (a session pick can diverge from the persisted default for
+// its own session); `charset`/`colorCompatibility`/`autoWrap`/`padding` have
+// no SessionState half today, so their "effective" value is just the
+// resolved config global over its floor constant.
+export interface EffectiveGlobals {
+  readonly theme: string;
+  readonly look: string;
+  readonly style: StripStyle;
+  readonly charset: Charset;
+  readonly colorCompatibility: ColorCompatibility;
+  readonly autoWrap: boolean;
+  readonly padding: number;
+}
 
 // ─── Augmented payload shape ─────────────────────────────────────────────────
 
@@ -69,6 +96,18 @@ export interface RenderPayload extends ClaudeHookData {
   // rendered palette, surfaced so a trigger label can display the active look.
   // Required for the same reason as theme: resolved unconditionally per render.
   readonly look: { readonly effective: string };
+  // [LAW:one-type-per-behavior] style/charset/colorCompatibility/autoWrap/
+  // padding are theme/look's twins over the remaining persistable globals
+  // (candybar-config-engine-71o.3) — each REQUIRED and unconditionally
+  // present for the same reason: the daemon already resolves the value for
+  // BuildLineOptions every render, and this is that exact value, so a
+  // trigger's "current selection" highlight and the render it describes
+  // trace to one resolution. See EffectiveGlobals for how each is derived.
+  readonly style: { readonly effective: string };
+  readonly charset: { readonly effective: string };
+  readonly colorCompatibility: { readonly effective: string };
+  readonly autoWrap: { readonly effective: boolean };
+  readonly padding: { readonly effective: number };
 
   // Usage-family. Each provider returns null when it has no data (no
   // transcript yet, no rate-limit window active, etc.); we drop the field
@@ -581,18 +620,14 @@ export async function buildRenderPayload(
   // registration; passing it in (rather than recomputing per render) keeps
   // the hot path free of the BFS + extractTemplateRefs cost.
   neededInputPaths: ReadonlySet<string>,
-  // [LAW:one-source-of-truth] The effective theme name, resolved ONCE by the
-  // daemon (effectiveThemeName(sessionState.theme, globals.palette)) and used
-  // for BOTH the rendered basePalette and this payload field — so a trigger
-  // label reading `.theme.effective` can never disagree with the colors. Passed
-  // in (not re-resolved here) because the daemon already computes it for the
-  // palette; this is that same value, threaded to the sole payload assembler.
-  effectiveTheme: string,
-  // [LAW:one-source-of-truth] The effective look name, resolved ONCE by the
-  // daemon beside the theme (effectiveLookName over SessionState/globals/looks)
-  // and used for BOTH the rendered adaptation and this payload field — so a
-  // trigger label reading `.look.effective` can never disagree with the colors.
-  effectiveLook: string,
+  // [LAW:one-source-of-truth] Every globals field a menu/stepper can persist,
+  // resolved ONCE by the daemon (server.ts, before both this call and the
+  // BuildLineOptions it renders with) and used for BOTH the actual render AND
+  // these payload fields — so a trigger label can never disagree with what
+  // was actually rendered. Passed in (not re-resolved here) because the
+  // daemon already computes every one of these for renderDsl's options; this
+  // is that same struct, threaded to the sole payload assembler.
+  effective: EffectiveGlobals,
 ): Promise<RenderPayload> {
   const wants = (prefix: string): boolean =>
     anyPathStartsWith(neededInputPaths, prefix);
@@ -794,13 +829,17 @@ export async function buildRenderPayload(
     ...(home !== undefined && { home }),
     ...(gitProjection.git !== undefined && { git: gitProjection.git }),
     ...(tmuxValue !== undefined && { tmux: { session: tmuxValue } }),
-    // [LAW:one-source-of-truth] Always present — the daemon resolves the
-    // effective theme every render (for basePalette), and this is that value.
-    // No `wants` gate: it costs nothing (a string already in hand) and a
-    // config that reads `.theme.effective` must always find it.
-    theme: { effective: effectiveTheme },
-    // Same contract as theme: always present, a string already in hand.
-    look: { effective: effectiveLook },
+    // [LAW:one-source-of-truth] Always present — the daemon resolves every
+    // one of these each render (for BuildLineOptions/basePalette), and these
+    // are those exact values. No `wants` gate: each costs nothing (already in
+    // hand) and a config reading e.g. `.padding.effective` must always find it.
+    theme: { effective: effective.theme },
+    look: { effective: effective.look },
+    style: { effective: effective.style },
+    charset: { effective: effective.charset },
+    colorCompatibility: { effective: effective.colorCompatibility },
+    autoWrap: { effective: effective.autoWrap },
+    padding: { effective: effective.padding },
     ...(sessionPayload !== undefined && { session: sessionPayload }),
     ...(todayPayload !== undefined && { today: todayPayload }),
     ...(costPerHour !== undefined && { burn: { costPerHour } }),

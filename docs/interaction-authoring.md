@@ -73,7 +73,7 @@ An action declares exactly one of `set` / `persist` / `copy` / `open` /
 | declaration | click effect |
 |---|---|
 | `{ set: key, to: "value" }` | write the literal value to **SessionState** (per-session, until the session ends) |
-| `{ set: key, from: "themes" \| "styles" \| "looks" \| [...] }` | write the option the template binds (picker/menu domain) — a registered domain name, or an inline array of literal values needing no registration |
+| `{ set: key, from: "themes" \| "styles" \| "looks" \| "charsets" \| "colorCompatibilities" \| [...] }` | write the option the template binds (picker/menu domain) — a registered domain name, or an inline array of literal values needing no registration |
 | `{ set: key, min: 0, max: 60, by: 2 }` | step the current value by `by`, wrapping in `[min, max]` |
 | `{ set: key, int: true }` | write any integer the render binds (a page cursor) |
 | `{ set: key, cycle: ["a", "b", "c"] }` | write the **successor** of the current value, wrapping; order members default-state-first |
@@ -86,11 +86,13 @@ A `set` action writing SessionState needs a matching `state` **variable** to
 read the value back into templates: `{ kind: "state", key: "<same key>",
 default: "…" }`. (The one exception: never declare state for a `{{ menu }}` —
 its state is synthesized, see below.) A `persist` action reads its current
-value back through whatever variable already projects that `globals` field
-(`theme.effective` for `palette`, `look.effective` for `look` — both declared
-by the bundled default); other `globals` fields have no `.effective`
-projection yet, so a `persist` action over them still writes correctly but
-has no "current selection" highlight until one exists.
+value back through whatever variable already projects that `globals` field —
+every persistable field has one, declared by the bundled default: `palette` →
+`theme.effective`, and every other field → `<field>.effective` (`look`,
+`style`, `charset`, `colorCompatibility`, `autoWrap`, `padding`). A `persist`
+action over a field with no such variable (a hand-authored globals field with
+no projection of its own) still writes correctly; it just has no "current
+selection" highlight.
 
 The canonical control-strip config — cycle chip, bounded stepper, copy/open
 toolbar:
@@ -193,6 +195,59 @@ plumbing of its own — the loader still requires the global `session.id`
 anchor the moment any `set`/`persist`/`reset` action exists (it rides the
 click for error-surfacing, same as `set`), but reading `.session.id` back is
 never required for `persist` the way `{ kind: "state" }` is for `set`.
+
+### Persisting the display globals: charset, colorCompatibility, autoWrap, padding
+
+These four `globals` fields have no SessionState half — no user ever picks
+them per-session, only as a config default — so `persist` is their ONLY
+seam, and `charsets`/`colorCompatibilities` are registered domains exactly
+like `themes`/`styles`, sourced from the same enums the loader validates
+`globals.charset`/`globals.colorCompatibility` against (no second list to
+drift out of sync). `autoWrap` is boolean, so it persists as a two-member
+`cycle`; `padding` is a bounded range, so it persists as a stepper pair —
+neither needs a registered domain.
+
+```json5 check:pass
+{
+  actions: {
+    applyCharset: { persist: "charset", from: "charsets" },
+    applyColorCompat: { persist: "colorCompatibility", from: "colorCompatibilities" },
+    toggleWrap: { persist: "autoWrap", cycle: ["true", "false"] },
+    paddingDown: { persist: "padding", min: 0, max: 16, by: -1 },
+    paddingUp: { persist: "padding", min: 0, max: 16, by: 1 },
+  },
+  segments: {
+    charsetControl: {
+      template: '{{ .charset.effective }} {{ menu "applyCharset" }}',
+      bg: "surface", fg: "foreground",
+    },
+    colorControl: {
+      template: '{{ .colorCompatibility.effective }} {{ menu "applyColorCompat" }}',
+      bg: "surface", fg: "foreground",
+    },
+    wrapToggle: {
+      template: '{{ action "toggleWrap" "wrap: on" "wrap: off" }}',
+      bg: "surface", fg: "foreground",
+    },
+    paddingControl: {
+      template: '{{ action "paddingDown" "◀" }} padding {{ .padding.effective }} {{ action "paddingUp" "▶" }}',
+      bg: "surface", fg: "foreground",
+    },
+  },
+  root: { v: [
+    { h: ["directory", "model"] },
+    { h: ["charsetControl", "colorControl", "wrapToggle", "paddingControl"] },
+  ] },
+}
+```
+
+`{{ .charset.effective }}` / `{{ .colorCompatibility.effective }}` /
+`{{ .padding.effective }}` are the bundled default's projections of the
+resolved config value — the same seam `{{ .theme.effective }}` rides for
+`palette` — so each trigger's label is always the value that actually
+rendered, never a restated guess. A charset or padding change takes effect
+on the very next render, live, with no daemon restart: `persist` writes the
+overrides file, which rides the config file's own watcher.
 
 ## `{{ menu "applyAction" }}` — the picker disclosure
 
