@@ -32,6 +32,7 @@ import {
   validateStateWrite,
 } from "../src/daemon/verbs/state-validators";
 import { ConfigError } from "../src/config/dsl-loader";
+import { registerOptionDomain } from "../src/config/option-domain";
 import { effectsOf, boldUrls } from "./helpers/click";
 import { parseHandlerUrl } from "../src/install/index";
 import {
@@ -268,6 +269,147 @@ describe("2de.12 — option set action", () => {
     click(url);
     expect(sessionState.get("s1", "sel")).toBe(target);
     dispose();
+  });
+});
+
+// ─── Inline literal option domain (candybar-config-engine-71o.1) ───────────────
+// [LAW:one-type-per-behavior] `from` used to be a closed union of three domain
+// NAMES; now it is one domain concept whose members are data — an inline array
+// IS a domain, no registration and no engine edit needed.
+
+describe("71o.1 — inline literal option domain (from: [...])", () => {
+  const SRC = `{
+    globals: {},
+    variables: {
+      'session.id': { kind: 'input', path: 'session_id', default: '' },
+      sortOrder: { kind: 'state', key: 'sort-order', default: 'asc' },
+    },
+    actions: { applySort: { set: 'sort-order', from: ['asc', 'desc'] } },
+    segments: {
+      bar: {
+        template: '{{ action "applySort" "↑" "asc" }} {{ action "applySort" "↓" "desc" }}',
+        bg: 'surface', fg: 'foreground',
+      },
+    },
+    root: 'bar',
+  }`;
+
+  test("renders one clickable per inline value, needing no registration", () => {
+    const { render, dispose } = buildRuntime(SRC);
+    const urls = extractUrls(render());
+    expect(urls.map(effectsOf)).toEqual([
+      [{ verb: "set-state", args: ["s1", "sort-order", "asc"] }],
+      [{ verb: "set-state", args: ["s1", "sort-order", "desc"] }],
+    ]);
+    dispose();
+  });
+
+  test("derives an allow-list gate of exactly the inline values", () => {
+    const config = parseAndValidate("<test>", SRC, ALLOWED);
+    expect(deriveActionValidators(config)).toEqual([
+      {
+        key: "sort-order",
+        spec: { kind: "allow-list", allowed: ["asc", "desc"] },
+      },
+    ]);
+  });
+
+  test("a click on an inline option passes the derived gate and mutates state", () => {
+    const { render, click, sessionState, dispose } = buildRuntime(SRC);
+    const url = extractUrls(render()).find((u) =>
+      effectsOf(u).some((e) => e.args[2] === "desc"),
+    )!;
+    click(url);
+    expect(sessionState.get("s1", "sort-order")).toBe("desc");
+    dispose();
+  });
+
+  test("a value outside the inline domain is rejected loudly at the wire", () => {
+    const { dispose } = buildRuntime(SRC); // registers the derived gate
+    const res = validateStateWrite("sort-order", "bogus");
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.reason).toMatch(/unknown state "sort-order" "bogus"/);
+    dispose();
+  });
+
+  // [LAW:one-source-of-truth] Mirrors cycleSpec's duplicate-member rejection —
+  // a duplicate has no successor-ambiguity concern here (unlike cycle), but it
+  // would render the same picker cell twice for no benefit, so it is rejected
+  // at load like every other malformed array shape in this file.
+  test("duplicate inline values are rejected at load", () => {
+    const src = `{
+      globals: {},
+      variables: {
+        'session.id': { kind: 'input', path: 'session_id', default: '' },
+        k: { kind: 'state', key: 'k', default: '' },
+      },
+      actions: { a: { set: 'k', from: ['x', 'y', 'x'] } },
+      segments: { bar: { template: '{{ action "a" "x" }}', bg: 'surface', fg: 'foreground' } },
+      root: 'bar',
+    }`;
+    try {
+      parseAndValidate("<test>", src, ALLOWED);
+      throw new Error("expected ConfigError");
+    } catch (e) {
+      expect(e).toBeInstanceOf(ConfigError);
+      expect((e as ConfigError).message).toMatch(/from array members must be unique/);
+    }
+  });
+});
+
+// ─── Registry-backed domains are open (candybar-config-engine-71o.1) ───────────
+// Acceptance: adding a domain is DATA (a registerOptionDomain call), never a
+// touch to action.ts / loader/actions.ts / render/action.ts /
+// daemon/verbs/state-validators.ts — this test proves it by registering a
+// brand-new domain and driving it through the exact same `from:` seam
+// "themes"/"styles" use, with zero special-casing anywhere in that path.
+
+describe("71o.1 — a newly-registered domain needs no engine edits", () => {
+  test("a config's `from` resolves a domain registered purely through the public registry API", () => {
+    const unregister = registerOptionDomain("fruitColors", () => [
+      "red",
+      "green",
+      "blue",
+    ]);
+    try {
+      const src = `{
+        globals: {},
+        variables: {
+          'session.id': { kind: 'input', path: 'session_id', default: '' },
+          fruit: { kind: 'state', key: 'fruit', default: 'red' },
+        },
+        actions: { pickFruit: { set: 'fruit', from: 'fruitColors' } },
+        segments: {
+          bar: {
+            template: '{{ action "pickFruit" "🍎" "red" }} {{ action "pickFruit" "🍏" "green" }} {{ action "pickFruit" "🫐" "blue" }}',
+            bg: 'surface', fg: 'foreground',
+          },
+        },
+        root: 'bar',
+      }`;
+      const config = parseAndValidate("<test>", src, ALLOWED);
+      expect(deriveActionValidators(config)).toEqual([
+        {
+          key: "fruit",
+          spec: { kind: "allow-list", allowed: ["red", "green", "blue"] },
+        },
+      ]);
+      const { render, click, sessionState, dispose } = buildRuntime(src);
+      const url = extractUrls(render()).find((u) =>
+        effectsOf(u).some((e) => e.args[2] === "green"),
+      )!;
+      click(url);
+      expect(sessionState.get("s1", "fruit")).toBe("green");
+      dispose();
+    } finally {
+      unregister();
+    }
+  });
+
+  test("re-registering a built-in domain name is rejected loudly", () => {
+    expect(() => registerOptionDomain("themes", () => ["x"])).toThrow(
+      /already registered.*built-in/,
+    );
   });
 });
 
@@ -568,7 +710,10 @@ describe("2de.12 — loader proves the ActionDecl invariants", () => {
   });
 
   test("an unknown `from` domain is rejected", () => {
-    expectIssue(base(`{ a: { set: 'k', from: 'colors' } }`), /from must be one of/);
+    expectIssue(
+      base(`{ a: { set: 'k', from: 'colors' } }`),
+      /references unknown option domain "colors"/,
+    );
   });
 
   test("bounded min >= max is rejected", () => {

@@ -24,19 +24,14 @@
 // These are the shapes a picker draws options from and the set/copy/open/int
 // discriminator the loader and the validator-derivation match on.
 
-// [LAW:one-source-of-truth] The domain lists a picker draws options from. Same
-// canonical sources the `themes()`/`styles()`/`looks()` bindings and the
-// set-state validators consult — the rendered options and the derived gate
-// cannot diverge because there is no second enumeration. themes/styles are
-// static registry lists; "looks" is the one PER-CONFIG domain (the merged
-// `looks` block's names), so its resolution sites take the config's look names
-// as data rather than consulting a module constant.
-export type OptionSource = "themes" | "styles" | "looks";
-export const OPTION_SOURCES: readonly OptionSource[] = [
-  "themes",
-  "styles",
-  "looks",
-];
+// [LAW:one-source-of-truth] The domain a picker draws options from. Resolved
+// through option-domain.ts's registry — themes/styles are registry-backed
+// static lists, "looks" is the one PER-CONFIG domain (the merged `looks`
+// block's names, threaded as data rather than consulted from a module
+// constant), and an inline array is its own domain, needing no registration
+// at all. Re-exported here so ActionDecl stays self-contained to read.
+import type { OptionDomain } from "./option-domain.js";
+export type { OptionDomain } from "./option-domain.js";
 
 // [LAW:types-are-the-program] The top-level discriminator of an ActionDecl — the
 // click effect is keyed by which of these is present. The loader proves
@@ -53,7 +48,9 @@ export type ActionKey = (typeof ACTION_KEYS)[number];
 //
 //   set + to            — write a literal value -> allow-list {to}
 //   set + from          — write the option the template binds at render
-//                         (a picker ranges the domain) -> allow-list {options}
+//                         (a picker ranges the domain — a registered name like
+//                         "themes", or an inline literal array) -> allow-list
+//                         {options}
 //   set + min/max/by    — write wrap(current ± by) clamped to [min,max]
 //                         (a stepper affordance) -> range [min,max]
 //   set + int           — write any integer the render binds (a paged cursor:
@@ -77,7 +74,7 @@ export type ActionKey = (typeof ACTION_KEYS)[number];
 // vocabulary grows by arms (a future `run`/`open-url`), not by validator plumbing.
 export type ActionDecl =
   | { readonly set: string; readonly to: string }
-  | { readonly set: string; readonly from: OptionSource }
+  | { readonly set: string; readonly from: OptionDomain }
   | {
       readonly set: string;
       readonly min: number;
