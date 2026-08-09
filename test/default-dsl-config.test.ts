@@ -538,6 +538,88 @@ describe("DEFAULT_DSL_CONFIG", () => {
     });
   });
 
+  // brandon-segments-3eo.1: the `git` and `gitaculous` segment templates each
+  // render every git fact (branch, staged/unstaged/untracked/conflicts,
+  // ahead/behind) in its own semantic palette color instead of one uniform
+  // segment fg, p10k-style. Feeding a payload where every fact is nonzero and
+  // counting DISTINCT truecolor foregrounds in the rendered line is the
+  // acceptance check — a regression back to one uniform fg would collapse
+  // the count to 1.
+  describe("git segment per-fact coloring", () => {
+    const GIT_PAYLOAD = {
+      hook_event_name: "Status",
+      session_id: "x",
+      transcript_path: "/tmp/t.jsonl",
+      cwd: "/tmp",
+      model: { id: "x", display_name: "x" },
+      workspace: { current_dir: "/tmp", project_dir: "/tmp", added_dirs: [] },
+      git: {
+        branch: "main",
+        repoName: "repo",
+        sha: "abc1234",
+        staged: 2,
+        unstaged: 3,
+        untracked: 4,
+        conflicts: 1,
+        ahead: 1,
+        behind: 1,
+        upstream: "origin/main",
+        operation: "",
+        stash: 2,
+        status: "conflicts",
+        timeSinceCommit: 0,
+      },
+    };
+
+    // Distinct truecolor foregrounds (`38;2;r;g;b`) across the rendered
+    // line — one per SGR-introduced run, deduped. A basic-code fg would also
+    // count but every semantic palette function here resolves to truecolor.
+    function distinctForegrounds(line: string): Set<string> {
+      const fgs = new Set<string>();
+      for (const m of line.matchAll(/\x1b\[([0-9;]*)m/g)) {
+        const params = (m[1] ?? "").split(";");
+        const i = params.indexOf("38");
+        if (i >= 0 && params[i + 1] === "2") {
+          fgs.add(`${params[i + 2]};${params[i + 3]};${params[i + 4]}`);
+        }
+      }
+      return fgs;
+    }
+
+    function renderSegment(segment: string): string {
+      const parsed = parseAndValidate("<default>", SERIALIZED);
+      const cfg = { ...parsed, root: oneSegmentRoot(segment) };
+      const store = new VariableStore();
+      const registry = new SourceRegistry(store);
+      try {
+        const compiled = registerDslConfig(cfg, registry, { cwd: "/tmp" });
+        const basePalette = new PaletteResolver(
+          getThemePalette(cfg.globals.palette ?? "textual-dark")!,
+        );
+        return renderDsl(cfg, compiled, store, registry, GIT_PAYLOAD, basePalette, {
+          style: "powerline",
+          colorCompatibility: "truecolor",
+          wrap: true,
+          padding: 1,
+          charset: "unicode",
+          width: Number.POSITIVE_INFINITY,
+        });
+      } finally {
+        registry.dispose();
+      }
+    }
+
+    test("git segment renders more than one distinct color across staged/unstaged/untracked/conflicts/ahead/behind", () => {
+      const distinct = distinctForegrounds(renderSegment("git"));
+      expect(distinct.size).toBeGreaterThan(1);
+    });
+
+    test("gitaculous segment renders more than one distinct color across the same facts", () => {
+      const distinct = distinctForegrounds(renderSegment("gitaculous"));
+      expect(distinct.size).toBeGreaterThan(1);
+    });
+  });
+
   // [LAW:dataflow-not-control-flow] The metrics segment renders parts
   // independently — each `if .metrics.<field>` guard fires off its own
   // value. Absent fields project through pickNonNull as missing keys and

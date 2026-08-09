@@ -31,7 +31,7 @@ import {
 } from "../var-system/sources.js";
 import type { BuildLineOptions } from "../render/strip.js";
 import { DEFAULT_PADDING, renderStripCells } from "../render/strip.js";
-import { resolverForThemeName } from "../themes/index.js";
+import { resolverForThemeName, effectiveThemeName } from "../themes/index.js";
 import { buildScope } from "../template-engine/scope.js";
 import {
   createCcCandybarEngine,
@@ -314,8 +314,24 @@ export function registerDslConfig(
   // one source.
   const lookNames = Object.keys(config.looks);
   const perConfigDomains = perConfigDomainsFor(config.looks);
+  // [LAW:rich-js-owns-color-math] Bind the semantic palette functions
+  // (primary/accent/success/warning/error/…) into the per-config engine so
+  // segment template BODIES can reference theme colors by name instead of
+  // hardcoding raw ANSI values, the same convention `bg`/`fg` specs already
+  // follow. [LAW:dataflow-not-control-flow] This resolver is frozen at
+  // registration to the config's DEFAULT theme (no session override —
+  // registerDslConfig runs once per config load, not per render) — the same
+  // "frozen at registration" contract `segments.<name>.palette` overrides
+  // already have. A live session theme click still recolors every segment's
+  // bg/fg (basePalette is re-resolved per render in renderDsl); only these
+  // in-body semantic color calls stay pinned to the config default, and the
+  // anchored semantic roots (error/success/warning) keep a stable hue across
+  // themes anyway, so the drift is cosmetic at worst.
+  const bodyPaletteResolver = resolverForThemeName(
+    effectiveThemeName(null, config.globals.palette),
+  );
   const engine = createCcCandybarEngine(
-    undefined,
+    bodyPaletteResolver,
     {
       ...actionFuncs(actionRuntime),
       ...pickerFuncs(actionRuntime),

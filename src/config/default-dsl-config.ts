@@ -74,30 +74,38 @@ const DIR_TEMPLATE =
   "{{ end }}{{ end }}" +
   "{{ abbreviatePath $dir }}";
 
-// Git working-tree counts — leading-space-then-trim idiom: each present count
-// contributes " +N", trim drops the leading space, survivors single-spaced.
+// Git working-tree counts — each present count renders in its own semantic
+// palette color (staged=success, unstaged=warning, untracked=accent,
+// conflicts=error) so a dirty tree reads at a glance, p10k/gitaculous-prompt
+// style, instead of one uniform segment fg. `$first` tracks whether a
+// separator space is still owed before the next present count — the same
+// reassign-in-nested-if idiom DIR_TEMPLATE uses for `$dir` above
+// [LAW:dataflow-not-control-flow]: one variable carries the "have we emitted
+// yet" state rather than four copies of positional space logic.
 const GIT_WORKTREE =
   "{{ if or (gt .git.staged 0) (gt .git.unstaged 0) (gt .git.untracked 0) (gt .git.conflicts 0) }}" +
-  ' ({{ printf "%s%s%s%s"' +
-  ' (ternary (printf " +%v" .git.staged) "" (gt .git.staged 0))' +
-  ' (ternary (printf " ~%v" .git.unstaged) "" (gt .git.unstaged 0))' +
-  ' (ternary (printf " ?%v" .git.untracked) "" (gt .git.untracked 0))' +
-  ' (ternary (printf " !%v" .git.conflicts) "" (gt .git.conflicts 0)) | trim }}){{ end }}';
+  " ({{ $first := true }}" +
+  '{{ if gt .git.staged 0 }}{{ success (printf "+%v" .git.staged) }}{{ $first = false }}{{ end }}' +
+  '{{ if gt .git.unstaged 0 }}{{ if not $first }} {{ end }}{{ warning (printf "~%v" .git.unstaged) }}{{ $first = false }}{{ end }}' +
+  '{{ if gt .git.untracked 0 }}{{ if not $first }} {{ end }}{{ accent (printf "?%v" .git.untracked) }}{{ $first = false }}{{ end }}' +
+  '{{ if gt .git.conflicts 0 }}{{ if not $first }} {{ end }}{{ error (printf "!%v" .git.conflicts) }}{{ $first = false }}{{ end }}' +
+  "){{ end }}";
 
-// Status icon precedence: conflicts → ⚠, dirty → ●, else clean ✓.
+// Status icon precedence: conflicts → ⚠ (error), dirty → ● (warning), else
+// clean ✓ (success) — colored to match the state it reports.
 const GIT_STATUS =
-  '{{ if eq .git.status "conflicts" }}⚠{{ else }}' +
-  '{{ if eq .git.status "dirty" }}●{{ else }}✓{{ end }}{{ end }}';
+  '{{ if eq .git.status "conflicts" }}{{ error "⚠" }}{{ else }}' +
+  '{{ if eq .git.status "dirty" }}{{ warning "●" }}{{ else }}{{ success "✓" }}{{ end }}{{ end }}';
 
 const GIT_TEMPLATE =
-  '{{ if ne .git.repoName "" }}{{ .git.repoName }} {{ end }}⎇ {{ .git.branch }}' +
+  '{{ if ne .git.repoName "" }}{{ .git.repoName }} {{ end }}⎇ {{ primary .git.branch }}' +
   "{{ if .git.sha }} ♯ {{ .git.sha }}{{ end }}" +
   "{{ if or (gt .git.ahead 0) (gt .git.behind 0) }}" +
-  " {{ if gt .git.ahead 0 }}↑{{ .git.ahead }}{{ end }}" +
-  "{{ if gt .git.behind 0 }}↓{{ .git.behind }}{{ end }}{{ end }}" +
+  ' {{ if gt .git.ahead 0 }}{{ success (printf "↑%v" .git.ahead) }}{{ end }}' +
+  '{{ if gt .git.behind 0 }}{{ warning (printf "↓%v" .git.behind) }}{{ end }}{{ end }}' +
   GIT_WORKTREE +
   "{{ if .git.upstream }} →{{ .git.upstream }}{{ end }}" +
-  "{{ if gt .git.stash 0 }} ⧇ {{ .git.stash }}{{ end }}" +
+  '{{ if gt .git.stash 0 }} {{ accent (printf "⧇ %v" .git.stash) }}{{ end }}' +
   " " +
   GIT_STATUS;
 
@@ -691,22 +699,27 @@ export const RAW_DEFAULT_DSL_CONFIG = {
       when: '{{ ne .git.branch "" }}',
     },
     gitaculous: {
+      // Recolored from raw green/red (render-bugs-pdu.3's era) to semantic
+      // palette names (brandon-segments-3eo.1): staged/ahead share `success`
+      // (positive — ready to commit / unpushed additions), unstaged/behind
+      // share `warning` (needs attention), conflicts gets its own `error`,
+      // branch gets `accent` so it reads apart from plain repoName/sha text.
       template:
         "(git)" +
         '{{ if ne .git.repoName "" }} {{ .git.repoName }}{{ end }}' +
         '{{ if ne .git.operation "" }} [{{ .git.operation }}]{{ end }}' +
         '{{ if ne .git.sha "" }} {{ .git.sha }}{{ end }}' +
         "{{ if or (gt .git.staged 0) (gt .git.unstaged 0) (gt .git.untracked 0) (gt .git.conflicts 0) }} " +
-        '{{ if gt .git.staged 0 }}{{ green "S" }}{{ end }}' +
-        '{{ if or (gt .git.unstaged 0) (gt .git.untracked 0) }}{{ red "U" }}{{ end }}' +
-        '{{ if gt .git.conflicts 0 }}{{ red (printf "!%v" .git.conflicts) }}{{ end }}' +
+        '{{ if gt .git.staged 0 }}{{ success "S" }}{{ end }}' +
+        '{{ if or (gt .git.unstaged 0) (gt .git.untracked 0) }}{{ warning "U" }}{{ end }}' +
+        '{{ if gt .git.conflicts 0 }}{{ error (printf "!%v" .git.conflicts) }}{{ end }}' +
         "{{ end }}" +
-        " ⎇ {{ .git.branch }}" +
+        " ⎇ {{ accent .git.branch }}" +
         '{{ if ne .git.upstream "" }} [{{ .git.upstream }}' +
         "{{ if or (gt .git.ahead 0) (gt .git.behind 0) }} " +
-        '{{ if gt .git.ahead 0 }}{{ green (printf "+%v" .git.ahead) }}{{ end }}' +
+        '{{ if gt .git.ahead 0 }}{{ success (printf "+%v" .git.ahead) }}{{ end }}' +
         "{{ if and (gt .git.ahead 0) (gt .git.behind 0) }}/{{ end }}" +
-        '{{ if gt .git.behind 0 }}{{ red (printf "-%v" .git.behind) }}{{ end }}' +
+        '{{ if gt .git.behind 0 }}{{ warning (printf "-%v" .git.behind) }}{{ end }}' +
         "{{ end }}]{{ end }}" +
         "{{ if gt .git.stash 0 }} ({{ .git.stash }} stashed){{ end }}" +
         '{{ if gt .git.timeSinceCommit 0 }} ◷ {{ template "formatTimeSince" .git.timeSinceCommit }}{{ end }}',
