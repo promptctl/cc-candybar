@@ -11,6 +11,7 @@ import {
   ConfigError,
 } from "../../config/dsl-loader.js";
 import type { ValidatedConfig } from "../../config/dsl-types.js";
+import { DEFAULT_DSL_CONFIG } from "../../config/default-dsl-config.js";
 import { registerDslConfig, type CompiledConfig } from "../../dsl/render.js";
 import {
   deriveActionValidators,
@@ -272,7 +273,10 @@ export class RenderCache {
     // cross-ref diagnostics on the daemon path carry real line numbers and the
     // authored-surface (root vs layout) discriminator works — the file is read
     // once inside loadConfig, not re-read here.
-    const { config: merged, source } = loadConfig(resolvedPath);
+    const { config: merged, source } = loadConfig(
+      resolvedPath,
+      DEFAULT_DSL_CONFIG,
+    );
     const config = validateConfig(merged, resolvedPath ?? "<default>", source);
 
     const store = new VariableStore();
