@@ -23,10 +23,7 @@ import {
   deriveConfigActionValidators,
   registerConfigValidator,
 } from "../verbs/config-validators.js";
-import {
-  loadConfigOverrides,
-  loadSegmentPaletteOverrides,
-} from "../config-overrides-store.js";
+import { loadOverrides } from "../config-overrides-store.js";
 import { configOverridesPath } from "../paths.js";
 import { VariableStore } from "../../var-system/store.js";
 import { SourceRegistry } from "../../var-system/sources.js";
@@ -296,9 +293,12 @@ export class RenderCache {
     // pick still overrides it per-session via effective* resolution,
     // unchanged). Always applied, even when the overrides file is empty —
     // an empty overrides object merges as a no-op, so there is no
-    // "has overrides?" branch [LAW:dataflow-not-control-flow].
+    // "has overrides?" branch [LAW:dataflow-not-control-flow]. One
+    // loadOverrides read serves BOTH halves below (globals + segment-palette)
+    // — the overrides file backs two different merge shapes, not two reads.
+    const overrides = loadOverrides(configOverridesPath(), dlog);
     const withGlobalsOverrides = mergeWithDefault(
-      { globals: loadConfigOverrides(configOverridesPath(), dlog) },
+      { globals: overrides.globals },
       merged,
     );
     // [LAW:one-source-of-truth] The segment-scoped half of the SAME overrides
@@ -311,7 +311,7 @@ export class RenderCache {
     // touch disjoint parts of the config (`globals` vs `segments[name]`).
     const withOverrides = applySegmentPaletteOverrides(
       withGlobalsOverrides,
-      loadSegmentPaletteOverrides(configOverridesPath(), dlog),
+      overrides.segmentPalette,
     );
     const config = validateConfig(
       withOverrides,

@@ -172,17 +172,17 @@ function loadRawOverrides(
   }
 }
 
-// [LAW:one-source-of-truth] The Globals-scoped VIEW of the raw dict — kept as
+// [LAW:one-source-of-truth] The Globals-scoped VIEW of a raw dict — kept as
 // `Partial<Globals>` so every existing caller (RenderCache's
 // mergeWithDefault({globals: ...}), stepConfig's range-seed lookup) keeps its
 // original, precisely-typed contract unchanged. Segment-palette entries in
 // the same file are invisible here by construction (isGlobalsField filters
-// them out) — see loadSegmentPaletteOverrides for that half.
-export function loadConfigOverrides(
-  filePath: string,
-  logger: DaemonLogger = quietLogger,
+// them out) — see projectSegmentPaletteOverrides for that half. A pure
+// projection over an already-read dict (not a filePath) so a caller wanting
+// BOTH views (loadOverrides below) pays for exactly one read.
+function projectGlobalsOverrides(
+  raw: Readonly<Record<string, string | number | boolean>>,
 ): Partial<Globals> {
-  const raw = loadRawOverrides(filePath, logger);
   const out: Record<string, string | number | boolean> = {};
   for (const [key, value] of Object.entries(raw)) {
     if (isGlobalsField(key)) out[key] = value;
@@ -199,11 +199,9 @@ export function loadConfigOverrides(
 // onto the already-merged config's `segments[name].palette` field
 // (applySegmentPaletteOverrides in config/loader/merge.ts), never through
 // mergeWithDefault's wholesale per-name segment replacement.
-export function loadSegmentPaletteOverrides(
-  filePath: string,
-  logger: DaemonLogger = quietLogger,
+function projectSegmentPaletteOverrides(
+  raw: Readonly<Record<string, string | number | boolean>>,
 ): Readonly<Record<string, string>> {
-  const raw = loadRawOverrides(filePath, logger);
   const out: Record<string, string> = {};
   for (const [key, value] of Object.entries(raw)) {
     const target = parsePersistTarget(key);
@@ -212,6 +210,41 @@ export function loadSegmentPaletteOverrides(
     }
   }
   return out;
+}
+
+export function loadConfigOverrides(
+  filePath: string,
+  logger: DaemonLogger = quietLogger,
+): Partial<Globals> {
+  return projectGlobalsOverrides(loadRawOverrides(filePath, logger));
+}
+
+export function loadSegmentPaletteOverrides(
+  filePath: string,
+  logger: DaemonLogger = quietLogger,
+): Readonly<Record<string, string>> {
+  return projectSegmentPaletteOverrides(loadRawOverrides(filePath, logger));
+}
+
+// [LAW:carrying-cost] RenderCache wants BOTH views on every reload
+// (buildState merges globals overrides, then overlays segment-palette
+// overrides) — calling loadConfigOverrides + loadSegmentPaletteOverrides
+// back to back would read, parse, and shape-validate the same tiny file
+// twice per reload for no reason. One read, two projections.
+export interface Overrides {
+  readonly globals: Partial<Globals>;
+  readonly segmentPalette: Readonly<Record<string, string>>;
+}
+
+export function loadOverrides(
+  filePath: string,
+  logger: DaemonLogger = quietLogger,
+): Overrides {
+  const raw = loadRawOverrides(filePath, logger);
+  return {
+    globals: projectGlobalsOverrides(raw),
+    segmentPalette: projectSegmentPaletteOverrides(raw),
+  };
 }
 
 // [LAW:no-silent-failure] Atomic write shared by set/clear: read the current
