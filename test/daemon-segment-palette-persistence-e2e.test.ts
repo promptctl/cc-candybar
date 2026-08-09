@@ -99,6 +99,32 @@ async function killAndWait(daemon: RunningDaemon): Promise<void> {
   await exited;
 }
 
+// [LAW:no-ambient-temporal-coupling] A `persist` write's synchronous
+// fs.writeFileSync completing does NOT mean RenderCache has reloaded — that
+// happens on a separate, asynchronous fs.watch callback (src/daemon/cache/
+// render.ts), so the very next render after a click can legitimately still
+// observe the pre-reload config. Polling for the observable effect (the
+// render actually changing) is the correct wait — not a fixed sleep, and
+// not a bare immediate assertion racing the watcher.
+async function waitForRenderChange(
+  sockPath: string,
+  sessionId: string,
+  cwd: string,
+  baseline: string,
+  timeoutMs = 10000,
+): Promise<string> {
+  const deadline = Date.now() + timeoutMs;
+  let last = baseline;
+  while (Date.now() < deadline) {
+    last = await render(sockPath, sessionId, cwd);
+    if (last !== baseline) return last;
+    await new Promise((r) => setTimeout(r, 50));
+  }
+  throw new Error(
+    `waitForRenderChange: render never changed from baseline within ${timeoutMs}ms`,
+  );
+}
+
 describe("candybar-config-engine-71o.6: real-daemon segment-palette click → persist → restart", () => {
   test("bundled default: clicking directory's palette-forever menu, over the real socket, survives a cold restart and leaves every other segment's palette untouched", async () => {
     const { env, sockPath, stateDir, removeTmpDirs } = prepareIsolatedDaemonEnv(
@@ -200,8 +226,24 @@ describe("candybar-config-engine-71o.6: real-daemon segment-palette click → pe
       await click(sockPath, applyUrl!);
 
       // Live re-render, same session, no daemon restart — the persisted
-      // override rides the config file's own watcher.
-      const afterClick = await render(sockPath, SID, projectDir);
+      // override rides the config file's own watcher, which reloads
+      // asynchronously (see waitForRenderChange). `opened` (captured right
+      // after the drawer was opened, same drawer-open state as the
+      // post-click render, but BEFORE the click) is the right baseline for
+      // "did the click visibly change anything" — a `before`-vs-post-click
+      // diff would be trivially true regardless of the palette, since
+      // `before` was rendered with the drawer CLOSED. With drawer state
+      // held constant, this proves the persisted palette actually reached
+      // the rendered `directory` segment's colors — not just that the
+      // overrides file was written (asserted below): a fully broken
+      // applySegmentPaletteOverrides overlay would time out here.
+      const afterClick = await waitForRenderChange(
+        sockPath,
+        SID,
+        projectDir,
+        opened,
+      );
+      expect(afterClick).not.toBe(opened);
       // The status row — nothing to do with `directory` — is byte-identical:
       // the override changed exactly one segment's palette, nothing else.
       expect(afterClick.split("\n").at(-1)).toBe(statusRowBefore);
