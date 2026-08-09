@@ -249,6 +249,45 @@ rendered, never a restated guess. A charset or padding change takes effect
 on the very next render, live, with no daemon restart: `persist` writes the
 overrides file, which rides the config file's own watcher.
 
+### The bundled settings drawer
+
+The bundled default (`DEFAULT_DSL_CONFIG`) ships every knob above already
+wired into the bar, with zero authoring required: a `kind: "group"` named
+`settings` sits on the identity row beside the quick-action tray, collapsed by
+default (`⚙ settings ▸`, visually silent until clicked). Opening it drops a
+row of seven controls immediately below: `themeControl`, `lookControl`,
+`styleControl` (session `set`, same as a hand-authored theme picker), and
+`charsetControl` / `colorCompatControl` / `wrapToggleControl` /
+`paddingControl` (the four `persist` steppers from the section above). The
+group's own synthesized toggle lives under the reserved name
+`groups.settings` — see the `kind: "group"` section below for what a group
+name reserves.
+
+A user config's `root:` **replaces the bundled default's wholesale** (see the
+top-level project docs), so removing the drawer — or reshaping it — is a
+matter of authoring your own `root` without a `settings` group in it. This
+reproduces the bundled default's two rows minus the drawer:
+
+```json5 check:pass
+{
+  root: { v: [
+    { h: ["directory", "gitaculous", "toolbar"] },
+    { h: ["model", "context", "cacheTimer", "block", "weekly"] },
+  ] },
+}
+```
+
+The seven constituent segments (`themeControl` / `lookControl` /
+`styleControl` / `charsetControl` / `colorCompatControl` / `wrapToggleControl`
+/ `paddingControl`) and their backing actions (`applyTheme`, `applyLook`,
+`applyStyle`, `applyCharsetForever` + `resetCharset`,
+`applyColorCompatForever` + `resetColorCompat`, `toggleWrapForever` +
+`resetAutoWrap`, `paddingDownForever` / `paddingUpForever` + `resetPadding`)
+stay declared in the merged config either way — merge-by-name lets you keep
+the drawer but swap one control's behavior (e.g. override
+`actions.applyCharsetForever` to bind a different domain) without touching
+`root` at all.
+
 ## `{{ menu "applyAction" }}` — the picker disclosure
 
 The apply-action name is the menu's **entire declaration**. The loader

@@ -71,23 +71,32 @@ describe("DEFAULT_DSL_CONFIG", () => {
   test("every layout entry is a declared segment", () => {
     for (const node of walkNodes(DEFAULT_DSL_CONFIG.root)) {
       if (node.kind !== "segment") continue;
-      expect(DEFAULT_DSL_CONFIG.segments).toHaveProperty(node.name);
+      // Array form: a synthesized group toggle's name (e.g. "groups.settings")
+      // contains a literal dot, which toHaveProperty's default dotted-path
+      // string form would otherwise misread as nested access.
+      expect(DEFAULT_DSL_CONFIG.segments).toHaveProperty([node.name]);
     }
   });
 
-  // The bundled default is the maintainer's three rows: an identity+actions row
-  // (directory, the verbose gitaculous line, and the quick-action tray: copy
-  // session id, open project / transcript in the editor) over a status row
-  // (model, context, prompt-cache warmth, the 5h/7d rate-limit quotas) over an
-  // appearance row (theme + look pickers, brandon-theming-8uj.1). This pins the
-  // chosen segment set — which segments graduated into the default bar and which
-  // stay declared-but-opt-in — so a future layout edit is a deliberate, reviewed
-  // change rather than an accidental drift. block/weekly are IN (their when-gates
-  // hide them when no rate-limit window is active); toolbar is IN (the default's
-  // interactivity); themeControl/lookControl are IN (theme/look discoverability);
-  // the cost segments (session/today), the speed/sparkline/burnrate telemetry,
-  // and the powerline-style picker affordance stay opt-in.
-  test("default root renders exactly the three-row identity+status+appearance segment set", () => {
+  // The bundled default is the maintainer's two always-visible rows — an
+  // identity+actions row (directory, the verbose gitaculous line, the
+  // quick-action tray: copy session id, open project / transcript in the
+  // editor, and the settingsDrawer toggle) over a status row (model, context,
+  // prompt-cache warmth, the 5h/7d rate-limit quotas) — plus the collapsed
+  // settingsDrawer group (candybar-config-engine-71o.4), whose synthesized
+  // toggle segment and gated body (theme/style/look/charset/colorCompatibility/
+  // autoWrap/padding) are part of the static layout tree regardless of the
+  // toggle's current open/closed value (walkNodes visits unconditionally; only
+  // the render-time `when` hides the body while closed). This pins the chosen
+  // segment set — which segments graduated into the default bar and which stay
+  // declared-but-opt-in — so a future layout edit is a deliberate, reviewed
+  // change rather than an accidental drift. block/weekly are IN (their
+  // when-gates hide them when no rate-limit window is active); toolbar is IN
+  // (the default's interactivity); the settingsDrawer's seven controls are IN
+  // (theme/style/look/charset/colorCompatibility/autoWrap/padding
+  // discoverability); the cost segments (session/today) and the
+  // speed/sparkline/burnrate telemetry stay opt-in.
+  test("default root renders exactly the two-row identity+status segment set plus the collapsed settingsDrawer", () => {
     const laidOut = new Set<string>();
     for (const node of walkNodes(DEFAULT_DSL_CONFIG.root)) {
       if (node.kind === "segment") laidOut.add(node.name);
@@ -102,23 +111,20 @@ describe("DEFAULT_DSL_CONFIG", () => {
         "block",
         "weekly",
         "toolbar",
+        "groups.settings",
         "themeControl",
         "lookControl",
+        "styleControl",
+        "charsetControl",
+        "colorCompatControl",
+        "wrapToggleControl",
+        "paddingControl",
       ].sort(),
     );
     // Declared-but-opt-in: present in `segments` for reference/user opt-in, but
     // deliberately absent from the default `root`.
-    for (const optIn of [
-      "git",
-      "session",
-      "today",
-      "styleControl",
-      "speed",
-      "tokenSparkline",
-      "burnrate",
-      "gitPr",
-    ]) {
-      expect(DEFAULT_DSL_CONFIG.segments).toHaveProperty(optIn);
+    for (const optIn of ["git", "session", "today", "speed", "tokenSparkline", "burnrate", "gitPr"]) {
+      expect(DEFAULT_DSL_CONFIG.segments).toHaveProperty([optIn]);
       expect(laidOut.has(optIn)).toBe(false);
     }
   });
@@ -224,6 +230,17 @@ describe("DEFAULT_DSL_CONFIG", () => {
       );
     };
     try {
+      // themeControl/lookControl live inside the settingsDrawer group
+      // (candybar-config-engine-71o.4), collapsed by default — open it first
+      // (the same click a "⚙ settings ▸" tap would dispatch) so the pickers
+      // this test exercises actually render.
+      clickUrl(
+        effectsUrl([
+          { verb: VERB_SET_STATE, args: [SID, "groups.settings", "settings"] },
+        ]),
+        { sessionState, dlog: () => {} },
+      );
+
       const targetTheme = listResolvablePaletteNames().find(
         (name) => name !== parsed.globals.palette,
       );
@@ -309,15 +326,20 @@ describe("DEFAULT_DSL_CONFIG", () => {
   });
 
   // [LAW:one-source-of-truth] Equivalence pin: the terse A-grammar spelling of the
-  // default's three informational rows (identity row, status row, appearance row)
-  // must lower to a root producing byte-identical ANSI to DEFAULT_DSL_CONFIG.root
-  // (the canonical container tree). Spelling differs; render does not.
+  // default's two informational rows (identity row, status row) plus the
+  // settingsDrawer group sugar must lower to a root producing byte-identical
+  // ANSI to DEFAULT_DSL_CONFIG.root (the canonical container tree, hand-lowered
+  // via `settingsDrawer`'s `kind: "group"` sugar — see its own comment for why
+  // it can't be authored in canonical form). Spelling differs; render does not.
   test("A-grammar { v:[{ h:[...] }] } spelling is render-equivalent to DEFAULT_DSL_CONFIG.root", () => {
     const ALLOWED = new Set(listResolvablePaletteNames());
     const A_SRC = `{ root: { v: [
-      { h: ["directory","gitaculous","toolbar"] },
-      { h: ["model","context","cacheTimer","block","weekly"] },
-      { h: ["themeControl","lookControl"] }
+      { h: ["directory","gitaculous","toolbar", { kind: "group", name: "settings",
+        label: "⚙ settings", direction: "horizontal", children: [
+          "themeControl","lookControl","styleControl","charsetControl",
+          "colorCompatControl","wrapToggleControl","paddingControl"
+        ] } ] },
+      { h: ["model","context","cacheTimer","block","weekly"] }
     ] } }`;
     const rawA = parseDslConfig("<test>", A_SRC, ALLOWED);
     const mergedA = mergeWithDefault(rawA, DEFAULT_DSL_CONFIG);
