@@ -149,6 +149,16 @@ export function sessionStatePath(): string {
   return path.join(stateDir(), "session-state.json");
 }
 
+// [LAW:one-source-of-truth] The daemon-owned overrides layer for persistent
+// config writes (candybar-config-engine-71o.2): a click that mutates the
+// bundled/user-file DEFAULT (as opposed to `set`, which mutates per-session
+// state) lands here — never in the hand-authored config file itself. Sibling
+// of sessionStatePath(): same root, same single-writer daemon, same test
+// isolation via XDG_STATE_HOME/CC_CANDYBAR_SOCKET-derived overrides.
+export function configOverridesPath(): string {
+  return path.join(stateDir(), "config-overrides.json");
+}
+
 // [LAW:one-source-of-truth] The fork-bomb breaker's daemon-population registry
 // (fork-bomb-breaker.ts) shares socketPath()'s UID-anchored /tmp root and, like
 // it, deliberately ignores XDG_STATE_HOME — the very isolation
