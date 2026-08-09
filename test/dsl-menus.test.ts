@@ -816,8 +816,9 @@ describe("candybar-config-engine-71o.5 — a brand-new field gets a {{ menu }} v
     const { render, click, sessionState, dispose } = buildRuntime(SRC);
     const toggleUrl = extractUrls(render()).find((u) =>
       effectsOf(u).some((e) => e.args[2] === "applySound"),
-    )!;
-    click(toggleUrl);
+    );
+    expect(toggleUrl).toBeDefined();
+    click(toggleUrl!);
 
     const opened = render();
     const buzzUrl = extractUrls(opened).find((u) =>
