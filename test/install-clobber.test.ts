@@ -206,11 +206,10 @@ describe("install — clobber protection", () => {
 });
 
 describe("installSuccessMessage", () => {
-  test("mentions the theme/look picker on the default bar", () => {
+  test("mentions the settings drawer and theme/look picker on the default bar", () => {
     const msg = installSuccessMessage();
     expect(msg).toMatch(/theme\/look picker/i);
-    expect(msg).toContain("🎨");
-    expect(msg).toContain("◐");
+    expect(msg).toContain("⚙ settings");
   });
 });
 
