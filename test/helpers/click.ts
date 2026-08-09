@@ -8,7 +8,10 @@ import {
   parseEffects,
   decodeSegments,
   VERB_DISPATCH,
+  VERB_RESET_CONFIG,
+  VERB_SET_CONFIG,
   VERB_SET_STATE,
+  VERB_STEP_CONFIG,
   VERB_STEP_STATE,
 } from "../../src/click/wire";
 import { VERBS } from "../../src/daemon/verbs";
@@ -21,11 +24,19 @@ export interface DecodedEffect {
 
 // [LAW:one-source-of-truth] Decode an effect's value the SAME way the daemon's
 // handler does, so the helper cannot mask a back-compat decode regression:
-// set-state and step-state are the multi-argument verbs (slash-segmented); every
-// other verb takes ONE argument — the whole value decoded once — so a direct
-// `copy/a/b` reports one arg "a/b" (exactly what the copy handler copies), not two.
+// set-state/step-state and their config-overrides twins set-config/step-config/
+// reset-config are the multi-argument verbs (slash-segmented); every other verb
+// takes ONE argument — the whole value decoded once — so a direct `copy/a/b`
+// reports one arg "a/b" (exactly what the copy handler copies), not two.
+const MULTI_ARG_VERBS = new Set<string>([
+  VERB_SET_STATE,
+  VERB_STEP_STATE,
+  VERB_SET_CONFIG,
+  VERB_STEP_CONFIG,
+  VERB_RESET_CONFIG,
+]);
 function decodeArgs(verb: string, value: string): string[] {
-  return verb === VERB_SET_STATE || verb === VERB_STEP_STATE
+  return MULTI_ARG_VERBS.has(verb)
     ? decodeSegments(value)
     : [decodeURIComponent(value)];
 }

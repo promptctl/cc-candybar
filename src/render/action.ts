@@ -32,7 +32,10 @@ import {
   effectsUrl,
   VERB_COPY,
   VERB_OPEN_VSCODE,
+  VERB_RESET_CONFIG,
+  VERB_SET_CONFIG,
   VERB_SET_STATE,
+  VERB_STEP_CONFIG,
   VERB_STEP_STATE,
   type Effect,
 } from "../click/wire.js";
@@ -99,9 +102,56 @@ export type CompiledActionDecl =
       readonly members: readonly string[];
     }
   | { readonly kind: "copy"; readonly text: Template<RichText> }
-  | { readonly kind: "open"; readonly target: Template<RichText> };
+  | { readonly kind: "open"; readonly target: Template<RichText> }
+  // [LAW:one-source-of-truth] `persist`'s twin of the set-* kinds above,
+  // MINUS set-int (a page cursor is never persisted — see action.ts). Carries
+  // the SAME shapes for the SAME reason: a persistent write is gated and
+  // realized exactly like a session write, only the wire verb (VERB_SET_CONFIG/
+  // VERB_STEP_CONFIG) and the write's durability differ.
+  | {
+      readonly kind: "persist-literal";
+      readonly key: string;
+      readonly value: string;
+      readonly stateVar: string;
+    }
+  | {
+      readonly kind: "persist-option";
+      readonly key: string;
+      readonly stateVar: string;
+      readonly options: readonly string[];
+    }
+  | {
+      readonly kind: "persist-bounded";
+      readonly key: string;
+      readonly by: number;
+    }
+  | {
+      readonly kind: "persist-cycle";
+      readonly key: string;
+      readonly stateVar: string;
+      readonly members: readonly string[];
+    }
+  // [LAW:one-source-of-truth] The gated undo for a persistent write: clears
+  // one config-overrides key. Carries only the key — there is no value to
+  // realize, so it shares copy/open's "no gate" shape at compile time (the
+  // GATE is the key-membership check the reset-config verb handler applies).
+  | { readonly kind: "reset"; readonly key: string };
 
 export type CompiledActions = ReadonlyMap<string, CompiledActionDecl>;
+
+// [LAW:one-source-of-truth] Globals fields whose CURRENT resolved value is
+// exposed to templates under a different var name than the field itself (the
+// daemon publishes the session-aware resolution once per render — e.g.
+// `theme.effective` for `palette`, src/daemon/render-payload.ts). A `persist`
+// action with no entry here reads back through its own key name as an input
+// var (mirrors compileActions' stateKeyToVar fallback) — most config-only
+// globals (padding, charset, colorCompatibility, ...) have no `.effective`
+// projection yet, so their "active" highlighting is inert until one exists;
+// the write path itself does not depend on this map.
+const CONFIG_KEY_TO_EFFECTIVE_VAR: ReadonlyMap<string, string> = new Map([
+  ["palette", "theme.effective"],
+  ["look", "look.effective"],
+]);
 
 // [LAW:locality-or-seam] The runtime holder the `action` template function closes
 // over. Populated after the engine is constructed (the func references the
@@ -208,16 +258,52 @@ function compileAction(
       by: action.by,
     };
   }
+  if ("persist" in action) {
+    const stateVar =
+      CONFIG_KEY_TO_EFFECTIVE_VAR.get(action.persist) ?? action.persist;
+    if ("to" in action) {
+      return {
+        kind: "persist-literal",
+        key: action.persist,
+        value: action.to,
+        stateVar,
+      };
+    }
+    if ("from" in action) {
+      return {
+        kind: "persist-option",
+        key: action.persist,
+        stateVar,
+        options: [...resolveOptionDomain(action.from, perConfigDomains)],
+      };
+    }
+    if ("cycle" in action) {
+      return {
+        kind: "persist-cycle",
+        key: action.persist,
+        stateVar,
+        members: action.cycle,
+      };
+    }
+    return {
+      kind: "persist-bounded",
+      key: action.persist,
+      by: action.by,
+    };
+  }
   if ("copy" in action) {
     return {
       kind: "copy",
       text: parseActionTemplate(parse, action.copy, name),
     };
   }
-  return {
-    kind: "open",
-    target: parseActionTemplate(parse, action.open, name),
-  };
+  if ("open" in action) {
+    return {
+      kind: "open",
+      target: parseActionTemplate(parse, action.open, name),
+    };
+  }
+  return { kind: "reset", key: action.reset };
 }
 
 function parseActionTemplate(
@@ -278,7 +364,7 @@ export function linkFragment(
 // renders the first display and clicks to the second member (an accordion
 // sibling's path "counts as closed", a never-written toggle "counts as off").
 function cycleIndex(
-  c: Extract<CompiledActionDecl, { kind: "set-cycle" }>,
+  c: Extract<CompiledActionDecl, { kind: "set-cycle" | "persist-cycle" }>,
   store: VariableStore,
 ): number {
   return Math.max(c.members.indexOf(readVar(store, c.stateVar)), 0);
@@ -386,6 +472,47 @@ function realize(
         },
         active: false,
       };
+    // [LAW:one-source-of-truth] The persist-* arms mirror set-*'s realization
+    // verbatim (same literal/option/cycle/bounded semantics), only the wire
+    // verb differs (VERB_SET_CONFIG/VERB_STEP_CONFIG instead of
+    // VERB_SET_STATE/VERB_STEP_STATE) — the daemon-side handler is what makes
+    // the write durable, not the click itself.
+    case "persist-literal": {
+      const current = readVar(store, c.stateVar);
+      return {
+        effect: { verb: VERB_SET_CONFIG, args: [sessionId, c.key, c.value] },
+        active: current === c.value,
+      };
+    }
+    case "persist-option": {
+      const value = boundValue ?? display;
+      const current = readVar(store, c.stateVar);
+      return {
+        effect: { verb: VERB_SET_CONFIG, args: [sessionId, c.key, value] },
+        active: current === value,
+      };
+    }
+    case "persist-cycle": {
+      const next = c.members[(cycleIndex(c, store) + 1) % c.members.length]!;
+      return {
+        effect: { verb: VERB_SET_CONFIG, args: [sessionId, c.key, next] },
+        active: false,
+      };
+    }
+    case "persist-bounded": {
+      return {
+        effect: {
+          verb: VERB_STEP_CONFIG,
+          args: [sessionId, c.key, String(c.by)],
+        },
+        active: false,
+      };
+    }
+    case "reset":
+      return {
+        effect: { verb: VERB_RESET_CONFIG, args: [sessionId, c.key] },
+        active: false,
+      };
   }
 }
 
@@ -405,7 +532,7 @@ function selectDisplay(
   if (displays.length === 0) {
     throw new Error(`action "${name}" needs a display (the clickable text)`);
   }
-  if (action.kind === "set-cycle") {
+  if (action.kind === "set-cycle" || action.kind === "persist-cycle") {
     if (displays.length !== 1 && displays.length !== action.members.length) {
       throw new Error(
         `action "${name}" cycles ${action.members.length} members; bind one display per member (${action.members.length}) or one static display, got ${displays.length}`,

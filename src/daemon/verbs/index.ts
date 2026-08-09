@@ -26,13 +26,29 @@ import {
   validateStateWrite,
 } from "./state-validators";
 import {
+  listConfigKeys,
+  rangeParamsForConfig,
+  validateConfigWrite,
+} from "./config-validators";
+import {
+  clearConfigOverride,
+  coerceGlobalsValue,
+  isGlobalsField,
+  loadConfigOverrides,
+  writeConfigOverride,
+} from "../config-overrides-store";
+import { configOverridesPath } from "../paths";
+import {
   decodeSegments,
   parseEffects,
   VERB_COPY,
   VERB_DISPATCH,
   VERB_OPEN_VSCODE,
   VERB_LOAD_CONFIG,
+  VERB_RESET_CONFIG,
+  VERB_SET_CONFIG,
   VERB_SET_STATE,
+  VERB_STEP_CONFIG,
   VERB_STEP_STATE,
   VERB_SHOW_CONFIG_ERROR,
   VERB_SHOW_CONFIG_WARNING,
@@ -324,6 +340,114 @@ const stepState: VerbHandler = (rawValue, ctx) => {
   );
 };
 
+// [LAW:no-defensive-null-guards] validateConfigWrite already proved `key` is
+// a registered config-writable key and `key`'s registration only ever comes
+// from config-validators.ts's deriveConfigActionValidators, which reads the
+// key from a `persist` action's own `.persist` field — a value the cross-ref
+// pass (loader/cross-ref.ts, via the SAME isGlobalsField check exported from
+// loader/globals.ts) already rejects at config-LOAD time when it doesn't
+// name a real Globals field, so a config with an invalid persist target
+// never reaches a live cache entry at all. So a validated write reaching
+// here is a real Globals field by construction; this assertion is the
+// type-narrowing boundary, not a runtime possibility.
+function assertGlobalsField(
+  key: string,
+): asserts key is Parameters<typeof coerceGlobalsValue>[0] {
+  if (!isGlobalsField(key)) {
+    throw new Error(
+      `set-config: "${key}" validated as a config-writable key but is not a ` +
+        `Globals field — registration/loader invariant broken`,
+    );
+  }
+}
+
+// [LAW:single-enforcer] `persist`'s twin of setState: the SAME validate-then-
+// write shape, writing through config-overrides-store instead of
+// SessionState. The write is DURABLE — RenderCache's file watcher on
+// configOverridesPath() (src/daemon/cache/render.ts) picks it up on the next
+// reload, exactly as an edit to the hand-authored config file would.
+// [LAW:no-silent-fallbacks] Unknown key or out-of-domain value is a loud
+// BAD_REQUEST — the SAME gate `set-state` uses (validateConfigWrite),
+// derived from the SAME action table (deriveConfigActionValidators).
+const setConfig: VerbHandler = (rawValue, ctx) => {
+  const [sessionId = "", key = "", incoming = ""] = decodeWire(() =>
+    decodeSegments(rawValue),
+  );
+  const sid = requireSessionId(sessionId);
+  if (!key) {
+    throw new BadVerbArgs(
+      `set-config: <key>/<value> is required (have keys: ${listConfigKeys().join(", ")})`,
+    );
+  }
+  const result = validateConfigWrite(key, incoming);
+  if (!result.ok) throw new BadVerbArgs(`set-config: ${result.reason}`);
+  assertGlobalsField(key);
+  const typed = coerceGlobalsValue(key, result.value);
+  writeConfigOverride(configOverridesPath(), key, typed, ctx.dlog);
+  ctx.dlog("info", `set-config: ${key}=${result.value} (session=${sid})`);
+};
+
+// [LAW:one-source-of-truth] `persist`'s twin of stepState: a RELATIVE nudge
+// against the current override (or the merged config's own value when
+// unset — rangeParamsForConfig's seed), wrapped and re-validated through the
+// SAME range gate, then written durably.
+const stepConfig: VerbHandler = (rawValue, ctx) => {
+  const [sessionId = "", key = "", byRaw = ""] = decodeWire(() =>
+    decodeSegments(rawValue),
+  );
+  const sid = requireSessionId(sessionId);
+  if (!key) {
+    throw new BadVerbArgs(
+      "step-config: <key> is required (shape: <sessionId>/<key>/<by>)",
+    );
+  }
+  if (!STEP_INT_RE.test(byRaw)) {
+    throw new BadVerbArgs(
+      `step-config: delta must be an integer, got "${byRaw}"`,
+    );
+  }
+  const by = parseInt(byRaw, 10);
+  const params = rangeParamsForConfig(key);
+  if (!params) {
+    throw new BadVerbArgs(
+      `step-config: key "${key}" is not a bounded (range) config key ` +
+        `(have keys: ${listConfigKeys().join(", ")})`,
+    );
+  }
+  assertGlobalsField(key);
+  const overrides = loadConfigOverrides(configOverridesPath(), ctx.dlog);
+  const stored = overrides[key];
+  const current =
+    typeof stored === "number"
+      ? Math.max(params.min, Math.min(params.max, stored))
+      : params.seed;
+  const next = wrapStep(current + by, params.min, params.max);
+  const result = validateConfigWrite(key, String(next));
+  if (!result.ok) throw new BadVerbArgs(`step-config: ${result.reason}`);
+  const typed = coerceGlobalsValue(key, result.value);
+  writeConfigOverride(configOverridesPath(), key, typed, ctx.dlog);
+  ctx.dlog(
+    "info",
+    `step-config: ${key} ${current}→${result.value} (by ${by}, session=${sid})`,
+  );
+};
+
+// [LAW:one-source-of-truth] The gated undo for `persist`: clears one
+// config-overrides key, restoring the user-file/bundled-default value on the
+// next reload. Gated by key MEMBERSHIP (listConfigKeys) rather than a value
+// domain — there is no value to validate, only a legitimate target to clear.
+const resetConfig: VerbHandler = (value, ctx) => {
+  const [sessionId = "", key = ""] = decodeWire(() => decodeSegments(value));
+  const sid = requireSessionId(sessionId);
+  if (!key || !listConfigKeys().includes(key)) {
+    throw new BadVerbArgs(
+      `reset-config: unknown config key "${key}" (have: ${listConfigKeys().join(", ")})`,
+    );
+  }
+  clearConfigOverride(configOverridesPath(), key, ctx.dlog);
+  ctx.dlog("info", `reset-config: ${key} (session=${sid})`);
+};
+
 // ─── Registry ───────────────────────────────────────────────────────────────
 
 // [LAW:one-source-of-truth] The LEAF verbs — every click effect that does real
@@ -382,6 +506,9 @@ const LEAF_VERBS = new Map<string, VerbHandler>([
   [VERB_OPEN_VSCODE, openVscode],
   [VERB_SET_STATE, setState],
   [VERB_STEP_STATE, stepState],
+  [VERB_SET_CONFIG, setConfig],
+  [VERB_STEP_CONFIG, stepConfig],
+  [VERB_RESET_CONFIG, resetConfig],
   [VERB_SHOW_CONFIG_ERROR, showConfigError],
   [VERB_SHOW_CONFIG_WARNING, showConfigWarning],
   [VERB_TOOLBAR_TOGGLE, toolbarToggle],
@@ -413,12 +540,16 @@ const dispatch: VerbHandler = (rawValue, ctx) => {
   let sessionId: string | null = null;
   for (const { verb, value } of parseEffects(rawValue)) {
     // Extract session ID from the first session-bearing effect for error display.
-    // set-state, step-state, and toolbar-toggle all carry the session id as their
-    // first segment, so a failing step surfaces in the bar like any other.
+    // set-state, step-state, set-config, step-config, reset-config, and
+    // toolbar-toggle all carry the session id as their first segment, so a
+    // failing step surfaces in the bar like any other.
     if (
       !sessionId &&
       (verb === VERB_SET_STATE ||
         verb === VERB_STEP_STATE ||
+        verb === VERB_SET_CONFIG ||
+        verb === VERB_STEP_CONFIG ||
+        verb === VERB_RESET_CONFIG ||
         verb === VERB_TOOLBAR_TOGGLE)
     ) {
       const parts = decodeSegments(value);

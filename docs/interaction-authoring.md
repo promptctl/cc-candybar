@@ -67,23 +67,30 @@ click does; templates bind clickable regions to those names. The click gate on
 the wire is derived from the same declarations, so a template cannot smuggle an
 un-gated write.
 
-An action declares exactly one of `set` / `copy` / `open`; a `set` declares
-exactly one value source:
+An action declares exactly one of `set` / `persist` / `copy` / `open` /
+`reset`; a `set` or `persist` declares exactly one value source:
 
 | declaration | click effect |
 |---|---|
-| `{ set: key, to: "value" }` | write the literal value |
+| `{ set: key, to: "value" }` | write the literal value to **SessionState** (per-session, until the session ends) |
 | `{ set: key, from: "themes" \| "styles" \| "looks" \| [...] }` | write the option the template binds (picker/menu domain) — a registered domain name, or an inline array of literal values needing no registration |
 | `{ set: key, min: 0, max: 60, by: 2 }` | step the current value by `by`, wrapping in `[min, max]` |
 | `{ set: key, int: true }` | write any integer the render binds (a page cursor) |
 | `{ set: key, cycle: ["a", "b", "c"] }` | write the **successor** of the current value, wrapping; order members default-state-first |
+| `{ persist: field, to \| from \| min/max/by \| cycle, … }` | the SAME four value sources as `set`, but writes the **config `globals` default** durably (every session, survives daemon restart) instead of one session — see below. No `int` arm: a page cursor is never persisted. |
+| `{ reset: field }` | clear one persisted `globals` field, restoring the config-file/bundled value |
 | `{ copy: "template" }` | copy the evaluated template to the clipboard |
 | `{ open: "template" }` | open the evaluated target in the editor |
 
 A `set` action writing SessionState needs a matching `state` **variable** to
 read the value back into templates: `{ kind: "state", key: "<same key>",
 default: "…" }`. (The one exception: never declare state for a `{{ menu }}` —
-its state is synthesized, see below.)
+its state is synthesized, see below.) A `persist` action reads its current
+value back through whatever variable already projects that `globals` field
+(`theme.effective` for `palette`, `look.effective` for `look` — both declared
+by the bundled default); other `globals` fields have no `.effective`
+projection yet, so a `persist` action over them still writes correctly but
+has no "current selection" highlight until one exists.
 
 The canonical control-strip config — cycle chip, bounded stepper, copy/open
 toolbar:
@@ -149,6 +156,43 @@ exactly the same over it:
   root: { v: ["sortControl"] },
 }
 ```
+
+### `persist` / `reset` — writing the config default, not a session pick
+
+Every other `set` in this doc changes what the CURRENT session sees. `persist`
+changes what EVERY session sees, from the next reload on — it writes into a
+daemon-owned overrides layer merged on top of your config file (bundled
+default < config file < persisted overrides < session pick, in that order:
+a session's own `set` pick still wins over a persisted default for that one
+session). The config file on disk is never touched — a `persist` write is
+never something `cc-candybar check` or a `git diff` on your config will show.
+
+Reach for `persist` when the picked value should become the new normal, not
+a one-off for this conversation — a theme you want every future session to
+open in, not just this one. Pair it with `reset` so a persisted choice is
+always undoable from the bar itself:
+
+```json5 check:pass
+{
+  actions: {
+    applyThemeForever: { persist: "palette", from: "themes" },
+    forgetTheme: { reset: "palette" },
+  },
+  segments: {
+    themeControls: {
+      template: '{{ action "applyThemeForever" "nord" }} {{ action "forgetTheme" "↺" }}',
+      bg: "surface", fg: "foreground",
+    },
+  },
+  root: { v: ["themeControls"] },
+}
+```
+
+`applyThemeForever` needs no matching `state` variable and no `session.id`
+plumbing of its own — the loader still requires the global `session.id`
+anchor the moment any `set`/`persist`/`reset` action exists (it rides the
+click for error-surfacing, same as `set`), but reading `.session.id` back is
+never required for `persist` the way `{ kind: "state" }` is for `set`.
 
 ## `{{ menu "applyAction" }}` — the picker disclosure
 
