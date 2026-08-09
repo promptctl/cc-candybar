@@ -295,6 +295,12 @@ describe("config-overrides-store: segment-palette keys", () => {
     expect(Object.prototype.hasOwnProperty.call(result, "__proto__")).toBe(
       true,
     );
+    // The two views partition the SAME file by key shape (see the
+    // coexistence test above) — confirm that boundary holds at the
+    // __proto__ edge too, not just for ordinary keys: a bug in
+    // isValidOverrides/parsePersistTarget that let this key leak into the
+    // Globals-scoped projection would go undetected otherwise.
+    expect(loadConfigOverrides(path)).toEqual({});
     cleanup();
   });
 });
