@@ -1,3 +1,10 @@
+# [1.24.0](https://github.com/promptctl/cc-candybar/compare/v1.23.0...v1.24.0) (2026-08-09)
+
+
+### Features
+
+* **theming:** wire theme/look picker into the bundled default ([#164](https://github.com/promptctl/cc-candybar/issues/164)) ([2da0143](https://github.com/promptctl/cc-candybar/commit/2da01434a84acde0bc6bbc0932873ef6bd50437a))
+
 # [1.23.0](https://github.com/promptctl/cc-candybar/compare/v1.22.0...v1.23.0) (2026-08-05)
 
 
