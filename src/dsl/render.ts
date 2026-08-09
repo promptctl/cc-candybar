@@ -31,7 +31,7 @@ import {
 } from "../var-system/sources.js";
 import type { BuildLineOptions } from "../render/strip.js";
 import { DEFAULT_PADDING, renderStripCells } from "../render/strip.js";
-import { resolverForThemeName } from "../themes/index.js";
+import { resolverForThemeName, effectiveThemeName } from "../themes/index.js";
 import { buildScope } from "../template-engine/scope.js";
 import {
   createCcCandybarEngine,
@@ -314,8 +314,32 @@ export function registerDslConfig(
   // one source.
   const lookNames = Object.keys(config.looks);
   const perConfigDomains = perConfigDomainsFor(config.looks);
+  // [LAW:rich-js-owns-color-math] Bind the semantic palette functions
+  // (primary/accent/success/warning/error/…) into the per-config engine so
+  // segment template BODIES can reference theme colors by name instead of
+  // hardcoding raw ANSI values, the same convention `bg`/`fg` specs already
+  // follow. [LAW:dataflow-not-control-flow] This resolver is frozen at
+  // registration to the config's DEFAULT theme (no session override —
+  // registerDslConfig runs once per config load, not per render) — the same
+  // "frozen at registration" contract `segments.<name>.palette` overrides
+  // already have. A live session theme click still recolors every segment's
+  // bg/fg (basePalette is re-resolved per render in renderDsl); only these
+  // in-body semantic color calls stay pinned to the config default theme.
+  // KNOWN LIMITATION, not merely cosmetic: `error`/`success`/`warning` are
+  // hue-anchored across themes (rich-js ANCHORED_ROOTS) so they drift only
+  // slightly on a mid-session theme switch, but `primary`/`accent` are NOT
+  // anchored — a click from e.g. tokyo-night to gruvbox-dark can render a
+  // template's `{{ primary .git.branch }}` in tokyo-night's primary against
+  // gruvbox-dark's live bg/fg, a genuine color mismatch, not just a shade
+  // drift. Fixing this for real needs a per-render-rebound resolver (a rich-js
+  // paletteFuncs API that takes a live getter instead of a frozen resolver),
+  // which gives up the parse-once/evaluate-many contract this engine
+  // otherwise holds — out of scope here; tracked as a follow-up.
+  const bodyPaletteResolver = resolverForThemeName(
+    effectiveThemeName(null, config.globals.palette),
+  );
   const engine = createCcCandybarEngine(
-    undefined,
+    bodyPaletteResolver,
     {
       ...actionFuncs(actionRuntime),
       ...pickerFuncs(actionRuntime),
