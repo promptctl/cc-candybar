@@ -538,6 +538,113 @@ describe("DEFAULT_DSL_CONFIG", () => {
     });
   });
 
+  // brandon-segments-3eo.1: the `git` and `gitaculous` segment templates each
+  // render every git fact (branch, staged/unstaged/untracked/conflicts,
+  // ahead/behind) in its own semantic palette color instead of one uniform
+  // segment fg, p10k-style. Feeding a payload where every fact is nonzero and
+  // counting DISTINCT truecolor foregrounds in the rendered line is the
+  // acceptance check — a regression back to one uniform fg would collapse
+  // the count to 1.
+  describe("git segment per-fact coloring", () => {
+    const GIT_PAYLOAD = {
+      hook_event_name: "Status",
+      session_id: "x",
+      transcript_path: "/tmp/t.jsonl",
+      cwd: "/tmp",
+      model: { id: "x", display_name: "x" },
+      workspace: { current_dir: "/tmp", project_dir: "/tmp", added_dirs: [] },
+      git: {
+        branch: "main",
+        repoName: "repo",
+        sha: "abc1234",
+        staged: 2,
+        unstaged: 3,
+        untracked: 4,
+        conflicts: 1,
+        ahead: 1,
+        behind: 1,
+        upstream: "origin/main",
+        operation: "",
+        stash: 2,
+        status: "conflicts",
+        timeSinceCommit: 0,
+      },
+    };
+
+    // Distinct truecolor foregrounds (`38;2;r;g;b`) across the rendered
+    // line — one per SGR-introduced run, deduped. A basic-code fg would also
+    // count but every semantic palette function here resolves to truecolor.
+    // Walks params sequentially (not `indexOf("38")`) and SKIPS a recognized
+    // `48;2;r;g;b` background run's components before looking for `38` —
+    // otherwise a bg color whose component happens to equal 38 could be
+    // misread as the fg introducer, or (mirror bug) mask a real one that
+    // follows it. Same class of collision test/segment-interior-color.test.ts's
+    // skipTruecolorRun fixes.
+    function distinctForegrounds(line: string): Set<string> {
+      const fgs = new Set<string>();
+      for (const m of line.matchAll(/\x1b\[([0-9;]*)m/g)) {
+        const params = (m[1] ?? "").split(";");
+        for (let i = 0; i < params.length; i++) {
+          if (params[i] === "38" && params[i + 1] === "2") {
+            fgs.add(`${params[i + 2]};${params[i + 3]};${params[i + 4]}`);
+            i += 4;
+          } else if (params[i] === "48" && params[i + 1] === "2") {
+            i += 4;
+          }
+        }
+      }
+      return fgs;
+    }
+
+    function renderSegment(segment: string): string {
+      const parsed = parseAndValidate("<default>", SERIALIZED);
+      const cfg = { ...parsed, root: oneSegmentRoot(segment) };
+      const store = new VariableStore();
+      const registry = new SourceRegistry(store);
+      try {
+        const compiled = registerDslConfig(cfg, registry, { cwd: "/tmp" });
+        const basePalette = new PaletteResolver(
+          getThemePalette(cfg.globals.palette ?? "textual-dark")!,
+        );
+        return renderDsl(cfg, compiled, store, registry, GIT_PAYLOAD, basePalette, {
+          style: "powerline",
+          colorCompatibility: "truecolor",
+          wrap: true,
+          padding: 1,
+          charset: "unicode",
+          width: Number.POSITIVE_INFINITY,
+        });
+      } finally {
+        registry.dispose();
+      }
+    }
+
+    test("git segment renders more than one distinct color across staged/unstaged/untracked/conflicts/ahead/behind", () => {
+      const distinct = distinctForegrounds(renderSegment("git"));
+      expect(distinct.size).toBeGreaterThan(1);
+    });
+
+    test("gitaculous segment renders more than one distinct color across the same facts", () => {
+      const distinct = distinctForegrounds(renderSegment("gitaculous"));
+      expect(distinct.size).toBeGreaterThan(1);
+    });
+
+    // GIT_WORKTREE's `$first` separator var is declared inside the outer
+    // `{{ if or ... }}` gate, not at the template's top level like
+    // DIR_TEMPLATE's `$dir` — a real structural difference a reviewer flagged.
+    // Reassignment via `=` (not `:=`) still walks up to the declaring frame
+    // regardless of nesting depth, so this asserts the actual observable
+    // behavior (single-space-separated counts, never concatenated) rather
+    // than trusting the analogy in the comment above GIT_WORKTREE.
+    test("worktree counts render single-space-separated, never concatenated", () => {
+      // eslint-disable-next-line no-control-regex
+      const ANSI = /\x1b\[[0-9;]*m|\x1b\]8;;[^\x1b]*\x1b\\|[\u{E0B0}-\u{E0BC}]/gu;
+      const visible = renderSegment("git").replace(ANSI, "");
+      expect(visible).toContain("+2 ~3 ?4 !1");
+      expect(visible).not.toMatch(/[+~?!]\d[+~?!]/);
+    });
+  });
+
   // [LAW:dataflow-not-control-flow] The metrics segment renders parts
   // independently — each `if .metrics.<field>` guard fires off its own
   // value. Absent fields project through pickNonNull as missing keys and

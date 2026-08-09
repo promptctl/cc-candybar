@@ -58,6 +58,16 @@ function parseRuns(ansi: string): Run[] {
   return runs;
 }
 
+// A truecolor RGB component (0-255) can numerically fall inside a basic-code
+// range (e.g. a blue of 106 collides with the 100-107 bright-bg range), so
+// the scan must SKIP a recognized `38;2;r;g;b` / `48;2;r;g;b` run's three
+// component tokens rather than re-inspecting them as standalone codes —
+// otherwise an unrelated color's component number gets misread as a legacy
+// ANSI introducer.
+function skipTruecolorRun(params: readonly string[], i: number): number {
+  return params[i + 1] === "2" ? i + 4 : i;
+}
+
 // The foreground a run sets — the value pdu.3's defect collapsed to a single
 // segment fg; comparing it across runs is the behavioral invariant. Both the
 // truecolor `38;2;r;g;b` form and a basic ANSI code (30-37/90-97) count.
@@ -66,6 +76,10 @@ function foregroundKey(sgr: string): string | null {
   for (let i = 0; i < params.length; i++) {
     if (params[i] === "38" && params[i + 1] === "2") {
       return `tc:${params[i + 2]};${params[i + 3]};${params[i + 4]}`;
+    }
+    if (params[i] === "48") {
+      i = skipTruecolorRun(params, i);
+      continue;
     }
     const n = Number(params[i]);
     if ((n >= 30 && n <= 37) || (n >= 90 && n <= 97)) return `basic:${n}`;
@@ -81,6 +95,10 @@ function backgroundKey(sgr: string): string | null {
   for (let i = 0; i < params.length; i++) {
     if (params[i] === "48" && params[i + 1] === "2") {
       return `tc:${params[i + 2]};${params[i + 3]};${params[i + 4]}`;
+    }
+    if (params[i] === "38") {
+      i = skipTruecolorRun(params, i);
+      continue;
     }
     const n = Number(params[i]);
     if ((n >= 40 && n <= 47) || (n >= 100 && n <= 107)) return `basic:${n}`;
