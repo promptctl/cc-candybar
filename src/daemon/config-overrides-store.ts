@@ -51,6 +51,17 @@ export function isGlobalsField(key: string): key is keyof Globals {
   return Object.prototype.hasOwnProperty.call(GLOBALS_FIELD_KIND, key);
 }
 
+// [LAW:one-source-of-truth] The same four canonical boolean-ish inputs
+// validateBoolean (state-validators.ts) accepts — a `persist` action's gate
+// is an ALLOW-LIST (the declared `to`/`cycle` members pass through
+// membership-checked but otherwise VERBATIM, unlike validateBoolean's own
+// bespoke normalization), so a config author writing `cycle: ["true",
+// "false"]` or `to: "0"` reaches this boundary with the raw member string,
+// not a pre-canonicalized "1"/"". This is the ONE place that must accept the
+// full accepted-input set, not just the canonical pair.
+const BOOLEAN_TRUTHY = new Set(["1", "true"]);
+const BOOLEAN_FALSY = new Set(["0", "false", ""]);
+
 // [LAW:no-silent-fallbacks] The `persist` write's validator canonicalizes to
 // a STRING (the same wire currency `set` uses) — this is the boundary that
 // lifts it into the typed value Globals declares. An out-of-range/non-numeric
@@ -72,12 +83,11 @@ export function coerceGlobalsValue(
     }
     return n;
   }
-  if (raw !== "1" && raw !== "") {
-    throw new Error(
-      `coerceGlobalsValue: "${key}" expects boolean-ish "1"/"", got "${raw}"`,
-    );
-  }
-  return raw === "1";
+  if (BOOLEAN_TRUTHY.has(raw)) return true;
+  if (BOOLEAN_FALSY.has(raw)) return false;
+  throw new Error(
+    `coerceGlobalsValue: "${key}" expects boolean-ish (1, 0, true, false), got "${raw}"`,
+  );
 }
 
 // [LAW:no-silent-fallbacks] Missing/corrupt/wrong-shape file → the empty
@@ -125,9 +135,15 @@ export function loadConfigOverrides(
   }
 }
 
-// [LAW:single-enforcer] Atomic write shared by set/clear: read the current
+// [LAW:no-silent-failure] Atomic write shared by set/clear: read the current
 // overrides, apply one mutation, write-to-temp + rename. Owner-only mode,
 // matching every other daemon runtime file (session-state.json, pid, lease).
+// Unlike session-state.json's debounced best-effort flush (no synchronous
+// caller waiting on it), a `persist` write is directly caused by a click that
+// expects a truthful ack — a swallowed failure here would let the verb
+// handler log "set-config: ..." as if it landed when nothing was written.
+// Logs at "error" for the daemon-log breadcrumb, then RETHROWS so the caller
+// (the click) fails loudly instead of claiming a success that didn't happen.
 function writeOverrides(
   filePath: string,
   overrides: Partial<Globals>,
@@ -140,7 +156,9 @@ function writeOverrides(
     fs.chmodSync(tmp, 0o600);
     fs.renameSync(tmp, filePath);
   } catch (e) {
-    logger("warn", `config-overrides write failed: ${(e as Error).message}`);
+    const message = `config-overrides write failed: ${(e as Error).message}`;
+    logger("error", message);
+    throw new Error(message);
   }
 }
 

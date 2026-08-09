@@ -176,10 +176,16 @@ function actionKeySpecs(
 // registration rather than silently shadowing the permanent gate. Only an
 // ALLOW-LIST contribution to a baseline key is dropped (the click reuses the
 // baseline gate as intended).
+//
+// [LAW:one-source-of-truth] The baseline set is read from the registry that
+// owns it (registry.listBaselineKeys()), not re-declared here — the baseline
+// keys were passed to createValidatorRegistry above; a second hardcoded list
+// could silently drift from them if a future baseline key were added there
+// and forgotten here.
 function dropBaselineAllowLists(
   contributions: readonly KeySpecContribution[],
 ): KeySpecContribution[] {
-  const baseline = new Set(["style", "theme", "toolbar-expanded"]);
+  const baseline = new Set(registry.listBaselineKeys());
   return contributions.filter(
     (c) => c.spec.kind !== "allow-list" || !baseline.has(c.key),
   );

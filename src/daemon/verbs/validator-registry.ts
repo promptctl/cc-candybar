@@ -231,22 +231,28 @@ export function mergeKeySpecs(
 
 // [LAW:types-are-the-program] The validator is RESIDUE of a SETTLED spec:
 // given one merged spec, its validator is forced. Pure projection — kind ⇒
-// constructor — with NO union or widen of its own.
+// constructor — with NO union or widen of its own. `noun` ("state"/"config")
+// is threaded through so the SAME shared projection labels a rejection
+// message with the keyspace it actually belongs to — this is the one place
+// that builds every validator, so it is the one place that can misname the
+// keyspace if the noun doesn't ride along.
 function validatorForSpec(
   key: string,
   spec: DerivedValidatorSpec,
+  noun: string,
 ): KeyValidator {
   if (spec.kind === "int") return makeIntValidator(`menu page "${key}"`);
   if (spec.kind === "range")
-    return makeRangeValidator(spec.min, spec.max, `stepper "${key}"`);
-  return makeAllowListValidator(spec.allowed, `state "${key}"`);
+    return makeRangeValidator(spec.min, spec.max, `${noun} stepper "${key}"`);
+  return makeAllowListValidator(spec.allowed, `${noun} "${key}"`);
 }
 
 function buildValidatorFromSpecs(
   key: string,
   specs: readonly DerivedValidatorSpec[],
+  noun: string,
 ): KeyValidator {
-  return validatorForSpec(key, mergeKeySpecs(key, specs));
+  return validatorForSpec(key, mergeKeySpecs(key, specs), noun);
 }
 
 // [LAW:single-enforcer] THE coherence merge: group every contribution by key
@@ -288,6 +294,12 @@ export interface ValidatorRegistry {
   register(key: string, spec: DerivedValidatorSpec): () => void;
   validate(key: string, rawValue: string): ValidateResult;
   listKeys(): readonly string[];
+  // [LAW:one-source-of-truth] The permanent/baseline subset of listKeys() —
+  // exposed so a consumer that needs to distinguish "derived from an action
+  // table" from "always writable" (e.g. dropping an allow-list contribution
+  // aimed at a baseline key) reads it from the registry that owns the
+  // distinction, rather than re-declaring the baseline set as a second list.
+  listBaselineKeys(): readonly string[];
   rangeParamsFor(key: string): RangeParams | null;
 }
 
@@ -351,13 +363,13 @@ export function createValidatorRegistry(
           );
         }
         existing.specs.push(spec);
-        existing.validator = buildValidatorFromSpecs(key, existing.specs);
+        existing.validator = buildValidatorFromSpecs(key, existing.specs, noun);
       } else {
         const specs = [spec];
         entries.set(key, {
           permanent: false,
           kind: spec.kind,
-          validator: buildValidatorFromSpecs(key, specs),
+          validator: buildValidatorFromSpecs(key, specs, noun),
           specs,
         });
       }
@@ -372,7 +384,7 @@ export function createValidatorRegistry(
         if (entry.specs.length === 0) {
           entries.delete(key);
         } else {
-          entry.validator = buildValidatorFromSpecs(key, entry.specs);
+          entry.validator = buildValidatorFromSpecs(key, entry.specs, noun);
         }
       };
     },
@@ -390,6 +402,10 @@ export function createValidatorRegistry(
 
     listKeys() {
       return [...entries.keys()];
+    },
+
+    listBaselineKeys() {
+      return baselineKeys();
     },
 
     rangeParamsFor(key) {

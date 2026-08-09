@@ -175,10 +175,46 @@ describe("config-overrides-store", () => {
     expect(coerceGlobalsValue("autoWrap", "")).toBe(false);
   });
 
+  // [LAW:verifiable-goals] A `persist` boolean field's gate is an ALLOW-LIST
+  // (a `cycle`/`to` action's declared members pass through membership-checked
+  // but otherwise VERBATIM), not validateBoolean's own canonicalizing
+  // SessionState validator — so a config author writing `cycle: ["true",
+  // "false"]` or `to: "0"` reaches coerceGlobalsValue with the raw member,
+  // not a pre-canonicalized "1"/"". All four canonical boolean-ish wire
+  // strings must coerce, not just the canonical "1"/"" pair.
+  test("coerceGlobalsValue accepts every canonical boolean-ish wire string, not just 1/empty", () => {
+    expect(coerceGlobalsValue("autoWrap", "true")).toBe(true);
+    expect(coerceGlobalsValue("autoWrap", "1")).toBe(true);
+    expect(coerceGlobalsValue("autoWrap", "false")).toBe(false);
+    expect(coerceGlobalsValue("autoWrap", "0")).toBe(false);
+    expect(coerceGlobalsValue("autoWrap", "")).toBe(false);
+  });
+
   test("coerceGlobalsValue throws loudly on an undeliverable numeric string", () => {
     expect(() => coerceGlobalsValue("padding", "not-a-number")).toThrow(
       /expects a number/,
     );
+  });
+
+  test("coerceGlobalsValue throws loudly on an undeliverable boolean string", () => {
+    expect(() => coerceGlobalsValue("autoWrap", "maybe")).toThrow(
+      /expects boolean-ish/,
+    );
+  });
+
+  // [LAW:no-silent-failure] A write failure must be OBSERVABLE by the caller
+  // — the verb handler logs "set-config: ..." as a success on the line right
+  // after this call, so a swallowed failure would let that log lie. Point
+  // the write at a path whose parent cannot be created (a file standing
+  // where a directory is expected) to force a real fs failure.
+  test("writeConfigOverride throws (not silently swallows) when the write fails", () => {
+    const { path: blocker, cleanup } = tmpFile();
+    writeFileSync(blocker, "not a directory");
+    const impossiblePath = join(blocker, "config-overrides.json");
+    expect(() =>
+      writeConfigOverride(impossiblePath, "palette", "nord"),
+    ).toThrow();
+    cleanup();
   });
 });
 
@@ -236,6 +272,28 @@ describe("config-validators registry", () => {
     expect(listConfigKeys()).toContain("charset");
     dispose();
     expect(listConfigKeys()).not.toContain("charset");
+  });
+
+  // [LAW:one-type-per-behavior] The shared validator-registry algebra is one
+  // implementation instantiated twice — a rejection message from the CONFIG
+  // keyspace must say "config", never the SessionState-era "state", or an
+  // operator debugging a persist-action click is misled about which gate
+  // rejected them.
+  test("an out-of-domain rejection names the config keyspace, not state", () => {
+    const dispose = registerConfigValidator("charset", {
+      kind: "allow-list",
+      allowed: ["unicode", "ascii"],
+    });
+    try {
+      const result = validateConfigWrite("charset", "bogus");
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.reason).toContain("config");
+        expect(result.reason).not.toContain("state");
+      }
+    } finally {
+      dispose();
+    }
   });
 });
 
