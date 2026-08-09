@@ -19,12 +19,16 @@
 // (add its name to the children), not new code. The same data flows through
 // the same render path whether the root has 1 leaf or 16.
 //
-// [LAW:types-are-the-program] `satisfies DslConfig` (not an annotation)
-// preserves the literal's narrow keys for downstream consumers — every
-// declared segment name shows up as a known key, every variable name shows
-// up in the input set the daemon must populate.
+// [LAW:types-are-the-program] The authored literal (RAW_DEFAULT_DSL_CONFIG)
+// uses `satisfies DslConfig` (not an annotation) so every declared segment
+// and variable name is checked against the real shape at the point of
+// authoring. The exported DEFAULT_DSL_CONFIG is that literal run through the
+// loader's own synthesis pass (see the bottom of this file) — a `DslConfig`,
+// the same effective shape every user config resolves to.
 
-import type { DslConfig } from "./dsl-types.js";
+import type { DslConfig, SegmentDecl } from "./dsl-types.js";
+import { parseDslConfig } from "./dsl-loader.js";
+import { mergeWithDefault } from "./loader/merge.js";
 
 // ─── Shared template fragments ───────────────────────────────────────────────
 //
@@ -144,7 +148,15 @@ function etaHeatFg(etaRef: string, warnRef: string): string {
 
 // ─── The default config ──────────────────────────────────────────────────────
 
-export const DEFAULT_DSL_CONFIG = {
+// [LAW:one-source-of-truth] The AUTHORED literal, pre-synthesis. Production
+// code wants the synthesized DEFAULT_DSL_CONFIG below; this is exported only
+// for tests that round-trip "what a user would get by copy-pasting the
+// bundled default into their own file" through the real per-file parse —
+// that round-trip must start from the AUTHORED declarations, never from
+// DEFAULT_DSL_CONFIG's own already-synthesized `menus.*` entries (reparsing
+// those would trip the reserved-namespace guard, which exists to catch a
+// user hand-declaring a name only synthesis may write).
+export const RAW_DEFAULT_DSL_CONFIG = {
   globals: {
     // Picked by the daemon's basePalette resolution; user overrides in their
     // own config. catppuccin-latte ships every spec name the default
@@ -814,20 +826,56 @@ export const DEFAULT_DSL_CONFIG = {
       bg: "surface",
       fg: "foreground",
     },
+    // Theme control — the palette switcher, wired into the DEFAULT bar
+    // (brandon-theming-8uj.1) so theme selection is discoverable without
+    // reading docs/interaction-authoring.md or hand-authoring a config.
+    // [LAW:one-source-of-truth] The trigger reads `.theme.effective` — the
+    // SAME daemon-resolved name (effectiveThemeName) the rendered basePalette
+    // is built from — so the label and the colors can never drift; unlike
+    // styleControl (no "effective style" input exists), no extra `state`
+    // variable is needed here. Shares the "pickers" accordion key with
+    // lookControl so opening one closes the other, the docs' canonical
+    // two-menu pairing.
+    themeControl: {
+      template:
+        "🎨 {{ .theme.effective }} " +
+        '{{ menu "applyTheme" (dict "key" "pickers") }}',
+      bg: "surface",
+      fg: "foreground",
+    },
+    // Look control — the theme-ADAPTATION switcher (see the `looks` block
+    // below), the exact twin of themeControl one dimension over:
+    // `.look.effective` is the daemon-resolved name (effectiveLookName) the
+    // rendered ThemeKey composes from. closeOnPick collapses the drop after a
+    // pick — looks are tried one at a time against the chosen theme, not
+    // stacked open.
+    lookControl: {
+      template:
+        "◐ {{ .look.effective }} " +
+        '{{ menu "applyLook" (dict "key" "pickers" "closeOnPick" true) }}',
+      bg: "surface",
+      fg: "foreground",
+    },
   },
 
   // Default layout — the canonical LayoutNode tree (`satisfies DslConfig`
   // requires the lowered form here; the terse Option-A `{ h/v/seg }` grammar is
   // the loader's authoring surface for user JSON, not this typed literal).
   //
-  // Two rows stacked by the vertical container: an IDENTITY + ACTIONS row
+  // Three rows stacked by the vertical container: an IDENTITY + ACTIONS row
   // (where am I / what can I do here — the directory, the verbose `gitaculous`
   // line (repo, sha, working-tree, upstream, stash, time-since-commit), then the
   // quick-action tray: copy session id, open project / transcript in the editor)
   // over a STATUS row (what's happening now — model, context-window fill,
-  // prompt-cache warmth, and the 5h / 7d rate-limit quotas). The tray sits on
-  // the identity row because its actions are workspace-scoped (this session,
-  // this project), not usage metrics. Each row zips its segments through the
+  // prompt-cache warmth, and the 5h / 7d rate-limit quotas) over an APPEARANCE
+  // row (theme + look pickers, brandon-theming-8uj.1 — the bundled default's
+  // only on-bar affordance to discover and use the theme/look feature without
+  // reading docs or hand-authoring a config). The tray sits on the identity
+  // row because its actions are workspace-scoped (this session, this
+  // project), not usage metrics; the pickers get their own row rather than
+  // crowding the identity row because a `{{ menu }}` drops its picker body
+  // onto the line immediately below its row, and that drop must not land on
+  // top of an unrelated row's content. Each row zips its segments through the
   // powerline joiner; `\n` separates the rows.
   //
   // [LAW:dataflow-not-control-flow] Every status segment is when-gated on its
@@ -859,6 +907,14 @@ export const DEFAULT_DSL_CONFIG = {
           { kind: "segment", name: "cacheTimer" },
           { kind: "segment", name: "block" },
           { kind: "segment", name: "weekly" },
+        ],
+      },
+      {
+        kind: "container",
+        direction: "horizontal",
+        children: [
+          { kind: "segment", name: "themeControl" },
+          { kind: "segment", name: "lookControl" },
         ],
       },
     ],
@@ -895,6 +951,17 @@ export const DEFAULT_DSL_CONFIG = {
     // rendered click and the wire gate share that one source — a template cannot
     // smuggle an un-gated style write.
     applyStyle: { set: "style", from: "styles" },
+
+    // [LAW:locality-or-seam] The theme/look pickers' behaviors, decoupled by
+    // NAME from themeControl/lookControl {{ menu }}s above — same seam as
+    // applyStyle. "theme" is the baseline permanent state key (validateTheme,
+    // registered in state-validators.ts); dropBaselineAllowLists reuses that
+    // gate for an allow-list contribution instead of re-registering it, so
+    // this action derives nothing new. "look" has no baseline entry, so this
+    // action derives a fresh allow-list validator ranging the merged `looks`
+    // block's names — the same derivation test/dsl-looks.test.ts exercises.
+    applyTheme: { set: "theme", from: "themes" },
+    applyLook: { set: "look", from: "looks" },
   },
 
   // ─── Looks ───────────────────────────────────────────────────────────────
@@ -1058,3 +1125,46 @@ export const DEFAULT_DSL_CONFIG = {
       "{{ else }}{{ . }}m{{ end }}",
   },
 } satisfies DslConfig;
+
+// [LAW:locality-or-seam] The palette names this module-level parse is allowed
+// to accept — DERIVED from RAW_DEFAULT_DSL_CONFIG itself (globals.palette +
+// every per-segment palette: pin), never from the live theme registry
+// (listResolvablePaletteNames()). A real user file must validate against the
+// live registry (an author can type any name); this file validates against
+// ITSELF (every name here is a literal we wrote and every render test below
+// exercises against the real registry already). This is what keeps the
+// module-load parse below from ever depending on the registry being healthy
+// at import time — a registry-loading bug elsewhere would surface where it
+// actually matters (a real render failing), never as an uncatchable crash on
+// every importer of this file before any daemon/CLI error handling runs.
+const AUTHORED_PALETTE_NAMES = new Set(
+  [
+    RAW_DEFAULT_DSL_CONFIG.globals.palette,
+    ...(Object.values(RAW_DEFAULT_DSL_CONFIG.segments) as SegmentDecl[]).map(
+      (s) => s.palette,
+    ),
+  ].filter((name): name is string => name !== undefined),
+);
+
+// [LAW:single-enforcer] Run the authored literal through the SAME
+// parse → synthesize pipeline every user config goes through (JSON5 stage +
+// synthesizeMenuDecls' `menus.*` synthesis, and any future group/menu
+// synthesis pass) instead of hand-duplicating that logic here. Without this,
+// the zero-config daemon path (loadConfig: no config file found ⇒ raw={},
+// merged directly against this constant — see src/config/dsl-loader.ts and
+// src/config/loader/merge.ts) would ship an UNSYNTHESIZED default: a
+// `{{ menu (dict "key" …) }}` accordion pairing (themeControl/lookControl,
+// brandon-theming-8uj.1) would render its glyph, but clicking it would reject
+// with "unknown state key" — the synthesis that derives a menu's `menus.*`
+// state var + cycle action only ever ran over TEXT a user typed, never over
+// this TS literal. Round-tripping through JSON is exactly what
+// test/default-dsl-config.test.ts's SERIALIZED-based tests already exercise,
+// so this is the same well-tested path, run once here instead of skipped.
+export const DEFAULT_DSL_CONFIG: DslConfig = mergeWithDefault(
+  parseDslConfig(
+    "<default>",
+    JSON.stringify(RAW_DEFAULT_DSL_CONFIG),
+    AUTHORED_PALETTE_NAMES,
+  ),
+  RAW_DEFAULT_DSL_CONFIG,
+);

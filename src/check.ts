@@ -25,6 +25,7 @@ import {
   ConfigError,
 } from "./config/dsl-loader.js";
 import { expandHome } from "./config/loader/discovery.js";
+import { DEFAULT_DSL_CONFIG } from "./config/default-dsl-config.js";
 import { VariableStore } from "./var-system/store.js";
 import { SourceRegistry } from "./var-system/sources.js";
 import { SessionState } from "./daemon/session-state.js";
@@ -250,7 +251,7 @@ function loadRegisterRender(
   cwd: string,
   warnings: string[],
 ): string {
-  const { config: merged, source } = loadConfig(configPath);
+  const { config: merged, source } = loadConfig(configPath, DEFAULT_DSL_CONFIG);
   const config = validateConfig(merged, configPath ?? "<default>", source);
 
   const store = new VariableStore();

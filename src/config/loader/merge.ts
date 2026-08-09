@@ -1,11 +1,19 @@
-// [LAW:one-source-of-truth] The single point that consults DEFAULT_DSL_CONFIG to
-// fill missing keys. A user file declares only what differs; the cascade here
-// (shallow-merge globals, by-name merge variables/segments/actions, wholesale
-// root replacement) is the one place "absent means inherit" is decided.
-// This file changes when the merge semantics change.
+// [LAW:one-source-of-truth] The single point that merges a raw user config
+// onto a default DslConfig to fill missing keys. A user file declares only
+// what differs; the cascade here (shallow-merge globals, by-name merge
+// variables/segments/actions, wholesale root replacement) is the one place
+// "absent means inherit" is decided. This file changes when the merge
+// semantics change.
+//
+// [LAW:one-way-deps] `dflt` is a required parameter — this module is generic
+// merge machinery and does not know about DEFAULT_DSL_CONFIG, the specific
+// bundled instance built ON TOP of it (default-dsl-config.ts imports this
+// function to synthesize itself). A default param pointing back at
+// DEFAULT_DSL_CONFIG would make this generic module depend on its own
+// specific consumer, a cycle. Callers who want "the bundled default" import
+// DEFAULT_DSL_CONFIG from default-dsl-config.ts and pass it explicitly.
 
 import { type DslConfig, type RawDslConfig } from "../dsl-types.js";
-import { DEFAULT_DSL_CONFIG } from "../default-dsl-config.js";
 
 /**
  * Merge a RawDslConfig on top of a default DslConfig. Pure function.
@@ -21,7 +29,7 @@ import { DEFAULT_DSL_CONFIG } from "../default-dsl-config.js";
  */
 export function mergeWithDefault(
   raw: RawDslConfig,
-  dflt: DslConfig = DEFAULT_DSL_CONFIG,
+  dflt: DslConfig,
 ): DslConfig {
   return {
     globals: { ...dflt.globals, ...(raw.globals ?? {}) },

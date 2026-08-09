@@ -8,7 +8,10 @@
 // at compile time (via the `satisfies` on the constant) AND at runtime here
 // (via parseDslConfig). Two boundaries, one truth.
 
-import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
+import {
+  DEFAULT_DSL_CONFIG,
+  RAW_DEFAULT_DSL_CONFIG,
+} from "../src/config/default-dsl-config";
 import { walkNodes } from "../src/config/dsl-types";
 import {
   parseDslConfig,
@@ -22,8 +25,25 @@ import { SourceRegistry } from "../src/var-system/sources";
 import { SessionState } from "../src/daemon/session-state";
 import { PaletteResolver, getThemePalette } from "@promptctl/rich-js";
 import { listResolvablePaletteNames } from "../src/themes/policy";
+import {
+  effectiveThemeName,
+  effectiveLookName,
+  lookKeyByName,
+  resolverForThemeName,
+} from "../src/themes";
+import {
+  deriveActionValidators,
+  registerStateValidator,
+} from "../src/daemon/verbs/state-validators";
+import { clickUrl } from "./helpers/click";
+import { effectsUrl, VERB_SET_STATE } from "../src/click/wire";
 
-const SERIALIZED = JSON.stringify(DEFAULT_DSL_CONFIG, null, 2);
+// [LAW:one-source-of-truth] Reparse the AUTHORED literal (pre-synthesis) —
+// mirrors what a user gets by copy-pasting the bundled default into their own
+// file, driven through the real per-file parse (which freshly synthesizes
+// `menus.*`). Reparsing DEFAULT_DSL_CONFIG itself (already-synthesized) would
+// trip the reserved-namespace guard on its own synthesized entries.
+const SERIALIZED = JSON.stringify(RAW_DEFAULT_DSL_CONFIG, null, 2);
 
 // A canonical one-leaf vertical root — narrows a spread config to a single
 // segment so the rendered line is exactly that segment's text.
@@ -55,17 +75,19 @@ describe("DEFAULT_DSL_CONFIG", () => {
     }
   });
 
-  // The bundled default is the maintainer's two rows: an identity+actions row
+  // The bundled default is the maintainer's three rows: an identity+actions row
   // (directory, the verbose gitaculous line, and the quick-action tray: copy
   // session id, open project / transcript in the editor) over a status row
-  // (model, context, prompt-cache warmth, the 5h/7d rate-limit quotas). This pins the
+  // (model, context, prompt-cache warmth, the 5h/7d rate-limit quotas) over an
+  // appearance row (theme + look pickers, brandon-theming-8uj.1). This pins the
   // chosen segment set — which segments graduated into the default bar and which
   // stay declared-but-opt-in — so a future layout edit is a deliberate, reviewed
   // change rather than an accidental drift. block/weekly are IN (their when-gates
   // hide them when no rate-limit window is active); toolbar is IN (the default's
-  // interactivity); the cost segments (session/today), the speed/sparkline/
-  // burnrate telemetry, and the style-picker affordance stay opt-in.
-  test("default root renders exactly the two-row identity+status segment set", () => {
+  // interactivity); themeControl/lookControl are IN (theme/look discoverability);
+  // the cost segments (session/today), the speed/sparkline/burnrate telemetry,
+  // and the powerline-style picker affordance stay opt-in.
+  test("default root renders exactly the three-row identity+status+appearance segment set", () => {
     const laidOut = new Set<string>();
     for (const node of walkNodes(DEFAULT_DSL_CONFIG.root)) {
       if (node.kind === "segment") laidOut.add(node.name);
@@ -80,6 +102,8 @@ describe("DEFAULT_DSL_CONFIG", () => {
         "block",
         "weekly",
         "toolbar",
+        "themeControl",
+        "lookControl",
       ].sort(),
     );
     // Declared-but-opt-in: present in `segments` for reference/user opt-in, but
@@ -140,6 +164,109 @@ describe("DEFAULT_DSL_CONFIG", () => {
     }
   });
 
+  // [LAW:verifiable-goals] brandon-theming-8uj.1 done-gate: the bundled default
+  // ships a clickable theme/look picker, not just documentation describing how
+  // to hand-author one. Drives the REAL click wire against DEFAULT_DSL_CONFIG's
+  // own applyTheme/applyLook actions (deriveActionValidators →
+  // registerStateValidator → clickUrl → VERBS, the same chain the daemon runs),
+  // then re-renders with theme.effective/look.effective recomputed exactly as
+  // server.ts does (effectiveThemeName/effectiveLookName over SessionState) —
+  // mirroring the daemon's real click → next-render loop, not a synthetic rig.
+  test("clicking a theme/look option changes theme.effective/look.effective on the next render", () => {
+    const SID = "theming-8uj-1";
+    const parsed = parseAndValidate("<default>", SERIALIZED);
+    const sessionState = new SessionState();
+    const store = new VariableStore();
+    const registry = new SourceRegistry(store, "", undefined, sessionState);
+    const compiled = registerDslConfig(parsed, registry, { cwd: "/tmp" });
+    // The daemon's cache installs the derived click gate at config load
+    // (cache/render.ts); mirror it so the click below passes through the same
+    // validator applyTheme/applyLook would in production.
+    const disposers = deriveActionValidators(parsed).map(({ key, spec }) =>
+      registerStateValidator(key, spec),
+    );
+    const opts = {
+      style: "powerline" as const,
+      colorCompatibility: "truecolor" as const,
+      wrap: true,
+      padding: 1,
+      charset: "unicode" as const,
+      width: Number.POSITIVE_INFINITY,
+    };
+    const render = (): string => {
+      const theme = effectiveThemeName(
+        sessionState.get(SID, "theme"),
+        parsed.globals.palette,
+      );
+      const look = effectiveLookName(
+        sessionState.get(SID, "look"),
+        parsed.globals.look,
+        parsed.looks,
+      );
+      return renderDsl(
+        parsed,
+        compiled,
+        store,
+        registry,
+        {
+          hook_event_name: "Status",
+          session_id: SID,
+          cwd: "/tmp",
+          model: { id: "claude-opus-4-7", display_name: "Opus 4.7" },
+          workspace: { current_dir: "/tmp", project_dir: "/tmp", added_dirs: [] },
+          theme: { effective: theme },
+          look: { effective: look },
+        },
+        resolverForThemeName(theme),
+        opts,
+        undefined,
+        lookKeyByName(parsed.looks, look),
+      );
+    };
+    try {
+      const targetTheme = listResolvablePaletteNames().find(
+        (name) => name !== parsed.globals.palette,
+      );
+      if (targetTheme === undefined) {
+        throw new Error(
+          "listResolvablePaletteNames() returned only the bundled default's own " +
+            `palette (${JSON.stringify(parsed.globals.palette)}) — need at least ` +
+            "one other resolvable theme to exercise a theme-switching click",
+        );
+      }
+      const before = render();
+      expect(before).not.toContain(targetTheme);
+
+      clickUrl(
+        effectsUrl([{ verb: VERB_SET_STATE, args: [SID, "theme", targetTheme] }]),
+        { sessionState, dlog: () => {} },
+      );
+      const afterTheme = render();
+      expect(afterTheme).toContain(targetTheme);
+      expect(afterTheme).not.toBe(before);
+
+      const targetLook = Object.keys(parsed.looks).find(
+        (name) => name !== "none",
+      );
+      if (targetLook === undefined) {
+        throw new Error(
+          "the merged config's looks block held only the \"none\" identity floor " +
+            "— need at least one other declared look to exercise a look-switching click",
+        );
+      }
+      clickUrl(
+        effectsUrl([{ verb: VERB_SET_STATE, args: [SID, "look", targetLook] }]),
+        { sessionState, dlog: () => {} },
+      );
+      const afterLook = render();
+      expect(afterLook).toContain(targetLook);
+      expect(afterLook).not.toBe(afterTheme);
+    } finally {
+      disposers.forEach((dispose) => dispose());
+      registry.dispose();
+    }
+  });
+
   // brandon-display-dam.2: templates author content; the intra-cell padding is
   // structural (globals.padding → BuildLineOptions.padding). With the bundled
   // default, padding 0 renders visibly tighter than 1, and 2 wider — the value
@@ -182,14 +309,15 @@ describe("DEFAULT_DSL_CONFIG", () => {
   });
 
   // [LAW:one-source-of-truth] Equivalence pin: the terse A-grammar spelling of the
-  // default's two informational rows (identity row over status row) must lower to
-  // a root producing byte-identical ANSI to DEFAULT_DSL_CONFIG.root (the canonical
-  // container tree). Spelling differs; render does not.
+  // default's three informational rows (identity row, status row, appearance row)
+  // must lower to a root producing byte-identical ANSI to DEFAULT_DSL_CONFIG.root
+  // (the canonical container tree). Spelling differs; render does not.
   test("A-grammar { v:[{ h:[...] }] } spelling is render-equivalent to DEFAULT_DSL_CONFIG.root", () => {
     const ALLOWED = new Set(listResolvablePaletteNames());
     const A_SRC = `{ root: { v: [
       { h: ["directory","gitaculous","toolbar"] },
-      { h: ["model","context","cacheTimer","block","weekly"] }
+      { h: ["model","context","cacheTimer","block","weekly"] },
+      { h: ["themeControl","lookControl"] }
     ] } }`;
     const rawA = parseDslConfig("<test>", A_SRC, ALLOWED);
     const mergedA = mergeWithDefault(rawA, DEFAULT_DSL_CONFIG);
