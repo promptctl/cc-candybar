@@ -25,12 +25,9 @@ import type { FuncMap, Template } from "@promptctl/go-template-js";
 import type { VariableStore } from "../var-system/store.js";
 import { toString as varToString } from "../var-system/types.js";
 import { buildScope } from "../template-engine/scope.js";
-import type { ActionDecl, OptionSource } from "../config/action.js";
-import {
-  listResolvablePaletteNames,
-  STRIP_STYLES,
-  type StripStyle,
-} from "../themes/policy.js";
+import type { ActionDecl } from "../config/action.js";
+import { resolveOptionDomain } from "../config/option-domain.js";
+import type { StripStyle } from "../themes/policy.js";
 import {
   effectsUrl,
   VERB_COPY,
@@ -106,21 +103,6 @@ export type CompiledActionDecl =
 
 export type CompiledActions = ReadonlyMap<string, CompiledActionDecl>;
 
-// [LAW:one-source-of-truth] An option source resolves to the SAME canonical list
-// the `themes()`/`styles()`/`looks()` bindings and the derived gate consult —
-// rendered options and the gate cannot diverge. The render-side resolver (the
-// daemon's validator-derivation has its own that must agree — themes/styles from
-// themes/policy, looks from the config's merged look names, threaded in as data
-// because that one domain is per-config, not registry-static).
-export function optionDomain(
-  src: OptionSource,
-  lookNames: readonly string[],
-): readonly string[] {
-  if (src === "themes") return listResolvablePaletteNames();
-  if (src === "styles") return STRIP_STYLES;
-  return lookNames;
-}
-
 // [LAW:locality-or-seam] The runtime holder the `action` template function closes
 // over. Populated after the engine is constructed (the func references the
 // engine, the compiled actions reference the engine — the holder breaks the
@@ -165,13 +147,17 @@ export function compileActions(
   parse: (src: string) => Template<RichText>,
   actions: Readonly<Record<string, ActionDecl>>,
   stateKeyToVar: ReadonlyMap<string, string>,
-  // The config's look names — the one per-config option domain optionDomain
-  // resolves from (themes/styles stay registry-static).
-  lookNames: readonly string[],
+  // This config's per-config option domains (currently just "looks" — the
+  // config's merged look names) — resolveOptionDomain checks these before
+  // falling back to the global registry (themes/styles).
+  perConfigDomains: ReadonlyMap<string, readonly string[]>,
 ): CompiledActions {
   const out = new Map<string, CompiledActionDecl>();
   for (const [name, action] of Object.entries(actions)) {
-    out.set(name, compileAction(parse, name, action, stateKeyToVar, lookNames));
+    out.set(
+      name,
+      compileAction(parse, name, action, stateKeyToVar, perConfigDomains),
+    );
   }
   return out;
 }
@@ -185,7 +171,7 @@ function compileAction(
   name: string,
   action: ActionDecl,
   stateKeyToVar: ReadonlyMap<string, string>,
-  lookNames: readonly string[],
+  perConfigDomains: ReadonlyMap<string, readonly string[]>,
 ): CompiledActionDecl {
   if ("set" in action) {
     const stateVar = stateKeyToVar.get(action.set) ?? action.set;
@@ -202,7 +188,7 @@ function compileAction(
         kind: "set-option",
         key: action.set,
         stateVar,
-        options: [...optionDomain(action.from, lookNames)],
+        options: [...resolveOptionDomain(action.from, perConfigDomains)],
       };
     }
     if ("int" in action) {

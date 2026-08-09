@@ -305,11 +305,15 @@ export function registerDslConfig(
     current: null,
   };
   // [LAW:one-source-of-truth] The config's look names — the one PER-CONFIG
-  // option domain. Computed once here and fed to BOTH consumers (the compiled
-  // set-option domains below and the `looks()` binding), so the rendered
-  // options, a hand-authored `range looks`, and the derived click gate (which
-  // reads the same config in deriveActionValidators) trace to one map.
+  // option domain. Computed once here and fed to every consumer (the `looks()`
+  // binding, and — wrapped as perConfigDomains — the compiled set-option
+  // domains below), so the rendered options, a hand-authored `range looks`,
+  // and the derived click gate (which reads the same config in
+  // deriveActionValidators) trace to one map.
   const lookNames = Object.keys(config.looks);
+  const perConfigDomains = new Map<string, readonly string[]>([
+    ["looks", lookNames],
+  ]);
   const engine = createCcCandybarEngine(
     undefined,
     {
@@ -363,7 +367,7 @@ export function registerDslConfig(
     parse,
     config.actions,
     stateKeyToVar,
-    lookNames,
+    perConfigDomains,
   );
 
   // [LAW:dataflow-not-control-flow] One variable failing to declare does not

@@ -73,7 +73,7 @@ exactly one value source:
 | declaration | click effect |
 |---|---|
 | `{ set: key, to: "value" }` | write the literal value |
-| `{ set: key, from: "themes" \| "styles" \| "looks" }` | write the option the template binds (picker/menu domain) |
+| `{ set: key, from: "themes" \| "styles" \| "looks" \| [...] }` | write the option the template binds (picker/menu domain) — a registered domain name, or an inline array of literal values needing no registration |
 | `{ set: key, min: 0, max: 60, by: 2 }` | step the current value by `by`, wrapping in `[min, max]` |
 | `{ set: key, int: true }` | write any integer the render binds (a page cursor) |
 | `{ set: key, cycle: ["a", "b", "c"] }` | write the **successor** of the current value, wrapping; order members default-state-first |
@@ -123,6 +123,32 @@ toolbar:
 - A bare `{{ action }}` on a `set … int` action must render a **numeric**
   display — the display *is* the integer written; a non-integer is rejected
   loudly at click time.
+
+### Inline option domains — a picker with no registration
+
+`from` names a domain (`"themes"`, `"styles"`, `"looks"`) OR **is** the domain:
+an array of literal values needs no name and no registration. Use this for any
+picker whose options are just a fixed authored list — `{{ menu }}` works
+exactly the same over it:
+
+```json5 check:pass
+{
+  variables: {
+    'session.id': { kind: 'input', path: 'session_id', default: '' },
+    sortOrder: { kind: 'state', key: 'sort-order', default: 'asc' },
+  },
+  actions: {
+    applySort: { set: 'sort-order', from: ['asc', 'desc'] },
+  },
+  segments: {
+    sortControl: {
+      template: '↕ {{ .sortOrder }} {{ menu "applySort" }}',
+      bg: "surface", fg: "foreground",
+    },
+  },
+  root: { v: ["sortControl"] },
+}
+```
 
 ## `{{ menu "applyAction" }}` — the picker disclosure
 
@@ -469,7 +495,7 @@ Template references unknown variable ".curent_dir"
 ```
 
 ```error
-a set action declares exactly one value source: "to" (a literal value), "from" (an option domain: themes/styles/looks), "min"/"max"/"by" (a bounded step), "int" (an unbounded integer cursor), or "cycle" (an enumerated domain stepped in order) — found: to, from
+a set action declares exactly one value source: "to" (a literal value), "from" (an option domain — a registered domain name like "themes"/"styles"/"looks", or an inline array of literal values), "min"/"max"/"by" (a bounded step), "int" (an unbounded integer cursor), or "cycle" (an enumerated domain stepped in order) — found: to, from
 ```
 
 ### Wrong display count on a cycle action

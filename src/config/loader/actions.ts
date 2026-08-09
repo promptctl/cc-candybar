@@ -17,10 +17,9 @@
 
 import {
   ACTION_KEYS,
-  OPTION_SOURCES,
   type ActionDecl,
   type ActionKey,
-  type OptionSource,
+  type OptionDomain,
 } from "../action.js";
 import { findKeyLine } from "./diagnostics.js";
 import {
@@ -231,7 +230,7 @@ function validateSetKey(
 // adds the cross-field invariants `fields` cannot express. The reconstructed
 // payload IS the member minus `set`, which the dispatcher re-attaches.
 const TO_FIELDS: FieldSpecMap<{ to: string }> = { to: setLiteralSpec() };
-const FROM_FIELDS: FieldSpecMap<{ from: OptionSource }> = { from: fromSpec() };
+const FROM_FIELDS: FieldSpecMap<{ from: OptionDomain }> = { from: fromSpec() };
 const BOUNDED_FIELDS: FieldSpecMap<{ min: number; max: number; by: number }> = {
   min: requireIntSpec(),
   max: requireIntSpec(),
@@ -327,9 +326,7 @@ const SET_ARMS: readonly SetArm[] = [
   setArm(CYCLE_FIELDS),
 ];
 
-const VALUE_SOURCE_MESSAGE = `a set action declares exactly one value source: "to" (a literal value), "from" (an option domain: ${OPTION_SOURCES.join(
-  "/",
-)}), "min"/"max"/"by" (a bounded step), "int" (an unbounded integer cursor), or "cycle" (an enumerated domain stepped in order)`;
+const VALUE_SOURCE_MESSAGE = `a set action declares exactly one value source: "to" (a literal value), "from" (an option domain — a registered domain name like "themes"/"styles"/"looks", or an inline array of literal values), "min"/"max"/"by" (a bounded step), "int" (an unbounded integer cursor), or "cycle" (an enumerated domain stepped in order)`;
 
 // [LAW:dataflow-not-control-flow] The set sub-union eliminator: validate the
 // shared `set` key, count which value sources are present, require exactly one,
@@ -394,27 +391,68 @@ function setLiteralSpec(): FieldSpec<string> {
   };
 }
 
-// [LAW:types-are-the-program] `from` is a required member of the closed
-// OPTION_SOURCES domain — the option set a picker ranges. A non-member is a hard
-// error with the bespoke one-of message, never a silent fallback.
-function fromSpec(): FieldSpec<OptionSource> {
+// [LAW:types-are-the-program] `from` is either a NAME (a non-empty string,
+// resolved against the option-domain registry) or an INLINE literal domain (a
+// non-empty array of deliverable set-state values — the same non-empty/
+// slash-free wire shape `to` and `cycle` members enforce). This arm proves
+// only the SHAPE; whether a named domain actually resolves needs the merged
+// config's per-config domains (e.g. "looks"), so that check is a cross-
+// reference concern (validateCrossReferences) — symmetric to how a layout
+// node's segment ref or a `{{ action }}` ref resolves post-merge.
+function fromSpec(): FieldSpec<OptionDomain> {
   return {
     required: true,
-    json: { enum: [...OPTION_SOURCES] },
+    json: {
+      anyOf: [
+        { type: "string", minLength: 1 },
+        { type: "array", items: { type: "string", minLength: 1 }, minItems: 1 },
+      ],
+    },
     parse: (ctx, path, field, raw) => {
       const from = raw[field];
-      if (
-        typeof from !== "string" ||
-        !(OPTION_SOURCES as readonly string[]).includes(from)
-      ) {
-        issue(
-          ctx,
-          `${path}.${field}`,
-          `from must be one of: ${OPTION_SOURCES.join(", ")}, got ${describeValue(from)}`,
-        );
-        return undefined;
+      const at = `${path}.${field}`;
+      if (typeof from === "string") {
+        if (from === "") {
+          issue(ctx, at, `from must be a non-empty domain name`);
+          return undefined;
+        }
+        return from;
       }
-      return from as OptionSource;
+      if (Array.isArray(from) && from.every((m) => typeof m === "string")) {
+        const members = from as string[];
+        if (members.length === 0) {
+          issue(
+            ctx,
+            at,
+            `from must name a domain (a non-empty string) or declare an inline domain (a non-empty array of values)`,
+          );
+          return undefined;
+        }
+        if (members.some((m) => m === "")) {
+          issue(
+            ctx,
+            at,
+            `from array members must be non-empty — an empty value cannot be delivered on the set-state wire`,
+          );
+          return undefined;
+        }
+        const slashed = members.filter((m) => m.includes("/"));
+        if (slashed.length > 0) {
+          issue(
+            ctx,
+            at,
+            `from array member(s) ${slashed.map((m) => `"${m}"`).join(", ")} contain "/" — set values must be slash-free`,
+          );
+          return undefined;
+        }
+        return members;
+      }
+      issue(
+        ctx,
+        at,
+        `from must be a domain name (a string) or an inline domain (an array of strings), got ${describeValue(from)}`,
+      );
+      return undefined;
     },
   };
 }

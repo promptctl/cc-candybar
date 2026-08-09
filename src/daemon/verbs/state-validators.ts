@@ -25,7 +25,8 @@
 // validator becomes the parsing boundary, the verb body the dataflow.
 
 import { listResolvablePaletteNames, STRIP_STYLES } from "../../themes/policy";
-import type { ActionDecl, OptionSource } from "../../config/action";
+import type { ActionDecl } from "../../config/action";
+import { resolveOptionDomain } from "../../config/option-domain";
 import type { DslConfig } from "../../config/dsl-types";
 
 // [LAW:one-source-of-truth] One contribution shape — a (key, spec) pair — every
@@ -430,21 +431,6 @@ export function makeRangeValidator(
   };
 }
 
-// [LAW:one-source-of-truth] The option members a picker draws from ARE the same
-// canonical lists the `themes()`/`styles()`/`looks()` bindings and the baseline
-// theme/style validators consult — the rendered options and the derived gate
-// cannot diverge because there is no second enumeration. "looks" is the one
-// per-config domain: its names come from the config's merged looks block,
-// threaded in as data (the render-side optionDomain takes the same list).
-function optionValuesFor(
-  src: OptionSource,
-  lookNames: readonly string[],
-): readonly string[] {
-  if (src === "themes") return RESOLVABLE_THEMES_LIST;
-  if (src === "styles") return STRIP_STYLES;
-  return lookNames;
-}
-
 // [LAW:types-are-the-program] Collapse one key's spec contributions into the
 // single spec that gates it. A key is an INTEGER spec (a paged cursor `int` or a
 // bounded `range`) or an allow-list — never both. An integer spec ABSORBS
@@ -571,7 +557,7 @@ function mergeContributions(
 function actionKeySpecs(
   a: ActionDecl,
   seeds: ReadonlyMap<string, number>,
-  lookNames: readonly string[],
+  perConfigDomains: ReadonlyMap<string, readonly string[]>,
 ): KeySpecContribution[] {
   if (!("set" in a)) return [];
   if ("to" in a) {
@@ -583,7 +569,7 @@ function actionKeySpecs(
         key: a.set,
         spec: {
           kind: "allow-list",
-          allowed: optionValuesFor(a.from, lookNames),
+          allowed: resolveOptionDomain(a.from, perConfigDomains),
         },
       },
     ];
@@ -646,10 +632,12 @@ function stateKeySeeds(config: DslConfig): ReadonlyMap<string, number> {
 // realizes a click from are the gate the wire enforces.
 function actionContributions(config: DslConfig): KeySpecContribution[] {
   const seeds = stateKeySeeds(config);
-  const lookNames = Object.keys(config.looks);
+  const perConfigDomains = new Map<string, readonly string[]>([
+    ["looks", Object.keys(config.looks)],
+  ]);
   return dropBaselineAllowLists(
     Object.values(config.actions).flatMap((a) =>
-      actionKeySpecs(a, seeds, lookNames),
+      actionKeySpecs(a, seeds, perConfigDomains),
     ),
   );
 }
