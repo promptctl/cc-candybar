@@ -85,17 +85,19 @@ describe("DEFAULT_DSL_CONFIG", () => {
   // prompt-cache warmth, the 5h/7d rate-limit quotas) — plus the collapsed
   // settingsDrawer group (candybar-config-engine-71o.4), whose synthesized
   // toggle segment and gated body (theme/style/look/charset/colorCompatibility/
-  // autoWrap/padding) are part of the static layout tree regardless of the
-  // toggle's current open/closed value (walkNodes visits unconditionally; only
-  // the render-time `when` hides the body while closed). This pins the chosen
-  // segment set — which segments graduated into the default bar and which stay
-  // declared-but-opt-in — so a future layout edit is a deliberate, reviewed
-  // change rather than an accidental drift. block/weekly are IN (their
-  // when-gates hide them when no rate-limit window is active); toolbar is IN
-  // (the default's interactivity); the settingsDrawer's seven controls are IN
+  // autoWrap/padding/directory-palette) are part of the static layout tree
+  // regardless of the toggle's current open/closed value (walkNodes visits
+  // unconditionally; only the render-time `when` hides the body while
+  // closed). This pins the chosen segment set — which segments graduated
+  // into the default bar and which stay declared-but-opt-in — so a future
+  // layout edit is a deliberate, reviewed change rather than an accidental
+  // drift. block/weekly are IN (their when-gates hide them when no
+  // rate-limit window is active); toolbar is IN (the default's
+  // interactivity); the settingsDrawer's eight controls are IN
   // (theme/style/look/charset/colorCompatibility/autoWrap/padding
-  // discoverability); the cost segments (session/today) and the
-  // speed/sparkline/burnrate telemetry stay opt-in.
+  // discoverability, plus directoryPaletteControl — candybar-config-engine-
+  // 71o.6's segment-scoped persist demo); the cost segments (session/today)
+  // and the speed/sparkline/burnrate telemetry stay opt-in.
   test("default root renders exactly the two-row identity+status segment set plus the collapsed settingsDrawer", () => {
     const laidOut = new Set<string>();
     for (const node of walkNodes(DEFAULT_DSL_CONFIG.root)) {
@@ -119,6 +121,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
         "colorCompatControl",
         "wrapToggleControl",
         "paddingControl",
+        "directoryPaletteControl",
       ].sort(),
     );
     // Declared-but-opt-in: present in `segments` for reference/user opt-in, but
@@ -337,7 +340,8 @@ describe("DEFAULT_DSL_CONFIG", () => {
       { h: ["directory","gitaculous","toolbar", { kind: "group", name: "settings",
         label: "⚙ settings", direction: "horizontal", children: [
           "themeControl","lookControl","styleControl","charsetControl",
-          "colorCompatControl","wrapToggleControl","paddingControl"
+          "colorCompatControl","wrapToggleControl","paddingControl",
+          "directoryPaletteControl"
         ] } ] },
       { h: ["model","context","cacheTimer","block","weekly"] }
     ] } }`;

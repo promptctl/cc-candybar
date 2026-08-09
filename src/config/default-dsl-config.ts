@@ -168,9 +168,11 @@ function etaHeatFg(etaRef: string, warnRef: string): string {
 // One collapsed-by-default drawer holding every bar-mutable display default:
 // theme/style/look (session `set` for a per-conversation preview, PLUS a
 // persist-forever twin — candybar-config-engine-71o.5 — for pinning the
-// choice as everyone's default) and the four .3 globals steppers
-// (persist-only, no SessionState half at all). Placed as a sibling in row
-// 1's horizontal container, toggled from beside the quick-action tray —
+// choice as everyone's default), the four .3 globals steppers (persist-only,
+// no SessionState half at all), and one .6 segment-scoped persist control
+// (directoryPaletteControl, persist-only like the four steppers — a
+// per-segment palette pin, not a whole-bar default). Placed as a sibling in
+// row 1's horizontal container, toggled from beside the quick-action tray —
 // see `root` below.
 const settingsDrawer = {
   kind: "group",
@@ -185,6 +187,7 @@ const settingsDrawer = {
     "colorCompatControl",
     "wrapToggleControl",
     "paddingControl",
+    "directoryPaletteControl",
   ],
 } as unknown as LayoutNode;
 
@@ -998,6 +1001,35 @@ export const RAW_DEFAULT_DSL_CONFIG = {
       bg: "surface",
       fg: "foreground",
     },
+    // [LAW:verifiable-goals] candybar-config-engine-71o.6's own acceptance
+    // bar, mirrored from .3/.5: at least ONE segment-scoped field must be
+    // menu-able from the BUNDLED default with no hand-authored actions.
+    // `directory` is the demo target — always visible, palette-driven
+    // bg/fg, so an override is immediately legible. The persist/reset pair
+    // below targets `segments.directory.palette` (not a Globals field),
+    // proving the option-domain-as-data seam generalizes to segment-scoped
+    // keys with zero engine edits beyond opening the key namespace itself
+    // (loader/persist-target.ts) — the SAME `from: "themes"` domain
+    // applyThemeForever already uses.
+    // [LAW:one-source-of-truth] exception: unlike charsetControl/
+    // paddingControl's `.field.effective` label, there is no
+    // `segments.directory.palette.effective` payload projection — adding one
+    // would require threading the full DslConfig through
+    // buildRenderPayload's signature (today built from EffectiveGlobals
+    // alone), a change with no other motivation than this one label. The
+    // control still writes/persists/resets correctly without it: per
+    // render/action.ts's CONFIG_KEY_TO_EFFECTIVE_VAR, a persist key with no
+    // effective-var entry writes fine and only loses the picker's "current
+    // selection" highlight — a documented, already-accepted degrade path,
+    // not a bug.
+    directoryPaletteControl: {
+      template:
+        "🎨 directory " +
+        '{{ menu "applyDirectoryPaletteForever" }} ' +
+        '{{ action "resetDirectoryPalette" "↺" }}',
+      bg: "surface",
+      fg: "foreground",
+    },
   },
 
   // Default layout — the canonical LayoutNode tree (`satisfies DslConfig`
@@ -1139,6 +1171,22 @@ export const RAW_DEFAULT_DSL_CONFIG = {
     paddingDownForever: { persist: "padding", min: 0, max: 16, by: -1 },
     paddingUpForever: { persist: "padding", min: 0, max: 16, by: 1 },
     resetPadding: { reset: "padding" },
+
+    // [LAW:locality-or-seam] The segment-palette control's behavior
+    // (candybar-config-engine-71o.6), decoupled by NAME from
+    // directoryPaletteControl below. The target key is `segments.directory.
+    // palette` — NOT a Globals field — so it rides the SAME generic
+    // `from`/`reset` machinery every other persist pair here uses, over a
+    // key namespace loader/persist-target.ts opened alongside the pre-
+    // existing Globals-field one. Like the four .3 steppers, this field has
+    // no SessionState half at all: a per-segment `palette:` is a static pin
+    // that ignores the session theme by design (src/dsl/render.ts), so
+    // `persist` is its only seam.
+    applyDirectoryPaletteForever: {
+      persist: "segments.directory.palette",
+      from: "themes",
+    },
+    resetDirectoryPalette: { reset: "segments.directory.palette" },
   },
 
   // ─── Looks ───────────────────────────────────────────────────────────────

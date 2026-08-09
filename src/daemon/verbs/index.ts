@@ -19,6 +19,7 @@
 //   cc-candybar://<verb>/<value>   where <value> may itself contain `/`.
 
 import { launchSync } from "../../proc/launch";
+import type { Globals } from "../../config/dsl-types";
 import type { SessionStateRW } from "../session-state";
 import {
   listStateKeys,
@@ -32,7 +33,7 @@ import {
 } from "./config-validators";
 import {
   clearConfigOverride,
-  coerceGlobalsValue,
+  coercePersistValue,
   isGlobalsField,
   loadConfigOverrides,
   writeConfigOverride,
@@ -340,23 +341,19 @@ const stepState: VerbHandler = (rawValue, ctx) => {
   );
 };
 
-// [LAW:no-defensive-null-guards] validateConfigWrite already proved `key` is
-// a registered config-writable key and `key`'s registration only ever comes
-// from config-validators.ts's deriveConfigActionValidators, which reads the
-// key from a `persist` action's own `.persist` field — a value the cross-ref
-// pass (loader/cross-ref.ts, via the SAME isGlobalsField check exported from
-// loader/globals.ts) already rejects at config-LOAD time when it doesn't
-// name a real Globals field, so a config with an invalid persist target
-// never reaches a live cache entry at all. So a validated write reaching
-// here is a real Globals field by construction; this assertion is the
-// type-narrowing boundary, not a runtime possibility.
-function assertGlobalsField(
-  key: string,
-): asserts key is Parameters<typeof coerceGlobalsValue>[0] {
+// [LAW:no-defensive-null-guards] Range-bounded (stepper) persist targets are
+// globals-only by construction: loader/cross-ref.ts (candybar-config-engine-
+// 71o.6) rejects a `min`/`max`/`by` persist arm over a `segments.<name>.
+// palette` target at config-LOAD time, so a validated write reaching
+// stepConfig with a range spec is a real Globals field by construction —
+// this assertion is the type-narrowing boundary (for the `overrides[key]`
+// index below), not a runtime possibility. setConfig has no such need:
+// coercePersistValue classifies a bare string key itself.
+function assertGlobalsField(key: string): asserts key is keyof Globals {
   if (!isGlobalsField(key)) {
     throw new Error(
-      `set-config: "${key}" validated as a config-writable key but is not a ` +
-        `Globals field — registration/loader invariant broken`,
+      `step-config: "${key}" validated as a bounded config-writable key but ` +
+        `is not a Globals field — registration/loader invariant broken`,
     );
   }
 }
@@ -381,8 +378,7 @@ const setConfig: VerbHandler = (rawValue, ctx) => {
   }
   const result = validateConfigWrite(key, incoming);
   if (!result.ok) throw new BadVerbArgs(`set-config: ${result.reason}`);
-  assertGlobalsField(key);
-  const typed = coerceGlobalsValue(key, result.value);
+  const typed = coercePersistValue(key, result.value);
   writeConfigOverride(configOverridesPath(), key, typed, ctx.dlog);
   ctx.dlog("info", `set-config: ${key}=${result.value} (session=${sid})`);
 };
@@ -424,7 +420,7 @@ const stepConfig: VerbHandler = (rawValue, ctx) => {
   const next = wrapStep(current + by, params.min, params.max);
   const result = validateConfigWrite(key, String(next));
   if (!result.ok) throw new BadVerbArgs(`step-config: ${result.reason}`);
-  const typed = coerceGlobalsValue(key, result.value);
+  const typed = coercePersistValue(key, result.value);
   writeConfigOverride(configOverridesPath(), key, typed, ctx.dlog);
   ctx.dlog(
     "info",

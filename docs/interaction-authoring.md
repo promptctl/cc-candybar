@@ -249,18 +249,63 @@ rendered, never a restated guess. A charset or padding change takes effect
 on the very next render, live, with no daemon restart: `persist` writes the
 overrides file, which rides the config file's own watcher.
 
+### Persisting a per-segment field: `segments.<name>.palette`
+
+Every `persist`/`reset` target so far has named a `globals` field — the
+whole-bar default. A segment's own `palette:` (overrides `globals.palette`
+for that ONE segment, ignoring the session theme entirely — see the segment
+config reference) is a *different* field shape, but the SAME mechanism
+reaches it: spell the target `segments.<name>.palette` instead of a bare
+`globals` field name, where `<name>` is a segment your config actually
+declares.
+
+```json5 check:pass
+{
+  actions: {
+    applySidebarPalette: { persist: "segments.sidebar.palette", from: "themes" },
+    resetSidebarPalette: { reset: "segments.sidebar.palette" },
+  },
+  segments: {
+    sidebar: { template: "sidebar", bg: "surface", fg: "foreground" },
+    sidebarPaletteControl: {
+      template: '🎨 {{ menu "applySidebarPalette" }} {{ action "resetSidebarPalette" "↺" }}',
+      bg: "surface", fg: "foreground",
+    },
+  },
+  root: { v: [{ h: ["sidebar", "sidebarPaletteControl"] }] },
+}
+```
+
+This is genuinely zero engine edits over the `globals`-field case — the
+option-domain-as-data seam (`from: "themes"`), the derived write gate
+(`deriveConfigActionValidators`), and the write path itself are all the
+SAME code, unaware the key happens to name a segment rather than a
+`globals` field. Only the key's own SHAPE differs, and only `<name>` is
+config data: any segment you declare can get its own palette-persist
+control this way. Two constraints are specific to this shape, both caught
+at load time: `<name>` must be a segment your config declares (a typo or a
+segment you haven't written yet is a load error naming the segments you
+DO have), and the value source must be `to`/`from`/`cycle` — never a
+bounded stepper (`min`/`max`/`by`), because a palette is a NAME, not a
+number.
+
+Like the four display-globals steppers above, a segment's `palette:` has no
+SessionState half — `persist` is its only seam, so there is no session
+`set` twin to pair it with.
+
 ### The bundled settings drawer
 
 The bundled default (`DEFAULT_DSL_CONFIG`) ships every knob above already
 wired into the bar, with zero authoring required: a `kind: "group"` named
 `settings` sits on the identity row beside the quick-action tray, collapsed by
 default (`⚙ settings ▸`, visually silent until clicked). Opening it drops a
-row of seven controls immediately below: `themeControl`, `lookControl`,
-`styleControl` and `charsetControl` / `colorCompatControl` /
+row of eight controls immediately below: `themeControl`, `lookControl`,
+`styleControl`, `charsetControl` / `colorCompatControl` /
 `wrapToggleControl` / `paddingControl` (the four `persist` steppers from the
-section above). The group's own synthesized toggle lives under the reserved
-name `groups.settings` — see the `kind: "group"` section below for what a
-group name reserves.
+section above), and `directoryPaletteControl` (the `segments.directory.
+palette` demo from the section above). The group's own synthesized toggle
+lives under the reserved name `groups.settings` — see the `kind: "group"`
+section below for what a group name reserves.
 
 `themeControl` / `lookControl` / `styleControl` each carry TWO menus, one
 per tier: the first (`applyTheme` / `applyLook` / `applyStyle`, session
@@ -295,17 +340,18 @@ reproduces the bundled default's two rows minus the drawer:
 }
 ```
 
-The seven constituent segments (`themeControl` / `lookControl` /
+The eight constituent segments (`themeControl` / `lookControl` /
 `styleControl` / `charsetControl` / `colorCompatControl` / `wrapToggleControl`
-/ `paddingControl`) and their backing actions (`applyTheme` + `applyThemeForever`
-+ `resetTheme`, `applyLook` + `applyLookForever` + `resetLook`, `applyStyle`
-+ `applyStyleForever` + `resetStyle`, `applyCharsetForever` + `resetCharset`,
+/ `paddingControl` / `directoryPaletteControl`) and their backing actions
+(`applyTheme` + `applyThemeForever` + `resetTheme`, `applyLook` +
+`applyLookForever` + `resetLook`, `applyStyle` + `applyStyleForever` +
+`resetStyle`, `applyCharsetForever` + `resetCharset`,
 `applyColorCompatForever` + `resetColorCompat`, `toggleWrapForever` +
-`resetAutoWrap`, `paddingDownForever` / `paddingUpForever` + `resetPadding`)
-stay declared in the merged config either way — merge-by-name lets you keep
-the drawer but swap one control's behavior (e.g. override
-`actions.applyCharsetForever` to bind a different domain) without touching
-`root` at all.
+`resetAutoWrap`, `paddingDownForever` / `paddingUpForever` + `resetPadding`,
+`applyDirectoryPaletteForever` + `resetDirectoryPalette`) stay declared in
+the merged config either way — merge-by-name lets you keep the drawer but
+swap one control's behavior (e.g. override `actions.applyCharsetForever` to
+bind a different domain) without touching `root` at all.
 
 ## `{{ menu "applyAction" }}` — the picker disclosure
 
@@ -704,6 +750,39 @@ key cannot hold two open names:
 
 ```error
 group "inner" shares key "drawer" with its ancestor group "outer" — a shared key holds ONE open group, so an ancestor and a descendant cannot share one. Sibling accordions share a key; nested groups use distinct keys.
+```
+
+### A `persist`/`reset` naming an undeclared segment
+
+`segments.<name>.palette` must name a segment your config actually declares
+— a typo (or a segment you haven't written yet) is a load error, not a
+click-time surprise:
+
+```json5 check:fail
+{
+  actions: { applyGhostPalette: { persist: "segments.ghost.palette", from: "themes" } },
+  segments: { sidebar: { template: "sidebar" } },
+}
+```
+
+```error
+names segment "ghost" which is not declared
+```
+
+### A bounded stepper over a segment palette
+
+A palette is a NAME, not a number — `min`/`max`/`by` has no meaning here;
+use `to`, `from`, or `cycle` like every other palette-shaped target:
+
+```json5 check:fail
+{
+  actions: { bumpSidebarPalette: { persist: "segments.sidebar.palette", min: 0, max: 5, by: 1 } },
+  segments: { sidebar: { template: "sidebar" } },
+}
+```
+
+```error
+is a segment palette target and cannot use a bounded stepper (min/max/by) — use "to", "from", or "cycle" instead
 ```
 
 ## Before you report done
