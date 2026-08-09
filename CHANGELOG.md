@@ -1,3 +1,10 @@
+# [1.26.0](https://github.com/promptctl/cc-candybar/compare/v1.25.0...v1.26.0) (2026-08-09)
+
+
+### Features
+
+* **cli:** mention the theme/look picker in --help and install output (8uj.3) ([#166](https://github.com/promptctl/cc-candybar/issues/166)) ([99405fa](https://github.com/promptctl/cc-candybar/commit/99405fa99b92c8009eefdbae86fb42987c70cf12))
+
 # [1.25.0](https://github.com/promptctl/cc-candybar/compare/v1.24.0...v1.25.0) (2026-08-09)
 
 
