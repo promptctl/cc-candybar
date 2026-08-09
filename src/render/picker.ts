@@ -28,7 +28,7 @@ import type { FuncMap } from "@promptctl/go-template-js";
 import { toNumber } from "../var-system/types.js";
 import { stripChromeCols } from "./strip.js";
 import { TERM_COLS_VAR } from "../config/dsl-types.js";
-import { effectsUrl, VERB_SET_STATE } from "../click/wire.js";
+import { effectsUrl, VERB_SET_CONFIG, VERB_SET_STATE } from "../click/wire.js";
 import {
   linkFragment,
   readVar,
@@ -136,6 +136,31 @@ function requireKind<K extends CompiledActionDecl["kind"]>(
   return action as Extract<CompiledActionDecl, { kind: K }>;
 }
 
+// [LAW:one-source-of-truth] The apply action a picker grid binds to is EITHER
+// of set-option's two durability twins (src/render/action.ts's persist-*
+// mirrors set-*'s shapes one for one) — a picker over `persist("charset",
+// from:"charsets")` is exactly as legal as one over `set("theme",
+// from:"themes")`, differing only in which wire verb the option click emits
+// (VERB_SET_CONFIG vs VERB_SET_STATE), never in shape (both carry key,
+// stateVar, options). Rejecting persist-option here would be an artificial
+// gap: the same option-domain gate (deriveActionValidators) covers both kinds
+// identically, so there is nothing about "picker" that's set-only.
+function requireOptionKind(
+  runtime: ActionRuntime,
+  name: string,
+): Extract<CompiledActionDecl, { kind: "set-option" | "persist-option" }> {
+  const action = runtime.compiled.get(name);
+  if (
+    !action ||
+    (action.kind !== "set-option" && action.kind !== "persist-option")
+  ) {
+    throw new Error(
+      `picker references action "${name}" which must be a set-option or persist-option action ({ set, from } or { persist, from }), got ${action ? `a ${action.kind} action` : "no such action"}`,
+    );
+  }
+  return action;
+}
+
 // [LAW:dataflow-not-control-flow] The page value (and the live width) select
 // which option cells render and which boundary arrows exist — a boundary arrow is
 // an ABSENT fragment, never a skipped branch. ←/→ navigate the page key
@@ -155,12 +180,7 @@ export function renderPicker(
   paged: boolean,
   runtime: ActionRuntime,
 ): RichText {
-  const apply = requireKind(
-    runtime,
-    applyName,
-    "set-option",
-    "a set-option action ({ set, from })",
-  );
+  const apply = requireOptionKind(runtime, applyName);
   const store = runtime.store;
   const sessionId = readVar(store, "session.id");
   const current = readVar(store, apply.stateVar);
@@ -222,13 +242,31 @@ export function renderPicker(
   const closeUrl = effectsUrl([
     { verb: VERB_SET_STATE, args: [sessionId, ...closeFlat] },
   ]);
+  // [LAW:one-source-of-truth] A set-option apply folds its closeOnPick pairs
+  // into ONE set-state batch (setState is variadic — see daemon/verbs). A
+  // persist-option apply cannot: setConfig takes exactly one (key, value), so
+  // its close pairs (always SessionState — open/page live there regardless of
+  // the apply's durability) ride as a SECOND effect in the same dispatch,
+  // still one atomic click via effectsUrl's array.
   const optionUrl = (option: string): string =>
-    effectsUrl([
-      {
-        verb: VERB_SET_STATE,
-        args: [sessionId, apply.key, option, ...(closeOnPick ? closeFlat : [])],
-      },
-    ]);
+    apply.kind === "persist-option"
+      ? effectsUrl([
+          { verb: VERB_SET_CONFIG, args: [sessionId, apply.key, option] },
+          ...(closeOnPick
+            ? [{ verb: VERB_SET_STATE, args: [sessionId, ...closeFlat] }]
+            : []),
+        ])
+      : effectsUrl([
+          {
+            verb: VERB_SET_STATE,
+            args: [
+              sessionId,
+              apply.key,
+              option,
+              ...(closeOnPick ? closeFlat : []),
+            ],
+          },
+        ]);
 
   const frags: RichText[] = [linkFragment(PICKER_CLOSE, closeUrl, false)];
   if (pageIdx > 0) {

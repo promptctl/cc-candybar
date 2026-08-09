@@ -26,7 +26,7 @@
 // loader's own synthesis pass (see the bottom of this file) — a `DslConfig`,
 // the same effective shape every user config resolves to.
 
-import type { DslConfig, SegmentDecl } from "./dsl-types.js";
+import type { DslConfig, LayoutNode, SegmentDecl } from "./dsl-types.js";
 import { parseDslConfig } from "./dsl-loader.js";
 import { mergeWithDefault } from "./loader/merge.js";
 
@@ -145,6 +145,46 @@ function etaHeatFg(etaRef: string, warnRef: string): string {
     `{{ else }}foreground{{ end }}{{ end }}`
   );
 }
+
+// ─── The settings drawer (candybar-config-engine-71o.4) ──────────────────────
+
+// [LAW:one-source-of-truth] exception: `kind: "group"` is authoring-grammar
+// sugar the loader lowers at parse time (src/config/loader/layout.ts) —
+// deliberately NOT a member of the canonical LayoutNode union DslConfig.root
+// requires (arranging + gating are behaviors `container` already has; "group"
+// is only a spelling), so a plain `satisfies DslConfig` cannot type-check it
+// inline below. Hand-lowering it here instead (writing the toggle segment +
+// gated body container by hand, under the reserved `groups.` namespace) is
+// NOT an option: reservedNamespaceCollisions rejects any USER-authored
+// variables/actions/segments name starting with `groups.` before synthesis
+// ever runs, so a hand-authored `groups.settings` segment would be rejected
+// as squatting the very namespace it's trying to populate — the sugar node is
+// the only legal way to populate it. This literal is unconditionally
+// round-tripped through the real parseDslConfig pipeline below (see the
+// module-load parse near the bottom of this file) exactly like a user's
+// hand-authored JSON5, so a malformed group is still caught loudly at import
+// time — the type safety net just moves from tsc to that parse, never lost.
+//
+// One collapsed-by-default drawer holding every bar-mutable display default:
+// theme/style/look (session `set`, unchanged from before this ticket) plus
+// the four .3 globals steppers (persist-only, no SessionState half). Placed
+// as a sibling in row 1's horizontal container, toggled from beside the
+// quick-action tray — see `root` below.
+const settingsDrawer = {
+  kind: "group",
+  name: "settings",
+  label: "⚙ settings",
+  direction: "horizontal",
+  children: [
+    "themeControl",
+    "lookControl",
+    "styleControl",
+    "charsetControl",
+    "colorCompatControl",
+    "wrapToggleControl",
+    "paddingControl",
+  ],
+} as unknown as LayoutNode;
 
 // ─── The default config ──────────────────────────────────────────────────────
 
@@ -862,6 +902,8 @@ export const RAW_DEFAULT_DSL_CONFIG = {
     // render) and stay-open, so shapes can be tried in a row; ▾/✕ collapse.
     // [LAW:dataflow-not-control-flow] No display state from the provider — the
     // label is the one "style" value the click writes and the render reads.
+    // Lives inside the settingsDrawer group (candybar-config-engine-71o.4) — not
+    // on `root` directly — so it renders only while the drawer is open.
     styleControl: {
       template:
         "✦ {{ if .activeStyle }}{{ .activeStyle }}{{ else }}(default){{ end }} " +
@@ -878,7 +920,10 @@ export const RAW_DEFAULT_DSL_CONFIG = {
     // styleControl (no "effective style" input exists), no extra `state`
     // variable is needed here. Shares the "pickers" accordion key with
     // lookControl so opening one closes the other, the docs' canonical
-    // two-menu pairing.
+    // two-menu pairing. Moved inside the settingsDrawer group
+    // (candybar-config-engine-71o.4) alongside style/look/charset/
+    // colorCompatibility/autoWrap/padding — one collapsed home for every
+    // bar-mutable display default, instead of its own always-on row.
     themeControl: {
       template:
         "🎨 {{ .theme.effective }} " +
@@ -899,27 +944,63 @@ export const RAW_DEFAULT_DSL_CONFIG = {
       bg: "surface",
       fg: "foreground",
     },
+    // ── The four .3 globals steppers, folded into the settingsDrawer group
+    // (candybar-config-engine-71o.4) alongside theme/style/look above. Each
+    // pairs a `persist` control with a `↺` reset (docs' persist/reset
+    // convention) — these four have no SessionState half at all, so persist
+    // is their only seam, unlike theme/style/look's session `set`. Labels
+    // read `.field.effective` (the daemon-resolved value BuildLineOptions
+    // actually rendered with), never a restated literal.
+    charsetControl: {
+      template:
+        "{{ .charset.effective }} " +
+        '{{ menu "applyCharsetForever" }} {{ action "resetCharset" "↺" }}',
+      bg: "surface",
+      fg: "foreground",
+    },
+    colorCompatControl: {
+      template:
+        "{{ .colorCompatibility.effective }} " +
+        '{{ menu "applyColorCompatForever" }} {{ action "resetColorCompat" "↺" }}',
+      bg: "surface",
+      fg: "foreground",
+    },
+    wrapToggleControl: {
+      template:
+        '{{ action "toggleWrapForever" "wrap: on" "wrap: off" }} ' +
+        '{{ action "resetAutoWrap" "↺" }}',
+      bg: "surface",
+      fg: "foreground",
+    },
+    paddingControl: {
+      template:
+        '{{ action "paddingDownForever" "◀" }} padding {{ .padding.effective }} ' +
+        '{{ action "paddingUpForever" "▶" }} {{ action "resetPadding" "↺" }}',
+      bg: "surface",
+      fg: "foreground",
+    },
   },
 
   // Default layout — the canonical LayoutNode tree (`satisfies DslConfig`
   // requires the lowered form here; the terse Option-A `{ h/v/seg }` grammar is
-  // the loader's authoring surface for user JSON, not this typed literal).
+  // the loader's authoring surface for user JSON, not this typed literal — the
+  // one exception being `settingsDrawer` above, whose `kind: "group"` sugar has
+  // no canonical-form equivalent it could be hand-lowered to; see its own
+  // comment).
   //
-  // Three rows stacked by the vertical container: an IDENTITY + ACTIONS row
-  // (where am I / what can I do here — the directory, the verbose `gitaculous`
-  // line (repo, sha, working-tree, upstream, stash, time-since-commit), then the
-  // quick-action tray: copy session id, open project / transcript in the editor)
-  // over a STATUS row (what's happening now — model, context-window fill,
-  // prompt-cache warmth, and the 5h / 7d rate-limit quotas) over an APPEARANCE
-  // row (theme + look pickers, brandon-theming-8uj.1 — the bundled default's
-  // only on-bar affordance to discover and use the theme/look feature without
-  // reading docs or hand-authoring a config). The tray sits on the identity
-  // row because its actions are workspace-scoped (this session, this
-  // project), not usage metrics; the pickers get their own row rather than
-  // crowding the identity row because a `{{ menu }}` drops its picker body
-  // onto the line immediately below its row, and that drop must not land on
-  // top of an unrelated row's content. Each row zips its segments through the
-  // powerline joiner; `\n` separates the rows.
+  // Two always-visible rows stacked by the vertical container: an IDENTITY +
+  // ACTIONS row (where am I / what can I do here — the directory, the verbose
+  // `gitaculous` line, the quick-action tray: copy session id, open project /
+  // transcript in the editor, and the settingsDrawer toggle) over a STATUS row
+  // (what's happening now — model, context-window fill, prompt-cache warmth,
+  // and the 5h / 7d rate-limit quotas). The settingsDrawer (candybar-config-
+  // engine-71o.4) sits on the identity row beside the tray — collapsed by
+  // default and visually silent (a single "⚙ settings ▸" cell) — and reveals a
+  // third row of every bar-mutable display default (theme, style, look,
+  // charset, colorCompatibility, autoWrap, padding) on the line immediately
+  // below row 1 when opened, exactly where a `{{ menu }}`'s own picker body
+  // would drop. Each row zips its segments through the powerline joiner; `\n`
+  // separates the rows.
   //
   // [LAW:dataflow-not-control-flow] Every status segment is when-gated on its
   // own signal (no repo → the identity row is just the directory + tray; no
@@ -939,6 +1020,7 @@ export const RAW_DEFAULT_DSL_CONFIG = {
           { kind: "segment", name: "directory" },
           { kind: "segment", name: "gitaculous" },
           { kind: "segment", name: "toolbar" },
+          settingsDrawer,
         ],
       },
       {
@@ -950,14 +1032,6 @@ export const RAW_DEFAULT_DSL_CONFIG = {
           { kind: "segment", name: "cacheTimer" },
           { kind: "segment", name: "block" },
           { kind: "segment", name: "weekly" },
-        ],
-      },
-      {
-        kind: "container",
-        direction: "horizontal",
-        children: [
-          { kind: "segment", name: "themeControl" },
-          { kind: "segment", name: "lookControl" },
         ],
       },
     ],
@@ -1005,6 +1079,30 @@ export const RAW_DEFAULT_DSL_CONFIG = {
     // block's names — the same derivation test/dsl-looks.test.ts exercises.
     applyTheme: { set: "theme", from: "themes" },
     applyLook: { set: "look", from: "looks" },
+
+    // [LAW:locality-or-seam] The settings-drawer steppers' behaviors
+    // (candybar-config-engine-71o.4), decoupled by NAME from
+    // charsetControl/colorCompatControl/wrapToggleControl/paddingControl
+    // below. Unlike theme/style/look (a per-session experiment via `set`),
+    // these four have no SessionState half at all — .3's handoff established
+    // `persist` as their ONLY seam — so every one of these writes the
+    // config-file DEFAULT through the daemon-owned overrides layer (never the
+    // hand-authored file itself), gated by the SAME deriveActionValidators
+    // pass as a `set` (persist mirrors set's value-source shapes one for
+    // one). Each is paired with a `reset` so a drawer choice is always
+    // undoable from the bar, per the docs' persist/reset convention.
+    applyCharsetForever: { persist: "charset", from: "charsets" },
+    resetCharset: { reset: "charset" },
+    applyColorCompatForever: {
+      persist: "colorCompatibility",
+      from: "colorCompatibilities",
+    },
+    resetColorCompat: { reset: "colorCompatibility" },
+    toggleWrapForever: { persist: "autoWrap", cycle: ["true", "false"] },
+    resetAutoWrap: { reset: "autoWrap" },
+    paddingDownForever: { persist: "padding", min: 0, max: 16, by: -1 },
+    paddingUpForever: { persist: "padding", min: 0, max: 16, by: 1 },
+    resetPadding: { reset: "padding" },
   },
 
   // ─── Looks ───────────────────────────────────────────────────────────────

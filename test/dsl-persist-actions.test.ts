@@ -51,6 +51,10 @@ import {
   validateConfigWrite,
 } from "../src/daemon/verbs/config-validators";
 import {
+  deriveActionValidators,
+  registerStateValidator,
+} from "../src/daemon/verbs/state-validators";
+import {
   clearConfigOverride,
   coerceGlobalsValue,
   isGlobalsField,
@@ -527,6 +531,100 @@ describe("persist action click → durable overrides write", () => {
     click(resetUrl);
     expect(loadConfigOverrides(overridesPath)).toEqual({});
     dispose();
+  });
+
+  // [LAW:verifiable-goals] candybar-config-engine-71o.4 found this the hard
+  // way against a real daemon: `{{ menu }}`'s picker grid (src/render/
+  // picker.ts) hard-required a set-option apply action, so a persist-option
+  // apply (the ONLY seam charset/colorCompatibility/autoWrap/padding have —
+  // see docs/interaction-authoring.md's "Persisting the display globals",
+  // which had ALREADY documented `{{ menu "applyCharset" }}` over a persist
+  // action as the canonical pattern) threw at render the moment the menu was
+  // actually opened. `buildPersistRuntime` above only derives the CONFIG
+  // gate; a `{{ menu }}`'s own open/close disclosure is a SessionState write,
+  // so this test derives BOTH gates — the same combination a real daemon
+  // registers for any config mixing session and persist actions.
+  test("a persist-option action bound via {{ menu }} opens and its option click writes set-config, not set-state", () => {
+    const src = `{
+      globals: {},
+      variables: {
+        'session.id': { kind: 'input', path: 'session_id', default: '' },
+        'charset.effective': { kind: 'literal', value: 'unicode' },
+        'term.cols': { kind: 'input', path: 'term.cols', type: 'number', default: 80 },
+      },
+      actions: { applyCharsetForever: { persist: 'charset', from: 'charsets' } },
+      segments: {
+        bar: { template: '{{ .charset.effective }} {{ menu "applyCharsetForever" }}', bg: 'surface', fg: 'foreground' },
+      },
+      root: 'bar',
+    }`;
+    const config = parseAndValidate("<test>", src, ALLOWED);
+    const sessionState = new SessionState();
+    const store = new VariableStore();
+    const registry = new SourceRegistry(store, "", undefined, sessionState);
+    const compiled = registerDslConfig(config, registry);
+    const basePalette = new PaletteResolver(getThemePalette("textual-dark")!);
+    const render = (): string =>
+      renderDsl(
+        config,
+        compiled,
+        store,
+        registry,
+        { session_id: "s1", project_dir: "/tmp/proj" },
+        basePalette,
+        opts(),
+      );
+    const stateDisposers = deriveActionValidators(config).map(({ key, spec }) =>
+      registerStateValidator(key, spec),
+    );
+    const configDisposers = deriveConfigActionValidators(config).map(
+      ({ key, spec }) => registerConfigValidator(key, spec),
+    );
+    const ctx: VerbContext = { sessionState, dlog: () => {} };
+    const click = (url: string): void => {
+      const { verb, value } = parseHandlerUrl(url);
+      const effects =
+        verb === VERB_DISPATCH ? parseEffects(value) : [{ verb, value }];
+      for (const e of effects) {
+        const handler = VERBS.get(e.verb);
+        if (!handler) throw new Error(`no handler for verb "${e.verb}"`);
+        handler(e.value, ctx);
+      }
+    };
+    try {
+      // The disclosure toggle is the menu's OWN SessionState write — open it.
+      const toggleUrl = extractUrls(render()).find(
+        (u) => effectsOf(u)[0]!.verb === "set-state",
+      )!;
+      click(toggleUrl);
+
+      // Opened: this must not throw (the bug threw here) and must list
+      // "ascii" as a set-config-backed option, never set-state.
+      const openUrls = extractUrls(render());
+      const asciiUrl = openUrls.find((u) =>
+        effectsOf(u).some(
+          (e) => e.verb === "set-config" && e.args[2] === "ascii",
+        ),
+      );
+      expect(asciiUrl).toBeDefined();
+      expect(
+        openUrls.some((u) =>
+          effectsOf(u).some(
+            (e) => e.verb === "set-state" && e.args.includes("ascii"),
+          ),
+        ),
+      ).toBe(false);
+
+      click(asciiUrl!);
+      const overrides = loadConfigOverrides(
+        join(xdgStateDir, "cc-candybar", "config-overrides.json"),
+      );
+      expect(overrides).toEqual({ charset: "ascii" });
+    } finally {
+      stateDisposers.forEach((d) => d());
+      configDisposers.forEach((d) => d());
+      registry.dispose();
+    }
   });
 
   // [LAW:verifiable-goals] The end-to-end click→durable-write path exercised

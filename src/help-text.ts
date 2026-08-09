@@ -23,9 +23,9 @@ Configuration:
   to point at a specific file. See the default config for all available options:
     node dist/index.mjs debug --project-dir . --cwd .
 
-  The bundled default bar ships a clickable theme/look picker — no config
-  needed. Click 🎨 <theme> ${DISCLOSURE_GLYPH_CLOSED} or ◐ <look> ${DISCLOSURE_GLYPH_CLOSED} on the bar to
-  switch palettes.
+  The bundled default bar ships a settings drawer — no config needed. Click
+  ⚙ settings ${DISCLOSURE_GLYPH_CLOSED} on the bar to reveal a clickable theme/look picker and
+  other display options.
 
 Subcommands:
   install                  One-shot setup: stages the runtime (native render
