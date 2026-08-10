@@ -571,29 +571,45 @@ describe("DEFAULT_DSL_CONFIG", () => {
       },
     };
 
-    // Distinct truecolor foregrounds (`38;2;r;g;b`) across the rendered
-    // line — one per SGR-introduced run, deduped. A basic-code fg would also
-    // count but every semantic palette function here resolves to truecolor.
-    // Walks params sequentially (not `indexOf("38")`) and SKIPS a recognized
-    // `48;2;r;g;b` background run's components before looking for `38` —
-    // otherwise a bg color whose component happens to equal 38 could be
-    // misread as the fg introducer, or (mirror bug) mask a real one that
+    // Every truecolor fg (`38;2;r;g;b`) SGR run across the rendered line, in
+    // order, with the escape's start offset — the ONE parser every helper
+    // below builds on. [LAW:one-source-of-truth] this used to be two
+    // independently-typed copies (distinctForegrounds here, a narrower
+    // fgBeforeText added by brandon-segments-3eo.1.1) that had already begun
+    // to drift on the exact bug this comment describes; one parser closes
+    // that gap for good instead of patching the newer copy to match the
+    // older one. Walks params sequentially (not `indexOf("38")`) and SKIPS a
+    // recognized `48;2;r;g;b` background run's components before looking for
+    // `38` — otherwise a bg color whose component happens to equal 38 could
+    // be misread as the fg introducer, or (mirror bug) mask a real one that
     // follows it. Same class of collision test/segment-interior-color.test.ts's
     // skipTruecolorRun fixes.
-    function distinctForegrounds(line: string): Set<string> {
-      const fgs = new Set<string>();
+    function truecolorForegrounds(
+      line: string,
+    ): Array<{ offset: number; fg: string }> {
+      const runs: Array<{ offset: number; fg: string }> = [];
       for (const m of line.matchAll(/\x1b\[([0-9;]*)m/g)) {
         const params = (m[1] ?? "").split(";");
         for (let i = 0; i < params.length; i++) {
           if (params[i] === "38" && params[i + 1] === "2") {
-            fgs.add(`${params[i + 2]};${params[i + 3]};${params[i + 4]}`);
+            runs.push({
+              offset: m.index ?? 0,
+              fg: `${params[i + 2]};${params[i + 3]};${params[i + 4]}`,
+            });
             i += 4;
           } else if (params[i] === "48" && params[i + 1] === "2") {
             i += 4;
           }
         }
       }
-      return fgs;
+      return runs;
+    }
+
+    // Distinct truecolor foregrounds across the rendered line — one per
+    // SGR-introduced run, deduped. A basic-code fg would also count but
+    // every semantic palette function here resolves to truecolor.
+    function distinctForegrounds(line: string): Set<string> {
+      return new Set(truecolorForegrounds(line).map((r) => r.fg));
     }
 
     function renderSegment(segment: string): string {
@@ -642,6 +658,48 @@ describe("DEFAULT_DSL_CONFIG", () => {
       const visible = renderSegment("git").replace(ANSI, "");
       expect(visible).toContain("+2 ~3 ?4 !1");
       expect(visible).not.toMatch(/[+~?!]\d[+~?!]/);
+    });
+
+    // brandon-segments-3eo.1.1: `git` and `gitaculous` independently typed
+    // the same fact's color and drifted (branch accent-vs-primary, stash
+    // colored-vs-not) — caught by live testing, fixed by routing both
+    // templates through the shared GIT_COLOR table. These assert the two
+    // segments now agree, not just that gitaculous has "more than one color".
+    //
+    // The truecolor fg immediately preceding `text`'s first occurrence — every
+    // colored token here is wrapped by exactly one palette function, which
+    // opens its SGR run directly before the token, so the last run starting
+    // before the match IS that token's color.
+    function fgBeforeText(line: string, text: string): string | undefined {
+      const idx = line.indexOf(text);
+      if (idx === -1) return undefined;
+      return truecolorForegrounds(line)
+        .filter((r) => r.offset < idx)
+        .at(-1)?.fg;
+    }
+
+    test("gitaculous colors unstaged and untracked distinctly, not merged into one indicator", () => {
+      const line = renderSegment("gitaculous");
+      const unstagedFg = fgBeforeText(line, "U");
+      const untrackedFg = fgBeforeText(line, "?");
+      expect(unstagedFg).toBeDefined();
+      expect(untrackedFg).toBeDefined();
+      expect(unstagedFg).not.toBe(untrackedFg);
+    });
+
+    test("gitaculous colors the branch the same as git does", () => {
+      const gitFg = fgBeforeText(renderSegment("git"), "main");
+      const gitaculousFg = fgBeforeText(renderSegment("gitaculous"), "main");
+      expect(gitFg).toBeDefined();
+      expect(gitFg).toBe(gitaculousFg);
+    });
+
+    test("gitaculous colors the stash count instead of leaving it plain", () => {
+      const line = renderSegment("gitaculous");
+      const stashFg = fgBeforeText(line, "(2 stashed)");
+      const plainFg = fgBeforeText(line, "abc1234"); // sha: never wrapped in a palette fn
+      expect(stashFg).toBeDefined();
+      expect(stashFg).not.toBe(plainFg);
     });
   });
 
