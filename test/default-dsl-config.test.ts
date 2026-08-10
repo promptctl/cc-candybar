@@ -643,6 +643,53 @@ describe("DEFAULT_DSL_CONFIG", () => {
       expect(visible).toContain("+2 ~3 ?4 !1");
       expect(visible).not.toMatch(/[+~?!]\d[+~?!]/);
     });
+
+    // brandon-segments-3eo.1.1: `git` and `gitaculous` independently typed
+    // the same fact's color and drifted (branch accent-vs-primary, stash
+    // colored-vs-not) — caught by live testing, fixed by routing both
+    // templates through the shared GIT_COLOR table. These assert the two
+    // segments now agree, not just that gitaculous has "more than one color".
+    //
+    // The truecolor fg immediately preceding `text`'s first occurrence — every
+    // colored token here is wrapped by exactly one palette function, which
+    // opens its SGR run directly before the token, so the last escape before
+    // the match IS that token's color.
+    function fgBeforeText(line: string, text: string): string | undefined {
+      const idx = line.indexOf(text);
+      if (idx === -1) return undefined;
+      const matches = [...line.slice(0, idx).matchAll(/\x1b\[([0-9;]*)m/g)];
+      const params = (matches.at(-1)?.[1] ?? "").split(";");
+      for (let i = 0; i < params.length; i++) {
+        if (params[i] === "38" && params[i + 1] === "2") {
+          return `${params[i + 2]};${params[i + 3]};${params[i + 4]}`;
+        }
+      }
+      return undefined;
+    }
+
+    test("gitaculous colors unstaged and untracked distinctly, not merged into one indicator", () => {
+      const line = renderSegment("gitaculous");
+      const unstagedFg = fgBeforeText(line, "U");
+      const untrackedFg = fgBeforeText(line, "?");
+      expect(unstagedFg).toBeDefined();
+      expect(untrackedFg).toBeDefined();
+      expect(unstagedFg).not.toBe(untrackedFg);
+    });
+
+    test("gitaculous colors the branch the same as git does", () => {
+      const gitFg = fgBeforeText(renderSegment("git"), "main");
+      const gitaculousFg = fgBeforeText(renderSegment("gitaculous"), "main");
+      expect(gitFg).toBeDefined();
+      expect(gitFg).toBe(gitaculousFg);
+    });
+
+    test("gitaculous colors the stash count instead of leaving it plain", () => {
+      const line = renderSegment("gitaculous");
+      const stashFg = fgBeforeText(line, "(2 stashed)");
+      const plainFg = fgBeforeText(line, "abc1234"); // sha: never wrapped in a palette fn
+      expect(stashFg).toBeDefined();
+      expect(stashFg).not.toBe(plainFg);
+    });
   });
 
   // [LAW:dataflow-not-control-flow] The metrics segment renders parts
