@@ -656,3 +656,135 @@ describe("DEFAULT_DSL_CONFIG", () => {
     });
   });
 });
+
+// ────────────────────────────────────────────────────────────────────────────
+// brandon-segments-3eo.1.1 — gitaculous and git share ONE git-fact→color
+// vocabulary (GIT_FG in default-dsl-config). These pin the ticket's acceptance
+// criteria against the SHIPPED default palette (globals.palette) — the colors a
+// real user actually sees, not an arbitrary test theme.
+//
+// [LAW:behavior-not-structure] The assertions read observable SGR foreground codes
+// out of the rendered bytes, never GIT_FG's contents: any future re-spelling that
+// keeps the two segments consistent still passes, and any drift that reintroduces
+// the two-templates-disagree bug the ticket was filed for fails.
+// ────────────────────────────────────────────────────────────────────────────
+describe("gitaculous ↔ git shared color vocabulary (brandon-segments-3eo.1.1)", () => {
+  interface Run {
+    readonly sgr: string;
+    readonly text: string;
+  }
+  // The foreground a run sets — truecolor `38;2;r;g;b` or a basic ANSI code
+  // (30-37/90-97). null = the run set no foreground (it inherits the segment fg).
+  const fgKey = (sgr: string): string | null => {
+    const p = sgr.split(";");
+    for (let i = 0; i < p.length; i++) {
+      if (p[i] === "38" && p[i + 1] === "2")
+        return `tc:${p[i + 2]};${p[i + 3]};${p[i + 4]}`;
+      const n = Number(p[i]);
+      if ((n >= 30 && n <= 37) || (n >= 90 && n <= 97)) return `basic:${n}`;
+    }
+    return null;
+  };
+  const parseRuns = (ansi: string): Run[] => {
+    const runs: Run[] = [];
+    // eslint-disable-next-line no-control-regex
+    const re = /\x1b\[([0-9;]*)m([^\x1b]*)/g;
+    for (const m of ansi.matchAll(re)) {
+      const text = m[2] ?? "";
+      if (text.length > 0) runs.push({ sgr: m[1] ?? "", text });
+    }
+    return runs;
+  };
+
+  const PALETTE = DEFAULT_DSL_CONFIG.globals.palette ?? "catppuccin-latte";
+  const renderSeg = (seg: string, git: Record<string, unknown>): Run[] => {
+    const payload = {
+      hook_event_name: "Status",
+      session_id: "vocab-test",
+      cwd: "/tmp",
+      model: { id: "x", display_name: "x" },
+      workspace: { current_dir: "/tmp", project_dir: "/tmp", added_dirs: [] },
+      git: {
+        branch: "main", repoName: "repo", sha: "abc1234", upstream: "origin/main",
+        operation: "", timeSinceCommit: 0, staged: 0, unstaged: 0, untracked: 0,
+        conflicts: 0, ahead: 0, behind: 0, stash: 0, ...git,
+      },
+    };
+    const config = parseAndValidate(
+      "<vocab>",
+      JSON.stringify({ root: { seg } }),
+      new Set(listResolvablePaletteNames()),
+      DEFAULT_DSL_CONFIG,
+    );
+    const store = new VariableStore();
+    const registry = new SourceRegistry(store, "", undefined, new SessionState());
+    try {
+      const compiled = registerDslConfig(config, registry, { cwd: "/tmp" });
+      const bp = new PaletteResolver(getThemePalette(PALETTE)!);
+      return parseRuns(
+        renderDsl(config, compiled, store, registry, payload, bp, {
+          style: "powerline", colorCompatibility: "truecolor", wrap: true,
+          padding: 0, charset: "unicode", width: Number.POSITIVE_INFINITY,
+        }),
+      );
+    } finally {
+      registry.dispose();
+    }
+  };
+  const runFor = (runs: Run[], glyph: string): Run | undefined =>
+    runs.find((r) => r.text.trim() === glyph);
+
+  // Criterion 1: unstaged and untracked are DISTINCT facts with DISTINCT colors.
+  // The old gitaculous merged both into a single `red "U"`, so a user could not
+  // tell an unstaged edit from a brand-new untracked file.
+  test("unstaged (U) and untracked (?) render distinct foreground colors", () => {
+    const runs = renderSeg("gitaculous", { unstaged: 3, untracked: 4 });
+    const u = runFor(runs, "U");
+    const q = runFor(runs, "?");
+    expect(u).toBeDefined();
+    expect(q).toBeDefined();
+    expect(fgKey(u!.sgr)).not.toBeNull();
+    expect(fgKey(q!.sgr)).not.toBeNull();
+    expect(fgKey(u!.sgr)).not.toBe(fgKey(q!.sgr));
+  });
+
+  // Criterion 2: both segments color the branch the SAME — the ticket's headline
+  // drift was gitaculous and git disagreeing on the branch color.
+  test("gitaculous and git color the branch with the same foreground code", () => {
+    const gitac = runFor(renderSeg("gitaculous", {}), "main");
+    const git = runFor(renderSeg("git", {}), "main");
+    expect(gitac).toBeDefined();
+    expect(git).toBeDefined();
+    expect(fgKey(gitac!.sgr)).not.toBeNull();
+    expect(fgKey(gitac!.sgr)).toBe(fgKey(git!.sgr));
+  });
+
+  // Criterion 3: gitaculous colors the stash count (it was left uncolored before,
+  // while git's stash carried a color — a per-fact disagreement).
+  test("gitaculous stash count carries a non-default foreground color", () => {
+    const runs = renderSeg("gitaculous", { stash: 5 });
+    const segRun = runs.find((r) => r.text.includes("(git)"));
+    const stashRun = runFor(runs, "5");
+    expect(segRun).toBeDefined();
+    expect(stashRun).toBeDefined();
+    const stashFg = fgKey(stashRun!.sgr);
+    expect(stashFg).not.toBeNull();
+    expect(stashFg).not.toBe(fgKey(segRun!.sgr));
+  });
+
+  // The vocabulary genuinely agrees: every fact spelled identically in both
+  // segments (branch, stash) resolves to the same color in each.
+  test("shared facts (branch, stash) match color across gitaculous and git", () => {
+    const g = { stash: 5 };
+    const gitac = renderSeg("gitaculous", g);
+    const git = renderSeg("git", g);
+    for (const glyph of ["main", "5"]) {
+      const a = runFor(gitac, glyph);
+      const b = runFor(git, glyph);
+      expect(a).toBeDefined();
+      expect(b).toBeDefined();
+      expect(fgKey(a!.sgr)).not.toBeNull();
+      expect(fgKey(a!.sgr)).toBe(fgKey(b!.sgr));
+    }
+  });
+});

@@ -70,15 +70,51 @@ const DIR_TEMPLATE =
   "{{ end }}{{ end }}" +
   "{{ abbreviatePath $dir }}";
 
-// Git working-tree counts — leading-space-then-trim idiom: each present count
-// contributes " +N", trim drops the leading space, survivors single-spaced.
+// [LAW:one-source-of-truth] ONE git-fact → color vocabulary, read by BOTH
+// git-style segments (git and gitaculous). A reader learns a fact's color once —
+// blue=branch, green=staged/ahead, yellow=unstaged/behind, magenta=untracked/stash,
+// red=conflicts — and it renders identically in either segment.
+// brandon-segments-3eo.1.1 was filed because the two templates had drifted into
+// deciding the same fact's color two different ways (branch colored differently,
+// unstaged+untracked merged into one color, stash colored in one segment and not
+// the other); centralizing the map here is what makes that drift unrepresentable.
+// [LAW:dataflow-not-control-flow] The color is DATA interpolated into each
+// template's fixed shape, never a per-template branch: recolor a fact once here and
+// both segments follow.
+//
+// Literal color names (green/yellow/…), NOT semantic palette names (success/accent/…):
+// a segment's `bg`/`fg` spec is palette-resolved per render (theme + look + hue are
+// only known then), but the CONTENT template engine is static — built once at
+// registration with no resolver (render.ts createCcCandybarEngine(undefined, …)) —
+// so it exposes only rich-js's literal color/attribute funcs, not the palette's
+// semantic-name funcs. Interior per-fact coloring therefore lives in literal space;
+// theme-adaptive interior color would need the resolver threaded into the content
+// engine, which is a separate concern.
+const GIT_FG = {
+  branch: "blue",
+  staged: "green",
+  unstaged: "yellow",
+  untracked: "magenta",
+  conflicts: "red",
+  ahead: "green",
+  behind: "yellow",
+  stash: "magenta",
+} as const;
+
+// Git working-tree counts, each colored by its GIT_FG fact. A shared `$sep` is
+// empty before the first present count and " " after it, so survivors render
+// single-spaced inside `( )` no matter which are present — the colored analogue of
+// the old leading-space-then-trim idiom (trim would flatten the styled fragments
+// back to plain strings, dropping the color, so it can't be used once each count
+// is colored).
 const GIT_WORKTREE =
   "{{ if or (gt .git.staged 0) (gt .git.unstaged 0) (gt .git.untracked 0) (gt .git.conflicts 0) }}" +
-  ' ({{ printf "%s%s%s%s"' +
-  ' (ternary (printf " +%v" .git.staged) "" (gt .git.staged 0))' +
-  ' (ternary (printf " ~%v" .git.unstaged) "" (gt .git.unstaged 0))' +
-  ' (ternary (printf " ?%v" .git.untracked) "" (gt .git.untracked 0))' +
-  ' (ternary (printf " !%v" .git.conflicts) "" (gt .git.conflicts 0)) | trim }}){{ end }}';
+  ' ({{ $sep := "" }}' +
+  `{{ if gt .git.staged 0 }}{{ ${GIT_FG.staged} (printf "+%v" .git.staged) }}{{ $sep = " " }}{{ end }}` +
+  `{{ if gt .git.unstaged 0 }}{{ $sep }}{{ ${GIT_FG.unstaged} (printf "~%v" .git.unstaged) }}{{ $sep = " " }}{{ end }}` +
+  `{{ if gt .git.untracked 0 }}{{ $sep }}{{ ${GIT_FG.untracked} (printf "?%v" .git.untracked) }}{{ $sep = " " }}{{ end }}` +
+  `{{ if gt .git.conflicts 0 }}{{ $sep }}{{ ${GIT_FG.conflicts} (printf "!%v" .git.conflicts) }}{{ end }}` +
+  "){{ end }}";
 
 // Status icon precedence: conflicts → ⚠, dirty → ●, else clean ✓.
 const GIT_STATUS =
@@ -86,14 +122,15 @@ const GIT_STATUS =
   '{{ if eq .git.status "dirty" }}●{{ else }}✓{{ end }}{{ end }}';
 
 const GIT_TEMPLATE =
-  '{{ if ne .git.repoName "" }}{{ .git.repoName }} {{ end }}⎇ {{ .git.branch }}' +
+  '{{ if ne .git.repoName "" }}{{ .git.repoName }} {{ end }}⎇ ' +
+  `{{ ${GIT_FG.branch} .git.branch }}` +
   "{{ if .git.sha }} ♯ {{ .git.sha }}{{ end }}" +
-  "{{ if or (gt .git.ahead 0) (gt .git.behind 0) }}" +
-  " {{ if gt .git.ahead 0 }}↑{{ .git.ahead }}{{ end }}" +
-  "{{ if gt .git.behind 0 }}↓{{ .git.behind }}{{ end }}{{ end }}" +
+  "{{ if or (gt .git.ahead 0) (gt .git.behind 0) }} " +
+  `{{ if gt .git.ahead 0 }}{{ ${GIT_FG.ahead} (printf "↑%v" .git.ahead) }}{{ end }}` +
+  `{{ if gt .git.behind 0 }}{{ ${GIT_FG.behind} (printf "↓%v" .git.behind) }}{{ end }}{{ end }}` +
   GIT_WORKTREE +
   "{{ if .git.upstream }} →{{ .git.upstream }}{{ end }}" +
-  "{{ if gt .git.stash 0 }} ⧇ {{ .git.stash }}{{ end }}" +
+  `{{ if gt .git.stash 0 }} ⧇ {{ ${GIT_FG.stash} (printf "%v" .git.stash) }}{{ end }}` +
   " " +
   GIT_STATUS;
 
@@ -597,18 +634,19 @@ export const DEFAULT_DSL_CONFIG = {
         '{{ if ne .git.operation "" }} [{{ .git.operation }}]{{ end }}' +
         '{{ if ne .git.sha "" }} {{ .git.sha }}{{ end }}' +
         "{{ if or (gt .git.staged 0) (gt .git.unstaged 0) (gt .git.untracked 0) (gt .git.conflicts 0) }} " +
-        '{{ if gt .git.staged 0 }}{{ green "S" }}{{ end }}' +
-        '{{ if or (gt .git.unstaged 0) (gt .git.untracked 0) }}{{ red "U" }}{{ end }}' +
-        '{{ if gt .git.conflicts 0 }}{{ red (printf "!%v" .git.conflicts) }}{{ end }}' +
+        `{{ if gt .git.staged 0 }}{{ ${GIT_FG.staged} "S" }}{{ end }}` +
+        `{{ if gt .git.unstaged 0 }}{{ ${GIT_FG.unstaged} "U" }}{{ end }}` +
+        `{{ if gt .git.untracked 0 }}{{ ${GIT_FG.untracked} "?" }}{{ end }}` +
+        `{{ if gt .git.conflicts 0 }}{{ ${GIT_FG.conflicts} (printf "!%v" .git.conflicts) }}{{ end }}` +
         "{{ end }}" +
-        " ⎇ {{ .git.branch }}" +
+        ` ⎇ {{ ${GIT_FG.branch} .git.branch }}` +
         '{{ if ne .git.upstream "" }} [{{ .git.upstream }}' +
         "{{ if or (gt .git.ahead 0) (gt .git.behind 0) }} " +
-        '{{ if gt .git.ahead 0 }}{{ green (printf "+%v" .git.ahead) }}{{ end }}' +
+        `{{ if gt .git.ahead 0 }}{{ ${GIT_FG.ahead} (printf "+%v" .git.ahead) }}{{ end }}` +
         "{{ if and (gt .git.ahead 0) (gt .git.behind 0) }}/{{ end }}" +
-        '{{ if gt .git.behind 0 }}{{ red (printf "-%v" .git.behind) }}{{ end }}' +
+        `{{ if gt .git.behind 0 }}{{ ${GIT_FG.behind} (printf "-%v" .git.behind) }}{{ end }}` +
         "{{ end }}]{{ end }}" +
-        "{{ if gt .git.stash 0 }} ({{ .git.stash }} stashed){{ end }}" +
+        `{{ if gt .git.stash 0 }} ({{ ${GIT_FG.stash} (printf "%v" .git.stash) }} stashed){{ end }}` +
         '{{ if gt .git.timeSinceCommit 0 }} ◷ {{ template "formatTimeSince" .git.timeSinceCommit }}{{ end }}',
       bg: "surface-active",
       fg: "foreground",

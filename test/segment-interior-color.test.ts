@@ -16,8 +16,11 @@ import { registerDslConfig, renderDsl } from "../src/dsl/render";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 
-// Fires every interior-colored branch: staged→green "S", unstaged→red "U",
-// ahead→green "+1", behind→red "-1".
+// Fires the shared GIT_FG vocabulary's interior glyphs: staged→green "S",
+// unstaged→yellow "U", ahead→green "+1", behind→yellow "-1" (staged/ahead share
+// green, unstaged/behind share yellow). untracked (magenta "?") stays 0 here so
+// this fixture keeps exercising the same four runs it always has; the untracked-
+// vs-unstaged split is pinned in default-dsl-config.test.ts.
 const GIT_PAYLOAD = {
   hook_event_name: "Status",
   session_id: "deadbeef-1234-5678-9abc-def012345678",
@@ -136,12 +139,12 @@ describe("interior per-part colors survive powerline serialization (pdu.3)", () 
     }
   });
 
-  test("green (staged/ahead) and red (unstaged/behind) are distinct from each other", () => {
+  test("green (staged/ahead) and yellow (unstaged/behind) are distinct from each other", () => {
     const green = foregroundKey(runFor("S")!.sgr);
-    const red = foregroundKey(runFor("U")!.sgr);
-    expect(green).not.toBe(red);
+    const yellow = foregroundKey(runFor("U")!.sgr);
+    expect(green).not.toBe(yellow);
     expect(foregroundKey(runFor("+1")!.sgr)).toBe(green);
-    expect(foregroundKey(runFor("-1")!.sgr)).toBe(red);
+    expect(foregroundKey(runFor("-1")!.sgr)).toBe(yellow);
   });
 
   test("every colored glyph is painted over the segment bg (composited, not bare)", () => {
