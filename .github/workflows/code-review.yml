@@ -55,6 +55,17 @@ jobs:
         uses: promptctl/copirate-code-review-agent@v1
         with:
           DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+          # [LAW:one-source-of-truth] The credential this workflow supplies and
+          # the provider it runs must be ONE decision. Left unset, PROVIDER
+          # defaults to `auto`, whose resolution lives in the action behind the
+          # moving `@v1` tag — and on 2026-08-23 that default started resolving
+          # to `claude-subscription`, which demands a CLAUDE_CODE_OAUTH_TOKEN
+          # this workflow has never passed. Every review then failed with a
+          # credential error, and a failed run reports NO findings, which reads
+          # exactly like a clean review ([LAW:no-silent-failure]) — the reason
+          # this is pinned rather than re-defaulted. DEEPSEEK_API_KEY above is
+          # the credential this repo actually holds, so name its provider.
+          PROVIDER: deepseek
           # DEPENDENCY_DIFF is on for EVERY repo this installs into — a deliberate
           # universal default baked into the template, NOT a per-repo divergence that
           # leaked in. On a PR that bumps a dependency the reviewer fetches the bumped
