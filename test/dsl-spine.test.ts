@@ -9,7 +9,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { PaletteResolver, getThemePalette } from "@promptctl/rich-js";
+import { getThemePalette } from "@promptctl/rich-js";
 
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
@@ -98,7 +98,7 @@ describe("DSL render spine (bzh.7 steel thread)", () => {
     const { config, compiled, store, registry } = buildRuntime(
       HOOK_DATA.workspace.current_dir,
     );
-    const basePalette = new PaletteResolver(getThemePalette("textual-dark")!);
+    const basePalette = getThemePalette("textual-dark"!);
     const result = renderDsl(
       config,
       compiled,
@@ -116,7 +116,7 @@ describe("DSL render spine (bzh.7 steel thread)", () => {
     const { config, compiled, store, registry } = buildRuntime(
       HOOK_DATA.workspace.current_dir,
     );
-    const basePalette = new PaletteResolver(getThemePalette("textual-dark")!);
+    const basePalette = getThemePalette("textual-dark"!);
 
     renderDsl(config, compiled, store, registry, HOOK_DATA, basePalette, OPTS);
 
@@ -130,7 +130,7 @@ describe("DSL render spine (bzh.7 steel thread)", () => {
     const { config, compiled, store, registry } = buildRuntime(
       HOOK_DATA.workspace.current_dir,
     );
-    const basePalette = new PaletteResolver(getThemePalette("textual-dark")!);
+    const basePalette = getThemePalette("textual-dark"!);
 
     const a = renderDsl(config, compiled, store, registry, HOOK_DATA, basePalette, OPTS);
     const b = renderDsl(config, compiled, store, registry, HOOK_DATA, basePalette, OPTS);
@@ -141,7 +141,7 @@ describe("DSL render spine (bzh.7 steel thread)", () => {
     const { config, compiled, store, registry } = buildRuntime(
       HOOK_DATA.workspace.current_dir,
     );
-    const basePalette = new PaletteResolver(getThemePalette("textual-dark")!);
+    const basePalette = getThemePalette("textual-dark"!);
     const sink = new Map<
       string,
       readonly import("@promptctl/rich-js").RichText[]
@@ -181,7 +181,7 @@ describe("DSL render spine (bzh.7 steel thread)", () => {
     const { config, compiled, store, registry } = buildRuntime(
       HOOK_DATA.workspace.current_dir,
     );
-    const basePalette = new PaletteResolver(getThemePalette("textual-dark")!);
+    const basePalette = getThemePalette("textual-dark"!);
     const result = renderDsl(
       config,
       compiled,
@@ -202,7 +202,7 @@ describe("DSL render spine (bzh.7 steel thread)", () => {
       const { config, compiled, store, registry } = buildRuntime(
         HOOK_DATA.workspace.current_dir,
       );
-      const basePalette = new PaletteResolver(getThemePalette("textual-dark")!);
+      const basePalette = getThemePalette("textual-dark"!);
       return renderDsl(config, compiled, store, registry, HOOK_DATA, basePalette, OPTS);
     })();
 
@@ -222,7 +222,7 @@ describe("DSL render spine (bzh.7 steel thread)", () => {
       const compiled = registerDslConfig(config, registry, {
         cwd: HOOK_DATA.workspace.current_dir,
       });
-      const basePalette = new PaletteResolver(getThemePalette("textual-dark")!);
+      const basePalette = getThemePalette("textual-dark"!);
       return renderDsl(config, compiled, store, registry, HOOK_DATA, basePalette, OPTS);
     })();
 

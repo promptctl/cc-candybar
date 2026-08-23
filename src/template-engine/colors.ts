@@ -1,6 +1,15 @@
 // [LAW:single-enforcer] All per-segment bg/fg resolution flows through
 // resolveSegmentColors. No second path; a second path would silently drift
-// from the two-stage pipeline (bg first, fg with auto-contrast context second).
+// from the ordered pipeline this function owns.
+//
+// [LAW:no-ambient-temporal-coupling] That ordering — publish the segment's
+// palette, resolve bg, publish bg, resolve fg, then hand the body its turn —
+// is not incidental execution order that happens to work. It is the phase
+// structure of a segment's color resolution, and this function is its one
+// owner. Each phase's output is *published* into the active-segment record
+// before the next phase runs, so a later template can read an earlier
+// phase's result (`fg: '{{ contrastOn (bgOf) }}'`) and an earlier one
+// cannot read a later one — it gets a message naming the phase instead.
 //
 // [LAW:dataflow-not-control-flow] Steps execute unconditionally; the option
 // values (undefined template = no spec) are what decides the output, not
@@ -8,60 +17,72 @@
 // → fragmentsToStripCells's baseStyle merge is a no-op, cells flow through
 // unchanged.
 
-import { Style, ColorSpec } from "@promptctl/rich-js";
-import type { ColorRgba, PaletteResolver } from "@promptctl/rich-js";
+import {
+  Style,
+  ColorSpec,
+  resolveColorRef,
+  ColorRefError,
+} from "@promptctl/rich-js";
+import type { ColorRgba, Palette } from "@promptctl/rich-js";
 import type { RichText } from "@promptctl/rich-js";
 import type { Template } from "@promptctl/go-template-js";
+import type { ActiveSegmentRef } from "../render/active-segment.js";
 
 export class ColorSpecError extends Error {
-  constructor(spec: string, role: "bg" | "fg") {
-    super(`Invalid ${role} color spec: ${JSON.stringify(spec)}`);
+  constructor(spec: string, role: "bg" | "fg", detail: string) {
+    super(`Invalid ${role} color ${JSON.stringify(spec)}: ${detail}`);
     this.name = "ColorSpecError";
   }
 }
 
 /**
- * Resolve per-segment bg and fg template strings into a Style for baseStyle
- * injection in fragmentsToStripCells().
+ * Resolve a segment's `bg:` and `fg:` templates into the Style that becomes
+ * its baseStyle, publishing each phase's result into `ref` as it goes.
  *
- * Pipeline:
- *   1. Evaluate bgTemplate → plain text color-spec string.
- *   2. resolver.resolve(bgSpec) → ColorRgba.
- *   3. Evaluate fgTemplate → plain text color-spec string.
- *   4. resolver.resolve(fgSpec, { against: bgColor }) → ColorRgba (auto-contrast).
- *   5. Wrap as Style({ bgcolor, color }).
+ * A `bg:`/`fg:` field is a template evaluated to a **color reference** — a
+ * palette variable name (`"surface-active"`) or a `#RRGGBB` literal. Since
+ * rich-js's `resolveColorRef` accepts both and is idempotent, the plain
+ * authoring form and a computed one take the identical path:
+ *
+ * ```json5
+ * bg: "surface-active"                             // a name, evaluated as itself
+ * bg: '{{ darken (color "surface-active") 1 }}'    // a computed literal
+ * ```
+ *
+ * There is no "is this a name or a color" branch anywhere — one total
+ * function over both. [LAW:dataflow-not-control-flow]
  *
  * Undefined template → that color is not set in the returned Style, so cells
  * fall through to their own style (or no color if they have none).
  *
- * Throws ColorSpecError if a non-empty spec string resolves to null.
- *
- * Hue rotation is not this function's concern: per-segment hue lives upstream as
- * WHICH palette `resolver` carries (a transposed palette), so bg and fg resolve
- * from the same transposed palette and their theme-designed relationship is
- * preserved. [LAW:dataflow-not-control-flow]
- *
- * [LAW:dataflow-not-control-flow] Steps are ordered data transformations, not
- * guarded branches. The "no spec" case is represented as undefined, which flows
- * through to produce an absent Style field — not a skipped step.
+ * Hue rotation and looks are not this function's concern: they live upstream
+ * as WHICH palette it is handed, so bg, fg, and the body all resolve from one
+ * palette and their theme-designed relationships are preserved.
  */
 export function resolveSegmentColors(
-  resolver: PaletteResolver,
+  ref: ActiveSegmentRef,
+  segName: string,
+  palette: Palette,
   bgTemplate: Template<RichText> | undefined,
   fgTemplate: Template<RichText> | undefined,
   scope: object,
 ): Style {
+  // Phase 0 — the palette is live from here until the walk clears it, so
+  // `{{ color … }}` in the bg template, the fg template, and the body all read
+  // this one palette. `bg` starts undefined: it is what phase 1 computes.
+  const active = { segName, palette, bg: undefined as ColorRgba | undefined };
+  ref.current = active;
+
+  // Phase 1 — background.
   const bgSpec = evalToPlainText(bgTemplate, scope);
   const bgColor =
-    bgSpec !== undefined
-      ? resolveSpec(resolver, bgSpec, undefined, "bg")
-      : undefined;
+    bgSpec !== undefined ? resolveRef(palette, bgSpec, "bg") : undefined;
 
+  // Phase 2 — publish it, then foreground, which may now ask about it.
+  active.bg = bgColor;
   const fgSpec = evalToPlainText(fgTemplate, scope);
   const fgColor =
-    fgSpec !== undefined
-      ? resolveSpec(resolver, fgSpec, bgColor, "fg")
-      : undefined;
+    fgSpec !== undefined ? resolveRef(palette, fgSpec, "fg") : undefined;
 
   return new Style({
     bgcolor: bgColor !== undefined ? ColorSpec.fromRgba(bgColor) : undefined,
@@ -82,21 +103,22 @@ function evalToPlainText(
     .join("");
 }
 
-// Resolve a color spec string through the palette resolver.
-// Throws ColorSpecError (loud failure) if the spec is unknown or the required
-// `against` context is missing — never silently falls back to a default.
-// [LAW:no-defensive-null-guards] null from resolver.resolve signals broken
-// config; the fix is the config, not a silent fallback.
-function resolveSpec(
-  resolver: PaletteResolver,
-  spec: string,
-  against: ColorRgba | undefined,
+// [LAW:one-source-of-truth] The same rich-js checkpoint the `{{ color }}`
+// template function crosses, so a reference that works in a body works in a
+// `bg:` field and vice versa. Re-thrown with the field's role attached —
+// rich-js knows the reference failed, only cc-candybar knows it came from a
+// `fg:`. [LAW:no-silent-failure] never a substituted default: a broken color
+// reference is a config bug, and the fix is the config.
+function resolveRef(
+  palette: Palette,
+  ref: string,
   role: "bg" | "fg",
 ): ColorRgba {
-  const color = resolver.resolve(
-    spec.trim(),
-    against !== undefined ? { against } : undefined,
-  );
-  if (color === null) throw new ColorSpecError(spec, role);
-  return color;
+  try {
+    return resolveColorRef(palette, ref);
+  } catch (e) {
+    if (e instanceof ColorRefError)
+      throw new ColorSpecError(ref, role, e.message);
+    throw e;
+  }
 }

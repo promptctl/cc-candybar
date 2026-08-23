@@ -15,7 +15,4 @@ export {
 } from "./policy.js";
 export type { StripStyle } from "./policy.js";
 
-export {
-  resolverForThemeName,
-  transposedResolver,
-} from "./palette-resolvers.js";
+export { paletteForThemeName, transposedPalette } from "./palette-resolvers.js";

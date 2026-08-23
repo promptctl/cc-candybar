@@ -115,7 +115,7 @@ export function validateCrossReferences(
     // bounded stepper (`min`/`max`/`by`) has no meaning over it, unlike a
     // Globals field where nothing today enforces value/field-kind agreement
     // either way. Rejecting it here (rather than tolerating a numeric-string
-    // palette name that only fails later at `resolverForThemeName`) keeps
+    // palette name that only fails later at `paletteForThemeName`) keeps
     // the failure at load time, next to the typo it actually is.
     if ("min" in a) {
       ctx.issues.push({
