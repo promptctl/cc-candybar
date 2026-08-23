@@ -7,6 +7,8 @@
 // handed, never how the transposition is spelled internally.
 
 import {
+  detectForge,
+  parseRemoteRef,
   parseRemotes,
   remoteWebUrl,
   repoWebUrl,
@@ -87,6 +89,111 @@ describe("remoteWebUrl — remotes with no page yield nothing", () => {
     ["ftp://example.com/repo.git", "scheme that serves no repo page"],
   ])("%s (%s) → null", (remote) => {
     expect(remoteWebUrl(remote)).toBeNull();
+  });
+});
+
+describe("remoteWebUrl — a drive path is a local path, not host:path", () => {
+  // A DOS drive prefix once slipped through the scp arm and made the drive
+  // letter a hostname: `C:/repo.git` linked to a host named `c`.
+  test.each([
+    ["C:/repo.git", "forward-slash drive path"],
+    ["C:\\repo.git", "backslash drive path"],
+    ["d:/work/notes", "lowercase drive letter"],
+  ])("%s (%s) → null", (remote) => {
+    expect(remoteWebUrl(remote)).toBeNull();
+  });
+
+  // The rejection requires the separator on purpose. A single-letter host is a
+  // real ssh-config alias, and `^[A-Za-z]:` alone would have taken it out.
+  test("a single-letter ssh alias is still a host", () => {
+    expect(remoteWebUrl("h:repo.git")).toBe("https://h/repo");
+    expect(remoteWebUrl("git@h:team/repo.git")).toBe("https://h/team/repo");
+  });
+});
+
+describe("remoteWebUrl — host case does not change the answer", () => {
+  // The ssh arm used to emit a mixed-case host while `detectForge` lowercased:
+  // WHATWG normalizes host case for "special" schemes only, so `https:` was
+  // folded and `ssh:` was not. One parser, one normalization, both readers.
+  test.each([
+    ["git@GitHub.com:Me/Repo.git", "https://github.com/Me/Repo"],
+    ["ssh://git@GitLab.COM/g/p.git", "https://gitlab.com/g/p"],
+    ["https://GitHub.com/Me/Repo.git", "https://github.com/Me/Repo"],
+  ])("%s → %s", (remote, expected) => {
+    expect(remoteWebUrl(remote)).toBe(expected);
+  });
+
+  // Path case is user data and survives untouched — only the host is normalized.
+  test("the repo path keeps its case", () => {
+    expect(remoteWebUrl("git@github.com:Me/MyRepo.git")).toContain("/Me/MyRepo");
+  });
+});
+
+describe("remoteWebUrl — one host classification, shared with detectForge", () => {
+  // [LAW:single-enforcer] The two questions asked of a remote must classify the
+  // same string the same way. A forge this recognizes must also yield a page on
+  // that same host; a shape one rejects the other cannot silently accept.
+  test.each([
+    "git@GitHub.com:o/r.git",
+    "https://gitlab.example.com/g/p.git",
+    "ssh://git@github.com:22/o/r.git",
+  ])("%s: detected forge host is the page host", (remote) => {
+    const forge = detectForge(remote);
+    const web = remoteWebUrl(remote);
+    expect(forge).not.toBeNull();
+    expect(web).not.toBeNull();
+    expect(new URL(web!).hostname).toBe(parseRemoteRef(remote)!.host);
+  });
+
+  test.each(["C:/repo.git", "/srv/git/r.git", "../r"])(
+    "%s: rejected by both",
+    (remote) => {
+      expect(parseRemoteRef(remote)).toBeNull();
+      expect(detectForge(remote)).toBeNull();
+      expect(remoteWebUrl(remote)).toBeNull();
+    },
+  );
+});
+
+describe("parseRemoteRef — git's two spellings decode to one shape", () => {
+  test("scp shorthand and its ssh:// equivalent agree", () => {
+    expect(parseRemoteRef("git@github.com:o/r.git")).toEqual(
+      parseRemoteRef("ssh://git@github.com/o/r.git"),
+    );
+  });
+
+  test("a single-slash scheme is an ssh host, matching git itself", () => {
+    // `git ls-remote "file:/tmp/x"` → "Could not resolve hostname file". Per
+    // `git help clone` the scp form is recognized when no slash precedes the
+    // first colon, which this satisfies. Disagreeing with git about what a
+    // repo's own remote means would be the worse answer.
+    expect(parseRemoteRef("file:/srv/git/notes.git")).toMatchObject({
+      scheme: "ssh",
+      host: "file",
+      path: "srv/git/notes.git",
+    });
+  });
+
+  test("a true file:// URL has no host", () => {
+    expect(parseRemoteRef("file:///srv/git/notes")).toMatchObject({
+      scheme: "file",
+      host: "",
+    });
+  });
+
+  test("port and credentials are separated out, never carried in the host", () => {
+    expect(parseRemoteRef("ssh://git@gitea.lan:2222/me/notes.git")).toEqual({
+      scheme: "ssh",
+      host: "gitea.lan",
+      port: "2222",
+      path: "me/notes.git",
+    });
+    expect(parseRemoteRef("https://x-token:secret@github.com/o/r.git")).toEqual({
+      scheme: "https",
+      host: "github.com",
+      port: "",
+      path: "o/r.git",
+    });
   });
 });
 

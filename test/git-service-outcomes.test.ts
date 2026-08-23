@@ -141,6 +141,29 @@ describe("GitService outcome classification", () => {
     expect(info.value.repoUrl).toEqual(ok("https://github.com/me/proj"));
   });
 
+  // [LAW:no-silent-failure] `git config --get-regexp` exits 1 for "no matches"
+  // and 128 for a config it cannot read. Folding both into an empty remotes list
+  // would render a broken repo as a remote-less one — repoName quietly becoming
+  // the basename, repoUrl and the PR origin reporting "none", nothing logged.
+  // These two assert the split, since only the exit code tells them apart.
+  test("a repo with no remotes is an empty list, not a failure", async () => {
+    const remotes = await svc.getRemotesAsync(repo);
+    expect(remotes).toEqual(ok([]));
+  });
+
+  test("an unreadable config is FAILED, never an empty remotes list", async () => {
+    const broken = join(root, "broken");
+    mkdirSync(broken);
+    run("git init -q -b main", broken);
+    run("git commit -q --allow-empty -m init", broken);
+    writeFileSync(join(broken, ".git", "config"), '[remote "origin"\n  url = x\n');
+
+    const remotes = await svc.getRemotesAsync(broken);
+    expect(remotes.kind).toBe("failed");
+    if (remotes.kind !== "failed") return;
+    expect(remotes.reason).toContain("git config --get-regexp");
+  });
+
   test("getRemoteOriginUrl still reports the raw origin URL the PR cache keys on", async () => {
     run("git remote add origin git@github.com:user/myrepo.git", repo);
     const withOrigin = await svc.getRemoteOriginUrl(repo);

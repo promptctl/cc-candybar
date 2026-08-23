@@ -94,10 +94,21 @@ export interface GitInfoOptions {
 function classify(
   label: string,
   result: LaunchResult,
-  nonZero: "absent" | "failed",
+  // How this command spells "there is none":
+  //   "absent" — ANY non-zero exit is the domain answer. `git describe --tags`
+  //     and `git rev-parse @{u}` both exit 128 for their genuine absences, so a
+  //     narrower rule would misread them as failures.
+  //   a number — ONLY that exit code is the domain answer; every other non-zero
+  //     is a real failure. `git config --get-regexp` exits 1 for "no matches"
+  //     but 128 for an unreadable config, and folding those together would
+  //     render a broken repo as an empty one. [LAW:no-silent-failure]
+  //   "failed" — no non-zero exit is ever a domain answer.
+  nonZero: "absent" | "failed" | number,
 ): Outcome<string> {
   if (result.ok) return ok(result.stdout);
   if (result.reason === "non-zero" && nonZero === "absent") return ABSENT;
+  if (result.reason === "non-zero" && nonZero === result.exitCode)
+    return ABSENT;
   const detail = [
     result.reason,
     result.exitCode != null ? `exit ${result.exitCode}` : null,
@@ -151,18 +162,92 @@ function nonEmpty(o: Outcome<string>): Outcome<string> {
 //   timeout / signal / rate-limited → failed        (forge couldn't answer)
 export type ForgeName = "github" | "gitlab";
 
-// [LAW:types-are-the-program] Extract the host from a git remote, handling the
-// two shapes git uses: scp-like `[user@]host:path` and URL `scheme://[user@]
-// host[:port]/path`. The URL form is checked first — its `host` in a scp regex
-// would mis-capture the scheme (`https` before `://`). Returns null for an
-// unrecognized shape (local path, unknown syntax).
+// [LAW:types-are-the-program] A git remote decomposed into the four facts every
+// consumer of one actually wants. Credentials are absent by construction — the
+// parser never carries userinfo out — so no downstream can leak a token it was
+// never handed.
+export interface RemoteRef {
+  // Lowercase, no trailing colon: "https", "ssh", "git", "file", …
+  readonly scheme: string;
+  // Lowercased; "" for a hostless URL (`file:///srv/git/r`).
+  readonly host: string;
+  // "" when the remote names none.
+  readonly port: string;
+  // No leading or trailing slash. Still carries any `.git` suffix — trimming
+  // that is a web-display rule, not a fact about the remote.
+  readonly path: string;
+}
+
+// A DOS drive path is a LOCAL path, not `host:path`. git says so directly
+// (`has_dos_drive_prefix`), and without this the scp arm below claims the drive
+// letter as a hostname: `C:/repo.git` became `https://C/repo`, a live link to a
+// host named `c`.
+//
+// The separator is required. `^[A-Za-z]:` alone would also reject `h:repo.git`,
+// a single-letter ssh-config alias and a form people really use; requiring
+// `[\\/]` keeps that working while still catching `C:/…` and `C:\…`.
+//
+// [LAW:one-type-per-behavior] exception: git's own drive-letter handling is
+// compiled in only on Windows — on POSIX `git ls-remote "C:/x"` genuinely tries
+// ssh host `c` — so rejecting unconditionally is a deliberate small infidelity
+// to the producer. Reading `path.sep` here would make a pure parser ambient
+// (`[LAW:effects-at-boundaries]`), and the asymmetry pays for it: on POSIX the
+// only input whose answer changes is a single-letter host with a drive-shaped
+// absolute path, which in practice is a pasted Windows path. No link beats a
+// wrong link.
+const DOS_DRIVE_PATH = /^[A-Za-z]:[\\/]/;
+
+// [LAW:single-enforcer] THE one decision of what shape a raw remote string is.
+// Both questions asked of a remote — "which forge is this?" (`remoteHost` →
+// `detectForge`) and "what page does this open?" (`remoteWebUrl`) — are
+// projections over this one answer, so they cannot classify the same string
+// differently. They already had: two regexes ago, `detectForge` lowercased its
+// host and `remoteWebUrl` did not, because WHATWG normalizes host case for
+// "special" schemes (`https:`) and not for `ssh:` — so `git@GitHub.com:o/r.git`
+// resolved to forge `github` but to page `https://GitHub.com/o/r`. The
+// lowercase below is that fix, applied once where both readers see it.
+//
+// git spells an ssh remote two ways, and this collapses them: the URL form
+// `scheme://[user@]host[:port]/path`, and the scp shorthand `[user@]host:path`
+// — which per `git help clone` "is only recognized if there are no slashes
+// before the first colon". Rewriting the shorthand into its ssh:// spelling
+// means one parser (the URL parser) sees every shape.
+//
+// Returns null when the string names no host at all: a local path, a relative
+// path, a drive path, an empty remote.
+export function parseRemoteRef(raw: string): RemoteRef | null {
+  const trimmed = raw.trim();
+  if (DOS_DRIVE_PATH.test(trimmed)) return null;
+
+  // The `(?!//)` is what keeps `https://…` out of the scp arm — there the colon
+  // separates a scheme, not a host from a path. A single-slash `file:/srv/x`
+  // deliberately DOES land here: git resolves it to ssh host `file` too
+  // (verified with `git ls-remote`), and disagreeing with git about what a
+  // repo's own remote means would be the worse answer.
+  const scp = trimmed.match(/^(?:[^@/:]+@)?([^/:]+):(?!\/\/)(.*)$/);
+  const candidate = scp
+    ? `ssh://${scp[1]}/${scp[2]!.replace(/^\/+/, "")}`
+    : trimmed;
+
+  let url: URL;
+  try {
+    url = new URL(candidate);
+  } catch {
+    return null;
+  }
+
+  return {
+    scheme: url.protocol.replace(/:$/, ""),
+    host: url.hostname.toLowerCase(),
+    port: url.port,
+    path: url.pathname.replace(/^\/+/, "").replace(/\/+$/, ""),
+  };
+}
+
+// The host `detectForge` dispatches on. A remote with no host (a `file://`
+// mirror) names no forge, same as an unparseable one.
 function remoteHost(remoteUrl: string): string | null {
-  const url = remoteUrl.trim();
-  const proto = url.match(/^[a-z][a-z0-9+.-]*:\/\/(?:[^@/]+@)?([^/:]+)/i);
-  if (proto) return proto[1]!.toLowerCase();
-  const scp = url.match(/^(?:[^@/]+@)?([^/:]+):/);
-  if (scp) return scp[1]!.toLowerCase();
-  return null;
+  return parseRemoteRef(remoteUrl)?.host || null;
 }
 
 // [LAW:types-are-the-program] Branch on the HOST, not a substring of the whole
@@ -192,9 +277,19 @@ export interface GitRemote {
 // ^remote\..*\.url$` stdout, so the accept/reject table is unit-testable without
 // spawning git. Each line is `remote.<name>.url <url>`; the name capture is
 // greedy so a dotted remote name (`remote.my.fork.url` → `my.fork`) keeps its
-// dots. A multi-URL remote (a multi-push setup) emits several lines under one
-// name and the FIRST wins — the URL git itself fetches from. A line carrying no
-// URL is a remote with no URL, the domain's own "none", not a parse failure.
+// dots. A line carrying no URL is a remote with no URL, the domain's own
+// "none", not a parse failure.
+//
+// A multi-URL remote (a fetch URL plus extra push mirrors) emits several lines
+// under one name and the FIRST wins, which is a DELIBERATE divergence from the
+// `git config --get remote.origin.url` this replaced — that returned the LAST
+// value. First is the URL git fetches from, i.e. the one that identifies the
+// repository; the extras are push-only. `git remote -v` on a two-URL origin is
+// the proof:
+//   origin  git@github.com:me/first.git  (fetch)
+//   origin  git@github.com:me/first.git  (push)
+//   origin  git@github.com:me/second.git (push)
+// So the old spelling keyed the PR cache and the forge host on a push mirror.
 export function parseRemotes(stdout: string): GitRemote[] {
   const remotes: GitRemote[] = [];
   const seen = new Set<string>();
@@ -225,6 +320,7 @@ export function parseRemotes(stdout: string): GitRemote[] {
 //   /srv/git/r.git · ../r · ""     → null  (names no host)
 //   file:///srv/git/r              → null  (nothing serves it)
 //   git@host:                      → null  (a host with no repo path)
+//   C:/r.git · C:\r.git            → null  (a drive path, not host:path)
 //
 // [LAW:one-type-per-behavior] The ssh→https transposition is host-agnostic BY
 // DESIGN. GitHub, GitLab, Gitea/Forgejo, Bitbucket, Codeberg and sr.ht are not
@@ -239,46 +335,29 @@ export function parseRemotes(stdout: string): GitRemote[] {
 // needs a recognized product AND an installed binary. This needs only a web
 // server. Two questions, two maps.
 export function remoteWebUrl(raw: string): string | null {
-  const trimmed = raw.trim();
-  // scp-like `[user@]host:path` is not a URL — rewrite it to the ssh:// form it
-  // is shorthand for, so ONE parser sees every shape. The `(?!//)` is what keeps
-  // `https://…` out of this arm: there the `:` is a scheme separator, not the
-  // scp host/path split.
-  const scp = trimmed.match(/^(?:[^@/:]+@)?([^/:]+):(?!\/\/)(.*)$/);
-  const candidate = scp
-    ? `ssh://${scp[1]}/${scp[2]!.replace(/^\/+/, "")}`
-    : trimmed;
-
-  let url: URL;
-  try {
-    url = new URL(candidate);
-  } catch {
-    // Not a URL at all — a local path, a relative path, an empty remote. That
-    // is this function's domain answer, not a swallowed error.
-    return null;
-  }
+  const ref = parseRemoteRef(raw);
+  if (!ref) return null;
 
   // [LAW:dataflow-not-control-flow] The scheme is the ONLY discriminator, and it
-  // decides two values (which host form, which web scheme) rather than gating
-  // whether work happens. Reading `.host` vs `.hostname` is what keeps a web
-  // port and drops an ssh one; both exclude userinfo by construction, which is
-  // what guarantees a token in the remote never reaches a clickable link.
-  const web = ((): { host: string; scheme: string } | null => {
-    if (url.protocol === "https:") return { host: url.host, scheme: "https:" };
-    if (url.protocol === "http:") return { host: url.host, scheme: "http:" };
-    if (url.protocol === "ssh:" || url.protocol === "git:")
-      return { host: url.hostname, scheme: "https:" };
+  // answers with VALUES — the web scheme and the web port — rather than gating
+  // whether work happens. The port is where the two arms genuinely differ: an
+  // http(s) port is part of the address a browser needs (a self-hosted forge on
+  // :3000), while an ssh port says nothing about where the web UI listens, so
+  // the ssh arm answers "" rather than carrying 2222 into an https URL.
+  const web = ((): { scheme: string; port: string } | null => {
+    if (ref.scheme === "https") return { scheme: "https", port: ref.port };
+    if (ref.scheme === "http") return { scheme: "http", port: ref.port };
+    if (ref.scheme === "ssh" || ref.scheme === "git")
+      return { scheme: "https", port: "" };
     return null;
   })();
-  if (!web) return null;
+  if (!web || !ref.host) return null;
 
-  const repoPath = url.pathname
-    .replace(/^\/+/, "")
-    .replace(/\/+$/, "")
-    .replace(/\.git$/, "");
+  const repoPath = ref.path.replace(/\.git$/, "");
   if (!repoPath) return null;
 
-  return `${web.scheme}//${web.host}/${repoPath}`;
+  const authority = web.port ? `${ref.host}:${web.port}` : ref.host;
+  return `${web.scheme}://${authority}/${repoPath}`;
 }
 
 // [LAW:one-source-of-truth] The ONE rule for which remote represents "the repo".
@@ -757,17 +836,25 @@ export class GitService {
     return ok(stashList ? stashList.split("\n").length : 0);
   }
 
-  // [LAW:one-source-of-truth] The ONE read of this repo's remotes. `repoName`,
-  // `repoUrl`, and the PR cache's origin URL are all projections over it —
-  // before this, repoName and the PR path each ran their own `config --get
-  // remote.origin.url`, two maps of one territory that could answer differently
-  // across the moment between them.
+  // [LAW:one-source-of-truth] The one read of this repo's remotes per call site.
+  // `repoName` and `repoUrl` share a single call from `computeGitInfo`, so those
+  // two can never disagree about which remote is origin — that pair used to be
+  // one `config --get remote.origin.url` each.
+  //
+  // The PR cache deliberately keeps its OWN call (`getRemoteOriginUrl`, from
+  // src/daemon/cache/git.ts): the forge lookup is a network resource cached
+  // under its own longer TTL, keyed `repoRoot|branch|remote`, and folding its
+  // remote read into GitInfo would tie a network cache's input to the local
+  // cache's fs-watched refresh cycle — the separation those two TTLs exist to
+  // create. So this is one read per lifecycle, not one read overall.
   //
   // `--get-regexp` exits 1 when NOTHING matches, which is a repo with no remotes
   // configured — a domain answer, so it lands as an EMPTY LIST rather than an
   // `absent` arm. [LAW:dataflow-not-control-flow] Every projection then reads
   // "no remotes" off the empty set (no repoUrl, basename repoName) instead of
-  // carrying a second no-value state through three consumers.
+  // carrying a second no-value state through three consumers. Exit 128 (an
+  // unreadable or corrupt config) is NOT that answer and stays `failed`, so a
+  // broken repo never renders as an empty one. [LAW:no-silent-failure]
   async getRemotesAsync(workingDir: string): Promise<Outcome<GitRemote[]>> {
     const r = classify(
       "git config --get-regexp remote url",
@@ -775,7 +862,7 @@ export class GitService {
         ["config", "--get-regexp", "^remote\\..*\\.url$"],
         { cwd: workingDir, timeout: 2000 },
       ),
-      "absent",
+      1,
     );
     if (r.kind === "failed") return r;
     return ok(r.kind === "ok" ? parseRemotes(r.value) : []);
