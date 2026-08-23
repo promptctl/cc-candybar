@@ -314,17 +314,16 @@ export function parseRemotes(stdout: string): GitRemote[] {
   return [...urlsByName].map(([name, urls]) => ({ name, urls }));
 }
 
-// [LAW:one-source-of-truth] THE url that identifies a remote's repository, for
-// every consumer that needs one — its display name, its web page, and the forge
-// the PR lookup dispatches on. The first url a browser can open wins, else the
-// first configured: a remote that fetches from a local mirror and pushes to a
-// forge keeps its forge identity, which is the case that broke when only the
-// first url survived.
+// [LAW:one-source-of-truth] THE url that says which repository a remote IS —
+// the source of its display name and its web page, and nothing else. The first
+// url a browser can open wins, else the first configured: a remote that fetches
+// from a local mirror and pushes to a forge keeps its forge identity, which is
+// the case that broke when only the first url survived.
 //
-// Deliberately ONE rule rather than "prefer a url detectForge recognizes" on
-// top. A remote listing a self-hosted Gitea page before a GitHub url resolves to
-// the Gitea page and gets no PR — a correct link and an honest absence, which
-// beats two selection rules competing over which url is the "real" one.
+// Forge dispatch is NOT this question and does not read this — see
+// `forgeRemoteUrl`. Identity asks "which repository is this?", dispatch asks
+// "where do I ask about pull requests?", and a remote naming two hosts has two
+// different correct answers.
 function identifyingUrl(remote: GitRemote): string | null {
   return (
     remote.urls.find((u) => remoteWebUrl(u) !== null) ?? remote.urls[0] ?? null
@@ -383,7 +382,11 @@ export function forgeRemoteUrl(remotes: readonly GitRemote[]): string | null {
 // basename stays reserved for its documented case, a repo with NO remote.
 export function repoNameFromUrl(url: string): string | null {
   const parsed = parseRemoteRef(url);
-  const segments = (parsed?.path ?? url).split("/");
+  // The raw branch must strip trailing separators the way `parseRemoteRef`
+  // already does for the parsed one — otherwise `/srv/mirrors/backup.git/`
+  // splits to a final empty segment and falls through to the directory
+  // basename, which is reserved for a repo with NO remote.
+  const segments = (parsed?.path ?? url.replace(/[\\/]+$/, "")).split("/");
   const name = (segments[segments.length - 1] ?? "").replace(/\.git$/, "");
   return name || null;
 }

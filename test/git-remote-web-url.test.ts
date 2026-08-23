@@ -37,6 +37,35 @@ describe("remoteWebUrl — http(s) remotes are already the page", () => {
   });
 });
 
+describe("remoteWebUrl — nothing raw reaches the OSC-8 sink", () => {
+  // A git remote is attacker-influenced in any repo you clone, and `git.repoUrl`
+  // feeds `{{ link }}`, which emits an OSC-8 hyperlink. That sequence is
+  // delimited by BEL (0x07) and ST (ESC \), so a raw control character in a repo
+  // path could terminate it early and inject terminal escapes.
+  //
+  // It cannot: the reassembly reads `parseRemoteRef`'s path, which the URL
+  // parser has already run through the path percent-encode set (C0 controls and
+  // space included, for non-special schemes like `ssh:` too). This asserts that
+  // property rather than trusting it — a future change to the reassembly that
+  // starts emitting raw bytes has to fail here.
+  test.each([
+    ["git@example.com:My Repo.git", "https://example.com/My%20Repo"],
+    ["ssh://git@example.com/My Repo.git", "https://example.com/My%20Repo"],
+    [
+      "git@example.com:a\x1b]8;;evil\x07b.git",
+      "https://example.com/a%1B]8;;evil%07b",
+    ],
+  ])("%j → %s", (remote, expected) => {
+    const web = remoteWebUrl(remote);
+    expect(web).toBe(expected);
+    expect(web).not.toMatch(/[\x00-\x1f\x7f ]/);
+  });
+
+  test("a remote the URL parser cannot represent yields nothing at all", () => {
+    expect(remoteWebUrl("git@example.com:a\nb.git")).toBeNull();
+  });
+});
+
 describe("remoteWebUrl — credentials never reach a clickable link", () => {
   // [LAW:no-silent-failure] A CI-style remote carries a token. Rendering it
   // into an OSC-8 link would publish the secret into the terminal and into
@@ -337,10 +366,13 @@ describe("the repo's name and its link never disagree", () => {
   // A local-path remote has no parsed path but does have a last segment, so it
   // keeps naming itself. The directory basename stays reserved for its
   // documented case: a repo with no remote at all.
-  test("a local-path remote names itself, with no link", () => {
-    expect(nameOf("/srv/mirrors/backup.git")).toBe("backup");
-    expect(remoteWebUrl("/srv/mirrors/backup.git")).toBeNull();
-  });
+  test.each(["/srv/mirrors/backup.git", "/srv/mirrors/backup.git/"])(
+    "a local-path remote (%s) names itself, with no link",
+    (url) => {
+      expect(nameOf(url)).toBe("backup");
+      expect(remoteWebUrl(url)).toBeNull();
+    },
+  );
 
   // The no-remote case is the directory-basename policy, asserted against real
   // git in test/git-service-outcomes.test.ts where the working dir is real.
