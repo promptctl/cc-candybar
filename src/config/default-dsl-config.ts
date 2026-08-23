@@ -392,6 +392,10 @@ export const RAW_DEFAULT_DSL_CONFIG = {
       path: "git.repoName",
       default: "",
     },
+    // The repo's browsable web page, transposed from its remote by the daemon.
+    // "" is the genuine "no remote a browser can open" (local-only repo, bare
+    // path remote) — the toolbar's link reads that value, not a flag.
+    "git.repoUrl": { kind: "input", path: "git.repoUrl", default: "" },
     "git.branch": { kind: "input", path: "git.branch", default: "" },
     "git.sha": { kind: "input", path: "git.sha", default: "" },
     "git.ahead": {
@@ -780,18 +784,27 @@ export const RAW_DEFAULT_DSL_CONFIG = {
       when: '{{ or (ne .git.prUrl "") (ne .git.prError "") }}',
     },
     // Quick-action tray — the default bar's interactivity: copy the session id,
-    // open the project dir / transcript (this session's jsonl) in the editor.
+    // open the project dir / transcript (this session's jsonl) in the editor,
+    // and open the repo's web page in the browser.
     // (copyDir — copy the cwd — stays declared as an action below for users who
-    // want a fourth glyph; it is simply not in the default tray.)
+    // want a fifth glyph; it is simply not in the default tray.)
     // [LAW:locality-or-seam] The glyph is the REPRESENTATION; the named action
     // (below) is the BEHAVIOR; the action name is the seam between them. Re-glyph
     // without touching behavior; re-target without touching this template. Each
     // `{{ action … }}` emits one OSC-8 clickable region whose URL the wire codec
     // owns end-to-end.
+    //
+    // `↗ repo` is the one glyph here that is NOT an action: the daemon already
+    // resolved the remote to an https page, so `{{ link }}` hands that URL
+    // straight to the terminal/OS (same seam the gitPr segment uses) — routing a
+    // public web URL through a cc-candybar:// verb would buy nothing. It is
+    // gated on the VALUE (`ne … ""`), not on a flag: a local-only repo simply
+    // supplies no page and the glyph is absent. [LAW:dataflow-not-control-flow]
     toolbar: {
       template:
         '{{ action "copySession" "⎘ id" }}' +
-        ' {{ action "openProject" "↗ proj" }} {{ action "openTranscript" "↗ log" }}',
+        ' {{ action "openProject" "↗ proj" }} {{ action "openTranscript" "↗ log" }}' +
+        '{{ if ne .git.repoUrl "" }} {{ link .git.repoUrl "↗ repo" }}{{ end }}',
       bg: "surface",
       fg: "foreground",
     },

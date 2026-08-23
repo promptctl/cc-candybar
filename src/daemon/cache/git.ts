@@ -363,7 +363,7 @@ export class GitDataProvider extends GitService {
   ): Promise<Outcome<PullRequest>> {
     // [LAW:no-silent-failure] A `failed` remote read (git couldn't run) must
     // surface; only `absent` (no remote configured) means "no forge PR".
-    const remote = await this.inner.getRemoteOriginUrl(repoRoot);
+    const remote = await this.inner.getRepoRemoteUrl(repoRoot);
     if (remote.kind === "failed") return remote;
     if (remote.kind === "absent") return ABSENT;
     const remoteUrl = remote.value;
