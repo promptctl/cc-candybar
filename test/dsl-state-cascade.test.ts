@@ -9,7 +9,7 @@
 // invokes for a wire-level click; no duplication.
 
 import { autorun } from "mobx";
-import { PaletteResolver, getThemePalette } from "@promptctl/rich-js";
+import { getThemePalette } from "@promptctl/rich-js";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
@@ -18,7 +18,7 @@ import { SessionState } from "../src/daemon/session-state";
 import { VERBS } from "../src/daemon/verbs";
 import {
   effectiveThemeName,
-  resolverForThemeName,
+  paletteForThemeName,
 } from "../src/themes";
 
 const ALLOWED_PALETTES = new Set(["textual-dark"]);
@@ -63,7 +63,7 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
     const store = new VariableStore();
     const registry = new SourceRegistry(store, "", undefined, sessionState);
     const compiled = registerDslConfig(config, registry);
-    const basePalette = new PaletteResolver(getThemePalette("textual-dark")!);
+    const basePalette = getThemePalette("textual-dark"!);
     const render = () =>
       stripAnsi(
         renderDsl(
@@ -95,7 +95,7 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
     // [LAW:verifiable-goals] The k5a.4 contract: a theme click recolors the
     // bar. The renderDsl-level tests above prove the TEXT cascade; this proves
     // the COLOR cascade by resolving basePalette per render from the session
-    // theme exactly as the daemon does (effectiveThemeName ∘ resolverForThemeName
+    // theme exactly as the daemon does (effectiveThemeName ∘ paletteForThemeName
     // over SessionState) — no frozen entry palette.
     // globals.palette is SET (as in the bundled default) — the regression this
     // pins: a config-default base theme must NOT be frozen per-segment, or the
@@ -127,7 +127,7 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
         store,
         registry,
         HOOK_DATA,
-        resolverForThemeName(
+        paletteForThemeName(
           effectiveThemeName(
             sessionState.get(SESSION_ID, "theme"),
             config.globals.palette,
@@ -625,7 +625,7 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
     const store = new VariableStore();
     const registry = new SourceRegistry(store, "", undefined, sessionState);
     const compiled = registerDslConfig(config, registry);
-    const basePalette = new PaletteResolver(getThemePalette("textual-dark")!);
+    const basePalette = getThemePalette("textual-dark"!);
     const render = () =>
       stripAnsi(
         renderDsl(

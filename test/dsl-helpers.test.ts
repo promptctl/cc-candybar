@@ -6,7 +6,7 @@
 // output, a malformed helper fails LOUDLY (not silently), and an absent `helpers`
 // key is a no-op (output-neutral preamble).
 
-import { PaletteResolver, getThemePalette } from "@promptctl/rich-js";
+import { getThemePalette } from "@promptctl/rich-js";
 
 import {
   parseDslConfig,
@@ -26,7 +26,7 @@ const OPTS = {
   width: Number.POSITIVE_INFINITY,
 };
 
-const BASE_PALETTE = new PaletteResolver(getThemePalette("textual-dark")!);
+const BASE_PALETTE = getThemePalette("textual-dark"!);
 
 // A minimal default to merge onto: an empty config so each test exercises only
 // its own helper slice (the production cascade is tested separately via the

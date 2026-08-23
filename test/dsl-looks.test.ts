@@ -34,7 +34,7 @@ import {
   effectiveLookName,
   effectiveThemeName,
   lookKeyByName,
-  resolverForThemeName,
+  paletteForThemeName,
 } from "../src/themes";
 
 const SID = "s-looks";
@@ -199,7 +199,7 @@ describe('from: "looks" — rendered options and the derived gate share the conf
         store,
         registry,
         { session_id: SID },
-        resolverForThemeName(THEME),
+        paletteForThemeName(THEME),
         OPTS,
       );
       // Each look name appears as a clickable region writing itself to `look` —
@@ -248,7 +248,7 @@ describe("look click — live whole-bar recolor over the active theme", () => {
       registerStateValidator(key, spec),
     );
     const render = (): string => {
-      const basePalette = resolverForThemeName(
+      const basePalette = paletteForThemeName(
         effectiveThemeName(sessionState.get(SID, "theme"), config.globals.palette),
       );
       const effectiveLook = effectiveLookName(
