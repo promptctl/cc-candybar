@@ -155,7 +155,9 @@ describe("GitService outcome classification", () => {
     const broken = join(root, "broken");
     mkdirSync(broken);
     run("git init -q -b main", broken);
-    run("git commit -q --allow-empty -m init", broken);
+    // No commit and no identity: reading `.git/config` needs neither, and a
+    // repo fixture that depends on an ambient global git identity passes on a
+    // developer machine and fails on a runner that has none.
     writeFileSync(join(broken, ".git", "config"), '[remote "origin"\n  url = x\n');
 
     const remotes = await svc.getRemotesAsync(broken);
