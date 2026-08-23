@@ -20,7 +20,7 @@ import { clickUrl } from "./helpers/click";
 import { effectsUrl, VERB_SET_STATE } from "../src/click/wire";
 import {
   effectiveStripStyle,
-  resolverForThemeName,
+  paletteForThemeName,
   STRIP_STYLES,
 } from "../src/themes";
 
@@ -53,7 +53,7 @@ function buildRuntime() {
   const store = new VariableStore();
   const registry = new SourceRegistry(store, "", undefined, sessionState);
   const compiled = registerDslConfig(config, registry);
-  const basePalette = resolverForThemeName(BASE_THEME);
+  const basePalette = paletteForThemeName(BASE_THEME);
 
   // [LAW:one-source-of-truth] Resolve the strip style per render the SAME way the
   // daemon does — the session's clicked style over the config default over the

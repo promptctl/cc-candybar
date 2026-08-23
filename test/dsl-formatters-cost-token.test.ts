@@ -13,7 +13,7 @@
 // DEFAULT_DSL_CONFIG, so the `{{ template "name" }}` calls resolve the same
 // helper bodies the shipped statusline uses — not a test-local copy.
 
-import { PaletteResolver, getThemePalette } from "@promptctl/rich-js";
+import { getThemePalette } from "@promptctl/rich-js";
 
 import {
   parseDslConfig,
@@ -31,7 +31,7 @@ const OPTS = {
   colorCompatibility: "truecolor" as const, wrap: true, padding: 0, charset: "unicode" as const,
   width: Number.POSITIVE_INFINITY,
 };
-const BASE_PALETTE = new PaletteResolver(getThemePalette("textual-dark")!);
+const BASE_PALETTE = getThemePalette("textual-dark"!);
 
 // Input vars the test segment reads; all numeric, default 0 so an absent payload
 // key exercises the var-system default (the DSL's representation of "missing").

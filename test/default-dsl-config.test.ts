@@ -23,13 +23,13 @@ import { registerDslConfig, renderDsl } from "../src/dsl/render";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import { SessionState } from "../src/daemon/session-state";
-import { PaletteResolver, getThemePalette } from "@promptctl/rich-js";
+import { getThemePalette, ColorRgba, contrastRatio } from "@promptctl/rich-js";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import {
   effectiveThemeName,
   effectiveLookName,
   lookKeyByName,
-  resolverForThemeName,
+  paletteForThemeName,
 } from "../src/themes";
 import {
   deriveActionValidators,
@@ -142,9 +142,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
       const compiled = registerDslConfig(parsed, registry, {
         cwd: process.cwd(),
       });
-      const basePalette = new PaletteResolver(
-        getThemePalette(parsed.globals.palette ?? "textual-dark")!,
-      );
+      const basePalette = getThemePalette(parsed.globals.palette ?? "textual-dark")!;
       const payload = {
         hook_event_name: "Status",
         session_id: "deadbeef-1234-5678-9abc-def012345678",
@@ -226,7 +224,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
           theme: { effective: theme },
           look: { effective: look },
         },
-        resolverForThemeName(theme),
+        paletteForThemeName(theme),
         opts,
         undefined,
         lookKeyByName(parsed.looks, look),
@@ -307,7 +305,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
       const registry = new SourceRegistry(store, "", undefined, new SessionState());
       try {
         const compiled = registerDslConfig(parsed, registry, { cwd: "/tmp" });
-        const bp = new PaletteResolver(getThemePalette("textual-dark")!);
+        const bp = getThemePalette("textual-dark"!)!;
         return renderDsl(parsed, compiled, store, registry, payload, bp, {
           style: "powerline",
           colorCompatibility: "truecolor",
@@ -369,7 +367,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
       const registry = new SourceRegistry(store, "", undefined, new SessionState());
       try {
         const compiled = registerDslConfig(cfg, registry, { cwd: "/tmp" });
-        const bp = new PaletteResolver(getThemePalette(cfg.globals.palette ?? "textual-dark")!);
+        const bp = getThemePalette(cfg.globals.palette ?? "textual-dark"!)!;
         return renderDsl(cfg, compiled, store, registry, payload, bp, opts);
       } finally {
         registry.dispose();
@@ -414,7 +412,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
       const registry = new SourceRegistry(store);
       try {
         const compiled = registerDslConfig(cfg, registry, { cwd: "/tmp" });
-        const bp = new PaletteResolver(getThemePalette("textual-dark")!);
+        const bp = getThemePalette("textual-dark"!)!;
         return renderDsl(cfg, compiled, store, registry, payload, bp, opts);
       } finally {
         registry.dispose();
@@ -523,9 +521,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
         const compiled = registerDslConfig(dirOnly, registry, {
           cwd: process.cwd(),
         });
-        const basePalette = new PaletteResolver(
-          getThemePalette(dirOnly.globals.palette ?? "textual-dark")!,
-        );
+        const basePalette = getThemePalette(dirOnly.globals.palette ?? "textual-dark")!;
         const payload = {
           hook_event_name: "Status",
           session_id: "x",
@@ -648,56 +644,69 @@ describe("DEFAULT_DSL_CONFIG", () => {
       },
     };
 
-    // Every truecolor fg (`38;2;r;g;b`) SGR run across the rendered line, in
-    // order, with the escape's start offset — the ONE parser every helper
-    // below builds on. [LAW:one-source-of-truth] this used to be two
+    // Every SGR run across the rendered line, in order, with the escape's
+    // start offset and its truecolor fg (if any) — the ONE parser every
+    // helper below builds on. [LAW:one-source-of-truth] this used to be two
     // independently-typed copies (distinctForegrounds here, a narrower
     // fgBeforeText added by brandon-segments-3eo.1.1) that had already begun
     // to drift on the exact bug this comment describes; one parser closes
     // that gap for good instead of patching the newer copy to match the
-    // older one. Walks params sequentially (not `indexOf("38")`) and SKIPS a
+    // older one. Walks params sequentially (not `indexOf`) and SKIPS a
     // recognized `48;2;r;g;b` background run's components before looking for
-    // `38` — otherwise a bg color whose component happens to equal 38 could
-    // be misread as the fg introducer, or (mirror bug) mask a real one that
-    // follows it. Same class of collision test/segment-interior-color.test.ts's
-    // skipTruecolorRun fixes.
-    function truecolorForegrounds(
-      line: string,
-    ): Array<{ offset: number; fg: string }> {
-      const runs: Array<{ offset: number; fg: string }> = [];
+    // `38` — otherwise a bg color component that happens to equal 38 could be
+    // misread as the fg introducer, or (mirror bug) mask a real one that
+    // follows it. Same class of collision
+    // test/segment-interior-color.test.ts's skipTruecolorRun fixes.
+    type SgrRun = { offset: number; fg?: string; bg?: string };
+    function sgrRuns(line: string): SgrRun[] {
+      const runs: SgrRun[] = [];
       for (const m of line.matchAll(/\x1b\[([0-9;]*)m/g)) {
         const params = (m[1] ?? "").split(";");
+        let fg: string | undefined;
+        let bg: string | undefined;
         for (let i = 0; i < params.length; i++) {
+          const triplet = `${params[i + 2]};${params[i + 3]};${params[i + 4]}`;
           if (params[i] === "38" && params[i + 1] === "2") {
-            runs.push({
-              offset: m.index ?? 0,
-              fg: `${params[i + 2]};${params[i + 3]};${params[i + 4]}`,
-            });
+            fg = triplet;
             i += 4;
           } else if (params[i] === "48" && params[i + 1] === "2") {
+            bg = triplet;
             i += 4;
           }
         }
+        runs.push({ offset: m.index ?? 0, fg, bg });
       }
       return runs;
+    }
+
+    // An SGR triplet back to a color, so a contrast assertion can be a
+    // measurement rather than a hardcoded hex. rich-js owns the arithmetic.
+    function sgrToRgba(triplet: string): ColorRgba {
+      const [r, g, b] = triplet.split(";").map(Number);
+      return new ColorRgba(r!, g!, b!);
     }
 
     // Distinct truecolor foregrounds across the rendered line — one per
     // SGR-introduced run, deduped. A basic-code fg would also count but
     // every semantic palette function here resolves to truecolor.
     function distinctForegrounds(line: string): Set<string> {
-      return new Set(truecolorForegrounds(line).map((r) => r.fg));
+      const fgs = new Set<string>();
+      for (const r of sgrRuns(line)) if (r.fg !== undefined) fgs.add(r.fg);
+      return fgs;
     }
 
-    function renderSegment(segment: string): string {
+    // `theme` defaults to the config's own palette; passing one renders the
+    // same segment under a different theme, which is how the contrast floor
+    // below is checked across the whole registry rather than on one theme.
+    function renderSegment(segment: string, theme?: string): string {
       const parsed = parseAndValidate("<default>", SERIALIZED);
       const cfg = { ...parsed, root: oneSegmentRoot(segment) };
       const store = new VariableStore();
       const registry = new SourceRegistry(store);
       try {
         const compiled = registerDslConfig(cfg, registry, { cwd: "/tmp" });
-        const basePalette = new PaletteResolver(
-          getThemePalette(cfg.globals.palette ?? "textual-dark")!,
+        const basePalette = paletteForThemeName(
+          theme ?? cfg.globals.palette ?? "textual-dark",
         );
         return renderDsl(cfg, compiled, store, registry, GIT_PAYLOAD, basePalette, {
           style: "powerline",
@@ -747,13 +756,25 @@ describe("DEFAULT_DSL_CONFIG", () => {
     // colored token here is wrapped by exactly one palette function, which
     // opens its SGR run directly before the token, so the last run starting
     // before the match IS that token's color.
-    function fgBeforeText(line: string, text: string): string | undefined {
+    // [LAW:one-source-of-truth] fg and bg are the same lookup over the same
+    // parser differing only in WHICH slot is read — the slot is a parameter,
+    // not a second copy of the walk. (Two copies of exactly this helper are
+    // what drifted in brandon-segments-3eo.1.1; see the sgrRuns comment.)
+    function colorBeforeText(
+      line: string,
+      text: string,
+      slot: "fg" | "bg",
+    ): string | undefined {
       const idx = line.indexOf(text);
       if (idx === -1) return undefined;
-      return truecolorForegrounds(line)
-        .filter((r) => r.offset < idx)
-        .at(-1)?.fg;
+      return sgrRuns(line)
+        .filter((r) => r.offset < idx && r[slot] !== undefined)
+        .at(-1)?.[slot];
     }
+    const fgBeforeText = (line: string, text: string) =>
+      colorBeforeText(line, text, "fg");
+    const bgBeforeText = (line: string, text: string) =>
+      colorBeforeText(line, text, "bg");
 
     test("gitaculous colors unstaged and untracked distinctly, not merged into one indicator", () => {
       const line = renderSegment("gitaculous");
@@ -774,9 +795,62 @@ describe("DEFAULT_DSL_CONFIG", () => {
     test("gitaculous colors the stash count instead of leaving it plain", () => {
       const line = renderSegment("gitaculous");
       const stashFg = fgBeforeText(line, "(2 stashed)");
-      const plainFg = fgBeforeText(line, "abc1234"); // sha: never wrapped in a palette fn
+      const plainFg = fgBeforeText(line, "abc1234"); // sha: structural, never painted
       expect(stashFg).toBeDefined();
       expect(stashFg).not.toBe(plainFg);
+    });
+
+    // brandon-segments-3eo.1.1.1. The reported symptom was that the git line
+    // read as one flat color when only a couple of facts happened to be
+    // present — the structural text (labels, punctuation, sha, upstream) sat
+    // at full foreground strength and competed with the facts. The fix is the
+    // segments' computed `fg:`: quiet is the DEFAULT, and only operative facts
+    // name a color.
+    //
+    // These pin the two halves of that contract as observable output.
+    describe("structural text recedes behind the operative facts", () => {
+      // Text that carries no git fact — it only frames one.
+      const STRUCTURAL = ["abc1234", "origin/main"];
+
+      test.each(["git", "gitaculous"])(
+        "%s: every painted fact differs from the structural color",
+        (segment) => {
+          const line = renderSegment(segment);
+          const quiet = fgBeforeText(line, STRUCTURAL[0]!);
+          expect(quiet).toBeDefined();
+          // Every other structural token shares that one color...
+          for (const text of STRUCTURAL.slice(1)) {
+            expect(fgBeforeText(line, text)).toBe(quiet);
+          }
+          // ...and it is distinct from the facts, which is the whole point:
+          // more than one color on the line, with the quiet one not among the
+          // painted ones.
+          const distinct = distinctForegrounds(line);
+          expect(distinct.size).toBeGreaterThan(2);
+          expect(distinct.has(quiet!)).toBe(true);
+        },
+      );
+
+      // [LAW:verifiable-goals] The quiet color is a *computed* blend toward the
+      // segment's own background, so how legible it ends up is a property of
+      // each theme's foreground/surface distance — not something one eyeballed
+      // screenshot can settle. Measured bare, the 60% blend ranges 1.93–3.10
+      // across these themes; the `readableOn` floor in GIT_QUIET_FG is what
+      // makes the result uniform. This asserts the floor holds everywhere,
+      // which is the claim the config comment makes.
+      test.each(listResolvablePaletteNames())(
+        "quiet structural text clears WCAG large-text contrast under theme %s",
+        (theme) => {
+          const line = renderSegment("gitaculous", theme);
+          const quiet = fgBeforeText(line, "abc1234");
+          expect(quiet).toBeDefined();
+          const bg = bgBeforeText(line, "abc1234");
+          expect(bg).toBeDefined();
+          // 2.99 not 3: ensureContrast bisects to the threshold, and the 8-bit
+          // quantization of the result can land a hair under the exact target.
+          expect(contrastRatio(sgrToRgba(quiet!), sgrToRgba(bg!))).toBeGreaterThan(2.99);
+        },
+      );
     });
   });
 
@@ -804,9 +878,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
         const compiled = registerDslConfig(metricsOnly, registry, {
           cwd: process.cwd(),
         });
-        const basePalette = new PaletteResolver(
-          getThemePalette(metricsOnly.globals.palette ?? "textual-dark")!,
-        );
+        const basePalette = getThemePalette(metricsOnly.globals.palette ?? "textual-dark")!;
         const payload = {
           hook_event_name: "Status",
           session_id: "x",
@@ -893,9 +965,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
           const compiled = registerDslConfig(blockOnly, registry, {
             cwd: process.cwd(),
           });
-          const basePalette = new PaletteResolver(
-            getThemePalette(blockOnly.globals.palette ?? "textual-dark")!,
-          );
+          const basePalette = getThemePalette(blockOnly.globals.palette ?? "textual-dark")!;
           const payload = {
             hook_event_name: "Status",
             session_id: "x",
@@ -970,9 +1040,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
         const compiled = registerDslConfig(sessionOnly, registry, {
           cwd: process.cwd(),
         });
-        const basePalette = new PaletteResolver(
-          getThemePalette(sessionOnly.globals.palette ?? "textual-dark")!,
-        );
+        const basePalette = getThemePalette(sessionOnly.globals.palette ?? "textual-dark")!;
         return renderDsl(
           sessionOnly,
           compiled,

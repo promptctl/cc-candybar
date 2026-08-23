@@ -68,7 +68,7 @@ import {
   effectiveThemeName,
   effectiveLookName,
   lookKeyByName,
-  resolverForThemeName,
+  paletteForThemeName,
 } from "../themes/index.js";
 import {
   renderStripCells,
@@ -897,10 +897,10 @@ async function handleRequest(req: Request): Promise<HandledRequest> {
         // [LAW:one-source-of-truth][LAW:dataflow-not-control-flow] basePalette
         // is derived from the same effective theme resolved above — so a theme
         // click recolors the whole bar on the next render. Not frozen on the
-        // cache entry (one entry serves many sessions). resolverForThemeName
+        // cache entry (one entry serves many sessions). paletteForThemeName
         // memoizes, so the per-render cost is one Map lookup once the theme is
         // warm.
-        const basePalette = resolverForThemeName(effective.theme);
+        const basePalette = paletteForThemeName(effective.theme);
         // [LAW:one-source-of-truth] Every renderOpts field below reuses the
         // SAME `effective` struct the payload was just built from — no second
         // `?? DEFAULT_X` computation to drift from it.

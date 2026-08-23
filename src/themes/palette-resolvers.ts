@@ -1,36 +1,32 @@
-// Memoized PaletteResolver construction over rich-js. cc-candybar moves theme
+// Memoized Palette construction over rich-js. cc-candybar moves theme
 // NAMES and ThemeKey axes (data); rich-js owns every color value operation. Two
-// memos live here: a theme name -> base resolver, and a (base, ThemeKey) ->
-// transposed resolver. They compose — the per-render base palette feeds the
+// memos live here: a theme name -> base palette, and a (base, ThemeKey) ->
+// transposed palette. They compose — the per-render base palette feeds the
 // per-segment transposition (the session look's axes + the segment's hue shift,
 // folded into one key by the caller).
 //
 // [LAW:no-shared-mutable-globals] Single owner: this module. Both Maps are pure
 // memos of pure rich-js functions, keyed by immutable inputs (resolved theme
 // name; palette name + the four ThemeKey axes). rich-js palettes are immutable
-// registry singletons, so a cached resolver never goes stale. Key spaces are
+// registry singletons, so a cached palette never goes stale. Key spaces are
 // bounded by #themes and #themes × #declared looks × #distinct hueShifts
 // (hueShift = look shift + segIndex*hueStep, segIndex bounded by layout; look
 // axes bounded by the loaded configs' looks blocks) — both small. Shared on
-// purpose: a theme's base resolver and its gruvbox+42° transposition are each
+// purpose: a theme's base palette and its gruvbox+42° transposition are each
 // computed once per process, not once per RenderCache entry or per render.
 // Read/written only through the two functions below.
 
-import {
-  PaletteResolver,
-  transposePalette,
-  getThemePalette,
-} from "@promptctl/rich-js";
-import type { ThemeKey } from "@promptctl/rich-js";
+import { transposePalette, getThemePalette } from "@promptctl/rich-js";
+import type { ThemeKey, Palette } from "@promptctl/rich-js";
 import { resolvePaletteName } from "./policy.js";
 
-const baseCache = new Map<string, PaletteResolver>();
-const transposeCache = new Map<string, PaletteResolver>();
+const baseCache = new Map<string, Palette>();
+const transposeCache = new Map<string, Palette>();
 
 /**
- * The PaletteResolver for a theme name (aliases resolved). Memoized.
+ * The Palette for a theme name (aliases resolved). Memoized.
  *
- * [LAW:single-enforcer] The one place a theme name becomes a PaletteResolver —
+ * [LAW:single-enforcer] The one place a theme name becomes a Palette —
  * the per-render base palette and per-segment `palette:` overrides both flow
  * through here. A name that does not resolve is registry/resolver drift, never
  * user error: the loader validates `globals.palette` and the set-state verb
@@ -38,7 +34,7 @@ const transposeCache = new Map<string, PaletteResolver>();
  * name reaches here it must resolve. [LAW:no-defensive-null-guards] the throw is
  * the loud failure for that broken invariant, not a fallback.
  */
-export function resolverForThemeName(name: string): PaletteResolver {
+export function paletteForThemeName(name: string): Palette {
   const resolved = resolvePaletteName(name);
   const hit = baseCache.get(resolved);
   if (hit !== undefined) return hit;
@@ -50,14 +46,13 @@ export function resolverForThemeName(name: string): PaletteResolver {
         `theme registry — allowed names and the registry are inconsistent`,
     );
   }
-  const resolver = new PaletteResolver(palette);
-  baseCache.set(resolved, resolver);
-  return resolver;
+  baseCache.set(resolved, palette);
+  return palette;
 }
 
 /**
- * The PaletteResolver for `base`'s palette transposed by a full ThemeKey — the
- * adapted-resolver constructor: (base resolver, key) → resolver. The caller
+ * `base` transposed by a full ThemeKey — the adapted-palette constructor:
+ * (base palette, key) → palette. The caller
  * composes whatever axes it carries (a look's four axes, the per-segment hue
  * shift) into ONE key and this makes ONE transposePalette call — never chain
  * two transpositions: chaining double-pays OKLCH quantization AND collides this
@@ -70,23 +65,20 @@ export function resolverForThemeName(name: string): PaletteResolver {
  * (error/success/warning), so semantic meaning is preserved by construction —
  * no local exemption list to drift.
  *
- * [LAW:single-enforcer] The sole place a transposed resolver is built — a
+ * [LAW:single-enforcer] The sole place a transposed palette is built — a
  * future look `roles` remap is additive at this one seam. The memo miss
  * (undefined) is genuine optionality — not-yet-computed — not a defended
  * invariant. [LAW:one-source-of-truth] The cache key carries every axis of the
  * ThemeKey: two keys differing on any axis are distinct palettes.
  */
-export function transposedResolver(
-  base: PaletteResolver,
-  key: ThemeKey,
-): PaletteResolver {
+export function transposedPalette(base: Palette, key: ThemeKey): Palette {
   const cacheKey =
-    `${base.palette.name} ${key.hueShift} ${key.chromaScale} ` +
+    `${base.name} ${key.hueShift} ${key.chromaScale} ` +
     `${key.lightnessScale} ${key.lightnessShift}`;
   const hit = transposeCache.get(cacheKey);
   if (hit !== undefined) return hit;
 
-  const resolver = new PaletteResolver(transposePalette(base.palette, key));
-  transposeCache.set(cacheKey, resolver);
-  return resolver;
+  const transposed = transposePalette(base, key);
+  transposeCache.set(cacheKey, transposed);
+  return transposed;
 }

@@ -10,7 +10,7 @@
 // the nav glyphs visible), never the internal pagination shape — driven through
 // the real spine (registerDslConfig + renderDsl) and the real strip serializer.
 
-import { PaletteResolver, getThemePalette, RichText } from "@promptctl/rich-js";
+import { getThemePalette, RichText } from "@promptctl/rich-js";
 import { Style } from "@promptctl/rich-js";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
@@ -81,7 +81,7 @@ function buildRuntime(
   const store = new VariableStore();
   const registry = new SourceRegistry(store, "", undefined, sessionState);
   const compiled = registerDslConfig(config, registry);
-  const basePalette = new PaletteResolver(getThemePalette("textual-dark")!);
+  const basePalette = getThemePalette("textual-dark"!);
   const renderPage = (width: number, page: number, wrap = true): string => {
     sessionState.set("s1", "theme-page", String(page));
     return renderDsl(
@@ -286,7 +286,7 @@ describe("brandon-menus-bn5.3 I2 — {{ menu }} DROP body fits within term.cols"
     const store = new VariableStore();
     const registry = new SourceRegistry(store, "", undefined, sessionState);
     const compiled = registerDslConfig(config, registry);
-    const basePalette = new PaletteResolver(getThemePalette("textual-dark")!);
+    const basePalette = getThemePalette("textual-dark"!);
     // openStyle: also open the style menu (its own page cursor) so BOTH bodies
     // drop in one render — the multiple-open-menus-in-one-row case.
     const render = (

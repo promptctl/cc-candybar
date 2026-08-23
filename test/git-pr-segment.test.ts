@@ -5,7 +5,7 @@
 // cleanly (the link-bleed guard: a region that opens but never closes bleeds
 // the hyperlink onto the rest of the terminal).
 
-import { PaletteResolver, getThemePalette } from "@promptctl/rich-js";
+import { getThemePalette } from "@promptctl/rich-js";
 
 import { RAW_DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { parseAndValidate } from "./helpers/parse-and-validate";
@@ -58,7 +58,7 @@ function renderGitPr(git: Record<string, unknown>): string {
   const registry = new SourceRegistry(store, "", undefined, new SessionState());
   try {
     const compiled = registerDslConfig(parsed, registry, { cwd: "/tmp" });
-    const basePalette = new PaletteResolver(getThemePalette("textual-dark")!);
+    const basePalette = getThemePalette("textual-dark"!);
     const payload = {
       hook_event_name: "Status",
       session_id: "deadbeef-1234-5678-9abc-def012345678",

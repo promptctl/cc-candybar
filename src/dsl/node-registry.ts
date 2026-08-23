@@ -23,7 +23,7 @@
 // strip item), not a function of matching backgrounds.
 
 import { RichText, IDENTITY } from "@promptctl/rich-js";
-import type { PaletteResolver, Style, ThemeKey } from "@promptctl/rich-js";
+import type { Palette, Style, ThemeKey } from "@promptctl/rich-js";
 import type { Template } from "@promptctl/go-template-js";
 import type {
   LayoutNode,
@@ -31,12 +31,11 @@ import type {
   SegmentDecl,
 } from "../config/dsl-types.js";
 import { splitCellsIntoLines } from "../render/split-lines.js";
-import { transposedResolver } from "../themes/index.js";
+import { transposedPalette } from "../themes/index.js";
 import {
   fragmentsToCells,
   evaluateWhen,
   applySegmentLayout,
-  resolveSegmentColors,
 } from "../template-engine/index.js";
 
 // ─── Compiled node shapes ──────────────────────────────────────────────────────
@@ -66,7 +65,7 @@ export interface CompiledSegment {
   readonly template: Template<RichText>;
   readonly bg?: Template<RichText>;
   readonly fg?: Template<RichText>;
-  readonly paletteResolver?: PaletteResolver;
+  readonly palette?: Palette;
 }
 export type CompiledSegments = Readonly<Record<string, CompiledSegment>>;
 
@@ -99,7 +98,7 @@ export interface NodeCompileCtx {
 // (the driver ANDs node.when with the parent's). renderChild continues the walk.
 export interface NodeRenderCtx {
   readonly scope: object;
-  readonly basePalette: PaletteResolver;
+  readonly basePalette: Palette;
   // [LAW:one-source-of-truth] The render-wide look (the session's chosen
   // theme-adaptation, resolved by the caller via effectiveLookName →
   // lookKeyByName), threaded by the driver — one ThemeKey per render, IDENTITY
@@ -121,15 +120,28 @@ export interface NodeRenderCtx {
   // text verdict instead of blessing a bar it cannot see. Trusted non-throwing
   // (the registry-dispose contract) — see RenderObservers.onSegmentError.
   readonly onSegmentError?: (segName: string, message: string) => void;
-  // [LAW:locality-or-seam] The menu seam, injected as capabilities so this module
-  // never imports the menu feature. `beginSegment` runs BEFORE a segment template
-  // evaluates: it publishes the segment name so a `{{ menu }}` can derive its
-  // identity. `collectDrops` runs AFTER eval: it reads the open menu bodies the
-  // menus carried as metadata on the evaluated fragments (template order) for the
-  // boundary to stack below the row, and clears the published placement. The
-  // driver owns the menu runtime; this module only hands it the fragments.
-  beginSegment(segName: string): void;
-  collectDrops(fragments: readonly RichText[]): readonly RichText[];
+  // [LAW:locality-or-seam] The segment seam, injected as a capability pair so
+  // this module never imports the menu or color features — it only says when a
+  // segment starts and stops.
+  //
+  // `enterSegment` runs BEFORE any of the segment's templates evaluate. It
+  // publishes what the segment's own templates may ask about themselves — the
+  // name a `{{ menu }}` derives its identity from, the palette `{{ color }}`
+  // resolves against, the background `{{ bgOf }}` returns — and resolves the
+  // segment's `bg:`/`fg:` into its base Style along the way. The bg/fg
+  // resolution HAS to happen here rather than after the body: a body asking for
+  // its own background can only be answered once the background exists.
+  //
+  // `exitSegment` runs AFTER eval: it reads the open menu bodies the menus
+  // carried as metadata on the evaluated fragments (template order) for the
+  // boundary to stack below the row, and tears the published record down.
+  enterSegment(
+    segName: string,
+    palette: Palette,
+    bgTemplate: Template<RichText> | undefined,
+    fgTemplate: Template<RichText> | undefined,
+  ): Style;
+  exitSegment(fragments: readonly RichText[]): readonly RichText[];
   // [LAW:locality-or-seam] The focus transform, injected as a capability (rich-js
   // owns the color math — see render.ts). Applied to the segment's baseStyle when
   // it has an open menu (it contributed drops), so the whole focused segment —
@@ -261,39 +273,42 @@ const segmentType: NodeType<"segment"> = {
     try {
       if (!evaluateWhen(segCompiled.when, ctx.scope)) return [];
 
-      // [LAW:single-enforcer] Publish the segment name + clear the drop sink
-      // BEFORE evaluating the template — a `{{ menu }}` inside reads the name to
-      // derive its identity and contributes its open body to the sink.
-      ctx.beginSegment(node.name);
+      // [LAW:dataflow-not-control-flow] The per-segment variability is WHICH
+      // palette — the base palette (per-segment override or basePalette)
+      // transposed by the render's look + this segment's hueShift, folded into
+      // ONE ThemeKey for a SINGLE transposePalette call (chaining two
+      // transpositions would double-pay OKLCH quantization and collide the
+      // transpose memo — see transposedPalette). An explicit per-segment
+      // `palette:` pin IGNORES the look, exactly as it ignores the session
+      // theme: the pin's presence is the discriminator, and its arm carries the
+      // identity look — a value choice, not a skipped operation.
+      const lookKey = segCompiled.palette !== undefined ? IDENTITY : ctx.look;
+      const palette = transposedPalette(
+        segCompiled.palette ?? ctx.basePalette,
+        {
+          ...lookKey,
+          hueShift: lookKey.hueShift + hueShift,
+        },
+      );
+
+      // [LAW:one-source-of-truth] ONE palette for this segment: its `bg:`, its
+      // `fg:`, and every `{{ color }}` in its body resolve from this same
+      // object. That is the whole reason the segment is entered before its body
+      // evaluates rather than after — a body coloured from a palette resolved
+      // independently of the cell it sits in is two palettes in one segment,
+      // and they diverge the moment a theme, look, or hue shift moves.
+      const resolvedStyle = ctx.enterSegment(
+        node.name,
+        palette,
+        segCompiled.bg,
+        segCompiled.fg,
+      );
       const fragments = segCompiled.template.evaluate(ctx.scope);
       // [LAW:decomposition] The open menu bodies, carried as out-of-band metadata
       // on the evaluated fragments — invisible to the inline render, so a menu can
       // sit anywhere in the template and content after it stays inline. Each
       // becomes one full-width line stacked below the segment's row.
-      const drops = ctx.collectDrops(fragments);
-
-      // [LAW:dataflow-not-control-flow] The per-segment variability is WHICH
-      // palette — the base resolver (per-segment override or basePalette)
-      // transposed by the render's look + this segment's hueShift, folded into
-      // ONE ThemeKey for a SINGLE transposePalette call (chaining two
-      // transpositions would double-pay OKLCH quantization and collide the
-      // transpose memo — see transposedResolver). bg and fg then resolve from
-      // this one palette. An explicit per-segment `palette:` pin IGNORES the
-      // look, exactly as it ignores the session theme: the pin's presence is
-      // the discriminator, and its arm carries the identity look — a value
-      // choice, not a skipped operation.
-      const lookKey =
-        segCompiled.paletteResolver !== undefined ? IDENTITY : ctx.look;
-      const resolver = transposedResolver(
-        segCompiled.paletteResolver ?? ctx.basePalette,
-        { ...lookKey, hueShift: lookKey.hueShift + hueShift },
-      );
-      const resolvedStyle = resolveSegmentColors(
-        resolver,
-        segCompiled.bg,
-        segCompiled.fg,
-        ctx.scope,
-      );
+      const drops = ctx.exitSegment(fragments);
       // [LAW:dataflow-not-control-flow] Focus is the PRESENCE of a drop: a segment
       // with an open menu (it contributed a body) lightens, so the whole focused
       // segment — inline trigger + dropped band — reads as highlighted. No state

@@ -7,7 +7,7 @@ import { createCcCandybarEngine } from "../src/template-engine/engine";
 
 // Evaluate a source against an empty scope, return joined plain text.
 function evalText(source: string, clock?: () => Date): string {
-  return createCcCandybarEngine(undefined, undefined, clock)
+  return createCcCandybarEngine(undefined, clock)
     .parse(source)
     .evaluate({})
     .map((rt) => rt.plain)
