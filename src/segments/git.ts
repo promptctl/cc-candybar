@@ -219,12 +219,21 @@ export function parseRemoteRef(raw: string): RemoteRef | null {
   const trimmed = raw.trim();
   if (DOS_DRIVE_PATH.test(trimmed)) return null;
 
-  // The `(?!//)` is what keeps `https://…` out of the scp arm — there the colon
-  // separates a scheme, not a host from a path. A single-slash `file:/srv/x`
-  // deliberately DOES land here: git resolves it to ssh host `file` too
-  // (verified with `git ls-remote`), and disagreeing with git about what a
-  // repo's own remote means would be the worse answer.
-  const scp = trimmed.match(/^(?:[^@/:]+@)?([^/:]+):(?!\/\/)(.*)$/);
+  // git spells an scp host two ways and both must decode through here. The
+  // bracketed IPv6 arm is tried FIRST because the generic arm would otherwise
+  // stop at the first colon inside the brackets and claim `[2001` as the host.
+  // Its user capture allows colons (`[^@/]+`) where the generic arm forbids
+  // them: an IPv6 literal makes colons ordinary, so `user@[::1]:repo.git` must
+  // still parse.
+  //
+  // The `(?!//)` is what keeps `https://…` out of the generic arm — there the
+  // colon separates a scheme, not a host from a path. A single-slash
+  // `file:/srv/x` deliberately DOES land here: git resolves it to ssh host
+  // `file` too (verified with `git ls-remote`), and disagreeing with git about
+  // what a repo's own remote means would be the worse answer.
+  const scp =
+    trimmed.match(/^(?:[^@/]+@)?(\[[^\]]+\]):(.*)$/) ??
+    trimmed.match(/^(?:[^@/:]+@)?([^/:]+):(?!\/\/)(.*)$/);
   const candidate = scp
     ? `ssh://${scp[1]}/${scp[2]!.replace(/^\/+/, "")}`
     : trimmed;
@@ -270,7 +279,11 @@ export function detectForge(remoteUrl: string): ForgeName | null {
 // single stored territory and every consumer draws its own map from it.
 export interface GitRemote {
   readonly name: string;
-  readonly url: string;
+  // EVERY configured url, in config order. A remote genuinely has N of them
+  // (a repo can fetch from a local mirror and push to a forge), and modelling
+  // it as one was the lossy map: the discarded url was sometimes the only one
+  // naming a forge, which cost both the repo link and the PR lookup.
+  readonly urls: readonly string[];
 }
 
 // [LAW:effects-at-boundaries] Pure text→data over `git config --get-regexp
@@ -280,28 +293,63 @@ export interface GitRemote {
 // dots. A line carrying no URL is a remote with no URL, the domain's own
 // "none", not a parse failure.
 //
-// A multi-URL remote (a fetch URL plus extra push mirrors) emits several lines
-// under one name and the FIRST wins, which is a DELIBERATE divergence from the
-// `git config --get remote.origin.url` this replaced — that returned the LAST
-// value. First is the URL git fetches from, i.e. the one that identifies the
-// repository; the extras are push-only. `git remote -v` on a two-URL origin is
-// the proof:
-//   origin  git@github.com:me/first.git  (fetch)
-//   origin  git@github.com:me/first.git  (push)
-//   origin  git@github.com:me/second.git (push)
-// So the old spelling keyed the PR cache and the forge host on a push mirror.
+// Every url under a name is KEPT, in config order — see GitRemote. Which one
+// represents the repository is `identifyingUrl`'s decision, made where the
+// answer is used rather than by discarding data here.
+//
+// The read this parses is scoped `--local` (see getRemotesAsync), which is what
+// makes config order unambiguous: across merged scopes git lists system →
+// global → local, so an unscoped read would put the LEAST specific url first.
+// That precedence — not push-mirror ordering — is why the `git config --get`
+// this replaced returned the last value.
 export function parseRemotes(stdout: string): GitRemote[] {
-  const remotes: GitRemote[] = [];
-  const seen = new Set<string>();
+  const urlsByName = new Map<string, string[]>();
   for (const line of stdout.split("\n")) {
     const match = line.match(/^remote\.(.+)\.url\s+(\S.*)$/);
     if (!match) continue;
-    const name = match[1]!;
-    if (seen.has(name)) continue;
-    seen.add(name);
-    remotes.push({ name, url: match[2]!.trim() });
+    const urls = urlsByName.get(match[1]!) ?? [];
+    urls.push(match[2]!.trim());
+    urlsByName.set(match[1]!, urls);
   }
-  return remotes;
+  return [...urlsByName].map(([name, urls]) => ({ name, urls }));
+}
+
+// [LAW:one-source-of-truth] THE url that identifies a remote's repository, for
+// every consumer that needs one — its display name, its web page, and the forge
+// the PR lookup dispatches on. The first url a browser can open wins, else the
+// first configured: a remote that fetches from a local mirror and pushes to a
+// forge keeps its forge identity, which is the case that broke when only the
+// first url survived.
+//
+// Deliberately ONE rule rather than "prefer a url detectForge recognizes" on
+// top. A remote listing a self-hosted Gitea page before a GitHub url resolves to
+// the Gitea page and gets no PR — a correct link and an honest absence, which
+// beats two selection rules competing over which url is the "real" one.
+function identifyingUrl(remote: GitRemote): string | null {
+  return (
+    remote.urls.find((u) => remoteWebUrl(u) !== null) ?? remote.urls[0] ?? null
+  );
+}
+
+// [LAW:one-source-of-truth] THE remote that represents this repo. `origin` is
+// git's own name for the canonical one, else the first configured. One
+// selection, so a repo's NAME and its LINK can never describe two different
+// repositories — before this, repoName read origin while repoWebUrl walked past
+// an unbrowsable origin to another remote, rendering `backup` beside a link to
+// someone else's `realname`.
+//
+// Note the selection ignores browsability on purpose: if origin is a local
+// mirror, that mirror IS this repo, and the honest render is its name with no
+// link. Linking to a different remote's page was the lie.
+function pickRepoRemote(remotes: readonly GitRemote[]): GitRemote | null {
+  return remotes.find((r) => r.name === "origin") ?? remotes[0] ?? null;
+}
+
+// The identifying url of the remote that represents this repo — the one answer
+// repoName, repoUrl and the PR lookup all project from.
+export function repoRemoteUrl(remotes: readonly GitRemote[]): string | null {
+  const remote = pickRepoRemote(remotes);
+  return remote ? identifyingUrl(remote) : null;
 }
 
 // [LAW:parse-dont-validate] Parse a git remote into the page a browser can open,
@@ -360,22 +408,13 @@ export function remoteWebUrl(raw: string): string | null {
   return `${web.scheme}://${authority}/${repoPath}`;
 }
 
-// [LAW:one-source-of-truth] The ONE rule for which remote represents "the repo".
-// `origin` is git's own name for the canonical remote, so it wins whenever it
-// has a web page; otherwise the first remote in config order that does. A repo
-// whose remotes are all unbrowsable (a bare path, a file:// mirror) — or which
-// has none — has no web home, and null says exactly that rather than inventing
-// a guess.
+// The repo's browsable page: one projection of `repoRemoteUrl`, so it names the
+// same repository `repoName` does. A repo whose identifying remote is a bare
+// path or a file:// mirror — or which has no remotes — has no web home, and
+// null says exactly that rather than borrowing another remote's page.
 export function repoWebUrl(remotes: readonly GitRemote[]): string | null {
-  const origin = remotes.find((r) => r.name === "origin");
-  const ordered = origin
-    ? [origin, ...remotes.filter((r) => r !== origin)]
-    : remotes;
-  for (const remote of ordered) {
-    const web = remoteWebUrl(remote.url);
-    if (web) return web;
-  }
-  return null;
+  const url = repoRemoteUrl(remotes);
+  return url === null ? null : remoteWebUrl(url);
 }
 
 export function classifyForgePr(
@@ -841,12 +880,20 @@ export class GitService {
   // two can never disagree about which remote is origin — that pair used to be
   // one `config --get remote.origin.url` each.
   //
-  // The PR cache deliberately keeps its OWN call (`getRemoteOriginUrl`, from
+  // The PR cache deliberately keeps its OWN call (`getRepoRemoteUrl`, from
   // src/daemon/cache/git.ts): the forge lookup is a network resource cached
   // under its own longer TTL, keyed `repoRoot|branch|remote`, and folding its
   // remote read into GitInfo would tie a network cache's input to the local
   // cache's fs-watched refresh cycle — the separation those two TTLs exist to
   // create. So this is one read per lifecycle, not one read overall.
+  //
+  // `--local` scopes the read to THIS repository's config. Without it the read
+  // merges system → global → local, so a stray `remote.origin.url` in
+  // ~/.gitconfig sorts FIRST and would hijack repoUrl, repoName and the PR cache
+  // key for every repo on the machine — a regression against the `git config
+  // --get` this replaced, whose last-wins was really scope precedence. Scoping
+  // also makes config order unambiguous, so "first url" is a fact rather than a
+  // bet about which scope won.
   //
   // `--get-regexp` exits 1 when NOTHING matches, which is a repo with no remotes
   // configured — a domain answer, so it lands as an EMPTY LIST rather than an
@@ -859,7 +906,7 @@ export class GitService {
     const r = classify(
       "git config --get-regexp remote url",
       await this.execGitAsync(
-        ["config", "--get-regexp", "^remote\\..*\\.url$"],
+        ["config", "--local", "--get-regexp", "^remote\\..*\\.url$"],
         { cwd: workingDir, timeout: 2000 },
       ),
       1,
@@ -879,21 +926,27 @@ export class GitService {
     remotes: readonly GitRemote[],
     workingDir: string,
   ): string {
-    const origin = remotes.find((r) => r.name === "origin");
-    const match = origin?.url.match(/\/([^/]+?)(\.git)?$/);
+    const url = repoRemoteUrl(remotes);
+    const match = url?.match(/\/([^/]+?)(\.git)?$/);
     return match?.[1] || path.basename(workingDir);
   }
 
   // [LAW:locality-or-seam] Public so the daemon's GitDataProvider can read the
-  // remote to fold into its PR cache key (the PR value depends on the remote;
-  // a re-pointed origin must be a new key). Raw origin URL (unparsed) — the
-  // forge detector reads the host from it. No origin configured → `absent` (no
-  // remote, hence no forge PR concept), distinct from a failed read.
-  async getRemoteOriginUrl(workingDir: string): Promise<Outcome<string>> {
+  // remote to fold into its PR cache key (the PR value depends on the remote; a
+  // re-pointed remote must be a new key). Raw, unparsed — the forge detector
+  // reads the host from it. No remotes → `absent` (hence no forge PR concept),
+  // distinct from a failed read.
+  //
+  // Named for the repo rather than for `origin` because it projects the SAME
+  // `repoRemoteUrl` that repoName and repoUrl do: `detectForge` gates the whole
+  // PR lookup and returns ABSENT before `gh` is ever spawned, so handing it a
+  // different remote's url than the bar displays would silently decide there is
+  // no PR. One selection, three consumers.
+  async getRepoRemoteUrl(workingDir: string): Promise<Outcome<string>> {
     const remotes = await this.getRemotesAsync(workingDir);
     if (remotes.kind !== "ok") return remotes;
-    const origin = remotes.value.find((r) => r.name === "origin");
-    return origin ? ok(origin.url) : ABSENT;
+    const url = repoRemoteUrl(remotes.value);
+    return url === null ? ABSENT : ok(url);
   }
 
   // [LAW:single-enforcer] One boundary for forge-CLI spawns. Mirrors

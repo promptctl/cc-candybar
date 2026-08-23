@@ -166,11 +166,37 @@ describe("GitService outcome classification", () => {
     expect(remotes.reason).toContain("git config --get-regexp");
   });
 
-  test("getRemoteOriginUrl still reports the raw origin URL the PR cache keys on", async () => {
+  // [LAW:one-source-of-truth] The read is `--local`. An unscoped read merges
+  // system → global → local, listing the LEAST specific first, so a stray
+  // `remote.origin.url` in ~/.gitconfig would hijack repoUrl, repoName and the
+  // PR cache key for every repo on the machine. Only a fake global config makes
+  // that visible, which is why this test builds one.
+  test("a global remote.origin.url never shadows this repo's own", async () => {
+    run("git remote add origin git@github.com:me/LOCAL.git", repo);
+    const fakeGlobal = join(root, "fakeglobal");
+    writeFileSync(
+      fakeGlobal,
+      '[remote "origin"]\n\turl = git@github.com:me/GLOBAL.git\n',
+    );
+    const prior = process.env.GIT_CONFIG_GLOBAL;
+    process.env.GIT_CONFIG_GLOBAL = fakeGlobal;
+    try {
+      const remotes = await svc.getRemotesAsync(repo);
+      expect(remotes).toEqual(
+        ok([{ name: "origin", urls: ["git@github.com:me/LOCAL.git"] }]),
+      );
+    } finally {
+      if (prior === undefined) delete process.env.GIT_CONFIG_GLOBAL;
+      else process.env.GIT_CONFIG_GLOBAL = prior;
+      run("git remote remove origin", repo);
+    }
+  });
+
+  test("getRepoRemoteUrl still reports the raw origin URL the PR cache keys on", async () => {
     run("git remote add origin git@github.com:user/myrepo.git", repo);
-    const withOrigin = await svc.getRemoteOriginUrl(repo);
+    const withOrigin = await svc.getRepoRemoteUrl(repo);
     run("git remote remove origin", repo);
-    const withoutOrigin = await svc.getRemoteOriginUrl(repo);
+    const withoutOrigin = await svc.getRepoRemoteUrl(repo);
     expect(withOrigin).toEqual(ok("git@github.com:user/myrepo.git"));
     expect(withoutOrigin).toEqual(ABSENT);
   });

@@ -11,6 +11,7 @@ import {
   parseRemoteRef,
   parseRemotes,
   remoteWebUrl,
+  repoRemoteUrl,
   repoWebUrl,
   type GitRemote,
 } from "../src/segments/git";
@@ -204,24 +205,36 @@ describe("parseRemotes", () => {
       "remote.upstream.url https://github.com/upstream/cc-candybar.git",
     ].join("\n");
     expect(parseRemotes(stdout)).toEqual([
-      { name: "origin", url: "git@github.com:promptctl/cc-candybar.git" },
-      { name: "upstream", url: "https://github.com/upstream/cc-candybar.git" },
+      {
+        name: "origin",
+        urls: ["git@github.com:promptctl/cc-candybar.git"],
+      },
+      {
+        name: "upstream",
+        urls: ["https://github.com/upstream/cc-candybar.git"],
+      },
     ]);
   });
 
   test("a dotted remote name keeps its dots", () => {
     expect(parseRemotes("remote.my.fork.url git@github.com:me/r.git")).toEqual([
-      { name: "my.fork", url: "git@github.com:me/r.git" },
+      { name: "my.fork", urls: ["git@github.com:me/r.git"] },
     ]);
   });
 
-  test("a multi-URL remote resolves to the first URL git would fetch from", () => {
+  test("every URL of a multi-URL remote is kept, in config order", () => {
+    // Dropping the later URLs lost the only one naming a forge when a repo
+    // fetches from a mirror and pushes to GitHub — costing both the link and
+    // the PR lookup. Which URL identifies the repo is decided downstream.
     const stdout = [
+      "remote.origin.url /srv/mirror/r.git",
       "remote.origin.url git@github.com:me/r.git",
-      "remote.origin.url git@gitlab.com:me/r.git",
     ].join("\n");
     expect(parseRemotes(stdout)).toEqual([
-      { name: "origin", url: "git@github.com:me/r.git" },
+      {
+        name: "origin",
+        urls: ["/srv/mirror/r.git", "git@github.com:me/r.git"],
+      },
     ]);
   });
 
@@ -230,58 +243,91 @@ describe("parseRemotes", () => {
   });
 
   test("a remote configured with no URL is not a remote with a URL", () => {
-    expect(parseRemotes("remote.broken.url \nremote.origin.url git@h:o/r.git")).toEqual([
-      { name: "origin", url: "git@h:o/r.git" },
-    ]);
+    expect(
+      parseRemotes("remote.broken.url \nremote.origin.url git@h:o/r.git"),
+    ).toEqual([{ name: "origin", urls: ["git@h:o/r.git"] }]);
   });
 });
 
-describe("repoWebUrl — which remote represents 'the repo'", () => {
+describe("the repo's identity — one selection, shared by name and link", () => {
   const remotes = (...rs: GitRemote[]): GitRemote[] => rs;
+  const one = (name: string, url: string): GitRemote => ({
+    name,
+    urls: [url],
+  });
 
   test("origin wins over every other remote", () => {
     expect(
       repoWebUrl(
         remotes(
-          { name: "upstream", url: "git@github.com:upstream/r.git" },
-          { name: "origin", url: "git@github.com:me/r.git" },
+          one("upstream", "git@github.com:upstream/r.git"),
+          one("origin", "git@github.com:me/r.git"),
         ),
       ),
     ).toBe("https://github.com/me/r");
   });
 
-  test("without an origin, the first remote with a page wins", () => {
+  test("without an origin, the first remote wins", () => {
     expect(
       repoWebUrl(
         remotes(
-          { name: "gh", url: "git@github.com:me/r.git" },
-          { name: "backup", url: "/srv/mirrors/r.git" },
+          one("gh", "git@github.com:me/r.git"),
+          one("backup", "/srv/mirrors/r.git"),
         ),
       ),
     ).toBe("https://github.com/me/r");
   });
 
-  test("an origin with no page falls through to a remote that has one", () => {
-    // [LAW:no-silent-failure] Falling through is not a silent substitution:
-    // origin genuinely has no web page, so the repo's page is the one that
-    // exists — the alternative is showing no link while one is reachable.
-    expect(
-      repoWebUrl(
-        remotes(
-          { name: "origin", url: "/srv/mirrors/r.git" },
-          { name: "gh", url: "git@github.com:me/r.git" },
-        ),
-      ),
-    ).toBe("https://github.com/me/r");
+  // [LAW:one-source-of-truth] The selection ignores browsability, so the NAME
+  // and the LINK always describe the same repository. Falling through to
+  // another remote's page rendered `backup` beside a link to `realname`.
+  test("an unbrowsable origin means no link, not another repo's page", () => {
+    const rs = remotes(
+      one("origin", "/srv/mirrors/backup.git"),
+      one("gh", "git@github.com:me/realname.git"),
+    );
+    expect(repoWebUrl(rs)).toBeNull();
+    expect(repoRemoteUrl(rs)).toBe("/srv/mirrors/backup.git");
+  });
+
+  // Within the picked remote, the URL that can identify a repo wins — so a
+  // fetch-from-mirror / push-to-forge remote keeps its forge identity, and
+  // detectForge (which gates the whole PR lookup) sees a URL it recognizes.
+  test("a remote's forge URL wins over its local mirror URL", () => {
+    const rs = remotes({
+      name: "origin",
+      urls: ["/srv/mirror/r.git", "git@github.com:me/r.git"],
+    });
+    expect(repoRemoteUrl(rs)).toBe("git@github.com:me/r.git");
+    expect(repoWebUrl(rs)).toBe("https://github.com/me/r");
+    expect(detectForge(repoRemoteUrl(rs)!)).toBe("github");
   });
 
   test("a repo whose remotes are all unbrowsable has no page", () => {
-    expect(
-      repoWebUrl(remotes({ name: "origin", url: "/srv/mirrors/r.git" })),
-    ).toBeNull();
+    expect(repoWebUrl(remotes(one("origin", "/srv/mirrors/r.git")))).toBeNull();
   });
 
   test("a repo with no remotes has no page", () => {
     expect(repoWebUrl([])).toBeNull();
+    expect(repoRemoteUrl([])).toBeNull();
+  });
+});
+
+describe("remoteWebUrl — IPv6 literals, in both of git's spellings", () => {
+  // git accepts `git@[2001:db8::1]:repo.git` (confirmed via `git remote -v`).
+  // The generic scp arm stopped at the first colon inside the brackets and
+  // took `[2001` as the host, so the URL parse threw and the link vanished.
+  test("the bracketed scp form and its ssh:// equivalent agree", () => {
+    expect(parseRemoteRef("git@[2001:db8::1]:repo.git")).toEqual(
+      parseRemoteRef("ssh://git@[2001:db8::1]/repo.git"),
+    );
+  });
+
+  test.each([
+    ["git@[2001:db8::1]:repo.git", "https://[2001:db8::1]/repo"],
+    ["ssh://git@[2001:db8::1]/repo.git", "https://[2001:db8::1]/repo"],
+    ["[2001:db8::1]:repo.git", "https://[2001:db8::1]/repo"],
+  ])("%s → %s", (remote, expected) => {
+    expect(remoteWebUrl(remote)).toBe(expected);
   });
 });
