@@ -346,10 +346,46 @@ function pickRepoRemote(remotes: readonly GitRemote[]): GitRemote | null {
 }
 
 // The identifying url of the remote that represents this repo — the one answer
-// repoName, repoUrl and the PR lookup all project from.
+// repoName and repoUrl both project from.
 export function repoRemoteUrl(remotes: readonly GitRemote[]): string | null {
   const remote = pickRepoRemote(remotes);
   return remote ? identifyingUrl(remote) : null;
+}
+
+// [LAW:one-type-per-behavior] The url the forge lookup dispatches on, which is a
+// DIFFERENT question from which url identifies the repo: "what repository is
+// this?" (name, page) versus "where do I ask about pull requests?". They answer
+// the same in every single-url config — essentially all of them — and diverge
+// only when a remote genuinely names two hosts, which is exactly where one
+// answer cannot serve both.
+//
+// `detectForge` gates the entire PR lookup and returns ABSENT before `gh` or
+// `glab` is spawned, so a browsable-but-unrecognized mirror listed first (a
+// self-hosted Gitea before a GitHub url) would silently decide the branch has no
+// PR. Prefer a url a forge CLI recognizes; fall back to the identifying url so a
+// repo with no recognized forge still keys its cache on something stable.
+export function forgeRemoteUrl(remotes: readonly GitRemote[]): string | null {
+  const remote = pickRepoRemote(remotes);
+  if (!remote) return null;
+  return (
+    remote.urls.find((u) => detectForge(u) !== null) ?? identifyingUrl(remote)
+  );
+}
+
+// The repository's name as its identifying url spells it. Reads the PARSED path
+// so the name and the page agree by construction — a raw-string regex disagreed
+// with the link for a slashless scp remote (`git@host:repo.git`) and for a
+// trailing-slash url, both of which fell through to the directory basename while
+// the link resolved fine.
+//
+// A local-path remote (`/srv/mirrors/backup.git`) has no parsed path but does
+// have a last segment, so the raw string is the fallback — the directory
+// basename stays reserved for its documented case, a repo with NO remote.
+export function repoNameFromUrl(url: string): string | null {
+  const parsed = parseRemoteRef(url);
+  const segments = (parsed?.path ?? url).split("/");
+  const name = (segments[segments.length - 1] ?? "").replace(/\.git$/, "");
+  return name || null;
 }
 
 // [LAW:parse-dont-validate] Parse a git remote into the page a browser can open,
@@ -927,8 +963,9 @@ export class GitService {
     workingDir: string,
   ): string {
     const url = repoRemoteUrl(remotes);
-    const match = url?.match(/\/([^/]+?)(\.git)?$/);
-    return match?.[1] || path.basename(workingDir);
+    return (
+      (url === null ? null : repoNameFromUrl(url)) ?? path.basename(workingDir)
+    );
   }
 
   // [LAW:locality-or-seam] Public so the daemon's GitDataProvider can read the
@@ -937,15 +974,16 @@ export class GitService {
   // reads the host from it. No remotes → `absent` (hence no forge PR concept),
   // distinct from a failed read.
   //
-  // Named for the repo rather than for `origin` because it projects the SAME
-  // `repoRemoteUrl` that repoName and repoUrl do: `detectForge` gates the whole
-  // PR lookup and returns ABSENT before `gh` is ever spawned, so handing it a
-  // different remote's url than the bar displays would silently decide there is
-  // no PR. One selection, three consumers.
+  // Named for the repo rather than for `origin` because it no longer reads
+  // `origin` specifically — it projects `forgeRemoteUrl` over the same picked
+  // remote repoName and repoUrl use, preferring a url a forge CLI recognizes.
+  // That preference is the point: `detectForge` gates the whole PR lookup, so a
+  // browsable-but-unrecognized mirror listed first would silently decide the
+  // branch has no PR.
   async getRepoRemoteUrl(workingDir: string): Promise<Outcome<string>> {
     const remotes = await this.getRemotesAsync(workingDir);
     if (remotes.kind !== "ok") return remotes;
-    const url = repoRemoteUrl(remotes.value);
+    const url = forgeRemoteUrl(remotes.value);
     return url === null ? ABSENT : ok(url);
   }
 

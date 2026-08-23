@@ -8,9 +8,11 @@
 
 import {
   detectForge,
+  forgeRemoteUrl,
   parseRemoteRef,
   parseRemotes,
   remoteWebUrl,
+  repoNameFromUrl,
   repoRemoteUrl,
   repoWebUrl,
   type GitRemote,
@@ -310,6 +312,64 @@ describe("the repo's identity — one selection, shared by name and link", () =>
   test("a repo with no remotes has no page", () => {
     expect(repoWebUrl([])).toBeNull();
     expect(repoRemoteUrl([])).toBeNull();
+  });
+});
+
+describe("the repo's name and its link never disagree", () => {
+  // [LAW:one-source-of-truth] Both project the PARSED path. A raw-string regex
+  // disagreed with the link for a slashless scp remote and for a trailing
+  // slash, silently falling through to the directory basename while the link
+  // resolved fine. Each case asserts name and link TOGETHER — asserting either
+  // alone is exactly what let that survive.
+  const nameOf = repoNameFromUrl;
+
+  test.each([
+    ["git@host:repo.git", "repo", "https://host/repo"],
+    ["h:repo.git", "repo", "https://h/repo"],
+    ["https://github.com/me/repo/", "repo", "https://github.com/me/repo"],
+    ["https://github.com/me/repo.git", "repo", "https://github.com/me/repo"],
+    ["git@github.com:me/sub/repo.git", "repo", "https://github.com/me/sub/repo"],
+  ])("%s → name %s, link %s", (url, name, link) => {
+    expect(nameOf(url)).toBe(name);
+    expect(remoteWebUrl(url)).toBe(link);
+  });
+
+  // A local-path remote has no parsed path but does have a last segment, so it
+  // keeps naming itself. The directory basename stays reserved for its
+  // documented case: a repo with no remote at all.
+  test("a local-path remote names itself, with no link", () => {
+    expect(nameOf("/srv/mirrors/backup.git")).toBe("backup");
+    expect(remoteWebUrl("/srv/mirrors/backup.git")).toBeNull();
+  });
+
+  // The no-remote case is the directory-basename policy, asserted against real
+  // git in test/git-service-outcomes.test.ts where the working dir is real.
+});
+
+describe("forgeRemoteUrl — identity and forge dispatch are different questions", () => {
+  // detectForge gates the whole PR lookup before gh/glab spawns, so a
+  // browsable-but-unrecognized mirror listed first must not shadow a recognized
+  // forge behind it. Identity still points at the first browsable url.
+  test("a recognized forge is not shadowed by a browsable non-forge url", () => {
+    const remotes = [
+      {
+        name: "origin",
+        urls: ["git@gitea.example.com:o/r.git", "git@github.com:o/r.git"],
+      },
+    ];
+    expect(repoWebUrl(remotes)).toBe("https://gitea.example.com/o/r");
+    expect(forgeRemoteUrl(remotes)).toBe("git@github.com:o/r.git");
+    expect(detectForge(forgeRemoteUrl(remotes)!)).toBe("github");
+  });
+
+  test("with no recognized forge, dispatch falls back to identity", () => {
+    const remotes = [{ name: "origin", urls: ["git@gitea.example.com:o/r.git"] }];
+    expect(forgeRemoteUrl(remotes)).toBe(repoRemoteUrl(remotes));
+  });
+
+  test("the two agree in a single-url config", () => {
+    const remotes = [{ name: "origin", urls: ["git@github.com:o/r.git"] }];
+    expect(forgeRemoteUrl(remotes)).toBe(repoRemoteUrl(remotes));
   });
 });
 
