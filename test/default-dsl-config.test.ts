@@ -424,6 +424,83 @@ describe("DEFAULT_DSL_CONFIG", () => {
     expect(render(configA)).toBe(render(configVerbose));
   });
 
+  // brandon-segments-e99: the quick-action tray's fourth glyph opens the repo's
+  // web page. The daemon has already transposed the remote into an https URL by
+  // the time it reaches the template, so `↗ repo` is a plain `{{ link }}` — the
+  // terminal/OS owns the click, no cc-candybar:// verb. Gated on the VALUE: a
+  // repo with no browsable remote supplies "" and the glyph is simply absent.
+  describe("toolbar repo link", () => {
+    function renderToolbar(git: Record<string, unknown>): string {
+      const parsed = parseAndValidate("<default>", SERIALIZED);
+      const toolbarOnly = { ...parsed, root: oneSegmentRoot("toolbar") };
+      const store = new VariableStore();
+      const registry = new SourceRegistry(
+        store,
+        "",
+        undefined,
+        new SessionState(),
+      );
+      try {
+        const compiled = registerDslConfig(toolbarOnly, registry, {
+          cwd: process.cwd(),
+        });
+        const basePalette = new PaletteResolver(
+          getThemePalette(toolbarOnly.globals.palette ?? "textual-dark")!,
+        );
+        return renderDsl(
+          toolbarOnly,
+          compiled,
+          store,
+          registry,
+          {
+            hook_event_name: "Status",
+            session_id: "sess-1",
+            transcript_path: "/tmp/t.jsonl",
+            cwd: "/tmp",
+            model: { id: "x", display_name: "x" },
+            workspace: {
+              current_dir: "/tmp",
+              project_dir: "/tmp",
+              added_dirs: [],
+            },
+            git,
+          },
+          basePalette,
+          {
+            style: "powerline",
+            colorCompatibility: "truecolor",
+            wrap: true,
+            padding: 1,
+            charset: "unicode",
+            width: Number.POSITIVE_INFINITY,
+          },
+        );
+      } finally {
+        registry.dispose();
+      }
+    }
+
+    test("a browsable repo gets an OSC-8 link carrying its web URL", () => {
+      const line = renderToolbar({
+        branch: "main",
+        repoUrl: "https://github.com/promptctl/cc-candybar",
+      });
+      expect(line).toContain("↗ repo");
+      // The URL rides an OSC-8 hyperlink, not the visible text — a click
+      // target, not a printed URL cluttering the bar.
+      expect(line).toContain(
+        "\x1b]8;;https://github.com/promptctl/cc-candybar\x1b\\",
+      );
+    });
+
+    test("a repo with no browsable remote renders the tray without the glyph", () => {
+      const line = renderToolbar({ branch: "main" });
+      expect(line).toContain("↗ proj");
+      expect(line).toContain("↗ log");
+      expect(line).not.toContain("↗ repo");
+    });
+  });
+
   // [LAW:verifiable-goals] The directory segment's template has boundary
   // cases that round-9 fixed: project root collapse, subdir relative path,
   // home boundary safety. Each case sets up a focused single-segment
