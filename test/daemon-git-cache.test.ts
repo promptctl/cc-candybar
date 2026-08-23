@@ -33,7 +33,7 @@ class StubGitService extends GitService {
   });
   public stubRemote: Outcome<string> = ok("git@github.com:acme/widget.git");
 
-  override async getRemoteOriginUrl(
+  override async getRepoRemoteUrl(
     _workingDir: string,
   ): Promise<Outcome<string>> {
     return this.stubRemote;

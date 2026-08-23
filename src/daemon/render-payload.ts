@@ -143,6 +143,10 @@ export interface RenderPayload extends ClaudeHookData {
 // between "no stashes" and "stash count unknown because git failed".
 export interface GitPayload {
   readonly repoName?: string;
+  // The repo's browsable web page (an https/http URL, credentials stripped),
+  // derived from the same remotes read `repoName` is. Missing = the repo has no
+  // remote a browser can open, so a template gates its link on `ne … ""`.
+  readonly repoUrl?: string;
   readonly branch?: string;
   readonly sha?: string;
   readonly ahead?: number;
@@ -581,6 +585,7 @@ function gitOptionsFromClosure(needed: ReadonlySet<string>): GitInfoOptions {
     ...(has("git.stash") && { showStashCount: true }),
     ...(has("git.upstream") && { showUpstream: true }),
     ...(has("git.repoName") && { showRepoName: true }),
+    ...(has("git.repoUrl") && { showRepoUrl: true }),
     ...(has("git.operation") && { showOperation: true }),
     ...(has("git.timeSinceCommit") && { showTimeSinceCommit: true }),
     // Any PR field laid out turns on the (network) forge lookup. Keep these in
@@ -948,6 +953,7 @@ function projectGitInfo(outcome: Outcome<GitInfo>): {
   const stash = field("stash", info.stashCount);
   const upstream = field("upstream", info.upstream);
   const repoName = field("repoName", info.repoName);
+  const repoUrl = field("repoUrl", info.repoUrl);
 
   // [LAW:no-silent-failure] The PR deliberately breaks the `field` pattern: a
   // `failed` lookup is NOT dropped to a missing key (which the template can't
@@ -991,6 +997,7 @@ function projectGitInfo(outcome: Outcome<GitInfo>): {
       ...(stash !== undefined && { stash }),
       ...(upstream !== undefined && { upstream }),
       ...(repoName !== undefined && { repoName }),
+      ...(repoUrl !== undefined && { repoUrl }),
       ...prFields,
     },
     failures,

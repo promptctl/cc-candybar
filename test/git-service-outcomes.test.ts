@@ -89,6 +89,118 @@ describe("GitService outcome classification", () => {
     expect(info.value.repoName).toEqual(ok("myrepo"));
   });
 
+  test("repoUrl without a remote is absent — no page, not an empty string", async () => {
+    const info = await svc.getGitInfo(repo, { showRepoUrl: true });
+    expect(info.kind).toBe("ok");
+    if (info.kind !== "ok") return;
+    expect(info.value.repoUrl).toEqual(ABSENT);
+  });
+
+  test("repoUrl transposes an ssh remote to its browsable page", async () => {
+    run("git remote add origin git@github.com:user/myrepo.git", repo);
+    const info = await svc.getGitInfo(repo, { showRepoUrl: true });
+    run("git remote remove origin", repo);
+    expect(info.kind).toBe("ok");
+    if (info.kind !== "ok") return;
+    expect(info.value.repoUrl).toEqual(ok("https://github.com/user/myrepo"));
+  });
+
+  test("repoUrl of a bare-path remote is absent — nothing serves it a page", async () => {
+    run(`git remote add origin "${join(root, "remote.git")}"`, repo);
+    const info = await svc.getGitInfo(repo, { showRepoUrl: true });
+    run("git remote remove origin", repo);
+    expect(info.kind).toBe("ok");
+    if (info.kind !== "ok") return;
+    expect(info.value.repoUrl).toEqual(ABSENT);
+  });
+
+  // [LAW:one-source-of-truth] repoName and repoUrl are two projections of ONE
+  // remotes read, so they cannot disagree about which remote is origin. This is
+  // the contract that replaced two independent `config --get remote.origin.url`
+  // spawns; asserting them TOGETHER is what pins it.
+  test("repoName and repoUrl agree, read together", async () => {
+    run("git remote add origin https://gitlab.com/group/sub/proj.git", repo);
+    const info = await svc.getGitInfo(repo, {
+      showRepoName: true,
+      showRepoUrl: true,
+    });
+    run("git remote remove origin", repo);
+    expect(info.kind).toBe("ok");
+    if (info.kind !== "ok") return;
+    expect(info.value.repoName).toEqual(ok("proj"));
+    expect(info.value.repoUrl).toEqual(ok("https://gitlab.com/group/sub/proj"));
+  });
+
+  test("origin is the repo's page even when other remotes exist", async () => {
+    run("git remote add upstream git@github.com:upstream/proj.git", repo);
+    run("git remote add origin git@github.com:me/proj.git", repo);
+    const info = await svc.getGitInfo(repo, { showRepoUrl: true });
+    run("git remote remove origin && git remote remove upstream", repo);
+    expect(info.kind).toBe("ok");
+    if (info.kind !== "ok") return;
+    expect(info.value.repoUrl).toEqual(ok("https://github.com/me/proj"));
+  });
+
+  // [LAW:no-silent-failure] `git config --get-regexp` exits 1 for "no matches"
+  // and 128 for a config it cannot read. Folding both into an empty remotes list
+  // would render a broken repo as a remote-less one — repoName quietly becoming
+  // the basename, repoUrl and the PR origin reporting "none", nothing logged.
+  // These two assert the split, since only the exit code tells them apart.
+  test("a repo with no remotes is an empty list, not a failure", async () => {
+    const remotes = await svc.getRemotesAsync(repo);
+    expect(remotes).toEqual(ok([]));
+  });
+
+  test("an unreadable config is FAILED, never an empty remotes list", async () => {
+    const broken = join(root, "broken");
+    mkdirSync(broken);
+    run("git init -q -b main", broken);
+    // No commit and no identity: reading `.git/config` needs neither, and a
+    // repo fixture that depends on an ambient global git identity passes on a
+    // developer machine and fails on a runner that has none.
+    writeFileSync(join(broken, ".git", "config"), '[remote "origin"\n  url = x\n');
+
+    const remotes = await svc.getRemotesAsync(broken);
+    expect(remotes.kind).toBe("failed");
+    if (remotes.kind !== "failed") return;
+    expect(remotes.reason).toContain("git config --get-regexp");
+  });
+
+  // [LAW:one-source-of-truth] The read is `--local`. An unscoped read merges
+  // system → global → local, listing the LEAST specific first, so a stray
+  // `remote.origin.url` in ~/.gitconfig would hijack repoUrl, repoName and the
+  // PR cache key for every repo on the machine. Only a fake global config makes
+  // that visible, which is why this test builds one.
+  test("a global remote.origin.url never shadows this repo's own", async () => {
+    run("git remote add origin git@github.com:me/LOCAL.git", repo);
+    const fakeGlobal = join(root, "fakeglobal");
+    writeFileSync(
+      fakeGlobal,
+      '[remote "origin"]\n\turl = git@github.com:me/GLOBAL.git\n',
+    );
+    const prior = process.env.GIT_CONFIG_GLOBAL;
+    process.env.GIT_CONFIG_GLOBAL = fakeGlobal;
+    try {
+      const remotes = await svc.getRemotesAsync(repo);
+      expect(remotes).toEqual(
+        ok([{ name: "origin", urls: ["git@github.com:me/LOCAL.git"] }]),
+      );
+    } finally {
+      if (prior === undefined) delete process.env.GIT_CONFIG_GLOBAL;
+      else process.env.GIT_CONFIG_GLOBAL = prior;
+      run("git remote remove origin", repo);
+    }
+  });
+
+  test("getRepoRemoteUrl still reports the raw origin URL the PR cache keys on", async () => {
+    run("git remote add origin git@github.com:user/myrepo.git", repo);
+    const withOrigin = await svc.getRepoRemoteUrl(repo);
+    run("git remote remove origin", repo);
+    const withoutOrigin = await svc.getRepoRemoteUrl(repo);
+    expect(withOrigin).toEqual(ok("git@github.com:user/myrepo.git"));
+    expect(withoutOrigin).toEqual(ABSENT);
+  });
+
   test("with an upstream, aheadBehind is ok with real counts", async () => {
     const remote = join(root, "remote.git");
     run(`git init -q --bare "${remote}"`, root);

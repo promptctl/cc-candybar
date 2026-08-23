@@ -88,6 +88,7 @@ export function checkPayload(
     },
     git: {
       repoName: "cc-candybar",
+      repoUrl: "https://github.com/promptctl/cc-candybar",
       branch: "main",
       sha: "abc1234",
       ahead: 2,
