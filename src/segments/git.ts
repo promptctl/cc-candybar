@@ -47,6 +47,10 @@ export interface GitInfo {
   stashCount?: Outcome<number>;
   upstream?: Outcome<string>;
   repoName?: Outcome<string>;
+  // The repo's browsable web page, derived from the same remotes read repoName
+  // is. `absent` = the repo has no remote a browser can open (local-only, a
+  // bare-path remote); `failed` = the remotes read itself failed.
+  repoUrl?: Outcome<string>;
   isWorktree?: boolean;
   // [LAW:no-silent-failure] The forge lookup's three outcomes are all kept
   // distinct here: `ok` is an open PR, `absent` is "this branch has none / no
@@ -71,6 +75,9 @@ export interface GitInfoOptions {
   showStashCount?: boolean;
   showUpstream?: boolean;
   showRepoName?: boolean;
+  // Shares ONE `git config --get-regexp` with showRepoName — turning both on
+  // costs the same single spawn as turning either on alone.
+  showRepoUrl?: boolean;
   // Opts into the forge (gh/glab) PR/MR lookup — a network call, so it is the
   // one option whose fetch the daemon caches on a longer, independent TTL than
   // the rest of GitInfo (see src/daemon/cache/git.ts). Never resolved by the
@@ -103,6 +110,20 @@ function classify(
 
 function firstLine(s: string): string {
   return s.trim().split("\n", 1)[0] ?? "";
+}
+
+// [LAW:dataflow-not-control-flow] Lift a pure, nullable derivation onto the
+// Outcome it derives from, in one total fold: a read that failed stays failed
+// (its reason survives to the boundary), and a derivation that found nothing
+// becomes the domain's `absent`. Callers get a derived field whose three states
+// line up with the read's, without re-deciding the policy at each site.
+function derived<A, B>(
+  from: Outcome<A>,
+  project: (value: A) => B | null,
+): Outcome<B> {
+  if (from.kind !== "ok") return from;
+  const value = project(from.value);
+  return value === null ? ABSENT : ok(value);
 }
 
 // Trim an ok stdout; an empty answer is the domain's "there is none".
@@ -155,6 +176,126 @@ export function detectForge(remoteUrl: string): ForgeName | null {
   if (!host) return null;
   if (host === "github.com" || host.endsWith(".github.com")) return "github";
   if (/(^|\.)gitlab\./.test(host)) return "gitlab";
+  return null;
+}
+
+// [LAW:types-are-the-program] One remote exactly as git reports it: the name it
+// is configured under and its raw URL. The browsable page is deliberately NOT a
+// field here — it is a DERIVATION (`remoteWebUrl`), so the raw form stays the
+// single stored territory and every consumer draws its own map from it.
+export interface GitRemote {
+  readonly name: string;
+  readonly url: string;
+}
+
+// [LAW:effects-at-boundaries] Pure text→data over `git config --get-regexp
+// ^remote\..*\.url$` stdout, so the accept/reject table is unit-testable without
+// spawning git. Each line is `remote.<name>.url <url>`; the name capture is
+// greedy so a dotted remote name (`remote.my.fork.url` → `my.fork`) keeps its
+// dots. A multi-URL remote (a multi-push setup) emits several lines under one
+// name and the FIRST wins — the URL git itself fetches from. A line carrying no
+// URL is a remote with no URL, the domain's own "none", not a parse failure.
+export function parseRemotes(stdout: string): GitRemote[] {
+  const remotes: GitRemote[] = [];
+  const seen = new Set<string>();
+  for (const line of stdout.split("\n")) {
+    const match = line.match(/^remote\.(.+)\.url\s+(\S.*)$/);
+    if (!match) continue;
+    const name = match[1]!;
+    if (seen.has(name)) continue;
+    seen.add(name);
+    remotes.push({ name, url: match[2]!.trim() });
+  }
+  return remotes;
+}
+
+// [LAW:parse-dont-validate] Parse a git remote into the page a browser can open,
+// or nothing. The returned string IS the proof: it has been through the URL
+// parser, carries an http(s) scheme, has had any credentials stripped, and names
+// a repo path — so the render boundary links it without re-checking anything.
+//
+// [LAW:no-silent-failure] The whole accept/reject table, so no shape leaks:
+//   https://host/o/r.git           → https://host/o/r
+//   https://tok@host/o/r           → https://host/o/r     (credential DROPPED)
+//   http://gitea.lan:3000/o/r.git  → http://gitea.lan:3000/o/r  (web port kept)
+//   git@host:o/r.git               → https://host/o/r     (scp shorthand)
+//   ssh://git@host:2222/o/r.git    → https://host/o/r     (ssh port DROPPED —
+//                                     an ssh port says nothing about the web one)
+//   git://host/o/r.git             → https://host/o/r
+//   /srv/git/r.git · ../r · ""     → null  (names no host)
+//   file:///srv/git/r              → null  (nothing serves it)
+//   git@host:                      → null  (a host with no repo path)
+//
+// [LAW:one-type-per-behavior] The ssh→https transposition is host-agnostic BY
+// DESIGN. GitHub, GitLab, Gitea/Forgejo, Bitbucket, Codeberg and sr.ht are not
+// six types to enumerate — they are six INSTANCES of one convention: the web UI
+// lives at the same host and path as the ssh remote. A hostname allow-list could
+// only ever recognize the hosted ones, and would be blind to every self-hosted
+// forge, which is the case that needs this most. The symmetric cost is a bare
+// `git@fileserver:/srv/x.git` yielding a link to a page that does not exist.
+//
+// Distinct from `detectForge` above, and deliberately not folded into it: that
+// answers the strictly narrower "which forge CLI can answer a PR query", which
+// needs a recognized product AND an installed binary. This needs only a web
+// server. Two questions, two maps.
+export function remoteWebUrl(raw: string): string | null {
+  const trimmed = raw.trim();
+  // scp-like `[user@]host:path` is not a URL — rewrite it to the ssh:// form it
+  // is shorthand for, so ONE parser sees every shape. The `(?!//)` is what keeps
+  // `https://…` out of this arm: there the `:` is a scheme separator, not the
+  // scp host/path split.
+  const scp = trimmed.match(/^(?:[^@/:]+@)?([^/:]+):(?!\/\/)(.*)$/);
+  const candidate = scp
+    ? `ssh://${scp[1]}/${scp[2]!.replace(/^\/+/, "")}`
+    : trimmed;
+
+  let url: URL;
+  try {
+    url = new URL(candidate);
+  } catch {
+    // Not a URL at all — a local path, a relative path, an empty remote. That
+    // is this function's domain answer, not a swallowed error.
+    return null;
+  }
+
+  // [LAW:dataflow-not-control-flow] The scheme is the ONLY discriminator, and it
+  // decides two values (which host form, which web scheme) rather than gating
+  // whether work happens. Reading `.host` vs `.hostname` is what keeps a web
+  // port and drops an ssh one; both exclude userinfo by construction, which is
+  // what guarantees a token in the remote never reaches a clickable link.
+  const web = ((): { host: string; scheme: string } | null => {
+    if (url.protocol === "https:") return { host: url.host, scheme: "https:" };
+    if (url.protocol === "http:") return { host: url.host, scheme: "http:" };
+    if (url.protocol === "ssh:" || url.protocol === "git:")
+      return { host: url.hostname, scheme: "https:" };
+    return null;
+  })();
+  if (!web) return null;
+
+  const repoPath = url.pathname
+    .replace(/^\/+/, "")
+    .replace(/\/+$/, "")
+    .replace(/\.git$/, "");
+  if (!repoPath) return null;
+
+  return `${web.scheme}//${web.host}/${repoPath}`;
+}
+
+// [LAW:one-source-of-truth] The ONE rule for which remote represents "the repo".
+// `origin` is git's own name for the canonical remote, so it wins whenever it
+// has a web page; otherwise the first remote in config order that does. A repo
+// whose remotes are all unbrowsable (a bare path, a file:// mirror) — or which
+// has none — has no web home, and null says exactly that rather than inventing
+// a guess.
+export function repoWebUrl(remotes: readonly GitRemote[]): string | null {
+  const origin = remotes.find((r) => r.name === "origin");
+  const ordered = origin
+    ? [origin, ...remotes.filter((r) => r !== origin)]
+    : remotes;
+  for (const remote of ordered) {
+    const web = remoteWebUrl(remote.url);
+    if (web) return web;
+  }
   return null;
 }
 
@@ -481,14 +622,22 @@ export class GitService {
     // Light operations run in parallel. Helpers never reject — failure is a
     // value in the outcome — so plain Promise.all replaces the allSettled +
     // untyped resultMap machinery the swallowing design required.
-    const [stashCount, repoName] = await Promise.all([
+    // [LAW:one-source-of-truth] repoName and repoUrl are two projections of ONE
+    // remotes read, so they can never disagree about origin and asking for both
+    // costs exactly one spawn. A failed read fails both alike, by construction.
+    const [stashCount, remotes] = await Promise.all([
       options.showStashCount ? this.getStashCountAsync(gitDir) : undefined,
-      options.showRepoName ? this.getRepoNameAsync(gitDir) : undefined,
+      options.showRepoName || options.showRepoUrl
+        ? this.getRemotesAsync(gitDir)
+        : undefined,
     ]);
     if (stashCount !== undefined) result.stashCount = stashCount;
-    if (repoName !== undefined) {
-      result.repoName = repoName;
+    if (remotes !== undefined && options.showRepoName) {
+      result.repoName = derived(remotes, (r) => this.repoNameFrom(r, gitDir));
       result.isWorktree = isWorktreeDir;
+    }
+    if (remotes !== undefined && options.showRepoUrl) {
+      result.repoUrl = derived(remotes, repoWebUrl);
     }
 
     if (options.showOperation) {
@@ -608,45 +757,56 @@ export class GitService {
     return ok(stashList ? stashList.split("\n").length : 0);
   }
 
-  private async getRepoNameAsync(workingDir: string): Promise<Outcome<string>> {
+  // [LAW:one-source-of-truth] The ONE read of this repo's remotes. `repoName`,
+  // `repoUrl`, and the PR cache's origin URL are all projections over it —
+  // before this, repoName and the PR path each ran their own `config --get
+  // remote.origin.url`, two maps of one territory that could answer differently
+  // across the moment between them.
+  //
+  // `--get-regexp` exits 1 when NOTHING matches, which is a repo with no remotes
+  // configured — a domain answer, so it lands as an EMPTY LIST rather than an
+  // `absent` arm. [LAW:dataflow-not-control-flow] Every projection then reads
+  // "no remotes" off the empty set (no repoUrl, basename repoName) instead of
+  // carrying a second no-value state through three consumers.
+  async getRemotesAsync(workingDir: string): Promise<Outcome<GitRemote[]>> {
     const r = classify(
-      "git config remote.origin.url",
-      await this.execGitAsync(["config", "--get", "remote.origin.url"], {
-        cwd: workingDir,
-        timeout: 2000,
-      }),
-      // `config --get` exits 1 when the key is unset — "no remote", a domain
-      // answer, not a failure.
+      "git config --get-regexp remote url",
+      await this.execGitAsync(
+        ["config", "--get-regexp", "^remote\\..*\\.url$"],
+        { cwd: workingDir, timeout: 2000 },
+      ),
       "absent",
     );
     if (r.kind === "failed") return r;
+    return ok(r.kind === "ok" ? parseRemotes(r.value) : []);
+  }
 
-    // A local-only repo's name is its directory name BY POLICY (the display
-    // contract for repos without a remote) — never as an error fallback; a
-    // failed `git config` above stays failed instead of borrowing this rule.
-    const remoteUrl = r.kind === "ok" ? r.value.trim() : "";
-    if (!remoteUrl) return ok(path.basename(workingDir));
-
-    const match = remoteUrl.match(/\/([^/]+?)(\.git)?$/);
-    return ok(match?.[1] || path.basename(workingDir));
+  // [LAW:effects-at-boundaries] Pure projection over remotes the caller already
+  // read — no spawn of its own, so it cannot disagree with the sibling repoUrl
+  // projection about what origin is.
+  //
+  // A local-only repo's name is its directory name BY POLICY (the display
+  // contract for repos without a remote) — never as an error fallback; a failed
+  // remotes read stays failed at the call site instead of borrowing this rule.
+  private repoNameFrom(
+    remotes: readonly GitRemote[],
+    workingDir: string,
+  ): string {
+    const origin = remotes.find((r) => r.name === "origin");
+    const match = origin?.url.match(/\/([^/]+?)(\.git)?$/);
+    return match?.[1] || path.basename(workingDir);
   }
 
   // [LAW:locality-or-seam] Public so the daemon's GitDataProvider can read the
   // remote to fold into its PR cache key (the PR value depends on the remote;
   // a re-pointed origin must be a new key). Raw origin URL (unparsed) — the
-  // forge detector reads the host from it. `config --get` exits 1 when unset →
-  // `absent` (no remote, hence no forge PR concept), distinct from a failure.
+  // forge detector reads the host from it. No origin configured → `absent` (no
+  // remote, hence no forge PR concept), distinct from a failed read.
   async getRemoteOriginUrl(workingDir: string): Promise<Outcome<string>> {
-    return nonEmpty(
-      classify(
-        "git config remote.origin.url",
-        await this.execGitAsync(["config", "--get", "remote.origin.url"], {
-          cwd: workingDir,
-          timeout: 2000,
-        }),
-        "absent",
-      ),
-    );
+    const remotes = await this.getRemotesAsync(workingDir);
+    if (remotes.kind !== "ok") return remotes;
+    const origin = remotes.value.find((r) => r.name === "origin");
+    return origin ? ok(origin.url) : ABSENT;
   }
 
   // [LAW:single-enforcer] One boundary for forge-CLI spawns. Mirrors

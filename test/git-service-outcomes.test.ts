@@ -89,6 +89,67 @@ describe("GitService outcome classification", () => {
     expect(info.value.repoName).toEqual(ok("myrepo"));
   });
 
+  test("repoUrl without a remote is absent — no page, not an empty string", async () => {
+    const info = await svc.getGitInfo(repo, { showRepoUrl: true });
+    expect(info.kind).toBe("ok");
+    if (info.kind !== "ok") return;
+    expect(info.value.repoUrl).toEqual(ABSENT);
+  });
+
+  test("repoUrl transposes an ssh remote to its browsable page", async () => {
+    run("git remote add origin git@github.com:user/myrepo.git", repo);
+    const info = await svc.getGitInfo(repo, { showRepoUrl: true });
+    run("git remote remove origin", repo);
+    expect(info.kind).toBe("ok");
+    if (info.kind !== "ok") return;
+    expect(info.value.repoUrl).toEqual(ok("https://github.com/user/myrepo"));
+  });
+
+  test("repoUrl of a bare-path remote is absent — nothing serves it a page", async () => {
+    run(`git remote add origin "${join(root, "remote.git")}"`, repo);
+    const info = await svc.getGitInfo(repo, { showRepoUrl: true });
+    run("git remote remove origin", repo);
+    expect(info.kind).toBe("ok");
+    if (info.kind !== "ok") return;
+    expect(info.value.repoUrl).toEqual(ABSENT);
+  });
+
+  // [LAW:one-source-of-truth] repoName and repoUrl are two projections of ONE
+  // remotes read, so they cannot disagree about which remote is origin. This is
+  // the contract that replaced two independent `config --get remote.origin.url`
+  // spawns; asserting them TOGETHER is what pins it.
+  test("repoName and repoUrl agree, read together", async () => {
+    run("git remote add origin https://gitlab.com/group/sub/proj.git", repo);
+    const info = await svc.getGitInfo(repo, {
+      showRepoName: true,
+      showRepoUrl: true,
+    });
+    run("git remote remove origin", repo);
+    expect(info.kind).toBe("ok");
+    if (info.kind !== "ok") return;
+    expect(info.value.repoName).toEqual(ok("proj"));
+    expect(info.value.repoUrl).toEqual(ok("https://gitlab.com/group/sub/proj"));
+  });
+
+  test("origin is the repo's page even when other remotes exist", async () => {
+    run("git remote add upstream git@github.com:upstream/proj.git", repo);
+    run("git remote add origin git@github.com:me/proj.git", repo);
+    const info = await svc.getGitInfo(repo, { showRepoUrl: true });
+    run("git remote remove origin && git remote remove upstream", repo);
+    expect(info.kind).toBe("ok");
+    if (info.kind !== "ok") return;
+    expect(info.value.repoUrl).toEqual(ok("https://github.com/me/proj"));
+  });
+
+  test("getRemoteOriginUrl still reports the raw origin URL the PR cache keys on", async () => {
+    run("git remote add origin git@github.com:user/myrepo.git", repo);
+    const withOrigin = await svc.getRemoteOriginUrl(repo);
+    run("git remote remove origin", repo);
+    const withoutOrigin = await svc.getRemoteOriginUrl(repo);
+    expect(withOrigin).toEqual(ok("git@github.com:user/myrepo.git"));
+    expect(withoutOrigin).toEqual(ABSENT);
+  });
+
   test("with an upstream, aheadBehind is ok with real counts", async () => {
     const remote = join(root, "remote.git");
     run(`git init -q --bare "${remote}"`, root);
