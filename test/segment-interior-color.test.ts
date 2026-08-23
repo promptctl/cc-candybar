@@ -6,7 +6,7 @@
 // DEFAULT_DSL_CONFIG (not a hand-rolled template) is deliberate: a synthetic
 // segment could pass while the SHIPPED gitaculous regresses.
 
-import { PaletteResolver, getThemePalette } from "@promptctl/rich-js";
+import { getThemePalette } from "@promptctl/rich-js";
 
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
@@ -119,7 +119,7 @@ function render(): string {
   const registry = new SourceRegistry(store, "", undefined, new SessionState());
   try {
     const compiled = registerDslConfig(config, registry, { cwd: "/tmp" });
-    const basePalette = new PaletteResolver(getThemePalette("textual-dark")!);
+    const basePalette = getThemePalette("textual-dark"!);
     return renderDsl(config, compiled, store, registry, GIT_PAYLOAD, basePalette, {
       style: "powerline",
       colorCompatibility: "truecolor", wrap: true, padding: 0, charset: "unicode" as const,

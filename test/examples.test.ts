@@ -9,7 +9,7 @@
 
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
-import { PaletteResolver, getThemePalette } from "@promptctl/rich-js";
+import { getThemePalette } from "@promptctl/rich-js";
 import {
   parseDslConfig,
   mergeWithDefault,
@@ -61,7 +61,7 @@ describe("shipped examples load and render through the real cascade", () => {
     // thrown — surface it here so a broken example var fails the test loudly.
     expect(compiled.loadWarnings).toEqual([]);
 
-    const basePalette = new PaletteResolver(getThemePalette("textual-dark")!);
+    const basePalette = getThemePalette("textual-dark"!);
     const rendered = renderDsl(
       config,
       compiled,

@@ -1,21 +1,42 @@
 // [LAW:behavior-not-structure] Tests assert observable output (resolved hex
 // values, Style fields, thrown errors) — never internal state.
+//
+// The seam under test: a segment's `bg:`/`fg:` fields are TEMPLATES that
+// evaluate to a **color reference** — a palette variable name, or a computed
+// `#RRGGBB` produced by rich-js's color math. `resolveSegmentColors` owns the
+// ordered phase sequence (publish palette → resolve bg → publish bg → resolve
+// fg), which is what makes `{{ bgOf }}` readable in a `fg:` template and an
+// error in a `bg:` one.
 
-import { Palette, PaletteResolver, parseRgbHex, ColorSpec, ColorRgba, Oklch } from "@promptctl/rich-js";
-import { createCcCandybarEngine } from "../src/template-engine/engine";
-import { resolveSegmentColors, ColorSpecError } from "../src/template-engine/colors";
 import {
-  transposedResolver,
-  resolverForThemeName,
+  Palette,
+  parseRgbHex,
+  ColorRgba,
+  Oklch,
+  darken,
+  blendRgb,
+  contrastFor,
+} from "@promptctl/rich-js";
+import { createCcCandybarEngine } from "../src/template-engine/engine";
+import {
+  resolveSegmentColors,
+  ColorSpecError,
+} from "../src/template-engine/colors";
+import { createActiveSegmentRef } from "../src/render/active-segment";
+import type { ActiveSegmentRef } from "../src/render/active-segment";
+import { segmentColorFuncs } from "../src/render/segment-color";
+import {
+  transposedPalette,
+  paletteForThemeName,
 } from "../src/themes/palette-resolvers";
 import type { Template } from "@promptctl/go-template-js";
-import type { RichText, ThemeKey } from "@promptctl/rich-js";
+import type { RichText, Style, ThemeKey } from "@promptctl/rich-js";
 
-// ─── Test palette + resolver ──────────────────────────────────────────────────
+// ─── Test palette ─────────────────────────────────────────────────────────────
 
-function makeTestResolver(): PaletteResolver {
-  const vars = new Map([
-    ["primary", parseRgbHex("4488ff")],
+function makeTestPalette(name = "test", primaryHex = "4488ff"): Palette {
+  const vars = new Map<string, ColorRgba>([
+    ["primary", parseRgbHex(primaryHex)],
     ["error", parseRgbHex("ff4444")],
     ["info", parseRgbHex("44aaff")],
     ["success", parseRgbHex("44cc88")],
@@ -25,12 +46,37 @@ function makeTestResolver(): PaletteResolver {
     // any non-identity key); real registry palettes always carry it.
     ["background", parseRgbHex("12121a")],
   ]);
-  return new PaletteResolver(new Palette("test", true, vars));
+  return new Palette(name, true, vars);
 }
 
-// Parse a template using a resolver-aware engine (same instance as production).
-function parseTemplate(source: string, resolver?: PaletteResolver): Template<RichText> {
-  return createCcCandybarEngine(resolver).parse(source);
+// ─── Harness ──────────────────────────────────────────────────────────────────
+//
+// The exact wiring renderDsl uses: ONE ActiveSegmentRef, an engine whose
+// segment-scoped funcs (`color`, `bgOf`) read through it, and
+// resolveSegmentColors publishing into it. The templates are parsed once and
+// the palette arrives per call — which is the whole point of the seam.
+
+const SEG = "demo";
+
+interface Harness {
+  readonly ref: ActiveSegmentRef;
+  parse(src: string): Template<RichText>;
+}
+
+function makeHarness(): Harness {
+  const ref = createActiveSegmentRef();
+  const engine = createCcCandybarEngine(segmentColorFuncs(ref));
+  return { ref, parse: (src: string) => engine.parse(src) };
+}
+
+function resolve(
+  h: Harness,
+  palette: Palette,
+  bg: Template<RichText> | undefined,
+  fg: Template<RichText> | undefined,
+  scope: object = {},
+): Style {
+  return resolveSegmentColors(h.ref, SEG, palette, bg, fg, scope);
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -39,139 +85,227 @@ function parseTemplate(source: string, resolver?: PaletteResolver): Template<Ric
 
 describe("no bg/fg templates → null Style", () => {
   test("undefined bg and fg → Style.isNull", () => {
-    const resolver = makeTestResolver();
-    const style = resolveSegmentColors(resolver, undefined, undefined, {});
+    const style = resolve(
+      makeHarness(),
+      makeTestPalette(),
+      undefined,
+      undefined,
+    );
     expect(style.isNull).toBe(true);
   });
 });
 
 // ────────────────────────────────────────────────────────────────────────────
-// 2. Static bg (degenerate template — same code path as a conditional)
+// 2. Color references: a bare palette name and a computed hex take ONE path
 // ────────────────────────────────────────────────────────────────────────────
 
-describe("static bg spec (no template interpolation)", () => {
+describe("bg/fg color references", () => {
   test("bare name resolves to the palette color", () => {
-    const resolver = makeTestResolver();
-    const bgTpl = parseTemplate("error");
-    const style = resolveSegmentColors(resolver, bgTpl, undefined, {});
+    const h = makeHarness();
+    const style = resolve(h, makeTestPalette(), h.parse("error"), undefined);
     expect(style.isNull).toBe(false);
     expect(style.bgcolor?.value?.hex).toBe("#ff4444");
   });
 
-  test("modifier syntax works through the same code path", () => {
-    const resolver = makeTestResolver();
-    const bgTpl = parseTemplate("primary-darken-1");
-    const style = resolveSegmentColors(resolver, bgTpl, undefined, {});
+  test("a computed color reference resolves through the same path as a name", () => {
+    // The name-authored form and the computed form are the identical code path
+    // (resolveColorRef is idempotent on hex), so `darken (color "primary") 1`
+    // must land exactly on rich-js's own darken of the palette's primary.
+    const h = makeHarness();
+    const palette = makeTestPalette();
+    const style = resolve(
+      h,
+      palette,
+      h.parse('{{ darken (color "primary") 1 }}'),
+      undefined,
+    );
     expect(style.isNull).toBe(false);
-    // darken-1 must differ from base primary color
     expect(style.bgcolor?.value?.hex).not.toBe("#4488ff");
+    expect(style.bgcolor?.value?.hex).toBe(
+      darken(palette.get("primary")!, 1).hex,
+    );
   });
 
   test("static fg resolves without bg context", () => {
-    const resolver = makeTestResolver();
-    const fgTpl = parseTemplate("text");
-    const style = resolveSegmentColors(resolver, undefined, fgTpl, {});
+    const h = makeHarness();
+    const style = resolve(h, makeTestPalette(), undefined, h.parse("text"));
     expect(style.color?.value?.hex).toBe("#eeeeee");
   });
 });
 
 // ────────────────────────────────────────────────────────────────────────────
-// 3. bg template with conditional — different specs based on variable state
+// 3. bg template with conditional — different references based on variable state
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("conditional bg template", () => {
-  const resolver = makeTestResolver();
-  const bgTpl = parseTemplate(
-    '{{ if gt .percent 90.0 }}error{{ else if gt .percent 75.0 }}info{{ else }}success{{ end }}'
+  const h = makeHarness();
+  const palette = makeTestPalette();
+  const bgTpl = h.parse(
+    "{{ if gt .percent 90.0 }}error{{ else if gt .percent 75.0 }}info{{ else }}success{{ end }}",
   );
 
   test("percent > 90 → error color", () => {
-    const style = resolveSegmentColors(resolver, bgTpl, undefined, { percent: 95 });
+    const style = resolve(h, palette, bgTpl, undefined, { percent: 95 });
     expect(style.bgcolor?.value?.hex).toBe("#ff4444");
   });
 
   test("percent 76–90 → info color", () => {
-    const style = resolveSegmentColors(resolver, bgTpl, undefined, { percent: 80 });
+    const style = resolve(h, palette, bgTpl, undefined, { percent: 80 });
     expect(style.bgcolor?.value?.hex).toBe("#44aaff");
   });
 
   test("percent ≤ 75 → success color", () => {
-    const style = resolveSegmentColors(resolver, bgTpl, undefined, { percent: 50 });
+    const style = resolve(h, palette, bgTpl, undefined, { percent: 50 });
     expect(style.bgcolor?.value?.hex).toBe("#44cc88");
   });
 });
 
 // ────────────────────────────────────────────────────────────────────────────
-// 4. fg = 'auto' resolves against the segment's resolved bg
+// 4. The phase sequence: what a `bg:` template may read vs a `fg:` one
 // ────────────────────────────────────────────────────────────────────────────
 
-describe("auto-contrast fg resolution", () => {
-  test("auto fg against dark bg resolves to a light color", () => {
-    const resolver = makeTestResolver();
-    const bgTpl = parseTemplate("surface"); // dark: #1a1a2e
-    const fgTpl = parseTemplate("auto");
-    const style = resolveSegmentColors(resolver, bgTpl, fgTpl, {});
-    // auto against a dark background should produce a light (high-value) color
-    const hex = style.color?.value?.hex;
-    expect(hex).toBeDefined();
-    const r = parseInt(hex!.slice(1, 3), 16);
-    const g = parseInt(hex!.slice(3, 5), 16);
-    const b = parseInt(hex!.slice(5, 7), 16);
-    const luminance = (r + g + b) / 3;
-    expect(luminance).toBeGreaterThan(128); // light result on dark bg
+describe("phase ordering — palette, then bg, then fg", () => {
+  test("the palette is live inside the bg phase ({{ color }} resolves there)", () => {
+    // Phase 0 publishes the palette BEFORE the bg template runs, so a bg field
+    // may name a theme color through the same `{{ color }}` a body uses.
+    const h = makeHarness();
+    const style = resolve(
+      h,
+      makeTestPalette(),
+      h.parse('{{ color "primary" }}'),
+      undefined,
+    );
+    expect(style.bgcolor?.value?.hex).toBe("#4488ff");
   });
 
-  test("auto fg without bg throws ColorSpecError (missing context)", () => {
-    const resolver = makeTestResolver();
-    const fgTpl = parseTemplate("auto");
-    expect(() => resolveSegmentColors(resolver, undefined, fgTpl, {})).toThrow(ColorSpecError);
-  });
-});
-
-// ────────────────────────────────────────────────────────────────────────────
-// 5. Alpha specs require bg context
-// ────────────────────────────────────────────────────────────────────────────
-
-describe("alpha spec needs bg context", () => {
-  test("'primary 50%' without bg throws ColorSpecError", () => {
-    const resolver = makeTestResolver();
-    const fgTpl = parseTemplate("primary 50%");
-    expect(() => resolveSegmentColors(resolver, undefined, fgTpl, {})).toThrow(ColorSpecError);
+  test("{{ bgOf }} in a fg template returns the segment's resolved background", () => {
+    const h = makeHarness();
+    const style = resolve(
+      h,
+      makeTestPalette(),
+      h.parse("surface"),
+      h.parse("{{ bgOf }}"),
+    );
+    expect(style.bgcolor?.value?.hex).toBe("#1a1a2e");
+    expect(style.color?.value?.hex).toBe(style.bgcolor?.value?.hex);
   });
 
-  test("'primary 50%' with bg resolves to a blended color", () => {
-    const resolver = makeTestResolver();
-    const bgTpl = parseTemplate("surface");
-    const fgTpl = parseTemplate("primary 50%");
-    const style = resolveSegmentColors(resolver, bgTpl, fgTpl, {});
-    expect(style.isNull).toBe(false);
-    expect(style.color?.value?.hex).toBeDefined();
-  });
-});
-
-// ────────────────────────────────────────────────────────────────────────────
-// 6. Invalid color spec surfaces clear error at render time
-// ────────────────────────────────────────────────────────────────────────────
-
-describe("invalid color spec → ColorSpecError", () => {
-  test("unknown bg spec name throws ColorSpecError", () => {
-    const resolver = makeTestResolver();
-    const bgTpl = parseTemplate("nonexistent-color");
-    expect(() => resolveSegmentColors(resolver, bgTpl, undefined, {})).toThrow(ColorSpecError);
-  });
-
-  test("unknown fg spec name throws ColorSpecError", () => {
-    const resolver = makeTestResolver();
-    const fgTpl = parseTemplate("totally-bogus");
-    expect(() => resolveSegmentColors(resolver, undefined, fgTpl, {})).toThrow(ColorSpecError);
-  });
-
-  test("error message names the spec and role", () => {
-    const resolver = makeTestResolver();
-    const bgTpl = parseTemplate("not-a-real-color");
+  test("{{ bgOf }} inside a bg template throws, naming the phase", () => {
+    const h = makeHarness();
     let caught: unknown;
     try {
-      resolveSegmentColors(resolver, bgTpl, undefined, {});
+      resolve(h, makeTestPalette(), h.parse("{{ bgOf }}"), undefined);
+    } catch (e) {
+      caught = e;
+    }
+    expect(caught).toBeInstanceOf(Error);
+    const message = (caught as Error).message;
+    expect(message).toContain(`segments.${SEG}`);
+    expect(message).toContain("background");
+  });
+
+  test("segment-scoped funcs outside any segment throw, saying so", () => {
+    // A fresh ref is never published into — the state a variable declaration or
+    // a layout-node `when` predicate evaluates in.
+    const h = makeHarness();
+    expect(h.ref.current).toBeNull();
+    expect(() => h.parse("{{ bgOf }}").evaluate({})).toThrow(
+      /no active segment/,
+    );
+    expect(() => h.parse('{{ color "primary" }}').evaluate({})).toThrow(
+      /no active segment/,
+    );
+  });
+
+  test("the published palette is the one passed in, not one captured at parse", () => {
+    // Two clocks closed: ONE parsed template, two palettes, two answers. A
+    // palette captured when the config loaded would make these identical while
+    // the rest of the render moved on (a theme click, a look, a hue shift).
+    const h = makeHarness();
+    const bgTpl = h.parse('{{ color "primary" }}');
+    const blue = resolve(
+      h,
+      makeTestPalette("blue", "4488ff"),
+      bgTpl,
+      undefined,
+    );
+    const green = resolve(
+      h,
+      makeTestPalette("green", "22bb66"),
+      bgTpl,
+      undefined,
+    );
+    expect(blue.bgcolor?.value?.hex).toBe("#4488ff");
+    expect(green.bgcolor?.value?.hex).toBe("#22bb66");
+    expect(blue.bgcolor?.value?.hex).not.toBe(green.bgcolor?.value?.hex);
+  });
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// 5. fg computed from the resolved bg — contrast and blending
+// ────────────────────────────────────────────────────────────────────────────
+
+describe("fg computed from bgOf", () => {
+  test("contrastOn (bgOf) over a dark bg resolves to a light color", () => {
+    const h = makeHarness();
+    const palette = makeTestPalette();
+    const style = resolve(
+      h,
+      palette,
+      h.parse("surface"), // dark: #1a1a2e
+      h.parse("{{ contrastOn (bgOf) }}"),
+    );
+    expect(style.color?.value?.hex).toBe(
+      contrastFor(palette.get("surface")!).hex,
+    );
+    // …and that answer is a light one on a dark background.
+    const hex = style.color!.value!.hex;
+    const r = parseInt(hex.slice(1, 3), 16);
+    const g = parseInt(hex.slice(3, 5), 16);
+    const b = parseInt(hex.slice(5, 7), 16);
+    expect((r + g + b) / 3).toBeGreaterThan(128);
+  });
+
+  test("mix (bgOf) (color …) 50 blends the fg halfway toward the bg", () => {
+    const h = makeHarness();
+    const palette = makeTestPalette();
+    const style = resolve(
+      h,
+      palette,
+      h.parse("surface"),
+      h.parse('{{ mix (bgOf) (color "primary") 50 }}'),
+    );
+    expect(style.isNull).toBe(false);
+    expect(style.color?.value?.hex).toBe(
+      blendRgb(palette.get("surface")!, palette.get("primary")!, 0.5).hex,
+    );
+  });
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// 6. Invalid color reference surfaces clearly at render time
+// ────────────────────────────────────────────────────────────────────────────
+
+describe("invalid color reference → ColorSpecError", () => {
+  test("unknown bg name throws ColorSpecError", () => {
+    const h = makeHarness();
+    expect(() =>
+      resolve(h, makeTestPalette(), h.parse("nonexistent-color"), undefined),
+    ).toThrow(ColorSpecError);
+  });
+
+  test("unknown fg name throws ColorSpecError", () => {
+    const h = makeHarness();
+    expect(() =>
+      resolve(h, makeTestPalette(), undefined, h.parse("totally-bogus")),
+    ).toThrow(ColorSpecError);
+  });
+
+  test("error message names the reference and the role", () => {
+    const h = makeHarness();
+    let caught: unknown;
+    try {
+      resolve(h, makeTestPalette(), h.parse("not-a-real-color"), undefined);
     } catch (e) {
       caught = e;
     }
@@ -182,33 +316,30 @@ describe("invalid color spec → ColorSpecError", () => {
 });
 
 // ────────────────────────────────────────────────────────────────────────────
-// 7. Palette functions registered in engine when resolver provided
+// 7. Segment-scoped color funcs reach a template body only via segmentColorFuncs
 // ────────────────────────────────────────────────────────────────────────────
 
-describe("palette functions in engine", () => {
-  test("{{ primary ... }} style function available when resolver provided", () => {
-    const resolver = makeTestResolver();
-    const engine = createCcCandybarEngine(resolver);
-    const tpl = engine.parse('{{ primary "hello" }}');
+describe("segment color functions in the engine", () => {
+  test('{{ fg (color "primary") … }} paints the palette color', () => {
+    const ref = createActiveSegmentRef();
+    const engine = createCcCandybarEngine(segmentColorFuncs(ref));
+    const tpl = engine.parse('{{ fg (color "primary") "hello" }}');
+    ref.current = { segName: SEG, palette: makeTestPalette(), bg: undefined };
     const fragments = tpl.evaluate({});
-    // The fragment should have a color from the 'primary' palette entry
-    const style = fragments[0]?.style;
-    expect(style?.color?.value?.hex).toBe("#4488ff");
+    expect(fragments[0]?.style?.color?.value?.hex).toBe("#4488ff");
+    expect(fragments[0]?.plain).toBe("hello");
   });
 
-  test("engine without resolver does not have palette functions", () => {
-    const engine = createCcCandybarEngine(); // no resolver
-    const tpl = engine.parse('{{ primary "hello" }}');
-    expect(() => tpl.evaluate({})).toThrow(); // FuncNotFoundError or similar
+  test("an engine built without segmentColorFuncs has no `color` function", () => {
+    const engine = createCcCandybarEngine(); // no segment-scoped funcs
+    const tpl = engine.parse('{{ color "primary" }}');
+    expect(() => tpl.evaluate({})).toThrow(/"color" is not registered/);
   });
 
-  test("palette function in template: field — full render", () => {
-    const resolver = makeTestResolver();
-    const engine = createCcCandybarEngine(resolver);
-    const tpl = engine.parse('{{ error "critical" }}');
-    const fragments = tpl.evaluate({});
-    expect(fragments[0]?.style?.color?.value?.hex).toBe("#ff4444");
-    expect(fragments[0]?.plain).toBe("critical");
+  test("an engine built without segmentColorFuncs has no `bgOf` function", () => {
+    const engine = createCcCandybarEngine();
+    const tpl = engine.parse("{{ bgOf }}");
+    expect(() => tpl.evaluate({})).toThrow(/"bgOf" is not registered/);
   });
 });
 
@@ -218,10 +349,13 @@ describe("palette functions in engine", () => {
 
 describe("both bg and fg resolved", () => {
   test("Style has both bgcolor and color set", () => {
-    const resolver = makeTestResolver();
-    const bgTpl = parseTemplate("surface");
-    const fgTpl = parseTemplate("text");
-    const style = resolveSegmentColors(resolver, bgTpl, fgTpl, {});
+    const h = makeHarness();
+    const style = resolve(
+      h,
+      makeTestPalette(),
+      h.parse("surface"),
+      h.parse("text"),
+    );
     expect(style.bgcolor?.value?.hex).toBe("#1a1a2e");
     expect(style.color?.value?.hex).toBe("#eeeeee");
   });
@@ -230,9 +364,9 @@ describe("both bg and fg resolved", () => {
 // ────────────────────────────────────────────────────────────────────────────
 // 9. Per-segment hue = WHICH palette (whole-theme transposition)
 //
-// [LAW:behavior-not-structure] The hue behavior is now a property of the palette
-// the resolver carries, not an option of resolveSegmentColors. These assert the
-// observable: resolved hex through a transposed resolver. The anchor rule itself
+// [LAW:behavior-not-structure] The hue behavior is a property of the palette
+// handed to resolveSegmentColors, not an option of it. These assert the
+// observable: resolved hex through a transposed palette. The anchor rule itself
 // (error/success/warning hue-locked, info NOT) is owned + exhaustively tested in
 // rich-js (transposePalette / ANCHORED_ROOTS); here we assert only that
 // cc-candybar wires it through correctly.
@@ -248,7 +382,7 @@ function maxChannelDelta(a: ColorRgba, b: ColorRgba): number {
 }
 
 describe("per-segment hue via palette transposition", () => {
-  const base = makeTestResolver();
+  const base = makeTestPalette();
   // A hue-only ThemeKey — the shape renderDsl composes for a segment when no
   // look is active (the other three axes identity).
   const hueKey = (hueShift: number): ThemeKey => ({
@@ -259,64 +393,69 @@ describe("per-segment hue via palette transposition", () => {
   });
 
   test("hueShift 0 → identity: resolved color is byte-exact to base", () => {
-    const shifted = transposedResolver(base, hueKey(0));
-    const a = shifted.resolve("primary")!;
-    const b = base.resolve("primary")!;
-    expect(maxChannelDelta(a, b)).toBe(0);
+    const shifted = transposedPalette(base, hueKey(0));
+    expect(maxChannelDelta(shifted.get("primary")!, base.get("primary")!)).toBe(
+      0,
+    );
   });
 
   test("hueShift 30 → non-anchored color shifts substantially", () => {
-    const shifted = transposedResolver(base, hueKey(30));
-    const a = shifted.resolve("primary")!;
-    const b = base.resolve("primary")!;
-    expect(maxChannelDelta(a, b)).toBeGreaterThan(5);
+    const shifted = transposedPalette(base, hueKey(30));
+    expect(
+      maxChannelDelta(shifted.get("primary")!, base.get("primary")!),
+    ).toBeGreaterThan(5);
   });
 
-  test("hueShift 30 → anchored specs (error/success) keep their hue", () => {
-    const shifted = transposedResolver(base, hueKey(30));
+  test("hueShift 30 → anchored names (error/success) keep their hue", () => {
+    const shifted = transposedPalette(base, hueKey(30));
     // error/success are in rich-js ANCHORED_ROOTS: hue-locked under transpose,
     // so they survive within round-trip tolerance while primary (above) moves.
-    expect(maxChannelDelta(shifted.resolve("error")!, base.resolve("error")!)).toBeLessThanOrEqual(2);
-    expect(maxChannelDelta(shifted.resolve("success")!, base.resolve("success")!)).toBeLessThanOrEqual(2);
+    expect(
+      maxChannelDelta(shifted.get("error")!, base.get("error")!),
+    ).toBeLessThanOrEqual(2);
+    expect(
+      maxChannelDelta(shifted.get("success")!, base.get("success")!),
+    ).toBeLessThanOrEqual(2);
   });
 
   test("hueShift 30 → 'info' is NOT anchored (transposes like any color)", () => {
     // The old local SEMANTIC_SPECS list exempted 'info'; rich-js ANCHORED_ROOTS
     // does not. This is the drift the reshaping removed.
-    const shifted = transposedResolver(base, hueKey(30));
+    const shifted = transposedPalette(base, hueKey(30));
     expect(
-      maxChannelDelta(shifted.resolve("info")!, base.resolve("info")!),
+      maxChannelDelta(shifted.get("info")!, base.get("info")!),
     ).toBeGreaterThan(5);
   });
 
-  test("memoized: same (palette, hueShift) returns the same resolver instance", () => {
-    expect(transposedResolver(base, hueKey(30))).toBe(transposedResolver(base, hueKey(30)));
+  test("memoized: same (palette, hueShift) returns the same palette instance", () => {
+    expect(transposedPalette(base, hueKey(30))).toBe(
+      transposedPalette(base, hueKey(30)),
+    );
   });
 
   test("literal fg is transposed too (bg/fg pair preserved, not output-only)", () => {
-    // The key fix: transposing the whole palette means a LITERAL fg token
+    // The key fix: transposing the whole palette means a LITERAL fg reference
     // shifts alongside bg. The old output-only bg rotation left a literal fg
     // un-shifted, drifting the theme-designed bg/fg relationship apart.
-    const shifted = transposedResolver(base, hueKey(60));
-    // fg is a chromatic literal token (not `auto`): under whole-palette
-    // transposition it shifts with bg; the old bg-output-only rotation left it put.
-    const bgTpl = parseTemplate("surface", shifted);
-    const fgTpl = parseTemplate("info", shifted);
-    const style = resolveSegmentColors(shifted, bgTpl, fgTpl, {});
-    const baseStyle = resolveSegmentColors(base, bgTpl, fgTpl, {});
+    const h = makeHarness();
+    const shifted = transposedPalette(base, hueKey(60));
+    const bgTpl = h.parse("surface");
+    const fgTpl = h.parse("info");
+    const style = resolve(h, shifted, bgTpl, fgTpl);
+    const baseStyle = resolve(h, base, bgTpl, fgTpl);
     expect(style.color?.value?.hex).not.toBe(baseStyle.color?.value?.hex);
   });
 });
 
 // ────────────────────────────────────────────────────────────────────────────
 // 9b. The other three ThemeKey axes — a look's chromaScale/lightnessScale/
-// lightnessShift, transposed through the same transposedResolver as hueShift
+// lightnessShift, transposed through the same transposedPalette as hueShift
 // (brandon-themes-07p). Asserted in OKLCH terms (Oklch.fromRgba) so "the
 // saturation moved" is a checked number, not an inference from a differing hex.
 // ────────────────────────────────────────────────────────────────────────────
 
 describe("non-hue ThemeKey axes via palette transposition", () => {
-  const base = makeTestResolver();
+  const base = makeTestPalette();
   const key = (overrides: Partial<ThemeKey>): ThemeKey => ({
     hueShift: 0,
     chromaScale: 1,
@@ -326,58 +465,61 @@ describe("non-hue ThemeKey axes via palette transposition", () => {
   });
 
   test("chromaScale 0.5 desaturates a non-anchored color (chroma drops, hue holds)", () => {
-    const shifted = transposedResolver(base, key({ chromaScale: 0.5 }));
-    const a = Oklch.fromRgba(base.resolve("primary")!);
-    const b = Oklch.fromRgba(shifted.resolve("primary")!);
+    const shifted = transposedPalette(base, key({ chromaScale: 0.5 }));
+    const a = Oklch.fromRgba(base.get("primary")!);
+    const b = Oklch.fromRgba(shifted.get("primary")!);
     expect(b.c).toBeLessThan(a.c * 0.75);
     expect(Math.abs(b.h - a.h)).toBeLessThanOrEqual(2);
   });
 
   test("lightnessScale -1 (INVERT_LIGHTNESS) flips lightness toward its complement", () => {
-    const shifted = transposedResolver(base, key({ lightnessScale: -1, lightnessShift: 1 }));
-    const a = Oklch.fromRgba(base.resolve("primary")!);
-    const b = Oklch.fromRgba(shifted.resolve("primary")!);
+    const shifted = transposedPalette(
+      base,
+      key({ lightnessScale: -1, lightnessShift: 1 }),
+    );
+    const a = Oklch.fromRgba(base.get("primary")!);
+    const b = Oklch.fromRgba(shifted.get("primary")!);
     // L' = 1 - L: the inverted lightness lands near the complement, not near the original.
     expect(Math.abs(b.l - (1 - a.l))).toBeLessThan(0.05);
     expect(Math.abs(b.l - a.l)).toBeGreaterThan(0.1);
   });
 
   test("memoized: distinct chromaScale/lightnessScale values are distinct cache entries", () => {
-    // Guards the fix this PR made to transposedResolver's cache key — before it
-    // covered all four axes, two keys differing only on chroma/lightness would
-    // collide and silently share a resolver.
-    const vivid = transposedResolver(base, key({ chromaScale: 1.5 }));
-    const muted = transposedResolver(base, key({ chromaScale: 0.5 }));
+    // Guards transposedPalette's cache key — before it covered all four axes,
+    // two keys differing only on chroma/lightness would collide and silently
+    // share a palette.
+    const vivid = transposedPalette(base, key({ chromaScale: 1.5 }));
+    const muted = transposedPalette(base, key({ chromaScale: 0.5 }));
     expect(vivid).not.toBe(muted);
-    expect(vivid.resolve("primary")!.red).not.toBe(muted.resolve("primary")!.red);
+    expect(vivid.get("primary")!.red).not.toBe(muted.get("primary")!.red);
   });
 });
 
 // ────────────────────────────────────────────────────────────────────────────
-// 10. resolverForThemeName — the single name -> PaletteResolver enforcer (k5a.4)
+// 10. paletteForThemeName — the single name -> Palette enforcer (k5a.4)
 // ────────────────────────────────────────────────────────────────────────────
 
-describe("resolverForThemeName", () => {
-  test("memoized: same name returns the same resolver instance", () => {
-    expect(resolverForThemeName("nord")).toBe(resolverForThemeName("nord"));
+describe("paletteForThemeName", () => {
+  test("memoized: same name returns the same palette instance", () => {
+    expect(paletteForThemeName("nord")).toBe(paletteForThemeName("nord"));
   });
 
-  test("resolves aliases to the same resolver as the canonical name", () => {
+  test("resolves aliases to the same palette as the canonical name", () => {
     // 'dark' is an alias of 'textual-dark' (resolvePaletteName), so both must
-    // collapse to one cached resolver.
-    expect(resolverForThemeName("dark")).toBe(
-      resolverForThemeName("textual-dark"),
+    // collapse to one cached palette.
+    expect(paletteForThemeName("dark")).toBe(
+      paletteForThemeName("textual-dark"),
     );
   });
 
-  test("distinct themes resolve a 'primary' spec to distinct colors", () => {
-    const a = resolverForThemeName("nord").resolve("primary")!;
-    const b = resolverForThemeName("gruvbox").resolve("primary")!;
+  test("distinct themes resolve 'primary' to distinct colors", () => {
+    const a = paletteForThemeName("nord").get("primary")!;
+    const b = paletteForThemeName("gruvbox").get("primary")!;
     expect(maxChannelDelta(a, b)).toBeGreaterThan(5);
   });
 
   test("an unresolvable name throws loudly (registry drift, not a fallback)", () => {
-    expect(() => resolverForThemeName("not-a-real-theme")).toThrow(
+    expect(() => paletteForThemeName("not-a-real-theme")).toThrow(
       /did not resolve in the theme registry/,
     );
   });

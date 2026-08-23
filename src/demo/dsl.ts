@@ -34,7 +34,7 @@ import {
   effectiveThemeName,
   effectiveLookName,
   lookKeyByName,
-  resolverForThemeName,
+  paletteForThemeName,
 } from "../themes/index.js";
 import { registerDslConfig, renderDsl } from "../dsl/render.js";
 import {
@@ -78,7 +78,7 @@ const payload = {
 };
 
 // The demo has no SessionState; the effective theme is just the config default.
-const basePalette = resolverForThemeName(
+const basePalette = paletteForThemeName(
   effectiveThemeName(null, config.globals.palette),
 );
 // Same fresh-session resolution one dimension over: the config-default look

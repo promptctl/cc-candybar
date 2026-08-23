@@ -20,7 +20,7 @@
 // SENSITIVITY itself (the retention rationale, what Option A would break) is
 // pinned separately below.
 
-import { PaletteResolver, getThemePalette } from "@promptctl/rich-js";
+import { getThemePalette } from "@promptctl/rich-js";
 
 import {
   parseDslConfig,
@@ -39,7 +39,7 @@ const OPTS = {
   colorCompatibility: "truecolor" as const, wrap: true, padding: 0, charset: "unicode" as const,
   width: Number.POSITIVE_INFINITY,
 };
-const BASE_PALETTE = new PaletteResolver(getThemePalette("textual-dark")!);
+const BASE_PALETTE = getThemePalette("textual-dark"!);
 
 const VARS = `{ n: { kind: "input", path: "n", type: "number", default: 0 } }`;
 

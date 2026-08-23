@@ -11,7 +11,7 @@
 // Internal refactors (hue rotation policy, sink ordering) that preserve these
 // behaviors must not break these tests.
 
-import { PaletteResolver, getThemePalette } from "@promptctl/rich-js";
+import { getThemePalette } from "@promptctl/rich-js";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
@@ -27,7 +27,7 @@ const OPTS = {
 };
 
 function basePalette() {
-  return new PaletteResolver(getThemePalette("textual-dark")!);
+  return getThemePalette("textual-dark"!);
 }
 
 function buildRuntime(source: string) {
