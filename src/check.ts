@@ -37,7 +37,7 @@ import {
   lookKeyByName,
   effectiveStripStyle,
 } from "./themes/policy.js";
-import { resolverForThemeName } from "./themes/palette-resolvers.js";
+import { paletteForThemeName } from "./themes/palette-resolvers.js";
 import {
   DEFAULT_CHARSET,
   DEFAULT_COLOR_COMPATIBILITY,
@@ -305,7 +305,7 @@ function loadRegisterRender(
       store,
       registry,
       checkPayload(effective),
-      resolverForThemeName(effective.theme),
+      paletteForThemeName(effective.theme),
       {
         style: effective.style,
         width: CHECK_WIDTH,

@@ -141,15 +141,15 @@ describe("nested style functions inside one cell", () => {
     expect(cells[0]!.plain).toBe("hello");
   });
 
-  test("red text produces cell with color set", () => {
-    const cells = evalCells('{{ red "error" }}');
+  test("colored text produces cell with color set", () => {
+    const cells = evalCells('{{ fg "red" "error" }}');
     expect(cells).toHaveLength(1);
     expect(cells[0]!.style.color).toBeDefined();
     expect(cells[0]!.plain).toBe("error");
   });
 
-  test("nested: bold inside red — outer wins on color, bold carried", () => {
-    const cells = evalCells('{{ red (bold "x") }}');
+  test("nested: bold inside a color — outer wins on color, bold carried", () => {
+    const cells = evalCells('{{ fg "red" (bold "x") }}');
     expect(cells).toHaveLength(1);
     expect(cells[0]!.style.color).toBeDefined(); // red
     expect(cells[0]!.style.bold).toBe(true);

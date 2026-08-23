@@ -18,8 +18,13 @@
 //    (int here is shadowed by ccCandybarFuncs' var-system cast below).
 //  • sprigDicts: dict, get, set, keys, values, pick, omit, hasKey, merge —
 //    `dict` lets a helper take multiple named inputs through its one dot arg.
-//  • richTextFuncs: bold, italic, red, green, … (styling from rich-js).
-//  • paletteFuncs (when resolver provided): primary, accent, palette, paletteOver, auto.
+//  • richTextFuncs: fg, bg, bold, italic, link, style (painting) PLUS the
+//    palette-free color math (darken, lighten, mix, contrastOn, readableOn,
+//    shiftHue, scaleChroma, scaleLightness, shiftLightness) — all from rich-js.
+//    Naming a THEME color (`{{ color "primary" }}`) and asking for the current
+//    segment's background (`{{ bgOf }}`) are segment-scoped, so they arrive
+//    through `extraFuncs` from the DSL render layer, which is the only place
+//    that knows which segment is rendering.
 //  • ccCandybarFuncs: basename, dirname, int, string, bool, urlEncode,
 //    themes, styles, sparkline.
 //  • formatterFuncs: minutesUntilReset (clock-reading numeric primitive),
@@ -39,29 +44,24 @@ import {
   sprigConversions,
   sprigDicts,
 } from "@promptctl/go-template-js";
-import type { PaletteResolver } from "@promptctl/rich-js";
 import { richTextFuncs, RichText } from "@promptctl/rich-js";
-import { paletteFuncs } from "@promptctl/rich-js/template-bindings";
 import { ccCandybarFuncs, formatterFuncs } from "./funcs.js";
 
 // [LAW:single-enforcer] fromString/toString are declared once here.
-// richTextFuncs() provides style functions (bold, red, link, …).
-// paletteFuncs(resolver) registers semantic palette functions when a theme
-// resolver is provided — same engine instance, no second parse path.
+// richTextFuncs() provides the theme-independent vocabulary: painting, color
+// math, attributes, links. It needs no configuration, so it is unconditional.
 // [LAW:one-way-deps] `extraFuncs` is an INJECTED FuncMap (e.g. the action +
 // picker feature funcs, built in render/action.ts + render/picker.ts). The
 // generic engine never imports a specific feature — the caller hands it the
 // capability as data, so the dependency runs caller → engine, never engine → feature.
-// [LAW:one-type-per-behavior] resolver?/extraFuncs? are values, not modes —
-// one factory, one engine shape; the data (their presence) governs what's
-// registered.
+// [LAW:one-type-per-behavior] extraFuncs? is a value, not a mode — one factory,
+// one engine shape; the data (its presence) governs what's registered.
 // [LAW:single-enforcer] `clock` is the one time source. It feeds sprigDatetime
 // (the funcs that read "now") AND createEngine's clock option, so every
 // time-dependent evaluation in this engine reads from one seam. Defaulted here
 // so the default literal `() => new Date()` lives in exactly one place; callers
 // that omit it (and forwarders passing `undefined`) inherit it unchanged.
 export function createCcCandybarEngine(
-  resolver?: PaletteResolver,
   extraFuncs?: FuncMap,
   clock: () => Date = () => new Date(),
 ): Engine<RichText> {
@@ -88,7 +88,6 @@ export function createCcCandybarEngine(
       // decoupled from any payload's nesting — no per-payload helper variant.
       ...sprigDicts(),
       ...richTextFuncs(),
-      ...(resolver !== undefined ? paletteFuncs(resolver) : {}),
       // Domain-specific overrides last (wins on collision with sprig aliases).
       // [LAW:one-source-of-truth] ccCandybarFuncs' `int` is the var-system cast
       // (toNumber over VarValue); it intentionally shadows sprigConversions' `int`

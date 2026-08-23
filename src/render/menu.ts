@@ -50,25 +50,30 @@ import {
 import { effectsUrl, VERB_SET_STATE } from "../click/wire.js";
 import { linkFragment, readVar, type ActionRuntime } from "./action.js";
 import { renderPicker } from "./picker.js";
+import type { ActiveSegmentRef } from "./active-segment.js";
 
-// [LAW:types-are-the-program] One menu placement: the structural fact a context-
-// free `{{ menu }}` cannot see about itself — the name of the segment it renders
-// inside. Published by the walk per segment render; the helper reads the live
-// value to derive identity.
-export interface MenuPlacement {
-  readonly segName: string;
-}
+// [LAW:one-type-per-behavior] A `{{ menu }}` needs one structural fact it cannot
+// see about itself — the name of the segment it renders inside. That used to be
+// its own `MenuPlacement` type; it is now a field on the ONE active-segment
+// record the walk publishes (see render/active-segment.ts), because "which
+// segment is rendering" is a single fact and a per-feature copy of it is a
+// second clock. The menu reads `segName` and ignores the rest.
 
 // [LAW:locality-or-seam] The runtime the `menu` func closes over. It shares the
 // ACTION runtime (the menu's glyph and body resolve their actions/state from the
 // same compiled table + store as every other helper) and READS the walk-published
-// current placement — both inputs, never written by the helper. `current` is
-// mutated only by the single owner (the render walk, before each segment eval) —
+// active segment — both inputs, never written by the helper. The record is
+// mutated only by the single owner (the render walk, around each segment eval) —
 // the spatial cousin of the hue cursor, one mutator, never ambient.
 // [LAW:no-ambient-temporal-coupling]
 export interface MenuRuntime {
   readonly action: ActionRuntime;
-  current: MenuPlacement | null;
+  // [LAW:one-source-of-truth] The menu does not publish its own "which segment
+  // is current" pointer — it reads the ONE record the render walk publishes for
+  // every segment-scoped feature (the palette `{{ color }}` resolves against and
+  // the background `{{ bgOf }}` returns ride the same record). A second pointer
+  // would be a second clock for the same fact.
+  readonly activeSegment: ActiveSegmentRef;
 }
 
 // [LAW:effects-at-boundaries] The body a `{{ menu }}` drops below its row rides as
@@ -95,7 +100,7 @@ function renderMenu(
   options: MenuOptions,
   runtime: MenuRuntime,
 ): RichText {
-  const placement = runtime.current;
+  const placement = runtime.activeSegment.current;
   // [LAW:no-defensive-null-guards] The walk publishes a placement before every
   // segment template evaluates; a `{{ menu }}` only renders inside a segment. A
   // null here is a wiring bug (the func fired with no current segment), surfaced

@@ -11,10 +11,40 @@
 // template author can copy the pattern without reading the DEFAULT_DSL_CONFIG
 // source.
 //
-// The key idea: color by NAME (primary/accent/success/warning/error), never
-// by hardcoded ANSI/hex value. A palette name resolves against whichever
-// theme/look is active, so the same template stays legible across every
-// theme a user picks — a hardcoded `red`/`green` would not.
+// ── The two ideas worth taking from this file ──────────────────────────────
+//
+// 1. COLOR BY NAME, never by hardcoded value. `{{ color "primary" }}` resolves
+//    against whichever theme, look and hue shift are active for this segment,
+//    so the same template stays legible across every theme a user picks. A
+//    literal `#ff0000` would not.
+//
+// 2. QUIET IS THE DEFAULT, not a wrapper. The segment's `fg:` is a *computed*
+//    color, so structural text — the `⎇` glyph, the parentheses, the spaces —
+//    recedes without the template saying anything about it, and only the
+//    operative facts name a color. That inversion is why the template below
+//    contains no de-emphasis markup at all.
+//
+// ── The colour vocabulary ──────────────────────────────────────────────────
+//
+// A colour is a value. `color` produces one from a palette name (or passes a
+// `#RRGGBB` literal through); the math functions transform one; `fg`/`bg`
+// paint one onto text. They compose by nesting, so the simple case is a prefix
+// of the composed case — you add an adjustment by WRAPPING working code, never
+// by rewriting it into a different form:
+//
+//   {{ fg (color "primary") .git.branch }}
+//   {{ fg (darken (color "primary") 2) .git.branch }}
+//   {{ fg (mix (color "primary") (bgOf) 40) .git.branch }}
+//
+// Available on any colour: darken/lighten (HSL levels), mix (blend a→b by
+// percent), contrastOn (black or white, whichever is readable), readableOn
+// (keep the colour, guarantee a WCAG ratio), and the four OKLCH axes
+// (shiftHue, scaleChroma, scaleLightness, shiftLightness).
+//
+// `bgOf` is the current segment's own resolved background — the thing to blend
+// *toward* when you want text to recede. Use it rather than the theme's
+// `background`: this segment sits on `surface-active`, so blending toward
+// `background` would mute toward a colour that is not actually behind it.
 //
 // Try it (static demo, no click state needed — this example has no
 // interactive elements):
@@ -27,7 +57,7 @@
 {
   segments: {
     git: {
-      // Five distinct palette-name functions, one per fact:
+      // Five distinct palette names, one per fact:
       //   primary  — the branch name (the identity of the segment)
       //   success  — staged files (green-family: ready to commit) AND the
       //              ahead count (green-family: unpushed local work)
@@ -36,13 +66,26 @@
       //   accent   — untracked files (new, not yet in git's index at all —
       //              distinct from "unstaged", which implies tracked+edited)
       //   error    — merge conflicts (the one state that blocks a commit)
+      // Everything NOT wrapped in an `fg` — the ⎇ glyph, the parentheses, the
+      // separating spaces — inherits the quiet `fg:` below.
       // Compare this to the bundled default's GIT_TEMPLATE/GIT_WORKTREE in
       // src/config/default-dsl-config.ts — same coloring convention, just
       // inlined here instead of factored through shared TS template-string
       // constants (this file has no TS module to factor into).
-      template: '⎇ {{ primary .git.branch }}{{ if or (gt .git.ahead 0) (gt .git.behind 0) }} {{ if gt .git.ahead 0 }}{{ success (printf "↑%v" .git.ahead) }}{{ end }}{{ if gt .git.behind 0 }}{{ warning (printf "↓%v" .git.behind) }}{{ end }}{{ end }}{{ if or (gt .git.staged 0) (gt .git.unstaged 0) (gt .git.untracked 0) (gt .git.conflicts 0) }} ({{ $first := true }}{{ if gt .git.staged 0 }}{{ success (printf "+%v" .git.staged) }}{{ $first = false }}{{ end }}{{ if gt .git.unstaged 0 }}{{ if not $first }} {{ end }}{{ warning (printf "~%v" .git.unstaged) }}{{ $first = false }}{{ end }}{{ if gt .git.untracked 0 }}{{ if not $first }} {{ end }}{{ accent (printf "?%v" .git.untracked) }}{{ $first = false }}{{ end }}{{ if gt .git.conflicts 0 }}{{ if not $first }} {{ end }}{{ error (printf "!%v" .git.conflicts) }}{{ $first = false }}{{ end }}){{ end }}',
+      template: '⎇ {{ fg (color "primary") .git.branch }}{{ if or (gt .git.ahead 0) (gt .git.behind 0) }} {{ if gt .git.ahead 0 }}{{ fg (color "success") (printf "↑%v" .git.ahead) }}{{ end }}{{ if gt .git.behind 0 }}{{ fg (color "warning") (printf "↓%v" .git.behind) }}{{ end }}{{ end }}{{ if or (gt .git.staged 0) (gt .git.unstaged 0) (gt .git.untracked 0) (gt .git.conflicts 0) }} ({{ $first := true }}{{ if gt .git.staged 0 }}{{ fg (color "success") (printf "+%v" .git.staged) }}{{ $first = false }}{{ end }}{{ if gt .git.unstaged 0 }}{{ if not $first }} {{ end }}{{ fg (color "warning") (printf "~%v" .git.unstaged) }}{{ $first = false }}{{ end }}{{ if gt .git.untracked 0 }}{{ if not $first }} {{ end }}{{ fg (color "accent") (printf "?%v" .git.untracked) }}{{ $first = false }}{{ end }}{{ if gt .git.conflicts 0 }}{{ if not $first }} {{ end }}{{ fg (color "error") (printf "!%v" .git.conflicts) }}{{ $first = false }}{{ end }}){{ end }}',
       bg: "surface-active",
-      fg: "foreground",
+      // A computed `fg:`. The field is a template that evaluates to a colour,
+      // and `bgOf` is available here because a segment's background resolves
+      // BEFORE its foreground. Read it as: blend the theme's foreground 60% of
+      // the way toward this segment's background, but never past a 3:1 contrast
+      // ratio (WCAG's large-text floor).
+      //
+      // The floor is what makes this theme-independent. A bare 60% blend
+      // measures anywhere from 1.9:1 to 3.1:1 depending on how far a given
+      // theme's foreground sits from its surface — legible in some themes,
+      // genuinely hard to read in others. Flooring it lands every theme at
+      // ~3:1: as quiet as that theme can afford, and never quieter.
+      fg: '{{ readableOn (mix (color "foreground") (bgOf) 60) (bgOf) 3 }}',
       when: '{{ ne .git.branch "" }}',
     },
   },

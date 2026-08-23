@@ -3,14 +3,14 @@
 // prove the click writes SessionState and the active-marking moves, but they
 // pass a STATIC basePalette into renderDsl — so they never exercise the
 // recolor. The recolor lives in the daemon's PER-RENDER basePalette resolution
-// (effectiveThemeName -> resolverForThemeName), OUTSIDE renderDsl. This test
+// (effectiveThemeName -> paletteForThemeName), OUTSIDE renderDsl. This test
 // replicates that resolution exactly as src/daemon/server.ts does, so it proves
 // the end-to-end loop: a set-state `theme` click changes the bytes a
 // non-picker segment renders.
 //
 // [LAW:single-enforcer] Drives the real spine — registerDslConfig + renderDsl
 // for rendering, parseHandlerUrl + VERBS for the click, and the same
-// effectiveThemeName/resolverForThemeName the daemon calls. No parallel rig.
+// effectiveThemeName/paletteForThemeName the daemon calls. No parallel rig.
 
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
@@ -19,7 +19,7 @@ import { registerDslConfig, renderDsl } from "../src/dsl/render";
 import { SessionState } from "../src/daemon/session-state";
 import { effectsOf, clickUrl, boldUrls } from "./helpers/click";
 import { effectsUrl, VERB_SET_STATE } from "../src/click/wire";
-import { effectiveThemeName, resolverForThemeName } from "../src/themes";
+import { effectiveThemeName, paletteForThemeName } from "../src/themes";
 
 const SID = "s-recolor";
 const BASE_THEME = "textual-dark";
@@ -65,10 +65,10 @@ function buildRuntime() {
   // daemon does — the session's chosen theme over the config default. This is
   // the line that makes a click recolor the bar; freezing it would silently
   // pass while the real daemon recolors. (server.ts: basePalette =
-  // resolverForThemeName(effectiveThemeName(sessionState.get(sid,'theme'),
+  // paletteForThemeName(effectiveThemeName(sessionState.get(sid,'theme'),
   // globals.palette))).
   const render = (): string => {
-    const basePalette = resolverForThemeName(
+    const basePalette = paletteForThemeName(
       effectiveThemeName(
         sessionState.get(SID, "theme"),
         config.globals.palette,

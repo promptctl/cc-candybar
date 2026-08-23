@@ -25,7 +25,7 @@ import { listResolvablePaletteNames } from "../src/themes/policy";
 import { registerDslConfig, renderDsl } from "../src/dsl/render";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
-import { PaletteResolver, getThemePalette } from "@promptctl/rich-js";
+import { getThemePalette } from "@promptctl/rich-js";
 
 const FIVE_HOUR_MS = 5 * 60 * 60 * 1000;
 const NOW_MS = 1_700_000_000_000; // fixed instant; NOW_MS / 1000 is whole seconds
@@ -197,9 +197,7 @@ function renderBurnrate(payload: Record<string, unknown>): string {
   const registry = new SourceRegistry(store);
   try {
     const compiled = registerDslConfig(cfg, registry, { cwd: "/tmp" });
-    const bp = new PaletteResolver(
-      getThemePalette(cfg.globals.palette ?? "catppuccin-latte")!,
-    );
+    const bp = getThemePalette(cfg.globals.palette ?? "catppuccin-latte")!;
     return renderDsl(cfg, compiled, store, registry, payload, bp, {
       style: "powerline",
       colorCompatibility: "none", wrap: true, padding: 0, charset: "unicode" as const,

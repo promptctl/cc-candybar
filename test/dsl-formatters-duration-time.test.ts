@@ -19,7 +19,7 @@
 // DEFAULT_DSL_CONFIG, so the `{{ template "name" }}` calls resolve the same
 // helper bodies the shipped statusline uses — not a test-local copy.
 
-import { PaletteResolver, getThemePalette } from "@promptctl/rich-js";
+import { getThemePalette } from "@promptctl/rich-js";
 
 import {
   parseDslConfig,
@@ -37,7 +37,7 @@ const OPTS = {
   colorCompatibility: "truecolor" as const, wrap: true, padding: 0, charset: "unicode" as const,
   width: Number.POSITIVE_INFINITY,
 };
-const BASE_PALETTE = new PaletteResolver(getThemePalette("textual-dark")!);
+const BASE_PALETTE = getThemePalette("textual-dark"!);
 
 // A whole-second-aligned frozen instant: clock().getTime() === NOW_MS exactly,
 // so minutesUntilReset's `epoch*1000 - now` arithmetic has no sub-second slack.

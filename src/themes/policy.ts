@@ -2,7 +2,7 @@
 // theme registry. cc-candybar selects theme NAMES and style IDENTIFIERS here;
 // every color *value* operation (hydrate hex, resolve specs, darken/contrast,
 // hue/transpose) lives in rich-js. This module only moves strings — no
-// PaletteResolver, no ColorRgba, no hex. The semantic/anchor knowledge
+// Palette, no ColorRgba, no hex. The semantic/anchor knowledge
 // (which tokens keep their hue) stays in rich-js (ANCHORED_ROOTS), not here.
 
 import {

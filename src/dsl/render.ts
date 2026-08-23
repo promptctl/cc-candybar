@@ -11,7 +11,7 @@
 // the input values (kind discriminators, layout length, palette presence)
 // govern output, not whether operations run.
 
-import type { RichText, PaletteResolver, ThemeKey } from "@promptctl/rich-js";
+import type { RichText, Palette, ThemeKey } from "@promptctl/rich-js";
 import { ColorSpec, Style, lighten, IDENTITY } from "@promptctl/rich-js";
 import type { Engine, Template } from "@promptctl/go-template-js";
 import type {
@@ -31,11 +31,12 @@ import {
 } from "../var-system/sources.js";
 import type { BuildLineOptions } from "../render/strip.js";
 import { DEFAULT_PADDING, renderStripCells } from "../render/strip.js";
-import { resolverForThemeName, effectiveThemeName } from "../themes/index.js";
+import { paletteForThemeName } from "../themes/index.js";
 import { buildScope } from "../template-engine/scope.js";
 import {
   createCcCandybarEngine,
   evaluateWhen,
+  resolveSegmentColors,
 } from "../template-engine/index.js";
 import {
   compileActions,
@@ -48,6 +49,11 @@ import {
   collectMenuDrops,
   type MenuRuntime,
 } from "../render/menu.js";
+import {
+  createActiveSegmentRef,
+  type ActiveSegmentRef,
+} from "../render/active-segment.js";
+import { segmentColorFuncs } from "../render/segment-color.js";
 // [LAW:one-way-deps] The node-type registry sits below this driver: it owns the
 // compiled node shapes + each kind's compile/render, dispatched via nodeType().
 // render.ts threads the recursion (compileChild/renderChild) + the hue counter in
@@ -73,13 +79,16 @@ import {
 export interface CompiledConfig {
   readonly segments: CompiledSegments;
   readonly root: CompiledNode;
-  // [LAW:locality-or-seam] The menu runtime the engine's `menu` func closes over,
-  // surfaced here so renderDsl can publish each segment's placement into it before
-  // that segment's template evaluates. One instance per compiled config; its
-  // `current` is mutated synchronously within a single renderDsl walk (renders are
-  // sequential + synchronous, so no cross-render leak) — the spatial cousin of the
-  // hue cursor, one owner. [LAW:no-ambient-temporal-coupling]
+  // [LAW:locality-or-seam] The menu runtime the engine's `menu` func closes over.
   readonly menuRuntime: MenuRuntime;
+  // [LAW:one-source-of-truth] The single "which segment is rendering" record
+  // every segment-scoped template function reads — the menu's identity, the
+  // `color` func's palette, the `bgOf` func's background. Surfaced here so the
+  // walk can publish into it. One instance per compiled config; mutated
+  // synchronously within a single renderDsl walk (renders are sequential +
+  // synchronous, so no cross-render leak) — the spatial cousin of the hue
+  // cursor, one owner. [LAW:no-ambient-temporal-coupling]
+  readonly activeSegment: ActiveSegmentRef;
   // [LAW:types-are-the-program] Variable declaration failures that did NOT
   // prevent the config from loading (type mismatches, bad defaults). The
   // affected variables are absent from the store; segments that reference them
@@ -297,13 +306,19 @@ export function registerDslConfig(
   // [LAW:single-enforcer] Forward the caller's clock (the daemon's `() => new
   // Date()`, a test's frozen clock) to the one engine. Omitted ⇒ undefined ⇒
   // createCcCandybarEngine applies its single default; no second default literal.
+  // [LAW:one-source-of-truth] ONE record for "which segment is rendering", read
+  // by every segment-scoped template function: `{{ menu }}` takes its identity
+  // from the name, `{{ color }}` its palette, `{{ bgOf }}` its background. A
+  // per-feature pointer would let two features disagree about which segment is
+  // current. Built before the engine so the funcs can close over it; `current`
+  // stays null until a render walk publishes one.
+  const activeSegment = createActiveSegmentRef();
   // [LAW:locality-or-seam] The menu runtime shares the action runtime (a menu's
-  // glyph + body resolve from the same compiled table + store) and carries the
-  // walk-published current placement. Built before the engine so the `menu` func
-  // can close over it; `current` stays null until a render walk publishes one.
+  // glyph + body resolve from the same compiled table + store) and reads the
+  // active segment through the shared record above.
   const menuRuntime: MenuRuntime = {
     action: actionRuntime,
-    current: null,
+    activeSegment,
   };
   // [LAW:one-source-of-truth] The config's look names — the one PER-CONFIG
   // option domain. Fed to every consumer (the `looks()` binding below, and —
@@ -314,36 +329,22 @@ export function registerDslConfig(
   // one source.
   const lookNames = Object.keys(config.looks);
   const perConfigDomains = perConfigDomainsFor(config.looks);
-  // [LAW:rich-js-owns-color-math] Bind the semantic palette functions
-  // (primary/accent/success/warning/error/…) into the per-config engine so
-  // segment template BODIES can reference theme colors by name instead of
-  // hardcoding raw ANSI values, the same convention `bg`/`fg` specs already
-  // follow. [LAW:dataflow-not-control-flow] This resolver is frozen at
-  // registration to the config's DEFAULT theme (no session override —
-  // registerDslConfig runs once per config load, not per render) — the same
-  // "frozen at registration" contract `segments.<name>.palette` overrides
-  // already have. A live session theme click still recolors every segment's
-  // bg/fg (basePalette is re-resolved per render in renderDsl); only these
-  // in-body semantic color calls stay pinned to the config default theme.
-  // KNOWN LIMITATION, not merely cosmetic: `error`/`success`/`warning` are
-  // hue-anchored across themes (rich-js ANCHORED_ROOTS) so they drift only
-  // slightly on a mid-session theme switch, but `primary`/`accent` are NOT
-  // anchored — a click from e.g. tokyo-night to gruvbox-dark can render a
-  // template's `{{ primary .git.branch }}` in tokyo-night's primary against
-  // gruvbox-dark's live bg/fg, a genuine color mismatch, not just a shade
-  // drift. Fixing this for real needs a per-render-rebound resolver (a rich-js
-  // paletteFuncs API that takes a live getter instead of a frozen resolver),
-  // which gives up the parse-once/evaluate-many contract this engine
-  // otherwise holds — out of scope here; tracked as a follow-up.
-  const bodyPaletteResolver = resolverForThemeName(
-    effectiveThemeName(null, config.globals.palette),
-  );
   const engine = createCcCandybarEngine(
-    bodyPaletteResolver,
     {
       ...actionFuncs(actionRuntime),
       ...pickerFuncs(actionRuntime),
       ...menuFuncs(menuRuntime),
+      // [LAW:one-source-of-truth] `{{ color }}` reads the palette of the
+      // segment currently rendering — the same palette its `bg:`/`fg:` resolve
+      // from, published by the walk. Binding it to a palette captured HERE
+      // (registration runs once per config load, renders happen per tick) was
+      // the two-clocks bug this seam exists to close: a session theme click, a
+      // look, or a per-segment hue rotation moved a segment's background while
+      // every in-body color stayed where it was, so one segment painted from
+      // two palettes at once. Reading live costs nothing structurally — FuncMap
+      // bodies run at evaluate time, so parse-once/evaluate-many is untouched.
+      // `{{ bgOf }}` rides the same record. [LAW:rich-js-owns-color-math]
+      ...segmentColorFuncs(activeSegment),
       // [LAW:one-type-per-behavior] The per-config sibling of the static
       // themes()/styles() bindings (template-engine/funcs.ts): zero-arg
       // projection of the "looks" option domain. Injected here — not in the
@@ -455,9 +456,9 @@ export function registerDslConfig(
       // per-render basePalette; folding globals.palette in here too would freeze
       // it per segment and the stale copy would shadow basePalette, so a session
       // theme change could never recolor the bar.
-      paletteResolver:
+      palette:
         seg.palette !== undefined
-          ? resolverForThemeName(seg.palette)
+          ? paletteForThemeName(seg.palette)
           : undefined,
     };
   }
@@ -494,6 +495,7 @@ export function registerDslConfig(
   return {
     segments: compiled,
     root: compileNode(config.root, "root"),
+    activeSegment,
     menuRuntime,
     loadWarnings,
   };
@@ -579,7 +581,7 @@ export function renderDsl(
   store: VariableStore,
   registry: SourceRegistry,
   payload: unknown,
-  basePalette: PaletteResolver,
+  basePalette: Palette,
   opts: BuildLineOptions,
   observers?: RenderObservers,
   // [LAW:dataflow-not-control-flow] The render's look (the session's chosen
@@ -654,19 +656,34 @@ export function renderDsl(
       : undefined;
   };
 
-  // [LAW:single-enforcer] The menu seam, owned here. `beginSegment` publishes the
-  // segment name a `{{ menu }}` needs to derive its identity; `collectDrops` reads
-  // the open bodies the menus carried as metadata on their evaluated fragments and
-  // clears the published placement. The runtime's `current` is set/cleared around
-  // each segment eval by the walk only — never ambient.
-  // [LAW:no-ambient-temporal-coupling]
-  const beginSegment = (segName: string): void => {
-    compiled.menuRuntime.current = { segName };
-  };
-  const collectDrops = (
-    fragments: readonly RichText[],
-  ): readonly RichText[] => {
-    compiled.menuRuntime.current = null;
+  // [LAW:single-enforcer] The segment seam, owned here as a symmetric pair.
+  // `enterSegment` establishes everything a segment's templates may ask about
+  // themselves — the name `{{ menu }}` derives its identity from, the palette
+  // `{{ color }}` resolves against, the background `{{ bgOf }}` returns — and
+  // returns the resolved base Style. `exitSegment` collects the menu bodies the
+  // fragments carried as metadata and tears the record back down.
+  //
+  // [LAW:no-ambient-temporal-coupling] The record is set and cleared around each
+  // segment's evaluation by the walk ONLY, so "which segment am I in" is owned
+  // state with one writer, never ambient context a reader has to hope is
+  // current. Enter/exit are a pair by construction: every path that publishes
+  // goes through the first, every path that finishes goes through the second.
+  const enterSegment = (
+    segName: string,
+    palette: Palette,
+    bgTemplate: Template<RichText> | undefined,
+    fgTemplate: Template<RichText> | undefined,
+  ): Style =>
+    resolveSegmentColors(
+      compiled.activeSegment,
+      segName,
+      palette,
+      bgTemplate,
+      fgTemplate,
+      scope,
+    );
+  const exitSegment = (fragments: readonly RichText[]): readonly RichText[] => {
+    compiled.activeSegment.current = null;
     return collectMenuDrops(fragments);
   };
 
@@ -690,8 +707,8 @@ export function renderDsl(
       nextHueShift,
       perSegmentSink,
       onSegmentError,
-      beginSegment,
-      collectDrops,
+      enterSegment,
+      exitSegment,
       focusTint,
       lookupSegment,
       renderChild: renderNode,

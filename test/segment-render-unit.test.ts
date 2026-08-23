@@ -13,7 +13,7 @@
 //      units — the structural chevron between them survives equal bg (it is no
 //      longer suppressed by `bgcolor === bgcolor`).
 
-import { PaletteResolver, getThemePalette } from "@promptctl/rich-js";
+import { getThemePalette } from "@promptctl/rich-js";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
@@ -52,7 +52,7 @@ function render(src: string, hookData: Record<string, unknown>): string {
   const store = new VariableStore();
   const registry = new SourceRegistry(store, "", undefined, sessionState);
   const compiled = registerDslConfig(config, registry);
-  const basePalette = new PaletteResolver(getThemePalette("textual-dark")!);
+  const basePalette = getThemePalette("textual-dark"!);
   return renderDsl(config, compiled, store, registry, hookData, basePalette, OPTS);
 }
 

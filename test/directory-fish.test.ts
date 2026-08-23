@@ -12,7 +12,7 @@ import { registerDslConfig, renderDsl } from "../src/dsl/render";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import { SessionState } from "../src/daemon/session-state";
-import { PaletteResolver, getThemePalette } from "@promptctl/rich-js";
+import { getThemePalette } from "@promptctl/rich-js";
 import { abbreviatePath } from "../src/utils/formatters";
 
 // Reparse the AUTHORED literal (pre-synthesis) — see
@@ -50,7 +50,7 @@ function renderDir(paths: {
     const compiled = registerDslConfig(parsed, registry, {
       cwd: paths.current_dir,
     });
-    const basePalette = new PaletteResolver(getThemePalette("textual-dark")!);
+    const basePalette = getThemePalette("textual-dark"!);
     const payload = {
       hook_event_name: "Status",
       session_id: "dir-fish-test-0000-0000-000000000000",
@@ -165,7 +165,7 @@ describe("configurability seam: user template override restores full path", () =
       const compiled = registerDslConfig(overridden, registry, {
         cwd: "/Users/bmf/code/cc-candybar",
       });
-      const basePalette = new PaletteResolver(getThemePalette("textual-dark")!);
+      const basePalette = getThemePalette("textual-dark"!);
       const line = renderDsl(
         overridden,
         compiled,
