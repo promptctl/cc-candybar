@@ -22,6 +22,8 @@
 //               the key" position magic: identity depends only on names a reader
 //               can see in the template, never on tree position.
 
+import { ident } from "./ident.js";
+
 // [LAW:one-source-of-truth] The reserved namespace every synthesized menu
 // artifact (state var + cycle action) lives under, mirroring group sugar's
 // `groups.`. A user-authored name under this prefix is a load error so synthesis
@@ -33,14 +35,6 @@ export const MENU_NS = "menus.";
 // (DISCLOSURE_CLOSED / DISCLOSURE_GLYPH_*) so group sugar and {{ menu }} cannot
 // drift. This module keeps only the menu's own IDENTITY derivation (member = apply
 // name; key = optional shared key), which group sugar derives differently.
-
-// [LAW:types-are-the-program] Collapse an arbitrary name to an identifier-shaped
-// id so the synthesized var/action/SessionState-key names carry no dots or
-// brackets that would break template field paths. Distinct names never collide
-// under this map for the alphanumeric segment/action names the config uses.
-function ident(name: string): string {
-  return name.replace(/[^A-Za-z0-9]+/g, "_");
-}
 
 // [LAW:single-enforcer] A menu's member name IS its apply-action name. Both the
 // loader and the helper call this so neither restates the rule.

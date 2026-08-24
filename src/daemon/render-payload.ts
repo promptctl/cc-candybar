@@ -61,6 +61,15 @@ export interface EffectiveGlobals {
   // carried alongside so a menu label states the arrangement that actually
   // rendered [LAW:one-source-of-truth].
   readonly preset: string;
+  // [LAW:one-source-of-truth] brandon-layout-edit-2gc.5 — the SAME "does the
+  // active preset have accumulated rootOps right now" fact
+  // presetIsCustomized derives, resolved alongside `preset` (not a second
+  // lookup later) because both come from the SAME entry.state read: the
+  // resolved name and the resolved op-log presence must trace to one
+  // rebuild, or a diagnostic could name the wrong preset after a reload
+  // lands mid-render. Not itself a display value either — see `preset`'s
+  // own comment.
+  readonly presetCustomized: boolean;
   readonly style: StripStyle;
   readonly charset: Charset;
   readonly colorCompatibility: ColorCompatibility;
@@ -108,7 +117,13 @@ export interface RenderPayload extends ClaudeHookData {
   // and look's twin one level up: the SAME name that selected the layout this
   // render walked and the globals it rendered with, surfaced so a preset
   // trigger's label can never claim an arrangement the bar is not in.
-  readonly preset: { readonly effective: string };
+  // [LAW:one-source-of-truth] brandon-layout-edit-2gc.5 — `customized` rides
+  // alongside `effective` rather than as a sibling top-level field, mirroring
+  // the shape a `when`-gated status segment reads (`.preset.customized`)
+  // beside the trigger's own `.preset.effective` label. Required for the
+  // same reason as `effective`: resolved unconditionally per render from
+  // presetIsCustomized, never absent.
+  readonly preset: { readonly effective: string; readonly customized: boolean };
   // [LAW:one-type-per-behavior] style/charset/colorCompatibility/autoWrap/
   // padding are theme/look's twins over the remaining persistable globals
   // (candybar-config-engine-71o.3) — each REQUIRED and unconditionally
@@ -858,7 +873,10 @@ export async function buildRenderPayload(
     // hand) and a config reading e.g. `.padding.effective` must always find it.
     theme: { effective: effective.theme },
     look: { effective: effective.look },
-    preset: { effective: effective.preset },
+    preset: {
+      effective: effective.preset,
+      customized: effective.presetCustomized,
+    },
     style: { effective: effective.style },
     charset: { effective: effective.charset },
     colorCompatibility: { effective: effective.colorCompatibility },

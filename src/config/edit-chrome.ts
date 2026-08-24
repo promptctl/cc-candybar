@@ -32,6 +32,8 @@ import type {
 } from "./dsl-types.js";
 import { collectSegmentNames } from "./layout-ops.js";
 import { presetByName, presetNames, presetRoot } from "./presets.js";
+import { presetRootOpsKey } from "./loader/persist-target.js";
+import { ident } from "./ident.js";
 import {
   EDIT_MODE_GATE,
   EDIT_NS,
@@ -51,6 +53,16 @@ import {
   disclosureStateVar,
 } from "./disclosure.js";
 
+// [LAW:dataflow-not-control-flow] brandon-layout-edit-2gc.5's diagnostic gate
+// — read the SAME way EDIT_MODE_GATE is: a bare boolean input var, false
+// only on the literal text "false" (evaluateWhen's documented contract).
+// `.preset.customized` is a per-render payload fact (presetIsCustomized over
+// entry.state.presetRootOps for whichever preset is ACTIVE), not config-time
+// knowledge, so the banner below is spliced UNCONDITIONALLY for every
+// preset — same shape, every reload — and this predicate is what decides
+// whether it's visible, never a branch in this synthesis pass.
+const PRESET_CUSTOMIZED_GATE = "{{ .preset.customized }}";
+
 // [LAW:one-source-of-truth] group/menu-synthesized segments (`groups.`/
 // `menus.`) and edit mode's own trigger/chrome (`edit.`) are structural —
 // removing one via `-` would strand its sibling artifacts (a toggle segment
@@ -65,13 +77,15 @@ function isChromeExempt(name: string): boolean {
   );
 }
 
-// [LAW:types-are-the-program] Collapse an arbitrary name to a template-
-// identifier-safe fragment — the SAME shape menu-keys.ts's `ident` enforces,
-// reimplemented here rather than imported (menu-keys.ts's copy is
-// module-private) since both need only the one rule: alphanumerics survive,
-// everything else collapses to `_`.
-function ident(name: string): string {
-  return name.replace(/[^A-Za-z0-9]+/g, "_");
+// [LAW:no-silent-failure] Go-template string-literal escaping for a preset
+// NAME spliced into DISPLAY text (prependCustomizedBanner) rather than an
+// identifier — the same hazard loader/layout.ts's group `label` synthesis
+// already guards against, reimplemented here since that copy is
+// module-private and this one small rule doesn't warrant its own shared
+// module the way `ident` (checked for agreement across three sites —
+// see ./ident.ts) did.
+function escapeTemplateLiteral(s: string): string {
+  return s.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
 }
 
 // [LAW:one-source-of-truth] Every synthesized decl this pass produces, keyed
@@ -258,6 +272,55 @@ function spliceContainer(
   return { ...node, children };
 }
 
+// brandon-layout-edit-2gc.5's other per-preset affordance: a `+`/`-` sibling
+// that isn't about ONE gap but about the preset's rootOps log as a whole —
+// synthesized the SAME way (one reset action targeting this preset's exact
+// `persist` key, one segment hosting `{{ action }}`), UNCONDITIONALLY, with
+// visibility carried entirely by PRESET_CUSTOMIZED_GATE
+// [LAW:dataflow-not-control-flow]. Prepended as an extra ROW (not spliced
+// into the row-interleaved chrome spliceContainer builds) because it is not
+// bound to any one segment gap — it is a fact about the whole tree — so it
+// gets its own line above it, visible or not by the SAME `when` every other
+// synthesized affordance here already uses.
+function prependCustomizedBanner(
+  splicedRoot: LayoutNode,
+  presetName: string,
+  presetIdent: string,
+  rootOpsKey: string,
+  artifacts: ChromeArtifacts,
+): LayoutNode {
+  const actionName = `${EDIT_NS}${presetIdent}.resetLayout`;
+  const chromeSegName = `${EDIT_NS}${presetIdent}.customized`;
+  // [LAW:no-silent-failure] `reset` clears `rootOpsKey` outright, restoring
+  // presetRoot's own fallback (the config's literal, hand-authored root) on
+  // the next reload — the exact undo the ticket's guardrail asked for.
+  // `rootOpsKey` is gated the SAME way every other `presets.<name>.rootOps`
+  // target is (deriveConfigActionValidators), and is ALWAYS a registered
+  // key — config-validators.ts's presetRootOpsContributions registers it
+  // for every declared preset UNCONDITIONALLY, specifically so a preset
+  // edited down to zero non-exempt segments (no removeChrome/insertChrome
+  // persist actions left to register it) doesn't orphan this exact click.
+  artifacts.actions[actionName] = { reset: rootOpsKey };
+  const label = escapeTemplateLiteral(presetName);
+  artifacts.segments[chromeSegName] = {
+    template: `{{ action "${actionName}" "↺ ${label} customized" }}`,
+    when: PRESET_CUSTOMIZED_GATE,
+  };
+  // [LAW:no-silent-failure] A preset's root may carry its OWN top-level
+  // `when` (the A-grammar's container schemas all permit one) — an author
+  // gating the whole preset behind a condition. `spliceContainer` preserves
+  // that onto `splicedRoot` via its `{...node, children}` spread, but this
+  // new OUTER wrapper is a brand-new node with no `when` of its own; without
+  // carrying it up, the reset banner would render even when the author's
+  // own condition is false, leaking past a gate they wrote.
+  return {
+    kind: "container",
+    direction: "vertical",
+    children: [{ kind: "segment", name: chromeSegName }, splicedRoot],
+    ...(splicedRoot.when !== undefined && { when: splicedRoot.when }),
+  };
+}
+
 // One preset's chrome-spliced root. A bare-segment root (the A-grammar
 // collapses a single top-level segment ref to `{ kind: "segment", name }`
 // with no enclosing container) is wrapped in a synthetic horizontal
@@ -269,21 +332,41 @@ function spliceEditChromeForPreset(
   artifacts: ChromeArtifacts,
 ): LayoutNode {
   const { node } = presetRoot(config, presetName);
-  const rootOpsKey = `presets.${presetName}.rootOps`;
+  const rootOpsKey = presetRootOpsKey(presetName);
   const domainName = addableDomainName(presetName);
   const presetIdent = ident(presetName);
   const posCounter = { n: 0 };
+  // [LAW:no-silent-failure] The bare-segment-root case (the A-grammar's
+  // `{ seg, when }` shorthand is a legal PresetDecl.root) carries its OWN
+  // `when` onto this synthetic wrapper too — prependCustomizedBanner's own
+  // when-carry-up reads `splicedRoot.when`, which is this wrapper's `when`
+  // once spliceContainer's `{...node, children}` passes it through
+  // unchanged; without copying it here, a bare-segment preset root's own
+  // gate would never reach that carry-up at all, leaking the reset banner
+  // past it exactly like the container case did before that fix.
   const container: ContainerNode =
     node.kind === "container"
       ? node
-      : { kind: "container", direction: "horizontal", children: [node] };
-  return spliceContainer(
+      : {
+          kind: "container",
+          direction: "horizontal",
+          children: [node],
+          ...(node.when !== undefined && { when: node.when }),
+        };
+  const spliced = spliceContainer(
     container,
     presetIdent,
     rootOpsKey,
     domainName,
     artifacts,
     posCounter,
+  );
+  return prependCustomizedBanner(
+    spliced,
+    presetName,
+    presetIdent,
+    rootOpsKey,
+    artifacts,
   );
 }
 

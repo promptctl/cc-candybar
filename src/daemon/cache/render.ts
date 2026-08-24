@@ -28,6 +28,7 @@ import { configOverridesPath } from "../paths.js";
 import {
   applyPresetRootOpsOverrides,
   sanitizePersistedPresetOverride,
+  sanitizePersistedPresetRootOps,
 } from "../../config/presets.js";
 import { VariableStore } from "../../var-system/store.js";
 import { SourceRegistry } from "../../var-system/sources.js";
@@ -85,6 +86,21 @@ export interface DslRenderState {
   readonly compiled: CompiledConfig;
   readonly neededInputPaths: ReadonlySet<string>;
   readonly lastRenderCellsBySegment: Map<string, readonly RichText[]>;
+  // [LAW:one-source-of-truth] The accumulated-ops record this reload read
+  // from the overrides file, sanitized against THIS config's declared
+  // presets (sanitizePersistedPresetRootOps — never the raw file content: a
+  // stale entry naming a preset from a different project must not surface
+  // as "customized" here either) — the exact input
+  // applyPresetRootOpsOverrides replayed into `config.presets[name].root`
+  // above. Carried alongside the replayed config because the replay
+  // CONSUMES the op count: by the time a preset's tree is spliced/
+  // validated, nothing about it says how many ops (if any) produced it.
+  // brandon-layout-edit-2gc.5 reads this per render (keyed by the active
+  // preset name) to answer "does the bar's current arrangement differ from
+  // what's literally in the user's file" without a second overrides read
+  // (this entry rebuilds on the SAME watcher that rebuilds `config`, so the
+  // two never drift).
+  readonly presetRootOps: Readonly<Record<string, readonly string[]>>;
   // [LAW:single-enforcer] Disposers for the SessionState validators this config
   // installed (derived from its action table). Disposed on swap/eviction in the
   // same dispose-before-swap transaction as the SourceRegistry, so a reload
@@ -327,6 +343,19 @@ export class RenderCache {
       withGlobalsOverrides,
       overrides.segmentPalette,
     );
+    // [LAW:no-silent-failure] Drop any entry naming a preset THIS config
+    // never declared before replay ever sees it — the shared overrides file
+    // outlives any one project's preset names (brandon-layout-edit-2gc.5 PR
+    // review: without this, a stale entry from a DIFFERENT project reaches
+    // applyPresetRootOpsOverrides -> presetRoot -> presetByName, which
+    // throws for an undeclared name, failing this unrelated project's
+    // ENTIRE render). Sanitized against `merged.presets` — the SAME config
+    // sanitizePersistedPresetOverride checks `globals.preset` against, two
+    // lines up, for the identical reason.
+    const sanitizedPresetRootOps = sanitizePersistedPresetRootOps(
+      overrides.presetRootOps,
+      merged.presets,
+    );
     // [LAW:one-source-of-truth] brandon-layout-edit-2gc.1's replay step —
     // the SAME "patch an already-merged config" cascade as the segment-
     // palette overlay above, one field over (a preset's `root` instead of a
@@ -337,7 +366,7 @@ export class RenderCache {
     // be.
     const withPresetRootOps = applyPresetRootOpsOverrides(
       withOverrides,
-      overrides.presetRootOps,
+      sanitizedPresetRootOps,
     );
     const config = validateConfig(
       withPresetRootOps,
@@ -414,6 +443,7 @@ export class RenderCache {
       neededInputPaths: buildNeededPrefixes(config),
       lastRenderCellsBySegment: new Map<string, readonly RichText[]>(),
       validatorDisposers,
+      presetRootOps: sanitizedPresetRootOps,
     };
   }
 
