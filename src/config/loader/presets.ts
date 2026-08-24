@@ -85,10 +85,22 @@ export function validatePresets(
     // config load, not only once an action ranges the "presets" domain (the
     // identical guard looks.ts applies to look names, for the identical
     // reason).
-    if (name === "" || name.includes("/")) {
+    //
+    // [LAW:one-source-of-truth] Newlines are ALSO rejected — the same reason
+    // loader/layout.ts's groupLabelSpec rejects \n/\r in a group's `label`
+    // before it ever reaches escapeTemplateLiteral: a preset name is spliced
+    // as DISPLAY TEXT into a synthesized Go-template string literal
+    // (edit-chrome.ts's "customized" banner), and that escaper only handles
+    // backslash/quote — an embedded newline produces an unterminated string
+    // literal go-template-js forbids, breaking synthesis for the WHOLE
+    // config, not just this one preset. Unlike a label, a preset name is
+    // also an identifier used across other seams (the `presets` domain, the
+    // `presets.<name>.rootOps` wire key), so this belongs in its general
+    // validity check, not a narrower escape-harder fix at the one splice site.
+    if (name === "" || name.includes("/") || /[\n\r]/.test(name)) {
       ctx.issues.push({
         path: `presets.${name}`,
-        message: `preset name ${JSON.stringify(name)} must be non-empty and slash-free — a preset picker writes the name on the set-state wire, which rejects empty values and splits on "/"`,
+        message: `preset name ${JSON.stringify(name)} must be non-empty, slash-free, and newline-free — a preset picker writes the name on the set-state wire (which rejects empty values and splits on "/"), and edit mode splices it into a synthesized template string`,
         line: findKeyLine(ctx.source, ["presets", name]),
       });
       continue;

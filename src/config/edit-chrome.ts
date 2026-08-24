@@ -299,11 +299,13 @@ function prependCustomizedBanner(
   const chromeSegName = `${EDIT_NS}${presetIdent}.customized`;
   // [LAW:no-silent-failure] `reset` clears `rootOpsKey` outright, restoring
   // presetRoot's own fallback (the config's literal, hand-authored root) on
-  // the next reload — the exact undo the ticket's guardrail asked for, and
-  // no new gate: `rootOpsKey` is already a registered `persist` target
-  // wherever this preset's tree has at least one addable/removable segment
-  // (removeChrome/insertChrome above), which is every preset that could
-  // possibly have accumulated ops to reset in the first place.
+  // the next reload — the exact undo the ticket's guardrail asked for.
+  // `rootOpsKey` is gated the SAME way every other `presets.<name>.rootOps`
+  // target is (deriveConfigActionValidators), and is ALWAYS a registered
+  // key — config-validators.ts's presetRootOpsContributions registers it
+  // for every declared preset UNCONDITIONALLY, specifically so a preset
+  // edited down to zero non-exempt segments (no removeChrome/insertChrome
+  // persist actions left to register it) doesn't orphan this exact click.
   artifacts.actions[actionName] = { reset: rootOpsKey };
   const label = escapeTemplateLiteral(presetName);
   artifacts.segments[chromeSegName] = {

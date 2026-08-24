@@ -349,6 +349,33 @@ describe("deriveConfigActionValidators over layout-op actions", () => {
       dispose();
     }
   });
+
+  // brandon-layout-edit-2gc.5 PR review: a preset that declares NO
+  // removeSegment/insertSegment/insertSegmentFrom action at all (e.g. one
+  // edited down to zero non-exempt segments, so spliceContainer's loop never
+  // ran) must still register `presets.<name>.rootOps` — otherwise its OWN
+  // synthesized `reset` action's target is unknown to the gate the moment
+  // it's needed most.
+  test("a preset's rootOps key is registered even with zero layout-op actions targeting it", () => {
+    const config = parseAndValidate(
+      "<test>",
+      `{
+        globals: {},
+        variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
+        actions: { undoIt: { reset: 'presets.empty.rootOps' } },
+        segments: { directory: { template: 'd', bg: 'surface', fg: 'foreground' } },
+        root: { h: ['directory'] },
+        presets: { empty: {} },
+      }`,
+      ALLOWED,
+    );
+    const contributions = deriveConfigActionValidators(config);
+    const rootOpsEntry = contributions.find(
+      (c) => c.key === "presets.empty.rootOps",
+    );
+    expect(rootOpsEntry).toBeDefined();
+    expect(rootOpsEntry!.spec).toEqual({ kind: "allow-list", allowed: [] });
+  });
 });
 
 // ─── end-to-end: click → durable APPEND, through the real daemon handler ─────
@@ -474,6 +501,53 @@ describe("apply-layout-op click → durable append", () => {
       ),
     ).toThrow();
     dispose();
+  });
+});
+
+// ─── presetIsCustomized: agrees with applyPresetRootOpsOverrides's own ─────
+// ─── decode+filter, never the raw token count ──────────────────────────────
+
+describe("presetIsCustomized", () => {
+  test("a non-empty, all-valid token list is customized", () => {
+    expect(
+      presetIsCustomized(
+        { default: [encodeLayoutOp({ op: "remove", target: "x" })] },
+        "default",
+      ),
+    ).toBe(true);
+  });
+
+  test("an absent entry is not customized", () => {
+    expect(presetIsCustomized({}, "default")).toBe(false);
+  });
+
+  test("an empty token list is not customized", () => {
+    expect(presetIsCustomized({ default: [] }, "default")).toBe(false);
+  });
+
+  // brandon-layout-edit-2gc.5 PR review: a token list where EVERY token
+  // decodes to null (malformed, or a previous protocol version) is the
+  // SAME "no ops to replay" case applyPresetRootOpsOverrides itself treats
+  // as a no-op (`ops.length === 0 → continue`, root left untouched) — so
+  // presetIsCustomized must agree, not read the raw (pre-decode) length.
+  test("a token list where every token is malformed is not customized", () => {
+    expect(
+      presetIsCustomized({ default: ["not-a-real-token", "also-garbage"] }, "default"),
+    ).toBe(false);
+  });
+
+  test("one valid token among malformed ones is still customized", () => {
+    expect(
+      presetIsCustomized(
+        {
+          default: [
+            "garbage",
+            encodeLayoutOp({ op: "remove", target: "x" }),
+          ],
+        },
+        "default",
+      ),
+    ).toBe(true);
   });
 });
 
@@ -842,6 +916,69 @@ describe("RenderCache: layout ops replay onto the resolved preset root", () => {
         } finally {
           for (const fn of cleanups3) fn();
         }
+      } finally {
+        for (const fn of cleanups2) fn();
+      }
+    } finally {
+      for (const fn of cleanups) fn();
+    }
+  });
+
+  // brandon-layout-edit-2gc.5 PR review: the bundled default's OWN
+  // "compact" preset has exactly 4 non-exempt segments (directory/git/
+  // context/presetControl) — removing all 4 via the synthesized `-` chrome
+  // leaves spliceContainer with zero children, so removeChrome/insertChrome
+  // contribute NOTHING for "compact" on the next reload. Proves the reset
+  // banner's own click still works in exactly that state, through the REAL
+  // RenderCache and the REAL daemon reset-config handler — not just that
+  // the key is derived (the narrower unit test above).
+  test("a preset emptied of every segment can still be reset through a real click", () => {
+    const userConfigPath = join(projectDir, ".cc-candybar.json5");
+    const bareUserConfig = JSON.stringify({ globals: {}, segments: {} });
+    writeFileSync(userConfigPath, bareUserConfig);
+    writeConfigOverride(
+      overridesPath(),
+      "presets.compact.rootOps",
+      JSON.stringify([
+        encodeLayoutOp({ op: "remove", target: "directory" }),
+        encodeLayoutOp({ op: "remove", target: "git" }),
+        encodeLayoutOp({ op: "remove", target: "context" }),
+        encodeLayoutOp({ op: "remove", target: "presetControl" }),
+      ]),
+    );
+
+    const { cache, cleanups } = makeCache();
+    try {
+      const emptied = cache.getOrCreate(projectDir, projectDir, undefined);
+      expect(emptied.lastError).toBeNull();
+      expect(
+        presetIsCustomized(emptied.state!.presetRootOps, "compact"),
+      ).toBe(true);
+      expect(
+        segmentNamesOf(emptied.state!.config.presets.compact!.root!),
+      ).toEqual([]);
+
+      const sessionState = new SessionState();
+      const ctx: VerbContext = { sessionState, dlog: () => {} };
+      const resetConfig = VERBS.get("reset-config")!;
+      // Would throw BadVerbArgs("unknown config key") before this fix.
+      expect(() =>
+        resetConfig(
+          `${encodeURIComponent("s1")}/${encodeURIComponent("presets.compact.rootOps")}`,
+          ctx,
+        ),
+      ).not.toThrow();
+
+      const { cache: cache2, cleanups: cleanups2 } = makeCache();
+      try {
+        const restored = cache2.getOrCreate(projectDir, projectDir, undefined);
+        expect(restored.lastError).toBeNull();
+        expect(
+          presetIsCustomized(restored.state!.presetRootOps, "compact"),
+        ).toBe(false);
+        expect(
+          segmentNamesOf(restored.state!.config.presets.compact!.root!),
+        ).toEqual(["directory", "git", "context", "presetControl"]);
       } finally {
         for (const fn of cleanups2) fn();
       }
