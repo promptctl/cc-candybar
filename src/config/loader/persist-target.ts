@@ -34,7 +34,15 @@ export type PersistTarget =
 // `presets.<name>.root` (src/config/presets.ts), a different namespace this
 // key must never be confused with.
 const SEGMENT_PALETTE_KEY = /^segments\.([^.]+)\.palette$/;
-const PRESET_ROOT_OPS_KEY = /^presets\.([^.]+)\.rootOps$/;
+// [LAW:one-source-of-truth] GREEDY capture, not `[^.]+` — a preset name is
+// validated only non-empty/slash/newline-free (loader/presets.ts), so a dot
+// is a legal preset name (e.g. "v1.compact"). presetRootOpsKey always
+// appends the literal ".rootOps" suffix, so a greedy `(.+)` backtracks to
+// the RIGHTMOST occurrence of that anchored suffix and correctly recovers
+// the full name for ANY preset name, dotted or not — round-tripping
+// presetRootOpsKey exactly, rather than restricting preset names further
+// to dodge the ambiguity a non-greedy/exclusive-dot capture would have.
+const PRESET_ROOT_OPS_KEY = /^presets\.(.+)\.rootOps$/;
 
 // [LAW:one-source-of-truth] THE builder for a preset's rootOps key — the
 // inverse of PRESET_ROOT_OPS_KEY's parse. Two independent sites used to

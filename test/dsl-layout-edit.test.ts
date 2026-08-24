@@ -551,6 +551,68 @@ describe("presetIsCustomized", () => {
   });
 });
 
+// ─── the "customized" banner's own escaping: quote/backslash preset names ──
+
+// brandon-layout-edit-2gc.5 PR review: quotes and backslashes are LEGAL in a
+// preset name (only empty/slash/newline are rejected — see loader/
+// presets.ts), and prependCustomizedBanner splices the name into a
+// synthesized Go-template string literal. Unlike the newline case (which
+// gets rejected at load, since escaping can't fix an embedded literal
+// newline), a quote/backslash-bearing name is escaped, not rejected — so
+// this proves the escape actually holds through real parseAndValidate +
+// registerDslConfig + renderDsl, not just by inspection.
+describe('the "customized" banner escapes quote/backslash preset names', () => {
+  // eslint-disable-next-line no-control-regex
+  const ANSI = /\x1b\[[0-9;]*m|\x1b\]8;;[^\x1b]*\x1b\\/g;
+
+  test('a preset named with a " and a \\ compiles and renders the literal label', () => {
+    const presetName = 'foo"bar\\baz';
+    const config = parseAndValidate(
+      "<test>",
+      `{
+        globals: {},
+        variables: {
+          'session.id': { kind: 'input', path: 'session_id', default: '' },
+          'preset.customized': { kind: 'input', path: 'preset.customized', type: 'boolean', default: false },
+        },
+        segments: {
+          directory: { template: 'd', bg: 'surface', fg: 'foreground' },
+          editControl: { template: '{{ action "edit.toggle" "e" }}', bg: 'surface', fg: 'foreground' },
+        },
+        root: { h: ['directory', 'editControl'] },
+        presets: { ${JSON.stringify(presetName)}: {} },
+      }`,
+      ALLOWED,
+    );
+    // The compile itself (parse every synthesized template) must not throw —
+    // an unescaped quote would break the Go-template source.
+    const store = new VariableStore();
+    const registry = new SourceRegistry(store, "", undefined, new SessionState());
+    let compiled: ReturnType<typeof registerDslConfig>;
+    expect(() => {
+      compiled = registerDslConfig(config, registry);
+    }).not.toThrow();
+    const basePalette = getThemePalette("textual-dark"!);
+    const rendered = renderDsl(
+      config,
+      compiled!,
+      store,
+      registry,
+      {
+        session_id: "s1",
+        project_dir: "/tmp/proj",
+        preset: { effective: presetName, customized: true },
+      },
+      basePalette,
+      opts(),
+      undefined,
+      { preset: presetName },
+    );
+    expect(rendered.replace(ANSI, "")).toContain(`↺ ${presetName} customized`);
+    registry.dispose();
+  });
+});
+
 // ─── RenderCache integration: replay + reload + restart + byte-identity ──────
 
 function makeCache(): { cache: RenderCache; cleanups: Array<() => void> } {
