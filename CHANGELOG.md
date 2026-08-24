@@ -1,3 +1,10 @@
+# [1.28.0](https://github.com/promptctl/cc-candybar/compare/v1.27.0...v1.28.0) (2026-08-24)
+
+
+### Features
+
+* **config:** persist/reset a preset choice across restarts (brandon-presets-0yk.2) ([#181](https://github.com/promptctl/cc-candybar/issues/181)) ([cbc1048](https://github.com/promptctl/cc-candybar/commit/cbc104824085039ecb1fd06ddcedbd628ce08d14)), closes [#179](https://github.com/promptctl/cc-candybar/issues/179)
+
 # [1.27.0](https://github.com/promptctl/cc-candybar/compare/v1.26.0...v1.27.0) (2026-08-24)
 
 
