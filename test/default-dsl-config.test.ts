@@ -442,9 +442,9 @@ describe("DEFAULT_DSL_CONFIG", () => {
         const compiled = registerDslConfig(toolbarOnly, registry, {
           cwd: process.cwd(),
         });
-        const basePalette = new PaletteResolver(
-          getThemePalette(toolbarOnly.globals.palette ?? "textual-dark")!,
-        );
+        const basePalette = getThemePalette(
+          toolbarOnly.globals.palette ?? "textual-dark",
+        )!;
         return renderDsl(
           toolbarOnly,
           compiled,
