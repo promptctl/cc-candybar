@@ -1,3 +1,10 @@
+# [1.33.0](https://github.com/promptctl/cc-candybar/compare/v1.32.0...v1.33.0) (2026-08-24)
+
+
+### Features
+
+* **config:** ship edit mode in the bundled default (brandon-layout-edit-2gc.4) ([#186](https://github.com/promptctl/cc-candybar/issues/186)) ([b38a9a7](https://github.com/promptctl/cc-candybar/commit/b38a9a74ffb05d68862b506a168249c567931cbd))
+
 # [1.32.0](https://github.com/promptctl/cc-candybar/compare/v1.31.0...v1.32.0) (2026-08-24)
 
 
