@@ -14,6 +14,7 @@ import { SourceRegistry } from "../src/var-system/sources";
 import { SessionState } from "../src/daemon/session-state";
 import { getThemePalette } from "@promptctl/rich-js";
 import { abbreviatePath } from "../src/utils/formatters";
+import { EDIT_NS } from "../src/config/loader/edit-mode";
 
 // Reparse the AUTHORED literal (pre-synthesis) — see
 // test/default-dsl-config.test.ts for why this must be the raw form, not the
@@ -38,12 +39,35 @@ const dirOnlyRoot = {
 // eslint-disable-next-line no-control-regex
 const ANSI = /\x1b\[[0-9;]*m|\x1b\]8;;[^\x1b]*\x1b\\/g;
 
+// [LAW:locality-or-seam] `toolbar` references `edit.toggle`
+// (brandon-layout-edit-2gc.4), so `synthesizeEditChrome` (inside
+// `parseAndValidate`, before any call site here narrows the layout) has
+// already baked a spliced copy of the full root into `presets.default.root`
+// — `registerDslConfig`'s per-preset compile prefers that over a plain
+// top-level `root:` override (`presetRoot`/`presets.ts`). Every narrowing
+// below must also reset `presets` and drop the synthesized `edit.*` entries
+// (`directory`'s own template never references `edit.toggle`, so none of
+// that machinery is needed in this file) or the baked-in full root shadows
+// the narrowed one.
+const dropEditNs = <V>(rec: Readonly<Record<string, V>>) =>
+  Object.fromEntries(
+    Object.entries(rec).filter(([name]) => !name.startsWith(EDIT_NS)),
+  );
+
 function renderDir(paths: {
   home: string;
   project_dir: string;
   current_dir: string;
 }): string {
-  const parsed = { ...parseAndValidate("<default>", SERIALIZED), root: dirOnlyRoot };
+  const base = parseAndValidate("<default>", SERIALIZED);
+  const parsed = {
+    ...base,
+    presets: {},
+    variables: dropEditNs(base.variables),
+    actions: dropEditNs(base.actions),
+    segments: dropEditNs(base.segments),
+    root: dirOnlyRoot,
+  };
   const store = new VariableStore();
   const registry = new SourceRegistry(store, "", undefined, new SessionState());
   try {
@@ -154,10 +178,13 @@ describe("configurability seam: user template override restores full path", () =
     const overridden = {
       ...parsed,
       root: dirOnlyRoot,
-      segments: {
+      presets: {},
+      variables: dropEditNs(parsed.variables),
+      actions: dropEditNs(parsed.actions),
+      segments: dropEditNs({
         ...parsed.segments,
         directory: { ...parsed.segments.directory, template: "{{ .current_dir }}" },
-      },
+      }),
     };
     const store = new VariableStore();
     const registry = new SourceRegistry(store, "", undefined, new SessionState());

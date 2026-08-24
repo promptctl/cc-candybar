@@ -48,10 +48,15 @@ import {
 } from "../src/daemon/verbs/config-validators";
 import { writeConfigOverride } from "../src/daemon/config-overrides-store";
 import { RenderCache } from "../src/daemon/cache/render";
+import { EDIT_NS } from "../src/config/loader/edit-mode";
+import {
+  addableSegmentDomains,
+  addableDomainName,
+} from "../src/config/edit-chrome";
 import { GitDataProvider } from "../src/daemon/cache/git";
 import { WatcherRegistry } from "../src/daemon/cache/watchers";
 import { encodeLayoutOp } from "../src/config/layout-ops";
-import type { LayoutNode } from "../src/config/dsl-types";
+import { walkNodes, type LayoutNode } from "../src/config/dsl-types";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 
@@ -484,11 +489,23 @@ function makeCache(): { cache: RenderCache; cleanups: Array<() => void> } {
   return { cache, cleanups };
 }
 
+// [LAW:locality-or-seam] The bundled default's `toolbar` segment references
+// `edit.toggle` (brandon-layout-edit-2gc.4), and `RenderCache` merges every
+// project's config on top of that default — so `edit.mode`/`edit.toggle`
+// (and, once validateConfig runs, per-preset `-`/`+` chrome) are now present
+// in EVERY resolved preset root this suite builds, `when`-gated shut but
+// structurally always there. This describe block asserts what op replay does
+// to a preset's ORDINARY content, so chrome nodes — recognizable purely by
+// the reserved `edit.` namespace their synthesis mints them under — are
+// filtered out here rather than at every call site.
 function segmentNamesOf(root: LayoutNode): string[] {
   const out: string[] = [];
   const walk = (node: LayoutNode): void => {
-    if (node.kind === "segment") out.push(node.name);
-    else for (const c of node.children) walk(c);
+    if (node.kind === "segment") {
+      if (!node.name.startsWith(EDIT_NS)) out.push(node.name);
+    } else {
+      for (const c of node.children) walk(c);
+    }
   };
   walk(root);
   return out;
@@ -637,6 +654,106 @@ describe("RenderCache: layout ops replay onto the resolved preset root", () => {
       expect(entry.lastError).toBeNull();
       const root = entry.state!.config.presets.default!.root!;
       expect(segmentNamesOf(root)).toEqual(["git"]);
+    } finally {
+      for (const fn of cleanups) fn();
+    }
+  });
+
+  // [LAW:verifiable-goals] brandon-layout-edit-2gc.4's own done-gate: the
+  // bundled default's `toolbar` segment hosts `edit.toggle`
+  // (docs/interaction-authoring.md's "The bundled default ships this on"),
+  // which raises a self-lockout question .3's handoff flagged explicitly —
+  // does removing the trigger's own host via edit mode's `-` strand a user
+  // with no way back? Proven here through the REAL RenderCache (the ONLY
+  // harness that actually replays `presets.default.rootOps` into a resolved
+  // tree AND recomputes the `+` picker's addable domain fresh each reload —
+  // see dsl-edit-mode.test.ts's sibling test for why its lighter-weight
+  // harness can prove the click but not this), against a project with NO
+  // hand-authored segments/root/actions of its own, so every artifact here
+  // — `toolbar`, `edit.toggle`, the addable domain — comes from
+  // DEFAULT_DSL_CONFIG alone.
+  test("toolbar removed via edit mode is offered back by every remaining `+`, and a real reload restores it", () => {
+    const userConfigPath = join(projectDir, ".cc-candybar.json5");
+    const bareUserConfig = JSON.stringify({ globals: {}, segments: {} });
+    writeFileSync(userConfigPath, bareUserConfig);
+
+    const { cache, cleanups } = makeCache();
+    try {
+      // Before any click: toolbar is in the resolved tree, and the `+`
+      // picker's addable domain does NOT yet offer it (it's already placed).
+      const before = cache.getOrCreate(projectDir, projectDir, undefined);
+      expect(before.lastError).toBeNull();
+      const rootBefore = before.state!.config.presets.default!.root!;
+      expect(segmentNamesOf(rootBefore)).toContain("toolbar");
+
+      writeConfigOverride(
+        overridesPath(),
+        "presets.default.rootOps",
+        JSON.stringify([
+          encodeLayoutOp({ op: "remove", target: "toolbar" }),
+        ]),
+      );
+
+      // A fresh cache — a real restart, not an in-process cache rebuild —
+      // reloading against the SAME state dir (same overrides file).
+      const { cache: cache2, cleanups: cleanups2 } = makeCache();
+      try {
+        const afterRemove = cache2.getOrCreate(projectDir, projectDir, undefined);
+        expect(afterRemove.lastError).toBeNull();
+        const rootAfterRemove = afterRemove.state!.config.presets.default!.root!;
+        expect(segmentNamesOf(rootAfterRemove)).not.toContain("toolbar");
+        // The trigger is gone, but the REST of the preset's chrome is still
+        // there — other `-`/`+` affordances remain, so the bar isn't a dead
+        // end (only the render's own `when` gate hides them until a session
+        // sets edit.mode open, which this test doesn't need to drive to
+        // confirm the STRUCTURE is intact).
+        const allNames: string[] = [];
+        for (const node of walkNodes(rootAfterRemove)) {
+          if (node.kind === "segment") allNames.push(node.name);
+        }
+        const remainingChrome = allNames.filter((n) => n.startsWith(EDIT_NS));
+        expect(remainingChrome.length).toBeGreaterThan(0);
+        // And "toolbar" is now a legal target of an insertSegmentFrom pick —
+        // every `+` in this preset ranges the SAME addable domain, computed
+        // fresh from the tree above, so any of them offers it back.
+        expect(
+          addableSegmentDomains(afterRemove.state!.config).get(
+            addableDomainName("default"),
+          ),
+        ).toContain("toolbar");
+
+        // Simulate clicking that `+` and picking "toolbar": append the
+        // matching insert op to the SAME log, exactly what
+        // insertSegmentFrom's real click writes.
+        writeConfigOverride(
+          overridesPath(),
+          "presets.default.rootOps",
+          JSON.stringify([
+            encodeLayoutOp({ op: "remove", target: "toolbar" }),
+            encodeLayoutOp({
+              op: "insert",
+              segment: "toolbar",
+              anchor: "gitaculous",
+              relation: "after",
+            }),
+          ]),
+        );
+
+        const { cache: cache3, cleanups: cleanups3 } = makeCache();
+        try {
+          const restored = cache3.getOrCreate(projectDir, projectDir, undefined);
+          expect(restored.lastError).toBeNull();
+          const rootRestored = restored.state!.config.presets.default!.root!;
+          // Fully recovered — through clicks the bar itself offered, no
+          // config file edit, surviving two full "restarts" along the way.
+          expect(segmentNamesOf(rootRestored)).toContain("toolbar");
+          expect(readFileSync(userConfigPath, "utf8")).toBe(bareUserConfig);
+        } finally {
+          for (const fn of cleanups3) fn();
+        }
+      } finally {
+        for (const fn of cleanups2) fn();
+      }
     } finally {
       for (const fn of cleanups) fn();
     }

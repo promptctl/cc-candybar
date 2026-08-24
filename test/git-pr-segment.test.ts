@@ -13,6 +13,7 @@ import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import { SessionState } from "../src/daemon/session-state";
 import { registerDslConfig, renderDsl } from "../src/dsl/render";
+import { EDIT_NS } from "../src/config/loader/edit-mode";
 
 // Reparse the AUTHORED literal (pre-synthesis) — see
 // test/default-dsl-config.test.ts for why this must be the raw form, not the
@@ -40,8 +41,27 @@ function renderGitPr(git: Record<string, unknown>): string {
   const base = parseAndValidate("<default>", SERIALIZED);
   // Narrow the spread default to just the gitPr segment so the rendered line is
   // exactly that segment's output.
+  //
+  // [LAW:locality-or-seam] `toolbar` references `edit.toggle`
+  // (brandon-layout-edit-2gc.4), so `synthesizeEditChrome` (inside
+  // `parseAndValidate`, BEFORE this narrowing) has already baked a spliced
+  // copy of the full root into `presets.default.root` and per-preset
+  // `insertSegmentFrom` actions (`edit.addable.<preset>`) into `actions` —
+  // both keyed off presets this test doesn't want. Reset `presets` (so the
+  // narrowed `root` below isn't shadowed by that baked-in copy — see
+  // `presetRoot`/`presets.ts`) and drop every synthesized `edit.*` entry
+  // (gitPr's own template never references `edit.toggle`, so none of that
+  // machinery is needed here).
+  const dropEditNs = <V>(rec: Readonly<Record<string, V>>) =>
+    Object.fromEntries(
+      Object.entries(rec).filter(([name]) => !name.startsWith(EDIT_NS)),
+    );
   const parsed = {
     ...base,
+    presets: {},
+    variables: dropEditNs(base.variables),
+    actions: dropEditNs(base.actions),
+    segments: dropEditNs(base.segments),
     root: {
       kind: "container" as const,
       direction: "vertical" as const,
