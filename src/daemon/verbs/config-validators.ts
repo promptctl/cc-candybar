@@ -103,7 +103,7 @@ function configKeySeeds(config: DslConfig): ReadonlyMap<string, number> {
 
 function actionContributions(config: DslConfig): KeySpecContribution[] {
   const seeds = configKeySeeds(config);
-  const perConfigDomains = perConfigDomainsFor(config.looks);
+  const perConfigDomains = perConfigDomainsFor(config);
   return Object.values(config.actions).flatMap((a) =>
     actionKeySpecs(a, seeds, perConfigDomains),
   );

@@ -112,6 +112,7 @@ describe("loadDslConfig — top-level shape", () => {
       root: { kind: "container", direction: "vertical", children: [] },
       actions: {},
       looks: {},
+      presets: {},
       helpers: {},
     });
   });
@@ -1470,6 +1471,7 @@ describe("loadDslConfig — valid corpus", () => {
       root: { kind: "container", direction: "vertical", children: [] },
       actions: {},
       looks: {},
+      presets: {},
       helpers: {},
     });
   });

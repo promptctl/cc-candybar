@@ -51,28 +51,47 @@ export function listResolvablePaletteNames(): readonly string[] {
   return [...listThemePalettes(), ...listThemeAliases()];
 }
 
+// --- Per-config member selection ---
+
+// [LAW:one-type-per-behavior] THE resolution shape shared by every selection
+// whose domain is PER-CONFIG (declared in the config, not a registry-static
+// list): session choice over config default over a floor, then collapse to the
+// floor if the chosen name is not a declared member. `looks` and `presets` are
+// both exactly this — what differs between them is only the floor name and
+// which map holds the members, i.e. DATA. Written once here rather than twice,
+// so a change to the collapse rule cannot land on one and miss the other.
+//
+// [LAW:dataflow-not-control-flow] The `??` chain IS the precedence — no "if the
+// session has one" branch anywhere. [LAW:no-silent-failure] the collapse is the
+// visible floor, not a throw: a stale SessionState entry from a prior config's
+// vocabulary (config edits can orphan a name the per-config gate once admitted)
+// must render the floor, and the caller publishes the RESOLVED name onto the
+// payload so a menu label can never claim a member the render did not use.
+//
+// The floor's membership is a load-time guarantee, not a runtime hope: the
+// bundled stdlib ships it and merge-by-name cannot remove it.
+export function effectiveMemberName(
+  sessionPick: string | null,
+  configDefault: string | undefined,
+  floor: string,
+  declared: Readonly<Record<string, unknown>>,
+): string {
+  const chosen = sessionPick ?? configDefault ?? floor;
+  return Object.prototype.hasOwnProperty.call(declared, chosen) ? chosen : floor;
+}
+
 // --- Look (theme-adaptation) identifiers ---
 
-// The look name a render should use, as data. [LAW:dataflow-not-control-flow]
-// [LAW:one-type-per-behavior] The exact shape of `effectiveThemeName`, one
-// dimension over: session choice over config default over the "none" floor, no
-// "if the session has a look" branch. Unlike the registry-static theme/style
-// domains, the look domain is PER-CONFIG (the merged `looks` block), so the
-// declared names arrive as data. A value outside them (a stale SessionState
-// entry from a prior config's look vocabulary — config edits can orphan a
-// clicked name the per-config gate once admitted) collapses to "none", which
-// every merged DslConfig carries by construction (the bundled stdlib ships it;
-// merge-by-name cannot remove it) — the same collapse-to-floor that keeps
-// effectiveStripStyle's return honest rather than silently widening.
+// [LAW:one-source-of-truth] The look domain's instance of the shared resolver
+// above — the floor is `"none"`, the identity adaptation every merged config
+// carries. A named wrapper (not a bare call at each site) so the floor is
+// spelled once and the three call sites cannot disagree about it.
 export function effectiveLookName(
   sessionLook: string | null,
   globalsLook: string | undefined,
   declaredLooks: Readonly<Record<string, ThemeKey>>,
 ): string {
-  const chosen = sessionLook ?? globalsLook ?? "none";
-  return Object.prototype.hasOwnProperty.call(declaredLooks, chosen)
-    ? chosen
-    : "none";
+  return effectiveMemberName(sessionLook, globalsLook, "none", declaredLooks);
 }
 
 // [LAW:single-enforcer] The one place an effective look NAME becomes the

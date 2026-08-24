@@ -92,6 +92,7 @@ function buildMockDeps(): { deps: RenderPayloadDeps; counts: CallCounts } {
 const EFFECTIVE_GLOBALS: EffectiveGlobals = {
   theme: "textual-dark",
   look: "none",
+  preset: "default",
   style: "powerline",
   charset: "unicode",
   colorCompatibility: "truecolor",
@@ -148,6 +149,7 @@ const CONFIG_WITHOUT_METRICS: DslConfig = {
   root: rootOf("directory", "git"),
   actions: {},
   looks: {},
+  presets: {},
   helpers: {},
 };
 
@@ -158,6 +160,7 @@ const CONFIG_WITH_METRICS: DslConfig = {
   root: rootOf("directory", "git", "metrics", "tmux"),
   actions: {},
   looks: {},
+  presets: {},
   helpers: {},
 };
 
@@ -218,6 +221,7 @@ describe("buildRenderPayload — layout-driven provider gating", () => {
       root: rootOf("gitDump"),
       actions: {},
       looks: {},
+      presets: {},
       helpers: {},
     };
     const needed = buildNeededPrefixes(config);
@@ -244,6 +248,7 @@ describe("buildRenderPayload — layout-driven provider gating", () => {
       },
       actions: {},
       looks: {},
+      presets: {},
       helpers: {},
     };
     const needed = buildNeededPrefixes(config);
