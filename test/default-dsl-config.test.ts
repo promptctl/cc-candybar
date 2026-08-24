@@ -28,6 +28,7 @@ import { listResolvablePaletteNames } from "../src/themes/policy";
 import {
   effectiveThemeName,
   effectiveLookName,
+  effectiveStripStyle,
   lookKeyByName,
   paletteForThemeName,
 } from "../src/themes";
@@ -37,6 +38,15 @@ import {
 } from "../src/daemon/verbs/state-validators";
 import { clickUrl } from "./helpers/click";
 import { effectsUrl, VERB_SET_STATE } from "../src/click/wire";
+import { presetNames, presetGlobals } from "../src/config/presets";
+import { checkPayload } from "../src/check";
+import type { EffectiveGlobals } from "../src/daemon/render-payload";
+import {
+  DEFAULT_CHARSET,
+  DEFAULT_COLOR_COMPATIBILITY,
+  DEFAULT_PADDING,
+  DEFAULT_WRAP,
+} from "../src/render/strip";
 
 // [LAW:one-source-of-truth] Reparse the AUTHORED literal (pre-synthesis) —
 // mirrors what a user gets by copy-pasting the bundled default into their own
@@ -84,20 +94,21 @@ describe("DEFAULT_DSL_CONFIG", () => {
   // editor, and the settingsDrawer toggle) over a status row (model, context,
   // prompt-cache warmth, the 5h/7d rate-limit quotas) — plus the collapsed
   // settingsDrawer group (candybar-config-engine-71o.4), whose synthesized
-  // toggle segment and gated body (theme/style/look/charset/colorCompatibility/
-  // autoWrap/padding/directory-palette) are part of the static layout tree
-  // regardless of the toggle's current open/closed value (walkNodes visits
-  // unconditionally; only the render-time `when` hides the body while
-  // closed). This pins the chosen segment set — which segments graduated
-  // into the default bar and which stay declared-but-opt-in — so a future
-  // layout edit is a deliberate, reviewed change rather than an accidental
-  // drift. block/weekly are IN (their when-gates hide them when no
+  // toggle segment and gated body (theme/style/look/preset/charset/
+  // colorCompatibility/autoWrap/padding/directory-palette) are part of the
+  // static layout tree regardless of the toggle's current open/closed value
+  // (walkNodes visits unconditionally; only the render-time `when` hides the
+  // body while closed). This pins the chosen segment set — which segments
+  // graduated into the default bar and which stay declared-but-opt-in — so a
+  // future layout edit is a deliberate, reviewed change rather than an
+  // accidental drift. block/weekly are IN (their when-gates hide them when no
   // rate-limit window is active); toolbar is IN (the default's
-  // interactivity); the settingsDrawer's eight controls are IN
-  // (theme/style/look/charset/colorCompatibility/autoWrap/padding
-  // discoverability, plus directoryPaletteControl — candybar-config-engine-
-  // 71o.6's segment-scoped persist demo); the cost segments (session/today)
-  // and the speed/sparkline/burnrate telemetry stay opt-in.
+  // interactivity); the settingsDrawer's nine controls are IN
+  // (theme/style/look/preset/charset/colorCompatibility/autoWrap/padding
+  // discoverability — presetControl added by brandon-presets-0yk.3 — plus
+  // directoryPaletteControl — candybar-config-engine-71o.6's segment-scoped
+  // persist demo); the cost segments (session/today) and the
+  // speed/sparkline/burnrate telemetry stay opt-in.
   test("default root renders exactly the two-row identity+status segment set plus the collapsed settingsDrawer", () => {
     const laidOut = new Set<string>();
     for (const node of walkNodes(DEFAULT_DSL_CONFIG.root)) {
@@ -116,6 +127,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
         "groups.settings",
         "themeControl",
         "lookControl",
+        "presetControl",
         "styleControl",
         "charsetControl",
         "colorCompatControl",
@@ -337,7 +349,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
     const A_SRC = `{ root: { v: [
       { h: ["directory","gitaculous","toolbar", { kind: "group", name: "settings",
         label: "⚙ settings", direction: "horizontal", children: [
-          "themeControl","lookControl","styleControl","charsetControl",
+          "themeControl","lookControl","presetControl","styleControl","charsetControl",
           "colorCompatControl","wrapToggleControl","paddingControl",
           "directoryPaletteControl"
         ] } ] },
@@ -1118,5 +1130,138 @@ describe("DEFAULT_DSL_CONFIG", () => {
       expect(defaultWarn).toContain("+60%");
       expect(tightWarn).toContain("!60%");
     });
+  });
+});
+
+// [LAW:verifiable-goals] brandon-presets-0yk.3's own done-gate: "every bundled
+// preset renders without error cells at 80, 120, and 200 columns" — the
+// compact one is pointless if it does not actually fit. Drives the exact
+// pipeline the daemon and `cc-candybar check` drive (registerDslConfig +
+// renderDsl, onSegmentError as the observer seam check.ts uses) against the
+// SAME rich fixture payload check.ts ships (checkPayload) — a minimal payload
+// would let a field-name typo in a gated branch (git worktree counts, the
+// burnrate/speed telemetry verbose surfaces) slip through untested, because
+// those branches only run when their data is present.
+//
+// [LAW:single-enforcer] Resolves each preset's globals through presetGlobals
+// (the same function server.ts and check.ts call), so EffectiveGlobals here
+// cannot diverge from what a real render would compute for that preset.
+describe("bundled preset library renders clean at every width — brandon-presets-0yk.3", () => {
+  const WIDTHS = [80, 120, 200];
+  // [LAW:single-enforcer] The real validated shape registerDslConfig/renderDsl
+  // require (the `ValidatedConfig` brand `validateConfig` stamps) — the same
+  // gate every production caller (daemon, check.ts) passes through, run once
+  // here since DEFAULT_DSL_CONFIG itself is validated but not re-branded.
+  const VALIDATED = validateConfig(DEFAULT_DSL_CONFIG);
+
+  function renderPreset(
+    name: string,
+    width: number,
+    // A transform over checkPayload's own fixture — an escape hatch for the
+    // one test below that needs gitPr/tokenSparkline's gated content to
+    // actually appear, without mutating the shared production fixture every
+    // other suite (test/example-configs.test.ts included) asserts literal
+    // values against. Identity by default.
+    withPayload: (base: Record<string, unknown>) => Record<string, unknown> = (
+      base,
+    ) => base,
+  ): { rendered: string; segmentErrors: string[] } {
+    const globals = presetGlobals(DEFAULT_DSL_CONFIG, name);
+    const effective: EffectiveGlobals = {
+      preset: name,
+      theme: effectiveThemeName(null, globals.palette),
+      look: effectiveLookName(null, globals.look, DEFAULT_DSL_CONFIG.looks),
+      style: effectiveStripStyle(null, globals.style),
+      autoWrap: globals.autoWrap ?? DEFAULT_WRAP,
+      padding: globals.padding ?? DEFAULT_PADDING,
+      charset: globals.charset ?? DEFAULT_CHARSET,
+      colorCompatibility:
+        globals.colorCompatibility ?? DEFAULT_COLOR_COMPATIBILITY,
+    };
+    const store = new VariableStore();
+    const registry = new SourceRegistry(store, "", undefined, new SessionState());
+    try {
+      const compiled = registerDslConfig(VALIDATED, registry, {
+        cwd: "/tmp",
+      });
+      const segmentErrors: string[] = [];
+      const rendered = renderDsl(
+        VALIDATED,
+        compiled,
+        store,
+        registry,
+        withPayload(checkPayload(effective)),
+        paletteForThemeName(effective.theme),
+        {
+          style: effective.style,
+          width,
+          colorCompatibility: effective.colorCompatibility,
+          wrap: effective.autoWrap,
+          padding: effective.padding,
+          charset: effective.charset,
+        },
+        {
+          onSegmentError: (segName, message) =>
+            segmentErrors.push(`segment "${segName}": ${message}`),
+        },
+        {
+          look: lookKeyByName(DEFAULT_DSL_CONFIG.looks, effective.look),
+          preset: effective.preset,
+        },
+      );
+      return { rendered, segmentErrors };
+    } finally {
+      registry.dispose();
+    }
+  }
+
+  // Guard against the domain silently shrinking to just the floor — a preset
+  // this suite never iterates would be a preset never render-tested.
+  test("the bundled library declares more than just the floor", () => {
+    expect(presetNames(DEFAULT_DSL_CONFIG.presets).length).toBeGreaterThan(1);
+  });
+
+  test.each(presetNames(DEFAULT_DSL_CONFIG.presets))(
+    'preset "%s" renders with zero error cells at 80/120/200 columns',
+    (name) => {
+      for (const width of WIDTHS) {
+        const { rendered, segmentErrors } = renderPreset(name, width);
+        expect(segmentErrors).toEqual([]);
+        expect(rendered.length).toBeGreaterThan(0);
+      }
+    },
+  );
+
+  // [LAW:carrying-cost] The compact preset's whole reason to exist is fitting
+  // where the default doesn't — pin that it actually renders NARROWER than
+  // the floor at the same width, not merely that it renders.
+  test("compact renders a shorter visible line than the default floor", () => {
+    // eslint-disable-next-line no-control-regex
+    const ANSI = /\x1b\[[0-9;]*m|\x1b\]8;;[^\x1b]*\x1b\\/g;
+    const visible = (s: string): string => s.replace(ANSI, "");
+    const compactLine = visible(renderPreset("compact", 200).rendered);
+    const defaultLine = visible(renderPreset("default", 200).rendered);
+    expect(compactLine.length).toBeLessThan(defaultLine.length);
+  });
+
+  // [LAW:carrying-cost] The verbose preset's whole reason to exist is
+  // surfacing the segments the default deliberately leaves opt-in — pin that
+  // each one's own content actually appears, not merely that no segment threw.
+  // gitPr and tokenSparkline both gate on data checkPayload's bundled fixture
+  // doesn't carry (no live PR, no speed history yet), so this test supplies
+  // both via `withPayload` rather than either skipping the assertion or
+  // mutating the shared fixture other suites assert literal values against.
+  test("verbose surfaces every opt-in segment's own content", () => {
+    // eslint-disable-next-line no-control-regex
+    const ANSI = /\x1b\[[0-9;]*m|\x1b\]8;;[^\x1b]*\x1b\\/g;
+    const line = renderPreset("verbose", 200, (base) => ({
+      ...base,
+      git: { ...(base.git as object), prUrl: "https://example.com/pr/181", prNumber: 181 },
+      speed: { history: "10,25,15,30,20" },
+    })).rendered.replace(ANSI, "");
+    expect(line).toContain("⇆ #181"); // gitPr
+    expect(line).toContain("to 5h"); // burnrate
+    expect(line).toContain("⇅ out"); // speed
+    expect(line).toMatch(/[▁▂▃▄▅▆▇█]/); // tokenSparkline's own block glyphs
   });
 });
