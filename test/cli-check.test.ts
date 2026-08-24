@@ -234,6 +234,33 @@ describe("checkConfig — explicit target", () => {
     );
   });
 
+  // brandon-layout-edit-2gc.5 PR review: `.preset.customized` is a fact
+  // check's rich-but-static fixture can never drive true on its own (unlike
+  // every OTHER field a segment might gate on, which checkPayload just
+  // supplies richly) — so a segment gated on it is otherwise invisible to
+  // check no matter how broken its content is. Proves the SECOND render
+  // pass (loadRegisterRender) catches this: the same evaluation-stage error
+  // as the test above, but reachable ONLY behind `.preset.customized`.
+  it("reports a segment error reachable only behind .preset.customized as fatal", () => {
+    const p = write(
+      "customized-gate-error.json5",
+      `{
+        actions: { cycleMode: { set: "work-mode", cycle: ["focus", "review", "debug"] } },
+        segments: {
+          a: { template: 'ok' },
+          layoutStatus: {
+            template: '{{ action "cycleMode" "🎯 focus" "🔍 review" }}',
+            when: '{{ .preset.customized }}',
+          },
+        },
+        root: { h: ['a', 'layoutStatus'] },
+      }`,
+    );
+    const message = expectFatal(checkConfig(p, dir));
+    expect(message).toContain('segment "layoutStatus"');
+    expect(message).toContain("(under .preset.customized = true)");
+  });
+
   it("reports a template parse error in a segment override (register stage)", () => {
     const p = write(
       "template-parse.json5",

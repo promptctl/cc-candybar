@@ -260,6 +260,17 @@ export function sanitizePersistedPresetRootOps(
 // true over a tree that is, in fact, byte-identical to the literal
 // declared root — the inverted form of the drift this diagnostic exists to
 // catch.
+//
+// [LAW:carrying-cost] Verifies DECODE only, not whether the decoded op's
+// target/anchor still resolves against the CURRENT tree — that check would
+// need this to duplicate applyLayoutOps' own stale-target resolution
+// (a real walk of the tree) just to COUNT, on every render, a fact only a
+// LATER hand-authored config edit can produce (removing a segment a stored
+// op still names — see the stale-op comment on applyPresetRootOpsOverrides
+// above). A rare, later-edit-triggered false "customized" is the honest,
+// documented cost of keeping this an O(tokens) check rather than an O(tree)
+// one; the doc at docs/interaction-authoring.md's "Knowing when a preset's
+// layout has been edited" section states this same limit.
 export function presetIsCustomized(
   presetRootOps: Readonly<Record<string, readonly string[]>>,
   name: string,

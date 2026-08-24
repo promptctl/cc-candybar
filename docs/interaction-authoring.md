@@ -594,12 +594,18 @@ means a preset's *rendered* layout can silently drift from the literal
 earlier click session left ops sitting there.
 
 `.preset.customized` is that signal — a boolean input var, true exactly when
-the ACTIVE preset (`.preset.effective`) currently has at least one op it can
-still decode and replay (not merely a non-empty log: a token list that is
-entirely malformed — hand-edited, or written by a previous protocol version
-— replays as zero ops, and the signal agrees with that, never showing
+the ACTIVE preset (`.preset.effective`) currently has at least one op that
+still DECODES (not merely a non-empty log: a token list that is entirely
+malformed — hand-edited, or written by a previous protocol version —
+replays as zero ops, and the signal agrees with that, never showing
 "customized" over a tree that's actually byte-identical to the declared
-root). Reference it in a `when` and pair it with `reset` over the SAME
+root). It checks decode, not whether the op still resolves against your
+CURRENT tree — a later hand-authored edit that removes a segment a stored
+op still names turns that op into a no-op at replay (the same stale-op
+skip a live restart already applies), and the signal doesn't chase that:
+a rare, later-edit-triggered "customized" over a tree that hasn't actually
+changed is the accepted cost of a cheap per-render check over a full tree
+diff. Reference it in a `when` and pair it with `reset` over the SAME
 `presets.<name>.rootOps` key `removeSegment`/`insertSegmentFrom` already
 write to — clearing it drops the accumulated ops and restores the literal
 declared root on the next reload, with no new gate to register (the key is

@@ -307,8 +307,11 @@ function loadRegisterRender(
       preset,
       // [LAW:no-silent-failure] `check` validates a config file in isolation
       // — it never reads the daemon-owned overrides file, so there is no
-      // rootOps log to be customized BY. false is the honest value, not a
-      // stand-in default: a static check can never see accumulated clicks.
+      // rootOps log to be customized BY. false is the honest value for THIS
+      // (primary, returned) render, not a stand-in default: a fresh session
+      // has never customized anything. A second render pass below also
+      // exercises `true`, so a `.preset.customized`-gated segment still
+      // gets checked — just not through this value.
       presetCustomized: false,
       theme: effectiveThemeName(null, globals.palette),
       look: effectiveLookName(null, globals.look, config.looks),
@@ -326,40 +329,71 @@ function loadRegisterRender(
     // authoring agent is not looking at the bar; check collects the same errors
     // through the render's observer seam and fails the verdict, so exit 0 never
     // blesses a bar that renders ⚠.
-    const segmentErrors: string[] = [];
-    const rendered = renderDsl(
-      config,
-      compiled,
-      store,
-      registry,
-      checkPayload(effective),
-      paletteForThemeName(effective.theme),
-      {
-        style: effective.style,
-        width: CHECK_WIDTH,
-        colorCompatibility: effective.colorCompatibility,
-        wrap: effective.autoWrap,
-        padding: effective.padding,
-        charset: effective.charset,
-      },
-      {
-        onSegmentError: (segName, message) =>
-          segmentErrors.push(`segment "${segName}": ${message}`),
-      },
-      {
-        look: lookKeyByName(config.looks, effective.look),
-        preset: effective.preset,
-      },
-    );
-    if (segmentErrors.length > 0) {
+    const renderOnce = (
+      payloadEffective: EffectiveGlobals,
+    ): { rendered: string; segmentErrors: string[] } => {
+      const segmentErrors: string[] = [];
+      const rendered = renderDsl(
+        config,
+        compiled,
+        store,
+        registry,
+        checkPayload(payloadEffective),
+        paletteForThemeName(payloadEffective.theme),
+        {
+          style: payloadEffective.style,
+          width: CHECK_WIDTH,
+          colorCompatibility: payloadEffective.colorCompatibility,
+          wrap: payloadEffective.autoWrap,
+          padding: payloadEffective.padding,
+          charset: payloadEffective.charset,
+        },
+        {
+          onSegmentError: (segName, message) =>
+            segmentErrors.push(`segment "${segName}": ${message}`),
+        },
+        {
+          look: lookKeyByName(config.looks, payloadEffective.look),
+          preset: payloadEffective.preset,
+        },
+      );
+      return { rendered, segmentErrors };
+    };
+
+    const primary = renderOnce(effective);
+    // [LAW:verifiable-goals] `.preset.customized` is the ONE gate this
+    // config surface adds that a rich, data-driven fixture (checkPayload's
+    // own stated design one comment up) can never drive true on its own —
+    // every OTHER field a segment might gate on is a VALUE checkPayload can
+    // just supply richly; this one is a daemon-resolved FACT about session
+    // state, not a hookData field a config author's own file ever carries.
+    // Without a second pass, a typo or MissingFieldError inside a user's
+    // OWN `when: '{{ .preset.customized }}'`-gated content (docs/
+    // interaction-authoring.md's own documented pattern) would pass check
+    // clean and only surface later as a live ⚠ error cell. Second pass
+    // only — the RETURNED rendering stays the realistic default (a fresh
+    // session has never customized anything); this pass exists purely to
+    // catch broken content behind the one gate the first pass can't reach.
+    const customizedCheck = renderOnce({
+      ...effective,
+      presetCustomized: true,
+    });
+
+    const errors = [
+      ...primary.segmentErrors,
+      ...customizedCheck.segmentErrors.map(
+        (m) => `${m} (under .preset.customized = true)`,
+      ),
+    ];
+    if (errors.length > 0) {
       throw new Error(
-        `config renders with ${segmentErrors.length} segment error${
-          segmentErrors.length === 1 ? "" : "s"
+        `config renders with ${errors.length} segment error${
+          errors.length === 1 ? "" : "s"
         } (the daemon would render ⚠ error cells):\n` +
-          segmentErrors.map((m) => `  ${m}`).join("\n"),
+          errors.map((m) => `  ${m}`).join("\n"),
       );
     }
-    return rendered;
+    return primary.rendered;
   } finally {
     // [LAW:single-enforcer] The registry owns every async handle the config
     // declared (timers, fs watchers, git subscriptions); a one-shot check must
