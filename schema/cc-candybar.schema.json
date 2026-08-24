@@ -1324,6 +1324,49 @@
           {
             "type": "object",
             "properties": {
+              "persist": {
+                "type": "string"
+              },
+              "removeSegment": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "persist",
+              "removeSegment"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "persist": {
+                "type": "string"
+              },
+              "insertSegment": {
+                "type": "string"
+              },
+              "anchor": {
+                "type": "string"
+              },
+              "relation": {
+                "enum": [
+                  "before",
+                  "after"
+                ]
+              }
+            },
+            "required": [
+              "persist",
+              "insertSegment",
+              "anchor",
+              "relation"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
               "copy": {
                 "type": "string"
               }
