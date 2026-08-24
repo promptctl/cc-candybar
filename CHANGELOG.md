@@ -1,3 +1,10 @@
+# [1.31.0](https://github.com/promptctl/cc-candybar/compare/v1.30.0...v1.31.0) (2026-08-24)
+
+
+### Features
+
+* **config:** undo/redo over the config-overrides layer (brandon-layout-edit-2gc.2) ([#184](https://github.com/promptctl/cc-candybar/issues/184)) ([dca17da](https://github.com/promptctl/cc-candybar/commit/dca17dae40073668c2dd50d2af890d18cc5480e2))
+
 # [1.30.0](https://github.com/promptctl/cc-candybar/compare/v1.29.0...v1.30.0) (2026-08-24)
 
 
