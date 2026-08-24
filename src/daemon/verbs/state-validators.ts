@@ -213,7 +213,7 @@ function stateKeySeeds(config: DslConfig): ReadonlyMap<string, number> {
 // `{{ action }}` fn realizes a click from are the gate the wire enforces.
 function actionContributions(config: DslConfig): KeySpecContribution[] {
   const seeds = stateKeySeeds(config);
-  const perConfigDomains = perConfigDomainsFor(config.looks);
+  const perConfigDomains = perConfigDomainsFor(config);
   return dropBaselineAllowLists(
     Object.values(config.actions).flatMap((a) =>
       actionKeySpecs(a, seeds, perConfigDomains),

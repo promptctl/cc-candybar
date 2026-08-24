@@ -70,6 +70,7 @@ import {
   lookKeyByName,
   paletteForThemeName,
 } from "../themes/index.js";
+import { effectivePresetName, presetGlobals } from "../config/presets.js";
 import {
   renderStripCells,
   DEFAULT_CHARSET,
@@ -866,26 +867,45 @@ async function handleRequest(req: Request): Promise<HandledRequest> {
         // BOTH the payload's `*.effective` fields (trigger labels) AND
         // renderOpts below (the actual render) — one resolution, two readers,
         // so a label can never disagree with what was rendered.
+        //
+        // [LAW:one-source-of-truth] The PRESET resolves FIRST, because every
+        // other field below reads globals — and which globals is exactly what
+        // the preset decides. `presetGlobals` is the config's globals with the
+        // active fragment's shallow-merged over them, so the preset sits at its
+        // one documented place in the precedence chain (bundled default < user
+        // file < persisted overrides < ACTIVE PRESET < session pick — see
+        // src/config/presets.ts and docs/interaction-authoring.md): later than
+        // everything read per cache ENTRY, earlier than every session click,
+        // which is the order the `??` chains below already enforce by reading
+        // SessionState first. There is no "does a preset apply?" branch — the
+        // floor preset's empty fragment merges as a no-op
+        // [LAW:dataflow-not-control-flow].
+        const preset = effectivePresetName(
+          sessionState.get(req.hookData.session_id, "preset"),
+          entry.state.config.globals.preset,
+          entry.state.config.presets,
+        );
+        const globals = presetGlobals(entry.state.config, preset);
         const effective: EffectiveGlobals = {
+          preset,
           theme: effectiveThemeName(
             sessionState.get(req.hookData.session_id, "theme"),
-            entry.state.config.globals.palette,
+            globals.palette,
           ),
           look: effectiveLookName(
             sessionState.get(req.hookData.session_id, "look"),
-            entry.state.config.globals.look,
+            globals.look,
             entry.state.config.looks,
           ),
           style: effectiveStripStyle(
             sessionState.get(req.hookData.session_id, "style"),
-            entry.state.config.globals.style,
+            globals.style,
           ),
-          autoWrap: entry.state.config.globals.autoWrap ?? DEFAULT_WRAP,
-          padding: entry.state.config.globals.padding ?? DEFAULT_PADDING,
-          charset: entry.state.config.globals.charset ?? DEFAULT_CHARSET,
+          autoWrap: globals.autoWrap ?? DEFAULT_WRAP,
+          padding: globals.padding ?? DEFAULT_PADDING,
+          charset: globals.charset ?? DEFAULT_CHARSET,
           colorCompatibility:
-            entry.state.config.globals.colorCompatibility ??
-            DEFAULT_COLOR_COMPATIBILITY,
+            globals.colorCompatibility ?? DEFAULT_COLOR_COMPATIBILITY,
         };
         const payload = await buildRenderPayload(
           req.hookData,
@@ -929,7 +949,10 @@ async function handleRequest(req: Request): Promise<HandledRequest> {
           // the per-segment ANSI serialization happens lazily inside the
           // debug handler so normal renders pay no extra serializer cost.
           { perSegmentSink: entry.state.lastRenderCellsBySegment },
-          lookKeyByName(entry.state.config.looks, effective.look),
+          {
+            look: lookKeyByName(entry.state.config.looks, effective.look),
+            preset: effective.preset,
+          },
         );
       }
       // [LAW:one-source-of-truth] Consume the transient click error written by

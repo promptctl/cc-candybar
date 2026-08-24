@@ -129,12 +129,49 @@ export function* walkNodes(node: LayoutNode): IterableIterator<LayoutNode> {
   }
 }
 
+// [LAW:types-are-the-program] A PRESET is a named config FRAGMENT — one
+// alternative arrangement of a bar the user can switch to — and its field set
+// is capped at exactly `root` + `globals`. That cap is not taste; it is the
+// daemon's own lifetime boundary made into a type.
+//
+// One RenderCache entry is keyed by (projectDir, cwd) and serves MANY sessions.
+// Its SourceRegistry (timers, fs watchers, git subscriptions) and its derived
+// click gate (registerStateValidator over deriveActionValidators) are built
+// ONCE, in buildState. A preset, by contrast, is a per-SESSION pick. So a
+// preset carrying `variables` would need a per-session registry, and one
+// carrying `actions` would need a per-session wire gate — or a gate that is the
+// union of every preset's actions anyway, at which point the preset scoped
+// nothing and only the merge got harder [LAW:no-ambient-temporal-coupling].
+// `root` and `globals` have no such problem: the root is WALKED per render (so
+// every preset's tree is compiled up front and one is selected by name, exactly
+// how every look's ThemeKey is resolved up front and one is selected by name),
+// and globals already resolve per render into EffectiveGlobals.
+//
+// Read as a rule an author can hold: a preset may carry what the bar RESOLVES
+// each render, never what the daemon REGISTERS once per process. An unbounded
+// preset would just be a second config file with extra steps.
+export interface PresetDecl {
+  // Absent ⇒ this preset does not restage the layout; the config's own `root`
+  // renders. A preset declares only its delta [LAW:carrying-cost] — a preset
+  // that had to restate every row to change one would be a copy, and copies go
+  // stale silently while continuing to look intentional.
+  readonly root?: LayoutNode;
+  // Absent ⇒ no display-default changes. Shallow-merged OVER the config's own
+  // globals when this preset is active, so a preset naming `padding` says
+  // nothing about `charset`.
+  readonly globals?: Globals;
+}
+
 export interface RawDslConfig {
   readonly globals?: Partial<Globals>;
   readonly variables?: Readonly<Record<string, VariableDecl>>;
   readonly segments?: Readonly<Record<string, SegmentDecl>>;
   readonly root?: LayoutNode;
   readonly actions?: Readonly<Record<string, ActionDecl>>;
+  // Named config fragments ("presets"): each an alternative `root`/`globals`
+  // arrangement selected per session, the exact twin of `looks` one level up
+  // (a look adapts the THEME; a preset adapts the LAYOUT + display globals).
+  readonly presets?: Readonly<Record<string, PresetDecl>>;
   // Named theme-adaptation bundles ("looks"): each is a full ThemeKey (the
   // loader normalizes absent axes to identity at parse). Applied ON TOP of the
   // active theme at render — a transform composing with every theme, selected
@@ -171,6 +208,14 @@ export interface DslConfig {
   // config by construction. An action `{ set: …, from: "looks" }` ranges these
   // names; the derived click gate and the rendered options read this one map.
   readonly looks: Readonly<Record<string, ThemeKey>>;
+  // [LAW:one-source-of-truth] The effective preset set: name → config fragment.
+  // Merges by name with the bundled default (user wins per name) like every
+  // other section — so the default's `default` preset (the empty fragment, and
+  // the resolution floor of effectivePresetName) is present in EVERY merged
+  // config by construction, exactly as `looks` guarantees `none`. An action
+  // `{ set: …, from: "presets" }` ranges these names; the derived click gate and
+  // the rendered options read this one map.
+  readonly presets: Readonly<Record<string, PresetDecl>>;
   // [LAW:single-enforcer] The effective helper set: a name → template-body map
   // compiled to a defines-preamble at registerDslConfig. Empty when no config
   // declares helpers — an absent `helpers` key merges to `{}` (same cascade as
@@ -213,6 +258,20 @@ export interface Globals {
   // validated post-merge (cross-ref) — a user's globals.look may name a
   // default-provided look.
   readonly look?: string;
+
+  // [LAW:one-type-per-behavior] The config default for the PRESET (a named
+  // config fragment from the `presets` block) — the same twin-of-`palette`
+  // shape as `look` one dimension over: the daemon resolves the live preset per
+  // render as `sessionState.preset ?? globals.preset ?? "default"`
+  // (effectivePresetName), so a preset click restages the bar live and a config
+  // can pick a default arrangement without an edit-per-session. Membership in
+  // the merged `presets` map is validated post-merge (cross-ref) — a user's
+  // globals.preset may name a default-provided preset.
+  //
+  // [LAW:one-source-of-truth] A preset's own `globals` may NOT carry this field
+  // (the loader rejects it): a preset selecting a preset is a second authority
+  // over which preset is active, and a cyclic one.
+  readonly preset?: string;
 
   // [LAW:one-type-per-behavior] The config default for the powerline cap/
   // separator SHAPE — the exact twin of `palette` one dimension over: the

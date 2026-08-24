@@ -22,6 +22,7 @@ import type {
 } from "../config/dsl-types.js";
 import { HUE_STEP_VAR } from "../config/dsl-types.js";
 import { perConfigDomainsFor } from "../config/option-domain.js";
+import { PRESET_FLOOR, presetNames, presetRoot } from "../config/presets.js";
 import type { VariableStore } from "../var-system/store.js";
 import type { SourceRegistry } from "../var-system/sources.js";
 import {
@@ -78,7 +79,17 @@ import {
 // owns node behavior); this driver only assembles + walks them.
 export interface CompiledConfig {
   readonly segments: CompiledSegments;
-  readonly root: CompiledNode;
+  // [LAW:dataflow-not-control-flow] EVERY preset's layout, compiled up front and
+  // keyed by preset name — the render selects one by name rather than compiling
+  // per session. This is the same move `looks` makes one level down (every
+  // look's ThemeKey is resolved at load; the render picks one), and it is what
+  // lets a per-SESSION preset pick ride a per-ENTRY compilation: one RenderCache
+  // entry serves many sessions, so nothing session-shaped may be compiled here.
+  // Total over `presetNames` — every selectable name, floor included — so the
+  // lookup needs no absent case. A preset declaring no `root` of its own maps
+  // to the config's own compiled root: the identity element, not a special
+  // case.
+  readonly roots: ReadonlyMap<string, CompiledNode>;
   // [LAW:locality-or-seam] The menu runtime the engine's `menu` func closes over.
   readonly menuRuntime: MenuRuntime;
   // [LAW:one-source-of-truth] The single "which segment is rendering" record
@@ -328,7 +339,8 @@ export function registerDslConfig(
   // gate (which reads the same config in deriveActionValidators) trace to
   // one source.
   const lookNames = Object.keys(config.looks);
-  const perConfigDomains = perConfigDomainsFor(config.looks);
+  const presetOptions = presetNames(config.presets);
+  const perConfigDomains = perConfigDomainsFor(config);
   const engine = createCcCandybarEngine(
     {
       ...actionFuncs(actionRuntime),
@@ -350,6 +362,11 @@ export function registerDslConfig(
       // projection of the "looks" option domain. Injected here — not in the
       // static FuncMap — because the domain is this config's looks block.
       looks: { fn: () => lookNames, argTypes: [] },
+      // The presets domain's twin of the binding above — same per-config
+      // reason, same shape. A hand-authored `range presets` and a
+      // `{{ menu "applyPreset" }}` therefore enumerate the same names the
+      // derived click gate admits.
+      presets: { fn: () => presetOptions, argTypes: [] },
     },
     opts?.clock,
   );
@@ -492,9 +509,24 @@ export function registerDslConfig(
     return nodeType(node.kind).compile(node, cctx);
   };
 
+  // [LAW:one-source-of-truth] One compiled tree per declared preset, built
+  // through the SAME compileNode the config's own root goes through —
+  // `presetRoot` resolves the fragment's `root` or falls back to the config's,
+  // so the floor preset (the empty fragment) needs no arm and no absent case
+  // downstream.
+  // Keyed by the SAME domain the menu renders and the click gate admits, so
+  // every selectable name has a compiled tree [LAW:one-source-of-truth].
+  const roots = new Map<string, CompiledNode>();
+  for (const name of presetOptions) {
+    // The path travels WITH the tree, so a preset that stages the config's own
+    // root diagnoses under `root` — the place its author actually wrote it.
+    const { node, path } = presetRoot(config, name);
+    roots.set(name, compileNode(node, path));
+  }
+
   return {
     segments: compiled,
-    root: compileNode(config.root, "root"),
+    roots,
     activeSegment,
     menuRuntime,
     loadWarnings,
@@ -575,6 +607,31 @@ export interface RenderObservers {
   readonly onSegmentError?: (segName: string, message: string) => void;
 }
 
+// [LAW:locality-or-seam] The per-render RESOLUTION the caller performs and hands
+// down — the values that are neither config (compiled once) nor payload (input
+// data), but the session's live choices resolved against the config: which
+// theme-adaptation, which preset. Bundled as ONE named bag for exactly the
+// reason RenderObservers is: `look` arrived as a positional tail, `preset` would
+// have been a second one, and the next resolution a third — each a signature
+// every caller re-counts. A new per-render choice is now one field here.
+//
+// Both fields default to their domain's own identity element, so an omitting
+// caller (a compile-only test, the demo) renders the unadapted config — a true
+// default, not a fallback [LAW:no-silent-failure].
+export interface RenderSelection {
+  // The resolved look, as a ThemeKey: effectiveLookName over SessionState/
+  // globals, then lookKeyByName — resolved by the caller exactly how basePalette
+  // is. IDENTITY is the "none" look. Composed with each segment's hue shift into
+  // ONE transposition.
+  readonly look?: ThemeKey;
+  // The resolved preset NAME: effectivePresetName over SessionState/globals,
+  // collapsed to the floor if stale. Selects which of `compiled.roots` this
+  // render walks. The name (not the fragment) crosses this seam because the
+  // fragment's two halves land in two different places — the root here, the
+  // globals in `opts`/the payload — and one name keeps them from disagreeing.
+  readonly preset?: string;
+}
+
 export function renderDsl(
   config: ValidatedConfig,
   compiled: CompiledConfig,
@@ -584,15 +641,10 @@ export function renderDsl(
   basePalette: Palette,
   opts: BuildLineOptions,
   observers?: RenderObservers,
-  // [LAW:dataflow-not-control-flow] The render's look (the session's chosen
-  // theme-adaptation), resolved per render by the caller — effectiveLookName
-  // over SessionState/globals, then lookKeyByName — exactly how basePalette
-  // resolves. IDENTITY is the domain's own no-adaptation element (the "none"
-  // look), so an omitting caller renders unadapted — a true default, not a
-  // fallback. Composed with each segment's hue shift into ONE transposition.
-  look: ThemeKey = IDENTITY,
+  selection?: RenderSelection,
 ): string {
   const { perSegmentSink, onSegmentError } = observers ?? {};
+  const { look = IDENTITY, preset = PRESET_FLOOR } = selection ?? {};
   // [LAW:one-source-of-truth] Inject the usable width as `term.cols` from the
   // SAME opts.width the strip wraps to (below), so a width-paginated widget reads
   // the exact wrap width — never a cached or independently-measured copy. This is
@@ -721,7 +773,22 @@ export function renderDsl(
   // emit a "\n"-bearing string (FlexStrip width-overflow wrap); joining the per-
   // line results with "\n" splices those in place — byte-identical to serializing
   // each leaf row independently, since the cells and their order are unchanged.
-  return renderNode(compiled.root, true)
+  // [LAW:no-defensive-null-guards] The active preset's compiled tree. By the
+  // time a name reaches here it must be a member: effectivePresetName collapses
+  // unknown names to the floor, and every merged config declares the floor — so
+  // the throw is the loud failure for a broken invariant (a hand-built config
+  // missing the bundled presets block), never a silent fall back to some other
+  // arrangement than the one the bar's own label claims is active.
+  const root = compiled.roots.get(preset);
+  if (root === undefined) {
+    throw new Error(
+      `Preset "${preset}" has no compiled layout — registerDslConfig compiles ` +
+        `one per declared preset and effectivePresetName collapses unknown ` +
+        `names to "${PRESET_FLOOR}"; a miss here is merge/policy drift ` +
+        `(have: ${[...compiled.roots.keys()].join(", ")})`,
+    );
+  }
+  return renderNode(root, true)
     .map((line) => renderStripCells(line, opts))
     .join("\n");
 }

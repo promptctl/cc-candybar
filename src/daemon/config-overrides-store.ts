@@ -60,6 +60,9 @@ const GLOBALS_FIELD_KIND: Readonly<
   default_truncate_marker: "string",
   palette: "string",
   look: "string",
+  // The active arrangement — a NAME like palette/look, so `persist: "preset"`
+  // makes a chosen preset the default every future session opens in.
+  preset: "string",
   style: "string",
   autoWrap: "boolean",
   padding: "number",

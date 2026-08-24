@@ -10,6 +10,7 @@ import {
   hasCacheField,
   walkNodes,
   type DslConfig,
+  type LayoutNode,
   type VariableDecl,
 } from "../dsl-types.js";
 import {
@@ -60,6 +61,24 @@ export function validateCrossReferences(
       line: findKeyLine(ctx.source, ["globals", "look"]),
     });
   }
+  // [LAW:one-type-per-behavior] globals.preset is globals.look one dimension
+  // over — the same post-merge membership check against the same kind of
+  // per-config block, for the same reason (a user's default may name a
+  // bundled preset). A typo'd DEFAULT is a load error even though a stale
+  // SESSION pick collapses silently to the floor: the config file is authored
+  // and re-readable, so naming a preset that does not exist is a mistake we can
+  // point at; a session pick is a click made against a config that has since
+  // changed, which is not [LAW:no-silent-failure].
+  if (
+    cfg.globals.preset !== undefined &&
+    !Object.prototype.hasOwnProperty.call(cfg.presets, cfg.globals.preset)
+  ) {
+    ctx.issues.push({
+      path: "globals.preset",
+      message: `globals.preset "${cfg.globals.preset}" does not match any declared preset (have: ${Object.keys(cfg.presets).join(", ")})`,
+      line: findKeyLine(ctx.source, ["globals", "preset"]),
+    });
+  }
   // [LAW:one-source-of-truth] A `set … from` NAME must resolve — checked
   // against this config's per-config domains ("looks", the merged looks:
   // block) plus the global registry (themes/styles, and any future
@@ -68,7 +87,7 @@ export function validateCrossReferences(
   // to resolve. Runs post-merge for the same reason globals.look does above:
   // "looks" isn't fully known until the user's looks: block has merged onto
   // the bundled stdlib.
-  const optionDomains = perConfigDomainsFor(cfg.looks);
+  const optionDomains = perConfigDomainsFor(cfg);
   for (const [name, a] of Object.entries(cfg.actions)) {
     if (!("set" in a) || !("from" in a) || typeof a.from !== "string") continue;
     if (!knownOptionDomainNames(optionDomains).includes(a.from)) {
@@ -155,30 +174,51 @@ export function validateCrossReferences(
   // field) — would fool a raw `findKeyLine` search and misclassify the config.
   // Validation is cold-path, so reading the source's top-level keys is exact.
   // The reported path/message then point at the surface the user wrote.
+  //
+  // [LAW:one-type-per-behavior] A PRESET's `root` is a root: it gets this exact
+  // walk, not a reduced copy. The only thing that varies between the config's
+  // own tree and a preset's is the diagnostic key + line — data threaded in,
+  // never a second traversal that could learn a different idea of what a valid
+  // layout is. This is what makes `cc-candybar check` catch a preset staging a
+  // segment nobody declared.
+  const checkLayoutTree = (
+    root: LayoutNode,
+    layoutKey: string,
+    layoutLine: number | undefined,
+  ): void => {
+    for (const node of walkNodes(root)) {
+      // [LAW:locality-or-seam] A node's `when` reads the global scope (bare
+      // globals + namespaced segment vars) — the same existence-check shape as a
+      // segment template, surfaced at load time.
+      if (node.when !== undefined) {
+        checkTemplateRefs(ctx, `${layoutKey}.when`, node.when, templateScope, {
+          line: layoutLine,
+        });
+      }
+      if (node.kind !== "segment") continue;
+      if (!Object.prototype.hasOwnProperty.call(cfg.segments, node.name)) {
+        const renamed = RENAMED_SEGMENTS[node.name];
+        const hint =
+          renamed !== undefined
+            ? ` (the built-in segment "${node.name}" was renamed to "${renamed}" — update this reference)`
+            : "";
+        ctx.issues.push({
+          path: layoutKey,
+          message: `${layoutKey} entry "${node.name}" does not match any declared segment${hint}`,
+          line: layoutLine,
+        });
+      }
+    }
+  };
   const layoutKey = authoredLayoutKey(ctx.source);
-  const layoutLine = findKeyLine(ctx.source, [layoutKey]);
-  for (const node of walkNodes(cfg.root)) {
-    // [LAW:locality-or-seam] A node's `when` reads the global scope (bare
-    // globals + namespaced segment vars) — the same existence-check shape as a
-    // segment template, surfaced at load time.
-    if (node.when !== undefined) {
-      checkTemplateRefs(ctx, `${layoutKey}.when`, node.when, templateScope, {
-        line: layoutLine,
-      });
-    }
-    if (node.kind !== "segment") continue;
-    if (!Object.prototype.hasOwnProperty.call(cfg.segments, node.name)) {
-      const renamed = RENAMED_SEGMENTS[node.name];
-      const hint =
-        renamed !== undefined
-          ? ` (the built-in segment "${node.name}" was renamed to "${renamed}" — update this reference)`
-          : "";
-      ctx.issues.push({
-        path: layoutKey,
-        message: `${layoutKey} entry "${node.name}" does not match any declared segment${hint}`,
-        line: layoutLine,
-      });
-    }
+  checkLayoutTree(cfg.root, layoutKey, findKeyLine(ctx.source, [layoutKey]));
+  for (const [name, preset] of Object.entries(cfg.presets)) {
+    if (preset.root === undefined) continue;
+    checkLayoutTree(
+      preset.root,
+      `presets.${name}.root`,
+      findKeyLine(ctx.source, ["presets", name, "root"]),
+    );
   }
 
   // For each variable's template/cache.key, every dotted ref must exist

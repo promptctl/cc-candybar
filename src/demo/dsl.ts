@@ -36,6 +36,7 @@ import {
   lookKeyByName,
   paletteForThemeName,
 } from "../themes/index.js";
+import { effectivePresetName, presetGlobals } from "../config/presets.js";
 import { registerDslConfig, renderDsl } from "../dsl/render.js";
 import {
   DEFAULT_CHARSET,
@@ -77,16 +78,22 @@ const payload = {
   },
 };
 
-// The demo has no SessionState; the effective theme is just the config default.
+// The demo has no SessionState, so every resolution below is the config default
+// over its floor. The PRESET resolves first — its fragment supplies the display
+// globals every other option reads — the same preset-first order server.ts and
+// check.ts resolve in, so the demo prints the arrangement a fresh session opens
+// in.
+const preset = effectivePresetName(null, config.globals.preset, config.presets);
+const globals = presetGlobals(config, preset);
 const basePalette = paletteForThemeName(
-  effectiveThemeName(null, config.globals.palette),
+  effectiveThemeName(null, globals.palette),
 );
 // Same fresh-session resolution one dimension over: the config-default look
 // over the "none" identity floor — the exact mirror of the daemon's per-render
 // effectiveLookName → lookKeyByName chain.
 const lookKey = lookKeyByName(
   config.looks,
-  effectiveLookName(null, config.globals.look, config.looks),
+  effectiveLookName(null, globals.look, config.looks),
 );
 
 // A fresh store + registry for this run. (A hot-reloading daemon would
@@ -125,7 +132,7 @@ try {
         // Same resolution the daemon applies: the config global over the
         // truecolor default floor.
         colorCompatibility:
-          config.globals.colorCompatibility ?? DEFAULT_COLOR_COMPATIBILITY,
+          globals.colorCompatibility ?? DEFAULT_COLOR_COMPATIBILITY,
         // [LAW:one-source-of-truth] Demo applies the same Claude-Code-UI
         // reserve the daemon does so demo output matches the bytes a real
         // statusline would emit at the same terminal width.
@@ -134,12 +141,12 @@ try {
         ),
         // Same resolution the daemon applies: the config global over the
         // default-on floor.
-        wrap: config.globals.autoWrap ?? DEFAULT_WRAP,
-        padding: config.globals.padding ?? DEFAULT_PADDING,
-        charset: config.globals.charset ?? DEFAULT_CHARSET,
+        wrap: globals.autoWrap ?? DEFAULT_WRAP,
+        padding: globals.padding ?? DEFAULT_PADDING,
+        charset: globals.charset ?? DEFAULT_CHARSET,
       },
       undefined,
-      lookKey,
+      { look: lookKey, preset },
     );
     process.stdout.write(`  ${line}\n`);
     if (frame < FRAMES - 1) await sleep(FRAME_INTERVAL_MS);

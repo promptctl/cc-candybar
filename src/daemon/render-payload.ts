@@ -54,6 +54,13 @@ import type {
 export interface EffectiveGlobals {
   readonly theme: string;
   readonly look: string;
+  // The active PRESET name — effectivePresetName(sessionState.preset,
+  // globals.preset, presets), collapsed to the floor if stale. Unlike every
+  // other field here it is not itself a display value: it is the name of the
+  // fragment whose `globals` were merged to PRODUCE the rest of this struct,
+  // carried alongside so a menu label states the arrangement that actually
+  // rendered [LAW:one-source-of-truth].
+  readonly preset: string;
   readonly style: StripStyle;
   readonly charset: Charset;
   readonly colorCompatibility: ColorCompatibility;
@@ -96,6 +103,12 @@ export interface RenderPayload extends ClaudeHookData {
   // rendered palette, surfaced so a trigger label can display the active look.
   // Required for the same reason as theme: resolved unconditionally per render.
   readonly look: { readonly effective: string };
+  // [LAW:one-type-per-behavior] The daemon-resolved effective PRESET name —
+  // effectivePresetName(sessionState.preset, globals.preset, presets) — theme
+  // and look's twin one level up: the SAME name that selected the layout this
+  // render walked and the globals it rendered with, surfaced so a preset
+  // trigger's label can never claim an arrangement the bar is not in.
+  readonly preset: { readonly effective: string };
   // [LAW:one-type-per-behavior] style/charset/colorCompatibility/autoWrap/
   // padding are theme/look's twins over the remaining persistable globals
   // (candybar-config-engine-71o.3) — each REQUIRED and unconditionally
@@ -845,6 +858,7 @@ export async function buildRenderPayload(
     // hand) and a config reading e.g. `.padding.effective` must always find it.
     theme: { effective: effective.theme },
     look: { effective: effective.look },
+    preset: { effective: effective.preset },
     style: { effective: effective.style },
     charset: { effective: effective.charset },
     colorCompatibility: { effective: effective.colorCompatibility },

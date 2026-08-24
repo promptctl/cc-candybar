@@ -43,6 +43,7 @@ function depsWith(
 const EFFECTIVE_GLOBALS: EffectiveGlobals = {
   theme: "textual-dark",
   look: "none",
+  preset: "default",
   style: "powerline",
   charset: "unicode",
   colorCompatibility: "truecolor",
@@ -317,6 +318,7 @@ describe("buildRenderPayload — effective globals projection", () => {
     const effective: EffectiveGlobals = {
       theme: "nord",
       look: "vivid",
+      preset: "default",
       style: "capsule",
       charset: "ascii",
       colorCompatibility: "256",
