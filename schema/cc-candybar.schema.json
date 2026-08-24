@@ -1367,6 +1367,47 @@
           {
             "type": "object",
             "properties": {
+              "persist": {
+                "type": "string"
+              },
+              "insertSegmentFrom": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "minItems": 1,
+                    "uniqueItems": true
+                  }
+                ]
+              },
+              "anchor": {
+                "type": "string"
+              },
+              "relation": {
+                "enum": [
+                  "before",
+                  "after"
+                ]
+              }
+            },
+            "required": [
+              "persist",
+              "insertSegmentFrom",
+              "anchor",
+              "relation"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
               "copy": {
                 "type": "string"
               }

@@ -239,7 +239,9 @@ describe("cross-ref: presets.<name>.rootOps target", () => {
         ),
         ALLOWED,
       ),
-    ).toThrow(/can only be paired with "removeSegment" or "insertSegment"/);
+    ).toThrow(
+      /can only be paired with "removeSegment", "insertSegment", or "insertSegmentFrom"/,
+    );
   });
 
   test("a 'reset' over a rootOps key is legal — the whole-log undo needs no arm check", () => {

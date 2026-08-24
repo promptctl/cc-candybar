@@ -7,6 +7,7 @@ import { parseHandlerUrl } from "../../src/install/index";
 import {
   parseEffects,
   decodeSegments,
+  VERB_APPLY_LAYOUT_OP,
   VERB_DISPATCH,
   VERB_REDO,
   VERB_RESET_CONFIG,
@@ -38,6 +39,7 @@ const MULTI_ARG_VERBS = new Set<string>([
   VERB_RESET_CONFIG,
   VERB_UNDO,
   VERB_REDO,
+  VERB_APPLY_LAYOUT_OP,
 ]);
 function decodeArgs(verb: string, value: string): string[] {
   return MULTI_ARG_VERBS.has(verb)

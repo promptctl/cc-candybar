@@ -79,6 +79,27 @@ export function decodeLayoutOp(token: string): LayoutOp | null {
   return null;
 }
 
+// [LAW:single-enforcer] THE one collector of "which segment names does this
+// tree contain" — brandon-layout-edit-2gc.3's edit-chrome synthesis
+// (src/config/edit-chrome.ts) uses it to compute both halves of the +/-
+// affordances: which segments are PRESENT (get a `-`) and, by set difference
+// against every declared segment, which are ADDABLE (populate the `+`
+// picker's domain). A name appearing more than once collapses to one entry —
+// callers that care about occurrence COUNT (none currently do) need a
+// different walk.
+export function collectSegmentNames(root: LayoutNode): ReadonlySet<string> {
+  const out = new Set<string>();
+  const walk = (node: LayoutNode): void => {
+    if (node.kind === "segment") {
+      out.add(node.name);
+      return;
+    }
+    for (const child of node.children) walk(child);
+  };
+  walk(root);
+  return out;
+}
+
 // [LAW:dataflow-not-control-flow] Ops are DATA folded over the tree in
 // order — replaying zero ops is the identity fold, replaying N is the same
 // reduce for every N. No branch on "are there ops to apply."
