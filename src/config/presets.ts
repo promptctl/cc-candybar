@@ -188,6 +188,36 @@ export function sanitizePersistedPresetOverride(
   return rest;
 }
 
+// [LAW:no-silent-failure] sanitizePersistedPresetOverride's twin for the
+// SAME machine-global overrides file, one field over: `presets.<name>.
+// rootOps` entries persist by NAME, and that name only has meaning against
+// the config it was clicked against. Loading a DIFFERENT project's config
+// — one that never declared "compact", say — would otherwise reach
+// applyPresetRootOpsOverrides -> presetRoot -> presetByName, which THROWS
+// for an undeclared name (correctly so for a hand-AUTHORED preset root: a
+// typo in a file the author can see). A stale overrides entry is not that
+// — it is the expected shape of a file that outlives any one project's
+// preset names — so it gets the SAME treatment sanitizePersistedPresetOverride
+// already gives `globals.preset`: dropped before replay ever sees it,
+// never a fatal error replacing an unrelated project's entire bar
+// (brandon-layout-edit-2gc.5 PR review).
+export function sanitizePersistedPresetRootOps(
+  presetRootOps: Readonly<Record<string, readonly string[]>>,
+  declaredPresets: Readonly<Record<string, PresetDecl>>,
+): Readonly<Record<string, readonly string[]>> {
+  const known = new Set(presetNames(declaredPresets));
+  const entries = Object.entries(presetRootOps).filter(([name]) =>
+    known.has(name),
+  );
+  // [LAW:carrying-cost] Identity return when nothing was dropped — the
+  // common case (this daemon serves one project, or every persisted name
+  // happens to be declared) costs one Set build and no new allocation.
+  if (entries.length === Object.keys(presetRootOps).length) {
+    return presetRootOps;
+  }
+  return Object.fromEntries(entries);
+}
+
 // [LAW:one-source-of-truth] brandon-layout-edit-2gc.1's replay step — the
 // SAME "patch an already-merged config" shape applySegmentPaletteOverrides
 // (src/config/loader/merge.ts) uses one field over, run at the SAME point in
@@ -208,6 +238,48 @@ export function sanitizePersistedPresetOverride(
 // already removed it. A malformed individual token (decodeLayoutOp -> null;
 // can only arise from hand-edited or previous-version state, never from this
 // process's own encodeLayoutOp) is filtered the same way, never applied.
+// [LAW:one-source-of-truth] brandon-layout-edit-2gc.5's diagnostic seam — the
+// ONE definition of "does this preset's rendered layout currently differ
+// from what's literally declared in the config file", read from the SAME
+// raw op-log record applyPresetRootOpsOverrides replays (never re-derived by
+// diffing the replayed tree against a fresh presetRoot() call, which would
+// be a second, weaker definition — a structural coincidence between two
+// unrelated edits could equal zero net ops and still disagree with the raw
+// log's own length). A name absent from the record (never edited) and a
+// name present with an empty token list (edited down to nothing, e.g. by
+// undo) are the SAME "not customized" — presence in the record only ever
+// means "this reload's overrides file had an entry", not "and it's non-
+// empty" [LAW:no-defensive-null-guards].
+//
+// Decodes each token the SAME way applyPresetRootOpsOverrides does, rather
+// than trusting the raw token COUNT — a token list where every token
+// decodes to null (malformed, or written by a previous protocol version)
+// is exactly the case applyPresetRootOpsOverrides itself treats as "no ops
+// to replay" (`ops.length === 0 → continue`, leaving the root untouched).
+// Counting raw tokens would disagree with that: "customized" would read
+// true over a tree that is, in fact, byte-identical to the literal
+// declared root — the inverted form of the drift this diagnostic exists to
+// catch.
+//
+// [LAW:carrying-cost] Verifies DECODE only, not whether the decoded op's
+// target/anchor still resolves against the CURRENT tree — that check would
+// need this to duplicate applyLayoutOps' own stale-target resolution
+// (a real walk of the tree) just to COUNT, on every render, a fact only a
+// LATER hand-authored config edit can produce (removing a segment a stored
+// op still names — see the stale-op comment on applyPresetRootOpsOverrides
+// above). A rare, later-edit-triggered false "customized" is the honest,
+// documented cost of keeping this an O(tokens) check rather than an O(tree)
+// one; the doc at docs/interaction-authoring.md's "Knowing when a preset's
+// layout has been edited" section states this same limit.
+export function presetIsCustomized(
+  presetRootOps: Readonly<Record<string, readonly string[]>>,
+  name: string,
+): boolean {
+  const tokens = presetRootOps[name];
+  if (tokens === undefined) return false;
+  return tokens.some((t) => decodeLayoutOp(t) !== null);
+}
+
 export function applyPresetRootOpsOverrides(
   config: DslConfig,
   presetRootOps: Readonly<Record<string, readonly string[]>>,

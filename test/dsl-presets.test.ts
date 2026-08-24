@@ -95,8 +95,44 @@ describe("presets block — loader validation", () => {
 
   test("a slash-bearing preset name is rejected at load, not at click time", () => {
     expect(parseIssues(`{ presets: { 'a/b': {} } }`)).toContain(
-      "must be non-empty and slash-free",
+      "must be non-empty, slash-free, and newline-free",
     );
+  });
+
+  // brandon-layout-edit-2gc.5 — a preset name is spliced as DISPLAY TEXT
+  // into a synthesized Go-template string literal (edit-chrome.ts's
+  // "customized" banner), and its escaper handles backslash/quote only, so
+  // an embedded newline would break template synthesis for the WHOLE
+  // config. Rejected the same way groupLabelSpec rejects \n/\r in a label.
+  test("a newline-bearing preset name is rejected at load", () => {
+    expect(parseIssues(`{ presets: { ${JSON.stringify("a\nb")}: {} } }`)).toContain(
+      "must be non-empty, slash-free, and newline-free",
+    );
+  });
+
+  // brandon-layout-edit-2gc.5 PR review: two preset names that collapse to
+  // the SAME synthesis identifier would silently steal each other's
+  // synthesized reset action/segment at chrome-synthesis time (a plain
+  // object-key overwrite that never re-enters cross-ref checking) — caught
+  // here instead, at the structural pass every preset name already goes
+  // through.
+  test("two preset names that collapse to the same synthesis identifier are rejected at load", () => {
+    const msg = parseIssues(
+      `{ presets: { 'quick-look': {}, 'quick_look': {} } }`,
+    );
+    expect(msg).toContain('"quick-look"');
+    expect(msg).toContain('"quick_look"');
+    expect(msg).toContain("collapse to the same synthesis identifier");
+  });
+
+  test("preset names that don't collide are unaffected", () => {
+    expect(() =>
+      parseAndValidate(
+        "<test>",
+        `{ presets: { compact: {}, verbose: {} } }`,
+        ALLOWED,
+      ),
+    ).not.toThrow();
   });
 
   // A preset's root goes through THE layout validator, so it inherits every

@@ -70,7 +70,11 @@ import {
   lookKeyByName,
   paletteForThemeName,
 } from "../themes/index.js";
-import { effectivePresetName, presetGlobals } from "../config/presets.js";
+import {
+  effectivePresetName,
+  presetGlobals,
+  presetIsCustomized,
+} from "../config/presets.js";
 import {
   renderStripCells,
   DEFAULT_CHARSET,
@@ -888,6 +892,15 @@ async function handleRequest(req: Request): Promise<HandledRequest> {
         const globals = presetGlobals(entry.state.config, preset);
         const effective: EffectiveGlobals = {
           preset,
+          // [LAW:one-source-of-truth] brandon-layout-edit-2gc.5 — read from
+          // THIS entry's own presetRootOps (the record that fed the SAME
+          // reload that produced entry.state.config), never a fresh
+          // loadOverrides() here — a second read could race a concurrent
+          // write and disagree with the tree that actually rendered.
+          presetCustomized: presetIsCustomized(
+            entry.state.presetRootOps,
+            preset,
+          ),
           theme: effectiveThemeName(
             sessionState.get(req.hookData.session_id, "theme"),
             globals.palette,
