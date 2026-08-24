@@ -1,3 +1,10 @@
+# [1.29.0](https://github.com/promptctl/cc-candybar/compare/v1.28.0...v1.29.0) (2026-08-24)
+
+
+### Features
+
+* **config:** bundled preset library in the default config (brandon-presets-0yk.3) ([#182](https://github.com/promptctl/cc-candybar/issues/182)) ([ec4f883](https://github.com/promptctl/cc-candybar/commit/ec4f88320a0741c503498427a1a549252bdb8b09))
+
 # [1.28.0](https://github.com/promptctl/cc-candybar/compare/v1.27.0...v1.28.0) (2026-08-24)
 
 
