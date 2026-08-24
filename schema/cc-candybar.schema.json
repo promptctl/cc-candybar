@@ -29,6 +29,9 @@
         "look": {
           "type": "string"
         },
+        "preset": {
+          "type": "string"
+        },
         "style": {
           "enum": [
             "powerline",
@@ -1374,6 +1377,78 @@
           },
           "lightnessShift": {
             "type": "number"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "presets": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "root": {
+            "$ref": "#/definitions/LayoutNode"
+          },
+          "globals": {
+            "type": "object",
+            "properties": {
+              "default_bg": {
+                "type": "string"
+              },
+              "default_fg": {
+                "type": "string"
+              },
+              "default_empty_value": {
+                "type": "string"
+              },
+              "default_separator": {
+                "type": "string"
+              },
+              "default_truncate_marker": {
+                "type": "string"
+              },
+              "palette": {
+                "type": "string"
+              },
+              "look": {
+                "type": "string"
+              },
+              "preset": {
+                "not": {},
+                "description": "not allowed inside a preset — a preset cannot select a preset"
+              },
+              "style": {
+                "enum": [
+                  "powerline",
+                  "capsule",
+                  "plain"
+                ]
+              },
+              "autoWrap": {
+                "type": "boolean"
+              },
+              "padding": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 16
+              },
+              "charset": {
+                "enum": [
+                  "unicode",
+                  "ascii"
+                ]
+              },
+              "colorCompatibility": {
+                "enum": [
+                  "truecolor",
+                  "256",
+                  "ansi",
+                  "none"
+                ]
+              }
+            },
+            "additionalProperties": false
           }
         },
         "additionalProperties": false

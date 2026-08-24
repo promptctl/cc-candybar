@@ -227,7 +227,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
         paletteForThemeName(theme),
         opts,
         undefined,
-        lookKeyByName(parsed.looks, look),
+        { look: lookKeyByName(parsed.looks, look) },
       );
     };
     try {

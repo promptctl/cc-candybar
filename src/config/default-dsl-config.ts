@@ -355,6 +355,17 @@ export const RAW_DEFAULT_DSL_CONFIG = {
       path: "look.effective",
       default: "",
     },
+    // [LAW:one-type-per-behavior] The effective PRESET name, theme/look's twin
+    // one level up — effectivePresetName(sessionState.preset, globals.preset,
+    // presets), the SAME name that selected the layout this render walked and
+    // the globals it rendered with. A preset-picker trigger reads
+    // `{{ .preset.effective }}` for its label, so the label and the arrangement
+    // trace to one resolution.
+    "preset.effective": {
+      kind: "input",
+      path: "preset.effective",
+      default: "",
+    },
     // [LAW:one-type-per-behavior] style/charset/colorCompatibility/autoWrap/
     // padding are theme/look's twins over the remaining persistable globals
     // (candybar-config-engine-71o.3) — the SAME values BuildLineOptions
@@ -1363,6 +1374,27 @@ export const RAW_DEFAULT_DSL_CONFIG = {
       lightnessScale: -1,
       lightnessShift: 1,
     },
+  },
+
+  // ─── Presets ─────────────────────────────────────────────────────────────
+  // Named config FRAGMENTS — each an alternative `root` + display `globals`,
+  // i.e. a whole arrangement of the bar rather than one knob. A preset is to
+  // configuration what a look is to a theme, and rides the identical seam:
+  // selected per session via the `preset` SessionState key (an action
+  // `{ set: "preset", from: "presets" }` + a `{{ menu }}`), resolved as session
+  // pick over globals.preset over this floor.
+  // [LAW:one-source-of-truth] Merges by name (user wins per name), so this
+  // stdlib — currently just the floor — is present in every merged config by
+  // construction, exactly as looks' "none" is.
+  presets: {
+    // [LAW:dataflow-not-control-flow] "default" is just the identity fragment
+    // — the resolution floor as a value, not a special case. An empty fragment
+    // declares no `root` and no `globals`, so it stages the config's own, which
+    // is precisely what "no preset chosen" means. A usable preset LIBRARY on
+    // top of this floor is brandon-presets-0yk.3; the floor itself belongs here
+    // because effectivePresetName's collapse target must exist in every merged
+    // config, the same load-bearing reason "none" ships beside the real looks.
+    default: {},
   },
 
   // [LAW:single-enforcer] / [LAW:one-source-of-truth] Display-formatting policy

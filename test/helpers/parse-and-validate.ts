@@ -24,6 +24,7 @@ const EMPTY_DEFAULT: DslConfig = {
   root: { kind: "container", direction: "vertical", children: [] },
   actions: {},
   looks: {},
+  presets: {},
   helpers: {},
 };
 

@@ -264,6 +264,7 @@ const SPEED_PATHS = new Set([
 const EFFECTIVE_GLOBALS: EffectiveGlobals = {
   theme: "textual-dark",
   look: "none",
+  preset: "default",
   style: "powerline",
   charset: "unicode",
   colorCompatibility: "truecolor",
