@@ -25,6 +25,7 @@ import { listResolvablePaletteNames } from "../src/themes/policy";
 import { registerDslConfig, renderDsl } from "../src/dsl/render";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
+import { SessionState } from "../src/daemon/session-state";
 import { getThemePalette } from "@promptctl/rich-js";
 
 const FIVE_HOUR_MS = 5 * 60 * 60 * 1000;
@@ -195,7 +196,13 @@ function renderBurnrate(payload: Record<string, unknown>): string {
     ALLOWED,
   );
   const store = new VariableStore();
-  const registry = new SourceRegistry(store);
+  // The merged bundled default's `toolbar` references `edit.toggle`
+  // (brandon-layout-edit-2gc.4), so `edit.mode` — a `state` var — is now
+  // declared regardless of this file's narrowed `burnrate`-only root; a
+  // SessionState is required to declare it (matching every other
+  // DEFAULT_DSL_CONFIG-based render helper) or it silently fails to declare
+  // and burnrate's own `when` renders an unrelated ⚠ error cell.
+  const registry = new SourceRegistry(store, "", undefined, new SessionState());
   try {
     const compiled = registerDslConfig(cfg, registry, { cwd: "/tmp" });
     const bp = getThemePalette(cfg.globals.palette ?? "catppuccin-latte")!;
