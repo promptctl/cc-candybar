@@ -59,38 +59,38 @@ const colorCompatibilitySpec: FieldSpec<ColorCompatibility> = {
 // this map, so a field added here is automatically settable from a preset —
 // there is no second list to remember to grow.
 const GLOBALS_FIELDS: FieldSpecMap<Globals> = {
-    default_bg: optionalStringSpec(),
-    default_fg: optionalStringSpec(),
-    default_empty_value: optionalStringSpec(),
-    default_separator: optionalStringSpec(),
-    default_truncate_marker: optionalStringSpec(),
-    palette: paletteSpec(),
-    // [LAW:types-are-the-program] The config-default LOOK name. Unlike the
-    // registry-static palette set, the look domain is per-config (the merged
-    // `looks` block), so membership is a cross-ref check on the MERGED config —
-    // a user's globals.look may name a default-provided look. Shape-only here,
-    // exactly the shape/meaning split paletteSpec's schema facet keeps.
-    look: optionalStringSpec(),
-    // [LAW:types-are-the-program] The config-default PRESET name — same
-    // per-config-domain shape as `look` (membership is a post-merge cross-ref
-    // check, since a user's globals.preset may name a default-provided preset).
-    preset: optionalStringSpec(),
-    // [LAW:types-are-the-program] The strip style is a CLOSED enum (the powerline
-    // shapes the joiner can render), unlike the open-ended palette NAME — so it
-    // validates by membership and emits a JSON-Schema `enum`.
-    style: optionalEnumSpec(STRIP_STYLES),
-    autoWrap: optionalBooleanSpec(),
-    // Intra-cell spaces per side. Bounded above so a config value can never
-    // drive an unbounded `" ".repeat` allocation in the daemon
-    // [LAW:no-silent-failure] — an absurd value is a loud load error, not a
-    // silently-huge render.
-    padding: optionalIntSpec({ min: 0, max: 16 }),
-    // [LAW:types-are-the-program] Closed enum like `style`: the joiner glyph
-    // vocabularies pickJoiner can render — validates by membership, emits a
-    // JSON-Schema `enum` from the same CHARSETS literal.
-    charset: optionalEnumSpec(CHARSETS),
-    // Closed enum with a bespoke "auto" rejection — see colorCompatibilitySpec.
-    colorCompatibility: colorCompatibilitySpec,
+  default_bg: optionalStringSpec(),
+  default_fg: optionalStringSpec(),
+  default_empty_value: optionalStringSpec(),
+  default_separator: optionalStringSpec(),
+  default_truncate_marker: optionalStringSpec(),
+  palette: paletteSpec(),
+  // [LAW:types-are-the-program] The config-default LOOK name. Unlike the
+  // registry-static palette set, the look domain is per-config (the merged
+  // `looks` block), so membership is a cross-ref check on the MERGED config —
+  // a user's globals.look may name a default-provided look. Shape-only here,
+  // exactly the shape/meaning split paletteSpec's schema facet keeps.
+  look: optionalStringSpec(),
+  // [LAW:types-are-the-program] The config-default PRESET name — same
+  // per-config-domain shape as `look` (membership is a post-merge cross-ref
+  // check, since a user's globals.preset may name a default-provided preset).
+  preset: optionalStringSpec(),
+  // [LAW:types-are-the-program] The strip style is a CLOSED enum (the powerline
+  // shapes the joiner can render), unlike the open-ended palette NAME — so it
+  // validates by membership and emits a JSON-Schema `enum`.
+  style: optionalEnumSpec(STRIP_STYLES),
+  autoWrap: optionalBooleanSpec(),
+  // Intra-cell spaces per side. Bounded above so a config value can never
+  // drive an unbounded `" ".repeat` allocation in the daemon
+  // [LAW:no-silent-failure] — an absurd value is a loud load error, not a
+  // silently-huge render.
+  padding: optionalIntSpec({ min: 0, max: 16 }),
+  // [LAW:types-are-the-program] Closed enum like `style`: the joiner glyph
+  // vocabularies pickJoiner can render — validates by membership, emits a
+  // JSON-Schema `enum` from the same CHARSETS literal.
+  charset: optionalEnumSpec(CHARSETS),
+  // Closed enum with a bespoke "auto" rejection — see colorCompatibilitySpec.
+  colorCompatibility: colorCompatibilitySpec,
 };
 
 const GLOBALS_SCHEMA: RecordSchema<Globals> = {
@@ -110,7 +110,8 @@ const nestedPresetSpec: FieldSpec<string> = {
   // the key at the same moment the validator does.
   json: {
     not: {},
-    description: "not allowed inside a preset — a preset cannot select a preset",
+    description:
+      "not allowed inside a preset — a preset cannot select a preset",
   },
   parse: (ctx, path, field, raw) => {
     if (raw[field] !== undefined) {

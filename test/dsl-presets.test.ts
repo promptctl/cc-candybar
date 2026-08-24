@@ -101,9 +101,13 @@ describe("presets block — loader validation", () => {
   // A preset's root goes through THE layout validator, so it inherits every
   // migration error the top-level root gets.
   test("a preset's root uses the same A-grammar validator as the top-level root", () => {
-    expect(
-      parseIssues(`{ presets: { wide: { root: { cells: ['a'] } } } }`),
-    ).toContain("a layout node must be a string");
+    const msg = parseIssues(
+      `{ presets: { wide: { root: { cells: ['a'] } } } }`,
+    );
+    // The path proves the routing (the preset's root, not a parallel validator);
+    // the phrase proves it was the A-grammar validator that spoke.
+    expect(msg).toContain("presets.wide.root.kind");
+    expect(msg).toContain("use the terse A-grammar");
   });
 
   test("globals.preset naming an undeclared preset is a load error", () => {

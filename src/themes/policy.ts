@@ -77,7 +77,9 @@ export function effectiveMemberName(
   declared: Readonly<Record<string, unknown>>,
 ): string {
   const chosen = sessionPick ?? configDefault ?? floor;
-  return Object.prototype.hasOwnProperty.call(declared, chosen) ? chosen : floor;
+  return Object.prototype.hasOwnProperty.call(declared, chosen)
+    ? chosen
+    : floor;
 }
 
 // --- Look (theme-adaptation) identifiers ---

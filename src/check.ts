@@ -286,7 +286,11 @@ function loadRegisterRender(
     // globals feed every field below, the SAME order the daemon resolves in
     // (server.ts) — so `check` renders the arrangement a fresh session actually
     // opens in, not the config's un-presetted root.
-    const preset = effectivePresetName(null, config.globals.preset, config.presets);
+    const preset = effectivePresetName(
+      null,
+      config.globals.preset,
+      config.presets,
+    );
     const globals = presetGlobals(config, preset);
     const effective: EffectiveGlobals = {
       preset,
