@@ -986,4 +986,41 @@ describe("RenderCache: layout ops replay onto the resolved preset root", () => {
       for (const fn of cleanups) fn();
     }
   });
+
+  // brandon-layout-edit-2gc.5 PR review: `configOverridesPath()` is ONE
+  // file shared by every project this daemon serves — a rootOps entry
+  // naming a preset that only exists in a DIFFERENT project's config must
+  // not fail THIS project's render. Without sanitizePersistedPresetRootOps,
+  // applyPresetRootOpsOverrides -> presetRoot -> presetByName throws for
+  // the undeclared name, and that throw would propagate out of buildState
+  // as a fatal `entry.lastError` for a project that never touched this key.
+  test("a rootOps entry naming a preset absent from THIS config is dropped, not fatal", () => {
+    const userConfigPath = join(projectDir, ".cc-candybar.json5");
+    writeFileSync(userConfigPath, userConfigBody);
+    // Written by some OTHER project's edit-mode session against a preset
+    // name that neither the bundled default nor this project's own config
+    // declares.
+    writeConfigOverride(
+      overridesPath(),
+      "presets.someOtherProjectsPreset.rootOps",
+      JSON.stringify([encodeLayoutOp({ op: "remove", target: "directory" })]),
+    );
+
+    const { cache, cleanups } = makeCache();
+    try {
+      const entry = cache.getOrCreate(projectDir, projectDir, undefined);
+      expect(entry.lastError).toBeNull();
+      // Dropped before it ever reached presetIsCustomized too — not just
+      // "didn't crash", but genuinely absent from the sanitized record.
+      expect(entry.state!.presetRootOps).not.toHaveProperty(
+        "someOtherProjectsPreset",
+      );
+      // This project's OWN preset is completely unaffected.
+      expect(
+        segmentNamesOf(entry.state!.config.presets.default!.root!),
+      ).toEqual(["directory", "git"]);
+    } finally {
+      for (const fn of cleanups) fn();
+    }
+  });
 });
