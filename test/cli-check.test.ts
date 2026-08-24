@@ -261,6 +261,27 @@ describe("checkConfig — explicit target", () => {
     expect(message).toContain("(under .preset.customized = true)");
   });
 
+  // brandon-layout-edit-2gc.5 PR review: an UNCONDITIONAL segment error (no
+  // `when` at all — the SAME fixture as the "cycle action" test above)
+  // fails identically in BOTH render passes (they share config/store/
+  // registry, differing only in `presetCustomized`). Proves it's reported
+  // exactly ONCE, not double-counted with a misleading "(under
+  // .preset.customized = true)" tag implying it's specific to that gate.
+  it("does not double-report an unconditional segment error across both render passes", () => {
+    const p = write(
+      "unconditional-error-dedup.json5",
+      `{
+        actions: { cycleMode: { set: "work-mode", cycle: ["focus", "review", "debug"] } },
+        segments: { chip: { template: '{{ action "cycleMode" "🎯 focus" "🔍 review" }}' } },
+        root: { h: ['chip'] },
+      }`,
+    );
+    const message = expectFatal(checkConfig(p, dir));
+    expect(message).toContain("config renders with 1 segment error");
+    expect(message).not.toContain("(under .preset.customized = true)");
+    expect(message.split('segment "chip"').length - 1).toBe(1);
+  });
+
   it("reports a template parse error in a segment override (register stage)", () => {
     const p = write(
       "template-parse.json5",

@@ -29,6 +29,7 @@ import {
 import { listGlobalsFieldNames } from "./globals.js";
 import { parsePersistTarget } from "./persist-target.js";
 import { presetNames } from "../presets.js";
+import { ident } from "../ident.js";
 import { findKeyLine } from "./diagnostics.js";
 import { isPlainObject, type ValidateCtx } from "./validate-core.js";
 import {
@@ -48,15 +49,6 @@ export const RENAMED_SEGMENTS: Readonly<Record<string, string>> = {
   gitTaculous: "gitaculous",
 };
 
-// [LAW:types-are-the-program] The SAME identifier-collapse rule edit-
-// chrome.ts's `ident()` applies (non-alphanumerics → `_`), reimplemented
-// here for the same module-private reason edit-chrome.ts reimplements
-// menu-keys.ts's copy rather than importing it — one line, no cross-module
-// dependency worth introducing for it.
-function ident(name: string): string {
-  return name.replace(/[^A-Za-z0-9]+/g, "_");
-}
-
 // [LAW:single-enforcer] Runs HERE — on `cfg.presets`, the MERGED map — not
 // in loader/presets.ts's per-file structural pass (where a round-1 version
 // of this check lived): that pass validates one config source at a time
@@ -71,6 +63,11 @@ function ident(name: string): string {
 // BUNDLED library or a different file contributed. This is the one place
 // that sees that merged set, so it's the one place that can prove no
 // collision exists in it.
+//
+// [LAW:one-source-of-truth] `ident` is imported from ../ident.ts — the ONE
+// collapse rule menu-keys.ts, edit-chrome.ts, and this guard all now share,
+// so a future tweak to the rule can't silently desync the guard from the
+// thing it checks.
 //
 // [LAW:no-silent-failure] Two preset names that collapse to the SAME
 // synthesis identifier (e.g. "quick-look" and "quick_look" both → "quick_

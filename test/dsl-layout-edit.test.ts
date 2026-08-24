@@ -613,6 +613,74 @@ describe('the "customized" banner escapes quote/backslash preset names', () => {
   });
 });
 
+// brandon-layout-edit-2gc.5 PR review round 4: a preset's declared root may
+// carry its OWN top-level `when` — including the A-grammar's bare-segment-
+// ref shorthand `{ seg, when }` (loader/layout.ts), NOT only a container.
+// prependCustomizedBanner's when-carry-up only reaches a container's own
+// `when`; without ALSO copying it onto spliceEditChromeForPreset's
+// synthetic wrapper for a bare-segment root, that shape's own gate never
+// reached the carry-up at all.
+describe("the reset banner respects a preset root's own top-level `when`", () => {
+  // eslint-disable-next-line no-control-regex
+  const ANSI = /\x1b\[[0-9;]*m|\x1b\]8;;[^\x1b]*\x1b\\/g;
+
+  function buildConfig(rootWhen: string) {
+    return parseAndValidate(
+      "<test>",
+      `{
+        globals: {},
+        variables: {
+          'session.id': { kind: 'input', path: 'session_id', default: '' },
+          'preset.customized': { kind: 'input', path: 'preset.customized', type: 'boolean', default: false },
+        },
+        segments: {
+          directory: { template: 'd', bg: 'surface', fg: 'foreground' },
+          editControl: { template: '{{ action "edit.toggle" "e" }}', bg: 'surface', fg: 'foreground' },
+        },
+        root: { h: ['directory', 'editControl'] },
+        presets: { gated: { root: { seg: 'directory', when: ${JSON.stringify(rootWhen)} } } },
+      }`,
+      ALLOWED,
+    );
+  }
+
+  function renderGated(config: ReturnType<typeof buildConfig>): string {
+    const store = new VariableStore();
+    const registry = new SourceRegistry(store, "", undefined, new SessionState());
+    try {
+      const compiled = registerDslConfig(config, registry);
+      const basePalette = getThemePalette("textual-dark"!);
+      return renderDsl(
+        config,
+        compiled,
+        store,
+        registry,
+        {
+          session_id: "s1",
+          project_dir: "/tmp/proj",
+          preset: { effective: "gated", customized: true },
+        },
+        basePalette,
+        opts(),
+        undefined,
+        { preset: "gated" },
+      ).replace(ANSI, "");
+    } finally {
+      registry.dispose();
+    }
+  }
+
+  test("the banner is hidden when a bare-segment-root's own when is false, even though .preset.customized is true", () => {
+    expect(renderGated(buildConfig("{{ false }}"))).not.toContain("customized");
+  });
+
+  test("the banner still shows when the root's own when is true (sanity: the gate above isn't just always-empty)", () => {
+    expect(renderGated(buildConfig("{{ true }}"))).toContain(
+      "↺ gated customized",
+    );
+  });
+});
+
 // ─── RenderCache integration: replay + reload + restart + byte-identity ──────
 
 function makeCache(): { cache: RenderCache; cleanups: Array<() => void> } {
