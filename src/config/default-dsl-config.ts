@@ -872,7 +872,7 @@ export const RAW_DEFAULT_DSL_CONFIG = {
     },
     // Quick-action tray — the default bar's interactivity: copy the session id,
     // open the project dir / transcript (this session's jsonl) in the editor,
-    // and open the repo's web page in the browser.
+    // open the repo's web page in the browser, and toggle layout edit mode.
     // (copyDir — copy the cwd — stays declared as an action below for users who
     // want a fifth glyph; it is simply not in the default tray.)
     // [LAW:locality-or-seam] The glyph is the REPRESENTATION; the named action
@@ -887,11 +887,36 @@ export const RAW_DEFAULT_DSL_CONFIG = {
     // public web URL through a cc-candybar:// verb would buy nothing. It is
     // gated on the VALUE (`ne … ""`), not on a flag: a local-only repo simply
     // supplies no page and the glyph is absent. [LAW:dataflow-not-control-flow]
+    //
+    // `✎ edit`/`✎ done` (brandon-layout-edit-2gc.4) is the bundled default's
+    // ONLY reference to the reserved `edit.toggle` action — referencing it
+    // anywhere is what opts this config into edit mode (see
+    // docs/interaction-authoring.md's "Edit mode" section), and this tray
+    // segment is where it lives.
+    //
+    // [LAW:carrying-cost] Placement resolves a self-lockout tension .3 flagged
+    // (see the epic's tickets): once edit mode is open, EVERY ordinary segment
+    // gets its own removable `-`, including whichever one hosts the trigger —
+    // a config can, in principle, remove its own way back into edit mode.
+    // Giving the trigger its own standalone segment would make that a one-click
+    // accident. Folding it into `toolbar` instead means removing the trigger
+    // requires removing the WHOLE quick-action tray — the same deliberate,
+    // symmetric risk every other multi-purpose segment already carries, not a
+    // bespoke edit-mode hazard — and it costs the default bar one glyph of
+    // width instead of a whole new segment's cell+padding+joiner overhead. The
+    // risk is bounded either way: `-` only removes the segment from this
+    // preset's tree (`edit.mode` itself is untouched SessionState), so the
+    // rest of the chrome — every remaining `+`/`-` in the bar — stays visible,
+    // and any of them can `+` `toolbar` straight back
+    // (test/dsl-layout-edit.test.ts covers the full round trip through a
+    // real RenderCache reload; test/dsl-edit-mode.test.ts covers the click
+    // itself and that edit.mode survives it).
     toolbar: {
       template:
         '{{ action "copySession" "⎘ id" }}' +
         ' {{ action "openProject" "↗ proj" }} {{ action "openTranscript" "↗ log" }}' +
-        '{{ if ne .git.repoUrl "" }} {{ link .git.repoUrl "↗ repo" }}{{ end }}',
+        '{{ if ne .git.repoUrl "" }} {{ link .git.repoUrl "↗ repo" }}{{ end }}' +
+        ' {{ action "edit.toggle" "✎ edit" "✎ done" }}',
       bg: "surface",
       fg: "foreground",
     },

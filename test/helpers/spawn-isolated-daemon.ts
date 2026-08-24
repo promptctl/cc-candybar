@@ -16,11 +16,12 @@
 
 import type { ChildProcess } from "node:child_process";
 import fs from "node:fs";
-import net from "node:net";
 import os from "node:os";
 import path from "node:path";
 
 import { spawnTestDaemon } from "./spawn-test-daemon";
+import { sendDaemonRequest } from "./daemon-wire";
+import { PROTOCOL_VERSION } from "../../src/daemon/protocol";
 
 export interface IsolatedDaemonEnv {
   env: NodeJS.ProcessEnv;
@@ -72,12 +73,31 @@ export interface RunningDaemon {
   killTree(signal?: NodeJS.Signals): void;
 }
 
-// [LAW:verifiable-goals] Readiness is "the daemon actually accepts a
-// connection", not "the socket file exists" — bind() creates the file
-// synchronously but doesn't prove the accept() loop is running (the
-// 452-corpse-adjacent incident this guards against: a daemon that bound but
-// hung before accept() would let a "file exists" check pass and the test
-// hang downstream on its first request).
+// [LAW:verifiable-goals] Readiness is "the daemon completes a real
+// protocol round trip", not "the socket accepts a raw connection" — a bare
+// connect()-then-destroy proved the accept() loop was running (the
+// 452-corpse-adjacent incident that guarded against), but it does NOT prove
+// THIS process is the one that will still be listening a few milliseconds
+// later. A cold-restart caller (`killAndWait` then `spawnDaemonWithEnv`
+// again against the same socket path) races the OLD daemon's own death: a
+// `SIGKILL`'d process can still be mid-teardown — its listener not yet torn
+// down, so a bare connect legitimately succeeds against it — for a few ms
+// after the signal lands. If the NEW daemon starts binding in that window,
+// `handleAddressInUse`'s EADDRINUSE arbitration correctly sees the old pid
+// as still alive and defers to it (`attach-and-exit`) rather than reclaiming
+// — a right call in isolation, but the old process then finishes dying
+// moments later, and the connect-only probe above had already reported
+// "ready" against a daemon that both never fully started AND is about to
+// disappear. The very next real request opens a connection, the dying old
+// listener accepts it, then closes it mid-flight — "socket closed before
+// response" (brandon-layout-edit-2gc.4 review: this raced consistently once
+// slightly heavier config synthesis widened the window, but the race
+// predates that change and can hit any cold-restart caller). A one-shot
+// `stats` request (cheap, synchronous, no render/session state needed) is
+// the actual readiness fact this helper promises: only a fully wired
+// `handleConnection` dispatch answers it, so a stale dying listener that
+// merely still accepts() cannot pass this probe the way it passed a bare
+// connect.
 //
 // [LAW:one-source-of-truth] `sockPath` is read from `env.CC_CANDYBAR_SOCKET`
 // — the SAME env this spawns the daemon with — rather than taken as a
@@ -101,14 +121,16 @@ export async function spawnDaemonWithEnv(
   let alive = false;
   while (!alive && Date.now() < deadline) {
     if (fs.existsSync(sockPath)) {
-      alive = await new Promise<boolean>((resolve) => {
-        const s = net.connect(sockPath);
-        s.once("connect", () => {
-          s.destroy();
-          resolve(true);
-        });
-        s.once("error", () => resolve(false));
-      });
+      try {
+        const resp = await sendDaemonRequest(
+          sockPath,
+          { v: PROTOCOL_VERSION, kind: "stats" },
+          1000,
+        );
+        alive = resp.ok;
+      } catch {
+        alive = false;
+      }
     }
     if (!alive) {
       await new Promise((r) => setTimeout(r, 25));
@@ -118,7 +140,7 @@ export async function spawnDaemonWithEnv(
     killTree();
     release();
     throw new Error(
-      "daemon did not accept connections within 5000ms (socket file" +
+      "daemon did not answer a stats round trip within 5000ms (socket file" +
         ` ${fs.existsSync(sockPath) ? "exists" : "absent"})`,
     );
   }
