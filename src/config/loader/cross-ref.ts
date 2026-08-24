@@ -15,8 +15,10 @@ import {
 } from "../dsl-types.js";
 import {
   actionBindsPersist,
+  actionBindsRedo,
   actionBindsReset,
   actionBindsSet,
+  actionBindsUndo,
   type ActionDecl,
 } from "../action.js";
 import {
@@ -442,15 +444,22 @@ function hasStateKind(cfg: DslConfig): boolean {
   return false;
 }
 
-// [LAW:dataflow-not-control-flow] A config emits a set-state, set-config, OR
-// reset-config click — and so needs session.id — when any declared action is
-// a `set` (literal/option/bounded/cycle), a `persist` (its config-overrides
-// twin), or a `reset` (persist's gated undo) — all three carry session.id on
-// the wire for click-error surfacing. copy/open actions write nothing, so
-// they embed no session.id.
+// [LAW:dataflow-not-control-flow] A config emits a set-state, set-config,
+// reset-config, undo, OR redo click — and so needs session.id — when any
+// declared action is a `set` (literal/option/bounded/cycle), a `persist`
+// (its config-overrides twin), a `reset` (persist's gated undo), or an
+// `undo`/`redo` (the overrides layer's global history step) — all five
+// carry session.id on the wire for click-error surfacing (an empty history
+// stack is a loud, session-scoped miss, not a silent no-op). copy/open
+// actions write nothing, so they embed no session.id.
 function hasActionSetAction(cfg: DslConfig): boolean {
   return Object.values(cfg.actions).some(
-    (a) => actionBindsSet(a) || actionBindsPersist(a) || actionBindsReset(a),
+    (a) =>
+      actionBindsSet(a) ||
+      actionBindsPersist(a) ||
+      actionBindsReset(a) ||
+      actionBindsUndo(a) ||
+      actionBindsRedo(a),
   );
 }
 
