@@ -27,9 +27,11 @@ import { toString as varToString } from "../var-system/types.js";
 import { buildScope } from "../template-engine/scope.js";
 import type { ActionDecl } from "../config/action.js";
 import { resolveOptionDomain } from "../config/option-domain.js";
+import { encodeLayoutOp, type LayoutOp } from "../config/layout-ops.js";
 import type { StripStyle } from "../themes/policy.js";
 import {
   effectsUrl,
+  VERB_APPLY_LAYOUT_OP,
   VERB_COPY,
   VERB_OPEN_VSCODE,
   VERB_RESET_CONFIG,
@@ -135,7 +137,12 @@ export type CompiledActionDecl =
   // one config-overrides key. Carries only the key — there is no value to
   // realize, so it shares copy/open's "no gate" shape at compile time (the
   // GATE is the key-membership check the reset-config verb handler applies).
-  | { readonly kind: "reset"; readonly key: string };
+  | { readonly kind: "reset"; readonly key: string }
+  // [LAW:one-source-of-truth] brandon-layout-edit-2gc.1's structural-edit
+  // arms. Fully literal at compile time (the op IS the declaration — no
+  // template-bound option, unlike persist-option), so `op` is precomputed
+  // here rather than reconstructed from raw fields at every realize() call.
+  | { readonly kind: "layout-op"; readonly key: string; readonly op: LayoutOp };
 
 export type CompiledActions = ReadonlyMap<string, CompiledActionDecl>;
 
@@ -292,6 +299,25 @@ function compileAction(
         key: action.persist,
         stateVar,
         members: action.cycle,
+      };
+    }
+    if ("removeSegment" in action) {
+      return {
+        kind: "layout-op",
+        key: action.persist,
+        op: { op: "remove", target: action.removeSegment },
+      };
+    }
+    if ("insertSegment" in action) {
+      return {
+        kind: "layout-op",
+        key: action.persist,
+        op: {
+          op: "insert",
+          segment: action.insertSegment,
+          anchor: action.anchor,
+          relation: action.relation,
+        },
       };
     }
     return {
@@ -520,6 +546,20 @@ function realize(
     case "reset":
       return {
         effect: { verb: VERB_RESET_CONFIG, args: [sessionId, c.key] },
+        active: false,
+      };
+    // [LAW:one-source-of-truth] The op is fixed at compile time (see
+    // compileAction) — the click just delivers it. `apply-layout-op`'s
+    // handler does read-current-append-write (see verbs/index.ts), unlike
+    // persist-literal's plain overwrite, so it is its own verb rather than
+    // VERB_SET_CONFIG. Never "active": a structural edit is a one-shot
+    // trigger, not a current-selection toggle.
+    case "layout-op":
+      return {
+        effect: {
+          verb: VERB_APPLY_LAYOUT_OP,
+          args: [sessionId, c.key, encodeLayoutOp(c.op)],
+        },
         active: false,
       };
   }

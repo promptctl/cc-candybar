@@ -17,6 +17,7 @@ import {
   actionBindsPersist,
   actionBindsReset,
   actionBindsSet,
+  type ActionDecl,
 } from "../action.js";
 import {
   knownOptionDomainNames,
@@ -24,6 +25,7 @@ import {
 } from "../option-domain.js";
 import { listGlobalsFieldNames } from "./globals.js";
 import { parsePersistTarget } from "./persist-target.js";
+import { presetNames } from "../presets.js";
 import { findKeyLine } from "./diagnostics.js";
 import { isPlainObject, type ValidateCtx } from "./validate-core.js";
 import {
@@ -116,9 +118,21 @@ export function validateCrossReferences(
     if (target === null) {
       ctx.issues.push({
         path: `actions.${name}.${discriminator}`,
-        message: `actions.${name}: "${key}" is not a config globals field (have: ${listGlobalsFieldNames().join(", ")}) or a "segments.<name>.palette" target`,
+        message: `actions.${name}: "${key}" is not a config globals field (have: ${listGlobalsFieldNames().join(", ")}), a "segments.<name>.palette" target, or a "presets.<name>.rootOps" target`,
         line: findKeyLine(ctx.source, ["actions", name, discriminator]),
       });
+      continue;
+    }
+    if (target.scope === "preset-root-ops") {
+      checkPresetRootOpsTarget(
+        ctx,
+        cfg,
+        name,
+        discriminator,
+        key,
+        target.preset,
+        a,
+      );
       continue;
     }
     if (target.scope !== "segment-palette") continue;
@@ -342,6 +356,76 @@ export function validateCrossReferences(
       message: `state reads and action set-writes require a global "session.id" variable (segment-local declarations do not satisfy this — declareState/set-state both read the global box; conventionally { kind: "input", path: "session_id" })`,
       line: findKeyLine(ctx.source, ["variables"]),
     });
+  }
+}
+
+// [LAW:no-silent-failure] brandon-layout-edit-2gc.1's structural-edit target
+// check, one arm of the persist/reset key cross-ref above. Three things must
+// hold at load time, same spirit as the segment-palette check just above it:
+// the preset name must be real (mirrors globals.preset's check earlier in
+// this function), the arm pairing must make sense for this scope (only
+// removeSegment/insertSegment address a tree — a `to`/`from`/cycle/bounded
+// literal has no meaning as "the current op log"), and every segment name
+// the op names must be declared.
+function checkPresetRootOpsTarget(
+  ctx: ValidateCtx,
+  cfg: DslConfig,
+  name: string,
+  discriminator: "persist" | "reset",
+  key: string,
+  presetName: string,
+  a: ActionDecl,
+): void {
+  const at = `actions.${name}.${discriminator}`;
+  const line = findKeyLine(ctx.source, ["actions", name, discriminator]);
+  if (!presetNames(cfg.presets).includes(presetName)) {
+    ctx.issues.push({
+      path: at,
+      message: `actions.${name}: "${key}" names preset "${presetName}" which is not declared (have: ${presetNames(cfg.presets).join(", ")})`,
+      line,
+    });
+    return;
+  }
+  // [LAW:one-source-of-truth] `reset` has no value-source arm to check — its
+  // shape is a bare `{ reset: key }` — so the arm-pairing/segment checks
+  // below are `persist`-only, exactly as the "reset" action's clean-slate
+  // undo is meant to be: it clears the whole op log regardless of what wrote
+  // it.
+  if (discriminator === "reset") return;
+  const hasRemove = "removeSegment" in a;
+  const hasInsert = "insertSegment" in a;
+  if (!hasRemove && !hasInsert) {
+    ctx.issues.push({
+      path: at,
+      message: `actions.${name}: "${key}" is a "presets.<name>.rootOps" target and can only be paired with "removeSegment" or "insertSegment" (not "to"/"from"/"cycle"/bounded — those have no meaning as a tree op)`,
+      line,
+    });
+    return;
+  }
+  const missing = (segName: string): boolean =>
+    !Object.prototype.hasOwnProperty.call(cfg.segments, segName);
+  if (hasRemove && "removeSegment" in a && missing(a.removeSegment)) {
+    ctx.issues.push({
+      path: at,
+      message: `actions.${name}: removeSegment "${a.removeSegment}" is not a declared segment (have: ${Object.keys(cfg.segments).join(", ")})`,
+      line,
+    });
+  }
+  if (hasInsert && "insertSegment" in a) {
+    if (missing(a.insertSegment)) {
+      ctx.issues.push({
+        path: at,
+        message: `actions.${name}: insertSegment "${a.insertSegment}" is not a declared segment (have: ${Object.keys(cfg.segments).join(", ")})`,
+        line,
+      });
+    }
+    if (missing(a.anchor)) {
+      ctx.issues.push({
+        path: at,
+        message: `actions.${name}: anchor "${a.anchor}" is not a declared segment (have: ${Object.keys(cfg.segments).join(", ")})`,
+        line,
+      });
+    }
   }
 }
 

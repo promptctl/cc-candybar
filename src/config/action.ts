@@ -75,6 +75,14 @@ export type ActionKey = (typeof ACTION_KEYS)[number];
 //                         -> allow-list {members}
 //   copy                — copy templated text to the clipboard -> no gate
 //   open                — open a templated target in the editor -> no gate
+//   removeSegment       — (persist only) remove the named segment from the
+//                         preset-root the `persist` key addresses
+//                         (`presets.<name>.rootOps`) -> allow-list {one op
+//                         token — see src/config/layout-ops.ts}
+//   insertSegment +
+//     anchor + relation  — (persist only) insert a named segment before/after
+//                         an existing one, same key shape -> allow-list {one
+//                         op token}
 //
 // [LAW:one-source-of-truth] `set` writes SessionState and `persist` writes
 // the config-overrides layer, so only those two derive a validator (through
@@ -87,6 +95,15 @@ export type ActionKey = (typeof ACTION_KEYS)[number];
 // arms verbatim (to/from/min-max-by/cycle) MINUS `int`: an unbounded page
 // cursor is a UI-only paging concept (a picker's own navigation state) with
 // no meaning as a persisted config default.
+//
+// [LAW:locality-or-seam] `removeSegment`/`insertSegment` are `persist`-ONLY
+// (brandon-layout-edit-2gc.1) — a structural edit is always a durable,
+// machine-owned write by design (the ticket's own instruction: reuse 71o's
+// writer, land in the SAME overrides layer), so there is no SessionState
+// twin. Every operation is fully literal at config-author time — the
+// segment names and relation are DATA the loader proves at load, not a
+// runtime picker — so each declared action has exactly one legal request,
+// gated the same one-member-allow-list way a literal `to` already is.
 export type ActionDecl =
   | { readonly set: string; readonly to: string }
   | { readonly set: string; readonly from: OptionDomain }
@@ -107,6 +124,13 @@ export type ActionDecl =
       readonly by: number;
     }
   | { readonly persist: string; readonly cycle: readonly string[] }
+  | { readonly persist: string; readonly removeSegment: string }
+  | {
+      readonly persist: string;
+      readonly insertSegment: string;
+      readonly anchor: string;
+      readonly relation: "before" | "after";
+    }
   | { readonly copy: string }
   | { readonly open: string }
   | { readonly reset: string };
