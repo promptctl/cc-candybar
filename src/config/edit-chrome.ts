@@ -33,6 +33,7 @@ import type {
 import { collectSegmentNames } from "./layout-ops.js";
 import { presetByName, presetNames, presetRoot } from "./presets.js";
 import { presetRootOpsKey } from "./loader/persist-target.js";
+import { ident } from "./ident.js";
 import {
   EDIT_MODE_GATE,
   EDIT_NS,
@@ -76,21 +77,13 @@ function isChromeExempt(name: string): boolean {
   );
 }
 
-// [LAW:types-are-the-program] Collapse an arbitrary name to a template-
-// identifier-safe fragment — the SAME shape menu-keys.ts's `ident` enforces,
-// reimplemented here rather than imported (menu-keys.ts's copy is
-// module-private) since both need only the one rule: alphanumerics survive,
-// everything else collapses to `_`.
-function ident(name: string): string {
-  return name.replace(/[^A-Za-z0-9]+/g, "_");
-}
-
 // [LAW:no-silent-failure] Go-template string-literal escaping for a preset
 // NAME spliced into DISPLAY text (prependCustomizedBanner) rather than an
 // identifier — the same hazard loader/layout.ts's group `label` synthesis
-// already guards against (reimplemented here for the same module-private
-// reason `ident` above is), since a preset name is validated only
-// non-empty/slash-free, not template-safe.
+// already guards against, reimplemented here since that copy is
+// module-private and this one small rule doesn't warrant its own shared
+// module the way `ident` (checked for agreement across three sites —
+// see ./ident.ts) did.
 function escapeTemplateLiteral(s: string): string {
   return s.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
 }
@@ -343,10 +336,23 @@ function spliceEditChromeForPreset(
   const domainName = addableDomainName(presetName);
   const presetIdent = ident(presetName);
   const posCounter = { n: 0 };
+  // [LAW:no-silent-failure] The bare-segment-root case (the A-grammar's
+  // `{ seg, when }` shorthand is a legal PresetDecl.root) carries its OWN
+  // `when` onto this synthetic wrapper too — prependCustomizedBanner's own
+  // when-carry-up reads `splicedRoot.when`, which is this wrapper's `when`
+  // once spliceContainer's `{...node, children}` passes it through
+  // unchanged; without copying it here, a bare-segment preset root's own
+  // gate would never reach that carry-up at all, leaking the reset banner
+  // past it exactly like the container case did before that fix.
   const container: ContainerNode =
     node.kind === "container"
       ? node
-      : { kind: "container", direction: "horizontal", children: [node] };
+      : {
+          kind: "container",
+          direction: "horizontal",
+          children: [node],
+          ...(node.when !== undefined && { when: node.when }),
+        };
   const spliced = spliceContainer(
     container,
     presetIdent,

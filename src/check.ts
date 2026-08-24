@@ -331,8 +331,13 @@ function loadRegisterRender(
     // blesses a bar that renders ⚠.
     const renderOnce = (
       payloadEffective: EffectiveGlobals,
-    ): { rendered: string; segmentErrors: string[] } => {
-      const segmentErrors: string[] = [];
+    ): { rendered: string; segmentErrors: Map<string, string> } => {
+      // [LAW:types-are-the-program] Keyed by segment NAME, not appended to a
+      // list — a segment errors at most once per pass, so this is the
+      // strongest true shape (dedupe-by-construction within one pass) and
+      // what makes deduping ACROSS the two passes below a plain key check
+      // rather than a message-text comparison.
+      const segmentErrors = new Map<string, string>();
       const rendered = renderDsl(
         config,
         compiled,
@@ -350,7 +355,7 @@ function loadRegisterRender(
         },
         {
           onSegmentError: (segName, message) =>
-            segmentErrors.push(`segment "${segName}": ${message}`),
+            segmentErrors.set(segName, message),
         },
         {
           look: lookKeyByName(config.looks, payloadEffective.look),
@@ -379,11 +384,25 @@ function loadRegisterRender(
       presetCustomized: true,
     });
 
+    // [LAW:no-silent-failure] An UNCONDITIONAL segment error (one whose
+    // `when`, if any, is true in both passes — the two renders share the
+    // same config/store/registry and differ only in `presetCustomized`)
+    // fires in BOTH passes identically. Deduped by segment NAME rather than
+    // concatenated: a customizedCheck error is only genuinely NEW
+    // information when primary didn't already report that same segment —
+    // reporting it twice would double-count one bug and the "(under
+    // .preset.customized = true)" tag would misdirect the reader into
+    // thinking it's specific to that gate when it isn't.
     const errors = [
-      ...primary.segmentErrors,
-      ...customizedCheck.segmentErrors.map(
-        (m) => `${m} (under .preset.customized = true)`,
+      ...[...primary.segmentErrors].map(
+        ([segName, message]) => `segment "${segName}": ${message}`,
       ),
+      ...[...customizedCheck.segmentErrors]
+        .filter(([segName]) => !primary.segmentErrors.has(segName))
+        .map(
+          ([segName, message]) =>
+            `segment "${segName}": ${message} (under .preset.customized = true)`,
+        ),
     ];
     if (errors.length > 0) {
       throw new Error(

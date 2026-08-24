@@ -613,6 +613,12 @@ already writable the moment any structural-edit action targets it).
 
 ```json5 check:pass
 {
+  // `.preset.customized` reads the ACTIVE preset's op log
+  // (`.preset.effective`) — pin "compact" as the default so it's the one
+  // `dropModel`/`resetCompactLayout` (and this example's own narrative)
+  // are actually about, exactly like `persist: "preset"` above pins one
+  // for real.
+  globals: { preset: "compact" },
   variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
   actions: {
     dropModel: { persist: "presets.compact.rootOps", removeSegment: "model" },
