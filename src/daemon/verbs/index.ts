@@ -37,6 +37,8 @@ import {
   isGlobalsField,
   loadConfigOverrides,
   loadOverrides,
+  redoLastOverride,
+  undoLastOverride,
   writeConfigOverride,
 } from "../config-overrides-store";
 import { configOverridesPath } from "../paths";
@@ -49,6 +51,7 @@ import {
   VERB_DISPATCH,
   VERB_OPEN_VSCODE,
   VERB_LOAD_CONFIG,
+  VERB_REDO,
   VERB_RESET_CONFIG,
   VERB_SET_CONFIG,
   VERB_SET_STATE,
@@ -57,6 +60,7 @@ import {
   VERB_SHOW_CONFIG_ERROR,
   VERB_SHOW_CONFIG_WARNING,
   VERB_TOOLBAR_TOGGLE,
+  VERB_UNDO,
 } from "../../click/wire";
 
 export interface VerbContext {
@@ -489,6 +493,35 @@ const applyLayoutOp: VerbHandler = (rawValue, ctx) => {
   );
 };
 
+// [LAW:one-source-of-truth] `reset`'s fine-grained sibling: step the ONE
+// global history over the overrides layer back one entry. No key, no value —
+// the history store (config-overrides-store.ts) owns which entry moves and
+// what it restores; this handler is pure plumbing between the wire and it.
+// [LAW:no-silent-failure] An empty stack is a loud BAD_REQUEST (dispatch's
+// aggregator turns it into a transient click.error), never a silent no-op —
+// the ticket's own done-gate.
+const undoConfig: VerbHandler = (value, ctx) => {
+  const [sessionId = ""] = decodeWire(() => decodeSegments(value));
+  const sid = requireSessionId(sessionId);
+  const entry = undoLastOverride(configOverridesPath(), ctx.dlog);
+  if (entry === null) {
+    throw new BadVerbArgs("undo: history is empty, nothing to undo");
+  }
+  ctx.dlog("info", `undo: ${entry.key} (session=${sid})`);
+};
+
+// [LAW:one-source-of-truth] undo's mirror — steps the same global history
+// forward one entry.
+const redoConfig: VerbHandler = (value, ctx) => {
+  const [sessionId = ""] = decodeWire(() => decodeSegments(value));
+  const sid = requireSessionId(sessionId);
+  const entry = redoLastOverride(configOverridesPath(), ctx.dlog);
+  if (entry === null) {
+    throw new BadVerbArgs("redo: nothing to redo");
+  }
+  ctx.dlog("info", `redo: ${entry.key} (session=${sid})`);
+};
+
 // ─── Registry ───────────────────────────────────────────────────────────────
 
 // [LAW:one-source-of-truth] The LEAF verbs — every click effect that does real
@@ -551,6 +584,8 @@ const LEAF_VERBS = new Map<string, VerbHandler>([
   [VERB_STEP_CONFIG, stepConfig],
   [VERB_RESET_CONFIG, resetConfig],
   [VERB_APPLY_LAYOUT_OP, applyLayoutOp],
+  [VERB_UNDO, undoConfig],
+  [VERB_REDO, redoConfig],
   [VERB_SHOW_CONFIG_ERROR, showConfigError],
   [VERB_SHOW_CONFIG_WARNING, showConfigWarning],
   [VERB_TOOLBAR_TOGGLE, toolbarToggle],
@@ -583,8 +618,9 @@ const dispatch: VerbHandler = (rawValue, ctx) => {
   for (const { verb, value } of parseEffects(rawValue)) {
     // Extract session ID from the first session-bearing effect for error display.
     // set-state, step-state, set-config, step-config, reset-config,
-    // apply-layout-op, and toolbar-toggle all carry the session id as their
-    // first segment, so a failing step surfaces in the bar like any other.
+    // apply-layout-op, undo, redo, and toolbar-toggle all carry the session id
+    // as their first segment, so a failing step surfaces in the bar like any
+    // other.
     if (
       !sessionId &&
       (verb === VERB_SET_STATE ||
@@ -593,6 +629,8 @@ const dispatch: VerbHandler = (rawValue, ctx) => {
         verb === VERB_STEP_CONFIG ||
         verb === VERB_RESET_CONFIG ||
         verb === VERB_APPLY_LAYOUT_OP ||
+        verb === VERB_UNDO ||
+        verb === VERB_REDO ||
         verb === VERB_TOOLBAR_TOGGLE)
     ) {
       const parts = decodeSegments(value);

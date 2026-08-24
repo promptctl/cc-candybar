@@ -8,11 +8,13 @@ import {
   parseEffects,
   decodeSegments,
   VERB_DISPATCH,
+  VERB_REDO,
   VERB_RESET_CONFIG,
   VERB_SET_CONFIG,
   VERB_SET_STATE,
   VERB_STEP_CONFIG,
   VERB_STEP_STATE,
+  VERB_UNDO,
 } from "../../src/click/wire";
 import { VERBS } from "../../src/daemon/verbs";
 import type { VerbContext } from "../../src/daemon/verbs";
@@ -34,6 +36,8 @@ const MULTI_ARG_VERBS = new Set<string>([
   VERB_SET_CONFIG,
   VERB_STEP_CONFIG,
   VERB_RESET_CONFIG,
+  VERB_UNDO,
+  VERB_REDO,
 ]);
 function decodeArgs(verb: string, value: string): string[] {
   return MULTI_ARG_VERBS.has(verb)

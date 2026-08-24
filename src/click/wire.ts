@@ -77,6 +77,15 @@ export const VERB_RESET_CONFIG = "reset-config";
 // differs, which is exactly why this is its own verb rather than another
 // VERB_SET_CONFIG value.
 export const VERB_APPLY_LAYOUT_OP = "apply-layout-op";
+// [LAW:one-source-of-truth] brandon-layout-edit-2gc.2's global history step
+// over the config-overrides layer — the fine-grained sibling of
+// VERB_RESET_CONFIG's coarse "clear one key". Args: `[sessionId]` — there is
+// no key: the history is ONE stack over every persist/reset write ever made
+// to the overrides file (config-overrides-store.ts), not a per-key log. An
+// empty stack is a loud BAD_REQUEST surfaced through click.error like any
+// other verb failure, never a silent no-op.
+export const VERB_UNDO = "undo";
+export const VERB_REDO = "redo";
 
 // [LAW:types-are-the-program] An effect to EMIT: a verb plus its raw (unencoded)
 // positional args. The wire owns all encoding — callers never percent-encode.

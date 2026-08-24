@@ -1399,6 +1399,30 @@
               "reset"
             ],
             "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "undo": {
+                "const": true
+              }
+            },
+            "required": [
+              "undo"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "redo": {
+                "const": true
+              }
+            },
+            "required": [
+              "redo"
+            ],
+            "additionalProperties": false
           }
         ]
       }

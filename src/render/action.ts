@@ -34,11 +34,13 @@ import {
   VERB_APPLY_LAYOUT_OP,
   VERB_COPY,
   VERB_OPEN_VSCODE,
+  VERB_REDO,
   VERB_RESET_CONFIG,
   VERB_SET_CONFIG,
   VERB_SET_STATE,
   VERB_STEP_CONFIG,
   VERB_STEP_STATE,
+  VERB_UNDO,
   type Effect,
 } from "../click/wire.js";
 
@@ -142,7 +144,13 @@ export type CompiledActionDecl =
   // arms. Fully literal at compile time (the op IS the declaration — no
   // template-bound option, unlike persist-option), so `op` is precomputed
   // here rather than reconstructed from raw fields at every realize() call.
-  | { readonly kind: "layout-op"; readonly key: string; readonly op: LayoutOp };
+  | { readonly kind: "layout-op"; readonly key: string; readonly op: LayoutOp }
+  // [LAW:one-source-of-truth] brandon-layout-edit-2gc.2's global history
+  // step over the overrides layer — `reset`'s fine-grained sibling. No key:
+  // there is nothing to carry, since the history stack (not this action) is
+  // what decides which entry moves.
+  | { readonly kind: "undo" }
+  | { readonly kind: "redo" };
 
 export type CompiledActions = ReadonlyMap<string, CompiledActionDecl>;
 
@@ -338,7 +346,10 @@ function compileAction(
       target: parseActionTemplate(parse, action.open, name),
     };
   }
-  return { kind: "reset", key: action.reset };
+  if ("reset" in action) {
+    return { kind: "reset", key: action.reset };
+  }
+  return "undo" in action ? { kind: "undo" } : { kind: "redo" };
 }
 
 function parseActionTemplate(
@@ -546,6 +557,20 @@ function realize(
     case "reset":
       return {
         effect: { verb: VERB_RESET_CONFIG, args: [sessionId, c.key] },
+        active: false,
+      };
+    // [LAW:one-source-of-truth] No key to carry — the click just says "step
+    // the history", and which entry moves is entirely server-side state
+    // (never wire input, so there is nothing here to gate). Never "active":
+    // a history step is a one-shot trigger, not a current-selection toggle.
+    case "undo":
+      return {
+        effect: { verb: VERB_UNDO, args: [sessionId] },
+        active: false,
+      };
+    case "redo":
+      return {
+        effect: { verb: VERB_REDO, args: [sessionId] },
         active: false,
       };
     // [LAW:one-source-of-truth] The op is fixed at compile time (see
