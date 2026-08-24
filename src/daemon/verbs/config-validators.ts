@@ -19,6 +19,7 @@ import { addableSegmentDomains } from "../../config/edit-chrome";
 import type { DslConfig } from "../../config/dsl-types";
 import { isGlobalsField } from "../config-overrides-store";
 import { encodeLayoutOp } from "../../config/layout-ops";
+import { parsePersistTarget } from "../../config/loader/persist-target";
 import {
   clampSeed,
   createValidatorRegistry,
@@ -168,6 +169,43 @@ function configKeySeeds(config: DslConfig): ReadonlyMap<string, number> {
   return seeds;
 }
 
+// [LAW:one-source-of-truth] Every preset a config's action table ALREADY
+// targets via a `presets.<name>.rootOps` key (persist OR reset — the
+// contribution is keyed off intent to use structural editing for that
+// preset, not off "this config has any presets block") stays a
+// registered key EVEN when that preset's CURRENT tree has no
+// addable/removable segment for removeChrome/insertChrome to contribute
+// from. Without this, a preset edited down to zero non-exempt segments
+// (spliceContainer then contributes nothing for it at all) would orphan
+// its OWN reset action: the one affordance meant to undo a fully-emptied
+// preset would throw "unknown config key" at the exact moment it's needed
+// most (brandon-layout-edit-2gc.5 PR review). An EMPTY allow-list
+// registers the key (so `reset-config`'s membership check —
+// src/daemon/verbs/index.ts's resetConfig — passes) without granting any
+// illegitimate WRITE: a real persist write still needs a real
+// removeSegment/insertSegment/insertSegmentFrom action elsewhere;
+// mergeContributions unions an empty array with whatever those contribute.
+//
+// [LAW:no-mode-explosion] Deliberately narrower than "every declared
+// preset" — a config with a `presets` block but ZERO persist/reset actions
+// over it has no structural-editing surface at all, so it registers
+// nothing here, preserving this module's own "zero baseline keys" floor
+// (a globals field, and now a preset's rootOps, is writable only because
+// SOME action names it).
+function presetRootOpsContributions(config: DslConfig): KeySpecContribution[] {
+  const presets = new Set<string>();
+  for (const a of Object.values(config.actions)) {
+    const key = "persist" in a ? a.persist : "reset" in a ? a.reset : null;
+    if (key === null) continue;
+    const target = parsePersistTarget(key);
+    if (target?.scope === "preset-root-ops") presets.add(target.preset);
+  }
+  return [...presets].map((name) => ({
+    key: `presets.${name}.rootOps`,
+    spec: { kind: "allow-list", allowed: [] },
+  }));
+}
+
 function actionContributions(config: DslConfig): KeySpecContribution[] {
   const seeds = configKeySeeds(config);
   // [LAW:one-source-of-truth] The "addable segment" domains
@@ -180,9 +218,12 @@ function actionContributions(config: DslConfig): KeySpecContribution[] {
     ...perConfigDomainsFor(config),
     ...addableSegmentDomains(config),
   ]);
-  return Object.values(config.actions).flatMap((a) =>
-    actionKeySpecs(a, seeds, perConfigDomains),
-  );
+  return [
+    ...presetRootOpsContributions(config),
+    ...Object.values(config.actions).flatMap((a) =>
+      actionKeySpecs(a, seeds, perConfigDomains),
+    ),
+  ];
 }
 
 // [LAW:single-enforcer] The SOLE install-site derivation: a config's

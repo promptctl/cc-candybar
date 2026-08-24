@@ -220,11 +220,23 @@ export function sanitizePersistedPresetOverride(
 // undo) are the SAME "not customized" — presence in the record only ever
 // means "this reload's overrides file had an entry", not "and it's non-
 // empty" [LAW:no-defensive-null-guards].
+//
+// Decodes each token the SAME way applyPresetRootOpsOverrides does, rather
+// than trusting the raw token COUNT — a token list where every token
+// decodes to null (malformed, or written by a previous protocol version)
+// is exactly the case applyPresetRootOpsOverrides itself treats as "no ops
+// to replay" (`ops.length === 0 → continue`, leaving the root untouched).
+// Counting raw tokens would disagree with that: "customized" would read
+// true over a tree that is, in fact, byte-identical to the literal
+// declared root — the inverted form of the drift this diagnostic exists to
+// catch.
 export function presetIsCustomized(
   presetRootOps: Readonly<Record<string, readonly string[]>>,
   name: string,
 ): boolean {
-  return (presetRootOps[name]?.length ?? 0) > 0;
+  const tokens = presetRootOps[name];
+  if (tokens === undefined) return false;
+  return tokens.some((t) => decodeLayoutOp(t) !== null);
 }
 
 export function applyPresetRootOpsOverrides(
