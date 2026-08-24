@@ -145,6 +145,22 @@ export type CompiledActionDecl =
   // template-bound option, unlike persist-option), so `op` is precomputed
   // here rather than reconstructed from raw fields at every realize() call.
   | { readonly kind: "layout-op"; readonly key: string; readonly op: LayoutOp }
+  // [LAW:one-source-of-truth] brandon-layout-edit-2gc.3's domain-sourced
+  // sibling of layout-op: `anchor`/`relation` are fixed at compile time (the
+  // POSITION is author-time data) but the segment name comes from the
+  // template's bound option — the option-picking shape `persist-option`
+  // already has, minus the value being written VERBATIM. `requireOptionKind`
+  // (render/picker.ts) admits this kind alongside set-option/persist-option
+  // so a `{{ menu }}`/`{{ picker }}` can drive it with zero picker changes;
+  // only the WRITE (realize(), below) differs — it encodes the picked option
+  // into a LayoutOp instead of persisting it as-is.
+  | {
+      readonly kind: "layout-op-option";
+      readonly key: string;
+      readonly anchor: string;
+      readonly relation: "before" | "after";
+      readonly options: readonly string[];
+    }
   // [LAW:one-source-of-truth] brandon-layout-edit-2gc.2's global history
   // step over the overrides layer — `reset`'s fine-grained sibling. No key:
   // there is nothing to carry, since the history stack (not this action) is
@@ -326,6 +342,17 @@ function compileAction(
           anchor: action.anchor,
           relation: action.relation,
         },
+      };
+    }
+    if ("insertSegmentFrom" in action) {
+      return {
+        kind: "layout-op-option",
+        key: action.persist,
+        anchor: action.anchor,
+        relation: action.relation,
+        options: [
+          ...resolveOptionDomain(action.insertSegmentFrom, perConfigDomains),
+        ],
       };
     }
     return {
@@ -587,6 +614,28 @@ function realize(
         },
         active: false,
       };
+    // [LAW:one-source-of-truth] The picked option (boundValue ?? display — the
+    // SAME resolution persist-option uses) becomes the op's `segment`; anchor/
+    // relation are the compiled literals. Same wire shape a literal layout-op
+    // emits, so the daemon's apply-layout-op handler and undo/redo need no
+    // knowledge of where the segment name came from. Never "active": a
+    // structural edit is a one-shot trigger, not a current-selection toggle.
+    case "layout-op-option": {
+      const segment = boundValue ?? display;
+      const op: LayoutOp = {
+        op: "insert",
+        segment,
+        anchor: c.anchor,
+        relation: c.relation,
+      };
+      return {
+        effect: {
+          verb: VERB_APPLY_LAYOUT_OP,
+          args: [sessionId, c.key, encodeLayoutOp(op)],
+        },
+        active: false,
+      };
+    }
   }
 }
 

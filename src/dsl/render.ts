@@ -23,6 +23,7 @@ import type {
 import { HUE_STEP_VAR } from "../config/dsl-types.js";
 import { perConfigDomainsFor } from "../config/option-domain.js";
 import { PRESET_FLOOR, presetNames, presetRoot } from "../config/presets.js";
+import { addableSegmentDomains } from "../config/edit-chrome.js";
 import type { VariableStore } from "../var-system/store.js";
 import type { SourceRegistry } from "../var-system/sources.js";
 import {
@@ -340,7 +341,15 @@ export function registerDslConfig(
   // one source.
   const lookNames = Object.keys(config.looks);
   const presetOptions = presetNames(config.presets);
-  const perConfigDomains = perConfigDomainsFor(config);
+  // [LAW:one-source-of-truth] The "addable segment" per-preset domains merge
+  // in here — the SAME map config-validators.ts's deriveConfigActionValidators
+  // merges — so a synthesized `insertSegmentFrom` action's rendered options
+  // and its derived click gate resolve from one source, never two
+  // independently-computed sets.
+  const perConfigDomains = new Map([
+    ...perConfigDomainsFor(config),
+    ...addableSegmentDomains(config),
+  ]);
   const engine = createCcCandybarEngine(
     {
       ...actionFuncs(actionRuntime),

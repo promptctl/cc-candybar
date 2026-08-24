@@ -28,7 +28,13 @@ import type { FuncMap } from "@promptctl/go-template-js";
 import { toNumber } from "../var-system/types.js";
 import { stripChromeCols } from "./strip.js";
 import { TERM_COLS_VAR } from "../config/dsl-types.js";
-import { effectsUrl, VERB_SET_CONFIG, VERB_SET_STATE } from "../click/wire.js";
+import {
+  effectsUrl,
+  VERB_APPLY_LAYOUT_OP,
+  VERB_SET_CONFIG,
+  VERB_SET_STATE,
+} from "../click/wire.js";
+import { encodeLayoutOp } from "../config/layout-ops.js";
 import {
   linkFragment,
   readVar,
@@ -136,26 +142,33 @@ function requireKind<K extends CompiledActionDecl["kind"]>(
   return action as Extract<CompiledActionDecl, { kind: K }>;
 }
 
-// [LAW:one-source-of-truth] The apply action a picker grid binds to is EITHER
-// of set-option's two durability twins (src/render/action.ts's persist-*
-// mirrors set-*'s shapes one for one) — a picker over `persist("charset",
-// from:"charsets")` is exactly as legal as one over `set("theme",
-// from:"themes")`, differing only in which wire verb the option click emits
-// (VERB_SET_CONFIG vs VERB_SET_STATE), never in shape (both carry key,
-// stateVar, options). Rejecting persist-option here would be an artificial
-// gap: the same option-domain gate (deriveActionValidators) covers both kinds
-// identically, so there is nothing about "picker" that's set-only.
+// [LAW:one-source-of-truth] The apply action a picker grid binds to is one of
+// THREE option-domain-driven kinds (src/render/action.ts): set-option/
+// persist-option (a picked value is WRITTEN VERBATIM — set-option's two
+// durability twins, differing only in wire verb VERB_SET_CONFIG vs
+// VERB_SET_STATE) or layout-op-option (a picked value is ENCODED into a
+// structural LayoutOp before writing — brandon-layout-edit-2gc.3's
+// `insertSegmentFrom`). All three share the same option-domain gate
+// (deriveActionValidators/deriveConfigActionValidators) and the same "pick a
+// cell, apply it" shape; only WHAT the click writes differs, which is
+// realize()'s job, not the picker's. Rejecting any of the three here would be
+// an artificial gap — there is nothing about "picker" that excludes one kind.
 function requireOptionKind(
   runtime: ActionRuntime,
   name: string,
-): Extract<CompiledActionDecl, { kind: "set-option" | "persist-option" }> {
+): Extract<
+  CompiledActionDecl,
+  { kind: "set-option" | "persist-option" | "layout-op-option" }
+> {
   const action = runtime.compiled.get(name);
   if (
     !action ||
-    (action.kind !== "set-option" && action.kind !== "persist-option")
+    (action.kind !== "set-option" &&
+      action.kind !== "persist-option" &&
+      action.kind !== "layout-op-option")
   ) {
     throw new Error(
-      `picker references action "${name}" which must be a set-option or persist-option action ({ set, from } or { persist, from }), got ${action ? `a ${action.kind} action` : "no such action"}`,
+      `picker references action "${name}" which must be a set-option, persist-option, or layout-op-option action ({ set, from }, { persist, from }, or { persist, insertSegmentFrom, anchor, relation }), got ${action ? `a ${action.kind} action` : "no such action"}`,
     );
   }
   return action;
@@ -183,7 +196,13 @@ export function renderPicker(
   const apply = requireOptionKind(runtime, applyName);
   const store = runtime.store;
   const sessionId = readVar(store, "session.id");
-  const current = readVar(store, apply.stateVar);
+  // [LAW:no-defensive-null-guards] layout-op-option carries no `stateVar` —
+  // a structural insert is a one-shot trigger, not a persisted single value,
+  // so there is no "current selection" to mark. `undefined` here (never a
+  // magic sentinel string) makes every option's `option === current` compare
+  // false below, structurally rather than by accident.
+  const current =
+    "stateVar" in apply ? readVar(store, apply.stateVar) : undefined;
   const widths = apply.options.map(cellWidth);
 
   // ✕ is always present; ←/→ appear only on a multi-page menu. Reserve arrow
@@ -243,30 +262,44 @@ export function renderPicker(
     { verb: VERB_SET_STATE, args: [sessionId, ...closeFlat] },
   ]);
   // [LAW:one-source-of-truth] A set-option apply folds its closeOnPick pairs
-  // into ONE set-state batch (setState is variadic — see daemon/verbs). A
-  // persist-option apply cannot: setConfig takes exactly one (key, value), so
-  // its close pairs (always SessionState — open/page live there regardless of
-  // the apply's durability) ride as a SECOND effect in the same dispatch,
-  // still one atomic click via effectsUrl's array.
-  const optionUrl = (option: string): string =>
-    apply.kind === "persist-option"
-      ? effectsUrl([
-          { verb: VERB_SET_CONFIG, args: [sessionId, apply.key, option] },
-          ...(closeOnPick
-            ? [{ verb: VERB_SET_STATE, args: [sessionId, ...closeFlat] }]
-            : []),
-        ])
-      : effectsUrl([
-          {
-            verb: VERB_SET_STATE,
-            args: [
-              sessionId,
-              apply.key,
-              option,
-              ...(closeOnPick ? closeFlat : []),
-            ],
-          },
-        ]);
+  // into ONE set-state batch (setState is variadic — see daemon/verbs).
+  // persist-option and layout-op-option cannot: setConfig/apply-layout-op
+  // each take exactly one (key, value) pair, so their close pairs (always
+  // SessionState — open/page live there regardless of the apply's
+  // durability) ride as a SECOND effect in the same dispatch, still one
+  // atomic click via effectsUrl's array. layout-op-option's "value" is the
+  // ENCODED op (segment=option, anchor/relation from the compiled action),
+  // not the option verbatim — the one place this kind's write differs from
+  // persist-option's.
+  const closeEffect = closeOnPick
+    ? [{ verb: VERB_SET_STATE, args: [sessionId, ...closeFlat] }]
+    : [];
+  const optionUrl = (option: string): string => {
+    if (apply.kind === "persist-option") {
+      return effectsUrl([
+        { verb: VERB_SET_CONFIG, args: [sessionId, apply.key, option] },
+        ...closeEffect,
+      ]);
+    }
+    if (apply.kind === "layout-op-option") {
+      const op = encodeLayoutOp({
+        op: "insert",
+        segment: option,
+        anchor: apply.anchor,
+        relation: apply.relation,
+      });
+      return effectsUrl([
+        { verb: VERB_APPLY_LAYOUT_OP, args: [sessionId, apply.key, op] },
+        ...closeEffect,
+      ]);
+    }
+    return effectsUrl([
+      {
+        verb: VERB_SET_STATE,
+        args: [sessionId, apply.key, option, ...(closeOnPick ? closeFlat : [])],
+      },
+    ]);
+  };
 
   const frags: RichText[] = [linkFragment(PICKER_CLOSE, closeUrl, false)];
   if (pageIdx > 0) {

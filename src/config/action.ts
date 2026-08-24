@@ -108,6 +108,13 @@ export type ActionKey = (typeof ACTION_KEYS)[number];
 //     anchor + relation  — (persist only) insert a named segment before/after
 //                         an existing one, same key shape -> allow-list {one
 //                         op token}
+//   insertSegmentFrom +
+//     anchor + relation  — (persist only) insertSegment's domain-sourced
+//                         sibling (brandon-layout-edit-2gc.3): the segment
+//                         name is picked from an option domain at render
+//                         (a `{{ menu }}`'s bound option) rather than fixed
+//                         at author time -> allow-list {one op token per
+//                         domain member}
 //
 // [LAW:one-source-of-truth] `set` writes SessionState and `persist` writes
 // the config-overrides layer, so only those two derive a validator (through
@@ -153,6 +160,24 @@ export type ActionDecl =
   | {
       readonly persist: string;
       readonly insertSegment: string;
+      readonly anchor: string;
+      readonly relation: "before" | "after";
+    }
+  // [LAW:one-source-of-truth] brandon-layout-edit-2gc.3's DOMAIN-SOURCED
+  // sibling of `insertSegment`: the same tree op, but the segment name comes
+  // from the template's bound option (a picker/menu cell) instead of being
+  // fixed at config-author time — exactly the `to`-vs-`from` split `set`/
+  // `persist` already draw, one arm over. `anchor`/`relation` stay literal
+  // (the POSITION is still author-time data; only WHICH segment lands there
+  // is picked at render). This is what makes a `{{ menu "insertHere" }}`
+  // legal over a structural edit: `requireOptionKind` (render/picker.ts)
+  // admits it alongside set-option/persist-option, and the click writes
+  // `encodeLayoutOp({ op: "insert", segment: <picked>, anchor, relation })` —
+  // the SAME wire shape a literal `insertSegment` action emits, so undo/redo
+  // and the daemon's apply-layout-op handler need no changes at all.
+  | {
+      readonly persist: string;
+      readonly insertSegmentFrom: OptionDomain;
       readonly anchor: string;
       readonly relation: "before" | "after";
     }

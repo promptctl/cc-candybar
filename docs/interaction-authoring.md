@@ -413,6 +413,43 @@ dropped when replayed, the same recovery `segments.<name>.palette` already
 gets for the identical situation: nothing left to apply it to, and nothing
 worth failing the whole render over.
 
+### Picking which segment to insert: `insertSegmentFrom`
+
+`insertSegment` is fully literal — the segment name is fixed at config-author
+time. `insertSegmentFrom` is its domain-sourced sibling: the same tree op,
+but the segment name is whatever the template's bound option resolves to at
+render, exactly the `to`-vs-`from` split every other value source already
+draws. `anchor`/`relation` stay literal (the POSITION is still author-time
+data); only WHICH segment lands there is picked live — so a `{{ menu }}` can
+drive a structural edit the same way it drives an ordinary `persist … from`:
+
+```json5 check:pass
+{
+  variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
+  actions: {
+    addAfterGit: { persist: "presets.compact.rootOps", insertSegmentFrom: ["gitPr", "model"], anchor: "git", relation: "after" },
+  },
+  segments: {
+    editControl: {
+      template: '+{{ menu "addAfterGit" }}',
+      bg: "surface", fg: "foreground",
+    },
+  },
+  presets: {
+    compact: { root: { h: ["directory", "git"] } },
+  },
+  root: "editControl",
+}
+```
+
+The domain works exactly like any other `from` — a registered name or an
+inline array — so an option domain built specifically for this position (e.g.
+"every segment not already in this preset's tree") registers or is authored
+inline like any other; nothing about the target being a tree makes the domain
+itself special. The gate mirrors `insertSegment`'s: the derived allow-list is
+the encoded op token for every domain member, so a click naming a segment the
+domain never listed decodes to nothing the gate admits.
+
 ### Undoing/redoing any persisted write: `undo` / `redo`
 
 `reset` clears ONE named key outright — the coarse "forget this override"
@@ -456,6 +493,69 @@ write after an `undo` abandons whatever was undone (the classic redo-stack
 branch: `redo` truncates rather than staying reachable past a new edit). The
 history is bounded — old entries fall off once a generous cap is exceeded —
 so a long-running daemon's history file cannot grow without limit.
+
+## Edit mode: `+`/`-` chrome for free
+
+Composing the layout by hand-writing `removeSegment`/`insertSegmentFrom`
+actions per position works, but doesn't scale to "every segment gets a `-`,
+every gap gets a `+`" — that would mean authoring one action per segment per
+preset. Edit mode does that authoring for you: reference the ONE reserved
+action `edit.toggle` anywhere in your bar, and every preset's resolved layout
+gets `-`/`+` chrome spliced in for free, gated behind the same on/off state
+your trigger toggles.
+
+```json5 check:pass
+{
+  variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
+  segments: {
+    directory: { template: '~/project', bg: 'surface', fg: 'foreground' },
+    git: { template: '⎇ main', bg: 'surface', fg: 'foreground' },
+    editControl: { template: '{{ action "edit.toggle" "✎" }}', bg: 'surface', fg: 'foreground' },
+  },
+  root: { v: [ { h: ['directory', 'git'] }, 'editControl' ] },
+}
+```
+
+**`edit.toggle` is the entire declaration.** Referencing it anywhere is what
+opts a config in — the loader detects the reference (the same AST-based
+detection `{{ menu }}` uses to find its own placements) and, only then,
+synthesizes:
+
+- `edit.mode` — a `state` variable, closed by default, and `edit.toggle`
+  itself — a binary `cycle` action flipping it open/closed. Wire your own
+  trigger to it, or copy `editControl` above verbatim.
+- For **every** preset (the `"default"` floor included) and every ordinary
+  segment in its resolved root: a `-` (a synthesized `removeSegment` action
+  behind `{{ action }}`) immediately after it, and a `+` (a synthesized
+  `insertSegmentFrom` action behind `{{ menu }}`, ranging every declared
+  segment not already in that preset's tree) before and after each run —
+  so N segments in a row read `+ [seg1 -] + [seg2 -] + … + [segN -] +`.
+  Every affordance is gated `when: {{ eq .edit.mode "open" }}` — invisible
+  until the toggle opens, present in the compiled tree either way.
+
+**This is demand-driven, not automatic.** A config that never references
+`edit.toggle` gets none of this — no toggle, no chrome, and critically no
+new `session.id` requirement, so a fully static bar is untouched by the
+feature's mere existence. Reference it once, anywhere, and the whole
+mechanism switches on for every row in every preset.
+
+**It's a splice, not a render branch.** Edit mode is not a special render
+mode — `-`/`+` are ordinary `SegmentDecl`s with ordinary `removeSegment`/
+`insertSegmentFrom` actions, spliced into the SAME tree shape `kind: "group"`
+sugar already lowers into. Toggling `edit.mode` changes which `when`
+predicates pass; it never changes what code runs. Padding, charset, and
+strip style apply to chrome exactly as they apply to any segment you'd write
+by hand.
+
+**Clicks land in the SAME `presets.<name>.rootOps` op log** `removeSegment`/
+`insertSegmentFrom` already write to — so `undo`/`redo` (above) cover an
+edit-mode click for free, and a structural edit made through edit mode
+survives a daemon restart exactly like a hand-authored one.
+
+Segments already under a reserved namespace (`groups.`/`menus.`/`edit.`
+itself) are excluded from both halves — removing a group's own toggle or a
+menu's own host segment would strand its synthesized siblings, so edit mode
+only ever touches ordinary content.
 
 ### Persisting a per-segment field: `segments.<name>.palette`
 
@@ -1009,7 +1109,7 @@ Same load-time check as `segments.<name>.palette`, one seam over:
 removeSegment "ghost" is not a declared segment
 ```
 
-### A value source other than `removeSegment`/`insertSegment` over a `rootOps` target
+### A value source other than `removeSegment`/`insertSegment`/`insertSegmentFrom` over a `rootOps` target
 
 `presets.<name>.rootOps` addresses a tree, not a scalar — `to`/`from`/`cycle`/
 a bounded stepper have no meaning as a tree op:
@@ -1023,7 +1123,7 @@ a bounded stepper have no meaning as a tree op:
 ```
 
 ```error
-can only be paired with "removeSegment" or "insertSegment"
+can only be paired with "removeSegment", "insertSegment", or "insertSegmentFrom"
 ```
 
 ## Before you report done

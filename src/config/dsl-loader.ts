@@ -48,6 +48,8 @@ import { validateVariables } from "./loader/variables.js";
 import { validateSegments } from "./loader/segments.js";
 import { synthesizeGroupDecls, validateRoot } from "./loader/layout.js";
 import { synthesizeMenuDecls } from "./loader/menu-synth.js";
+import { synthesizeEditModeToggle } from "./loader/edit-mode.js";
+import { synthesizeEditChrome } from "./edit-chrome.js";
 import { validateActions } from "./loader/actions.js";
 import { validateLooks } from "./loader/looks.js";
 import { validatePresets } from "./loader/presets.js";
@@ -143,7 +145,15 @@ export function validateConfig(
   if (issues.length > 0) {
     throw new ConfigError(filePath, issues);
   }
-  return config as ValidatedConfig;
+  // [LAW:one-source-of-truth] Edit-mode's CHROME half (brandon-layout-edit-
+  // 2gc.3), synthesized HERE — not in parseDslConfig alongside the toggle —
+  // because it needs the fully merged, preset-resolved, rootOps-replayed
+  // tree cross-ref/cycles just proved sound. Its own output (segment refs
+  // into freshly-synthesized segments, actions into freshly-synthesized
+  // actions) is correct by construction and does not re-enter cross-ref/
+  // cycle checking, exactly as group/menu synthesis's output doesn't either.
+  const withChrome = synthesizeEditChrome(config);
+  return withChrome as ValidatedConfig;
 }
 
 /**
@@ -278,6 +288,13 @@ function validateTopLevel(
   // through deriveActionValidators, and collide loudly with any user name under
   // the reserved namespace.
   synthesizeMenuDecls(ctx, out);
+  // [LAW:one-source-of-truth] Edit-mode's TOGGLE half (brandon-layout-edit-
+  // 2gc.3) — unconditional, like the reservation above, so `edit.mode`/
+  // `edit.toggle` exist in EVERY parsed file and a hand-authored trigger
+  // segment cross-ref-checks normally. The CHROME half (the per-position +/-
+  // affordances) runs later, in validateConfig, once the merged/preset-
+  // resolved/rootOps-replayed tree exists to derive it from.
+  synthesizeEditModeToggle(ctx, out);
   return out;
 }
 
