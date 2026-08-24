@@ -38,6 +38,7 @@ import {
   effectiveStripStyle,
 } from "./themes/policy.js";
 import { paletteForThemeName } from "./themes/palette-resolvers.js";
+import { effectivePresetName, presetGlobals } from "./config/presets.js";
 import {
   DEFAULT_CHARSET,
   DEFAULT_COLOR_COMPATIBILITY,
@@ -281,15 +282,26 @@ function loadRegisterRender(
     // Fresh session (no clicked theme/style/look), so the session half of
     // each resolution is null — the config default over the floor, exactly
     // what the daemon renders for a session that has never clicked.
+    // [LAW:one-source-of-truth] The preset resolves first and its fragment's
+    // globals feed every field below, the SAME order the daemon resolves in
+    // (server.ts) — so `check` renders the arrangement a fresh session actually
+    // opens in, not the config's un-presetted root.
+    const preset = effectivePresetName(
+      null,
+      config.globals.preset,
+      config.presets,
+    );
+    const globals = presetGlobals(config, preset);
     const effective: EffectiveGlobals = {
-      theme: effectiveThemeName(null, config.globals.palette),
-      look: effectiveLookName(null, config.globals.look, config.looks),
-      style: effectiveStripStyle(null, config.globals.style),
-      autoWrap: config.globals.autoWrap ?? DEFAULT_WRAP,
-      padding: config.globals.padding ?? DEFAULT_PADDING,
-      charset: config.globals.charset ?? DEFAULT_CHARSET,
+      preset,
+      theme: effectiveThemeName(null, globals.palette),
+      look: effectiveLookName(null, globals.look, config.looks),
+      style: effectiveStripStyle(null, globals.style),
+      autoWrap: globals.autoWrap ?? DEFAULT_WRAP,
+      padding: globals.padding ?? DEFAULT_PADDING,
+      charset: globals.charset ?? DEFAULT_CHARSET,
       colorCompatibility:
-        config.globals.colorCompatibility ?? DEFAULT_COLOR_COMPATIBILITY,
+        globals.colorCompatibility ?? DEFAULT_COLOR_COMPATIBILITY,
     };
     // [LAW:no-silent-failure] A segment whose template THROWS while evaluating
     // (an `{{ action }}` display-arity mismatch, a MissingFieldError from a
@@ -318,7 +330,10 @@ function loadRegisterRender(
         onSegmentError: (segName, message) =>
           segmentErrors.push(`segment "${segName}": ${message}`),
       },
-      lookKeyByName(config.looks, effective.look),
+      {
+        look: lookKeyByName(config.looks, effective.look),
+        preset: effective.preset,
+      },
     );
     if (segmentErrors.length > 0) {
       throw new Error(

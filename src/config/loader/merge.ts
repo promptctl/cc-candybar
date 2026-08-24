@@ -48,6 +48,11 @@ export function mergeWithDefault(
     // overrides one adaptation by re-declaring its name; the bundled stdlib
     // (incl. the "none" identity floor) survives every merge by construction.
     looks: { ...dflt.looks, ...(raw.looks ?? {}) },
+    // [LAW:one-source-of-truth] presets merge by name, same cascade — a user
+    // overrides one arrangement by re-declaring its name; the bundled stdlib
+    // (incl. the "default" empty-fragment floor effectivePresetName collapses
+    // to) survives every merge by construction, exactly as looks' "none" does.
+    presets: { ...dflt.presets, ...(raw.presets ?? {}) },
     // [LAW:one-source-of-truth] helpers merge by name, same cascade — a user
     // overrides one formatter helper by re-declaring its name; the rest inherit
     // from the bundled default.

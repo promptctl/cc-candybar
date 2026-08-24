@@ -50,6 +50,7 @@ import { synthesizeGroupDecls, validateRoot } from "./loader/layout.js";
 import { synthesizeMenuDecls } from "./loader/menu-synth.js";
 import { validateActions } from "./loader/actions.js";
 import { validateLooks } from "./loader/looks.js";
+import { validatePresets } from "./loader/presets.js";
 import { validateHelpers } from "./loader/helpers.js";
 import { validateCrossReferences } from "./loader/cross-ref.js";
 import { validateNoCycles } from "./loader/cycles.js";
@@ -233,7 +234,7 @@ function validateTopLevel(
 
   const out: Mutable<RawDslConfig> = {};
   if (raw.globals !== undefined)
-    out.globals = validateGlobals(ctx, raw.globals);
+    out.globals = validateGlobals(ctx, "globals", raw.globals);
   if (raw.variables !== undefined)
     out.variables = validateVariables(ctx, "variables", raw.variables);
   if (raw.segments !== undefined)
@@ -255,6 +256,13 @@ function validateTopLevel(
   if (raw.actions !== undefined)
     out.actions = validateActions(ctx, raw.actions);
   if (raw.looks !== undefined) out.looks = validateLooks(ctx, raw.looks);
+  // [LAW:one-source-of-truth] Parsed BEFORE the synthesis passes below, because
+  // a preset's `root` runs through the same validateRoot and therefore collects
+  // its group sugar into the same `ctx.groups` the top-level root does — the
+  // synthesized artifacts must see every group the config declares, wherever it
+  // was staged from.
+  if (raw.presets !== undefined)
+    out.presets = validatePresets(ctx, raw.presets);
   if (raw.helpers !== undefined)
     out.helpers = validateHelpers(ctx, raw.helpers);
   // [LAW:one-source-of-truth] Group sugar synthesis runs AFTER every section
@@ -283,5 +291,6 @@ const TOP_LEVEL_KEYS = new Set([
   "root",
   "actions",
   "looks",
+  "presets",
   "helpers",
 ]);

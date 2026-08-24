@@ -32,6 +32,7 @@ import {
   listResolvablePaletteNames,
   STRIP_STYLES,
 } from "../themes/policy.js";
+import { presetNames } from "./presets.js";
 
 // [LAW:types-are-the-program] The authoring shape of a `set … from` value: a
 // bare string names a domain (resolved through the registry or a per-config
@@ -100,20 +101,34 @@ export function registerOptionDomain(
 }
 
 // [LAW:one-source-of-truth] THE single construction of a config's per-config
-// domain overrides — currently just "looks", the merged `looks:` block's
-// names. cross-ref.ts (checking a `from` name resolves), state-validators.ts
-// (deriving the click gate), and dsl/render.ts (compiling render-time
-// options) each need this map; before this function they each rebuilt it
-// independently, three sites that could silently drift if a future
-// per-config domain were added to only some of them. Takes the bare `looks`
-// record (not the full DslConfig) so this leaf module never imports
+// domain overrides — the domains whose members are declared IN the config
+// rather than in the registry above: "looks" (the merged `looks:` block) and
+// "presets" (the merged `presets:` block). cross-ref.ts (checking a `from` name
+// resolves), state-validators.ts (deriving the click gate), and dsl/render.ts
+// (compiling render-time options) each need this map; before this function they
+// each rebuilt it independently, three sites that could silently drift if a
+// future per-config domain were added to only some of them.
+//
+// [LAW:locality-or-seam] The parameter is the CONFIG, structurally typed to the
+// blocks read here — not one positional record per domain. Presets were the
+// second per-config domain, and adding them under the old `(looks)` signature
+// would have rippled a new argument through all three call sites; under this
+// one, a third domain is a single line HERE and nothing else moves. Structural
+// (rather than importing DslConfig) so this leaf module still never imports
 // dsl-types.ts — that would cycle through dsl-types.ts -> action.ts ->
 // option-domain.ts (type-only, but still a cycle this module stays clear of,
 // per [LAW:one-way-deps]).
-export function perConfigDomainsFor(
-  looks: Readonly<Record<string, unknown>>,
-): ReadonlyMap<string, readonly string[]> {
-  return new Map([["looks", Object.keys(looks)]]);
+export function perConfigDomainsFor(config: {
+  readonly looks: Readonly<Record<string, unknown>>;
+  readonly presets: Readonly<Record<string, unknown>>;
+}): ReadonlyMap<string, readonly string[]> {
+  return new Map([
+    ["looks", Object.keys(config.looks)],
+    // [LAW:one-source-of-truth] Not `Object.keys` — the floor is selectable
+    // whether or not a config declares it, and presetNames is where that is
+    // stated (once, for the gate and the render alike).
+    ["presets", presetNames(config.presets)],
+  ]);
 }
 
 // [LAW:one-source-of-truth] The full set of names `from` may legally name for

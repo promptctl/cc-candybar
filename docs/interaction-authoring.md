@@ -164,10 +164,21 @@ exactly the same over it:
 Every other `set` in this doc changes what the CURRENT session sees. `persist`
 changes what EVERY session sees, from the next reload on — it writes into a
 daemon-owned overrides layer merged on top of your config file (bundled
-default < config file < persisted overrides < session pick, in that order:
-a session's own `set` pick still wins over a persisted default for that one
-session). The config file on disk is never touched — a `persist` write is
-never something `cc-candybar check` or a `git diff` on your config will show.
+default < config file < persisted overrides < active preset < session pick,
+in that order: a session's own `set` pick still wins over a persisted default
+for that one session). The config file on disk is never touched — a `persist`
+write is never something `cc-candybar check` or a `git diff` on your config
+will show.
+
+The `active preset` layer is a whole alternative arrangement: a named `root`
+and/or display-`globals` fragment, declared in a top-level `presets:` block and
+picked per session. It sits to the right of persisted overrides because the
+chain is ordered by how late each layer is decided — everything left of the
+preset is read once when the config loads and is shared by every session, while
+the preset and the session pick are both resolved on every render. That is what
+makes switching to a `compact` preset actually change the padding of a user who
+once persisted a padding they liked, and what keeps their next click on padding
+winning over the preset.
 
 Reach for `persist` when the picked value should become the new normal, not
 a one-off for this conversation — a theme you want every future session to
@@ -248,6 +259,54 @@ resolved config value — the same seam `{{ .theme.effective }}` rides for
 rendered, never a restated guess. A charset or padding change takes effect
 on the very next render, live, with no daemon restart: `persist` writes the
 overrides file, which rides the config file's own watcher.
+
+### Picking a whole arrangement: `presets`
+
+A preset changes several of those things at once. Declare it in the top-level
+`presets:` block as a named fragment carrying a `root`, a `globals` delta, or
+both, and pick it with the ordinary `set` seam over the `presets` domain — the
+domain is your own block's names, plus `"default"`, the identity fragment that
+means "this config's own `root` and `globals`, unchanged". `"default"` is
+always selectable, whether or not you declare it, so a menu can always get back
+to where it started.
+
+```json5 check:pass
+{
+  variables: {
+    'session.id': { kind: 'input', path: 'session_id', default: '' },
+    activePreset: { kind: 'state', key: 'preset', default: 'default' },
+  },
+  actions: {
+    applyPreset: { set: 'preset', from: 'presets' },
+  },
+  segments: {
+    presetControl: {
+      template: '▦ {{ .activePreset }} {{ menu "applyPreset" }}',
+      bg: "surface", fg: "foreground",
+    },
+  },
+  presets: {
+    compact: { globals: { padding: 0 }, root: { v: ["presetControl"] } },
+    roomy: { globals: { padding: 2 } },
+  },
+  root: { v: [
+    { h: ["directory", "model"] },
+    "presetControl",
+  ] },
+}
+```
+
+A fragment may carry `root` and `globals` and nothing else. The rule behind
+that is lifetime: a preset carries what the bar *resolves* on every render,
+never what the daemon *registers* once per process. `variables` and `actions`
+are registered once — the timers, watchers and click gate they build are shared
+by every session on that project — so a per-session pick cannot reach them, and
+naming one in a preset is a load error. A preset's `globals` also may not carry
+`preset`, which would make a second authority on which preset is active.
+
+Each preset's `root` goes through the same layout validator the top-level
+`root` does, so a stray segment name fails at load with the preset in the path
+(`presets.compact.root`), not silently at click time.
 
 ### Persisting a per-segment field: `segments.<name>.palette`
 

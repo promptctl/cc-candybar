@@ -265,7 +265,7 @@ describe("look click — live whole-bar recolor over the active theme", () => {
         basePalette,
         OPTS,
         undefined,
-        lookKeyByName(config.looks, effectiveLook),
+        { look: lookKeyByName(config.looks, effectiveLook) },
       );
     };
     const dispose = (): void => {
