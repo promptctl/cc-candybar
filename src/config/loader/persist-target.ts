@@ -16,17 +16,33 @@ import { isGlobalsField } from "./globals.js";
 
 export type PersistTarget =
   | { readonly scope: "globals"; readonly field: keyof Globals }
-  | { readonly scope: "segment-palette"; readonly segment: string };
+  | { readonly scope: "segment-palette"; readonly segment: string }
+  // [LAW:one-source-of-truth] brandon-layout-edit-2gc.1's structural-edit
+  // target — the accumulated op LOG for one preset's root (see
+  // src/config/layout-ops.ts), never the tree itself: a scalar-shaped value
+  // (a JSON-encoded string[] of op tokens) so it rides the SAME flat-dict
+  // overrides file with no shape change to that store's core writer.
+  | { readonly scope: "preset-root-ops"; readonly preset: string };
 
 // [LAW:locality-or-seam] `segments.<name>.palette` reuses the SAME dotted
 // namespacing SegmentDecl.vars already uses for segment-local variables
 // (`<segment>.<var>`, declared in src/dsl/render.ts) — one idiom for "a name
 // scoped under a segment", not a bespoke second syntax invented for persist
-// targets alone.
+// targets alone. `presets.<name>.rootOps` mirrors it one level up (a name
+// scoped under a preset) — deliberately spelled `rootOps`, not `root`, so it
+// never reads as the same string as presetRoot()'s load-time diagnostic path
+// `presets.<name>.root` (src/config/presets.ts), a different namespace this
+// key must never be confused with.
 const SEGMENT_PALETTE_KEY = /^segments\.([^.]+)\.palette$/;
+const PRESET_ROOT_OPS_KEY = /^presets\.([^.]+)\.rootOps$/;
 
 export function parsePersistTarget(key: string): PersistTarget | null {
   if (isGlobalsField(key)) return { scope: "globals", field: key };
-  const match = SEGMENT_PALETTE_KEY.exec(key);
-  return match ? { scope: "segment-palette", segment: match[1]! } : null;
+  const segmentMatch = SEGMENT_PALETTE_KEY.exec(key);
+  if (segmentMatch)
+    return { scope: "segment-palette", segment: segmentMatch[1]! };
+  const presetMatch = PRESET_ROOT_OPS_KEY.exec(key);
+  return presetMatch
+    ? { scope: "preset-root-ops", preset: presetMatch[1]! }
+    : null;
 }

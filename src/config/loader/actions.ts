@@ -324,6 +324,25 @@ const CYCLE_FIELDS_SET: FieldSpecMap<{ cycle: readonly string[] }> = {
 const CYCLE_FIELDS_PERSIST: FieldSpecMap<{ cycle: readonly string[] }> = {
   cycle: cycleSpec("persist"),
 };
+// [LAW:one-type-per-behavior] brandon-layout-edit-2gc.1's two structural-edit
+// arms — PERSIST-only (see action.ts's ActionDecl doc comment for why there
+// is no `set` twin). Each field reuses layoutNameSpec: a segment/anchor name
+// must be non-empty and free of both `/` (the click wire's own segment
+// delimiter) and `:` (layout-ops.ts's op-token delimiter) — the SAME
+// wire-safety diligence slashFreeString already applies to `to`/`cycle`
+// members, one forbidden character wider.
+const REMOVE_SEGMENT_FIELDS: FieldSpecMap<{ removeSegment: string }> = {
+  removeSegment: layoutNameSpec("removeSegment"),
+};
+const INSERT_SEGMENT_FIELDS: FieldSpecMap<{
+  insertSegment: string;
+  anchor: string;
+  relation: "before" | "after";
+}> = {
+  insertSegment: layoutNameSpec("insertSegment"),
+  anchor: layoutNameSpec("anchor"),
+  relation: relationSpec(),
+};
 
 // [LAW:types-are-the-program] A bounded step is fully described by an integer
 // domain (min < max) and a non-zero integer increment (`by`; negative for a
@@ -418,16 +437,49 @@ const SET_ARMS: readonly ValueSourceArm[] = [
 
 // [LAW:one-type-per-behavior] `persist` mirrors `set` minus the `int` arm — a
 // page cursor is a UI-only paging concept with no meaning as a persisted
-// config default (see action.ts's ActionDecl comment).
+// config default (see action.ts's ActionDecl comment). `removeSegment`/
+// `insertSegment` are ADDITIONAL persist-only arms with no `set` counterpart.
 const PERSIST_ARMS: readonly ValueSourceArm[] = [
   valueSourceArm("persist", TO_FIELDS_PERSIST),
   valueSourceArm("persist", FROM_FIELDS_PERSIST),
   valueSourceArm("persist", BOUNDED_FIELDS, minLessThanMax, byNonZero),
   valueSourceArm("persist", CYCLE_FIELDS_PERSIST),
+  valueSourceArm("persist", REMOVE_SEGMENT_FIELDS),
+  valueSourceArm("persist", INSERT_SEGMENT_FIELDS),
 ];
 
-const VALUE_SOURCE_MESSAGE = (discriminator: "set" | "persist") =>
-  `a ${discriminator} action declares exactly one value source: "to" (a literal value), "from" (an option domain — a registered domain name like "themes"/"styles"/"looks", or an inline array of literal values), "min"/"max"/"by" (a bounded step)${discriminator === "set" ? `, "int" (an unbounded integer cursor)` : ""}, or "cycle" (an enumerated domain stepped in order)`;
+// [LAW:one-source-of-truth] The clause list, not the joined string, is the
+// data that varies per discriminator — the "or" belongs on the LAST clause
+// only, and which clause is last differs between `set` (ends at cycle) and
+// `persist` (ends at insertSegment), so building a list and joining it is
+// what keeps that placement correct without a second copy of the sentence.
+function valueSourceClauses(discriminator: "set" | "persist"): string[] {
+  const clauses = [
+    `"to" (a literal value)`,
+    `"from" (an option domain — a registered domain name like "themes"/"styles"/"looks", or an inline array of literal values)`,
+    `"min"/"max"/"by" (a bounded step)`,
+  ];
+  if (discriminator === "set")
+    clauses.push(`"int" (an unbounded integer cursor)`);
+  clauses.push(`"cycle" (an enumerated domain stepped in order)`);
+  if (discriminator === "persist") {
+    clauses.push(
+      `"removeSegment" (remove a named segment from the layout)`,
+      `"insertSegment"/"anchor"/"relation" (insert a named segment before/after an existing one)`,
+    );
+  }
+  return clauses;
+}
+
+function VALUE_SOURCE_MESSAGE(discriminator: "set" | "persist"): string {
+  const clauses = valueSourceClauses(discriminator);
+  const last = clauses[clauses.length - 1]!;
+  const list =
+    clauses.length === 1
+      ? last
+      : `${clauses.slice(0, -1).join(", ")}, or ${last}`;
+  return `a ${discriminator} action declares exactly one value source: ${list}`;
+}
 
 // [LAW:dataflow-not-control-flow] The set/persist sub-union eliminator:
 // validate the shared discriminator key, count which value sources are
@@ -677,6 +729,61 @@ function intMarkerSpec(): FieldSpec<true> {
         return undefined;
       }
       return true;
+    },
+  };
+}
+
+// [LAW:one-source-of-truth] A layout op's segment-name field (removeSegment /
+// insertSegment / anchor) is non-empty and free of BOTH wire-structural
+// characters: `/` (the click wire's own multi-arg segment delimiter, the
+// same restriction slashFreeString already enforces for `to`/`cycle`) and
+// `:` (layout-ops.ts's op-token delimiter — a name containing it would make
+// encodeLayoutOp's output ambiguous to decode). One spec, three callsites,
+// so the two-character restriction can't drift between them.
+function layoutNameSpec(field: string): FieldSpec<string> {
+  return {
+    required: true,
+    json: { type: "string" },
+    parse: (ctx, path, f, raw) => {
+      const v = requireString(ctx, path, raw, f);
+      if (v === null) return undefined;
+      const at = `${path}.${f}`;
+      if (v === "") {
+        issue(ctx, at, `${field} must be non-empty (a segment name)`);
+        return undefined;
+      }
+      if (v.includes("/") || v.includes(":")) {
+        issue(
+          ctx,
+          at,
+          `${field} "${v}" contains "/" or ":" — segment names in a layout op must be free of both (the click wire's own delimiter and layout-ops.ts's op-token delimiter)`,
+        );
+        return undefined;
+      }
+      return v;
+    },
+  };
+}
+
+// [LAW:types-are-the-program] `relation` is a closed two-value enum, not a
+// free string — a typo (`"befor"`) is a load error, never a click-time
+// surprise. Mirrors intMarkerSpec's "one legal literal" shape, widened to
+// two.
+function relationSpec(): FieldSpec<"before" | "after"> {
+  return {
+    required: true,
+    json: { enum: ["before", "after"] },
+    parse: (ctx, path, field, raw) => {
+      const v = raw[field];
+      if (v !== "before" && v !== "after") {
+        issue(
+          ctx,
+          `${path}.${field}`,
+          `relation must be "before" or "after", got ${describeValue(v)}`,
+        );
+        return undefined;
+      }
+      return v;
     },
   };
 }

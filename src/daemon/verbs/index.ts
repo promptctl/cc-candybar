@@ -36,12 +36,15 @@ import {
   coercePersistValue,
   isGlobalsField,
   loadConfigOverrides,
+  loadOverrides,
   writeConfigOverride,
 } from "../config-overrides-store";
 import { configOverridesPath } from "../paths";
+import { parsePersistTarget } from "../../config/loader/persist-target";
 import {
   decodeSegments,
   parseEffects,
+  VERB_APPLY_LAYOUT_OP,
   VERB_COPY,
   VERB_DISPATCH,
   VERB_OPEN_VSCODE,
@@ -444,6 +447,48 @@ const resetConfig: VerbHandler = (value, ctx) => {
   ctx.dlog("info", `reset-config: ${key} (session=${sid})`);
 };
 
+// [LAW:one-source-of-truth] brandon-layout-edit-2gc.1's structural-edit
+// write: a THIRD config-overrides write shape beside setConfig's overwrite
+// and stepConfig's numeric read-modify-write — read the current op-token
+// list at `key`, append the validated op, write the whole list back. Gated
+// by the SAME allow-list machinery setConfig uses (validateConfigWrite,
+// derived from a config's declared removeSegment/insertSegment actions) —
+// an op token no action declares is a loud BAD_REQUEST, never silently
+// appended. `key` must resolve to the preset-root-ops scope specifically
+// (never a globals/segment-palette key smuggled in through this verb) —
+// checked here rather than trusted from the gate, since the gate only
+// proves the VALUE is allowed for that key, not that the key's SCOPE
+// matches this verb's read-modify-write shape.
+const applyLayoutOp: VerbHandler = (rawValue, ctx) => {
+  const [sessionId = "", key = "", opToken = ""] = decodeWire(() =>
+    decodeSegments(rawValue),
+  );
+  const sid = requireSessionId(sessionId);
+  if (!key) {
+    throw new BadVerbArgs(
+      `apply-layout-op: <key>/<op> is required (have: ${listConfigKeys().join(", ")})`,
+    );
+  }
+  const result = validateConfigWrite(key, opToken);
+  if (!result.ok) throw new BadVerbArgs(`apply-layout-op: ${result.reason}`);
+  const target = parsePersistTarget(key);
+  if (target === null || target.scope !== "preset-root-ops") {
+    throw new BadVerbArgs(
+      `apply-layout-op: "${key}" is not a "presets.<name>.rootOps" target`,
+    );
+  }
+  const existing =
+    loadOverrides(configOverridesPath(), ctx.dlog).presetRootOps[
+      target.preset
+    ] ?? [];
+  const next = JSON.stringify([...existing, result.value]);
+  writeConfigOverride(configOverridesPath(), key, next, ctx.dlog);
+  ctx.dlog(
+    "info",
+    `apply-layout-op: ${key} += ${result.value} (session=${sid})`,
+  );
+};
+
 // ─── Registry ───────────────────────────────────────────────────────────────
 
 // [LAW:one-source-of-truth] The LEAF verbs — every click effect that does real
@@ -505,6 +550,7 @@ const LEAF_VERBS = new Map<string, VerbHandler>([
   [VERB_SET_CONFIG, setConfig],
   [VERB_STEP_CONFIG, stepConfig],
   [VERB_RESET_CONFIG, resetConfig],
+  [VERB_APPLY_LAYOUT_OP, applyLayoutOp],
   [VERB_SHOW_CONFIG_ERROR, showConfigError],
   [VERB_SHOW_CONFIG_WARNING, showConfigWarning],
   [VERB_TOOLBAR_TOGGLE, toolbarToggle],
@@ -536,9 +582,9 @@ const dispatch: VerbHandler = (rawValue, ctx) => {
   let sessionId: string | null = null;
   for (const { verb, value } of parseEffects(rawValue)) {
     // Extract session ID from the first session-bearing effect for error display.
-    // set-state, step-state, set-config, step-config, reset-config, and
-    // toolbar-toggle all carry the session id as their first segment, so a
-    // failing step surfaces in the bar like any other.
+    // set-state, step-state, set-config, step-config, reset-config,
+    // apply-layout-op, and toolbar-toggle all carry the session id as their
+    // first segment, so a failing step surfaces in the bar like any other.
     if (
       !sessionId &&
       (verb === VERB_SET_STATE ||
@@ -546,6 +592,7 @@ const dispatch: VerbHandler = (rawValue, ctx) => {
         verb === VERB_SET_CONFIG ||
         verb === VERB_STEP_CONFIG ||
         verb === VERB_RESET_CONFIG ||
+        verb === VERB_APPLY_LAYOUT_OP ||
         verb === VERB_TOOLBAR_TOGGLE)
     ) {
       const parts = decodeSegments(value);

@@ -37,6 +37,7 @@ import type {
   PresetDecl,
 } from "./dsl-types.js";
 import { effectiveMemberName } from "../themes/policy.js";
+import { applyLayoutOps, decodeLayoutOp } from "./layout-ops.js";
 
 // [LAW:one-source-of-truth] The floor preset's name, spelled once. `looks` has
 // `"none"` (the identity adaptation); presets have `"default"` (the identity
@@ -185,4 +186,45 @@ export function sanitizePersistedPresetOverride(
   const rest = { ...globalsOverride };
   delete rest.preset;
   return rest;
+}
+
+// [LAW:one-source-of-truth] brandon-layout-edit-2gc.1's replay step — the
+// SAME "patch an already-merged config" shape applySegmentPaletteOverrides
+// (src/config/loader/merge.ts) uses one field over, run at the SAME point in
+// RenderCache.buildState (after the globals/segment-palette overrides, before
+// validateConfig): for every preset with an accumulated op log, resolve its
+// CURRENT root the normal way (presetRoot — bundled/user root, or the
+// preset's own declared fragment) and replay the ops on top, writing the
+// result back as that preset's `root`. Every later reader (presetRoot,
+// registerDslConfig's per-preset compile, validateConfig's cross-ref walk)
+// sees the patched tree as if it had been authored that way — no second
+// resolution path [LAW:locality-or-seam].
+//
+// [LAW:no-silent-failure] exception: an op whose target/anchor names a
+// segment absent from the CURRENT tree is a no-op (layout-ops.ts's own
+// documented policy) — a validated action can only ever name a segment the
+// config declares at the time it was clicked, so a miss here only happens
+// after a LATER edit (a config change, or an earlier op in the same list)
+// already removed it. A malformed individual token (decodeLayoutOp -> null;
+// can only arise from hand-edited or previous-version state, never from this
+// process's own encodeLayoutOp) is filtered the same way, never applied.
+export function applyPresetRootOpsOverrides(
+  config: DslConfig,
+  presetRootOps: Readonly<Record<string, readonly string[]>>,
+): DslConfig {
+  const entries = Object.entries(presetRootOps).filter(
+    ([, tokens]) => tokens.length > 0,
+  );
+  if (entries.length === 0) return config;
+  const presets: Record<string, PresetDecl> = { ...config.presets };
+  for (const [name, tokens] of entries) {
+    const ops = tokens.map(decodeLayoutOp).filter((op) => op !== null);
+    if (ops.length === 0) continue;
+    const { node } = presetRoot(config, name);
+    presets[name] = {
+      ...presetByName(config.presets, name),
+      root: applyLayoutOps(node, ops),
+    };
+  }
+  return { ...config, presets };
 }

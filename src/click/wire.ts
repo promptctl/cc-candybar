@@ -66,6 +66,17 @@ export const VERB_STEP_CONFIG = "step-config";
 // config-overrides key, restoring the user-file/bundled-default value on the
 // next reload. Args: `[sessionId, key]`.
 export const VERB_RESET_CONFIG = "reset-config";
+// [LAW:one-type-per-behavior] brandon-layout-edit-2gc.1's structural-edit
+// verb — a THIRD write semantic beside set-config's plain overwrite and
+// step-config's numeric read-modify-write: read the current op-token LIST at
+// `key` (a "presets.<name>.rootOps" config-overrides target), append the
+// validated `op` token, write the whole list back. Args: `[sessionId, key,
+// op]` — `op` is one opaque token from src/config/layout-ops.ts's codec, the
+// SAME shape a `persist … to` literal's value would be, gated the SAME way
+// (validateConfigWrite) — only the write's SHAPE (append vs. overwrite)
+// differs, which is exactly why this is its own verb rather than another
+// VERB_SET_CONFIG value.
+export const VERB_APPLY_LAYOUT_OP = "apply-layout-op";
 
 // [LAW:types-are-the-program] An effect to EMIT: a verb plus its raw (unencoded)
 // positional args. The wire owns all encoding — callers never percent-encode.

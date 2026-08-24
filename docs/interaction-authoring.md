@@ -360,6 +360,54 @@ you actually typed into `globals.preset` in your OWN config file gets the
 load-time typo check, the same distinction `segments.<name>.palette` draws
 between a name your config declares and one it doesn't.
 
+### Editing a preset's layout: `removeSegment` / `insertSegment`
+
+A preset's `root` is data you write once. `removeSegment` and `insertSegment`
+are the click-driven seam for changing it: `persist` a *structural* edit
+against `presets.<name>.rootOps` (a reserved suffix distinct from the preset's
+own `root` field — see below) instead of naming a value source. Both are
+fully literal — the segment name(s), and for `insertSegment` an `anchor` and a
+`relation` of `"before"` or `"after"` — so each declared action is exactly one
+legal request, gated the same one-value way a literal `persist … to` already
+is.
+
+```json5 check:pass
+{
+  variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
+  actions: {
+    dropModel: { persist: "presets.compact.rootOps", removeSegment: "model" },
+    addGitPr: { persist: "presets.compact.rootOps", insertSegment: "gitPr", anchor: "directory", relation: "after" },
+  },
+  segments: {
+    editControl: {
+      template: '{{ action "dropModel" "-model" }} {{ action "addGitPr" "+gitPr" }}',
+      bg: "surface", fg: "foreground",
+    },
+  },
+  presets: {
+    compact: { root: { h: ["directory", "model"] } },
+  },
+  root: "editControl",
+}
+```
+
+Position is addressed by the segment's own NAME, never by a sibling index — an
+index would point at the wrong node the moment an earlier edit shifted the
+tree under it. Clicks accumulate: each one appends one op to a log stored
+alongside the preset (never touching the preset's own declared `root`, and
+never your config file), and the daemon replays the whole log on top of the
+declared root every time it resolves that preset — so a remove and an insert
+from two separate clicks both land, in order, instead of the second clobbering
+the first. `reset: "presets.compact.rootOps"` clears the whole log at once,
+restoring the preset's declared root — there is no per-op undo yet (a `set`
+twin doesn't exist either: a structural edit is always a durable write, the
+same way `persist`'s other arms already are).
+
+A stale op — one naming a segment a later config change removed — is silently
+dropped when replayed, the same recovery `segments.<name>.palette` already
+gets for the identical situation: nothing left to apply it to, and nothing
+worth failing the whole render over.
+
 ### Persisting a per-segment field: `segments.<name>.palette`
 
 Every `persist`/`reset` target so far has named a `globals` field — the
@@ -894,6 +942,39 @@ use `to`, `from`, or `cycle` like every other palette-shaped target:
 
 ```error
 is a segment palette target and cannot use a bounded stepper (min/max/by) — use "to", "from", or "cycle" instead
+```
+
+### `removeSegment` naming an undeclared segment
+
+Same load-time check as `segments.<name>.palette`, one seam over:
+
+```json5 check:fail
+{
+  actions: { dropGhost: { persist: "presets.compact.rootOps", removeSegment: "ghost" } },
+  segments: { sidebar: { template: "sidebar" } },
+  presets: { compact: { root: "sidebar" } },
+}
+```
+
+```error
+removeSegment "ghost" is not a declared segment
+```
+
+### A value source other than `removeSegment`/`insertSegment` over a `rootOps` target
+
+`presets.<name>.rootOps` addresses a tree, not a scalar — `to`/`from`/`cycle`/
+a bounded stepper have no meaning as a tree op:
+
+```json5 check:fail
+{
+  actions: { bumpLayout: { persist: "presets.compact.rootOps", min: 0, max: 1, by: 1 } },
+  segments: { sidebar: { template: "sidebar" } },
+  presets: { compact: { root: "sidebar" } },
+}
+```
+
+```error
+can only be paired with "removeSegment" or "insertSegment"
 ```
 
 ## Before you report done
