@@ -12,7 +12,7 @@ import {
   DEFAULT_DSL_CONFIG,
   RAW_DEFAULT_DSL_CONFIG,
 } from "../src/config/default-dsl-config";
-import { walkNodes } from "../src/config/dsl-types";
+import { walkNodes, type ValidatedConfig } from "../src/config/dsl-types";
 import {
   parseDslConfig,
   mergeWithDefault,
@@ -39,6 +39,11 @@ import {
 import { clickUrl } from "./helpers/click";
 import { effectsUrl, VERB_SET_STATE } from "../src/click/wire";
 import { presetNames, presetGlobals } from "../src/config/presets";
+import {
+  EDIT_NS,
+  EDIT_MODE_KEY,
+  EDIT_TOGGLE_ACTION,
+} from "../src/config/loader/edit-mode";
 import { checkPayload } from "../src/check";
 import type { EffectiveGlobals } from "../src/daemon/render-payload";
 import {
@@ -69,6 +74,53 @@ const oneSegmentRoot = (segment: string) =>
       },
     ],
   });
+
+// [LAW:locality-or-seam] Narrow an already-VALIDATED config to one segment.
+// Overriding just `root` is not enough once the bundled default references
+// `edit.toggle` (brandon-layout-edit-2gc.4, via the toolbar segment):
+// `synthesizeEditChrome` runs inside `parseAndValidate` — BEFORE any call
+// site here narrows the layout — and, for every preset including the
+// `"default"` floor, bakes a spliced copy of the FULL original root into
+// `presets.default.root`. `registerDslConfig`'s per-preset compile prefers a
+// preset's own `.root` over the top-level `root` field
+// (`presetRoot`/`presets.ts`), so a bare `{ ...parsed, root: oneSegmentRoot(x) }`
+// silently renders the untouched full tree instead of the narrowed one.
+//
+// Resetting `presets` alone isn't enough either: `synthesizeEditChrome` also
+// bakes one `insertSegmentFrom` action per preset (`edit.addable.<name>`
+// naming that preset's own addable-segment domain) into `config.actions`, and
+// `registerDslConfig` compiles every declared action regardless of what's in
+// `root` — so an orphaned reference to a domain only the now-discarded
+// "compact"/"verbose" presets registered throws `unknown option domain`. None
+// of this per-preset edit-chrome machinery is what these single-segment tests
+// exercise (test/dsl-edit-mode.test.ts and test/dsl-layout-edit.test.ts own
+// that surface), so the clean narrowing drops every synthesized per-preset
+// `edit.*` chrome artifact too — EXCEPT the two bare, preset-independent
+// names (`edit.mode`/`edit.toggle`) Phase A synthesis writes once, which stay
+// so a narrowed `toolbar` (whose template references `edit.toggle` directly)
+// still compiles.
+const EDIT_CHROME_NAME = (name: string) =>
+  name.startsWith(EDIT_NS) &&
+  name !== EDIT_MODE_KEY &&
+  name !== EDIT_TOGGLE_ACTION;
+
+const narrowToSegment = (
+  parsed: ValidatedConfig,
+  segment: string,
+): ValidatedConfig => {
+  const dropEditChrome = <V>(rec: Readonly<Record<string, V>>) =>
+    Object.fromEntries(
+      Object.entries(rec).filter(([name]) => !EDIT_CHROME_NAME(name)),
+    );
+  return {
+    ...parsed,
+    root: oneSegmentRoot(segment),
+    presets: {},
+    variables: dropEditChrome(parsed.variables),
+    actions: dropEditChrome(parsed.actions),
+    segments: dropEditChrome(parsed.segments),
+  };
+};
 
 describe("DEFAULT_DSL_CONFIG", () => {
   test("loader round-trips the bundled default", () => {
@@ -442,7 +494,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
   describe("toolbar repo link", () => {
     function renderToolbar(git: Record<string, unknown>): string {
       const parsed = parseAndValidate("<default>", SERIALIZED);
-      const toolbarOnly = { ...parsed, root: oneSegmentRoot("toolbar") };
+      const toolbarOnly = narrowToSegment(parsed, "toolbar");
       const store = new VariableStore();
       const registry = new SourceRegistry(
         store,
@@ -526,7 +578,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
       // that segment's text. `home` flows through the augmented payload
       // (kind: "input", path: "home" in DEFAULT_DSL_CONFIG) — we set it
       // on the payload object directly; no env-var mutation needed.
-      const dirOnly = { ...parsed, root: oneSegmentRoot("directory") };
+      const dirOnly = narrowToSegment(parsed, "directory");
       const store = new VariableStore();
       const registry = new SourceRegistry(store);
       try {
@@ -712,7 +764,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
     // below is checked across the whole registry rather than on one theme.
     function renderSegment(segment: string, theme?: string): string {
       const parsed = parseAndValidate("<default>", SERIALIZED);
-      const cfg = { ...parsed, root: oneSegmentRoot(segment) };
+      const cfg = narrowToSegment(parsed, segment);
       const store = new VariableStore();
       const registry = new SourceRegistry(store);
       try {
@@ -883,7 +935,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
       linesRemoved?: number;
     }): string {
       const parsed = parseAndValidate("<default>", SERIALIZED);
-      const metricsOnly = { ...parsed, root: oneSegmentRoot("metrics") };
+      const metricsOnly = narrowToSegment(parsed, "metrics");
       const store = new VariableStore();
       const registry = new SourceRegistry(store);
       try {
@@ -961,8 +1013,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
       const renderBlock = (warningThreshold: number, util: number): string => {
         const parsed = parseAndValidate("<default>", SERIALIZED);
         const blockOnly = {
-          ...parsed,
-          root: oneSegmentRoot("block"),
+          ...narrowToSegment(parsed, "block"),
           variables: {
             ...parsed.variables,
             "block.budget.warningThreshold": {
@@ -1039,7 +1090,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
       // from — it must be the config actually being validated (`merged`), not
       // the bundled default's serialization.
       const config = validateConfig(merged, "<merged>", JSON.stringify(merged, null, 2));
-      const sessionOnly = { ...config, root: oneSegmentRoot("session") };
+      const sessionOnly = narrowToSegment(config, "session");
       const store = new VariableStore();
       // The merged bundled default declares `activeStyle`/`stylePage` as state
       // vars; SessionState is required to declare them, exactly as the daemon
