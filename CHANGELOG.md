@@ -1,3 +1,10 @@
+# [1.27.0](https://github.com/promptctl/cc-candybar/compare/v1.26.0...v1.27.0) (2026-08-24)
+
+
+### Features
+
+* **config:** presets block + per-render resolution seam (brandon-presets-0yk.1) ([#179](https://github.com/promptctl/cc-candybar/issues/179)) ([40d3461](https://github.com/promptctl/cc-candybar/commit/40d3461efccfc422cf8207edd6c65cf4adb28b0a))
+
 # [1.26.0](https://github.com/promptctl/cc-candybar/compare/v1.25.0...v1.26.0) (2026-08-09)
 
 
