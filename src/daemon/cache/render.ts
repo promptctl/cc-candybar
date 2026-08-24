@@ -25,7 +25,10 @@ import {
 } from "../verbs/config-validators.js";
 import { loadOverrides } from "../config-overrides-store.js";
 import { configOverridesPath } from "../paths.js";
-import { sanitizePersistedPresetOverride } from "../../config/presets.js";
+import {
+  applyPresetRootOpsOverrides,
+  sanitizePersistedPresetOverride,
+} from "../../config/presets.js";
 import { VariableStore } from "../../var-system/store.js";
 import { SourceRegistry } from "../../var-system/sources.js";
 import type { GitDataProvider } from "./git.js";
@@ -324,8 +327,20 @@ export class RenderCache {
       withGlobalsOverrides,
       overrides.segmentPalette,
     );
-    const config = validateConfig(
+    // [LAW:one-source-of-truth] brandon-layout-edit-2gc.1's replay step —
+    // the SAME "patch an already-merged config" cascade as the segment-
+    // palette overlay above, one field over (a preset's `root` instead of a
+    // segment's `palette`). Runs last so validateConfig's cross-ref walk
+    // proves the OPS-PATCHED tree, not the pre-edit one — a structural edit
+    // that referenced a segment removed by a later config change is caught
+    // exactly like a hand-authored preset root naming the same segment would
+    // be.
+    const withPresetRootOps = applyPresetRootOpsOverrides(
       withOverrides,
+      overrides.presetRootOps,
+    );
+    const config = validateConfig(
+      withPresetRootOps,
       resolvedPath ?? "<default>",
       source,
     );

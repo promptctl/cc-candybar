@@ -100,7 +100,17 @@ export function coercePersistValue(
       `coercePersistValue: "${key}" is not a valid persist target`,
     );
   }
-  if (target.scope === "segment-palette") return raw;
+  // [LAW:one-type-per-behavior] Both non-globals scopes are always a NAME/
+  // TOKEN string — segment-palette's value is a palette name, preset-root-ops'
+  // is one op token appended by the daemon's apply-layout-op verb handler
+  // (never a bare `persist` write — see verbs/index.ts). Neither has a
+  // GLOBALS_FIELD_KIND row because neither is a Globals field.
+  if (
+    target.scope === "segment-palette" ||
+    target.scope === "preset-root-ops"
+  ) {
+    return raw;
+  }
   const kind = GLOBALS_FIELD_KIND[target.field];
   if (kind === "string") return raw;
   if (kind === "number") {
@@ -136,9 +146,7 @@ function isValidOverrides(
     const target = parsePersistTarget(key);
     if (target === null) return false;
     const kind =
-      target.scope === "segment-palette"
-        ? "string"
-        : GLOBALS_FIELD_KIND[target.field];
+      target.scope === "globals" ? GLOBALS_FIELD_KIND[target.field] : "string";
     if (kind === "number" && typeof v !== "number") return false;
     if (kind === "boolean" && typeof v !== "boolean") return false;
     if (kind === "string" && typeof v !== "string") return false;
@@ -237,6 +245,46 @@ function projectSegmentPaletteOverrides(
   return out;
 }
 
+// [LAW:one-source-of-truth] The preset-root-ops-scoped VIEW of the SAME raw
+// dict — preset name -> the accumulated op-token LIST (brandon-layout-edit-
+// 2gc.1's structural-edit log; see src/config/layout-ops.ts). This is a
+// SHAPE check only (well-formed JSON array of strings) — decoding each
+// token into a typed LayoutOp, and applying the ops to a tree, is presets.ts's
+// job, not this storage-layer module's [LAW:decomposition]. A stored value
+// that isn't a JSON array of strings drops for THAT preset only (a warn log,
+// never a crash of the whole overrides file) — the identical "the world
+// moved on since this was written" recovery projectSegmentPaletteOverrides
+// already gets, one level narrower.
+function projectPresetRootOpsOverrides(
+  raw: Readonly<Record<string, string | number | boolean>>,
+  logger: DaemonLogger,
+): Readonly<Record<string, readonly string[]>> {
+  const out: Record<string, readonly string[]> = Object.create(null) as Record<
+    string,
+    readonly string[]
+  >;
+  for (const [key, value] of Object.entries(raw)) {
+    const target = parsePersistTarget(key);
+    if (target?.scope !== "preset-root-ops" || typeof value !== "string") {
+      continue;
+    }
+    try {
+      const parsed: unknown = JSON.parse(value);
+      if (Array.isArray(parsed) && parsed.every((t) => typeof t === "string")) {
+        out[target.preset] = parsed;
+        continue;
+      }
+    } catch {
+      // fall through to the warn below
+    }
+    logger(
+      "warn",
+      `config-overrides: "${key}" is not a valid op-token list, dropping`,
+    );
+  }
+  return out;
+}
+
 export function loadConfigOverrides(
   filePath: string,
   logger: DaemonLogger = quietLogger,
@@ -251,14 +299,15 @@ export function loadSegmentPaletteOverrides(
   return projectSegmentPaletteOverrides(loadRawOverrides(filePath, logger));
 }
 
-// [LAW:carrying-cost] RenderCache wants BOTH views on every reload
-// (buildState merges globals overrides, then overlays segment-palette
-// overrides) — calling loadConfigOverrides + loadSegmentPaletteOverrides
-// back to back would read, parse, and shape-validate the same tiny file
-// twice per reload for no reason. One read, two projections.
+// [LAW:carrying-cost] RenderCache wants ALL THREE views on every reload
+// (buildState merges globals overrides, overlays segment-palette overrides,
+// then replays preset-root-ops overrides) — calling the scoped loaders back
+// to back would read, parse, and shape-validate the same tiny file three
+// times per reload for no reason. One read, three projections.
 export interface Overrides {
   readonly globals: Partial<Globals>;
   readonly segmentPalette: Readonly<Record<string, string>>;
+  readonly presetRootOps: Readonly<Record<string, readonly string[]>>;
 }
 
 export function loadOverrides(
@@ -269,6 +318,7 @@ export function loadOverrides(
   return {
     globals: projectGlobalsOverrides(raw),
     segmentPalette: projectSegmentPaletteOverrides(raw),
+    presetRootOps: projectPresetRootOpsOverrides(raw, logger),
   };
 }
 
