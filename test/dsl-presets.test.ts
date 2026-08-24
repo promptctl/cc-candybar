@@ -142,6 +142,51 @@ describe("presets block — loader validation", () => {
   });
 });
 
+// ─── Compile diagnostics: the path names what the author wrote ────────────────
+
+// Every preset's tree goes through ONE compileNode, keyed by preset name — so
+// the tree a preset STAGES and the path it is DIAGNOSED under are two facts that
+// can drift. They must not: a preset declaring no `root` of its own stages the
+// config's root, which the author wrote at `root`, not under that preset's name.
+// The floor makes this reachable for configs that never opted into presets at
+// all [FRAMING:representation].
+describe("preset compile diagnostics name the authored path", () => {
+  const compileError = (src: string): string => {
+    const config = parseAndValidate("<presets>", src, ALLOWED);
+    const registry = new SourceRegistry(
+      new VariableStore(),
+      "",
+      undefined,
+      new SessionState(),
+    );
+    try {
+      registerDslConfig(config, registry);
+    } catch (e) {
+      return (e as Error).message;
+    }
+    throw new Error("expected a compile error");
+  };
+
+  test("a plain config's own root diagnoses under `root`, never presets.default", () => {
+    const msg = compileError(`{
+      segments: { hello: { template: 'hi', bg: 'surface', fg: 'foreground' } },
+      root: { v: [{ seg: 'hello', when: '{{ oops ' }] },
+    }`);
+    expect(msg).toContain("root.children[0].when");
+    // The author wrote no presets block; no error may name one.
+    expect(msg).not.toContain("presets.");
+  });
+
+  test("a preset's OWN root diagnoses under that preset's path", () => {
+    const msg = compileError(`{
+      segments: { hello: { template: 'hi', bg: 'surface', fg: 'foreground' } },
+      root: { v: ['hello'] },
+      presets: { wide: { root: { v: [{ seg: 'hello', when: '{{ oops ' }] } } },
+    }`);
+    expect(msg).toContain("presets.wide.root.children[0].when");
+  });
+});
+
 // ─── Selection: the render actually changes ───────────────────────────────────
 
 // Mirrors the daemon's per-render resolution verbatim (server.ts): the preset

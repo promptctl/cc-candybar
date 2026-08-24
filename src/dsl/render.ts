@@ -518,10 +518,10 @@ export function registerDslConfig(
   // every selectable name has a compiled tree [LAW:one-source-of-truth].
   const roots = new Map<string, CompiledNode>();
   for (const name of presetOptions) {
-    roots.set(
-      name,
-      compileNode(presetRoot(config, name), `presets.${name}.root`),
-    );
+    // The path travels WITH the tree, so a preset that stages the config's own
+    // root diagnoses under `root` — the place its author actually wrote it.
+    const { node, path } = presetRoot(config, name);
+    roots.set(name, compileNode(node, path));
   }
 
   return {

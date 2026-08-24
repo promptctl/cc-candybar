@@ -120,13 +120,29 @@ export function presetByName(
   return preset;
 }
 
-// [LAW:dataflow-not-control-flow] A preset's layout, as a total function of the
-// name: a preset that declares no `root` stages the config's own root. That is
-// the identity element of this projection, not a "has a root?" special case —
-// which is exactly what makes the floor preset (the empty fragment) need no
-// arm of its own.
-export function presetRoot(config: DslConfig, name: string): LayoutNode {
-  return presetByName(config.presets, name).root ?? config.root;
+// A preset's layout AND the config path that layout was authored at, as a total
+// function of the name: a preset that declares no `root` stages the config's own
+// root, which lives at `root` and not under this preset's name.
+//
+// [LAW:one-source-of-truth] Both halves come from ONE decision on purpose. The
+// fallback used to be resolved here while the diagnostic path was spelled
+// separately at the compile site as `presets.<name>.root`, so the two disagreed
+// for exactly the configs that never opted into presets at all: a plain config
+// with no `presets:` block reported its own root's template errors under
+// `presets.default.root`, naming a node the author never wrote. Returning the
+// tree together with where it came from makes that drift unrepresentable rather
+// than merely fixed [FRAMING:representation].
+export function presetRoot(
+  config: DslConfig,
+  name: string,
+): { readonly node: LayoutNode; readonly path: string } {
+  // [LAW:dataflow-not-control-flow] A projection returning DATA, not a branch
+  // around an operation: both arms yield the same shape, and the discriminator
+  // (did this preset declare a root?) is a fact the fragment already carries.
+  const own = presetByName(config.presets, name).root;
+  return own === undefined
+    ? { node: config.root, path: "root" }
+    : { node: own, path: `presets.${name}.root` };
 }
 
 // [LAW:dataflow-not-control-flow] A preset's display globals, as a total
