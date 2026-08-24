@@ -15,6 +15,7 @@ import {
   perConfigDomainsFor,
   resolveOptionDomain,
 } from "../../config/option-domain";
+import { addableSegmentDomains } from "../../config/edit-chrome";
 import type { DslConfig } from "../../config/dsl-types";
 import { isGlobalsField } from "../config-overrides-store";
 import { encodeLayoutOp } from "../../config/layout-ops";
@@ -111,6 +112,34 @@ function actionKeySpecs(
       },
     ];
   }
+  // [LAW:one-source-of-truth] brandon-layout-edit-2gc.3's domain-sourced
+  // sibling: the allow-list is the ENCODED op token for every domain member,
+  // not the raw member — mirroring how a literal `insertSegment` contributes
+  // its own single encoded token above. A click carrying an option this
+  // domain never named — or naming a real segment but the wrong anchor/
+  // relation — cannot decode to a member of this list, so it is rejected the
+  // same loud way an unknown literal op token already is.
+  if ("insertSegmentFrom" in a) {
+    return [
+      {
+        key: a.persist,
+        spec: {
+          kind: "allow-list",
+          allowed: resolveOptionDomain(
+            a.insertSegmentFrom,
+            perConfigDomains,
+          ).map((segment) =>
+            encodeLayoutOp({
+              op: "insert",
+              segment,
+              anchor: a.anchor,
+              relation: a.relation,
+            }),
+          ),
+        },
+      },
+    ];
+  }
   return [
     {
       key: a.persist,
@@ -141,7 +170,16 @@ function configKeySeeds(config: DslConfig): ReadonlyMap<string, number> {
 
 function actionContributions(config: DslConfig): KeySpecContribution[] {
   const seeds = configKeySeeds(config);
-  const perConfigDomains = perConfigDomainsFor(config);
+  // [LAW:one-source-of-truth] The "addable segment" domains
+  // (edit-chrome.ts's `addableSegmentDomains`) merge in here alongside
+  // looks/presets — the same per-preset seam `insertSegmentFrom` resolves
+  // through at render (render.ts's registerDslConfig merges the identical
+  // map), so the rendered picker options and the derived click gate can
+  // never diverge over what's addable.
+  const perConfigDomains = new Map([
+    ...perConfigDomainsFor(config),
+    ...addableSegmentDomains(config),
+  ]);
   return Object.values(config.actions).flatMap((a) =>
     actionKeySpecs(a, seeds, perConfigDomains),
   );
