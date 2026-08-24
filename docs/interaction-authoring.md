@@ -270,6 +270,17 @@ means "this config's own `root` and `globals`, unchanged". `"default"` is
 always selectable, whether or not you declare it, so a menu can always get back
 to where it started.
 
+The bundled default ships two ready-made presets on top of its own two-row
+`"default"` arrangement, merged by name under anything you declare: `"compact"`
+— one row (directory, git, context) at `padding: 0`, for narrow terminals and
+split panes — and `"verbose"` — the default's own rows plus a third,
+surfacing every segment the default declares but leaves opt-in (`gitPr`,
+`burnrate`, `speed`, `tokenSparkline`). Both carry a standalone `▦` preset
+picker in place of the default's full settings drawer, so switching to either
+never strands a session without a way back. Try them without writing a config
+at all — click `▦` beside the settings drawer — or pin one as your default
+with `globals: { preset: "compact" }`.
+
 ```json5 check:pass
 {
   variables: {

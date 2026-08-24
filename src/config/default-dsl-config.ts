@@ -247,14 +247,25 @@ function etaHeatFg(etaRef: string, warnRef: string): string {
 // time — the type safety net just moves from tsc to that parse, never lost.
 //
 // One collapsed-by-default drawer holding every bar-mutable display default:
-// theme/style/look (session `set` for a per-conversation preview, PLUS a
-// persist-forever twin — candybar-config-engine-71o.5 — for pinning the
-// choice as everyone's default), the four .3 globals steppers (persist-only,
-// no SessionState half at all), and one .6 segment-scoped persist control
-// (directoryPaletteControl, persist-only like the four steppers — a
-// per-segment palette pin, not a whole-bar default). Placed as a sibling in
-// row 1's horizontal container, toggled from beside the quick-action tray —
-// see `root` below.
+// theme/style/look/preset (session `set` for a per-conversation preview, PLUS
+// a persist-forever twin — candybar-config-engine-71o.5, brandon-presets-0yk.3
+// — for pinning the choice as everyone's default), the four .3 globals
+// steppers (persist-only, no SessionState half at all), and one .6
+// segment-scoped persist control (directoryPaletteControl, persist-only like
+// the four steppers — a per-segment palette pin, not a whole-bar default).
+// Placed as a sibling in row 1's horizontal container, toggled from beside the
+// quick-action tray — see `root` below.
+//
+// [LAW:one-source-of-truth] exception: this `kind: "group"` sugar node may
+// appear EXACTLY ONCE in the whole config — group names are a synthesis-wide
+// namespace (synthesizeGroupDecls collects every group across every preset's
+// root too), so a second `settingsDrawer` reference embedded in a preset's
+// own root would be a SECOND declaration of "settings" and collide with
+// itself, not a reuse of the first. It stays only in the default `root`
+// below; the library presets under `presets:` reach back to it — and to the
+// rest of the settingsDrawer's controls — by switching to the "default"
+// preset via the standalone `presetControl` segment they carry instead (see
+// each preset's own comment), never by re-embedding the group.
 const settingsDrawer = {
   kind: "group",
   name: "settings",
@@ -263,6 +274,7 @@ const settingsDrawer = {
   children: [
     "themeControl",
     "lookControl",
+    "presetControl",
     "styleControl",
     "charsetControl",
     "colorCompatControl",
@@ -1099,6 +1111,25 @@ export const RAW_DEFAULT_DSL_CONFIG = {
       bg: "surface",
       fg: "foreground",
     },
+    // Preset control — the whole-arrangement switcher (brandon-presets-0yk.3),
+    // the exact twin of themeControl/lookControl one level up: `.preset.
+    // effective` is the daemon-resolved name (effectivePresetName) that chose
+    // BOTH the compiled root this render walked and the globals it rendered
+    // with, so the label can never name an arrangement the bar is not in.
+    // closeOnPick on both menus, like lookControl: a preset swap is a
+    // decisive whole-bar change tried one at a time, not a stackable tweak.
+    // Lives inside settingsDrawer (never inside a preset's own staged root —
+    // see settingsDrawer's comment), so every bundled preset — including the
+    // narrow `compact` one — keeps the one control that switches back.
+    presetControl: {
+      template:
+        "▦ {{ .preset.effective }} " +
+        '{{ menu "applyPreset" (dict "key" "pickers" "closeOnPick" true) }} ' +
+        '📌{{ menu "applyPresetForever" (dict "key" "pickersForever" "closeOnPick" true) }} ' +
+        '{{ action "resetPreset" "↺" }}',
+      bg: "surface",
+      fg: "foreground",
+    },
     // ── The four .3 globals steppers, folded into the settingsDrawer group
     // (candybar-config-engine-71o.4) alongside theme/style/look above. Each
     // pairs a `persist` control with a `↺` reset (docs' persist/reset
@@ -1263,23 +1294,33 @@ export const RAW_DEFAULT_DSL_CONFIG = {
     // block's names — the same derivation test/dsl-looks.test.ts exercises.
     applyTheme: { set: "theme", from: "themes" },
     applyLook: { set: "look", from: "looks" },
+    // [LAW:one-type-per-behavior] The preset picker's session-preview
+    // behavior (brandon-presets-0yk.3), the exact twin of applyLook one level
+    // up: "preset" has no baseline SessionState entry, so this derives a
+    // fresh allow-list validator ranging the merged `presets` block's names
+    // (the floor included — presetNames always seeds it) via the same
+    // `from`-sourced derivation every picker above uses.
+    applyPreset: { set: "preset", from: "presets" },
 
     // [LAW:one-source-of-truth] The persist-forever twins of applyTheme/
-    // applyStyle/applyLook above (candybar-config-engine-71o.5) — same
-    // domain sources (`from`), same picker mechanism, but the target is the
-    // Globals field the config DEFAULT reads (`palette`/`style`/`look`,
-    // isGlobalsField-checked at load), not the SessionState key the session
-    // preview writes. Precedence is unchanged: a session's own `set` pick
-    // (applyTheme/applyStyle/applyLook) still wins over a persisted default
-    // for that session — effectiveThemeName/effectiveStripStyle/
-    // effectiveLookName all read SessionState before globals. Paired with a
-    // `reset` each, per the docs' persist/reset convention.
+    // applyStyle/applyLook/applyPreset above (candybar-config-engine-71o.5,
+    // brandon-presets-0yk.3) — same domain sources (`from`), same picker
+    // mechanism, but the target is the Globals field the config DEFAULT
+    // reads (`palette`/`style`/`look`/`preset`, isGlobalsField-checked at
+    // load), not the SessionState key the session preview writes.
+    // Precedence is unchanged: a session's own `set` pick still wins over a
+    // persisted default for that session — effectiveThemeName/
+    // effectiveStripStyle/effectiveLookName/effectivePresetName all read
+    // SessionState before globals. Paired with a `reset` each, per the docs'
+    // persist/reset convention.
     applyThemeForever: { persist: "palette", from: "themes" },
     resetTheme: { reset: "palette" },
     applyStyleForever: { persist: "style", from: "styles" },
     resetStyle: { reset: "style" },
     applyLookForever: { persist: "look", from: "looks" },
     resetLook: { reset: "look" },
+    applyPresetForever: { persist: "preset", from: "presets" },
+    resetPreset: { reset: "preset" },
 
     // [LAW:locality-or-seam] The settings-drawer steppers' behaviors
     // (candybar-config-engine-71o.4), decoupled by NAME from
@@ -1380,21 +1421,117 @@ export const RAW_DEFAULT_DSL_CONFIG = {
   // Named config FRAGMENTS — each an alternative `root` + display `globals`,
   // i.e. a whole arrangement of the bar rather than one knob. A preset is to
   // configuration what a look is to a theme, and rides the identical seam:
-  // selected per session via the `preset` SessionState key (an action
-  // `{ set: "preset", from: "presets" }` + a `{{ menu }}`), resolved as session
-  // pick over globals.preset over this floor.
+  // selected per session via the `preset` SessionState key (the applyPreset
+  // action, `{ set: "preset", from: "presets" }`, and the presetControl
+  // segment's `{{ menu }}` above), resolved as session pick over
+  // globals.preset over this floor.
   // [LAW:one-source-of-truth] Merges by name (user wins per name), so this
-  // stdlib — currently just the floor — is present in every merged config by
-  // construction, exactly as looks' "none" is.
+  // stdlib is present in every merged config by construction, exactly as
+  // looks' "none"/"vivid"/"muted"/… is — a user redefining "compact" or
+  // "verbose" wins per name; the floor cannot be shadowed by anything but an
+  // empty fragment, because that IS what it already is.
+  //
+  // [LAW:carrying-cost] Each library preset stages only real deltas from the
+  // bundled default's own root (declared above) — no preset here restates a
+  // segment's template, bg, or fg, only which of the ALREADY-declared
+  // segments appear and in what arrangement, per the field cap
+  // (brandon-presets-0yk.1's premise note): a bundled preset can only STAGE
+  // segments DEFAULT_DSL_CONFIG.segments already declares, never introduce
+  // one.
+  //
+  // [LAW:verifiable-goals] Every entry here is asserted error-cell-free at
+  // 80/120/200 columns against a RICH payload in
+  // test/default-dsl-config.test.ts (the same checkPayload fixture check.ts
+  // uses) — curated by actually rendering each arrangement, not by reading
+  // the segment names off the page.
   presets: {
     // [LAW:dataflow-not-control-flow] "default" is just the identity fragment
     // — the resolution floor as a value, not a special case. An empty fragment
     // declares no `root` and no `globals`, so it stages the config's own, which
-    // is precisely what "no preset chosen" means. A usable preset LIBRARY on
-    // top of this floor is brandon-presets-0yk.3; the floor itself belongs here
-    // because effectivePresetName's collapse target must exist in every merged
-    // config, the same load-bearing reason "none" ships beside the real looks.
+    // is precisely what "no preset chosen" means. This is the bundled default's
+    // OWN two-row (identity / status) arrangement declared as `root` above —
+    // it needs no entry of its own here beyond the floor, because staging it
+    // AS a named fragment would be a byte-for-byte copy of `root` that could
+    // silently drift from it the moment either changed.
     default: {},
+
+    // Single-row arrangement for narrow terminals and split panes — the
+    // situation where a user most wants a different arrangement and least
+    // wants to hand-write one. Keeps only the three facts a split pane most
+    // needs at a glance (where am I / what's the git state / how much context
+    // is left), the quiet one-line `git` segment rather than the multi-fact
+    // `gitaculous`, and `padding: 0` to buy back the chrome a narrow column
+    // can't spare.
+    //
+    // [LAW:no-silent-failure] Carries the standalone `presetControl` segment
+    // (NOT the full settingsDrawer group — see that constant's own comment on
+    // why a group can't be re-embedded) so a session that switches TO compact
+    // is never stranded: one click back to "default" restores the drawer and
+    // everything else compact traded away for width.
+    compact: {
+      root: {
+        kind: "container",
+        direction: "horizontal",
+        children: [
+          { kind: "segment", name: "directory" },
+          { kind: "segment", name: "git" },
+          { kind: "segment", name: "context" },
+          { kind: "segment", name: "presetControl" },
+        ],
+      },
+      globals: { padding: 0 },
+    },
+
+    // Verbose arrangement surfacing every segment that is declared but NOT in
+    // the default root (gitPr, burnrate, speed, tokenSparkline — see each
+    // segment's own "declared-but-opt-in" comment above) alongside the
+    // default's own two rows, for a user who wants the full usage-monitor
+    // picture rather than the quiet default. A third row carries the two
+    // per-turn throughput segments, which read "—" between turns
+    // ([LAW:no-silent-failure] on speed/tokenSparkline) rather than an empty
+    // or stale row. Carries the standalone `presetControl` in place of the
+    // full settingsDrawer group, exactly like `compact` and for the same
+    // reason (that constant's comment) — switching back to "default" reaches
+    // the drawer and every other bar-mutable default from there.
+    verbose: {
+      root: {
+        kind: "container",
+        direction: "vertical",
+        children: [
+          {
+            kind: "container",
+            direction: "horizontal",
+            children: [
+              { kind: "segment", name: "directory" },
+              { kind: "segment", name: "gitaculous" },
+              { kind: "segment", name: "gitPr" },
+              { kind: "segment", name: "toolbar" },
+              { kind: "segment", name: "presetControl" },
+            ],
+          },
+          {
+            kind: "container",
+            direction: "horizontal",
+            children: [
+              { kind: "segment", name: "model" },
+              { kind: "segment", name: "context" },
+              { kind: "segment", name: "cacheTimer" },
+              { kind: "segment", name: "block" },
+              { kind: "segment", name: "weekly" },
+              { kind: "segment", name: "burnrate" },
+            ],
+          },
+          {
+            kind: "container",
+            direction: "horizontal",
+            children: [
+              { kind: "segment", name: "speed" },
+              { kind: "segment", name: "tokenSparkline" },
+            ],
+          },
+        ],
+      },
+    },
   },
 
   // [LAW:single-enforcer] / [LAW:one-source-of-truth] Display-formatting policy
