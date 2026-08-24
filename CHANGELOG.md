@@ -1,3 +1,10 @@
+# [1.34.0](https://github.com/promptctl/cc-candybar/compare/v1.33.0...v1.34.0) (2026-08-24)
+
+
+### Features
+
+* **config:** visible diagnostic + reset for accumulated edit-mode ops (brandon-layout-edit-2gc.5) ([#187](https://github.com/promptctl/cc-candybar/issues/187)) ([d5303bb](https://github.com/promptctl/cc-candybar/commit/d5303bb497fd8ed0c5eabd17dd378c361d5cf423))
+
 # [1.33.0](https://github.com/promptctl/cc-candybar/compare/v1.32.0...v1.33.0) (2026-08-24)
 
 
