@@ -25,6 +25,7 @@ import {
 } from "../verbs/config-validators.js";
 import { loadOverrides } from "../config-overrides-store.js";
 import { configOverridesPath } from "../paths.js";
+import { sanitizePersistedPresetOverride } from "../../config/presets.js";
 import { VariableStore } from "../../var-system/store.js";
 import { SourceRegistry } from "../../var-system/sources.js";
 import type { GitDataProvider } from "./git.js";
@@ -297,8 +298,18 @@ export class RenderCache {
     // loadOverrides read serves BOTH halves below (globals + segment-palette)
     // — the overrides file backs two different merge shapes, not two reads.
     const overrides = loadOverrides(configOverridesPath(), dlog);
+    // [LAW:no-silent-failure] `preset` is a per-config domain riding a
+    // machine-global overrides file (src/config/presets.ts —
+    // sanitizePersistedPresetOverride) — a persisted pick from another
+    // project's config must not fail THIS config's load. Every other
+    // globals field is registry-static (palette/style/charset/…), so this
+    // is the one field that needs sanitizing before the merge below.
+    const sanitizedGlobalsOverride = sanitizePersistedPresetOverride(
+      overrides.globals,
+      merged.presets,
+    );
     const withGlobalsOverrides = mergeWithDefault(
-      { globals: overrides.globals },
+      { globals: sanitizedGlobalsOverride },
       merged,
     );
     // [LAW:one-source-of-truth] The segment-scoped half of the SAME overrides

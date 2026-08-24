@@ -33,6 +33,7 @@ import {
   PRESET_FLOOR,
   effectivePresetName,
   presetGlobals,
+  sanitizePersistedPresetOverride,
 } from "../src/config/presets";
 import { paletteForThemeName } from "../src/themes";
 import { checkConfig } from "../src/check";
@@ -371,6 +372,48 @@ describe("preset selection — the arrangement the bar renders", () => {
     } finally {
       rt.dispose();
     }
+  });
+});
+
+// ─── Persisted overrides: a machine-global file, a per-config domain ──────────
+
+// brandon-presets-0yk.2: `persist: "preset"` reuses the SAME overrides file
+// every other persisted field does (candybar-config-engine-71o.2) — but that
+// file is ONE per machine while `presets` is a per-config domain (the second
+// one, after `looks`). A value written by a click against project A's config
+// must not fail project B's load just because B never declared that name.
+// sanitizePersistedPresetOverride is the seam that keeps that value from
+// reaching validateConfig's cross-ref check (which stays fatal for a
+// hand-authored globals.preset typo — a config author's own mistake, not a
+// stale cross-project pick). The RenderCache-level proof that a stale
+// persisted preset name actually collapses to the floor instead of failing
+// the whole render lives in test/dsl-persist-actions.test.ts, alongside the
+// rest of the overrides-file machinery this reuses.
+describe("sanitizePersistedPresetOverride — the overrides file outlives any one config", () => {
+  const PRESETS = { compact: {}, roomy: {} };
+
+  test("a declared preset name passes through unchanged", () => {
+    const override = { preset: "compact", padding: 2 };
+    expect(sanitizePersistedPresetOverride(override, PRESETS)).toEqual(
+      override,
+    );
+  });
+
+  test("the floor name passes through even when not declared by this config", () => {
+    const override = { preset: PRESET_FLOOR };
+    expect(sanitizePersistedPresetOverride(override, {})).toEqual(override);
+  });
+
+  test("an undeclared preset name is dropped, leaving the other fields intact", () => {
+    const override = { preset: "from-another-project", padding: 2 };
+    expect(sanitizePersistedPresetOverride(override, PRESETS)).toEqual({
+      padding: 2,
+    });
+  });
+
+  test("no preset field at all is a no-op", () => {
+    const override = { padding: 2 };
+    expect(sanitizePersistedPresetOverride(override, PRESETS)).toBe(override);
   });
 });
 
