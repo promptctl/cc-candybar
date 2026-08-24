@@ -1,3 +1,10 @@
+# [1.30.0](https://github.com/promptctl/cc-candybar/compare/v1.29.0...v1.30.0) (2026-08-24)
+
+
+### Features
+
+* **config:** layout mutation through the existing config writer (brandon-layout-edit-2gc.1) ([#183](https://github.com/promptctl/cc-candybar/issues/183)) ([692ff99](https://github.com/promptctl/cc-candybar/commit/692ff99e127c7193ebd61aebb72d6ed5fe65a367))
+
 # [1.29.0](https://github.com/promptctl/cc-candybar/compare/v1.28.0...v1.29.0) (2026-08-24)
 
 
