@@ -17,6 +17,7 @@ import {
 } from "../../config/option-domain";
 import type { DslConfig } from "../../config/dsl-types";
 import { isGlobalsField } from "../config-overrides-store";
+import { encodeLayoutOp } from "../../config/layout-ops";
 import {
   clampSeed,
   createValidatorRegistry,
@@ -72,6 +73,43 @@ function actionKeySpecs(
   }
   if ("cycle" in a) {
     return [{ key: a.persist, spec: { kind: "allow-list", allowed: a.cycle } }];
+  }
+  // [LAW:single-enforcer] brandon-layout-edit-2gc.1's structural-edit arms:
+  // the op is fully literal at config-author time (removeSegment's target,
+  // insertSegment's segment/anchor/relation), so — exactly like a literal
+  // `to` — there is exactly ONE legal value this declared action can ever
+  // request: its own encoded op token. Multiple layout actions targeting the
+  // same "presets.<name>.rootOps" key each contribute one allow-list member,
+  // unioned by mergeContributions below, same as multiple `to` actions on
+  // one key already do.
+  if ("removeSegment" in a) {
+    return [
+      {
+        key: a.persist,
+        spec: {
+          kind: "allow-list",
+          allowed: [encodeLayoutOp({ op: "remove", target: a.removeSegment })],
+        },
+      },
+    ];
+  }
+  if ("insertSegment" in a) {
+    return [
+      {
+        key: a.persist,
+        spec: {
+          kind: "allow-list",
+          allowed: [
+            encodeLayoutOp({
+              op: "insert",
+              segment: a.insertSegment,
+              anchor: a.anchor,
+              relation: a.relation,
+            }),
+          ],
+        },
+      },
+    ];
   }
   return [
     {
