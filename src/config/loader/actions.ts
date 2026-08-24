@@ -388,6 +388,20 @@ const INSERT_SEGMENT_FIELDS: FieldSpecMap<{
   anchor: layoutNameSpec("anchor"),
   relation: relationSpec(),
 };
+// [LAW:one-type-per-behavior] `insertSegmentFrom`'s payload mirrors
+// `insertSegment`'s verbatim except the segment name is a `from`-shaped
+// OptionDomain (fromSpec, the SAME field `set`/`persist … from` already
+// validate) instead of a literal layout name — the "to" vs "from" split every
+// other value source already draws, one arm over.
+const INSERT_SEGMENT_FROM_FIELDS: FieldSpecMap<{
+  insertSegmentFrom: OptionDomain;
+  anchor: string;
+  relation: "before" | "after";
+}> = {
+  insertSegmentFrom: fromSpec("persist"),
+  anchor: layoutNameSpec("anchor"),
+  relation: relationSpec(),
+};
 
 // [LAW:types-are-the-program] A bounded step is fully described by an integer
 // domain (min < max) and a non-zero integer increment (`by`; negative for a
@@ -440,12 +454,25 @@ interface ValueSourceArm {
   readonly parse: ArmParse<Partial<ActionDecl>>;
 }
 
+// [LAW:no-mode-explosion] `detectKeys` narrows WHICH of an arm's fields the
+// present-count dispatch keys off, independent of `allowed`/`label` (still
+// the full field set — what the arm PERMITS and is NAMED by never changes).
+// Every arm before insertSegmentFrom had a field set disjoint from every
+// other arm's, so `Object.keys(fieldMap)` was a safe default for both jobs
+// at once. insertSegmentFrom breaks that: it shares `anchor`/`relation` with
+// insertSegment (same POSITION shape, different segment-name SOURCE), so
+// dispatching on the full set would make an ordinary `insertSegment` action
+// spuriously match both arms via those shared keys. Pass the true
+// discriminator (the field no sibling arm carries) here; omit it when the
+// field set already is disjoint from every sibling, as it is everywhere else.
 function valueSourceArm<P extends object>(
   discriminator: "set" | "persist",
   fieldMap: FieldSpecMap<P>,
-  ...checks: ReadonlyArray<Refinement<P>>
+  checks: ReadonlyArray<Refinement<P>> = [],
+  detectKeys?: readonly string[],
 ): ValueSourceArm {
-  const detect = Object.keys(fieldMap);
+  const fullKeys = Object.keys(fieldMap);
+  const detect = detectKeys ?? fullKeys;
   const inner: ArmParse<P> = (ctx, path, raw) =>
     fields(ctx, fieldMap, path, raw);
   const source = objectJson(fieldMap) as {
@@ -454,8 +481,8 @@ function valueSourceArm<P extends object>(
   };
   return {
     detect,
-    allowed: [discriminator, ...detect],
-    label: detect.join("/"),
+    allowed: [discriminator, ...fullKeys],
+    label: fullKeys.join("/"),
     json: {
       type: "object",
       properties: { [discriminator]: { type: "string" }, ...source.properties },
@@ -475,7 +502,7 @@ function valueSourceArm<P extends object>(
 const SET_ARMS: readonly ValueSourceArm[] = [
   valueSourceArm("set", TO_FIELDS_SET),
   valueSourceArm("set", FROM_FIELDS_SET),
-  valueSourceArm("set", BOUNDED_FIELDS, minLessThanMax, byNonZero),
+  valueSourceArm("set", BOUNDED_FIELDS, [minLessThanMax, byNonZero]),
   valueSourceArm("set", INT_FIELDS),
   valueSourceArm("set", CYCLE_FIELDS_SET),
 ];
@@ -487,10 +514,21 @@ const SET_ARMS: readonly ValueSourceArm[] = [
 const PERSIST_ARMS: readonly ValueSourceArm[] = [
   valueSourceArm("persist", TO_FIELDS_PERSIST),
   valueSourceArm("persist", FROM_FIELDS_PERSIST),
-  valueSourceArm("persist", BOUNDED_FIELDS, minLessThanMax, byNonZero),
+  valueSourceArm("persist", BOUNDED_FIELDS, [minLessThanMax, byNonZero]),
   valueSourceArm("persist", CYCLE_FIELDS_PERSIST),
   valueSourceArm("persist", REMOVE_SEGMENT_FIELDS),
-  valueSourceArm("persist", INSERT_SEGMENT_FIELDS),
+  // [LAW:no-mode-explosion] Both insertSegment arms narrow detectKeys to
+  // their own discriminating field — see valueSourceArm's own comment. They
+  // share "anchor"/"relation" (same position shape, different segment-name
+  // source), so dispatching on the full field set would make EITHER arm
+  // spuriously match an action declaring the other.
+  valueSourceArm("persist", INSERT_SEGMENT_FIELDS, [], ["insertSegment"]),
+  valueSourceArm(
+    "persist",
+    INSERT_SEGMENT_FROM_FIELDS,
+    [],
+    ["insertSegmentFrom"],
+  ),
 ];
 
 // [LAW:one-source-of-truth] The clause list, not the joined string, is the
@@ -511,6 +549,7 @@ function valueSourceClauses(discriminator: "set" | "persist"): string[] {
     clauses.push(
       `"removeSegment" (remove a named segment from the layout)`,
       `"insertSegment"/"anchor"/"relation" (insert a named segment before/after an existing one)`,
+      `"insertSegmentFrom"/"anchor"/"relation" (insert a segment PICKED from an option domain before/after an existing one)`,
     );
   }
   return clauses;
@@ -635,7 +674,7 @@ function fromSpec(discriminator: "set" | "persist"): FieldSpec<OptionDomain> {
       const at = `${path}.${field}`;
       if (typeof from === "string") {
         if (from === "") {
-          issue(ctx, at, `from must be a non-empty domain name`);
+          issue(ctx, at, `${field} must be a non-empty domain name`);
           return undefined;
         }
         return from;
@@ -646,7 +685,7 @@ function fromSpec(discriminator: "set" | "persist"): FieldSpec<OptionDomain> {
           issue(
             ctx,
             at,
-            `from must name a domain (a non-empty string) or declare an inline domain (a non-empty array of values)`,
+            `${field} must name a domain (a non-empty string) or declare an inline domain (a non-empty array of values)`,
           );
           return undefined;
         }
@@ -654,7 +693,7 @@ function fromSpec(discriminator: "set" | "persist"): FieldSpec<OptionDomain> {
           issue(
             ctx,
             at,
-            `from array members must be non-empty — an empty value cannot be delivered on the ${wire} wire`,
+            `${field} array members must be non-empty — an empty value cannot be delivered on the ${wire} wire`,
           );
           return undefined;
         }
@@ -663,7 +702,7 @@ function fromSpec(discriminator: "set" | "persist"): FieldSpec<OptionDomain> {
           issue(
             ctx,
             at,
-            `from array member(s) ${slashed.map((m) => `"${m}"`).join(", ")} contain "/" — ${discriminator} values must be slash-free`,
+            `${field} array member(s) ${slashed.map((m) => `"${m}"`).join(", ")} contain "/" — ${discriminator} values must be slash-free`,
           );
           return undefined;
         }
@@ -671,7 +710,7 @@ function fromSpec(discriminator: "set" | "persist"): FieldSpec<OptionDomain> {
           issue(
             ctx,
             at,
-            `from array members must be unique — a duplicated value would render the same picker option twice`,
+            `${field} array members must be unique — a duplicated value would render the same picker option twice`,
           );
           return undefined;
         }
@@ -680,7 +719,7 @@ function fromSpec(discriminator: "set" | "persist"): FieldSpec<OptionDomain> {
       issue(
         ctx,
         at,
-        `from must be a domain name (a string) or an inline domain (an array of strings), got ${describeValue(from)}`,
+        `${field} must be a domain name (a string) or an inline domain (an array of strings), got ${describeValue(from)}`,
       );
       return undefined;
     },

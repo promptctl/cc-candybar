@@ -396,10 +396,14 @@ function checkPresetRootOpsTarget(
   if (discriminator === "reset") return;
   const hasRemove = "removeSegment" in a;
   const hasInsert = "insertSegment" in a;
-  if (!hasRemove && !hasInsert) {
+  // [LAW:one-source-of-truth] brandon-layout-edit-2gc.3's domain-sourced
+  // sibling — the segment name is picked at render, so only `anchor` (still
+  // literal at author time) needs the declared-segment check below.
+  const hasInsertFrom = "insertSegmentFrom" in a;
+  if (!hasRemove && !hasInsert && !hasInsertFrom) {
     ctx.issues.push({
       path: at,
-      message: `actions.${name}: "${key}" is a "presets.<name>.rootOps" target and can only be paired with "removeSegment" or "insertSegment" (not "to"/"from"/"cycle"/bounded — those have no meaning as a tree op)`,
+      message: `actions.${name}: "${key}" is a "presets.<name>.rootOps" target and can only be paired with "removeSegment", "insertSegment", or "insertSegmentFrom" (not "to"/"from"/"cycle"/bounded — those have no meaning as a tree op)`,
       line,
     });
     return;
@@ -428,6 +432,13 @@ function checkPresetRootOpsTarget(
         line,
       });
     }
+  }
+  if (hasInsertFrom && "insertSegmentFrom" in a && missing(a.anchor)) {
+    ctx.issues.push({
+      path: at,
+      message: `actions.${name}: anchor "${a.anchor}" is not a declared segment (have: ${Object.keys(cfg.segments).join(", ")})`,
+      line,
+    });
   }
 }
 
