@@ -19,7 +19,10 @@ import { addableSegmentDomains } from "../../config/edit-chrome";
 import type { DslConfig } from "../../config/dsl-types";
 import { isGlobalsField } from "../config-overrides-store";
 import { encodeLayoutOp } from "../../config/layout-ops";
-import { parsePersistTarget } from "../../config/loader/persist-target";
+import {
+  parsePersistTarget,
+  presetRootOpsKey,
+} from "../../config/loader/persist-target";
 import {
   clampSeed,
   createValidatorRegistry,
@@ -201,7 +204,7 @@ function presetRootOpsContributions(config: DslConfig): KeySpecContribution[] {
     if (target?.scope === "preset-root-ops") presets.add(target.preset);
   }
   return [...presets].map((name) => ({
-    key: `presets.${name}.rootOps`,
+    key: presetRootOpsKey(name),
     spec: { kind: "allow-list", allowed: [] },
   }));
 }

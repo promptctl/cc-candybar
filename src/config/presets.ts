@@ -188,6 +188,36 @@ export function sanitizePersistedPresetOverride(
   return rest;
 }
 
+// [LAW:no-silent-failure] sanitizePersistedPresetOverride's twin for the
+// SAME machine-global overrides file, one field over: `presets.<name>.
+// rootOps` entries persist by NAME, and that name only has meaning against
+// the config it was clicked against. Loading a DIFFERENT project's config
+// — one that never declared "compact", say — would otherwise reach
+// applyPresetRootOpsOverrides -> presetRoot -> presetByName, which THROWS
+// for an undeclared name (correctly so for a hand-AUTHORED preset root: a
+// typo in a file the author can see). A stale overrides entry is not that
+// — it is the expected shape of a file that outlives any one project's
+// preset names — so it gets the SAME treatment sanitizePersistedPresetOverride
+// already gives `globals.preset`: dropped before replay ever sees it,
+// never a fatal error replacing an unrelated project's entire bar
+// (brandon-layout-edit-2gc.5 PR review).
+export function sanitizePersistedPresetRootOps(
+  presetRootOps: Readonly<Record<string, readonly string[]>>,
+  declaredPresets: Readonly<Record<string, PresetDecl>>,
+): Readonly<Record<string, readonly string[]>> {
+  const known = new Set(presetNames(declaredPresets));
+  const entries = Object.entries(presetRootOps).filter(([name]) =>
+    known.has(name),
+  );
+  // [LAW:carrying-cost] Identity return when nothing was dropped — the
+  // common case (this daemon serves one project, or every persisted name
+  // happens to be declared) costs one Set build and no new allocation.
+  if (entries.length === Object.keys(presetRootOps).length) {
+    return presetRootOps;
+  }
+  return Object.fromEntries(entries);
+}
+
 // [LAW:one-source-of-truth] brandon-layout-edit-2gc.1's replay step — the
 // SAME "patch an already-merged config" shape applySegmentPaletteOverrides
 // (src/config/loader/merge.ts) uses one field over, run at the SAME point in

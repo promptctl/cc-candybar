@@ -108,7 +108,52 @@ export function validatePresets(
     const parsed = record(ctx, PRESET_SCHEMA, `presets.${name}`, value);
     if (parsed !== null) out[name] = parsed;
   }
+  presetIdentCollisions(ctx, out);
   return out;
+}
+
+// [LAW:types-are-the-program] The SAME identifier-collapse rule edit-
+// chrome.ts's `ident()` applies (non-alphanumerics → `_`), reimplemented
+// here for the same module-private reason edit-chrome.ts reimplements
+// menu-keys.ts's copy rather than importing it — this file sits below
+// edit-chrome.ts in the dependency graph [LAW:one-way-deps], and the rule
+// is one line.
+function ident(name: string): string {
+  return name.replace(/[^A-Za-z0-9]+/g, "_");
+}
+
+// [LAW:no-silent-failure] Two preset names that collapse to the SAME
+// synthesis identifier (e.g. "quick-look" and "quick_look" both → "quick_
+// look") would silently steal each other's synthesized artifacts at
+// chrome-synthesis time: synthesizeEditChrome keys its per-preset reset
+// action/segment (and the pre-existing per-gap +/- actions) by
+// `ident(presetName)` in a plain object accumulator, and that pass "does
+// not re-enter cross-ref checking" (dsl-loader.ts) — so the SECOND preset
+// processed would overwrite the first's entries, leaving the first
+// preset's already-built tree holding a segment ref to a name that now
+// points at the second preset's reset action. A user clicking "reset" on
+// preset A would silently reset preset B instead. Caught here — the
+// structural pass every preset name already goes through — rather than
+// letting it reach synthesis. [LAW:one-source-of-truth]
+function presetIdentCollisions(
+  ctx: ValidateCtx,
+  presets: Readonly<Record<string, PresetDecl>>,
+): void {
+  const byIdent = new Map<string, string[]>();
+  for (const name of Object.keys(presets)) {
+    const id = ident(name);
+    const names = byIdent.get(id);
+    if (names) names.push(name);
+    else byIdent.set(id, [name]);
+  }
+  for (const [id, names] of byIdent) {
+    if (names.length < 2) continue;
+    ctx.issues.push({
+      path: "presets",
+      message: `preset names ${names.map((n) => JSON.stringify(n)).join(" and ")} both collapse to the same synthesis identifier "${id}" — edit mode's synthesized reset affordance would silently steal one preset's action for the other. Rename one.`,
+      line: findKeyLine(ctx.source, ["presets"]),
+    });
+  }
 }
 
 // [LAW:one-source-of-truth] The schema emitter derives from the SAME declaration

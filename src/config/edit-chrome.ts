@@ -32,6 +32,7 @@ import type {
 } from "./dsl-types.js";
 import { collectSegmentNames } from "./layout-ops.js";
 import { presetByName, presetNames, presetRoot } from "./presets.js";
+import { presetRootOpsKey } from "./loader/persist-target.js";
 import {
   EDIT_MODE_GATE,
   EDIT_NS,
@@ -330,7 +331,7 @@ function spliceEditChromeForPreset(
   artifacts: ChromeArtifacts,
 ): LayoutNode {
   const { node } = presetRoot(config, presetName);
-  const rootOpsKey = `presets.${presetName}.rootOps`;
+  const rootOpsKey = presetRootOpsKey(presetName);
   const domainName = addableDomainName(presetName);
   const presetIdent = ident(presetName);
   const posCounter = { n: 0 };

@@ -36,6 +36,17 @@ export type PersistTarget =
 const SEGMENT_PALETTE_KEY = /^segments\.([^.]+)\.palette$/;
 const PRESET_ROOT_OPS_KEY = /^presets\.([^.]+)\.rootOps$/;
 
+// [LAW:one-source-of-truth] THE builder for a preset's rootOps key — the
+// inverse of PRESET_ROOT_OPS_KEY's parse. Two independent sites used to
+// spell `presets.${name}.rootOps` themselves (edit-chrome.ts's synthesis,
+// config-validators.ts's always-registered contribution), with only the
+// regex above as a read-side authority and no shared write-side one — they
+// happened to agree, but nothing enforced it. One function now; both call
+// sites import it.
+export function presetRootOpsKey(name: string): string {
+  return `presets.${name}.rootOps`;
+}
+
 export function parsePersistTarget(key: string): PersistTarget | null {
   if (isGlobalsField(key)) return { scope: "globals", field: key };
   const segmentMatch = SEGMENT_PALETTE_KEY.exec(key);

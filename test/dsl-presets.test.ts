@@ -110,6 +110,31 @@ describe("presets block — loader validation", () => {
     );
   });
 
+  // brandon-layout-edit-2gc.5 PR review: two preset names that collapse to
+  // the SAME synthesis identifier would silently steal each other's
+  // synthesized reset action/segment at chrome-synthesis time (a plain
+  // object-key overwrite that never re-enters cross-ref checking) — caught
+  // here instead, at the structural pass every preset name already goes
+  // through.
+  test("two preset names that collapse to the same synthesis identifier are rejected at load", () => {
+    const msg = parseIssues(
+      `{ presets: { 'quick-look': {}, 'quick_look': {} } }`,
+    );
+    expect(msg).toContain('"quick-look"');
+    expect(msg).toContain('"quick_look"');
+    expect(msg).toContain("collapse to the same synthesis identifier");
+  });
+
+  test("preset names that don't collide are unaffected", () => {
+    expect(() =>
+      parseAndValidate(
+        "<test>",
+        `{ presets: { compact: {}, verbose: {} } }`,
+        ALLOWED,
+      ),
+    ).not.toThrow();
+  });
+
   // A preset's root goes through THE layout validator, so it inherits every
   // migration error the top-level root gets.
   test("a preset's root uses the same A-grammar validator as the top-level root", () => {
