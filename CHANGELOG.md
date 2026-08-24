@@ -1,3 +1,10 @@
+# [1.32.0](https://github.com/promptctl/cc-candybar/compare/v1.31.0...v1.32.0) (2026-08-24)
+
+
+### Features
+
+* **config:** edit mode — inline +/- affordances spliced into the layout tree (brandon-layout-edit-2gc.3) ([#185](https://github.com/promptctl/cc-candybar/issues/185)) ([9252109](https://github.com/promptctl/cc-candybar/commit/9252109f20bcd584bf46678802eff770f9393b93))
+
 # [1.31.0](https://github.com/promptctl/cc-candybar/compare/v1.30.0...v1.31.0) (2026-08-24)
 
 
