@@ -68,7 +68,8 @@ the wire is derived from the same declarations, so a template cannot smuggle an
 un-gated write.
 
 An action declares exactly one of `set` / `persist` / `copy` / `open` /
-`reset`; a `set` or `persist` declares exactly one value source:
+`reset` / `undo` / `redo`; a `set` or `persist` declares exactly one value
+source:
 
 | declaration | click effect |
 |---|---|
@@ -79,6 +80,8 @@ An action declares exactly one of `set` / `persist` / `copy` / `open` /
 | `{ set: key, cycle: ["a", "b", "c"] }` | write the **successor** of the current value, wrapping; order members default-state-first |
 | `{ persist: field, to \| from \| min/max/by \| cycle, … }` | the SAME four value sources as `set`, but writes the **config `globals` default** durably (every session, survives daemon restart) instead of one session — see below. No `int` arm: a page cursor is never persisted. |
 | `{ reset: field }` | clear one persisted `globals` field, restoring the config-file/bundled value |
+| `{ undo: true }` | step the overrides layer's **global history** one entry back — restores whatever a PRIOR `persist`/`reset` write changed, any key, not just the one this action names (it names none) |
+| `{ redo: true }` | re-apply the most recently undone entry |
 | `{ copy: "template" }` | copy the evaluated template to the clipboard |
 | `{ open: "template" }` | open the evaluated target in the editor |
 
@@ -399,14 +402,60 @@ never your config file), and the daemon replays the whole log on top of the
 declared root every time it resolves that preset — so a remove and an insert
 from two separate clicks both land, in order, instead of the second clobbering
 the first. `reset: "presets.compact.rootOps"` clears the whole log at once,
-restoring the preset's declared root — there is no per-op undo yet (a `set`
-twin doesn't exist either: a structural edit is always a durable write, the
-same way `persist`'s other arms already are).
+restoring the preset's declared root (a `set` twin doesn't exist either: a
+structural edit is always a durable write, the same way `persist`'s other
+arms already are). For undoing ONE op at a time instead of the whole log, see
+`undo`/`redo` below — the same global history mechanism steps a layout edit
+back exactly as it steps any other persisted write.
 
 A stale op — one naming a segment a later config change removed — is silently
 dropped when replayed, the same recovery `segments.<name>.palette` already
 gets for the identical situation: nothing left to apply it to, and nothing
 worth failing the whole render over.
+
+### Undoing/redoing any persisted write: `undo` / `redo`
+
+`reset` clears ONE named key outright — the coarse "forget this override"
+case. `undo`/`redo` are its fine-grained siblings: they step ONE GLOBAL
+history over every `persist`/`reset` write ever made to the overrides
+layer — a theme pin, a padding nudge, a segment-palette override, a
+`removeSegment`/`insertSegment` structural edit — back and forth, one entry
+at a time, regardless of which key or which config declared the action that
+made the write. Neither carries a key: there is nothing to name, since the
+history itself decides which entry moves.
+
+```json5 check:pass
+{
+  variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
+  actions: {
+    pinDracula: { persist: 'palette', to: 'dracula' },
+    back: { undo: true },
+    fwd: { redo: true },
+  },
+  segments: {
+    bar: {
+      template: '{{ action "pinDracula" "🎨" }} {{ action "back" "◀" }} {{ action "fwd" "▶" }}',
+      bg: "surface", fg: "foreground",
+    },
+  },
+  root: "bar",
+}
+```
+
+The history is **daemon-global, not per-session** — `config-overrides.json`
+already has exactly one writer and no session-scoping (a `persist` write is
+daemon-global by design), so `undo`/`redo` step that same file rather than
+inventing a session axis it doesn't otherwise have. Two sessions can see each
+other's undos; that is the deliberate consequence of one shared bar default,
+not a bug.
+
+Clicking `undo` with nothing to undo — or `redo` with nothing to redo — is a
+loud, transient message in the bar (the same `click.error` channel any failed
+click surfaces through), never a silent no-op. A fresh `persist`/`reset`
+write after an `undo` abandons whatever was undone (the classic redo-stack
+branch: `redo` truncates rather than staying reachable past a new edit). The
+history is bounded — old entries fall off once a generous cap is exceeded —
+so a long-running daemon's history file cannot grow without limit.
 
 ### Persisting a per-segment field: `segments.<name>.palette`
 

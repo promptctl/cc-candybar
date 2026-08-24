@@ -145,6 +145,8 @@ const ACTION_ARMS: Record<ActionKey, ArmParse<ActionDecl>> = {
   copy: templateArm("copy"),
   open: templateArm("open"),
   reset: resetArm,
+  undo: markerArm("undo"),
+  redo: markerArm("redo"),
 };
 
 // [LAW:one-source-of-truth] A copy/open action emits the closed single-key
@@ -170,6 +172,8 @@ function actionDeclJson(): JsonNode {
       templateArmJson("copy"),
       templateArmJson("open"),
       templateArmJson("reset"),
+      markerArmJson("undo"),
+      markerArmJson("redo"),
     ],
   };
 }
@@ -226,6 +230,47 @@ function resetArm(
     (v) => `reset key "${v}" contains "/" — keys must be slash-free`,
   );
   return key === null ? null : { reset: key };
+}
+
+// [LAW:one-type-per-behavior] `undo`/`redo` are copy/open/reset's shape one
+// step further reduced: a single required key whose only legal VALUE is the
+// literal `true` (mirrors intMarkerSpec — a marker, not data), because there
+// is no key to name: the history they step is one global stack over the
+// whole overrides layer, not a per-target write. `function`, not a const
+// arrow, so ACTION_ARMS above (built before this declaration in source
+// order) can reference it directly via hoisting.
+function markerArm(key: "undo" | "redo"): ArmParse<ActionDecl> {
+  return (ctx, path, raw) => {
+    for (const k of Object.keys(raw)) {
+      if (k !== key)
+        issue(
+          ctx,
+          `${path}.${k}`,
+          `Unknown key "${k}" on a ${key} action. Expected only: ${key}`,
+        );
+    }
+    if (raw[key] !== true) {
+      issue(
+        ctx,
+        `${path}.${key}`,
+        `${key} must be the literal true (it takes no key — it steps the ONE global history over the whole overrides layer), got ${describeValue(raw[key])}`,
+      );
+      return null;
+    }
+    return { [key]: true } as unknown as ActionDecl;
+  };
+}
+
+// [LAW:one-source-of-truth] Mirrors templateArmJson's shape one level
+// narrower: the value schema is `const: true`, not `type: string` — a
+// marker action carries no data, on the wire or in the schema.
+function markerArmJson(key: "undo" | "redo"): JsonNode {
+  return {
+    type: "object",
+    properties: { [key]: { const: true } },
+    required: [key],
+    additionalProperties: false,
+  };
 }
 
 // ─── The `set` value-source sub-union ────────────────────────────────────────

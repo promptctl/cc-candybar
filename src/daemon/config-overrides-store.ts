@@ -322,43 +322,94 @@ export function loadOverrides(
   };
 }
 
-// [LAW:no-silent-failure] Atomic write shared by set/clear: read the current
-// overrides, apply one mutation, write-to-temp + rename. Owner-only mode,
-// matching every other daemon runtime file (session-state.json, pid, lease).
+// [LAW:no-silent-failure] The atomic write/rename dance, generalized over ANY
+// JSON-serializable value — both this module's flat overrides dict and its
+// history stack (below) go through this one primitive rather than each
+// re-implementing mkdir+tmp+chmod+rename. Owner-only mode, matching every
+// other daemon runtime file (session-state.json, pid, lease). `label` names
+// the failure in the log/thrown message (the caller's own vocabulary —
+// "config-overrides"/"config-overrides-history" — not derived from the path,
+// so the wording a test might match on stays stable across either file).
 // Unlike session-state.json's debounced best-effort flush (no synchronous
-// caller waiting on it), a `persist` write is directly caused by a click that
-// expects a truthful ack — a swallowed failure here would let the verb
-// handler log "set-config: ..." as if it landed when nothing was written.
-// Logs at "error" for the daemon-log breadcrumb, then RETHROWS so the caller
-// (the click) fails loudly instead of claiming a success that didn't happen.
-function writeOverrides(
+// caller waiting on it), a `persist`/`undo`/`redo` write is directly caused
+// by a click that expects a truthful ack — a swallowed failure here would let
+// the verb handler log success for a write that didn't land. Logs at "error"
+// for the daemon-log breadcrumb, then RETHROWS so the caller (the click)
+// fails loudly instead of claiming a success that didn't happen.
+function writeJsonAtomic(
   filePath: string,
-  overrides: Readonly<Record<string, string | number | boolean>>,
+  label: string,
+  value: unknown,
   logger: DaemonLogger,
 ): void {
   try {
     fs.mkdirSync(path.dirname(filePath), { recursive: true });
     const tmp = `${filePath}.tmp`;
-    fs.writeFileSync(tmp, JSON.stringify(overrides), { mode: 0o600 });
+    fs.writeFileSync(tmp, JSON.stringify(value), { mode: 0o600 });
     fs.chmodSync(tmp, 0o600);
     fs.renameSync(tmp, filePath);
   } catch (e) {
-    const message = `config-overrides write failed: ${(e as Error).message}`;
+    const message = `${label} write failed: ${(e as Error).message}`;
     logger("error", message);
     throw new Error(message);
   }
 }
 
+function writeOverrides(
+  filePath: string,
+  overrides: Readonly<Record<string, string | number | boolean>>,
+  logger: DaemonLogger,
+): void {
+  writeJsonAtomic(filePath, "config-overrides", overrides, logger);
+}
+
+// [LAW:one-source-of-truth] The one place a key's value in the flat dict
+// changes (set-or-delete) — writeConfigOverride/clearConfigOverride/
+// restoreConfigOverrideValue all fold through here, so "what was the value
+// BEFORE this write" (the fact history needs) is captured at the one site
+// that reads-then-writes it, never re-derived. `value: undefined` deletes;
+// any other value sets. Returns the previous value (or undefined if the key
+// was absent) — the caller decides whether that fact matters.
+function mutateOverride(
+  filePath: string,
+  key: string,
+  value: string | number | boolean | undefined,
+  logger: DaemonLogger,
+): string | number | boolean | undefined {
+  const overrides = loadRawOverrides(filePath, logger);
+  const prev = overrides[key];
+  if (value === undefined) {
+    if (!(key in overrides)) return prev;
+    const next = { ...overrides };
+    delete next[key];
+    writeOverrides(filePath, next, logger);
+  } else {
+    writeOverrides(filePath, { ...overrides, [key]: value }, logger);
+  }
+  return prev;
+}
+
+// [LAW:one-source-of-truth] `persist`'s write, TRACKED: mutate the key, then
+// record the transition on the SAME global history undo/redo step
+// (brandon-layout-edit-2gc.2). This is the ONE enforcement point — every
+// current and future caller of writeConfigOverride (setConfig, stepConfig,
+// apply-layout-op's append) gets history for free, with zero edits to those
+// verb handlers, because the recording lives here rather than at each call
+// site. [LAW:locality-or-seam]
 export function writeConfigOverride(
   filePath: string,
   key: string,
   value: string | number | boolean,
   logger: DaemonLogger = quietLogger,
 ): void {
-  const overrides = loadRawOverrides(filePath, logger);
-  writeOverrides(filePath, { ...overrides, [key]: value }, logger);
+  const prev = mutateOverride(filePath, key, value, logger);
+  pushHistoryEntry(filePath, { key, from: prev ?? null, to: value }, logger);
 }
 
+// [LAW:one-source-of-truth] `reset`'s write, TRACKED — mirrors
+// writeConfigOverride above. A clear that touches nothing (the key was
+// already absent) records no entry: nothing changed, so there is nothing to
+// undo back to.
 export function clearConfigOverride(
   filePath: string,
   key: string,
@@ -366,7 +417,247 @@ export function clearConfigOverride(
 ): void {
   const overrides = loadRawOverrides(filePath, logger);
   if (!(key in overrides)) return;
-  const next = { ...overrides };
-  delete next[key];
-  writeOverrides(filePath, next, logger);
+  const prev = mutateOverride(filePath, key, undefined, logger);
+  pushHistoryEntry(filePath, { key, from: prev ?? null, to: null }, logger);
+}
+
+// [LAW:one-source-of-truth] The UNTRACKED twin — restores a key to EXACTLY
+// `value` (or clears it, for `null`) without recording a new history entry.
+// The only legitimate callers are popPastEntry/popFutureEntry below: undo and
+// redo already know they're moving an entry between the past/future stacks,
+// so routing their own restoration back through the tracked writers would
+// record the undo/redo AS a new forward edit — burying the entry it just
+// popped and making the OTHER stack unreachable. This is a structurally
+// distinct function, not a boolean flag on the tracked ones
+// [LAW:no-mode-explosion] — its contract ("apply this exact value, no
+// bookkeeping") is different from theirs ("write this value, remember how to
+// undo it"), not a variant of the same one.
+function restoreConfigOverrideValue(
+  filePath: string,
+  key: string,
+  value: string | number | boolean | null,
+  logger: DaemonLogger,
+): void {
+  mutateOverride(filePath, key, value === null ? undefined : value, logger);
+}
+
+// ─── Undo/redo history (brandon-layout-edit-2gc.2) ────────────────────────
+
+// [LAW:types-are-the-program] ONE entry shape covers every scope the
+// overrides file holds — a globals field's snapshot overwrite (setConfig), a
+// segment-palette snapshot overwrite (same verb, different key shape), AND a
+// preset-root-ops APPEND (apply-layout-op's read-current-append-write) —
+// because at the STORAGE layer every one of those is indistinguishable from
+// "the value at `key` changed from `from` to `to`". apply-layout-op computes
+// its new array-of-tokens string by reading-then-appending one level up
+// (verbs/index.ts); by the time that string reaches writeConfigOverride, it
+// is just the next value at that key. Undo restoring `from` verbatim is
+// therefore ALSO the correct "pop the last op token" behavior for a rootOps
+// key, with no rootOps-specific code anywhere in this module — the ticket's
+// "one history over the overrides layer, not a layout-specific feature" falls
+// out of the shape, it isn't special-cased into it. `null` is the ABSENT
+// sentinel (a key with no prior/no resulting value): safe because no real
+// override value is ever `null` — see isValidOverrides's kind table.
+export interface HistoryEntry {
+  readonly key: string;
+  readonly from: string | number | boolean | null;
+  readonly to: string | number | boolean | null;
+}
+
+interface HistoryState {
+  readonly past: readonly HistoryEntry[];
+  readonly future: readonly HistoryEntry[];
+}
+
+const EMPTY_HISTORY: HistoryState = { past: [], future: [] };
+
+// [LAW:carrying-cost] Resolves the ticket's "depth of the ring" question:
+// bounded so a long-running daemon's history file cannot grow without limit,
+// generous enough that no realistic editing session bumps into it. Oldest
+// entries fall off first (capPush below) — a silent, documented trim, not a
+// failure.
+const MAX_HISTORY_DEPTH = 50;
+
+// [LAW:one-source-of-truth] Resolves the ticket's "where it lives relative to
+// the overrides file" question: a SIBLING file in the same directory, derived
+// as a pure function of the overrides path already passed in — no reach to
+// paths.ts/global state, so every existing call site (and every existing
+// test's XDG_STATE_HOME isolation, which already isolates configOverridesPath())
+// isolates this file too, with zero additional test-harness surface. Kept
+// SEPARATE from the overrides file itself (rather than nesting it inside a
+// wrapper shape) so the overrides file's own on-disk shape — asserted by
+// name in existing tests and callers — never changes
+// [LAW:locality-or-seam]: a change to history storage must not ripple into
+// every existing reader of the flat overrides dict.
+function historyPathFor(overridesFilePath: string): string {
+  return path.join(
+    path.dirname(overridesFilePath),
+    "config-overrides-history.json",
+  );
+}
+
+function isValidHistoryValue(
+  v: unknown,
+): v is string | number | boolean | null {
+  return (
+    v === null ||
+    typeof v === "string" ||
+    typeof v === "number" ||
+    typeof v === "boolean"
+  );
+}
+
+function isValidHistoryEntry(v: unknown): v is HistoryEntry {
+  if (v === null || typeof v !== "object") return false;
+  const obj = v as Record<string, unknown>;
+  return (
+    typeof obj.key === "string" &&
+    isValidHistoryValue(obj.from) &&
+    isValidHistoryValue(obj.to)
+  );
+}
+
+// [LAW:no-silent-failure] Missing/corrupt/wrong-shape file → the empty
+// history is the DEFINED recovery (mirrors isValidOverrides/loadRawOverrides'
+// identical "first-ever boot" treatment for the sibling file) — a single
+// malformed entry drops the WHOLE history, never a guess at which entries to
+// salvage.
+function isValidHistoryState(v: unknown): v is HistoryState {
+  if (v === null || typeof v !== "object" || Array.isArray(v)) return false;
+  const obj = v as Record<string, unknown>;
+  return (
+    Array.isArray(obj.past) &&
+    obj.past.every(isValidHistoryEntry) &&
+    Array.isArray(obj.future) &&
+    obj.future.every(isValidHistoryEntry)
+  );
+}
+
+function loadHistoryState(
+  overridesFilePath: string,
+  logger: DaemonLogger,
+): HistoryState {
+  const filePath = historyPathFor(overridesFilePath);
+  let raw: string;
+  try {
+    raw = fs.readFileSync(filePath, "utf8");
+  } catch (e) {
+    const code = (e as NodeJS.ErrnoException).code;
+    if (code !== "ENOENT") {
+      logger(
+        "warn",
+        `config-overrides-history read failed (${code}); starting empty`,
+      );
+    }
+    return EMPTY_HISTORY;
+  }
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (isValidHistoryState(parsed)) return parsed;
+    logger(
+      "warn",
+      `config-overrides-history load: unexpected shape, starting empty`,
+    );
+    return EMPTY_HISTORY;
+  } catch {
+    logger(
+      "warn",
+      `config-overrides-history load: corrupt JSON, starting empty`,
+    );
+    return EMPTY_HISTORY;
+  }
+}
+
+function writeHistoryState(
+  overridesFilePath: string,
+  state: HistoryState,
+  logger: DaemonLogger,
+): void {
+  writeJsonAtomic(
+    historyPathFor(overridesFilePath),
+    "config-overrides-history",
+    state,
+    logger,
+  );
+}
+
+// [LAW:no-mode-explosion] Bounded push, oldest-drops-first, shared by both
+// stacks (past grows on a fresh edit or a redo; future grows on an undo) —
+// one shape, not two near-duplicate arms.
+function capPush<T>(arr: readonly T[], entry: T, max: number): readonly T[] {
+  const next = [...arr, entry];
+  return next.length > max ? next.slice(next.length - max) : next;
+}
+
+// [LAW:one-source-of-truth] The ONLY caller is writeConfigOverride/
+// clearConfigOverride above — every tracked write lands here, so recording
+// cannot drift from mutation. A fresh edit TRUNCATES `future`: the classic
+// undo/redo branch — diverging from history by doing something NEW abandons
+// whatever was undone, rather than silently keeping it reachable from a
+// history state the new edit has already invalidated.
+function pushHistoryEntry(
+  overridesFilePath: string,
+  entry: HistoryEntry,
+  logger: DaemonLogger,
+): void {
+  const state = loadHistoryState(overridesFilePath, logger);
+  writeHistoryState(
+    overridesFilePath,
+    { past: capPush(state.past, entry, MAX_HISTORY_DEPTH), future: [] },
+    logger,
+  );
+}
+
+// [LAW:one-source-of-truth] The daemon-GLOBAL history is ONE stack, not
+// per-session: config-overrides.json already has exactly one writer (the
+// daemon) and no session-scoping (candybar-config-engine-71o's own binding
+// guardrail — a `persist` write is daemon-global by design), so undo/redo
+// stepping that SAME single-writer file inherits the same scope rather than
+// inventing a session axis the storage layer doesn't otherwise have. Two
+// sessions clicking undo do see each other's edits — a real, DELIBERATE
+// consequence of there being one bar default, not a bug: the alternative
+// (per-session history over daemon-global state) would let one session's
+// "undo" silently fail to undo what another session's click actually did.
+//
+// [LAW:no-silent-failure] Returns `null` at the bottom of the stack — the
+// verb handler (verbs/index.ts) turns that into a loud BadVerbArgs surfaced
+// through click.error, never a silent no-op.
+export function undoLastOverride(
+  overridesFilePath: string,
+  logger: DaemonLogger = quietLogger,
+): HistoryEntry | null {
+  const state = loadHistoryState(overridesFilePath, logger);
+  const entry = state.past[state.past.length - 1];
+  if (entry === undefined) return null;
+  restoreConfigOverrideValue(overridesFilePath, entry.key, entry.from, logger);
+  writeHistoryState(
+    overridesFilePath,
+    {
+      past: state.past.slice(0, -1),
+      future: capPush(state.future, entry, MAX_HISTORY_DEPTH),
+    },
+    logger,
+  );
+  return entry;
+}
+
+// [LAW:no-silent-failure] Redo's mirror of undo above — `null` at the top of
+// the stack, same loud surfacing contract.
+export function redoLastOverride(
+  overridesFilePath: string,
+  logger: DaemonLogger = quietLogger,
+): HistoryEntry | null {
+  const state = loadHistoryState(overridesFilePath, logger);
+  const entry = state.future[state.future.length - 1];
+  if (entry === undefined) return null;
+  restoreConfigOverrideValue(overridesFilePath, entry.key, entry.to, logger);
+  writeHistoryState(
+    overridesFilePath,
+    {
+      past: capPush(state.past, entry, MAX_HISTORY_DEPTH),
+      future: state.future.slice(0, -1),
+    },
+    logger,
+  );
+  return entry;
 }

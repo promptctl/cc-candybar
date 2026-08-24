@@ -43,7 +43,24 @@ export type { OptionDomain } from "./option-domain.js";
 // overrides layer (never the hand-authored config file). `reset` clears one
 // persisted override — the gated undo `persist` needs, since a machine-owned
 // write with no way back would be a one-way ratchet.
-export const ACTION_KEYS = ["set", "persist", "copy", "open", "reset"] as const;
+//
+// [LAW:one-source-of-truth] `undo`/`redo` (brandon-layout-edit-2gc.2) are
+// `reset`'s FINE-GRAINED siblings: `reset` clears one named key outright
+// (the coarse "forget this override" case); `undo`/`redo` step ONE GLOBAL
+// history of every `persist`/`reset` write ever made to the overrides layer
+// — every key, not just structural layout edits — back and forth. Neither
+// carries a key: the history is a single stack over the whole overrides
+// file (config-overrides-store.ts owns it), so the action is a bare marker,
+// like `int: true` is for a set-int cursor.
+export const ACTION_KEYS = [
+  "set",
+  "persist",
+  "copy",
+  "open",
+  "reset",
+  "undo",
+  "redo",
+] as const;
 export type ActionKey = (typeof ACTION_KEYS)[number];
 
 // [LAW:types-are-the-program] An ActionDecl is the click effect a named action
@@ -75,6 +92,14 @@ export type ActionKey = (typeof ACTION_KEYS)[number];
 //                         -> allow-list {members}
 //   copy                — copy templated text to the clipboard -> no gate
 //   open                — open a templated target in the editor -> no gate
+//   undo                — step the config-overrides layer's GLOBAL history one
+//                         entry back (any persist/reset write, not just a
+//                         layout op) -> no gate, no key: there is nothing a
+//                         template could smuggle, since the value restored is
+//                         whatever the daemon's own history recorded, never
+//                         wire input
+//   redo                — the inverse of undo: re-apply the most recently
+//                         undone entry -> no gate, no key
 //   removeSegment       — (persist only) remove the named segment from the
 //                         preset-root the `persist` key addresses
 //                         (`presets.<name>.rootOps`) -> allow-list {one op
@@ -133,7 +158,9 @@ export type ActionDecl =
     }
   | { readonly copy: string }
   | { readonly open: string }
-  | { readonly reset: string };
+  | { readonly reset: string }
+  | { readonly undo: true }
+  | { readonly redo: true };
 
 // [LAW:dataflow-not-control-flow] Does this action write a SessionState key? A
 // `set` action composes a set-state click URL whose first segment is session.id;
@@ -154,4 +181,15 @@ export function actionBindsPersist(a: ActionDecl): boolean {
 // same as set/persist), so it joins the same requirement.
 export function actionBindsReset(a: ActionDecl): boolean {
   return "reset" in a;
+}
+
+// [LAW:dataflow-not-control-flow] Does this action step the config-overrides
+// history? `undo`/`redo` carry session.id on the wire too — same reason as
+// `reset`: an empty stack is a loud, session-scoped click.error, not a
+// silent no-op (the ticket's own done-gate).
+export function actionBindsUndo(a: ActionDecl): boolean {
+  return "undo" in a;
+}
+export function actionBindsRedo(a: ActionDecl): boolean {
+  return "redo" in a;
 }
