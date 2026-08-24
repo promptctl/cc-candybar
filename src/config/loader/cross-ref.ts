@@ -11,6 +11,7 @@ import {
   walkNodes,
   type DslConfig,
   type LayoutNode,
+  type PresetDecl,
   type VariableDecl,
 } from "../dsl-types.js";
 import {
@@ -28,6 +29,7 @@ import {
 import { listGlobalsFieldNames } from "./globals.js";
 import { parsePersistTarget } from "./persist-target.js";
 import { presetNames } from "../presets.js";
+import { ident } from "../ident.js";
 import { findKeyLine } from "./diagnostics.js";
 import { isPlainObject, type ValidateCtx } from "./validate-core.js";
 import {
@@ -46,6 +48,54 @@ import {
 export const RENAMED_SEGMENTS: Readonly<Record<string, string>> = {
   gitTaculous: "gitaculous",
 };
+
+// [LAW:single-enforcer] Runs HERE — on `cfg.presets`, the MERGED map — not
+// in loader/presets.ts's per-file structural pass (where a round-1 version
+// of this check lived): that pass validates one config source at a time
+// (the bundled default's own RAW_DEFAULT_DSL_CONFIG, or a user's file,
+// independently), so it could only ever catch a collision between two
+// preset names declared in ONE source. synthesizeEditChrome — the thing
+// this guard protects, which keys its per-preset reset action/segment (and
+// the pre-existing per-gap +/- actions) by `ident(presetName)` in a plain
+// object accumulator with no re-entrant cross-ref check — runs on the
+// MERGED config (dsl-loader.ts), so the collision it can actually produce
+// is a merged one: a user preset whose ident collides with a name the
+// BUNDLED library or a different file contributed. This is the one place
+// that sees that merged set, so it's the one place that can prove no
+// collision exists in it.
+//
+// [LAW:one-source-of-truth] `ident` is imported from ../ident.ts — the ONE
+// collapse rule menu-keys.ts, edit-chrome.ts, and this guard all now share,
+// so a future tweak to the rule can't silently desync the guard from the
+// thing it checks.
+//
+// [LAW:no-silent-failure] Two preset names that collapse to the SAME
+// synthesis identifier (e.g. "quick-look" and "quick_look" both → "quick_
+// look") would silently steal each other's synthesized artifacts: the
+// SECOND preset processed overwrites the first's entries, leaving the
+// first preset's already-built tree holding a segment ref to a name that
+// now points at the second preset's reset action. A user clicking "reset"
+// on preset A would silently reset preset B instead.
+function presetIdentCollisions(
+  ctx: ValidateCtx,
+  presets: Readonly<Record<string, PresetDecl>>,
+): void {
+  const byIdent = new Map<string, string[]>();
+  for (const name of Object.keys(presets)) {
+    const id = ident(name);
+    const names = byIdent.get(id);
+    if (names) names.push(name);
+    else byIdent.set(id, [name]);
+  }
+  for (const [id, names] of byIdent) {
+    if (names.length < 2) continue;
+    ctx.issues.push({
+      path: "presets",
+      message: `preset names ${names.map((n) => JSON.stringify(n)).join(" and ")} both collapse to the same synthesis identifier "${id}" — edit mode's synthesized reset affordance would silently steal one preset's action for the other. Rename one.`,
+      line: findKeyLine(ctx.source, ["presets"]),
+    });
+  }
+}
 
 export function validateCrossReferences(
   ctx: ValidateCtx,
@@ -83,6 +133,7 @@ export function validateCrossReferences(
       line: findKeyLine(ctx.source, ["globals", "preset"]),
     });
   }
+  presetIdentCollisions(ctx, cfg.presets);
   // [LAW:one-source-of-truth] A `set … from` NAME must resolve — checked
   // against this config's per-config domains ("looks", the merged looks:
   // block) plus the global registry (themes/styles, and any future

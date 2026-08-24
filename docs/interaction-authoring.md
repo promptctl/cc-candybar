@@ -585,6 +585,67 @@ worth knowing before you wire your own trigger:
   a deliberate, legible click ("remove my whole quick-action tray") instead
   of a single easy-to-fat-finger glyph of its own.
 
+### Knowing when a preset's layout has been edited: `.preset.customized`
+
+Edit mode's `+`/`-` clicks land in `presets.<name>.rootOps` — an accumulated
+op log, replayed onto the preset's declared `root` on every reload. That
+means a preset's *rendered* layout can silently drift from the literal
+`root:` you can see in your config file: nothing in the bar told you an
+earlier click session left ops sitting there.
+
+`.preset.customized` is that signal — a boolean input var, true exactly when
+the ACTIVE preset (`.preset.effective`) currently has at least one op that
+still DECODES (not merely a non-empty log: a token list that is entirely
+malformed — hand-edited, or written by a previous protocol version —
+replays as zero ops, and the signal agrees with that, never showing
+"customized" over a tree that's actually byte-identical to the declared
+root). It checks decode, not whether the op still resolves against your
+CURRENT tree — a later hand-authored edit that removes a segment a stored
+op still names turns that op into a no-op at replay (the same stale-op
+skip a live restart already applies), and the signal doesn't chase that:
+a rare, later-edit-triggered "customized" over a tree that hasn't actually
+changed is the accepted cost of a cheap per-render check over a full tree
+diff. Reference it in a `when` and pair it with `reset` over the SAME
+`presets.<name>.rootOps` key `removeSegment`/`insertSegmentFrom` already
+write to — clearing it drops the accumulated ops and restores the literal
+declared root on the next reload, with no new gate to register (the key is
+already writable the moment any structural-edit action targets it).
+
+```json5 check:pass
+{
+  // `.preset.customized` reads the ACTIVE preset's op log
+  // (`.preset.effective`) — pin "compact" as the default so it's the one
+  // `dropModel`/`resetCompactLayout` (and this example's own narrative)
+  // are actually about, exactly like `persist: "preset"` above pins one
+  // for real.
+  globals: { preset: "compact" },
+  variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
+  actions: {
+    dropModel: { persist: "presets.compact.rootOps", removeSegment: "model" },
+    resetCompactLayout: { reset: "presets.compact.rootOps" },
+  },
+  segments: {
+    directory: { template: '~/project', bg: 'surface', fg: 'foreground' },
+    layoutStatus: {
+      template: '{{ action "resetCompactLayout" "↺ layout customized" }}',
+      when: '{{ .preset.customized }}',
+      bg: "surface", fg: "foreground",
+    },
+  },
+  presets: {
+    compact: { globals: { padding: 0 } },
+  },
+  root: { v: ["directory", "layoutStatus"] },
+}
+```
+
+**Edit mode synthesizes this for you too.** Referencing `edit.toggle`
+(above) doesn't just splice `-`/`+` per gap — it also prepends this exact
+banner, `when`-gated the same way, above every preset's chrome-spliced root,
+targeting that preset's own `rootOps` key. You only need to author it
+yourself in a config that edits `presets.<name>.rootOps` WITHOUT wiring edit
+mode at all (the pattern above).
+
 ### Persisting a per-segment field: `segments.<name>.palette`
 
 Every `persist`/`reset` target so far has named a `globals` field — the

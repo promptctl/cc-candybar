@@ -24,6 +24,12 @@
 //      < ACTIVE PRESET, unchanged) — the SAME watcher-driven reload path a
 //      hand edit to the config file already takes, survives a real restart,
 //      and never touches the hand-authored config file.
+//   6. brandon-layout-edit-2gc.5's own done-gate: a non-empty accumulated op
+//      log is a VISIBLE fact (presetIsCustomized, projected as
+//      `.preset.customized`), edit mode synthesizes a `reset`-backed banner
+//      for it per preset for free, and firing that reset through the real
+//      daemon handler clears the log and restores the literal declared root
+//      — never a silent drift between what's on screen and what's on disk.
 
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -57,6 +63,7 @@ import { GitDataProvider } from "../src/daemon/cache/git";
 import { WatcherRegistry } from "../src/daemon/cache/watchers";
 import { encodeLayoutOp } from "../src/config/layout-ops";
 import { walkNodes, type LayoutNode } from "../src/config/dsl-types";
+import { presetIsCustomized } from "../src/config/presets";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 
@@ -342,6 +349,33 @@ describe("deriveConfigActionValidators over layout-op actions", () => {
       dispose();
     }
   });
+
+  // brandon-layout-edit-2gc.5 PR review: a preset that declares NO
+  // removeSegment/insertSegment/insertSegmentFrom action at all (e.g. one
+  // edited down to zero non-exempt segments, so spliceContainer's loop never
+  // ran) must still register `presets.<name>.rootOps` — otherwise its OWN
+  // synthesized `reset` action's target is unknown to the gate the moment
+  // it's needed most.
+  test("a preset's rootOps key is registered even with zero layout-op actions targeting it", () => {
+    const config = parseAndValidate(
+      "<test>",
+      `{
+        globals: {},
+        variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
+        actions: { undoIt: { reset: 'presets.empty.rootOps' } },
+        segments: { directory: { template: 'd', bg: 'surface', fg: 'foreground' } },
+        root: { h: ['directory'] },
+        presets: { empty: {} },
+      }`,
+      ALLOWED,
+    );
+    const contributions = deriveConfigActionValidators(config);
+    const rootOpsEntry = contributions.find(
+      (c) => c.key === "presets.empty.rootOps",
+    );
+    expect(rootOpsEntry).toBeDefined();
+    expect(rootOpsEntry!.spec).toEqual({ kind: "allow-list", allowed: [] });
+  });
 });
 
 // ─── end-to-end: click → durable APPEND, through the real daemon handler ─────
@@ -467,6 +501,183 @@ describe("apply-layout-op click → durable append", () => {
       ),
     ).toThrow();
     dispose();
+  });
+});
+
+// ─── presetIsCustomized: agrees with applyPresetRootOpsOverrides's own ─────
+// ─── decode+filter, never the raw token count ──────────────────────────────
+
+describe("presetIsCustomized", () => {
+  test("a non-empty, all-valid token list is customized", () => {
+    expect(
+      presetIsCustomized(
+        { default: [encodeLayoutOp({ op: "remove", target: "x" })] },
+        "default",
+      ),
+    ).toBe(true);
+  });
+
+  test("an absent entry is not customized", () => {
+    expect(presetIsCustomized({}, "default")).toBe(false);
+  });
+
+  test("an empty token list is not customized", () => {
+    expect(presetIsCustomized({ default: [] }, "default")).toBe(false);
+  });
+
+  // brandon-layout-edit-2gc.5 PR review: a token list where EVERY token
+  // decodes to null (malformed, or a previous protocol version) is the
+  // SAME "no ops to replay" case applyPresetRootOpsOverrides itself treats
+  // as a no-op (`ops.length === 0 → continue`, root left untouched) — so
+  // presetIsCustomized must agree, not read the raw (pre-decode) length.
+  test("a token list where every token is malformed is not customized", () => {
+    expect(
+      presetIsCustomized({ default: ["not-a-real-token", "also-garbage"] }, "default"),
+    ).toBe(false);
+  });
+
+  test("one valid token among malformed ones is still customized", () => {
+    expect(
+      presetIsCustomized(
+        {
+          default: [
+            "garbage",
+            encodeLayoutOp({ op: "remove", target: "x" }),
+          ],
+        },
+        "default",
+      ),
+    ).toBe(true);
+  });
+});
+
+// ─── the "customized" banner's own escaping: quote/backslash preset names ──
+
+// brandon-layout-edit-2gc.5 PR review: quotes and backslashes are LEGAL in a
+// preset name (only empty/slash/newline are rejected — see loader/
+// presets.ts), and prependCustomizedBanner splices the name into a
+// synthesized Go-template string literal. Unlike the newline case (which
+// gets rejected at load, since escaping can't fix an embedded literal
+// newline), a quote/backslash-bearing name is escaped, not rejected — so
+// this proves the escape actually holds through real parseAndValidate +
+// registerDslConfig + renderDsl, not just by inspection.
+describe('the "customized" banner escapes quote/backslash preset names', () => {
+  // eslint-disable-next-line no-control-regex
+  const ANSI = /\x1b\[[0-9;]*m|\x1b\]8;;[^\x1b]*\x1b\\/g;
+
+  test('a preset named with a " and a \\ compiles and renders the literal label', () => {
+    const presetName = 'foo"bar\\baz';
+    const config = parseAndValidate(
+      "<test>",
+      `{
+        globals: {},
+        variables: {
+          'session.id': { kind: 'input', path: 'session_id', default: '' },
+          'preset.customized': { kind: 'input', path: 'preset.customized', type: 'boolean', default: false },
+        },
+        segments: {
+          directory: { template: 'd', bg: 'surface', fg: 'foreground' },
+          editControl: { template: '{{ action "edit.toggle" "e" }}', bg: 'surface', fg: 'foreground' },
+        },
+        root: { h: ['directory', 'editControl'] },
+        presets: { ${JSON.stringify(presetName)}: {} },
+      }`,
+      ALLOWED,
+    );
+    // The compile itself (parse every synthesized template) must not throw —
+    // an unescaped quote would break the Go-template source.
+    const store = new VariableStore();
+    const registry = new SourceRegistry(store, "", undefined, new SessionState());
+    let compiled: ReturnType<typeof registerDslConfig>;
+    expect(() => {
+      compiled = registerDslConfig(config, registry);
+    }).not.toThrow();
+    const basePalette = getThemePalette("textual-dark"!);
+    const rendered = renderDsl(
+      config,
+      compiled!,
+      store,
+      registry,
+      {
+        session_id: "s1",
+        project_dir: "/tmp/proj",
+        preset: { effective: presetName, customized: true },
+      },
+      basePalette,
+      opts(),
+      undefined,
+      { preset: presetName },
+    );
+    expect(rendered.replace(ANSI, "")).toContain(`↺ ${presetName} customized`);
+    registry.dispose();
+  });
+});
+
+// brandon-layout-edit-2gc.5 PR review round 4: a preset's declared root may
+// carry its OWN top-level `when` — including the A-grammar's bare-segment-
+// ref shorthand `{ seg, when }` (loader/layout.ts), NOT only a container.
+// prependCustomizedBanner's when-carry-up only reaches a container's own
+// `when`; without ALSO copying it onto spliceEditChromeForPreset's
+// synthetic wrapper for a bare-segment root, that shape's own gate never
+// reached the carry-up at all.
+describe("the reset banner respects a preset root's own top-level `when`", () => {
+  // eslint-disable-next-line no-control-regex
+  const ANSI = /\x1b\[[0-9;]*m|\x1b\]8;;[^\x1b]*\x1b\\/g;
+
+  function buildConfig(rootWhen: string) {
+    return parseAndValidate(
+      "<test>",
+      `{
+        globals: {},
+        variables: {
+          'session.id': { kind: 'input', path: 'session_id', default: '' },
+          'preset.customized': { kind: 'input', path: 'preset.customized', type: 'boolean', default: false },
+        },
+        segments: {
+          directory: { template: 'd', bg: 'surface', fg: 'foreground' },
+          editControl: { template: '{{ action "edit.toggle" "e" }}', bg: 'surface', fg: 'foreground' },
+        },
+        root: { h: ['directory', 'editControl'] },
+        presets: { gated: { root: { seg: 'directory', when: ${JSON.stringify(rootWhen)} } } },
+      }`,
+      ALLOWED,
+    );
+  }
+
+  function renderGated(config: ReturnType<typeof buildConfig>): string {
+    const store = new VariableStore();
+    const registry = new SourceRegistry(store, "", undefined, new SessionState());
+    try {
+      const compiled = registerDslConfig(config, registry);
+      const basePalette = getThemePalette("textual-dark"!);
+      return renderDsl(
+        config,
+        compiled,
+        store,
+        registry,
+        {
+          session_id: "s1",
+          project_dir: "/tmp/proj",
+          preset: { effective: "gated", customized: true },
+        },
+        basePalette,
+        opts(),
+        undefined,
+        { preset: "gated" },
+      ).replace(ANSI, "");
+    } finally {
+      registry.dispose();
+    }
+  }
+
+  test("the banner is hidden when a bare-segment-root's own when is false, even though .preset.customized is true", () => {
+    expect(renderGated(buildConfig("{{ false }}"))).not.toContain("customized");
+  });
+
+  test("the banner still shows when the root's own when is true (sanity: the gate above isn't just always-empty)", () => {
+    expect(renderGated(buildConfig("{{ true }}"))).toContain(
+      "↺ gated customized",
+    );
   });
 });
 
@@ -754,6 +965,190 @@ describe("RenderCache: layout ops replay onto the resolved preset root", () => {
       } finally {
         for (const fn of cleanups2) fn();
       }
+    } finally {
+      for (const fn of cleanups) fn();
+    }
+  });
+
+  // [LAW:verifiable-goals] brandon-layout-edit-2gc.5's own done-gate: the
+  // visible diagnostic and its reset affordance, driven through the REAL
+  // RenderCache (presetRootOps is a fact of THIS reload, never re-read), the
+  // REAL synthesized reset action (edit-chrome.ts's prependCustomizedBanner,
+  // reached only when DEFAULT_DSL_CONFIG's `toolbar` wires edit.toggle —
+  // exactly the merged-default path every other test in this describe block
+  // already exercises), and the REAL daemon reset-config handler — never a
+  // synthetic stand-in for any of the three.
+  test("a customized preset shows the diagnostic; resetting clears it and restores the literal root", () => {
+    const userConfigPath = join(projectDir, ".cc-candybar.json5");
+    writeFileSync(userConfigPath, userConfigBody);
+
+    const { cache, cleanups } = makeCache();
+    try {
+      // Before any edit: not customized, and the resolved tree carries no
+      // "↺ … customized" segment at all (the banner's own `when` still gates
+      // it out visually, but this proves the FACT the gate reads is false).
+      const before = cache.getOrCreate(projectDir, projectDir, undefined);
+      expect(before.lastError).toBeNull();
+      expect(
+        presetIsCustomized(before.state!.presetRootOps, "default"),
+      ).toBe(false);
+      const rootBefore = before.state!.config.presets.default!.root!;
+      expect(segmentNamesOf(rootBefore)).toEqual(["directory", "git"]);
+
+      writeConfigOverride(
+        overridesPath(),
+        "presets.default.rootOps",
+        JSON.stringify([encodeLayoutOp({ op: "remove", target: "directory" })]),
+      );
+
+      const { cache: cache2, cleanups: cleanups2 } = makeCache();
+      try {
+        const customized = cache2.getOrCreate(projectDir, projectDir, undefined);
+        expect(customized.lastError).toBeNull();
+        expect(
+          presetIsCustomized(customized.state!.presetRootOps, "default"),
+        ).toBe(true);
+        expect(segmentNamesOf(customized.state!.config.presets.default!.root!)).toEqual(["git"]);
+        // The synthesized reset action targets the SAME key the +/-
+        // affordances already write — no second gate to register.
+        const resetActionNames = Object.entries(
+          customized.state!.config.actions,
+        )
+          .filter(
+            ([, a]) =>
+              "reset" in a && a.reset === "presets.default.rootOps",
+          )
+          .map(([name]) => name);
+        expect(resetActionNames.length).toBe(1);
+
+        // Fire the reset click through the REAL daemon handler — no key
+        // to discover from the action name; reset-config only ever needs
+        // the target key, exactly like a hand click would send.
+        const sessionState = new SessionState();
+        const ctx: VerbContext = { sessionState, dlog: () => {} };
+        const resetConfig = VERBS.get("reset-config")!;
+        resetConfig(
+          `${encodeURIComponent("s1")}/${encodeURIComponent("presets.default.rootOps")}`,
+          ctx,
+        );
+
+        const { cache: cache3, cleanups: cleanups3 } = makeCache();
+        try {
+          const restored = cache3.getOrCreate(projectDir, projectDir, undefined);
+          expect(restored.lastError).toBeNull();
+          expect(
+            presetIsCustomized(restored.state!.presetRootOps, "default"),
+          ).toBe(false);
+          expect(
+            segmentNamesOf(restored.state!.config.presets.default!.root!),
+          ).toEqual(["directory", "git"]);
+          expect(readFileSync(userConfigPath, "utf8")).toBe(userConfigBody);
+        } finally {
+          for (const fn of cleanups3) fn();
+        }
+      } finally {
+        for (const fn of cleanups2) fn();
+      }
+    } finally {
+      for (const fn of cleanups) fn();
+    }
+  });
+
+  // brandon-layout-edit-2gc.5 PR review: the bundled default's OWN
+  // "compact" preset has exactly 4 non-exempt segments (directory/git/
+  // context/presetControl) — removing all 4 via the synthesized `-` chrome
+  // leaves spliceContainer with zero children, so removeChrome/insertChrome
+  // contribute NOTHING for "compact" on the next reload. Proves the reset
+  // banner's own click still works in exactly that state, through the REAL
+  // RenderCache and the REAL daemon reset-config handler — not just that
+  // the key is derived (the narrower unit test above).
+  test("a preset emptied of every segment can still be reset through a real click", () => {
+    const userConfigPath = join(projectDir, ".cc-candybar.json5");
+    const bareUserConfig = JSON.stringify({ globals: {}, segments: {} });
+    writeFileSync(userConfigPath, bareUserConfig);
+    writeConfigOverride(
+      overridesPath(),
+      "presets.compact.rootOps",
+      JSON.stringify([
+        encodeLayoutOp({ op: "remove", target: "directory" }),
+        encodeLayoutOp({ op: "remove", target: "git" }),
+        encodeLayoutOp({ op: "remove", target: "context" }),
+        encodeLayoutOp({ op: "remove", target: "presetControl" }),
+      ]),
+    );
+
+    const { cache, cleanups } = makeCache();
+    try {
+      const emptied = cache.getOrCreate(projectDir, projectDir, undefined);
+      expect(emptied.lastError).toBeNull();
+      expect(
+        presetIsCustomized(emptied.state!.presetRootOps, "compact"),
+      ).toBe(true);
+      expect(
+        segmentNamesOf(emptied.state!.config.presets.compact!.root!),
+      ).toEqual([]);
+
+      const sessionState = new SessionState();
+      const ctx: VerbContext = { sessionState, dlog: () => {} };
+      const resetConfig = VERBS.get("reset-config")!;
+      // Would throw BadVerbArgs("unknown config key") before this fix.
+      expect(() =>
+        resetConfig(
+          `${encodeURIComponent("s1")}/${encodeURIComponent("presets.compact.rootOps")}`,
+          ctx,
+        ),
+      ).not.toThrow();
+
+      const { cache: cache2, cleanups: cleanups2 } = makeCache();
+      try {
+        const restored = cache2.getOrCreate(projectDir, projectDir, undefined);
+        expect(restored.lastError).toBeNull();
+        expect(
+          presetIsCustomized(restored.state!.presetRootOps, "compact"),
+        ).toBe(false);
+        expect(
+          segmentNamesOf(restored.state!.config.presets.compact!.root!),
+        ).toEqual(["directory", "git", "context", "presetControl"]);
+      } finally {
+        for (const fn of cleanups2) fn();
+      }
+    } finally {
+      for (const fn of cleanups) fn();
+    }
+  });
+
+  // brandon-layout-edit-2gc.5 PR review: `configOverridesPath()` is ONE
+  // file shared by every project this daemon serves — a rootOps entry
+  // naming a preset that only exists in a DIFFERENT project's config must
+  // not fail THIS project's render. Without sanitizePersistedPresetRootOps,
+  // applyPresetRootOpsOverrides -> presetRoot -> presetByName throws for
+  // the undeclared name, and that throw would propagate out of buildState
+  // as a fatal `entry.lastError` for a project that never touched this key.
+  test("a rootOps entry naming a preset absent from THIS config is dropped, not fatal", () => {
+    const userConfigPath = join(projectDir, ".cc-candybar.json5");
+    writeFileSync(userConfigPath, userConfigBody);
+    // Written by some OTHER project's edit-mode session against a preset
+    // name that neither the bundled default nor this project's own config
+    // declares.
+    writeConfigOverride(
+      overridesPath(),
+      "presets.someOtherProjectsPreset.rootOps",
+      JSON.stringify([encodeLayoutOp({ op: "remove", target: "directory" })]),
+    );
+
+    const { cache, cleanups } = makeCache();
+    try {
+      const entry = cache.getOrCreate(projectDir, projectDir, undefined);
+      expect(entry.lastError).toBeNull();
+      // Dropped before it ever reached presetIsCustomized too — not just
+      // "didn't crash", but genuinely absent from the sanitized record.
+      expect(entry.state!.presetRootOps).not.toHaveProperty(
+        "someOtherProjectsPreset",
+      );
+      // This project's OWN preset is completely unaffected.
+      expect(
+        segmentNamesOf(entry.state!.config.presets.default!.root!),
+      ).toEqual(["directory", "git"]);
     } finally {
       for (const fn of cleanups) fn();
     }
