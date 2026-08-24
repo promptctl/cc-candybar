@@ -154,3 +154,35 @@ export function presetRoot(
 export function presetGlobals(config: DslConfig, name: string): Globals {
   return { ...config.globals, ...presetByName(config.presets, name).globals };
 }
+
+// [LAW:no-silent-failure] The persisted-overrides analogue of
+// applySegmentPaletteOverrides' stale-segment skip (src/config/loader/
+// merge.ts), one seam over: `configOverridesPath()` is ONE file shared by
+// every project on the machine (candybar-config-engine-71o.2), but `presets`
+// is a PER-CONFIG domain — the one other per-config domain besides `looks`.
+// A `persist: "preset"` click writes a name valid for the config it was
+// clicked against; loading a DIFFERENT project whose config never declared
+// that name must not fail the whole render. validateConfig's cross-ref check
+// (loader/cross-ref.ts) stays fatal for a hand-AUTHORED `globals.preset` —
+// that is a typo in a file the author can see and fix — but a value that
+// only exists because the overrides layer supplied it gets the SAME
+// treatment a stale SessionState pick already gets from effectivePresetName:
+// collapse to the floor, visibly, never throw. Dropping the field here (so
+// it never reaches validateConfig) is what makes that collapse happen for
+// this layer too, instead of a fatal error replacing the whole bar.
+export function sanitizePersistedPresetOverride(
+  globalsOverride: Partial<Globals>,
+  declaredPresets: Readonly<Record<string, PresetDecl>>,
+): Partial<Globals> {
+  const preset = globalsOverride.preset;
+  if (preset === undefined || presetNames(declaredPresets).includes(preset)) {
+    return globalsOverride;
+  }
+  // [LAW:no-defensive-null-guards] Not a broken-invariant throw: an
+  // overrides file legitimately outlives any one config's preset names, so
+  // this IS the expected shape, not a caller bug — a plain drop, mirroring
+  // applySegmentPaletteOverrides' `continue` for the identical reason.
+  const rest = { ...globalsOverride };
+  delete rest.preset;
+  return rest;
+}
