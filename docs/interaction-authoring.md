@@ -308,6 +308,47 @@ Each preset's `root` goes through the same layout validator the top-level
 `root` does, so a stray segment name fails at load with the preset in the path
 (`presets.compact.root`), not silently at click time.
 
+### Pinning a preset as the default: `persist` / `reset`
+
+A `set` pick over `presets` is a per-session preview, exactly like `set:
+"palette"` — it changes what THIS session sees, from the next render, with no
+daemon restart. Pin one as the config default the SAME way you would a
+theme: `persist: "preset"` writes it into the overrides layer `set` never
+touches; `reset: "preset"` clears it. Nothing about `preset` makes this a
+special case — it is just another `Globals` field name to `persist`/`reset`,
+the same zero-engine-edits seam `segments.<name>.palette` rides above.
+
+```json5 check:pass
+{
+  actions: {
+    pinPreset: { persist: "preset", from: "presets" },
+    unpinPreset: { reset: "preset" },
+  },
+  segments: {
+    pinControl: {
+      template: '📌 {{ menu "pinPreset" }} {{ action "unpinPreset" "↺" }}',
+      bg: "surface", fg: "foreground",
+    },
+  },
+  presets: {
+    compact: { globals: { padding: 0 } },
+  },
+  root: { v: ["pinControl"] },
+}
+```
+
+`persist: "preset"` carries one risk no other persisted field does. The
+overrides file `persist` writes to is ONE file shared by every project this
+daemon serves, but `presets` is a per-config domain — the second one, after
+`looks` — so the name a pin wrote for one project's config may not exist in
+the config of the next project this daemon renders. That case is handled the
+same way a stale session pick already is: the name collapses to `"default"`,
+visibly, rather than failing the whole render. It is never a load error,
+because the config that is loading it did not author it — only a preset name
+you actually typed into `globals.preset` in your OWN config file gets the
+load-time typo check, the same distinction `segments.<name>.palette` draws
+between a name your config declares and one it doesn't.
+
 ### Persisting a per-segment field: `segments.<name>.palette`
 
 Every `persist`/`reset` target so far has named a `globals` field — the

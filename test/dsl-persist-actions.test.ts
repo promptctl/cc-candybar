@@ -64,6 +64,11 @@ import {
 import { RenderCache } from "../src/daemon/cache/render";
 import { GitDataProvider } from "../src/daemon/cache/git";
 import { WatcherRegistry } from "../src/daemon/cache/watchers";
+import {
+  PRESET_FLOOR,
+  effectivePresetName,
+  presetGlobals,
+} from "../src/config/presets";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 
@@ -533,6 +538,53 @@ describe("persist action click → durable overrides write", () => {
     dispose();
   });
 
+  // [LAW:verifiable-goals] brandon-presets-0yk.2: `preset` reuses persist/
+  // reset's SAME click path — no bespoke "pin a preset forever" plumbing,
+  // just another globals field name (candybar-config-engine-71o.2's stated
+  // "zero engine edits" promise held for the persistence half too).
+  const SRC_PRESET = `{
+    globals: {},
+    variables: {
+      'session.id': { kind: 'input', path: 'session_id', default: '' },
+    },
+    actions: {
+      applyPresetForever: { persist: 'preset', from: 'presets' },
+      forgetPreset: { reset: 'preset' },
+    },
+    segments: { bar: { template: '{{ action "applyPresetForever" "compact" }} {{ action "forgetPreset" "↺" }}', bg: 'surface', fg: 'foreground' } },
+    root: 'bar',
+    presets: { compact: {} },
+  }`;
+
+  test("clicking a persist-option action over preset writes the overrides file durably", () => {
+    const { render, click, dispose } = buildPersistRuntime(SRC_PRESET);
+    const urls = extractUrls(render());
+    const applyUrl = effectsOf(urls[0]!)[0]!;
+    expect(applyUrl.verb).toBe("set-config");
+    click(urls[0]!);
+    const overrides = loadConfigOverrides(
+      join(xdgStateDir, "cc-candybar", "config-overrides.json"),
+    );
+    expect(overrides).toEqual({ preset: "compact" });
+    dispose();
+  });
+
+  test("clicking reset clears a previously-persisted preset override", () => {
+    const overridesPath = join(
+      xdgStateDir,
+      "cc-candybar",
+      "config-overrides.json",
+    );
+    writeConfigOverride(overridesPath, "preset", "compact");
+    const { render, click, dispose } = buildPersistRuntime(SRC_PRESET);
+    const urls = extractUrls(render());
+    const resetUrl = urls[1]!;
+    expect(effectsOf(resetUrl)[0]!.verb).toBe("reset-config");
+    click(resetUrl);
+    expect(loadConfigOverrides(overridesPath)).toEqual({});
+    dispose();
+  });
+
   // [LAW:verifiable-goals] candybar-config-engine-71o.4 found this the hard
   // way against a real daemon: `{{ menu }}`'s picker grid (src/render/
   // picker.ts) hard-required a set-option apply action, so a persist-option
@@ -896,6 +948,143 @@ describe("RenderCache: persistent overrides merge into the effective config", ()
       expect(entry.state!.config.globals.charset).toBe("ascii");
     } finally {
       for (const fn of restartedCleanups) fn();
+    }
+  });
+
+  // [LAW:verifiable-goals] brandon-presets-0yk.2 done-gate: "the choice
+  // survives a daemon restart and appears in a new session" — `preset` is
+  // just another Globals field to the persist/restart machinery above, so
+  // this mirrors the charset test verbatim, one field over.
+  test("an override changes globals.preset without touching the user config file, and survives a restart", async () => {
+    const userConfigPath = join(projectDir, ".cc-candybar.json5");
+    const userConfigBody = JSON.stringify({
+      globals: {},
+      segments: {},
+      presets: { both: {} },
+    });
+    writeFileSync(userConfigPath, userConfigBody);
+
+    const overridesPath = join(
+      xdgStateDir,
+      "cc-candybar",
+      "config-overrides.json",
+    );
+    writeConfigOverride(overridesPath, "preset", "both");
+
+    const { cache, cleanups } = makeCache();
+    try {
+      const entry = cache.getOrCreate(projectDir, projectDir, undefined);
+      expect(entry.lastError).toBeNull();
+      expect(entry.state!.config.globals.preset).toBe("both");
+      expect(readFileSync(userConfigPath, "utf8")).toBe(userConfigBody);
+    } finally {
+      for (const fn of cleanups) fn();
+    }
+
+    const { cache: restarted, cleanups: restartedCleanups } = makeCache();
+    try {
+      const entry = restarted.getOrCreate(projectDir, projectDir, undefined);
+      expect(entry.state!.config.globals.preset).toBe("both");
+    } finally {
+      for (const fn of restartedCleanups) fn();
+    }
+  });
+
+  // [LAW:verifiable-goals] brandon-presets-0yk.2: the risk `persist: "preset"`
+  // introduces that no other persisted field carries. The overrides file at
+  // configOverridesPath() is ONE file shared by EVERY project on the machine
+  // (candybar-config-engine-71o.2), but `presets` is a per-config domain — a
+  // name valid for the project that persisted it may not exist in the next
+  // project this same daemon serves. Without sanitizePersistedPresetOverride
+  // (src/config/presets.ts), the merged globals.preset would reach
+  // validateConfig's cross-ref check and fail the ENTIRE render fatally, for
+  // a config that never even mentions presets. The epic's binding guardrail
+  // ("a stale or deleted preset name collapses to the floor, visibly ... do
+  // not throw") must hold for this layer exactly as it already does for a
+  // stale SessionState pick.
+  test("a persisted preset name this config doesn't declare drops silently instead of failing the render", async () => {
+    const userConfigPath = join(projectDir, ".cc-candybar.json5");
+    writeFileSync(
+      userConfigPath,
+      // No `presets` block at all — this project never opted in.
+      JSON.stringify({ globals: {}, segments: {} }),
+    );
+
+    const overridesPath = join(
+      xdgStateDir,
+      "cc-candybar",
+      "config-overrides.json",
+    );
+    // Written by a `persist: "preset"` click against a DIFFERENT project's
+    // config, which declared "compact". This project never did.
+    writeConfigOverride(overridesPath, "preset", "compact");
+
+    const { cache, cleanups } = makeCache();
+    try {
+      const entry = cache.getOrCreate(projectDir, projectDir, undefined);
+      expect(entry.lastError).toBeNull();
+      expect(entry.state).not.toBeNull();
+      expect(entry.state!.config.globals.preset).toBeUndefined();
+      // Falls through to the same floor collapse a stale SessionState pick
+      // gets — the label and the arrangement stay in agreement.
+      expect(
+        effectivePresetName(
+          null,
+          entry.state!.config.globals.preset,
+          entry.state!.config.presets,
+        ),
+      ).toBe(PRESET_FLOOR);
+    } finally {
+      for (const fn of cleanups) fn();
+    }
+  });
+
+  // [LAW:verifiable-goals] brandon-presets-0yk.2 done-gate: "switching
+  // presets with pending overrides behaves as documented, asserted by a
+  // test" — the precedence chain in docs/interaction-authoring.md and
+  // src/config/presets.ts, driven through the REAL RenderCache (so the
+  // persisted override is genuinely baked into config.globals, not asserted
+  // against a hand-built fixture) and the real presetGlobals composition the
+  // daemon calls: a preset's own fields win over a persisted default (a
+  // "compact" preset must actually change padding, even for a user who once
+  // persisted a padding they liked); a field the active preset says nothing
+  // about still reads the persisted default underneath it.
+  test("an active preset's own field wins over a persisted default; a field the preset doesn't touch keeps reading the persisted default", async () => {
+    const userConfigPath = join(projectDir, ".cc-candybar.json5");
+    writeFileSync(
+      userConfigPath,
+      JSON.stringify({
+        globals: {},
+        segments: {},
+        presets: { roomy: { globals: { padding: 4 } } },
+      }),
+    );
+
+    const overridesPath = join(
+      xdgStateDir,
+      "cc-candybar",
+      "config-overrides.json",
+    );
+    writeConfigOverride(overridesPath, "padding", 2);
+    writeConfigOverride(overridesPath, "charset", "ascii");
+
+    const { cache, cleanups } = makeCache();
+    try {
+      const entry = cache.getOrCreate(projectDir, projectDir, undefined);
+      expect(entry.lastError).toBeNull();
+
+      // No active preset (the floor): the persisted overrides apply as-is.
+      const atFloor = presetGlobals(entry.state!.config, PRESET_FLOOR);
+      expect(atFloor.padding).toBe(2);
+      expect(atFloor.charset).toBe("ascii");
+
+      // "roomy" declares padding — it wins over the persisted 2. It says
+      // nothing about charset — the persisted "ascii" survives underneath.
+      const atRoomy = presetGlobals(entry.state!.config, "roomy");
+      expect(atRoomy.padding).toBe(4);
+      expect(atRoomy.charset).toBe("ascii");
+    } finally {
+      for (const fn of cleanups) fn();
     }
   });
 
