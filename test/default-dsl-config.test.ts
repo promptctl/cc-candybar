@@ -1220,6 +1220,12 @@ describe("bundled preset library renders clean at every width — brandon-preset
     const globals = presetGlobals(DEFAULT_DSL_CONFIG, name);
     const effective: EffectiveGlobals = {
       preset: name,
+      // A fresh install/session has never clicked +/-, so no preset carries
+      // accumulated rootOps by default — the realistic baseline for the
+      // "renders clean" sweep below. The dedicated "customized" test further
+      // down overrides `.preset.customized` via `withPayload` instead of
+      // this shared default.
+      presetCustomized: false,
       theme: effectiveThemeName(null, globals.palette),
       look: effectiveLookName(null, globals.look, DEFAULT_DSL_CONFIG.looks),
       style: effectiveStripStyle(null, globals.style),
@@ -1314,5 +1320,28 @@ describe("bundled preset library renders clean at every width — brandon-preset
     expect(line).toContain("to 5h"); // burnrate
     expect(line).toContain("⇅ out"); // speed
     expect(line).toMatch(/[▁▂▃▄▅▆▇█]/); // tokenSparkline's own block glyphs
+  });
+
+  // brandon-layout-edit-2gc.5 — the visible diagnostic for accumulated
+  // rootOps: edit-chrome.ts's synthesized banner is spliced UNCONDITIONALLY
+  // ([LAW:dataflow-not-control-flow]), so this pins BOTH values of the same
+  // predicate rather than only the "never customized" case the sweep above
+  // already covers implicitly.
+  test("customized preset shows the reset banner; a clean one doesn't", () => {
+    // eslint-disable-next-line no-control-regex
+    const ANSI = /\x1b\[[0-9;]*m|\x1b\]8;;[^\x1b]*\x1b\\/g;
+    const withCustomized = (base: Record<string, unknown>) => ({
+      ...base,
+      preset: { effective: "default", customized: true },
+    });
+    const customizedLine = renderPreset(
+      "default",
+      200,
+      withCustomized,
+    ).rendered.replace(ANSI, "");
+    expect(customizedLine).toContain("↺ default customized");
+
+    const cleanLine = renderPreset("default", 200).rendered.replace(ANSI, "");
+    expect(cleanLine).not.toContain("↺");
   });
 });

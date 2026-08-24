@@ -378,6 +378,17 @@ export const RAW_DEFAULT_DSL_CONFIG = {
       path: "preset.effective",
       default: "",
     },
+    // [LAW:one-source-of-truth] brandon-layout-edit-2gc.5 — presetIsCustomized
+    // over the SAME reload's presetRootOps, resolved alongside preset.effective
+    // (RenderPayload.preset.customized). edit-chrome.ts's synthesized "↺ …
+    // customized" segment gates on this directly; a hand-authored config can
+    // read it too for its own reset affordance.
+    "preset.customized": {
+      kind: "input",
+      path: "preset.customized",
+      type: "boolean",
+      default: false,
+    },
     // [LAW:one-type-per-behavior] style/charset/colorCompatibility/autoWrap/
     // padding are theme/look's twins over the remaining persistable globals
     // (candybar-config-engine-71o.3) — the SAME values BuildLineOptions

@@ -208,6 +208,25 @@ export function sanitizePersistedPresetOverride(
 // already removed it. A malformed individual token (decodeLayoutOp -> null;
 // can only arise from hand-edited or previous-version state, never from this
 // process's own encodeLayoutOp) is filtered the same way, never applied.
+// [LAW:one-source-of-truth] brandon-layout-edit-2gc.5's diagnostic seam — the
+// ONE definition of "does this preset's rendered layout currently differ
+// from what's literally declared in the config file", read from the SAME
+// raw op-log record applyPresetRootOpsOverrides replays (never re-derived by
+// diffing the replayed tree against a fresh presetRoot() call, which would
+// be a second, weaker definition — a structural coincidence between two
+// unrelated edits could equal zero net ops and still disagree with the raw
+// log's own length). A name absent from the record (never edited) and a
+// name present with an empty token list (edited down to nothing, e.g. by
+// undo) are the SAME "not customized" — presence in the record only ever
+// means "this reload's overrides file had an entry", not "and it's non-
+// empty" [LAW:no-defensive-null-guards].
+export function presetIsCustomized(
+  presetRootOps: Readonly<Record<string, readonly string[]>>,
+  name: string,
+): boolean {
+  return (presetRootOps[name]?.length ?? 0) > 0;
+}
+
 export function applyPresetRootOpsOverrides(
   config: DslConfig,
   presetRootOps: Readonly<Record<string, readonly string[]>>,
