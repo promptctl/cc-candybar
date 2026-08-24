@@ -24,6 +24,12 @@
 //      < ACTIVE PRESET, unchanged) — the SAME watcher-driven reload path a
 //      hand edit to the config file already takes, survives a real restart,
 //      and never touches the hand-authored config file.
+//   6. brandon-layout-edit-2gc.5's own done-gate: a non-empty accumulated op
+//      log is a VISIBLE fact (presetIsCustomized, projected as
+//      `.preset.customized`), edit mode synthesizes a `reset`-backed banner
+//      for it per preset for free, and firing that reset through the real
+//      daemon handler clears the log and restores the literal declared root
+//      — never a silent drift between what's on screen and what's on disk.
 
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -57,6 +63,7 @@ import { GitDataProvider } from "../src/daemon/cache/git";
 import { WatcherRegistry } from "../src/daemon/cache/watchers";
 import { encodeLayoutOp } from "../src/config/layout-ops";
 import { walkNodes, type LayoutNode } from "../src/config/dsl-types";
+import { presetIsCustomized } from "../src/config/presets";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 
@@ -748,6 +755,90 @@ describe("RenderCache: layout ops replay onto the resolved preset root", () => {
           // config file edit, surviving two full "restarts" along the way.
           expect(segmentNamesOf(rootRestored)).toContain("toolbar");
           expect(readFileSync(userConfigPath, "utf8")).toBe(bareUserConfig);
+        } finally {
+          for (const fn of cleanups3) fn();
+        }
+      } finally {
+        for (const fn of cleanups2) fn();
+      }
+    } finally {
+      for (const fn of cleanups) fn();
+    }
+  });
+
+  // [LAW:verifiable-goals] brandon-layout-edit-2gc.5's own done-gate: the
+  // visible diagnostic and its reset affordance, driven through the REAL
+  // RenderCache (presetRootOps is a fact of THIS reload, never re-read), the
+  // REAL synthesized reset action (edit-chrome.ts's prependCustomizedBanner,
+  // reached only when DEFAULT_DSL_CONFIG's `toolbar` wires edit.toggle —
+  // exactly the merged-default path every other test in this describe block
+  // already exercises), and the REAL daemon reset-config handler — never a
+  // synthetic stand-in for any of the three.
+  test("a customized preset shows the diagnostic; resetting clears it and restores the literal root", () => {
+    const userConfigPath = join(projectDir, ".cc-candybar.json5");
+    writeFileSync(userConfigPath, userConfigBody);
+
+    const { cache, cleanups } = makeCache();
+    try {
+      // Before any edit: not customized, and the resolved tree carries no
+      // "↺ … customized" segment at all (the banner's own `when` still gates
+      // it out visually, but this proves the FACT the gate reads is false).
+      const before = cache.getOrCreate(projectDir, projectDir, undefined);
+      expect(before.lastError).toBeNull();
+      expect(
+        presetIsCustomized(before.state!.presetRootOps, "default"),
+      ).toBe(false);
+      const rootBefore = before.state!.config.presets.default!.root!;
+      expect(segmentNamesOf(rootBefore)).toEqual(["directory", "git"]);
+
+      writeConfigOverride(
+        overridesPath(),
+        "presets.default.rootOps",
+        JSON.stringify([encodeLayoutOp({ op: "remove", target: "directory" })]),
+      );
+
+      const { cache: cache2, cleanups: cleanups2 } = makeCache();
+      try {
+        const customized = cache2.getOrCreate(projectDir, projectDir, undefined);
+        expect(customized.lastError).toBeNull();
+        expect(
+          presetIsCustomized(customized.state!.presetRootOps, "default"),
+        ).toBe(true);
+        expect(segmentNamesOf(customized.state!.config.presets.default!.root!)).toEqual(["git"]);
+        // The synthesized reset action targets the SAME key the +/-
+        // affordances already write — no second gate to register.
+        const resetActionNames = Object.entries(
+          customized.state!.config.actions,
+        )
+          .filter(
+            ([, a]) =>
+              "reset" in a && a.reset === "presets.default.rootOps",
+          )
+          .map(([name]) => name);
+        expect(resetActionNames.length).toBe(1);
+
+        // Fire the reset click through the REAL daemon handler — no key
+        // to discover from the action name; reset-config only ever needs
+        // the target key, exactly like a hand click would send.
+        const sessionState = new SessionState();
+        const ctx: VerbContext = { sessionState, dlog: () => {} };
+        const resetConfig = VERBS.get("reset-config")!;
+        resetConfig(
+          `${encodeURIComponent("s1")}/${encodeURIComponent("presets.default.rootOps")}`,
+          ctx,
+        );
+
+        const { cache: cache3, cleanups: cleanups3 } = makeCache();
+        try {
+          const restored = cache3.getOrCreate(projectDir, projectDir, undefined);
+          expect(restored.lastError).toBeNull();
+          expect(
+            presetIsCustomized(restored.state!.presetRootOps, "default"),
+          ).toBe(false);
+          expect(
+            segmentNamesOf(restored.state!.config.presets.default!.root!),
+          ).toEqual(["directory", "git"]);
+          expect(readFileSync(userConfigPath, "utf8")).toBe(userConfigBody);
         } finally {
           for (const fn of cleanups3) fn();
         }

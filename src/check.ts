@@ -121,6 +121,17 @@ export function checkPayload(
     tmux: { session: "work" },
     theme: { effective: effective.theme },
     look: { effective: effective.look },
+    // [LAW:one-source-of-truth] Was missing here even though EffectiveGlobals
+    // already carried `preset` — a pre-existing gap this ticket's own fixture
+    // needs closed: a preset trigger's `.preset.effective` label and
+    // brandon-layout-edit-2gc.5's `.preset.customized` gate both silently
+    // fell back to their declared defaults ("" / false) rather than the
+    // resolved value, exactly the drift the sibling `*.effective` fields
+    // already guard against.
+    preset: {
+      effective: effective.preset,
+      customized: effective.presetCustomized,
+    },
     style: { effective: effective.style },
     charset: { effective: effective.charset },
     colorCompatibility: { effective: effective.colorCompatibility },
@@ -294,6 +305,11 @@ function loadRegisterRender(
     const globals = presetGlobals(config, preset);
     const effective: EffectiveGlobals = {
       preset,
+      // [LAW:no-silent-failure] `check` validates a config file in isolation
+      // — it never reads the daemon-owned overrides file, so there is no
+      // rootOps log to be customized BY. false is the honest value, not a
+      // stand-in default: a static check can never see accumulated clicks.
+      presetCustomized: false,
       theme: effectiveThemeName(null, globals.palette),
       look: effectiveLookName(null, globals.look, config.looks),
       style: effectiveStripStyle(null, globals.style),

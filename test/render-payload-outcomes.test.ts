@@ -44,6 +44,7 @@ const EFFECTIVE_GLOBALS: EffectiveGlobals = {
   theme: "textual-dark",
   look: "none",
   preset: "default",
+  presetCustomized: false,
   style: "powerline",
   charset: "unicode",
   colorCompatibility: "truecolor",
@@ -319,6 +320,7 @@ describe("buildRenderPayload — effective globals projection", () => {
       theme: "nord",
       look: "vivid",
       preset: "default",
+      presetCustomized: true,
       style: "capsule",
       charset: "ascii",
       colorCompatibility: "256",
@@ -335,6 +337,7 @@ describe("buildRenderPayload — effective globals projection", () => {
     );
     expect(payload.theme).toEqual({ effective: "nord" });
     expect(payload.look).toEqual({ effective: "vivid" });
+    expect(payload.preset).toEqual({ effective: "default", customized: true });
     expect(payload.style).toEqual({ effective: "capsule" });
     expect(payload.charset).toEqual({ effective: "ascii" });
     expect(payload.colorCompatibility).toEqual({ effective: "256" });

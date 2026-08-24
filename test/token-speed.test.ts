@@ -266,6 +266,7 @@ const EFFECTIVE_GLOBALS: EffectiveGlobals = {
   theme: "textual-dark",
   look: "none",
   preset: "default",
+  presetCustomized: false,
   style: "powerline",
   charset: "unicode",
   colorCompatibility: "truecolor",

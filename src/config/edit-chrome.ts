@@ -51,6 +51,16 @@ import {
   disclosureStateVar,
 } from "./disclosure.js";
 
+// [LAW:dataflow-not-control-flow] brandon-layout-edit-2gc.5's diagnostic gate
+// — read the SAME way EDIT_MODE_GATE is: a bare boolean input var, false
+// only on the literal text "false" (evaluateWhen's documented contract).
+// `.preset.customized` is a per-render payload fact (presetIsCustomized over
+// entry.state.presetRootOps for whichever preset is ACTIVE), not config-time
+// knowledge, so the banner below is spliced UNCONDITIONALLY for every
+// preset — same shape, every reload — and this predicate is what decides
+// whether it's visible, never a branch in this synthesis pass.
+const PRESET_CUSTOMIZED_GATE = "{{ .preset.customized }}";
+
 // [LAW:one-source-of-truth] group/menu-synthesized segments (`groups.`/
 // `menus.`) and edit mode's own trigger/chrome (`edit.`) are structural —
 // removing one via `-` would strand its sibling artifacts (a toggle segment
@@ -72,6 +82,16 @@ function isChromeExempt(name: string): boolean {
 // everything else collapses to `_`.
 function ident(name: string): string {
   return name.replace(/[^A-Za-z0-9]+/g, "_");
+}
+
+// [LAW:no-silent-failure] Go-template string-literal escaping for a preset
+// NAME spliced into DISPLAY text (prependCustomizedBanner) rather than an
+// identifier — the same hazard loader/layout.ts's group `label` synthesis
+// already guards against (reimplemented here for the same module-private
+// reason `ident` above is), since a preset name is validated only
+// non-empty/slash-free, not template-safe.
+function escapeTemplateLiteral(s: string): string {
+  return s.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
 }
 
 // [LAW:one-source-of-truth] Every synthesized decl this pass produces, keyed
@@ -258,6 +278,45 @@ function spliceContainer(
   return { ...node, children };
 }
 
+// brandon-layout-edit-2gc.5's other per-preset affordance: a `+`/`-` sibling
+// that isn't about ONE gap but about the preset's rootOps log as a whole —
+// synthesized the SAME way (one reset action targeting this preset's exact
+// `persist` key, one segment hosting `{{ action }}`), UNCONDITIONALLY, with
+// visibility carried entirely by PRESET_CUSTOMIZED_GATE
+// [LAW:dataflow-not-control-flow]. Prepended as an extra ROW (not spliced
+// into the row-interleaved chrome spliceContainer builds) because it is not
+// bound to any one segment gap — it is a fact about the whole tree — so it
+// gets its own line above it, visible or not by the SAME `when` every other
+// synthesized affordance here already uses.
+function prependCustomizedBanner(
+  splicedRoot: LayoutNode,
+  presetName: string,
+  presetIdent: string,
+  rootOpsKey: string,
+  artifacts: ChromeArtifacts,
+): LayoutNode {
+  const actionName = `${EDIT_NS}${presetIdent}.resetLayout`;
+  const chromeSegName = `${EDIT_NS}${presetIdent}.customized`;
+  // [LAW:no-silent-failure] `reset` clears `rootOpsKey` outright, restoring
+  // presetRoot's own fallback (the config's literal, hand-authored root) on
+  // the next reload — the exact undo the ticket's guardrail asked for, and
+  // no new gate: `rootOpsKey` is already a registered `persist` target
+  // wherever this preset's tree has at least one addable/removable segment
+  // (removeChrome/insertChrome above), which is every preset that could
+  // possibly have accumulated ops to reset in the first place.
+  artifacts.actions[actionName] = { reset: rootOpsKey };
+  const label = escapeTemplateLiteral(presetName);
+  artifacts.segments[chromeSegName] = {
+    template: `{{ action "${actionName}" "↺ ${label} customized" }}`,
+    when: PRESET_CUSTOMIZED_GATE,
+  };
+  return {
+    kind: "container",
+    direction: "vertical",
+    children: [{ kind: "segment", name: chromeSegName }, splicedRoot],
+  };
+}
+
 // One preset's chrome-spliced root. A bare-segment root (the A-grammar
 // collapses a single top-level segment ref to `{ kind: "segment", name }`
 // with no enclosing container) is wrapped in a synthetic horizontal
@@ -277,13 +336,20 @@ function spliceEditChromeForPreset(
     node.kind === "container"
       ? node
       : { kind: "container", direction: "horizontal", children: [node] };
-  return spliceContainer(
+  const spliced = spliceContainer(
     container,
     presetIdent,
     rootOpsKey,
     domainName,
     artifacts,
     posCounter,
+  );
+  return prependCustomizedBanner(
+    spliced,
+    presetName,
+    presetIdent,
+    rootOpsKey,
+    artifacts,
   );
 }
 

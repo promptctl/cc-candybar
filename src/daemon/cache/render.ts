@@ -85,6 +85,17 @@ export interface DslRenderState {
   readonly compiled: CompiledConfig;
   readonly neededInputPaths: ReadonlySet<string>;
   readonly lastRenderCellsBySegment: Map<string, readonly RichText[]>;
+  // [LAW:one-source-of-truth] The RAW accumulated-ops record this reload read
+  // from the overrides file (the exact input applyPresetRootOpsOverrides
+  // replayed into `config.presets[name].root` above) — carried alongside the
+  // replayed config because the replay CONSUMES the op count: by the time a
+  // preset's tree is spliced/validated, nothing about it says how many ops
+  // (if any) produced it. brandon-layout-edit-2gc.5 reads this per render
+  // (keyed by the active preset name) to answer "does the bar's current
+  // arrangement differ from what's literally in the user's file" without a
+  // second overrides read (this entry rebuilds on the SAME watcher that
+  // rebuilds `config`, so the two never drift).
+  readonly presetRootOps: Readonly<Record<string, readonly string[]>>;
   // [LAW:single-enforcer] Disposers for the SessionState validators this config
   // installed (derived from its action table). Disposed on swap/eviction in the
   // same dispose-before-swap transaction as the SourceRegistry, so a reload
@@ -414,6 +425,7 @@ export class RenderCache {
       neededInputPaths: buildNeededPrefixes(config),
       lastRenderCellsBySegment: new Map<string, readonly RichText[]>(),
       validatorDisposers,
+      presetRootOps: overrides.presetRootOps,
     };
   }
 
