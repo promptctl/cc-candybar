@@ -1016,8 +1016,12 @@ describe("RenderCache: persistent overrides merge into the effective config", ()
       "config-overrides.json",
     );
     // Written by a `persist: "preset"` click against a DIFFERENT project's
-    // config, which declared "compact". This project never did.
-    writeConfigOverride(overridesPath, "preset", "compact");
+    // config, which declared this name. This project never did — and unlike
+    // "compact"/"verbose" (brandon-presets-0yk.3's bundled library, merged by
+    // name into EVERY project, so a stale-name test can no longer use either
+    // as its "undeclared here" example), a name this fictitious cannot
+    // collide with the bundled library either.
+    writeConfigOverride(overridesPath, "preset", "widescreen-workstation-only");
 
     const { cache, cleanups } = makeCache();
     try {

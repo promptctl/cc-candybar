@@ -21,9 +21,12 @@
 // (brandon-config-aoi): this test is what keeps that proof honest over time.
 
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 
 import { checkConfig, checkPlan } from "../src/check";
+import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
+import { presetNames } from "../src/config/presets";
 
 const examplesDir = path.join(__dirname, "..", "examples");
 
@@ -113,4 +116,44 @@ describe("shipped example configs (examples/*.json5)", () => {
     expect(out).toContain("v1.15.0");
     expect(out).toContain("63%"); // block utilization
   });
+});
+
+// [LAW:verifiable-goals] brandon-presets-0yk.3's own done-gate: "the examples/
+// load test covers the bundled library the way it covers example configs" —
+// the same `cc-candybar check` guarantee the suite above gives every shipped
+// examples/*.json5 file, given here to every NAME in the bundled `presets`
+// library, via the one-line config a real user would write to pick one
+// (`globals: { preset: "<name>" }`) — not a hand-built render rig, the actual
+// CLI entry point, on a real temp file on disk.
+describe("bundled preset library is clean under `cc-candybar check`", () => {
+  const withPresetConfig = <T,>(preset: string, fn: (configPath: string) => T): T => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "ccb-bundled-presets-"));
+    const configPath = path.join(dir, ".cc-candybar.json5");
+    fs.writeFileSync(configPath, JSON.stringify({ globals: { preset } }));
+    try {
+      return fn(configPath);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  };
+
+  // Guard against the domain silently shrinking to just the floor — a preset
+  // this suite never iterates would be a preset never `check`-tested.
+  test("the bundled library declares more than just the floor", () => {
+    expect(presetNames(DEFAULT_DSL_CONFIG.presets).length).toBeGreaterThan(1);
+  });
+
+  test.each(presetNames(DEFAULT_DSL_CONFIG.presets))(
+    'a config picking preset "%s" is clean under check (exit 0) and renders',
+    (preset) => {
+      const outcome = withPresetConfig(preset, (p) => checkConfig(p));
+      if (outcome.kind !== "clean") {
+        throw new Error(
+          `preset "${preset}": ${outcome.kind}: ${"message" in outcome ? outcome.message : ""}`,
+        );
+      }
+      expect(checkPlan(outcome).code).toBe(0);
+      expect(outcome.rendered.length).toBeGreaterThan(0);
+    },
+  );
 });
