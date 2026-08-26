@@ -55,6 +55,12 @@ jobs:
         uses: brandon-fryslie/coding-agent-review@v1
         with:
           DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+          # Pinned rather than left at the action's PROVIDER: auto default: auto
+          # now resolves to claude-subscription, which needs CLAUDE_CODE_OAUTH_TOKEN
+          # — a credential this workflow never provisions (install.sh only syncs
+          # DEEPSEEK_API_KEY). Left at auto, every review run fails outright.
+          # [LAW:no-silent-failure] pin to the credential actually supplied above.
+          PROVIDER: deepseek
           # DEPENDENCY_DIFF is on for EVERY repo this installs into — a deliberate
           # universal default baked into the template, NOT a per-repo divergence that
           # leaked in. On a PR that bumps a dependency the reviewer fetches the bumped
