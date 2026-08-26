@@ -1,3 +1,10 @@
+## [1.34.1](https://github.com/promptctl/cc-candybar/compare/v1.34.0...v1.34.1) (2026-08-26)
+
+
+### Bug Fixes
+
+* **demo:** update stale fg auto grammar and justfile demo target ([#188](https://github.com/promptctl/cc-candybar/issues/188)) ([d60b90c](https://github.com/promptctl/cc-candybar/commit/d60b90c08a9d16c6c4c44625ca6c27c7d4971268))
+
 # [1.34.0](https://github.com/promptctl/cc-candybar/compare/v1.33.0...v1.34.0) (2026-08-24)
 
 
