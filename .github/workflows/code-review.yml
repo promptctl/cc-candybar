@@ -47,20 +47,26 @@ jobs:
     timeout-minutes: 30
     steps:
       - name: Checkout pull request
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803  # v6
         with:
           ref: ${{ github.event.pull_request.head.sha }}
 
+      # Pinned by SHA rather than by tag, and deliberately so: this step receives a
+      # long-lived subscription token, and a tag can be moved under it without any diff
+      # landing in this repo. The SHA is chosen in install.sh, which owns this file.
+      #
+      # BOTH credentials are passed on purpose. PROVIDER defaults to `auto`, which the
+      # action retargets centrally — it moved from deepseek to claude-subscription in
+      # 1.42.0 — and a workflow carrying only the then-current target's secret breaks the
+      # day it moves. Passing both means a retarget needs no edit here: PROVIDER alone
+      # selects the provider and credential presence never steers it, so the unused input
+      # is simply never read. The action fails loudly, before spending anything, if the
+      # credential for the CURRENT target is the one missing.
       - name: Code Review
-        uses: brandon-fryslie/coding-agent-review@v1
+        uses: promptctl/copirate-code-review-agent@04083de7e05373424167fcae73030c9539b07668
         with:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
-          # Pinned rather than left at the action's PROVIDER: auto default: auto
-          # now resolves to claude-subscription, which needs CLAUDE_CODE_OAUTH_TOKEN
-          # — a credential this workflow never provisions (install.sh only syncs
-          # DEEPSEEK_API_KEY). Left at auto, every review run fails outright.
-          # [LAW:no-silent-failure] pin to the credential actually supplied above.
-          PROVIDER: deepseek
           # DEPENDENCY_DIFF is on for EVERY repo this installs into — a deliberate
           # universal default baked into the template, NOT a per-repo divergence that
           # leaked in. On a PR that bumps a dependency the reviewer fetches the bumped

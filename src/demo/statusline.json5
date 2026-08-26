@@ -47,10 +47,10 @@
   },
 
   // ── Segments: how each piece of data is drawn ────────────────────────────
-  // `bg`/`fg` are palette spec strings, and `fg` may also be a template that
-  // computes a color — `{{ contrastOn (bgOf) }}` picks black or white,
-  // whichever is readable against this segment's own background.
-  // `when` hides a segment when it evaluates false.
+  // `bg`/`fg` are palette spec strings, and either may also be a template
+  // that computes a color — `fg: '{{ contrastOn (bgOf) }}'` below picks
+  // black or white, whichever is readable against this segment's own
+  // background. `when` hides a segment when it evaluates false.
   segments: {
     user: {
       template: ' {{ .user }} ',
