@@ -47,13 +47,15 @@
   },
 
   // ── Segments: how each piece of data is drawn ────────────────────────────
-  // `bg`/`fg` are palette spec strings. `fg: 'auto'` picks a readable foreground
-  // for the segment's background. `when` hides a segment when it evaluates false.
+  // `bg`/`fg` are palette spec strings, and `fg` may also be a template that
+  // computes a color — `{{ contrastOn (bgOf) }}` picks black or white,
+  // whichever is readable against this segment's own background.
+  // `when` hides a segment when it evaluates false.
   segments: {
     user: {
       template: ' {{ .user }} ',
       bg: 'primary',
-      fg: 'auto',
+      fg: '{{ contrastOn (bgOf) }}',
     },
     directory: {
       template: ' {{ .here }} ',
@@ -63,14 +65,14 @@
     branch: {
       template: ' {{ .branch }} ',
       bg: 'accent',
-      fg: 'auto',
+      fg: '{{ contrastOn (bgOf) }}',
       when: '{{ ne .branch "" }}',   // hidden entirely outside a git repo
       palette: 'gruvbox',      // this segment pulls its OWN palette (per-segment switch)
     },
     model: {
       template: ' {{ .model }} ',
       bg: 'secondary',
-      fg: 'auto',
+      fg: '{{ contrastOn (bgOf) }}',
       when: '{{ ne .model "" }}',
     },
     session: {
@@ -81,7 +83,7 @@
     clock: {
       template: ' {{ .clock }} ',
       bg: 'primary',
-      fg: 'auto',
+      fg: '{{ contrastOn (bgOf) }}',
     },
   },
 

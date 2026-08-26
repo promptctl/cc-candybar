@@ -1,5 +1,5 @@
 demo:
-    npx tsx src/demo/app.ts
+    pnpm demo
 
 # Full local deploy: build the bundle and stage the native render-path
 # binary. After this, a statusline launcher pointing at the checkout
