@@ -121,8 +121,8 @@ fn parse_stdin() -> Result<ParsedInput, BadInput> {
             "no input on stdin (this tool reads hook data from Claude Code)".into(),
         ));
     }
-    let hook_data: serde_json::Value = serde_json::from_slice(&buf)
-        .map_err(|e| BadInput::Msg(format!("stdin not JSON: {e}")))?;
+    let hook_data: serde_json::Value =
+        serde_json::from_slice(&buf).map_err(|e| BadInput::Msg(format!("stdin not JSON: {e}")))?;
     let session_id = hook_data
         .get("session_id")
         .and_then(|v| v.as_str())
@@ -226,10 +226,12 @@ fn render(argv: &[String], hook_data: &serde_json::Value) -> RenderOutcome {
         Ok(p) => p.to_string_lossy().into_owned(),
         Err(e) => return RenderOutcome::Transient(TransientCause::Io(e.to_string())),
     };
-    // [LAW:single-enforcer] Terminal width is captured here, in the client's
+    // [LAW:single-enforcer] Client hints are captured here, in the client's
     // live shell context, then trusted by the daemon. The daemon's own env
-    // reflects whichever shell launched it, not the active terminal.
+    // reflects whichever shell launched it — not the active terminal, and not
+    // whether THIS session arrived over SSH.
     let term_cols = detect_term_cols();
+    let ssh = detect_ssh();
 
     let mut request = serde_json::json!({
         "v": PROTOCOL_VERSION,
@@ -238,9 +240,19 @@ fn render(argv: &[String], hook_data: &serde_json::Value) -> RenderOutcome {
         "args": argv,
         "cwd": cwd,
     });
+    // --- client hints (mirrors ClientHints in src/daemon/protocol.ts) ---
+    // [LAW:one-source-of-truth] scripts/check-protocol.mjs diffs the key set in
+    // this block against that interface — add a hint in both runtimes at once.
+    //
+    // termCols is CONDITIONAL: absence is the honest "could not determine".
+    // ssh is UNCONDITIONAL: our own env is a total answer, so we always state
+    // it, which reserves absence to mean "client too old to report" and keeps
+    // that distinguishable from a genuine local session.
     if let Some(cols) = term_cols {
         request["termCols"] = serde_json::Value::from(cols);
     }
+    request["ssh"] = serde_json::Value::from(ssh);
+    // --- end client hints ---
     let body = match serde_json::to_vec(&request) {
         Ok(b) => b,
         // Encoding our own request failed — this is a programming error
@@ -397,6 +409,20 @@ fn detect_term_cols() -> Option<u32> {
     None
 }
 
+// The env vars an SSH login shell inherits from sshd — mirrors SSH_ENV_VARS in
+// src/index.ts, diffed by scripts/check-protocol.mjs. Both runtimes must agree
+// on what "SSH" means, or the native fast path and the node fallback would
+// report the same session differently.
+const SSH_ENV_VARS: [&str; 3] = ["SSH_CONNECTION", "SSH_CLIENT", "SSH_TTY"];
+
+// [LAW:dataflow-not-control-flow] A fold over the vocabulary above. Total by
+// construction: reading our own env always yields an answer, so "no var set"
+// is the affirmative "local", never a failed detection.
+fn detect_ssh() -> bool {
+    SSH_ENV_VARS
+        .iter()
+        .any(|name| env::var(name).is_ok_and(|v| !v.is_empty()))
+}
 
 // Path families — must agree with src/daemon/paths.ts or the client can't
 // find the daemon's socket.
@@ -420,7 +446,10 @@ fn state_dir() -> PathBuf {
         return Path::new(&xdg).join("cc-candybar");
     }
     let home = env::var_os("HOME").unwrap_or_else(|| OsString::from("/"));
-    Path::new(&home).join(".local").join("state").join("cc-candybar")
+    Path::new(&home)
+        .join(".local")
+        .join("state")
+        .join("cc-candybar")
 }
 
 // --- per-session last-render cache ---------------------------------------
@@ -926,17 +955,29 @@ mod tests {
     #[test]
     fn classify_io_error_keeps_connection_errors_transient() {
         let conn = classify_io_error(io::Error::from(io::ErrorKind::ConnectionRefused));
-        assert!(matches!(conn, RenderOutcome::Transient(TransientCause::Unreachable(_))));
+        assert!(matches!(
+            conn,
+            RenderOutcome::Transient(TransientCause::Unreachable(_))
+        ));
         let nf = classify_io_error(io::Error::from(io::ErrorKind::NotFound));
-        assert!(matches!(nf, RenderOutcome::Transient(TransientCause::Unreachable(_))));
+        assert!(matches!(
+            nf,
+            RenderOutcome::Transient(TransientCause::Unreachable(_))
+        ));
         let to = classify_io_error(io::Error::from(io::ErrorKind::TimedOut));
-        assert!(matches!(to, RenderOutcome::Transient(TransientCause::Timeout)));
+        assert!(matches!(
+            to,
+            RenderOutcome::Transient(TransientCause::Timeout)
+        ));
     }
 
     #[test]
     fn classify_io_error_default_is_transient_io() {
         let other = classify_io_error(io::Error::new(io::ErrorKind::Other, "something"));
-        assert!(matches!(other, RenderOutcome::Transient(TransientCause::Io(_))));
+        assert!(matches!(
+            other,
+            RenderOutcome::Transient(TransientCause::Io(_))
+        ));
     }
 
     fn argv(parts: &[&str]) -> Vec<String> {
@@ -972,7 +1013,10 @@ mod tests {
     // The render hot path (flags only, or no args) stays on the Rust render path.
     #[test]
     fn dispatch_keeps_render_invocation_local() {
-        assert!(!should_dispatch_to_node(&argv(&["cc-candybar", "--style=powerline"]), false));
+        assert!(!should_dispatch_to_node(
+            &argv(&["cc-candybar", "--style=powerline"]),
+            false
+        ));
         assert!(!should_dispatch_to_node(&argv(&["cc-candybar"]), false));
     }
 
@@ -1091,8 +1135,14 @@ mod tests {
 
     #[test]
     fn dispatch_help_and_tty_to_node() {
-        assert!(should_dispatch_to_node(&argv(&["cc-candybar", "--help"]), false));
-        assert!(should_dispatch_to_node(&argv(&["cc-candybar", "-h"]), false));
+        assert!(should_dispatch_to_node(
+            &argv(&["cc-candybar", "--help"]),
+            false
+        ));
+        assert!(should_dispatch_to_node(
+            &argv(&["cc-candybar", "-h"]),
+            false
+        ));
         // No positional subcommand, but an interactive TTY → Node prints the
         // needs-input error.
         assert!(should_dispatch_to_node(&argv(&["cc-candybar"]), true));

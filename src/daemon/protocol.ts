@@ -34,12 +34,61 @@ export interface RenderRequest {
   hookData: ClaudeHookData;
   args: string[];
   cwd: string;
-  // [LAW:single-enforcer] Terminal width is captured at the trust boundary
-  // (the client's env, where COLUMNS/ioctl are meaningful) and trusted by the
-  // daemon. Absence means the client couldn't determine it. The wire field is
-  // typed `number` but the wire is untrusted JSON — callers MUST run it
-  // through sanitizeTermCols at the receive boundary before using it.
+  // ─── Client hints ────────────────────────────────────────────────────────
+  // [LAW:single-enforcer] Facts only the LIVE CLIENT can observe, captured at
+  // the trust boundary and trusted by the daemon. The daemon is detached and
+  // one-per-user, so its own env answers for whichever shell spawned it —
+  // possibly a different session, possibly hours ago. Every field below is
+  // typed here but arrives as untrusted JSON: callers MUST route the request
+  // through parseClientHints at the receive boundary, never read these
+  // directly. See the ClientHints doc block for the absence semantics.
   termCols?: number;
+  ssh?: boolean;
+}
+
+// [LAW:locality-or-seam] The seam for "a fact the daemon cannot observe about
+// the session it is rendering for". `termCols` established the pattern; `ssh`
+// is the second member, and the documented-but-unbuilt client-aware
+// `colorCompatibility: "auto"` is the next. Naming the set as ONE type is what
+// keeps that third addition a field rather than another sanitizer, another
+// wire read, and another parameter threaded through the render path.
+//
+// [LAW:parse-dont-validate] This is the stamped type. `RenderRequest`'s
+// same-named fields are raw JSON of unknown provenance; a `ClientHints` has
+// crossed the checkpoint, so nothing downstream re-checks them.
+//
+// [LAW:types-are-the-program] Both fields are optional, but they mean
+// DIFFERENT things by absence, and each is the strongest true theorem for its
+// own fact:
+//   • `termCols` absent — the client tried and could not determine a width
+//     (no COLUMNS, no TTY on stderr). A genuine "unknown", reachable from any
+//     client version.
+//   • `ssh` absent — the client did not REPORT. A current client always knows
+//     (its own env is total on this question) and so always sends `true` or
+//     `false`; absence therefore means one thing only: a client too old to
+//     carry the field — a real case, because `cc-candybar install` stages a
+//     native binary that does not turn over with the npm package. Collapsing
+//     that to `false` here would fuse "we know it's local" with "we don't
+//     know" ([LAW:no-silent-failure]); instead it travels onward as an absent
+//     payload field, where the DSL input-fallback chain emits the declared
+//     default AND records a `last_error` that `cc-candybar debug vars`
+//     surfaces.
+export interface ClientHints {
+  readonly termCols?: number;
+  readonly ssh?: boolean;
+}
+
+// [LAW:single-enforcer] The ONE checkpoint where wire-supplied client hints
+// become trusted values. Per-field sanitizers stay separate (each fact has its
+// own validity rule) but nothing outside this function calls them, so a new
+// hint cannot reach the render path un-sanitized.
+export function parseClientHints(req: RenderRequest): ClientHints {
+  const termCols = sanitizeTermCols(req.termCols);
+  const ssh = sanitizeSsh(req.ssh);
+  return {
+    ...(termCols !== undefined && { termCols }),
+    ...(ssh !== undefined && { ssh }),
+  };
 }
 
 // [LAW:no-defensive-null-guards] exception: trust boundary. The wire is
@@ -56,6 +105,14 @@ export function sanitizeTermCols(v: unknown): number | undefined {
   const n = Math.floor(v);
   if (n <= 0) return undefined;
   return n > MAX_TERM_COLS ? MAX_TERM_COLS : n;
+}
+
+// [LAW:no-defensive-null-guards] exception: trust boundary, same shape as
+// sanitizeTermCols. A non-boolean (absent, or a malformed/hostile frame) is
+// NOT coerced to `false` — the three wire states stay three
+// ([LAW:no-silent-failure]): true, false, and "no answer from this client".
+export function sanitizeSsh(v: unknown): boolean | undefined {
+  return typeof v === "boolean" ? v : undefined;
 }
 
 export interface ShutdownRequest {

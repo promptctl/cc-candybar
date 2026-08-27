@@ -38,7 +38,7 @@ import {
   PROTOCOL_VERSION,
   encodeFrame,
   makeFrameReader,
-  sanitizeTermCols,
+  parseClientHints,
 } from "./protocol";
 import type { Request, Response } from "./protocol";
 import { GitDataProvider } from "./cache/git";
@@ -836,17 +836,21 @@ async function handleRequest(req: Request): Promise<HandledRequest> {
         req.cwd,
         sessionConfigFile,
       );
-      // [LAW:single-enforcer] Width capture lives at the wire boundary.
-      // The client (Rust + TTY) is the only process that can see the real
-      // terminal; the daemon is detached. We do NOT consult getTerminalWidth's
-      // env/stderr fallbacks here — they would let the daemon's stale
-      // launch-time COLUMNS env shape rendering for a different terminal,
-      // which is exactly the wrong source.
+      // [LAW:parse-dont-validate] The ONE checkpoint for everything the client
+      // observed and the daemon cannot. Raw `req.*` hint fields are not read
+      // past this line; `hints` is the stamped type the render path consumes.
+      //
+      // [LAW:single-enforcer] Every hint is captured client-side because the
+      // daemon is detached and shared: its env answers for whichever shell
+      // spawned it. We do NOT consult getTerminalWidth's env/stderr fallbacks
+      // for width, and we do NOT consult SSH_* for remoteness — both would
+      // describe a different session than the one being rendered.
       // [LAW:one-source-of-truth] Both branches feed raw cols through
       // applyClaudeCodeReserve, so `width` always means "usable cells
       // post-reserve" with no semantic split between wire-supplied and
       // fallback values.
-      const termCols = sanitizeTermCols(req.termCols);
+      const hints = parseClientHints(req);
+      const termCols = hints.termCols;
       const width = applyClaudeCodeReserve(termCols ?? DEFAULT_TERMINAL_WIDTH);
       const renderOpts: BuildLineOptions = { ...RENDER_OPTS_BASE, width };
       // [LAW:dataflow-not-control-flow] Two outcomes fall out of one rule:
@@ -926,6 +930,7 @@ async function handleRequest(req: Request): Promise<HandledRequest> {
           req.cwd,
           entry.state.neededInputPaths,
           effective,
+          hints,
         );
         // [LAW:one-source-of-truth][LAW:dataflow-not-control-flow] basePalette
         // is derived from the same effective theme resolved above — so a theme
