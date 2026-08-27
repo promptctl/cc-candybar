@@ -210,16 +210,31 @@ anchor the moment any `set`/`persist`/`reset` action exists (it rides the
 click for error-surfacing, same as `set`), but reading `.session.id` back is
 never required for `persist` the way `{ kind: "state" }` is for `set`.
 
-### Persisting the display globals: charset, colorCompatibility, autoWrap, padding
+### The display globals: charset, colorCompatibility, autoWrap, padding
 
-These four `globals` fields have no SessionState half — no user ever picks
-them per-session, only as a config default — so `persist` is their ONLY
-seam, and `charsets`/`colorCompatibilities` are registered domains exactly
-like `themes`/`styles`, sourced from the same enums the loader validates
-`globals.charset`/`globals.colorCompatibility` against (no second list to
-drift out of sync). `autoWrap` is boolean, so it persists as a two-member
-`cycle`; `padding` is a bounded range, so it persists as a stepper pair —
-neither needs a registered domain.
+`charset` and `colorCompatibility` have no SessionState half. That is a
+decision, not a gap: they describe the **terminal** — whether its font carries
+the powerline glyphs, and how many colours it can render — rather than a taste,
+and neither varies session-to-session on one machine. A per-session override for
+them would be a knob whose only honest setting is the one already in the config.
+So `persist` is their ONLY seam, and `charsets`/`colorCompatibilities` are
+registered domains exactly like `themes`/`styles`, sourced from the same enums
+the loader validates `globals.charset`/`globals.colorCompatibility` against (no
+second list to drift out of sync).
+
+`autoWrap` and `padding` DO have a session half, because how much bar fits on
+your screen right now is a taste that legitimately differs between a wide
+terminal and a split pane. Both spellings are available for them: `persist:`
+writes the durable default every session sees, `set:` writes only the clicking
+session's. `autoWrap` is boolean, so it takes a two-member `cycle`; `padding` is
+a bounded range, so it takes a stepper pair — neither needs a registered domain.
+
+They resolve like every other pickable global: **the session's own pick, over
+the persisted default, over the config file's value, over the built-in floor.**
+A session value outside the field's domain — a stale entry from when the range
+or vocabulary was wider — is treated as no session value at all and falls
+through to the default, rather than throwing or rendering something the label
+disagrees with.
 
 ```json5 check:pass
 {
@@ -262,6 +277,36 @@ resolved config value — the same seam `{{ .theme.effective }}` rides for
 rendered, never a restated guess. A charset or padding change takes effect
 on the very next render, live, with no daemon restart: `persist` writes the
 overrides file, which rides the config file's own watcher.
+
+For `autoWrap` and `padding` you can offer the session-scoped version of the
+same control by swapping `persist:` for `set:`. Nothing else changes — same
+domains, same bounds, same `.effective` label — and the two can coexist, one
+control for "just this terminal" beside one for "everywhere":
+
+```json5 check:pass
+{
+  actions: {
+    // This session only.
+    wrapHere: { set: "autoWrap", cycle: ["true", "false"] },
+    padHereDown: { set: "padding", min: 0, max: 16, by: -1 },
+    padHereUp: { set: "padding", min: 0, max: 16, by: 1 },
+    // Every session, durably.
+    wrapEverywhere: { persist: "autoWrap", cycle: ["true", "false"] },
+  },
+  variables: {
+    // A `set` action needs the key readable as a `state` variable; its
+    // integer `default` is also what an unset stepper seeds from.
+    sessionPadding: { kind: "state", key: "padding", default: "1" },
+  },
+  segments: {
+    layoutControls: {
+      template: '{{ action "padHereDown" "◀" }} padding {{ .padding.effective }} {{ action "padHereUp" "▶" }}  {{ action "wrapHere" "wrap: on" "wrap: off" }}',
+      bg: "surface", fg: "foreground",
+    },
+  },
+  root: { v: [{ h: ["directory", "layoutControls"] }] },
+}
+```
 
 ### Picking a whole arrangement: `presets`
 
