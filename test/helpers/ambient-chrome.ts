@@ -151,8 +151,16 @@ function isSettingsMenuKey(key: string): boolean {
 // extra link in an assertion; over-filtering silently swallows the fixture's
 // own link and makes the assertion vacuous. The loud direction wins.
 export function ownLinks(urls: readonly string[]): string[] {
+  // [LAW:one-source-of-truth] Reads the same reserved-key predicate the
+  // validator filter does, rather than restating a prefix list that drifted
+  // once already: matching `edit.` alone missed edit chrome's own insert-menu
+  // disclosure, whose key is `menus.edit_<preset>_insertSeg_<n>.…`.
+  //
+  // Safe for a layout-edit test's own subject because `apply-layout-op` is not
+  // a key-writing verb — `keysWrittenBy` reports nothing for it, so a `+`/`-`
+  // click is never a filter candidate whatever this predicate says.
   return withoutSettingsLinks(urls).filter(
-    (u) => !keysWrittenBy(u).some((k) => k.startsWith(EDIT_NS)),
+    (u) => !keysWrittenBy(u).some(isReservedChromeKey),
   );
 }
 

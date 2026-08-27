@@ -33,6 +33,7 @@ import {
 import { ConfigError } from "../src/config/dsl-loader";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { presetNames, presetRoot } from "../src/config/presets";
+import { addableSegmentDomains } from "../src/config/edit-chrome";
 import {
   countAnchors,
   SETTINGS_ANCHOR,
@@ -528,9 +529,17 @@ describe("the menu is chrome-exempt", () => {
       { cwd: "/tmp/proj" },
     );
     expect(compiled).toBeDefined();
-    const offered = Object.values(config.actions).flatMap((a) =>
-      "insertSegmentFrom" in a ? [String(a.insertSegmentFrom)] : [],
-    );
-    expect(offered.every((d) => !d.startsWith(SETTINGS_NS))).toBe(true);
+    // Asserted on the domain's VALUES, never on `insertSegmentFrom` — that
+    // field holds the domain's NAME (`addableDomainName` → `edit.addable.<p>`),
+    // which is EDIT_NS-prefixed by construction, so checking it for a
+    // SETTINGS_NS prefix passes however broken `isChromeExempt` gets.
+    const domains = [...addableSegmentDomains(config).values()];
+    // The non-emptiness is half the assertion: `every` over an empty list is
+    // the same vacuous pass one indirection further out.
+    expect(domains.length).toBeGreaterThan(0);
+    for (const offered of domains) {
+      expect(offered.length).toBeGreaterThan(0);
+      expect(offered.filter((n) => n.startsWith(SETTINGS_NS))).toEqual([]);
+    }
   });
 });
