@@ -21,6 +21,7 @@ import type { DslConfig } from "../../src/config/dsl-types";
 import { EDIT_NS } from "../../src/config/loader/edit-mode";
 import { GROUP_NS } from "../../src/config/loader/layout";
 import { MENU_NS } from "../../src/config/menu-keys";
+import { parsePersistTarget } from "../../src/config/loader/persist-target";
 import { PRESET_CUSTOMIZED_VAR } from "../../src/config/edit-chrome";
 import { SETTINGS_NS } from "../../src/config/settings-menu";
 import {
@@ -50,7 +51,14 @@ function isReservedChromeKey(key: string): boolean {
     // Edit chrome registers a rootOps op-log key per preset the moment any
     // `+`/`-` affordance exists — which is now every config, since the settings
     // menu makes edit mode reachable from every bar.
-    (key.startsWith("presets.") && key.endsWith(".rootOps"))
+    //
+    // [LAW:parse-dont-validate] Asked of the canonical parser rather than
+    // matched as `presets.` + `.rootOps`. persist-target.ts owns that format
+    // (its own comment records two write-side spellings drifting before they
+    // were consolidated), and its regex captures greedily so a dotted preset
+    // name like "v1.compact" round-trips — a hand-rolled prefix/suffix pair
+    // gets that silently wrong.
+    parsePersistTarget(key)?.scope === "preset-root-ops"
   );
 }
 

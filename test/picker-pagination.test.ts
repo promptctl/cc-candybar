@@ -269,7 +269,11 @@ describe("brandon-menus-bn5.3 I2 — {{ menu }} DROP body fits within term.cols"
         themeMenu: { template: 'T {{ menu "applyTheme" }}', bg: 'surface', fg: 'foreground' },
         styleMenu: { template: 'S {{ menu "applyStyle" }}', bg: 'surface', fg: 'foreground' },
       },
-      root: { h: ['label', 'themeMenu', 'styleMenu'] },
+      // The global settings menu rides every bar. Isolated onto its own row
+      // (as pickerConfig does) so row 0 stays exactly the inline trigger row
+      // these tests measure — an unaccounted ambient cell in the measured row
+      // would make the width budget below lie.
+      root: { v: [{ h: ['label', 'themeMenu', 'styleMenu'] }, 'settings.menu'] },
     }`;
   }
 
@@ -340,6 +344,11 @@ describe("brandon-menus-bn5.3 I2 — {{ menu }} DROP body fits within term.cols"
           // fit the width budget; the reserve is what makes the padded, capped
           // dropped band fit even when packed to the full page.
           for (const line of lines) expect(cw(line)).toBeLessThanOrEqual(width);
+          // Row 0 really is the trigger row, asserted rather than assumed: the
+          // ambient settings menu is isolated onto its own row precisely so the
+          // width math below measures this suite's own cells. Without this, the
+          // claim in the next comment silently went stale once already.
+          expect(lines[0]).not.toContain("☰");
           // The dropped body is the line with the ✕ affordance (row 0 is the
           // inline "L T ▾ S ▸" trigger row and never carries the body).
           const body = lines.find((l) => l.includes("✕")) ?? "";
