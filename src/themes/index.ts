@@ -9,6 +9,8 @@ export {
   effectiveLookName,
   lookKeyByName,
   effectiveStripStyle,
+  effectiveAutoWrap,
+  effectivePadding,
   isStripStyle,
   listResolvablePaletteNames,
   STRIP_STYLES,
