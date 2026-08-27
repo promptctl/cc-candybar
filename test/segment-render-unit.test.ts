@@ -117,8 +117,10 @@ describe("segment is the rendering unit (2de.10)", () => {
     const out = render(src, { session_id: "s1" });
 
     // Two items ⇒ one mid-join + one end-cap = two chevrons. Pre-fix the equal
-    // bg suppressed the mid-join, collapsing the count to one.
-    expect(chevronCount(out)).toBe(2);
+    // bg suppressed the mid-join, collapsing the count to one. The third
+    // chevron is the join to the global settings menu, which every bar carries
+    // (candybar-settings-ui-aok.1); the assertion here is that a↔b is painted.
+    expect(chevronCount(out)).toBe(3);
     expect(out).toContain("AAA");
     expect(out).toContain("BBB");
   });

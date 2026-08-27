@@ -29,6 +29,13 @@ import {
 import { listGlobalsFieldNames } from "./globals.js";
 import { parsePersistTarget } from "./persist-target.js";
 import { presetNames } from "../presets.js";
+import {
+  canHostSessionState,
+  countAnchors,
+  isSettingsAnchor,
+  SESSION_ID_VAR,
+  SETTINGS_ANCHOR,
+} from "../settings-menu.js";
 import { ident } from "../ident.js";
 import { findKeyLine } from "./diagnostics.js";
 import { isPlainObject, type ValidateCtx } from "./validate-core.js";
@@ -248,11 +255,30 @@ export function validateCrossReferences(
   // never a second traversal that could learn a different idea of what a valid
   // layout is. This is what makes `cc-candybar check` catch a preset staging a
   // segment nobody declared.
+  //
+  // [LAW:single-enforcer] The menu precondition is asked once, of the same
+  // predicate synthesizeSettingsMenu gates on, and read by every tree walked.
+  const menuWillSynthesize = canHostSessionState(cfg);
   const checkLayoutTree = (
     root: LayoutNode,
     layoutKey: string,
     layoutLine: number | undefined,
   ): void => {
+    // [LAW:one-source-of-truth] The global settings menu's anchor is a POSITION
+    // an author may place and this walk must therefore accept, even though no
+    // config declares a segment by that name — synthesizeSettingsMenu provides
+    // it unconditionally, immediately after these checks pass. Two placements is
+    // the real error: one state key holds one open state, so a second anchor
+    // would be a second toggle writing one disclosure, with two bodies claiming
+    // to be it. Counted over the SAME census the synthesis reads, so "placed"
+    // means one thing [LAW:single-enforcer].
+    if (countAnchors(root) > 1) {
+      ctx.issues.push({
+        path: layoutKey,
+        message: `${layoutKey} places the global settings menu anchor "${SETTINGS_ANCHOR}" ${countAnchors(root)} times — it may appear at most once per layout (it is one disclosure, and one state key holds one open state). Remove all but the placement you want; removing every placement puts the menu at its default position.`,
+        line: layoutLine,
+      });
+    }
     for (const node of walkNodes(root)) {
       // [LAW:locality-or-seam] A node's `when` reads the global scope (bare
       // globals + namespaced segment vars) — the same existence-check shape as a
@@ -263,6 +289,24 @@ export function validateCrossReferences(
         });
       }
       if (node.kind !== "segment") continue;
+      if (isSettingsAnchor(node.name)) {
+        // [LAW:one-source-of-truth] Accepting the anchor asserts that
+        // synthesizeSettingsMenu WILL declare a segment by this name, so the
+        // acceptance reads the very predicate that pass decides by rather than
+        // assuming its answer. When it is false the reference is genuinely
+        // dangling, and the error names the unmet precondition: the author
+        // placed a documented anchor, they did not typo a segment name, and the
+        // generic "does not match any declared segment" would teach the wrong
+        // lesson [LAW:no-silent-failure].
+        if (!menuWillSynthesize) {
+          ctx.issues.push({
+            path: layoutKey,
+            message: `${layoutKey} places the global settings menu anchor "${SETTINGS_ANCHOR}", but this config declares no "${SESSION_ID_VAR}" variable — the menu is a click surface and every click composes a URL from "${SESSION_ID_VAR}", so it is not synthesized for a config without it. Declare a "${SESSION_ID_VAR}" variable (any config merged onto the bundled default inherits one) or remove the anchor placement.`,
+            line: layoutLine,
+          });
+        }
+        continue;
+      }
       if (!Object.prototype.hasOwnProperty.call(cfg.segments, node.name)) {
         const renamed = RENAMED_SEGMENTS[node.name];
         const hint =

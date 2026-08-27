@@ -21,12 +21,8 @@
 //      touching the hand-authored file, never touching sibling segments),
 //      and it survives a real restart.
 
-import {
-  mkdtempSync,
-  rmSync,
-  writeFileSync,
-  readFileSync,
-} from "node:fs";
+import { ownLinks, ownValidators } from "./helpers/ambient-chrome";
+import { mkdtempSync, rmSync, writeFileSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { getThemePalette } from "@promptctl/rich-js";
@@ -78,7 +74,9 @@ function extractUrls(rendered: string): string[] {
   const urls: string[] = [];
   let m: RegExpExecArray | null;
   while ((m = re.exec(rendered)) !== null) urls.push(m[1]!);
-  return urls;
+  // The global settings menu and the edit toggle it reaches are on every bar;
+  // this file's assertions are about the fixture's OWN clickable regions.
+  return ownLinks(urls);
 }
 
 function tmpFile(): { path: string; cleanup: () => void } {
@@ -160,7 +158,9 @@ describe("loader: segment-palette persist/reset target validation", () => {
         base(`{ a: { persist: 'segments.ghost.palette', from: 'themes' } }`),
         ALLOWED,
       ),
-    ).toThrow(/names segment "ghost" which is not declared \(have segments: sidebar\)/);
+    ).toThrow(
+      /names segment "ghost" which is not declared \(have segments: sidebar\)/,
+    );
   });
 
   test("reset targeting an undeclared segment is a load error", () => {
@@ -177,7 +177,9 @@ describe("loader: segment-palette persist/reset target validation", () => {
     expect(() =>
       parseAndValidate(
         "<test>",
-        base(`{ a: { persist: 'segments.sidebar.palette', min: 0, max: 5, by: 1 } }`),
+        base(
+          `{ a: { persist: 'segments.sidebar.palette', min: 0, max: 5, by: 1 } }`,
+        ),
         ALLOWED,
       ),
     ).toThrow(
@@ -211,7 +213,10 @@ describe("config-validators: segment-palette persist keys", () => {
       }`,
       ALLOWED,
     );
-    const contributions = deriveConfigActionValidators(config);
+    const contributions = ownValidators(
+      config,
+      deriveConfigActionValidators(config),
+    );
     expect(contributions.map((c) => c.key)).toEqual([
       "segments.sidebar.palette",
     ]);
@@ -224,9 +229,10 @@ describe("config-validators: segment-palette persist keys", () => {
       allowed: ["nord", "gruvbox"],
     });
     try {
-      expect(validateConfigWrite("segments.sidebar.palette", "nord")).toEqual(
-        { ok: true, value: "nord" },
-      );
+      expect(validateConfigWrite("segments.sidebar.palette", "nord")).toEqual({
+        ok: true,
+        value: "nord",
+      });
       expect(validateConfigWrite("segments.sidebar.palette", "bogus").ok).toBe(
         false,
       );
@@ -270,9 +276,7 @@ describe("config-overrides-store: segment-palette keys", () => {
   });
 
   test("coercePersistValue passes a segment-palette value through as a bare string", () => {
-    expect(coercePersistValue("segments.sidebar.palette", "nord")).toBe(
-      "nord",
-    );
+    expect(coercePersistValue("segments.sidebar.palette", "nord")).toBe("nord");
   });
 
   // [LAW:no-defensive-null-guards] A segment literally named "__proto__" is
@@ -370,9 +374,7 @@ describe("applySegmentPaletteOverrides", () => {
       string,
       string
     >;
-    expect(() =>
-      applySegmentPaletteOverrides(before, overrides),
-    ).not.toThrow();
+    expect(() => applySegmentPaletteOverrides(before, overrides)).not.toThrow();
     const out = applySegmentPaletteOverrides(before, overrides);
     expect(out.segments).toEqual(before.segments);
     expect(Object.getPrototypeOf({})).toBe(Object.prototype);
@@ -565,9 +567,7 @@ describe("RenderCache: segment-palette overrides merge into the effective config
       expect(entry.state!.config.segments.sidebar!.bg).toBe("surface");
       // The sibling segment is completely unaffected.
       expect(entry.state!.config.segments.other!.palette).toBeUndefined();
-      expect(entry.state!.config.segments.other!.template).toBe(
-        "other-text",
-      );
+      expect(entry.state!.config.segments.other!.template).toBe("other-text");
       // The hand-authored file is byte-identical — the daemon never wrote to it.
       expect(readFileSync(userConfigPath, "utf8")).toBe(userConfigBody);
     } finally {

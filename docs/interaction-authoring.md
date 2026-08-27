@@ -533,11 +533,18 @@ synthesizes:
   Every affordance is gated `when: {{ eq .edit.mode "open" }}` — invisible
   until the toggle opens, present in the compiled tree either way.
 
-**This is demand-driven, not automatic.** A config that never references
-`edit.toggle` gets none of this — no toggle, no chrome, and critically no
-new `session.id` requirement, so a fully static bar is untouched by the
-feature's mere existence. Reference it once, anywhere, and the whole
-mechanism switches on for every row in every preset.
+**This is demand-driven, not automatic — but the demand is usually already
+there.** A config that never references `edit.toggle` gets none of this — no
+toggle, no chrome, and critically no new `session.id` requirement, so a fully
+static bar is untouched by the feature's mere existence. Reference it once,
+anywhere, and the whole mechanism switches on for every row in every preset.
+
+In practice you almost never make that reference yourself: the global settings
+menu (below) puts an `✎ edit` entry in every bar it can, and that entry *is* a
+reference to `edit.toggle`. So expect edit mode to be live in any config you
+write. The gate still does its job at the one edge that matters — the menu is
+not synthesized for a config declaring no `session.id`, which is exactly the
+static, non-interactive bar the gate exists to leave alone.
 
 **It's a splice, not a render branch.** Edit mode is not a special render
 mode — `-`/`+` are ordinary `SegmentDecl`s with ordinary `removeSegment`/
@@ -690,6 +697,72 @@ Like the four display-globals steppers above, a segment's `palette:` has no
 SessionState half — `persist` is its only seam, so there is no session
 `set` twin to pair it with.
 
+### The global settings menu: `settings.menu`
+
+One disclosure is present in **every** bar, whatever the config says: the
+global settings menu, rendered as `☰ ▸` and opening onto the always-available
+functionality — preset switching and edit mode. It exists because `root:`
+replaces the bundled default's wholesale, so a user config that declares its
+own `root` (the ordinary reason to write one) would otherwise delete every
+door into the features below along with it.
+
+You do not declare it and you cannot delete it. What you *can* do is choose
+where it goes, by placing the reserved segment name `settings.menu` in your
+layout — the anchor. Place it and the menu renders there; leave it out and the
+menu is appended to the bar's first row. Nothing else differs between the two:
+the same toggle, the same body, the same clicks.
+
+```json5 check:pass
+{
+  root: { v: [
+    { h: ["directory", "gitaculous"] },
+    { h: ["settings.menu", "model", "context"] },
+  ] },
+}
+```
+
+The anchor may appear **at most once** per layout. It names one disclosure
+backed by one state key, and one key holds one open state, so a second
+placement would be two toggles fighting over it:
+
+```json5 check:fail
+{
+  root: { v: [
+    { h: ["directory", "settings.menu"] },
+    { h: ["model", "settings.menu"] },
+  ] },
+}
+```
+
+```error
+it may appear at most once per layout
+```
+
+A `when` on one of your rows never reaches the menu. If the row the default
+placement would land in is gated, the menu takes its own ungated row instead —
+otherwise an ordinary conditional row (a git row you only want inside a repo)
+would take the undeletable door down with it whenever the condition is false.
+Two gates *are* honored, because both are things you said on purpose: a `when`
+on the `root` itself (there is no bar at all under that condition, so there is
+nothing to put a menu on), and a gate on a row where you placed the anchor
+yourself.
+
+**The one config that gets no menu** is one that declares no `session.id`
+variable. Every click composes a URL whose first segment is the session id read
+from the store, so a config without it describes a static, non-interactive bar
+and there is no menu to put on one. Any config merged over the bundled default
+— which is every config the daemon loads — inherits `session.id`, so this
+excludes hand-built static configs and nothing else. Placing the `settings.menu`
+anchor in such a config is a load error naming the missing variable, not a
+silently absent menu.
+
+Everything the menu synthesizes lives under the reserved `settings.` namespace
+— a variable, action, or segment of your own under that prefix is a load error,
+the same contract `groups.` / `menus.` / `edit.` carry (see "Squatting a
+reserved namespace" below). Edit mode also treats those names as structural: no
+`-` affordance is offered beside the menu, so the way back into edit mode cannot
+be edited away.
+
 ### The bundled settings drawer
 
 The bundled default (`DEFAULT_DSL_CONFIG`) ships every knob above already
@@ -725,8 +798,9 @@ persisted default for that one session.
 
 A user config's `root:` **replaces the bundled default's wholesale** (see the
 top-level project docs), so removing the drawer — or reshaping it — is a
-matter of authoring your own `root` without a `settings` group in it. This
-reproduces the bundled default's two rows minus the drawer:
+matter of authoring your own `root` without a `settings` group in it. Doing so
+no longer strands you: the global settings menu above is present either way.
+This reproduces the bundled default's two rows minus the drawer:
 
 ```json5 check:pass
 {

@@ -11,16 +11,15 @@
 // a pure function over the DSL state bundle, so tests drive it with
 // constructed state and read the result.
 
+import { SessionState } from "../src/daemon/session-state";
+import { ownDeclNames } from "./helpers/ambient-chrome";
 import {
   PROTOCOL_VERSION,
   encodeFrame,
   makeFrameReader,
 } from "../src/daemon/protocol";
 import type { Request, Response } from "../src/daemon/protocol";
-import {
-  DEBUG_WHATS,
-  isDebugWhat,
-} from "../src/daemon/debug-types";
+import { DEBUG_WHATS, isDebugWhat } from "../src/daemon/debug-types";
 import type { DebugSnapshot } from "../src/daemon/debug-types";
 import {
   buildDebugSnapshot,
@@ -98,7 +97,7 @@ function buildPopulatedState(): DaemonDslState {
     new Set<string>(), // no palette validation needed — segments don't set one
   );
   const store = new VariableStore();
-  const registry = new SourceRegistry(store);
+  const registry = new SourceRegistry(store, "", undefined, new SessionState());
   const compiled = registerDslConfig(config, registry, {
     cwd: process.cwd(),
   });
@@ -165,7 +164,7 @@ describe("introspectVars with populated state", () => {
   test("includes every declared variable, alphabetized", () => {
     const state = buildPopulatedState();
     const vars = introspectVars(state);
-    const names = vars.map((v) => v.name);
+    const names = ownDeclNames(vars.map((v) => v.name));
     expect(names).toEqual(["derived", "greeting", "session.id", "user_path"]);
   });
 
@@ -221,8 +220,11 @@ describe("introspectVars with populated state", () => {
   test("type matches each variable's declared type", () => {
     const state = buildPopulatedState();
     const vars = introspectVars(state);
-    // Every variable in the fixture is string-typed.
-    for (const v of vars) expect(v.type).toBe("string");
+    // Every variable in the fixture is string-typed. (The synthesized chrome
+    // every bar carries brings its own, including a boolean.)
+    const own = new Set(ownDeclNames(vars.map((v) => v.name)));
+    for (const v of vars.filter((v) => own.has(v.name)))
+      expect(v.type).toBe("string");
   });
 });
 
@@ -232,7 +234,7 @@ describe("introspectSegments with populated state", () => {
   test("includes every declared segment in layout order", () => {
     const state = buildPopulatedState();
     const segs = introspectSegments(state);
-    expect(segs.map((s) => s.name)).toEqual(["intro", "plain"]);
+    expect(ownDeclNames(segs.map((s) => s.name))).toEqual(["intro", "plain"]);
   });
 
   test("template source is verbatim from config", () => {
@@ -261,9 +263,7 @@ describe("introspectSegments with populated state", () => {
     const state = buildPopulatedState();
     const segs = introspectSegments(state);
     const byName = new Map(segs.map((s) => [s.name, s]));
-    expect(byName.get("intro")?.lastRender).toBe(
-      "(rendered output goes here)",
-    );
+    expect(byName.get("intro")?.lastRender).toBe("(rendered output goes here)");
     // Not seeded → null, not undefined or empty string.
     expect(byName.get("plain")?.lastRender).toBeNull();
   });
@@ -295,15 +295,13 @@ describe("extractReferencedVars", () => {
   });
 
   test("ignores refs that do not match any declared name", () => {
-    expect(
-      extractReferencedVars("{{ .undeclared }}", declared),
-    ).toEqual([]);
+    expect(extractReferencedVars("{{ .undeclared }}", declared)).toEqual([]);
   });
 
   test("ignores '.' inside text outside actions", () => {
-    expect(
-      extractReferencedVars("static .greeting text", declared),
-    ).toEqual([]);
+    expect(extractReferencedVars("static .greeting text", declared)).toEqual(
+      [],
+    );
   });
 
   test("dedups and sorts findings", () => {
@@ -317,15 +315,15 @@ describe("extractReferencedVars", () => {
 
   test("credits ancestor when ref goes deeper than declared", () => {
     // `.session.id.extra` should still credit `session.id`.
-    expect(
-      extractReferencedVars("{{ .session.id.extra }}", declared),
-    ).toEqual(["session.id"]);
+    expect(extractReferencedVars("{{ .session.id.extra }}", declared)).toEqual([
+      "session.id",
+    ]);
   });
 
   test("handles pipeline forms", () => {
-    expect(
-      extractReferencedVars("{{ .greeting | upper }}", declared),
-    ).toEqual(["greeting"]);
+    expect(extractReferencedVars("{{ .greeting | upper }}", declared)).toEqual([
+      "greeting",
+    ]);
   });
 
   // [LAW:single-enforcer] String literals must NOT produce false positives.
@@ -335,16 +333,16 @@ describe("extractReferencedVars", () => {
   // name does not get falsely credited as a real reference.
   test("ignores dotted refs inside string literals", () => {
     // `.greeting` appears inside a string literal — must NOT be reported.
-    expect(
-      extractReferencedVars(`{{ printf ".greeting" }}`, declared),
-    ).toEqual([]);
+    expect(extractReferencedVars(`{{ printf ".greeting" }}`, declared)).toEqual(
+      [],
+    );
     // Same with single-quoted and backtick literals.
-    expect(
-      extractReferencedVars(`{{ printf '.greeting' }}`, declared),
-    ).toEqual([]);
-    expect(
-      extractReferencedVars("{{ printf `.greeting` }}", declared),
-    ).toEqual([]);
+    expect(extractReferencedVars(`{{ printf '.greeting' }}`, declared)).toEqual(
+      [],
+    );
+    expect(extractReferencedVars("{{ printf `.greeting` }}", declared)).toEqual(
+      [],
+    );
   });
 
   test("real ref outside a string literal still wins", () => {
@@ -375,13 +373,13 @@ describe("introspectConfig with populated state", () => {
         { kind: "segment", name: "plain" },
       ],
     });
-    expect(Object.keys(config?.variables ?? {}).sort()).toEqual([
+    expect(ownDeclNames(Object.keys(config?.variables ?? {})).sort()).toEqual([
       "derived",
       "greeting",
       "session.id",
       "user_path",
     ]);
-    expect(Object.keys(config?.segments ?? {}).sort()).toEqual([
+    expect(ownDeclNames(Object.keys(config?.segments ?? {})).sort()).toEqual([
       "intro",
       "plain",
     ]);
