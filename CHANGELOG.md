@@ -1,3 +1,10 @@
+# [1.36.0](https://github.com/promptctl/cc-candybar/compare/v1.35.0...v1.36.0) (2026-08-27)
+
+
+### Features
+
+* **config:** a global settings menu no config can delete (candybar-settings-ui-aok.1) ([#190](https://github.com/promptctl/cc-candybar/issues/190)) ([6ba46ee](https://github.com/promptctl/cc-candybar/commit/6ba46ee3ea77e9e4ecd1b47b592336bf87ecb5e1))
+
 # [1.35.0](https://github.com/promptctl/cc-candybar/compare/v1.34.1...v1.35.0) (2026-08-27)
 
 
