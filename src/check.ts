@@ -119,6 +119,11 @@ export function checkPayload(
     weekly: { percentage: 21, resetsAt: nowSec + 5 * 86400 },
     cache: { expiresAt: nowSec + 15 * 60 },
     tmux: { session: "work" },
+    // `ssh: true` for the same reason `tmux.session` is populated: this
+    // fixture deliberately satisfies every gate so a when-gated segment
+    // RENDERS and its template gets checked. A local-looking fixture would
+    // gate the host segment off and let a typo inside it ship.
+    host: { name: "tester-box", user: "tester", ssh: true },
     theme: { effective: effective.theme },
     look: { effective: effective.look },
     // [LAW:one-source-of-truth] Was missing here even though EffectiveGlobals
