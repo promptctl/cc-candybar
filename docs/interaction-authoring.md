@@ -533,11 +533,18 @@ synthesizes:
   Every affordance is gated `when: {{ eq .edit.mode "open" }}` — invisible
   until the toggle opens, present in the compiled tree either way.
 
-**This is demand-driven, not automatic.** A config that never references
-`edit.toggle` gets none of this — no toggle, no chrome, and critically no
-new `session.id` requirement, so a fully static bar is untouched by the
-feature's mere existence. Reference it once, anywhere, and the whole
-mechanism switches on for every row in every preset.
+**This is demand-driven, not automatic — but the demand is usually already
+there.** A config that never references `edit.toggle` gets none of this — no
+toggle, no chrome, and critically no new `session.id` requirement, so a fully
+static bar is untouched by the feature's mere existence. Reference it once,
+anywhere, and the whole mechanism switches on for every row in every preset.
+
+In practice you almost never make that reference yourself: the global settings
+menu (below) puts an `✎ edit` entry in every bar it can, and that entry *is* a
+reference to `edit.toggle`. So expect edit mode to be live in any config you
+write. The gate still does its job at the one edge that matters — the menu is
+not synthesized for a config declaring no `session.id`, which is exactly the
+static, non-interactive bar the gate exists to leave alone.
 
 **It's a splice, not a render branch.** Edit mode is not a special render
 mode — `-`/`+` are ordinary `SegmentDecl`s with ordinary `removeSegment`/
@@ -730,6 +737,15 @@ placement would be two toggles fighting over it:
 ```error
 it may appear at most once per layout
 ```
+
+**The one config that gets no menu** is one that declares no `session.id`
+variable. Every click composes a URL whose first segment is the session id read
+from the store, so a config without it describes a static, non-interactive bar
+and there is no menu to put on one. Any config merged over the bundled default
+— which is every config the daemon loads — inherits `session.id`, so this
+excludes hand-built static configs and nothing else. Placing the `settings.menu`
+anchor in such a config is a load error naming the missing variable, not a
+silently absent menu.
 
 Everything the menu synthesizes lives under the reserved `settings.` namespace
 — a variable, action, or segment of your own under that prefix is a load error,

@@ -79,9 +79,9 @@ describe("looks block — loader validation", () => {
   });
 
   test("non-finite axis is rejected (JSON5 admits NaN/Infinity literals)", () => {
-    expect(parseIssues(`{ looks: { neon: { hueShift: Infinity } } }`)).toContain(
-      "hueShift must be a finite number, got Infinity",
-    );
+    expect(
+      parseIssues(`{ looks: { neon: { hueShift: Infinity } } }`),
+    ).toContain("hueShift must be a finite number, got Infinity");
   });
 
   test("non-numeric axis is rejected", () => {
@@ -131,7 +131,12 @@ describe("looks block — normalization and merge", () => {
       ALLOWED,
     );
     expect(raw.looks).toEqual({
-      vapor: { hueShift: 30, chromaScale: 1, lightnessScale: 1, lightnessShift: 0 },
+      vapor: {
+        hueShift: 30,
+        chromaScale: 1,
+        lightnessScale: 1,
+        lightnessShift: 0,
+      },
     });
   });
 
@@ -154,7 +159,15 @@ describe("looks block — normalization and merge", () => {
     expect(merged.looks.vivid?.chromaScale).toBe(2);
     expect(merged.looks.mine?.hueShift).toBe(10);
     expect(Object.keys(merged.looks)).toEqual(
-      expect.arrayContaining(["none", "vivid", "muted", "dim", "bright", "inverted", "mine"]),
+      expect.arrayContaining([
+        "none",
+        "vivid",
+        "muted",
+        "dim",
+        "bright",
+        "inverted",
+        "mine",
+      ]),
     );
   });
 });
@@ -177,7 +190,7 @@ describe('from: "looks" — rendered options and the derived gate share the conf
 
   test("deriveActionValidators gates key `look` to exactly the declared names", () => {
     const config = parseAndValidate("<looks>", SRC, ALLOWED);
-    expect(ownValidators(deriveActionValidators(config))).toEqual([
+    expect(ownValidators(config, deriveActionValidators(config))).toEqual([
       {
         key: "look",
         spec: {
@@ -191,7 +204,12 @@ describe('from: "looks" — rendered options and the derived gate share the conf
   test("the looks() binding renders one option region per declared name", () => {
     const config = parseAndValidate("<looks>", SRC, ALLOWED);
     const store = new VariableStore();
-    const registry = new SourceRegistry(store, "", undefined, new SessionState());
+    const registry = new SourceRegistry(
+      store,
+      "",
+      undefined,
+      new SessionState(),
+    );
     const compiled = registerDslConfig(config, registry);
     try {
       const rendered = renderDsl(
@@ -250,7 +268,10 @@ describe("look click — live whole-bar recolor over the active theme", () => {
     );
     const render = (): string => {
       const basePalette = paletteForThemeName(
-        effectiveThemeName(sessionState.get(SID, "theme"), config.globals.palette),
+        effectiveThemeName(
+          sessionState.get(SID, "theme"),
+          config.globals.palette,
+        ),
       );
       const effectiveLook = effectiveLookName(
         sessionState.get(SID, "look"),
@@ -345,7 +366,12 @@ describe("look click — live whole-bar recolor over the active theme", () => {
 describe("effectiveLookName / lookKeyByName", () => {
   const LOOKS = {
     none: { hueShift: 0, chromaScale: 1, lightnessScale: 1, lightnessShift: 0 },
-    vivid: { hueShift: 0, chromaScale: 1.5, lightnessScale: 1, lightnessShift: 0 },
+    vivid: {
+      hueShift: 0,
+      chromaScale: 1.5,
+      lightnessScale: 1,
+      lightnessShift: 0,
+    },
   };
 
   test("session over config default over the none floor", () => {

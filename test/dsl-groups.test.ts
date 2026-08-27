@@ -39,7 +39,10 @@ const ALLOWED = new Set(listResolvablePaletteNames());
 function opts() {
   return {
     style: "powerline" as const,
-    colorCompatibility: "truecolor" as const, wrap: true, padding: 0, charset: "unicode" as const,
+    colorCompatibility: "truecolor" as const,
+    wrap: true,
+    padding: 0,
+    charset: "unicode" as const,
     width: Number.POSITIVE_INFINITY,
   };
 }
@@ -169,7 +172,7 @@ describe("2de.4 — group sugar: toggle round trip", () => {
     expect(config.segments["groups.details"]?.template).toBe(
       '{{ action "groups.details" "details ▸" "details ▾" }}',
     );
-    expect(ownValidators(deriveActionValidators(config))).toEqual([
+    expect(ownValidators(config, deriveActionValidators(config))).toEqual([
       {
         key: "groups.details",
         spec: { kind: "allow-list", allowed: ["closed", "details"] },
@@ -231,7 +234,7 @@ describe("2de.4 — accordion (shared key)", () => {
 
   test("the shared key's gate is the union of the sibling cycles", () => {
     const config = parseAndValidate("<test>", ACCORDION_SRC, ALLOWED);
-    expect(ownValidators(deriveActionValidators(config))).toEqual([
+    expect(ownValidators(config, deriveActionValidators(config))).toEqual([
       {
         key: "menu",
         spec: { kind: "allow-list", allowed: ["closed", "files", "tools"] },

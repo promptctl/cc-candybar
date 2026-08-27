@@ -159,7 +159,7 @@ describe("2de.12 — literal set action", () => {
 
   test("derives an allow-list gate of {to} for the custom key", () => {
     const config = parseAndValidate("<test>", SRC, ALLOWED);
-    expect(ownValidators(deriveActionValidators(config))).toEqual([
+    expect(ownValidators(config, deriveActionValidators(config))).toEqual([
       { key: "flavor", spec: { kind: "allow-list", allowed: ["chocolate"] } },
     ]);
   });
@@ -188,7 +188,7 @@ describe("2de.12 — set on a baseline key derives nothing", () => {
 
   test("the theme literal reuses the permanent theme validator (no derived spec)", () => {
     const config = parseAndValidate("<test>", SRC, ALLOWED);
-    expect(ownValidators(deriveActionValidators(config))).toEqual([]);
+    expect(ownValidators(config, deriveActionValidators(config))).toEqual([]);
   });
 
   test("the click still passes the baseline theme gate end-to-end", () => {
@@ -226,7 +226,7 @@ describe("2de.12 — option set action", () => {
 
   test("derives an allow-list of the resolved option domain for the custom key", () => {
     const config = parseAndValidate("<test>", SRC, ALLOWED);
-    expect(ownValidators(deriveActionValidators(config))).toEqual([
+    expect(ownValidators(config, deriveActionValidators(config))).toEqual([
       { key: "sel", spec: { kind: "allow-list", allowed: THEMES } },
     ]);
   });
@@ -313,7 +313,7 @@ describe("71o.1 — inline literal option domain (from: [...])", () => {
 
   test("derives an allow-list gate of exactly the inline values", () => {
     const config = parseAndValidate("<test>", SRC, ALLOWED);
-    expect(ownValidators(deriveActionValidators(config))).toEqual([
+    expect(ownValidators(config, deriveActionValidators(config))).toEqual([
       {
         key: "sort-order",
         spec: { kind: "allow-list", allowed: ["asc", "desc"] },
@@ -398,7 +398,7 @@ describe("71o.1 — a newly-registered domain needs no engine edits", () => {
         root: 'bar',
       }`;
       const config = parseAndValidate("<test>", src, ALLOWED);
-      expect(ownValidators(deriveActionValidators(config))).toEqual([
+      expect(ownValidators(config, deriveActionValidators(config))).toEqual([
         {
           key: "fruit",
           spec: { kind: "allow-list", allowed: ["red", "green", "blue"] },
@@ -496,7 +496,7 @@ describe("2de.12 — bounded set action", () => {
 
   test("two bounded actions on one key merge to a single range gate carrying the seed", () => {
     const config = parseAndValidate("<test>", SRC, ALLOWED);
-    expect(ownValidators(deriveActionValidators(config))).toEqual([
+    expect(ownValidators(config, deriveActionValidators(config))).toEqual([
       { key: "hue", spec: { kind: "range", min: 0, max: 60, seed: 14 } },
     ]);
   });
@@ -591,7 +591,7 @@ describe("2de.12 — copy / open actions derive no gate", () => {
 
   test("copy/open contribute no validator spec", () => {
     const config = parseAndValidate("<test>", SRC, ALLOWED);
-    expect(ownValidators(deriveActionValidators(config))).toEqual([]);
+    expect(ownValidators(config, deriveActionValidators(config))).toEqual([]);
   });
 
   test("copy carries the evaluated template; open carries the evaluated target", () => {
@@ -860,7 +860,7 @@ describe("2de.4 — cycle set action", () => {
 
   test("derives an allow-list gate of exactly the members", () => {
     const config = parseAndValidate("<test>", SRC, ALLOWED);
-    expect(ownValidators(deriveActionValidators(config))).toEqual([
+    expect(ownValidators(config, deriveActionValidators(config))).toEqual([
       {
         key: "details-open",
         spec: { kind: "allow-list", allowed: ["0", "1"] },
@@ -913,7 +913,7 @@ describe("2de.4 — cycle set action", () => {
       root: 'bar',
     }`;
     const config = parseAndValidate("<test>", src, ALLOWED);
-    expect(ownValidators(deriveActionValidators(config))).toEqual([
+    expect(ownValidators(config, deriveActionValidators(config))).toEqual([
       {
         key: "menu",
         spec: { kind: "allow-list", allowed: ["closed", "a", "b"] },

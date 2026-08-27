@@ -31,7 +31,7 @@
 //      daemon handler clears the log and restores the literal declared root
 //      — never a silent drift between what's on screen and what's on disk.
 
-import { ownLinks, ownValidators } from "./helpers/ambient-chrome";
+import { ownLinks } from "./helpers/ambient-chrome";
 import { SETTINGS_NS } from "../src/config/settings-menu";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";

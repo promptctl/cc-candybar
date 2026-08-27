@@ -253,7 +253,10 @@ describe("config-validators registry", () => {
       }`,
       ALLOWED,
     );
-    const contributions = ownValidators(deriveConfigActionValidators(config));
+    const contributions = ownValidators(
+      config,
+      deriveConfigActionValidators(config),
+    );
     expect(contributions.map((c) => c.key)).toEqual(["palette"]);
   });
 

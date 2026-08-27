@@ -171,7 +171,9 @@ describe("deriveConfigActionValidators over undo/redo actions", () => {
       }`,
       ALLOWED,
     );
-    expect(ownValidators(deriveConfigActionValidators(config))).toEqual([]);
+    expect(ownValidators(config, deriveConfigActionValidators(config))).toEqual(
+      [],
+    );
   });
 });
 
@@ -231,11 +233,7 @@ describe("undo/redo click → the overrides history", () => {
     return join(xdgStateDir, "cc-candybar", "config-overrides.json");
   }
   function historyPath(): string {
-    return join(
-      xdgStateDir,
-      "cc-candybar",
-      "config-overrides-history.json",
-    );
+    return join(xdgStateDir, "cc-candybar", "config-overrides-history.json");
   }
   function rawOverrides(): Record<string, unknown> {
     return JSON.parse(readFileSync(overridesPath(), "utf8")) as Record<
@@ -272,11 +270,18 @@ describe("undo/redo click → the overrides history", () => {
     presets: {},
   }`;
 
-  function urlFor(runtime: ReturnType<typeof buildRuntime>, actionName: string): string {
+  function urlFor(
+    runtime: ReturnType<typeof buildRuntime>,
+    actionName: string,
+  ): string {
     const urls = extractUrls(runtime.render());
-    const idx = ["pinDracula", "forgetPalette", "removeDirectory", "back", "fwd"].indexOf(
-      actionName,
-    );
+    const idx = [
+      "pinDracula",
+      "forgetPalette",
+      "removeDirectory",
+      "back",
+      "fwd",
+    ].indexOf(actionName);
     return urls[idx]!;
   }
 
@@ -337,9 +342,9 @@ describe("undo/redo click → the overrides history", () => {
   test("a rootOps structural edit undoes through the SAME mechanism — no layout-specific code", () => {
     const runtime = buildRuntime(SRC);
     runtime.click(urlFor(runtime, "removeDirectory"));
-    expect(JSON.parse(rawOverrides()["presets.default.rootOps"] as string)).toEqual([
-      encodeLayoutOp({ op: "remove", target: "directory" }),
-    ]);
+    expect(
+      JSON.parse(rawOverrides()["presets.default.rootOps"] as string),
+    ).toEqual([encodeLayoutOp({ op: "remove", target: "directory" })]);
 
     runtime.click(urlFor(runtime, "back"));
     // the whole-log key returns to absent — the entry's `from` was null
