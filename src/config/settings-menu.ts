@@ -114,6 +114,14 @@ declare const anchored: unique symbol;
 // stamp is the proof, so `expandAnchor` has no "anchor missing" arm to guard
 // and no answer-shaped void to return: the only way to obtain this type is to
 // go through `withAnchor`, which establishes the fact by construction.
+//
+// The theorem includes the anchor inheriting no gate the DEFAULT placement
+// descended into — a weaker stamp ("contains an anchor" alone) is what let a
+// `when`-gated first row silently swallow the menu. Two gates are exempt
+// because they are explicit authorial statements rather than accidents: the
+// author's own placement of the anchor (they chose that position, gate and
+// all) and a `when` on the root itself (there is no bar at all under that
+// condition, so there is nothing to host a menu on).
 type AnchoredRoot = LayoutNode & { readonly [anchored]: true };
 
 // [LAW:dataflow-not-control-flow] The default position, as structural recursion
@@ -140,7 +148,27 @@ function appendAnchor(node: LayoutNode): LayoutNode {
     };
   }
   const [first, ...rest] = node.children;
-  if (node.direction === "vertical" && first !== undefined) {
+  // [LAW:no-silent-failure] Descend only into an UNGATED child. A gate on an
+  // inner row is a statement about that row's content, not about the bar — an
+  // author writing an ordinary conditional first row (a git row shown only
+  // inside a repo) has no idea the default placement attaches the menu there,
+  // and inheriting that gate would silently delete the one surface this pass
+  // exists to make undeletable, under exactly their condition. When the first
+  // row is gated the anchor becomes its own ungated row on this container
+  // instead, which is a position the author can still override by placing the
+  // anchor themselves.
+  //
+  // The ROOT's own `when` is deliberately NOT lifted out of, here or in the
+  // segment arm above: gating the whole tree is an explicit statement that
+  // there is no bar under this condition, and there is no bar to host a menu
+  // on. That is the same "the author's explicit choice is the answer" rule
+  // that honors an author-placed anchor inside a gated row — and it is what
+  // keeps edit chrome's reset banner gated with the content it describes.
+  if (
+    node.direction === "vertical" &&
+    first !== undefined &&
+    first.when === undefined
+  ) {
     return { ...node, children: [appendAnchor(first), ...rest] };
   }
   return { ...node, children: [...node.children, anchorRef] };

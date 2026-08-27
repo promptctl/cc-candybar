@@ -738,6 +738,15 @@ placement would be two toggles fighting over it:
 it may appear at most once per layout
 ```
 
+A `when` on one of your rows never reaches the menu. If the row the default
+placement would land in is gated, the menu takes its own ungated row instead —
+otherwise an ordinary conditional row (a git row you only want inside a repo)
+would take the undeletable door down with it whenever the condition is false.
+Two gates *are* honored, because both are things you said on purpose: a `when`
+on the `root` itself (there is no bar at all under that condition, so there is
+nothing to put a menu on), and a gate on a row where you placed the anchor
+yourself.
+
 **The one config that gets no menu** is one that declares no `session.id`
 variable. Every click composes a URL whose first segment is the session id read
 from the store, so a config without it describes a static, non-interactive bar

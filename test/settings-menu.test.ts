@@ -316,6 +316,124 @@ describe("the anchor may be placed at most once", () => {
   });
 });
 
+// ─── 3b. A `when` the author wrote never reaches the menu ────────────────────
+
+// The guarantee is "present in every bar, whatever the config says". A `when`
+// on the row the default placement lands in used to defeat it silently: the
+// anchor inherited the gate, so an author writing an ordinary conditional row
+// (a git row shown only inside a repo) deleted the undeletable door by accident
+// under exactly that condition. Asserted on the resolved tree rather than on a
+// render, because it must hold for every value the predicate could take.
+describe("the default placement never inherits an author's gate", () => {
+  // Every `when` on the path from the resolved root down to the anchor.
+  function gatesOverAnchor(node: LayoutNode): string[] {
+    const walk = (n: LayoutNode, above: string[]): string[] | null => {
+      const here = n.when === undefined ? above : [...above, n.when];
+      if (n.kind === "segment") return n.name === SETTINGS_ANCHOR ? here : null;
+      for (const child of n.children) {
+        const found = walk(child, here);
+        if (found !== null) return found;
+      }
+      return null;
+    };
+    const gates = walk(node, []);
+    if (gates === null) throw new Error("no anchor in the resolved root");
+    return gates;
+  }
+
+  const GATE = `{{ .flag }}`;
+  const withFlag = (root: string): string => `{
+    globals: {},
+    variables: { flag: { kind: 'literal', value: 'x' } },
+    root: ${root},
+  }`;
+
+  test.each([
+    [
+      "a gated first row",
+      `{ v: [{ h: ['directory','model'], when: '${GATE}' }, { h: ['context'] }] }`,
+    ],
+    [
+      "a gated first row whose siblings are gated too",
+      `{ v: [{ h: ['directory'], when: '${GATE}' }, { h: ['context'], when: '${GATE}' }] }`,
+    ],
+    [
+      "a gated row nested a level down",
+      `{ v: [{ v: [{ h: ['directory'], when: '${GATE}' }] }] }`,
+    ],
+    ["an ungated root (control)", `{ v: [{ h: ['directory','model'] }] }`],
+  ])("%s leaves the menu ungated", (_label, root) => {
+    const config = parseAndValidate(
+      "<user>",
+      withFlag(root),
+      ALLOWED,
+      DEFAULT_DSL_CONFIG,
+    );
+    expect(gatesOverAnchor(resolvedRoot(config))).toEqual([]);
+  });
+
+  test("the author's own gate stays on the author's own content", () => {
+    const config = parseAndValidate(
+      "<user>",
+      withFlag(
+        `{ v: [{ h: ['directory','model'], when: '${GATE}' }, { h: ['context'] }] }`,
+      ),
+      ALLOWED,
+      DEFAULT_DSL_CONFIG,
+    );
+    // Lifting the menu out of the gate must not lift the row out of it too.
+    const gatesOver = (target: string): string[] => {
+      const walk = (n: LayoutNode, above: string[]): string[] | null => {
+        const here = n.when === undefined ? above : [...above, n.when];
+        if (n.kind === "segment") return n.name === target ? here : null;
+        for (const child of n.children) {
+          const found = walk(child, here);
+          if (found !== null) return found;
+        }
+        return null;
+      };
+      return walk(resolvedRoot(config), []) ?? [];
+    };
+    expect(gatesOver("directory")).toContain(GATE);
+  });
+
+  test.each([
+    ["a bare-segment root", `{ seg: 'directory', when: '${GATE}' }`],
+    ["a single-row root", `{ h: ['directory','model'], when: '${GATE}' }`],
+  ])(
+    "a `when` on %s is honored — there is no bar to host a menu on",
+    (_label, root) => {
+      // The exemption, asserted rather than left implicit: gating the ROOT is an
+      // explicit statement that the whole bar is conditional, unlike a gate on
+      // one inner row the default placement merely happened to land in. It is
+      // also what keeps edit chrome's reset banner gated with the content it
+      // describes (see dsl-layout-edit's banner tests, which read this `when`).
+      const config = parseAndValidate(
+        "<user>",
+        withFlag(root),
+        ALLOWED,
+        DEFAULT_DSL_CONFIG,
+      );
+      expect(gatesOverAnchor(resolvedRoot(config))).toContain(GATE);
+    },
+  );
+
+  test("an author who places the anchor inside a gated row keeps it there", () => {
+    // Their placement is their answer — the pass honors the position, gate and
+    // all. Only the DEFAULT placement is lifted out.
+    const config = parseAndValidate(
+      "<user>",
+      withFlag(
+        `{ v: [{ h: ['directory','${SETTINGS_ANCHOR}'], when: '${GATE}' }] }`,
+      ),
+      ALLOWED,
+      DEFAULT_DSL_CONFIG,
+    );
+    expect(gatesOverAnchor(resolvedRoot(config))).toContain(GATE);
+    expect(countAnchors(resolvedRoot(config))).toBe(1);
+  });
+});
+
 // ─── 4. The anchor's precondition is loud ────────────────────────────────────
 
 // [LAW:one-source-of-truth] cross-ref accepts an authored `settings.menu` on the
