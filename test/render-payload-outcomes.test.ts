@@ -9,6 +9,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { buildRenderPayload } from "../src/daemon/render-payload";
+import type { ClientHints } from "../src/daemon/protocol";
 import type {
   EffectiveGlobals,
   RenderPayloadDeps,
@@ -40,6 +41,11 @@ function depsWith(
 // The effective globals the daemon resolves per render; these lane tests
 // don't exercise them, so any well-formed struct serves as the required
 // argument.
+// No client hints: these fixtures exercise the daemon-side folds, not the wire
+// boundary. An empty object is the honest "this render carried no hints"
+// (the shape an old client produces), so `host.ssh` stays absent throughout.
+const NO_HINTS: ClientHints = {};
+
 const EFFECTIVE_GLOBALS: EffectiveGlobals = {
   theme: "textual-dark",
   look: "none",
@@ -82,6 +88,7 @@ describe("buildRenderPayload — git outcome lane", () => {
       undefined,
       GIT_PATHS,
       EFFECTIVE_GLOBALS,
+      NO_HINTS,
     );
 
     expect(payload.git).toBeUndefined();
@@ -103,6 +110,7 @@ describe("buildRenderPayload — git outcome lane", () => {
       undefined,
       GIT_PATHS,
       EFFECTIVE_GLOBALS,
+      NO_HINTS,
     );
 
     expect(payload.git).toBeUndefined();
@@ -129,6 +137,7 @@ describe("buildRenderPayload — git outcome lane", () => {
       undefined,
       GIT_PATHS,
       EFFECTIVE_GLOBALS,
+      NO_HINTS,
     );
 
     // ok fields project as values; the failed field is MISSING (the DSL
@@ -169,6 +178,7 @@ describe("buildRenderPayload — cache outcome lane", () => {
       undefined,
       CACHE_PATHS,
       EFFECTIVE_GLOBALS,
+      NO_HINTS,
     );
     chmodSync(transcript, 0o644);
 
@@ -198,6 +208,7 @@ describe("buildRenderPayload — cache outcome lane", () => {
       undefined,
       CACHE_PATHS,
       EFFECTIVE_GLOBALS,
+      NO_HINTS,
     );
 
     expect(payload.cache).toEqual({
@@ -235,6 +246,7 @@ describe("buildRenderPayload — migrated lanes share the outcome contract", () 
       undefined,
       LANE_PATHS,
       EFFECTIVE_GLOBALS,
+      NO_HINTS,
     );
 
     expect(payload.context).toBeUndefined();
@@ -276,6 +288,7 @@ describe("buildRenderPayload — migrated lanes share the outcome contract", () 
       undefined,
       LANE_PATHS,
       EFFECTIVE_GLOBALS,
+      NO_HINTS,
     );
 
     expect(payload.tmux).toEqual({ session: "main-session" });
@@ -300,6 +313,7 @@ describe("buildRenderPayload — migrated lanes share the outcome contract", () 
       undefined,
       LANE_PATHS,
       EFFECTIVE_GLOBALS,
+      NO_HINTS,
     );
 
     expect(payload.tmux).toBeUndefined();
@@ -334,6 +348,7 @@ describe("buildRenderPayload — effective globals projection", () => {
       undefined,
       new Set(), // no provider lane needed for this projection
       effective,
+      NO_HINTS,
     );
     expect(payload.theme).toEqual({ effective: "nord" });
     expect(payload.look).toEqual({ effective: "vivid" });
@@ -379,6 +394,7 @@ describe("buildRenderPayload — git PR projection", () => {
       undefined,
       PR_PATHS,
       EFFECTIVE_GLOBALS,
+      NO_HINTS,
     );
 
     expect(payload.git).toMatchObject({
@@ -408,6 +424,7 @@ describe("buildRenderPayload — git PR projection", () => {
       undefined,
       PR_PATHS,
       EFFECTIVE_GLOBALS,
+      NO_HINTS,
     );
 
     expect(payload.git!.prError).toBe("gh pr view: non-zero, exit 1, HTTP 401");
@@ -439,6 +456,7 @@ describe("buildRenderPayload — git PR projection", () => {
       undefined,
       PR_PATHS,
       EFFECTIVE_GLOBALS,
+      NO_HINTS,
     );
 
     expect("prNumber" in payload.git!).toBe(false);

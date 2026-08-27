@@ -7,6 +7,7 @@ import {
   buildRenderPayload,
   buildNeededPrefixes,
 } from "../src/daemon/render-payload";
+import type { ClientHints } from "../src/daemon/protocol";
 import type {
   EffectiveGlobals,
   RenderPayloadDeps,
@@ -89,6 +90,11 @@ function buildMockDeps(): { deps: RenderPayloadDeps; counts: CallCounts } {
 // The daemon-resolved effective globals; the gating tests assert provider CALL
 // COUNTS, not these values, so any well-formed struct satisfies the required
 // argument.
+// No client hints: these fixtures exercise the daemon-side folds, not the wire
+// boundary. An empty object is the honest "this render carried no hints"
+// (the shape an old client produces), so `host.ssh` stays absent throughout.
+const NO_HINTS: ClientHints = {};
+
 const EFFECTIVE_GLOBALS: EffectiveGlobals = {
   theme: "textual-dark",
   look: "none",
@@ -174,6 +180,7 @@ describe("buildRenderPayload — layout-driven provider gating", () => {
       undefined,
       buildNeededPrefixes(CONFIG_WITHOUT_METRICS),
       EFFECTIVE_GLOBALS,
+      NO_HINTS,
     );
     expect(counts.git).toBe(1);
     // No segment in layout reads metrics.* / tmux.* / today.* / etc., so
@@ -193,6 +200,7 @@ describe("buildRenderPayload — layout-driven provider gating", () => {
       undefined,
       buildNeededPrefixes(CONFIG_WITH_METRICS),
       EFFECTIVE_GLOBALS,
+      NO_HINTS,
     );
     expect(counts.git).toBe(1);
     expect(counts.metrics).toBe(1);

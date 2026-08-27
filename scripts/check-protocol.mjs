@@ -93,6 +93,7 @@ function markers(relPath, patterns, description) {
 
 const TS_PROTOCOL = "src/daemon/protocol.ts";
 const TS_CLIENT = "src/daemon/client.ts";
+const TS_INDEX = "src/index.ts";
 const TS_GLYPH = "src/render/error-glyph.ts";
 const TS_STYLE = "src/render/diagnostic-style.ts";
 const TS_PATHS = "src/daemon/paths.ts";
@@ -149,6 +150,39 @@ const CHECKS = [
       /"([A-Z_]+)"/g,
     ),
     rust: memberSet(RS_MAIN, /match code \{[\s\S]+?\n {4}\}/, /"([A-Z_]+)" =>/g),
+  },
+  // The client-hint wire keys. Unlike the rows above these are field NAMES, not
+  // constants — but they drift the same way and break louder: a hint the Rust
+  // client stops sending does not fail, it silently degrades to the daemon's
+  // absent-field default on the ONLY client path that actually ships.
+  {
+    label: "client-hint wire keys",
+    ts: memberSet(
+      TS_PROTOCOL,
+      /export interface ClientHints \{[\s\S]+?\n\}/,
+      /readonly (\w+)\?:/g,
+    ),
+    rust: memberSet(
+      RS_MAIN,
+      /--- client hints[\s\S]+?--- end client hints ---/,
+      /request\["(\w+)"\]/g,
+    ),
+  },
+  // What "this session is over SSH" MEANS. Both runtimes answer the same
+  // question for the same session; disagreeing on the vocabulary would make the
+  // native fast path and the node fallback report a session differently.
+  {
+    label: "SSH env vocabulary",
+    ts: memberSet(
+      TS_INDEX,
+      /const SSH_ENV_VARS = \[[\s\S]+?\] as const;/,
+      /"(SSH_\w+)"/g,
+    ),
+    rust: memberSet(
+      RS_MAIN,
+      /const SSH_ENV_VARS: \[&str; \d+\] = \[[\s\S]+?\];/,
+      /"(SSH_\w+)"/g,
+    ),
   },
   {
     label: "glyph FG",

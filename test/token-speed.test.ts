@@ -24,8 +24,10 @@ import {
   buildRenderPayload,
   projectTokensPerSecond,
   type EffectiveGlobals,
+
   type RenderPayloadDeps,
 } from "../src/daemon/render-payload";
+import type { ClientHints } from "../src/daemon/protocol";
 import { SessionUsageStore } from "../src/daemon/cache/session-usage-store";
 import { clearParseCache } from "../src/utils/claude";
 import type { ClaudeHookData } from "../src/utils/claude";
@@ -262,6 +264,11 @@ const SPEED_PATHS = new Set([
 
 // The daemon-resolved effective globals; these speed-lane tests don't
 // exercise them, so any well-formed struct satisfies the required argument.
+// No client hints: these fixtures exercise the daemon-side folds, not the wire
+// boundary. An empty object is the honest "this render carried no hints"
+// (the shape an old client produces), so `host.ssh` stays absent throughout.
+const NO_HINTS: ClientHints = {};
+
 const EFFECTIVE_GLOBALS: EffectiveGlobals = {
   theme: "textual-dark",
   look: "none",
@@ -293,6 +300,7 @@ describe("buildRenderPayload — speed lane", () => {
       undefined,
       SPEED_PATHS,
       EFFECTIVE_GLOBALS,
+      NO_HINTS,
     );
     // Δoutput 500 / 1s = 500; Δtotal 500 / 1s = 500; Δinput 0 ⇒ absent.
     expect(payload.speed?.output).toBe(500);
@@ -316,6 +324,7 @@ describe("buildRenderPayload — speed lane", () => {
       undefined,
       SPEED_PATHS,
       EFFECTIVE_GLOBALS,
+      NO_HINTS,
     );
     expect(payload.speed).toBeUndefined();
   });
@@ -346,6 +355,7 @@ describe("buildRenderPayload — speed lane", () => {
       undefined,
       new Set(["speed.history"]),
       EFFECTIVE_GLOBALS,
+      NO_HINTS,
     );
     expect(payload.speed?.history).toBe("100,0,300");
   });
@@ -373,6 +383,7 @@ describe("buildRenderPayload — speed lane", () => {
       undefined,
       new Set(["speed.history"]),
       EFFECTIVE_GLOBALS,
+      NO_HINTS,
     );
     // Only the single in-window pair survives; the stale and rapid gaps are
     // dropped, never shown as 0.
@@ -395,6 +406,7 @@ describe("buildRenderPayload — speed lane", () => {
       undefined,
       new Set(["speed.history"]),
       EFFECTIVE_GLOBALS,
+      NO_HINTS,
     );
     expect(payload.speed).toBeUndefined();
   });
@@ -406,6 +418,7 @@ describe("buildRenderPayload — speed lane", () => {
       undefined,
       new Set(["session.tokens"]),
       EFFECTIVE_GLOBALS,
+      NO_HINTS,
     );
     expect(payload.speed).toBeUndefined();
   });

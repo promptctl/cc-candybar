@@ -36,6 +36,33 @@ function detectTermCols(): number | undefined {
   return undefined;
 }
 
+// The env vars an SSH login shell inherits from sshd. Any one of them present
+// and non-empty means this session arrived over the network.
+//
+// [LAW:one-source-of-truth] This vocabulary is mirrored by the Rust client
+// (rust-client/src/main.rs) and diffed by scripts/check-protocol.mjs, which
+// anchors on the declaration below — keep it a named const holding string
+// literals, or repoint the CHECKS row in the same commit. Both runtimes must
+// agree on what "SSH" means or the fast path and the fallback path would
+// disagree about the same session.
+//
+// All three are checked, not just SSH_CONNECTION: SSH_CLIENT is what older
+// sshd builds (and the user's git-taculous zsh theme) key on, and SSH_TTY is
+// the one that survives some `sudo` env_keep policies. Extra names can only
+// widen recall of a fact that is otherwise reported as a plain `false`.
+const SSH_ENV_VARS = ["SSH_CONNECTION", "SSH_CLIENT", "SSH_TTY"] as const;
+
+// [LAW:dataflow-not-control-flow] A fold over the vocabulary, not a chain of
+// ifs — adding a name is a data edit.
+//
+// Unlike detectTermCols this is TOTAL: the client reads its own environment, so
+// "no SSH var set" is the affirmative answer "local", never a failure to
+// determine. It therefore always reports, and the daemon reads an ABSENT `ssh`
+// hint as "this client is too old to answer" rather than as "local".
+function detectSsh(): boolean {
+  return SSH_ENV_VARS.some((name) => (process.env[name] ?? "") !== "");
+}
+
 function showHelpText(): void {
   console.log(HELP_TEXT);
 }
@@ -134,15 +161,18 @@ echo '{"session_id":"test-session","workspace":{"project_dir":"/path/to/project"
     // caches). On daemon miss we spawn detached and emit empty output; the
     // next status-line refresh hits the warm daemon and renders for real.
     //
-    // [LAW:single-enforcer] Terminal width is captured here, in the user's
+    // [LAW:single-enforcer] Client hints are captured here, in the user's
     // shell environment, then trusted by the daemon. The daemon's own env
-    // reflects whichever shell launched it minutes/hours ago, so it can't
-    // measure the active terminal — only the live client can.
+    // reflects whichever shell launched it minutes/hours ago, so it can
+    // measure neither the active terminal nor whether THIS session came in
+    // over SSH — only the live client can. One daemon serves a local session
+    // and an SSH session at the same time, so the answer genuinely differs per
+    // request.
     const outcome = await tryRenderViaDaemon(
       hookData,
       process.argv,
       process.cwd(),
-      detectTermCols(),
+      { termCols: detectTermCols(), ssh: detectSsh() },
     );
     // [LAW:types-are-the-program] Three variants, one per outcome kind. The
     // "kick on every failure" pattern was the load-bearing half of the

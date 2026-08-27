@@ -17,7 +17,9 @@
 // resolve falls back to the variable's declared default).
 
 import path from "node:path";
+import os from "node:os";
 import type { ClaudeHookData } from "../utils/claude.js";
+import type { ClientHints } from "./protocol.js";
 import type { DslConfig, VariableDecl } from "../config/dsl-types.js";
 import { walkNodes } from "../config/dsl-types.js";
 import { extractTemplateRefs } from "../config/dsl-loader.js";
@@ -96,6 +98,11 @@ export interface RenderPayload extends ClaudeHookData {
 
   readonly git?: GitPayload;
   readonly tmux?: { readonly session: string };
+  // [LAW:types-are-the-program] REQUIRED for the same reason theme/look are:
+  // the daemon assembles it every render from sources that cannot be "not
+  // requested" (two syscalls and one already-parsed wire hint). The fields
+  // INSIDE it carry the real optionality — see HostPayload.
+  readonly host: HostPayload;
   // [LAW:one-source-of-truth] The daemon-resolved effective theme name —
   // effectiveThemeName(sessionState.theme, globals.palette). The SAME value the
   // rendered basePalette is built from, surfaced so a trigger label can display
@@ -198,6 +205,41 @@ export interface GitPayload {
   readonly prState?: string;
   readonly prUrl?: string;
   readonly prError?: string;
+}
+
+// Which machine this session is on, and whether the user got here over the
+// network. The two halves have DIFFERENT provenance and that is the whole
+// design ([LAW:one-source-of-truth]):
+//
+//   • `name`/`user` are MACHINE facts. Client and daemon are the same machine
+//     by construction — the socket path is UID-derived and the pid mutex is
+//     per-user — so the daemon reading them directly cannot drift from what
+//     the client would have reported. Sending them over the wire would buy
+//     nothing and add a second source.
+//   • `ssh` is a SESSION fact and is the exact opposite: one daemon serves a
+//     local session and an SSH session simultaneously, so the daemon's own env
+//     answers for whichever shell spawned it. It can ONLY arrive as a client
+//     hint. This is the same reasoning that makes `globals.colorCompatibility:
+//     "auto"` deliberately unrepresentable.
+//
+// [LAW:no-silent-failure] Every field is optional because each can genuinely
+// be unknown, and absence is preserved rather than defaulted here: `user` when
+// the uid has no passwd entry, `ssh` when the client predates the hint. Both
+// travel as missing keys to the DSL input-fallback chain, which emits the
+// declared default AND records a `last_error` that `cc-candybar debug vars`
+// surfaces — so "we don't know" stays distinguishable from "we know it's
+// local", which a `?? false` here would have destroyed.
+export interface HostPayload {
+  // The SHORT hostname — `os.hostname()` up to the first dot, the same
+  // projection zsh's `%m` makes. A statusbar cell identifies a machine to a
+  // human; the FQDN is a network address, a different fact, and a separate
+  // field the day something needs it.
+  readonly name?: string;
+  // The EFFECTIVE username from the passwd database, not `$USER`. The env var
+  // is a map that drifts (su/sudo leave it stale); the passwd entry for the
+  // running uid is the territory. Matches zsh's `%n`.
+  readonly user?: string;
+  readonly ssh?: boolean;
 }
 
 export interface SessionPayload {
@@ -463,6 +505,72 @@ function projectSpeedHistory(obs: SpeedObservation): string | undefined {
   return rates.join(",");
 }
 
+// ─── Host identity ───────────────────────────────────────────────────────────
+
+/**
+ * The short hostname: everything before the first dot, or the whole string when
+ * there is no dot. `os.hostname()` yields an FQDN on some hosts (macOS's
+ * `mymachine.local`, a DNS-configured server's `web1.prod.example.com`) and a
+ * bare name on others; this makes the rendered cell identify the machine the
+ * same way on both, which is zsh's `%m` and the projection git-taculous shows.
+ *
+ * [LAW:effects-at-boundaries] Pure and total — the syscall stays in readHost.
+ */
+export function shortHostname(hostname: string): string {
+  const dot = hostname.indexOf(".");
+  return dot < 0 ? hostname : hostname.slice(0, dot);
+}
+
+/**
+ * Assemble the host identity for one render.
+ *
+ * [LAW:effects-at-boundaries] Named `read*`, not `project*`, because it is not
+ * pure: two syscalls happen here. That is in bounds — this module IS the
+ * daemon's data-assembly edge, the same edge that reads `process.env.HOME`
+ * below — and the point of the seam is that nothing downstream reads them
+ * again.
+ *
+ * [LAW:no-silent-failure] A throwing syscall (a uid with no passwd entry is the
+ * realistic case, in a stripped container) yields an ABSENT field plus a
+ * description for the caller to log, exactly like a failed git lane — never a
+ * fabricated name, and never an exception: the whole bar must not blank over a
+ * cosmetic cell.
+ */
+function readHost(hints: ClientHints): {
+  readonly host: HostPayload;
+  readonly failures: readonly string[];
+} {
+  const failures: string[] = [];
+  const attempt = (field: string, read: () => string): string | undefined => {
+    try {
+      const value = read();
+      // "" is not a usable identity; treat it as absence so the DSL default
+      // applies rather than rendering an empty `@host` fragment.
+      return value === "" ? undefined : value;
+    } catch (e) {
+      failures.push(`host.${field}: ${String(e)}`);
+      return undefined;
+    }
+  };
+
+  const name = attempt("name", () => shortHostname(os.hostname()));
+  const user = attempt("user", () => os.userInfo().username);
+  return {
+    host: {
+      ...(name !== undefined && { name }),
+      ...(user !== undefined && { user }),
+      // [LAW:one-source-of-truth] Passed straight through from the parsed
+      // hint. The daemon deliberately does NOT consult its own SSH_* env as a
+      // fallback: that env belongs to whichever shell spawned it, so a
+      // "helpful" fallback would confidently mislabel every session that
+      // daemon serves. Absent hint → absent field → declared default + a
+      // recorded last_error, which is the honest report of "not answered".
+      ...(hints.ssh !== undefined && { ssh: hints.ssh }),
+    },
+    failures,
+  };
+}
+
 // ─── Builder ─────────────────────────────────────────────────────────────────
 
 // ─── Config-driven provider gating ───────────────────────────────────────────
@@ -666,6 +774,13 @@ export async function buildRenderPayload(
   // daemon already computes every one of these for renderDsl's options; this
   // is that same struct, threaded to the sole payload assembler.
   effective: EffectiveGlobals,
+  // [LAW:locality-or-seam] The parsed client hints, NOT the raw request — this
+  // function is downstream of the wire checkpoint and never re-sanitizes.
+  // Separate from `effective` on purpose: that struct is resolved globals (what
+  // the config and the session chose), this is observed session context (what
+  // the client saw). Fusing them would put a config-precedence chain and a
+  // trust boundary behind one name.
+  hints: ClientHints,
 ): Promise<RenderPayload> {
   const wants = (prefix: string): boolean =>
     anyPathStartsWith(neededInputPaths, prefix);
@@ -756,6 +871,10 @@ export async function buildRenderPayload(
 
   const gitProjection = projectGitInfo(gitOutcome);
   failures.push(...gitProjection.failures);
+  // Ungated, like `home` below: two syscalls and a hint already in hand, so a
+  // `wants` gate would add a branch and save nothing.
+  const hostProjection = readHost(hints);
+  failures.push(...hostProjection.failures);
   const usageValue = take(usage);
   const todayValue = take(today);
   const contextValue = take(context);
@@ -867,6 +986,7 @@ export async function buildRenderPayload(
     ...(home !== undefined && { home }),
     ...(gitProjection.git !== undefined && { git: gitProjection.git }),
     ...(tmuxValue !== undefined && { tmux: { session: tmuxValue } }),
+    host: hostProjection.host,
     // [LAW:one-source-of-truth] Always present — the daemon resolves every
     // one of these each render (for BuildLineOptions/basePalette), and these
     // are those exact values. No `wants` gate: each costs nothing (already in
