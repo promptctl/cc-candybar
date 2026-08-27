@@ -16,107 +16,23 @@ import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-import { PROTOCOL_VERSION } from "../src/daemon/protocol";
-import { parseHandlerUrl } from "../src/install/index";
-import { effectsOf } from "./helpers/click";
+import {
+  click,
+  extractUrls,
+  killAndWait,
+  render,
+  stripAnsi,
+  urlWriting,
+} from "./helpers/daemon-e2e";
 import {
   prepareIsolatedDaemonEnv,
   spawnDaemonWithEnv,
   type RunningDaemon,
 } from "./helpers/spawn-isolated-daemon";
-import { sendDaemonRequest, waitForExit } from "./helpers/daemon-wire";
 import { SETTINGS_ANCHOR } from "../src/config/settings-menu";
 import { EDIT_MODE_KEY } from "../src/config/loader/edit-mode";
 
 jest.setTimeout(30_000);
-
-const REPLY_BUDGET_MS = 5000;
-// Same documented transient-retry contract daemon-config-persistence-e2e uses:
-// a cold first render (git spawn + config parse + template compile) can exceed
-// the daemon's 200ms per-request guard on a loaded runner.
-const TIMEOUT_RETRY_BUDGET = 5;
-
-async function render(
-  sockPath: string,
-  sessionId: string,
-  cwd: string,
-): Promise<string> {
-  for (let attempt = 1; ; attempt++) {
-    const resp = await sendDaemonRequest(
-      sockPath,
-      {
-        v: PROTOCOL_VERSION,
-        kind: "render",
-        hookData: {
-          hook_event_name: "Status",
-          session_id: sessionId,
-          transcript_path: path.join(cwd, "transcript.jsonl"),
-          cwd,
-          model: { id: "claude-opus-4-7", display_name: "Opus 4.7" },
-          workspace: { current_dir: cwd, project_dir: cwd, added_dirs: [] },
-        },
-        args: [],
-        cwd,
-      },
-      REPLY_BUDGET_MS,
-    );
-    if (!resp.ok) {
-      if (resp.code === "TIMEOUT" && attempt < TIMEOUT_RETRY_BUDGET) continue;
-      throw new Error(`render failed: ${resp.error} (${resp.code})`);
-    }
-    if (!("output" in resp)) {
-      throw new Error(`render carried no output: ${JSON.stringify(resp)}`);
-    }
-    return resp.output;
-  }
-}
-
-async function click(sockPath: string, url: string): Promise<void> {
-  const { verb, value } = parseHandlerUrl(url);
-  const resp = await sendDaemonRequest(
-    sockPath,
-    { v: PROTOCOL_VERSION, kind: "click", verb, value },
-    REPLY_BUDGET_MS,
-  );
-  if (!resp.ok) {
-    throw new Error(`click failed: ${resp.error} (${resp.code})`);
-  }
-}
-
-function extractUrls(rendered: string): string[] {
-  // eslint-disable-next-line no-control-regex
-  const re = /\x1b\]8;;([^\x1b]+)\x1b\\/g;
-  const urls: string[] = [];
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(rendered)) !== null) urls.push(m[1]!);
-  return urls;
-}
-
-// The affordance that writes `value` to `key`, as the user's own click would
-// find it: by what it does, from the rendered bytes — never constructed.
-function urlWriting(rendered: string, key: string, value: string): string {
-  const url = extractUrls(rendered).find((u) => {
-    try {
-      return effectsOf(u).some((e) => e.args[1] === key && e.args[2] === value);
-    } catch {
-      return false;
-    }
-  });
-  if (url === undefined) {
-    throw new Error(`no rendered affordance writes ${key}=${value}`);
-  }
-  return url;
-}
-
-// eslint-disable-next-line no-control-regex
-const ANSI = /\x1b\[[0-9;]*m|\x1b\]8;;[^\x1b]*\x1b\\/g;
-const stripAnsi = (s: string): string => s.replace(ANSI, "");
-
-async function killAndWait(daemon: RunningDaemon): Promise<void> {
-  const exited = waitForExit(daemon.child);
-  daemon.killTree();
-  await exited;
-}
 
 describe("candybar-settings-ui-aok.1: real daemon, real user config", () => {
   test("a user root of one row of two segments still reaches presets and edit mode", async () => {

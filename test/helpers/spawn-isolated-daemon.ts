@@ -30,12 +30,31 @@ export interface IsolatedDaemonEnv {
   removeTmpDirs(): void;
 }
 
+// The smaller of the two platform limits, so a path that passes here passes on
+// both. Linux allows 108; there is no gain in letting a test that works on
+// Linux fail on a maintainer's Mac.
+const SUN_PATH_MAX = 104;
+
 export function prepareIsolatedDaemonEnv(tmpPrefix: string): IsolatedDaemonEnv {
   const stateRoot = fs.mkdtempSync(path.join(os.tmpdir(), `${tmpPrefix}-`));
   const stateDir = path.join(stateRoot, "cc-candybar");
   // Socket parent must satisfy ensureSocketParentSafe (uid==me + mode 0700).
   fs.mkdirSync(stateDir, { recursive: true, mode: 0o700 });
   const sockPath = path.join(stateDir, "socket");
+  // [LAW:no-silent-failure] `sockaddr_un.sun_path` is 104 bytes on macOS (108
+  // on Linux). Past that, bind() fails inside the spawned daemon and the only
+  // symptom a test sees is spawnDaemonWithEnv timing out five seconds later
+  // with "socket file absent" — which reads like a slow daemon and costs an
+  // afternoon. The prefix is the only part a caller controls, so fail here,
+  // naming the real cause and the fix.
+  if (Buffer.byteLength(sockPath) > SUN_PATH_MAX) {
+    throw new Error(
+      `isolated daemon socket path is ${Buffer.byteLength(sockPath)} bytes, ` +
+        `over the ${SUN_PATH_MAX}-byte sockaddr_un limit: ${sockPath}\n` +
+        `Shorten the tmpPrefix passed to prepareIsolatedDaemonEnv ` +
+        `("${tmpPrefix}").`,
+    );
+  }
 
   const env: NodeJS.ProcessEnv = {
     ...process.env,
