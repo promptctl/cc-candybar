@@ -20,6 +20,7 @@
 // SENSITIVITY itself (the retention rationale, what Option A would break) is
 // pinned separately below.
 
+import { SessionState } from "../src/daemon/session-state";
 import { getThemePalette } from "@promptctl/rich-js";
 
 import {
@@ -59,7 +60,7 @@ function render(n: number): string {
     source,
   ) as ValidatedConfig;
   const store = new VariableStore();
-  const registry = new SourceRegistry(store);
+  const registry = new SourceRegistry(store, "", undefined, new SessionState());
   const compiled = registerDslConfig(config, registry, { cwd: "/tmp" });
   const out = renderDsl(
     config,

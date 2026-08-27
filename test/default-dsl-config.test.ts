@@ -477,7 +477,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
 
     function render(cfg: typeof configA): string {
       const store = new VariableStore();
-      const registry = new SourceRegistry(store);
+      const registry = new SourceRegistry(store, "", undefined, new SessionState());
       try {
         const compiled = registerDslConfig(cfg, registry, { cwd: "/tmp" });
         const bp = getThemePalette("textual-dark"!)!;
@@ -584,7 +584,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
       // on the payload object directly; no env-var mutation needed.
       const dirOnly = narrowToSegment(parsed, "directory");
       const store = new VariableStore();
-      const registry = new SourceRegistry(store);
+      const registry = new SourceRegistry(store, "", undefined, new SessionState());
       try {
         const compiled = registerDslConfig(dirOnly, registry, {
           cwd: process.cwd(),
@@ -770,7 +770,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
       const parsed = parseAndValidate("<default>", SERIALIZED);
       const cfg = narrowToSegment(parsed, segment);
       const store = new VariableStore();
-      const registry = new SourceRegistry(store);
+      const registry = new SourceRegistry(store, "", undefined, new SessionState());
       try {
         const compiled = registerDslConfig(cfg, registry, { cwd: "/tmp" });
         const basePalette = paletteForThemeName(
@@ -941,7 +941,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
       const parsed = parseAndValidate("<default>", SERIALIZED);
       const metricsOnly = narrowToSegment(parsed, "metrics");
       const store = new VariableStore();
-      const registry = new SourceRegistry(store);
+      const registry = new SourceRegistry(store, "", undefined, new SessionState());
       try {
         const compiled = registerDslConfig(metricsOnly, registry, {
           cwd: process.cwd(),
@@ -1027,7 +1027,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
           },
         };
         const store = new VariableStore();
-        const registry = new SourceRegistry(store);
+        const registry = new SourceRegistry(store, "", undefined, new SessionState());
         try {
           const compiled = registerDslConfig(blockOnly, registry, {
             cwd: process.cwd(),

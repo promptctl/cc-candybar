@@ -50,6 +50,8 @@ import { synthesizeGroupDecls, validateRoot } from "./loader/layout.js";
 import { synthesizeMenuDecls } from "./loader/menu-synth.js";
 import { synthesizeEditModeToggle } from "./loader/edit-mode.js";
 import { synthesizeEditChrome } from "./edit-chrome.js";
+import { SETTINGS_NS, synthesizeSettingsMenu } from "./settings-menu.js";
+import { reservedNamespaceCollisions } from "./loader/reserved-namespace.js";
 import { validateActions } from "./loader/actions.js";
 import { validateLooks } from "./loader/looks.js";
 import { validatePresets } from "./loader/presets.js";
@@ -152,7 +154,12 @@ export function validateConfig(
   // into freshly-synthesized segments, actions into freshly-synthesized
   // actions) is correct by construction and does not re-enter cross-ref/
   // cycle checking, exactly as group/menu synthesis's output doesn't either.
-  const withChrome = synthesizeEditChrome(config);
+  // [LAW:dataflow-not-control-flow] candybar-settings-ui-aok.1's global settings
+  // menu, spliced BEFORE edit chrome so edit chrome walks the final content tree
+  // and treats the menu's reserved `settings.` names as chrome-exempt — the
+  // full ordering argument lives in settings-menu.ts's header, beside the pass
+  // it governs.
+  const withChrome = synthesizeEditChrome(synthesizeSettingsMenu(config));
   return withChrome as ValidatedConfig;
 }
 
@@ -295,6 +302,18 @@ function validateTopLevel(
   // affordances) runs later, in validateConfig, once the merged/preset-
   // resolved/rootOps-replayed tree exists to derive it from.
   synthesizeEditModeToggle(ctx, out);
+  // [LAW:one-source-of-truth] The global settings menu reserves its namespace
+  // here and synthesizes NOTHING here: the tree it must be present in only
+  // exists after merge (a user `root` replaces the default's), so the artifacts
+  // are minted in validateConfig. The reservation is unconditional all the same,
+  // mirroring every other namespace above — "you never author settings.*" is a
+  // stable contract, not a rule that switches on when the pass happens to fire.
+  reservedNamespaceCollisions(
+    ctx,
+    out,
+    SETTINGS_NS,
+    "the global settings menu",
+  );
   return out;
 }
 

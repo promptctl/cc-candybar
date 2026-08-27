@@ -19,6 +19,7 @@
 //      source; integer bounds; non-zero `by`), resolves `{{ action }}` refs, and
 //      requires session.id for any set action.
 
+import { ownLinks, ownValidators } from "./helpers/ambient-chrome";
 import { getThemePalette } from "@promptctl/rich-js";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
@@ -50,7 +51,10 @@ const THEMES = listResolvablePaletteNames();
 function opts(width = Number.POSITIVE_INFINITY) {
   return {
     style: "powerline" as const,
-    colorCompatibility: "truecolor" as const, wrap: true, padding: 0, charset: "unicode" as const,
+    colorCompatibility: "truecolor" as const,
+    wrap: true,
+    padding: 0,
+    charset: "unicode" as const,
     width,
   };
 }
@@ -61,7 +65,10 @@ function extractUrls(rendered: string): string[] {
   const urls: string[] = [];
   let m: RegExpExecArray | null;
   while ((m = re.exec(rendered)) !== null) urls.push(m[1]!);
-  return urls;
+  // The ambient chrome every bar carries (the global settings menu and the
+  // edit-mode toggle it reaches) emits its own clickable regions; this file's
+  // subject is what a TEMPLATE'S OWN actions click, so they are filtered out.
+  return ownLinks(urls);
 }
 
 // eslint-disable-next-line no-control-regex
@@ -152,7 +159,7 @@ describe("2de.12 — literal set action", () => {
 
   test("derives an allow-list gate of {to} for the custom key", () => {
     const config = parseAndValidate("<test>", SRC, ALLOWED);
-    expect(deriveActionValidators(config)).toEqual([
+    expect(ownValidators(deriveActionValidators(config))).toEqual([
       { key: "flavor", spec: { kind: "allow-list", allowed: ["chocolate"] } },
     ]);
   });
@@ -181,7 +188,7 @@ describe("2de.12 — set on a baseline key derives nothing", () => {
 
   test("the theme literal reuses the permanent theme validator (no derived spec)", () => {
     const config = parseAndValidate("<test>", SRC, ALLOWED);
-    expect(deriveActionValidators(config)).toEqual([]);
+    expect(ownValidators(deriveActionValidators(config))).toEqual([]);
   });
 
   test("the click still passes the baseline theme gate end-to-end", () => {
@@ -219,7 +226,7 @@ describe("2de.12 — option set action", () => {
 
   test("derives an allow-list of the resolved option domain for the custom key", () => {
     const config = parseAndValidate("<test>", SRC, ALLOWED);
-    expect(deriveActionValidators(config)).toEqual([
+    expect(ownValidators(deriveActionValidators(config))).toEqual([
       { key: "sel", spec: { kind: "allow-list", allowed: THEMES } },
     ]);
   });
@@ -306,7 +313,7 @@ describe("71o.1 — inline literal option domain (from: [...])", () => {
 
   test("derives an allow-list gate of exactly the inline values", () => {
     const config = parseAndValidate("<test>", SRC, ALLOWED);
-    expect(deriveActionValidators(config)).toEqual([
+    expect(ownValidators(deriveActionValidators(config))).toEqual([
       {
         key: "sort-order",
         spec: { kind: "allow-list", allowed: ["asc", "desc"] },
@@ -328,7 +335,8 @@ describe("71o.1 — inline literal option domain (from: [...])", () => {
     const { dispose } = buildRuntime(SRC); // registers the derived gate
     const res = validateStateWrite("sort-order", "bogus");
     expect(res.ok).toBe(false);
-    if (!res.ok) expect(res.reason).toMatch(/unknown state "sort-order" "bogus"/);
+    if (!res.ok)
+      expect(res.reason).toMatch(/unknown state "sort-order" "bogus"/);
     dispose();
   });
 
@@ -352,7 +360,9 @@ describe("71o.1 — inline literal option domain (from: [...])", () => {
       throw new Error("expected ConfigError");
     } catch (e) {
       expect(e).toBeInstanceOf(ConfigError);
-      expect((e as ConfigError).message).toMatch(/from array members must be unique/);
+      expect((e as ConfigError).message).toMatch(
+        /from array members must be unique/,
+      );
     }
   });
 });
@@ -388,7 +398,7 @@ describe("71o.1 — a newly-registered domain needs no engine edits", () => {
         root: 'bar',
       }`;
       const config = parseAndValidate("<test>", src, ALLOWED);
-      expect(deriveActionValidators(config)).toEqual([
+      expect(ownValidators(deriveActionValidators(config))).toEqual([
         {
           key: "fruit",
           spec: { kind: "allow-list", allowed: ["red", "green", "blue"] },
@@ -486,7 +496,7 @@ describe("2de.12 — bounded set action", () => {
 
   test("two bounded actions on one key merge to a single range gate carrying the seed", () => {
     const config = parseAndValidate("<test>", SRC, ALLOWED);
-    expect(deriveActionValidators(config)).toEqual([
+    expect(ownValidators(deriveActionValidators(config))).toEqual([
       { key: "hue", spec: { kind: "range", min: 0, max: 60, seed: 14 } },
     ]);
   });
@@ -581,7 +591,7 @@ describe("2de.12 — copy / open actions derive no gate", () => {
 
   test("copy/open contribute no validator spec", () => {
     const config = parseAndValidate("<test>", SRC, ALLOWED);
-    expect(deriveActionValidators(config)).toEqual([]);
+    expect(ownValidators(deriveActionValidators(config))).toEqual([]);
   });
 
   test("copy carries the evaluated template; open carries the evaluated target", () => {
@@ -695,7 +705,10 @@ describe("2de.12 — loader proves the ActionDecl invariants", () => {
   });
 
   test("two of set/copy/open is rejected", () => {
-    expectIssue(base(`{ a: { set: 'k', to: 'v', copy: 'x' } }`), /exactly one of/);
+    expectIssue(
+      base(`{ a: { set: 'k', to: 'v', copy: 'x' } }`),
+      /exactly one of/,
+    );
   });
 
   test("two value sources on a set is rejected", () => {
@@ -847,7 +860,7 @@ describe("2de.4 — cycle set action", () => {
 
   test("derives an allow-list gate of exactly the members", () => {
     const config = parseAndValidate("<test>", SRC, ALLOWED);
-    expect(deriveActionValidators(config)).toEqual([
+    expect(ownValidators(deriveActionValidators(config))).toEqual([
       {
         key: "details-open",
         spec: { kind: "allow-list", allowed: ["0", "1"] },
@@ -900,7 +913,7 @@ describe("2de.4 — cycle set action", () => {
       root: 'bar',
     }`;
     const config = parseAndValidate("<test>", src, ALLOWED);
-    expect(deriveActionValidators(config)).toEqual([
+    expect(ownValidators(deriveActionValidators(config))).toEqual([
       {
         key: "menu",
         spec: { kind: "allow-list", allowed: ["closed", "a", "b"] },
@@ -946,7 +959,11 @@ describe("2de.4 — loader proves the cycle invariants", () => {
 
   test("a valid cycle parses", () => {
     expect(() =>
-      parseAndValidate("<test>", base(`{ a: { set: 'k', cycle: ['0', '1'] } }`), ALLOWED),
+      parseAndValidate(
+        "<test>",
+        base(`{ a: { set: 'k', cycle: ['0', '1'] } }`),
+        ALLOWED,
+      ),
     ).not.toThrow();
   });
 
@@ -965,17 +982,11 @@ describe("2de.4 — loader proves the cycle invariants", () => {
   });
 
   test("an empty member is rejected", () => {
-    expectIssue(
-      base(`{ a: { set: 'k', cycle: ['', 'b'] } }`),
-      /non-empty/,
-    );
+    expectIssue(base(`{ a: { set: 'k', cycle: ['', 'b'] } }`), /non-empty/);
   });
 
   test("a slash-bearing member is rejected", () => {
-    expectIssue(
-      base(`{ a: { set: 'k', cycle: ['a/b', 'c'] } }`),
-      /slash-free/,
-    );
+    expectIssue(base(`{ a: { set: 'k', cycle: ['a/b', 'c'] } }`), /slash-free/);
   });
 
   test("cycle plus another value source is rejected", () => {

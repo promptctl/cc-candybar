@@ -21,6 +21,7 @@
 //      touching the hand-authored file, never touching sibling segments),
 //      and it survives a real restart.
 
+import { ownLinks, ownValidators } from "./helpers/ambient-chrome";
 import {
   mkdtempSync,
   rmSync,
@@ -78,7 +79,9 @@ function extractUrls(rendered: string): string[] {
   const urls: string[] = [];
   let m: RegExpExecArray | null;
   while ((m = re.exec(rendered)) !== null) urls.push(m[1]!);
-  return urls;
+  // The global settings menu and the edit toggle it reaches are on every bar;
+  // this file's assertions are about the fixture's OWN clickable regions.
+  return ownLinks(urls);
 }
 
 function tmpFile(): { path: string; cleanup: () => void } {
@@ -211,7 +214,7 @@ describe("config-validators: segment-palette persist keys", () => {
       }`,
       ALLOWED,
     );
-    const contributions = deriveConfigActionValidators(config);
+    const contributions = ownValidators(deriveConfigActionValidators(config));
     expect(contributions.map((c) => c.key)).toEqual([
       "segments.sidebar.palette",
     ]);

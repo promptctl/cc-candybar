@@ -19,6 +19,7 @@
 //   5. reset-config is gated by key membership and clears one override,
 //      restoring the pre-override value on the next reload.
 
+import { ownLinks, ownValidators } from "./helpers/ambient-chrome";
 import {
   mkdirSync,
   mkdtempSync,
@@ -93,7 +94,9 @@ function extractUrls(rendered: string): string[] {
   const urls: string[] = [];
   let m: RegExpExecArray | null;
   while ((m = re.exec(rendered)) !== null) urls.push(m[1]!);
-  return urls;
+  // The global settings menu and the edit toggle it reaches are on every bar;
+  // this file's assertions are about the fixture's OWN clickable regions.
+  return ownLinks(urls);
 }
 
 function tmpFile(): { path: string; cleanup: () => void } {
@@ -250,7 +253,7 @@ describe("config-validators registry", () => {
       }`,
       ALLOWED,
     );
-    const contributions = deriveConfigActionValidators(config);
+    const contributions = ownValidators(deriveConfigActionValidators(config));
     expect(contributions.map((c) => c.key)).toEqual(["palette"]);
   });
 

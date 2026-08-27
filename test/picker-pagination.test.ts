@@ -67,7 +67,11 @@ function pickerConfig(): string {
         bg: 'surface', fg: 'foreground',
       },
     },
-    root: { v: ['menu'] },
+    // The global settings menu (candybar-settings-ui-aok.1) rides every bar;
+    // placed EXPLICITLY on its own row here so the picker keeps its row to
+    // itself — a sibling cell would eat into the width this suite measures
+    // pagination against, which is not what these tests are about.
+    root: { v: ['menu', 'settings.menu'] },
   }`;
 }
 

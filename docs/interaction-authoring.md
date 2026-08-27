@@ -690,6 +690,54 @@ Like the four display-globals steppers above, a segment's `palette:` has no
 SessionState half — `persist` is its only seam, so there is no session
 `set` twin to pair it with.
 
+### The global settings menu: `settings.menu`
+
+One disclosure is present in **every** bar, whatever the config says: the
+global settings menu, rendered as `☰ ▸` and opening onto the always-available
+functionality — preset switching and edit mode. It exists because `root:`
+replaces the bundled default's wholesale, so a user config that declares its
+own `root` (the ordinary reason to write one) would otherwise delete every
+door into the features below along with it.
+
+You do not declare it and you cannot delete it. What you *can* do is choose
+where it goes, by placing the reserved segment name `settings.menu` in your
+layout — the anchor. Place it and the menu renders there; leave it out and the
+menu is appended to the bar's first row. Nothing else differs between the two:
+the same toggle, the same body, the same clicks.
+
+```json5 check:pass
+{
+  root: { v: [
+    { h: ["directory", "gitaculous"] },
+    { h: ["settings.menu", "model", "context"] },
+  ] },
+}
+```
+
+The anchor may appear **at most once** per layout. It names one disclosure
+backed by one state key, and one key holds one open state, so a second
+placement would be two toggles fighting over it:
+
+```json5 check:fail
+{
+  root: { v: [
+    { h: ["directory", "settings.menu"] },
+    { h: ["model", "settings.menu"] },
+  ] },
+}
+```
+
+```error
+it may appear at most once per layout
+```
+
+Everything the menu synthesizes lives under the reserved `settings.` namespace
+— a variable, action, or segment of your own under that prefix is a load error,
+the same contract `groups.` / `menus.` / `edit.` carry (see "Squatting a
+reserved namespace" below). Edit mode also treats those names as structural: no
+`-` affordance is offered beside the menu, so the way back into edit mode cannot
+be edited away.
+
 ### The bundled settings drawer
 
 The bundled default (`DEFAULT_DSL_CONFIG`) ships every knob above already
@@ -725,8 +773,9 @@ persisted default for that one session.
 
 A user config's `root:` **replaces the bundled default's wholesale** (see the
 top-level project docs), so removing the drawer — or reshaping it — is a
-matter of authoring your own `root` without a `settings` group in it. This
-reproduces the bundled default's two rows minus the drawer:
+matter of authoring your own `root` without a `settings` group in it. Doing so
+no longer strands you: the global settings menu above is present either way.
+This reproduces the bundled default's two rows minus the drawer:
 
 ```json5 check:pass
 {

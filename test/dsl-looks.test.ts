@@ -12,6 +12,7 @@
 // registerStateValidator + the real dispatch for the click, and the same
 // effectiveLookName/lookKeyByName the daemon calls. No parallel rig.
 
+import { ownValidators } from "./helpers/ambient-chrome";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
@@ -176,7 +177,7 @@ describe('from: "looks" — rendered options and the derived gate share the conf
 
   test("deriveActionValidators gates key `look` to exactly the declared names", () => {
     const config = parseAndValidate("<looks>", SRC, ALLOWED);
-    expect(deriveActionValidators(config)).toEqual([
+    expect(ownValidators(deriveActionValidators(config))).toEqual([
       {
         key: "look",
         spec: {

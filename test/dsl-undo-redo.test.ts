@@ -23,6 +23,7 @@
 //   7. History survives a restart (a fresh read of the same on-disk files).
 //   8. The ring is bounded (MAX_HISTORY_DEPTH = 50).
 
+import { ownLinks, ownValidators } from "./helpers/ambient-chrome";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -64,7 +65,9 @@ function extractUrls(rendered: string): string[] {
   const urls: string[] = [];
   let m: RegExpExecArray | null;
   while ((m = re.exec(rendered)) !== null) urls.push(m[1]!);
-  return urls;
+  // The global settings menu and the edit toggle it reaches are on every bar;
+  // this file's assertions are about the fixture's OWN clickable regions.
+  return ownLinks(urls);
 }
 
 // ─── loader: the undo/redo ActionDecl arms ────────────────────────────────
@@ -168,7 +171,7 @@ describe("deriveConfigActionValidators over undo/redo actions", () => {
       }`,
       ALLOWED,
     );
-    expect(deriveConfigActionValidators(config)).toEqual([]);
+    expect(ownValidators(deriveConfigActionValidators(config))).toEqual([]);
   });
 });
 

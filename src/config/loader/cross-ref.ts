@@ -29,6 +29,11 @@ import {
 import { listGlobalsFieldNames } from "./globals.js";
 import { parsePersistTarget } from "./persist-target.js";
 import { presetNames } from "../presets.js";
+import {
+  countAnchors,
+  isSettingsAnchor,
+  SETTINGS_ANCHOR,
+} from "../settings-menu.js";
 import { ident } from "../ident.js";
 import { findKeyLine } from "./diagnostics.js";
 import { isPlainObject, type ValidateCtx } from "./validate-core.js";
@@ -253,6 +258,21 @@ export function validateCrossReferences(
     layoutKey: string,
     layoutLine: number | undefined,
   ): void => {
+    // [LAW:one-source-of-truth] The global settings menu's anchor is a POSITION
+    // an author may place and this walk must therefore accept, even though no
+    // config declares a segment by that name — synthesizeSettingsMenu provides
+    // it unconditionally, immediately after these checks pass. Two placements is
+    // the real error: one state key holds one open state, so a second anchor
+    // would be a second toggle writing one disclosure, with two bodies claiming
+    // to be it. Counted over the SAME census the synthesis reads, so "placed"
+    // means one thing [LAW:single-enforcer].
+    if (countAnchors(root) > 1) {
+      ctx.issues.push({
+        path: layoutKey,
+        message: `${layoutKey} places the global settings menu anchor "${SETTINGS_ANCHOR}" ${countAnchors(root)} times — it may appear at most once per layout (it is one disclosure, and one state key holds one open state). Remove all but the placement you want; removing every placement puts the menu at its default position.`,
+        line: layoutLine,
+      });
+    }
     for (const node of walkNodes(root)) {
       // [LAW:locality-or-seam] A node's `when` reads the global scope (bare
       // globals + namespaced segment vars) — the same existence-check shape as a
@@ -263,6 +283,7 @@ export function validateCrossReferences(
         });
       }
       if (node.kind !== "segment") continue;
+      if (isSettingsAnchor(node.name)) continue;
       if (!Object.prototype.hasOwnProperty.call(cfg.segments, node.name)) {
         const renamed = RENAMED_SEGMENTS[node.name];
         const hint =

@@ -19,6 +19,7 @@
 // DEFAULT_DSL_CONFIG, so the `{{ template "name" }}` calls resolve the same
 // helper bodies the shipped statusline uses — not a test-local copy.
 
+import { SessionState } from "../src/daemon/session-state";
 import { getThemePalette } from "@promptctl/rich-js";
 
 import {
@@ -67,7 +68,7 @@ function render(call: string, payload: Record<string, number>): string {
     source,
   ) as ValidatedConfig;
   const store = new VariableStore();
-  const registry = new SourceRegistry(store);
+  const registry = new SourceRegistry(store, "", undefined, new SessionState());
   const compiled = registerDslConfig(config, registry, {
     cwd: "/tmp",
     clock: FROZEN_CLOCK,

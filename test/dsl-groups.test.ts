@@ -15,6 +15,7 @@
 //   5. The loader proves the group invariants (identifier name, unique names,
 //      reserved namespace, ancestor/descendant key sharing, one open per key).
 
+import { ownValidators } from "./helpers/ambient-chrome";
 import { getThemePalette } from "@promptctl/rich-js";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
@@ -168,7 +169,7 @@ describe("2de.4 — group sugar: toggle round trip", () => {
     expect(config.segments["groups.details"]?.template).toBe(
       '{{ action "groups.details" "details ▸" "details ▾" }}',
     );
-    expect(deriveActionValidators(config)).toEqual([
+    expect(ownValidators(deriveActionValidators(config))).toEqual([
       {
         key: "groups.details",
         spec: { kind: "allow-list", allowed: ["closed", "details"] },
@@ -230,7 +231,7 @@ describe("2de.4 — accordion (shared key)", () => {
 
   test("the shared key's gate is the union of the sibling cycles", () => {
     const config = parseAndValidate("<test>", ACCORDION_SRC, ALLOWED);
-    expect(deriveActionValidators(config)).toEqual([
+    expect(ownValidators(deriveActionValidators(config))).toEqual([
       {
         key: "menu",
         spec: { kind: "allow-list", allowed: ["closed", "files", "tools"] },

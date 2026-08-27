@@ -183,6 +183,12 @@ A **group** is a collapsible chunk of layout — an *input-only* node kind (`[LA
 - **Nested disclosure**: nest groups with *distinct* keys — a closed parent's `when` hides the whole subtree (child open-state persists invisibly). An ancestor and descendant sharing a key is a load error (one key cannot represent "both open").
 - Group names are identifiers (they splice into `.groups.<name>` template paths) and never `"closed"`. `label` is a plain string (escaped at synthesis); dynamic labels are raw-grammar territory. At most one group per shared key declares `open: true`.
 
+### The global settings menu (`settings.menu`)
+
+`root` replaces wholesale, so every interactive surface the bundled default places in it disappears the moment a user writes their own `root` — the defect `candybar-settings-ui-aok` exists to fix. `synthesizeSettingsMenu` (`src/config/settings-menu.ts`) closes it: one disclosure (`☰ ▸`, opening onto preset switching and edit mode) spliced into **every** preset root, minted once under the reserved `settings.` namespace and merely *referenced* per preset — which is what makes it idempotent across N presets, unlike a `kind: "group"` node, where a second reference would be a second declaration.
+
+It runs from `validateConfig` (it needs the merged tree, like edit chrome) and **before** `synthesizeEditChrome`, so edit chrome walks the final content tree and treats `settings.` as chrome-exempt — the door back into edit mode has no `-` beside it. It also guarantees `edit.toggle`, which is exactly what edit chrome's own demand gate reads. Placement is a **position**, not a mode (`[LAW:dataflow-not-control-flow]`): `withAnchor` returns a tree that provably contains the anchor — the author's own placement of the reserved `settings.menu` segment name, or the default position appended to the bar's first row — and one splice expands that leaf. A second placement is a load error (one key holds one open state); `cross-ref.ts` is where both the acceptance of the undeclared anchor name and that rejection live.
+
 ### Click actions and the URL handler
 
 Hyperlinks in segment output emit `cc-candybar://<verb>/<value>` OSC-8 links. On macOS, `cc-candybar install` builds `~/Applications/CCCandybarURLHandler.app`, copies the runtime to `~/Library/Application Support/CCCandybar/url-handler.mjs` (stable path independent of pnpm cache), and registers the URL scheme via Launch Services. Click → URL handler app → `cc-candybar url-handle <url>` → daemon click protocol. Verbs are dispatched in `handleClick` (`src/daemon/server.ts`).

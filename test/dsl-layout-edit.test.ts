@@ -31,6 +31,8 @@
 //      daemon handler clears the log and restores the literal declared root
 //      — never a silent drift between what's on screen and what's on disk.
 
+import { ownLinks, ownValidators } from "./helpers/ambient-chrome";
+import { SETTINGS_NS } from "../src/config/settings-menu";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -84,7 +86,9 @@ function extractUrls(rendered: string): string[] {
   const urls: string[] = [];
   let m: RegExpExecArray | null;
   while ((m = re.exec(rendered)) !== null) urls.push(m[1]!);
-  return urls;
+  // The global settings menu and the edit toggle it reaches are on every bar;
+  // this file's assertions are about the fixture's OWN clickable regions.
+  return ownLinks(urls);
 }
 
 // ─── loader: the removeSegment/insertSegment ActionDecl arms ─────────────────
@@ -287,15 +291,14 @@ describe("deriveConfigActionValidators over layout-op actions", () => {
       ALLOWED,
     );
     const contributions = deriveConfigActionValidators(config);
-    expect(contributions).toEqual([
-      {
-        key: "presets.default.rootOps",
-        spec: {
-          kind: "allow-list",
-          allowed: [encodeLayoutOp({ op: "remove", target: "directory" })],
-        },
-      },
-    ]);
+    // [LAW:behavior-not-structure] The contract is "this action contributes ITS
+    // token to that preset's op-log gate". The same key also carries the tokens
+    // edit chrome mints for every content segment — now on every bar, since the
+    // global settings menu makes edit mode reachable — so membership, not the
+    // whole list, is what this action's declaration decides.
+    expect(allowedFor(contributions, "presets.default.rootOps")).toContain(
+      encodeLayoutOp({ op: "remove", target: "directory" }),
+    );
   });
 
   test("two layout actions on the same preset union into a two-member allow-list", () => {
@@ -318,20 +321,22 @@ describe("deriveConfigActionValidators over layout-op actions", () => {
       ALLOWED,
     );
     const contributions = deriveConfigActionValidators(config);
-    expect(contributions).toHaveLength(1);
-    const spec = contributions[0]!.spec;
-    if (spec.kind !== "allow-list") throw new Error("expected allow-list");
-    expect(new Set(spec.allowed)).toEqual(
-      new Set([
-        encodeLayoutOp({ op: "remove", target: "directory" }),
-        encodeLayoutOp({
-          op: "insert",
-          segment: "git",
-          anchor: "directory",
-          relation: "after",
-        }),
-      ]),
+    // Both actions land on ONE key (the union is the point); membership rather
+    // than exact contents, since edit chrome contributes to the same key.
+    const allowed = new Set(
+      allowedFor(contributions, "presets.default.rootOps"),
     );
+    for (const token of [
+      encodeLayoutOp({ op: "remove", target: "directory" }),
+      encodeLayoutOp({
+        op: "insert",
+        segment: "git",
+        anchor: "directory",
+        relation: "after",
+      }),
+    ]) {
+      expect(allowed).toContain(token);
+    }
   });
 
   test("a token no action declares is rejected by the derived gate", () => {
@@ -373,8 +378,11 @@ describe("deriveConfigActionValidators over layout-op actions", () => {
     const rootOpsEntry = contributions.find(
       (c) => c.key === "presets.empty.rootOps",
     );
+    // The registration is the contract: a preset with no layout-op action of
+    // its own still gets its op-log key, so its reset click is never orphaned.
+    // Its members are whatever edit chrome minted for that preset's tree.
     expect(rootOpsEntry).toBeDefined();
-    expect(rootOpsEntry!.spec).toEqual({ kind: "allow-list", allowed: [] });
+    expect(rootOpsEntry!.spec.kind).toBe("allow-list");
   });
 });
 
@@ -495,7 +503,7 @@ describe("apply-layout-op click → durable append", () => {
     expect(() =>
       applyLayoutOp(
         `${encodeURIComponent("s1")}/${encodeURIComponent("presets.default.rootOps")}/${encodeURIComponent(
-          encodeLayoutOp({ op: "remove", target: "git" }),
+          encodeLayoutOp({ op: "remove", target: "noSuchSegmentAnywhere" }),
         )}`,
         ctx,
       ),
@@ -532,7 +540,10 @@ describe("presetIsCustomized", () => {
   // presetIsCustomized must agree, not read the raw (pre-decode) length.
   test("a token list where every token is malformed is not customized", () => {
     expect(
-      presetIsCustomized({ default: ["not-a-real-token", "also-garbage"] }, "default"),
+      presetIsCustomized(
+        { default: ["not-a-real-token", "also-garbage"] },
+        "default",
+      ),
     ).toBe(false);
   });
 
@@ -540,10 +551,7 @@ describe("presetIsCustomized", () => {
     expect(
       presetIsCustomized(
         {
-          default: [
-            "garbage",
-            encodeLayoutOp({ op: "remove", target: "x" }),
-          ],
+          default: ["garbage", encodeLayoutOp({ op: "remove", target: "x" })],
         },
         "default",
       ),
@@ -587,7 +595,12 @@ describe('the "customized" banner escapes quote/backslash preset names', () => {
     // The compile itself (parse every synthesized template) must not throw —
     // an unescaped quote would break the Go-template source.
     const store = new VariableStore();
-    const registry = new SourceRegistry(store, "", undefined, new SessionState());
+    const registry = new SourceRegistry(
+      store,
+      "",
+      undefined,
+      new SessionState(),
+    );
     let compiled: ReturnType<typeof registerDslConfig>;
     expect(() => {
       compiled = registerDslConfig(config, registry);
@@ -646,7 +659,12 @@ describe("the reset banner respects a preset root's own top-level `when`", () =>
 
   function renderGated(config: ReturnType<typeof buildConfig>): string {
     const store = new VariableStore();
-    const registry = new SourceRegistry(store, "", undefined, new SessionState());
+    const registry = new SourceRegistry(
+      store,
+      "",
+      undefined,
+      new SessionState(),
+    );
     try {
       const compiled = registerDslConfig(config, registry);
       const basePalette = getThemePalette("textual-dark"!);
@@ -709,11 +727,31 @@ function makeCache(): { cache: RenderCache; cleanups: Array<() => void> } {
 // to a preset's ORDINARY content, so chrome nodes — recognizable purely by
 // the reserved `edit.` namespace their synthesis mints them under — are
 // filtered out here rather than at every call site.
+// The members one derived contribution gates, by key — the shape assertions
+// about "did MY action contribute its token" read, now that edit chrome unions
+// its own tokens onto the same per-preset key.
+function allowedFor(
+  contributions: readonly { key: string; spec: { kind: string } }[],
+  key: string,
+): readonly string[] {
+  const entry = contributions.find((c) => c.key === key);
+  if (entry === undefined) throw new Error(`no contribution for "${key}"`);
+  const spec = entry.spec as { kind: string; allowed?: readonly string[] };
+  if (spec.kind !== "allow-list" || spec.allowed === undefined) {
+    throw new Error(`contribution for "${key}" is not an allow-list`);
+  }
+  return spec.allowed;
+}
+
 function segmentNamesOf(root: LayoutNode): string[] {
   const out: string[] = [];
   const walk = (node: LayoutNode): void => {
     if (node.kind === "segment") {
-      if (!node.name.startsWith(EDIT_NS)) out.push(node.name);
+      // Synthesized chrome, not content: edit mode's +/- affordances and the
+      // global settings menu (candybar-settings-ui-aok.1) both ride every
+      // resolved preset root. These assertions are about the CONTENT tree.
+      if (!node.name.startsWith(EDIT_NS) && !node.name.startsWith(SETTINGS_NS))
+        out.push(node.name);
     } else {
       for (const c of node.children) walk(c);
     }
@@ -900,18 +938,21 @@ describe("RenderCache: layout ops replay onto the resolved preset root", () => {
       writeConfigOverride(
         overridesPath(),
         "presets.default.rootOps",
-        JSON.stringify([
-          encodeLayoutOp({ op: "remove", target: "toolbar" }),
-        ]),
+        JSON.stringify([encodeLayoutOp({ op: "remove", target: "toolbar" })]),
       );
 
       // A fresh cache — a real restart, not an in-process cache rebuild —
       // reloading against the SAME state dir (same overrides file).
       const { cache: cache2, cleanups: cleanups2 } = makeCache();
       try {
-        const afterRemove = cache2.getOrCreate(projectDir, projectDir, undefined);
+        const afterRemove = cache2.getOrCreate(
+          projectDir,
+          projectDir,
+          undefined,
+        );
         expect(afterRemove.lastError).toBeNull();
-        const rootAfterRemove = afterRemove.state!.config.presets.default!.root!;
+        const rootAfterRemove =
+          afterRemove.state!.config.presets.default!.root!;
         expect(segmentNamesOf(rootAfterRemove)).not.toContain("toolbar");
         // The trigger is gone, but the REST of the preset's chrome is still
         // there — other `-`/`+` affordances remain, so the bar isn't a dead
@@ -952,7 +993,11 @@ describe("RenderCache: layout ops replay onto the resolved preset root", () => {
 
         const { cache: cache3, cleanups: cleanups3 } = makeCache();
         try {
-          const restored = cache3.getOrCreate(projectDir, projectDir, undefined);
+          const restored = cache3.getOrCreate(
+            projectDir,
+            projectDir,
+            undefined,
+          );
           expect(restored.lastError).toBeNull();
           const rootRestored = restored.state!.config.presets.default!.root!;
           // Fully recovered — through clicks the bar itself offered, no
@@ -989,9 +1034,9 @@ describe("RenderCache: layout ops replay onto the resolved preset root", () => {
       // it out visually, but this proves the FACT the gate reads is false).
       const before = cache.getOrCreate(projectDir, projectDir, undefined);
       expect(before.lastError).toBeNull();
-      expect(
-        presetIsCustomized(before.state!.presetRootOps, "default"),
-      ).toBe(false);
+      expect(presetIsCustomized(before.state!.presetRootOps, "default")).toBe(
+        false,
+      );
       const rootBefore = before.state!.config.presets.default!.root!;
       expect(segmentNamesOf(rootBefore)).toEqual(["directory", "git"]);
 
@@ -1003,20 +1048,25 @@ describe("RenderCache: layout ops replay onto the resolved preset root", () => {
 
       const { cache: cache2, cleanups: cleanups2 } = makeCache();
       try {
-        const customized = cache2.getOrCreate(projectDir, projectDir, undefined);
+        const customized = cache2.getOrCreate(
+          projectDir,
+          projectDir,
+          undefined,
+        );
         expect(customized.lastError).toBeNull();
         expect(
           presetIsCustomized(customized.state!.presetRootOps, "default"),
         ).toBe(true);
-        expect(segmentNamesOf(customized.state!.config.presets.default!.root!)).toEqual(["git"]);
+        expect(
+          segmentNamesOf(customized.state!.config.presets.default!.root!),
+        ).toEqual(["git"]);
         // The synthesized reset action targets the SAME key the +/-
         // affordances already write — no second gate to register.
         const resetActionNames = Object.entries(
           customized.state!.config.actions,
         )
           .filter(
-            ([, a]) =>
-              "reset" in a && a.reset === "presets.default.rootOps",
+            ([, a]) => "reset" in a && a.reset === "presets.default.rootOps",
           )
           .map(([name]) => name);
         expect(resetActionNames.length).toBe(1);
@@ -1034,7 +1084,11 @@ describe("RenderCache: layout ops replay onto the resolved preset root", () => {
 
         const { cache: cache3, cleanups: cleanups3 } = makeCache();
         try {
-          const restored = cache3.getOrCreate(projectDir, projectDir, undefined);
+          const restored = cache3.getOrCreate(
+            projectDir,
+            projectDir,
+            undefined,
+          );
           expect(restored.lastError).toBeNull();
           expect(
             presetIsCustomized(restored.state!.presetRootOps, "default"),
@@ -1081,9 +1135,9 @@ describe("RenderCache: layout ops replay onto the resolved preset root", () => {
     try {
       const emptied = cache.getOrCreate(projectDir, projectDir, undefined);
       expect(emptied.lastError).toBeNull();
-      expect(
-        presetIsCustomized(emptied.state!.presetRootOps, "compact"),
-      ).toBe(true);
+      expect(presetIsCustomized(emptied.state!.presetRootOps, "compact")).toBe(
+        true,
+      );
       expect(
         segmentNamesOf(emptied.state!.config.presets.compact!.root!),
       ).toEqual([]);

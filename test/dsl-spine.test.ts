@@ -6,6 +6,7 @@
 // [LAW:verifiable-goals] Success is a byte string that matches a committed
 // snapshot. Any byte drift fails loudly.
 
+import { SessionState } from "../src/daemon/session-state";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -16,6 +17,7 @@ import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import { registerDslConfig, renderDsl } from "../src/dsl/render";
 import { walkNodes } from "../src/config/dsl-types";
+import { presetRoot, PRESET_FLOOR } from "../src/config/presets";
 
 // [LAW:single-enforcer] Inlined fixture values formerly served by
 // `test/parity/fixtures.ts`. The parity infra was retired alongside the
@@ -73,7 +75,7 @@ describe("DSL render spine (bzh.7 steel thread)", () => {
   function buildRuntime(cwd: string) {
     const config = parseAndValidate("<test>", FIXTURE_SOURCE, ALLOWED_PALETTES);
     const store = new VariableStore();
-    const registry = new SourceRegistry(store);
+    const registry = new SourceRegistry(store, "", undefined, new SessionState());
     const compiled = registerDslConfig(config, registry, { cwd });
     return { config, compiled, store, registry };
   }
@@ -164,9 +166,14 @@ describe("DSL render spine (bzh.7 steel thread)", () => {
     expect(sink.has("doesNotExist")).toBe(false);
     // Every layout entry that wasn't `when`-hidden appears in the sink.
     expect(sink.size).toBeGreaterThan(0);
-    const allLayoutSegments = [...walkNodes(config.root)].flatMap((n) =>
-      n.kind === "segment" ? [n.name] : [],
-    );
+    // [LAW:one-source-of-truth] The tree the render WALKED is the active
+    // preset's resolved root, not `config.root` — the synthesis passes
+    // (settings menu, edit chrome) write `presets[name].root` and leave
+    // `config.root` as the author wrote it. Reading the same tree renderDsl
+    // reads is what makes this assertion about the render.
+    const allLayoutSegments = [
+      ...walkNodes(presetRoot(config, PRESET_FLOOR).node),
+    ].flatMap((n) => (n.kind === "segment" ? [n.name] : []));
     for (const [name, cells] of sink) {
       expect(allLayoutSegments).toContain(name);
       expect(cells.length).toBeGreaterThan(0);
@@ -218,7 +225,7 @@ describe("DSL render spine (bzh.7 steel thread)", () => {
         new Set(["textual-dark"]),
       );
       const store = new VariableStore();
-      const registry = new SourceRegistry(store);
+      const registry = new SourceRegistry(store, "", undefined, new SessionState());
       const compiled = registerDslConfig(config, registry, {
         cwd: HOOK_DATA.workspace.current_dir,
       });
