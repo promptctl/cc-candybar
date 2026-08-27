@@ -28,6 +28,7 @@
 //      SAME padding/charset/style pipeline as hand-authored segments, no
 //      special-cased chrome path.
 
+import { withoutSettingsLinks } from "./helpers/ambient-chrome";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -79,7 +80,9 @@ function extractUrls(rendered: string): string[] {
   const urls: string[] = [];
   let m: RegExpExecArray | null;
   while ((m = re.exec(rendered)) !== null) urls.push(m[1]!);
-  return urls;
+  // The global settings menu and the edit toggle it reaches are on every bar;
+  // this file's assertions are about the fixture's OWN clickable regions.
+  return withoutSettingsLinks(urls);
 }
 
 // eslint-disable-next-line no-control-regex

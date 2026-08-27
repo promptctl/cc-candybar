@@ -11,6 +11,7 @@
 // Internal refactors (hue rotation policy, sink ordering) that preserve these
 // behaviors must not break these tests.
 
+import { SessionState } from "../src/daemon/session-state";
 import { getThemePalette } from "@promptctl/rich-js";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
@@ -33,7 +34,7 @@ function basePalette() {
 function buildRuntime(source: string) {
   const config = parseAndValidate("<test>", source, ALLOWED_PALETTES);
   const store = new VariableStore();
-  const registry = new SourceRegistry(store);
+  const registry = new SourceRegistry(store, "", undefined, new SessionState());
   const compiled = registerDslConfig(config, registry, { cwd: "/tmp" });
   return { config, compiled, store, registry };
 }

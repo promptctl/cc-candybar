@@ -40,6 +40,7 @@ import {
   EDIT_TOGGLE_ACTION,
 } from "./loader/edit-mode.js";
 import { GROUP_NS } from "./loader/layout.js";
+import { SETTINGS_NS } from "./settings-menu.js";
 import {
   menuActionName,
   menuMember,
@@ -61,7 +62,11 @@ import {
 // knowledge, so the banner below is spliced UNCONDITIONALLY for every
 // preset — same shape, every reload — and this predicate is what decides
 // whether it's visible, never a branch in this synthesis pass.
-const PRESET_CUSTOMIZED_GATE = "{{ .preset.customized }}";
+// [LAW:one-source-of-truth] Exported: test/helpers/ambient-chrome.ts filters this
+// ensured name out of "what did the AUTHOR declare" assertions and must read the
+// same string, never a second copy that a rename here would leave behind.
+export const PRESET_CUSTOMIZED_VAR = "preset.customized";
+const PRESET_CUSTOMIZED_GATE = `{{ .${PRESET_CUSTOMIZED_VAR} }}`;
 
 // [LAW:one-source-of-truth] group/menu-synthesized segments (`groups.`/
 // `menus.`) and edit mode's own trigger/chrome (`edit.`) are structural —
@@ -73,7 +78,12 @@ function isChromeExempt(name: string): boolean {
   return (
     name.startsWith(EDIT_NS) ||
     name.startsWith(MENU_NS) ||
-    name.startsWith(GROUP_NS)
+    name.startsWith(GROUP_NS) ||
+    // The global settings menu is the entry point edit mode is REACHED from
+    // (candybar-settings-ui-aok.1) — offering a `-` beside it would let one
+    // click delete the door back in, the self-lockout the `toolbar` trigger's
+    // placement was chosen to avoid. Structural, like the three above it.
+    name.startsWith(SETTINGS_NS)
   );
 }
 
@@ -93,6 +103,11 @@ function escapeTemplateLiteral(s: string): string {
 // so cross-preset names (disambiguated by `presetIdent`) can never collide.
 interface ChromeArtifacts {
   readonly variables: Record<string, VariableDecl>;
+  // [LAW:no-silent-failure] Declarations this synthesis DEPENDS on rather than
+  // OWNS: merged UNDER the config so a user's own declaration of the same name
+  // wins, unlike `variables` above, which lives in a reserved namespace no user
+  // may write and therefore merges over.
+  readonly ensured: Record<string, VariableDecl>;
   readonly actions: Record<string, ActionDeclType>;
   readonly segments: Record<string, SegmentDecl>;
 }
@@ -219,7 +234,18 @@ function spliceContainer(
   posCounter: { n: number },
 ): ContainerNode {
   const children: LayoutNode[] = [];
-  for (const child of node.children) {
+  // [LAW:one-source-of-truth] The trailing `+`'s position is "after the last
+  // CONTENT segment", not "after the last child". Those coincided until a
+  // synthesis started appending exempt chrome (the global settings menu,
+  // candybar-settings-ui-aok.1) to a row's end, at which point reading the last
+  // child silently dropped the row's final insert point — N segments offering
+  // only N insert points instead of N+1.
+  const lastContent = node.children.reduce(
+    (idx, child, i) =>
+      child.kind === "segment" && !isChromeExempt(child.name) ? i : idx,
+    -1,
+  );
+  for (const [i, child] of node.children.entries()) {
     if (child.kind === "container") {
       children.push(
         spliceContainer(
@@ -250,24 +276,19 @@ function spliceContainer(
     );
     children.push(child);
     children.push(removeChrome(presetIdent, rootOpsKey, child.name, artifacts));
-  }
-  const last = node.children[node.children.length - 1];
-  if (
-    last !== undefined &&
-    last.kind === "segment" &&
-    !isChromeExempt(last.name)
-  ) {
-    children.push(
-      insertChrome(
-        presetIdent,
-        rootOpsKey,
-        String(posCounter.n++),
-        domainName,
-        last.name,
-        "after",
-        artifacts,
-      ),
-    );
+    if (i === lastContent) {
+      children.push(
+        insertChrome(
+          presetIdent,
+          rootOpsKey,
+          String(posCounter.n++),
+          domainName,
+          child.name,
+          "after",
+          artifacts,
+        ),
+      );
+    }
   }
   return { ...node, children };
 }
@@ -301,6 +322,20 @@ function prependCustomizedBanner(
   // edited down to zero non-exempt segments (no removeChrome/insertChrome
   // persist actions left to register it) doesn't orphan this exact click.
   artifacts.actions[actionName] = { reset: rootOpsKey };
+  // [LAW:one-source-of-truth] The banner reads `.preset.customized`, so THIS
+  // pass is what requires that variable — not whichever config happens to
+  // declare it. The bundled default does, which is why the dependency stayed
+  // invisible until the global settings menu made edit mode reachable from
+  // configs that never declared it, and the missing field surfaced as a ⚠ on
+  // the bar. Ensured, never overridden: a user declaration of the same name
+  // wins (see the merge in synthesizeEditChrome), so this only supplies the
+  // floor the synthesis itself depends on.
+  artifacts.ensured[PRESET_CUSTOMIZED_VAR] = {
+    kind: "input",
+    path: PRESET_CUSTOMIZED_VAR,
+    type: "boolean",
+    default: false,
+  };
   const label = escapeTemplateLiteral(presetName);
   artifacts.segments[chromeSegName] = {
     template: `{{ action "${actionName}" "↺ ${label} customized" }}`,
@@ -391,6 +426,7 @@ export function synthesizeEditChrome(config: DslConfig): DslConfig {
   if (!(EDIT_TOGGLE_ACTION in config.actions)) return config;
   const artifacts: ChromeArtifacts = {
     variables: {},
+    ensured: {},
     actions: {},
     segments: {},
   };
@@ -404,7 +440,11 @@ export function synthesizeEditChrome(config: DslConfig): DslConfig {
   }
   return {
     ...config,
-    variables: { ...config.variables, ...artifacts.variables },
+    variables: {
+      ...artifacts.ensured,
+      ...config.variables,
+      ...artifacts.variables,
+    },
     actions: { ...config.actions, ...artifacts.actions },
     segments: { ...config.segments, ...artifacts.segments },
     presets,

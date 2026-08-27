@@ -24,6 +24,7 @@
 //   5. Old spellings (positional page/bools/key) and malformed option dicts are
 //      LOAD errors naming the new form — never silently reinterpreted.
 
+import { ownLinks } from "./helpers/ambient-chrome";
 import { getThemePalette } from "@promptctl/rich-js";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
@@ -59,7 +60,9 @@ function extractUrls(rendered: string): string[] {
   const urls: string[] = [];
   let m: RegExpExecArray | null;
   while ((m = re.exec(rendered)) !== null) urls.push(m[1]!);
-  return urls;
+  // The global settings menu and the edit toggle it reaches are on every bar;
+  // this file's assertions are about the fixture's OWN clickable regions.
+  return ownLinks(urls);
 }
 
 // eslint-disable-next-line no-control-regex
@@ -671,8 +674,11 @@ describe('the "theme tester" — N menus in one segment', () => {
     // Three distinct state keys + their three page cursors, all synthesized
     // from one segment — the old (rowKey,segName) identity would have
     // collapsed all three to one.
+    // Restricted to THIS segment's menus: every bar also carries the settings
+    // menu's own picker and edit chrome's `+` menus, synthesized under the same
+    // namespace but keyed by their own host segments.
     const menuKeys = Object.keys(config.variables).filter((k) =>
-      k.startsWith("menus."),
+      k.startsWith("menus.tester."),
     );
     expect(menuKeys).toHaveLength(6);
   });
