@@ -465,6 +465,31 @@ export const RAW_DEFAULT_DSL_CONFIG = {
     // gates the input variant so unused segments cost nothing.
     "tmux.session": { kind: "input", path: "tmux.session", default: "" },
 
+    // Host identity — which machine this session is on, and whether the user
+    // arrived over SSH. All three come through the augmented payload rather
+    // than `kind: "env"` / `kind: "shell"`, and that is not a style choice:
+    //
+    //   • `host.ssh` CANNOT be an env var here. Variables are evaluated in the
+    //     DAEMON, which is detached and serves every session for this user at
+    //     once — its `SSH_*` env describes whichever shell happened to spawn
+    //     it. The fact is captured by the live client and carried as a wire
+    //     hint (the `termCols` pattern); the payload is the only honest source.
+    //   • `host.name`/`host.user` are machine facts the daemon reads directly,
+    //     so they cost two syscalls instead of a per-render subprocess.
+    //
+    // Defaults are the "unknown" values, and for `ssh` that is `false`: an
+    // absent field (a client too old to send the hint) renders as local, which
+    // is the pre-feature behavior, while the input-fallback chain records a
+    // `last_error` so `cc-candybar debug vars` can still tell the two apart.
+    "host.name": { kind: "input", path: "host.name", default: "" },
+    "host.user": { kind: "input", path: "host.user", default: "" },
+    "host.ssh": {
+      kind: "input",
+      path: "host.ssh",
+      type: "boolean",
+      default: false,
+    },
+
     // Git — every field flows from the daemon's projected GitInfo payload.
     // The DSL's native `kind: "git"` source covers a 6-field subset
     // (branch/sha/dirty/ahead/behind/stash); using `input` here gives the
@@ -802,6 +827,34 @@ export const RAW_DEFAULT_DSL_CONFIG = {
       bg: "surface-active",
       fg: "foreground",
       when: '{{ ne .tmux.session "" }}',
+    },
+    // "You are not on your own machine." Modelled on the git-taculous zsh
+    // theme, which prepends `(%n@%m)` to the prompt under SSH and shows
+    // nothing locally — you already know your own hostname.
+    //
+    // [LAW:dataflow-not-control-flow] Presence IS the signal. There is no SSH
+    // "mode" and no force-on flag (git-taculous's GITTACULOUS_ENABLE_SSH_THEME
+    // would be a flag with no deletion date, [LAW:no-mode-explosion]); the cell
+    // exists exactly when the value says so, like tmux/block/weekly. A user who
+    // wants it always-on overrides this one segment's `when` to `"true"`.
+    //
+    // `bg: "warning"` is load-bearing, not decoration: warning is one of the
+    // hue-ANCHORED palette roots, so it survives every theme, look, and
+    // per-segment hue transposition still reading as an alert. Any other slot
+    // would drift with the hue stepper and could land camouflaged against its
+    // neighbours — exactly what a "wrong machine" warning must never do.
+    // `contrastOn (bgOf)` then derives a readable foreground from whatever that
+    // resolves to, rather than betting a fixed `foreground` stays legible.
+    //
+    // Each half falls back to "?" so a failed hostname/username read renders
+    // `⇄ ?@?` — still unmistakably "remote", and legibly missing its identity
+    // rather than a blank that reads as a rendering bug ([LAW:no-silent-failure]).
+    host: {
+      template:
+        '⇄ {{ .host.user | default "?" }}@{{ .host.name | default "?" }}',
+      bg: "warning",
+      fg: "{{ contrastOn (bgOf) }}",
+      when: "{{ .host.ssh }}",
     },
     git: {
       template: GIT_TEMPLATE,
@@ -1268,6 +1321,12 @@ export const RAW_DEFAULT_DSL_CONFIG = {
         kind: "container",
         direction: "horizontal",
         children: [
+          // Leads the identity row: the first thing to read is WHICH MACHINE,
+          // because it reframes every path and branch to its right. Same
+          // placement git-taculous gives `(%n@%m)` — ahead of the directory.
+          // Gated off entirely on a local session, so the row still opens with
+          // `directory` where it always has.
+          { kind: "segment", name: "host" },
           { kind: "segment", name: "directory" },
           { kind: "segment", name: "gitaculous" },
           { kind: "segment", name: "toolbar" },

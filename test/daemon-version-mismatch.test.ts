@@ -344,6 +344,7 @@ describe("wire trust boundary: unknown error codes (kz8.5 followup)", () => {
         } as never,
         ["cc-candybar"],
         "/tmp",
+        {},
       );
     } finally {
       if (prevXdg === undefined) {
@@ -511,6 +512,7 @@ describe("wire trust boundary: protocol-violation exceptions are permanent", () 
         } as never,
         ["cc-candybar"],
         "/tmp",
+        {},
       );
     } finally {
       if (prevXdg === undefined) {

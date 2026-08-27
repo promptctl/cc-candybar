@@ -292,6 +292,7 @@ describe("end-to-end: VERSION_MISMATCH wire → permanent outcome → glyph", ()
         } as never,
         ["cc-candybar"],
         "/tmp",
+        {},
       );
       expect(outcome.kind).toBe("permanent");
       if (outcome.kind !== "permanent") return;

@@ -12,7 +12,7 @@
 import type { ClaudeHookData } from "../utils/claude";
 import { requestOutcome } from "./client-transport";
 import type { RoundTripBudgets, RoundTripOutcome } from "./client-transport";
-import type { Response } from "./protocol";
+import type { ClientHints, Response } from "./protocol";
 
 const CONNECT_TIMEOUT_MS = 50;
 const TOTAL_BUDGET_MS = 150;
@@ -47,14 +47,17 @@ function projectOutput(
 // There is no inline render path; see src/index.ts. The caller is responsible
 // for branching on outcome.kind and deciding whether to kick, display an
 // error glyph, or print the rendered output.
+// [LAW:one-source-of-truth] `hints` carries every fact the daemon cannot
+// observe for itself; it is spread onto the request verbatim so this relay
+// never becomes a second place that decides what the client saw.
 export function tryRenderViaDaemon(
   hookData: ClaudeHookData,
   args: string[],
   cwd: string,
-  termCols?: number,
+  hints: ClientHints,
 ): Promise<ClientOutcome> {
   return requestOutcome(
-    { kind: "render", hookData, args, cwd, termCols },
+    { kind: "render", hookData, args, cwd, ...hints },
     RENDER_BUDGETS,
     projectOutput,
   );

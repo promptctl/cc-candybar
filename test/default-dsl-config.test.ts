@@ -168,6 +168,10 @@ describe("DEFAULT_DSL_CONFIG", () => {
     }
     expect([...laidOut].sort()).toEqual(
       [
+        // Leads the identity row and is when-gated on `.host.ssh`, so it is
+        // invisible on every local session — the row still opens with
+        // `directory` unless you are SSH'd in (candybar-segments-e7u).
+        "host",
         "directory",
         "gitaculous",
         "model",
@@ -399,7 +403,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
   test("A-grammar { v:[{ h:[...] }] } spelling is render-equivalent to DEFAULT_DSL_CONFIG.root", () => {
     const ALLOWED = new Set(listResolvablePaletteNames());
     const A_SRC = `{ root: { v: [
-      { h: ["directory","gitaculous","toolbar", { kind: "group", name: "settings",
+      { h: ["host","directory","gitaculous","toolbar", { kind: "group", name: "settings",
         label: "⚙ settings", direction: "horizontal", children: [
           "themeControl","lookControl","presetControl","styleControl","charsetControl",
           "colorCompatControl","wrapToggleControl","paddingControl",

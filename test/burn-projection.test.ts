@@ -12,8 +12,10 @@ import {
   projectCostPerHour,
   projectEtaMinutes,
   type EffectiveGlobals,
+
   type RenderPayloadDeps,
 } from "../src/daemon/render-payload";
+import type { ClientHints } from "../src/daemon/protocol";
 import { ABSENT, ok } from "../src/utils/outcome";
 import {
   mergeWithDefault,
@@ -127,6 +129,11 @@ const BURN_PATHS = new Set([
 
 // The daemon-resolved effective globals; these burn-lane tests don't exercise
 // them, so any well-formed struct satisfies the required argument.
+// No client hints: these fixtures exercise the daemon-side folds, not the wire
+// boundary. An empty object is the honest "this render carried no hints"
+// (the shape an old client produces), so `host.ssh` stays absent throughout.
+const NO_HINTS: ClientHints = {};
+
 const EFFECTIVE_GLOBALS: EffectiveGlobals = {
   theme: "textual-dark",
   look: "none",
@@ -147,6 +154,7 @@ describe("buildRenderPayload — burn projection lane", () => {
       undefined,
       BURN_PATHS,
       EFFECTIVE_GLOBALS,
+      NO_HINTS,
     );
     expect(payload.burn?.costPerHour).toBe(12);
     expect(payload.block?.etaMinutes).toBe(240);
@@ -163,6 +171,7 @@ describe("buildRenderPayload — burn projection lane", () => {
       undefined,
       BURN_PATHS,
       EFFECTIVE_GLOBALS,
+      NO_HINTS,
     );
     expect(payload.block?.nativeUtilization).toBe(20);
     expect(payload.block?.etaMinutes).toBeUndefined();
@@ -175,6 +184,7 @@ describe("buildRenderPayload — burn projection lane", () => {
       undefined,
       new Set(["block.resetsAt", "weekly.resetsAt"]),
       EFFECTIVE_GLOBALS,
+      NO_HINTS,
     );
     expect(payload.burn).toBeUndefined();
   });
