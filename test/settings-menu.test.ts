@@ -316,6 +316,58 @@ describe("the anchor may be placed at most once", () => {
   });
 });
 
+// ─── 4. The anchor's precondition is loud ────────────────────────────────────
+
+// [LAW:one-source-of-truth] cross-ref accepts an authored `settings.menu` on the
+// promise that synthesizeSettingsMenu will declare it. When the two read
+// different facts, that promise breaks silently: the config loads clean, the
+// anchor is never lowered, and the dangling reference reaches the render walk to
+// throw at `lookupSegment` — a load-time mistake surfacing three layers away.
+// These tests pin the two halves of the one predicate.
+//
+// The default here is the EMPTY one (parseAndValidate's default argument), which
+// is the only way to reach a config with no `session.id`: production's cascade
+// merges the bundled default, which declares it.
+describe("placing the anchor where the menu cannot be synthesized", () => {
+  const placing = (variables: string): string => `{
+    globals: {},
+    variables: { ${variables} },
+    segments: { hello: { template: 'hi' } },
+    root: { h: ['hello', '${SETTINGS_ANCHOR}'] },
+  }`;
+
+  test("without session.id, the load error names the unmet precondition", () => {
+    try {
+      parseAndValidate("<user>", placing(""), ALLOWED);
+      throw new Error("expected a ConfigError");
+    } catch (err) {
+      expect(err).toBeInstanceOf(ConfigError);
+      const message = (err as ConfigError).message;
+      expect(message).toContain(SETTINGS_ANCHOR);
+      expect(message).toContain("session.id");
+      // Not the generic dangling-reference error: true, but it teaches the
+      // author to hunt for a typo in a name they copied from the docs.
+      expect(message).not.toContain("does not match any declared segment");
+    }
+  });
+
+  test("with session.id, the anchor loads and lowers to a declared segment", () => {
+    const config = parseAndValidate(
+      "<user>",
+      placing(
+        `'session.id': { kind: 'input', path: 'session_id', default: '' }`,
+      ),
+      ALLOWED,
+    );
+    // The invariant whose violation used to throw at render: every segment the
+    // resolved root names is a segment the config declares.
+    for (const name of segmentNames(resolvedRoot(config))) {
+      expect(Object.keys(config.segments)).toContain(name);
+    }
+    expect(segmentNames(resolvedRoot(config))).toContain(SETTINGS_ANCHOR);
+  });
+});
+
 // ─── 5. Structural: edit mode cannot delete its own door ─────────────────────
 
 describe("the menu is chrome-exempt", () => {

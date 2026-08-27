@@ -290,6 +290,11 @@ function ensureEditToggle(artifacts: MenuArtifacts): void {
   );
 }
 
+// [LAW:one-source-of-truth] The variable whose presence IS the precondition,
+// named once so the predicate below and the load error cross-ref.ts raises when
+// it fails cannot describe different variables.
+export const SESSION_ID_VAR = "session.id";
+
 // [LAW:types-are-the-program] The menu's one structural prerequisite, read as a
 // value: a global `session.id`. It is not a demand gate and not a preference —
 // the menu is a CLICK surface, every click composes a URL whose first segment is
@@ -299,8 +304,16 @@ function ensureEditToggle(artifacts: MenuArtifacts): void {
 // place on one. Every config the daemon renders merges the bundled default,
 // which declares `session.id`, so in production this is universally true; what
 // it excludes is the hand-built static config, not a user.
-function canHostSessionState(config: DslConfig): boolean {
-  return Object.prototype.hasOwnProperty.call(config.variables, "session.id");
+//
+// [LAW:one-source-of-truth] Exported because this is THE fact "will the anchor
+// resolve to a segment?" — asked here to decide whether to mint the menu, and
+// asked by cross-ref.ts to decide whether an authored placement of the anchor is
+// a reference this pass is about to satisfy or a dangling one. Two readers, one
+// predicate: when they were two predicates, cross-ref accepted an anchor this
+// pass then declined to provide, and the un-lowered reference reached the render
+// walk to throw at `lookupSegment`.
+export function canHostSessionState(config: DslConfig): boolean {
+  return Object.prototype.hasOwnProperty.call(config.variables, SESSION_ID_VAR);
 }
 
 // [LAW:single-enforcer] THE synthesis entry point, called once from

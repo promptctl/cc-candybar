@@ -30,8 +30,10 @@ import { listGlobalsFieldNames } from "./globals.js";
 import { parsePersistTarget } from "./persist-target.js";
 import { presetNames } from "../presets.js";
 import {
+  canHostSessionState,
   countAnchors,
   isSettingsAnchor,
+  SESSION_ID_VAR,
   SETTINGS_ANCHOR,
 } from "../settings-menu.js";
 import { ident } from "../ident.js";
@@ -253,6 +255,10 @@ export function validateCrossReferences(
   // never a second traversal that could learn a different idea of what a valid
   // layout is. This is what makes `cc-candybar check` catch a preset staging a
   // segment nobody declared.
+  //
+  // [LAW:single-enforcer] The menu precondition is asked once, of the same
+  // predicate synthesizeSettingsMenu gates on, and read by every tree walked.
+  const menuWillSynthesize = canHostSessionState(cfg);
   const checkLayoutTree = (
     root: LayoutNode,
     layoutKey: string,
@@ -283,7 +289,24 @@ export function validateCrossReferences(
         });
       }
       if (node.kind !== "segment") continue;
-      if (isSettingsAnchor(node.name)) continue;
+      if (isSettingsAnchor(node.name)) {
+        // [LAW:one-source-of-truth] Accepting the anchor asserts that
+        // synthesizeSettingsMenu WILL declare a segment by this name, so the
+        // acceptance reads the very predicate that pass decides by rather than
+        // assuming its answer. When it is false the reference is genuinely
+        // dangling, and the error names the unmet precondition: the author
+        // placed a documented anchor, they did not typo a segment name, and the
+        // generic "does not match any declared segment" would teach the wrong
+        // lesson [LAW:no-silent-failure].
+        if (!menuWillSynthesize) {
+          ctx.issues.push({
+            path: layoutKey,
+            message: `${layoutKey} places the global settings menu anchor "${SETTINGS_ANCHOR}", but this config declares no "${SESSION_ID_VAR}" variable — the menu is a click surface and every click composes a URL from "${SESSION_ID_VAR}", so it is not synthesized for a config without it. Declare a "${SESSION_ID_VAR}" variable (any config merged onto the bundled default inherits one) or remove the anchor placement.`,
+            line: layoutLine,
+          });
+        }
+        continue;
+      }
       if (!Object.prototype.hasOwnProperty.call(cfg.segments, node.name)) {
         const renamed = RENAMED_SEGMENTS[node.name];
         const hint =
