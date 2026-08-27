@@ -44,21 +44,43 @@ function rotate(): void {
   bytesWritten = 0;
 }
 
+export type LogLevel = "info" | "warn" | "error";
+
 // [LAW:locality-or-seam] The logging capability daemon components depend on.
 // `dlog` is the daemon's implementation (writes to daemon.log); consumers that
 // inject a different impl (a quiet default in tests) take this shape.
-export type DaemonLogger = (
-  level: "info" | "warn" | "error",
-  msg: string,
-) => void;
+export type DaemonLogger = (level: LogLevel, msg: string) => void;
 
-export function dlog(level: "info" | "warn" | "error", msg: string): void {
-  const line = `${new Date().toISOString()} [${level}] ${msg}\n`;
-  const buf = Buffer.from(line, "utf8");
+// [LAW:one-source-of-truth] Both emitters below render a line here, so a tail
+// of daemon.log is uniformly parseable no matter which process wrote it.
+function formatLine(level: LogLevel, msg: string): string {
+  return `${new Date().toISOString()} [${level}] ${msg}\n`;
+}
+
+export function dlog(level: LogLevel, msg: string): void {
+  const buf = Buffer.from(formatLine(level, msg), "utf8");
   const s = ensureStream();
   s.write(buf);
   bytesWritten += buf.length;
   if (bytesWritten >= MAX_BYTES) rotate();
+}
+
+// The same log file, written by a process that is not the daemon: `url-handle`
+// runs for milliseconds under the URL-handler app, and its stderr goes nowhere
+// an operator will ever read. Sharing one file is what makes a single `tail`
+// show the whole click loop — the click leaving the client AND the daemon
+// servicing it — which is the only way to tell a REJECTED click from one that
+// never arrived.
+//
+// [LAW:single-enforcer] Rotation stays the daemon's job alone. It owns
+// `bytesWritten` and the generation shuffle; a second rotator would rename
+// files out from under the daemon's open stream. A client only ever appends,
+// and O_APPEND makes one short line atomic against the daemon's concurrent
+// writes.
+export function clog(level: LogLevel, msg: string): void {
+  const filePath = logPath();
+  fs.mkdirSync(path.dirname(filePath), { recursive: true });
+  fs.appendFileSync(filePath, formatLine(level, msg));
 }
 
 export function closeLog(): void {

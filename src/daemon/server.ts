@@ -1296,7 +1296,33 @@ const payloadDeps = {
   clock: () => new Date(),
 };
 
+// [LAW:single-enforcer] Every click verb funnels through here, so this is the
+// one place the click half of the interaction loop becomes observable. The
+// render path has always logged a structured line per tick; a click logged
+// nothing, which left "the daemon rejected this click" and "the click never
+// reached the daemon" as the same observation — an empty log.
+//
+// [LAW:no-silent-failure] The failure was never suppressed: `dispatchClick`
+// returns a fully typed error that goes back over the wire. But it goes to a
+// process the URL-handler app launched, whose stderr no operator ever reads,
+// and an error reported only to a void is a silent one.
 function handleClick(verb: string, value: string): Response {
+  const t0 = Date.now();
+  const res = dispatchClick(verb, value);
+  // [LAW:dataflow-not-control-flow] One unconditional emit per click. The
+  // outcome rides as VALUES in the line (ok/code/err), never as whether the
+  // call runs — a failure-only log would make success invisible, and silence
+  // would stay ambiguous, which is the exact defect this closes.
+  const detail = res.ok ? "" : ` code=${res.code} err=${res.error}`;
+  dlog(
+    res.ok ? "info" : "warn",
+    `click verb=${verb} value=${value} took=${Date.now() - t0}ms ` +
+      `ok=${res.ok ? "Y" : "N"}${detail}`,
+  );
+  return res;
+}
+
+function dispatchClick(verb: string, value: string): Response {
   const handler = VERBS.get(verb);
   if (!handler) {
     return {

@@ -6,6 +6,7 @@ import { launchSync } from "../proc/launch";
 import { tryClickViaDaemon } from "../daemon/client";
 import type { PermanentOutcome } from "../daemon/client-transport";
 import { obtainDaemonKick } from "../daemon/acquire";
+import { clog } from "../daemon/log";
 import { URL_SCHEME, VERB_COPY } from "../click/wire";
 import { DISCLOSURE_GLYPH_CLOSED } from "../config/disclosure";
 
@@ -384,25 +385,56 @@ export function parseHandlerUrl(
 // VERSION_MISMATCH against a future daemon) exits non-zero with the daemon's
 // error message so the failure is visible — never silently swallowed by a
 // local fallback that would diverge from the daemon's truth.
+// [LAW:types-are-the-program] Success carries no diagnostic and a failure
+// always carries one, so the pair cannot disagree — there is no "ok with an
+// error message" or "failed with nothing to say" to defend against below.
+type ClickReport = { ok: true } | { ok: false; diagnostic: string };
+
+// [LAW:single-enforcer] The one exit from url-handle. Every arm below reports
+// through here, so the client half of the click loop is emitted exactly once,
+// with one shape, on every path — including the arms that never reach the
+// daemon at all and therefore leave no trace in the daemon's own click log.
+//
+// [LAW:no-silent-failure] stderr is kept (it is the honest channel for a
+// human running url-handle by hand) but it cannot be the ONLY channel: under
+// the URL-handler app this process is launched by Launch Services and its
+// stderr is discarded, which is how a broken click became indistinguishable
+// from no click at all.
+function finishUrlHandle(
+  verb: string,
+  value: string,
+  report: ClickReport,
+): never {
+  const detail = report.ok ? "" : ` err=${report.diagnostic}`;
+  clog(
+    report.ok ? "info" : "warn",
+    `click-client verb=${verb} value=${value} ok=${report.ok ? "Y" : "N"}${detail}`,
+  );
+  if (!report.ok) process.stderr.write(report.diagnostic + "\n");
+  process.exit(report.ok ? 0 : 1);
+}
+
 export async function runUrlHandle(rawUrl: string | undefined): Promise<void> {
   if (!rawUrl) {
-    process.stderr.write("url-handle: missing URL argument.\n");
-    process.exit(1);
+    finishUrlHandle("?", "?", {
+      ok: false,
+      diagnostic: "url-handle: missing URL argument.",
+    });
   }
 
   let parsed: ParsedUrl;
   try {
     parsed = parseHandlerUrl(rawUrl);
   } catch (err) {
-    process.stderr.write(
-      `url-handle: ${err instanceof Error ? err.message : String(err)}\n`,
-    );
-    process.exit(1);
+    finishUrlHandle("?", rawUrl, {
+      ok: false,
+      diagnostic: `url-handle: ${err instanceof Error ? err.message : String(err)}`,
+    });
   }
 
   const outcome = await tryClickViaDaemon(parsed.verb, parsed.value);
   if (outcome.kind === "ok") {
-    process.exit(0);
+    finishUrlHandle(parsed.verb, parsed.value, { ok: true });
   }
 
   if (outcome.kind === "transient") {
@@ -410,18 +442,20 @@ export async function runUrlHandle(rawUrl: string | undefined): Promise<void> {
     // is lost (the daemon couldn't service it), but the next click hits a
     // warm daemon. Mirrors the render-path's transient recovery.
     obtainDaemonKick();
-    process.stderr.write(
-      `url-handle: daemon unavailable (${outcome.cause}: ${outcome.message})\n`,
-    );
-    process.exit(1);
+    finishUrlHandle(parsed.verb, parsed.value, {
+      ok: false,
+      diagnostic: `url-handle: daemon unavailable (${outcome.cause}: ${outcome.message})`,
+    });
   }
 
   // [LAW:dataflow-not-control-flow] Format each permanent cause from its
   // own typed payload, not by probing for "message" on a generic outcome.
   // The PermanentOutcome union already discriminates by `cause`; the switch
   // mirrors that discriminator one-to-one and pulls the right fields.
-  process.stderr.write(formatPermanent(outcome) + "\n");
-  process.exit(1);
+  finishUrlHandle(parsed.verb, parsed.value, {
+    ok: false,
+    diagnostic: formatPermanent(outcome),
+  });
 }
 
 // [LAW:single-enforcer] One place that turns a PermanentOutcome into a
