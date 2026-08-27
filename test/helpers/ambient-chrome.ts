@@ -18,25 +18,47 @@
 
 import type { ActionDecl } from "../../src/config/action";
 import type { DslConfig } from "../../src/config/dsl-types";
-import { EDIT_MODE_KEY, EDIT_NS } from "../../src/config/loader/edit-mode";
+import { EDIT_NS } from "../../src/config/loader/edit-mode";
 import { GROUP_NS } from "../../src/config/loader/layout";
 import { MENU_NS } from "../../src/config/menu-keys";
-import { SETTINGS_ANCHOR, SETTINGS_NS } from "../../src/config/settings-menu";
+import { PRESET_CUSTOMIZED_VAR } from "../../src/config/edit-chrome";
+import { SETTINGS_NS } from "../../src/config/settings-menu";
+import {
+  VERB_RESET_CONFIG,
+  VERB_SET_CONFIG,
+  VERB_SET_STATE,
+  VERB_STEP_CONFIG,
+  VERB_STEP_STATE,
+} from "../../src/click/wire";
+import { effectsOf } from "./click";
 
-// The reserved namespaces the synthesis passes mint under, plus the one plain
-// SessionState key the settings menu's preset picker writes.
-function isAmbientChromeKey(key: string): boolean {
+// [LAW:one-source-of-truth] Keys only the SYNTHESIS can produce, spelled once
+// for both consumers below. Every arm is under a namespace the loader reserves,
+// so no author declaration can land here and no authorship check is needed:
+// membership alone proves the key is chrome.
+function isReservedChromeKey(key: string): boolean {
   return (
-    key === "preset" ||
     key.startsWith(SETTINGS_NS) ||
     key.startsWith(EDIT_NS) ||
+    // The settings menu's own preset picker, hosted on `settings.presets`.
     key.startsWith(`${MENU_NS}settings_`) ||
+    // NOT vestigial: edit chrome's `+` affordance hosts a menu on each
+    // `edit.<preset>.insertSeg.<n>` segment (edit-chrome.ts's insertChrome
+    // calls menuStateKey directly), and `ident()` collapses the dots — so a
+    // bundled-default config really does derive 30+ keys under this prefix.
     key.startsWith(`${MENU_NS}edit_`) ||
     // Edit chrome registers a rootOps op-log key per preset the moment any
     // `+`/`-` affordance exists — which is now every config, since the settings
     // menu makes edit mode reachable from every bar.
     (key.startsWith("presets.") && key.endsWith(".rootOps"))
   );
+}
+
+// The reserved keys, plus the one plain SessionState key the settings menu's
+// preset picker writes. `preset` is a bare word an author CAN own, which is why
+// every consumer of this predicate must pair it with an authorship check.
+function isAmbientChromeKey(key: string): boolean {
+  return key === "preset" || isReservedChromeKey(key);
 }
 
 // [LAW:one-source-of-truth] The SessionState keys the config's OWN actions
@@ -88,26 +110,73 @@ export function ownValidators<T extends { key: string }>(
   );
 }
 
+// [LAW:one-source-of-truth] The keys a click URL writes, decoded the way the
+// daemon decodes them (`effectsOf`) rather than sniffed as substrings of the
+// wire encoding. Every key-writing verb takes `[sessionId, key, …]`; the rest
+// (apply-layout-op, undo/redo, copy, open) write no key and so contribute none
+// — which is what keeps a layout-edit affordance out of these filters, since
+// its op-log write is a preset's business, not the settings menu's.
+const KEY_WRITING_VERBS = new Set<string>([
+  VERB_SET_STATE,
+  VERB_STEP_STATE,
+  VERB_SET_CONFIG,
+  VERB_STEP_CONFIG,
+  VERB_RESET_CONFIG,
+]);
+
+function keysWrittenBy(url: string): string[] {
+  return effectsOf(url)
+    .filter((e) => KEY_WRITING_VERBS.has(e.verb))
+    .map((e) => e.args[1])
+    .filter((k): k is string => k !== undefined);
+}
+
+// The settings menu's OWN surfaces: its `☰` toggle and — the part a substring
+// match on the anchor missed — its hosted preset picker, whose disclosure key
+// is `menus.settings_presets.…` and shares none of the anchor's spelling. A
+// test that opens the menu before collecting links would otherwise have counted
+// the picker's toggle as one of its fixture's own regions.
+function isSettingsMenuKey(key: string): boolean {
+  return key.startsWith(SETTINGS_NS) || key.startsWith(`${MENU_NS}settings_`);
+}
+
 // The click URLs the ambient chrome emits, removed from a collected list so a
 // template's own clickable regions are what the assertion counts.
+//
+// [LAW:no-silent-failure] Deliberately does NOT filter the bare `preset` key
+// the menu's picker applies. Unlike every key above, `preset` is a name an
+// author can own — test/dsl-persist-actions.ts declares `{ persist: 'preset' }`
+// and calls this function — and unlike `ownValidators`, this signature has no
+// config to check authorship against. Under-filtering surfaces as an unexpected
+// extra link in an assertion; over-filtering silently swallows the fixture's
+// own link and makes the assertion vacuous. The loud direction wins.
 export function ownLinks(urls: readonly string[]): string[] {
-  return withoutSettingsLinks(urls).filter((u) => !u.includes(EDIT_MODE_KEY));
+  return withoutSettingsLinks(urls).filter(
+    (u) => !keysWrittenBy(u).some((k) => k.startsWith(EDIT_NS)),
+  );
 }
 
 // The narrower filter, for a test whose OWN subject is edit mode: only the
-// settings toggle is ambient there, and the menu's `✎ edit` entry is
-// `when`-gated behind a closed disclosure, so it emits nothing to confuse it.
+// settings menu is ambient there, and its `✎ edit` entry is `when`-gated behind
+// a closed disclosure, so it emits nothing to confuse it.
 export function withoutSettingsLinks(urls: readonly string[]): string[] {
-  return urls.filter((u) => !u.includes(SETTINGS_ANCHOR));
+  return urls.filter((u) => !keysWrittenBy(u).some(isSettingsMenuKey));
 }
 
 // Declaration NAMES the synthesis passes add to a validated config — the
 // reserved namespaces plus the one ordinary variable edit chrome ensures for
 // its own banner. A test asserting "what did the AUTHOR declare" filters these.
+//
+// `PRESET_CUSTOMIZED_VAR` gets no authorship check, unlike `ownValidators`'
+// bare `preset`, because there is no discriminator to read: a WRITE carries its
+// author in the action's name, but a DECLARATION name carries nothing, and by
+// the time these names are collected the merged config holds one entry whether
+// edit chrome ensured it or an author declared it. Closing that collision would
+// mean reserving or namespacing the name upstream, not filtering harder here.
 export function ownDeclNames(names: readonly string[]): string[] {
   return names.filter(
     (n) =>
-      n !== "preset.customized" &&
+      n !== PRESET_CUSTOMIZED_VAR &&
       !n.startsWith(SETTINGS_NS) &&
       !n.startsWith(EDIT_NS) &&
       !n.startsWith(MENU_NS) &&

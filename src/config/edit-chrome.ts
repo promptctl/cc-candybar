@@ -62,7 +62,10 @@ import {
 // knowledge, so the banner below is spliced UNCONDITIONALLY for every
 // preset — same shape, every reload — and this predicate is what decides
 // whether it's visible, never a branch in this synthesis pass.
-const PRESET_CUSTOMIZED_VAR = "preset.customized";
+// [LAW:one-source-of-truth] Exported: test/helpers/ambient-chrome.ts filters this
+// ensured name out of "what did the AUTHOR declare" assertions and must read the
+// same string, never a second copy that a rename here would leave behind.
+export const PRESET_CUSTOMIZED_VAR = "preset.customized";
 const PRESET_CUSTOMIZED_GATE = `{{ .${PRESET_CUSTOMIZED_VAR} }}`;
 
 // [LAW:one-source-of-truth] group/menu-synthesized segments (`groups.`/

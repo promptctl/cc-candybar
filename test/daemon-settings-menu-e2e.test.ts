@@ -12,7 +12,7 @@
 // isolated `XDG_CONFIG_HOME` must be the daemon's — a client-side override
 // would resolve nothing.
 
-import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
@@ -160,11 +160,15 @@ describe("candybar-settings-ui-aok.1: real daemon, real user config", () => {
       const editing = await render(sockPath, SID, projectDir);
       expect(stripAnsi(editing)).toContain("✎ done");
       expect(
-        extractUrls(editing).filter((u) => u.includes("apply-layout-op")).length,
+        extractUrls(editing).filter((u) => u.includes("apply-layout-op"))
+          .length,
       ).toBeGreaterThan(0);
     } finally {
       if (daemon) await killAndWait(daemon);
       removeTmpDirs();
+      // removeTmpDirs only clears what prepareIsolatedDaemonEnv created; this
+      // dir is ours, so orphaning it would leak one temp dir per run.
+      rmSync(projectDir, { recursive: true, force: true });
     }
   });
 });
