@@ -1,3 +1,10 @@
+# [1.35.0](https://github.com/promptctl/cc-candybar/compare/v1.34.1...v1.35.0) (2026-08-27)
+
+
+### Features
+
+* **segments:** host/SSH segment — show user@host only when remote (candybar-segments-e7u) ([#189](https://github.com/promptctl/cc-candybar/issues/189)) ([ab940d9](https://github.com/promptctl/cc-candybar/commit/ab940d9e00a52c44ae3dab5534fff1539c7c4ee2))
+
 ## [1.34.1](https://github.com/promptctl/cc-candybar/compare/v1.34.0...v1.34.1) (2026-08-26)
 
 
