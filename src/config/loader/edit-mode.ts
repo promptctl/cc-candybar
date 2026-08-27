@@ -29,6 +29,20 @@
 // of this pass caused. The reserved namespace stays reserved unconditionally
 // (mirroring reservedNamespaceCollisions' own contract); only the SYNTHESIS is
 // conditional.
+//
+// WHAT candybar-settings-ui-aok.1 CHANGED, and what it did not: the gate above
+// is intact and still the only way edit mode is reached — but it now has a
+// PERMANENT DEMANDER. synthesizeSettingsMenu mints a `settings.edit` segment
+// referencing `edit.toggle` into every config it can host, so in practice the
+// demand is satisfied for essentially every config a user writes, and reading
+// this section as "most bars carry no edit mode" is no longer true. The
+// separation the gate protects still holds exactly where it always mattered:
+// the menu declines to synthesize for a config with no `session.id`
+// (canHostSessionState in settings-menu.ts), which is precisely the static,
+// non-interactive bar this comment was written to keep clean. Production blast
+// radius was nil either way — the bundled default's `toolbar` segment already
+// referenced `edit.toggle`, so every config merging it already demanded edit
+// mode before the menu existed.
 
 import { createEngine } from "@promptctl/go-template-js";
 import type { Mutable, ValidateCtx } from "./validate-core.js";

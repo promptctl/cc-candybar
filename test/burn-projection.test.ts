@@ -264,6 +264,10 @@ describe("burnrate segment render", () => {
 
   test("hidden when no rate-limit window is active", () => {
     const line = renderBurnrate({ ...SEG_BASE });
-    expect(line.trim()).toBe("");
+    // The bar is never empty — every rendered bar carries the global settings
+    // menu (candybar-settings-ui-aok.1) — so hidden is asserted as "none of
+    // this segment's own content", not as an empty line.
+    expect(line).not.toContain("/hr");
+    expect(line).not.toMatch(/\$\d/);
   });
 });

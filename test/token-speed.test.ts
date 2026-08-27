@@ -486,6 +486,10 @@ describe("speed segment render", () => {
 
   test("hidden when the session has done no work (tokens 0)", () => {
     const line = renderSpeed({ ...SEG_BASE });
-    expect(line.trim()).toBe("");
+    // The bar is never empty — every rendered bar carries the global settings
+    // menu (candybar-settings-ui-aok.1) — so hidden is asserted as "none of
+    // this segment's own content", not as an empty line.
+    expect(line).not.toContain("/s");
+    expect(line).not.toContain("tot");
   });
 });

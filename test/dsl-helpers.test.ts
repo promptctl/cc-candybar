@@ -6,6 +6,7 @@
 // output, a malformed helper fails LOUDLY (not silently), and an absent `helpers`
 // key is a no-op (output-neutral preamble).
 
+import { SessionState } from "../src/daemon/session-state";
 import { getThemePalette } from "@promptctl/rich-js";
 
 import {
@@ -50,7 +51,7 @@ function build(source: string, dflt: DslConfig = EMPTY_DEFAULT) {
     source,
   ) as ValidatedConfig;
   const store = new VariableStore();
-  const registry = new SourceRegistry(store);
+  const registry = new SourceRegistry(store, "", undefined, new SessionState());
   const compiled = registerDslConfig(config, registry, { cwd: "/tmp" });
   return { config, compiled, store, registry };
 }
