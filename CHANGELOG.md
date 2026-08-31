@@ -1,3 +1,10 @@
+# [1.38.0](https://github.com/promptctl/cc-candybar/compare/v1.37.0...v1.38.0) (2026-08-31)
+
+
+### Features
+
+* **config:** one control per setting, with a persist? that chooses the destination (candybar-settings-ui-aok.3) ([#192](https://github.com/promptctl/cc-candybar/issues/192)) ([d501fec](https://github.com/promptctl/cc-candybar/commit/d501fec32f8d3b1749dcce15d372d513bc3151d1))
+
 # [1.37.0](https://github.com/promptctl/cc-candybar/compare/v1.36.0...v1.37.0) (2026-08-31)
 
 
