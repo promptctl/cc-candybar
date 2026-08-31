@@ -33,7 +33,6 @@ import {
   spawnDaemonWithEnv,
   type RunningDaemon,
 } from "./helpers/spawn-isolated-daemon";
-import { PADDING_RANGE } from "../src/themes/policy";
 
 jest.setTimeout(30_000);
 
