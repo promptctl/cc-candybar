@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import { DISCLOSURE_GLYPH_CLOSED } from "../src/config/disclosure";
 import path from "node:path";
 import os from "node:os";
 import { __test__ } from "../src/install";
@@ -206,10 +207,13 @@ describe("install — clobber protection", () => {
 });
 
 describe("installSuccessMessage", () => {
-  test("mentions the settings drawer and theme/look picker on the default bar", () => {
+  // Same contract as --help's own text (test/help-text.test.ts): the tip names
+  // the surface the controls live on, with the glyph read from the synthesis
+  // that renders it rather than spelled again here.
+  test("points at the settings menu, with the glyph the bar actually renders", () => {
     const msg = installSuccessMessage();
-    expect(msg).toMatch(/theme\/look picker/i);
-    expect(msg).toContain("⚙ settings");
+    expect(msg).toMatch(/theme\/look\/style\/wrap\/padding controls/i);
+    expect(msg).toContain(`☰ ${DISCLOSURE_GLYPH_CLOSED}`);
   });
 });
 

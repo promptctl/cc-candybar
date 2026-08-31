@@ -738,12 +738,18 @@ describe("persist action click → durable overrides write", () => {
     const urls = extractUrls(render());
     const effect = effectsOf(urls[2]!)[0]!;
     expect(effect.verb).toBe("step-config");
-    click(urls[2]!); // unset seeds from min (0) + by (1) = 1
-    click(urls[2]!); // reads the just-written override (1) + by (1) = 2
+    // [LAW:one-source-of-truth] An unset stepper seeds from the value the bar
+    // RENDERS with no write at all — this config declares no `globals.padding`,
+    // so that is the field's floor (DEFAULT_PADDING = 1), not `min`.
+    // candybar-settings-ui-aok.3: seeding from `min` is what made the first ◀
+    // on a bar reading `padding 1` wrap to 16, and both write gates now read
+    // the same seed source (numericGlobalsSeeds).
+    click(urls[2]!); // unset seeds from the floor (1) + by (1) = 2
+    click(urls[2]!); // reads the just-written override (2) + by (1) = 3
     const overrides = loadConfigOverrides(
       join(xdgStateDir, "cc-candybar", "config-overrides.json"),
     );
-    expect(overrides).toEqual({ padding: 2 });
+    expect(overrides).toEqual({ padding: 3 });
     dispose();
   });
 
@@ -821,6 +827,55 @@ describe("persist action click → durable overrides write", () => {
         ctx,
       ),
     ).toThrow();
+  });
+
+  // [LAW:verifiable-goals] candybar-settings-ui-aok.3's whole reason for
+  // folding the session release INTO the durable write, rather than emitting
+  // it beside the write as its own effect, is an ORDER guarantee: the release
+  // happens only after the write landed, so a failure can never cost the user
+  // their session pick with nothing durable in its place.
+  //
+  // This pins the order from the failing end. An unregistered release key —
+  // what a stale link carries after a reload narrowed the gates — must fail
+  // LOUDLY and leave the durable write that already succeeded intact on disk.
+  // A release that silently no-op'd, or one that somehow rolled the write
+  // back, would both pass a happy-path test; only this direction distinguishes
+  // them.
+  test("a bad release key fails loudly AFTER the durable write has landed", () => {
+    const config = parseAndValidate(
+      "<test>",
+      `{
+        globals: {},
+        variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
+        actions: { pin: { persist: 'palette', from: 'themes' } },
+        segments: { s: { template: 'x', bg: 'surface', fg: 'foreground' } },
+        root: 's',
+      }`,
+      ALLOWED,
+    );
+    const disposers = deriveConfigActionValidators(config).map(({ key, spec }) =>
+      registerConfigValidator(key, spec),
+    );
+    const sessionState = new SessionState();
+    const ctx: VerbContext = { sessionState, dlog: () => {} };
+    const enc = (v: string) => encodeURIComponent(v);
+    try {
+      expect(() =>
+        VERBS.get("set-config")!(
+          `${enc("s1")}/${enc("palette")}/${enc("nord")}/${enc("no-such-session-key")}`,
+          ctx,
+        ),
+      ).toThrow(/unknown session key/);
+      // The durable half is on disk regardless: the release ran after it, and
+      // its failure is reported rather than swallowed or compensated.
+      expect(
+        loadConfigOverrides(
+          join(xdgStateDir, "cc-candybar", "config-overrides.json"),
+        ),
+      ).toEqual({ palette: "nord" });
+    } finally {
+      for (const d of disposers) d();
+    }
   });
 });
 

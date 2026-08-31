@@ -1408,6 +1408,130 @@
           {
             "type": "object",
             "properties": {
+              "set": {
+                "type": "string"
+              },
+              "persist": {
+                "type": "string"
+              },
+              "persistWhen": {
+                "type": "string"
+              },
+              "to": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "set",
+              "persist",
+              "persistWhen",
+              "to"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "set": {
+                "type": "string"
+              },
+              "persist": {
+                "type": "string"
+              },
+              "persistWhen": {
+                "type": "string"
+              },
+              "from": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "minItems": 1,
+                    "uniqueItems": true
+                  }
+                ]
+              }
+            },
+            "required": [
+              "set",
+              "persist",
+              "persistWhen",
+              "from"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "set": {
+                "type": "string"
+              },
+              "persist": {
+                "type": "string"
+              },
+              "persistWhen": {
+                "type": "string"
+              },
+              "min": {
+                "type": "integer"
+              },
+              "max": {
+                "type": "integer"
+              },
+              "by": {
+                "type": "integer"
+              }
+            },
+            "required": [
+              "set",
+              "persist",
+              "persistWhen",
+              "min",
+              "max",
+              "by"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "set": {
+                "type": "string"
+              },
+              "persist": {
+                "type": "string"
+              },
+              "persistWhen": {
+                "type": "string"
+              },
+              "cycle": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "minItems": 2,
+                "uniqueItems": true
+              }
+            },
+            "required": [
+              "set",
+              "persist",
+              "persistWhen",
+              "cycle"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
               "copy": {
                 "type": "string"
               }

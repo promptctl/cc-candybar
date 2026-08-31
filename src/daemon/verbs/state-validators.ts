@@ -16,12 +16,13 @@
 // `persist` action's keyspace) — two keyspaces, one mechanism.
 
 import { listResolvablePaletteNames, STRIP_STYLES } from "../../themes/policy";
-import type { ActionDecl } from "../../config/action";
+import { actionDestinations, type ActionDecl } from "../../config/action";
 import {
   perConfigDomainsFor,
   resolveOptionDomain,
 } from "../../config/option-domain";
 import type { DslConfig } from "../../config/dsl-types";
+import { numericGlobalsSeeds } from "../../config/loader/globals";
 import {
   clampSeed,
   createValidatorRegistry,
@@ -191,10 +192,18 @@ function dropBaselineAllowLists(
   );
 }
 
-// [LAW:one-source-of-truth] Each `state` variable's integer `default` is the
-// initial value of its key — the value the bar renders before any click. The
-// step-state handler must seed an unset key from the SAME number, so the
-// derived range spec carries it.
+// [LAW:one-source-of-truth] The value a bounded key renders with before any
+// click, from the two places that can define it: a `state` variable's integer
+// `default` (the only source for a key of the config's own invention, like a
+// hue stepper), and — winning for the fields it covers — what the config
+// resolves for a GLOBALS field, since a session stepper over `padding` starts
+// from the padding the bar is showing, not from a state var nobody declared.
+//
+// The globals half is the SAME function the config-overrides gate seeds from
+// (numericGlobalsSeeds), so a session stepper and its durable twin cannot
+// start from different numbers. Before it existed, the settings menu's session
+// padding stepper seeded from `min`: a bar reading `padding 1` answered its
+// first ◀ by wrapping to 16.
 function stateKeySeeds(config: DslConfig): ReadonlyMap<string, number> {
   const seeds = new Map<string, number>();
   const INT_RE = /^-?\d+$/;
@@ -205,6 +214,9 @@ function stateKeySeeds(config: DslConfig): ReadonlyMap<string, number> {
       seeds.set(decl.key, parseInt(raw, 10));
     }
   }
+  for (const [key, seed] of numericGlobalsSeeds(config.globals)) {
+    seeds.set(key, seed);
+  }
   return seeds;
 }
 
@@ -214,10 +226,16 @@ function stateKeySeeds(config: DslConfig): ReadonlyMap<string, number> {
 function actionContributions(config: DslConfig): KeySpecContribution[] {
   const seeds = stateKeySeeds(config);
   const perConfigDomains = perConfigDomainsFor(config);
+  // [LAW:single-enforcer] Every action is exploded into the
+  // single-destination declarations it writes through BEFORE the fold, so a
+  // dual-destination action (candybar-settings-ui-aok.3) contributes exactly
+  // the `set` spec its session half would have contributed on its own — the
+  // gate is derived by the code that has always derived it, from the same
+  // declaration the click realizes, and a dual can widen nothing.
   return dropBaselineAllowLists(
-    Object.values(config.actions).flatMap((a) =>
-      actionKeySpecs(a, seeds, perConfigDomains),
-    ),
+    Object.values(config.actions)
+      .flatMap(actionDestinations)
+      .flatMap((a) => actionKeySpecs(a, seeds, perConfigDomains)),
   );
 }
 
