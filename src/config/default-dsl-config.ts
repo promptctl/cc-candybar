@@ -1277,10 +1277,6 @@ export const RAW_DEFAULT_DSL_CONFIG = {
       from: "colorCompatibilities",
     },
     resetColorCompat: { reset: "colorCompatibility" },
-    // [LAW:one-source-of-truth] The toggle's members and the stepper's bounds
-    // are the SAME literals the resolvers parse a session pick with
-    // (BOOLEAN_MEMBERS / PADDING_RANGE in themes/policy.ts) — a click cannot
-    // write a value the render's own resolution would then refuse.
 
     // [LAW:locality-or-seam] The segment-palette control's behavior
     // (candybar-config-engine-71o.6), decoupled by NAME from
@@ -1288,7 +1284,7 @@ export const RAW_DEFAULT_DSL_CONFIG = {
     // palette` — NOT a Globals field — so it rides the SAME generic
     // `from`/`reset` machinery every other persist pair here uses, over a
     // key namespace loader/persist-target.ts opened alongside the pre-
-    // existing Globals-field one. Like the four .3 steppers, this field has
+    // existing Globals-field one. Like charset/colorCompatibility, this field has
     // no SessionState half at all: a per-segment `palette:` is a static pin
     // that ignores the session theme by design (src/dsl/render.ts), so
     // `persist` is its only seam.
