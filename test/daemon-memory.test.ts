@@ -173,6 +173,17 @@ describe("heap-analysis scripts", () => {
   let before: string;
   let after: string;
 
+  // [LAW:no-ambient-temporal-coupling] This hook writes TWO full V8 heap
+  // snapshots of the Jest worker. Its duration is not a property of the code
+  // under test — it scales with the worker's heap (every module the run has
+  // loaded) and with how contended the machine is, so the 30s budget
+  // jest.config sets for ordinary unit tests is the wrong number here: it
+  // passes in ~5s on a developer machine and timed out on a loaded CI runner
+  // once the repo's test corpus grew. The ASSERTIONS below are unchanged and
+  // still deterministic (the snapshots are constructed to contain the signal);
+  // only the budget for the snapshotting itself is stated honestly.
+  jest.setTimeout(180_000);
+
   beforeAll(async () => {
     clearParseCache();
     before = join(root, "before.heapsnapshot");
