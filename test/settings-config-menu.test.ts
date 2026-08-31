@@ -294,6 +294,29 @@ describe("the dual-destination action arm", () => {
     ).toThrow(/is not a declared state key/);
   });
 
+  // A segment-local state variable is a legitimate selector: render.ts's
+  // stateKeyToVar registers segment `vars` alongside global ones, and that map
+  // is what a dual's selector resolves through at click time. A load check
+  // that only saw the global scope would reject configs that work.
+  test("a segment-local state variable is a legal selector", () => {
+    const config = parseAndValidate(
+      "<test>",
+      `{
+        variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
+        actions: { t: { set: 'theme', persist: 'palette', persistWhen: 'flag', from: 'themes' } },
+        segments: {
+          d: {
+            template: 'd', bg: 'surface', fg: 'foreground',
+            vars: { flag: { kind: 'state', key: 'flag', default: 'false' } },
+          },
+        },
+        root: { h: ['d'] },
+      }`,
+      ALLOWED,
+    );
+    expect(config.actions.t).toMatchObject({ persistWhen: "flag" });
+  });
+
   test("two value sources at once is a load error, as it is for set/persist", () => {
     expect(() =>
       parseAndValidate(
@@ -481,16 +504,27 @@ describe("the config menu, reached from a user config whose root is one row", ()
     expect(plain(committed)).toContain("wrap: on");
   });
 
-  test("the padding stepper follows the checkbox too", () => {
-    const stepVerb = (rendered: string): string[] =>
+  // The bounded arm is a genuinely different code path from the pickers': a
+  // stepper carries no stateVar and emits a RELATIVE nudge, so it skips the
+  // readback compileDual does for the cycle and option arms. Both destinations
+  // are therefore asserted at each state — an incomplete switch that left the
+  // session step live beside the durable one would pass a "contains" check.
+  test("the padding stepper follows the checkbox, and only one destination at a time", () => {
+    const stepVerbs = (rendered: string): string[] =>
       writesTo(rendered, "padding")
         .flatMap((u) => effectsOf(u))
         .filter((e) => e.args[1] === "padding")
         .map((e) => e.verb);
 
-    expect(stepVerb(r.render())).toContain("step-state");
+    const unchecked = stepVerbs(r.render());
+    expect(unchecked).toContain("step-state");
+    expect(unchecked).not.toContain("step-config");
+
     r.click(writesTo(r.render(), "settings.persist")[0]!);
-    expect(stepVerb(r.render())).toContain("step-config");
+
+    const checked = stepVerbs(r.render());
+    expect(checked).toContain("step-config");
+    expect(checked).not.toContain("step-state");
   });
 
   // [LAW:dataflow-not-control-flow] The epic's own guardrail, as a test: no

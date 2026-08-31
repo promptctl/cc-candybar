@@ -178,10 +178,7 @@ export function validateCrossReferences(
   for (const [name, a] of Object.entries(cfg.actions)) {
     if (!actionIsDual(a)) continue;
     const selector = a[PERSIST_WHEN];
-    const declared = Object.values(cfg.variables).some(
-      (v) => v.kind === "state" && v.key === selector,
-    );
-    if (!declared) {
+    if (!declaresStateKey(cfg, selector)) {
       ctx.issues.push({
         path: `actions.${name}.${PERSIST_WHEN}`,
         message: `actions.${name} ${PERSIST_WHEN}: "${selector}" is not a declared state key — a dual action's selector must name a { kind: "state", key: "${selector}" } variable, or the destination can never change`,
@@ -566,17 +563,29 @@ function checkPresetRootOpsTarget(
   }
 }
 
+// [LAW:one-source-of-truth] Every `state` variable a config declares, in BOTH
+// scopes — global `variables` and each segment's own `vars`. A segment-local
+// state variable is fully legitimate: src/dsl/render.ts's stateKeyToVar
+// registers them (as `<segment>.<var>`) and it is the map a dual's selector is
+// resolved through at render, so a load-time check that scanned only the
+// global scope would reject configs that work.
+function stateVars(cfg: DslConfig): VariableDecl[] {
+  return [
+    ...Object.values(cfg.variables),
+    ...Object.values(cfg.segments).flatMap((seg) =>
+      Object.values(seg.vars ?? {}),
+    ),
+  ].filter((v) => v.kind === "state");
+}
+
 function hasStateKind(cfg: DslConfig): boolean {
-  for (const v of Object.values(cfg.variables)) {
-    if (v.kind === "state") return true;
-  }
-  for (const seg of Object.values(cfg.segments)) {
-    if (!seg.vars) continue;
-    for (const v of Object.values(seg.vars)) {
-      if (v.kind === "state") return true;
-    }
-  }
-  return false;
+  return stateVars(cfg).length > 0;
+}
+
+// Does any declared `state` variable hold this key? The question a dual's
+// `persistWhen` selector has to answer, asked over the same two scopes.
+function declaresStateKey(cfg: DslConfig, key: string): boolean {
+  return stateVars(cfg).some((v) => v.kind === "state" && v.key === key);
 }
 
 // [LAW:dataflow-not-control-flow] A config emits a set-state, set-config,

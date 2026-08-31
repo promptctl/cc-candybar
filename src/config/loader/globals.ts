@@ -203,8 +203,14 @@ export function listGlobalsFieldNames(): readonly string[] {
 // themes/policy.ts because it must name `Globals`, and policy.ts is the leaf
 // dsl-types imports FROM — a table that needs both belongs on this side of
 // that edge [LAW:one-way-deps].
+// The direction matters: `NonNullable<Globals[K]> extends number` asks "is this
+// field's type a number", which is what the totality claim needs. The mirror
+// (`number extends …`) happens to agree for a field declared as plain `number`
+// — the two are symmetric there — but silently drops a field typed as a
+// literal union (`zoom?: 1 | 2 | 3`), which is a perfectly ordinary way to
+// declare a bounded numeric setting and exactly the case this guard exists for.
 type NumericGlobalsField = {
-  [K in keyof Globals]-?: number extends NonNullable<Globals[K]> ? K : never;
+  [K in keyof Globals]-?: NonNullable<Globals[K]> extends number ? K : never;
 }[keyof Globals];
 
 const NUMERIC_GLOBALS_FLOORS: Readonly<Record<NumericGlobalsField, number>> = {
