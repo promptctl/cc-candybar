@@ -1,3 +1,10 @@
+# [1.37.0](https://github.com/promptctl/cc-candybar/compare/v1.36.0...v1.37.0) (2026-08-31)
+
+
+### Features
+
+* **daemon:** autoWrap and padding resolve per session (candybar-settings-ui-aok.2) ([#191](https://github.com/promptctl/cc-candybar/issues/191)) ([3ade71e](https://github.com/promptctl/cc-candybar/commit/3ade71e2d9424af16916cbc52d3dc896e746d407))
+
 # [1.36.0](https://github.com/promptctl/cc-candybar/compare/v1.35.0...v1.36.0) (2026-08-27)
 
 
