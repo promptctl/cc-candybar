@@ -21,6 +21,9 @@
 //   5. The controls are REACHABLE from that two-segment root: the menu the
 //      user cannot delete carries them.
 
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { getThemePalette } from "@promptctl/rich-js";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { ConfigError } from "../src/config/dsl-loader";
@@ -28,7 +31,12 @@ import { SessionState } from "../src/daemon/session-state";
 import { SourceRegistry } from "../src/var-system/sources";
 import { VariableStore } from "../src/var-system/store";
 import { registerDslConfig, renderDsl } from "../src/dsl/render";
-import { listResolvablePaletteNames } from "../src/themes/policy";
+import {
+  effectiveAutoWrap,
+  effectivePadding,
+  effectiveThemeName,
+  listResolvablePaletteNames,
+} from "../src/themes/policy";
 import {
   deriveActionValidators,
   registerStateValidator,
@@ -116,12 +124,32 @@ function rig(source: string): {
             project_dir: "/tmp",
             added_dirs: [],
           },
-          theme: { effective: "tokyo-night" },
+          // [LAW:one-source-of-truth] The daemon resolves these per render
+          // from SessionState over the config's globals (server.ts's
+          // EffectiveGlobals); mirroring that here — through the same policy
+          // functions, not a restated rule — is what lets an assertion read
+          // the LABEL after a click instead of only the click's URL.
+          theme: {
+            effective: effectiveThemeName(
+              sessionState.get(SID, "theme"),
+              config.globals.palette,
+            ),
+          },
           look: { effective: "none" },
           style: { effective: "powerline" },
           preset: { effective: "default" },
-          autoWrap: { effective: true },
-          padding: { effective: 1 },
+          autoWrap: {
+            effective: effectiveAutoWrap(
+              sessionState.get(SID, "autoWrap"),
+              config.globals.autoWrap,
+            ),
+          },
+          padding: {
+            effective: effectivePadding(
+              sessionState.get(SID, "padding"),
+              config.globals.padding,
+            ),
+          },
         },
         getThemePalette("tokyo-night"),
         opts(),
@@ -317,7 +345,16 @@ describe("a dual derives exactly what its two halves derive", () => {
 
 describe("the config menu, reached from a user config whose root is one row", () => {
   let r: ReturnType<typeof rig>;
+  // A durable click writes configOverridesPath() for real, so point the state
+  // dir at a temp directory for the duration — otherwise this suite would edit
+  // the developer's own persisted defaults.
+  let savedXdgState: string | undefined;
+  let stateDir: string;
+
   beforeEach(() => {
+    savedXdgState = process.env.XDG_STATE_HOME;
+    stateDir = mkdtempSync(join(tmpdir(), "cc-candybar-settings-menu-state-"));
+    process.env.XDG_STATE_HOME = stateDir;
     r = rig(TWO_SEGMENT_ROOT);
     // Open the menu and its config row — the two clicks a "☰ ▸" then
     // "⚙ config ▸" tap dispatches. Both affordances are found in the rendered
@@ -329,7 +366,12 @@ describe("the config menu, reached from a user config whose root is one row", ()
     expect(configToggle).toBeDefined();
     r.click(configToggle!);
   });
-  afterEach(() => r.dispose());
+  afterEach(() => {
+    r.dispose();
+    if (savedXdgState === undefined) delete process.env.XDG_STATE_HOME;
+    else process.env.XDG_STATE_HOME = savedXdgState;
+    rmSync(stateDir, { recursive: true, force: true });
+  });
 
   test("every setting the menu owns is one control, reachable from that root", () => {
     const out = plain(r.render());
@@ -370,7 +412,50 @@ describe("the config menu, reached from a user config whose root is one row", ()
 
     const open = r.render();
     expect(writesTo(open, "palette").some((u) => !isReset(u))).toBe(true);
-    expect(writesTo(open, "theme")).toEqual([]);
+    // The session key is touched, but only to be CLEARED — never given a
+    // value. That clear is what keeps a durable write visible to the session
+    // that made it: a session pick outranks a durable default, so committing
+    // "what I'm looking at" has to stop overriding it here, and an absence is
+    // the only thing that means that.
+    const themeWrites = writesTo(open, "theme").flatMap((u) => effectsOf(u));
+    expect(themeWrites.length).toBeGreaterThan(0);
+    expect(
+      themeWrites.filter((e) => e.args[1] === "theme").map((e) => e.verb),
+    ).toEqual(themeWrites.filter((e) => e.args[1] === "theme").map(() => "clear-state"));
+  });
+
+  // [LAW:verifiable-goals] The workflow this menu invites, end to end: try a
+  // value in the session, tick persist?, commit it. Before the session clear
+  // rode along with the durable write, this sequence left the durable default
+  // invisible and the control dead — every further click recomputed the same
+  // successor and changed nothing on screen.
+  test("try-then-commit leaves the control live and the bar showing the committed value", () => {
+    const wrapUrl = (): string =>
+      writesTo(r.render(), "autoWrap").find((u) => !isReset(u))!;
+    expect(plain(r.render())).toContain("wrap: on");
+
+    // Try it: session-only, the bar follows.
+    r.click(wrapUrl());
+    expect(plain(r.render())).toContain("wrap: off");
+
+    // Commit it: the durable write lands AND the session override is dropped,
+    // so the bar keeps showing what was committed rather than freezing on the
+    // session value that would otherwise outrank it.
+    r.click(writesTo(r.render(), "settings.persist")[0]!);
+    r.click(wrapUrl());
+    const committed = r.render();
+    expect(
+      effectsOf(writesTo(committed, "autoWrap").find((u) => !isReset(u))!).some(
+        (e) => e.verb === "set-config",
+      ),
+    ).toBe(true);
+
+    // …and the session override is GONE, which is the half of the fix this rig
+    // can see: the label falls back to the value the config resolves, the slot
+    // the durable write now fills. (That the durable value then shows through
+    // needs the overrides layer this rig has no RenderCache to load — the
+    // real-daemon e2e covers it, with a cold restart on top.)
+    expect(plain(committed)).toContain("wrap: on");
   });
 
   test("the padding stepper follows the checkbox too", () => {

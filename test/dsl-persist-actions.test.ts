@@ -738,12 +738,18 @@ describe("persist action click → durable overrides write", () => {
     const urls = extractUrls(render());
     const effect = effectsOf(urls[2]!)[0]!;
     expect(effect.verb).toBe("step-config");
-    click(urls[2]!); // unset seeds from min (0) + by (1) = 1
-    click(urls[2]!); // reads the just-written override (1) + by (1) = 2
+    // [LAW:one-source-of-truth] An unset stepper seeds from the value the bar
+    // RENDERS with no write at all — this config declares no `globals.padding`,
+    // so that is the field's floor (DEFAULT_PADDING = 1), not `min`.
+    // candybar-settings-ui-aok.3: seeding from `min` is what made the first ◀
+    // on a bar reading `padding 1` wrap to 16, and both write gates now read
+    // the same seed source (numericGlobalsSeeds).
+    click(urls[2]!); // unset seeds from the floor (1) + by (1) = 2
+    click(urls[2]!); // reads the just-written override (2) + by (1) = 3
     const overrides = loadConfigOverrides(
       join(xdgStateDir, "cc-candybar", "config-overrides.json"),
     );
-    expect(overrides).toEqual({ padding: 2 });
+    expect(overrides).toEqual({ padding: 3 });
     dispose();
   });
 

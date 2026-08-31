@@ -7,6 +7,7 @@ import { type Globals } from "../dsl-types.js";
 import {
   CHARSETS,
   COLOR_COMPATIBILITIES,
+  NUMERIC_GLOBALS_FLOORS,
   PADDING_RANGE,
   STRIP_STYLES,
   type ColorCompatibility,
@@ -192,4 +193,21 @@ export function isGlobalsField(key: string): key is keyof Globals {
 
 export function listGlobalsFieldNames(): readonly string[] {
   return [...GLOBALS_FIELD_NAMES];
+}
+
+// [LAW:single-enforcer] THE seed for a bounded stepper over a globals field:
+// what the bar renders with no write of any kind — the config's own value, or
+// the field's floor when it declares none. Both write gates read it (the
+// SessionState one through stateKeySeeds, the config-overrides one through
+// configKeySeeds), so a session stepper and its durable twin can never start
+// from different numbers, and neither can silently start from `min`.
+export function numericGlobalsSeeds(
+  globals: Globals,
+): ReadonlyMap<string, number> {
+  const seeds = new Map<string, number>();
+  for (const [field, floor] of Object.entries(NUMERIC_GLOBALS_FLOORS)) {
+    const declared = globals[field as keyof Globals];
+    seeds.set(field, typeof declared === "number" ? declared : floor);
+  }
+  return seeds;
 }

@@ -17,7 +17,7 @@ import {
 } from "../../config/option-domain";
 import { addableSegmentDomains } from "../../config/edit-chrome";
 import type { DslConfig } from "../../config/dsl-types";
-import { isGlobalsField } from "../config-overrides-store";
+import { numericGlobalsSeeds } from "../../config/loader/globals";
 import { encodeLayoutOp } from "../../config/layout-ops";
 import {
   parsePersistTarget,
@@ -163,13 +163,7 @@ function actionKeySpecs(
 // applied. Mirrors stateKeySeeds' "the bar's current display, not silently
 // min" rule for SessionState steppers.
 function configKeySeeds(config: DslConfig): ReadonlyMap<string, number> {
-  const seeds = new Map<string, number>();
-  for (const [key, value] of Object.entries(config.globals)) {
-    if (isGlobalsField(key) && typeof value === "number") {
-      seeds.set(key, value);
-    }
-  }
-  return seeds;
+  return numericGlobalsSeeds(config.globals);
 }
 
 // [LAW:one-source-of-truth] Every preset a config's action table ALREADY

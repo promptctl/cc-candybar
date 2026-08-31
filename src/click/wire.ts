@@ -40,6 +40,20 @@ export const VERB_SET_STATE = "set-state";
 // from live state, so the link carries no `current` snapshot and N rapid clicks
 // each re-read-and-write. Additive: old set-state links still resolve.
 export const VERB_STEP_STATE = "step-state";
+// [LAW:one-source-of-truth] set-state's INVERSE: drop one SessionState key so
+// the value resolves from the layer beneath it again (the config default, or
+// the floor). Args: `[sessionId, key]` — no value, because "no session pick"
+// is an absence, not a value, and every one of these keys resolves through
+// effectiveGlobal, where an absent session entry is precisely what lets the
+// durable default show through.
+//
+// Gated by key MEMBERSHIP (listStateKeys), exactly as reset-config is over the
+// config keyspace — there is no value to validate, only a legitimate target to
+// clear. It is reset-config's SessionState twin, and it exists because a
+// SessionState write had no inverse: a `persist` click could set a durable
+// default that its own session could never see, since the session pick that
+// preceded it outranks it forever.
+export const VERB_CLEAR_STATE = "clear-state";
 export const VERB_COPY = "copy";
 export const VERB_OPEN_VSCODE = "open-vscode";
 export const VERB_TOOLBAR_TOGGLE = "toolbar-toggle";

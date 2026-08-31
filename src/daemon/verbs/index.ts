@@ -57,6 +57,7 @@ import {
   VERB_SET_STATE,
   VERB_STEP_CONFIG,
   VERB_STEP_STATE,
+  VERB_CLEAR_STATE,
   VERB_SHOW_CONFIG_ERROR,
   VERB_SHOW_CONFIG_WARNING,
   VERB_TOOLBAR_TOGGLE,
@@ -296,6 +297,28 @@ const STEP_INT_RE = /^-?\d+$/;
 function wrapStep(n: number, min: number, max: number): number {
   return n > max ? min : n < min ? max : n;
 }
+
+// [LAW:one-source-of-truth] set-state's INVERSE — reset-config's SessionState
+// twin, gated the same way: by key MEMBERSHIP (listStateKeys), because there
+// is no value to validate, only a legitimate target to clear.
+//
+// It exists because a SessionState write had no inverse, and that gap had a
+// user-visible cost: every settable global resolves session pick OVER durable
+// default (effectiveGlobal), so a session that had picked a value could set a
+// durable default it would then never see — the control appeared dead for the
+// rest of that session. Committing a default therefore has to be able to say
+// "and stop overriding it here", which is exactly an absence, not a value.
+const clearState: VerbHandler = (rawValue, ctx) => {
+  const [sessionId = "", key = ""] = decodeWire(() => decodeSegments(rawValue));
+  const sid = requireSessionId(sessionId);
+  if (!key || !listStateKeys().includes(key)) {
+    throw new BadVerbArgs(
+      `clear-state: unknown state key "${key}" (have: ${listStateKeys().join(", ")})`,
+    );
+  }
+  ctx.sessionState.clear(sid, key);
+  ctx.dlog("info", `clear-state: ${key} (session=${sid})`);
+};
 
 // [LAW:one-source-of-truth] A RELATIVE nudge to a bounded state key. The link
 // carries ONLY the irreducible intent `[sessionId, key, by]` (no `current`
@@ -580,6 +603,7 @@ const LEAF_VERBS = new Map<string, VerbHandler>([
   [VERB_OPEN_VSCODE, openVscode],
   [VERB_SET_STATE, setState],
   [VERB_STEP_STATE, stepState],
+  [VERB_CLEAR_STATE, clearState],
   [VERB_SET_CONFIG, setConfig],
   [VERB_STEP_CONFIG, stepConfig],
   [VERB_RESET_CONFIG, resetConfig],
@@ -617,14 +641,15 @@ const dispatch: VerbHandler = (rawValue, ctx) => {
   let sessionId: string | null = null;
   for (const { verb, value } of parseEffects(rawValue)) {
     // Extract session ID from the first session-bearing effect for error display.
-    // set-state, step-state, set-config, step-config, reset-config,
-    // apply-layout-op, undo, redo, and toolbar-toggle all carry the session id
-    // as their first segment, so a failing step surfaces in the bar like any
-    // other.
+    // set-state, step-state, clear-state, set-config, step-config,
+    // reset-config, apply-layout-op, undo, redo, and toolbar-toggle all carry
+    // the session id as their first segment, so a failing step surfaces in the
+    // bar like any other.
     if (
       !sessionId &&
       (verb === VERB_SET_STATE ||
         verb === VERB_STEP_STATE ||
+        verb === VERB_CLEAR_STATE ||
         verb === VERB_SET_CONFIG ||
         verb === VERB_STEP_CONFIG ||
         verb === VERB_RESET_CONFIG ||

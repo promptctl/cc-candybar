@@ -189,12 +189,32 @@ describe("candybar-config-engine-71o.5: real-daemon click → persist → restar
       // is positive, so the assertion below is pinned to the actual
       // increment, not whichever stepper happens to render first.
       const paddingUpUrl = findUrl(openedUrls, (effects) =>
-        effects.length === 1 &&
-        effects[0]!.verb === "step-config" &&
-        effects[0]!.args[1] === "padding" &&
-        Number(effects[0]!.args[2]) > 0,
+        effects.some(
+          (e) =>
+            e.verb === "step-config" &&
+            e.args[1] === "padding" &&
+            Number(e.args[2]) > 0,
+        ),
       );
       expect(paddingUpUrl).toBeDefined();
+
+      // [LAW:no-silent-failure] Every durable click carries the session clear
+      // with it, in the same dispatch. Without it the write would be invisible
+      // to the session that made it — a session pick outranks a durable
+      // default — so "commit what I'm looking at" would leave the bar
+      // unchanged and the control dead. Asserted on the wire, on both the
+      // theme pick and the padding step, because it is the pairing that makes
+      // the persist? workflow work at all.
+      for (const url of [themeForeverUrl!, paddingUpUrl!]) {
+        expect(
+          effectsOf(url).some(
+            (e) => e.verb === "clear-state" && e.args[1] === "theme",
+          ) ||
+            effectsOf(url).some(
+              (e) => e.verb === "clear-state" && e.args[1] === "padding",
+            ),
+        ).toBe(true);
+      }
 
       await click(sockPath, themeForeverUrl!);
       await click(sockPath, paddingUpUrl!);
@@ -227,9 +247,19 @@ describe("candybar-config-engine-71o.5: real-daemon click → persist → restar
       );
       expect(afterClicks).toContain(targetTheme);
 
-      // …and the clicking session still shows ITS pick, which is that same
-      // precedence read from the other end.
-      expect(await render(sockPath, SID, projectDir)).toContain(sessionTheme);
+      // …and the COMMITTING session shows the committed value too, because the
+      // durable click cleared the session pick that would otherwise outrank it
+      // forever. Before that clear rode along, this session kept rendering
+      // `sessionTheme` and every further click changed nothing on screen — the
+      // durable default was real but invisible to the person who set it.
+      const committing = await renderUntil(
+        sockPath,
+        SID,
+        projectDir,
+        (out) => out.includes(targetTheme),
+        `the committed theme "${targetTheme}" on the session that committed it`,
+      );
+      expect(committing).not.toContain(sessionTheme);
 
       // The hand-authored file is byte-identical — persist never touches it.
       expect(readFileSync(userConfigPath, "utf8")).toBe(userConfigBody);
@@ -243,13 +273,14 @@ describe("candybar-config-engine-71o.5: real-daemon click → persist → restar
         padding?: number;
       };
       expect(overrides.palette).toBe(targetTheme);
-      // clampSeed's documented fallback (validator-registry.ts): an unset
-      // seed falls back to `min` (0), not the bundled default's rendered
-      // padding — the bundled default never literally sets
-      // `globals.padding` (it relies on the render-side `?? 1` floor), so
-      // configKeySeeds has nothing numeric to seed from. First click from
-      // an empty overrides file is therefore min(0) + by(1) = 1.
-      expect(overrides.padding).toBe(1);
+      // [LAW:one-source-of-truth] A stepper starts from what the bar SHOWS.
+      // The bundled default never literally sets `globals.padding` — it leans
+      // on the field's floor (DEFAULT_PADDING = 1) — so the first ▶ from an
+      // empty overrides file is 1 + 1 = 2. It used to be min(0) + 1 = 1, which
+      // meant the first ◀ on a bar reading `padding 1` wrapped to 16;
+      // candybar-settings-ui-aok.3 gave both write gates one seed source
+      // (numericGlobalsSeeds) that applies the floor.
+      expect(overrides.padding).toBe(2);
 
       // Kill this daemon and start a FRESH one against the SAME state dir
       // (same overrides file) — a real cold restart, not an in-process

@@ -82,6 +82,7 @@ An action declares exactly one of `set` / `persist` / `copy` / `open` /
 | `{ persist: field, to \| from \| min/max/by \| cycle, … }` | the SAME four value sources as `set`, but writes the **config `globals` default** durably (every session, survives daemon restart) instead of one session — see below. No `int` arm: a page cursor is never persisted. |
 | `{ set: key, persist: field, persistWhen: selectorKey, to \| from \| min/max/by \| cycle, … }` | ONE control, TWO destinations: write the same value to SessionState or to the durable `globals` default, chosen at click time by the boolean value of `selectorKey` — see below |
 | `{ reset: field }` | clear one persisted `globals` field, restoring the config-file/bundled value |
+| `{ set: key, persist: field, persistWhen: selectorKey, … }` (durable click) | also emits `clear-state` on `key`, so the committed default is visible to the session that committed it |
 | `{ undo: true }` | step the overrides layer's **global history** one entry back — restores whatever a PRIOR `persist`/`reset` write changed, any key, not just the one this action names (it names none) |
 | `{ redo: true }` | re-apply the most recently undone entry |
 | `{ copy: "template" }` | copy the evaluated template to the clipboard |
@@ -252,6 +253,15 @@ Read the picker's own click to see what changed: with `persistDefault` unset or
 is a `set-config` write to the `globals` field `palette`. Same segment, same
 template, same options — the destination is a value the click carries, not a
 second control.
+
+A durable click carries one more effect: a `clear-state` on the session key, in
+the same atomic dispatch. It has to. A session pick outranks a durable default
+(that is the precedence chain above), so committing a value while the session
+still holds its own pick would set a default the committing session could never
+see — the bar would not move, and the control would keep writing the same value
+forever. "Make this the default" means "and stop overriding it here", so the
+commit drops the session override and the durable value shows through. Nothing
+to declare: the pairing is what a dual action realizes.
 
 The two keys differ here because the session key and the globals field have
 always had different names (`theme` vs `palette`). Where they agree — `look`,
