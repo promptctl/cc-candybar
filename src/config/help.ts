@@ -32,7 +32,6 @@ import {
   disclosureGate,
   disclosureStateVar,
   disclosureTrigger,
-  escapeTemplateLiteral,
   type DisclosureRef,
 } from "./disclosure.js";
 
@@ -112,19 +111,22 @@ export function declareHelp(
   };
 
   // [LAW:one-source-of-truth] One line is one SEGMENT whose template is that
-  // line VERBATIM — no wrapper text, no joining, no reformatting. That is what
-  // makes "the bar's help IS the corpus" checkable as identity rather than as
-  // string similarity: the declaration a test reads and the sentence
-  // `src/help-text.ts` exports are the same value, escaped only as the template
-  // grammar requires.
+  // line VERBATIM — no wrapper text, no joining, no reformatting, and no
+  // escaping. A `template` IS template source, so its static runs reach the bar
+  // unchanged; escaping belongs to text spliced INSIDE a quoted `{{ }}` argument
+  // (what `disclosureTrigger` above does, and this is not), and applying it here
+  // would put backslashes on the bar the moment a sentence used a quote. That is
+  // what makes "the bar's help IS the corpus" checkable as identity rather than
+  // as string similarity: the declaration a test reads and the sentence
+  // `src/help-text.ts` exports are one value, byte for byte.
   const bodyGate = disclosureGate(self, ...within);
   const children = lines.map((line, i): LayoutNode => {
     const lineName = `${name}.${i}`;
-    out.segments[lineName] = {
-      template: escapeTemplateLiteral(line),
-      ...surface,
-      when: bodyGate,
-    };
+    // [LAW:single-enforcer] The gate lives on the body container below and
+    // nowhere else — the render walk ANDs an ancestor's `when` into every
+    // descendant (src/dsl/render.ts:764), so a copy here would be a second
+    // enforcer of one predicate with nothing keeping the two equal.
+    out.segments[lineName] = { template: line, ...surface };
     return { kind: "segment", name: lineName };
   });
 
