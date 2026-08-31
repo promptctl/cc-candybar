@@ -395,15 +395,32 @@ function wrapWithPresetRows(
 //    the last row is the one position that moves no other leaf.
 //
 // Those two together disqualify the reset-banner row, which sits above the
-// content. The trigger does inherit its host row's own `when`, which is what
-// riding a row means: a preset that gates its last row hides that row's `+`/`-`
-// affordances along with the `(?)` explaining them.
+// content.
 //
-// [LAW:dataflow-not-control-flow] Total over the three node shapes with no
-// guard: a vertical container's rows are its children, so recurse into the last;
-// a horizontal container IS a row, so append; a segment is a row of one that
-// cannot hold a second cell, so pair it into one. An empty container has no last
-// child and appends, which is the same answer.
+// A THIRD requirement decides how far the descent may go, and it outranks the
+// other two: the trigger must be visible exactly when EDIT MODE is, since a
+// trigger you must already have opened something else to reach is not a trigger.
+// A container's `when` reaches every descendant, so descending into a
+// `when`-bearing container would silently make its gate the trigger's gate.
+// `kind: "group"` is the shape that makes this concrete rather than theoretical:
+// lowerGroup emits `{vertical, children: [toggle, {…, when: groupGate}]}`, so a
+// preset root ending in a group — ordinary authoring the A-grammar endorses —
+// would otherwise put the `(?)` INSIDE that group's collapsible body, gated on
+// edit mode AND a disclosure most groups default closed. Pairing beside a gated
+// SEGMENT is a different act and stays allowed: `{h: [gatedSeg, cell]}` puts the
+// cell beside the gate rather than under it.
+//
+// For a root whose last row is gated the three requirements are jointly
+// unsatisfiable, so the priority is stated rather than left to whichever branch
+// the recursion happens to reach: visible (always) > no recolour (always, since
+// appending is still after every existing leaf) > no extra line (surrendered
+// here, in exactly the configs where riding a row was never possible).
+//
+// [LAW:dataflow-not-control-flow] Total over the node shapes with no guard: a
+// segment is a row of one that cannot hold a second cell, so it pairs into one;
+// a vertical container's rows are its children, so it descends into the last one
+// it may; anything else appends. An empty container has no last child and
+// appends, which is the same answer.
 function withTrailingCell(node: LayoutNode, cell: LayoutNode): LayoutNode {
   if (node.kind === "segment") {
     return {
@@ -413,13 +430,17 @@ function withTrailingCell(node: LayoutNode, cell: LayoutNode): LayoutNode {
     };
   }
   const last = node.children.at(-1);
-  if (node.direction === "horizontal" || last === undefined) {
-    return { ...node, children: [...node.children, cell] };
+  if (
+    node.direction === "vertical" &&
+    last !== undefined &&
+    (last.kind === "segment" || last.when === undefined)
+  ) {
+    return {
+      ...node,
+      children: [...node.children.slice(0, -1), withTrailingCell(last, cell)],
+    };
   }
-  return {
-    ...node,
-    children: [...node.children.slice(0, -1), withTrailingCell(last, cell)],
-  };
+  return { ...node, children: [...node.children, cell] };
 }
 
 // One preset's chrome-spliced root. A bare-segment root (the A-grammar
