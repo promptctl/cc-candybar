@@ -11,9 +11,10 @@
 // CANONICAL vs DEMO (recorded for brandon-menus-bn5 IMPROVE/FOCUS — the curated
 // surface an author actually reaches for vs. the mechanism this file exposes):
 //   CANONICAL (stdlib — what a real config uses):
-//     • {{ menu "apply" [(dict "closeOnPick" bool "paged" bool "key" str)] }} —
-//       THE picker disclosure. One call = trigger glyph + drop-below picker body
-//       + synthesized open-state AND page cursor (see the "Theme picker" section
+//     • {{ menu "apply" "▸" "▾" [(dict "closeOnPick" bool "paged" bool "key" str)] }}
+//       — THE picker disclosure. One call = the trigger text you bind (one per
+//       state, or one static display for both) + drop-below picker body +
+//       synthesized open-state AND page cursor (see the "Theme picker" section
 //       for the desugaring it replaces).
 //     • {{ action "name" … }} for copy/open (clipboard, links) and set:from/int.
 //     • kind: "group" — the disclosure for an ARBITRARY layout body (not a picker).
@@ -159,7 +160,7 @@
 
     // ── Theme picker ───────────────────────────────────────────────────────
     // DEMO-ONLY: this is the manual disclosure that {{ menu }} desugars TO. The
-    // canonical form is one call — `{{ menu "applyTheme" }}` in a trigger
+    // canonical form is one call — `{{ menu "applyTheme" "▸" "▾" }}` in a trigger
     // segment — which synthesizes the open-state var + toggle AND the page
     // cursor (var + int action) and drops the picker below the row. The parts
     // spelled out here (the openThemeMenu {set,to} action on themeControl above,

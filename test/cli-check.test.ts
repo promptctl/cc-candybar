@@ -143,18 +143,19 @@ describe("checkConfig — explicit target", () => {
     expect(message).toContain('reserved "groups."');
   });
 
-  // bn5.6 vocabulary: the removed {{ menu }} positional tail is a
-  // migration-pointing load error, not a silent reinterpretation.
-  it("reports the removed {{ menu }} positional tail with the migration pointer", () => {
+  // aok.4 vocabulary: a menu's trigger text is authored, so the display-less
+  // form is a migration-pointing load error reachable from the CLI, not a
+  // silent ▸ the author never wrote.
+  it("reports a {{ menu }} with no trigger display with the migration pointer", () => {
     const p = write(
-      "menu-positional.json5",
+      "menu-nodisplay.json5",
       `{
         actions: { applyX: { set: "theme", from: "themes" } },
-        segments: { a: { template: '{{ menu "applyX" "pageX" }}' } },
+        segments: { a: { template: '{{ menu "applyX" }}' } },
         root: { h: ['a'] },
       }`,
     );
-    expect(expectFatal(checkConfig(p, dir))).toContain("options (dict");
+    expect(expectFatal(checkConfig(p, dir))).toContain("needs a display");
   });
 
   it("reports an unknown {{ menu }} dict option with the legal shape", () => {
@@ -162,7 +163,7 @@ describe("checkConfig — explicit target", () => {
       "menu-badopt.json5",
       `{
         actions: { applyX: { set: "theme", from: "themes" } },
-        segments: { a: { template: '{{ menu "applyX" (dict "closeOnPik" true) }}' } },
+        segments: { a: { template: '{{ menu "applyX" "▸" "▾" (dict "closeOnPik" true) }}' } },
         root: { h: ['a'] },
       }`,
     );
@@ -230,7 +231,7 @@ describe("checkConfig — explicit target", () => {
     const message = expectFatal(checkConfig(p, dir));
     expect(message).toContain('segment "chip"');
     expect(message).toContain(
-      'cycles 3 members; bind one display per member (3) or one static display, got 2',
+      "cycles 3 members; bind one display per member (3) or one static display, got 2",
     );
   });
 

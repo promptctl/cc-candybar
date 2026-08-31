@@ -2,7 +2,7 @@
 // spine (registerDslConfig + renderDsl), the real loader (parse → validate → menu
 // synthesis), and the real set-state gate — never a parallel rig. Covers the
 // pdu.5/.7/.9 redesign (drop-channel bodies, name-derived identity) plus the
-// bn5.6 surface: `{{ menu "apply" }}` is the COMPLETE common case — the loader
+// bn5.6 surface: `{{ menu "apply" "▸" "▾" }}` is the COMPLETE common case — the loader
 // synthesizes the open-state var + cycle action AND the page cursor (state var +
 // int action) under the reserved `menus.` namespace — and rare knobs are ONE
 // trailing `(dict …)` (closeOnPick / paged / key). The removed positional tail
@@ -49,7 +49,10 @@ const ALLOWED = new Set(listResolvablePaletteNames());
 function opts() {
   return {
     style: "powerline" as const,
-    colorCompatibility: "truecolor" as const, wrap: true, padding: 0, charset: "unicode" as const,
+    colorCompatibility: "truecolor" as const,
+    wrap: true,
+    padding: 0,
+    charset: "unicode" as const,
     width: Number.POSITIVE_INFINITY,
   };
 }
@@ -140,7 +143,7 @@ const MENU_SRC = `{
   },
   segments: {
     label: { template: 'PICK', bg: 'surface', fg: 'foreground' },
-    themepicker: { template: '🎨 {{ menu "applyTheme" }}', bg: 'surface', fg: 'foreground' },
+    themepicker: { template: '🎨 {{ menu "applyTheme" "▸" "▾" }}', bg: 'surface', fg: 'foreground' },
   },
   root: { h: ['label', 'themepicker'] },
 }`;
@@ -190,7 +193,9 @@ describe("menu synthesis (derived identity, reserved namespace)", () => {
       throw new Error("expected ConfigError");
     } catch (e) {
       expect(e).toBeInstanceOf(ConfigError);
-      expect((e as ConfigError).message).toMatch(/reserved "menus\." namespace/);
+      expect((e as ConfigError).message).toMatch(
+        /reserved "menus\." namespace/,
+      );
     }
   });
 
@@ -199,7 +204,7 @@ describe("menu synthesis (derived identity, reserved namespace)", () => {
       globals: {},
       variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
       actions: { closed: { set: 'theme', from: 'themes' } },
-      segments: { s: { template: '{{ menu "closed" }}', bg: 'surface', fg: 'foreground' } },
+      segments: { s: { template: '{{ menu "closed" "▸" "▾" }}', bg: 'surface', fg: 'foreground' } },
       root: { h: ['s'] },
     }`;
     try {
@@ -239,7 +244,7 @@ describe("menu synthesis (derived identity, reserved namespace)", () => {
         'a-b': { set: 'theme', from: 'themes' },
         'a_b': { set: 'style', from: 'styles' },
       },
-      segments: { s: { template: 'S {{ menu "a-b" }} {{ menu "a_b" }}', bg: 'surface', fg: 'foreground' } },
+      segments: { s: { template: 'S {{ menu "a-b" "▸" "▾" }} {{ menu "a_b" "▸" "▾" }}', bg: 'surface', fg: 'foreground' } },
       root: { h: ['s'] },
     }`;
     try {
@@ -257,7 +262,7 @@ describe("menu synthesis (derived identity, reserved namespace)", () => {
     const src = `{
       globals: {},
       variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
-      segments: { s: { template: '{{ menu "" }}', bg: 'surface', fg: 'foreground' } },
+      segments: { s: { template: '{{ menu "" "▸" "▾" }}', bg: 'surface', fg: 'foreground' } },
       root: { h: ['s'] },
     }`;
     try {
@@ -275,7 +280,7 @@ describe("menu synthesis (derived identity, reserved namespace)", () => {
     const src = `{
       globals: {},
       variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
-      segments: { s: { template: '{{ menu "noSuchApply" }}', bg: 'surface', fg: 'foreground' } },
+      segments: { s: { template: '{{ menu "noSuchApply" "▸" "▾" }}', bg: 'surface', fg: 'foreground' } },
       root: { h: ['s'] },
     }`;
     try {
@@ -283,7 +288,9 @@ describe("menu synthesis (derived identity, reserved namespace)", () => {
       throw new Error("expected ConfigError");
     } catch (e) {
       expect(e).toBeInstanceOf(ConfigError);
-      expect((e as ConfigError).message).toMatch(/unknown action "noSuchApply" \(in a picker or menu\)/);
+      expect((e as ConfigError).message).toMatch(
+        /unknown action "noSuchApply" \(in a picker or menu\)/,
+      );
     }
   });
 
@@ -292,7 +299,7 @@ describe("menu synthesis (derived identity, reserved namespace)", () => {
       globals: {},
       variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
       actions: { applyTheme: { set: 'theme', from: 'themes' } },
-      segments: { s: { template: '{{ menu "applyTheme" (dict "key" "") }}', bg: 'surface', fg: 'foreground' } },
+      segments: { s: { template: '{{ menu "applyTheme" "▸" "▾" (dict "key" "") }}', bg: 'surface', fg: 'foreground' } },
       root: { h: ['s'] },
     }`;
     try {
@@ -309,7 +316,7 @@ describe("menu synthesis (derived identity, reserved namespace)", () => {
       globals: {},
       variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
       actions: { applyTheme: { set: 'theme', from: 'themes' } },
-      segments: { s: { template: 'X', bg: '{{ menu "applyTheme" }}', fg: 'foreground' } },
+      segments: { s: { template: 'X', bg: '{{ menu "applyTheme" "▸" "▾" }}', fg: 'foreground' } },
       root: { h: ['s'] },
     }`;
     try {
@@ -317,7 +324,9 @@ describe("menu synthesis (derived identity, reserved namespace)", () => {
       throw new Error("expected ConfigError");
     } catch (e) {
       expect(e).toBeInstanceOf(ConfigError);
-      expect((e as ConfigError).message).toMatch(/only valid in a segment's "template"/);
+      expect((e as ConfigError).message).toMatch(
+        /only valid in a segment's "template"/,
+      );
     }
   });
 
@@ -326,7 +335,7 @@ describe("menu synthesis (derived identity, reserved namespace)", () => {
       globals: {},
       variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
       actions: { applyTheme: { set: 'theme', from: 'themes' } },
-      segments: { m: { template: 'M {{ menu "applyTheme" }}', bg: 'surface', fg: 'foreground' } },
+      segments: { m: { template: 'M {{ menu "applyTheme" "▸" "▾" }}', bg: 'surface', fg: 'foreground' } },
       root: { v: [ { h: ['m'] }, { h: ['m'] } ] },
     }`;
     try {
@@ -334,7 +343,9 @@ describe("menu synthesis (derived identity, reserved namespace)", () => {
       throw new Error("expected ConfigError");
     } catch (e) {
       expect(e).toBeInstanceOf(ConfigError);
-      expect((e as ConfigError).message).toMatch(/placed in the layout more than once/);
+      expect((e as ConfigError).message).toMatch(
+        /placed in the layout more than once/,
+      );
     }
   });
 
@@ -343,7 +354,7 @@ describe("menu synthesis (derived identity, reserved namespace)", () => {
       globals: {},
       variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
       actions: { applyTheme: { set: 'theme', from: 'themes' } },
-      helpers: { mkMenu: '{{ menu "applyTheme" }}' },
+      helpers: { mkMenu: '{{ menu "applyTheme" "▸" "▾" }}' },
       segments: { s: { template: '{{ template "mkMenu" . }}', bg: 'surface', fg: 'foreground' } },
       root: { h: ['s'] },
     }`;
@@ -363,17 +374,21 @@ describe("menu synthesis (derived identity, reserved namespace)", () => {
 // fail AT LOAD with text naming the new form — a blind authoring agent's only
 // channel. A silently reinterpreted tail (e.g. the old page-action string read
 // as an option) would be the exact failure class bn5.6 exists to kill.
-describe("bn5.6 — old spellings and bad option dicts are migration-pointing LOAD errors", () => {
-  const load = (segTemplate: string, extraVars = ""): (() => void) => {
-    const src = `{
+// One fixture shape behind both the load assertions and the render ones, so a
+// spelling proven to load is proven to render from the same source.
+const srcFor = (segTemplate: string, extraVars = ""): string => `{
       globals: {},
-      variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' }${extraVars} },
+      variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' }, 'term.cols': { kind: 'input', path: 'term.cols', type: 'number', default: 80 }${extraVars} },
       actions: { applyTheme: { set: 'theme', from: 'themes' }, themePage: { set: 'theme-page', int: true } },
       segments: { s: { template: '${segTemplate}', bg: 'surface', fg: 'foreground' } },
       root: { h: ['s'] },
     }`;
-    return () => parseAndValidate("<test>", src, ALLOWED);
-  };
+const load =
+  (segTemplate: string, extraVars = ""): (() => void) =>
+  () =>
+    parseAndValidate("<test>", srcFor(segTemplate, extraVars), ALLOWED);
+
+describe("bn5.6 — old spellings and bad option dicts are migration-pointing LOAD errors", () => {
 
   test("the full old positional form fails load naming the new form (acceptance)", () => {
     try {
@@ -383,28 +398,56 @@ describe("bn5.6 — old spellings and bad option dicts are migration-pointing LO
       expect(e).toBeInstanceOf(ConfigError);
       const msg = (e as ConfigError).message;
       expect(msg).toMatch(/positional tail .* was removed/);
-      expect(msg).toMatch(/\{\{ menu "applyTheme" \}\}/); // the new form, named
+      expect(msg).toMatch(/\{\{ menu "applyTheme" "▸" "▾" \}\}/); // the new form
       expect(msg).toMatch(/dict "closeOnPick"/); // …and the options spelling
     }
   });
 
-  test("a bare page-action second string arg fails load (never reinterpreted)", () => {
-    expect(load('{{ menu "applyTheme" "themePage" }}')).toThrow(
-      /positional tail .* was removed/,
-    );
+  // aok.4: the trigger's text is authored, so the display-less form — correct
+  // until this change — is the migration a live config actually hits, and it
+  // fails at LOAD naming the fix rather than rendering a glyph nobody wrote.
+  test("no display fails load naming the authored form (acceptance)", () => {
+    try {
+      load('{{ menu "applyTheme" }}')();
+      throw new Error("expected ConfigError");
+    } catch (e) {
+      expect(e).toBeInstanceOf(ConfigError);
+      const msg = (e as ConfigError).message;
+      expect(msg).toMatch(/needs a display/);
+      expect(msg).toMatch(/\{\{ menu "applyTheme" "▸" "▾" \}\}/);
+    }
+  });
+
+  // [LAW:no-silent-failure] The one shape the grammar can no longer tell apart:
+  // `{{ menu "a" "b" }}` was the removed page-action form and is now a static
+  // display, and nothing in the argument shapes distinguishes them. It does not
+  // fail quietly — the second literal renders as the trigger's visible text, so
+  // a config still on that ancient spelling shows "themePage" on the bar where
+  // an arrow belongs. Rejecting it would take a heuristic ("this display names
+  // a declared action") that could refuse a legitimate config, and the form has
+  // been a hard load error since bn5.6, so nothing loadable is still using it.
+  test("a two-argument menu binds a static display (the ancient page form is visible, not silent)", () => {
+    expect(load('{{ menu "applyTheme" "themePage" }}')).not.toThrow();
+    // The claim above is about what the BAR SHOWS, so assert it there: the
+    // stale action name is the trigger's visible text, sitting where an arrow
+    // belongs. A load-only check would pass just as happily if the display were
+    // dropped on the floor [LAW:behavior-not-structure].
+    const rt = buildRuntime(srcFor('{{ menu "applyTheme" "themePage" }}'));
+    expect(stripAnsi(rt.render())).toContain("themePage");
+    rt.dispose();
   });
 
   test("an unknown option name fails load (transposition guard)", () => {
-    expect(load('{{ menu "applyTheme" (dict "closeonpick" true) }}')).toThrow(
-      /unknown \{\{ menu \}\} option "closeonpick"/,
-    );
+    expect(
+      load('{{ menu "applyTheme" "▸" "▾" (dict "closeonpick" true) }}'),
+    ).toThrow(/unknown \{\{ menu \}\} option "closeonpick"/);
   });
 
   test("a mistyped option value fails load (bool where string / string where bool)", () => {
-    expect(load('{{ menu "applyTheme" (dict "paged" "yes") }}')).toThrow(
-      /"paged" must be a boolean/,
-    );
-    expect(load('{{ menu "applyTheme" (dict "key" true) }}')).toThrow(
+    expect(
+      load('{{ menu "applyTheme" "▸" "▾" (dict "paged" "yes") }}'),
+    ).toThrow(/"paged" must be a boolean/);
+    expect(load('{{ menu "applyTheme" "▸" "▾" (dict "key" true) }}')).toThrow(
       /"key" must be a string/,
     );
   });
@@ -412,10 +455,64 @@ describe("bn5.6 — old spellings and bad option dicts are migration-pointing LO
   test("a dynamic dict entry fails load (cannot gate at load)", () => {
     expect(
       load(
-        '{{ menu "applyTheme" (dict "key" .someVar) }}',
+        '{{ menu "applyTheme" "▸" "▾" (dict "key" .someVar) }}',
         ", someVar: { kind: 'literal', value: 'k' }",
       ),
     ).toThrow(/not fully literal/);
+  });
+});
+
+// [LAW:one-source-of-truth] The loader splits the argument tail on EXPRS and the
+// renderer splits the same tail on VALUES — two readings of one fact, "which
+// slot is the options dict". aok.4 gave the tail displays as well as the dict,
+// so the last slot became one both readings can claim: a non-literal there is a
+// display to the loader and, if it evaluates to an object, the options dict to
+// the renderer. The loader closes that by admitting only call sites where the
+// two readings PROVABLY coincide — and the boundary is silence, not novelty: a
+// shape whose alternate reading throws at render stays legal.
+describe("the options dict and the trigger displays cannot be confused", () => {
+  test("a non-literal LAST argument fails load when both readings are legal", () => {
+    try {
+      load('{{ menu "applyTheme" "▸" .session.id }}')();
+      throw new Error("expected ConfigError");
+    } catch (e) {
+      expect(e).toBeInstanceOf(ConfigError);
+      const msg = (e as ConfigError).message;
+      expect(msg).toMatch(/neither a literal nor a literal \(dict …\)/);
+      expect(msg).toMatch(/read as 2 displays or as 1 plus options/);
+      expect(msg).toMatch(/\(dict\) \}\}/); // …and the disambiguator it names
+    }
+  });
+
+  test("an explicit trailing (dict …) disambiguates, so dynamic displays stay legal", () => {
+    // The escape the error names: with the options slot spelled out, the last
+    // expr is provably the dict and BOTH displays may be dynamic — the parity
+    // with a cycle {{ action }}'s free displays is preserved, not traded away.
+    expect(
+      load('{{ menu "applyTheme" (printf "◂%s" "a") (printf "▸%s" "b") (dict) }}'),
+    ).not.toThrow();
+  });
+
+  test("a non-literal SOLE display loads — its other reading throws, so it is not silent", () => {
+    // Read as options this is zero displays, which `cycleDisplayIssue` already
+    // calls illegal, so a render-time object here fails loudly instead of
+    // quietly becoming the static form. Loudness is the bar, so no load error.
+    expect(load('{{ menu "applyTheme" .session.id }}')).not.toThrow();
+  });
+
+  test("a non-string display fails LOUDLY at render, naming its position", () => {
+    // The one gate for a dynamic display that evaluates to a non-string: the
+    // loader permits non-literal displays (identity does not depend on them),
+    // so this throw is what stands between an author and a silently dropped
+    // trigger. An array dodges `isDict` (arrays are excluded), so it reaches
+    // the display check rather than being read as the options dict. The bar is
+    // where the author reads it: renderDsl surfaces a segment's throw as a
+    // visible ⚠ diagnostic rather than propagating it.
+    const rt = buildRuntime(srcFor('{{ menu "applyTheme" (list "x") "▾" }}'));
+    const out = stripAnsi(rt.render());
+    expect(out).toContain("display #1 is not text");
+    expect(out).toContain('["x"]'); // the offending value, named
+    rt.dispose();
   });
 });
 
@@ -431,7 +528,8 @@ describe("toggle round trip + drop stacking", () => {
   });
 
   test("click opens: ▾ + body dropped BELOW the row; row 0 keeps the neighbor", () => {
-    const { render, clickToggle, sessionState, dispose } = buildRuntime(MENU_SRC);
+    const { render, clickToggle, sessionState, dispose } =
+      buildRuntime(MENU_SRC);
     clickToggle(render(), TKEY, "applyTheme");
     expect(sessionState.get("s1", TKEY)).toBe("applyTheme");
     const lines = stripAnsi(render()).split("\n");
@@ -504,8 +602,8 @@ describe("toggle round trip + drop stacking", () => {
   // atomic pick+close, exercised through the dict option end-to-end.
   test('(dict "closeOnPick" true): picking an option applies it AND closes the menu', () => {
     const src = MENU_SRC.replace(
-      '{{ menu "applyTheme" }}',
-      '{{ menu "applyTheme" (dict "closeOnPick" true) }}',
+      '{{ menu "applyTheme" "▸" "▾" }}',
+      '{{ menu "applyTheme" "▸" "▾" (dict "closeOnPick" true) }}',
     );
     const { render, click, clickToggle, sessionState, dispose } =
       buildRuntime(src);
@@ -538,8 +636,8 @@ const INDEPENDENT_SRC = `{
     applyStyle: { set: 'style', from: 'styles' },
   },
   segments: {
-    themeMenu: { template: 'T {{ menu "applyTheme" }}', bg: 'surface', fg: 'foreground' },
-    styleMenu: { template: 'S {{ menu "applyStyle" }}', bg: 'surface', fg: 'foreground' },
+    themeMenu: { template: 'T {{ menu "applyTheme" "▸" "▾" }}', bg: 'surface', fg: 'foreground' },
+    styleMenu: { template: 'S {{ menu "applyStyle" "▸" "▾" }}', bg: 'surface', fg: 'foreground' },
   },
   root: { h: ['themeMenu', 'styleMenu'] },
 }`;
@@ -581,15 +679,16 @@ const ACCORDION_SRC = `{
     applyStyle: { set: 'style', from: 'styles' },
   },
   segments: {
-    themeMenu: { template: 'T {{ menu "applyTheme" (dict "key" "pickers") }}', bg: 'surface', fg: 'foreground' },
-    styleMenu: { template: 'S {{ menu "applyStyle" (dict "key" "pickers") }}', bg: 'surface', fg: 'foreground' },
+    themeMenu: { template: 'T {{ menu "applyTheme" "▸" "▾" (dict "key" "pickers") }}', bg: 'surface', fg: 'foreground' },
+    styleMenu: { template: 'S {{ menu "applyStyle" "▸" "▾" (dict "key" "pickers") }}', bg: 'surface', fg: 'foreground' },
   },
   root: { h: ['themeMenu', 'styleMenu'] },
 }`;
 
 describe("opt-in accordion (shared key, one open at a time)", () => {
   test("both menus share the key; the gate unions members; ONE shared page cursor; opening one closes the other", () => {
-    const { config, render, clickToggle, dispose } = buildRuntime(ACCORDION_SRC);
+    const { config, render, clickToggle, dispose } =
+      buildRuntime(ACCORDION_SRC);
     expect(config.actions["menus.pickers.applyTheme"]).toEqual({
       set: "menus.pickers",
       cycle: ["closed", "applyTheme"],
@@ -632,8 +731,8 @@ describe("opt-in accordion (shared key, one open at a time)", () => {
       variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
       actions: { applyTheme: { set: 'theme', from: 'themes' } },
       segments: {
-        a: { template: 'A {{ menu "applyTheme" (dict "key" "k") }}', bg: 'surface', fg: 'foreground' },
-        b: { template: 'B {{ menu "applyTheme" (dict "key" "k") }}', bg: 'surface', fg: 'foreground' },
+        a: { template: 'A {{ menu "applyTheme" "▸" "▾" (dict "key" "k") }}', bg: 'surface', fg: 'foreground' },
+        b: { template: 'B {{ menu "applyTheme" "▸" "▾" (dict "key" "k") }}', bg: 'surface', fg: 'foreground' },
       },
       root: { h: ['a', 'b'] },
     }`;
@@ -660,7 +759,7 @@ const TESTER_SRC = `{
     applyTheme2: { set: 'theme', from: 'themes' },
   },
   segments: {
-    tester: { template: 'TEST {{ menu "applyTheme" }} | {{ menu "applyStyle" }} | {{ menu "applyTheme2" }} END', bg: 'surface', fg: 'foreground' },
+    tester: { template: 'TEST {{ menu "applyTheme" "▸" "▾" }} | {{ menu "applyStyle" "▸" "▾" }} | {{ menu "applyTheme2" "▸" "▾" }} END', bg: 'surface', fg: 'foreground' },
   },
   root: { h: ['tester'] },
 }`;
@@ -792,7 +891,7 @@ describe("candybar-config-engine-71o.5 — a brand-new field gets a {{ menu }} v
     },
     segments: {
       soundControl: {
-        template: '\u{1F50A} {{ .soundEffects }} {{ menu "applySound" }}',
+        template: '\u{1F50A} {{ .soundEffects }} {{ menu "applySound" "▸" "▾" }}',
         bg: 'surface', fg: 'foreground',
       },
     },
@@ -828,9 +927,7 @@ describe("candybar-config-engine-71o.5 — a brand-new field gets a {{ menu }} v
 
     const opened = render();
     const buzzUrl = extractUrls(opened).find((u) =>
-      effectsOf(u).some(
-        (e) => e.verb === "set-state" && e.args[2] === "buzz",
-      ),
+      effectsOf(u).some((e) => e.verb === "set-state" && e.args[2] === "buzz"),
     );
     expect(buzzUrl).toBeDefined();
     click(buzzUrl!);
@@ -844,5 +941,78 @@ describe("candybar-config-engine-71o.5 — a brand-new field gets a {{ menu }} v
     const rejected = validateStateWrite("sound-effects", "explosion");
     expect(rejected.ok).toBe(false);
     dispose();
+  });
+});
+
+// ─── aok.4: one glyph policy across both disclosure kinds ────────────────────
+
+// [LAW:one-source-of-truth] This codebase has two disclosures, and until .4 they
+// disagreed about where the trigger glyph lived: a GROUP spliced ▸/▾ into the
+// toggle template it synthesized, where an author could see and change them,
+// while a MENU appended them from its own runtime, where an author could not.
+// Convergence is the deliverable, so it is asserted as BEHAVIOR both kinds now
+// share — not by reaching into the function they share [LAW:behavior-not-structure].
+//
+// Both bind displays the way a cycle action does, because both ARE a two-member
+// cycle: one display per state, or one static display shown in every state.
+describe("aok.4 — group and menu resolve their trigger display by one rule", () => {
+  const BOTH = (groupDisplays: string, menuDisplays: string) => `{
+    globals: {},
+    variables: {
+      'session.id': { kind: 'input', path: 'session_id', default: '' },
+      'term.cols': { kind: 'input', path: 'term.cols', type: 'number', default: 80 },
+    },
+    actions: { applyTheme: { set: 'theme', from: 'themes' } },
+    segments: {
+      body: { template: 'BODY', bg: 'surface', fg: 'foreground' },
+      picker: { template: 'P {{ menu "applyTheme" ${menuDisplays} }}', bg: 'surface', fg: 'foreground' },
+    },
+    root: { v: [
+      { kind: 'group', name: 'grp', label: 'G', children: [{ kind: 'segment', name: 'body' }] },
+      { kind: 'segment', name: 'picker' },
+    ] },
+  }`;
+
+  // A group's synthesized toggle is an {{ action }} over its own two-member
+  // cycle, so the two kinds are compared through the states each one renders.
+  test("per-state displays: both swap when opened", () => {
+    const { render, clickToggle, dispose } = buildRuntime(BOTH("", `"▸" "▾"`));
+    const closed = stripAnsi(render());
+    expect(closed).toContain("G ▸");
+    expect(closed).toContain("P ▸");
+
+    clickToggle(render(), "groups.grp", "grp");
+    clickToggle(render(), "menus.picker.applyTheme", "applyTheme");
+    const open = stripAnsi(render());
+    expect(open).toContain("G ▾");
+    expect(open).toContain("P ▾");
+    dispose();
+  });
+
+  // The form edit chrome's `+` uses: one display, shown in both states. A menu
+  // could not express this at all before .4 — its glyph was not a binding.
+  test("one static display: the menu shows it in both states", () => {
+    const { render, clickToggle, dispose } = buildRuntime(BOTH("", `"+"`));
+    const closed = stripAnsi(render()).split("\n");
+    expect(closed.some((l) => l.includes("P +"))).toBe(true);
+
+    clickToggle(render(), "menus.picker.applyTheme", "applyTheme");
+    // Still `+`, and the picker body now drops onto the line below it — the
+    // open state is carried by the body, not by a glyph swap.
+    const open = stripAnsi(render()).split("\n");
+    const row = open.findIndex((l) => l.includes("P +"));
+    expect(row).toBeGreaterThanOrEqual(0);
+    expect(open.length).toBe(closed.length + 1);
+    expect(open[row + 1]).toBeDefined();
+    dispose();
+  });
+
+  // The shared arity rule, from the side that can see it earliest: a menu's
+  // display count is statically known, so three displays on a two-state
+  // disclosure is a load error in the rule's own words.
+  test("three displays on a two-state disclosure is a load error", () => {
+    expect(() =>
+      parseAndValidate("<test>", BOTH("", `"a" "b" "c"`), ALLOWED),
+    ).toThrow(/cycles 2 members; bind one display per member \(2\)/);
   });
 });
