@@ -167,7 +167,14 @@ interface SettingControl {
 // globals field "palette") for the historical reason recorded in
 // state-validators.ts's baseline table; carrying BOTH keys as data is what
 // makes that difference expressible without a special case.
-const PICKER_CONTROLS: readonly SettingControl[] = [
+//
+// They are split into two lists by WHERE they render, because that is a fact
+// about each control, not something the layout should recover by comparing
+// names [LAW:dataflow-not-control-flow]. Switching arrangement is what people
+// open this menu for, so the preset picker sits one click from the toggle;
+// the display settings sit one disclosure deeper, which is what keeps the
+// menu narrow when opened.
+const PRIMARY_CONTROLS: readonly SettingControl[] = [
   {
     name: "preset",
     sessionKey: "preset",
@@ -176,6 +183,9 @@ const PICKER_CONTROLS: readonly SettingControl[] = [
     glyph: "▦",
     domain: "presets",
   },
+];
+
+const CONFIG_CONTROLS: readonly SettingControl[] = [
   {
     name: "theme",
     sessionKey: "theme",
@@ -200,6 +210,14 @@ const PICKER_CONTROLS: readonly SettingControl[] = [
     glyph: "✦",
     domain: "styles",
   },
+];
+
+// Every picker control, wherever it renders — minting one is the same job in
+// both rows, so the synthesis folds over this and the placement lists above
+// decide only where each lands.
+const PICKER_CONTROLS: readonly SettingControl[] = [
+  ...PRIMARY_CONTROLS,
+  ...CONFIG_CONTROLS,
 ];
 
 // [LAW:one-source-of-truth] Every PLAIN key the settings menu writes — both
@@ -352,7 +370,12 @@ function expandAnchor(node: AnchoredRoot | LayoutNode): LayoutNode {
               direction: "horizontal",
               children: [
                 { kind: "segment", name: PERSIST_SEG },
-                { kind: "segment", name: controlSeg("preset") },
+                ...PRIMARY_CONTROLS.map(
+                  (c): LayoutNode => ({
+                    kind: "segment",
+                    name: controlSeg(c.name),
+                  }),
+                ),
                 { kind: "segment", name: CONFIG_SEG },
                 { kind: "segment", name: EDIT_SEG },
               ],
@@ -366,7 +389,7 @@ function expandAnchor(node: AnchoredRoot | LayoutNode): LayoutNode {
               kind: "container",
               direction: "horizontal",
               children: [
-                ...PICKER_CONTROLS.filter((c) => c.name !== "preset").map(
+                ...CONFIG_CONTROLS.map(
                   (c): LayoutNode => ({
                     kind: "segment",
                     name: controlSeg(c.name),
