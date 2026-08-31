@@ -28,6 +28,14 @@
 
 import type { DslConfig, LayoutNode, SegmentDecl } from "./dsl-types.js";
 import { parseDslConfig } from "./dsl-loader.js";
+// [LAW:one-source-of-truth] The bundled drawer's menus author their own
+// disclosure glyphs now that `{{ menu }}` appends none. Interpolating the
+// shared constants keeps the stdlib bar reading like every other disclosure
+// without restating the vocabulary in three string literals.
+import {
+  DISCLOSURE_GLYPH_CLOSED,
+  DISCLOSURE_GLYPH_OPEN,
+} from "./disclosure.js";
 import { mergeWithDefault } from "./loader/merge.js";
 
 // ─── Shared template fragments ───────────────────────────────────────────────
@@ -1133,14 +1141,16 @@ export const RAW_DEFAULT_DSL_CONFIG = {
     charsetControl: {
       template:
         "{{ .charset.effective }} " +
-        '{{ menu "applyCharsetForever" }} {{ action "resetCharset" "↺" }}',
+        `{{ menu "applyCharsetForever" "${DISCLOSURE_GLYPH_CLOSED}" "${DISCLOSURE_GLYPH_OPEN}" }} ` +
+        '{{ action "resetCharset" "↺" }}',
       bg: "surface",
       fg: "foreground",
     },
     colorCompatControl: {
       template:
         "{{ .colorCompatibility.effective }} " +
-        '{{ menu "applyColorCompatForever" }} {{ action "resetColorCompat" "↺" }}',
+        `{{ menu "applyColorCompatForever" "${DISCLOSURE_GLYPH_CLOSED}" "${DISCLOSURE_GLYPH_OPEN}" }} ` +
+        '{{ action "resetColorCompat" "↺" }}',
       bg: "surface",
       fg: "foreground",
     },
@@ -1168,7 +1178,7 @@ export const RAW_DEFAULT_DSL_CONFIG = {
     directoryPaletteControl: {
       template:
         "🎨 directory " +
-        '{{ menu "applyDirectoryPaletteForever" }} ' +
+        `{{ menu "applyDirectoryPaletteForever" "${DISCLOSURE_GLYPH_CLOSED}" "${DISCLOSURE_GLYPH_OPEN}" }} ` +
         '{{ action "resetDirectoryPalette" "↺" }}',
       bg: "surface",
       fg: "foreground",
