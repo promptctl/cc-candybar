@@ -107,6 +107,7 @@ describe("loadDslConfig — top-level shape", () => {
     const cfg = parseAndValidate(FILE, "{}");
     expect(cfg).toEqual({
       globals: {},
+      editGlobals: {},
       variables: {},
       segments: {},
       root: { kind: "container", direction: "vertical", children: [] },
@@ -1466,6 +1467,7 @@ describe("loadDslConfig — valid corpus", () => {
   test("minimal valid config loads to canonical empty shape", () => {
     expect(parseAndValidate(FILE, "{}")).toEqual({
       globals: {},
+      editGlobals: {},
       variables: {},
       segments: {},
       root: { kind: "container", direction: "vertical", children: [] },

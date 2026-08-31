@@ -52,14 +52,30 @@ export function resolvePaletteName(name: string): string {
 // default rather than throw or render something the label disagrees with
 // [LAW:no-silent-failure] — the caller publishes what this returns as
 // `<field>.effective`, so bar and label always trace to one value.
+//
+// [LAW:one-source-of-truth] `staged` is the RIGHTMOST rung of the precedence
+// chain documented in src/config/presets.ts — a fragment some transient MODE of
+// the bar puts on top while it is on (today: edit mode's `editGlobals`). It
+// outranks even the session pick because it is decided LATER: a user picks a
+// style, then afterwards enters edit mode. That is the same lifetime rule that
+// forced the preset's own position, applied one rung further along, which is
+// why it is a parameter of THIS function rather than a check at any call site —
+// a chain with a rung missing from one field is exactly the drift a single
+// resolver exists to prevent.
+//
+// [LAW:dataflow-not-control-flow] Absent ⇒ `undefined`, which the `??` chain
+// skips by the same code path a session that never clicked skips its own rung.
+// There is no "is edit mode on" branch anywhere below this line; the mode is
+// carried entirely by whether this argument has a value.
 export function effectiveGlobal<T>(
+  staged: T | null | undefined,
   sessionPick: string | null,
   configDefault: T | null | undefined,
   floor: T,
   parseSession: (raw: string) => T | null,
 ): T {
   const picked = sessionPick === null ? null : parseSession(sessionPick);
-  return picked ?? configDefault ?? floor;
+  return staged ?? picked ?? configDefault ?? floor;
 }
 
 // The theme name a render should use, as data.
@@ -70,10 +86,12 @@ export function effectiveGlobal<T>(
 // parse is identity: there is no membership to check here, and pretending
 // otherwise would collapse names `paletteForThemeName` handles fine.
 export function effectiveThemeName(
+  stagedPalette: string | undefined,
   sessionTheme: string | null,
   globalsPalette: string | undefined,
 ): string {
   return effectiveGlobal(
+    stagedPalette,
     sessionTheme,
     globalsPalette,
     "textual-dark",
@@ -110,7 +128,12 @@ export function listResolvablePaletteNames(): readonly string[] {
 //
 // The floor's membership is a load-time guarantee, not a runtime hope: the
 // bundled stdlib ships it and merge-by-name cannot remove it.
+//
+// The staged rung runs through the SAME membership parse the other two do: a
+// fragment naming a member the config does not declare is no more a pick than a
+// stale session entry is, and collapses one rung onward rather than throwing.
 export function effectiveMemberName(
+  stagedName: string | undefined,
   sessionPick: string | null,
   configDefault: string | undefined,
   floor: string,
@@ -119,6 +142,7 @@ export function effectiveMemberName(
   const member = (raw: string): string | null =>
     Object.prototype.hasOwnProperty.call(declared, raw) ? raw : null;
   return effectiveGlobal(
+    stagedName === undefined ? null : member(stagedName),
     sessionPick,
     member(configDefault ?? floor),
     floor,
@@ -133,11 +157,18 @@ export function effectiveMemberName(
 // carries. A named wrapper (not a bare call at each site) so the floor is
 // spelled once and the three call sites cannot disagree about it.
 export function effectiveLookName(
+  stagedLook: string | undefined,
   sessionLook: string | null,
   globalsLook: string | undefined,
   declaredLooks: Readonly<Record<string, ThemeKey>>,
 ): string {
-  return effectiveMemberName(sessionLook, globalsLook, "none", declaredLooks);
+  return effectiveMemberName(
+    stagedLook,
+    sessionLook,
+    globalsLook,
+    "none",
+    declaredLooks,
+  );
 }
 
 // [LAW:single-enforcer] The one place an effective look NAME becomes the
@@ -196,11 +227,16 @@ export function isStripStyle(value: string): value is StripStyle {
 // [LAW:one-source-of-truth]; test/session-globals.test.ts pins it with a stale
 // pick over a valid non-floor default, the case the old tests never exercised.
 export function effectiveStripStyle(
+  stagedStyle: StripStyle | undefined,
   sessionStyle: string | null,
   globalsStyle: StripStyle | undefined,
 ): StripStyle {
-  return effectiveGlobal(sessionStyle, globalsStyle, "powerline", (raw) =>
-    isStripStyle(raw) ? raw : null,
+  return effectiveGlobal(
+    stagedStyle,
+    sessionStyle,
+    globalsStyle,
+    "powerline",
+    (raw) => (isStripStyle(raw) ? raw : null),
   );
 }
 
@@ -323,10 +359,12 @@ function parsePadding(raw: string): number | null {
 // Whether a render wraps over-wide rows, as data. The session's pick over the
 // config default over the on floor — `effectiveGlobal` with a boolean domain.
 export function effectiveAutoWrap(
+  stagedAutoWrap: boolean | undefined,
   sessionAutoWrap: string | null,
   globalsAutoWrap: boolean | undefined,
 ): boolean {
   return effectiveGlobal(
+    stagedAutoWrap,
     sessionAutoWrap,
     globalsAutoWrap,
     DEFAULT_WRAP,
@@ -341,10 +379,12 @@ export function effectiveAutoWrap(
 // own default is the honest answer rather than a render at a width nobody
 // chose.
 export function effectivePadding(
+  stagedPadding: number | undefined,
   sessionPadding: string | null,
   globalsPadding: number | undefined,
 ): number {
   return effectiveGlobal(
+    stagedPadding,
     sessionPadding,
     globalsPadding,
     DEFAULT_PADDING,

@@ -105,6 +105,7 @@ const EFFECTIVE_GLOBALS: EffectiveGlobals = {
   colorCompatibility: "truecolor",
   autoWrap: true,
   padding: 1,
+  separator: undefined,
 };
 
 const HOOK_DATA = {
@@ -158,6 +159,7 @@ const CONFIG_WITHOUT_METRICS: DslConfig = {
   looks: {},
   presets: {},
   helpers: {},
+  editGlobals: {},
 };
 
 const CONFIG_WITH_METRICS: DslConfig = {
@@ -169,6 +171,7 @@ const CONFIG_WITH_METRICS: DslConfig = {
   looks: {},
   presets: {},
   helpers: {},
+  editGlobals: {},
 };
 
 describe("buildRenderPayload — layout-driven provider gating", () => {
@@ -232,6 +235,7 @@ describe("buildRenderPayload — layout-driven provider gating", () => {
       looks: {},
       presets: {},
       helpers: {},
+      editGlobals: {},
     };
     const needed = buildNeededPrefixes(config);
     // The only declared `git.*` input is `git.branch`; it must be in
@@ -259,6 +263,7 @@ describe("buildRenderPayload — layout-driven provider gating", () => {
       looks: {},
       presets: {},
       helpers: {},
+      editGlobals: {},
     };
     const needed = buildNeededPrefixes(config);
     expect(needed.has("metrics.sessionDuration")).toBe(true);

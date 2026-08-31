@@ -329,6 +329,7 @@ describe("applySegmentPaletteOverrides", () => {
     looks: {},
     presets: {},
     helpers: {},
+    editGlobals: {},
   });
 
   test("patches only the palette field, preserving every other field", () => {

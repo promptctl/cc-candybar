@@ -1187,14 +1187,14 @@ describe("RenderCache: persistent overrides merge into the effective config", ()
       const sessionState = new SessionState();
       sessionState.set("s1", "theme", "dracula");
       expect(
-        effectiveThemeName(
+        effectiveThemeName(undefined, 
           sessionState.get("s1", "theme"),
           entry.state!.config.globals.palette,
         ),
       ).toBe("dracula");
       // A session that never picked reads the persisted default.
       expect(
-        effectiveThemeName(
+        effectiveThemeName(undefined, 
           sessionState.get("s2-no-pick", "theme"),
           entry.state!.config.globals.palette,
         ),

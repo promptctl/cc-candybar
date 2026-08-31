@@ -43,7 +43,7 @@ import {
   type ValidateCtx,
 } from "./loader/validate-core.js";
 import { mergeWithDefault } from "./loader/merge.js";
-import { validateGlobals } from "./loader/globals.js";
+import { validateEditGlobals, validateGlobals } from "./loader/globals.js";
 import { validateVariables } from "./loader/variables.js";
 import { validateSegments } from "./loader/segments.js";
 import { synthesizeGroupDecls, validateRoot } from "./loader/layout.js";
@@ -280,6 +280,12 @@ function validateTopLevel(
   // was staged from.
   if (raw.presets !== undefined)
     out.presets = validatePresets(ctx, raw.presets);
+  // [LAW:one-type-per-behavior] Edit mode's staged display globals — the same
+  // fragment shape a preset carries, one rung later in the precedence chain, so
+  // it runs through the same field table (validateEditGlobals) rather than a
+  // parallel schema listing which globals edit mode may set.
+  if (raw.editGlobals !== undefined)
+    out.editGlobals = validateEditGlobals(ctx, "editGlobals", raw.editGlobals);
   if (raw.helpers !== undefined)
     out.helpers = validateHelpers(ctx, raw.helpers);
   // [LAW:one-source-of-truth] Group sugar synthesis runs AFTER every section
@@ -328,5 +334,6 @@ const TOP_LEVEL_KEYS = new Set([
   "actions",
   "looks",
   "presets",
+  "editGlobals",
   "helpers",
 ]);

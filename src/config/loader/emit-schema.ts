@@ -12,7 +12,7 @@
 // cycles. Those stay SEMANTIC checks the loader carries — schema = shape, lint =
 // meaning, the same complementary boundary `config-schema.test.ts` pins.
 
-import { globalsJson } from "./globals.js";
+import { editGlobalsJson, globalsJson } from "./globals.js";
 import { variablesMapJson } from "./variables.js";
 import { segmentsJson } from "./segments.js";
 import { actionsJson } from "./actions.js";
@@ -50,6 +50,7 @@ export function emitConfigSchema(): JsonNode {
       actions: actionsJson(),
       looks: looksJson(),
       presets: presetsJson(),
+      editGlobals: editGlobalsJson(),
       helpers: { type: "object", additionalProperties: { type: "string" } },
     },
     definitions: {

@@ -20,7 +20,20 @@ import path from "node:path";
 import os from "node:os";
 import type { ClaudeHookData } from "../utils/claude.js";
 import type { ClientHints } from "./protocol.js";
-import type { DslConfig, VariableDecl } from "../config/dsl-types.js";
+import type { DslConfig, Globals, VariableDecl } from "../config/dsl-types.js";
+import { effectivePresetName, presetGlobals } from "../config/presets.js";
+import { EDIT_MODE_KEY, EDIT_MODE_OPEN } from "../config/loader/edit-mode.js";
+import {
+  DEFAULT_CHARSET,
+  DEFAULT_COLOR_COMPATIBILITY,
+} from "../render/strip.js";
+import {
+  effectiveAutoWrap,
+  effectiveLookName,
+  effectivePadding,
+  effectiveStripStyle,
+  effectiveThemeName,
+} from "../themes/policy.js";
 import { walkNodes } from "../config/dsl-types.js";
 import { extractTemplateRefs } from "../config/dsl-loader.js";
 import type { GitInfo, GitInfoOptions } from "../segments/git.js";
@@ -75,10 +88,94 @@ export interface EffectiveGlobals {
   // own comment.
   readonly presetCustomized: boolean;
   readonly style: StripStyle;
+  // [LAW:one-source-of-truth] The cell separator `plain` renders between
+  // segments (globals.default_separator). `string | undefined`, not a resolved
+  // string, precisely because its floor is NOT ours: PlainJoiner owns " | " and
+  // pickJoiner already reads undefined as "use the class default", so naming a
+  // floor here would be a second copy of a constant that lives in rich-js.
+  // Like charset it has no SessionState half — the config global (as staged by
+  // whatever fragment is on top) is its whole resolution.
+  readonly separator: string | undefined;
   readonly charset: Charset;
   readonly colorCompatibility: ColorCompatibility;
   readonly autoWrap: boolean;
   readonly padding: number;
+}
+
+// [LAW:one-source-of-truth] THE resolution — one function, so the precedence
+// chain has one implementation rather than one per caller. It previously stood
+// as two structurally identical struct literals (the daemon's, in server.ts,
+// and `cc-candybar check`'s), which is two clocks: the check command's job is
+// to render what the daemon would render, and a rung added to one copy is a
+// rung silently missing from the other. The callers differ only in WHERE a
+// session value comes from and whether an overrides log exists to be customized
+// by, so both arrive as parameters and nothing else forks
+// [LAW:dataflow-not-control-flow].
+//
+// `sessionPick` is the reader for one SessionState key. `check` passes a
+// function returning null for every key — a fresh session that has never
+// clicked — rather than a null store, so "no session" travels as a VALUE
+// through the same chain a real session travels [LAW:no-mode-explosion].
+export function resolveEffectiveGlobals(
+  config: DslConfig,
+  sessionPick: (key: string) => string | null,
+  presetCustomized: (preset: string) => boolean,
+): EffectiveGlobals {
+  // The preset resolves FIRST: every field below reads globals, and which
+  // globals is exactly what the preset decides.
+  const preset = effectivePresetName(
+    sessionPick("preset"),
+    config.globals.preset,
+    config.presets,
+  );
+  const globals = presetGlobals(config, preset);
+  // [LAW:dataflow-not-control-flow] The staged fragment is a VALUE, and "edit
+  // mode is off" is the EMPTY value — the identity fragment, exactly as
+  // PRESET_FLOOR's is. Every field below is resolved by the same expression
+  // whether or not edit mode is on; only the contents of `staged` differ. This
+  // is the whole of "no render-walk branch on edit mode": there is no branch
+  // here either, so there is none to leak downstream.
+  const staged: Partial<Globals> =
+    sessionPick(EDIT_MODE_KEY) === EDIT_MODE_OPEN ? config.editGlobals : {};
+  return {
+    preset,
+    presetCustomized: presetCustomized(preset),
+    theme: effectiveThemeName(
+      staged.palette,
+      sessionPick("theme"),
+      globals.palette,
+    ),
+    look: effectiveLookName(
+      staged.look,
+      sessionPick("look"),
+      globals.look,
+      config.looks,
+    ),
+    style: effectiveStripStyle(
+      staged.style,
+      sessionPick("style"),
+      globals.style,
+    ),
+    // [LAW:one-source-of-truth] The fields with no SessionState half resolve as
+    // `staged ?? config ?? floor` — the same chain minus the rung they do not
+    // have, spelled with the same `??` rather than a second mechanism.
+    separator: staged.default_separator ?? globals.default_separator,
+    autoWrap: effectiveAutoWrap(
+      staged.autoWrap,
+      sessionPick("autoWrap"),
+      globals.autoWrap,
+    ),
+    padding: effectivePadding(
+      staged.padding,
+      sessionPick("padding"),
+      globals.padding,
+    ),
+    charset: staged.charset ?? globals.charset ?? DEFAULT_CHARSET,
+    colorCompatibility:
+      staged.colorCompatibility ??
+      globals.colorCompatibility ??
+      DEFAULT_COLOR_COMPATIBILITY,
+  };
 }
 
 // ─── Augmented payload shape ─────────────────────────────────────────────────
