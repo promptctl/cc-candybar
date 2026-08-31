@@ -1257,7 +1257,13 @@ The sentences themselves live in `src/help-text.ts`, the same corpus `--help`
 prints, so the bar and the CLI cannot drift into two wordings of one fact.
 
 To write your own, use a group whose label is the glyph and whose body is a
-segment of text — nothing here is privileged:
+segment of text — nothing here is privileged. Note what the sugar gives you:
+a group appends the disclosure glyph to its label in both states, so `label:
+"(?)"` renders `(?) ▸` closed and `(?) ▾` open. The `(?)`/`✕` swap the two
+bundled ones use binds two unrelated strings per state, which is raw-grammar
+territory — a `state` variable, a `cycle` action and your own
+`{{ action "…" "(?)" "✕" }}`, exactly as the group section above directs for
+any custom trigger.
 
 ```json5 check:pass
 {
