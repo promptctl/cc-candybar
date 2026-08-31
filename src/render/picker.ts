@@ -37,8 +37,8 @@ import {
   type ActionRuntime,
   type CompiledActionDecl,
 } from "./action.js";
+import { DISCLOSURE_GLYPH_CLOSE } from "../config/disclosure.js";
 
-const PICKER_CLOSE = "✕";
 const PICKER_PREV = "←";
 const PICKER_NEXT = "→";
 
@@ -242,7 +242,7 @@ export function renderPicker(
           2 * runtime.padding,
       )
     : Infinity;
-  const closeReserve = cellWidth(PICKER_CLOSE) + 1;
+  const closeReserve = cellWidth(DISCLOSURE_GLYPH_CLOSE) + 1;
   const arrowReserve = cellWidth(PICKER_PREV) + 1 + cellWidth(PICKER_NEXT) + 1;
   const firstPass = paginate(widths, available, closeReserve);
   const pages =
@@ -303,7 +303,9 @@ export function renderPicker(
       : effectsUrl([...effects, ...closeEffect]);
   };
 
-  const frags: RichText[] = [linkFragment(PICKER_CLOSE, closeUrl, false)];
+  const frags: RichText[] = [
+    linkFragment(DISCLOSURE_GLYPH_CLOSE, closeUrl, false),
+  ];
   if (pageIdx > 0) {
     frags.push(linkFragment(PICKER_PREV, pageUrl(pageIdx - 1), false));
   }

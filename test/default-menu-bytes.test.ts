@@ -44,7 +44,11 @@ import {
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { MENU_NS } from "../src/config/menu-keys";
 import { EDIT_MODE_KEY, EDIT_NS } from "../src/config/loader/edit-mode";
-import { DISCLOSURE_CLOSED } from "../src/config/disclosure";
+import {
+  DISCLOSURE_CLOSED,
+  DISCLOSURE_GLYPH_CLOSED,
+  DISCLOSURE_GLYPH_OPEN,
+} from "../src/config/disclosure";
 import { effectsOf } from "./helpers/click";
 import { parseHandlerUrl } from "../src/install/index";
 import { parseEffects, VERB_DISPATCH, VERB_SET_STATE } from "../src/click/wire";
@@ -255,10 +259,10 @@ describe("every {{ menu }} the bundled default renders", () => {
     rig.dispose();
   });
 
-  // [LAW:verifiable-goals] The affordance the ticket is about. Today every `+`
-  // renders `+▸` — a `+` the template writes beside an arrow the `{{ menu }}`
-  // runtime appends. These bytes are the "before" the change is measured
-  // against, and the only ones in this file expected to move.
+  // [LAW:verifiable-goals] The affordance the ticket is about. These bytes
+  // began as the "before" — every `+` rendered `+▸`, a `+` the template wrote
+  // beside an arrow the `{{ menu }}` runtime appended — and they are the only
+  // ones in this file the change was allowed to move.
   describe("edit mode's + insert affordances", () => {
     const editRig = () => {
       const rig = buildRuntime(`{ h: ['directory', 'model'] }`);
@@ -269,8 +273,15 @@ describe("every {{ menu }} the bundled default renders", () => {
     test("closed: exact bytes of the whole edit-mode bar", () => {
       const rig = editRig();
       const out = rig.render();
-      // Two segments ⇒ three insertion points, each a closed disclosure.
-      expect(stripAnsi(out)).toContain("+");
+      // Two segments ⇒ three insertion points, each a closed disclosure. The
+      // requirement, verbatim: "I'd also prefer the 'plus sign' menus to NOT
+      // have the arrow" — so no disclosure glyph rides beside a `+`, in either
+      // state, while the settings menu's own `{{ action }}` disclosure keeps
+      // the ▸ it has always authored.
+      const row0 = stripAnsi(out).split("\n")[0]!;
+      expect(row0).toContain("+");
+      expect(row0).not.toContain(`+${DISCLOSURE_GLYPH_CLOSED}`);
+      expect(row0).not.toContain(`+${DISCLOSURE_GLYPH_OPEN}`);
       expect(out).toMatchSnapshot("closed");
       rig.dispose();
     });
@@ -282,7 +293,32 @@ describe("every {{ menu }} the bundled default renders", () => {
       );
       if (!opener) throw new Error("edit mode rendered no + opener");
       rig.click(opener.url);
-      expect(rig.render()).toMatchSnapshot("open");
+      const out = rig.render();
+      expect(stripAnsi(out).split("\n")[0]!).not.toContain(
+        `+${DISCLOSURE_GLYPH_OPEN}`,
+      );
+      expect(out).toMatchSnapshot("open");
+      rig.dispose();
+    });
+
+    // [LAW:verifiable-goals] The regression removing the glyph invites, pinned
+    // so it cannot return quietly. A preset's N insertion points render
+    // byte-identical rows and drop byte-identical bodies, so if the open one
+    // does not LOOK different on row 0, the bar has stopped answering "which
+    // `+` did I open" — and it answers only because the trigger binds a display
+    // per state. A static display would pass every snapshot above and fail
+    // here, which is the point.
+    test("an opened + is distinguishable from its unopened siblings", () => {
+      const rig = editRig();
+      const openers = menuOpeners(rig.render()).filter((o) =>
+        o.member.startsWith(EDIT_NS),
+      );
+      expect(openers.length).toBeGreaterThan(1);
+
+      const closedRow = stripAnsi(rig.render()).split("\n")[0]!;
+      rig.click(openers[0]!.url);
+      const openRow = stripAnsi(rig.render()).split("\n")[0]!;
+      expect(openRow).not.toBe(closedRow);
       rig.dispose();
     });
   });

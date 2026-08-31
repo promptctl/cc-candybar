@@ -159,7 +159,7 @@
 
     // ── Theme picker ───────────────────────────────────────────────────────
     // DEMO-ONLY: this is the manual disclosure that {{ menu }} desugars TO. The
-    // canonical form is one call — `{{ menu "applyTheme" }}` in a trigger
+    // canonical form is one call — `{{ menu "applyTheme" "▸" "▾" }}` in a trigger
     // segment — which synthesizes the open-state var + toggle AND the page
     // cursor (var + int action) and drops the picker below the row. The parts
     // spelled out here (the openThemeMenu {set,to} action on themeControl above,

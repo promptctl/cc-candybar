@@ -596,7 +596,7 @@ describe("persist action click → durable overrides write", () => {
   // picker.ts) hard-required a set-option apply action, so a persist-option
   // apply (the ONLY seam charset/colorCompatibility/autoWrap/padding have —
   // see docs/interaction-authoring.md's "Persisting the display globals",
-  // which had ALREADY documented `{{ menu "applyCharset" }}` over a persist
+  // which had ALREADY documented `{{ menu "applyCharset" "▸" "▾" }}` over a persist
   // action as the canonical pattern) threw at render the moment the menu was
   // actually opened. `buildPersistRuntime` above only derives the CONFIG
   // gate; a `{{ menu }}`'s own open/close disclosure is a SessionState write,
@@ -612,7 +612,7 @@ describe("persist action click → durable overrides write", () => {
       },
       actions: { applyCharsetForever: { persist: 'charset', from: 'charsets' } },
       segments: {
-        bar: { template: '{{ .charset.effective }} {{ menu "applyCharsetForever" }}', bg: 'surface', fg: 'foreground' },
+        bar: { template: '{{ .charset.effective }} {{ menu "applyCharsetForever" "▸" "▾" }}', bg: 'surface', fg: 'foreground' },
       },
       root: 'bar',
     }`;

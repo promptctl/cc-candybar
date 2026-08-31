@@ -50,6 +50,7 @@ import {
 } from "./menu-keys.js";
 import {
   DISCLOSURE_CLOSED,
+  DISCLOSURE_GLYPH_CLOSE,
   disclosureCycleAction,
   disclosureStateVar,
 } from "./disclosure.js";
@@ -211,8 +212,21 @@ function insertChrome(
   artifacts.actions[identity] = disclosureCycleAction(stateKey, member);
   artifacts.actions[pageKey] = { set: pageKey, int: true };
 
+  // The `+` IS the trigger — no appended arrow (candybar-settings-ui-aok.4).
+  // Beside a `-` that means something else entirely, a ▸ read as part of the
+  // affordance rather than as a disclosure hint, so the trigger names the ACTION
+  // its click performs instead: `+` inserts here, `✕` closes what `+` opened —
+  // the same glyph, and the same effect, as the body's own close cell.
+  //
+  // [LAW:no-silent-failure] It is deliberately NOT one static display. A preset
+  // has N insertion points whose rendered rows are byte-identical, and their
+  // dropped bodies are identical too — so with no per-state display, an open `+`
+  // is indistinguishable from the two beside it and the bar silently stops
+  // answering "which one did I open". The tint that marks other open menus
+  // (node-registry's `drops.length > 0`) cannot answer it either: this segment
+  // declares no bg, so there is nothing to tint.
   artifacts.segments[chromeSegName] = {
-    template: `+{{ menu "${applyName}" }}`,
+    template: `{{ menu "${applyName}" "+" "${DISCLOSURE_GLYPH_CLOSE}" }}`,
     when: EDIT_MODE_GATE,
   };
   return { kind: "segment", name: chromeSegName };

@@ -578,7 +578,8 @@ function declareSettingControls(artifacts: MenuArtifacts): void {
     artifacts.segments[seg] = {
       template:
         `${c.glyph} {{ .${c.effectiveVar} }} ` +
-        `{{ menu "${apply}" (dict "key" "${PICKER_KEY}" "closeOnPick" true) }} ` +
+        `{{ menu "${apply}" "${DISCLOSURE_GLYPH_CLOSED}" "${DISCLOSURE_GLYPH_OPEN}" ` +
+        `(dict "key" "${PICKER_KEY}" "closeOnPick" true) }} ` +
         `{{ action "${controlReset(c.name)}" "↺" }}`,
       bg: "surface",
       fg: "foreground",

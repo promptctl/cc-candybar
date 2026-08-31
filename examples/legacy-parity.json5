@@ -213,7 +213,7 @@
     // No per-segment `palette:` override — that would pin a static theme and
     // stop it following the session pick.
     trigger: {
-      template: '🎨 {{ .theme.effective }} {{ menu "applyTheme" }}',
+      template: '🎨 {{ .theme.effective }} {{ menu "applyTheme" "▸" "▾" }}',
       bg: "surface",
       fg: "foreground",
     },

@@ -1,10 +1,21 @@
 // [LAW:locality-or-seam] The runtime half of the `{{ menu }}` seam — sibling to
 // `{{ action }}`/`{{ picker }}`. A menu is a self-contained disclosure: an inline
-// glyph that toggles open/closed, and (when open) its body — a picker grid —
+// TRIGGER that toggles open/closed, and (when open) its body — a picker grid —
 // that DROPS onto the line(s) below the enclosing row. The body is the one picker
-// renderer (`renderPicker`); the glyph is a coupled set-state the menu composes
+// renderer (`renderPicker`); the trigger is a coupled set-state the menu composes
 // directly (like the picker's closeOnPick) — it toggles the open-state AND resets
 // the page cursor in one atomic batch, gated by the synthesized cycle action.
+//
+// [LAW:one-source-of-truth] The trigger's TEXT is authored, never emitted here.
+// This module used to append ▸/▾ from the glyph constants, while the codebase's
+// other disclosure — group sugar — spliced those same constants into the
+// template it synthesized, where an author could see and change them. Two
+// policies for one fact; the docs sided with the visible one ("the trigger is
+// any template content you like") while a menu appended a glyph nobody wrote,
+// which is why edit mode's `+` rendered `+▸`. A menu's disclosure IS a
+// two-member cycle, so its trigger now binds displays exactly as a cycle
+// `{{ action }}` does, through the same `pickCycleDisplay` (candybar-settings-
+// ui-aok.4).
 //
 // [LAW:effects-at-boundaries] The helper is a PURE function of its inputs (the
 // walk-published placement + the live store): it computes the inline glyph and,
@@ -42,11 +53,7 @@ import {
   parseMenuOptions,
   type MenuOptions,
 } from "../config/menu-keys.js";
-import {
-  DISCLOSURE_CLOSED,
-  DISCLOSURE_GLYPH_CLOSED,
-  DISCLOSURE_GLYPH_OPEN,
-} from "../config/disclosure.js";
+import { DISCLOSURE_CLOSED, pickCycleDisplay } from "../config/disclosure.js";
 import { effectsUrl, VERB_SET_STATE } from "../click/wire.js";
 import { linkFragment, readVar, type ActionRuntime } from "./action.js";
 import { renderPicker } from "./picker.js";
@@ -94,9 +101,10 @@ export function collectMenuDrops(
 }
 
 // Realize a `{{ menu }}` against the live placement + state: return its inline
-// glyph, carrying the (open) body as out-of-band metadata for the boundary.
+// trigger, carrying the (open) body as out-of-band metadata for the boundary.
 function renderMenu(
   applyName: string,
+  displays: readonly string[],
   options: MenuOptions,
   runtime: MenuRuntime,
 ): RichText {
@@ -139,8 +147,14 @@ function renderMenu(
   // coupled batch passes the same wire gate every click does [LAW:single-enforcer].
   const sessionId = readVar(action.store, "session.id");
   const successor = open ? DISCLOSURE_CLOSED : member;
+  // [LAW:one-source-of-truth] The trigger's text is AUTHORED, resolved through
+  // the one display rule a cycle `{{ action }}` uses — a menu's disclosure is a
+  // two-member cycle, so binding `"▸" "▾"` gives the per-state form and binding
+  // `"+"` gives the static one. Nothing is appended here: a disclosure glyph an
+  // author never wrote is a glyph they cannot decline, which is exactly how
+  // edit mode's `+` came to read `+▸`.
   const glyph = linkFragment(
-    open ? DISCLOSURE_GLYPH_OPEN : DISCLOSURE_GLYPH_CLOSED,
+    pickCycleDisplay(`{{ menu "${applyName}" }}`, displays, 2, open ? 1 : 0),
     effectsUrl([
       {
         verb: VERB_SET_STATE,
@@ -178,25 +192,59 @@ function renderMenu(
   return glyph;
 }
 
+// [LAW:parse-dont-validate] THE crossing for a `{{ menu }}`'s argument tail.
+// The engine cannot type these slots for us — displays are strings and the
+// optional trailing knobs are a dict, so one declared slot type would refuse
+// one of them — so the tail arrives as opaque values and leaves here as a
+// record whose shape the renderer can no longer doubt: displays are strings,
+// options are parsed. Every rejected shape names the legal one.
+interface MenuArgs {
+  readonly displays: readonly string[];
+  readonly options: MenuOptions;
+}
+const isDict = (v: unknown): v is Record<string, unknown> =>
+  typeof v === "object" && v !== null && !Array.isArray(v);
+
+function parseMenuArgs(applyName: string, tail: readonly unknown[]): MenuArgs {
+  // The dict is the LAST argument when present; everything before it is a
+  // display. One position, so a reader never has to count.
+  const last = tail[tail.length - 1];
+  const optsArg = isDict(last) ? last : undefined;
+  const displayArgs = optsArg === undefined ? tail : tail.slice(0, -1);
+  const bad = displayArgs.findIndex((d) => typeof d !== "string");
+  if (bad !== -1) {
+    throw new Error(
+      `{{ menu "${applyName}" }} display #${bad + 1} is not text (${JSON.stringify(displayArgs[bad])}) — a menu binds its trigger text, then an optional trailing (dict …) of options`,
+    );
+  }
+  return {
+    displays: displayArgs as readonly string[],
+    // [LAW:one-source-of-truth] The same option reader the loader folds over
+    // the static dict — vocabulary, types, defaults live once.
+    options: parseMenuOptions(optsArg ?? {}),
+  };
+}
+
 // [LAW:dataflow-not-control-flow] One func; the apply-action NAME is the menu's
-// whole identity (the page cursor is derived from it, not passed), and the rare
-// knobs travel as ONE optional trailing `(dict …)` — closeOnPick (default
-// false: stay-open), paged (default true: a drop menu wants bounded height),
-// key (accordion grouping: omitted ⇒ independent, present ⇒ mutually exclusive
-// with siblings sharing it). Values, not modes. The loader gates the same dict
-// statically (staticDictEntries), so an old positional tail never reaches this
-// fn — it is a migration-pointing load error.
+// whole identity (the page cursor is derived from it, not passed), the TRIGGER
+// TEXT is bound like a cycle action's display (one per state, or one static),
+// and the rare knobs travel as ONE optional trailing `(dict …)` — closeOnPick
+// (default false: stay-open), paged (default true: a drop menu wants bounded
+// height), key (accordion grouping: omitted ⇒ independent, present ⇒ mutually
+// exclusive with siblings sharing it). Values, not modes. The loader gates the
+// same dict statically (staticDictEntries), so an old positional tail never
+// reaches this fn — it is a migration-pointing load error.
 //
 // [LAW:one-way-deps] Injected into the engine by registerDslConfig as data; the
 // generic engine never imports this module.
 export function menuFuncs(runtime: MenuRuntime): FuncMap {
   return {
     menu: {
-      fn: (applyName: string, opts?: Record<string, unknown>) =>
-        // [LAW:one-source-of-truth] The same option reader the loader folds
-        // over the static dict — vocabulary, types, defaults live once.
-        renderMenu(applyName, parseMenuOptions(opts ?? {}), runtime),
-      argTypes: ["string", "dict"],
+      fn: (applyName: string, ...tail: unknown[]) => {
+        const { displays, options } = parseMenuArgs(applyName, tail);
+        return renderMenu(applyName, displays, options, runtime);
+      },
+      argTypes: ["string", "value"],
       returnType: "T",
     },
   };

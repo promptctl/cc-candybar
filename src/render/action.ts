@@ -32,6 +32,7 @@ import {
   type ActionDecl,
 } from "../config/action.js";
 import { resolveOptionDomain } from "../config/option-domain.js";
+import { pickCycleDisplay } from "../config/disclosure.js";
 import { encodeLayoutOp, type LayoutOp } from "../config/layout-ops.js";
 import { parseSessionBoolean, type StripStyle } from "../themes/policy.js";
 import {
@@ -800,15 +801,16 @@ function selectDisplay(
     throw new Error(`action "${name}" needs a display (the clickable text)`);
   }
   if (action.kind === "set-cycle" || action.kind === "persist-cycle") {
-    if (displays.length !== 1 && displays.length !== action.members.length) {
-      throw new Error(
-        `action "${name}" cycles ${action.members.length} members; bind one display per member (${action.members.length}) or one static display, got ${displays.length}`,
-      );
-    }
-    const display =
-      displays.length === 1
-        ? displays[0]!
-        : displays[cycleIndex(action, store)]!;
+    // [LAW:single-enforcer] The arity rule and the pick are the disclosure
+    // primitive's, not this file's — `{{ menu }}` resolves its own trigger
+    // through the same function over its `[closed, member]` cycle, so the two
+    // disclosure kinds cannot disagree about what a display binding means.
+    const display = pickCycleDisplay(
+      `action "${name}"`,
+      displays,
+      action.members.length,
+      cycleIndex(action, store),
+    );
     return { display, boundValue: undefined };
   }
   if (displays.length > 2) {

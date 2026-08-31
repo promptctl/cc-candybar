@@ -32,8 +32,62 @@ export const DISCLOSURE_CLOSED = "closed";
 // [LAW:representation] The disclosure glyph vocabulary — one pair for the whole
 // bar so every disclosure reads the same (trailing the label/content it gates,
 // per pdu.8): collapsed ▸, expanded ▾.
+//
+// [LAW:one-source-of-truth] These are the AUTHORED default, never an emission.
+// Every disclosure splices them into the template it synthesizes — group sugar
+// (loader/layout.ts), the settings menu (settings-menu.ts), the bundled drawer
+// — and a hand-authored config writes whichever glyph it likes, because the
+// trigger's text is a display bound at the call site like any other. Until
+// candybar-settings-ui-aok.4 `{{ menu }}` was the exception, appending ▸/▾ from
+// its own runtime where no author could see or decline it, which is how edit
+// mode's `+` came to render `+▸`.
 export const DISCLOSURE_GLYPH_CLOSED = "▸";
 export const DISCLOSURE_GLYPH_OPEN = "▾";
+
+// [LAW:one-source-of-truth] The glyph that CLOSES an open disclosure. The
+// picker body's ✕ has always been this; it lives here now because a trigger can
+// wear it too — edit mode's `+` does, since a `+` whose only open-state cue was
+// the ▸ this change removed would otherwise be indistinguishable from its
+// siblings (three insertion points render byte-identically when one is open,
+// and their dropped bodies are identical too, so row 0 is the only place the
+// answer can live). Two affordances, one meaning, one glyph.
+export const DISCLOSURE_GLYPH_CLOSE = "✕";
+
+// [LAW:single-enforcer] THE display rule every multi-state trigger obeys: bind
+// one display per member, or ONE static display that shows in every state. It
+// lives here, beside the toggle machinery, because both disclosure kinds need
+// it at different times — the loader can count a call's arguments statically
+// and wants an ISSUE to report, the renderer holds the evaluated displays and
+// wants to THROW — and a rule spelled once in each place is a rule that drifts.
+// A `{{ menu }}` folds through it with two members (its `[closed, member]`
+// cycle) and a cycle `{{ action }}` with as many as it declares; nothing about
+// the rule is disclosure-specific beyond who calls it.
+export function cycleDisplayIssue(
+  subject: string,
+  count: number,
+  members: number,
+): string | undefined {
+  if (count === 0) return `${subject} needs a display (the clickable text)`;
+  if (count !== 1 && count !== members) {
+    return `${subject} cycles ${members} members; bind one display per member (${members}) or one static display, got ${count}`;
+  }
+  return undefined;
+}
+
+// [LAW:dataflow-not-control-flow] Which display shows is a pure function of
+// (bound displays, current member index): a single static display shows in
+// every state, per-member displays index by the state. Throws the one rule's
+// text rather than silently dropping or repeating an argument.
+export function pickCycleDisplay(
+  subject: string,
+  displays: readonly string[],
+  members: number,
+  index: number,
+): string {
+  const issue = cycleDisplayIssue(subject, displays.length, members);
+  if (issue !== undefined) throw new Error(issue);
+  return displays.length === 1 ? displays[0]! : displays[index]!;
+}
 
 // [LAW:single-enforcer] THE backing `state` variable a disclosure key implies:
 // it holds the open member's name and defaults to `def` (the CLOSED sentinel for
