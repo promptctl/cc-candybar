@@ -42,7 +42,7 @@ import {
   registerConfigValidator,
 } from "../src/daemon/verbs/config-validators";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
-import { MENU_NS } from "../src/config/menu-keys";
+import { menuPageKey } from "../src/config/menu-keys";
 import { EDIT_MODE_KEY, EDIT_NS } from "../src/config/loader/edit-mode";
 import {
   DISCLOSURE_CLOSED,
@@ -113,10 +113,14 @@ function links(rendered: string): Link[] {
 }
 
 // [LAW:dataflow-not-control-flow] A menu's opener identifies itself in its own
-// click: the one effect writing a `menus.` key to something other than the
-// closed sentinel. So this test needs to know no key names — the member it
-// writes IS the menu's apply-action name, which is also how each snapshot below
-// gets its label.
+// click: the disclosure toggle is the coupled batch `renderMenu` emits, so its
+// 4th arg is by construction the PAGE key of its 2nd, and its 3rd is a member
+// rather than the closed sentinel. Matching that exact shape — rather than the
+// `menus.` prefix, which a page-cursor key also carries — keeps a ←/→ page
+// click (a 3-arg write, no 4th arg) from reading as an opener on a render where
+// a picker is already open. So this test needs to know no key names — the member
+// it writes IS the menu's apply-action name, which is also how each snapshot
+// below gets its label.
 interface Opener extends Link {
   readonly member: string;
 }
@@ -126,7 +130,7 @@ function menuOpeners(rendered: string): Opener[] {
       .filter(
         (e) =>
           e.verb === VERB_SET_STATE &&
-          (e.args[1] ?? "").startsWith(MENU_NS) &&
+          e.args[3] === menuPageKey(e.args[1] ?? "") &&
           e.args[2] !== DISCLOSURE_CLOSED,
       )
       .map((e) => ({ url, text, member: e.args[2]! })),
