@@ -65,11 +65,11 @@ function buildRuntime() {
   // daemon does — the session's chosen theme over the config default. This is
   // the line that makes a click recolor the bar; freezing it would silently
   // pass while the real daemon recolors. (server.ts: basePalette =
-  // paletteForThemeName(effectiveThemeName(sessionState.get(sid,'theme'),
+  // paletteForThemeName(effectiveThemeName(undefined, sessionState.get(sid,'theme'),
   // globals.palette))).
   const render = (): string => {
     const basePalette = paletteForThemeName(
-      effectiveThemeName(
+      effectiveThemeName(undefined, 
         sessionState.get(SID, "theme"),
         config.globals.palette,
       ),

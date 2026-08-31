@@ -53,6 +53,12 @@ export function mergeWithDefault(
     // (incl. the "default" empty-fragment floor effectivePresetName collapses
     // to) survives every merge by construction, exactly as looks' "none" does.
     presets: { ...dflt.presets, ...(raw.presets ?? {}) },
+    // [LAW:one-source-of-truth] editGlobals merges FIELD by field — the
+    // `globals` cascade above, not the by-name cascades around it, because it
+    // IS a globals fragment: a user retuning edit mode's separator says nothing
+    // about its `style`, exactly as a user setting `globals.padding` says
+    // nothing about `globals.charset`.
+    editGlobals: { ...dflt.editGlobals, ...(raw.editGlobals ?? {}) },
     // [LAW:one-source-of-truth] helpers merge by name, same cascade — a user
     // overrides one formatter helper by re-declaring its name; the rest inherit
     // from the bundled default.

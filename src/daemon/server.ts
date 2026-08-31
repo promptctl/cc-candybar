@@ -63,20 +63,8 @@ import { buildDebugSnapshot } from "./debug";
 import { DEBUG_WHATS, isDebugWhat } from "./debug-types";
 import { expandHome } from "../config/dsl-loader.js";
 import { renderDsl } from "../dsl/render.js";
-import {
-  effectiveStripStyle,
-  effectiveAutoWrap,
-  effectivePadding,
-  effectiveThemeName,
-  effectiveLookName,
-  lookKeyByName,
-  paletteForThemeName,
-} from "../themes/index.js";
-import {
-  effectivePresetName,
-  presetGlobals,
-  presetIsCustomized,
-} from "../config/presets.js";
+import { lookKeyByName, paletteForThemeName } from "../themes/index.js";
+import { presetIsCustomized } from "../config/presets.js";
 import {
   renderStripCells,
   DEFAULT_CHARSET,
@@ -90,7 +78,11 @@ import {
 } from "../render/strip.js";
 import { applyClaudeCodeReserve } from "../utils/terminal-width.js";
 import type { RichText } from "@promptctl/rich-js";
-import { buildRenderPayload, type EffectiveGlobals } from "./render-payload.js";
+import {
+  buildRenderPayload,
+  resolveEffectiveGlobals,
+  type EffectiveGlobals,
+} from "./render-payload.js";
 import { ContextProvider } from "../segments/context.js";
 import { MetricsProvider } from "../segments/metrics.js";
 import { TmuxService } from "../segments/tmux.js";
@@ -860,83 +852,28 @@ async function handleRequest(req: Request): Promise<HandledRequest> {
       // No special-case branches — same composition every render.
       let body = "";
       if (entry.state !== null) {
-        // [LAW:one-source-of-truth] Resolve the effective theme ONCE — the
-        // session's chosen theme (SessionState) over the config default. This
-        // single name drives BOTH the payload's `theme.effective` field (the
-        // trigger label reads it) AND the rendered basePalette below, so a label
-        // and the colors can never disagree. Resolved here, before the payload
-        // build, so it can be threaded into the sole payload assembler.
-        //
-        // [LAW:one-source-of-truth] Every globals field a menu/stepper can
-        // persist (candybar-config-engine-71o.3), resolved ONCE into one
-        // struct: theme/look/style/autoWrap/padding compose the session's click
-        // (SessionState) over the config default over a floor — a click
-        // recolors/reshapes the whole bar on the next render; charset and
-        // colorCompatibility describe the TERMINAL rather than a taste and so
-        // have no SessionState half at all, making the config global over its
-        // floor constant their whole resolution. This struct feeds
-        // BOTH the payload's `*.effective` fields (trigger labels) AND
-        // renderOpts below (the actual render) — one resolution, two readers,
-        // so a label can never disagree with what was rendered.
-        //
-        // [LAW:one-source-of-truth] The PRESET resolves FIRST, because every
-        // other field below reads globals — and which globals is exactly what
-        // the preset decides. `presetGlobals` is the config's globals with the
-        // active fragment's shallow-merged over them, so the preset sits at its
-        // one documented place in the precedence chain (bundled default < user
-        // file < persisted overrides < ACTIVE PRESET < session pick — see
-        // src/config/presets.ts and docs/interaction-authoring.md): later than
-        // everything read per cache ENTRY, earlier than every session click,
-        // which is the order the `??` chains below already enforce by reading
-        // SessionState first. There is no "does a preset apply?" branch — the
-        // floor preset's empty fragment merges as a no-op
-        // [LAW:dataflow-not-control-flow].
-        const preset = effectivePresetName(
-          sessionState.get(req.hookData.session_id, "preset"),
-          entry.state.config.globals.preset,
-          entry.state.config.presets,
-        );
-        const globals = presetGlobals(entry.state.config, preset);
-        const effective: EffectiveGlobals = {
-          preset,
+        // [LAW:one-source-of-truth] Every globals field resolved ONCE per
+        // render, here — before the payload build, so the same struct feeds
+        // BOTH the payload's `*.effective` fields (what a trigger label says)
+        // AND renderOpts below (what actually renders). One resolution, two
+        // readers, so a label can never disagree with the bar. The precedence
+        // the resolver applies, and why each rung sits where it does, lives
+        // with the chain (resolveEffectiveGlobals, and src/config/presets.ts).
+        // Read alongside the config, from the same entry, in one statement —
+        // which is exactly what the closure below claims about it.
+        const presetRootOps = entry.state.presetRootOps;
+        const effective: EffectiveGlobals = resolveEffectiveGlobals(
+          entry.state.config,
+          (key: string) => sessionState.get(req.hookData.session_id, key),
           // [LAW:one-source-of-truth] brandon-layout-edit-2gc.5 — read from
           // THIS entry's own presetRootOps (the record that fed the SAME
           // reload that produced entry.state.config), never a fresh
           // loadOverrides() here — a second read could race a concurrent
-          // write and disagree with the tree that actually rendered.
-          presetCustomized: presetIsCustomized(
-            entry.state.presetRootOps,
-            preset,
-          ),
-          theme: effectiveThemeName(
-            sessionState.get(req.hookData.session_id, "theme"),
-            globals.palette,
-          ),
-          look: effectiveLookName(
-            sessionState.get(req.hookData.session_id, "look"),
-            globals.look,
-            entry.state.config.looks,
-          ),
-          style: effectiveStripStyle(
-            sessionState.get(req.hookData.session_id, "style"),
-            globals.style,
-          ),
-          autoWrap: effectiveAutoWrap(
-            sessionState.get(req.hookData.session_id, "autoWrap"),
-            globals.autoWrap,
-          ),
-          padding: effectivePadding(
-            sessionState.get(req.hookData.session_id, "padding"),
-            globals.padding,
-          ),
-          // charset and colorCompatibility have no session half by design —
-          // they describe the terminal, not a taste (see CHARSETS in
-          // themes/policy.ts) — so the config global over its floor is their
-          // whole resolution.
-          charset: globals.charset ?? DEFAULT_CHARSET,
-          colorCompatibility:
-            globals.colorCompatibility ?? DEFAULT_COLOR_COMPATIBILITY,
-        };
+          // write and disagree with the tree that actually rendered. That is
+          // why it arrives as a closure over this entry rather than being
+          // looked up inside the resolver.
+          (preset: string) => presetIsCustomized(presetRootOps, preset),
+        );
         const payload = await buildRenderPayload(
           req.hookData,
           payloadDeps,
@@ -956,6 +893,10 @@ async function handleRequest(req: Request): Promise<HandledRequest> {
         // SAME `effective` struct the payload was just built from — no second
         // `?? DEFAULT_X` computation to drift from it.
         renderOpts.style = effective.style;
+        // The `plain` joiner's cell separator. Assigned unconditionally like
+        // every field around it: `undefined` is a value pickJoiner already
+        // reads as "PlainJoiner's own default", not an absence to branch on.
+        renderOpts.separator = effective.separator;
         renderOpts.wrap = effective.autoWrap;
         renderOpts.padding = effective.padding;
         renderOpts.charset = effective.charset;

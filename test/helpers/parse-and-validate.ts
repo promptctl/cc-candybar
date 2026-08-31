@@ -26,6 +26,7 @@ const EMPTY_DEFAULT: DslConfig = {
   looks: {},
   presets: {},
   helpers: {},
+  editGlobals: {},
 };
 
 export function parseAndValidate(

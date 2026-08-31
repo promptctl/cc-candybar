@@ -128,7 +128,7 @@ describe("DSL state cascade (vhi.1 acceptance)", () => {
         registry,
         HOOK_DATA,
         paletteForThemeName(
-          effectiveThemeName(
+          effectiveThemeName(undefined, 
             sessionState.get(SESSION_ID, "theme"),
             config.globals.palette,
           ),

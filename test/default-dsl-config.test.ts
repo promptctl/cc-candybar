@@ -28,7 +28,6 @@ import { listResolvablePaletteNames } from "../src/themes/policy";
 import {
   effectiveThemeName,
   effectiveLookName,
-  effectiveStripStyle,
   lookKeyByName,
   paletteForThemeName,
 } from "../src/themes";
@@ -38,20 +37,18 @@ import {
 } from "../src/daemon/verbs/state-validators";
 import { clickUrl } from "./helpers/click";
 import { effectsUrl, VERB_SET_STATE } from "../src/click/wire";
-import { presetNames, presetGlobals } from "../src/config/presets";
+import { presetNames } from "../src/config/presets";
 import {
   EDIT_NS,
   EDIT_MODE_KEY,
+  EDIT_MODE_OPEN,
   EDIT_TOGGLE_ACTION,
 } from "../src/config/loader/edit-mode";
 import { checkPayload } from "../src/check";
-import type { EffectiveGlobals } from "../src/daemon/render-payload";
 import {
-  DEFAULT_CHARSET,
-  DEFAULT_COLOR_COMPATIBILITY,
-  DEFAULT_PADDING,
-  DEFAULT_WRAP,
-} from "../src/render/strip";
+  resolveEffectiveGlobals,
+  type EffectiveGlobals,
+} from "../src/daemon/render-payload";
 
 // [LAW:one-source-of-truth] Reparse the AUTHORED literal (pre-synthesis) —
 // mirrors what a user gets by copy-pasting the bundled default into their own
@@ -269,11 +266,11 @@ describe("DEFAULT_DSL_CONFIG", () => {
       width: Number.POSITIVE_INFINITY,
     };
     const render = (): string => {
-      const theme = effectiveThemeName(
+      const theme = effectiveThemeName(undefined, 
         sessionState.get(SID, "theme"),
         parsed.globals.palette,
       );
-      const look = effectiveLookName(
+      const look = effectiveLookName(undefined, 
         sessionState.get(SID, "look"),
         parsed.globals.look,
         parsed.looks,
@@ -1198,9 +1195,9 @@ describe("DEFAULT_DSL_CONFIG", () => {
 // burnrate/speed telemetry verbose surfaces) slip through untested, because
 // those branches only run when their data is present.
 //
-// [LAW:single-enforcer] Resolves each preset's globals through presetGlobals
-// (the same function server.ts and check.ts call), so EffectiveGlobals here
-// cannot diverge from what a real render would compute for that preset.
+// [LAW:single-enforcer] Resolves through resolveEffectiveGlobals — the one
+// function server.ts and check.ts both call — so EffectiveGlobals here cannot
+// diverge from what a real render would compute for that preset.
 describe("bundled preset library renders clean at every width — brandon-presets-0yk.3", () => {
   const WIDTHS = [80, 120, 200];
   // [LAW:single-enforcer] The real validated shape registerDslConfig/renderDsl
@@ -1208,6 +1205,14 @@ describe("bundled preset library renders clean at every width — brandon-preset
   // gate every production caller (daemon, check.ts) passes through, run once
   // here since DEFAULT_DSL_CONFIG itself is validated but not re-branded.
   const VALIDATED = validateConfig(DEFAULT_DSL_CONFIG);
+
+  // The one place "which session am I" varies across this suite: the preset
+  // pick, plus (for the edit-mode sweep) the edit-mode key. Every other key is
+  // unclicked — a fresh session [LAW:dataflow-not-control-flow].
+  const freshSession = (key: string, preset: string): string | null =>
+    key === "preset" ? preset : null;
+  const editingSession = (key: string, preset: string): string | null =>
+    key === EDIT_MODE_KEY ? EDIT_MODE_OPEN : freshSession(key, preset);
 
   function renderPreset(
     name: string,
@@ -1220,25 +1225,21 @@ describe("bundled preset library renders clean at every width — brandon-preset
     withPayload: (base: Record<string, unknown>) => Record<string, unknown> = (
       base,
     ) => base,
+    sessionPick: (key: string, preset: string) => string | null = freshSession,
   ): { rendered: string; segmentErrors: string[] } {
-    const globals = presetGlobals(DEFAULT_DSL_CONFIG, name);
-    const effective: EffectiveGlobals = {
-      preset: name,
+    // [LAW:one-source-of-truth] THE daemon's resolution, driven by a session
+    // that has picked exactly this preset (and, for the edit-mode sweep below,
+    // has edit mode open). Restating the chain here as a struct literal is what
+    // would let this harness drift from the daemon.
+    const effective: EffectiveGlobals = resolveEffectiveGlobals(
+      DEFAULT_DSL_CONFIG,
+      (key) => sessionPick(key, name),
       // A fresh install/session has never clicked +/-, so no preset carries
       // accumulated rootOps by default — the realistic baseline for the
       // "renders clean" sweep below. The dedicated "customized" test further
-      // down overrides `.preset.customized` via `withPayload` instead of
-      // this shared default.
-      presetCustomized: false,
-      theme: effectiveThemeName(null, globals.palette),
-      look: effectiveLookName(null, globals.look, DEFAULT_DSL_CONFIG.looks),
-      style: effectiveStripStyle(null, globals.style),
-      autoWrap: globals.autoWrap ?? DEFAULT_WRAP,
-      padding: globals.padding ?? DEFAULT_PADDING,
-      charset: globals.charset ?? DEFAULT_CHARSET,
-      colorCompatibility:
-        globals.colorCompatibility ?? DEFAULT_COLOR_COMPATIBILITY,
-    };
+      // down overrides `.preset.customized` via `withPayload` instead.
+      () => false,
+    );
     const store = new VariableStore();
     const registry = new SourceRegistry(store, "", undefined, new SessionState());
     try {
@@ -1255,6 +1256,7 @@ describe("bundled preset library renders clean at every width — brandon-preset
         paletteForThemeName(effective.theme),
         {
           style: effective.style,
+          separator: effective.separator,
           width,
           colorCompatibility: effective.colorCompatibility,
           wrap: effective.autoWrap,
@@ -1292,6 +1294,40 @@ describe("bundled preset library renders clean at every width — brandon-preset
       }
     },
   );
+
+  // [LAW:verifiable-goals] candybar-settings-ui-aok.5's width gate: edit mode
+  // restyles the whole bar (the staged globals.style), and the picker reserves
+  // its pagination seam from stripChromeCols(runtime.stripStyle). A staged
+  // style that did not reach that reserve would give wrong page widths in
+  // exactly the mode where menus are most used — so the sweep runs again with
+  // edit mode open, at the same widths, over every preset.
+  test.each(presetNames(DEFAULT_DSL_CONFIG.presets))(
+    'preset "%s" renders clean at 80/120/200 columns with edit mode open',
+    (name) => {
+      for (const width of WIDTHS) {
+        const { rendered, segmentErrors } = renderPreset(
+          name,
+          width,
+          undefined,
+          editingSession,
+        );
+        expect(segmentErrors).toEqual([]);
+        expect(rendered.length).toBeGreaterThan(0);
+      }
+    },
+  );
+
+  test("edit mode stages its separator over every preset's own style", () => {
+    // The staged fragment is the rightmost rung: a preset declaring its own
+    // `style` still renders with edit mode's joiner while the mode is on.
+    for (const name of presetNames(DEFAULT_DSL_CONFIG.presets)) {
+      const editing = renderPreset(name, 120, undefined, editingSession);
+      expect(editing.segmentErrors).toEqual([]);
+      expect(editing.rendered).toContain(
+        DEFAULT_DSL_CONFIG.editGlobals.default_separator,
+      );
+    }
+  });
 
   // [LAW:carrying-cost] The compact preset's whole reason to exist is fitting
   // where the default doesn't — pin that it actually renders NARROWER than

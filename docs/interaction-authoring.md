@@ -170,11 +170,11 @@ exactly the same over it:
 Every other `set` in this doc changes what the CURRENT session sees. `persist`
 changes what EVERY session sees, from the next reload on — it writes into a
 daemon-owned overrides layer merged on top of your config file (bundled
-default < config file < persisted overrides < active preset < session pick,
-in that order: a session's own `set` pick still wins over a persisted default
-for that one session). The config file on disk is never touched — a `persist`
-write is never something `cc-candybar check` or a `git diff` on your config
-will show.
+default < config file < persisted overrides < active preset < session pick <
+edit mode, in that order: a session's own `set` pick still wins over a
+persisted default for that one session). The config file on disk is never
+touched — a `persist` write is never something `cc-candybar check` or a
+`git diff` on your config will show.
 
 The `active preset` layer is a whole alternative arrangement: a named `root`
 and/or display-`globals` fragment, declared in a top-level `presets:` block and
@@ -185,6 +185,12 @@ the preset and the session pick are both resolved on every render. That is what
 makes switching to a `compact` preset actually change the padding of a user who
 once persisted a padding they liked, and what keeps their next click on padding
 winning over the preset.
+
+The same rule puts `edit mode` last: entering edit mode is decided later than
+any pick, so its `editGlobals` fragment (see "Edit mode's own look" below)
+outranks even a session pick — and only while the mode is on. Nothing is saved
+when it turns on or restored when it turns off; the pick underneath was never
+overwritten, only out-ranked.
 
 Reach for `persist` when the picked value should become the new normal, not
 a one-off for this conversation — a theme you want every future session to
@@ -730,6 +736,45 @@ sugar already lowers into. Toggling `edit.mode` changes which `when`
 predicates pass; it never changes what code runs. Padding, charset, and
 strip style apply to chrome exactly as they apply to any segment you'd write
 by hand.
+
+### Edit mode's own look: `editGlobals`
+
+Powerline joiners exist to make adjacent segments read as one continuous
+strip — the opposite of what you want while deciding where one segment ends
+and the next begins. So edit mode stages its own display globals: a top-level
+`editGlobals` block, applied while the mode is on and only then.
+
+The bundled default stages plain joiners with a visible separator:
+
+```json5 check:pass
+{
+  editGlobals: { style: 'plain', default_separator: ' | ' },
+  variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
+  segments: {
+    directory: { template: '~/project', bg: 'surface', fg: 'foreground' },
+    editControl: { template: '{{ action "edit.toggle" "✎" }}', bg: 'surface', fg: 'foreground' },
+  },
+  root: { h: ['directory', 'editControl'] },
+}
+```
+
+It is an ordinary `globals` fragment, so any display field is fair game —
+`padding`, `palette`, `look`, `autoWrap` — and it merges field by field with
+the bundled one, so retuning the separator keeps `style: 'plain'`:
+
+```json5 check:pass
+{ editGlobals: { default_separator: ' :: ' } }
+```
+
+Two things it is not. It is **not** a preset: it carries no `root`, because
+the layout half of edit mode is the `+`/`-` splice above. And it may not
+select one — `editGlobals: { preset: 'compact' }` is a load error, for the
+same reason a preset's own globals may not name a preset: which preset is
+active keeps exactly one authority.
+
+Leaving edit mode needs no undo. The fragment is applied at resolution time
+while the mode is on; it is never written to session state or the overrides
+layer, so whatever governed before governs again the moment you toggle off.
 
 **Clicks land in the SAME `presets.<name>.rootOps` op log** `removeSegment`/
 `insertSegmentFrom` already write to — so `undo`/`redo` (above) cover an
@@ -1449,6 +1494,22 @@ key cannot hold two open names:
 
 ```error
 group "inner" shares key "drawer" with its ancestor group "outer" — a shared key holds ONE open group, so an ancestor and a descendant cannot share one. Sibling accordions share a key; nested groups use distinct keys.
+```
+
+### An `editGlobals` fragment selecting a preset
+
+Which preset is active has exactly one authority. A globals fragment naming
+one — a preset's own `globals`, or edit mode's `editGlobals` — would be a
+second:
+
+```json5 check:fail
+{
+  editGlobals: { preset: "compact" },
+}
+```
+
+```error
+the editGlobals fragment cannot select a preset
 ```
 
 ### A `persist`/`reset` naming an undeclared segment
