@@ -1109,8 +1109,10 @@ describe("RenderCache: layout ops replay onto the resolved preset root", () => {
   });
 
   // brandon-layout-edit-2gc.5 PR review: the bundled default's OWN
-  // "compact" preset has exactly 4 non-exempt segments (directory/git/
-  // context/presetControl) — removing all 4 via the synthesized `-` chrome
+  // "compact" preset has exactly 3 non-exempt segments (directory/git/
+  // context — candybar-settings-ui-aok.3 dropped its standalone preset
+  // control, since the settings menu is spliced into every preset root and
+  // carries one) — removing all 3 via the synthesized `-` chrome
   // leaves spliceContainer with zero children, so removeChrome/insertChrome
   // contribute NOTHING for "compact" on the next reload. Proves the reset
   // banner's own click still works in exactly that state, through the REAL
@@ -1127,7 +1129,6 @@ describe("RenderCache: layout ops replay onto the resolved preset root", () => {
         encodeLayoutOp({ op: "remove", target: "directory" }),
         encodeLayoutOp({ op: "remove", target: "git" }),
         encodeLayoutOp({ op: "remove", target: "context" }),
-        encodeLayoutOp({ op: "remove", target: "presetControl" }),
       ]),
     );
 
@@ -1162,7 +1163,7 @@ describe("RenderCache: layout ops replay onto the resolved preset root", () => {
         ).toBe(false);
         expect(
           segmentNamesOf(restored.state!.config.presets.compact!.root!),
-        ).toEqual(["directory", "git", "context", "presetControl"]);
+        ).toEqual(["directory", "git", "context"]);
       } finally {
         for (const fn of cleanups2) fn();
       }

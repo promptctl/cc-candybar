@@ -14,7 +14,7 @@ import path from "node:path";
 
 import { PROTOCOL_VERSION } from "../../src/daemon/protocol";
 import { parseHandlerUrl } from "../../src/install/index";
-import { effectsOf } from "./click";
+import { effectsOf, type DecodedEffect } from "./click";
 import { sendDaemonRequest, waitForExit } from "./daemon-wire";
 import type { RunningDaemon } from "./spawn-isolated-daemon";
 
@@ -95,6 +95,54 @@ export function extractUrls(rendered: string): string[] {
   return urls;
 }
 
+// [LAW:no-ambient-temporal-coupling] Render until the daemon's own state
+// catches up, or fail loudly at the deadline. A durable (`persist`) write
+// lands in a file that RenderCache reloads through an fs WATCHER, so the
+// reload is genuinely asynchronous with respect to the click's response —
+// there is no happens-after signal to await (brandon-testing-82q tracks
+// publishing one). Asserting on a single post-click render therefore encodes
+// a bet on watcher latency; re-rendering until the expected state appears
+// encodes the actual contract ("the write becomes visible"), and the timeout
+// makes a broken write fail with the last render in hand rather than hanging.
+export async function renderUntil(
+  sockPath: string,
+  sessionId: string,
+  projectDir: string,
+  accepts: (rendered: string) => boolean,
+  what: string,
+  timeoutMs = 5_000,
+): Promise<string> {
+  const deadline = Date.now() + timeoutMs;
+  let last = "";
+  do {
+    last = await render(sockPath, sessionId, projectDir);
+    if (accepts(last)) return last;
+  } while (Date.now() < deadline);
+  throw new Error(
+    `daemon never rendered ${what} within ${timeoutMs}ms; last render was:\n${last}`,
+  );
+}
+
+// [LAW:single-enforcer] THE search over rendered affordances: decode each
+// URL's effects and keep the first the predicate accepts. Every caller asks
+// "which link DOES this?" — by verb, key and value, the facts the daemon acts
+// on — rather than by the link's text or its position in the bar, so a
+// re-glyphed or re-ordered control does not move the test. A URL that fails to
+// decode is not a candidate (a rendered link this codec cannot read is not an
+// affordance the daemon would honor either).
+export function findUrl(
+  urls: readonly string[],
+  match: (effects: DecodedEffect[]) => boolean,
+): string | undefined {
+  return urls.find((u) => {
+    try {
+      return match(effectsOf(u));
+    } catch {
+      return false;
+    }
+  });
+}
+
 // The affordance that writes `value` to `key`, as the user's own click would
 // find it: by what it does, from the rendered bytes — never constructed.
 export function urlWriting(
@@ -102,13 +150,9 @@ export function urlWriting(
   key: string,
   value: string,
 ): string {
-  const url = extractUrls(rendered).find((u) => {
-    try {
-      return effectsOf(u).some((e) => e.args[1] === key && e.args[2] === value);
-    } catch {
-      return false;
-    }
-  });
+  const url = findUrl(extractUrls(rendered), (effects) =>
+    effects.some((e) => e.args[1] === key && e.args[2] === value),
+  );
   if (url === undefined) {
     throw new Error(`no rendered affordance writes ${key}=${value}`);
   }

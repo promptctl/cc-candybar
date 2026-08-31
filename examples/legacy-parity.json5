@@ -121,7 +121,10 @@
 // panel block (the pop-up control panel):
 //   theme-cycle 🎨 ${theme}→ the `trigger` theme control + `{{ menu }}` picker
 //                           (the "cycle" became a full paged picker).
-//   style-cycle 🖌 ${style}→ the bundled `styleControl` + its `{{ menu }}` picker.
+//   style-cycle 🖌 ${style}→ the ☰ settings menu's style control (synthesized
+//                           into every root — see src/config/settings-menu.ts),
+//                           whose one picker writes the session or the durable
+//                           default depending on its `persist?` checkbox.
 //
 // modelContextLimits.sonnet:200000
 //                         → DROPPED — context %/tokens come from native hook
@@ -232,9 +235,10 @@
       "model", "context", "block", "weekly", "sessionId",
       { kind: "group", name: "tray", label: "actions", children: ["toolbar"] },
     ] },
-    // The legacy `panel` control popup — theme picker + style picker. Each
-    // {{ menu }} is INDEPENDENT (no shared key): both can be open at once. An
-    // open picker drops its body onto the line directly below this row.
-    { h: ["trigger", "styleControl"] },
+    // The legacy `panel` control popup — a theme picker of this config's own,
+    // kept to show the hand-authored form. The style picker it used to sit
+    // beside now lives in the ☰ settings menu, which is synthesized into every
+    // root (including this one) and carries one control per setting.
+    { h: ["trigger"] },
   ] },
 }

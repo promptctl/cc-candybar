@@ -25,10 +25,15 @@ import type { FuncMap, Template } from "@promptctl/go-template-js";
 import type { VariableStore } from "../var-system/store.js";
 import { toString as varToString } from "../var-system/types.js";
 import { buildScope } from "../template-engine/scope.js";
-import type { ActionDecl } from "../config/action.js";
+import {
+  actionDestinations,
+  actionIsDual,
+  PERSIST_WHEN,
+  type ActionDecl,
+} from "../config/action.js";
 import { resolveOptionDomain } from "../config/option-domain.js";
 import { encodeLayoutOp, type LayoutOp } from "../config/layout-ops.js";
-import type { StripStyle } from "../themes/policy.js";
+import { parseSessionBoolean, type StripStyle } from "../themes/policy.js";
 import {
   effectsUrl,
   VERB_APPLY_LAYOUT_OP,
@@ -166,7 +171,24 @@ export type CompiledActionDecl =
   // there is nothing to carry, since the history stack (not this action) is
   // what decides which entry moves.
   | { readonly kind: "undo" }
-  | { readonly kind: "redo" };
+  | { readonly kind: "redo" }
+  // [LAW:dataflow-not-control-flow] candybar-settings-ui-aok.3's ONE control
+  // per setting. Both destinations are compiled here as the ordinary
+  // single-destination shapes they are, and `selector` names the session key
+  // whose boolean value picks between them at click time. The destination is
+  // therefore a VALUE flowing through `activeDestination` — every consumer
+  // (realize, the picker, selectDisplay) resolves it once at the top and then
+  // runs the code it has always run, so nothing downstream branches on
+  // "is this dual".
+  | {
+      readonly kind: "dual";
+      readonly selector: string;
+      readonly session: CompiledActionDecl;
+      readonly durable: CompiledActionDecl;
+      // The SessionState key the session half writes, carried so a durable
+      // click can clear it in the same dispatch (see realize's dual arm).
+      readonly sessionKey: string;
+    };
 
 export type CompiledActions = ReadonlyMap<string, CompiledActionDecl>;
 
@@ -185,6 +207,13 @@ export type CompiledActions = ReadonlyMap<string, CompiledActionDecl>;
 // highlight is inert (readVar falls back to "" since no such var exists).
 const CONFIG_KEY_TO_EFFECTIVE_VAR: ReadonlyMap<string, string> = new Map([
   ["palette", "theme.effective"],
+  // [LAW:one-source-of-truth] `preset` earns its entry here the moment a DUAL
+  // control writes it: compileDual makes BOTH halves read back through this
+  // map, so a field missing from it loses its current-selection mark on the
+  // session side too — and the preset picker sits on the settings menu's
+  // always-visible first row, where "which arrangement am I in" is the whole
+  // question the control answers.
+  ["preset", "preset.effective"],
   ["look", "look.effective"],
   ["style", "style.effective"],
   ["charset", "charset.effective"],
@@ -263,6 +292,20 @@ function compileAction(
   stateKeyToVar: ReadonlyMap<string, string>,
   perConfigDomains: ReadonlyMap<string, readonly string[]>,
 ): CompiledActionDecl {
+  // [LAW:one-source-of-truth] A dual compiles as its own two destinations —
+  // the SAME explosion the validator derivations fold over
+  // (actionDestinations), so the click a dual realizes and the gate it derives
+  // come from one statement of what the two halves are. It is matched BEFORE
+  // the `set` arm because a dual carries `set` too.
+  if (actionIsDual(action)) {
+    const [session, durable] = actionDestinations(action);
+    return compileDual(
+      stateKeyToVar.get(action[PERSIST_WHEN]) ?? action[PERSIST_WHEN],
+      action.set,
+      compileAction(parse, name, session!, stateKeyToVar, perConfigDomains),
+      compileAction(parse, name, durable!, stateKeyToVar, perConfigDomains),
+    );
+  }
   if ("set" in action) {
     const stateVar = stateKeyToVar.get(action.set) ?? action.set;
     if ("to" in action) {
@@ -379,6 +422,55 @@ function compileAction(
   return "undo" in action ? { kind: "undo" } : { kind: "redo" };
 }
 
+// [LAW:one-source-of-truth] A dual control shows ONE current value and writes
+// relative to the value it showed — so both destinations read back through the
+// DURABLE half's variable, which is the `.effective` projection the daemon
+// resolved for this render (CONFIG_KEY_TO_EFFECTIVE_VAR above): the value the
+// bar is actually rendering with, whatever chain produced it. Reading the
+// session key instead would let a cycle's glyph name the effective state while
+// its click stepped from an unwritten session key — the toggle would render
+// "wrap: off" and write "false", a click that visibly does nothing. Arms that
+// carry no `stateVar` (the bounded steppers) read nothing at render by design:
+// their step is relative and resolved daemon-side.
+function compileDual(
+  selectorVar: string,
+  sessionKey: string,
+  session: CompiledActionDecl,
+  durable: CompiledActionDecl,
+): CompiledActionDecl {
+  const readBack =
+    "stateVar" in session && "stateVar" in durable
+      ? { ...session, stateVar: durable.stateVar }
+      : session;
+  return {
+    kind: "dual",
+    selector: selectorVar,
+    session: readBack,
+    durable,
+    sessionKey,
+  };
+}
+
+// [LAW:dataflow-not-control-flow] THE destination fold: which store a dual
+// action writes is the boolean value of its selector key, read from the same
+// live store the rest of the render reads. Total over every compiled action —
+// a single-destination action IS its own destination — so callers resolve
+// through it unconditionally and never test for the dual kind.
+//
+// [LAW:one-source-of-truth] `parseSessionBoolean` is the one spelling of a
+// boolean in SessionState (themes/policy.ts), the same parse `autoWrap`'s own
+// session half goes through: an unwritten, malformed, or "false" selector all
+// mean the session destination, and only a canonical "true" means durable.
+export function activeDestination(
+  c: CompiledActionDecl,
+  store: VariableStore,
+): CompiledActionDecl {
+  if (c.kind !== "dual") return c;
+  return parseSessionBoolean(readVar(store, c.selector)) === true
+    ? c.durable
+    : c.session;
+}
+
 function parseActionTemplate(
   parse: (src: string) => Template<RichText>,
   src: string,
@@ -463,18 +555,18 @@ function cycleIndex(
 // cell of an option picker, is pure waste). set-* arms read individual vars
 // directly. This is data locality, not a control-flow guard: the scope simply
 // flows into the arms that need it.
-function realize(
+export function realize(
   c: CompiledActionDecl,
   display: string,
   boundValue: string | undefined,
   store: VariableStore,
   sessionId: string,
-): { effect: Effect; active: boolean } {
+): { effects: readonly Effect[]; active: boolean } {
   switch (c.kind) {
     case "set-literal": {
       const current = readVar(store, c.stateVar);
       return {
-        effect: { verb: VERB_SET_STATE, args: [sessionId, c.key, c.value] },
+        effects: [{ verb: VERB_SET_STATE, args: [sessionId, c.key, c.value] }],
         active: current === c.value,
       };
     }
@@ -482,7 +574,7 @@ function realize(
       const value = boundValue ?? display;
       const current = readVar(store, c.stateVar);
       return {
-        effect: { verb: VERB_SET_STATE, args: [sessionId, c.key, value] },
+        effects: [{ verb: VERB_SET_STATE, args: [sessionId, c.key, value] }],
         active: current === value,
       };
     }
@@ -499,7 +591,7 @@ function realize(
       const value = boundValue ?? display;
       const current = readVar(store, c.stateVar);
       return {
-        effect: { verb: VERB_SET_STATE, args: [sessionId, c.key, value] },
+        effects: [{ verb: VERB_SET_STATE, args: [sessionId, c.key, value] }],
         active: current === value,
       };
     }
@@ -510,7 +602,7 @@ function realize(
       // promised.
       const next = c.members[(cycleIndex(c, store) + 1) % c.members.length]!;
       return {
-        effect: { verb: VERB_SET_STATE, args: [sessionId, c.key, next] },
+        effects: [{ verb: VERB_SET_STATE, args: [sessionId, c.key, next] }],
         active: false,
       };
     }
@@ -522,27 +614,33 @@ function realize(
       // single range gate. So the link is byte-identical across renders and N
       // rapid clicks each accumulate (the idempotent absolute-write bug is gone).
       return {
-        effect: {
-          verb: VERB_STEP_STATE,
-          args: [sessionId, c.key, String(c.by)],
-        },
+        effects: [
+          {
+            verb: VERB_STEP_STATE,
+            args: [sessionId, c.key, String(c.by)],
+          },
+        ],
         active: false,
       };
     }
     case "copy":
       return {
-        effect: {
-          verb: VERB_COPY,
-          args: [evalTemplate(c.text, buildScope(store))],
-        },
+        effects: [
+          {
+            verb: VERB_COPY,
+            args: [evalTemplate(c.text, buildScope(store))],
+          },
+        ],
         active: false,
       };
     case "open":
       return {
-        effect: {
-          verb: VERB_OPEN_VSCODE,
-          args: [evalTemplate(c.target, buildScope(store))],
-        },
+        effects: [
+          {
+            verb: VERB_OPEN_VSCODE,
+            args: [evalTemplate(c.target, buildScope(store))],
+          },
+        ],
         active: false,
       };
     // [LAW:one-source-of-truth] The persist-* arms mirror set-*'s realization
@@ -553,7 +651,7 @@ function realize(
     case "persist-literal": {
       const current = readVar(store, c.stateVar);
       return {
-        effect: { verb: VERB_SET_CONFIG, args: [sessionId, c.key, c.value] },
+        effects: [{ verb: VERB_SET_CONFIG, args: [sessionId, c.key, c.value] }],
         active: current === c.value,
       };
     }
@@ -561,29 +659,31 @@ function realize(
       const value = boundValue ?? display;
       const current = readVar(store, c.stateVar);
       return {
-        effect: { verb: VERB_SET_CONFIG, args: [sessionId, c.key, value] },
+        effects: [{ verb: VERB_SET_CONFIG, args: [sessionId, c.key, value] }],
         active: current === value,
       };
     }
     case "persist-cycle": {
       const next = c.members[(cycleIndex(c, store) + 1) % c.members.length]!;
       return {
-        effect: { verb: VERB_SET_CONFIG, args: [sessionId, c.key, next] },
+        effects: [{ verb: VERB_SET_CONFIG, args: [sessionId, c.key, next] }],
         active: false,
       };
     }
     case "persist-bounded": {
       return {
-        effect: {
-          verb: VERB_STEP_CONFIG,
-          args: [sessionId, c.key, String(c.by)],
-        },
+        effects: [
+          {
+            verb: VERB_STEP_CONFIG,
+            args: [sessionId, c.key, String(c.by)],
+          },
+        ],
         active: false,
       };
     }
     case "reset":
       return {
-        effect: { verb: VERB_RESET_CONFIG, args: [sessionId, c.key] },
+        effects: [{ verb: VERB_RESET_CONFIG, args: [sessionId, c.key] }],
         active: false,
       };
     // [LAW:one-source-of-truth] No key to carry — the click just says "step
@@ -592,12 +692,12 @@ function realize(
     // a history step is a one-shot trigger, not a current-selection toggle.
     case "undo":
       return {
-        effect: { verb: VERB_UNDO, args: [sessionId] },
+        effects: [{ verb: VERB_UNDO, args: [sessionId] }],
         active: false,
       };
     case "redo":
       return {
-        effect: { verb: VERB_REDO, args: [sessionId] },
+        effects: [{ verb: VERB_REDO, args: [sessionId] }],
         active: false,
       };
     // [LAW:one-source-of-truth] The op is fixed at compile time (see
@@ -608,10 +708,12 @@ function realize(
     // trigger, not a current-selection toggle.
     case "layout-op":
       return {
-        effect: {
-          verb: VERB_APPLY_LAYOUT_OP,
-          args: [sessionId, c.key, encodeLayoutOp(c.op)],
-        },
+        effects: [
+          {
+            verb: VERB_APPLY_LAYOUT_OP,
+            args: [sessionId, c.key, encodeLayoutOp(c.op)],
+          },
+        ],
         active: false,
       };
     // [LAW:one-source-of-truth] The picked option (boundValue ?? display — the
@@ -620,6 +722,46 @@ function realize(
     // emits, so the daemon's apply-layout-op handler and undo/redo need no
     // knowledge of where the segment name came from. Never "active": a
     // structural edit is a one-shot trigger, not a current-selection toggle.
+    // [LAW:dataflow-not-control-flow] The destination is resolved to a value
+    // and the SAME fold runs on it — a dual's realization is its chosen
+    // half's realization, with nothing about persistence duplicated here.
+    // Depth is structurally one: a dual's halves are the single-destination
+    // decls actionDestinations built, which can never be dual themselves.
+    //
+    // [LAW:no-silent-failure] A DURABLE click carries the session key to
+    // RELEASE as a trailing arg on its own write, so the daemon drops it only
+    // after that write succeeded. Without the release the write would be
+    // invisible to the session that made it — every settable global resolves
+    // session pick OVER durable default, so the workflow this menu invites
+    // ("try it here, then tick persist? to commit it") would set a default the
+    // user cannot see and leave the control dead for the rest of the session.
+    // Riding the write rather than sitting beside it is what makes the pair
+    // unsplittable: a click runs every effect it carries, so a rejected write
+    // must not be able to drop the pick on its own.
+    case "dual": {
+      const chosen = activeDestination(c, store);
+      const { effects, active } = realize(
+        chosen,
+        display,
+        boundValue,
+        store,
+        sessionId,
+      );
+      // The durable write carries the session key to RELEASE as one more
+      // segment on itself, so the daemon clears it only after its own write
+      // succeeded. A second effect beside it would not do: `dispatch` runs
+      // every effect in a click by design, so a rejected write would still
+      // wipe the session pick and leave nothing durable in its place.
+      return chosen === c.durable
+        ? {
+            effects: effects.map((e) => ({
+              ...e,
+              args: [...e.args, c.sessionKey],
+            })),
+            active,
+          }
+        : { effects, active };
+    }
     case "layout-op-option": {
       const segment = boundValue ?? display;
       const op: LayoutOp = {
@@ -629,10 +771,12 @@ function realize(
         relation: c.relation,
       };
       return {
-        effect: {
-          verb: VERB_APPLY_LAYOUT_OP,
-          args: [sessionId, c.key, encodeLayoutOp(op)],
-        },
+        effects: [
+          {
+            verb: VERB_APPLY_LAYOUT_OP,
+            args: [sessionId, c.key, encodeLayoutOp(op)],
+          },
+        ],
         active: false,
       };
     }
@@ -682,24 +826,34 @@ export function renderAction(
   displays: readonly string[],
   runtime: ActionRuntime,
 ): RichText {
-  const action = runtime.compiled.get(name);
+  const declared = runtime.compiled.get(name);
   // [LAW:no-defensive-null-guards] The loader validates every `{{ action "x" }}`
   // reference resolves to a declared action, and compileActions compiled every
   // declared action for THIS config's engine. A miss is a caller/wiring bug.
-  if (!action) {
+  if (!declared) {
     throw new Error(`action "${name}" is not declared in this config`);
   }
   const store = runtime.store;
-  const { display, boundValue } = selectDisplay(name, action, displays, store);
+  // [LAW:dataflow-not-control-flow] DISPLAY selection reads the resolved half
+  // (a cycle's glyph is the current member's, whichever store it will write),
+  // while REALIZATION is handed the declaration itself — a dual realizes as
+  // its chosen half PLUS the session clear that keeps a durable write visible,
+  // and that pairing belongs to the one fold that owns the union.
+  const { display, boundValue } = selectDisplay(
+    name,
+    activeDestination(declared, store),
+    displays,
+    store,
+  );
   const sessionId = readVar(store, "session.id");
-  const { effect, active } = realize(
-    action,
+  const { effects, active } = realize(
+    declared,
     display,
     boundValue,
     store,
     sessionId,
   );
-  return linkFragment(display, effectsUrl([effect]), active);
+  return linkFragment(display, effectsUrl(effects), active);
 }
 
 // ─── FuncMap entry ─────────────────────────────────────────────────────────────

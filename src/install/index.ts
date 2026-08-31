@@ -451,8 +451,8 @@ function installSuccessMessage(): string {
   return (
     `✓ install complete.\n` +
     `  Restart Claude Code to pick up the new statusline.\n` +
-    `  Tip: the default bar has a settings drawer — click ⚙ settings\n` +
-    `  ${DISCLOSURE_GLYPH_CLOSED} to reveal a clickable theme/look picker and other display options.\n`
+    `  Tip: every bar carries a settings menu — click ☰ ${DISCLOSURE_GLYPH_CLOSED} for preset\n` +
+    `  switching, edit mode, and clickable theme/look/style/wrap/padding controls.\n`
   );
 }
 
