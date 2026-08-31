@@ -172,6 +172,9 @@ export interface RawDslConfig {
   // arrangement selected per session, the exact twin of `looks` one level up
   // (a look adapts the THEME; a preset adapts the LAYOUT + display globals).
   readonly presets?: Readonly<Record<string, PresetDecl>>;
+  // The display globals edit mode stages while it is on — see DslConfig's own
+  // `editGlobals` for the shape, the merge, and where it sits in the chain.
+  readonly editGlobals?: Partial<Globals>;
   // Named theme-adaptation bundles ("looks"): each is a full ThemeKey (the
   // loader normalizes absent axes to identity at parse). Applied ON TOP of the
   // active theme at render — a transform composing with every theme, selected
@@ -216,6 +219,26 @@ export interface DslConfig {
   // `{ set: …, from: "presets" }` ranges these names; the derived click gate and
   // the rendered options read this one map.
   readonly presets: Readonly<Record<string, PresetDecl>>;
+  // [LAW:one-source-of-truth] The display globals edit mode stages while it is
+  // on — the `globals` half of the fragment whose `root` half edit chrome
+  // already stages (src/config/edit-chrome.ts). Merges FIELD BY FIELD with the
+  // bundled default's (like `globals` itself, not wholesale like `root`), so a
+  // user retuning the separator keeps the bundled `style: "plain"`.
+  //
+  // [LAW:types-are-the-program] `Partial<Globals>`, deliberately NOT
+  // `PresetDecl`: a preset is root + globals, and edit mode needs only the
+  // globals half. Taking the wider type to use half of it would make "an edit
+  // fragment that restages the layout" representable — a second authority over
+  // a tree edit-chrome already owns. The loader additionally rejects `preset`
+  // inside it, for the same reason a preset may not select a preset.
+  //
+  // Its rung in the precedence chain is the RIGHTMOST one (see
+  // src/config/presets.ts): it outranks even a session pick, because entering
+  // edit mode is decided later than picking a style. Nothing writes it back to
+  // SessionState or the overrides layer, which is why leaving edit mode
+  // restores the previous look with no save/restore path
+  // [LAW:dataflow-not-control-flow].
+  readonly editGlobals: Partial<Globals>;
   // [LAW:single-enforcer] The effective helper set: a name → template-body map
   // compiled to a defines-preamble at registerDslConfig. Empty when no config
   // declares helpers — an absent `helpers` key merges to `{}` (same cascade as

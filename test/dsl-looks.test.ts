@@ -268,12 +268,12 @@ describe("look click — live whole-bar recolor over the active theme", () => {
     );
     const render = (): string => {
       const basePalette = paletteForThemeName(
-        effectiveThemeName(
+        effectiveThemeName(undefined, 
           sessionState.get(SID, "theme"),
           config.globals.palette,
         ),
       );
-      const effectiveLook = effectiveLookName(
+      const effectiveLook = effectiveLookName(undefined, 
         sessionState.get(SID, "look"),
         config.globals.look,
         config.looks,
@@ -375,14 +375,14 @@ describe("effectiveLookName / lookKeyByName", () => {
   };
 
   test("session over config default over the none floor", () => {
-    expect(effectiveLookName("vivid", "none", LOOKS)).toBe("vivid");
-    expect(effectiveLookName(null, "vivid", LOOKS)).toBe("vivid");
-    expect(effectiveLookName(null, undefined, LOOKS)).toBe("none");
+    expect(effectiveLookName(undefined, "vivid", "none", LOOKS)).toBe("vivid");
+    expect(effectiveLookName(undefined, null, "vivid", LOOKS)).toBe("vivid");
+    expect(effectiveLookName(undefined, null, undefined, LOOKS)).toBe("none");
   });
 
   test("a name outside the declared set collapses to none", () => {
-    expect(effectiveLookName("vapor", undefined, LOOKS)).toBe("none");
-    expect(effectiveLookName(null, "vapor", LOOKS)).toBe("none");
+    expect(effectiveLookName(undefined, "vapor", undefined, LOOKS)).toBe("none");
+    expect(effectiveLookName(undefined, null, "vapor", LOOKS)).toBe("none");
   });
 
   test("lookKeyByName throws loudly on a non-member (broken merge invariant)", () => {

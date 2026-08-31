@@ -95,11 +95,11 @@ function buildRuntime(padding: number = CONFIG_PADDING) {
         style: "powerline" as const,
         colorCompatibility: "truecolor" as const,
         charset: "unicode" as const,
-        wrap: effectiveAutoWrap(
+        wrap: effectiveAutoWrap(undefined, 
           sessionState.get(sid, "autoWrap"),
           config.globals.autoWrap,
         ),
-        padding: effectivePadding(
+        padding: effectivePadding(undefined, 
           sessionState.get(sid, "padding"),
           config.globals.padding,
         ),
@@ -217,14 +217,14 @@ describe("a session value outside the domain is not a session value", () => {
     ["padded digits", " 3 "],
     ["not a number", "wide"],
   ])("padding %s falls through to the config default", (_label, raw) => {
-    expect(effectivePadding(raw, CONFIG_PADDING)).toBe(CONFIG_PADDING);
+    expect(effectivePadding(undefined, raw, CONFIG_PADDING)).toBe(CONFIG_PADDING);
   });
 
   it.each([
     ["both ends of the range are admitted", PADDING_RANGE.min],
     ["and the top", PADDING_RANGE.max],
   ])("%s", (_label, value) => {
-    expect(effectivePadding(String(value), CONFIG_PADDING)).toBe(value);
+    expect(effectivePadding(undefined, String(value), CONFIG_PADDING)).toBe(value);
   });
 
   // `configured` is FALSE throughout, which is the whole point: `DEFAULT_WRAP`
@@ -234,7 +234,7 @@ describe("a session value outside the domain is not a session value", () => {
   it.each([["yes"], ["1"], [""], ["TRUE"], ["on"], ["False"]])(
     "autoWrap %s falls through to the config default",
     (raw) => {
-      expect(effectiveAutoWrap(raw, false)).toBe(false);
+      expect(effectiveAutoWrap(undefined, raw, false)).toBe(false);
     },
   );
 
@@ -245,12 +245,12 @@ describe("a session value outside the domain is not a session value", () => {
     // The other half of the same guard: the two real members must beat a
     // config default that disagrees, or "falls through" would be trivially
     // satisfied by a parse that never returns anything.
-    expect(effectiveAutoWrap(raw, !expected)).toBe(expected);
+    expect(effectiveAutoWrap(undefined, raw, !expected)).toBe(expected);
   });
 
   it("with no config default either, both land on their floor", () => {
-    expect(effectivePadding("nonsense", undefined)).toBe(DEFAULT_PADDING);
-    expect(effectiveAutoWrap("nonsense", undefined)).toBe(DEFAULT_WRAP);
+    expect(effectivePadding(undefined, "nonsense", undefined)).toBe(DEFAULT_PADDING);
+    expect(effectiveAutoWrap(undefined, "nonsense", undefined)).toBe(DEFAULT_WRAP);
   });
 });
 
@@ -283,13 +283,13 @@ describe("a stale session pick falls to the config default, not the floor", () =
   const PRESETS: Record<string, PresetDecl> = { default: {}, compact: {} };
 
   it("strip style: a removed vocabulary member yields the configured style", () => {
-    expect(effectiveStripStyle("no-such-style", "capsule")).toBe("capsule");
-    expect(effectiveStripStyle("no-such-style", undefined)).toBe("powerline");
+    expect(effectiveStripStyle(undefined, "no-such-style", "capsule")).toBe("capsule");
+    expect(effectiveStripStyle(undefined, "no-such-style", undefined)).toBe("powerline");
   });
 
   it("look: an orphaned name yields the configured look", () => {
-    expect(effectiveLookName("deleted-look", "vivid", LOOKS)).toBe("vivid");
-    expect(effectiveLookName("deleted-look", undefined, LOOKS)).toBe("none");
+    expect(effectiveLookName(undefined, "deleted-look", "vivid", LOOKS)).toBe("vivid");
+    expect(effectiveLookName(undefined, "deleted-look", undefined, LOOKS)).toBe("none");
   });
 
   it("preset: an orphaned name yields the configured preset", () => {
@@ -304,7 +304,7 @@ describe("a stale session pick falls to the config default, not the floor", () =
   it("a config default that is ITSELF stale still reaches the floor", () => {
     // The per-config domains are the only ones where the loader cannot catch a
     // stale default, so both rungs have to be parsed, not just the session's.
-    expect(effectiveLookName("deleted-look", "also-deleted", LOOKS)).toBe(
+    expect(effectiveLookName(undefined, "deleted-look", "also-deleted", LOOKS)).toBe(
       "none",
     );
     expect(effectivePresetName(null, "also-deleted", PRESETS)).toBe("default");

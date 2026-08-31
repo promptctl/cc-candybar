@@ -30,21 +30,10 @@ import { VariableStore } from "../var-system/store.js";
 import { SourceRegistry } from "../var-system/sources.js";
 import { SessionState } from "../daemon/session-state.js";
 import { listResolvablePaletteNames } from "../themes/policy.js";
-import {
-  effectiveThemeName,
-  effectiveLookName,
-  effectiveAutoWrap,
-  effectivePadding,
-  lookKeyByName,
-  paletteForThemeName,
-} from "../themes/index.js";
-import { effectivePresetName, presetGlobals } from "../config/presets.js";
+import { lookKeyByName, paletteForThemeName } from "../themes/index.js";
+import { resolveEffectiveGlobals } from "../daemon/render-payload.js";
 import { registerDslConfig, renderDsl } from "../dsl/render.js";
-import {
-  DEFAULT_CHARSET,
-  DEFAULT_COLOR_COMPATIBILITY,
-  DEFAULT_TERMINAL_WIDTH,
-} from "../render/strip.js";
+import { DEFAULT_TERMINAL_WIDTH } from "../render/strip.js";
 import { applyClaudeCodeReserve } from "../utils/terminal-width.js";
 
 const FRAMES = 4;
@@ -83,18 +72,18 @@ const payload = {
 // globals every other option reads — the same preset-first order server.ts and
 // check.ts resolve in, so the demo prints the arrangement a fresh session opens
 // in.
-const preset = effectivePresetName(null, config.globals.preset, config.presets);
-const globals = presetGlobals(config, preset);
-const basePalette = paletteForThemeName(
-  effectiveThemeName(null, globals.palette),
+// [LAW:one-source-of-truth] THE daemon's resolver, not a mirror of it — a
+// fresh-session pick reader (null for every key) and no overrides log to be
+// customized by. The demo previously restated this chain field by field and had
+// already drifted: it hardcoded `style: "powerline"` below and so ignored a
+// config's own `globals.style`.
+const effective = resolveEffectiveGlobals(
+  config,
+  () => null,
+  () => false,
 );
-// Same fresh-session resolution one dimension over: the config-default look
-// over the "none" identity floor — the exact mirror of the daemon's per-render
-// effectiveLookName → lookKeyByName chain.
-const lookKey = lookKeyByName(
-  config.looks,
-  effectiveLookName(null, globals.look, config.looks),
-);
+const basePalette = paletteForThemeName(effective.theme);
+const lookKey = lookKeyByName(config.looks, effective.look);
 
 // A fresh store + registry for this run. (A hot-reloading daemon would
 // dispose() the old pair and build new ones — see registerDslConfig's docs.)
@@ -128,26 +117,21 @@ try {
       payload,
       basePalette,
       {
-        style: "powerline",
-        // Same resolution the daemon applies: the config global over the
-        // truecolor default floor.
-        colorCompatibility:
-          globals.colorCompatibility ?? DEFAULT_COLOR_COMPATIBILITY,
+        style: effective.style,
+        separator: effective.separator,
+        colorCompatibility: effective.colorCompatibility,
         // [LAW:one-source-of-truth] Demo applies the same Claude-Code-UI
         // reserve the daemon does so demo output matches the bytes a real
         // statusline would emit at the same terminal width.
         width: applyClaudeCodeReserve(
           process.stdout.columns ?? DEFAULT_TERMINAL_WIDTH,
         ),
-        // Same resolvers the daemon applies, with a null session pick — the
-        // demo has no SessionState, so both land on the config default over
-        // their floor.
-        wrap: effectiveAutoWrap(null, globals.autoWrap),
-        padding: effectivePadding(null, globals.padding),
-        charset: globals.charset ?? DEFAULT_CHARSET,
+        wrap: effective.autoWrap,
+        padding: effective.padding,
+        charset: effective.charset,
       },
       undefined,
-      { look: lookKey, preset },
+      { look: lookKey, preset: effective.preset },
     );
     process.stdout.write(`  ${line}\n`);
     if (frame < FRAMES - 1) await sleep(FRAME_INTERVAL_MS);

@@ -130,7 +130,7 @@ function rig(source: string): {
           // functions, not a restated rule — is what lets an assertion read
           // the LABEL after a click instead of only the click's URL.
           theme: {
-            effective: effectiveThemeName(
+            effective: effectiveThemeName(undefined, 
               sessionState.get(SID, "theme"),
               config.globals.palette,
             ),
@@ -139,13 +139,13 @@ function rig(source: string): {
           style: { effective: "powerline" },
           preset: { effective: "default" },
           autoWrap: {
-            effective: effectiveAutoWrap(
+            effective: effectiveAutoWrap(undefined, 
               sessionState.get(SID, "autoWrap"),
               config.globals.autoWrap,
             ),
           },
           padding: {
-            effective: effectivePadding(
+            effective: effectivePadding(undefined, 
               sessionState.get(SID, "padding"),
               config.globals.padding,
             ),

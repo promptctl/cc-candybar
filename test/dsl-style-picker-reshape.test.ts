@@ -58,11 +58,11 @@ function buildRuntime() {
   // [LAW:one-source-of-truth] Resolve the strip style per render the SAME way the
   // daemon does — the session's clicked style over the config default over the
   // "powerline" floor. Freezing it would silently pass while the real daemon
-  // reshapes. (server.ts: renderOpts.style = effectiveStripStyle(
+  // reshapes. (server.ts: renderOpts.style = effectiveStripStyle(undefined, 
   // sessionState.get(sid,'style'), globals.style)).
   const render = (): string =>
     renderDsl(config, compiled, store, registry, { session_id: SID }, basePalette, {
-      style: effectiveStripStyle(
+      style: effectiveStripStyle(undefined, 
         sessionState.get(SID, "style"),
         config.globals.style,
       ),
@@ -117,18 +117,18 @@ describe("DSL style picker — live reshape", () => {
 
 describe("effectiveStripStyle — session over config over floor", () => {
   test("session pick wins over config default and floor", () => {
-    expect(effectiveStripStyle("capsule", "plain")).toBe("capsule");
+    expect(effectiveStripStyle(undefined, "capsule", "plain")).toBe("capsule");
   });
   test("config default applies when the session is unset", () => {
-    expect(effectiveStripStyle(null, "plain")).toBe("plain");
+    expect(effectiveStripStyle(undefined, null, "plain")).toBe("plain");
   });
   test("floor is powerline when neither session nor config is set", () => {
-    expect(effectiveStripStyle(null, undefined)).toBe("powerline");
+    expect(effectiveStripStyle(undefined, null, undefined)).toBe("powerline");
   });
   test("a stale out-of-domain session value collapses to the floor", () => {
     // A SessionState entry left over from a prior option vocabulary (e.g. the
     // legacy 'muted' preset) is not a renderable strip style — it must not leak
     // through as a StripStyle. [LAW:no-silent-failure] / [LAW:types-are-the-program]
-    expect(effectiveStripStyle("muted", undefined)).toBe("powerline");
+    expect(effectiveStripStyle(undefined, "muted", undefined)).toBe("powerline");
   });
 });

@@ -104,43 +104,63 @@ const GLOBALS_SCHEMA: RecordSchema<Globals> = {
   fields: GLOBALS_FIELDS,
 };
 
-// [LAW:one-source-of-truth] A preset's `globals` may not carry `preset`: which
-// preset is active has exactly one authority (session pick over globals.preset
-// over the floor), and a preset re-selecting a preset would be a second one —
-// a cyclic second one. Same species of bespoke, migration-pointing rejection as
+// [LAW:one-source-of-truth] A globals FRAGMENT — a delta layered over the
+// config's own globals at render time — may not carry `preset`: which preset is
+// active has exactly one authority (session pick over globals.preset over the
+// floor), and a fragment re-selecting a preset would be a second one. For a
+// preset's own fragment that second authority is also cyclic; for edit mode's
+// it would let a look-only fragment restage the whole layout, which edit chrome
+// already owns. Same species of bespoke, migration-pointing rejection as
 // colorCompatibility's "auto" above, and for the same reason: an author who
 // writes it deserves to be told WHY, not handed a bare unknown-key message.
-const nestedPresetSpec: FieldSpec<string> = {
-  required: false,
-  // Always-fail: JSON Schema's `not: {}` matches nothing, so an editor flags
-  // the key at the same moment the validator does.
-  json: {
-    not: {},
-    description:
-      "not allowed inside a preset — a preset cannot select a preset",
-  },
-  parse: (ctx, path, field, raw) => {
-    if (raw[field] !== undefined) {
-      ctx.issues.push({
-        path: `${path}.${field}`,
-        message:
-          `${path}.${field}: a preset cannot select a preset. Which preset is active is ` +
-          `resolved once, as session pick over globals.preset over "default"; a preset ` +
-          `naming another would be a second authority over that, and a cyclic one. ` +
-          `Set the default arrangement in the top-level globals.preset instead.`,
-        line: findKeyLine(ctx.source, [...path.split("."), field]),
-      });
-    }
-    return undefined;
-  },
-};
+//
+// [LAW:one-type-per-behavior] Both fragments reject the field identically and
+// differ only in the SUBJECT a diagnostic names, so this is one spec taking
+// that noun as data — never two specs that could drift in what they reject.
+function nestedPresetSpec(subject: string): FieldSpec<string> {
+  return {
+    required: false,
+    // Always-fail: JSON Schema's `not: {}` matches nothing, so an editor flags
+    // the key at the same moment the validator does.
+    json: {
+      not: {},
+      description: `not allowed here — ${subject} cannot select a preset`,
+    },
+    parse: (ctx, path, field, raw) => {
+      if (raw[field] !== undefined) {
+        ctx.issues.push({
+          path: `${path}.${field}`,
+          message:
+            `${path}.${field}: ${subject} cannot select a preset. Which preset is active is ` +
+            `resolved once, as session pick over globals.preset over "default"; a fragment ` +
+            `naming another would be a second authority over that. ` +
+            `Set the default arrangement in the top-level globals.preset instead.`,
+          line: findKeyLine(ctx.source, [...path.split("."), field]),
+        });
+      }
+      return undefined;
+    },
+  };
+}
 
-// [LAW:one-source-of-truth] The preset-scoped globals schema is the SAME field
-// table with exactly one field swapped for its rejection — not a hand-listed
-// subset that a future globals field could be forgotten from.
+// [LAW:one-source-of-truth] Each fragment-scoped globals schema is the SAME
+// field table with exactly one field swapped for its rejection — not a
+// hand-listed subset that a future globals field could be forgotten from.
 const PRESET_GLOBALS_SCHEMA: RecordSchema<Globals> = {
   noun: "preset globals key",
-  fields: { ...GLOBALS_FIELDS, preset: nestedPresetSpec },
+  fields: { ...GLOBALS_FIELDS, preset: nestedPresetSpec("a preset") },
+};
+
+// [LAW:one-type-per-behavior] Edit mode's staged globals are the same shape one
+// rung later in the precedence chain, so they reuse the same table rather than
+// declaring which fields edit mode "supports" — a field added to Globals is
+// edit-settable the same day, with no edit here.
+const EDIT_GLOBALS_SCHEMA: RecordSchema<Globals> = {
+  noun: "editGlobals key",
+  fields: {
+    ...GLOBALS_FIELDS,
+    preset: nestedPresetSpec("the editGlobals fragment"),
+  },
 };
 
 // An absent globals block is the empty default (no issue); a non-object is a
@@ -175,6 +195,20 @@ export function globalsJson(): JsonNode {
 
 export function presetGlobalsJson(): JsonNode {
   return recordJson(PRESET_GLOBALS_SCHEMA);
+}
+
+// Edit mode's twin of the two above: same interpreter, same field table, the
+// schema whose `preset` rejection names the editGlobals fragment.
+export function validateEditGlobals(
+  ctx: ValidateCtx,
+  path: string,
+  raw: unknown,
+): Globals {
+  return record(ctx, EDIT_GLOBALS_SCHEMA, path, raw) ?? {};
+}
+
+export function editGlobalsJson(): JsonNode {
+  return recordJson(EDIT_GLOBALS_SCHEMA);
 }
 
 // [LAW:one-source-of-truth] THE membership check for "is this a real Globals

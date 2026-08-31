@@ -56,6 +56,7 @@ const EFFECTIVE_GLOBALS: EffectiveGlobals = {
   colorCompatibility: "truecolor",
   autoWrap: true,
   padding: 1,
+  separator: undefined,
 };
 
 const GIT_PATHS = new Set([
@@ -340,6 +341,7 @@ describe("buildRenderPayload — effective globals projection", () => {
       colorCompatibility: "256",
       autoWrap: false,
       padding: 3,
+      separator: undefined,
     };
     const logs: LogEntry[] = [];
     const payload = await buildRenderPayload(

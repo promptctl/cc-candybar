@@ -107,7 +107,7 @@ describe("shipped example configs (examples/*.json5)", () => {
     expect(out).toContain("◆ 8");
     expect(out).toContain("+ 512");
     // [LAW:one-source-of-truth] The theme trigger reads the daemon-resolved
-    // `theme.effective` var — checkConfig threads effectiveThemeName(null,
+    // `theme.effective` var — checkConfig threads effectiveThemeName(undefined, null,
     // globals.palette) into the payload exactly as the daemon does, so the
     // label below is single-sourced from legacy-parity's globals.palette.
     expect(out).toContain("🎨 catppuccin-mocha");
