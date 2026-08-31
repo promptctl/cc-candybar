@@ -19,6 +19,8 @@ import {
   actionBindsRedo,
   actionBindsReset,
   actionBindsSet,
+  actionIsDual,
+  PERSIST_WHEN,
   actionBindsUndo,
   type ActionDecl,
 } from "../action.js";
@@ -157,6 +159,33 @@ export function validateCrossReferences(
         path: `actions.${name}.from`,
         message: `actions.${name} from: references unknown option domain "${a.from}" (have: ${knownOptionDomainNames(optionDomains).join(", ")})`,
         line: findKeyLine(ctx.source, ["actions", name, "from"]),
+      });
+    }
+  }
+  // [LAW:no-silent-failure] A dual action's `persistWhen` must name a key some
+  // `state` variable declares. The structural pass proves only that it is a
+  // deliverable wire key; whether it RESOLVES is a cross-ref concern, exactly
+  // as `from`'s domain is above.
+  //
+  // Without this, a typo loads perfectly cleanly and then does nothing
+  // forever: compileDual falls back to the raw key name, activeDestination
+  // reads it, finds nothing, and `parseSessionBoolean` answers null — which
+  // means "session". So the checkbox the author wired to the real key flips a
+  // value no control reads, the destination never changes, and there is no
+  // error anywhere to explain why. A silently-permanent session write is the
+  // worst possible shape for this failure, since it looks exactly like
+  // working software.
+  for (const [name, a] of Object.entries(cfg.actions)) {
+    if (!actionIsDual(a)) continue;
+    const selector = a[PERSIST_WHEN];
+    const declared = Object.values(cfg.variables).some(
+      (v) => v.kind === "state" && v.key === selector,
+    );
+    if (!declared) {
+      ctx.issues.push({
+        path: `actions.${name}.${PERSIST_WHEN}`,
+        message: `actions.${name} ${PERSIST_WHEN}: "${selector}" is not a declared state key — a dual action's selector must name a { kind: "state", key: "${selector}" } variable, or the destination can never change`,
+        line: findKeyLine(ctx.source, ["actions", name, PERSIST_WHEN]),
       });
     }
   }

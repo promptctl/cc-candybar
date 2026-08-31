@@ -212,6 +212,37 @@ const CONFIG_CONTROLS: readonly SettingControl[] = [
   },
 ];
 
+// The two settings whose affordance is not a picker: wrapping is a toggle (two
+// members, so a menu would be a drop-down over a binary) and padding is a
+// stepper over a range (16 picker cells for a value you nudge). Both are dual
+// exactly like the pickers — only the affordance differs, so they carry the
+// same key record and only their `domain` is absent.
+//
+// [LAW:one-source-of-truth] Declared as records rather than typed inline at
+// each use, so every key in SETTINGS_WRITTEN_KEYS below traces to one
+// declaration. When these two were string literals repeated across the set,
+// the segment and the action, a rename in one place would have silently
+// misclassified the key rather than failing.
+interface KeyedSetting {
+  readonly name: string;
+  readonly sessionKey: string;
+  readonly configKey: string;
+}
+
+const WRAP: KeyedSetting = {
+  name: "wrap",
+  sessionKey: "autoWrap",
+  configKey: "autoWrap",
+};
+const PADDING: KeyedSetting = {
+  name: "padding",
+  sessionKey: "padding",
+  configKey: "padding",
+};
+
+const WRAP_SEG = `${SETTINGS_NS}${WRAP.name}`;
+const PADDING_SEG = `${SETTINGS_NS}${PADDING.name}`;
+
 // Every picker control, wherever it renders — minting one is the same job in
 // both rows, so the synthesis folds over this and the placement lists above
 // decide only where each lands.
@@ -228,11 +259,12 @@ const PICKER_CONTROLS: readonly SettingControl[] = [
 // same records the controls are minted from, so a consumer pairing it with an
 // authorship check (test/helpers/ambient-chrome.ts) can never drift from what
 // the synthesis actually declares.
-export const SETTINGS_WRITTEN_KEYS: ReadonlySet<string> = new Set([
-  ...PICKER_CONTROLS.flatMap((c) => [c.sessionKey, c.configKey]),
-  "autoWrap",
-  "padding",
-]);
+export const SETTINGS_WRITTEN_KEYS: ReadonlySet<string> = new Set(
+  [...PICKER_CONTROLS, WRAP, PADDING].flatMap((c) => [
+    c.sessionKey,
+    c.configKey,
+  ]),
+);
 
 // [LAW:one-source-of-truth] A control's three names, derived from its one
 // name — the segment that shows it, the action its picker applies, and the
@@ -241,13 +273,6 @@ export const SETTINGS_WRITTEN_KEYS: ReadonlySet<string> = new Set([
 const controlSeg = (name: string): string => `${SETTINGS_NS}${name}`;
 const controlApply = (name: string): string => `${SETTINGS_NS}apply.${name}`;
 const controlReset = (name: string): string => `${SETTINGS_NS}reset.${name}`;
-
-// The two settings whose affordance is not a picker: wrapping is a toggle
-// (two members, so a menu would be a drop-down over a binary) and padding is a
-// stepper over a range (16 picker cells for a value you nudge). Both are dual
-// exactly like the pickers — only the affordance differs.
-const WRAP_SEG = `${SETTINGS_NS}wrap`;
-const PADDING_SEG = `${SETTINGS_NS}padding`;
 
 // [LAW:one-source-of-truth] The predicate the body container gates on, derived
 // from the same anchor string the toggle's cycle writes — spelled once here,
@@ -572,32 +597,29 @@ function declareSettingControls(artifacts: MenuArtifacts): void {
     artifacts.actions[controlReset(c.name)] = { reset: c.configKey };
     declareHostedMenu(seg, apply, artifacts, PICKER_KEY);
   }
-  artifacts.actions[controlApply("wrap")] = {
-    set: "autoWrap",
-    persist: "autoWrap",
+  artifacts.actions[controlApply(WRAP.name)] = {
+    set: WRAP.sessionKey,
+    persist: WRAP.configKey,
     persistWhen: PERSIST_KEY,
     cycle: [...BOOLEAN_MEMBERS],
   };
-  artifacts.actions[controlReset("wrap")] = { reset: "autoWrap" };
+  artifacts.actions[controlReset(WRAP.name)] = { reset: WRAP.configKey };
   // [LAW:one-source-of-truth] The stepper's bounds are PADDING_RANGE, the same
   // range the loader validates a config-file `padding` against and the same one
   // both write gates enforce — a click can never reach a value the file could
   // not have held.
-  artifacts.actions[`${controlApply("padding")}.down`] = {
-    set: "padding",
-    persist: "padding",
-    persistWhen: PERSIST_KEY,
-    ...PADDING_RANGE,
-    by: -1,
-  };
-  artifacts.actions[`${controlApply("padding")}.up`] = {
-    set: "padding",
-    persist: "padding",
-    persistWhen: PERSIST_KEY,
-    ...PADDING_RANGE,
-    by: 1,
-  };
-  artifacts.actions[controlReset("padding")] = { reset: "padding" };
+  for (const by of [-1, 1]) {
+    artifacts.actions[
+      `${controlApply(PADDING.name)}.${by < 0 ? "down" : "up"}`
+    ] = {
+      set: PADDING.sessionKey,
+      persist: PADDING.configKey,
+      persistWhen: PERSIST_KEY,
+      ...PADDING_RANGE,
+      by,
+    };
+  }
+  artifacts.actions[controlReset(PADDING.name)] = { reset: PADDING.configKey };
 }
 
 // [LAW:one-source-of-truth] Edit mode's toggle, ensured rather than duplicated:

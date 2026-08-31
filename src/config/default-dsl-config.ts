@@ -303,8 +303,8 @@ export const RAW_DEFAULT_DSL_CONFIG = {
     // catppuccin-latte — a light palette that landed as a drive-by in an
     // unrelated formatting-cleanup commit and read poorly on the dark
     // terminals most users run — after live-clicking every registry theme
-    // through the bundled themeControl picker: it stays legible as the
-    // per-row hue-step (see themeControl/lookControl below) shifts each
+    // through the settings menu's theme picker: it stays legible as the
+    // per-row hue-step shifts each
     // row's hue, where warmer bases (gruvbox, dracula) drifted toward mud
     // and the pastel ones (rose-pine, atom-one) washed out at this
     // contrast.
@@ -774,7 +774,7 @@ export const RAW_DEFAULT_DSL_CONFIG = {
       default: 0,
     },
 
-    // No page-cursor var: the styleControl {{ menu }} synthesizes its own page
+    // No page-cursor var: a {{ menu }} synthesizes its own page
     // cursor (state var + int action, named by menuPageKey) under the reserved
     // menus.* namespace, alongside its open-state.
   },
@@ -1120,16 +1120,16 @@ export const RAW_DEFAULT_DSL_CONFIG = {
         " .metrics.sessionDuration .metrics.messageCount" +
         " .metrics.linesAdded .metrics.linesRemoved }}",
     },
-    // ── The four .3 globals steppers, folded into the settingsDrawer group
-    // (candybar-config-engine-71o.4) alongside theme/style/look above. Each
-    // pairs a `persist` control with a `↺` reset (docs' persist/reset
-    // convention) — `charset`/`colorCompatibility` have no SessionState half
-    // at all, so persist is genuinely their only seam, while
-    // `autoWrap`/`padding` do have one and are simply spelled durable here
-    // (candybar-settings-ui-aok.3 owns whether the panel offers the choice).
-    // Labels
-    // read `.field.effective` (the daemon-resolved value BuildLineOptions
-    // actually rendered with), never a restated literal.
+    // ── The TWO globals steppers left in this drawer. `charset` and
+    // `colorCompatibility` have no SessionState half at all — they describe
+    // the terminal, not a taste that varies per session — so `persist` is
+    // genuinely their only seam and there is no destination for a `persist?`
+    // selector to choose between. Everything with both halves
+    // (theme/style/look/preset/autoWrap/padding) moved to the synthesized
+    // settings menu as ONE dual control each (candybar-settings-ui-aok.3).
+    // Each pairs a `persist` control with a `↺` reset (docs' persist/reset
+    // convention); labels read `.field.effective` (the daemon-resolved value
+    // BuildLineOptions actually rendered with), never a restated literal.
     charsetControl: {
       template:
         "{{ .charset.effective }} " +
@@ -1155,7 +1155,7 @@ export const RAW_DEFAULT_DSL_CONFIG = {
     // (loader/persist-target.ts) — the SAME `from: "themes"` domain
     // applyThemeForever already uses.
     // [LAW:one-source-of-truth] exception: unlike charsetControl/
-    // paddingControl's `.field.effective` label, there is no
+    // the other controls' `.field.effective` labels, there is no
     // `segments.directory.palette.effective` payload projection — adding one
     // would require threading the full DslConfig through
     // buildRenderPayload's signature (today built from EffectiveGlobals
@@ -1257,20 +1257,19 @@ export const RAW_DEFAULT_DSL_CONFIG = {
     openProject: { open: "{{ .project_dir }}" },
     openTranscript: { open: "{{ .transcript_path }}" },
 
-    // [LAW:locality-or-seam] The settings-drawer steppers' behaviors
+    // [LAW:locality-or-seam] The settings-drawer controls' behaviors
     // (candybar-config-engine-71o.4), decoupled by NAME from
-    // charsetControl/colorCompatControl/wrapToggleControl/paddingControl
-    // below. Unlike theme/style/look (a per-session experiment via `set`),
-    // these four are spelled durable: `charset`/`colorCompatibility` have no
-    // SessionState half at all, and `autoWrap`/`padding` have one
-    // (candybar-settings-ui-aok.2) but keep persist as the DRAWER's spelling
-    // until .3 collapses the twins behind one `persist?`. So every one of
-    // these writes the
-    // config-file DEFAULT through the daemon-owned overrides layer (never the
-    // hand-authored file itself), gated by the SAME deriveActionValidators
-    // pass as a `set` (persist mirrors set's value-source shapes one for
-    // one). Each is paired with a `reset` so a drawer choice is always
-    // undoable from the bar, per the docs' persist/reset convention.
+    // charsetControl/colorCompatControl below. These are durable-only by
+    // NATURE, not by omission: `charset` and `colorCompatibility` describe the
+    // terminal (glyph coverage, colour depth) rather than a taste that varies
+    // between sessions, so they have no SessionState half for a `persist?`
+    // selector to choose between — which is exactly why
+    // candybar-settings-ui-aok.3 left them here while moving every
+    // both-halves setting into the settings menu as one dual control. Each
+    // writes the config DEFAULT through the daemon-owned overrides layer
+    // (never the hand-authored file itself), gated by the SAME
+    // deriveConfigActionValidators pass, and is paired with a `reset` so a
+    // drawer choice is always undoable from the bar.
     applyCharsetForever: { persist: "charset", from: "charsets" },
     resetCharset: { reset: "charset" },
     applyColorCompatForever: {
@@ -1605,7 +1604,7 @@ const AUTHORED_PALETTE_NAMES = new Set(
 // the zero-config daemon path (loadConfig: no config file found ⇒ raw={},
 // merged directly against this constant — see src/config/dsl-loader.ts and
 // src/config/loader/merge.ts) would ship an UNSYNTHESIZED default: a
-// `{{ menu (dict "key" …) }}` accordion pairing (themeControl/lookControl,
+// `{{ menu (dict "key" …) }}` accordion pairing (the settings menu's pickers,
 // brandon-theming-8uj.1) would render its glyph, but clicking it would reject
 // with "unknown state key" — the synthesis that derives a menu's `menus.*`
 // state var + cycle action only ever ran over TEXT a user typed, never over

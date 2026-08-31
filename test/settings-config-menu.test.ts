@@ -277,6 +277,23 @@ describe("the dual-destination action arm", () => {
     ).toThrow(ConfigError);
   });
 
+  // [LAW:no-silent-failure] A selector naming nothing loads cleanly and then
+  // does nothing FOREVER: the compiled action falls back to the raw key name,
+  // reads it, finds nothing, and an unreadable selector parses as "session".
+  // The checkbox flips a value no control reads and the destination never
+  // moves, with no error anywhere — working software, permanently wrong.
+  test("persistWhen naming an undeclared state key is a load error", () => {
+    expect(() =>
+      parseAndValidate(
+        "<test>",
+        base(
+          `{ t: { set: 'theme', persist: 'palette', persistWhen: 'persistt', from: 'themes' } }`,
+        ),
+        ALLOWED,
+      ),
+    ).toThrow(/is not a declared state key/);
+  });
+
   test("two value sources at once is a load error, as it is for set/persist", () => {
     expect(() =>
       parseAndValidate(

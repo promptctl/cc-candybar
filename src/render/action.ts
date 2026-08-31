@@ -207,6 +207,13 @@ export type CompiledActions = ReadonlyMap<string, CompiledActionDecl>;
 // highlight is inert (readVar falls back to "" since no such var exists).
 const CONFIG_KEY_TO_EFFECTIVE_VAR: ReadonlyMap<string, string> = new Map([
   ["palette", "theme.effective"],
+  // [LAW:one-source-of-truth] `preset` earns its entry here the moment a DUAL
+  // control writes it: compileDual makes BOTH halves read back through this
+  // map, so a field missing from it loses its current-selection mark on the
+  // session side too — and the preset picker sits on the settings menu's
+  // always-visible first row, where "which arrangement am I in" is the whole
+  // question the control answers.
+  ["preset", "preset.effective"],
   ["look", "look.effective"],
   ["style", "style.effective"],
   ["charset", "charset.effective"],
@@ -721,15 +728,16 @@ export function realize(
     // Depth is structurally one: a dual's halves are the single-destination
     // decls actionDestinations built, which can never be dual themselves.
     //
-    // [LAW:no-silent-failure] A DURABLE click carries the session clear with
-    // it, as a second effect in the same atomic dispatch. Without it the write
-    // would be invisible to the session that made it — every settable global
-    // resolves session pick OVER durable default, so the ordinary workflow
-    // this menu invites ("try it here, then tick persist? to commit it")
-    // would set a default the user cannot see and leave the control dead for
-    // the rest of the session, clicking forever with nothing changing.
-    // "Make this everyone's default" means "and stop overriding it here",
-    // and that is an ABSENCE, which is what clear-state writes.
+    // [LAW:no-silent-failure] A DURABLE click carries the session key to
+    // RELEASE as a trailing arg on its own write, so the daemon drops it only
+    // after that write succeeded. Without the release the write would be
+    // invisible to the session that made it — every settable global resolves
+    // session pick OVER durable default, so the workflow this menu invites
+    // ("try it here, then tick persist? to commit it") would set a default the
+    // user cannot see and leave the control dead for the rest of the session.
+    // Riding the write rather than sitting beside it is what makes the pair
+    // unsplittable: a click runs every effect it carries, so a rejected write
+    // must not be able to drop the pick on its own.
     case "dual": {
       const chosen = activeDestination(c, store);
       const { effects, active } = realize(

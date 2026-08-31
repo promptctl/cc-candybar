@@ -828,6 +828,55 @@ describe("persist action click → durable overrides write", () => {
       ),
     ).toThrow();
   });
+
+  // [LAW:verifiable-goals] candybar-settings-ui-aok.3's whole reason for
+  // folding the session release INTO the durable write, rather than emitting
+  // it beside the write as its own effect, is an ORDER guarantee: the release
+  // happens only after the write landed, so a failure can never cost the user
+  // their session pick with nothing durable in its place.
+  //
+  // This pins the order from the failing end. An unregistered release key —
+  // what a stale link carries after a reload narrowed the gates — must fail
+  // LOUDLY and leave the durable write that already succeeded intact on disk.
+  // A release that silently no-op'd, or one that somehow rolled the write
+  // back, would both pass a happy-path test; only this direction distinguishes
+  // them.
+  test("a bad release key fails loudly AFTER the durable write has landed", () => {
+    const config = parseAndValidate(
+      "<test>",
+      `{
+        globals: {},
+        variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
+        actions: { pin: { persist: 'palette', from: 'themes' } },
+        segments: { s: { template: 'x', bg: 'surface', fg: 'foreground' } },
+        root: 's',
+      }`,
+      ALLOWED,
+    );
+    const disposers = deriveConfigActionValidators(config).map(({ key, spec }) =>
+      registerConfigValidator(key, spec),
+    );
+    const sessionState = new SessionState();
+    const ctx: VerbContext = { sessionState, dlog: () => {} };
+    const enc = (v: string) => encodeURIComponent(v);
+    try {
+      expect(() =>
+        VERBS.get("set-config")!(
+          `${enc("s1")}/${enc("palette")}/${enc("nord")}/${enc("no-such-session-key")}`,
+          ctx,
+        ),
+      ).toThrow(/unknown session key/);
+      // The durable half is on disk regardless: the release ran after it, and
+      // its failure is reported rather than swallowed or compensated.
+      expect(
+        loadConfigOverrides(
+          join(xdgStateDir, "cc-candybar", "config-overrides.json"),
+        ),
+      ).toEqual({ palette: "nord" });
+    } finally {
+      for (const d of disposers) d();
+    }
+  });
 });
 
 // ─── RenderCache integration: merge precedence + reload + byte-identity ──────
