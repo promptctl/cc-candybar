@@ -23,9 +23,12 @@ Configuration:
   to point at a specific file. See the default config for all available options:
     node dist/index.mjs debug --project-dir . --cwd .
 
-  The bundled default bar ships a settings drawer — no config needed. Click
-  ⚙ settings ${DISCLOSURE_GLYPH_CLOSED} on the bar to reveal a clickable theme/look picker and
-  other display options.
+  Every bar carries a settings menu, whatever your config says — no config
+  needed, and writing your own \`root\` cannot delete it. Click
+  ☰ ${DISCLOSURE_GLYPH_CLOSED} on the bar for preset switching, edit mode, and a config menu
+  of clickable theme/look/style/wrap/padding controls. The \`persist?\`
+  checkbox there chooses where a change lands: unchecked it applies to this
+  session only, checked it becomes the default every session opens with.
 
 Subcommands:
   install                  One-shot setup: stages the runtime (native render
