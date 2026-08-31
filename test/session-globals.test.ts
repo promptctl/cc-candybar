@@ -27,10 +27,19 @@ import {
 } from "../src/daemon/verbs/state-validators";
 import {
   effectiveAutoWrap,
+  effectiveLookName,
   effectivePadding,
+  effectiveStripStyle,
   paletteForThemeName,
 } from "../src/themes";
-import { PADDING_RANGE, DEFAULT_PADDING } from "../src/themes/policy";
+import { effectivePresetName } from "../src/config/presets";
+import type { PresetDecl } from "../src/config/dsl-types";
+import type { ThemeKey } from "@promptctl/rich-js";
+import {
+  PADDING_RANGE,
+  DEFAULT_PADDING,
+  DEFAULT_WRAP,
+} from "../src/themes/policy";
 
 const BASE_THEME = "textual-dark";
 const ALLOWED = new Set([BASE_THEME]);
@@ -218,18 +227,87 @@ describe("a session value outside the domain is not a session value", () => {
     expect(effectivePadding(String(value), CONFIG_PADDING)).toBe(value);
   });
 
+  // `configured` is FALSE throughout, which is the whole point: `DEFAULT_WRAP`
+  // is true, and so is what any mis-parse of these strings would produce, so a
+  // table run against a `true` config default cannot tell "correctly fell
+  // through" from "wrongly parsed `yes` as true" — it passes either way.
+  it.each([["yes"], ["1"], [""], ["TRUE"], ["on"], ["False"]])(
+    "autoWrap %s falls through to the config default",
+    (raw) => {
+      expect(effectiveAutoWrap(raw, false)).toBe(false);
+    },
+  );
+
   it.each([
-    ["yes", true],
-    ["1", true],
-    ["", true],
-    ["TRUE", true],
-  ])("autoWrap %s falls through to the config default", (raw, configured) => {
-    expect(effectiveAutoWrap(raw, configured)).toBe(configured);
+    ["true", true],
+    ["false", false],
+  ])("autoWrap %s IS a session value, and wins", (raw, expected) => {
+    // The other half of the same guard: the two real members must beat a
+    // config default that disagrees, or "falls through" would be trivially
+    // satisfied by a parse that never returns anything.
+    expect(effectiveAutoWrap(raw, !expected)).toBe(expected);
   });
 
   it("with no config default either, both land on their floor", () => {
     expect(effectivePadding("nonsense", undefined)).toBe(DEFAULT_PADDING);
-    expect(effectiveAutoWrap("nonsense", undefined)).toBe(true);
+    expect(effectiveAutoWrap("nonsense", undefined)).toBe(DEFAULT_WRAP);
+  });
+});
+
+// [LAW:behavior-not-structure] The precedence this PR's shared resolver
+// applies to EVERY pickable global, pinned on the three fields that had their
+// own spelling before it: a stale session pick is an ABSENT session pick, so it
+// falls through to the config default and reaches the floor only when there is
+// no config default either.
+//
+// This is a deliberate change. The old per-field spellings collapsed a stale
+// pick straight to the floor, skipping the user's own declared default — so a
+// config saying `style: "capsule"` rendered powerline the moment a session
+// entry went stale. Every existing regression test passed `undefined` as the
+// config default, where both rules agree, which is exactly why the change could
+// land unnoticed; these cases are the ones that can tell them apart.
+describe("a stale session pick falls to the config default, not the floor", () => {
+  // Identity adaptations / empty fragments: these resolvers read only the KEYS
+  // (is this name declared?), so the values need to typecheck and nothing more.
+  const IDENTITY: ThemeKey = {
+    hueShift: 0,
+    chromaScale: 1,
+    lightnessScale: 1,
+    lightnessShift: 0,
+  };
+  const LOOKS: Record<string, ThemeKey> = {
+    none: IDENTITY,
+    vivid: IDENTITY,
+    muted: IDENTITY,
+  };
+  const PRESETS: Record<string, PresetDecl> = { default: {}, compact: {} };
+
+  it("strip style: a removed vocabulary member yields the configured style", () => {
+    expect(effectiveStripStyle("no-such-style", "capsule")).toBe("capsule");
+    expect(effectiveStripStyle("no-such-style", undefined)).toBe("powerline");
+  });
+
+  it("look: an orphaned name yields the configured look", () => {
+    expect(effectiveLookName("deleted-look", "vivid", LOOKS)).toBe("vivid");
+    expect(effectiveLookName("deleted-look", undefined, LOOKS)).toBe("none");
+  });
+
+  it("preset: an orphaned name yields the configured preset", () => {
+    expect(effectivePresetName("deleted-preset", "compact", PRESETS)).toBe(
+      "compact",
+    );
+    expect(effectivePresetName("deleted-preset", undefined, PRESETS)).toBe(
+      "default",
+    );
+  });
+
+  it("a config default that is ITSELF stale still reaches the floor", () => {
+    // The per-config domains are the only ones where the loader cannot catch a
+    // stale default, so both rungs have to be parsed, not just the session's.
+    expect(effectiveLookName("deleted-look", "also-deleted", LOOKS)).toBe(
+      "none",
+    );
+    expect(effectivePresetName(null, "also-deleted", PRESETS)).toBe("default");
   });
 });
 

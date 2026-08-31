@@ -182,10 +182,19 @@ export function isStripStyle(value: string): value is StripStyle {
 
 // The strip style a render should use, as data.
 // [LAW:one-type-per-behavior] `effectiveGlobal` over a closed registry-static
-// vocabulary: the narrowing guard IS the parse, so a stale SessionState entry
-// from a prior option vocabulary collapses to the floor. `pickJoiner` would
-// render an unknown style as powerline anyway; parsing here keeps the returned
-// TYPE honest rather than silently widening it.
+// vocabulary: the narrowing guard IS the parse. `pickJoiner` would render an
+// unknown style as powerline anyway; parsing here keeps the returned TYPE
+// honest rather than silently widening it.
+//
+// A stale SessionState entry (a member of a prior option vocabulary) is an
+// ABSENT session pick, not a pick of the floor: it falls through to the config
+// default, and only reaches "powerline" when the config declares no style
+// either. That is a deliberate change from the pre-`effectiveGlobal` spelling,
+// which collapsed straight to the floor and skipped the user's own declared
+// default — a config saying `style: "capsule"` deserves capsule when a session
+// entry goes stale, not powerline. Every field here now shares that one rule
+// [LAW:one-source-of-truth]; test/session-globals.test.ts pins it with a stale
+// pick over a valid non-floor default, the case the old tests never exercised.
 export function effectiveStripStyle(
   sessionStyle: string | null,
   globalsStyle: StripStyle | undefined,
@@ -309,10 +318,11 @@ export function effectiveAutoWrap(
 }
 
 // The intra-cell padding a render uses, as data. A session value outside
-// PADDING_RANGE collapses to the config default the same way a stale style name
-// collapses to powerline: the gate already refuses out-of-range clicks, so a
-// value that gets here is a stale entry from a narrower-since range, and the
-// default is the honest answer rather than a render at a width nobody chose.
+// PADDING_RANGE falls through to the config default, the same rule every other
+// field here follows: the gate already refuses out-of-range clicks, so a value
+// that gets here is a stale entry from a narrower-since range, and the user's
+// own default is the honest answer rather than a render at a width nobody
+// chose.
 export function effectivePadding(
   sessionPadding: string | null,
   globalsPadding: number | undefined,
