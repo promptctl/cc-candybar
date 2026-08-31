@@ -33,6 +33,8 @@ import { listResolvablePaletteNames } from "../themes/policy.js";
 import {
   effectiveThemeName,
   effectiveLookName,
+  effectiveAutoWrap,
+  effectivePadding,
   lookKeyByName,
   paletteForThemeName,
 } from "../themes/index.js";
@@ -41,9 +43,7 @@ import { registerDslConfig, renderDsl } from "../dsl/render.js";
 import {
   DEFAULT_CHARSET,
   DEFAULT_COLOR_COMPATIBILITY,
-  DEFAULT_PADDING,
   DEFAULT_TERMINAL_WIDTH,
-  DEFAULT_WRAP,
 } from "../render/strip.js";
 import { applyClaudeCodeReserve } from "../utils/terminal-width.js";
 
@@ -139,10 +139,11 @@ try {
         width: applyClaudeCodeReserve(
           process.stdout.columns ?? DEFAULT_TERMINAL_WIDTH,
         ),
-        // Same resolution the daemon applies: the config global over the
-        // default-on floor.
-        wrap: globals.autoWrap ?? DEFAULT_WRAP,
-        padding: globals.padding ?? DEFAULT_PADDING,
+        // Same resolvers the daemon applies, with a null session pick — the
+        // demo has no SessionState, so both land on the config default over
+        // their floor.
+        wrap: effectiveAutoWrap(null, globals.autoWrap),
+        padding: effectivePadding(null, globals.padding),
         charset: globals.charset ?? DEFAULT_CHARSET,
       },
       undefined,

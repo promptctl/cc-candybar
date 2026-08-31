@@ -48,11 +48,13 @@ import type {
 // BuildLineOptions), so the value a trigger label displays and the value
 // that actually shaped the render can never disagree — the same reasoning
 // theme/look already followed, generalized to every globals field a menu or
-// stepper can persist. `theme`/`look`/`style` compose SessionState over the
-// config default (a session pick can diverge from the persisted default for
-// its own session); `charset`/`colorCompatibility`/`autoWrap`/`padding` have
-// no SessionState half today, so their "effective" value is just the
-// resolved config global over its floor constant.
+// stepper can persist. `theme`/`look`/`style`/`autoWrap`/`padding` compose
+// SessionState over the config default (a session pick can diverge from the
+// persisted default for its own session); `charset` and `colorCompatibility`
+// have no SessionState half — they describe the terminal (glyph coverage,
+// colour depth) rather than a per-session taste, so the resolved config global
+// over its floor constant is their whole resolution. See CHARSETS in
+// themes/policy.ts for why that is a decision rather than a gap.
 export interface EffectiveGlobals {
   readonly theme: string;
   readonly look: string;

@@ -7,6 +7,7 @@ import { type Globals } from "../dsl-types.js";
 import {
   CHARSETS,
   COLOR_COMPATIBILITIES,
+  PADDING_RANGE,
   STRIP_STYLES,
   type ColorCompatibility,
 } from "../../themes/policy.js";
@@ -84,7 +85,11 @@ const GLOBALS_FIELDS: FieldSpecMap<Globals> = {
   // drive an unbounded `" ".repeat` allocation in the daemon
   // [LAW:no-silent-failure] — an absurd value is a loud load error, not a
   // silently-huge render.
-  padding: optionalIntSpec({ min: 0, max: 16 }),
+  // [LAW:one-source-of-truth] The bound comes from PADDING_RANGE, the same
+  // literal the bundled default's stepper actions bound clicks by and the
+  // session-half parse admits values from — so the file, the click, and the
+  // session pick cannot end up honouring three different ranges.
+  padding: optionalIntSpec(PADDING_RANGE),
   // [LAW:types-are-the-program] Closed enum like `style`: the joiner glyph
   // vocabularies pickJoiner can render — validates by membership, emits a
   // JSON-Schema `enum` from the same CHARSETS literal.

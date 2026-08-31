@@ -36,14 +36,14 @@ import {
   effectiveLookName,
   lookKeyByName,
   effectiveStripStyle,
+  effectiveAutoWrap,
+  effectivePadding,
 } from "./themes/policy.js";
 import { paletteForThemeName } from "./themes/palette-resolvers.js";
 import { effectivePresetName, presetGlobals } from "./config/presets.js";
 import {
   DEFAULT_CHARSET,
   DEFAULT_COLOR_COMPATIBILITY,
-  DEFAULT_PADDING,
-  DEFAULT_WRAP,
 } from "./render/strip.js";
 import type { EffectiveGlobals } from "./daemon/render-payload.js";
 
@@ -321,8 +321,8 @@ function loadRegisterRender(
       theme: effectiveThemeName(null, globals.palette),
       look: effectiveLookName(null, globals.look, config.looks),
       style: effectiveStripStyle(null, globals.style),
-      autoWrap: globals.autoWrap ?? DEFAULT_WRAP,
-      padding: globals.padding ?? DEFAULT_PADDING,
+      autoWrap: effectiveAutoWrap(null, globals.autoWrap),
+      padding: effectivePadding(null, globals.padding),
       charset: globals.charset ?? DEFAULT_CHARSET,
       colorCompatibility:
         globals.colorCompatibility ?? DEFAULT_COLOR_COMPATIBILITY,

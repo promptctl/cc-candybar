@@ -37,16 +37,12 @@ export type { Charset, ColorCompatibility, StripStyle };
 // applyClaudeCodeReserve from src/utils/terminal-width).
 export const DEFAULT_TERMINAL_WIDTH = 120;
 
-// [LAW:one-source-of-truth] The one statement of the globals.autoWrap
-// default (on — current behavior). Every resolver of the config global
-// (`globals.autoWrap ?? DEFAULT_WRAP`) derives from this constant.
-export const DEFAULT_WRAP = true;
-
-// [LAW:one-source-of-truth] The one statement of the globals.padding
-// default (one space per side inside each segment cell — current behavior,
-// matching the legacy display.padding). Every resolver of the config global
-// (`globals.padding ?? DEFAULT_PADDING`) derives from this constant.
-export const DEFAULT_PADDING = 1;
+// [LAW:one-source-of-truth] autoWrap's and padding's defaults live in
+// themes/policy.ts beside their resolvers and padding's range, because the
+// config loader needs them too and config must not import render
+// [LAW:one-way-deps]. Re-exported here on the same terms as the types above, so
+// render-layer consumers keep importing them from the strip module.
+export { DEFAULT_WRAP, DEFAULT_PADDING } from "../themes/policy.js";
 
 // [LAW:one-source-of-truth] The one statement of the globals.charset default
 // (powerline unicode glyphs — current behavior, matching the legacy
