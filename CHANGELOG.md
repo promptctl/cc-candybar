@@ -1,3 +1,10 @@
+# [1.40.0](https://github.com/promptctl/cc-candybar/compare/v1.39.0...v1.40.0) (2026-08-31)
+
+
+### Features
+
+* **config:** edit mode's look is a staged globals fragment, not renderer constants (candybar-settings-ui-aok.5) ([#194](https://github.com/promptctl/cc-candybar/issues/194)) ([480e6a9](https://github.com/promptctl/cc-candybar/commit/480e6a931a805fe5f38edec2768afc2455200642))
+
 # [1.39.0](https://github.com/promptctl/cc-candybar/compare/v1.38.0...v1.39.0) (2026-08-31)
 
 
