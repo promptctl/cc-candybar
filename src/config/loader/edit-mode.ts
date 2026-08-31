@@ -51,7 +51,9 @@ import type { ActionDecl } from "../action.js";
 import {
   DISCLOSURE_CLOSED,
   disclosureCycleAction,
+  disclosureGate,
   disclosureStateVar,
+  type DisclosureRef,
 } from "../disclosure.js";
 import { reservedNamespaceCollisions } from "./reserved-namespace.js";
 
@@ -71,10 +73,20 @@ export const EDIT_MODE_KEY = "edit.mode";
 export const EDIT_TOGGLE_ACTION = "edit.toggle";
 export const EDIT_MODE_OPEN = "open";
 
+// [LAW:one-source-of-truth] Edit mode AS a disclosure, which is what it has
+// always been: a binary toggle over one SessionState key. Naming it as a ref
+// lets anything nested inside edit mode (a `(?)` and its body) derive its own
+// gate by conjunction with this one, instead of concatenating gate strings.
+export const EDIT_MODE_REF: DisclosureRef = {
+  variable: EDIT_MODE_KEY,
+  member: EDIT_MODE_OPEN,
+};
+
 // [LAW:one-source-of-truth] The predicate every synthesized +/- chrome
-// segment gates on — spelled once here so edit-chrome.ts never hand-rolls
-// the template string a second time.
-export const EDIT_MODE_GATE = `{{ eq .${EDIT_MODE_KEY} "${EDIT_MODE_OPEN}" }}`;
+// segment gates on — derived from the ref above through the same function
+// every other disclosure's gate comes from, so edit-mode chrome and a group
+// body are gated by one rule rather than by two spellings that agree today.
+export const EDIT_MODE_GATE = disclosureGate(EDIT_MODE_REF);
 
 // [LAW:single-enforcer] The ONE detector for "does this file want edit mode":
 // a literal `{{ action "edit.toggle" … }}` call somewhere a segment's

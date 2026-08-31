@@ -49,8 +49,13 @@ import {
   DISCLOSURE_GLYPH_CLOSED,
   DISCLOSURE_GLYPH_OPEN,
   disclosureCycleAction,
+  disclosureGate,
   disclosureStateVar,
+  disclosureTrigger,
+  type DisclosureRef,
 } from "./disclosure.js";
+import { declareHelp, type HelpDisclosure } from "./help.js";
+import { PERSIST_HELP } from "../help-text.js";
 import {
   EDIT_MODE_KEY,
   EDIT_MODE_OPEN,
@@ -127,11 +132,34 @@ const CONFIG_SEG = `${SETTINGS_NS}config`;
 // cannot silently write a durable default today — SessionState is per session.
 const PERSIST_KEY = PERSIST_SEG;
 
-// [LAW:one-source-of-truth] The config menu's own disclosure, spelled the same
-// way the anchor above is: ONE name that is the segment, the state variable and
-// the cycle action, so its toggle's click and its body's `when` cannot address
-// different keys.
-const CONFIG_OPEN_GATE = `{{ and (eq .${SETTINGS_ANCHOR} "${SETTINGS_OPEN}") (eq .${CONFIG_SEG} "${SETTINGS_OPEN}") }}`;
+// [LAW:one-source-of-truth] The two disclosures this menu IS, as refs rather
+// than as gate strings: every gate below — and every `(?)` nested inside them —
+// derives from these, so the toggle that writes a key and the `when` that reads
+// it cannot name different variables.
+const SETTINGS_REF: DisclosureRef = {
+  variable: SETTINGS_ANCHOR,
+  member: SETTINGS_OPEN,
+};
+const CONFIG_REF: DisclosureRef = {
+  variable: CONFIG_SEG,
+  member: SETTINGS_OPEN,
+};
+
+// Gated on BOTH keys — a config row left open yesterday must not render beside
+// a closed menu today. Nesting is conjunction, which is why it is one list.
+const CONFIG_OPEN_GATE = disclosureGate(SETTINGS_REF, CONFIG_REF);
+
+// The `(?)` that explains `persist?` — the one control in this menu whose
+// behaviour a user cannot infer from its label, which is exactly why the ticket
+// named it as a required use site. Its body says what the NEXT click does, in
+// the same two sentences `--help` prints.
+const PERSIST_HELP_SEG = `${SETTINGS_NS}help.persist`;
+
+// [LAW:one-source-of-truth] The panel's surface colours, spelled once. The help
+// cells must wear the same ones as the controls they explain — a `(?)` body in
+// a different colour reads as a different panel — and that agreement is only
+// guaranteed if there is one value to hand both.
+const SETTINGS_SURFACE = { bg: "surface", fg: "foreground" } as const;
 
 // [LAW:one-source-of-truth] One accordion key for every picker in the menu:
 // one key holds one open member, so opening a theme picker closes the look
@@ -278,7 +306,7 @@ const controlReset = (name: string): string => `${SETTINGS_NS}reset.${name}`;
 // from the same anchor string the toggle's cycle writes — spelled once here,
 // exactly as lowerGroup derives a group body's `when` from the group's own
 // reference name.
-const SETTINGS_OPEN_GATE = `{{ eq .${SETTINGS_ANCHOR} "${SETTINGS_OPEN}" }}`;
+const SETTINGS_OPEN_GATE = disclosureGate(SETTINGS_REF);
 
 // [LAW:single-enforcer] The one answer to "is this segment reference the global
 // menu's anchor". cross-ref.ts asks it to accept an authored placement of a name
@@ -379,7 +407,10 @@ export function countAnchors(node: LayoutNode): number {
 // a vertical pair of the toggle segment and a `when`-gated body. Replaces the
 // anchor leaf wherever it sits, so the author's chosen position is the menu's
 // position with nothing else moved.
-function expandAnchor(node: AnchoredRoot | LayoutNode): LayoutNode {
+function expandAnchor(
+  node: AnchoredRoot | LayoutNode,
+  help: HelpDisclosure,
+): LayoutNode {
   if (node.kind === "segment") {
     return isSettingsAnchor(node.name)
       ? {
@@ -395,6 +426,11 @@ function expandAnchor(node: AnchoredRoot | LayoutNode): LayoutNode {
               direction: "horizontal",
               children: [
                 { kind: "segment", name: PERSIST_SEG },
+                // The `(?)` rides the row that already exists, immediately
+                // after the control it explains — so closed help costs no row
+                // and widens the bar by one cell, and open help reads as an
+                // answer to the checkbox on its left.
+                help.trigger,
                 ...PRIMARY_CONTROLS.map(
                   (c): LayoutNode => ({
                     kind: "segment",
@@ -406,6 +442,9 @@ function expandAnchor(node: AnchoredRoot | LayoutNode): LayoutNode {
               ],
               when: SETTINGS_OPEN_GATE,
             },
+            // The help body: one row, present only while the `(?)` is open,
+            // directly under the row that asked the question.
+            help.body,
             // Row two: the display settings, behind their own disclosure so
             // the menu opens narrow. Gated on BOTH keys — a config row left
             // open yesterday must not render beside a closed menu today; one
@@ -429,7 +468,10 @@ function expandAnchor(node: AnchoredRoot | LayoutNode): LayoutNode {
         }
       : node;
   }
-  return { ...node, children: node.children.map(expandAnchor) };
+  return {
+    ...node,
+    children: node.children.map((child) => expandAnchor(child, help)),
+  };
 }
 
 // ─── The artifacts ──────────────────────────────────────────────────────────
@@ -476,7 +518,10 @@ function declareHostedMenu(
 // reference, and a second reference to one declaration is a reuse, not the
 // self-collision a second `kind: "group"` node would be (see the settingsDrawer
 // comment in default-dsl-config.ts for that hazard in its original form).
-function settingsArtifacts(): MenuArtifacts {
+function settingsArtifacts(): {
+  artifacts: MenuArtifacts;
+  help: HelpDisclosure;
+} {
   const artifacts: MenuArtifacts = {
     variables: {
       [SETTINGS_ANCHOR]: disclosureStateVar(SETTINGS_ANCHOR, DISCLOSURE_CLOSED),
@@ -497,22 +542,27 @@ function settingsArtifacts(): MenuArtifacts {
       // [LAW:representation] The glyph trails the label it gates, per the
       // disclosure vocabulary every other toggle in the bar reads by.
       [SETTINGS_ANCHOR]: {
-        template: `{{ action "${SETTINGS_ANCHOR}" "☰ ${DISCLOSURE_GLYPH_CLOSED}" "☰ ${DISCLOSURE_GLYPH_OPEN}" }}`,
-        bg: "surface",
-        fg: "foreground",
+        template: disclosureTrigger(
+          SETTINGS_ANCHOR,
+          `☰ ${DISCLOSURE_GLYPH_CLOSED}`,
+          `☰ ${DISCLOSURE_GLYPH_OPEN}`,
+        ),
+        ...SETTINGS_SURFACE,
       },
       // [LAW:representation] The checkbox states what the NEXT write does,
       // which is why the glyph and the word live together: "☑ persist?" is
       // the whole explanation of where the click below it lands.
       [PERSIST_SEG]: {
         template: `{{ action "${PERSIST_SEG}" "☐ persist?" "☑ persist?" }}`,
-        bg: "surface",
-        fg: "foreground",
+        ...SETTINGS_SURFACE,
       },
       [CONFIG_SEG]: {
-        template: `{{ action "${CONFIG_SEG}" "⚙ config ${DISCLOSURE_GLYPH_CLOSED}" "⚙ config ${DISCLOSURE_GLYPH_OPEN}" }}`,
-        bg: "surface",
-        fg: "foreground",
+        template: disclosureTrigger(
+          CONFIG_SEG,
+          `⚙ config ${DISCLOSURE_GLYPH_CLOSED}`,
+          `⚙ config ${DISCLOSURE_GLYPH_OPEN}`,
+        ),
+        ...SETTINGS_SURFACE,
       },
       // [LAW:one-type-per-behavior] Both non-picker controls read the same
       // `.effective` projection their picker siblings read, and write the
@@ -522,8 +572,7 @@ function settingsArtifacts(): MenuArtifacts {
         template:
           `{{ action "${controlApply("wrap")}" "wrap: on" "wrap: off" }} ` +
           `{{ action "${controlReset("wrap")}" "↺" }}`,
-        bg: "surface",
-        fg: "foreground",
+        ...SETTINGS_SURFACE,
       },
       [PADDING_SEG]: {
         template:
@@ -531,8 +580,7 @@ function settingsArtifacts(): MenuArtifacts {
           "padding {{ .padding.effective }} " +
           `{{ action "${controlApply("padding")}.up" "▶" }} ` +
           `{{ action "${controlReset("padding")}" "↺" }}`,
-        bg: "surface",
-        fg: "foreground",
+        ...SETTINGS_SURFACE,
       },
       // The entry point edit mode never had: `edit.toggle` is a reserved action
       // whose only bundled reference lives in the `toolbar` segment, which a
@@ -540,8 +588,7 @@ function settingsArtifacts(): MenuArtifacts {
       // from a segment no config can drop.
       [EDIT_SEG]: {
         template: `{{ action "${EDIT_TOGGLE_ACTION}" "✎ edit" "✎ done" }}`,
-        bg: "surface",
-        fg: "foreground",
+        ...SETTINGS_SURFACE,
       },
     },
   };
@@ -555,7 +602,19 @@ function settingsArtifacts(): MenuArtifacts {
     DISCLOSURE_CLOSED,
   );
   declareSettingControls(artifacts);
-  return artifacts;
+  // [LAW:one-source-of-truth] The `(?)` is minted here, with the panel it
+  // belongs to, and its two NODES are returned so `expandAnchor` places them by
+  // the value it is handed rather than by re-deriving names this pass already
+  // owns. Nested in SETTINGS_REF, so closing the menu takes the open help with
+  // it.
+  const help = declareHelp(
+    PERSIST_HELP_SEG,
+    PERSIST_HELP,
+    [SETTINGS_REF],
+    artifacts,
+    SETTINGS_SURFACE,
+  );
+  return { artifacts, help };
 }
 
 // [LAW:one-source-of-truth] Every setting the menu offers, minted from the one
@@ -581,8 +640,7 @@ function declareSettingControls(artifacts: MenuArtifacts): void {
         `{{ menu "${apply}" "${DISCLOSURE_GLYPH_CLOSED}" "${DISCLOSURE_GLYPH_OPEN}" ` +
         `(dict "key" "${PICKER_KEY}" "closeOnPick" true) }} ` +
         `{{ action "${controlReset(c.name)}" "↺" }}`,
-      bg: "surface",
-      fg: "foreground",
+      ...SETTINGS_SURFACE,
     };
     artifacts.actions[apply] = {
       set: c.sessionKey,
@@ -676,14 +734,14 @@ export function canHostSessionState(config: DslConfig): boolean {
 // and every name now declares one.
 export function synthesizeSettingsMenu(config: DslConfig): DslConfig {
   if (!canHostSessionState(config)) return config;
-  const artifacts = settingsArtifacts();
+  const { artifacts, help } = settingsArtifacts();
   ensureEditToggle(artifacts);
   const presets: Record<string, PresetDecl> = { ...config.presets };
   for (const name of presetNames(config.presets)) {
     const { node } = presetRoot(config, name);
     presets[name] = {
       ...presetByName(config.presets, name),
-      root: expandAnchor(withAnchor(node)),
+      root: expandAnchor(withAnchor(node), help),
     };
   }
   return {

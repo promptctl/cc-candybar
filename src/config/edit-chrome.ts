@@ -36,9 +36,12 @@ import { presetRootOpsKey } from "./loader/persist-target.js";
 import { ident } from "./ident.js";
 import {
   EDIT_MODE_GATE,
+  EDIT_MODE_REF,
   EDIT_NS,
   EDIT_TOGGLE_ACTION,
 } from "./loader/edit-mode.js";
+import { declareHelp, type HelpDisclosure } from "./help.js";
+import { EDIT_MODE_HELP } from "../help-text.js";
 import { GROUP_NS } from "./loader/layout.js";
 import { SETTINGS_NS } from "./settings-menu.js";
 import {
@@ -51,6 +54,7 @@ import {
 import {
   DISCLOSURE_CLOSED,
   DISCLOSURE_GLYPH_CLOSE,
+  escapeTemplateLiteral,
   disclosureCycleAction,
   disclosureStateVar,
 } from "./disclosure.js";
@@ -86,17 +90,6 @@ function isChromeExempt(name: string): boolean {
     // placement was chosen to avoid. Structural, like the three above it.
     name.startsWith(SETTINGS_NS)
   );
-}
-
-// [LAW:no-silent-failure] Go-template string-literal escaping for a preset
-// NAME spliced into DISPLAY text (prependCustomizedBanner) rather than an
-// identifier — the same hazard loader/layout.ts's group `label` synthesis
-// already guards against, reimplemented here since that copy is
-// module-private and this one small rule doesn't warrant its own shared
-// module the way `ident` (checked for agreement across three sites —
-// see ./ident.ts) did.
-function escapeTemplateLiteral(s: string): string {
-  return s.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
 }
 
 // [LAW:one-source-of-truth] Every synthesized decl this pass produces, keyed
@@ -312,17 +305,23 @@ function spliceContainer(
 // synthesized the SAME way (one reset action targeting this preset's exact
 // `persist` key, one segment hosting `{{ action }}`), UNCONDITIONALLY, with
 // visibility carried entirely by PRESET_CUSTOMIZED_GATE
-// [LAW:dataflow-not-control-flow]. Prepended as an extra ROW (not spliced
-// into the row-interleaved chrome spliceContainer builds) because it is not
-// bound to any one segment gap — it is a fact about the whole tree — so it
-// gets its own line above it, visible or not by the SAME `when` every other
-// synthesized affordance here already uses.
-function prependCustomizedBanner(
+// [LAW:dataflow-not-control-flow]. It gets its own ROW (not a slot in the
+// row-interleaved chrome spliceContainer builds) because it is not bound to any
+// one segment gap — it is a fact about the whole tree — visible or not by the
+// SAME `when` every other synthesized affordance here already uses.
+//
+// candybar-settings-ui-aok.6 gave edit mode's `(?)` the same treatment for the
+// same reason: help about `+`/`-`/`↺` is a fact about the tree, not about a
+// cell. So this function now brackets the content with the two per-preset rows
+// that describe it — the banner above, help below — which is what its name
+// says and why it is no longer "prepend".
+function wrapWithPresetRows(
   splicedRoot: LayoutNode,
   presetName: string,
   presetIdent: string,
   rootOpsKey: string,
   artifacts: ChromeArtifacts,
+  help: HelpDisclosure,
 ): LayoutNode {
   const actionName = `${EDIT_NS}${presetIdent}.resetLayout`;
   const chromeSegName = `${EDIT_NS}${presetIdent}.customized`;
@@ -365,7 +364,27 @@ function prependCustomizedBanner(
   return {
     kind: "container",
     direction: "vertical",
-    children: [{ kind: "segment", name: chromeSegName }, splicedRoot],
+    children: [
+      { kind: "segment", name: chromeSegName },
+      splicedRoot,
+      // [LAW:no-silent-failure] Help is appended AFTER the content, and the
+      // reason is not cosmetic. The hue cursor (src/dsl/render.ts:696) advances
+      // in pre-order over every segment leaf in the tree — VISIBLE OR NOT, so
+      // that toggling a disclosure never recolours the bar. The corollary is
+      // that any segment inserted ahead of the content shifts the hue index of
+      // everything after it: an earlier draft of this splice put the `(?)`
+      // first and recoloured every cell of every user's bar (measured on the
+      // bundled default: the status row went 33;41;59 → 49;36;52) while edit
+      // mode was still OFF. Closed help must cost nothing, and a whole-bar
+      // recolour is not nothing. Appending is what makes that true by
+      // construction rather than by luck.
+      //
+      // It reads correctly too: every other disclosure body in this codebase
+      // drops BELOW the row that opened it, and help about the whole edit-mode
+      // bar is a fact about the tree above it, exactly like the reset banner.
+      help.trigger,
+      help.body,
+    ],
     ...(splicedRoot.when !== undefined && { when: splicedRoot.when }),
   };
 }
@@ -379,6 +398,7 @@ function spliceEditChromeForPreset(
   config: DslConfig,
   presetName: string,
   artifacts: ChromeArtifacts,
+  help: HelpDisclosure,
 ): LayoutNode {
   const { node } = presetRoot(config, presetName);
   const rootOpsKey = presetRootOpsKey(presetName);
@@ -387,7 +407,7 @@ function spliceEditChromeForPreset(
   const posCounter = { n: 0 };
   // [LAW:no-silent-failure] The bare-segment-root case (the A-grammar's
   // `{ seg, when }` shorthand is a legal PresetDecl.root) carries its OWN
-  // `when` onto this synthetic wrapper too — prependCustomizedBanner's own
+  // `when` onto this synthetic wrapper too — wrapWithPresetRows's own
   // when-carry-up reads `splicedRoot.when`, which is this wrapper's `when`
   // once spliceContainer's `{...node, children}` passes it through
   // unchanged; without copying it here, a bare-segment preset root's own
@@ -410,12 +430,13 @@ function spliceEditChromeForPreset(
     artifacts,
     posCounter,
   );
-  return prependCustomizedBanner(
+  return wrapWithPresetRows(
     spliced,
     presetName,
     presetIdent,
     rootOpsKey,
     artifacts,
+    help,
   );
 }
 
@@ -444,9 +465,27 @@ export function synthesizeEditChrome(config: DslConfig): DslConfig {
     actions: {},
     segments: {},
   };
+  // [LAW:one-source-of-truth] Edit mode's `(?)` is minted ONCE and merely
+  // REFERENCED from every preset root — the same move the settings menu makes
+  // with its anchor, and for the same reason: one disclosure means one open
+  // state, so switching presets cannot land you beside a second `(?)` that
+  // disagrees about whether help is showing. The text is identical for every
+  // preset because what `+` and `-` do is a fact about edit mode, not about a
+  // layout.
+  const help = declareHelp(
+    `${EDIT_NS}help`,
+    EDIT_MODE_HELP,
+    [EDIT_MODE_REF],
+    artifacts,
+  );
   const presets: Record<string, PresetDecl> = { ...config.presets };
   for (const name of presetNames(config.presets)) {
-    const splicedRoot = spliceEditChromeForPreset(config, name, artifacts);
+    const splicedRoot = spliceEditChromeForPreset(
+      config,
+      name,
+      artifacts,
+      help,
+    );
     presets[name] = {
       ...presetByName(config.presets, name),
       root: splicedRoot,

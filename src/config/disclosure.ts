@@ -89,6 +89,64 @@ export function pickCycleDisplay(
   return displays.length === 1 ? displays[0]! : displays[index]!;
 }
 
+// [LAW:one-source-of-truth] Go-template string-literal escaping for any DISPLAY
+// text a synthesis splices into a template it emits — a group's label, a preset
+// name in the reset banner, a help line. It lives here, beside the two splices
+// that need it most, because it was already two verbatim copies (loader/layout.ts
+// and edit-chrome.ts, whose comment deferred the merge until "one small rule"
+// earned its own home). The `(?)` affordance was the third caller, so it did.
+export function escapeTemplateLiteral(s: string): string {
+  return s.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+}
+
+// [LAW:types-are-the-program] One open disclosure, named by the two strings that
+// decide it: the VARIABLE a body reads and the MEMBER value that means "this one
+// is open". They are distinct because a group's variable is per-group
+// (`groups.<name>`) while its state KEY may be shared with accordion siblings —
+// so the pair, never a lone key, is what identifies an open state.
+export interface DisclosureRef {
+  readonly variable: string;
+  readonly member: string;
+}
+
+// [LAW:single-enforcer] THE body predicate a disclosure implies. Variadic
+// because nesting is conjunction and nothing else: a row inside two disclosures
+// is open when both are, which is one list, not a compound spelling. Callers
+// that used to hand-write `{{ eq .x "open" }}` beside `{{ and (eq .x "open")
+// (eq .y "open") }}` now pass one ref or two to one function — the shape stops
+// varying with the depth [LAW:dataflow-not-control-flow].
+//
+// `and` is variadic in Go templates and returns its sole argument when given
+// one, so the single-disclosure case needs no separate spelling.
+//
+// [LAW:types-are-the-program] The first ref is a separate parameter so a gate
+// over ZERO disclosures — which would emit an argument-less `{{ and }}` and gate
+// on nothing — is unrepresentable, with no runtime guard to state it.
+export function disclosureGate(
+  first: DisclosureRef,
+  ...rest: readonly DisclosureRef[]
+): string {
+  const terms = [first, ...rest]
+    .map((o) => `(eq .${o.variable} "${escapeTemplateLiteral(o.member)}")`)
+    .join(" ");
+  return `{{ and ${terms} }}`;
+}
+
+// [LAW:single-enforcer] THE trigger template a disclosure's toggle segment
+// carries: one `{{ action }}` over the cycle action, binding the author's text
+// per state — closed first, matching the cycle's own closed-first member order
+// so the display index and the member index are the same number. Since .4 every
+// trigger authors its own text (the runtime appends no glyph), which makes this
+// the one place the binding is spelled; before it, five sites spelled it and the
+// `+▸` double-glyph bug lived in the gap between two of them.
+export function disclosureTrigger(
+  action: string,
+  closed: string,
+  open: string,
+): string {
+  return `{{ action "${action}" "${escapeTemplateLiteral(closed)}" "${escapeTemplateLiteral(open)}" }}`;
+}
+
 // [LAW:single-enforcer] THE backing `state` variable a disclosure key implies:
 // it holds the open member's name and defaults to `def` (the CLOSED sentinel for
 // an independent disclosure, or an initially-open member for a group's
