@@ -42,6 +42,7 @@ import {
   type MenuOptions,
 } from "../menu-keys.js";
 import {
+  cycleDisplayIssue,
   DISCLOSURE_CLOSED,
   disclosureCycleAction,
   disclosureStateVar,
@@ -60,13 +61,16 @@ import { reservedNamespaceCollisions } from "./reserved-namespace.js";
 const MENU_FUNC = "menu";
 
 // [LAW:types-are-the-program] The `{{ menu }}` surface, mirroring the render
-// helper's signature `menu "apply" [(dict …)]`: the apply name (identity member,
-// a required string literal) and ONE optional trailing options dict —
-// closeOnPick / paged / key, all statically readable via `staticDictEntries`.
-// The removed positional tail (page-action string, bare bools, 5th-arg key) is
-// detected and rejected with a migration-pointing error, never silently
+// helper's signature `menu "apply" display… [(dict …)]`: the apply name
+// (identity member, a required string literal), the trigger's authored display
+// text (one per state or one static — the arity is statically countable, so it
+// is checked here), and ONE optional trailing options dict — closeOnPick /
+// paged / key, all statically readable via `staticDictEntries`. Displays
+// themselves are NOT required to be literals; identity does not depend on
+// them, exactly as a cycle `{{ action }}`'s displays are free. Every removed
+// spelling is rejected with a migration-pointing error, never silently
 // reinterpreted [LAW:no-silent-failure].
-const MIGRATION = `the positional tail ("pageAction" closeOnPick paged "key") was removed: the page cursor is now synthesized from the menu's identity, and rare knobs are named options in ONE trailing dict — write {{ menu "applyTheme" }} or {{ menu "applyTheme" (dict "closeOnPick" true "paged" false "key" "pickers") }} (defaults: closeOnPick false, paged true, no key)`;
+const MIGRATION = `a menu binds its trigger text the way a cycle action binds a display — write {{ menu "applyTheme" "▸" "▾" }} (one per state) or {{ menu "insertHere" "+" }} (one static display for both), with the rare knobs in ONE trailing dict: {{ menu "applyTheme" "▸" "▾" (dict "closeOnPick" true "paged" false "key" "pickers") }} (defaults: closeOnPick false, paged true, no key). The renderer no longer appends ▸/▾ of its own (candybar-settings-ui-aok.4), and the older positional tail ("pageAction" closeOnPick paged "key") was removed — the page cursor is synthesized from the menu's identity`;
 
 // [LAW:dataflow-not-control-flow] One total analysis of a `{{ menu }}` call site:
 // every reachable argument shape lands in exactly one arm — a usable identity
@@ -80,33 +84,80 @@ type MenuAnalysis =
     }
   | { readonly kind: "issue"; readonly message: string };
 
+type ArgExpr = ReferencedCall["argExprs"][number];
+
+const isDictCall = (e: ArgExpr): boolean =>
+  e.kind === "call" && e.name === "dict";
+
+// [LAW:one-source-of-truth] The two sides split the tail on different evidence —
+// exprs here, evaluated values in `parseMenuArgs` — so the loader admits only
+// call sites where those two readings PROVABLY coincide. The renderer's split
+// asks one question of the last value, "is it an object", so a literal answers
+// it here: a parse-time constant evaluates to itself and can never become the
+// options dict. A literal `(dict …)` always does. Everything else in that slot
+// is classified by whatever it happens to evaluate to.
+const isNonObjectLiteral = (e: ArgExpr): boolean =>
+  e.kind === "literal" && typeof e.value !== "object";
+
+// The display-arity rule used as a predicate; the message is the caller's
+// business, so the subject never surfaces. [LAW:single-enforcer] — legality is
+// read off the disclosure primitive, never restated as a count comparison.
+const legalDisplayCount = (count: number): boolean =>
+  cycleDisplayIssue("", count, 2) === undefined;
+
 function analyzeMenuCall(call: ReferencedCall): MenuAnalysis {
   const issue = (message: string): MenuAnalysis => ({ kind: "issue", message });
-  const [applyArg, optsArg] = call.argExprs;
+  const [applyArg, ...tail] = call.argExprs;
   if (applyArg === undefined) {
     return issue(
-      `with no arguments — it takes an apply-action name (e.g. {{ menu "applyTheme" }})`,
+      `with no arguments — it takes an apply-action name and its trigger text (e.g. {{ menu "applyTheme" "▸" "▾" }})`,
     );
-  }
-  if (call.argExprs.length > 2) {
-    return issue(`with more than two arguments — ${MIGRATION}`);
   }
   if (applyArg.kind !== "literal" || typeof applyArg.value !== "string") {
     return issue(
-      `whose apply action is not a string literal — a menu's identity is its apply-action name, which must be a literal so it can be gated at load (e.g. {{ menu "applyTheme" }})`,
+      `whose apply action is not a string literal — a menu's identity is its apply-action name, which must be a literal so it can be gated at load (e.g. {{ menu "applyTheme" "▸" "▾" }})`,
     );
   }
-  if (
-    optsArg !== undefined &&
-    (optsArg.kind !== "call" || optsArg.name !== "dict")
-  ) {
-    // A literal (the old page-action string / positional bool), a dynamic value,
-    // or a non-dict call: none is an options dict — one migration error covers
-    // the whole family [LAW:one-type-per-behavior].
+  // [LAW:types-are-the-program] The dict is the LAST argument when present;
+  // everything before it is a display. Splitting on that one position is the
+  // whole grammar, and it is the same split `parseMenuArgs` performs on the
+  // evaluated tail at render — one shape, read twice from the two things each
+  // side has (exprs here, values there).
+  const last = tail[tail.length - 1];
+  const optsArg = last !== undefined && isDictCall(last) ? last : undefined;
+  const displays = optsArg === undefined ? tail : tail.slice(0, -1);
+  if (displays.some(isDictCall)) {
     return issue(
-      `whose second argument is not an options (dict …) — ${MIGRATION}`,
+      `whose options (dict …) is not its last argument — ${MIGRATION}`,
     );
   }
+  // [LAW:no-silent-failure] The last slot is the one both readings can claim.
+  // When the expr there is not provably one or the other AND dropping it still
+  // leaves a legal display count, the renderer's value-based split can land on
+  // a DIFFERENT reading than this one — same call, two shapes, no error either
+  // side: the options dict skips `staticDictEntries` (so a dynamic `key` derives
+  // a state key with no synthesized var behind it, and the menu never opens) or
+  // a display vanishes into the static form. Reject that call site; an explicit
+  // trailing `(dict …)` disambiguates it and keeps dynamic displays legal.
+  // Where the alternate reading is an ILLEGAL count the renderer throws instead
+  // of diverging, so it stays accepted — loudness, not refusal, is the bar.
+  if (
+    last !== undefined &&
+    optsArg === undefined &&
+    !isNonObjectLiteral(last) &&
+    legalDisplayCount(displays.length - 1)
+  ) {
+    return issue(
+      `whose last argument is neither a literal nor a literal (dict …) — the renderer tells a display from the options dict by the value it evaluates to, so this call could be read as ${displays.length} displays or as ${displays.length - 1} plus options, and both are legal. Make the options explicit as a trailing (dict …) — {{ menu "${applyArg.value}" (printf "…") (printf "…") (dict) }} binds dynamic displays unambiguously — or bind the trigger text as literals`,
+    );
+  }
+  // [LAW:single-enforcer] The display-arity rule is the disclosure primitive's,
+  // the same one the renderer picks through — checked HERE too because the
+  // count is statically known, so an unauthored trigger is a load error naming
+  // the fix rather than a diagnostic glyph on the next render.
+  // "whose trigger …" completes the caller's `segment "X" has a {{ menu }} `.
+  const arity = cycleDisplayIssue("whose trigger", displays.length, 2);
+  if (arity !== undefined) return issue(`${arity} — ${MIGRATION}`);
   const entries = optsArg === undefined ? {} : staticDictEntries(optsArg);
   if (entries === null) {
     return issue(

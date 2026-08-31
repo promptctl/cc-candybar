@@ -266,8 +266,8 @@ describe("brandon-menus-bn5.3 I2 — {{ menu }} DROP body fits within term.cols"
       },
       segments: {
         label: { template: 'L', bg: 'surface', fg: 'foreground' },
-        themeMenu: { template: 'T {{ menu "applyTheme" }}', bg: 'surface', fg: 'foreground' },
-        styleMenu: { template: 'S {{ menu "applyStyle" }}', bg: 'surface', fg: 'foreground' },
+        themeMenu: { template: 'T {{ menu "applyTheme" "▸" "▾" }}', bg: 'surface', fg: 'foreground' },
+        styleMenu: { template: 'S {{ menu "applyStyle" "▸" "▾" }}', bg: 'surface', fg: 'foreground' },
       },
       // The global settings menu rides every bar. Isolated onto its own row
       // (as pickerConfig does) so row 0 stays exactly the inline trigger row

@@ -101,13 +101,15 @@
     // No per-segment `palette:` override on purpose: that would pin a static
     // theme and stop it following the session pick. bg/fg resolve against the
     // live basePalette, so the control recolors with the bar.
-    //   {{ menu "applyTheme" }} — the apply name is the whole declaration; the
-    //   page cursor is synthesized, and the defaults are the canonical path:
+    //   {{ menu "applyTheme" "▸" "▾" }} — the apply name is the whole
+    //   declaration and the ▸/▾ is the trigger text you bind (the renderer
+    //   appends none); the page cursor is synthesized, and the defaults are
+    //   the canonical path:
     //   stay-open (try themes in a row) + paged (←/→ pages at term width). The
     //   disclosure's identity is DERIVED from this segment + the apply action
     //   name, so nothing here names the menu or a key — see menu-keys.ts.
     trigger: {
-      template: '🎨 {{ .theme.effective }} {{ menu "applyTheme" }}',
+      template: '🎨 {{ .theme.effective }} {{ menu "applyTheme" "▸" "▾" }}',
       bg: "surface",
       fg: "foreground",
     },
@@ -126,10 +128,10 @@
     // so no arrows render under the paged default. No shared key, so this menu
     // is INDEPENDENT of the theme menu — both can be open at once. (Rare knobs
     // are named options in ONE trailing dict — to make a set of menus mutually
-    // exclusive, give each the same key: {{ menu "applyStyle" (dict "key"
+    // exclusive, give each the same key: {{ menu "applyStyle" "▸" "▾" (dict "key"
     // "pickers") }}; to wrap instead of paginate: (dict "paged" false).)
     styleControl: {
-      template: '✦ {{ if .activeStyle }}{{ .activeStyle }}{{ else }}(default){{ end }} {{ menu "applyStyle" }}',
+      template: '✦ {{ if .activeStyle }}{{ .activeStyle }}{{ else }}(default){{ end }} {{ menu "applyStyle" "▸" "▾" }}',
       bg: "surface",
       fg: "foreground",
     },

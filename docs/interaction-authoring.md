@@ -48,9 +48,9 @@ re-declare them.
 
 One rule, applied once per interactive element:
 
-- **Pick a value from an option domain** (theme, style, look) → `{{ menu "applyAction" }}`
-  in a segment template. One call = trigger glyph + drop-below picker + all
-  backing state, synthesized.
+- **Pick a value from an option domain** (theme, style, look) → `{{ menu "applyAction" "▸" "▾" }}`
+  in a segment template. One call = a clickable trigger whose text you write +
+  drop-below picker + all backing state, synthesized.
 - **Collapse/reveal arbitrary layout** (a details drawer, a links panel) →
   `{ kind: "group", … }` in `root`.
 - **A single click effect** (copy, open, cycle, step) → `{{ action "name" … }}`
@@ -157,7 +157,7 @@ exactly the same over it:
   },
   segments: {
     sortControl: {
-      template: '↕ {{ .sortOrder }} {{ menu "applySort" }}',
+      template: '↕ {{ .sortOrder }} {{ menu "applySort" "▸" "▾" }}',
       bg: "surface", fg: "foreground",
     },
   },
@@ -216,8 +216,8 @@ never required for `persist` the way `{ kind: "state" }` is for `set`.
 ### One control, two destinations: `persistWhen`
 
 A setting with both halves — a session pick and a durable default — used to
-cost two controls: `{{ menu "applyTheme" }}` for this session, and
-`📌{{ menu "applyThemeForever" }}` for everyone's default. Two controls for one
+cost two controls: `{{ menu "applyTheme" "▸" "▾" }}` for this session, and
+`📌{{ menu "applyThemeForever" "▸" "▾" }}` for everyone's default. Two controls for one
 setting is one too many to read and two declarations to keep in agreement.
 
 A **dual** action collapses them. It names both destination keys, one shared
@@ -240,7 +240,7 @@ click lands:
   },
   segments: {
     themeControl: {
-      template: '{{ action "persistToggle" "☐ persist?" "☑ persist?" }} 🎨 {{ .theme.effective }} {{ menu "applyTheme" }}',
+      template: '{{ action "persistToggle" "☐ persist?" "☑ persist?" }} 🎨 {{ .theme.effective }} {{ menu "applyTheme" "▸" "▾" }}',
       bg: "surface", fg: "foreground",
     },
   },
@@ -374,11 +374,11 @@ disagrees with.
   },
   segments: {
     charsetControl: {
-      template: '{{ .charset.effective }} {{ menu "applyCharset" }}',
+      template: '{{ .charset.effective }} {{ menu "applyCharset" "▸" "▾" }}',
       bg: "surface", fg: "foreground",
     },
     colorControl: {
-      template: '{{ .colorCompatibility.effective }} {{ menu "applyColorCompat" }}',
+      template: '{{ .colorCompatibility.effective }} {{ menu "applyColorCompat" "▸" "▾" }}',
       bg: "surface", fg: "foreground",
     },
     wrapToggle: {
@@ -472,7 +472,7 @@ with `globals: { preset: "compact" }`.
   },
   segments: {
     presetControl: {
-      template: '▦ {{ .activePreset }} {{ menu "applyPreset" }}',
+      template: '▦ {{ .activePreset }} {{ menu "applyPreset" "▸" "▾" }}',
       bg: "surface", fg: "foreground",
     },
   },
@@ -517,7 +517,7 @@ the same zero-engine-edits seam `segments.<name>.palette` rides above.
   },
   segments: {
     pinControl: {
-      template: '📌 {{ menu "pinPreset" }} {{ action "unpinPreset" "↺" }}',
+      template: '📌 {{ menu "pinPreset" "▸" "▾" }} {{ action "unpinPreset" "↺" }}',
       bg: "surface", fg: "foreground",
     },
   },
@@ -608,7 +608,7 @@ drive a structural edit the same way it drives an ordinary `persist … from`:
   },
   segments: {
     editControl: {
-      template: '+{{ menu "addAfterGit" }}',
+      template: '{{ menu "addAfterGit" "+" "✕" }}',
       bg: "surface", fg: "foreground",
     },
   },
@@ -849,7 +849,7 @@ declares.
   segments: {
     sidebar: { template: "sidebar", bg: "surface", fg: "foreground" },
     sidebarPaletteControl: {
-      template: '🎨 {{ menu "applySidebarPalette" }} {{ action "resetSidebarPalette" "↺" }}',
+      template: '🎨 {{ menu "applySidebarPalette" "▸" "▾" }} {{ action "resetSidebarPalette" "↺" }}',
       bg: "surface", fg: "foreground",
     },
   },
@@ -1011,12 +1011,13 @@ merged config either way — merge-by-name lets you keep the drawer but swap one
 control's behavior (e.g. override `actions.applyCharsetForever` to bind a
 different domain) without touching `root` at all.
 
-## `{{ menu "applyAction" }}` — the picker disclosure
+## `{{ menu "applyAction" "▸" "▾" }}` — the picker disclosure
 
 The apply-action name is the menu's **entire declaration**. The loader
 synthesizes everything else under the reserved `menus.*` namespace: the
-open/closed state, the ▸/▾ toggle glyph, the page cursor (state var + int
-action), and the click gates. The body is a paged picker over the apply
+open/closed state, the page cursor (state var + int action), and the click
+gates. The trigger's *text* is the one thing it does not synthesize — you bind
+that, below. The body is a paged picker over the apply
 action's option domain, dropped onto the line below the enclosing row while
 open.
 
@@ -1027,7 +1028,7 @@ open.
   },
   segments: {
     themeControl: {
-      template: '🎨 {{ .theme.effective }} {{ menu "applyTheme" }}',
+      template: '🎨 {{ .theme.effective }} {{ menu "applyTheme" "▸" "▾" }}',
       bg: "surface", fg: "foreground",
     },
   },
@@ -1044,10 +1045,14 @@ Rules that fall out of the synthesis:
   open-state var, no when-gated picker row. If you find yourself declaring a
   variable named anything like `themePage`, you are hand-building the
   desugaring — delete it and let `{{ menu }}` synthesize.
-- The trigger is **any template content you like** — the text around
-  `{{ menu }}` is yours, dynamic values welcome (`{{ .theme.effective }}`
-  above). The menu emits only its own ▸/▾ glyph. (Contrast: a group's `label`
-  is a static string — see groups below.)
+- **The trigger text is yours, all of it.** A menu emits nothing you did not
+  write: bind one display per state (`"▸" "▾"` — a disclosure is a two-state
+  cycle, so this is the same binding a cycle `{{ action }}` takes) or one static
+  display used in both (`"+"`). The text *around* the call is yours too, dynamic
+  values welcome (`{{ .theme.effective }}` above). Bind no display and it is a
+  load error, never a glyph you never chose. (Contrast: a group's `label` is a
+  static string, and its ▸/▾ is spliced into the toggle the loader synthesizes —
+  see groups below.)
 - A `{{ menu }}` lives **only in a segment's `template`** — not in `bg`/`fg`/
   `when`, not in a shared helper — and a menu-hosting segment is placed **once**
   in the layout.
@@ -1074,11 +1079,11 @@ menu:
   },
   segments: {
     themeControl: {
-      template: '🎨 {{ .theme.effective }} {{ menu "applyTheme" (dict "key" "pickers") }}',
+      template: '🎨 {{ .theme.effective }} {{ menu "applyTheme" "▸" "▾" (dict "key" "pickers") }}',
       bg: "surface", fg: "foreground",
     },
     styleControl: {
-      template: '✦ style {{ menu "applyStyle" (dict "key" "pickers" "closeOnPick" true) }}',
+      template: '✦ style {{ menu "applyStyle" "▸" "▾" (dict "key" "pickers" "closeOnPick" true) }}',
       bg: "surface", fg: "foreground",
     },
   },
@@ -1122,7 +1127,7 @@ ignores the session theme.
   },
   segments: {
     lookControl: {
-      template: '◐ {{ .look.effective }} {{ menu "applyLook" }}',
+      template: '◐ {{ .look.effective }} {{ menu "applyLook" "▸" "▾" }}',
       bg: "surface", fg: "foreground",
     },
   },
@@ -1196,22 +1201,25 @@ Each entry: the wrong config, then the exact text `cc-candybar check` prints.
 These are asserted against the real loader by CI — trust them over any other
 spelling you have seen.
 
-### The removed `{{ menu }}` positional tail
+### A `{{ menu }}` with no trigger text
 
-Old configs (and old training data) spell
-`{{ menu "applyTheme" "themePage" false true }}`. That surface is gone — the
-page cursor is synthesized and the knobs are named:
+A menu's trigger is authored, exactly like a cycle action's display: the
+renderer appends no ▸/▾ of its own. `{{ menu "applyTheme" }}` — correct in
+older releases, and the spelling old training data reaches for — names no
+trigger at all, so it is a load error rather than a glyph you never wrote.
+(The far older positional tail, `{{ menu "applyTheme" "themePage" false true }}`,
+fails here too: three displays where a two-state disclosure takes one or two.)
 
 ```json5 check:fail
 {
   actions: { applyTheme: { set: "theme", from: "themes" } },
-  segments: { trigger: { template: '🎨 {{ menu "applyTheme" "themePage" false true }}' } },
+  segments: { trigger: { template: '🎨 {{ menu "applyTheme" }}' } },
   root: { v: ["trigger"] },
 }
 ```
 
 ```error
-has a {{ menu }} with more than two arguments — the positional tail ("pageAction" closeOnPick paged "key") was removed: the page cursor is now synthesized from the menu's identity, and rare knobs are named options in ONE trailing dict — write {{ menu "applyTheme" }} or {{ menu "applyTheme" (dict "closeOnPick" true "paged" false "key" "pickers") }} (defaults: closeOnPick false, paged true, no key)
+has a {{ menu }} whose trigger needs a display (the clickable text) — a menu binds its trigger text the way a cycle action binds a display — write {{ menu "applyTheme" "▸" "▾" }} (one per state) or {{ menu "insertHere" "+" }} (one static display for both), with the rare knobs in ONE trailing dict: {{ menu "applyTheme" "▸" "▾" (dict "closeOnPick" true "paged" false "key" "pickers") }} (defaults: closeOnPick false, paged true, no key). The renderer no longer appends ▸/▾ of its own (candybar-settings-ui-aok.4), and the older positional tail ("pageAction" closeOnPick paged "key") was removed — the page cursor is synthesized from the menu's identity.
 ```
 
 ### A mistyped or unknown menu option
@@ -1222,7 +1230,7 @@ with defaults:
 ```json5 check:fail
 {
   actions: { applyTheme: { set: "theme", from: "themes" } },
-  segments: { trigger: { template: '{{ menu "applyTheme" (dict "closeonpick" true) }}' } },
+  segments: { trigger: { template: '{{ menu "applyTheme" "▸" "▾" (dict "closeonpick" true) }}' } },
   root: { v: ["trigger"] },
 }
 ```
@@ -1239,7 +1247,7 @@ parse error:
 ```json5 check:fail
 {
   actions: { applyStyle: { set: "style", from: "styles" } },
-  segments: { trigger: { template: '{{ menu "applyStyle" (dict "key" "pickers", "closeOnPick" true) }}' } },
+  segments: { trigger: { template: '{{ menu "applyStyle" "▸" "▾" (dict "key" "pickers", "closeOnPick" true) }}' } },
   root: { v: ["trigger"] },
 }
 ```
@@ -1255,13 +1263,46 @@ Menu identity is gated at load; every option value must be a literal:
 ```json5 check:fail
 {
   actions: { applyTheme: { set: "theme", from: "themes" } },
-  segments: { trigger: { template: '{{ menu "applyTheme" (dict "key" .group) }}' } },
+  segments: { trigger: { template: '{{ menu "applyTheme" "▸" "▾" (dict "key" .group) }}' } },
   root: { v: ["trigger"] },
 }
 ```
 
 ```error
 whose options (dict …) is not fully literal — every option value must be a literal so the menu can be gated at load (a dynamic entry like (dict "key" .x) cannot)
+```
+
+### A dynamic LAST argument, where the options dict would also fit
+
+Trigger displays may be dynamic — identity does not depend on them. But the
+options dict is the *last* argument, so a non-literal in that slot is a shape
+the renderer would classify by whatever it evaluates to, and it could land on a
+different reading than the loader's. Where both readings are legal the call is
+rejected rather than resolved by a guess:
+
+```json5 check:fail
+{
+  variables: { glyph: { kind: "literal", value: "▾" } },
+  actions: { applyTheme: { set: "theme", from: "themes" } },
+  segments: { trigger: { template: '{{ menu "applyTheme" "▸" .glyph }}' } },
+  root: { v: ["trigger"] },
+}
+```
+
+```error
+whose last argument is neither a literal nor a literal (dict …)
+```
+
+Spell the options out to disambiguate — an empty `(dict)` is enough, and both
+displays may then be dynamic:
+
+```json5 check:pass
+{
+  variables: { open: { kind: "literal", value: "▾" }, shut: { kind: "literal", value: "▸" } },
+  actions: { applyTheme: { set: "theme", from: "themes" } },
+  segments: { trigger: { template: '{{ menu "applyTheme" .shut .open (dict) }}' } },
+  root: { v: ["trigger"] },
+}
 ```
 
 ### A `{{ menu }}` outside a segment template
@@ -1272,7 +1313,7 @@ in `template` — not `bg`/`fg`/`when`, and not in a shared helper:
 ```json5 check:fail
 {
   actions: { applyTheme: { set: "theme", from: "themes" } },
-  segments: { trigger: { template: "🎨", when: '{{ menu "applyTheme" }}' } },
+  segments: { trigger: { template: "🎨", when: '{{ menu "applyTheme" "▸" "▾" }}' } },
   root: { v: ["trigger"] },
 }
 ```
@@ -1283,7 +1324,7 @@ uses {{ menu }} in its "when" — a menu is only valid in a segment's "template"
 
 ```json5 check:fail
 {
-  helpers: { themeMenu: '{{ menu "applyTheme" }}' },
+  helpers: { themeMenu: '{{ menu "applyTheme" "▸" "▾" }}' },
   actions: { applyTheme: { set: "theme", from: "themes" } },
   segments: { trigger: { template: '{{ template "themeMenu" }}' } },
   root: { v: ["trigger"] },
@@ -1299,7 +1340,7 @@ helper "themeMenu" uses {{ menu }}, but a menu must live directly in a segment t
 ```json5 check:fail
 {
   actions: { applyTheme: { set: "theme", from: "themes" } },
-  segments: { trigger: { template: '🎨 {{ menu "applyTheme" }}' } },
+  segments: { trigger: { template: '🎨 {{ menu "applyTheme" "▸" "▾" }}' } },
   root: { v: [ "trigger", { h: ["trigger"] } ] },
 }
 ```
