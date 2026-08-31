@@ -11,9 +11,10 @@
 // CANONICAL vs DEMO (recorded for brandon-menus-bn5 IMPROVE/FOCUS — the curated
 // surface an author actually reaches for vs. the mechanism this file exposes):
 //   CANONICAL (stdlib — what a real config uses):
-//     • {{ menu "apply" [(dict "closeOnPick" bool "paged" bool "key" str)] }} —
-//       THE picker disclosure. One call = trigger glyph + drop-below picker body
-//       + synthesized open-state AND page cursor (see the "Theme picker" section
+//     • {{ menu "apply" "▸" "▾" [(dict "closeOnPick" bool "paged" bool "key" str)] }}
+//       — THE picker disclosure. One call = the trigger text you bind (one per
+//       state, or one static display for both) + drop-below picker body +
+//       synthesized open-state AND page cursor (see the "Theme picker" section
 //       for the desugaring it replaces).
 //     • {{ action "name" … }} for copy/open (clipboard, links) and set:from/int.
 //     • kind: "group" — the disclosure for an ARBITRARY layout body (not a picker).

@@ -209,7 +209,8 @@
     // 🎨 name + a ▸/▾ toggle whose picker body drops full-width onto the line
     // below when open. The defaults are exactly the legacy behavior — stay-open
     // so themes can be tried in a row, paged into ←/→ pages at term width — so
-    // the apply name is the whole declaration (the page cursor is synthesized).
+    // the apply name is the whole declaration and the ▸/▾ is the trigger text
+    // you bind (the renderer appends none; the page cursor is synthesized).
     // No per-segment `palette:` override — that would pin a static theme and
     // stop it following the session pick.
     trigger: {
