@@ -1,9 +1,17 @@
-// [LAW:single-enforcer] The slim name/string policy layered on top of rich-js's
-// theme registry. cc-candybar selects theme NAMES and style IDENTIFIERS here;
-// every color *value* operation (hydrate hex, resolve specs, darken/contrast,
-// hue/transpose) lives in rich-js. This module only moves strings — no
-// Palette, no ColorRgba, no hex. The semantic/anchor knowledge
-// (which tokens keep their hue) stays in rich-js (ANCHORED_ROOTS), not here.
+// [LAW:single-enforcer] The vocabulary and the resolution for every `globals`
+// field a config can set or a click can pick: what values each field admits,
+// what its floor is, and the one function that turns a session pick, a config
+// default and that floor into the value a render actually uses.
+//
+// It sits in the themes module because theme/look/style were the first three
+// fields to need it, and it is a LEAF: the config loader (validation, JSON
+// schema) and the render layer both import it, which is what keeps a
+// config↔render cycle from forming [LAW:one-way-deps].
+//
+// No color arithmetic lives here. cc-candybar selects theme NAMES and style
+// IDENTIFIERS; every color *value* operation (hydrate hex, resolve specs,
+// darken/contrast, hue/transpose) lives in rich-js, as does the semantic/anchor
+// knowledge of which tokens keep their hue (ANCHORED_ROOTS).
 
 import {
   listThemePalettes,
@@ -22,19 +30,55 @@ export function resolvePaletteName(name: string): string {
   return THEME_ALIASES[name] ?? name;
 }
 
-// The theme name a render should use, as data. [LAW:dataflow-not-control-flow]
-// The `??` chain is the precedence — session choice over config default over the
-// built-in — with no "if the session has a theme" branch. The session value is
-// the user's live per-session pick (null when unset); globals.palette is the
-// config default; "textual-dark" is the always-present floor.
+// --- The one globals resolution ---
+
+// [LAW:one-type-per-behavior] THE resolution every globals field a click can
+// pick shares: the session's own value, over the config default, over a floor.
+// Written once because the fields differ only in DATA — which floor, and how a
+// raw SessionState string becomes a value of that field's type. Theme, look,
+// preset, style, autoWrap and padding are all this function with different
+// arguments, so the precedence order cannot land on one field and miss another.
+//
+// [LAW:dataflow-not-control-flow] The `??` chain IS the precedence; there is no
+// "does this session have one" branch. A session that has never clicked passes
+// null and lands on the config default by the same code path a session that
+// clicked lands on its pick.
+//
+// [LAW:parse-dont-validate] `parseSession` is the boundary between an untyped
+// SessionState string and this field's domain: it returns the typed value or
+// null, and null means "no session pick" — indistinguishable, on purpose, from
+// never having clicked. That is what makes a stale entry from a prior config's
+// vocabulary (or a value a since-narrowed gate would now refuse) resolve to the
+// default rather than throw or render something the label disagrees with
+// [LAW:no-silent-failure] — the caller publishes what this returns as
+// `<field>.effective`, so bar and label always trace to one value.
+export function effectiveGlobal<T>(
+  sessionPick: string | null,
+  configDefault: T | null | undefined,
+  floor: T,
+  parseSession: (raw: string) => T | null,
+): T {
+  const picked = sessionPick === null ? null : parseSession(sessionPick);
+  return picked ?? configDefault ?? floor;
+}
+
+// The theme name a render should use, as data.
 // [LAW:one-source-of-truth] The single definition of "which theme is effective";
 // every render derives basePalette through this, so the rendered palette can
-// never disagree with the chosen theme.
+// never disagree with the chosen theme. The theme domain is OPEN — registry
+// names, aliases, and per-session sentinels all resolve downstream — so its
+// parse is identity: there is no membership to check here, and pretending
+// otherwise would collapse names `paletteForThemeName` handles fine.
 export function effectiveThemeName(
   sessionTheme: string | null,
   globalsPalette: string | undefined,
 ): string {
-  return sessionTheme ?? globalsPalette ?? "textual-dark";
+  return effectiveGlobal(
+    sessionTheme,
+    globalsPalette,
+    "textual-dark",
+    (raw) => raw,
+  );
 }
 
 function listThemeAliases(): readonly string[] {
@@ -53,20 +97,16 @@ export function listResolvablePaletteNames(): readonly string[] {
 
 // --- Per-config member selection ---
 
-// [LAW:one-type-per-behavior] THE resolution shape shared by every selection
-// whose domain is PER-CONFIG (declared in the config, not a registry-static
-// list): session choice over config default over a floor, then collapse to the
-// floor if the chosen name is not a declared member. `looks` and `presets` are
-// both exactly this — what differs between them is only the floor name and
-// which map holds the members, i.e. DATA. Written once here rather than twice,
-// so a change to the collapse rule cannot land on one and miss the other.
+// The `effectiveGlobal` instance for every selection whose domain is PER-CONFIG
+// (declared in the config, not a registry-static list). `looks` and `presets`
+// are both exactly this — what differs between them is only the floor name and
+// which map holds the members, i.e. DATA.
 //
-// [LAW:dataflow-not-control-flow] The `??` chain IS the precedence — no "if the
-// session has one" branch anywhere. [LAW:no-silent-failure] the collapse is the
-// visible floor, not a throw: a stale SessionState entry from a prior config's
-// vocabulary (config edits can orphan a name the per-config gate once admitted)
-// must render the floor, and the caller publishes the RESOLVED name onto the
-// payload so a menu label can never claim a member the render did not use.
+// The config default runs through the SAME membership parse the session pick
+// does, one layer down: a `look:`/`preset:` naming a member the config no longer
+// declares is no default at all, and collapses to the floor exactly as a stale
+// session pick does. The loader cannot catch that for a per-config domain, so
+// this resolution is where it is caught.
 //
 // The floor's membership is a load-time guarantee, not a runtime hope: the
 // bundled stdlib ships it and merge-by-name cannot remove it.
@@ -76,10 +116,14 @@ export function effectiveMemberName(
   floor: string,
   declared: Readonly<Record<string, unknown>>,
 ): string {
-  const chosen = sessionPick ?? configDefault ?? floor;
-  return Object.prototype.hasOwnProperty.call(declared, chosen)
-    ? chosen
-    : floor;
+  const member = (raw: string): string | null =>
+    Object.prototype.hasOwnProperty.call(declared, raw) ? raw : null;
+  return effectiveGlobal(
+    sessionPick,
+    member(configDefault ?? floor),
+    floor,
+    member,
+  );
 }
 
 // --- Look (theme-adaptation) identifiers ---
@@ -136,19 +180,28 @@ export function isStripStyle(value: string): value is StripStyle {
   return (STRIP_STYLES as readonly string[]).includes(value);
 }
 
-// The strip style a render should use, as data. [LAW:dataflow-not-control-flow]
-// [LAW:one-type-per-behavior] The exact shape of `effectiveThemeName`, one
-// dimension over: session choice over config default over the "powerline" floor,
-// no "if the session has a style" branch. A value outside the domain (a stale
-// SessionState entry from a prior option vocabulary) collapses to the floor —
-// `pickJoiner` would render it as powerline anyway, so the floor keeps the
-// returned type honest rather than silently widening.
+// The strip style a render should use, as data.
+// [LAW:one-type-per-behavior] `effectiveGlobal` over a closed registry-static
+// vocabulary: the narrowing guard IS the parse. `pickJoiner` would render an
+// unknown style as powerline anyway; parsing here keeps the returned TYPE
+// honest rather than silently widening it.
+//
+// A stale SessionState entry (a member of a prior option vocabulary) is an
+// ABSENT session pick, not a pick of the floor: it falls through to the config
+// default, and only reaches "powerline" when the config declares no style
+// either. That is a deliberate change from the pre-`effectiveGlobal` spelling,
+// which collapsed straight to the floor and skipped the user's own declared
+// default — a config saying `style: "capsule"` deserves capsule when a session
+// entry goes stale, not powerline. Every field here now shares that one rule
+// [LAW:one-source-of-truth]; test/session-globals.test.ts pins it with a stale
+// pick over a valid non-floor default, the case the old tests never exercised.
 export function effectiveStripStyle(
   sessionStyle: string | null,
   globalsStyle: StripStyle | undefined,
 ): StripStyle {
-  const chosen = sessionStyle ?? globalsStyle ?? "powerline";
-  return isStripStyle(chosen) ? chosen : "powerline";
+  return effectiveGlobal(sessionStyle, globalsStyle, "powerline", (raw) =>
+    isStripStyle(raw) ? raw : null,
+  );
 }
 
 // --- Joiner charset identifiers ---
@@ -164,7 +217,11 @@ export function effectiveStripStyle(
 // joiner SHAPE, charset picks the glyph VALUES fed to it.
 // [config-only] Unlike STRIP_STYLES there is no SessionState/click half, so no
 // narrowing guard or effective* resolver — the config global over the default
-// is the whole resolution.
+// is the whole resolution. That is a decision, not a gap: charset describes the
+// TERMINAL (does its font carry the powerline private-use glyphs), not a taste.
+// It does not vary session-to-session on one machine, so a per-session override
+// would be a knob whose only honest setting is the one already in the config.
+// Same for COLOR_COMPATIBILITIES below.
 export const CHARSETS = ["unicode", "ascii"] as const;
 export type Charset = (typeof CHARSETS)[number];
 
@@ -192,3 +249,88 @@ export const COLOR_COMPATIBILITIES = [
   "none",
 ] as const satisfies readonly ColorSystemSpec[];
 export type ColorCompatibility = (typeof COLOR_COMPATIBILITIES)[number];
+
+// --- Layout globals (autoWrap, padding) ---
+//
+// These two DO have a session half, unlike charset/colorCompatibility above:
+// wrapping and cell padding are how much bar you want on your screen right now
+// — a taste that legitimately differs between one session in a wide terminal
+// and another in a split pane. Their floors and domains live here, beside the
+// other globals vocabularies, because both the config loader (range validation,
+// JSON-schema emit) and the render layer need them and config must not import
+// render [LAW:one-way-deps]. src/render/strip.ts re-exports them so render-layer
+// callers keep their existing import site.
+
+// [LAW:one-source-of-truth] The one statement of the globals.autoWrap default
+// (on — current behavior).
+export const DEFAULT_WRAP = true;
+
+// [LAW:one-source-of-truth] The spelling of a boolean as a SessionState string.
+// SessionState holds strings, so "true"/"false" is the wire vocabulary for every
+// boolean globals field — the same two members the bundled default's
+// `cycle: [...]` toggle writes and the parse below reads. Spelled once so a
+// toggle cannot write a member the resolver refuses to parse.
+export const BOOLEAN_MEMBERS = ["true", "false"] as const;
+
+// [LAW:one-source-of-truth] The one statement of the globals.padding default
+// (one space per side inside each segment cell — current behavior, matching the
+// legacy display.padding).
+export const DEFAULT_PADDING = 1;
+
+// [LAW:one-source-of-truth] THE padding domain: an integer, inclusive both ends.
+// Read by the loader's `padding` int spec (config-file values), by the bundled
+// default's stepper actions (`min`/`max`, which bound what a click may persist),
+// and by the session parse below. When those were three copies of `0`/`16`, a
+// widened range could land on the file and miss the clicks.
+export const PADDING_RANGE = { min: 0, max: 16 } as const;
+
+// [LAW:parse-dont-validate] A SessionState string to a boolean, or null for
+// anything else. `??` in effectiveGlobal (never `||`) is what keeps a parsed
+// `false` a real answer rather than falling through to the default.
+function parseBoolean(raw: string): boolean | null {
+  return raw === "true" ? true : raw === "false" ? false : null;
+}
+
+// [LAW:parse-dont-validate] A SessionState string to a padding value inside the
+// one declared range. The digits test comes first because `Number("")` is 0 and
+// `Number(" 3 ")` is 3 — an empty or padded entry would otherwise parse to a
+// value nobody wrote.
+function parsePadding(raw: string): number | null {
+  if (!/^\d+$/.test(raw)) return null;
+  const value = Number(raw);
+  return value >= PADDING_RANGE.min && value <= PADDING_RANGE.max
+    ? value
+    : null;
+}
+
+// Whether a render wraps over-wide rows, as data. The session's pick over the
+// config default over the on floor — `effectiveGlobal` with a boolean domain.
+export function effectiveAutoWrap(
+  sessionAutoWrap: string | null,
+  globalsAutoWrap: boolean | undefined,
+): boolean {
+  return effectiveGlobal(
+    sessionAutoWrap,
+    globalsAutoWrap,
+    DEFAULT_WRAP,
+    parseBoolean,
+  );
+}
+
+// The intra-cell padding a render uses, as data. A session value outside
+// PADDING_RANGE falls through to the config default, the same rule every other
+// field here follows: the gate already refuses out-of-range clicks, so a value
+// that gets here is a stale entry from a narrower-since range, and the user's
+// own default is the honest answer rather than a render at a width nobody
+// chose.
+export function effectivePadding(
+  sessionPadding: string | null,
+  globalsPadding: number | undefined,
+): number {
+  return effectiveGlobal(
+    sessionPadding,
+    globalsPadding,
+    DEFAULT_PADDING,
+    parsePadding,
+  );
+}

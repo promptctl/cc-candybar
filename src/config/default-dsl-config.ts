@@ -28,6 +28,7 @@
 
 import type { DslConfig, LayoutNode, SegmentDecl } from "./dsl-types.js";
 import { parseDslConfig } from "./dsl-loader.js";
+import { BOOLEAN_MEMBERS, PADDING_RANGE } from "../themes/policy.js";
 import { mergeWithDefault } from "./loader/merge.js";
 
 // ─── Shared template fragments ───────────────────────────────────────────────
@@ -250,7 +251,11 @@ function etaHeatFg(etaRef: string, warnRef: string): string {
 // theme/style/look/preset (session `set` for a per-conversation preview, PLUS
 // a persist-forever twin — candybar-config-engine-71o.5, brandon-presets-0yk.3
 // — for pinning the choice as everyone's default), the four .3 globals
-// steppers (persist-only, no SessionState half at all), and one .6
+// steppers (persist-only HERE — `autoWrap`/`padding` have gained a session
+// half since, but the drawer's own controls stay durable-by-default until
+// candybar-settings-ui-aok.3 gives the panel one `persist?` toggle instead of
+// a spelling per row; `charset`/`colorCompatibility` have no session half at
+// all, by design), and one .6
 // segment-scoped persist control (directoryPaletteControl, persist-only like
 // the four steppers — a per-segment palette pin, not a whole-bar default).
 // Placed as a sibling in row 1's horizontal container, toggled from beside the
@@ -1222,8 +1227,11 @@ export const RAW_DEFAULT_DSL_CONFIG = {
     // ── The four .3 globals steppers, folded into the settingsDrawer group
     // (candybar-config-engine-71o.4) alongside theme/style/look above. Each
     // pairs a `persist` control with a `↺` reset (docs' persist/reset
-    // convention) — these four have no SessionState half at all, so persist
-    // is their only seam, unlike theme/style/look's session `set`. Labels
+    // convention) — `charset`/`colorCompatibility` have no SessionState half
+    // at all, so persist is genuinely their only seam, while
+    // `autoWrap`/`padding` do have one and are simply spelled durable here
+    // (candybar-settings-ui-aok.3 owns whether the panel offers the choice).
+    // Labels
     // read `.field.effective` (the daemon-resolved value BuildLineOptions
     // actually rendered with), never a restated literal.
     charsetControl: {
@@ -1421,8 +1429,11 @@ export const RAW_DEFAULT_DSL_CONFIG = {
     // (candybar-config-engine-71o.4), decoupled by NAME from
     // charsetControl/colorCompatControl/wrapToggleControl/paddingControl
     // below. Unlike theme/style/look (a per-session experiment via `set`),
-    // these four have no SessionState half at all — .3's handoff established
-    // `persist` as their ONLY seam — so every one of these writes the
+    // these four are spelled durable: `charset`/`colorCompatibility` have no
+    // SessionState half at all, and `autoWrap`/`padding` have one
+    // (candybar-settings-ui-aok.2) but keep persist as the DRAWER's spelling
+    // until .3 collapses the twins behind one `persist?`. So every one of
+    // these writes the
     // config-file DEFAULT through the daemon-owned overrides layer (never the
     // hand-authored file itself), gated by the SAME deriveActionValidators
     // pass as a `set` (persist mirrors set's value-source shapes one for
@@ -1435,10 +1446,14 @@ export const RAW_DEFAULT_DSL_CONFIG = {
       from: "colorCompatibilities",
     },
     resetColorCompat: { reset: "colorCompatibility" },
-    toggleWrapForever: { persist: "autoWrap", cycle: ["true", "false"] },
+    // [LAW:one-source-of-truth] The toggle's members and the stepper's bounds
+    // are the SAME literals the resolvers parse a session pick with
+    // (BOOLEAN_MEMBERS / PADDING_RANGE in themes/policy.ts) — a click cannot
+    // write a value the render's own resolution would then refuse.
+    toggleWrapForever: { persist: "autoWrap", cycle: [...BOOLEAN_MEMBERS] },
     resetAutoWrap: { reset: "autoWrap" },
-    paddingDownForever: { persist: "padding", min: 0, max: 16, by: -1 },
-    paddingUpForever: { persist: "padding", min: 0, max: 16, by: 1 },
+    paddingDownForever: { persist: "padding", ...PADDING_RANGE, by: -1 },
+    paddingUpForever: { persist: "padding", ...PADDING_RANGE, by: 1 },
     resetPadding: { reset: "padding" },
 
     // [LAW:locality-or-seam] The segment-palette control's behavior

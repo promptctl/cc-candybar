@@ -21,99 +21,22 @@ import { readFileSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-import { PROTOCOL_VERSION } from "../src/daemon/protocol";
-import { parseHandlerUrl } from "../src/install/index";
 import { effectsUrl, VERB_SET_STATE } from "../src/click/wire";
 import { effectsOf } from "./helpers/click";
 import { listResolvablePaletteNames } from "../src/themes/policy";
+import {
+  click,
+  extractUrls,
+  killAndWait,
+  render,
+} from "./helpers/daemon-e2e";
 import {
   prepareIsolatedDaemonEnv,
   spawnDaemonWithEnv,
   type RunningDaemon,
 } from "./helpers/spawn-isolated-daemon";
-import { sendDaemonRequest, waitForExit } from "./helpers/daemon-wire";
 
 jest.setTimeout(30_000);
-
-const REPLY_BUDGET_MS = 5000;
-
-// [LAW:no-ambient-temporal-coupling] `TIMEOUT` (server.ts's REQUEST_TIMEOUT_MS
-// — a real 200ms per-request guard protecting the daemon from one slow
-// request blocking every other connection) is classified `transient` by the
-// real client (client-transport.ts's interpretResponse): the daemon is up,
-// just slow for this one request, and the documented recovery is retry, not
-// fail. A cold first render for a brand-new (projectDir, cwd) — first git
-// subprocess spawn, first config parse + template compile — can genuinely
-// exceed 200ms on a loaded CI runner even though it's fast on a warm local
-// machine. A real client shows a blank line and lets the next natural
-// render tick retry; this test has no "next tick" to lean on, so it retries
-// inline, bounded, matching the documented transient contract rather than
-// treating an expected-occasionally condition as a hard failure.
-const TIMEOUT_RETRY_BUDGET = 5;
-
-async function render(
-  sockPath: string,
-  sessionId: string,
-  cwd: string,
-): Promise<string> {
-  for (let attempt = 1; ; attempt++) {
-    const resp = await sendDaemonRequest(
-      sockPath,
-      {
-        v: PROTOCOL_VERSION,
-        kind: "render",
-        hookData: {
-          hook_event_name: "Status",
-          session_id: sessionId,
-          transcript_path: path.join(cwd, "transcript.jsonl"),
-          cwd,
-          model: { id: "claude-opus-4-7", display_name: "Opus 4.7" },
-          workspace: { current_dir: cwd, project_dir: cwd, added_dirs: [] },
-        },
-        args: [],
-        cwd,
-      },
-      REPLY_BUDGET_MS,
-    );
-    if (!resp.ok) {
-      if (resp.code === "TIMEOUT" && attempt < TIMEOUT_RETRY_BUDGET) continue;
-      throw new Error(`render failed: ${resp.error} (${resp.code})`);
-    }
-    if (!("output" in resp)) {
-      throw new Error(
-        `render response carried no output: ${JSON.stringify(resp)}`,
-      );
-    }
-    return resp.output;
-  }
-}
-
-async function click(sockPath: string, url: string): Promise<void> {
-  const { verb, value } = parseHandlerUrl(url);
-  const resp = await sendDaemonRequest(
-    sockPath,
-    { v: PROTOCOL_VERSION, kind: "click", verb, value },
-    REPLY_BUDGET_MS,
-  );
-  if (!resp.ok) {
-    throw new Error(`click failed: ${resp.error} (${resp.code})`);
-  }
-}
-
-function extractUrls(rendered: string): string[] {
-  // eslint-disable-next-line no-control-regex
-  const re = /\x1b\]8;;([^\x1b]+)\x1b\\/g;
-  const urls: string[] = [];
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(rendered)) !== null) urls.push(m[1]!);
-  return urls;
-}
-
-async function killAndWait(daemon: RunningDaemon): Promise<void> {
-  const exited = waitForExit(daemon.child);
-  daemon.killTree();
-  await exited;
-}
 
 describe("candybar-config-engine-71o.5: real-daemon click → persist → restart", () => {
   test("bundled default: clicking theme + padding forever, over the real socket, survives a cold daemon restart and a byte-identical config file", async () => {

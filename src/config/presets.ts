@@ -168,9 +168,14 @@ export function presetGlobals(config: DslConfig, name: string): Globals {
 // that is a typo in a file the author can see and fix — but a value that
 // only exists because the overrides layer supplied it gets the SAME
 // treatment a stale SessionState pick already gets from effectivePresetName:
-// collapse to the floor, visibly, never throw. Dropping the field here (so
-// it never reaches validateConfig) is what makes that collapse happen for
-// this layer too, instead of a fatal error replacing the whole bar.
+// an undeclared name is not a pick at all, so the resolution moves on to the
+// next rung of the precedence chain — visibly, never a throw. (For a stale
+// SESSION pick that next rung is the config's own `globals.preset`, and only
+// then the floor; for the field dropped here it is whatever the config file
+// itself declares. Same rule, different starting rung —
+// see effectiveGlobal in themes/policy.ts.) Dropping the field here (so it
+// never reaches validateConfig) is what applies that rule to this layer too,
+// instead of a fatal error replacing the whole bar.
 export function sanitizePersistedPresetOverride(
   globalsOverride: Partial<Globals>,
   declaredPresets: Readonly<Record<string, PresetDecl>>,
