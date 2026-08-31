@@ -28,7 +28,6 @@
 
 import type { DslConfig, LayoutNode, SegmentDecl } from "./dsl-types.js";
 import { parseDslConfig } from "./dsl-loader.js";
-import { BOOLEAN_MEMBERS, PADDING_RANGE } from "../themes/policy.js";
 import { mergeWithDefault } from "./loader/merge.js";
 
 // ─── Shared template fragments ───────────────────────────────────────────────
@@ -247,17 +246,22 @@ function etaHeatFg(etaRef: string, warnRef: string): string {
 // hand-authored JSON5, so a malformed group is still caught loudly at import
 // time — the type safety net just moves from tsc to that parse, never lost.
 //
-// One collapsed-by-default drawer holding every bar-mutable display default:
-// theme/style/look/preset (session `set` for a per-conversation preview, PLUS
-// a persist-forever twin — candybar-config-engine-71o.5, brandon-presets-0yk.3
-// — for pinning the choice as everyone's default), the four .3 globals
-// steppers (persist-only HERE — `autoWrap`/`padding` have gained a session
-// half since, but the drawer's own controls stay durable-by-default until
-// candybar-settings-ui-aok.3 gives the panel one `persist?` toggle instead of
-// a spelling per row; `charset`/`colorCompatibility` have no session half at
-// all, by design), and one .6
-// segment-scoped persist control (directoryPaletteControl, persist-only like
-// the four steppers — a per-segment palette pin, not a whole-bar default).
+// One collapsed-by-default drawer holding what the SESSION-scoped settings
+// menu deliberately does not: `charset` and `colorCompatibility` — terminal
+// capability facts (glyph coverage, colour depth) rather than tastes that
+// vary session to session, so they have no session half to choose between —
+// and one segment-scoped persist control (directoryPaletteControl, a
+// per-segment palette pin rather than a whole-bar default).
+//
+// [LAW:one-source-of-truth] candybar-settings-ui-aok.3 moved every setting
+// with BOTH halves — theme/style/look/preset/autoWrap/padding — out of this
+// drawer and into the synthesized settings menu, where each is ONE control
+// whose destination the `persist?` selector chooses. They used to be spelled
+// twice here (`{{ menu "applyTheme" }}` beside `📌{{ menu
+// "applyThemeForever" }}`), which is exactly the second representation that
+// collapse removed. What is left in this drawer is durable-only by nature,
+// not by omission — there is nothing for a persist? selector to choose.
+//
 // Placed as a sibling in row 1's horizontal container, toggled from beside the
 // quick-action tray — see `root` below.
 //
@@ -267,26 +271,16 @@ function etaHeatFg(etaRef: string, warnRef: string): string {
 // root too), so a second `settingsDrawer` reference embedded in a preset's
 // own root would be a SECOND declaration of "settings" and collide with
 // itself, not a reuse of the first. It stays only in the default `root`
-// below; the library presets under `presets:` reach back to it — and to the
-// rest of the settingsDrawer's controls — by switching to the "default"
-// preset via the standalone `presetControl` segment they carry instead (see
-// each preset's own comment), never by re-embedding the group.
+// below; the library presets under `presets:` reach it by switching back to
+// the "default" preset from the GLOBAL settings menu, which
+// synthesizeSettingsMenu splices into every preset root
+// (src/config/settings-menu.ts) — never by re-embedding this group.
 const settingsDrawer = {
   kind: "group",
   name: "settings",
-  label: "⚙ settings",
+  label: "⚙ terminal",
   direction: "horizontal",
-  children: [
-    "themeControl",
-    "lookControl",
-    "presetControl",
-    "styleControl",
-    "charsetControl",
-    "colorCompatControl",
-    "wrapToggleControl",
-    "paddingControl",
-    "directoryPaletteControl",
-  ],
+  children: ["charsetControl", "colorCompatControl", "directoryPaletteControl"],
 } as unknown as LayoutNode;
 
 // ─── The default config ──────────────────────────────────────────────────────
@@ -1133,97 +1127,6 @@ export const RAW_DEFAULT_DSL_CONFIG = {
         " .metrics.sessionDuration .metrics.messageCount" +
         " .metrics.linesAdded .metrics.linesRemoved }}",
     },
-    // Style control — the powerline-shape switcher. A self-contained {{ menu }}
-    // disclosure: the ✦ glyph + current-style label is the REPRESENTATION, and the
-    // ▸/▾ disclosure (whose identity is DERIVED from this segment + the applyStyle
-    // action, see menu-keys.ts) toggles the picker body, which DROPS full-width
-    // onto the line below this row when open. [LAW:one-type-per-behavior] "a menu
-    // that opens and closes" is one behavior the substrate already expresses — no
-    // bespoke open-action + page-cursor-as-open-state + when-gated reveal row.
-    // The apply name is the whole declaration: the page cursor (state var + int
-    // gate) is synthesized from the menu's identity, and the defaults are the
-    // canonical path — paged (the 3 powerline shapes fit one page, so no arrows
-    // render) and stay-open, so shapes can be tried in a row; ▾/✕ collapse.
-    // [LAW:dataflow-not-control-flow] No display state from the provider — the
-    // label is the one "style" value the click writes and the render reads.
-    // Lives inside the settingsDrawer group (candybar-config-engine-71o.4) — not
-    // on `root` directly — so it renders only while the drawer is open.
-    // The 📌 "make default" menu + ↺ reset, one per control below, is
-    // styleControl/themeControl/lookControl's PERSIST twin (candybar-config-
-    // engine-71o.5) — the exact pairing charsetControl/colorCompatControl/
-    // wrapToggleControl/paddingControl already use, since theme/style/look
-    // are the only three of the drawer's seven knobs with a session `set`
-    // half at all. Its own "pickersForever" accordion key keeps the
-    // persist tier visually distinct from the existing "pickers" try tier
-    // (opening a session preview and opening a "pin as default" picker are
-    // different intents; auto-closing one when the other opens would
-    // conflate them) without touching the already-shipped/tested "pickers"
-    // accordion's membership.
-    styleControl: {
-      template:
-        "✦ {{ if .activeStyle }}{{ .activeStyle }}{{ else }}(default){{ end }} " +
-        '{{ menu "applyStyle" }} ' +
-        '📌{{ menu "applyStyleForever" (dict "key" "pickersForever") }} ' +
-        '{{ action "resetStyle" "↺" }}',
-      bg: "surface",
-      fg: "foreground",
-    },
-    // Theme control — the palette switcher, wired into the DEFAULT bar
-    // (brandon-theming-8uj.1) so theme selection is discoverable without
-    // reading docs/interaction-authoring.md or hand-authoring a config.
-    // [LAW:one-source-of-truth] The trigger reads `.theme.effective` — the
-    // SAME daemon-resolved name (effectiveThemeName) the rendered basePalette
-    // is built from — so the label and the colors can never drift; unlike
-    // styleControl (no "effective style" input exists), no extra `state`
-    // variable is needed here. Shares the "pickers" accordion key with
-    // lookControl so opening one closes the other, the docs' canonical
-    // two-menu pairing. Moved inside the settingsDrawer group
-    // (candybar-config-engine-71o.4) alongside style/look/charset/
-    // colorCompatibility/autoWrap/padding — one collapsed home for every
-    // bar-mutable display default, instead of its own always-on row.
-    themeControl: {
-      template:
-        "🎨 {{ .theme.effective }} " +
-        '{{ menu "applyTheme" (dict "key" "pickers") }} ' +
-        '📌{{ menu "applyThemeForever" (dict "key" "pickersForever") }} ' +
-        '{{ action "resetTheme" "↺" }}',
-      bg: "surface",
-      fg: "foreground",
-    },
-    // Look control — the theme-ADAPTATION switcher (see the `looks` block
-    // below), the exact twin of themeControl one dimension over:
-    // `.look.effective` is the daemon-resolved name (effectiveLookName) the
-    // rendered ThemeKey composes from. closeOnPick collapses the drop after a
-    // pick — looks are tried one at a time against the chosen theme, not
-    // stacked open.
-    lookControl: {
-      template:
-        "◐ {{ .look.effective }} " +
-        '{{ menu "applyLook" (dict "key" "pickers" "closeOnPick" true) }} ' +
-        '📌{{ menu "applyLookForever" (dict "key" "pickersForever" "closeOnPick" true) }} ' +
-        '{{ action "resetLook" "↺" }}',
-      bg: "surface",
-      fg: "foreground",
-    },
-    // Preset control — the whole-arrangement switcher (brandon-presets-0yk.3),
-    // the exact twin of themeControl/lookControl one level up: `.preset.
-    // effective` is the daemon-resolved name (effectivePresetName) that chose
-    // BOTH the compiled root this render walked and the globals it rendered
-    // with, so the label can never name an arrangement the bar is not in.
-    // closeOnPick on both menus, like lookControl: a preset swap is a
-    // decisive whole-bar change tried one at a time, not a stackable tweak.
-    // Lives inside settingsDrawer (never inside a preset's own staged root —
-    // see settingsDrawer's comment), so every bundled preset — including the
-    // narrow `compact` one — keeps the one control that switches back.
-    presetControl: {
-      template:
-        "▦ {{ .preset.effective }} " +
-        '{{ menu "applyPreset" (dict "key" "pickers" "closeOnPick" true) }} ' +
-        '📌{{ menu "applyPresetForever" (dict "key" "pickersForever" "closeOnPick" true) }} ' +
-        '{{ action "resetPreset" "↺" }}',
-      bg: "surface",
-      fg: "foreground",
-    },
     // ── The four .3 globals steppers, folded into the settingsDrawer group
     // (candybar-config-engine-71o.4) alongside theme/style/look above. Each
     // pairs a `persist` control with a `↺` reset (docs' persist/reset
@@ -1245,20 +1148,6 @@ export const RAW_DEFAULT_DSL_CONFIG = {
       template:
         "{{ .colorCompatibility.effective }} " +
         '{{ menu "applyColorCompatForever" }} {{ action "resetColorCompat" "↺" }}',
-      bg: "surface",
-      fg: "foreground",
-    },
-    wrapToggleControl: {
-      template:
-        '{{ action "toggleWrapForever" "wrap: on" "wrap: off" }} ' +
-        '{{ action "resetAutoWrap" "↺" }}',
-      bg: "surface",
-      fg: "foreground",
-    },
-    paddingControl: {
-      template:
-        '{{ action "paddingDownForever" "◀" }} padding {{ .padding.effective }} ' +
-        '{{ action "paddingUpForever" "▶" }} {{ action "resetPadding" "↺" }}',
       bg: "surface",
       fg: "foreground",
     },
@@ -1375,56 +1264,6 @@ export const RAW_DEFAULT_DSL_CONFIG = {
     openProject: { open: "{{ .project_dir }}" },
     openTranscript: { open: "{{ .transcript_path }}" },
 
-    // [LAW:locality-or-seam] The style menu's behavior, decoupled by NAME from the
-    // styleControl {{ menu }} above. The disclosure's open-state toggle, its
-    // backing state var, AND the picker body's page cursor (state var + int
-    // action) are all SYNTHESIZED by the menu pass (under the reserved menus.*
-    // namespace) — no hand-authored open/close or page plumbing. This one action
-    // is the picker body's apply effect, gated by derivation
-    // (deriveActionValidators): it writes the chosen shape, gated to the
-    // STRIP_STYLES allow-list because its value source is `from: "styles"`. The
-    // rendered click and the wire gate share that one source — a template cannot
-    // smuggle an un-gated style write.
-    applyStyle: { set: "style", from: "styles" },
-
-    // [LAW:locality-or-seam] The theme/look pickers' behaviors, decoupled by
-    // NAME from themeControl/lookControl {{ menu }}s above — same seam as
-    // applyStyle. "theme" is the baseline permanent state key (validateTheme,
-    // registered in state-validators.ts); dropBaselineAllowLists reuses that
-    // gate for an allow-list contribution instead of re-registering it, so
-    // this action derives nothing new. "look" has no baseline entry, so this
-    // action derives a fresh allow-list validator ranging the merged `looks`
-    // block's names — the same derivation test/dsl-looks.test.ts exercises.
-    applyTheme: { set: "theme", from: "themes" },
-    applyLook: { set: "look", from: "looks" },
-    // [LAW:one-type-per-behavior] The preset picker's session-preview
-    // behavior (brandon-presets-0yk.3), the exact twin of applyLook one level
-    // up: "preset" has no baseline SessionState entry, so this derives a
-    // fresh allow-list validator ranging the merged `presets` block's names
-    // (the floor included — presetNames always seeds it) via the same
-    // `from`-sourced derivation every picker above uses.
-    applyPreset: { set: "preset", from: "presets" },
-
-    // [LAW:one-source-of-truth] The persist-forever twins of applyTheme/
-    // applyStyle/applyLook/applyPreset above (candybar-config-engine-71o.5,
-    // brandon-presets-0yk.3) — same domain sources (`from`), same picker
-    // mechanism, but the target is the Globals field the config DEFAULT
-    // reads (`palette`/`style`/`look`/`preset`, isGlobalsField-checked at
-    // load), not the SessionState key the session preview writes.
-    // Precedence is unchanged: a session's own `set` pick still wins over a
-    // persisted default for that session — effectiveThemeName/
-    // effectiveStripStyle/effectiveLookName/effectivePresetName all read
-    // SessionState before globals. Paired with a `reset` each, per the docs'
-    // persist/reset convention.
-    applyThemeForever: { persist: "palette", from: "themes" },
-    resetTheme: { reset: "palette" },
-    applyStyleForever: { persist: "style", from: "styles" },
-    resetStyle: { reset: "style" },
-    applyLookForever: { persist: "look", from: "looks" },
-    resetLook: { reset: "look" },
-    applyPresetForever: { persist: "preset", from: "presets" },
-    resetPreset: { reset: "preset" },
-
     // [LAW:locality-or-seam] The settings-drawer steppers' behaviors
     // (candybar-config-engine-71o.4), decoupled by NAME from
     // charsetControl/colorCompatControl/wrapToggleControl/paddingControl
@@ -1450,11 +1289,6 @@ export const RAW_DEFAULT_DSL_CONFIG = {
     // are the SAME literals the resolvers parse a session pick with
     // (BOOLEAN_MEMBERS / PADDING_RANGE in themes/policy.ts) — a click cannot
     // write a value the render's own resolution would then refuse.
-    toggleWrapForever: { persist: "autoWrap", cycle: [...BOOLEAN_MEMBERS] },
-    resetAutoWrap: { reset: "autoWrap" },
-    paddingDownForever: { persist: "padding", ...PADDING_RANGE, by: -1 },
-    paddingUpForever: { persist: "padding", ...PADDING_RANGE, by: 1 },
-    resetPadding: { reset: "padding" },
 
     // [LAW:locality-or-seam] The segment-palette control's behavior
     // (candybar-config-engine-71o.6), decoupled by NAME from
@@ -1531,10 +1365,10 @@ export const RAW_DEFAULT_DSL_CONFIG = {
   // Named config FRAGMENTS — each an alternative `root` + display `globals`,
   // i.e. a whole arrangement of the bar rather than one knob. A preset is to
   // configuration what a look is to a theme, and rides the identical seam:
-  // selected per session via the `preset` SessionState key (the applyPreset
-  // action, `{ set: "preset", from: "presets" }`, and the presetControl
-  // segment's `{{ menu }}` above), resolved as session pick over
-  // globals.preset over this floor.
+  // selected per session via the `preset` SessionState key — or pinned as the
+  // durable default via `globals.preset` — through the settings menu's ONE
+  // dual preset control (src/config/settings-menu.ts), resolved as session
+  // pick over globals.preset over this floor.
   // [LAW:one-source-of-truth] Merges by name (user wins per name), so this
   // stdlib is present in every merged config by construction, exactly as
   // looks' "none"/"vivid"/"muted"/… is — a user redefining "compact" or
@@ -1573,11 +1407,13 @@ export const RAW_DEFAULT_DSL_CONFIG = {
     // `gitaculous`, and `padding: 0` to buy back the chrome a narrow column
     // can't spare.
     //
-    // [LAW:no-silent-failure] Carries the standalone `presetControl` segment
-    // (NOT the full settingsDrawer group — see that constant's own comment on
-    // why a group can't be re-embedded) so a session that switches TO compact
-    // is never stranded: one click back to "default" restores the drawer and
-    // everything else compact traded away for width.
+    // [LAW:no-silent-failure] A session that switches TO compact is never
+    // stranded: synthesizeSettingsMenu splices the global settings menu — and
+    // with it the preset switcher — into EVERY preset root, so one click back
+    // to "default" restores everything compact traded away for width. That is
+    // why this root carries no preset control of its own: one guaranteed door
+    // per root, minted once and referenced, not a segment each preset must
+    // remember to carry [LAW:one-source-of-truth].
     compact: {
       root: {
         kind: "container",
@@ -1586,7 +1422,6 @@ export const RAW_DEFAULT_DSL_CONFIG = {
           { kind: "segment", name: "directory" },
           { kind: "segment", name: "git" },
           { kind: "segment", name: "context" },
-          { kind: "segment", name: "presetControl" },
         ],
       },
       globals: { padding: 0 },
@@ -1599,10 +1434,9 @@ export const RAW_DEFAULT_DSL_CONFIG = {
     // picture rather than the quiet default. A third row carries the two
     // per-turn throughput segments, which read "—" between turns
     // ([LAW:no-silent-failure] on speed/tokenSparkline) rather than an empty
-    // or stale row. Carries the standalone `presetControl` in place of the
-    // full settingsDrawer group, exactly like `compact` and for the same
-    // reason (that constant's comment) — switching back to "default" reaches
-    // the drawer and every other bar-mutable default from there.
+    // or stale row. Like `compact`, it carries no preset control of its own —
+    // the global settings menu is spliced into every preset root and is the
+    // one door back.
     verbose: {
       root: {
         kind: "container",
@@ -1616,7 +1450,6 @@ export const RAW_DEFAULT_DSL_CONFIG = {
               { kind: "segment", name: "gitaculous" },
               { kind: "segment", name: "gitPr" },
               { kind: "segment", name: "toolbar" },
-              { kind: "segment", name: "presetControl" },
             ],
           },
           {

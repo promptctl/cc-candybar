@@ -270,7 +270,16 @@ export const DEFAULT_WRAP = true;
 // boolean globals field — the same two members the bundled default's
 // `cycle: [...]` toggle writes and the parse below reads. Spelled once so a
 // toggle cannot write a member the resolver refuses to parse.
-export const BOOLEAN_MEMBERS = ["true", "false"] as const;
+// [LAW:one-source-of-truth] The two members, named, because their ORDER is
+// meaningful and differs per control: a cycle's members are ordered
+// default-state-first (an unwritten key counts as the first member and clicks
+// to the second), so `autoWrap` — on by default — cycles ["true","false"]
+// while `persist?` — off by default — cycles [BOOLEAN_FALSE, BOOLEAN_TRUE].
+// Spelling the members rather than reversing the pair keeps each declaration's
+// default state readable at its own site.
+export const BOOLEAN_TRUE = "true";
+export const BOOLEAN_FALSE = "false";
+export const BOOLEAN_MEMBERS = [BOOLEAN_TRUE, BOOLEAN_FALSE] as const;
 
 // [LAW:one-source-of-truth] The one statement of the globals.padding default
 // (one space per side inside each segment cell — current behavior, matching the
@@ -287,8 +296,16 @@ export const PADDING_RANGE = { min: 0, max: 16 } as const;
 // [LAW:parse-dont-validate] A SessionState string to a boolean, or null for
 // anything else. `??` in effectiveGlobal (never `||`) is what keeps a parsed
 // `false` a real answer rather than falling through to the default.
-function parseBoolean(raw: string): boolean | null {
-  return raw === "true" ? true : raw === "false" ? false : null;
+//
+// [LAW:one-source-of-truth] Exported because SessionState holds strings and
+// BOOLEAN_MEMBERS above is the one spelling of a boolean in that store — so
+// every reader of a boolean session key parses it HERE, not with its own
+// truthiness rule. The second reader is the dual-destination action's
+// `persistWhen` selector (src/render/action.ts): "is persist? checked" is the
+// same question `autoWrap`'s toggle asks of its own key, and a bespoke
+// `raw !== ""` there would accept values this parse rejects.
+export function parseSessionBoolean(raw: string): boolean | null {
+  return raw === BOOLEAN_TRUE ? true : raw === BOOLEAN_FALSE ? false : null;
 }
 
 // [LAW:parse-dont-validate] A SessionState string to a padding value inside the
@@ -313,7 +330,7 @@ export function effectiveAutoWrap(
     sessionAutoWrap,
     globalsAutoWrap,
     DEFAULT_WRAP,
-    parseBoolean,
+    parseSessionBoolean,
   );
 }
 

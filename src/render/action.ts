@@ -25,10 +25,15 @@ import type { FuncMap, Template } from "@promptctl/go-template-js";
 import type { VariableStore } from "../var-system/store.js";
 import { toString as varToString } from "../var-system/types.js";
 import { buildScope } from "../template-engine/scope.js";
-import type { ActionDecl } from "../config/action.js";
+import {
+  actionDestinations,
+  actionIsDual,
+  PERSIST_WHEN,
+  type ActionDecl,
+} from "../config/action.js";
 import { resolveOptionDomain } from "../config/option-domain.js";
 import { encodeLayoutOp, type LayoutOp } from "../config/layout-ops.js";
-import type { StripStyle } from "../themes/policy.js";
+import { parseSessionBoolean, type StripStyle } from "../themes/policy.js";
 import {
   effectsUrl,
   VERB_APPLY_LAYOUT_OP,
@@ -166,7 +171,21 @@ export type CompiledActionDecl =
   // there is nothing to carry, since the history stack (not this action) is
   // what decides which entry moves.
   | { readonly kind: "undo" }
-  | { readonly kind: "redo" };
+  | { readonly kind: "redo" }
+  // [LAW:dataflow-not-control-flow] candybar-settings-ui-aok.3's ONE control
+  // per setting. Both destinations are compiled here as the ordinary
+  // single-destination shapes they are, and `selector` names the session key
+  // whose boolean value picks between them at click time. The destination is
+  // therefore a VALUE flowing through `activeDestination` — every consumer
+  // (realize, the picker, selectDisplay) resolves it once at the top and then
+  // runs the code it has always run, so nothing downstream branches on
+  // "is this dual".
+  | {
+      readonly kind: "dual";
+      readonly selector: string;
+      readonly session: CompiledActionDecl;
+      readonly durable: CompiledActionDecl;
+    };
 
 export type CompiledActions = ReadonlyMap<string, CompiledActionDecl>;
 
@@ -263,6 +282,19 @@ function compileAction(
   stateKeyToVar: ReadonlyMap<string, string>,
   perConfigDomains: ReadonlyMap<string, readonly string[]>,
 ): CompiledActionDecl {
+  // [LAW:one-source-of-truth] A dual compiles as its own two destinations —
+  // the SAME explosion the validator derivations fold over
+  // (actionDestinations), so the click a dual realizes and the gate it derives
+  // come from one statement of what the two halves are. It is matched BEFORE
+  // the `set` arm because a dual carries `set` too.
+  if (actionIsDual(action)) {
+    const [session, durable] = actionDestinations(action);
+    return compileDual(
+      stateKeyToVar.get(action[PERSIST_WHEN]) ?? action[PERSIST_WHEN],
+      compileAction(parse, name, session!, stateKeyToVar, perConfigDomains),
+      compileAction(parse, name, durable!, stateKeyToVar, perConfigDomains),
+    );
+  }
   if ("set" in action) {
     const stateVar = stateKeyToVar.get(action.set) ?? action.set;
     if ("to" in action) {
@@ -377,6 +409,48 @@ function compileAction(
     return { kind: "reset", key: action.reset };
   }
   return "undo" in action ? { kind: "undo" } : { kind: "redo" };
+}
+
+// [LAW:one-source-of-truth] A dual control shows ONE current value and writes
+// relative to the value it showed — so both destinations read back through the
+// DURABLE half's variable, which is the `.effective` projection the daemon
+// resolved for this render (CONFIG_KEY_TO_EFFECTIVE_VAR above): the value the
+// bar is actually rendering with, whatever chain produced it. Reading the
+// session key instead would let a cycle's glyph name the effective state while
+// its click stepped from an unwritten session key — the toggle would render
+// "wrap: off" and write "false", a click that visibly does nothing. Arms that
+// carry no `stateVar` (the bounded steppers) read nothing at render by design:
+// their step is relative and resolved daemon-side.
+function compileDual(
+  selectorVar: string,
+  session: CompiledActionDecl,
+  durable: CompiledActionDecl,
+): CompiledActionDecl {
+  const readBack =
+    "stateVar" in session && "stateVar" in durable
+      ? { ...session, stateVar: durable.stateVar }
+      : session;
+  return { kind: "dual", selector: selectorVar, session: readBack, durable };
+}
+
+// [LAW:dataflow-not-control-flow] THE destination fold: which store a dual
+// action writes is the boolean value of its selector key, read from the same
+// live store the rest of the render reads. Total over every compiled action —
+// a single-destination action IS its own destination — so callers resolve
+// through it unconditionally and never test for the dual kind.
+//
+// [LAW:one-source-of-truth] `parseSessionBoolean` is the one spelling of a
+// boolean in SessionState (themes/policy.ts), the same parse `autoWrap`'s own
+// session half goes through: an unwritten, malformed, or "false" selector all
+// mean the session destination, and only a canonical "true" means durable.
+export function activeDestination(
+  c: CompiledActionDecl,
+  store: VariableStore,
+): CompiledActionDecl {
+  if (c.kind !== "dual") return c;
+  return parseSessionBoolean(readVar(store, c.selector)) === true
+    ? c.durable
+    : c.session;
 }
 
 function parseActionTemplate(
@@ -620,6 +694,19 @@ function realize(
     // emits, so the daemon's apply-layout-op handler and undo/redo need no
     // knowledge of where the segment name came from. Never "active": a
     // structural edit is a one-shot trigger, not a current-selection toggle.
+    // [LAW:dataflow-not-control-flow] The destination is resolved to a value
+    // and the SAME fold runs on it — a dual's realization is its chosen
+    // half's realization, with nothing about persistence duplicated here.
+    // Depth is structurally one: a dual's halves are the single-destination
+    // decls actionDestinations built, which can never be dual themselves.
+    case "dual":
+      return realize(
+        activeDestination(c, store),
+        display,
+        boundValue,
+        store,
+        sessionId,
+      );
     case "layout-op-option": {
       const segment = boundValue ?? display;
       const op: LayoutOp = {
@@ -682,14 +769,18 @@ export function renderAction(
   displays: readonly string[],
   runtime: ActionRuntime,
 ): RichText {
-  const action = runtime.compiled.get(name);
+  const declared = runtime.compiled.get(name);
   // [LAW:no-defensive-null-guards] The loader validates every `{{ action "x" }}`
   // reference resolves to a declared action, and compileActions compiled every
   // declared action for THIS config's engine. A miss is a caller/wiring bug.
-  if (!action) {
+  if (!declared) {
     throw new Error(`action "${name}" is not declared in this config`);
   }
   const store = runtime.store;
+  // [LAW:dataflow-not-control-flow] Resolve the destination ONCE, at the top,
+  // so display selection and realization see the same half — and so every line
+  // below is the line it was before duals existed.
+  const action = activeDestination(declared, store);
   const { display, boundValue } = selectDisplay(name, action, displays, store);
   const sessionId = readVar(store, "session.id");
   const { effect, active } = realize(

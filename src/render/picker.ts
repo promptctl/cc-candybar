@@ -36,6 +36,7 @@ import {
 } from "../click/wire.js";
 import { encodeLayoutOp } from "../config/layout-ops.js";
 import {
+  activeDestination,
   linkFragment,
   readVar,
   type ActionRuntime,
@@ -160,7 +161,15 @@ function requireOptionKind(
   CompiledActionDecl,
   { kind: "set-option" | "persist-option" | "layout-op-option" }
 > {
-  const action = runtime.compiled.get(name);
+  // [LAW:dataflow-not-control-flow] A dual-destination action resolves to the
+  // half its selector names BEFORE the kind check, so a picker over a dual is
+  // a picker over whichever option kind is live — the grid, its current-mark,
+  // and its close folding are the code they already were. The check below then
+  // still names a real, single-destination kind in its error.
+  const declared = runtime.compiled.get(name);
+  const action = declared
+    ? activeDestination(declared, runtime.store)
+    : declared;
   if (
     !action ||
     (action.kind !== "set-option" &&

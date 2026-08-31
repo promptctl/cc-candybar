@@ -68,8 +68,9 @@ the wire is derived from the same declarations, so a template cannot smuggle an
 un-gated write.
 
 An action declares exactly one of `set` / `persist` / `copy` / `open` /
-`reset` / `undo` / `redo`; a `set` or `persist` declares exactly one value
-source:
+`reset` / `undo` / `redo` — or, for one control that writes *either* store,
+`set` and `persist` together with a `persistWhen` selector. A `set`, a
+`persist`, or a dual declares exactly one value source:
 
 | declaration | click effect |
 |---|---|
@@ -79,6 +80,7 @@ source:
 | `{ set: key, int: true }` | write any integer the render binds (a page cursor) |
 | `{ set: key, cycle: ["a", "b", "c"] }` | write the **successor** of the current value, wrapping; order members default-state-first |
 | `{ persist: field, to \| from \| min/max/by \| cycle, … }` | the SAME four value sources as `set`, but writes the **config `globals` default** durably (every session, survives daemon restart) instead of one session — see below. No `int` arm: a page cursor is never persisted. |
+| `{ set: key, persist: field, persistWhen: selectorKey, to \| from \| min/max/by \| cycle, … }` | ONE control, TWO destinations: write the same value to SessionState or to the durable `globals` default, chosen at click time by the boolean value of `selectorKey` — see below |
 | `{ reset: field }` | clear one persisted `globals` field, restoring the config-file/bundled value |
 | `{ undo: true }` | step the overrides layer's **global history** one entry back — restores whatever a PRIOR `persist`/`reset` write changed, any key, not just the one this action names (it names none) |
 | `{ redo: true }` | re-apply the most recently undone entry |
@@ -209,6 +211,118 @@ plumbing of its own — the loader still requires the global `session.id`
 anchor the moment any `set`/`persist`/`reset` action exists (it rides the
 click for error-surfacing, same as `set`), but reading `.session.id` back is
 never required for `persist` the way `{ kind: "state" }` is for `set`.
+
+### One control, two destinations: `persistWhen`
+
+A setting with both halves — a session pick and a durable default — used to
+cost two controls: `{{ menu "applyTheme" }}` for this session, and
+`📌{{ menu "applyThemeForever" }}` for everyone's default. Two controls for one
+setting is one too many to read and two declarations to keep in agreement.
+
+A **dual** action collapses them. It names both destination keys, one shared
+value source, and a `persistWhen` key whose boolean value decides where the
+click lands:
+
+```json5 check:pass
+{
+  variables: {
+    persistDefault: { kind: "state", key: "persistDefault", default: "false" },
+  },
+  actions: {
+    persistToggle: { set: "persistDefault", cycle: ["false", "true"] },
+    applyTheme: {
+      set: "theme",
+      persist: "palette",
+      persistWhen: "persistDefault",
+      from: "themes",
+    },
+  },
+  segments: {
+    themeControl: {
+      template: '{{ action "persistToggle" "☐ persist?" "☑ persist?" }} 🎨 {{ .theme.effective }} {{ menu "applyTheme" }}',
+      bg: "surface", fg: "foreground",
+    },
+  },
+  root: { v: ["themeControl"] },
+}
+```
+
+Read the picker's own click to see what changed: with `persistDefault` unset or
+`"false"` it is a `set-state` write to the session key `theme`; with `"true"` it
+is a `set-config` write to the `globals` field `palette`. Same segment, same
+template, same options — the destination is a value the click carries, not a
+second control.
+
+The two keys differ here because the session key and the globals field have
+always had different names (`theme` vs `palette`). Where they agree — `look`,
+`style`, `preset`, `autoWrap`, `padding` — write the same name twice; a dual
+always spells both, so no reader has to remember which settings are the
+exception.
+
+The gate does not widen. A dual derives exactly the two validators its two
+halves would have derived separately: an allow-list over the same domain on the
+session key, and one on the globals field. A dual is, precisely, the pair of
+ordinary actions it replaces.
+
+Three sources have no dual form. `int` is a page cursor with no meaning as a
+durable default, and `removeSegment` / `insertSegment` / `insertSegmentFrom` are
+structural edits that are durable by nature — none of them has a second
+destination to choose between:
+
+```json5 check:fail
+{
+  variables: {
+    persistDefault: { kind: "state", key: "persistDefault", default: "false" },
+  },
+  actions: {
+    page: {
+      set: "themePage",
+      persist: "padding",
+      persistWhen: "persistDefault",
+      int: true,
+    },
+  },
+  segments: { d: { template: "d", bg: "surface", fg: "foreground" } },
+  root: { v: ["d"] },
+}
+```
+
+```error
+a dual action declares exactly one value source
+```
+
+All three keys travel together. Naming one destination and not the other is a
+load error rather than a quietly single-destination action:
+
+```json5 check:fail
+{
+  variables: {
+    persistDefault: { kind: "state", key: "persistDefault", default: "false" },
+  },
+  actions: {
+    applyTheme: {
+      set: "theme",
+      persistWhen: "persistDefault",
+      from: "themes",
+    },
+  },
+  segments: { d: { template: "d", bg: "surface", fg: "foreground" } },
+  root: { v: ["d"] },
+}
+```
+
+```error
+a dual-destination action declares set, persist, persistWhen together
+```
+
+The selector is an ordinary `set` key, so it is yours to shape: name it what
+you like, give it whatever glyphs read best, and put it anywhere the controls it
+governs are visible. Two rules earn their keep. Keep it **session-scoped and
+off by default**, so you arrive able to experiment and committing to a durable
+default is a deliberate act — and a checkbox armed in one session can never
+write a default from another. And never place it above a control it cannot
+affect: a checkbox that silently does nothing for half the rows beneath it is a
+lie the panel tells.
 
 ### The display globals: charset, colorCompatibility, autoWrap, padding
 
@@ -751,11 +865,37 @@ globals that *do* have one.)
 ### The global settings menu: `settings.menu`
 
 One disclosure is present in **every** bar, whatever the config says: the
-global settings menu, rendered as `☰ ▸` and opening onto the always-available
-functionality — preset switching and edit mode. It exists because `root:`
-replaces the bundled default's wholesale, so a user config that declares its
-own `root` (the ordinary reason to write one) would otherwise delete every
-door into the features below along with it.
+global settings menu, rendered as `☰ ▸`. It exists because `root:` replaces the
+bundled default's wholesale, so a user config that declares its own `root` (the
+ordinary reason to write one) would otherwise delete every door into the
+features below along with it.
+
+Opening it shows the always-available functionality:
+
+```
+☰ ▾
+  ☐ persist?   ▦ default ▸   ⚙ config ▾   ✎ edit
+     🎨 tokyo-night ▸   ◐ none ▸   ✦ powerline ▸   wrap: on ↺   ◀ padding 1 ▶ ↺
+```
+
+- **`persist?`** chooses where every setting in the menu is written: unchecked
+  (the state you arrive in) the click changes this session only; checked, it
+  writes the durable default every session opens with. It is the `persistWhen`
+  selector from the section above, and it is session-scoped — arming it here
+  cannot write a default from another session.
+- **The preset switcher** and **`✎ edit`** are one click from the toggle,
+  because switching arrangement and entering edit mode are what you most often
+  open this menu to do.
+- **`⚙ config`** opens the display settings: theme, look, style, wrap and
+  padding, each ONE control that follows the checkbox, each with a `↺` that
+  forgets its durable default. `charset` and `colorCompatibility` are
+  deliberately absent — they describe your terminal rather than a taste that
+  varies session to session, so they have no session half to choose between and
+  stay config-file settings.
+
+Every picker in the menu shares one accordion key, so opening the look picker
+closes the theme picker: the panel is narrow, and two open drop-downs would
+overflow it.
 
 You do not declare it and you cannot delete it. What you *can* do is choose
 where it goes, by placing the reserved segment name `settings.menu` in your
@@ -816,42 +956,30 @@ be edited away.
 
 ### The bundled settings drawer
 
-The bundled default (`DEFAULT_DSL_CONFIG`) ships every knob above already
-wired into the bar, with zero authoring required: a `kind: "group"` named
-`settings` sits on the identity row beside the quick-action tray, collapsed by
-default (`⚙ settings ▸`, visually silent until clicked). Opening it drops a
-row of eight controls immediately below: `themeControl`, `lookControl`,
-`styleControl`, `charsetControl` / `colorCompatControl` /
-`wrapToggleControl` / `paddingControl` (the four `persist` steppers from the
-section above), and `directoryPaletteControl` (the `segments.directory.
-palette` demo from the section above). The group's own synthesized toggle
-lives under the reserved name `groups.settings` — see the `kind: "group"`
-section below for what a group name reserves.
+The bundled default (`DEFAULT_DSL_CONFIG`) ships one more group beside the
+global menu: a `kind: "group"` named `settings`, sitting on the identity row
+next to the quick-action tray, collapsed by default (`⚙ terminal ▸`, visually
+silent until clicked). It holds the three controls the settings menu does not:
+`charsetControl` and `colorCompatControl` (terminal capability facts, with no
+session half to offer a choice over) and `directoryPaletteControl` (the
+`segments.directory.palette` demo from the section above — a per-segment pin,
+not a whole-bar default). The group's own synthesized toggle lives under the
+reserved name `groups.settings` — see the `kind: "group"` section below for
+what a group name reserves.
 
-`themeControl` / `lookControl` / `styleControl` each carry TWO menus, one
-per tier: the first (`applyTheme` / `applyLook` / `applyStyle`, session
-`set`) is a per-conversation preview — try a theme without committing anyone
-else to it. The second, behind the 📌 glyph (`applyThemeForever` /
-`applyLookForever` / `applyStyleForever`, `persist`), pins the choice as the
-config DEFAULT every session opens into from then on, paired with a `↺`
-reset (`resetTheme` / `resetLook` / `resetStyle`) exactly like the four
-`persist` steppers. The PERSIST tier shares one `{{ menu }}` accordion key
-(`"pickersForever"`) across all three controls, so opening one closes the
-others. The PREVIEW tier is narrower: `applyTheme` and `applyLook` share
-`"pickers"` (pre-dating this pairing — see the two-menu accordion example
-above), but `applyStyle`'s preview menu has no key at all — it's
-independent, opens alongside either. Either way, opening a preview menu
-never closes a persist menu or vice versa — they answer different questions
-("what does THIS session look like" vs. "what should EVERY session default
-to") and closing one to open the other would conflate them. Precedence is
-unchanged either way: a session's own preview pick still wins over a
-persisted default for that one session.
+Everything with BOTH halves — theme, look, style, preset, wrap, padding — lives
+in the global settings menu instead, as one dual control each. That is the
+difference between the two surfaces: the menu is where a setting you can try
+per-session lives, and it cannot be deleted; the drawer is ordinary authored
+layout holding the durable-only knobs, and your own `root:` replaces it like
+any other segment.
 
 A user config's `root:` **replaces the bundled default's wholesale** (see the
 top-level project docs), so removing the drawer — or reshaping it — is a
 matter of authoring your own `root` without a `settings` group in it. Doing so
-no longer strands you: the global settings menu above is present either way.
-This reproduces the bundled default's two rows minus the drawer:
+no longer strands you: the global settings menu above is present either way,
+and with it every setting that has a session half. This reproduces the bundled
+default's two rows minus the drawer:
 
 ```json5 check:pass
 {
@@ -862,18 +990,13 @@ This reproduces the bundled default's two rows minus the drawer:
 }
 ```
 
-The eight constituent segments (`themeControl` / `lookControl` /
-`styleControl` / `charsetControl` / `colorCompatControl` / `wrapToggleControl`
-/ `paddingControl` / `directoryPaletteControl`) and their backing actions
-(`applyTheme` + `applyThemeForever` + `resetTheme`, `applyLook` +
-`applyLookForever` + `resetLook`, `applyStyle` + `applyStyleForever` +
-`resetStyle`, `applyCharsetForever` + `resetCharset`,
-`applyColorCompatForever` + `resetColorCompat`, `toggleWrapForever` +
-`resetAutoWrap`, `paddingDownForever` / `paddingUpForever` + `resetPadding`,
-`applyDirectoryPaletteForever` + `resetDirectoryPalette`) stay declared in
-the merged config either way — merge-by-name lets you keep the drawer but
-swap one control's behavior (e.g. override `actions.applyCharsetForever` to
-bind a different domain) without touching `root` at all.
+The three constituent segments (`charsetControl` / `colorCompatControl` /
+`directoryPaletteControl`) and their backing actions (`applyCharsetForever` +
+`resetCharset`, `applyColorCompatForever` + `resetColorCompat`,
+`applyDirectoryPaletteForever` + `resetDirectoryPalette`) stay declared in the
+merged config either way — merge-by-name lets you keep the drawer but swap one
+control's behavior (e.g. override `actions.applyCharsetForever` to bind a
+different domain) without touching `root` at all.
 
 ## `{{ menu "applyAction" }}` — the picker disclosure
 

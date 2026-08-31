@@ -23,7 +23,10 @@ import { GROUP_NS } from "../../src/config/loader/layout";
 import { MENU_NS } from "../../src/config/menu-keys";
 import { parsePersistTarget } from "../../src/config/loader/persist-target";
 import { PRESET_CUSTOMIZED_VAR } from "../../src/config/edit-chrome";
-import { SETTINGS_NS } from "../../src/config/settings-menu";
+import {
+  SETTINGS_NS,
+  SETTINGS_WRITTEN_KEYS,
+} from "../../src/config/settings-menu";
 import {
   VERB_RESET_CONFIG,
   VERB_SET_CONFIG,
@@ -41,7 +44,7 @@ function isReservedChromeKey(key: string): boolean {
   return (
     key.startsWith(SETTINGS_NS) ||
     key.startsWith(EDIT_NS) ||
-    // The settings menu's own preset picker, hosted on `settings.presets`.
+    // The settings menu's own pickers, hosted on `settings.<setting>`.
     key.startsWith(`${MENU_NS}settings_`) ||
     // NOT vestigial: edit chrome's `+` affordance hosts a menu on each
     // `edit.<preset>.insertSeg.<n>` segment (edit-chrome.ts's insertChrome
@@ -62,11 +65,14 @@ function isReservedChromeKey(key: string): boolean {
   );
 }
 
-// The reserved keys, plus the one plain SessionState key the settings menu's
-// preset picker writes. `preset` is a bare word an author CAN own, which is why
-// every consumer of this predicate must pair it with an authorship check.
+// The reserved keys, plus the plain keys the settings menu's own controls
+// write — `preset`/`theme`/`palette`/`look`/`style`/`autoWrap`/`padding`, both
+// destinations of every dual control (candybar-settings-ui-aok.3). Those are
+// bare words an author CAN own, which is why every consumer of this predicate
+// must pair it with an authorship check. The set is IMPORTED from the synthesis
+// that writes them, never re-spelled here.
 function isAmbientChromeKey(key: string): boolean {
-  return key === "preset" || isReservedChromeKey(key);
+  return SETTINGS_WRITTEN_KEYS.has(key) || isReservedChromeKey(key);
 }
 
 // [LAW:one-source-of-truth] The SessionState keys the config's OWN actions

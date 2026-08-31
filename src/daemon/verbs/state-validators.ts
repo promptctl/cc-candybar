@@ -16,7 +16,7 @@
 // `persist` action's keyspace) — two keyspaces, one mechanism.
 
 import { listResolvablePaletteNames, STRIP_STYLES } from "../../themes/policy";
-import type { ActionDecl } from "../../config/action";
+import { actionDestinations, type ActionDecl } from "../../config/action";
 import {
   perConfigDomainsFor,
   resolveOptionDomain,
@@ -214,10 +214,16 @@ function stateKeySeeds(config: DslConfig): ReadonlyMap<string, number> {
 function actionContributions(config: DslConfig): KeySpecContribution[] {
   const seeds = stateKeySeeds(config);
   const perConfigDomains = perConfigDomainsFor(config);
+  // [LAW:single-enforcer] Every action is exploded into the
+  // single-destination declarations it writes through BEFORE the fold, so a
+  // dual-destination action (candybar-settings-ui-aok.3) contributes exactly
+  // the `set` spec its session half would have contributed on its own — the
+  // gate is derived by the code that has always derived it, from the same
+  // declaration the click realizes, and a dual can widen nothing.
   return dropBaselineAllowLists(
-    Object.values(config.actions).flatMap((a) =>
-      actionKeySpecs(a, seeds, perConfigDomains),
-    ),
+    Object.values(config.actions)
+      .flatMap(actionDestinations)
+      .flatMap((a) => actionKeySpecs(a, seeds, perConfigDomains)),
   );
 }
 

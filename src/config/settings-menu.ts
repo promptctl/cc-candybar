@@ -63,6 +63,13 @@ import {
   menuStateKey,
 } from "./menu-keys.js";
 import { presetByName, presetNames, presetRoot } from "./presets.js";
+import type { OptionDomain } from "./option-domain.js";
+import {
+  BOOLEAN_FALSE,
+  BOOLEAN_MEMBERS,
+  BOOLEAN_TRUE,
+  PADDING_RANGE,
+} from "../themes/policy.js";
 
 // [LAW:one-source-of-truth] The reserved namespace every artifact this pass
 // mints lives under, mirroring `groups.`/`menus.`/`edit.`. Reserved at parse
@@ -83,13 +90,146 @@ export const SETTINGS_ANCHOR = `${SETTINGS_NS}menu`;
 // toggle — a binary disclosure holds the CLOSED sentinel or this.
 const SETTINGS_OPEN = EDIT_MODE_OPEN;
 
-// The body's two content segments and the preset picker's apply action. `.1`
-// scopes the body to what its acceptance names — switch presets, enter edit
-// mode. The remaining display controls arrive with the config menu (`.3`),
-// which is the child that owns them.
-const PRESETS_SEG = `${SETTINGS_NS}presets`;
+// The body's content segments. `.1` scoped the body to what its acceptance
+// names — switch presets, enter edit mode; `.3` adds the persist? selector
+// beside them and the config menu below them.
 const EDIT_SEG = `${SETTINGS_NS}edit`;
-const APPLY_PRESET_ACTION = `${SETTINGS_NS}applyPreset`;
+
+// ─── The config menu (candybar-settings-ui-aok.3) ───────────────────────────
+//
+// [LAW:one-source-of-truth] ONE control per setting. The drawer used to spell
+// each of theme/style/look/preset TWICE — `{{ menu "applyTheme" }}` for the
+// session beside `📌{{ menu "applyThemeForever" }}` for the durable default —
+// two controls a reader had to reconcile at every glance, and two declarations
+// an author had to keep in agreement. Here each setting is one control bound
+// to one DUAL action, and the `persist?` selector beside them chooses which
+// store every one of those controls writes [LAW:dataflow-not-control-flow].
+//
+// [LAW:no-mode-explosion] persist? is not a mode: it is a value in
+// SessionState that the compiled action reads at click time. Nothing branches
+// on it — not the synthesis (which mints the same tree either way), not the
+// render walk, and not the daemon's writers, which are the same two writers
+// they were before this menu existed.
+//
+// The selector sits in the menu's FIRST row, above and beside every control it
+// governs, so it never stands over a row it cannot affect: every setting under
+// it — preset here, theme/look/style/wrap/padding in the config row — is dual.
+// `charset` and `colorCompatibility` are deliberately absent: they describe the
+// TERMINAL (glyph coverage, colour depth), not a taste that varies between
+// sessions, so they have no session half to choose and stay config-file
+// settings (see CHARSETS in themes/policy.ts).
+const PERSIST_SEG = `${SETTINGS_NS}persist`;
+const CONFIG_SEG = `${SETTINGS_NS}config`;
+
+// The selector's own state key, session-scoped and unchecked by default: you
+// arrive in experimentation mode, and committing a value to every future
+// session is a deliberate act. It also means a checkbox left armed yesterday
+// cannot silently write a durable default today — SessionState is per session.
+const PERSIST_KEY = PERSIST_SEG;
+
+// [LAW:one-source-of-truth] The config menu's own disclosure, spelled the same
+// way the anchor above is: ONE name that is the segment, the state variable and
+// the cycle action, so its toggle's click and its body's `when` cannot address
+// different keys.
+const CONFIG_OPEN_GATE = `{{ and (eq .${SETTINGS_ANCHOR} "${SETTINGS_OPEN}") (eq .${CONFIG_SEG} "${SETTINGS_OPEN}") }}`;
+
+// [LAW:one-source-of-truth] One accordion key for every picker in the menu:
+// one key holds one open member, so opening a theme picker closes the look
+// picker. The settings menu is a narrow panel — two open drop-downs would
+// overflow it — and this is the same shared-key mechanism group sugar uses,
+// selected by a value, not a mode.
+const PICKER_KEY = `${SETTINGS_NS}pickers`;
+
+// [LAW:types-are-the-program] One row of the config menu, as data: everything
+// that differs between "theme" and "padding" is a field here, so the six
+// controls below are six VALUES and the synthesis that mints them is written
+// once. A control names the two keys its dual action writes (they differ where
+// history made them differ — SessionState "theme" over globals field
+// "palette"), the variable whose value it displays, and its value source.
+interface SettingControl {
+  readonly name: string;
+  readonly sessionKey: string;
+  readonly configKey: string;
+  // The `.effective` projection the daemon resolved for this render — the
+  // value the bar is ACTUALLY rendering with, whatever produced it. A control
+  // labels itself with this rather than with its own session key, so the label
+  // can never name a value the bar is not in.
+  readonly effectiveVar: string;
+  readonly glyph: string;
+  readonly domain: OptionDomain;
+}
+
+// [LAW:one-type-per-behavior] Four settings, one control shape: a glyph, the
+// current value, a picker over a domain, and the ↺ that forgets the durable
+// default. They differ only in which keys they write and which domain they
+// range — configuration, so they are four VALUES of one synthesis, not four
+// hand-written segments. `theme`'s two keys differ (SessionState "theme" over
+// globals field "palette") for the historical reason recorded in
+// state-validators.ts's baseline table; carrying BOTH keys as data is what
+// makes that difference expressible without a special case.
+const PICKER_CONTROLS: readonly SettingControl[] = [
+  {
+    name: "preset",
+    sessionKey: "preset",
+    configKey: "preset",
+    effectiveVar: "preset.effective",
+    glyph: "▦",
+    domain: "presets",
+  },
+  {
+    name: "theme",
+    sessionKey: "theme",
+    configKey: "palette",
+    effectiveVar: "theme.effective",
+    glyph: "🎨",
+    domain: "themes",
+  },
+  {
+    name: "look",
+    sessionKey: "look",
+    configKey: "look",
+    effectiveVar: "look.effective",
+    glyph: "◐",
+    domain: "looks",
+  },
+  {
+    name: "style",
+    sessionKey: "style",
+    configKey: "style",
+    effectiveVar: "style.effective",
+    glyph: "✦",
+    domain: "styles",
+  },
+];
+
+// [LAW:one-source-of-truth] Every PLAIN key the settings menu writes — both
+// destinations of every control it mints. Unlike the `settings.` names, these
+// are ordinary words a config can own (`theme`, `padding`, …), so a reader
+// cannot tell from the key alone whether the menu or the author wrote it. This
+// set is the menu's own answer to "which keys do I write", derived from the
+// same records the controls are minted from, so a consumer pairing it with an
+// authorship check (test/helpers/ambient-chrome.ts) can never drift from what
+// the synthesis actually declares.
+export const SETTINGS_WRITTEN_KEYS: ReadonlySet<string> = new Set([
+  ...PICKER_CONTROLS.flatMap((c) => [c.sessionKey, c.configKey]),
+  "autoWrap",
+  "padding",
+]);
+
+// [LAW:one-source-of-truth] A control's three names, derived from its one
+// name — the segment that shows it, the action its picker applies, and the
+// action its ↺ resets. Derived rather than declared so a control record can
+// never name a segment whose picker writes a different setting.
+const controlSeg = (name: string): string => `${SETTINGS_NS}${name}`;
+const controlApply = (name: string): string => `${SETTINGS_NS}apply.${name}`;
+const controlReset = (name: string): string => `${SETTINGS_NS}reset.${name}`;
+
+// The two settings whose affordance is not a picker: wrapping is a toggle
+// (two members, so a menu would be a drop-down over a binary) and padding is a
+// stepper over a range (16 picker cells for a value you nudge). Both are dual
+// exactly like the pickers — only the affordance differs.
+const WRAP_SEG = `${SETTINGS_NS}wrap`;
+const PADDING_SEG = `${SETTINGS_NS}padding`;
 
 // [LAW:one-source-of-truth] The predicate the body container gates on, derived
 // from the same anchor string the toggle's cycle writes — spelled once here,
@@ -204,14 +344,38 @@ function expandAnchor(node: AnchoredRoot | LayoutNode): LayoutNode {
           direction: "vertical",
           children: [
             node,
+            // Row one: what the menu is FOR — the persist? selector that says
+            // where every setting below it lands, the preset switcher, the
+            // door into the config menu, and the door into edit mode.
             {
               kind: "container",
               direction: "horizontal",
               children: [
-                { kind: "segment", name: PRESETS_SEG },
+                { kind: "segment", name: PERSIST_SEG },
+                { kind: "segment", name: controlSeg("preset") },
+                { kind: "segment", name: CONFIG_SEG },
                 { kind: "segment", name: EDIT_SEG },
               ],
               when: SETTINGS_OPEN_GATE,
+            },
+            // Row two: the display settings, behind their own disclosure so
+            // the menu opens narrow. Gated on BOTH keys — a config row left
+            // open yesterday must not render beside a closed menu today; one
+            // gate per disclosure, and this row is inside two of them.
+            {
+              kind: "container",
+              direction: "horizontal",
+              children: [
+                ...PICKER_CONTROLS.filter((c) => c.name !== "preset").map(
+                  (c): LayoutNode => ({
+                    kind: "segment",
+                    name: controlSeg(c.name),
+                  }),
+                ),
+                { kind: "segment", name: WRAP_SEG },
+                { kind: "segment", name: PADDING_SEG },
+              ],
+              when: CONFIG_OPEN_GATE,
             },
           ],
         }
@@ -237,9 +401,14 @@ function declareHostedMenu(
   segName: string,
   applyName: string,
   artifacts: MenuArtifacts,
+  // The accordion key the menu shares with its siblings, or undefined for a
+  // menu that toggles only itself — the same `key` option `{{ menu }}` takes,
+  // threaded here so the synthesized artifacts and the rendered disclosure
+  // derive one identity from one value [LAW:one-source-of-truth].
+  sharedKey?: string,
 ): void {
   const member = menuMember(applyName);
-  const stateKey = menuStateKey(segName, applyName, undefined);
+  const stateKey = menuStateKey(segName, applyName, sharedKey);
   const pageKey = menuPageKey(stateKey);
   artifacts.variables[stateKey] = disclosureStateVar(
     stateKey,
@@ -266,11 +435,15 @@ function settingsArtifacts(): MenuArtifacts {
     },
     actions: {
       [SETTINGS_ANCHOR]: disclosureCycleAction(SETTINGS_ANCHOR, SETTINGS_OPEN),
-      // [LAW:single-enforcer] The picker's apply effect, gated by derivation
-      // like every other `from`-sourced set: `presets` is a per-config domain
-      // both deriveActionValidators and the rendered options resolve through
-      // one `resolveOptionDomain`, so this adds a control, never a gate.
-      [APPLY_PRESET_ACTION]: { set: "preset", from: "presets" },
+      [CONFIG_SEG]: disclosureCycleAction(CONFIG_SEG, SETTINGS_OPEN),
+      // [LAW:one-source-of-truth] The selector is an ordinary session cycle
+      // over the one boolean spelling SessionState uses — off first, because
+      // an unwritten key counts as the first member and the menu opens in
+      // experimentation mode.
+      [PERSIST_SEG]: {
+        set: PERSIST_KEY,
+        cycle: [BOOLEAN_FALSE, BOOLEAN_TRUE],
+      },
     },
     segments: {
       // [LAW:representation] The glyph trails the label it gates, per the
@@ -280,8 +453,36 @@ function settingsArtifacts(): MenuArtifacts {
         bg: "surface",
         fg: "foreground",
       },
-      [PRESETS_SEG]: {
-        template: `▦ {{ menu "${APPLY_PRESET_ACTION}" (dict "closeOnPick" true) }}`,
+      // [LAW:representation] The checkbox states what the NEXT write does,
+      // which is why the glyph and the word live together: "☑ persist?" is
+      // the whole explanation of where the click below it lands.
+      [PERSIST_SEG]: {
+        template: `{{ action "${PERSIST_SEG}" "☐ persist?" "☑ persist?" }}`,
+        bg: "surface",
+        fg: "foreground",
+      },
+      [CONFIG_SEG]: {
+        template: `{{ action "${CONFIG_SEG}" "⚙ config ${DISCLOSURE_GLYPH_CLOSED}" "⚙ config ${DISCLOSURE_GLYPH_OPEN}" }}`,
+        bg: "surface",
+        fg: "foreground",
+      },
+      // [LAW:one-type-per-behavior] Both non-picker controls read the same
+      // `.effective` projection their picker siblings read, and write the
+      // same two stores through the same dual arm — a toggle and a stepper
+      // are affordances over one behavior, not two kinds of setting.
+      [WRAP_SEG]: {
+        template:
+          `{{ action "${controlApply("wrap")}" "wrap: on" "wrap: off" }} ` +
+          `{{ action "${controlReset("wrap")}" "↺" }}`,
+        bg: "surface",
+        fg: "foreground",
+      },
+      [PADDING_SEG]: {
+        template:
+          `{{ action "${controlApply("padding")}.down" "◀" }} ` +
+          "padding {{ .padding.effective }} " +
+          `{{ action "${controlApply("padding")}.up" "▶" }} ` +
+          `{{ action "${controlReset("padding")}" "↺" }}`,
         bg: "surface",
         fg: "foreground",
       },
@@ -296,8 +497,84 @@ function settingsArtifacts(): MenuArtifacts {
       },
     },
   };
-  declareHostedMenu(PRESETS_SEG, APPLY_PRESET_ACTION, artifacts);
+  artifacts.variables[PERSIST_KEY] = {
+    kind: "state",
+    key: PERSIST_KEY,
+    default: BOOLEAN_FALSE,
+  };
+  artifacts.variables[CONFIG_SEG] = disclosureStateVar(
+    CONFIG_SEG,
+    DISCLOSURE_CLOSED,
+  );
+  declareSettingControls(artifacts);
   return artifacts;
+}
+
+// [LAW:one-source-of-truth] Every setting the menu offers, minted from the one
+// table that describes them. A picker control is a glyph, its live value, a
+// `{{ menu }}` over its domain, and the ↺ that forgets its durable default;
+// wrap and padding differ only in affordance. Every apply action here is DUAL
+// — one declaration naming both destination keys and the selector that chooses
+// between them — so the panel spells each setting exactly once and the click
+// carries the destination as data [LAW:dataflow-not-control-flow].
+//
+// [LAW:single-enforcer] Nothing here declares a gate. `deriveActionValidators`
+// and `deriveConfigActionValidators` each explode these dual declarations
+// (actionDestinations) and derive the same specs they would have derived from
+// the pair of single-destination actions this replaces — so the writable-key
+// surface is byte-for-byte what it was when the drawer spelled both halves.
+function declareSettingControls(artifacts: MenuArtifacts): void {
+  for (const c of PICKER_CONTROLS) {
+    const seg = controlSeg(c.name);
+    const apply = controlApply(c.name);
+    artifacts.segments[seg] = {
+      template:
+        `${c.glyph} {{ .${c.effectiveVar} }} ` +
+        `{{ menu "${apply}" (dict "key" "${PICKER_KEY}" "closeOnPick" true) }} ` +
+        `{{ action "${controlReset(c.name)}" "↺" }}`,
+      bg: "surface",
+      fg: "foreground",
+    };
+    artifacts.actions[apply] = {
+      set: c.sessionKey,
+      persist: c.configKey,
+      persistWhen: PERSIST_KEY,
+      from: c.domain,
+    };
+    // [LAW:one-source-of-truth] ↺ clears the DURABLE default only — the one
+    // write the user cannot otherwise take back, since a session value dies
+    // with the session. Its target is the config key the dual's durable half
+    // writes, read from the same record, so the two can never name different
+    // settings.
+    artifacts.actions[controlReset(c.name)] = { reset: c.configKey };
+    declareHostedMenu(seg, apply, artifacts, PICKER_KEY);
+  }
+  artifacts.actions[controlApply("wrap")] = {
+    set: "autoWrap",
+    persist: "autoWrap",
+    persistWhen: PERSIST_KEY,
+    cycle: [...BOOLEAN_MEMBERS],
+  };
+  artifacts.actions[controlReset("wrap")] = { reset: "autoWrap" };
+  // [LAW:one-source-of-truth] The stepper's bounds are PADDING_RANGE, the same
+  // range the loader validates a config-file `padding` against and the same one
+  // both write gates enforce — a click can never reach a value the file could
+  // not have held.
+  artifacts.actions[`${controlApply("padding")}.down`] = {
+    set: "padding",
+    persist: "padding",
+    persistWhen: PERSIST_KEY,
+    ...PADDING_RANGE,
+    by: -1,
+  };
+  artifacts.actions[`${controlApply("padding")}.up`] = {
+    set: "padding",
+    persist: "padding",
+    persistWhen: PERSIST_KEY,
+    ...PADDING_RANGE,
+    by: 1,
+  };
+  artifacts.actions[controlReset("padding")] = { reset: "padding" };
 }
 
 // [LAW:one-source-of-truth] Edit mode's toggle, ensured rather than duplicated:

@@ -185,7 +185,116 @@ export type ActionDecl =
   | { readonly open: string }
   | { readonly reset: string }
   | { readonly undo: true }
-  | { readonly redo: true };
+  | { readonly redo: true }
+  | DualActionDecl;
+
+// [LAW:one-source-of-truth] The key whose PRESENCE makes an action
+// dual-destination, and whose VALUE names the SessionState key that chooses
+// the destination at click time. Spelled once: the loader dispatches on it,
+// the compiler reads it, and the settings menu's synthesis writes it.
+export const PERSIST_WHEN = "persistWhen";
+
+// [LAW:types-are-the-program] ONE setting, ONE control, TWO stores
+// (candybar-settings-ui-aok.3). Before this arm, a setting with both a
+// session and a durable half cost the author two declarations and the reader
+// two controls — `{{ menu "applyTheme" }}` beside `📌{{ menu
+// "applyThemeForever" }}` — a second representation of one setting that had
+// to be reconciled at every glance.
+//
+// A dual decl carries BOTH destination keys (`set` = the SessionState key,
+// `persist` = the config-overrides key — they differ where history made them
+// differ, e.g. session "theme" over globals field "palette") and ONE value
+// source shared by both. `persistWhen` names the session key whose boolean
+// value SELECTS the destination; the value written is identical either way,
+// so the destination is the only thing that varies, and it varies as DATA
+// [LAW:dataflow-not-control-flow].
+//
+// [LAW:single-enforcer] This adds NO gate surface. `actionDestinations`
+// below explodes one dual decl into exactly the two single-destination decls
+// it is equivalent to, and both validator derivations (state-validators.ts,
+// config-validators.ts) fold over that explosion — so the writable (key,
+// spec) pairs stay statically enumerable from the declarations, derived by
+// the same code that has always derived them.
+//
+// The `int` / `removeSegment` / `insertSegment*` sources are deliberately
+// absent: `int` is a UI-only page cursor with no durable meaning, and the
+// structural edits are persist-only by design (see the arms above), so
+// neither has two destinations to choose between.
+export type DualActionDecl =
+  | {
+      readonly set: string;
+      readonly persist: string;
+      readonly persistWhen: string;
+      readonly to: string;
+    }
+  | {
+      readonly set: string;
+      readonly persist: string;
+      readonly persistWhen: string;
+      readonly from: OptionDomain;
+    }
+  | {
+      readonly set: string;
+      readonly persist: string;
+      readonly persistWhen: string;
+      readonly cycle: readonly string[];
+    }
+  | {
+      readonly set: string;
+      readonly persist: string;
+      readonly persistWhen: string;
+      readonly min: number;
+      readonly max: number;
+      readonly by: number;
+    };
+
+// [LAW:parse-dont-validate] The one discriminator for the dual arm, and the
+// reason every `"set" in a` consumer stays correct: a dual decl carries both
+// `set` and `persist`, so a consumer that must treat the two destinations
+// separately asks THIS first (or folds through actionDestinations below), and
+// a consumer that only asks "does this bind a session write" (actionBindsSet)
+// keeps its existing answer with no change at all.
+export function actionIsDual(a: ActionDecl): a is DualActionDecl {
+  return PERSIST_WHEN in a;
+}
+
+// [LAW:one-source-of-truth] THE explosion of an action into the
+// single-destination declarations it writes through — `[a]` for every
+// ordinary action, `[session, durable]` for a dual. Every consumer that
+// reasons about DESTINATIONS (both validator derivations) flatMaps through
+// this instead of learning the dual shape, so the gate a dual derives is by
+// construction the union of the gates its two halves would have derived
+// separately — there is no second derivation to keep in agreement.
+export function actionDestinations(a: ActionDecl): readonly ActionDecl[] {
+  if (!actionIsDual(a)) return [a];
+  // [LAW:types-are-the-program] Written out per value source rather than
+  // spread-and-cast: the two halves are then ordinary, fully-typed `set` and
+  // `persist` members — the exact declarations an author would have written —
+  // and adding a value source to DualActionDecl fails to compile here until
+  // its explosion is stated.
+  if ("to" in a) {
+    return [
+      { set: a.set, to: a.to },
+      { persist: a.persist, to: a.to },
+    ];
+  }
+  if ("from" in a) {
+    return [
+      { set: a.set, from: a.from },
+      { persist: a.persist, from: a.from },
+    ];
+  }
+  if ("cycle" in a) {
+    return [
+      { set: a.set, cycle: a.cycle },
+      { persist: a.persist, cycle: a.cycle },
+    ];
+  }
+  return [
+    { set: a.set, min: a.min, max: a.max, by: a.by },
+    { persist: a.persist, min: a.min, max: a.max, by: a.by },
+  ];
+}
 
 // [LAW:dataflow-not-control-flow] Does this action write a SessionState key? A
 // `set` action composes a set-state click URL whose first segment is session.id;
