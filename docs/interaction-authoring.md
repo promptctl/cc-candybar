@@ -713,8 +713,10 @@ synthesizes:
   `insertSegmentFrom` action behind `{{ menu }}`, ranging every declared
   segment not already in that preset's tree) before and after each run —
   so N segments in a row read `+ [seg1 -] + [seg2 -] + … + [segN -] +`.
-  Every affordance is gated `when: {{ eq .edit.mode "open" }}` — invisible
-  until the toggle opens, present in the compiled tree either way.
+  Every affordance is gated on edit mode being open — the same disclosure
+  predicate a group body or a `{{ menu }}` gates on, over the `edit.mode`
+  key — so each is invisible until the toggle opens, and present in the
+  compiled tree either way.
 
 **This is demand-driven, not automatic — but the demand is usually already
 there.** A config that never references `edit.toggle` gets none of this — no
@@ -1244,8 +1246,8 @@ or not any group/menu exists in your config.
 
 The bar ships two `(?)` affordances, and neither needs anything in your config:
 
-- **In edit mode**, below the bar — what `+`, `-` and the `↺ … customized`
-  banner do when clicked.
+- **In edit mode**, trailing the bar's last row — what `+`, `-` and the
+  `↺ … customized` banner do when clicked.
 - **In the config menu**, beside `persist?` — where the next click lands.
 
 Both are ordinary disclosures. `(?)` closed, `✕` open, one session-scoped state
@@ -1263,7 +1265,9 @@ a group appends the disclosure glyph to its label in both states, so `label:
 bundled ones use binds two unrelated strings per state, which is raw-grammar
 territory — a `state` variable, a `cycle` action and your own
 `{{ action "…" "(?)" "✕" }}`, exactly as the group section above directs for
-any custom trigger.
+any custom trigger. A group's body also defaults to `direction: "vertical"`,
+so more than one help line stacks; say `direction: "horizontal"` to get the
+row of text cells the bundled ones render.
 
 ```json5 check:pass
 {
