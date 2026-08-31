@@ -384,12 +384,56 @@ describe.each([
     expect(after.length - before.length).toBe(1);
   });
 
-  test("closed help widens no row", () => {
-    // "Help must not widen the bar while closed and must not add a row on its
-    // own." The `(?)` cell is the asked-for cost; its BODY is free until clicked.
+  // "Help must not widen the bar while closed." The earlier version of this
+  // test opened neither surface, so no `(?)` was on the bar at all and it
+  // passed identically with `src/config/help.ts` deleted — hence the presence
+  // assertion, which is what makes the width one about help.
+  test.each([
+    ["edit mode", enterEditMode],
+    ["the config menu", openSettingsMenu],
+  ])("closed help in %s overflows no line", (_name, open) => {
     const rt = buildRuntime(twoSegmentRoot(padding));
-    const plain = rt.lines(width);
-    for (const line of plain) expect(cols(line)).toBeLessThanOrEqual(width);
+    open(rt);
+    const shown = rt.lines(width);
+
+    expect(shown.some((l) => l.includes(HELP_GLYPH_CLOSED))).toBe(true);
+    for (const line of shown) expect(cols(line)).toBeLessThanOrEqual(width);
+  });
+});
+
+// ─── 6. A closed trigger costs no row ────────────────────────────────────────
+
+// "Help must not add a row on its own." The `(?)` cell is the asked-for cost;
+// its BODY is free until clicked.
+//
+// [LAW:verifiable-goals] Stated as the criterion itself — a closed trigger is
+// never ALONE on its line — rather than as a line count, because a count would
+// need a no-help baseline that production never renders. Strip the glyph from
+// the line it landed on: a trigger riding a row leaves that row's other cells
+// behind, a trigger that minted its own row leaves whitespace.
+//
+// [LAW:behavior-not-structure] Measured wide, deliberately. This asserts a fact
+// about the LAYOUT TREE, and FlexStrip's width-based auto-wrap is a separate
+// mechanism that can push any trailing cell onto its own visual line — at 80
+// columns and padding 2 it does exactly that to a correctly-placed `(?)`. A
+// width narrow enough to wrap would make this test fail for a reason that has
+// nothing to do with what it is measuring; the overflow behaviour has its own
+// tests above.
+describe("a closed (?) rides a row rather than adding one", () => {
+  const WIDE = 200;
+
+  test.each([
+    ["edit mode", enterEditMode],
+    ["the config menu", openSettingsMenu],
+  ])("in %s", (_name, open) => {
+    const rt = buildRuntime();
+    open(rt);
+    const hosts = rt
+      .lines(WIDE)
+      .filter((l) => l.includes(HELP_GLYPH_CLOSED));
+
+    expect(hosts).toHaveLength(1);
+    expect(hosts[0]!.replaceAll(HELP_GLYPH_CLOSED, "").trim()).not.toBe("");
   });
 });
 

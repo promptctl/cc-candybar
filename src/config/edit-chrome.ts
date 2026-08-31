@@ -310,11 +310,11 @@ function spliceContainer(
 // one segment gap — it is a fact about the whole tree — visible or not by the
 // SAME `when` every other synthesized affordance here already uses.
 //
-// candybar-settings-ui-aok.6 gave edit mode's `(?)` the same treatment for the
-// same reason: help about `+`/`-`/`↺` is a fact about the tree, not about a
-// cell. So this function now brackets the content with the two per-preset rows
-// that describe it — the banner above, help below — which is what its name
-// says and why it is no longer "prepend".
+// candybar-settings-ui-aok.6 hangs edit mode's `(?)` off the same content — its
+// BODY is a per-preset row on the same footing as the banner, so this function
+// now brackets the content rather than only preceding it, which is what its name
+// says and why it is no longer "prepend". Its TRIGGER is not a row; see
+// withTrailingCell.
 function wrapWithPresetRows(
   splicedRoot: LayoutNode,
   presetName: string,
@@ -366,26 +366,59 @@ function wrapWithPresetRows(
     direction: "vertical",
     children: [
       { kind: "segment", name: chromeSegName },
-      splicedRoot,
-      // [LAW:no-silent-failure] Help is appended AFTER the content, and the
-      // reason is not cosmetic. The hue cursor (src/dsl/render.ts:696) advances
-      // in pre-order over every segment leaf in the tree — VISIBLE OR NOT, so
-      // that toggling a disclosure never recolours the bar. The corollary is
-      // that any segment inserted ahead of the content shifts the hue index of
-      // everything after it: an earlier draft of this splice put the `(?)`
-      // first and recoloured every cell of every user's bar (measured on the
-      // bundled default: the status row went 33;41;59 → 49;36;52) while edit
-      // mode was still OFF. Closed help must cost nothing, and a whole-bar
-      // recolour is not nothing. Appending is what makes that true by
-      // construction rather than by luck.
-      //
-      // It reads correctly too: every other disclosure body in this codebase
-      // drops BELOW the row that opened it, and help about the whole edit-mode
-      // bar is a fact about the tree above it, exactly like the reset banner.
-      help.trigger,
+      withTrailingCell(splicedRoot, help.trigger),
+      // The body is a ROW of its own, and only while the disclosure is open —
+      // dropping BELOW the row that revealed it, like every other disclosure
+      // body in this codebase.
       help.body,
     ],
     ...(splicedRoot.when !== undefined && { when: splicedRoot.when }),
+  };
+}
+
+// [LAW:one-source-of-truth] `HelpDisclosure.trigger` is a CELL, and its contract
+// is that the caller joins it to a row it ALREADY HAS — the settings menu pushes
+// it into the row holding `persist?`. Edit mode's rows are the ones
+// spliceContainer just built, so the trigger joins the last of them. Two
+// constraints pin that placement and nothing else satisfies both:
+//
+//  - Closed help must cost no LINE. A trigger given its own vertical slot is a
+//    permanent row for the whole time edit mode is on, since a trigger's `when`
+//    is its host surface's, never its own open state (a trigger you must open in
+//    order to see could never be opened).
+//  - Closed help must cost no COLOUR. The hue cursor (src/dsl/render.ts:696)
+//    advances in pre-order over every segment leaf — VISIBLE OR NOT, so that
+//    toggling a disclosure never recolours the bar — which means a leaf inserted
+//    AHEAD of the content shifts the hue index of everything after it. An
+//    earlier draft put the `(?)` first and recoloured every cell of the bundled
+//    default (status row 33;41;59 → 49;36;52) with edit mode still OFF. Trailing
+//    the last row is the one position that moves no other leaf.
+//
+// Those two together disqualify the reset-banner row, which sits above the
+// content. The trigger does inherit its host row's own `when`, which is what
+// riding a row means: a preset that gates its last row hides that row's `+`/`-`
+// affordances along with the `(?)` explaining them.
+//
+// [LAW:dataflow-not-control-flow] Total over the three node shapes with no
+// guard: a vertical container's rows are its children, so recurse into the last;
+// a horizontal container IS a row, so append; a segment is a row of one that
+// cannot hold a second cell, so pair it into one. An empty container has no last
+// child and appends, which is the same answer.
+function withTrailingCell(node: LayoutNode, cell: LayoutNode): LayoutNode {
+  if (node.kind === "segment") {
+    return {
+      kind: "container",
+      direction: "horizontal",
+      children: [node, cell],
+    };
+  }
+  const last = node.children.at(-1);
+  if (node.direction === "horizontal" || last === undefined) {
+    return { ...node, children: [...node.children, cell] };
+  }
+  return {
+    ...node,
+    children: [...node.children.slice(0, -1), withTrailingCell(last, cell)],
   };
 }
 
