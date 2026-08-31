@@ -374,17 +374,21 @@ describe("menu synthesis (derived identity, reserved namespace)", () => {
 // fail AT LOAD with text naming the new form — a blind authoring agent's only
 // channel. A silently reinterpreted tail (e.g. the old page-action string read
 // as an option) would be the exact failure class bn5.6 exists to kill.
-describe("bn5.6 — old spellings and bad option dicts are migration-pointing LOAD errors", () => {
-  const load = (segTemplate: string, extraVars = ""): (() => void) => {
-    const src = `{
+// One fixture shape behind both the load assertions and the render ones, so a
+// spelling proven to load is proven to render from the same source.
+const srcFor = (segTemplate: string, extraVars = ""): string => `{
       globals: {},
-      variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' }${extraVars} },
+      variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' }, 'term.cols': { kind: 'input', path: 'term.cols', type: 'number', default: 80 }${extraVars} },
       actions: { applyTheme: { set: 'theme', from: 'themes' }, themePage: { set: 'theme-page', int: true } },
       segments: { s: { template: '${segTemplate}', bg: 'surface', fg: 'foreground' } },
       root: { h: ['s'] },
     }`;
-    return () => parseAndValidate("<test>", src, ALLOWED);
-  };
+const load =
+  (segTemplate: string, extraVars = ""): (() => void) =>
+  () =>
+    parseAndValidate("<test>", srcFor(segTemplate, extraVars), ALLOWED);
+
+describe("bn5.6 — old spellings and bad option dicts are migration-pointing LOAD errors", () => {
 
   test("the full old positional form fails load naming the new form (acceptance)", () => {
     try {
@@ -424,6 +428,13 @@ describe("bn5.6 — old spellings and bad option dicts are migration-pointing LO
   // been a hard load error since bn5.6, so nothing loadable is still using it.
   test("a two-argument menu binds a static display (the ancient page form is visible, not silent)", () => {
     expect(load('{{ menu "applyTheme" "themePage" }}')).not.toThrow();
+    // The claim above is about what the BAR SHOWS, so assert it there: the
+    // stale action name is the trigger's visible text, sitting where an arrow
+    // belongs. A load-only check would pass just as happily if the display were
+    // dropped on the floor [LAW:behavior-not-structure].
+    const rt = buildRuntime(srcFor('{{ menu "applyTheme" "themePage" }}'));
+    expect(stripAnsi(rt.render())).toContain("themePage");
+    rt.dispose();
   });
 
   test("an unknown option name fails load (transposition guard)", () => {
@@ -448,6 +459,60 @@ describe("bn5.6 — old spellings and bad option dicts are migration-pointing LO
         ", someVar: { kind: 'literal', value: 'k' }",
       ),
     ).toThrow(/not fully literal/);
+  });
+});
+
+// [LAW:one-source-of-truth] The loader splits the argument tail on EXPRS and the
+// renderer splits the same tail on VALUES — two readings of one fact, "which
+// slot is the options dict". aok.4 gave the tail displays as well as the dict,
+// so the last slot became one both readings can claim: a non-literal there is a
+// display to the loader and, if it evaluates to an object, the options dict to
+// the renderer. The loader closes that by admitting only call sites where the
+// two readings PROVABLY coincide — and the boundary is silence, not novelty: a
+// shape whose alternate reading throws at render stays legal.
+describe("the options dict and the trigger displays cannot be confused", () => {
+  test("a non-literal LAST argument fails load when both readings are legal", () => {
+    try {
+      load('{{ menu "applyTheme" "▸" .session.id }}')();
+      throw new Error("expected ConfigError");
+    } catch (e) {
+      expect(e).toBeInstanceOf(ConfigError);
+      const msg = (e as ConfigError).message;
+      expect(msg).toMatch(/neither a literal nor a literal \(dict …\)/);
+      expect(msg).toMatch(/read as 2 displays or as 1 plus options/);
+      expect(msg).toMatch(/\(dict\) \}\}/); // …and the disambiguator it names
+    }
+  });
+
+  test("an explicit trailing (dict …) disambiguates, so dynamic displays stay legal", () => {
+    // The escape the error names: with the options slot spelled out, the last
+    // expr is provably the dict and BOTH displays may be dynamic — the parity
+    // with a cycle {{ action }}'s free displays is preserved, not traded away.
+    expect(
+      load('{{ menu "applyTheme" (printf "◂%s" "a") (printf "▸%s" "b") (dict) }}'),
+    ).not.toThrow();
+  });
+
+  test("a non-literal SOLE display loads — its other reading throws, so it is not silent", () => {
+    // Read as options this is zero displays, which `cycleDisplayIssue` already
+    // calls illegal, so a render-time object here fails loudly instead of
+    // quietly becoming the static form. Loudness is the bar, so no load error.
+    expect(load('{{ menu "applyTheme" .session.id }}')).not.toThrow();
+  });
+
+  test("a non-string display fails LOUDLY at render, naming its position", () => {
+    // The one gate for a dynamic display that evaluates to a non-string: the
+    // loader permits non-literal displays (identity does not depend on them),
+    // so this throw is what stands between an author and a silently dropped
+    // trigger. An array dodges `isDict` (arrays are excluded), so it reaches
+    // the display check rather than being read as the options dict. The bar is
+    // where the author reads it: renderDsl surfaces a segment's throw as a
+    // visible ⚠ diagnostic rather than propagating it.
+    const rt = buildRuntime(srcFor('{{ menu "applyTheme" (list "x") "▾" }}'));
+    const out = stripAnsi(rt.render());
+    expect(out).toContain("display #1 is not text");
+    expect(out).toContain('["x"]'); // the offending value, named
+    rt.dispose();
   });
 });
 

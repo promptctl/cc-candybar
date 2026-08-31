@@ -1272,6 +1272,39 @@ Menu identity is gated at load; every option value must be a literal:
 whose options (dict …) is not fully literal — every option value must be a literal so the menu can be gated at load (a dynamic entry like (dict "key" .x) cannot)
 ```
 
+### A dynamic LAST argument, where the options dict would also fit
+
+Trigger displays may be dynamic — identity does not depend on them. But the
+options dict is the *last* argument, so a non-literal in that slot is a shape
+the renderer would classify by whatever it evaluates to, and it could land on a
+different reading than the loader's. Where both readings are legal the call is
+rejected rather than resolved by a guess:
+
+```json5 check:fail
+{
+  variables: { glyph: { kind: "literal", value: "▾" } },
+  actions: { applyTheme: { set: "theme", from: "themes" } },
+  segments: { trigger: { template: '{{ menu "applyTheme" "▸" .glyph }}' } },
+  root: { v: ["trigger"] },
+}
+```
+
+```error
+whose last argument is neither a literal nor a literal (dict …)
+```
+
+Spell the options out to disambiguate — an empty `(dict)` is enough, and both
+displays may then be dynamic:
+
+```json5 check:pass
+{
+  variables: { open: { kind: "literal", value: "▾" }, shut: { kind: "literal", value: "▸" } },
+  actions: { applyTheme: { set: "theme", from: "themes" } },
+  segments: { trigger: { template: '{{ menu "applyTheme" .shut .open (dict) }}' } },
+  root: { v: ["trigger"] },
+}
+```
+
 ### A `{{ menu }}` outside a segment template
 
 A menu derives its identity from the segment it sits in, so it is valid only

@@ -84,8 +84,26 @@ type MenuAnalysis =
     }
   | { readonly kind: "issue"; readonly message: string };
 
-const isDictCall = (e: ReferencedCall["argExprs"][number]): boolean =>
+type ArgExpr = ReferencedCall["argExprs"][number];
+
+const isDictCall = (e: ArgExpr): boolean =>
   e.kind === "call" && e.name === "dict";
+
+// [LAW:one-source-of-truth] The two sides split the tail on different evidence —
+// exprs here, evaluated values in `parseMenuArgs` — so the loader admits only
+// call sites where those two readings PROVABLY coincide. The renderer's split
+// asks one question of the last value, "is it an object", so a literal answers
+// it here: a parse-time constant evaluates to itself and can never become the
+// options dict. A literal `(dict …)` always does. Everything else in that slot
+// is classified by whatever it happens to evaluate to.
+const isNonObjectLiteral = (e: ArgExpr): boolean =>
+  e.kind === "literal" && typeof e.value !== "object";
+
+// The display-arity rule used as a predicate; the message is the caller's
+// business, so the subject never surfaces. [LAW:single-enforcer] — legality is
+// read off the disclosure primitive, never restated as a count comparison.
+const legalDisplayCount = (count: number): boolean =>
+  cycleDisplayIssue("", count, 2) === undefined;
 
 function analyzeMenuCall(call: ReferencedCall): MenuAnalysis {
   const issue = (message: string): MenuAnalysis => ({ kind: "issue", message });
@@ -105,14 +123,32 @@ function analyzeMenuCall(call: ReferencedCall): MenuAnalysis {
   // whole grammar, and it is the same split `parseMenuArgs` performs on the
   // evaluated tail at render — one shape, read twice from the two things each
   // side has (exprs here, values there).
-  const optsArg =
-    tail.length > 0 && isDictCall(tail[tail.length - 1]!)
-      ? tail[tail.length - 1]
-      : undefined;
+  const last = tail[tail.length - 1];
+  const optsArg = last !== undefined && isDictCall(last) ? last : undefined;
   const displays = optsArg === undefined ? tail : tail.slice(0, -1);
   if (displays.some(isDictCall)) {
     return issue(
       `whose options (dict …) is not its last argument — ${MIGRATION}`,
+    );
+  }
+  // [LAW:no-silent-failure] The last slot is the one both readings can claim.
+  // When the expr there is not provably one or the other AND dropping it still
+  // leaves a legal display count, the renderer's value-based split can land on
+  // a DIFFERENT reading than this one — same call, two shapes, no error either
+  // side: the options dict skips `staticDictEntries` (so a dynamic `key` derives
+  // a state key with no synthesized var behind it, and the menu never opens) or
+  // a display vanishes into the static form. Reject that call site; an explicit
+  // trailing `(dict …)` disambiguates it and keeps dynamic displays legal.
+  // Where the alternate reading is an ILLEGAL count the renderer throws instead
+  // of diverging, so it stays accepted — loudness, not refusal, is the bar.
+  if (
+    last !== undefined &&
+    optsArg === undefined &&
+    !isNonObjectLiteral(last) &&
+    legalDisplayCount(displays.length - 1)
+  ) {
+    return issue(
+      `whose last argument is neither a literal nor a literal (dict …) — the renderer tells a display from the options dict by the value it evaluates to, so this call could be read as ${displays.length} displays or as ${displays.length - 1} plus options, and both are legal. Make the options explicit as a trailing (dict …) — {{ menu "${applyArg.value}" (printf "…") (printf "…") (dict) }} binds dynamic displays unambiguously — or bind the trigger text as literals`,
     );
   }
   // [LAW:single-enforcer] The display-arity rule is the disclosure primitive's,

@@ -202,6 +202,12 @@ interface MenuArgs {
   readonly displays: readonly string[];
   readonly options: MenuOptions;
 }
+// [LAW:one-source-of-truth] This splits the tail on VALUES; the loader splits
+// the same tail on EXPRS (`menu-synth.ts`). They agree because the loader admits
+// only call sites where they provably must: a last argument that is neither a
+// string literal nor a literal `(dict …)` is a load error whenever both readings
+// would be legal, so what reaches here can only match the loader's reading or
+// throw below.
 const isDict = (v: unknown): v is Record<string, unknown> =>
   typeof v === "object" && v !== null && !Array.isArray(v);
 
