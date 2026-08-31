@@ -10,14 +10,14 @@
 // goal, realized more strictly here than SessionState's legacy baseline
 // theme/style/toolbar-expanded keys.
 
-import type { ActionDecl } from "../../config/action";
+import { actionDestinations, type ActionDecl } from "../../config/action";
 import {
   perConfigDomainsFor,
   resolveOptionDomain,
 } from "../../config/option-domain";
 import { addableSegmentDomains } from "../../config/edit-chrome";
 import type { DslConfig } from "../../config/dsl-types";
-import { isGlobalsField } from "../config-overrides-store";
+import { numericGlobalsSeeds } from "../../config/loader/globals";
 import { encodeLayoutOp } from "../../config/layout-ops";
 import {
   parsePersistTarget,
@@ -163,13 +163,7 @@ function actionKeySpecs(
 // applied. Mirrors stateKeySeeds' "the bar's current display, not silently
 // min" rule for SessionState steppers.
 function configKeySeeds(config: DslConfig): ReadonlyMap<string, number> {
-  const seeds = new Map<string, number>();
-  for (const [key, value] of Object.entries(config.globals)) {
-    if (isGlobalsField(key) && typeof value === "number") {
-      seeds.set(key, value);
-    }
-  }
-  return seeds;
+  return numericGlobalsSeeds(config.globals);
 }
 
 // [LAW:one-source-of-truth] Every preset a config's action table ALREADY
@@ -197,7 +191,7 @@ function configKeySeeds(config: DslConfig): ReadonlyMap<string, number> {
 // SOME action names it).
 function presetRootOpsContributions(config: DslConfig): KeySpecContribution[] {
   const presets = new Set<string>();
-  for (const a of Object.values(config.actions)) {
+  for (const a of writeDestinations(config)) {
     const key = "persist" in a ? a.persist : "reset" in a ? a.reset : null;
     if (key === null) continue;
     const target = parsePersistTarget(key);
@@ -223,10 +217,19 @@ function actionContributions(config: DslConfig): KeySpecContribution[] {
   ]);
   return [
     ...presetRootOpsContributions(config),
-    ...Object.values(config.actions).flatMap((a) =>
+    ...writeDestinations(config).flatMap((a) =>
       actionKeySpecs(a, seeds, perConfigDomains),
     ),
   ];
+}
+
+// [LAW:single-enforcer] Every action as the single-destination declarations it
+// writes through — the SAME explosion state-validators.ts folds over, so a
+// dual-destination action (candybar-settings-ui-aok.3) contributes exactly the
+// `persist` spec its durable half would have contributed alone. One statement
+// of "what are this action's destinations", two derivations reading it.
+function writeDestinations(config: DslConfig): readonly ActionDecl[] {
+  return Object.values(config.actions).flatMap(actionDestinations);
 }
 
 // [LAW:single-enforcer] The SOLE install-site derivation: a config's

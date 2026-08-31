@@ -16,6 +16,14 @@
 // hand-authored user config file, present only to prove the daemon never
 // writes to it (persistent writes land in the daemon-owned overrides layer,
 // never the config file on disk).
+//
+// [LAW:verifiable-goals] candybar-settings-ui-aok.3 folded the two controls
+// per setting into ONE whose destination the `persist?` checkbox chooses, so
+// this test now drives that choice over the real socket: the SAME rendered
+// theme control emits a session `set-state` write with persist? unchecked and
+// a durable `set-config` write with it checked. That contrast is the ticket's
+// headline claim, and asserting it on the wire — not on the compiled action —
+// is what proves the destination really rides the click.
 
 import { readFileSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
@@ -27,8 +35,10 @@ import { listResolvablePaletteNames } from "../src/themes/policy";
 import {
   click,
   extractUrls,
+  findUrl,
   killAndWait,
   render,
+  renderUntil,
 } from "./helpers/daemon-e2e";
 import {
   prepareIsolatedDaemonEnv,
@@ -63,104 +73,197 @@ describe("candybar-config-engine-71o.5: real-daemon click → persist → restar
       // for this project has no gate to pass yet.
       await render(sockPath, SID, projectDir);
 
-      // The settingsDrawer's controls are collapsed by default (candybar-
-      // config-engine-71o.4) — open it first, the same click a "⚙ settings
-      // ▸" tap dispatches. The group-toggle contract (write "groups.<name>"
-      // to the group's own name) is stable synthesis, not render output, so
-      // constructing it directly matches test/default-dsl-config.test.ts's
-      // own theming-8uj.1 precedent rather than depending on extracting it.
+      // The settings menu and its config row are collapsed by default — open
+      // both, the same two clicks a "☰ ▸" then "⚙ config ▸" tap dispatches.
+      // The disclosure contract (write the disclosure's own name to its own
+      // key) is stable synthesis, not render output, so constructing it
+      // directly matches test/default-dsl-config.test.ts's own precedent
+      // rather than depending on extracting it.
       await click(
         sockPath,
         effectsUrl([
-          { verb: VERB_SET_STATE, args: [SID, "groups.settings", "settings"] },
+          { verb: VERB_SET_STATE, args: [SID, "settings.menu", "open"] },
+          { verb: VERB_SET_STATE, args: [SID, "settings.config", "open"] },
         ]),
       );
 
-      const drawerOpen = await render(sockPath, SID, projectDir);
-      const drawerOpenUrls = extractUrls(drawerOpen);
+      const menuOpen = await render(sockPath, SID, projectDir);
 
-      // Opening the drawer reveals themeControl's TRIGGER (the 📌 glyph),
-      // not applyThemeForever's own picker body — {{ menu }} is its own
-      // nested disclosure. Find and click ITS toggle (a set-state write
-      // under the reserved menus.* namespace) before the per-theme option
-      // links exist to click.
-      const themeForeverToggleUrl = drawerOpenUrls.find((u) => {
-        try {
-          const effects = effectsOf(u);
-          return (
-            effects.length === 1 &&
-            effects[0]!.verb === "set-state" &&
-            effects[0]!.args[2] === "applyThemeForever"
-          );
-        } catch {
-          return false;
-        }
-      });
-      expect(themeForeverToggleUrl).toBeDefined();
-      await click(sockPath, themeForeverToggleUrl!);
+      // The config row reveals the theme control's TRIGGER (▸), not the
+      // picker body — {{ menu }} is its own nested disclosure. Click ITS
+      // toggle (a set-state write under the reserved menus.* namespace, whose
+      // member is the apply action's name) before any per-theme option link
+      // exists to click.
+      const themeMenuToggleUrl = findUrl(extractUrls(menuOpen), (effects) =>
+        effects.length === 1 &&
+        effects[0]!.verb === "set-state" &&
+        effects[0]!.args[2] === "settings.apply.theme",
+      );
+      expect(themeMenuToggleUrl).toBeDefined();
+      await click(sockPath, themeMenuToggleUrl!);
+
+      // TWO themes, deliberately: one tried in-session and one committed
+      // durably. Using the same name for both would let the session pick
+      // satisfy the durability assertions below (a session value wins for its
+      // own session), so the test would pass with the durable write missing.
+      const [sessionTheme, targetTheme] = listResolvablePaletteNames().filter(
+        (name) => name !== "tokyo-night", // the bundled default's globals.palette
+      );
+      if (sessionTheme === undefined || targetTheme === undefined) {
+        throw new Error(
+          "listResolvablePaletteNames() returned fewer than two themes besides " +
+            "the bundled default's own palette — need one to try and one to commit",
+        );
+      }
+
+      // ── persist? UNCHECKED: the one theme control writes the SESSION key.
+      // The checkbox starts unchecked (its state var's default), so this is
+      // the state a user arrives in — experimentation, costing nothing.
+      const sessionOnly = await render(sockPath, SID, projectDir);
+      const sessionThemeUrl = findUrl(extractUrls(sessionOnly), (effects) =>
+        effects[0]!.verb === "set-state" &&
+        effects[0]!.args[1] === "theme" &&
+        effects[0]!.args[2] === sessionTheme,
+      );
+      expect(sessionThemeUrl).toBeDefined();
+      // …and emits NO durable write at all while unchecked: not a second
+      // effect on the same link, and not a second link elsewhere in the row.
+      expect(
+        findUrl(extractUrls(sessionOnly), (effects) =>
+          effects.some((e) => e.verb === "set-config" && e.args[1] === "palette"),
+        ),
+      ).toBeUndefined();
+
+      // Take the unchecked click, then read a CONCURRENT session over the same
+      // socket: the picker changed this conversation and left the other one
+      // alone. That contrast is what "only this session" means, and only a
+      // second live session can show it — the overrides file being empty
+      // proves nothing about what another session renders.
+      await click(sockPath, sessionThemeUrl!);
+      const OTHER_SID = "e2e-session-concurrent";
+      expect(await render(sockPath, SID, projectDir)).toContain(sessionTheme);
+      // Open the other session's menu to the same depth BEFORE asserting it
+      // does not show the pick. A closed menu renders no theme name at all, so
+      // asserting on a collapsed bar would pass whether or not the pick
+      // leaked — the string simply is not reachable output. Opening it first
+      // is what makes the absence evidence.
+      await click(
+        sockPath,
+        effectsUrl([
+          { verb: VERB_SET_STATE, args: [OTHER_SID, "settings.menu", "open"] },
+          { verb: VERB_SET_STATE, args: [OTHER_SID, "settings.config", "open"] },
+        ]),
+      );
+      const otherBar = await render(sockPath, OTHER_SID, projectDir);
+      expect(otherBar).toContain("🎨 tokyo-night"); // its own default, shown
+      expect(otherBar).not.toContain(sessionTheme);
+
+      // Re-open the theme picker: the pick above closed it (closeOnPick).
+      await click(sockPath, themeMenuToggleUrl!);
+
+      // ── Check persist?. One click on the checkbox, nothing else about the
+      // control changes — same segment, same picker, same options.
+      const persistToggleUrl = findUrl(extractUrls(await render(sockPath, SID, projectDir)), (effects) =>
+        effects.length === 1 &&
+        effects[0]!.verb === "set-state" &&
+        effects[0]!.args[1] === "settings.persist" &&
+        effects[0]!.args[2] === "true",
+      );
+      expect(persistToggleUrl).toBeDefined();
+      await click(sockPath, persistToggleUrl!);
 
       const opened = await render(sockPath, SID, projectDir);
       const openedUrls = extractUrls(opened);
 
-      const targetTheme = listResolvablePaletteNames().find(
-        (name) => name !== "tokyo-night", // the bundled default's globals.palette
+      // ── persist? CHECKED: the SAME control now writes the durable key.
+      // (set-config on the globals field `palette`, not set-state on the
+      // session key `theme` — one control, the destination chosen by a value.)
+      const themeForeverUrl = findUrl(openedUrls, (effects) =>
+        effects[0]!.verb === "set-config" &&
+        effects[0]!.args[1] === "palette" &&
+        effects[0]!.args[2] === targetTheme,
       );
-      if (targetTheme === undefined) {
-        throw new Error(
-          "listResolvablePaletteNames() returned only the bundled default's " +
-            "own palette — need at least one other resolvable theme",
-        );
-      }
-
-      // applyThemeForever is a persist-option action (verb set-config,
-      // args = [sessionId, "palette", value]) rendered as one link per
-      // theme name — find the one bound to targetTheme specifically, not
-      // applyTheme's session-preview twin (verb set-state, key "theme").
-      const themeForeverUrl = openedUrls.find((u) => {
-        try {
-          const effects = effectsOf(u);
-          return (
-            effects.length === 1 &&
-            effects[0]!.verb === "set-config" &&
-            effects[0]!.args[1] === "palette" &&
-            effects[0]!.args[2] === targetTheme
-          );
-        } catch {
-          return false;
-        }
-      });
       expect(themeForeverUrl).toBeDefined();
+      expect(
+        findUrl(openedUrls, (effects) =>
+          effects.some((e) => e.verb === "set-state" && e.args[1] === "theme"),
+        ),
+      ).toBeUndefined();
 
-      // paddingUpForever and paddingDownForever are both persist-bounded
-      // steppers over the SAME "padding" field, distinguished only by their
-      // signed `by` (render/action.ts's persist-bounded arm: args =
-      // [sessionId, key, String(by)]) — find the one whose `by` is
-      // positive, so the assertion below is pinned to the actual increment,
-      // not whichever stepper happens to render first.
-      const paddingUpUrl = openedUrls.find((u) => {
-        try {
-          const effects = effectsOf(u);
-          return (
-            effects.length === 1 &&
-            effects[0]!.verb === "step-config" &&
-            effects[0]!.args[1] === "padding" &&
-            Number(effects[0]!.args[2]) > 0
-          );
-        } catch {
-          return false;
-        }
-      });
+      // The session pick from before is untouched by checking the box —
+      // toggling persist? moves where the NEXT write goes, never values
+      // already written.
+      expect(await render(sockPath, SID, projectDir)).toContain(sessionTheme);
+
+      // The padding stepper's ▶ is a bounded step over the same durable
+      // field while persist? is checked (render/action.ts's persist-bounded
+      // arm: args = [sessionId, key, String(by)]) — find the one whose `by`
+      // is positive, so the assertion below is pinned to the actual
+      // increment, not whichever stepper happens to render first.
+      const paddingUpUrl = findUrl(openedUrls, (effects) =>
+        effects.some(
+          (e) =>
+            e.verb === "step-config" &&
+            e.args[1] === "padding" &&
+            Number(e.args[2]) > 0,
+        ),
+      );
       expect(paddingUpUrl).toBeDefined();
+
+      // [LAW:no-silent-failure] A durable write carries the session key to
+      // RELEASE as a trailing segment on the write itself, so the daemon drops
+      // the session pick only after the durable value landed. Without the
+      // release the write would be invisible to the session that made it — a
+      // session pick outranks a durable default — so "commit what I'm looking
+      // at" would leave the bar unchanged and the control dead. Each control
+      // is pinned to ITS OWN key: an OR over both would pass even if the
+      // padding stepper released "theme".
+      expect(
+        effectsOf(themeForeverUrl!).some(
+          (e) => e.verb === "set-config" && e.args[3] === "theme",
+        ),
+      ).toBe(true);
+      expect(
+        effectsOf(paddingUpUrl!).some(
+          (e) => e.verb === "step-config" && e.args[3] === "padding",
+        ),
+      ).toBe(true);
 
       await click(sockPath, themeForeverUrl!);
       await click(sockPath, paddingUpUrl!);
 
-      // Live re-render, same session, no daemon restart: the persisted
-      // overrides ride the config file's own watcher (RenderCache), so this
-      // proves the write took effect without a restart, before proving it
-      // SURVIVES one below.
-      const afterClicks = await render(sockPath, SID, projectDir);
+      // Live, no daemon restart: the persisted write rides the config file's
+      // own watcher (RenderCache), so it is visible to a running daemon before
+      // any restart. Read it on the CONCURRENT session, which never picked a
+      // theme — the clicking session cannot show this, because its own session
+      // pick outranks a durable default for its own render (bundled default <
+      // config file < persisted overrides < preset < session pick). Asserting
+      // durability there would conflate the two layers and pass on the session
+      // value alone.
+      // Read it on that same concurrent session, whose menu is already open
+      // from the isolation check above.
+      const afterClicks = await renderUntil(
+        sockPath,
+        OTHER_SID,
+        projectDir,
+        (out) => out.includes(targetTheme),
+        `the persisted theme "${targetTheme}" on a session that never picked one`,
+      );
       expect(afterClicks).toContain(targetTheme);
+
+      // …and the COMMITTING session shows the committed value too, because the
+      // durable click cleared the session pick that would otherwise outrank it
+      // forever. Before that clear rode along, this session kept rendering
+      // `sessionTheme` and every further click changed nothing on screen — the
+      // durable default was real but invisible to the person who set it.
+      const committing = await renderUntil(
+        sockPath,
+        SID,
+        projectDir,
+        (out) => out.includes(targetTheme),
+        `the committed theme "${targetTheme}" on the session that committed it`,
+      );
+      expect(committing).not.toContain(sessionTheme);
 
       // The hand-authored file is byte-identical — persist never touches it.
       expect(readFileSync(userConfigPath, "utf8")).toBe(userConfigBody);
@@ -174,13 +277,14 @@ describe("candybar-config-engine-71o.5: real-daemon click → persist → restar
         padding?: number;
       };
       expect(overrides.palette).toBe(targetTheme);
-      // clampSeed's documented fallback (validator-registry.ts): an unset
-      // seed falls back to `min` (0), not the bundled default's rendered
-      // padding — the bundled default never literally sets
-      // `globals.padding` (it relies on the render-side `?? 1` floor), so
-      // configKeySeeds has nothing numeric to seed from. First click from
-      // an empty overrides file is therefore min(0) + by(1) = 1.
-      expect(overrides.padding).toBe(1);
+      // [LAW:one-source-of-truth] A stepper starts from what the bar SHOWS.
+      // The bundled default never literally sets `globals.padding` — it leans
+      // on the field's floor (DEFAULT_PADDING = 1) — so the first ▶ from an
+      // empty overrides file is 1 + 1 = 2. It used to be min(0) + 1 = 1, which
+      // meant the first ◀ on a bar reading `padding 1` wrapped to 16;
+      // candybar-settings-ui-aok.3 gave both write gates one seed source
+      // (numericGlobalsSeeds) that applies the floor.
+      expect(overrides.padding).toBe(2);
 
       // Kill this daemon and start a FRESH one against the SAME state dir
       // (same overrides file) — a real cold restart, not an in-process
@@ -190,25 +294,31 @@ describe("candybar-config-engine-71o.5: real-daemon click → persist → restar
 
       // A brand-new session that never clicked anything. The persisted
       // theme is now every session's baseline PALETTE (colors the fresh
-      // render already carries), but the THEME NAME text only appears
-      // inside the settingsDrawer — collapsed by default per-session, since
-      // groups.settings is itself SessionState, not something a config
-      // write touches. Open the drawer for this fresh session (a pure UI
-      // affordance, not a config mutation) to assert the persisted name
-      // shows up with zero prior clicks by THIS session, i.e. it came from
-      // the config default, not a picked-and-remembered value.
+      // render already carries), but the THEME NAME text only appears in the
+      // settings menu's config row — collapsed by default per-session, since
+      // both disclosure keys are SessionState, not something a config write
+      // touches. Open them for this fresh session (a pure UI affordance, not
+      // a config mutation) to assert the persisted name shows up with zero
+      // prior clicks by THIS session, i.e. it came from the config default,
+      // not a picked-and-remembered value. Note this fresh session's own
+      // persist? checkbox is UNCHECKED — a checkbox armed in one session
+      // never carries into another.
       const FRESH_SID = "e2e-session-2-fresh";
       await render(sockPath, FRESH_SID, projectDir);
       await click(
         sockPath,
         effectsUrl([
-          {
-            verb: VERB_SET_STATE,
-            args: [FRESH_SID, "groups.settings", "settings"],
-          },
+          { verb: VERB_SET_STATE, args: [FRESH_SID, "settings.menu", "open"] },
+          { verb: VERB_SET_STATE, args: [FRESH_SID, "settings.config", "open"] },
         ]),
       );
-      const freshOut = await render(sockPath, FRESH_SID, projectDir);
+      const freshOut = await renderUntil(
+        sockPath,
+        FRESH_SID,
+        projectDir,
+        (out) => out.includes(targetTheme),
+        `the persisted theme "${targetTheme}" for a fresh session`,
+      );
       expect(freshOut).toContain(targetTheme);
 
       // The hand-authored file is STILL byte-identical after the restart.

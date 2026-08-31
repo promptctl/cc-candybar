@@ -57,10 +57,19 @@ export const VERB_LOAD_CONFIG = "load-config";
 // (candybar-config-engine-71o.2). Args: `[sessionId, key, value]` — the
 // sessionId is carried only for click.error surfacing, exactly like
 // set-state; the write itself is daemon-global, not session-scoped.
+// A durable write takes an OPTIONAL trailing segment: the SessionState key to
+// RELEASE once the write has succeeded. A dual-destination control
+// (candybar-settings-ui-aok.3) commits "make this the durable default AND stop
+// overriding it in this session" — one intent, whose session half must not
+// happen if the durable half failed. Carried as one more segment on the write
+// itself rather than as a second effect beside it, because `dispatch` runs
+// every effect in a click by design; a pair would let a rejected write still
+// wipe the user's pick. Args: `[sessionId, key, value, releaseKey?]`.
 export const VERB_SET_CONFIG = "set-config";
 // [LAW:types-are-the-program] A RELATIVE nudge to a bounded config-overrides
 // key (e.g. a padding stepper) — the config twin of step-state. Args:
-// `[sessionId, key, by]`.
+// `[sessionId, key, by, releaseKey?]` — the same optional release segment
+// set-config takes, for the same reason.
 export const VERB_STEP_CONFIG = "step-config";
 // [LAW:one-source-of-truth] The gated undo for `persist`: clears one
 // config-overrides key, restoring the user-file/bundled-default value on the

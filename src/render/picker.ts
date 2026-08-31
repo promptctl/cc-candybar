@@ -28,15 +28,11 @@ import type { FuncMap } from "@promptctl/go-template-js";
 import { toNumber } from "../var-system/types.js";
 import { stripChromeCols } from "./strip.js";
 import { TERM_COLS_VAR } from "../config/dsl-types.js";
+import { effectsUrl, VERB_SET_STATE } from "../click/wire.js";
 import {
-  effectsUrl,
-  VERB_APPLY_LAYOUT_OP,
-  VERB_SET_CONFIG,
-  VERB_SET_STATE,
-} from "../click/wire.js";
-import { encodeLayoutOp } from "../config/layout-ops.js";
-import {
+  activeDestination,
   linkFragment,
+  realize,
   readVar,
   type ActionRuntime,
   type CompiledActionDecl,
@@ -160,7 +156,15 @@ function requireOptionKind(
   CompiledActionDecl,
   { kind: "set-option" | "persist-option" | "layout-op-option" }
 > {
-  const action = runtime.compiled.get(name);
+  // [LAW:dataflow-not-control-flow] A dual-destination action resolves to the
+  // half its selector names BEFORE the kind check, so a picker over a dual is
+  // a picker over whichever option kind is live — the grid, its current-mark,
+  // and its close folding are the code they already were. The check below then
+  // still names a real, single-destination kind in its error.
+  const declared = runtime.compiled.get(name);
+  const action = declared
+    ? activeDestination(declared, runtime.store)
+    : declared;
   if (
     !action ||
     (action.kind !== "set-option" &&
@@ -194,6 +198,13 @@ export function renderPicker(
   runtime: ActionRuntime,
 ): RichText {
   const apply = requireOptionKind(runtime, applyName);
+  // [LAW:one-source-of-truth] The GRID reads the resolved half above (its
+  // options, its current-mark); the CLICK is realized from the declaration
+  // itself, through the same fold `{{ action }}` uses. That is what carries a
+  // dual's session clear into a picked option — the picker never learns what a
+  // dual is, and there is no second projection of "what does this option
+  // write" to drift from realize's.
+  const declared = runtime.compiled.get(applyName)!;
   const store = runtime.store;
   const sessionId = readVar(store, "session.id");
   // [LAW:no-defensive-null-guards] layout-op-option carries no `stateVar` —
@@ -275,30 +286,21 @@ export function renderPicker(
     ? [{ verb: VERB_SET_STATE, args: [sessionId, ...closeFlat] }]
     : [];
   const optionUrl = (option: string): string => {
-    if (apply.kind === "persist-option") {
-      return effectsUrl([
-        { verb: VERB_SET_CONFIG, args: [sessionId, apply.key, option] },
-        ...closeEffect,
-      ]);
-    }
-    if (apply.kind === "layout-op-option") {
-      const op = encodeLayoutOp({
-        op: "insert",
-        segment: option,
-        anchor: apply.anchor,
-        relation: apply.relation,
-      });
-      return effectsUrl([
-        { verb: VERB_APPLY_LAYOUT_OP, args: [sessionId, apply.key, op] },
-        ...closeEffect,
-      ]);
-    }
-    return effectsUrl([
-      {
-        verb: VERB_SET_STATE,
-        args: [sessionId, apply.key, option, ...(closeOnPick ? closeFlat : [])],
-      },
-    ]);
+    const { effects } = realize(declared, option, option, store, sessionId);
+    // [LAW:one-source-of-truth] A plain session pick folds its close pairs into
+    // the SAME set-state (setState is variadic), so closing and applying are
+    // one write. Every other shape — a durable write, a structural op, a dual
+    // carrying its session clear — takes more than one effect already, so its
+    // close rides as its own effect in the same atomic dispatch.
+    const solo = effects.length === 1 ? effects[0]! : undefined;
+    return solo?.verb === VERB_SET_STATE
+      ? effectsUrl([
+          {
+            verb: VERB_SET_STATE,
+            args: [...solo.args, ...(closeOnPick ? closeFlat : [])],
+          },
+        ])
+      : effectsUrl([...effects, ...closeEffect]);
   };
 
   const frags: RichText[] = [linkFragment(PICKER_CLOSE, closeUrl, false)];

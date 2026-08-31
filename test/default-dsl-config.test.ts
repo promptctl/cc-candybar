@@ -146,21 +146,27 @@ describe("DEFAULT_DSL_CONFIG", () => {
   // editor, and the settingsDrawer toggle) over a status row (model, context,
   // prompt-cache warmth, the 5h/7d rate-limit quotas) — plus the collapsed
   // settingsDrawer group (candybar-config-engine-71o.4), whose synthesized
-  // toggle segment and gated body (theme/style/look/preset/charset/
-  // colorCompatibility/autoWrap/padding/directory-palette) are part of the
-  // static layout tree regardless of the toggle's current open/closed value
-  // (walkNodes visits unconditionally; only the render-time `when` hides the
-  // body while closed). This pins the chosen segment set — which segments
-  // graduated into the default bar and which stay declared-but-opt-in — so a
-  // future layout edit is a deliberate, reviewed change rather than an
-  // accidental drift. block/weekly are IN (their when-gates hide them when no
-  // rate-limit window is active); toolbar is IN (the default's
-  // interactivity); the settingsDrawer's nine controls are IN
-  // (theme/style/look/preset/charset/colorCompatibility/autoWrap/padding
-  // discoverability — presetControl added by brandon-presets-0yk.3 — plus
-  // directoryPaletteControl — candybar-config-engine-71o.6's segment-scoped
-  // persist demo); the cost segments (session/today) and the
-  // speed/sparkline/burnrate telemetry stay opt-in.
+  // toggle segment and gated body are part of the static layout tree
+  // regardless of the toggle's current open/closed value (walkNodes visits
+  // unconditionally; only the render-time `when` hides the body while
+  // closed). This pins the chosen segment set — which segments graduated into
+  // the default bar and which stay declared-but-opt-in — so a future layout
+  // edit is a deliberate, reviewed change rather than an accidental drift.
+  // block/weekly are IN (their when-gates hide them when no rate-limit window
+  // is active); toolbar is IN (the default's interactivity).
+  //
+  // The drawer holds THREE controls, not nine: candybar-settings-ui-aok.3
+  // moved every setting with both a session and a durable half
+  // (theme/style/look/preset/autoWrap/padding) into the synthesized settings
+  // menu, where each is ONE control whose destination a `persist?` checkbox
+  // chooses. What is left here is durable-only by nature — charset and
+  // colorCompatibility describe the terminal, and directoryPaletteControl is
+  // a per-segment pin. Those `settings.*` segments are NOT in this list
+  // because this walks DEFAULT_DSL_CONFIG.root, the AUTHORED tree, and the
+  // menu is spliced in later by validateConfig (see the settings-menu tests).
+  //
+  // The cost segments (session/today) and the speed/sparkline/burnrate
+  // telemetry stay opt-in.
   test("default root renders exactly the two-row identity+status segment set plus the collapsed settingsDrawer", () => {
     const laidOut = new Set<string>();
     for (const node of walkNodes(DEFAULT_DSL_CONFIG.root)) {
@@ -181,14 +187,8 @@ describe("DEFAULT_DSL_CONFIG", () => {
         "weekly",
         "toolbar",
         "groups.settings",
-        "themeControl",
-        "lookControl",
-        "presetControl",
-        "styleControl",
         "charsetControl",
         "colorCompatControl",
-        "wrapToggleControl",
-        "paddingControl",
         "directoryPaletteControl",
       ].sort(),
     );
@@ -299,13 +299,14 @@ describe("DEFAULT_DSL_CONFIG", () => {
       );
     };
     try {
-      // themeControl/lookControl live inside the settingsDrawer group
-      // (candybar-config-engine-71o.4), collapsed by default — open it first
-      // (the same click a "⚙ settings ▸" tap would dispatch) so the pickers
-      // this test exercises actually render.
+      // The theme and look controls live in the synthesized settings menu's
+      // config row (candybar-settings-ui-aok.3), behind two nested
+      // disclosures — open both with the same clicks a "☰ ▸" then "⚙ config ▸"
+      // tap would dispatch, so the controls this test exercises render.
       clickUrl(
         effectsUrl([
-          { verb: VERB_SET_STATE, args: [SID, "groups.settings", "settings"] },
+          { verb: VERB_SET_STATE, args: [SID, "settings.menu", "open"] },
+          { verb: VERB_SET_STATE, args: [SID, "settings.config", "open"] },
         ]),
         { sessionState, dlog: () => {} },
       );
@@ -404,9 +405,8 @@ describe("DEFAULT_DSL_CONFIG", () => {
     const ALLOWED = new Set(listResolvablePaletteNames());
     const A_SRC = `{ root: { v: [
       { h: ["host","directory","gitaculous","toolbar", { kind: "group", name: "settings",
-        label: "⚙ settings", direction: "horizontal", children: [
-          "themeControl","lookControl","presetControl","styleControl","charsetControl",
-          "colorCompatControl","wrapToggleControl","paddingControl",
+        label: "⚙ terminal", direction: "horizontal", children: [
+          "charsetControl","colorCompatControl",
           "directoryPaletteControl"
         ] } ] },
       { h: ["model","context","cacheTimer","block","weekly"] }

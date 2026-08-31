@@ -297,6 +297,40 @@ function wrapStep(n: number, min: number, max: number): number {
   return n > max ? min : n < min ? max : n;
 }
 
+// [LAW:no-ambient-temporal-coupling] The RELEASE half of a durable write, run
+// by the durable handlers themselves AFTER their own write succeeded — never
+// as a separate effect beside them.
+//
+// A dual-destination control commits "make this the durable default AND stop
+// overriding it in this session". Those are one intent, and the session half
+// is destructive: dropping the session pick is only correct if the durable
+// value actually landed. Emitted as two effects, `dispatch` would run the
+// clear even when the persist failed (it runs every effect in a click by
+// design, for independent ones like "write value + close menu") — wiping the
+// user's pick with nothing durable in its place, a lost update whose error
+// message would not even mention it. Ordering that matters belongs inside one
+// handler, not in a hope about the dispatcher.
+//
+// Gated by key MEMBERSHIP (listStateKeys), exactly as reset-config is over the
+// config keyspace: there is no value to validate, only a legitimate target to
+// clear. Absent segment = nothing to release, which is every ordinary persist
+// click [LAW:dataflow-not-control-flow].
+function releaseSessionKey(
+  release: string,
+  sid: string,
+  ctx: VerbContext,
+  verb: string,
+): void {
+  if (!release) return;
+  if (!listStateKeys().includes(release)) {
+    throw new BadVerbArgs(
+      `${verb}: unknown session key "${release}" to release (have: ${listStateKeys().join(", ")})`,
+    );
+  }
+  ctx.sessionState.clear(sid, release);
+  ctx.dlog("info", `${verb}: released session key ${release} (session=${sid})`);
+}
+
 // [LAW:one-source-of-truth] A RELATIVE nudge to a bounded state key. The link
 // carries ONLY the irreducible intent `[sessionId, key, by]` (no `current`
 // snapshot), so the SAME link string fires every render and N rapid clicks each
@@ -374,8 +408,8 @@ function assertGlobalsField(key: string): asserts key is keyof Globals {
 // BAD_REQUEST — the SAME gate `set-state` uses (validateConfigWrite),
 // derived from the SAME action table (deriveConfigActionValidators).
 const setConfig: VerbHandler = (rawValue, ctx) => {
-  const [sessionId = "", key = "", incoming = ""] = decodeWire(() =>
-    decodeSegments(rawValue),
+  const [sessionId = "", key = "", incoming = "", release = ""] = decodeWire(
+    () => decodeSegments(rawValue),
   );
   const sid = requireSessionId(sessionId);
   if (!key) {
@@ -388,6 +422,7 @@ const setConfig: VerbHandler = (rawValue, ctx) => {
   const typed = coercePersistValue(key, result.value);
   writeConfigOverride(configOverridesPath(), key, typed, ctx.dlog);
   ctx.dlog("info", `set-config: ${key}=${result.value} (session=${sid})`);
+  releaseSessionKey(release, sid, ctx, "set-config");
 };
 
 // [LAW:one-source-of-truth] `persist`'s twin of stepState: a RELATIVE nudge
@@ -395,7 +430,7 @@ const setConfig: VerbHandler = (rawValue, ctx) => {
 // unset — rangeParamsForConfig's seed), wrapped and re-validated through the
 // SAME range gate, then written durably.
 const stepConfig: VerbHandler = (rawValue, ctx) => {
-  const [sessionId = "", key = "", byRaw = ""] = decodeWire(() =>
+  const [sessionId = "", key = "", byRaw = "", release = ""] = decodeWire(() =>
     decodeSegments(rawValue),
   );
   const sid = requireSessionId(sessionId);
@@ -433,6 +468,7 @@ const stepConfig: VerbHandler = (rawValue, ctx) => {
     "info",
     `step-config: ${key} ${current}→${result.value} (by ${by}, session=${sid})`,
   );
+  releaseSessionKey(release, sid, ctx, "step-config");
 };
 
 // [LAW:one-source-of-truth] The gated undo for `persist`: clears one
