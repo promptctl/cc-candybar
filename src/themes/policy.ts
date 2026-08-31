@@ -300,9 +300,6 @@ export const PADDING_RANGE = { min: 0, max: 16 } as const;
 // `globals.padding` and leans on it. Without the floor, both write gates
 // seeded an unset stepper from `min`, so the first ◀ on a bar reading
 // `padding 1` wrapped to 16.
-export const NUMERIC_GLOBALS_FLOORS = {
-  padding: DEFAULT_PADDING,
-} as const satisfies Readonly<Record<string, number>>;
 
 // [LAW:parse-dont-validate] A SessionState string to a boolean, or null for
 // anything else. `??` in effectiveGlobal (never `||`) is what keeps a parsed

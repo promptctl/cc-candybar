@@ -35,6 +35,17 @@
 // it runs the same measurement path, so a broken harness (import error, no-op
 // observer) surfaces as a loud red instead of making this gate vacuously green.
 
+// [LAW:no-ambient-temporal-coupling] jest.setTimeout is FILE-scoped, so it is
+// stated here where that is visible rather than inside the one describe whose
+// cost motivates it. The heap-analysis block writes two full V8 heap snapshots
+// of the Jest worker: its duration scales with the worker's loaded heap and
+// the machine's contention, not with the code under test — ~5s locally, over
+// the 30s unit-test budget on a loaded CI runner once the repo's test corpus
+// grew. The concurrency gate below shares the budget as a consequence; its
+// assertions are unchanged and it passes in milliseconds, so the cost is a
+// slower failure there, not a weaker check.
+jest.setTimeout(180_000);
+
 import { createHook } from "node:async_hooks";
 import { writeHeapSnapshot } from "node:v8";
 import { execFileSync } from "node:child_process";
@@ -172,17 +183,6 @@ describe("heap-analysis scripts", () => {
   const scriptsDir = join(process.cwd(), "scripts");
   let before: string;
   let after: string;
-
-  // [LAW:no-ambient-temporal-coupling] This hook writes TWO full V8 heap
-  // snapshots of the Jest worker. Its duration is not a property of the code
-  // under test — it scales with the worker's heap (every module the run has
-  // loaded) and with how contended the machine is, so the 30s budget
-  // jest.config sets for ordinary unit tests is the wrong number here: it
-  // passes in ~5s on a developer machine and timed out on a loaded CI runner
-  // once the repo's test corpus grew. The ASSERTIONS below are unchanged and
-  // still deterministic (the snapshots are constructed to contain the signal);
-  // only the budget for the snapshotting itself is stated honestly.
-  jest.setTimeout(180_000);
 
   beforeAll(async () => {
     clearParseCache();

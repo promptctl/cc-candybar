@@ -7,7 +7,7 @@ import { type Globals } from "../dsl-types.js";
 import {
   CHARSETS,
   COLOR_COMPATIBILITIES,
-  NUMERIC_GLOBALS_FLOORS,
+  DEFAULT_PADDING,
   PADDING_RANGE,
   STRIP_STYLES,
   type ColorCompatibility,
@@ -194,6 +194,22 @@ export function isGlobalsField(key: string): key is keyof Globals {
 export function listGlobalsFieldNames(): readonly string[] {
   return [...GLOBALS_FIELD_NAMES];
 }
+
+// [LAW:types-are-the-program] Every NUMERIC globals field with the value that
+// renders when a config declares none, typed TOTAL over those fields — so
+// adding a numeric globals field without a floor is a COMPILE error, not a
+// silent seed-from-`min` (the bug this table exists to prevent, recurring for
+// the new field). It lives here rather than beside DEFAULT_PADDING in
+// themes/policy.ts because it must name `Globals`, and policy.ts is the leaf
+// dsl-types imports FROM — a table that needs both belongs on this side of
+// that edge [LAW:one-way-deps].
+type NumericGlobalsField = {
+  [K in keyof Globals]-?: number extends NonNullable<Globals[K]> ? K : never;
+}[keyof Globals];
+
+const NUMERIC_GLOBALS_FLOORS: Readonly<Record<NumericGlobalsField, number>> = {
+  padding: DEFAULT_PADDING,
+};
 
 // [LAW:single-enforcer] THE seed for a bounded stepper over a globals field:
 // what the bar renders with no write of any kind — the config's own value, or

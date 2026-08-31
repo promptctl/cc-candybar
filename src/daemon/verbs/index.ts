@@ -57,7 +57,6 @@ import {
   VERB_SET_STATE,
   VERB_STEP_CONFIG,
   VERB_STEP_STATE,
-  VERB_CLEAR_STATE,
   VERB_SHOW_CONFIG_ERROR,
   VERB_SHOW_CONFIG_WARNING,
   VERB_TOOLBAR_TOGGLE,
@@ -298,27 +297,39 @@ function wrapStep(n: number, min: number, max: number): number {
   return n > max ? min : n < min ? max : n;
 }
 
-// [LAW:one-source-of-truth] set-state's INVERSE — reset-config's SessionState
-// twin, gated the same way: by key MEMBERSHIP (listStateKeys), because there
-// is no value to validate, only a legitimate target to clear.
+// [LAW:no-ambient-temporal-coupling] The RELEASE half of a durable write, run
+// by the durable handlers themselves AFTER their own write succeeded — never
+// as a separate effect beside them.
 //
-// It exists because a SessionState write had no inverse, and that gap had a
-// user-visible cost: every settable global resolves session pick OVER durable
-// default (effectiveGlobal), so a session that had picked a value could set a
-// durable default it would then never see — the control appeared dead for the
-// rest of that session. Committing a default therefore has to be able to say
-// "and stop overriding it here", which is exactly an absence, not a value.
-const clearState: VerbHandler = (rawValue, ctx) => {
-  const [sessionId = "", key = ""] = decodeWire(() => decodeSegments(rawValue));
-  const sid = requireSessionId(sessionId);
-  if (!key || !listStateKeys().includes(key)) {
+// A dual-destination control commits "make this the durable default AND stop
+// overriding it in this session". Those are one intent, and the session half
+// is destructive: dropping the session pick is only correct if the durable
+// value actually landed. Emitted as two effects, `dispatch` would run the
+// clear even when the persist failed (it runs every effect in a click by
+// design, for independent ones like "write value + close menu") — wiping the
+// user's pick with nothing durable in its place, a lost update whose error
+// message would not even mention it. Ordering that matters belongs inside one
+// handler, not in a hope about the dispatcher.
+//
+// Gated by key MEMBERSHIP (listStateKeys), exactly as reset-config is over the
+// config keyspace: there is no value to validate, only a legitimate target to
+// clear. Absent segment = nothing to release, which is every ordinary persist
+// click [LAW:dataflow-not-control-flow].
+function releaseSessionKey(
+  release: string,
+  sid: string,
+  ctx: VerbContext,
+  verb: string,
+): void {
+  if (!release) return;
+  if (!listStateKeys().includes(release)) {
     throw new BadVerbArgs(
-      `clear-state: unknown state key "${key}" (have: ${listStateKeys().join(", ")})`,
+      `${verb}: unknown session key "${release}" to release (have: ${listStateKeys().join(", ")})`,
     );
   }
-  ctx.sessionState.clear(sid, key);
-  ctx.dlog("info", `clear-state: ${key} (session=${sid})`);
-};
+  ctx.sessionState.clear(sid, release);
+  ctx.dlog("info", `${verb}: released session key ${release} (session=${sid})`);
+}
 
 // [LAW:one-source-of-truth] A RELATIVE nudge to a bounded state key. The link
 // carries ONLY the irreducible intent `[sessionId, key, by]` (no `current`
@@ -397,8 +408,8 @@ function assertGlobalsField(key: string): asserts key is keyof Globals {
 // BAD_REQUEST — the SAME gate `set-state` uses (validateConfigWrite),
 // derived from the SAME action table (deriveConfigActionValidators).
 const setConfig: VerbHandler = (rawValue, ctx) => {
-  const [sessionId = "", key = "", incoming = ""] = decodeWire(() =>
-    decodeSegments(rawValue),
+  const [sessionId = "", key = "", incoming = "", release = ""] = decodeWire(
+    () => decodeSegments(rawValue),
   );
   const sid = requireSessionId(sessionId);
   if (!key) {
@@ -411,6 +422,7 @@ const setConfig: VerbHandler = (rawValue, ctx) => {
   const typed = coercePersistValue(key, result.value);
   writeConfigOverride(configOverridesPath(), key, typed, ctx.dlog);
   ctx.dlog("info", `set-config: ${key}=${result.value} (session=${sid})`);
+  releaseSessionKey(release, sid, ctx, "set-config");
 };
 
 // [LAW:one-source-of-truth] `persist`'s twin of stepState: a RELATIVE nudge
@@ -418,7 +430,7 @@ const setConfig: VerbHandler = (rawValue, ctx) => {
 // unset — rangeParamsForConfig's seed), wrapped and re-validated through the
 // SAME range gate, then written durably.
 const stepConfig: VerbHandler = (rawValue, ctx) => {
-  const [sessionId = "", key = "", byRaw = ""] = decodeWire(() =>
+  const [sessionId = "", key = "", byRaw = "", release = ""] = decodeWire(() =>
     decodeSegments(rawValue),
   );
   const sid = requireSessionId(sessionId);
@@ -456,6 +468,7 @@ const stepConfig: VerbHandler = (rawValue, ctx) => {
     "info",
     `step-config: ${key} ${current}→${result.value} (by ${by}, session=${sid})`,
   );
+  releaseSessionKey(release, sid, ctx, "step-config");
 };
 
 // [LAW:one-source-of-truth] The gated undo for `persist`: clears one
@@ -603,7 +616,6 @@ const LEAF_VERBS = new Map<string, VerbHandler>([
   [VERB_OPEN_VSCODE, openVscode],
   [VERB_SET_STATE, setState],
   [VERB_STEP_STATE, stepState],
-  [VERB_CLEAR_STATE, clearState],
   [VERB_SET_CONFIG, setConfig],
   [VERB_STEP_CONFIG, stepConfig],
   [VERB_RESET_CONFIG, resetConfig],
@@ -641,15 +653,14 @@ const dispatch: VerbHandler = (rawValue, ctx) => {
   let sessionId: string | null = null;
   for (const { verb, value } of parseEffects(rawValue)) {
     // Extract session ID from the first session-bearing effect for error display.
-    // set-state, step-state, clear-state, set-config, step-config,
-    // reset-config, apply-layout-op, undo, redo, and toolbar-toggle all carry
-    // the session id as their first segment, so a failing step surfaces in the
-    // bar like any other.
+    // set-state, step-state, set-config, step-config, reset-config,
+    // apply-layout-op, undo, redo, and toolbar-toggle all carry the session id
+    // as their first segment, so a failing step surfaces in the bar like any
+    // other.
     if (
       !sessionId &&
       (verb === VERB_SET_STATE ||
         verb === VERB_STEP_STATE ||
-        verb === VERB_CLEAR_STATE ||
         verb === VERB_SET_CONFIG ||
         verb === VERB_STEP_CONFIG ||
         verb === VERB_RESET_CONFIG ||

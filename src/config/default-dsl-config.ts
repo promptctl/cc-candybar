@@ -774,13 +774,6 @@ export const RAW_DEFAULT_DSL_CONFIG = {
       default: 0,
     },
 
-    // ── Style picker state (the live powerline-shape switcher) ───────────────
-    // [LAW:one-source-of-truth] `activeStyle` reads the SAME "style" SessionState
-    // key the daemon resolves into the strip joiner per render (see
-    // effectiveStripStyle wiring in src/daemon/server.ts) — the picker's write
-    // and the render's read are one value. Empty default ⇒ the daemon's
-    // "powerline" floor is in effect and styleControl shows "(default)".
-    activeStyle: { kind: "state", key: "style", default: "" },
     // No page-cursor var: the styleControl {{ menu }} synthesizes its own page
     // cursor (state var + int action, named by menuPageKey) under the reserved
     // menus.* namespace, alongside its open-state.

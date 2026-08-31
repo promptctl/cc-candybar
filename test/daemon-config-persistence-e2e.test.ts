@@ -142,9 +142,21 @@ describe("candybar-config-engine-71o.5: real-daemon click → persist → restar
       await click(sockPath, sessionThemeUrl!);
       const OTHER_SID = "e2e-session-concurrent";
       expect(await render(sockPath, SID, projectDir)).toContain(sessionTheme);
-      expect(await render(sockPath, OTHER_SID, projectDir)).not.toContain(
-        sessionTheme,
+      // Open the other session's menu to the same depth BEFORE asserting it
+      // does not show the pick. A closed menu renders no theme name at all, so
+      // asserting on a collapsed bar would pass whether or not the pick
+      // leaked — the string simply is not reachable output. Opening it first
+      // is what makes the absence evidence.
+      await click(
+        sockPath,
+        effectsUrl([
+          { verb: VERB_SET_STATE, args: [OTHER_SID, "settings.menu", "open"] },
+          { verb: VERB_SET_STATE, args: [OTHER_SID, "settings.config", "open"] },
+        ]),
       );
+      const otherBar = await render(sockPath, OTHER_SID, projectDir);
+      expect(otherBar).toContain("🎨 tokyo-night"); // its own default, shown
+      expect(otherBar).not.toContain(sessionTheme);
 
       // Re-open the theme picker: the pick above closed it (closeOnPick).
       await click(sockPath, themeMenuToggleUrl!);
@@ -198,23 +210,24 @@ describe("candybar-config-engine-71o.5: real-daemon click → persist → restar
       );
       expect(paddingUpUrl).toBeDefined();
 
-      // [LAW:no-silent-failure] Every durable click carries the session clear
-      // with it, in the same dispatch. Without it the write would be invisible
-      // to the session that made it — a session pick outranks a durable
-      // default — so "commit what I'm looking at" would leave the bar
-      // unchanged and the control dead. Asserted on the wire, on both the
-      // theme pick and the padding step, because it is the pairing that makes
-      // the persist? workflow work at all.
-      for (const url of [themeForeverUrl!, paddingUpUrl!]) {
-        expect(
-          effectsOf(url).some(
-            (e) => e.verb === "clear-state" && e.args[1] === "theme",
-          ) ||
-            effectsOf(url).some(
-              (e) => e.verb === "clear-state" && e.args[1] === "padding",
-            ),
-        ).toBe(true);
-      }
+      // [LAW:no-silent-failure] A durable write carries the session key to
+      // RELEASE as a trailing segment on the write itself, so the daemon drops
+      // the session pick only after the durable value landed. Without the
+      // release the write would be invisible to the session that made it — a
+      // session pick outranks a durable default — so "commit what I'm looking
+      // at" would leave the bar unchanged and the control dead. Each control
+      // is pinned to ITS OWN key: an OR over both would pass even if the
+      // padding stepper released "theme".
+      expect(
+        effectsOf(themeForeverUrl!).some(
+          (e) => e.verb === "set-config" && e.args[3] === "theme",
+        ),
+      ).toBe(true);
+      expect(
+        effectsOf(paddingUpUrl!).some(
+          (e) => e.verb === "step-config" && e.args[3] === "padding",
+        ),
+      ).toBe(true);
 
       await click(sockPath, themeForeverUrl!);
       await click(sockPath, paddingUpUrl!);
@@ -227,17 +240,8 @@ describe("candybar-config-engine-71o.5: real-daemon click → persist → restar
       // config file < persisted overrides < preset < session pick). Asserting
       // durability there would conflate the two layers and pass on the session
       // value alone.
-      // Its menu is closed — both disclosure keys are SessionState, so this
-      // session opens collapsed however many themes another session persists.
-      // The theme NAME only renders inside the config row, so open it (a pure
-      // UI affordance, not a config mutation) before reading the value.
-      await click(
-        sockPath,
-        effectsUrl([
-          { verb: VERB_SET_STATE, args: [OTHER_SID, "settings.menu", "open"] },
-          { verb: VERB_SET_STATE, args: [OTHER_SID, "settings.config", "open"] },
-        ]),
-      );
+      // Read it on that same concurrent session, whose menu is already open
+      // from the isolation check above.
       const afterClicks = await renderUntil(
         sockPath,
         OTHER_SID,

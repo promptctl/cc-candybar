@@ -16,7 +16,6 @@ import {
   VERB_STEP_CONFIG,
   VERB_STEP_STATE,
   VERB_UNDO,
-  VERB_CLEAR_STATE,
 } from "../../src/click/wire";
 import { VERBS } from "../../src/daemon/verbs";
 import type { VerbContext } from "../../src/daemon/verbs";
@@ -35,7 +34,6 @@ export interface DecodedEffect {
 const MULTI_ARG_VERBS = new Set<string>([
   VERB_SET_STATE,
   VERB_STEP_STATE,
-  VERB_CLEAR_STATE,
   VERB_SET_CONFIG,
   VERB_STEP_CONFIG,
   VERB_RESET_CONFIG,

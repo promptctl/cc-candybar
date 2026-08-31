@@ -40,20 +40,6 @@ export const VERB_SET_STATE = "set-state";
 // from live state, so the link carries no `current` snapshot and N rapid clicks
 // each re-read-and-write. Additive: old set-state links still resolve.
 export const VERB_STEP_STATE = "step-state";
-// [LAW:one-source-of-truth] set-state's INVERSE: drop one SessionState key so
-// the value resolves from the layer beneath it again (the config default, or
-// the floor). Args: `[sessionId, key]` — no value, because "no session pick"
-// is an absence, not a value, and every one of these keys resolves through
-// effectiveGlobal, where an absent session entry is precisely what lets the
-// durable default show through.
-//
-// Gated by key MEMBERSHIP (listStateKeys), exactly as reset-config is over the
-// config keyspace — there is no value to validate, only a legitimate target to
-// clear. It is reset-config's SessionState twin, and it exists because a
-// SessionState write had no inverse: a `persist` click could set a durable
-// default that its own session could never see, since the session pick that
-// preceded it outranks it forever.
-export const VERB_CLEAR_STATE = "clear-state";
 export const VERB_COPY = "copy";
 export const VERB_OPEN_VSCODE = "open-vscode";
 export const VERB_TOOLBAR_TOGGLE = "toolbar-toggle";
@@ -71,10 +57,19 @@ export const VERB_LOAD_CONFIG = "load-config";
 // (candybar-config-engine-71o.2). Args: `[sessionId, key, value]` — the
 // sessionId is carried only for click.error surfacing, exactly like
 // set-state; the write itself is daemon-global, not session-scoped.
+// A durable write takes an OPTIONAL trailing segment: the SessionState key to
+// RELEASE once the write has succeeded. A dual-destination control
+// (candybar-settings-ui-aok.3) commits "make this the durable default AND stop
+// overriding it in this session" — one intent, whose session half must not
+// happen if the durable half failed. Carried as one more segment on the write
+// itself rather than as a second effect beside it, because `dispatch` runs
+// every effect in a click by design; a pair would let a rejected write still
+// wipe the user's pick. Args: `[sessionId, key, value, releaseKey?]`.
 export const VERB_SET_CONFIG = "set-config";
 // [LAW:types-are-the-program] A RELATIVE nudge to a bounded config-overrides
 // key (e.g. a padding stepper) — the config twin of step-state. Args:
-// `[sessionId, key, by]`.
+// `[sessionId, key, by, releaseKey?]` — the same optional release segment
+// set-config takes, for the same reason.
 export const VERB_STEP_CONFIG = "step-config";
 // [LAW:one-source-of-truth] The gated undo for `persist`: clears one
 // config-overrides key, restoring the user-file/bundled-default value on the

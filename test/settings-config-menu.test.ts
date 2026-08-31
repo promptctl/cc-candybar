@@ -412,16 +412,22 @@ describe("the config menu, reached from a user config whose root is one row", ()
 
     const open = r.render();
     expect(writesTo(open, "palette").some((u) => !isReset(u))).toBe(true);
-    // The session key is touched, but only to be CLEARED — never given a
-    // value. That clear is what keeps a durable write visible to the session
-    // that made it: a session pick outranks a durable default, so committing
-    // "what I'm looking at" has to stop overriding it here, and an absence is
-    // the only thing that means that.
-    const themeWrites = writesTo(open, "theme").flatMap((u) => effectsOf(u));
-    expect(themeWrites.length).toBeGreaterThan(0);
+    // The session key appears only as the RELEASE segment of the durable write
+    // — never as a write of its own. That release is what keeps a durable
+    // write visible to the session that made it (a session pick outranks a
+    // durable default), and riding the write means a rejected write cannot
+    // drop the pick.
+    const applyEffects = effectsOf(
+      writesTo(open, "palette").find((u) => !isReset(u))!,
+    );
     expect(
-      themeWrites.filter((e) => e.args[1] === "theme").map((e) => e.verb),
-    ).toEqual(themeWrites.filter((e) => e.args[1] === "theme").map(() => "clear-state"));
+      applyEffects.some(
+        (e) => e.verb === "set-config" && e.args[3] === "theme",
+      ),
+    ).toBe(true);
+    expect(
+      applyEffects.some((e) => e.verb === "set-state" && e.args[1] === "theme"),
+    ).toBe(false);
   });
 
   // [LAW:verifiable-goals] The workflow this menu invites, end to end: try a

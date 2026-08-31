@@ -37,7 +37,6 @@ import { parseSessionBoolean, type StripStyle } from "../themes/policy.js";
 import {
   effectsUrl,
   VERB_APPLY_LAYOUT_OP,
-  VERB_CLEAR_STATE,
   VERB_COPY,
   VERB_OPEN_VSCODE,
   VERB_REDO,
@@ -740,12 +739,17 @@ export function realize(
         store,
         sessionId,
       );
+      // The durable write carries the session key to RELEASE as one more
+      // segment on itself, so the daemon clears it only after its own write
+      // succeeded. A second effect beside it would not do: `dispatch` runs
+      // every effect in a click by design, so a rejected write would still
+      // wipe the session pick and leave nothing durable in its place.
       return chosen === c.durable
         ? {
-            effects: [
-              ...effects,
-              { verb: VERB_CLEAR_STATE, args: [sessionId, c.sessionKey] },
-            ],
+            effects: effects.map((e) => ({
+              ...e,
+              args: [...e.args, c.sessionKey],
+            })),
             active,
           }
         : { effects, active };

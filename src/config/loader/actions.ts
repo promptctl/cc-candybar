@@ -346,6 +346,7 @@ function validateDiscriminatorKeys(
 ): Record<string, string> | null {
   const out: Record<string, string> = {};
   const keys = DISCRIMINATOR_KEYS[discriminator];
+  let ok = true;
   for (const [key, noun] of keys) {
     // [LAW:no-silent-failure] An ABSENT key gets the shape, not a type
     // mismatch. A single-destination arm cannot reach this (its key is the
@@ -361,7 +362,8 @@ function validateDiscriminatorKeys(
           .map(([k]) => k)
           .join(", ")} together, plus one value source`,
       );
-      return null;
+      ok = false;
+      continue;
     }
     const value = slashFreeString(
       ctx,
@@ -371,10 +373,17 @@ function validateDiscriminatorKeys(
       `${key} key must be non-empty (${noun})`,
       (v) => `${key} key "${v}" contains "/" — keys must be slash-free`,
     );
-    if (value === null) return null;
+    if (value === null) {
+      ok = false;
+      continue;
+    }
     out[key] = value;
   }
-  return out;
+  // [LAW:no-silent-failure] Every failing key is reported before returning, so
+  // an author who omits two of a dual's three keys sees both in one pass —
+  // matching every other multi-issue check in this file, and matching what the
+  // comment above promises.
+  return ok ? out : null;
 }
 
 // [LAW:one-source-of-truth] The wire verb name a discriminator's writes
