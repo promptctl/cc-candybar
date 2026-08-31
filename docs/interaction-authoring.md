@@ -1247,7 +1247,9 @@ or not any group/menu exists in your config.
 The bar ships two `(?)` affordances, and neither needs anything in your config:
 
 - **In edit mode**, trailing the bar's last row — what `+`, `-` and the
-  `↺ … customized` banner do when clicked.
+  `↺ … customized` banner do when clicked. Where that row is itself gated by
+  another disclosure it takes a line of its own instead, so the `(?)` can
+  never end up hidden behind something you have to open first.
 - **In the config menu**, beside `persist?` — where the next click lands.
 
 Both are ordinary disclosures. `(?)` closed, `✕` open, one session-scoped state
@@ -1286,9 +1288,12 @@ Two things worth knowing before you place one:
 - **Keep help short.** A body cell is a cell like any other, so a long sentence
   wraps and costs extra rows at narrow widths. One complete thought per cell,
   each leading with the glyph it explains, is what the bundled help does.
-- **Put it after the content it explains, not before.** Segment hue advances in
-  tree order across *every* segment, visible or hidden, so a cell inserted ahead
-  of your bar shifts the colour of everything after it. Appending costs nothing.
+- **Put it at the very end of your `root`, not merely after the segment it
+  explains.** Segment hue advances in tree order across *every* segment in the
+  whole tree, visible or hidden, so a cell shifts the colour of everything that
+  follows it anywhere — including later rows. A `(?)` at the end of your last
+  row costs nothing; the same `(?)` at the end of your *first* row recolours
+  every row below it, whether or not anyone opens it.
 
 ## Mistakes and the errors they produce
 

@@ -90,8 +90,11 @@ export function pickCycleDisplay(
 }
 
 // [LAW:one-source-of-truth] Go-template string-literal escaping for any DISPLAY
-// text a synthesis splices into a template it emits — a group's label, a preset
-// name in the reset banner, a help line. It lives here, beside the two splices
+// text a synthesis splices INSIDE a quoted `{{ }}` argument of a template it
+// emits — a group's label, a preset name in the reset banner, a `(?)` trigger's
+// closed/open glyphs. NOT for a template's own body text, which is source rather
+// than a splice: a help line is assigned verbatim (help.ts) because escaping one
+// would put a backslash on the bar. It lives here, beside the two splices
 // that need it most, because it was already two verbatim copies (loader/layout.ts
 // and edit-chrome.ts, whose comment deferred the merge until "one small rule"
 // earned its own home). The `(?)` affordance was the third caller, so it did.

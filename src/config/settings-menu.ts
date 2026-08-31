@@ -443,9 +443,10 @@ function expandAnchor(
                 // after every existing leaf and costs zero. This menu splices
                 // MID-TREE at an anchor `withAnchor` lets the author put
                 // anywhere, so no position inside it is after the rest of the
-                // bar: the four leaves it adds (this trigger plus three body
-                // lines) shift everything past the anchor by 4 x hue.step
-                // wherever they sit. Trailing here would buy nothing and cost
+                // bar: the leaves it adds — this trigger plus one per
+                // PERSIST_HELP line, a count that lives in help-text.ts and is
+                // deliberately not copied here — shift everything past the
+                // anchor wherever inside the menu they sit. Trailing would cost
                 // the adjacency that IS the affordance. The fix is decoupling
                 // colour from tree position — candybar-render-y5h, which fixes
                 // every mid-tree synthesis at once rather than one file at a
