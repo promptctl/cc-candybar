@@ -65,6 +65,8 @@ import { expandHome } from "../config/dsl-loader.js";
 import { renderDsl } from "../dsl/render.js";
 import {
   effectiveStripStyle,
+  effectiveAutoWrap,
+  effectivePadding,
   effectiveThemeName,
   effectiveLookName,
   lookKeyByName,
@@ -867,11 +869,12 @@ async function handleRequest(req: Request): Promise<HandledRequest> {
         //
         // [LAW:one-source-of-truth] Every globals field a menu/stepper can
         // persist (candybar-config-engine-71o.3), resolved ONCE into one
-        // struct: theme/look/style compose the session's click (SessionState)
-        // over the config default over a floor — a click recolors/reshapes the
-        // whole bar on the next render; charset/colorCompatibility/autoWrap/
-        // padding have no SessionState half today, so their "effective" value
-        // is just the config global over its floor constant. This struct feeds
+        // struct: theme/look/style/autoWrap/padding compose the session's click
+        // (SessionState) over the config default over a floor — a click
+        // recolors/reshapes the whole bar on the next render; charset and
+        // colorCompatibility describe the TERMINAL rather than a taste and so
+        // have no SessionState half at all, making the config global over its
+        // floor constant their whole resolution. This struct feeds
         // BOTH the payload's `*.effective` fields (trigger labels) AND
         // renderOpts below (the actual render) — one resolution, two readers,
         // so a label can never disagree with what was rendered.
@@ -918,8 +921,18 @@ async function handleRequest(req: Request): Promise<HandledRequest> {
             sessionState.get(req.hookData.session_id, "style"),
             globals.style,
           ),
-          autoWrap: globals.autoWrap ?? DEFAULT_WRAP,
-          padding: globals.padding ?? DEFAULT_PADDING,
+          autoWrap: effectiveAutoWrap(
+            sessionState.get(req.hookData.session_id, "autoWrap"),
+            globals.autoWrap,
+          ),
+          padding: effectivePadding(
+            sessionState.get(req.hookData.session_id, "padding"),
+            globals.padding,
+          ),
+          // charset and colorCompatibility have no session half by design —
+          // they describe the terminal, not a taste (see CHARSETS in
+          // themes/policy.ts) — so the config global over its floor is their
+          // whole resolution.
           charset: globals.charset ?? DEFAULT_CHARSET,
           colorCompatibility:
             globals.colorCompatibility ?? DEFAULT_COLOR_COMPATIBILITY,
