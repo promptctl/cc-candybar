@@ -102,13 +102,17 @@ describe("candybar-config-engine-71o.5: real-daemon click → persist → restar
       expect(themeMenuToggleUrl).toBeDefined();
       await click(sockPath, themeMenuToggleUrl!);
 
-      const targetTheme = listResolvablePaletteNames().find(
+      // TWO themes, deliberately: one tried in-session and one committed
+      // durably. Using the same name for both would let the session pick
+      // satisfy the durability assertions below (a session value wins for its
+      // own session), so the test would pass with the durable write missing.
+      const [sessionTheme, targetTheme] = listResolvablePaletteNames().filter(
         (name) => name !== "tokyo-night", // the bundled default's globals.palette
       );
-      if (targetTheme === undefined) {
+      if (sessionTheme === undefined || targetTheme === undefined) {
         throw new Error(
-          "listResolvablePaletteNames() returned only the bundled default's " +
-            "own palette — need at least one other resolvable theme",
+          "listResolvablePaletteNames() returned fewer than two themes besides " +
+            "the bundled default's own palette — need one to try and one to commit",
         );
       }
 
@@ -119,7 +123,7 @@ describe("candybar-config-engine-71o.5: real-daemon click → persist → restar
       const sessionThemeUrl = findUrl(extractUrls(sessionOnly), (effects) =>
         effects[0]!.verb === "set-state" &&
         effects[0]!.args[1] === "theme" &&
-        effects[0]!.args[2] === targetTheme,
+        effects[0]!.args[2] === sessionTheme,
       );
       expect(sessionThemeUrl).toBeDefined();
       // …and emits NO durable write at all while unchecked: not a second
@@ -130,9 +134,24 @@ describe("candybar-config-engine-71o.5: real-daemon click → persist → restar
         ),
       ).toBeUndefined();
 
+      // Take the unchecked click, then read a CONCURRENT session over the same
+      // socket: the picker changed this conversation and left the other one
+      // alone. That contrast is what "only this session" means, and only a
+      // second live session can show it — the overrides file being empty
+      // proves nothing about what another session renders.
+      await click(sockPath, sessionThemeUrl!);
+      const OTHER_SID = "e2e-session-concurrent";
+      expect(await render(sockPath, SID, projectDir)).toContain(sessionTheme);
+      expect(await render(sockPath, OTHER_SID, projectDir)).not.toContain(
+        sessionTheme,
+      );
+
+      // Re-open the theme picker: the pick above closed it (closeOnPick).
+      await click(sockPath, themeMenuToggleUrl!);
+
       // ── Check persist?. One click on the checkbox, nothing else about the
       // control changes — same segment, same picker, same options.
-      const persistToggleUrl = findUrl(extractUrls(sessionOnly), (effects) =>
+      const persistToggleUrl = findUrl(extractUrls(await render(sockPath, SID, projectDir)), (effects) =>
         effects.length === 1 &&
         effects[0]!.verb === "set-state" &&
         effects[0]!.args[1] === "settings.persist" &&
@@ -159,6 +178,11 @@ describe("candybar-config-engine-71o.5: real-daemon click → persist → restar
         ),
       ).toBeUndefined();
 
+      // The session pick from before is untouched by checking the box —
+      // toggling persist? moves where the NEXT write goes, never values
+      // already written.
+      expect(await render(sockPath, SID, projectDir)).toContain(sessionTheme);
+
       // The padding stepper's ▶ is a bounded step over the same durable
       // field while persist? is checked (render/action.ts's persist-bounded
       // arm: args = [sessionId, key, String(by)]) — find the one whose `by`
@@ -175,18 +199,37 @@ describe("candybar-config-engine-71o.5: real-daemon click → persist → restar
       await click(sockPath, themeForeverUrl!);
       await click(sockPath, paddingUpUrl!);
 
-      // Live re-render, same session, no daemon restart: the persisted
-      // overrides ride the config file's own watcher (RenderCache), so this
-      // proves the write took effect without a restart, before proving it
-      // SURVIVES one below.
+      // Live, no daemon restart: the persisted write rides the config file's
+      // own watcher (RenderCache), so it is visible to a running daemon before
+      // any restart. Read it on the CONCURRENT session, which never picked a
+      // theme — the clicking session cannot show this, because its own session
+      // pick outranks a durable default for its own render (bundled default <
+      // config file < persisted overrides < preset < session pick). Asserting
+      // durability there would conflate the two layers and pass on the session
+      // value alone.
+      // Its menu is closed — both disclosure keys are SessionState, so this
+      // session opens collapsed however many themes another session persists.
+      // The theme NAME only renders inside the config row, so open it (a pure
+      // UI affordance, not a config mutation) before reading the value.
+      await click(
+        sockPath,
+        effectsUrl([
+          { verb: VERB_SET_STATE, args: [OTHER_SID, "settings.menu", "open"] },
+          { verb: VERB_SET_STATE, args: [OTHER_SID, "settings.config", "open"] },
+        ]),
+      );
       const afterClicks = await renderUntil(
         sockPath,
-        SID,
+        OTHER_SID,
         projectDir,
         (out) => out.includes(targetTheme),
-        `the persisted theme "${targetTheme}"`,
+        `the persisted theme "${targetTheme}" on a session that never picked one`,
       );
       expect(afterClicks).toContain(targetTheme);
+
+      // …and the clicking session still shows ITS pick, which is that same
+      // precedence read from the other end.
+      expect(await render(sockPath, SID, projectDir)).toContain(sessionTheme);
 
       // The hand-authored file is byte-identical — persist never touches it.
       expect(readFileSync(userConfigPath, "utf8")).toBe(userConfigBody);
