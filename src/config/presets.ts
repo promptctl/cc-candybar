@@ -15,7 +15,7 @@
 // place it is written down:
 //
 //   bundled default  <  user config file  <  persisted overrides
-//                    <  ACTIVE PRESET  <  session pick
+//                    <  ACTIVE PRESET  <  session pick  <  EDIT MODE
 //
 // The preset's position is forced by its lifetime, not chosen. Everything to
 // its left is resolved once per RenderCache entry (an entry serves many
@@ -26,6 +26,18 @@
 // "compact" arrangement must actually change padding, even for a user who once
 // persisted a padding they liked) while a session's own click still wins over
 // the preset (a click is later still).
+//
+// The same rule places the last rung (candybar-settings-ui-aok.5): edit mode's
+// `editGlobals` fragment is decided later than ANY session pick — a user picks
+// a style, and only afterwards enters edit mode — so it is the new rightmost
+// layer, and a session pick of "capsule" cannot survive into a mode whose whole
+// job is to stop segments reading as one continuous strip. It differs from
+// every rung to its left in LIFETIME rather than in kind: nothing writes it to
+// SessionState or the overrides layer, so leaving edit mode restores the
+// previous look with no save/restore path — the session's own pick was never
+// overwritten, only out-ranked [LAW:dataflow-not-control-flow]. The rung itself
+// is the `staged` parameter of effectiveGlobal (themes/policy.ts); this comment
+// is the ONE place the order is written down.
 
 // [LAW:one-way-deps] Type-only, so nothing is emitted and option-domain.ts (a
 // leaf that deliberately never imports dsl-types.ts) can import PRESET_NAMES
@@ -87,7 +99,14 @@ export function effectivePresetName(
   globalsPreset: string | undefined,
   declaredPresets: Readonly<Record<string, PresetDecl>>,
 ): string {
+  // [LAW:types-are-the-program] No staged rung, and the absence is enforced
+  // rather than assumed: every globals fragment that could stage one — a
+  // preset's own `globals`, edit mode's `editGlobals` — has `preset` swapped for
+  // a rejection in its schema (loader/globals.ts), so "a fragment selected a
+  // preset" is unrepresentable and there is nothing here to resolve against.
+  // Which preset is active keeps exactly one authority.
   return effectiveMemberName(
+    undefined,
     sessionPreset,
     globalsPreset,
     PRESET_FLOOR,

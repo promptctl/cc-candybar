@@ -31,21 +31,12 @@ import { SourceRegistry } from "./var-system/sources.js";
 import { SessionState } from "./daemon/session-state.js";
 import { registerDslConfig, renderDsl } from "./dsl/render.js";
 import { deriveActionValidators } from "./daemon/verbs/state-validators.js";
-import {
-  effectiveThemeName,
-  effectiveLookName,
-  lookKeyByName,
-  effectiveStripStyle,
-  effectiveAutoWrap,
-  effectivePadding,
-} from "./themes/policy.js";
+import { lookKeyByName } from "./themes/policy.js";
 import { paletteForThemeName } from "./themes/palette-resolvers.js";
-import { effectivePresetName, presetGlobals } from "./config/presets.js";
 import {
-  DEFAULT_CHARSET,
-  DEFAULT_COLOR_COMPATIBILITY,
-} from "./render/strip.js";
-import type { EffectiveGlobals } from "./daemon/render-payload.js";
+  resolveEffectiveGlobals,
+  type EffectiveGlobals,
+} from "./daemon/render-payload.js";
 
 // [LAW:no-ambient-temporal-coupling] A fixed width keeps the verdict a function
 // of the config alone, not of whichever terminal invoked the check. Templates
@@ -302,14 +293,13 @@ function loadRegisterRender(
     // globals feed every field below, the SAME order the daemon resolves in
     // (server.ts) — so `check` renders the arrangement a fresh session actually
     // opens in, not the config's un-presetted root.
-    const preset = effectivePresetName(
-      null,
-      config.globals.preset,
-      config.presets,
-    );
-    const globals = presetGlobals(config, preset);
-    const effective: EffectiveGlobals = {
-      preset,
+    const effective: EffectiveGlobals = resolveEffectiveGlobals(
+      config,
+      // A fresh session: no clicked theme/style/look, and edit mode off. The
+      // resolution is THE daemon's (resolveEffectiveGlobals), not a copy that
+      // agrees with it today — which is the whole reason check renders what the
+      // daemon would render rather than something adjacent.
+      () => null,
       // [LAW:no-silent-failure] `check` validates a config file in isolation
       // — it never reads the daemon-owned overrides file, so there is no
       // rootOps log to be customized BY. false is the honest value for THIS
@@ -317,16 +307,8 @@ function loadRegisterRender(
       // has never customized anything. A second render pass below also
       // exercises `true`, so a `.preset.customized`-gated segment still
       // gets checked — just not through this value.
-      presetCustomized: false,
-      theme: effectiveThemeName(null, globals.palette),
-      look: effectiveLookName(null, globals.look, config.looks),
-      style: effectiveStripStyle(null, globals.style),
-      autoWrap: effectiveAutoWrap(null, globals.autoWrap),
-      padding: effectivePadding(null, globals.padding),
-      charset: globals.charset ?? DEFAULT_CHARSET,
-      colorCompatibility:
-        globals.colorCompatibility ?? DEFAULT_COLOR_COMPATIBILITY,
-    };
+      () => false,
+    );
     // [LAW:no-silent-failure] A segment whose template THROWS while evaluating
     // (an `{{ action }}` display-arity mismatch, a MissingFieldError from a
     // partially-declared variable) renders as a visible ⚠ error cell — partial
@@ -352,6 +334,7 @@ function loadRegisterRender(
         paletteForThemeName(payloadEffective.theme),
         {
           style: payloadEffective.style,
+          separator: payloadEffective.separator,
           width: CHECK_WIDTH,
           colorCompatibility: payloadEffective.colorCompatibility,
           wrap: payloadEffective.autoWrap,

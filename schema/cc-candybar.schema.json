@@ -1648,7 +1648,7 @@
               },
               "preset": {
                 "not": {},
-                "description": "not allowed inside a preset — a preset cannot select a preset"
+                "description": "not allowed here — a preset cannot select a preset"
               },
               "style": {
                 "enum": [
@@ -1685,6 +1685,66 @@
         },
         "additionalProperties": false
       }
+    },
+    "editGlobals": {
+      "type": "object",
+      "properties": {
+        "default_bg": {
+          "type": "string"
+        },
+        "default_fg": {
+          "type": "string"
+        },
+        "default_empty_value": {
+          "type": "string"
+        },
+        "default_separator": {
+          "type": "string"
+        },
+        "default_truncate_marker": {
+          "type": "string"
+        },
+        "palette": {
+          "type": "string"
+        },
+        "look": {
+          "type": "string"
+        },
+        "preset": {
+          "not": {},
+          "description": "not allowed here — the editGlobals fragment cannot select a preset"
+        },
+        "style": {
+          "enum": [
+            "powerline",
+            "capsule",
+            "plain"
+          ]
+        },
+        "autoWrap": {
+          "type": "boolean"
+        },
+        "padding": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 16
+        },
+        "charset": {
+          "enum": [
+            "unicode",
+            "ascii"
+          ]
+        },
+        "colorCompatibility": {
+          "enum": [
+            "truecolor",
+            "256",
+            "ansi",
+            "none"
+          ]
+        }
+      },
+      "additionalProperties": false
     },
     "helpers": {
       "type": "object",

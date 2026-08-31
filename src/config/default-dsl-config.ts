@@ -1475,6 +1475,24 @@ export const RAW_DEFAULT_DSL_CONFIG = {
     },
   },
 
+  // [LAW:one-source-of-truth] What edit mode LOOKS like, as config a user can
+  // retune — the whole point of candybar-settings-ui-aok.5, whose predecessor
+  // was renderer constants. Powerline chrome exists to make adjacent segments
+  // read as one continuous strip, which is precisely the wrong signal while a
+  // user is trying to see where one segment ends and the next begins; `plain`
+  // trades the caps for a visible separator between every cell.
+  //
+  // The separator is stated rather than left to PlainJoiner's own default: this
+  // fragment layers over the user's globals, so a config that set
+  // `default_separator` for its own powerline bar would otherwise carry that
+  // choice into edit mode, where the separator is the entire affordance. " | "
+  // (not "│") because it must survive `charset: "ascii"` — the fragment does
+  // not, and should not, know the terminal's glyph coverage.
+  editGlobals: {
+    style: "plain",
+    default_separator: " | ",
+  },
+
   // [LAW:single-enforcer] / [LAW:one-source-of-truth] Display-formatting policy
   // for the cost/token/budget family lives here as named template helpers, each
   // DEFINED ONCE and called from every segment via `{{ template "name" .arg }}`

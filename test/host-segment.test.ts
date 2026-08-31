@@ -44,6 +44,7 @@ const EFFECTIVE_GLOBALS: EffectiveGlobals = {
   colorCompatibility: "truecolor",
   autoWrap: true,
   padding: 1,
+  separator: undefined,
 };
 
 const DEPS = {
