@@ -294,19 +294,24 @@ control for "just this terminal" beside one for "everywhere":
     wrapEverywhere: { persist: "autoWrap", cycle: ["true", "false"] },
   },
   variables: {
-    // A `set` action needs the key readable as a `state` variable; its
-    // integer `default` is also what an unset stepper seeds from.
+    // The `set: "padding"` stepper seeds an unset key from THIS declaration's
+    // integer default, so the first ◀/▶ click steps from 1 rather than from 0.
     sessionPadding: { kind: "state", key: "padding", default: "1" },
   },
   segments: {
     layoutControls: {
-      template: '{{ action "padHereDown" "◀" }} padding {{ .padding.effective }} {{ action "padHereUp" "▶" }}  {{ action "wrapHere" "wrap: on" "wrap: off" }}',
+      template: '{{ action "padHereDown" "◀" }} padding {{ .padding.effective }} {{ action "padHereUp" "▶" }}  {{ action "wrapHere" "wrap: on" "wrap: off" }}  {{ action "wrapEverywhere" "pin wrap: on" "pin wrap: off" }}',
       bg: "surface", fg: "foreground",
     },
   },
   root: { v: [{ h: ["directory", "layoutControls"] }] },
 }
 ```
+
+Both halves are wired into the template above, which is the point: `wrap: …`
+changes only this terminal, `pin wrap: …` changes the default every session
+gets. An action nobody renders is a declaration with no affordance — the loader
+accepts it, and the bar shows nothing.
 
 ### Picking a whole arrangement: `presets`
 
@@ -738,9 +743,10 @@ DO have), and the value source must be `to`/`from`/`cycle` — never a
 bounded stepper (`min`/`max`/`by`), because a palette is a NAME, not a
 number.
 
-Like the four display-globals steppers above, a segment's `palette:` has no
+Like `charset` and `colorCompatibility` above, a segment's `palette:` has no
 SessionState half — `persist` is its only seam, so there is no session
-`set` twin to pair it with.
+`set` twin to pair it with. (`autoWrap` and `padding` are the two display
+globals that *do* have one.)
 
 ### The global settings menu: `settings.menu`
 
