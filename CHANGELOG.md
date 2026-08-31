@@ -1,3 +1,10 @@
+# [1.39.0](https://github.com/promptctl/cc-candybar/compare/v1.38.0...v1.39.0) (2026-08-31)
+
+
+### Features
+
+* **menu:** the disclosure glyph becomes authored data, so the + menus drop the arrow (candybar-settings-ui-aok.4) ([#193](https://github.com/promptctl/cc-candybar/issues/193)) ([e82fe4d](https://github.com/promptctl/cc-candybar/commit/e82fe4de344d5844302b7a70f7b7d2a0c7a7c82c))
+
 # [1.38.0](https://github.com/promptctl/cc-candybar/compare/v1.37.0...v1.38.0) (2026-08-31)
 
 
