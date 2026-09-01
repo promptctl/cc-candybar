@@ -563,7 +563,7 @@ describe("presetIsCustomized", () => {
 
 // brandon-layout-edit-2gc.5 PR review: quotes and backslashes are LEGAL in a
 // preset name (only empty/slash/newline are rejected — see loader/
-// presets.ts), and prependCustomizedBanner splices the name into a
+// presets.ts), and wrapWithPresetRows splices the name into a
 // synthesized Go-template string literal. Unlike the newline case (which
 // gets rejected at load, since escaping can't fix an embedded literal
 // newline), a quote/backslash-bearing name is escaped, not rejected — so
@@ -629,7 +629,7 @@ describe('the "customized" banner escapes quote/backslash preset names', () => {
 // brandon-layout-edit-2gc.5 PR review round 4: a preset's declared root may
 // carry its OWN top-level `when` — including the A-grammar's bare-segment-
 // ref shorthand `{ seg, when }` (loader/layout.ts), NOT only a container.
-// prependCustomizedBanner's when-carry-up only reaches a container's own
+// wrapWithPresetRows's when-carry-up only reaches a container's own
 // `when`; without ALSO copying it onto spliceEditChromeForPreset's
 // synthetic wrapper for a bare-segment root, that shape's own gate never
 // reached the carry-up at all.
@@ -1018,7 +1018,7 @@ describe("RenderCache: layout ops replay onto the resolved preset root", () => {
   // [LAW:verifiable-goals] brandon-layout-edit-2gc.5's own done-gate: the
   // visible diagnostic and its reset affordance, driven through the REAL
   // RenderCache (presetRootOps is a fact of THIS reload, never re-read), the
-  // REAL synthesized reset action (edit-chrome.ts's prependCustomizedBanner,
+  // REAL synthesized reset action (edit-chrome.ts's wrapWithPresetRows,
   // reached only when DEFAULT_DSL_CONFIG's `toolbar` wires edit.toggle —
   // exactly the merged-default path every other test in this describe block
   // already exercises), and the REAL daemon reset-config handler — never a

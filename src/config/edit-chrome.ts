@@ -36,9 +36,12 @@ import { presetRootOpsKey } from "./loader/persist-target.js";
 import { ident } from "./ident.js";
 import {
   EDIT_MODE_GATE,
+  EDIT_MODE_REF,
   EDIT_NS,
   EDIT_TOGGLE_ACTION,
 } from "./loader/edit-mode.js";
+import { declareHelp, type HelpDisclosure } from "./help.js";
+import { EDIT_MODE_HELP } from "../help-text.js";
 import { GROUP_NS } from "./loader/layout.js";
 import { SETTINGS_NS } from "./settings-menu.js";
 import {
@@ -51,6 +54,7 @@ import {
 import {
   DISCLOSURE_CLOSED,
   DISCLOSURE_GLYPH_CLOSE,
+  escapeTemplateLiteral,
   disclosureCycleAction,
   disclosureStateVar,
 } from "./disclosure.js";
@@ -86,17 +90,6 @@ function isChromeExempt(name: string): boolean {
     // placement was chosen to avoid. Structural, like the three above it.
     name.startsWith(SETTINGS_NS)
   );
-}
-
-// [LAW:no-silent-failure] Go-template string-literal escaping for a preset
-// NAME spliced into DISPLAY text (prependCustomizedBanner) rather than an
-// identifier — the same hazard loader/layout.ts's group `label` synthesis
-// already guards against, reimplemented here since that copy is
-// module-private and this one small rule doesn't warrant its own shared
-// module the way `ident` (checked for agreement across three sites —
-// see ./ident.ts) did.
-function escapeTemplateLiteral(s: string): string {
-  return s.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
 }
 
 // [LAW:one-source-of-truth] Every synthesized decl this pass produces, keyed
@@ -312,17 +305,23 @@ function spliceContainer(
 // synthesized the SAME way (one reset action targeting this preset's exact
 // `persist` key, one segment hosting `{{ action }}`), UNCONDITIONALLY, with
 // visibility carried entirely by PRESET_CUSTOMIZED_GATE
-// [LAW:dataflow-not-control-flow]. Prepended as an extra ROW (not spliced
-// into the row-interleaved chrome spliceContainer builds) because it is not
-// bound to any one segment gap — it is a fact about the whole tree — so it
-// gets its own line above it, visible or not by the SAME `when` every other
-// synthesized affordance here already uses.
-function prependCustomizedBanner(
+// [LAW:dataflow-not-control-flow]. It gets its own ROW (not a slot in the
+// row-interleaved chrome spliceContainer builds) because it is not bound to any
+// one segment gap — it is a fact about the whole tree — visible or not by the
+// SAME `when` every other synthesized affordance here already uses.
+//
+// candybar-settings-ui-aok.6 hangs edit mode's `(?)` off the same content — its
+// BODY is a per-preset row on the same footing as the banner, so this function
+// now brackets the content rather than only preceding it, which is what its name
+// says and why it is no longer "prepend". Its TRIGGER is not a row; see
+// withTrailingCell.
+function wrapWithPresetRows(
   splicedRoot: LayoutNode,
   presetName: string,
   presetIdent: string,
   rootOpsKey: string,
   artifacts: ChromeArtifacts,
+  help: HelpDisclosure,
 ): LayoutNode {
   const actionName = `${EDIT_NS}${presetIdent}.resetLayout`;
   const chromeSegName = `${EDIT_NS}${presetIdent}.customized`;
@@ -365,9 +364,83 @@ function prependCustomizedBanner(
   return {
     kind: "container",
     direction: "vertical",
-    children: [{ kind: "segment", name: chromeSegName }, splicedRoot],
+    children: [
+      { kind: "segment", name: chromeSegName },
+      withTrailingCell(splicedRoot, help.trigger),
+      // The body is a ROW of its own, and only while the disclosure is open —
+      // dropping BELOW the row that revealed it, like every other disclosure
+      // body in this codebase.
+      help.body,
+    ],
     ...(splicedRoot.when !== undefined && { when: splicedRoot.when }),
   };
+}
+
+// [LAW:one-source-of-truth] `HelpDisclosure.trigger` is a CELL, and its contract
+// is that the caller joins it to a row it ALREADY HAS — the settings menu pushes
+// it into the row holding `persist?`. Edit mode's rows are the ones
+// spliceContainer just built, so the trigger joins the last of them. Two
+// constraints pin that placement and nothing else satisfies both:
+//
+//  - Closed help must cost no LINE. A trigger given its own vertical slot is a
+//    permanent row for the whole time edit mode is on, since a trigger's `when`
+//    is its host surface's, never its own open state (a trigger you must open in
+//    order to see could never be opened).
+//  - Closed help must cost no COLOUR. The hue cursor (src/dsl/render.ts:696)
+//    advances in pre-order over every segment leaf — VISIBLE OR NOT, so that
+//    toggling a disclosure never recolours the bar — which means a leaf inserted
+//    AHEAD of the content shifts the hue index of everything after it. An
+//    earlier draft put the `(?)` first and recoloured every cell of the bundled
+//    default (status row 33;41;59 → 49;36;52) with edit mode still OFF. Trailing
+//    the last row is the one position that moves no other leaf.
+//
+// Those two together disqualify the reset-banner row, which sits above the
+// content.
+//
+// A THIRD requirement decides how far the descent may go, and it outranks the
+// other two: the trigger must be visible exactly when EDIT MODE is, since a
+// trigger you must already have opened something else to reach is not a trigger.
+// A container's `when` reaches every descendant, so descending into a
+// `when`-bearing container would silently make its gate the trigger's gate.
+// `kind: "group"` is the shape that makes this concrete rather than theoretical:
+// lowerGroup emits `{vertical, children: [toggle, {…, when: groupGate}]}`, so a
+// preset root ending in a group — ordinary authoring the A-grammar endorses —
+// would otherwise put the `(?)` INSIDE that group's collapsible body, gated on
+// edit mode AND a disclosure most groups default closed. Pairing beside a gated
+// SEGMENT is a different act and stays allowed: `{h: [gatedSeg, cell]}` puts the
+// cell beside the gate rather than under it.
+//
+// For a root whose last row is gated the three requirements are jointly
+// unsatisfiable, so the priority is stated rather than left to whichever branch
+// the recursion happens to reach: visible (always) > no recolour (always, since
+// appending is still after every existing leaf) > no extra line (surrendered
+// here, in exactly the configs where riding a row was never possible).
+//
+// [LAW:dataflow-not-control-flow] Total over the node shapes with no guard: a
+// segment is a row of one that cannot hold a second cell, so it pairs into one;
+// a vertical container's rows are its children, so it descends into the last one
+// it may; anything else appends. An empty container has no last child and
+// appends, which is the same answer.
+function withTrailingCell(node: LayoutNode, cell: LayoutNode): LayoutNode {
+  if (node.kind === "segment") {
+    return {
+      kind: "container",
+      direction: "horizontal",
+      children: [node, cell],
+    };
+  }
+  const last = node.children.at(-1);
+  if (
+    node.direction === "vertical" &&
+    last !== undefined &&
+    (last.kind === "segment" || last.when === undefined)
+  ) {
+    return {
+      ...node,
+      children: [...node.children.slice(0, -1), withTrailingCell(last, cell)],
+    };
+  }
+  return { ...node, children: [...node.children, cell] };
 }
 
 // One preset's chrome-spliced root. A bare-segment root (the A-grammar
@@ -379,6 +452,7 @@ function spliceEditChromeForPreset(
   config: DslConfig,
   presetName: string,
   artifacts: ChromeArtifacts,
+  help: HelpDisclosure,
 ): LayoutNode {
   const { node } = presetRoot(config, presetName);
   const rootOpsKey = presetRootOpsKey(presetName);
@@ -387,7 +461,7 @@ function spliceEditChromeForPreset(
   const posCounter = { n: 0 };
   // [LAW:no-silent-failure] The bare-segment-root case (the A-grammar's
   // `{ seg, when }` shorthand is a legal PresetDecl.root) carries its OWN
-  // `when` onto this synthetic wrapper too — prependCustomizedBanner's own
+  // `when` onto this synthetic wrapper too — wrapWithPresetRows's own
   // when-carry-up reads `splicedRoot.when`, which is this wrapper's `when`
   // once spliceContainer's `{...node, children}` passes it through
   // unchanged; without copying it here, a bare-segment preset root's own
@@ -410,12 +484,13 @@ function spliceEditChromeForPreset(
     artifacts,
     posCounter,
   );
-  return prependCustomizedBanner(
+  return wrapWithPresetRows(
     spliced,
     presetName,
     presetIdent,
     rootOpsKey,
     artifacts,
+    help,
   );
 }
 
@@ -444,9 +519,27 @@ export function synthesizeEditChrome(config: DslConfig): DslConfig {
     actions: {},
     segments: {},
   };
+  // [LAW:one-source-of-truth] Edit mode's `(?)` is minted ONCE and merely
+  // REFERENCED from every preset root — the same move the settings menu makes
+  // with its anchor, and for the same reason: one disclosure means one open
+  // state, so switching presets cannot land you beside a second `(?)` that
+  // disagrees about whether help is showing. The text is identical for every
+  // preset because what `+` and `-` do is a fact about edit mode, not about a
+  // layout.
+  const help = declareHelp(
+    `${EDIT_NS}help`,
+    EDIT_MODE_HELP,
+    [EDIT_MODE_REF],
+    artifacts,
+  );
   const presets: Record<string, PresetDecl> = { ...config.presets };
   for (const name of presetNames(config.presets)) {
-    const splicedRoot = spliceEditChromeForPreset(config, name, artifacts);
+    const splicedRoot = spliceEditChromeForPreset(
+      config,
+      name,
+      artifacts,
+      help,
+    );
     presets[name] = {
       ...presetByName(config.presets, name),
       root: splicedRoot,

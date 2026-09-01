@@ -713,8 +713,10 @@ synthesizes:
   `insertSegmentFrom` action behind `{{ menu }}`, ranging every declared
   segment not already in that preset's tree) before and after each run —
   so N segments in a row read `+ [seg1 -] + [seg2 -] + … + [segN -] +`.
-  Every affordance is gated `when: {{ eq .edit.mode "open" }}` — invisible
-  until the toggle opens, present in the compiled tree either way.
+  Every affordance is gated on edit mode being open — the same disclosure
+  predicate a group body or a `{{ menu }}` gates on, over the `edit.mode`
+  key — so each is invisible until the toggle opens, and present in the
+  compiled tree either way.
 
 **This is demand-driven, not automatic — but the demand is usually already
 there.** A config that never references `edit.toggle` gets none of this — no
@@ -932,7 +934,7 @@ Opening it shows the always-available functionality:
 
 ```
 ☰ ▾
-  ☐ persist?   ▦ default ▸ ↺   ⚙ config ▾   ✎ edit
+  ☐ persist?  (?)   ▦ default ▸ ↺   ⚙ config ▾   ✎ edit
      🎨 tokyo-night ▸ ↺   ◐ none ▸ ↺   ✦ powerline ▸ ↺   wrap: on ↺   ◀ padding 1 ▶ ↺
 ```
 
@@ -1239,6 +1241,59 @@ The accordion drawer:
 The `groups.` and `menus.` namespaces are **reserved** in all three sections
 (variables, actions, segments) — synthesis owns them unconditionally, whether
 or not any group/menu exists in your config.
+
+## `(?)` — instructions where they are needed
+
+The bar ships two `(?)` affordances, and neither needs anything in your config:
+
+- **In edit mode**, trailing the bar's last row — what `+`, `-` and the
+  `↺ … customized` banner do when clicked. Where that row is itself gated by
+  another disclosure it takes a line of its own instead, so the `(?)` can
+  never end up hidden behind something you have to open first.
+- **In the config menu**, beside `persist?` — where the next click lands.
+
+Both are ordinary disclosures. `(?)` closed, `✕` open, one session-scoped state
+key each, and a body that is a row of plain text cells. There is no help widget
+and no tooltip type: a `(?)` differs from the group above only in the text its
+trigger binds and in what its body contains.
+
+The sentences themselves live in `src/help-text.ts`, the same corpus `--help`
+prints, so the bar and the CLI cannot drift into two wordings of one fact.
+
+To write your own, use a group whose label is the glyph and whose body is a
+segment of text — nothing here is privileged. Note what the sugar gives you:
+a group appends the disclosure glyph to its label in both states, so `label:
+"(?)"` renders `(?) ▸` closed and `(?) ▾` open. The `(?)`/`✕` swap the two
+bundled ones use binds two unrelated strings per state, which is raw-grammar
+territory — a `state` variable, a `cycle` action and your own
+`{{ action "…" "(?)" "✕" }}`, exactly as the group section above directs for
+any custom trigger. A group's body also defaults to `direction: "vertical"`,
+so more than one help line stacks; say `direction: "horizontal"` to get the
+row of text cells the bundled ones render.
+
+```json5 check:pass
+{
+  segments: {
+    deploy: { template: '🚀 staging', bg: "surface", fg: "foreground" },
+    deployHelp: { template: 'green = deployed, amber = building', bg: "surface", fg: "foreground" },
+  },
+  root: { v: [
+    { h: ["directory", "deploy", { kind: "group", name: "deployHelp", label: "(?)", children: ["deployHelp"] }] },
+  ] },
+}
+```
+
+Two things worth knowing before you place one:
+
+- **Keep help short.** A body cell is a cell like any other, so a long sentence
+  wraps and costs extra rows at narrow widths. One complete thought per cell,
+  each leading with the glyph it explains, is what the bundled help does.
+- **Put it at the very end of your `root`, not merely after the segment it
+  explains.** Segment hue advances in tree order across *every* segment in the
+  whole tree, visible or hidden, so a cell shifts the colour of everything that
+  follows it anywhere — including later rows. A `(?)` at the end of your last
+  row costs nothing; the same `(?)` at the end of your *first* row recolours
+  every row below it, whether or not anyone opens it.
 
 ## Mistakes and the errors they produce
 
