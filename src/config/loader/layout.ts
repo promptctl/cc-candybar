@@ -35,7 +35,9 @@ import {
   DISCLOSURE_GLYPH_CLOSED,
   DISCLOSURE_GLYPH_OPEN,
   disclosureCycleAction,
+  disclosureGate,
   disclosureStateVar,
+  disclosureTrigger,
 } from "../disclosure.js";
 import { findKeyLine } from "./diagnostics.js";
 import { reservedNamespaceCollisions } from "./reserved-namespace.js";
@@ -535,18 +537,11 @@ function lowerGroup(g: GroupNodeInput): LayoutNode {
         kind: "container",
         direction: g.direction ?? "vertical",
         children: g.children,
-        when: `{{ eq .${ref} "${g.name}" }}`,
+        when: disclosureGate({ variable: ref, member: g.name }),
       },
     ],
     ...(g.when !== undefined && { when: g.when }),
   };
-}
-
-// Go-template string-literal escaping for the synthesized toggle template — the
-// label is a plain display string (dynamic labels are raw-grammar territory),
-// so backslashes and quotes are the only characters that could break the splice.
-function escapeTemplateLiteral(s: string): string {
-  return s.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
 }
 
 function groupIssue(ctx: ValidateCtx, path: string, message: string): void {
@@ -641,7 +636,6 @@ export function synthesizeGroupDecls(
   for (const g of groups) {
     const name = GROUP_NS + g.name;
     const key = groupStateKey(g);
-    const label = escapeTemplateLiteral(g.label);
     // [LAW:dataflow-not-control-flow] Depth is a value derivable from the paths
     // already in ctx.groups — no extra threading. Strict-prefix count gives
     // nesting depth; the indent embeds as a string constant in the template.
@@ -662,7 +656,11 @@ export function synthesizeGroupDecls(
     // structural left-margin (nesting depth) and stays leading; the glyph is a
     // trailing affordance on the label, never a prefix.
     segments[name] = {
-      template: `{{ action "${name}" "${indent}${label} ${DISCLOSURE_GLYPH_CLOSED}" "${indent}${label} ${DISCLOSURE_GLYPH_OPEN}" }}`,
+      template: disclosureTrigger(
+        name,
+        `${indent}${g.label} ${DISCLOSURE_GLYPH_CLOSED}`,
+        `${indent}${g.label} ${DISCLOSURE_GLYPH_OPEN}`,
+      ),
       ...(g.bg !== undefined && { bg: g.bg }),
       ...(g.fg !== undefined && { fg: g.fg }),
     };

@@ -1,4 +1,5 @@
 import { DISCLOSURE_GLYPH_CLOSED } from "./config/disclosure";
+import { HELP_GLYPH_CLOSED } from "./config/help";
 
 // [LAW:effects-at-boundaries] Pure data, no I/O — index.ts owns the console.log
 // effect. Kept as its own module so the text is importable (and testable) without
@@ -6,6 +7,29 @@ import { DISCLOSURE_GLYPH_CLOSED } from "./config/disclosure";
 // [LAW:one-source-of-truth] The disclosure glyph comes from config/disclosure.ts
 // (the same constant the theme/look picker itself renders with), so this text
 // can't drift from what a user actually sees on the bar.
+// [LAW:one-source-of-truth] THE help corpus, as data. `--help` and the bar's
+// own `(?)` disclosures are two RENDERINGS of these arrays, never two copies of
+// the sentences: a `(?)` segment's template IS one of these strings, and the
+// paragraphs below interpolate the same values. A help sentence typed into a
+// segment template — where nothing would ever notice it drifting from the CLI's
+// wording — is the defect this shape exists to make unrepresentable.
+//
+// [LAW:representation] One line is one CELL on the bar, so each is a complete
+// thought that stands alone and each stays short: `(?)` bodies drop below their
+// row, and a body that overflows `term.cols` wraps into more rows than the fact
+// it explains is worth. Every line leads with the glyph it explains, so the
+// reader matches text to affordance by shape rather than by reading order.
+export const EDIT_MODE_HELP = [
+  "+ inserts here",
+  "- removes the one left of it",
+  "↺ undoes edits",
+] as const;
+
+export const PERSIST_HELP = [
+  "☐ this session only",
+  "☑ default for every session",
+] as const;
+
 export const HELP_TEXT = `
 cc-candybar - Beautiful powerline statusline for Claude Code
 
@@ -27,8 +51,10 @@ Configuration:
   needed, and writing your own \`root\` cannot delete it. Click
   ☰ ${DISCLOSURE_GLYPH_CLOSED} on the bar for preset switching, edit mode, and a config menu
   of clickable theme/look/style/wrap/padding controls. The \`persist?\`
-  checkbox there chooses where a change lands: unchecked it applies to this
-  session only, checked it becomes the default every session opens with.
+  checkbox there chooses where a change lands: ${PERSIST_HELP.join(", ")}.
+
+  Anywhere the bar shows ${HELP_GLYPH_CLOSED}, clicking it reveals these same instructions
+  in place. In edit mode: ${EDIT_MODE_HELP.join(", ")}.
 
 Subcommands:
   install                  One-shot setup: stages the runtime (native render
