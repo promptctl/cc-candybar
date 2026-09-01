@@ -934,7 +934,7 @@ Opening it shows the always-available functionality:
 
 ```
 ☰ ▾
-  ☐ persist?   ▦ default ▸ ↺   ⚙ config ▾   ✎ edit
+  ☐ persist?  (?)   ▦ default ▸ ↺   ⚙ config ▾   ✎ edit
      🎨 tokyo-night ▸ ↺   ◐ none ▸ ↺   ✦ powerline ▸ ↺   wrap: on ↺   ◀ padding 1 ▶ ↺
 ```
 
