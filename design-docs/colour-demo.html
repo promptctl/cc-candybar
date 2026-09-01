@@ -1,0 +1,390 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Recursive subdivision — colour demo</title>
+<style>
+  body{background:#0f1115;color:#c9d1d9;font:13px/1.55 ui-monospace,SFMono-Regular,Menlo,monospace;margin:0;padding:26px 30px 60px}
+  h1{font-size:15px;letter-spacing:.09em;text-transform:uppercase;color:#7d8590;font-weight:600;margin:0 0 4px}
+  h2{font-size:11px;letter-spacing:.13em;text-transform:uppercase;color:#6e7681;font-weight:600;margin:32px 0 10px;border-bottom:1px solid #21252b;padding-bottom:6px}
+  .sub{color:#6e7681;margin:0 0 20px;max-width:78ch}
+  .bar{display:flex;margin:0 0 2px}
+  .cell{padding:3px 11px;white-space:pre}
+  .lbl{color:#6e7681;width:170px;flex:none;padding:3px 10px 3px 0;text-align:right;font-size:11px}
+  .row{display:flex;align-items:flex-start;margin-bottom:14px}
+  .ctl{display:flex;gap:22px;flex-wrap:wrap;align-items:center;background:#171a1f;padding:11px 15px;border-radius:6px;margin-bottom:6px}
+  .ctl label{display:flex;gap:7px;align-items:center;color:#8b949e;font-size:11px}
+  input[type=range]{width:118px}
+  select,button{background:#0f1115;color:#c9d1d9;border:1px solid #30363d;border-radius:4px;padding:3px 8px;font:inherit;font-size:11px}
+  button{cursor:pointer}
+  button:hover{background:#1c2027;border-color:#484f58}
+  .note{color:#6e7681;font-size:11px;margin:4px 0 0 170px;max-width:80ch}
+  em{color:#a5d6ff;font-style:normal}
+  .two{display:grid;grid-template-columns:1fr 1fr;gap:0 26px;align-items:start}
+  .side{min-width:0}
+  .item{margin-bottom:20px;overflow-x:auto}
+  .hd{color:#8b949e;font-size:11px;letter-spacing:.1em;text-transform:uppercase;
+      border-bottom:1px solid #21252b;padding-bottom:5px;position:sticky;top:0;background:#0f1115}
+  .col{min-width:0;overflow-x:auto}
+  .tname{color:#565e68;font-size:10px;letter-spacing:.05em;margin:0 0 3px}
+</style>
+<body>
+<h1>Colour by recursive subdivision</h1>
+<p class="sub">Every node owns a region of colour space; its children divide that region. No colour is hand-picked: every cell names the SAME role (<code>surface</code>) and reads it from a palette transposed by the product of the offsets along that node's path. Real rich-js themes, real <code>transposePalette</code>. The top row is today's <code>hue.step</code> for comparison. Drag <em>hidden leaves</em> — it recolours row 2 under hue.step and cannot touch it under subdivision.</p>
+
+<div class="ctl">
+  <label>theme <select id=th></select></label>
+  <label>distribution <select id=dm></select></label>
+  <label>menu style <select id=ms></select></label>
+  <label>hue offset <input type=range id=ho min=0 max=360><span id=hov></span></label>
+  <label>chroma lift <input type=range id=cl min=50 max=500><span id=clv></span></label>
+  <label>hue.step° <input type=range id=hs min=0 max=40><span id=hsv></span></label>
+  <label>settings-menu entries <input type=range id=hl min=0 max=30><span id=hlv></span></label>
+  <label>extra cells in row 1 <input type=range id=xc min=0 max=4><span id=xcv></span></label>
+  <label>root hue span <input type=range id=h0 min=0 max=360><span id=h0v></span></label>
+  <label>contraction <input type=range id=cn min=10 max=100><span id=cnv></span></label>
+  <label>chroma spread <input type=range id=cs min=100 max=400><span id=csv></span></label>
+  <label>menu lightness <input type=range id=ml min=100 max=260><span id=mlv></span></label>
+  <button id=rs>reset</button>
+</div>
+<div id=out></div>
+
+<script src="colour-demo-richjs.js"></script>
+<script>
+const {listThemePalettes, getThemePalette, transposePalette} = RJ;
+
+// ── ThemeKey as a group element ───────────────────────────────────────────────
+// hue: additive (circle) · chroma: multiplicative · lightness: affine L↦sL+t
+const ID={hueShift:0,chromaScale:1,lightnessScale:1,lightnessShift:0};
+// group product — apply a, then b. Order matters; root→leaf is the order.
+const mul=(a,b)=>({hueShift:a.hueShift+b.hueShift, chromaScale:a.chromaScale*b.chromaScale,
+  lightnessScale:b.lightnessScale*a.lightnessScale,
+  lightnessShift:b.lightnessScale*a.lightnessShift+b.lightnessShift});
+// g^u — the geodesic from identity. Exact one-parameter subgroup of Aff(1):
+// hold the fixed point, scale the approach to it.
+function pow(g,u){
+  const hueShift=g.hueShift*u, chromaScale=g.chromaScale**u, lightnessScale=g.lightnessScale**u;
+  const lightnessShift = Math.abs(g.lightnessScale-1)<1e-9 ? g.lightnessShift*u
+    : (g.lightnessShift/(1-g.lightnessScale))*(1-lightnessScale);
+  return {hueShift,chromaScale,lightnessScale,lightnessShift};
+}
+
+// ── distributions: (i,n) → position in [0,1] ──────────────────────────────────
+const PHI=0.6180339887498949;
+const vdc=i=>{let d=0,f=.5;while(i>0){d+=f*(i&1);i>>=1;f/=2}return d};
+// `free` marks a distribution that never consults n — the sibling COUNT. Those
+// are the only ones that isolate: a node's position is a function of its own
+// index alone, so adding, removing, or hiding a sibling cannot move it.
+// The n-dependent two are kept for CLOSED sets (a menu's option domain, where
+// the count is the set itself, not an accident of authoring) and as the control.
+const DIST={
+  'van der Corput'  :{f:(i,n)=>vdc(i),                 free:true },
+  'golden angle'    :{f:(i,n)=>(i*PHI)%1,              free:true },
+  'ends-interleaved':{f:(i,n)=>{const s=i%2===0?i/2:n-1-(i-1)/2;return (s+.5)/n}, free:false},
+  'monotonic'       :{f:(i,n)=>(i+.5)/n,               free:false},
+};
+
+// ── the tree ──────────────────────────────────────────────────────────────────
+// The real bundled bar's segments, but EVERY cell names the same role.
+// Decorative role-picking (`panel` here, `surface-active` there, chosen so cells
+// would differ) is deleted: a role name says what a cell MEANS, and spending it
+// on how a cell LOOKS leaves no way to say either cleanly. All decorative
+// variety now comes from the subdivision; meaning stays in the anchoring
+// section, where `error` is read through the identical tree.
+const BAR=[
+  [' ~/c/cc-candybar ',' (git) cc-candybar b5e87f8 ⟋ main ⏱ 4h ',
+   ' id ↗ proj ↗ log ↗ repo ✎ edit ',' ≡ ▸ '],
+  [' ✳ Opus 5 ',' ◔ 281,953 (72%) ',' ⏱ 59m ',' ▣ 9% (1h 11m) ',' ◑ 41% (3d 5h) ',
+   ' 🎨 atom-one-dark ▸ '],
+];
+const MENU=['dracula','nord','gruvbox','rose-pine','catppuccin','tokyo-night'];
+const SUBMENU=['frappe','latte','macchiato','mocha'];
+const SUB_AT=4;   // 'catppuccin' is the entry that opens a submenu
+
+// The bundled bar's ACTUAL bg roles, in order. Used only by the faithful
+// hue.step reproduction below — the proposal deletes decorative role-picking,
+// but a model of TODAY has to keep it or it is not a model of today.
+const REAL_ROLES=[
+  ['surface','surface-active','surface','surface'],
+  ['panel','surface-active','surface','panel','panel','surface'],
+];
+
+// TODAY, reproduced from MEASURED indices. These were solved by rendering the
+// real bar through the real client and matching each cell's RGB back to a hue
+// index — not assumed. The gaps are the finding: adjacent visible segments sit
+// 3 apart because edit-mode chrome (+/- affordances, gated OFF) is interleaved
+// around every segment and the cursor counts hidden leaves. The 11 and 15 jumps
+// are the settings disclosure. Most of this bar's hue budget is spent on
+// segments that never render.
+const REAL_IDX=[[2,5,8,11],[22,25,28,31,34,37]];
+function faithfulHueStep(base,P){
+  return BAR.map((row,r)=>`<div class=bar>${row.map((t,i)=>{
+    const p=transposePalette(base,{hueShift:REAL_IDX[r][i]*P.HS,chromaScale:1,lightnessScale:1,lightnessShift:0});
+    return `<span class=cell style="background:${css(p.get(REAL_ROLES[r][i]))};color:${css(p.get('foreground'))}">${t}</span>`;
+  }).join('')}</div>`).join('');
+}
+
+// HL settings-menu entries hang off the `≡` trigger as its CONTENTS — not as
+// siblings of `directory`. Today they are spliced into row 1's layout, so the
+// global cursor walks them and they repaint row 2 while rendering nothing.
+// As an instance they are counted among the menu's own children only.
+const treeFor=P=>({children:[
+  {children:[...BAR[0].map((t,i)=>({t,bg:'surface',
+    ...(i===3?{menu:Array.from({length:P.HL},(_,k)=>'setting '+(k+1))}:{})})),
+    ...Array.from({length:P.XC},(_,k)=>({t:' new '+(k+1)+' ',bg:'surface'}))]},
+  {children:BAR[1].map((t,i)=>({t,bg:'surface',...(i===5?{menu:MENU}:{})}))},
+]});
+
+// ── AN INSTANCE ───────────────────────────────────────────────────────────────
+// (spread, dist, next) — the constraints one instance divides its region by, and
+// the constraints it hands its children. Not a per-depth table: an instance's
+// constraints say what that instance is FOR. The bar spreads hue (its cells are
+// different KINDS of thing); a menu spreads lightness (its cells are members of
+// one family). Munsell's distinction, declared rather than derived from depth.
+const barCons=(P,dist,d=0)=>({
+  spread:{hueShift:P.H0*P.c**d, chromaScale:P.CS**(P.c**d), lightnessScale:1, lightnessShift:0},
+  next:()=>barCons(P,dist,d+1),
+});
+// A disclosure starts a NEW instance: seeded by the trigger's own colour, so its
+// contents read as that trigger's family, but divided by its own constraints and
+// counted among its own children only. Nothing inside it can reach the bar.
+const menuCons=P=>({
+  spread:{hueShift:0, chromaScale:1, lightnessScale:P.ML, lightnessShift:0},
+  dist:DIST['monotonic'],
+  next:()=>menuCons(P),
+});
+
+// ── THE WHOLE SYSTEM ──────────────────────────────────────────────────────────
+// Colour is a PURE FUNCTION OF A NODE'S ADDRESS — the [index, siblingCount] pairs
+// from the root down. There is no walk, no cursor, no traversal state, and no
+// ordering requirement: any node's colour is computable alone, without rendering
+// or even visiting any other node. That is what isolates a subtree — nothing
+// outside its own address can reach it. With an n-free distribution the count is
+// never read, so the address collapses to the indices alone.
+function keyAt(addr,P,dist,tail){
+  let key=rootKey(P), cons=barCons(P,dist);
+  for(const [i,n] of addr){
+    key=mul(key, pow(cons.spread, DIST[dist].f(i,n)-0.5));
+    cons=cons.next();
+  }
+  if(tail){ // a disclosure: a fresh instance seeded here, with its own constraints
+    const mc=menuCons(P), [i,n]=tail;
+    key=mul(key, pow(mc.spread, mc.dist.f(i,n)-0.5));
+  }
+  return key;
+}
+
+// ── THE THEME IS THE PALETTE ──────────────────────────────────────────────────
+// No hueShift. Rotating hue synthesises colours the theme's designer never chose,
+// which is why every theme collapsed to "the same bar at a different lightness" —
+// theme identity LIVES in hue, and spending the whole circle spends all of it.
+//
+// Instead: tint the theme's own neutral surface toward the theme's own curated
+// hues. Every colour is then a blend of two colours the theme already contains.
+// dracula yields purple/blue/pink, gruvbox sage/tan/gold, nord ice/steel/mauve —
+// distinct BECAUSE the vocabulary is the theme's, not ours. It needs no light/dark
+// branch either: the base carries the lightness, so latte tints just as correctly.
+//
+// error/success/warning are deliberately NOT in this vocabulary. Decoration cannot
+// collide with meaning because meaning is not in the set — a stronger guarantee
+// than hue-anchoring, which only kept them from MOVING.
+const DECOR_HUES=['primary','secondary','accent'];
+const DECOR_BASES=['surface','panel','surface-lighten-1'];
+const DECOR_AMTS=[0.16,0.30];
+// The decorative vocabulary, ordered. An address selects one entry; it does not
+// synthesise a colour. 3 x 3 x 2 = 18 backgrounds, all of them the theme's own.
+const DECOR=[];
+for(const a of DECOR_AMTS) for(const h of DECOR_HUES) for(const b of DECOR_BASES) DECOR.push({b,h,a});
+const mixc=(x,y,p)=>({red:x.red+(y.red-x.red)*p, green:x.green+(y.green-x.green)*p,
+                      blue:x.blue+(y.blue-x.blue)*p});
+const entry=idx=>DECOR[((idx%DECOR.length)+DECOR.length)%DECOR.length];
+
+// "State is the pure hue" was an ASSERTION about the palettes, and textual-dark
+// disproved it: its `secondary` is #004578, a navy already darker than most
+// surfaces, so its pure form landed on top of the decorative tints (contrast
+// 1.42 — indistinguishable). textual-ansi's primary was worse at 1.14.
+//
+// So the separation is ENFORCED rather than assumed: push the pure hue toward
+// `foreground` until it clears the most-tinted decorative cell this hue can
+// produce. Themes whose roots are already vivid stop at the first step and are
+// unchanged; only the ones that would have failed move. Global minimum across
+// 23 themes x 3 hues: 2.20, up from 1.14.
+const STATE_FLOOR=2.2;
+const stateCache=new Map();
+function stateColor(P,hueName){
+  const ck=P.name+'|'+hueName; if(stateCache.has(ck)) return stateCache.get(ck);
+  const S=P.get('surface'), hue=P.get(hueName), fg=P.get('foreground');
+  const decorMax=mixc(S,hue,0.30), pure=mixc(S,hue,0.92);
+  let c=pure;
+  for(let k=0;k<=10;k++){ c=mixc(pure,fg,k*0.08); if(CR(c,decorMax)>=STATE_FLOOR) break; }
+  stateCache.set(ck,c); return c;
+}
+function decorBg(P,idx,open){
+  const d=entry(idx), base=P.get(d.b), hue=P.get(d.h);
+  if(!base||!hue) return P.get('surface');
+  // STATE AND DECORATION MUST NOT SHARE A REGION. Emphasis by DEGREE failed for
+  // the same reason hue rotation did: the decorative vocabulary already spans a
+  // wide band of tints, so "more tinted" lands inside the space other cells
+  // occupy and the open trigger reads as just another segment.
+  //
+  // So decoration is always a TINT (mix <= 0.30) and state is the PURE hue. Same
+  // colour family — the band still visibly belongs to its trigger — at an
+  // intensity decoration can never reach. Disjoint by construction, exactly as
+  // error/success/warning are kept safe by being absent from the vocabulary
+  // rather than by being far away in it.
+  return open ? stateColor(P,d.h) : mixc(base,hue,d.a);
+}
+// A menu inverts the axes: hue HELD at its trigger's, only the tint AMOUNT
+// varying — the items are one family. HOW that amount varies is a taste call
+// with a measurable component: a monotonic ramp spreads lightness by 40-50 and
+// reads as a directional wedge rather than a set of peers, because it implies an
+// ordering the options do not have. The alternatives stay non-directional.
+// Position along the plane->state axis, in [0,1]. The previous version mapped
+// these through a narrow window (+/-0.08), which is why "scatter" barely moved:
+// the items were all landing on nearly the same colour. These span the band.
+const MENU_STYLE={
+  'scatter':     (k,n)=>0.12+0.80*vdc(k),                 // n-free, non-directional
+  'alternating': (k,n)=>{const s=k%2===0?k/2:n-1-(k-1)/2; return 0.12+0.80*(s/Math.max(1,n-1));},
+  'ramp':        (k,n)=>0.12+0.80*(k/Math.max(1,n-1)),    // the directional wedge
+  'uniform':     ()=>0.55,
+};
+
+// DEPTH ADVANCES THE HUE. A nested disclosure takes the NEXT hue in the
+// vocabulary, so a submenu cannot be mistaken for its parent's band even though
+// both live in the state region — and it recedes one more step toward
+// `background`, so the two cues agree rather than relying on either alone.
+// Depth is the only input, so nesting needs no new rule: level 3 is level 0's
+// hue at a deeper plane, and nothing in the walk has to know how deep it is.
+function menuPlane(P,hostIdx,depth){
+  const d=entry(hostIdx);
+  const hi=(DECOR_HUES.indexOf(d.h)+depth)%DECOR_HUES.length;
+  const st=stateColor(P,DECOR_HUES[hi]);
+  return {st, plane:mixc(st,P.get('background'),Math.min(0.75,0.42+0.14*depth))};
+}
+// A TRIGGER IS DRAWN FROM WHAT IT OPENS, NOT FROM WHERE IT SITS. An item that
+// opens a disclosure takes the PEAK of its children's region, so the thing you
+// clicked and the band it produced are the same colour and the parent is
+// obvious. Applied at every depth by the same line: the bar's trigger already
+// took its menu's hue, and a menu item that opens a submenu now takes the
+// submenu's. Its siblings keep scattering in their own region around it.
+function decorMenuBg(P,hostIdx,k,n,depth,opens){
+  if(opens) return menuPlane(P,hostIdx,(depth||0)+1).st;
+  const {st,plane}=menuPlane(P,hostIdx,depth||0);
+  return mixc(plane,st,MENU_STYLE[ms.value](k,n));
+}
+
+// ── render: the segment names a ROLE; the transposition decides what it means ──
+const css=v=>`rgb(${v.red},${v.green},${v.blue})`;
+// The node names a ROLE; the transposition decides what that role resolves to.
+// `override` is used only by the anchoring section, which re-reads the same tree
+// through one different role name to show semantics surviving the variety.
+function cell(node,key,base,override){
+  const p=transposePalette(base,key);
+  return `<span class=cell style="background:${css(p.get(override ?? node.bg ?? 'surface'))};color:${css(p.get('foreground'))}">${node.t}</span>`;
+}
+// The root's own key — where the whole signature sits before anything divides it.
+// Distinct from the root's SPREAD, which is how wide its children range.
+// Chroma LIFT lives here, not in the spread: a spread is symmetric about identity,
+// so it varies saturation without ever raising it. Hue rotation cannot manufacture
+// colour that the base role does not have — atom-one-dark's `surface` is 59,65,77,
+// and every rotation of a near-grey is another near-grey. Saturation is its own axis.
+const rootKey=P=>({hueShift:P.HO, chromaScale:P.CL, lightnessScale:1, lightnessShift:0});
+
+// TODAY'S SYSTEM, for comparison: one global counter over segment leaves in
+// pre-order, hueShift = index x step. No containers, no regions — the whole bar
+// is one flat sequence, which is exactly why inserting a leaf recolours the rest.
+function hueStepRows(base,P,bgRole){
+  let n=0, h='';
+  const step=()=>mul(rootKey(P),{hueShift:n++*P.HS,chromaScale:1,lightnessScale:1,lightnessShift:0});
+  for(const row of treeFor(P).children){
+    const cells=row.children.map(kid=>{
+      const c=cell(kid,step(),base,bgRole);
+      // Today a disclosure's contents are SPLICED into this row, so the cursor
+      // walks every one of them here — invisibly, and at the bar's expense.
+      (kid.menu??[]).forEach(step);
+      return c;
+    });
+    h+=`<div class=bar>${cells.join('')}</div>`;
+  }
+  return h;
+}
+
+// The address selects an ENTRY from the theme's vocabulary. vdc keeps it n-free,
+// so a node's colour still depends on its own index and nothing else.
+const pick=(addr,dist)=>{
+  let v=0, w=1;
+  for(const [i,n] of addr){ v+=DIST[dist].f(i,n)*w*DECOR.length; w*=0.37; }
+  return Math.round(v);
+};
+function walk(dist,P){
+  const T=treeFor(P), R=T.children.length, out=[], drops=[];
+  T.children.forEach((row,r)=>{
+    const N=row.children.length;
+    out.push(row.children.map((node,i)=>({node, idx:pick([[r,R],[i,N]],dist), open:!!node.menu})));
+    row.children.forEach((node,i)=>{
+      if(!node.menu) return;
+      const host=pick([[r,R],[i,N]],dist), M=node.menu.length;
+      drops.push(node.menu.map((t,k)=>({node:{t:' '+t+' '}, host, k, n:M, depth:0,
+        opens:k===SUB_AT})));
+      // one entry is itself a disclosure — its band is one level deeper
+      drops.push(SUBMENU.map((t,k)=>({node:{t:' '+t+' '}, host, k, n:SUBMENU.length, depth:1})));
+    });
+  });
+  return {out,drops};
+}
+// Pure hue is bright enough that the text colour has to be chosen, not assumed:
+// pick whichever of background/foreground actually contrasts on this theme.
+const lin=v=>{v/=255;return v<=0.04045?v/12.92:((v+0.055)/1.055)**2.4};
+const RL=c=>0.2126*lin(c.red)+0.7152*lin(c.green)+0.0722*lin(c.blue);
+const CR=(a,b)=>{const x=RL(a),y=RL(b);return (Math.max(x,y)+0.05)/(Math.min(x,y)+0.05)};
+const readableOn=(P,bg)=>{const a=P.get('background'),b=P.get('foreground');
+  return CR(bg,a)>=CR(bg,b)?a:b;};
+function tcell(P,node,idx,open){
+  const bg=decorBg(P,idx,open), fg=open?readableOn(P,bg):P.get('foreground');
+  return `<span class=cell style="background:${css(bg)};color:${css(fg)}">${node.t}</span>`;
+}
+function rows(dist,base,P,bgRole){
+  return walk(dist,P).out.map(o=>`<div class=bar>${o.map(x=>
+    bgRole ? `<span class=cell style="background:${css(base.get(bgRole))};color:${css(base.get('foreground'))}">${x.node.t}</span>`
+           : tcell(base,x.node,x.idx,x.open)).join('')}</div>`).join('');
+}
+function render(){
+  const P={H0:+h0.value, c:+cn.value/100, ML:+ml.value/100, CS:+cs.value/100,
+           HO:+ho.value, CL:+cl.value/100, HS:+hs.value, HL:+hl.value, XC:+xc.value};
+  hov.textContent=P.HO+'\u00b0'; h0v.textContent=P.H0+'\u00b0'; cnv.textContent=P.c.toFixed(2);
+  mlv.textContent=P.ML.toFixed(2); csv.textContent=P.CS.toFixed(2);
+  clv.textContent='\u00d7'+P.CL.toFixed(2); hsv.textContent=P.HS+'\u00b0';
+  hlv.textContent=P.HL; xcv.textContent=P.XC;
+  const D=dm.value;
+
+  let h=`<p class=note style="margin-left:0">One tree, one rule, every theme \u2014 each with its theme menu open. No hue rotation: a segment's background is <code>mix(base, themeHue, amount)</code>, both operands colours the theme already contains, selected by the node's address. The drop band holds its trigger's hue and varies only the amount, so it reads as that segment's family.</p>`;
+  for(const t of listThemePalettes()){
+    const base=getThemePalette(t), W=walk(D,P);
+    const sub=W.drops[W.drops.length-1]??[], drop=W.drops[W.drops.length-2]??[];
+    h+=`<div class=item><div class=tname>${t}</div>`;
+    h+=W.out.map(o=>`<div class=bar>${o.map(x=>tcell(base,x.node,x.idx,x.open)).join('')}</div>`).join('');
+    const band=cells=>`<div class=bar>${cells.map(x=>{
+      const b=decorMenuBg(base,x.host,x.k,x.n,x.depth,x.opens);
+      return `<span class=cell style="background:${css(b)};color:${css(readableOn(base,b))}">${x.node.t}</span>`;
+    }).join('')}</div>`;
+    h+=band(drop)+band(sub);
+    h+=`</div>`;
+  }
+  out.innerHTML=h;
+}
+// [LAW:one-source-of-truth] Defaults live here and nowhere else — the inputs are
+// seeded from this map, so `reset` restores the same values the page loaded with
+// rather than a second copy that can drift from the markup.
+const DEFAULTS={th:'atom-one-dark', dm:'van der Corput', ms:'scatter', ho:0, cl:180, hs:14, hl:0, xc:0, h0:360, cn:50, cs:100, ml:165};
+const INPUTS={th,dm,ms,ho,cl,hs,hl,xc,h0,cn,cs,ml};
+const applyDefaults=()=>{ for(const[k,el]of Object.entries(INPUTS)) el.value=DEFAULTS[k]; };
+
+th.innerHTML=listThemePalettes().map(n=>`<option>${n}</option>`).join('');
+dm.innerHTML=Object.keys(DIST).map(n=>`<option>${n}</option>`).join('');
+ms.innerHTML=Object.keys(MENU_STYLE).map(n=>`<option>${n}</option>`).join('');
+applyDefaults();
+Object.values(INPUTS).forEach(e=>e.addEventListener('input',render));
+th.addEventListener('change',render);
+rs.addEventListener('click',()=>{applyDefaults();render();});
+render();
+</script>
+</body>
+</html>
