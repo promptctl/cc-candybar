@@ -1,3 +1,10 @@
+# [1.41.0](https://github.com/promptctl/cc-candybar/compare/v1.40.0...v1.41.0) (2026-09-01)
+
+
+### Features
+
+* **config:** a reusable (?) that shows instructions where they are needed (candybar-settings-ui-aok.6) ([#195](https://github.com/promptctl/cc-candybar/issues/195)) ([d1903db](https://github.com/promptctl/cc-candybar/commit/d1903dbda3153d58945529851a3a5bff9a73645b))
+
 # [1.40.0](https://github.com/promptctl/cc-candybar/compare/v1.39.0...v1.40.0) (2026-08-31)
 
 
