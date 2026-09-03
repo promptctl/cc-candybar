@@ -8,10 +8,66 @@ import { dlog, type DaemonLogger } from "./log";
 // Only the RSS trigger remains — idle and age limits were removed because they
 // interrupted active sessions. The RSS limit is a true anomaly backstop; normal
 // operation should never approach it now that transcript parsing is pruned.
-const DEFAULT_RSS_LIMIT =
-  (parseInt(process.env["CC_CANDYBAR_RSS_LIMIT_MB"] ?? "", 10) || 512) *
-  1024 *
-  1024;
+//
+// [LAW:one-source-of-truth] The daemon's memory budget is ONE number, read from
+// ONE place. Two limits derive from it and their ORDER is the whole point:
+//
+//   RSS backstop (this module)   — graceful: heap snapshot, logged shutdown,
+//                                  clean restart on the next tick.
+//   V8 old-space cap (spawners)  — hard: V8 aborts with SIGABRT below every JS
+//                                  handler, so no log line, no snapshot, and
+//                                  the next daemon finds only a stale socket.
+//
+// The cap sits at HEAP_CAP_OVER_RSS × the backstop, a margin wide enough that
+// the graceful path fires first under any growth the 60 s poll can see (a
+// burst that doubles RSS inside one poll window can still reach the hard cap).
+// Before this the two were unrelated literals (400 MB heap in
+// each spawner, 512 MB RSS here): a cold daemon seeding a large transcript tree
+// for a dozen sessions blew the heap in seconds, aborted silently, and crash-
+// looped on every render tick while the backstop — a 60 s poll — never got a
+// turn. Raising the env override raises BOTH, because both spawners derive the
+// cap through heapCapMb below. The Rust client mirrors RSS_LIMIT_ENV,
+// DEFAULT_RSS_LIMIT_MB, and HEAP_CAP_OVER_RSS as literals
+// (rust-client/src/launch.rs); scripts/check-protocol.mjs fails the build on
+// drift.
+export const RSS_LIMIT_ENV = "CC_CANDYBAR_RSS_LIMIT_MB";
+export const DEFAULT_RSS_LIMIT_MB = 2048;
+export const HEAP_CAP_OVER_RSS = 2;
+
+// [LAW:parse-dont-validate] Absent → default; a positive integer → that; present
+// but malformed → throw. Only an operator ever sets this variable, so garbage
+// is an operator error, and `|| default` would silently run at a budget they
+// did not ask for. [LAW:no-silent-failure]
+//
+// [LAW:one-source-of-truth] The grammar is ONE rule both runtimes apply
+// verbatim — ASCII digits only, > 0, within the safe-integer range —
+// so the spawner and the daemon it spawns accept and reject the same values
+// (rust-client/src/launch.rs heap_cap_mb). A grammar that differed by so much
+// as a leading `+` would let a client spawn a daemon that refuses to boot.
+export function rssLimitMb(env: NodeJS.ProcessEnv): number {
+  const raw = env[RSS_LIMIT_ENV];
+  if (raw === undefined) return DEFAULT_RSS_LIMIT_MB;
+  const mb = /^\d+$/.test(raw) ? Number(raw) : NaN;
+  if (!Number.isSafeInteger(mb) || mb <= 0) {
+    throw new Error(
+      `${RSS_LIMIT_ENV} must be a positive integer (MB), got ${JSON.stringify(raw)}`,
+    );
+  }
+  return mb;
+}
+
+// The `--max-old-space-size` value a spawner hands node for the daemon.
+export function heapCapMb(env: NodeJS.ProcessEnv): number {
+  return rssLimitMb(env) * HEAP_CAP_OVER_RSS;
+}
+
+const BYTES_PER_MB = 1024 * 1024;
+
+// The budget in the unit `process.memoryUsage().rss` reports.
+export function rssLimitBytes(env: NodeJS.ProcessEnv): number {
+  return rssLimitMb(env) * BYTES_PER_MB;
+}
+
 const DEFAULT_CHECK_INTERVAL = 60 * 1000;
 const HEAP_SNAPSHOT_KEEP = 3;
 
@@ -42,7 +98,7 @@ export interface LimitsHandle {
 }
 
 export function makeLimits(deps: LimitsDeps): LimitsHandle {
-  const rssLimit = deps.rssLimitBytes ?? DEFAULT_RSS_LIMIT;
+  const rssLimit = deps.rssLimitBytes ?? DEFAULT_RSS_LIMIT_MB * BYTES_PER_MB;
   const keep = deps.snapshotsKeep ?? HEAP_SNAPSHOT_KEEP;
   let triggered = false;
 
