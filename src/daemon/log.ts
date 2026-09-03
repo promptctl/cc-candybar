@@ -5,32 +5,31 @@ import { logPath } from "./paths";
 const MAX_BYTES = 5 * 1024 * 1024;
 const KEEP_GENERATIONS = 3;
 
-let stream: fs.WriteStream | null = null;
-let bytesWritten = 0;
+// [LAW:no-ambient-temporal-coupling] Every line is a synchronous append, so a
+// line is on disk the moment the call returns — including the death line each
+// shutdown path writes last, which an async stream dropped whenever
+// `process.exit` outran its flush. The daemon writes a handful of short lines
+// per second; a sync append is microseconds. No stream means nothing to flush,
+// nothing to close, and no window in which a late writer can reopen a sink
+// that nobody waits for. [LAW:polishing-by-subtraction]
+let bytesWritten: number | null = null;
 
-function ensureStream(): fs.WriteStream {
-  if (stream) return stream;
-  const filePath = logPath();
+// Pre-load size once so rotation triggers correctly across daemon restarts.
+function currentBytes(filePath: string): number {
+  if (bytesWritten !== null) return bytesWritten;
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
-  // Pre-load size so rotation triggers correctly across daemon restarts.
   try {
     bytesWritten = fs.statSync(filePath).size;
   } catch {
     bytesWritten = 0;
   }
-  stream = fs.createWriteStream(filePath, { flags: "a" });
-  return stream;
+  return bytesWritten;
 }
 
 // Self-rotation: when daemon.log exceeds MAX_BYTES, shift .1→.2, .2→.3, drop
 // the oldest, and start fresh. Daemon-internal so we don't depend on any
 // external rotator. Cheap because rotation only runs at the rollover boundary.
-function rotate(): void {
-  const filePath = logPath();
-  if (stream) {
-    stream.end();
-    stream = null;
-  }
+function rotate(filePath: string): void {
   for (let i = KEEP_GENERATIONS - 1; i >= 1; i--) {
     const src = `${filePath}.${i}`;
     const dst = `${filePath}.${i + 1}`;
@@ -44,34 +43,18 @@ function rotate(): void {
   bytesWritten = 0;
 }
 
+export type LogLevel = "info" | "warn" | "error";
+
 // [LAW:locality-or-seam] The logging capability daemon components depend on.
 // `dlog` is the daemon's implementation (writes to daemon.log); consumers that
 // inject a different impl (a quiet default in tests) take this shape.
-export type DaemonLogger = (
-  level: "info" | "warn" | "error",
-  msg: string,
-) => void;
+export type DaemonLogger = (level: LogLevel, msg: string) => void;
 
-export function dlog(level: "info" | "warn" | "error", msg: string): void {
+export function dlog(level: LogLevel, msg: string): void {
+  const filePath = logPath();
   const line = `${new Date().toISOString()} [${level}] ${msg}\n`;
-  const buf = Buffer.from(line, "utf8");
-  const s = ensureStream();
-  s.write(buf);
-  bytesWritten += buf.length;
-  if (bytesWritten >= MAX_BYTES) rotate();
-}
-
-// [LAW:no-ambient-temporal-coupling] The stream is async; `process.exit` right
-// after `stream.end()` drops whatever is still buffered — which is exactly the
-// death line every shutdown path writes last. Handing the caller the flush
-// completion makes "log flushed" a state the exit provably awaits. `end(cb)`
-// fires cb on 'finish' OR 'error', so a dead disk still settles it.
-export function closeLog(onClosed: () => void): void {
-  if (!stream) {
-    onClosed();
-    return;
-  }
-  const s = stream;
-  stream = null;
-  s.end(onClosed);
+  const before = currentBytes(filePath);
+  fs.appendFileSync(filePath, line);
+  bytesWritten = before + Buffer.byteLength(line, "utf8");
+  if (bytesWritten >= MAX_BYTES) rotate(filePath);
 }

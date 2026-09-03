@@ -18,8 +18,10 @@ import { dlog, type DaemonLogger } from "./log";
 //                                  handler, so no log line, no snapshot, and
 //                                  the next daemon finds only a stale socket.
 //
-// The cap sits at HEAP_CAP_OVER_RSS × the backstop so the graceful path is the
-// one that fires. Before this the two were unrelated literals (400 MB heap in
+// The cap sits at HEAP_CAP_OVER_RSS × the backstop, a margin wide enough that
+// the graceful path fires first under any growth the 60 s poll can see (a
+// burst that doubles RSS inside one poll window can still reach the hard cap).
+// Before this the two were unrelated literals (400 MB heap in
 // each spawner, 512 MB RSS here): a cold daemon seeding a large transcript tree
 // for a dozen sessions blew the heap in seconds, aborted silently, and crash-
 // looped on every render tick while the backstop — a 60 s poll — never got a
@@ -36,11 +38,18 @@ export const HEAP_CAP_OVER_RSS = 2;
 // but malformed → throw. Only an operator ever sets this variable, so garbage
 // is an operator error, and `|| default` would silently run at a budget they
 // did not ask for. [LAW:no-silent-failure]
+//
+// [LAW:one-source-of-truth] The grammar is ONE rule both runtimes apply
+// verbatim — trimmed, ASCII digits only, > 0, within the safe-integer range —
+// so the spawner and the daemon it spawns accept and reject the same values
+// (rust-client/src/launch.rs heap_cap_mb). A grammar that differed by so much
+// as a leading `+` would let a client spawn a daemon that refuses to boot.
 export function rssLimitMb(env: NodeJS.ProcessEnv): number {
   const raw = env[RSS_LIMIT_ENV];
   if (raw === undefined) return DEFAULT_RSS_LIMIT_MB;
-  const mb = Number.parseInt(raw, 10);
-  if (!Number.isInteger(mb) || mb <= 0 || String(mb) !== raw.trim()) {
+  const digits = raw.trim();
+  const mb = /^\d+$/.test(digits) ? Number(digits) : NaN;
+  if (!Number.isSafeInteger(mb) || mb <= 0) {
     throw new Error(
       `${RSS_LIMIT_ENV} must be a positive integer (MB), got ${JSON.stringify(raw)}`,
     );
@@ -175,9 +184,6 @@ export function realLimitsDeps(
     pid: process.pid,
     snapshotDir: dir,
     log: dlog,
-    // [LAW:effects-at-boundaries] The one env read for the backstop; the
-    // spawners read the same function for the heap cap.
-    rssLimitBytes: rssLimitMb(process.env) * 1024 * 1024,
     rssBytes: () => process.memoryUsage().rss,
     writeHeapSnapshot: (file) => v8.writeHeapSnapshot(file),
     listSnapshots: () => {

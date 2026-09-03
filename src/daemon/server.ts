@@ -34,7 +34,7 @@ import {
   releaseRegistration,
   readRegistryEntry,
 } from "./fork-bomb-breaker";
-import { dlog, closeLog } from "./log";
+import { dlog } from "./log";
 import {
   PROTOCOL_VERSION,
   encodeFrame,
@@ -47,7 +47,12 @@ import { SessionUsageStore } from "./cache/session-usage-store";
 import { RenderCache } from "./cache/render";
 import { WatcherRegistry } from "./cache/watchers";
 import { RuntimeStats } from "./stats";
-import { makeLimits, realLimitsDeps, type LimitsHandle } from "./limits";
+import {
+  makeLimits,
+  realLimitsDeps,
+  rssLimitMb,
+  type LimitsHandle,
+} from "./limits";
 import { armParentWatchdog, anchorFromEnv, pidAlive } from "./parent-watchdog";
 import { resetSpawnBackoff } from "./acquire";
 import { SessionState } from "./session-state";
@@ -155,6 +160,9 @@ let myStartTime: string | null = null;
 // waiting for the next boot's stale-sweep.
 let breakerRegistryPath: string | null = null;
 
+// The parsed memory budget (bytes); set first thing in runDaemon.
+let rssLimitBytes = 0;
+
 export function runDaemon(): void {
   // Catch-alls log + exit so the supervisor (the next client) can restart us.
   // [LAW:no-defensive-null-guards] These are *trust boundaries* — we are
@@ -179,6 +187,13 @@ export function runDaemon(): void {
       shutdown(0);
     });
   }
+
+  // [LAW:effects-at-boundaries] The memory budget is parsed here, before any
+  // resource is committed — a malformed override is refused before the breaker
+  // registers us, before the bind, before the lease, and before a `daemon up`
+  // line could claim a boot that is about to die. Parsed once, threaded into
+  // armLimits and the boot line.
+  rssLimitBytes = rssLimitMb(process.env) * 1024 * 1024;
 
   // [LAW:single-enforcer] The fork-bomb circuit breaker runs FIRST among the
   // resource-committing steps (no dir created, no socket touched, no session
@@ -380,7 +395,8 @@ function onListening(sockPath: string): void {
     // territory), not the flag the spawner meant to pass (the map) — the one
     // question a silent SIGABRT crash-loop leaves open is "which cap was live".
     `daemon up: pid=${process.pid} v=${PROTOCOL_VERSION} sock=${sockPath} ` +
-      `heapCap=${Math.round(v8.getHeapStatistics().heap_size_limit / 1048576)}MB`,
+      `heapCap=${Math.round(v8.getHeapStatistics().heap_size_limit / 1048576)}MB ` +
+      `rssLimit=${Math.round(rssLimitBytes / 1048576)}MB`,
   );
   // [LAW:single-enforcer] This bind is the one process-wide fact that answers
   // "did an outage just end" — see resetSpawnBackoff's doc comment in
@@ -463,7 +479,9 @@ function armBinaryWatch(): void {
 let limits: LimitsHandle | null = null;
 function armLimits(): void {
   limits = makeLimits(
-    realLimitsDeps(stats.startedAt.getTime(), (code) => shutdown(code)),
+    realLimitsDeps(stats.startedAt.getTime(), (code) => shutdown(code), {
+      rssLimitBytes,
+    }),
   );
   limits.arm();
 }
@@ -574,10 +592,9 @@ function shutdown(code: number): void {
       (p) => fs.unlinkSync(p),
     );
   }
-  // [LAW:no-ambient-temporal-coupling] Exit only once the log has flushed, so
-  // the death line above is on disk; the SIGKILL backstop armed first still
-  // bounds a flush that never completes.
-  closeLog(() => process.exit(code));
+  // Every dlog above was a synchronous append (log.ts), so the death line is
+  // already on disk; nothing to flush before exit.
+  process.exit(code);
 }
 
 // --- per-connection handler ---
