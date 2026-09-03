@@ -120,6 +120,23 @@ describe("bdi.2 — config-level shared helper templates", () => {
     expect(plain(render(source, { x: 3 }))).toContain("cost=$3.00");
   });
 
+  test("a helper may call one declared AFTER it: resolution is by name at render, not by declaration order", () => {
+    // [LAW:behavior-not-structure] The contract is the shared define set, not
+    // the order it was folded in: a call is looked up when it executes, against
+    // the full set every template inherits. The bundled default relies on this
+    // (formatEta calls formatLongTimeRemaining, declared later).
+    const source = `{
+      variables: { x: { kind: "input", path: "x", type: "number" } },
+      helpers: {
+        labeled: 'cost={{ template "money" . }}',
+        money: '\${{ printf "%.2f" . }}',
+      },
+      segments: { c: { template: '{{ template "labeled" .x }}' } },
+      root: "c",
+    }`;
+    expect(plain(render(source, { x: 3 }))).toContain("cost=$3.00");
+  });
+
   test("by-name override (merge cascade): user helper wins, renders the override", () => {
     // The default supplies `money`; the user re-declares it by name.
     const dflt: DslConfig = {
