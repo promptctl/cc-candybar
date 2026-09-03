@@ -157,10 +157,12 @@ describe("dlog", () => {
       },
       (dlog, logFile) => {
         dlog("info", "tips over");
-        // The tipping line landed in the file that then became .1.
-        expect(fs.readFileSync(`${logFile}.1`, "utf8")).toMatch(
-          /x+\d{4}-.* \[info\] tips over\n$/,
-        );
+        // The tipping line landed in the file that then became .1. Sliced,
+        // not regexed: `x+` over 5 MB overflows the regex stack on node 22.
+        const seeded = MAX_BYTES - 16;
+        const gen1 = fs.readFileSync(`${logFile}.1`, "utf8");
+        expect(gen1.slice(0, seeded)).toBe("x".repeat(seeded));
+        expect(gen1.slice(seeded)).toMatch(/^\d{4}-.* \[info\] tips over\n$/);
         expect(fs.readFileSync(`${logFile}.2`, "utf8")).toBe("gen1");
         expect(fs.readFileSync(`${logFile}.3`, "utf8")).toBe("gen2");
         expect(fs.existsSync(`${logFile}.4`)).toBe(false);
