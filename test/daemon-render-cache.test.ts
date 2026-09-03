@@ -13,6 +13,7 @@ import { RenderCache } from "../src/daemon/cache/render";
 import { GitDataProvider } from "../src/daemon/cache/git";
 import { SessionState } from "../src/daemon/session-state";
 import { WatcherRegistry } from "../src/daemon/cache/watchers";
+import { ReloadSignal } from "./helpers/reload-signal";
 import { walkNodes, type LayoutNode } from "../src/config/dsl-types";
 
 // Flatten a layout tree to its segment names, in pre-order — the post-`root`
@@ -31,6 +32,7 @@ function makeCache(): {
   cache: RenderCache;
   cleanups: Array<() => void>;
   gitService: GitDataProvider;
+  reloads: ReloadSignal;
 } {
   const cleanups: Array<() => void> = [];
   const watchers = new WatcherRegistry({
@@ -48,11 +50,12 @@ function makeCache(): {
   });
   cleanups.push(() => gitService.close());
   const sessionState = new SessionState();
+  const reloads = new ReloadSignal();
   const cache = new RenderCache(
     { gitService, sessionState, watchers },
-    { maxEntries: 4 },
+    { maxEntries: 4, observers: reloads.observers },
   );
-  return { cache, cleanups, gitService };
+  return { cache, cleanups, gitService, reloads };
 }
 
 function mkConfigDir(): { dir: string; cleanup: () => void } {
@@ -61,33 +64,6 @@ function mkConfigDir(): { dir: string; cleanup: () => void } {
     dir,
     cleanup: () => rmSync(dir, { recursive: true, force: true }),
   };
-}
-
-// Poll for a condition with timeouts that comfortably exceed
-// WatcherRegistry's 50ms debounce + macOS fs.watch's variable latency.
-// 15s is a generous bound — macOS FSEvents can briefly stall when
-// multiple test suites run watchers in sequence; the timeout is high
-// enough that real failures (watcher not firing at all) still surface
-// as a clear timeout rather than a flake.
-//
-// [LAW:verifiable-goals] Throws on timeout so a never-true condition
-// fails loudly with a clear message — silent timeout would let watcher
-// regressions silently pass.
-async function waitFor(
-  cond: () => boolean,
-  {
-    timeoutMs = 15000,
-    intervalMs = 50,
-    label = "condition",
-  }: { timeoutMs?: number; intervalMs?: number; label?: string } = {},
-): Promise<void> {
-  const deadline = Date.now() + timeoutMs;
-  while (!cond() && Date.now() < deadline) {
-    await new Promise((r) => setTimeout(r, intervalMs));
-  }
-  if (!cond()) {
-    throw new Error(`waitFor timed out after ${timeoutMs}ms (${label})`);
-  }
 }
 
 describe("RenderCache", () => {
@@ -156,7 +132,7 @@ describe("RenderCache", () => {
 
   test("last-known-good preserved when a hot reload introduces a broken config", async () => {
     const { dir, cleanup } = mkConfigDir();
-    const { cache, cleanups } = makeCache();
+    const { cache, cleanups, reloads } = makeCache();
     try {
       // Step 1: write a valid config file, populate the cache from it.
       const cfg = join(dir, ".cc-candybar.json5");
@@ -180,12 +156,11 @@ describe("RenderCache", () => {
       const goodConfigRef = goodState!.config;
 
       // Step 2: overwrite the file with garbage. The watcher fires, the
-      // cache calls reloadInto, buildState throws (JSON5 parse error),
-      // and the entry's `state` should be the SAME object as before.
-      writeFileSync(cfg, "this is not JSON5 {{{ broken");
-      await waitFor(() => entry.lastError !== null, {
-        label: "lastError populated after broken-config reload",
-      });
+      // cache reloads, buildState throws (JSON5 parse error), and the
+      // entry's `state` should be the SAME object as before.
+      await reloads.after(entry, () =>
+        writeFileSync(cfg, "this is not JSON5 {{{ broken"),
+      );
 
       expect(entry.lastError).not.toBeNull();
       expect(entry.state).toBe(goodState); // identity preserved
@@ -198,7 +173,7 @@ describe("RenderCache", () => {
 
   test("watcher fires reload when a config file is created where none existed", async () => {
     const { dir, cleanup } = mkConfigDir();
-    const { cache, cleanups } = makeCache();
+    const { cache, cleanups, reloads } = makeCache();
     try {
       // First call: no file exists, falls back to default.
       const entry = cache.getOrCreate(dir, dir, undefined);
@@ -209,34 +184,25 @@ describe("RenderCache", () => {
       // row count alone wouldn't prove the file was picked up.
       const defaultLayoutSegCount = layoutSegments(entry.state!.config.root).length;
 
-      // Give fs.watch a moment to attach to the parent dir before we
-      // start writing into it. Without this, on macOS the writeFileSync
-      // can land in the brief window after `getOrCreate` returns but
-      // before the FSEvents subscription is actually active, and the
-      // change goes unseen.
-      await new Promise((r) => setTimeout(r, 100));
-
       // Create the project-local file. The watcher should fire.
       const cfg = join(dir, ".cc-candybar.json5");
-      writeFileSync(
-        cfg,
-        JSON.stringify({
-          globals: {},
-          variables: { x: { kind: "literal", value: "from-file" } },
-          segments: {
-            only: {
-              template: " {{ .x }} ",
-              bg: "surface",
-              fg: "foreground",
+      await reloads.after(entry, () =>
+        writeFileSync(
+          cfg,
+          JSON.stringify({
+            globals: {},
+            variables: { x: { kind: "literal", value: "from-file" } },
+            segments: {
+              only: {
+                template: " {{ .x }} ",
+                bg: "surface",
+                fg: "foreground",
+              },
             },
-          },
-          root: { h: ["only"] },
-        }),
+            root: { h: ["only"] },
+          }),
+        ),
       );
-      // fs.watch is async and platform-debounced (50ms in our registry).
-      await waitFor(() => entry.configFilePath === cfg, {
-        label: `watcher should have observed new config file at ${cfg}`,
-      });
       expect(entry.configFilePath).toBe(cfg);
       expect(entry.state!.config.root).toEqual(oneRow("only"));
       // Sanity: was actually different from the default.
@@ -283,7 +249,7 @@ describe("RenderCache", () => {
 
   test("lastWarning is set when .json5 and .json coexist at same location", async () => {
     const { dir, cleanup } = mkConfigDir();
-    const { cache, cleanups } = makeCache();
+    const { cache, cleanups, reloads } = makeCache();
     try {
       // Both files at the same location — .json5 wins on resolution, but
       // detectConfigCollisions surfaces the duplicate.
@@ -309,13 +275,12 @@ describe("RenderCache", () => {
       expect(entry.lastWarning).toContain(cfgJson);
 
       // Removing the duplicate clears the warning on next reload. The
-      // watcher fires on file deletion in the same dir. Same fs.watch
-      // warmup gotcha as the create-detection test — give the watcher
-      // a moment to register on the dir before the mutation.
-      await new Promise((r) => setTimeout(r, 100));
-      unlinkSync(cfgJson);
-      await waitFor(() => entry.lastWarning === null, {
-        label: "lastWarning should clear after removing the .json sibling",
+      // watcher fires on file deletion in the same dir. Rewrite-then-unlink
+      // so every application of the mutation emits an event (a bare unlink
+      // of an already-absent file emits none) and ends with the file absent.
+      await reloads.after(entry, () => {
+        writeFileSync(cfgJson, validCfg);
+        unlinkSync(cfgJson);
       });
       expect(entry.lastWarning).toBeNull();
       // The .json5 is still the resolved file; render state intact.

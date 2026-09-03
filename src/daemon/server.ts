@@ -131,11 +131,27 @@ const sessionState = new SessionState();
 const contextProvider = new ContextProvider();
 const metricsProvider = new MetricsProvider();
 const tmuxService = new TmuxService();
-const renderCache = new RenderCache({
-  gitService,
-  sessionState,
-  watchers: watcherRegistry,
-});
+const renderCache = new RenderCache(
+  {
+    gitService,
+    sessionState,
+    watchers: watcherRegistry,
+  },
+  {
+    observers: {
+      // [LAW:no-silent-failure] Every config (re)load's outcome lands in
+      // daemon.log beside the "config change detected" line that preceded it
+      // — the operator's only record of whether a save was picked up cleanly,
+      // kept rendering last-known-good behind an error, or resolved to a
+      // different file. Same info level as the detection line.
+      onReload: (entry) =>
+        dlog(
+          "info",
+          `config loaded projectDir=${entry.projectDir} cwd=${entry.cwd} file=${entry.configFilePath ?? "<bundled default>"} error=${entry.lastError === null ? "none" : JSON.stringify(entry.lastError)} warning=${entry.lastWarning === null ? "none" : JSON.stringify(entry.lastWarning)}`,
+        ),
+    },
+  },
+);
 
 const REQUEST_TIMEOUT_MS = 200;
 const BIN_CHECK_INTERVAL_MS = 60 * 1000;

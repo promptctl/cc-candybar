@@ -61,6 +61,26 @@ export interface RenderDeps {
   watchers: WatcherRegistry;
 }
 
+// [LAW:no-ambient-temporal-coupling] The cache's outward lifecycle signal. A
+// reload is the one event the cache alone knows the completion of — it runs
+// from a debounced fs watcher, on the cache's own schedule — so anything that
+// must run AFTER a reload (an operator log of its outcome, a test asserting
+// on the state it wrote) needs the cache to say so, or it is left betting on
+// a clock. The same named-bag idiom as renderDsl's RenderObservers
+// [LAW:locality-or-seam]: a caller states what it passes by name, and a new
+// observer is one field here, not a constructor signature every caller
+// re-counts.
+export interface RenderCacheObservers {
+  // Fires once per completed reload of an entry — the initial population in
+  // getOrCreate and every watcher-driven reload alike, success (a fresh
+  // `state`) and failure (`lastError` set, prior state preserved) alike —
+  // after the entry's fields and watcher are settled. The entry is handed
+  // over so the observer reads the outcome from the one place it lives.
+  // Trusted non-throwing (the same contract as onSegmentError): an observer
+  // that throws is a caller bug surfaced loudly, never absorbed here.
+  readonly onReload?: (entry: CacheEntry) => void;
+}
+
 // [LAW:types-are-the-program] The DSL render state for an entry is one
 // optionally-null bundle, not five independently-optional fields. Either
 // every field is populated (a render is possible) or all are null (parse
@@ -154,10 +174,15 @@ export class RenderCache {
   private readonly entries = new Map<string, CacheEntry>();
   private readonly deps: RenderDeps;
   private readonly maxEntries: number;
+  private readonly observers: RenderCacheObservers;
 
-  constructor(deps: RenderDeps, opts: { maxEntries?: number } = {}) {
+  constructor(
+    deps: RenderDeps,
+    opts: { maxEntries?: number; observers?: RenderCacheObservers } = {},
+  ) {
     this.deps = deps;
     this.maxEntries = opts.maxEntries ?? MAX_ENTRIES;
+    this.observers = opts.observers ?? {};
   }
 
   // [LAW:dataflow-not-control-flow] One uniform shape: every entry has the
@@ -220,7 +245,17 @@ export class RenderCache {
   // new DslConfig disposes the old SourceRegistry before constructing a new
   // one. The registry owns timers, watchers, MobX reactions, and git
   // subscriptions — dropping it without dispose leaks every handle.
+  //
+  // [LAW:single-enforcer] One publish point for "this reload completed":
+  // loadFromDisk owns the outcome (it returns through more than one arm),
+  // and this wrapper is the only caller, so the signal structurally cannot
+  // be skipped by whichever arm a reload takes — or by an arm added later.
   private reloadInto(entry: CacheEntry): void {
+    this.loadFromDisk(entry);
+    this.observers.onReload?.(entry);
+  }
+
+  private loadFromDisk(entry: CacheEntry): void {
     const resolvedPath = resolveDslConfigPath(
       entry.projectDir,
       entry.cwd,
@@ -286,7 +321,7 @@ export class RenderCache {
   // store, registry, compiled segments, palette — as one transaction. Any
   // failure inside disposes the partially-built registry so we don't leak
   // timers/watchers from a half-constructed reload, then rethrows so the
-  // caller (reloadInto) preserves the prior `entry.state` unchanged.
+  // caller (loadFromDisk) preserves the prior `entry.state` unchanged.
   private buildState(
     entry: CacheEntry,
     resolvedPath: string | null,
@@ -396,7 +431,7 @@ export class RenderCache {
     // key) are part of the same construction transaction as the registry: any
     // failure (registration, a duplicate-key throw) disposes every handle built
     // so far — registry AND already-installed validators — before rethrowing, so
-    // reloadInto preserves the prior last-known-good with nothing half-installed.
+    // loadFromDisk preserves the prior last-known-good with nothing half-installed.
     const validatorDisposers: Array<() => void> = [];
     try {
       // [LAW:one-source-of-truth] The action runtime reads session.id + current
