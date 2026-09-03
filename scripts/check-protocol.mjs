@@ -71,12 +71,16 @@ function lit(relPath, regex) {
 }
 
 // Set of string members: collect every capture of a global regex within the
-// slice matched by blockRegex, canonicalized as a sorted joined list.
+// slice matched by blockRegex, canonicalized as a sorted joined list. A member
+// is its capture groups joined by a fixed separator, so a multi-group regex
+// compares values, never the formatting between them.
 function memberSet(relPath, blockRegex, memberRegex) {
   return () => {
     const block = read(relPath).match(blockRegex);
     if (!block) return null;
-    const members = [...block[0].matchAll(memberRegex)].map((m) => m[1]);
+    const members = [...block[0].matchAll(memberRegex)].map((m) =>
+      m.slice(1).join("="),
+    );
     if (members.length === 0) return null;
     return [...new Set(members)].sort().join(", ");
   };
@@ -216,8 +220,8 @@ const CHECKS = [
   // from its own list, so the lists themselves are the mirrored fact.
   {
     label: "budget grammar: accepted vectors",
-    ts: memberSet(TS_LIMITS_TEST, /const ACCEPT[\s\S]*?\];/, /("[^"]*", ?\d+)/g),
-    rust: memberSet(RS_LAUNCH, /const ACCEPT[\s\S]*?\];/, /("[^"]*", ?\d+)/g),
+    ts: memberSet(TS_LIMITS_TEST, /const ACCEPT[\s\S]*?\];/, /"([^"]*)", ?(\d+)/g),
+    rust: memberSet(RS_LAUNCH, /const ACCEPT[\s\S]*?\];/, /"([^"]*)", ?(\d+)/g),
   },
   {
     label: "budget grammar: rejected vectors",

@@ -38,6 +38,47 @@ async function withFreshLog<T>(
 }
 
 describe("dlog", () => {
+  test("never throws even when stderr, the last channel, fails too", async () => {
+    await withFreshLog(
+      (logFile) => {
+        fs.rmSync(path.dirname(logFile), { recursive: true, force: true });
+        fs.writeFileSync(path.dirname(logFile), "");
+      },
+      (dlog) => {
+        const spy = jest
+          .spyOn(process.stderr, "write")
+          .mockImplementation(() => {
+            throw new Error("EPIPE");
+          });
+        try {
+          expect(() => dlog("error", "uncaughtException: boom")).not.toThrow();
+        } finally {
+          spy.mockRestore();
+        }
+      },
+    );
+  });
+
+  test("self-heals: a state dir removed mid-life is recreated for the next line", async () => {
+    await withFreshLog(
+      () => {},
+      (dlog, logFile) => {
+        dlog("info", "one");
+        fs.rmSync(path.dirname(logFile), { recursive: true, force: true });
+        const spy = jest
+          .spyOn(process.stderr, "write")
+          .mockImplementation(() => true);
+        try {
+          dlog("info", "two");
+        } finally {
+          spy.mockRestore();
+        }
+        dlog("info", "three");
+        expect(fs.readFileSync(logFile, "utf8")).toMatch(/\[info\] three\n$/);
+      },
+    );
+  });
+
   test("never throws: an unwritable sink degrades to stderr, line intact", async () => {
     await withFreshLog(
       (logFile) => {

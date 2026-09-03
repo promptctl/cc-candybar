@@ -65,8 +65,15 @@ export function dlog(level: LogLevel, msg: string): void {
     // shutdown), taking the clean-death path down with it. stderr carries the
     // line and the reason — the terminal when the daemon runs by hand, and
     // /dev/null under a detached spawn; the daemon keeps serving either way.
-    process.stderr.write(
-      `${line}cc-candybar: ${filePath} unwritable: ${(e as Error).message}\n`,
-    );
+    // Nulling the counter re-runs the lazy init on the next call, so a state
+    // dir removed out from under the daemon is recreated for the next line.
+    bytesWritten = null;
+    try {
+      process.stderr.write(
+        `${line}cc-candybar: ${filePath} unwritable: ${(e as Error).message}\n`,
+      );
+    } catch {
+      // stderr was the last channel.
+    }
   }
 }
