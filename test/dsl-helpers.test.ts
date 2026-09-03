@@ -1,10 +1,10 @@
 // [LAW:verifiable-goals] bdi.2 acceptance: config-level shared helper templates.
-// A `helpers` block compiles to a define-preamble prepended to every template
-// this config parses, so `{{ template "name" .arg }}` resolves a single shared
+// A `helpers` block compiles to one define set every template this config
+// parses inherits, so `{{ template "name" .arg }}` resolves a single shared
 // definition from any segment/predicate/action. These tests pin the four
 // acceptance criteria byte-for-byte: a helper renders, a by-name override changes
 // output, a malformed helper fails LOUDLY (not silently), and an absent `helpers`
-// key is a no-op (output-neutral preamble).
+// key is a no-op (an inherited define emits nothing).
 
 import { SessionState } from "../src/daemon/session-state";
 import { getThemePalette } from "@promptctl/rich-js";
@@ -174,7 +174,7 @@ describe("bdi.2 — config-level shared helper templates", () => {
   });
 
   test("an UNUSED helper is output-neutral (byte-identical to no helpers)", () => {
-    // [LAW:dataflow-not-control-flow] The define-preamble emits nothing; a config
+    // [LAW:dataflow-not-control-flow] An inherited define emits nothing; a config
     // carrying an unused helper renders the SAME bytes as one with no helpers.
     const withHelper = `{
       variables: { x: { kind: "input", path: "x", type: "number" } },

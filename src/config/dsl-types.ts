@@ -181,9 +181,9 @@ export interface RawDslConfig {
   // per session exactly like theme/style (session key `look`).
   readonly looks?: Readonly<Record<string, ThemeKey>>;
   // [LAW:single-enforcer] Config-level shared helper templates: name → Go-template
-  // body. Each compiles to one `{{ define "name" }}body{{ end }}` block, and the
-  // whole set into a single output-neutral preamble prepended to every template
-  // this config parses — so a formatter (`{{ template "formatCost" .x }}`) is
+  // body. Each compiles to one `{{ define "name" }}body{{ end }}` unit, and the
+  // whole set into one shared define set every template this config parses
+  // inherits — so a formatter (`{{ template "formatCost" .x }}`) is
   // defined ONCE and callable from any segment/predicate, never re-inlined per
   // segment. Absent ≡ no helpers; merges by-name (user overrides a helper).
   readonly helpers?: Readonly<Record<string, string>>;
@@ -240,7 +240,7 @@ export interface DslConfig {
   // [LAW:dataflow-not-control-flow].
   readonly editGlobals: Partial<Globals>;
   // [LAW:single-enforcer] The effective helper set: a name → template-body map
-  // compiled to a defines-preamble at registerDslConfig. Empty when no config
+  // compiled to one shared define set at registerDslConfig. Empty when no config
   // declares helpers — an absent `helpers` key merges to `{}` (same cascade as
   // actions). The single definition site for each formatter/transform a template
   // calls via `{{ template "name" .arg }}`.

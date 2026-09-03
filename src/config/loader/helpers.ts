@@ -2,7 +2,7 @@
 // record of name → template-body STRING. Each value is a Go-template source the
 // renderer compiles into a `{{ define }}` block; whether the body PARSES (and
 // whether a `{{ template "name" }}` reference resolves) is a render-time concern
-// (registerDslConfig parses the preamble and throws a per-helper diagnostic).
+// (registerDslConfig parses each helper and throws a per-helper diagnostic).
 // This file changes only if the helper authoring shape changes.
 
 import { findKeyLine } from "./diagnostics.js";
