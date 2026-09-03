@@ -51,9 +51,11 @@ export type LogLevel = "info" | "warn" | "error";
 export type DaemonLogger = (level: LogLevel, msg: string) => void;
 
 export function dlog(level: LogLevel, msg: string): void {
-  const filePath = logPath();
   const line = `${new Date().toISOString()} [${level}] ${msg}\n`;
   try {
+    // [LAW:single-enforcer] Path resolution reaches os.homedir(); it lives
+    // inside the one boundary that makes dlog total.
+    const filePath = logPath();
     const before = currentBytes(filePath);
     fs.appendFileSync(filePath, line);
     bytesWritten = before + Buffer.byteLength(line, "utf8");
@@ -70,7 +72,7 @@ export function dlog(level: LogLevel, msg: string): void {
     bytesWritten = null;
     try {
       process.stderr.write(
-        `${line}cc-candybar: ${filePath} unwritable: ${(e as Error).message}\n`,
+        `${line}cc-candybar: daemon.log unwritable: ${(e as Error).message}\n`,
       );
     } catch {
       // stderr was the last channel.

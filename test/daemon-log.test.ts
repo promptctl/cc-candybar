@@ -59,6 +59,36 @@ describe("dlog", () => {
     );
   });
 
+  test("never throws when the sink's path cannot even be resolved", async () => {
+    await withFreshLog(
+      () => {},
+      (dlog) => {
+        // With no $XDG_STATE_HOME, logPath() falls back to os.homedir(),
+        // which throws when the process has no resolvable home.
+        const prevXdg = process.env.XDG_STATE_HOME;
+        delete process.env.XDG_STATE_HOME;
+        const home = jest.spyOn(os, "homedir").mockImplementation(() => {
+          throw new Error("ENOENT: no home");
+        });
+        const written: string[] = [];
+        const err = jest
+          .spyOn(process.stderr, "write")
+          .mockImplementation((chunk: string | Uint8Array) => {
+            written.push(String(chunk));
+            return true;
+          });
+        try {
+          expect(() => dlog("error", "uncaughtException: boom")).not.toThrow();
+        } finally {
+          err.mockRestore();
+          home.mockRestore();
+          process.env.XDG_STATE_HOME = prevXdg;
+        }
+        expect(written.join("")).toMatch(/\[error\] uncaughtException: boom\n.*unwritable: ENOENT/);
+      },
+    );
+  });
+
   test("self-heals: a state dir removed mid-life is recreated for the next line", async () => {
     await withFreshLog(
       () => {},
