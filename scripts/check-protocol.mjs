@@ -98,7 +98,9 @@ const TS_GLYPH = "src/render/error-glyph.ts";
 const TS_STYLE = "src/render/diagnostic-style.ts";
 const TS_PATHS = "src/daemon/paths.ts";
 const TS_ACQUIRE = "src/daemon/acquire.ts";
+const TS_LIMITS = "src/daemon/limits.ts";
 const RS_MAIN = "rust-client/src/main.rs";
+const RS_LAUNCH = "rust-client/src/launch.rs";
 const RS_GLYPH = "rust-client/src/error_glyph.rs";
 
 const CHECKS = [
@@ -242,6 +244,25 @@ const CHECKS = [
     label: "spawn-backoff filename",
     ts: lit(TS_PATHS, /const SPAWN_BACKOFF_FILE = "((?:[^"\\]|\\.)*)";/),
     rust: lit(RS_MAIN, /const SPAWN_BACKOFF_FILE: &str = "((?:[^"\\]|\\.)*)";/),
+  },
+  // The daemon's memory budget: both spawners derive node's --max-old-space-size
+  // from it, the daemon derives its RSS backstop from it, and the cap must stay
+  // above the backstop (limits.ts). All three pieces must agree or one runtime
+  // spawns a daemon whose hard cap sits below its graceful one.
+  {
+    label: "rss-limit env var",
+    ts: lit(TS_LIMITS, /export const RSS_LIMIT_ENV = "((?:[^"\\]|\\.)*)";/),
+    rust: lit(RS_LAUNCH, /const RSS_LIMIT_ENV: &str = "((?:[^"\\]|\\.)*)";/),
+  },
+  {
+    label: "default rss limit (MB)",
+    ts: num(TS_LIMITS, /export const DEFAULT_RSS_LIMIT_MB = ([\d\s*_]+);/),
+    rust: num(RS_LAUNCH, /const DEFAULT_RSS_LIMIT_MB: u64 = ([\d\s*_]+);/),
+  },
+  {
+    label: "heap cap over rss (multiplier)",
+    ts: num(TS_LIMITS, /export const HEAP_CAP_OVER_RSS = ([\d\s*_]+);/),
+    rust: num(RS_LAUNCH, /const HEAP_CAP_OVER_RSS: u64 = ([\d\s*_]+);/),
   },
 ];
 

@@ -1,4 +1,4 @@
-import { makeLimits, type LimitsDeps } from "../src/daemon/limits";
+import { makeLimits, type LimitsDeps, DEFAULT_RSS_LIMIT_MB } from "../src/daemon/limits";
 
 interface Recorder {
   shutdownCalls: number[];
@@ -142,7 +142,7 @@ describe("describeNextRestart", () => {
 
   test("flags rss approaching limit", () => {
     const rec = newRec();
-    rec.fakeRss = 400 * 1024 * 1024; // > 75% of 512MB default
+    rec.fakeRss = DEFAULT_RSS_LIMIT_MB * 0.8 * 1024 * 1024; // > 75% of the default
     const limits = makeLimits(makeDeps(rec));
     expect(limits.describeNextRestart()).toContain("rss");
   });

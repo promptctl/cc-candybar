@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import net from "node:net";
+import v8 from "node:v8";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
@@ -375,7 +376,11 @@ function onListening(sockPath: string): void {
   }
   dlog(
     "info",
-    `daemon up: pid=${process.pid} v=${PROTOCOL_VERSION} sock=${sockPath}`,
+    // [FRAMING:representation] Report the heap cap V8 actually applied (the
+    // territory), not the flag the spawner meant to pass (the map) — the one
+    // question a silent SIGABRT crash-loop leaves open is "which cap was live".
+    `daemon up: pid=${process.pid} v=${PROTOCOL_VERSION} sock=${sockPath} ` +
+      `heapCap=${Math.round(v8.getHeapStatistics().heap_size_limit / 1048576)}MB`,
   );
   // [LAW:single-enforcer] This bind is the one process-wide fact that answers
   // "did an outage just end" — see resetSpawnBackoff's doc comment in
@@ -569,8 +574,10 @@ function shutdown(code: number): void {
       (p) => fs.unlinkSync(p),
     );
   }
-  closeLog();
-  process.exit(code);
+  // [LAW:no-ambient-temporal-coupling] Exit only once the log has flushed, so
+  // the death line above is on disk; the SIGKILL backstop armed first still
+  // bounds a flush that never completes.
+  closeLog(() => process.exit(code));
 }
 
 // --- per-connection handler ---

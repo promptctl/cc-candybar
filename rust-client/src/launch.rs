@@ -47,15 +47,51 @@ pub fn exec_node_replace(node_script: &Path, argv_tail: &[String]) -> io::Error 
     cmd.exec()
 }
 
-// Spawn a detached `node --max-old-space-size=400 <script> daemon`. fds 0/1/2
-// are routed to /dev/null. The child is placed in its own session via setsid
-// so it isn't reaped when the parent statusline shell exits.
+// [LAW:one-source-of-truth] Mirror of src/daemon/limits.ts — the daemon's ONE
+// memory budget, from which both its RSS backstop (daemon-side, graceful) and
+// the V8 old-space cap this spawner passes (hard: SIGABRT below every JS
+// handler, no log line) derive. The cap is HEAP_CAP_OVER_RSS × the budget so
+// the graceful path always fires first. scripts/check-protocol.mjs fails the
+// build if these three drift from the TS side.
+const RSS_LIMIT_ENV: &str = "CC_CANDYBAR_RSS_LIMIT_MB";
+const DEFAULT_RSS_LIMIT_MB: u64 = 2048;
+const HEAP_CAP_OVER_RSS: u64 = 2;
+
+// [LAW:parse-dont-validate] Mirror of limits.ts rssLimitMb/heapCapMb: absent →
+// default; a positive integer → that; malformed → Err. The daemon itself would
+// refuse to boot on the same malformed value, so spawning it would only add a
+// crash-loop on top of the operator error. [LAW:no-silent-failure]
+pub fn heap_cap_mb(raw: Option<&str>) -> Result<u64, String> {
+    let mb = match raw {
+        None => DEFAULT_RSS_LIMIT_MB,
+        Some(s) => match s.trim().parse::<u64>() {
+            Ok(v) if v > 0 => v,
+            _ => {
+                return Err(format!(
+                    "{RSS_LIMIT_ENV} must be a positive integer (MB), got {s:?}"
+                ))
+            }
+        },
+    };
+    Ok(mb * HEAP_CAP_OVER_RSS)
+}
+
+// Spawn a detached `node --max-old-space-size=<heap_cap_mb> <script> daemon`.
+// fds 0/1/2 are routed to /dev/null. The child is placed in its own session
+// via setsid so it isn't reaped when the parent statusline shell exits.
 //
 // Returns true on successful spawn, false on any setup error (no script, no
-// /dev/null, fd clone failure). The caller treats false as "could not
-// kick"; the bind() exclusion inside the daemon is the actual singleton
-// invariant.
+// /dev/null, fd clone failure, malformed memory budget). The caller treats
+// false as "could not kick"; the bind() exclusion inside the daemon is the
+// actual singleton invariant.
 pub fn spawn_node_detached_daemon(node_script: &Path) -> bool {
+    let heap_cap = match heap_cap_mb(std::env::var(RSS_LIMIT_ENV).ok().as_deref()) {
+        Ok(mb) => mb,
+        Err(msg) => {
+            eprintln!("cc-candybar: not spawning daemon — {msg}");
+            return false;
+        }
+    };
     let dev_null = match File::options().read(true).write(true).open("/dev/null") {
         Ok(f) => f,
         Err(_) => return false,
@@ -71,9 +107,7 @@ pub fn spawn_node_detached_daemon(node_script: &Path) -> bool {
     let stderr_fd = Stdio::from(dev_null);
 
     let mut cmd = Command::new("node");
-    // Cap V8 old-generation at 400 MB so GC fires before RSS hits the 512 MB
-    // hard limit. Mirrors src/daemon/acquire.ts — keep the two in sync.
-    cmd.arg(OsString::from("--max-old-space-size=400"))
+    cmd.arg(OsString::from(format!("--max-old-space-size={heap_cap}")))
         .arg(node_script.as_os_str())
         .arg("daemon")
         .stdin(stdin_fd)
@@ -94,8 +128,23 @@ pub fn spawn_node_detached_daemon(node_script: &Path) -> bool {
 
 #[cfg(test)]
 mod tests {
+    use super::heap_cap_mb;
     use std::fs;
     use std::path::{Path, PathBuf};
+
+    // [LAW:behavior-not-structure] The contract: the cap is twice the budget,
+    // the budget defaults when unset, and garbage is refused rather than
+    // silently defaulted. The exact numbers are pinned TS↔Rust by
+    // scripts/check-protocol.mjs, not here.
+    #[test]
+    fn heap_cap_derives_from_rss_budget() {
+        assert_eq!(heap_cap_mb(None), Ok(2048 * 2));
+        assert_eq!(heap_cap_mb(Some("1024")), Ok(2048));
+        assert_eq!(heap_cap_mb(Some(" 300 ")), Ok(600));
+        for garbage in ["0", "-5", "abc", "", "1.5", "512MB"] {
+            assert!(heap_cap_mb(Some(garbage)).is_err(), "{garbage:?} accepted");
+        }
+    }
 
     fn rs_files(dir: &Path, out: &mut Vec<PathBuf>) {
         for entry in fs::read_dir(dir).expect("read src dir") {

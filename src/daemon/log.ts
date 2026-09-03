@@ -61,9 +61,17 @@ export function dlog(level: "info" | "warn" | "error", msg: string): void {
   if (bytesWritten >= MAX_BYTES) rotate();
 }
 
-export function closeLog(): void {
-  if (stream) {
-    stream.end();
-    stream = null;
+// [LAW:no-ambient-temporal-coupling] The stream is async; `process.exit` right
+// after `stream.end()` drops whatever is still buffered — which is exactly the
+// death line every shutdown path writes last. Handing the caller the flush
+// completion makes "log flushed" a state the exit provably awaits. `end(cb)`
+// fires cb on 'finish' OR 'error', so a dead disk still settles it.
+export function closeLog(onClosed: () => void): void {
+  if (!stream) {
+    onClosed();
+    return;
   }
+  const s = stream;
+  stream = null;
+  s.end(onClosed);
 }
