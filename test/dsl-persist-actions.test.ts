@@ -35,6 +35,7 @@ import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import { registerDslConfig, renderDsl } from "../src/dsl/render";
 import { SessionState } from "../src/daemon/session-state";
+import { ReloadSignal } from "./helpers/reload-signal";
 import {
   effectiveThemeName,
   listResolvablePaletteNames,
@@ -884,6 +885,7 @@ describe("persist action click → durable overrides write", () => {
 function makeCache(): {
   cache: RenderCache;
   cleanups: Array<() => void>;
+  reloads: ReloadSignal;
 } {
   const cleanups: Array<() => void> = [];
   const watchers = new WatcherRegistry({
@@ -897,16 +899,12 @@ function makeCache(): {
   });
   cleanups.push(() => gitService.close());
   const sessionState = new SessionState();
-  const cache = new RenderCache({ gitService, sessionState, watchers });
-  return { cache, cleanups };
-}
-
-async function waitFor(cond: () => boolean, timeoutMs = 15000): Promise<void> {
-  const deadline = Date.now() + timeoutMs;
-  while (!cond() && Date.now() < deadline) {
-    await new Promise((r) => setTimeout(r, 50));
-  }
-  if (!cond()) throw new Error("waitFor timed out");
+  const reloads = new ReloadSignal();
+  const cache = new RenderCache(
+    { gitService, sessionState, watchers },
+    { observers: reloads.observers },
+  );
+  return { cache, cleanups, reloads };
 }
 
 describe("RenderCache: persistent overrides merge into the effective config", () => {
@@ -1218,7 +1216,7 @@ describe("RenderCache: persistent overrides merge into the effective config", ()
     // this mirrors production ordering, not a workaround for the test.
     mkdirSync(join(xdgStateDir, "cc-candybar"), { recursive: true });
 
-    const { cache, cleanups } = makeCache();
+    const { cache, cleanups, reloads } = makeCache();
     try {
       const entry = cache.getOrCreate(projectDir, projectDir, undefined);
       expect(entry.state!.config.globals.palette).not.toBe("nord");
@@ -1228,9 +1226,9 @@ describe("RenderCache: persistent overrides merge into the effective config", ()
         "cc-candybar",
         "config-overrides.json",
       );
-      writeConfigOverride(overridesPath, "palette", "nord");
-
-      await waitFor(() => entry.state?.config.globals.palette === "nord");
+      await reloads.after(entry, () =>
+        writeConfigOverride(overridesPath, "palette", "nord"),
+      );
       expect(entry.state!.config.globals.palette).toBe("nord");
     } finally {
       for (const fn of cleanups) fn();
