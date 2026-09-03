@@ -47,15 +47,72 @@ pub fn exec_node_replace(node_script: &Path, argv_tail: &[String]) -> io::Error 
     cmd.exec()
 }
 
-// Spawn a detached `node --max-old-space-size=400 <script> daemon`. fds 0/1/2
-// are routed to /dev/null. The child is placed in its own session via setsid
-// so it isn't reaped when the parent statusline shell exits.
+// [LAW:one-source-of-truth] Mirror of src/daemon/limits.ts — the daemon's ONE
+// memory budget, from which both its RSS backstop (daemon-side, graceful) and
+// the V8 old-space cap this spawner passes (hard: SIGABRT below every JS
+// handler, no log line) derive. The cap is HEAP_CAP_OVER_RSS × the budget so
+// the graceful path always fires first. scripts/check-protocol.mjs fails the
+// build if these three drift from the TS side.
+const RSS_LIMIT_ENV: &str = "CC_CANDYBAR_RSS_LIMIT_MB";
+const DEFAULT_RSS_LIMIT_MB: u64 = 2048;
+const HEAP_CAP_OVER_RSS: u64 = 2;
+
+// [LAW:parse-dont-validate] Mirror of limits.ts rssLimitMb/heapCapMb: absent →
+// default; a positive integer → that; malformed → Err. The daemon itself would
+// refuse to boot on the same malformed value, so spawning it would only add a
+// crash-loop on top of the operator error. [LAW:no-silent-failure]
+//
+// [LAW:one-source-of-truth] The grammar is the TS grammar verbatim — ASCII
+// digits only, > 0, within JS's safe-integer range (2^53 − 1, the bound
+// `Number.isSafeInteger` applies on the daemon side) — so the spawner and the
+// daemon it spawns accept and reject the same values. `str::parse::<u64>`
+// alone would admit a leading `+` the daemon refuses, and a `u64` upper bound
+// would admit a value the daemon refuses as unsafe.
+const JS_MAX_SAFE_INTEGER: u64 = (1 << 53) - 1;
+
+pub fn heap_cap_mb(raw: Option<&str>) -> Result<u64, String> {
+    let reject = |s: &str| format!("{RSS_LIMIT_ENV} must be a positive integer (MB), got {s:?}");
+    let mb = match raw {
+        None => DEFAULT_RSS_LIMIT_MB,
+        Some(s) => {
+            let well_formed = !s.is_empty() && s.bytes().all(|b| b.is_ascii_digit());
+            match s.parse::<u64>() {
+                Ok(v) if well_formed && v > 0 && v <= JS_MAX_SAFE_INTEGER => v,
+                _ => return Err(reject(s)),
+            }
+        }
+    };
+    // Cannot overflow: mb ≤ 2^53 − 1, so the product is < 2^54.
+    Ok(mb * HEAP_CAP_OVER_RSS)
+}
+
+// Spawn a detached `node --max-old-space-size=<heap_cap_mb> <script> daemon`.
+// fds 0/1/2 are routed to /dev/null. The child is placed in its own session
+// via setsid so it isn't reaped when the parent statusline shell exits.
 //
 // Returns true on successful spawn, false on any setup error (no script, no
-// /dev/null, fd clone failure). The caller treats false as "could not
-// kick"; the bind() exclusion inside the daemon is the actual singleton
-// invariant.
+// /dev/null, fd clone failure, malformed memory budget). The caller treats
+// false as "could not kick"; the bind() exclusion inside the daemon is the
+// actual singleton invariant.
 pub fn spawn_node_detached_daemon(node_script: &Path) -> bool {
+    // [LAW:no-silent-failure] `var` distinguishes absent from present-but-not-
+    // UTF-8; `.ok()` would have collapsed a non-UTF-8 value into "unset" and
+    // spawned a daemon at the default budget the operator did not ask for.
+    let raw = match std::env::var(RSS_LIMIT_ENV) {
+        Ok(s) => Some(s),
+        Err(std::env::VarError::NotPresent) => None,
+        Err(std::env::VarError::NotUnicode(os)) => {
+            eprintln!("cc-candybar: not spawning daemon — {RSS_LIMIT_ENV} is not UTF-8: {os:?}");
+            return false;
+        }
+    };
+    let heap_cap = match heap_cap_mb(raw.as_deref()) {
+        Ok(mb) => mb,
+        Err(msg) => {
+            eprintln!("cc-candybar: not spawning daemon — {msg}");
+            return false;
+        }
+    };
     let dev_null = match File::options().read(true).write(true).open("/dev/null") {
         Ok(f) => f,
         Err(_) => return false,
@@ -71,9 +128,7 @@ pub fn spawn_node_detached_daemon(node_script: &Path) -> bool {
     let stderr_fd = Stdio::from(dev_null);
 
     let mut cmd = Command::new("node");
-    // Cap V8 old-generation at 400 MB so GC fires before RSS hits the 512 MB
-    // hard limit. Mirrors src/daemon/acquire.ts — keep the two in sync.
-    cmd.arg(OsString::from("--max-old-space-size=400"))
+    cmd.arg(OsString::from(format!("--max-old-space-size={heap_cap}")))
         .arg(node_script.as_os_str())
         .arg("daemon")
         .stdin(stdin_fd)
@@ -94,8 +149,45 @@ pub fn spawn_node_detached_daemon(node_script: &Path) -> bool {
 
 #[cfg(test)]
 mod tests {
+    use super::heap_cap_mb;
     use std::fs;
     use std::path::{Path, PathBuf};
+
+    // [LAW:behavior-not-structure] The contract: the cap is twice the budget,
+    // the budget defaults when unset, and garbage is refused rather than
+    // silently defaulted. The exact numbers are pinned TS↔Rust by
+    // scripts/check-protocol.mjs, not here.
+    //
+    // ACCEPT and REJECT are the SAME tables test/daemon-limits.test.ts runs
+    // against rssLimitMb/heapCapMb — one grammar, pinned from both sides by
+    // scripts/check-protocol.mjs, which diffs the two lists.
+    const ACCEPT: &[(&str, u64)] = &[("1024", 1024), ("007", 7)];
+    const REJECT: &[&str] = &[
+        "",
+        " ",
+        " 300 ",
+        "0",
+        "-5",
+        "+10",
+        "abc",
+        "1.5",
+        "512MB",
+        "1_000",
+        "١٢",
+        "9007199254740992", // 2^53: past the safe-integer range
+        "99999999999999999999",
+    ];
+
+    #[test]
+    fn heap_cap_derives_from_rss_budget() {
+        assert_eq!(heap_cap_mb(None), Ok(2048 * 2));
+        for (raw, mb) in ACCEPT {
+            assert_eq!(heap_cap_mb(Some(raw)), Ok(mb * 2), "{raw:?}");
+        }
+        for garbage in REJECT {
+            assert!(heap_cap_mb(Some(garbage)).is_err(), "{garbage:?} accepted");
+        }
+    }
 
     fn rs_files(dir: &Path, out: &mut Vec<PathBuf>) {
         for entry in fs::read_dir(dir).expect("read src dir") {

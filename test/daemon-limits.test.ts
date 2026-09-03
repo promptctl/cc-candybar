@@ -1,4 +1,12 @@
-import { makeLimits, type LimitsDeps } from "../src/daemon/limits";
+import {
+  makeLimits,
+  type LimitsDeps,
+  DEFAULT_RSS_LIMIT_MB,
+  HEAP_CAP_OVER_RSS,
+  RSS_LIMIT_ENV,
+  rssLimitMb,
+  heapCapMb,
+} from "../src/daemon/limits";
 
 interface Recorder {
   shutdownCalls: number[];
@@ -142,7 +150,7 @@ describe("describeNextRestart", () => {
 
   test("flags rss approaching limit", () => {
     const rec = newRec();
-    rec.fakeRss = 400 * 1024 * 1024; // > 75% of 512MB default
+    rec.fakeRss = DEFAULT_RSS_LIMIT_MB * 0.8 * 1024 * 1024; // > 75% of the default
     const limits = makeLimits(makeDeps(rec));
     expect(limits.describeNextRestart()).toContain("rss");
   });
@@ -152,5 +160,50 @@ describe("describeNextRestart", () => {
     rec.fakeRss = 50 * 1024 * 1024; // well under limit
     const limits = makeLimits(makeDeps(rec));
     expect(limits.describeNextRestart()).toBeNull();
+  });
+});
+
+// [LAW:one-source-of-truth] These vector tables are the SAME tables
+// rust-client/src/launch.rs runs against heap_cap_mb — one grammar, pinned
+// from both sides. scripts/check-protocol.mjs diffs the two ACCEPT and the two
+// REJECT lists, so adding a vector on one side without the other fails the
+// build.
+const ACCEPT: Array<[string, number]> = [
+  ["1024", 1024],
+  ["007", 7],
+];
+const REJECT = [
+  "",
+  " ",
+  " 300 ",
+  "0",
+  "-5",
+  "+10",
+  "abc",
+  "1.5",
+  "512MB",
+  "1_000",
+  "١٢",
+  "9007199254740992", // 2^53: past the safe-integer range
+  "99999999999999999999",
+];
+
+describe("rssLimitMb / heapCapMb (the memory-budget grammar)", () => {
+  const env = (v: string | undefined): NodeJS.ProcessEnv =>
+    v === undefined ? {} : { [RSS_LIMIT_ENV]: v };
+
+  test("absent → the default; the cap is HEAP_CAP_OVER_RSS × the budget", () => {
+    expect(rssLimitMb(env(undefined))).toBe(DEFAULT_RSS_LIMIT_MB);
+    expect(heapCapMb(env(undefined))).toBe(DEFAULT_RSS_LIMIT_MB * HEAP_CAP_OVER_RSS);
+  });
+
+  test.each(ACCEPT)("accepts %j as %i MB", (raw, mb) => {
+    expect(rssLimitMb(env(raw))).toBe(mb);
+    expect(heapCapMb(env(raw))).toBe(mb * HEAP_CAP_OVER_RSS);
+  });
+
+  test.each(REJECT)("rejects %j loudly rather than defaulting", (raw) => {
+    expect(() => rssLimitMb(env(raw))).toThrow(RSS_LIMIT_ENV);
+    expect(() => heapCapMb(env(raw))).toThrow(RSS_LIMIT_ENV);
   });
 });
