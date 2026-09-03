@@ -1,10 +1,10 @@
 // [LAW:verifiable-goals] bdi.2 acceptance: config-level shared helper templates.
-// A `helpers` block compiles to a define-preamble prepended to every template
-// this config parses, so `{{ template "name" .arg }}` resolves a single shared
+// A `helpers` block compiles to one define set every template this config
+// parses inherits, so `{{ template "name" .arg }}` resolves a single shared
 // definition from any segment/predicate/action. These tests pin the four
 // acceptance criteria byte-for-byte: a helper renders, a by-name override changes
 // output, a malformed helper fails LOUDLY (not silently), and an absent `helpers`
-// key is a no-op (output-neutral preamble).
+// key is a no-op (an inherited define emits nothing).
 
 import { SessionState } from "../src/daemon/session-state";
 import { getThemePalette } from "@promptctl/rich-js";
@@ -120,6 +120,23 @@ describe("bdi.2 — config-level shared helper templates", () => {
     expect(plain(render(source, { x: 3 }))).toContain("cost=$3.00");
   });
 
+  test("a helper may call one declared AFTER it: resolution is by name at render, not by declaration order", () => {
+    // [LAW:behavior-not-structure] The contract is the shared define set, not
+    // the order it was folded in: a call is looked up when it executes, against
+    // the full set every template inherits. The bundled default relies on this
+    // (formatEta calls formatLongTimeRemaining, declared later).
+    const source = `{
+      variables: { x: { kind: "input", path: "x", type: "number" } },
+      helpers: {
+        labeled: 'cost={{ template "money" . }}',
+        money: '\${{ printf "%.2f" . }}',
+      },
+      segments: { c: { template: '{{ template "labeled" .x }}' } },
+      root: "c",
+    }`;
+    expect(plain(render(source, { x: 3 }))).toContain("cost=$3.00");
+  });
+
   test("by-name override (merge cascade): user helper wins, renders the override", () => {
     // The default supplies `money`; the user re-declares it by name.
     const dflt: DslConfig = {
@@ -174,7 +191,7 @@ describe("bdi.2 — config-level shared helper templates", () => {
   });
 
   test("an UNUSED helper is output-neutral (byte-identical to no helpers)", () => {
-    // [LAW:dataflow-not-control-flow] The define-preamble emits nothing; a config
+    // [LAW:dataflow-not-control-flow] An inherited define emits nothing; a config
     // carrying an unused helper renders the SAME bytes as one with no helpers.
     const withHelper = `{
       variables: { x: { kind: "input", path: "x", type: "number" } },
