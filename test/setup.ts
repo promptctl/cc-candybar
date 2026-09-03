@@ -16,11 +16,16 @@ import { PARENT_PID_ENV } from "../src/daemon/parent-watchdog";
 // is never touched.
 process.env[PARENT_PID_ENV] = String(process.pid);
 
-// [LAW:single-enforcer] The one place source-run processes get their package
-// version stamp (see test/helpers/version-stamp.cjs): this worker's own
-// sandbox global, and — through NODE_OPTIONS, inherited by every daemon a test
-// spawns — each child's too. Without it src/version.ts refuses to load.
-const VERSION_STAMP = path.join(__dirname, "helpers", "version-stamp.cjs");
+// [LAW:single-enforcer] The one place the test suite stamps the package
+// version (scripts/version-stamp.cjs): this worker's own sandbox global, and —
+// through NODE_OPTIONS, inherited by every daemon a test spawns — each child's
+// too. Without it src/version.ts refuses to load.
+const VERSION_STAMP = path.join(
+  __dirname,
+  "..",
+  "scripts",
+  "version-stamp.cjs",
+);
 createRequire(__filename)(VERSION_STAMP);
 process.env.NODE_OPTIONS = [
   process.env.NODE_OPTIONS ?? "",

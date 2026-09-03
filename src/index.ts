@@ -53,6 +53,16 @@ function detectTermCols(): number | undefined {
 // widen recall of a fact that is otherwise reported as a plain `false`.
 const SSH_ENV_VARS = ["SSH_CONNECTION", "SSH_CLIENT", "SSH_TTY"] as const;
 
+// [LAW:one-source-of-truth] The bare flags Node answers itself. The Rust client
+// routes exactly these to Node (its NODE_FLAGS; check-protocol diffs the two),
+// so a spelling added here without its mirror fails the build, not the user.
+const NODE_FLAGS = {
+  help: ["--help", "-h"],
+  version: ["--version", "-V"],
+} as const;
+const hasFlag = (flags: readonly string[]): boolean =>
+  flags.some((f) => process.argv.includes(f));
+
 // [LAW:dataflow-not-control-flow] A fold over the vocabulary, not a chain of
 // ifs — adding a name is a data edit.
 //
@@ -70,10 +80,7 @@ function showHelpText(): void {
 
 async function main(): Promise<void> {
   try {
-    const showHelp =
-      process.argv.includes("--help") || process.argv.includes("-h");
-
-    if (showHelp) {
+    if (hasFlag(NODE_FLAGS.help)) {
       showHelpText();
       process.exit(0);
     }
@@ -81,7 +88,7 @@ async function main(): Promise<void> {
     // stamp alone — never a daemon probe, which would fail exactly when the
     // flag is most needed (no working daemon). Daemon skew is the stats
     // snapshot's `version` field.
-    if (process.argv.includes("--version") || process.argv.includes("-V")) {
+    if (hasFlag(NODE_FLAGS.version)) {
       console.log(`cc-candybar ${PACKAGE_VERSION}`);
       process.exit(0);
     }

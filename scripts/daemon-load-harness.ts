@@ -42,6 +42,7 @@ import net from "node:net";
 import os from "node:os";
 import path from "node:path";
 import { parseArgs } from "node:util";
+import { pathToFileURL } from "node:url";
 import { DEBOUNCE_MS } from "../src/daemon/cache/watchers.js";
 import {
   PROTOCOL_VERSION,
@@ -378,6 +379,8 @@ async function spawnDaemon(stateRoot: string): Promise<DaemonHandle> {
     XDG_CACHE_HOME: fs.mkdtempSync(path.join(os.tmpdir(), "cbh-cache-")),
     // Empty config dir → falls back to DEFAULT_DSL_CONFIG (the realistic mix).
     XDG_CONFIG_HOME: fs.mkdtempSync(path.join(os.tmpdir(), "cbh-config-")),
+    // src/version.ts refuses to load unstamped; `--daemon tsx` runs raw source.
+    NODE_OPTIONS: `--import=${pathToFileURL(path.join(REPO_ROOT, "scripts", "version-stamp.cjs")).href}`,
   };
   if (values.config) {
     const cfgDir = path.join(env.XDG_CONFIG_HOME!, "cc-candybar");

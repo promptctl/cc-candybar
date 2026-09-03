@@ -191,6 +191,21 @@ const CHECKS = [
       /"(SSH_\w+)"/g,
     ),
   },
+  // Which bare flags Node answers. The Rust client must route every spelling
+  // to Node, or the shipped binary treats it as a render and fails on stdin.
+  {
+    label: "Node-answered flag vocabulary",
+    ts: memberSet(
+      TS_INDEX,
+      /const NODE_FLAGS = \{[\s\S]+?\} as const;/,
+      /"(-{1,2}[A-Za-z]+)"/g,
+    ),
+    rust: memberSet(
+      RS_MAIN,
+      /const NODE_FLAGS: \[&str; \d+\] = \[[\s\S]+?\];/,
+      /"(-{1,2}[A-Za-z]+)"/g,
+    ),
+  },
   {
     label: "glyph FG",
     ts: lit(TS_STYLE, /const DIAGNOSTIC_ERROR_FG = "((?:[^"\\]|\\.)*)";/),
