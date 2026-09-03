@@ -1,5 +1,5 @@
 import type {
-  CacheEntry,
+  ReloadedEntry,
   RenderCacheObservers,
 } from "../../src/daemon/cache/render";
 import { DEBOUNCE_MS } from "../../src/daemon/cache/watchers";
@@ -28,7 +28,7 @@ import { DEBOUNCE_MS } from "../../src/daemon/cache/watchers";
 //    tests' previous "give fs.watch a moment" sleeps were this same fact,
 //    bet on instead of proven.
 export class ReloadSignal {
-  private readonly waiters = new Map<Readonly<CacheEntry>, Array<() => void>>();
+  private readonly waiters = new Map<ReloadedEntry, Array<() => void>>();
 
   // Hand this to `new RenderCache(deps, { observers })`.
   readonly observers: RenderCacheObservers = {
@@ -44,7 +44,7 @@ export class ReloadSignal {
   // `mutate` must leave the disk in the same final state on every call AND
   // emit an fs event on every call (a plain overwrite does; a bare unlink
   // does not — pair it with a rewrite).
-  async after(entry: Readonly<CacheEntry>, mutate: () => void): Promise<void> {
+  async after(entry: ReloadedEntry, mutate: () => void): Promise<void> {
     for (let round = 1; round <= MAX_ROUNDS; round++) {
       const reloaded = this.next(entry);
       mutate();
@@ -55,7 +55,7 @@ export class ReloadSignal {
     );
   }
 
-  private next(entry: Readonly<CacheEntry>): Promise<void> {
+  private next(entry: ReloadedEntry): Promise<void> {
     return new Promise((resolve) => {
       const pending = this.waiters.get(entry) ?? [];
       pending.push(resolve);

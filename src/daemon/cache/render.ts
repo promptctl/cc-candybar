@@ -75,12 +75,19 @@ export interface RenderCacheObservers {
   // getOrCreate and every watcher-driven reload alike, success (a fresh
   // `state`) and failure (`lastError` set, prior state preserved) alike —
   // after the entry's fields and watcher are settled. The entry is handed
-  // over read-only so the observer reads the outcome from the one place it
-  // lives and the type, not this comment, keeps it from writing there.
-  // Trusted non-throwing (the same contract as onSegmentError): an observer
-  // that throws is a caller bug surfaced loudly, never absorbed here.
-  readonly onReload?: (entry: Readonly<CacheEntry>) => void;
+  // over as ReloadedEntry so the observer reads the outcome from the one
+  // place it lives and the type, not this comment, keeps it from writing
+  // there. Trusted non-throwing (the same contract as onSegmentError): an
+  // observer that throws is a caller bug surfaced loudly, never absorbed here.
+  readonly onReload?: (entry: ReloadedEntry) => void;
 }
+
+// [LAW:types-are-the-program] The observer's view of an entry: read-only,
+// and without the watcher handle — `Readonly` cannot stop a method call, and
+// `release()` is the one reach that would silently break the rebind
+// invariant (a released-but-non-null watcher never rebinds). Omission is
+// the only type that closes it.
+export type ReloadedEntry = Readonly<Omit<CacheEntry, "watcher">>;
 
 // [LAW:types-are-the-program] The DSL render state for an entry is one
 // optionally-null bundle, not five independently-optional fields. Either

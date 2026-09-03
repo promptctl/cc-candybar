@@ -9,7 +9,11 @@ import { mkdtempSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { RenderCache } from "../src/daemon/cache/render";
+import {
+  RenderCache,
+  type CacheEntry,
+  type RenderCacheObservers,
+} from "../src/daemon/cache/render";
 import { GitDataProvider } from "../src/daemon/cache/git";
 import { SessionState } from "../src/daemon/session-state";
 import { WatcherRegistry } from "../src/daemon/cache/watchers";
@@ -28,11 +32,14 @@ const oneRow = (...segments: string[]): LayoutNode => ({
   children: segments.map((name) => ({ kind: "segment" as const, name })),
 });
 
-function makeCache(): {
+// `observers` defaults to the ReloadSignal's — the tests that hand in their
+// own are probing the observer contract itself, not awaiting a reload.
+function makeCache(observers?: RenderCacheObservers): {
   cache: RenderCache;
   cleanups: Array<() => void>;
   gitService: GitDataProvider;
   reloads: ReloadSignal;
+  watchers: WatcherRegistry;
 } {
   const cleanups: Array<() => void> = [];
   const watchers = new WatcherRegistry({
@@ -53,9 +60,9 @@ function makeCache(): {
   const reloads = new ReloadSignal();
   const cache = new RenderCache(
     { gitService, sessionState, watchers },
-    { maxEntries: 4, observers: reloads.observers },
+    { maxEntries: 4, observers: observers ?? reloads.observers },
   );
-  return { cache, cleanups, gitService, reloads };
+  return { cache, cleanups, gitService, reloads, watchers };
 }
 
 function mkConfigDir(): { dir: string; cleanup: () => void } {
@@ -122,7 +129,9 @@ describe("RenderCache", () => {
       // No file means state was built from the bundled default — every
       // built-in segment is declared.
       expect(entry.state).not.toBeNull();
-      expect(layoutSegments(entry.state!.config.root).length).toBeGreaterThan(0);
+      expect(layoutSegments(entry.state!.config.root).length).toBeGreaterThan(
+        0,
+      );
       expect(entry.configFilePath).toBeNull();
     } finally {
       for (const fn of cleanups) fn();
@@ -182,7 +191,9 @@ describe("RenderCache", () => {
       // count (across all rows) because the user fixture below uses one
       // row of one segment — matching the default's row count of 1 — so
       // row count alone wouldn't prove the file was picked up.
-      const defaultLayoutSegCount = layoutSegments(entry.state!.config.root).length;
+      const defaultLayoutSegCount = layoutSegments(
+        entry.state!.config.root,
+      ).length;
 
       // Create the project-local file. The watcher should fire.
       const cfg = join(dir, ".cc-candybar.json5");
@@ -286,6 +297,54 @@ describe("RenderCache", () => {
       // The .json5 is still the resolved file; render state intact.
       expect(entry.configFilePath).toBe(cfgJson5);
       expect(entry.lastError).toBeNull();
+    } finally {
+      for (const fn of cleanups) fn();
+      cleanup();
+    }
+  });
+
+  test("an observer that throws during the first load leaves the entry reachable", () => {
+    const { dir, cleanup } = mkConfigDir();
+    const { cache, cleanups, watchers } = makeCache({
+      onReload: () => {
+        throw new Error("observer boom");
+      },
+    });
+    try {
+      expect(() => cache.getOrCreate(dir, dir, undefined)).toThrow(
+        "observer boom",
+      );
+      // The entry — and the live registry + watcher it owns — is in the
+      // cache, so eviction/dispose can still reach it.
+      expect(cache.size).toBe(1);
+      expect(cache.firstPopulatedState()).not.toBeNull();
+      expect(watchers.size()).toBe(1);
+      // A second lookup finds it rather than building a duplicate: the
+      // observer (which would throw again) does not run, and no second
+      // watcher opens.
+      const found = cache.getOrCreate(dir, dir, undefined);
+      expect(found.state).toBe(cache.firstPopulatedState());
+      expect(cache.size).toBe(1);
+      expect(watchers.size()).toBe(1);
+    } finally {
+      for (const fn of cleanups) fn();
+      cleanup();
+    }
+  });
+
+  test("a reentrant getOrCreate from inside onReload returns the entry under construction", () => {
+    const { dir, cleanup } = mkConfigDir();
+    let inner: CacheEntry | undefined;
+    const { cache, cleanups, watchers } = makeCache({
+      onReload: () => {
+        inner = cache.getOrCreate(dir, dir, undefined);
+      },
+    });
+    try {
+      const outer = cache.getOrCreate(dir, dir, undefined);
+      expect(inner).toBe(outer);
+      expect(cache.size).toBe(1);
+      expect(watchers.size()).toBe(1);
     } finally {
       for (const fn of cleanups) fn();
       cleanup();
