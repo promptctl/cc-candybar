@@ -75,10 +75,11 @@ export interface RenderCacheObservers {
   // getOrCreate and every watcher-driven reload alike, success (a fresh
   // `state`) and failure (`lastError` set, prior state preserved) alike —
   // after the entry's fields and watcher are settled. The entry is handed
-  // over so the observer reads the outcome from the one place it lives.
+  // over read-only so the observer reads the outcome from the one place it
+  // lives and the type, not this comment, keeps it from writing there.
   // Trusted non-throwing (the same contract as onSegmentError): an observer
   // that throws is a caller bug surfaced loudly, never absorbed here.
-  readonly onReload?: (entry: CacheEntry) => void;
+  readonly onReload?: (entry: Readonly<CacheEntry>) => void;
 }
 
 // [LAW:types-are-the-program] The DSL render state for an entry is one
@@ -213,8 +214,13 @@ export class RenderCache {
       state: null,
       watcher: null,
     };
-    this.reloadInto(entry);
+    // [LAW:single-enforcer] Insert before the first load: from the moment the
+    // entry owns live handles it is reachable for eviction and dispose, so a
+    // throwing observer cannot strand a registry outside the map, and a
+    // reentrant getOrCreate for this key finds the entry under construction
+    // rather than building a duplicate.
     this.entries.set(key, entry);
+    this.reloadInto(entry);
 
     if (this.entries.size > this.maxEntries) {
       const oldest = this.entries.keys().next().value;

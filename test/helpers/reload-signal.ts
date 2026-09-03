@@ -22,12 +22,13 @@ import { DEBOUNCE_MS } from "../../src/daemon/cache/watchers";
 //    returns, and a write landing before that is never reported. The only
 //    proof of liveness is a delivered event, so `after` re-applies the
 //    mutation until a reload observes it. RETRY_MS is a cadence, not a
-//    deadline: a slower machine retries more and still passes; a watcher
-//    that never delivers is Jest's own test timeout, loud and carrying the
-//    test's name. The tests' previous "give fs.watch a moment" sleeps were
-//    this same fact, bet on instead of proven.
+//    deadline: a slower machine retries more and still passes. A watcher
+//    that never delivers fails after MAX_ROUNDS with the count — below
+//    Jest's test timeout, so the test's `finally` cleanup still runs. The
+//    tests' previous "give fs.watch a moment" sleeps were this same fact,
+//    bet on instead of proven.
 export class ReloadSignal {
-  private readonly waiters = new Map<CacheEntry, Array<() => void>>();
+  private readonly waiters = new Map<Readonly<CacheEntry>, Array<() => void>>();
 
   // Hand this to `new RenderCache(deps, { observers })`.
   readonly observers: RenderCacheObservers = {
@@ -43,15 +44,18 @@ export class ReloadSignal {
   // `mutate` must leave the disk in the same final state on every call AND
   // emit an fs event on every call (a plain overwrite does; a bare unlink
   // does not — pair it with a rewrite).
-  async after(entry: CacheEntry, mutate: () => void): Promise<void> {
-    for (;;) {
+  async after(entry: Readonly<CacheEntry>, mutate: () => void): Promise<void> {
+    for (let round = 1; round <= MAX_ROUNDS; round++) {
       const reloaded = this.next(entry);
       mutate();
       if (await arrivesWithin(reloaded, RETRY_MS)) return;
     }
+    throw new Error(
+      `no reload observed for ${entry.projectDir} after ${MAX_ROUNDS} mutations (${MAX_ROUNDS * RETRY_MS} ms)`,
+    );
   }
 
-  private next(entry: CacheEntry): Promise<void> {
+  private next(entry: Readonly<CacheEntry>): Promise<void> {
     return new Promise((resolve) => {
       const pending = this.waiters.get(entry) ?? [];
       pending.push(resolve);
@@ -64,6 +68,9 @@ export class ReloadSignal {
 // a retry must at least outwait the debounce, or every round re-mutates before
 // the first one could possibly have reloaded.
 const RETRY_MS = 4 * DEBOUNCE_MS;
+// 64 fresh chances (~13 s at the cadence above): far above any delivery
+// latency seen, below Jest's 30 s testTimeout so the failure is this error.
+const MAX_ROUNDS = 64;
 
 function arrivesWithin(signal: Promise<void>, ms: number): Promise<boolean> {
   return new Promise((resolve) => {
