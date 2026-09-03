@@ -1,3 +1,10 @@
+## [1.41.2](https://github.com/promptctl/cc-candybar/compare/v1.41.1...v1.41.2) (2026-09-03)
+
+
+### Bug Fixes
+
+* **dsl:** helpers are one shared Defines, not a preamble re-parsed into every template ([#198](https://github.com/promptctl/cc-candybar/issues/198)) ([54428d0](https://github.com/promptctl/cc-candybar/commit/54428d0c40c3a42e9c4fd8711099ab0627024eb6)), closes [#197](https://github.com/promptctl/cc-candybar/issues/197) [#197](https://github.com/promptctl/cc-candybar/issues/197)
+
 ## [1.41.1](https://github.com/promptctl/cc-candybar/compare/v1.41.0...v1.41.1) (2026-09-03)
 
 
