@@ -143,9 +143,17 @@ fn parse_stdin() -> Result<ParsedInput, BadInput> {
 // hand-maintained name list — means a subcommand Node adds (lint/schema/vars/…)
 // works here with no Rust mirror to update and no drift to ship. `stdin_is_tty`
 // is injected so this is a pure, testable function.
+//
+// Bare flags that are questions for a human, not render options: they are the
+// one non-structural case, so they are named here — and the test
+// `dispatch_routes_every_node_flag_to_node` enumerates the contract so a
+// spelling dropped from this list fails loudly rather than silently falling
+// through to "no input on stdin".
+const NODE_FLAGS: [&str; 4] = ["--help", "-h", "--version", "-V"];
+
 fn should_dispatch_to_node(argv: &[String], stdin_is_tty: bool) -> bool {
-    // --help / -h anywhere → Node prints help.
-    if argv.iter().any(|a| a == "--help" || a == "-h") {
+    // --help / -h / --version / -V anywhere → Node answers.
+    if argv.iter().any(|a| NODE_FLAGS.contains(&a.as_str())) {
         return true;
     }
     // A positional first arg (not a flag) is a subcommand → Node owns it.
@@ -1133,16 +1141,26 @@ mod tests {
         assert_eq!(effective_cooldown_ms(1_000_000), SPAWN_BACKOFF_CAP_MS);
     }
 
+    // [LAW:one-source-of-truth] Every bare flag Node answers — help and version,
+    // both spellings — must route to Node from the shipped binary whether stdin
+    // is redirected or a TTY. The list is spelled here on purpose, not read from
+    // NODE_FLAGS: the test pins the contract, so a spelling dropped from the
+    // routing list fails here instead of degrading to "no input on stdin" (the
+    // same silent-fallthrough defect the subcommand test above was written for).
     #[test]
-    fn dispatch_help_and_tty_to_node() {
-        assert!(should_dispatch_to_node(
-            &argv(&["cc-candybar", "--help"]),
-            false
-        ));
-        assert!(should_dispatch_to_node(
-            &argv(&["cc-candybar", "-h"]),
-            false
-        ));
+    fn dispatch_routes_every_node_flag_to_node() {
+        for flag in ["--help", "-h", "--version", "-V"] {
+            for tty in [false, true] {
+                assert!(
+                    should_dispatch_to_node(&argv(&["cc-candybar", flag]), tty),
+                    "flag `{flag}` must dispatch to Node with stdin_is_tty={tty}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn dispatch_tty_without_subcommand_to_node() {
         // No positional subcommand, but an interactive TTY → Node prints the
         // needs-input error.
         assert!(should_dispatch_to_node(&argv(&["cc-candybar"]), true));

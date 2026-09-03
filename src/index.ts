@@ -16,6 +16,7 @@ import { runCheck } from "./check";
 import { obtainDaemonKick } from "./daemon/acquire";
 import { planOutcome } from "./render/outcome-plan";
 import { HELP_TEXT } from "./help-text";
+import { PACKAGE_VERSION } from "./version";
 
 // Read terminal width from the live shell context (no subprocess). Returns
 // undefined when nothing reliable is available; the daemon falls back to its
@@ -74,6 +75,14 @@ async function main(): Promise<void> {
 
     if (showHelp) {
       showHelpText();
+      process.exit(0);
+    }
+    // [LAW:one-type-per-behavior] Answers "what is THIS binary" from the baked
+    // stamp alone — never a daemon probe, which would fail exactly when the
+    // flag is most needed (no working daemon). Daemon skew is the stats
+    // snapshot's `version` field.
+    if (process.argv.includes("--version") || process.argv.includes("-V")) {
+      console.log(`cc-candybar ${PACKAGE_VERSION}`);
       process.exit(0);
     }
 

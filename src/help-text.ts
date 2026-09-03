@@ -37,6 +37,7 @@ Usage: cc-candybar [options]
 
 Standalone Commands:
   -h, --help               Show this help
+  -V, --version            Print the version of this runtime (cc-candybar <version>)
 
 Debugging:
   CC_CANDYBAR_DEBUG=1      Enable debug logging for troubleshooting

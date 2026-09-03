@@ -64,6 +64,7 @@ export function formatStats(s: StatsSnapshot): string {
   lines.push(`process`);
   lines.push(`  pid           ${s.pid}`);
   lines.push(`  version       ${s.version}`);
+  lines.push(`  protocol      ${s.protocolVersion}`);
   lines.push(`  startedAt     ${s.startedAt}`);
   lines.push(`  uptime        ${fmtUptime(s.uptimeSec)}`);
   lines.push(`  rss           ${fmtBytes(s.rssBytes)}`);
