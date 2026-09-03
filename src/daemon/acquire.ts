@@ -2,6 +2,7 @@ import fs from "node:fs";
 import net from "node:net";
 import path from "node:path";
 import { launchDetachedSync } from "../proc/launch";
+import { heapCapMb } from "./limits";
 import process from "node:process";
 import {
   socketPath,
@@ -656,9 +657,11 @@ function sleep(ms: number): Promise<void> {
 
 // ─── Default spawn implementation ───────────────────────────────────────────
 //
-// Cap V8 old-generation at 400 MB so GC fires before RSS hits the 512 MB hard
-// limit. The Rust client mirrors this in rust-client/src/main.rs
-// (spawn_daemon_detached) — keep the two in sync when changing this value.
+// [LAW:one-source-of-truth] The V8 old-space cap is derived from the daemon's
+// RSS budget (limits.ts: heapCapMb), never a literal here — the cap must sit
+// ABOVE the RSS backstop so the graceful path fires first, and only one owner
+// of the budget can keep that order true. The Rust client derives the same
+// value the same way (rust-client/src/launch.rs).
 //
 // [LAW:single-enforcer] Routes through src/proc/launch so daemon-spawn shows
 // up in subprocess metering (category "daemon-spawn"). The launch primitive
@@ -674,7 +677,7 @@ function spawnDaemonDetachedReal(): boolean {
   // discarded the Promise and unconditionally returned true.
   const result = launchDetachedSync({
     bin: node,
-    args: ["--max-old-space-size=400", script, "daemon"],
+    args: [`--max-old-space-size=${heapCapMb(process.env)}`, script, "daemon"],
     category: "daemon-spawn",
   });
   return result.ok;

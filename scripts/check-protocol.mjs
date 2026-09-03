@@ -71,12 +71,16 @@ function lit(relPath, regex) {
 }
 
 // Set of string members: collect every capture of a global regex within the
-// slice matched by blockRegex, canonicalized as a sorted joined list.
+// slice matched by blockRegex, canonicalized as a sorted joined list. A member
+// is its capture groups joined by a fixed separator, so a multi-group regex
+// compares values, never the formatting between them.
 function memberSet(relPath, blockRegex, memberRegex) {
   return () => {
     const block = read(relPath).match(blockRegex);
     if (!block) return null;
-    const members = [...block[0].matchAll(memberRegex)].map((m) => m[1]);
+    const members = [...block[0].matchAll(memberRegex)].map((m) =>
+      m.slice(1).join("="),
+    );
     if (members.length === 0) return null;
     return [...new Set(members)].sort().join(", ");
   };
@@ -98,7 +102,10 @@ const TS_GLYPH = "src/render/error-glyph.ts";
 const TS_STYLE = "src/render/diagnostic-style.ts";
 const TS_PATHS = "src/daemon/paths.ts";
 const TS_ACQUIRE = "src/daemon/acquire.ts";
+const TS_LIMITS_TEST = "test/daemon-limits.test.ts";
+const TS_LIMITS = "src/daemon/limits.ts";
 const RS_MAIN = "rust-client/src/main.rs";
+const RS_LAUNCH = "rust-client/src/launch.rs";
 const RS_GLYPH = "rust-client/src/error_glyph.rs";
 
 const CHECKS = [
@@ -209,6 +216,18 @@ const CHECKS = [
     ts: num(TS_GLYPH, /const MAX_MESSAGE_LEN = ([\d\s*]+);/),
     rust: num(RS_GLYPH, /const MAX_MESSAGE_LEN: usize = ([\d\s*]+);/),
   },
+  // The budget grammar's test vectors: each side's test drives its own parser
+  // from its own list, so the lists themselves are the mirrored fact.
+  {
+    label: "budget grammar: accepted vectors",
+    ts: memberSet(TS_LIMITS_TEST, /const ACCEPT[\s\S]*?\];/, /"([^"]*)", ?(\d+)/g),
+    rust: memberSet(RS_LAUNCH, /const ACCEPT[\s\S]*?\];/, /"([^"]*)", ?(\d+)/g),
+  },
+  {
+    label: "budget grammar: rejected vectors",
+    ts: memberSet(TS_LIMITS_TEST, /const REJECT[\s\S]*?\];/, /"([^"]*)"/g),
+    rust: memberSet(RS_LAUNCH, /const REJECT[\s\S]*?\];/, /"([^"]*)"/g),
+  },
   {
     label: "spawn-cooldown (ms)",
     ts: num(TS_ACQUIRE, /const SPAWN_COOLDOWN_MS = ([\d\s*_]+);/),
@@ -242,6 +261,25 @@ const CHECKS = [
     label: "spawn-backoff filename",
     ts: lit(TS_PATHS, /const SPAWN_BACKOFF_FILE = "((?:[^"\\]|\\.)*)";/),
     rust: lit(RS_MAIN, /const SPAWN_BACKOFF_FILE: &str = "((?:[^"\\]|\\.)*)";/),
+  },
+  // The daemon's memory budget: both spawners derive node's --max-old-space-size
+  // from it, the daemon derives its RSS backstop from it, and the cap must stay
+  // above the backstop (limits.ts). All three pieces must agree or one runtime
+  // spawns a daemon whose hard cap sits below its graceful one.
+  {
+    label: "rss-limit env var",
+    ts: lit(TS_LIMITS, /export const RSS_LIMIT_ENV = "((?:[^"\\]|\\.)*)";/),
+    rust: lit(RS_LAUNCH, /const RSS_LIMIT_ENV: &str = "((?:[^"\\]|\\.)*)";/),
+  },
+  {
+    label: "default rss limit (MB)",
+    ts: num(TS_LIMITS, /export const DEFAULT_RSS_LIMIT_MB = ([\d\s*_]+);/),
+    rust: num(RS_LAUNCH, /const DEFAULT_RSS_LIMIT_MB: u64 = ([\d\s*_]+);/),
+  },
+  {
+    label: "heap cap over rss (multiplier)",
+    ts: num(TS_LIMITS, /export const HEAP_CAP_OVER_RSS = ([\d\s*_]+);/),
+    rust: num(RS_LAUNCH, /const HEAP_CAP_OVER_RSS: u64 = ([\d\s*_]+);/),
   },
 ];
 
