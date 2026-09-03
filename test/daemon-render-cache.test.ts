@@ -332,6 +332,27 @@ describe("RenderCache", () => {
     }
   });
 
+  test("a throwing observer cannot push the cache over its entry cap", () => {
+    // maxEntries=4. Every lookup throws from the observer AND inserts its
+    // entry (pinned above); the cap must still hold across five of them.
+    const { cache, cleanups, watchers } = makeCache({
+      onReload: () => {
+        throw new Error("observer boom");
+      },
+    });
+    try {
+      for (let i = 0; i < 5; i++) {
+        expect(() => cache.getOrCreate(`/p${i}`, `/p${i}`, undefined)).toThrow(
+          "observer boom",
+        );
+      }
+      expect(cache.size).toBe(4);
+      expect(watchers.size()).toBe(4);
+    } finally {
+      for (const fn of cleanups) fn();
+    }
+  });
+
   test("a reentrant getOrCreate from inside onReload returns the entry under construction", () => {
     const { dir, cleanup } = mkConfigDir();
     let inner: CacheEntry | undefined;

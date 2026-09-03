@@ -232,14 +232,15 @@ export class RenderCache {
       state: null,
       watcher: null,
     };
-    // [LAW:single-enforcer] Insert before the first load: from the moment the
-    // entry owns live handles it is reachable for eviction and dispose, so a
-    // throwing observer cannot strand a registry outside the map, and a
-    // reentrant getOrCreate for this key finds the entry under construction
-    // rather than building a duplicate.
+    // [LAW:single-enforcer] Insert, bound, then load — in that order. From the
+    // moment the entry owns live handles it is reachable for eviction and
+    // dispose, so a throwing observer cannot strand a registry outside the
+    // map, and a reentrant getOrCreate for this key finds the entry under
+    // construction rather than building a duplicate. The bound runs before
+    // the load because it is a fact about the MAP, complete at insertion:
+    // nothing the load does (including an observer throwing) can skip it.
+    // [LAW:dataflow-not-control-flow]
     this.entries.set(key, entry);
-    this.reloadInto(entry);
-
     if (this.entries.size > this.maxEntries) {
       const oldest = this.entries.keys().next().value;
       if (oldest !== undefined) {
@@ -254,6 +255,7 @@ export class RenderCache {
         this.entries.delete(oldest);
       }
     }
+    this.reloadInto(entry);
 
     return entry;
   }
