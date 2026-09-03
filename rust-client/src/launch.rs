@@ -54,7 +54,7 @@ pub fn exec_node_replace(node_script: &Path, argv_tail: &[String]) -> io::Error 
 // the graceful path always fires first. scripts/check-protocol.mjs fails the
 // build if these three drift from the TS side.
 const RSS_LIMIT_ENV: &str = "CC_CANDYBAR_RSS_LIMIT_MB";
-const DEFAULT_RSS_LIMIT_MB: u64 = 2048;
+const DEFAULT_RSS_LIMIT_MB: u64 = 512;
 const HEAP_CAP_OVER_RSS: u64 = 2;
 
 // [LAW:parse-dont-validate] Mirror of limits.ts rssLimitMb/heapCapMb: absent →
@@ -180,7 +180,7 @@ mod tests {
 
     #[test]
     fn heap_cap_derives_from_rss_budget() {
-        assert_eq!(heap_cap_mb(None), Ok(2048 * 2));
+        assert_eq!(heap_cap_mb(None), Ok(512 * 2));
         for (raw, mb) in ACCEPT {
             assert_eq!(heap_cap_mb(Some(raw)), Ok(mb * 2), "{raw:?}");
         }

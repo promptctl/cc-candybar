@@ -13,7 +13,7 @@
 
 import type { RichText, Palette, ThemeKey } from "@promptctl/rich-js";
 import { ColorSpec, Style, lighten, IDENTITY } from "@promptctl/rich-js";
-import type { Engine, Template } from "@promptctl/go-template-js";
+import { Defines, type Engine, type Template } from "@promptctl/go-template-js";
 import type {
   ValidatedConfig,
   VariableDecl,
@@ -213,38 +213,40 @@ function declareOne(
   }
 }
 
-// ─── Helper preamble ─────────────────────────────────────────────────────────
+// ─── Helpers ─────────────────────────────────────────────────────────────────
 
 // [LAW:single-enforcer] Compile the config's shared helper templates into ONE
-// output-neutral preamble: each name→body becomes a `{{ define "name" }}body{{ end }}`
-// block, concatenated with no interstitial text so the preamble emits nothing.
-// Prepended to every template this config parses, the defines resolve a
-// `{{ template "name" .arg }}` call locally — go-template-js scopes defines to a
-// single parse unit, so the define and the call MUST share one parse.
-// [LAW:no-silent-fallbacks] Each body is parsed in ISOLATION first, so a malformed
-// helper surfaces a per-helper diagnostic rather than a confusing error blamed on
-// the first segment that happens to call it.
-// [LAW:dataflow-not-control-flow] Empty helpers ⇒ "" ⇒ `engine.parse("" + src)`
-// is byte-identical to `engine.parse(src)`: existing configs are unaffected with
-// no special-case branch.
-function compileHelperPreamble(
+// define set: each name→body is parsed as its own `{{ define "name" }}body{{ end }}`
+// unit, chained onto the previous helpers' set, so the result is one `Defines`
+// every template this config parses inherits (`engine.parse(src, helpers)`).
+// [LAW:one-source-of-truth] Inherited by link, never by copy. The previous
+// shape — the defines' SOURCE prepended to every parse — re-parsed the whole
+// helper block into every template: ~100 KB of AST per parse for the 2 KB
+// stdlib block, ~287 parses per config, ~30 MB per config, and a daemon
+// holding twenty configs sat at 600 MB of nothing but duplicated helper ASTs
+// (the 2026-09-02 RSS-breach snapshot and the 2026-09-03 crash-loop).
+// [LAW:no-silent-fallbacks] Each body is parsed in ISOLATION, so a malformed
+// helper surfaces a per-helper diagnostic rather than a confusing error blamed
+// on the first segment that happens to call it; the redefinition check the
+// parser applies against the inherited set is what makes helper names unique.
+function compileHelpers(
   engine: Engine<RichText>,
   helpers: Readonly<Record<string, string>>,
-): string {
-  let preamble = "";
+): Defines {
+  let defines = Defines.EMPTY;
   for (const [name, body] of Object.entries(helpers)) {
-    const define = `{{ define "${name}" }}${body}{{ end }}`;
     try {
-      engine.parse(define);
+      defines = engine
+        .parse(`{{ define "${name}" }}${body}{{ end }}`, defines)
+        .defines();
     } catch (e) {
       throw new Error(
         `Template parse error in helpers.${name}: ${(e as Error).message}`,
         { cause: e },
       );
     }
-    preamble += define;
   }
-  return preamble;
+  return defines;
 }
 
 // ─── registerDslConfig ────────────────────────────────────────────────────────
@@ -379,16 +381,14 @@ export function registerDslConfig(
     },
     opts?.clock,
   );
-  // [LAW:single-enforcer] THE one parse path for this config: prepend the helper
-  // preamble so every template — segment template/when/bg/fg, node `when`, and
-  // action copy/open — resolves `{{ template "name" }}` calls against the same
-  // shared helpers. One closure, not raw engine.parse scattered across sites, so
-  // there is exactly one boundary where helpers come into scope (and one place a
-  // helper could fail to be visible). The preamble is compiled ONCE here, not per
-  // parse, and is "" when no helpers are declared.
-  const helperPreamble = compileHelperPreamble(engine, config.helpers);
-  const parse = (src: string): Template<RichText> =>
-    engine.parse(helperPreamble + src);
+  // [LAW:single-enforcer] THE one parse path for this config: every template —
+  // segment template/when/bg/fg, node `when`, and action copy/open — inherits
+  // the same helper define set, so `{{ template "name" }}` resolves against one
+  // shared AST. One closure, not raw engine.parse scattered across sites, so
+  // there is exactly one boundary where helpers come into scope (and one place
+  // a helper could fail to be visible). The helpers are parsed ONCE here.
+  const helpers = compileHelpers(engine, config.helpers);
+  const parse = (src: string): Template<RichText> => engine.parse(src, helpers);
   // [LAW:one-source-of-truth] Map each SessionState key → the variable that
   // reads it, so an option picker marks its current selection by reading the
   // SAME value the templates read — independent of whether the config named the

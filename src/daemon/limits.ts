@@ -21,17 +21,18 @@ import { dlog, type DaemonLogger } from "./log";
 // The cap sits at HEAP_CAP_OVER_RSS × the backstop, a margin wide enough that
 // the graceful path fires first under any growth the 60 s poll can see (a
 // burst that doubles RSS inside one poll window can still reach the hard cap).
-// Before this the two were unrelated literals (400 MB heap in
-// each spawner, 512 MB RSS here): a cold daemon seeding a large transcript tree
-// for a dozen sessions blew the heap in seconds, aborted silently, and crash-
-// looped on every render tick while the backstop — a 60 s poll — never got a
-// turn. Raising the env override raises BOTH, because both spawners derive the
-// cap through heapCapMb below. The Rust client mirrors RSS_LIMIT_ENV,
-// DEFAULT_RSS_LIMIT_MB, and HEAP_CAP_OVER_RSS as literals
+// Before this the two were unrelated literals (400 MB heap in each spawner,
+// 512 MB RSS here), and the 2026-09-03 outage found the gap: a daemon holding
+// twenty configs' worth of duplicated helper-template ASTs (since fixed in
+// src/dsl/render.ts compileHelpers) blew the heap in seconds, aborted
+// silently, and crash-looped on every render tick while the backstop — a 60 s
+// poll — never got a turn. Raising the env override raises BOTH, because both
+// spawners derive the cap through heapCapMb below. The Rust client mirrors
+// RSS_LIMIT_ENV, DEFAULT_RSS_LIMIT_MB, and HEAP_CAP_OVER_RSS as literals
 // (rust-client/src/launch.rs); scripts/check-protocol.mjs fails the build on
 // drift.
 export const RSS_LIMIT_ENV = "CC_CANDYBAR_RSS_LIMIT_MB";
-export const DEFAULT_RSS_LIMIT_MB = 2048;
+export const DEFAULT_RSS_LIMIT_MB = 512;
 export const HEAP_CAP_OVER_RSS = 2;
 
 // [LAW:parse-dont-validate] Absent → default; a positive integer → that; present
