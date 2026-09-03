@@ -163,9 +163,31 @@ describe("describeNextRestart", () => {
   });
 });
 
-// [LAW:one-source-of-truth] This vector table is the SAME table
+// [LAW:one-source-of-truth] These vector tables are the SAME tables
 // rust-client/src/launch.rs runs against heap_cap_mb — one grammar, pinned
-// from both sides. Add a vector here, add it there.
+// from both sides. scripts/check-protocol.mjs diffs the two ACCEPT and the two
+// REJECT lists, so adding a vector on one side without the other fails the
+// build.
+const ACCEPT: Array<[string, number]> = [
+  ["1024", 1024],
+  [" 300 ", 300],
+  ["007", 7],
+];
+const REJECT = [
+  "",
+  " ",
+  "0",
+  "-5",
+  "+10",
+  "abc",
+  "1.5",
+  "512MB",
+  "1_000",
+  "١٢",
+  "9007199254740992", // 2^53: past the safe-integer range
+  "99999999999999999999",
+];
+
 describe("rssLimitMb / heapCapMb (the memory-budget grammar)", () => {
   const env = (v: string | undefined): NodeJS.ProcessEnv =>
     v === undefined ? {} : { [RSS_LIMIT_ENV]: v };
@@ -175,29 +197,12 @@ describe("rssLimitMb / heapCapMb (the memory-budget grammar)", () => {
     expect(heapCapMb(env(undefined))).toBe(DEFAULT_RSS_LIMIT_MB * HEAP_CAP_OVER_RSS);
   });
 
-  test.each([
-    ["1024", 1024],
-    [" 300 ", 300],
-    ["007", 7],
-  ])("accepts %j as %i MB", (raw, mb) => {
+  test.each(ACCEPT)("accepts %j as %i MB", (raw, mb) => {
     expect(rssLimitMb(env(raw))).toBe(mb);
     expect(heapCapMb(env(raw))).toBe(mb * HEAP_CAP_OVER_RSS);
   });
 
-  test.each([
-    "",
-    " ",
-    "0",
-    "-5",
-    "+10",
-    "abc",
-    "1.5",
-    "512MB",
-    "1_000",
-    "١٢",
-    "9007199254740992", // 2^53: past the safe-integer range
-    "99999999999999999999",
-  ])("rejects %j loudly rather than defaulting", (raw) => {
+  test.each(REJECT)("rejects %j loudly rather than defaulting", (raw) => {
     expect(() => rssLimitMb(env(raw))).toThrow(RSS_LIMIT_ENV);
     expect(() => heapCapMb(env(raw))).toThrow(RSS_LIMIT_ENV);
   });

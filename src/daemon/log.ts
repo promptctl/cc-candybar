@@ -53,8 +53,19 @@ export type DaemonLogger = (level: LogLevel, msg: string) => void;
 export function dlog(level: LogLevel, msg: string): void {
   const filePath = logPath();
   const line = `${new Date().toISOString()} [${level}] ${msg}\n`;
-  const before = currentBytes(filePath);
-  fs.appendFileSync(filePath, line);
-  bytesWritten = before + Buffer.byteLength(line, "utf8");
-  if (bytesWritten >= MAX_BYTES) rotate(filePath);
+  try {
+    const before = currentBytes(filePath);
+    fs.appendFileSync(filePath, line);
+    bytesWritten = before + Buffer.byteLength(line, "utf8");
+    if (bytesWritten >= MAX_BYTES) rotate(filePath);
+  } catch (e) {
+    // [LAW:no-silent-failure] exception: the failure IS the log sink, so it
+    // cannot be reported through the log sink. A throw here would escape the
+    // crash handlers that call dlog first (uncaughtException → dlog →
+    // shutdown), taking the clean-death path down with it. stderr is the one
+    // channel left; it carries the line and the reason it went there.
+    process.stderr.write(
+      `${line}cc-candybar: ${filePath} unwritable: ${(e as Error).message}\n`,
+    );
+  }
 }

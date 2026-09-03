@@ -62,6 +62,13 @@ export function heapCapMb(env: NodeJS.ProcessEnv): number {
   return rssLimitMb(env) * HEAP_CAP_OVER_RSS;
 }
 
+const BYTES_PER_MB = 1024 * 1024;
+
+// The budget in the unit `process.memoryUsage().rss` reports.
+export function rssLimitBytes(env: NodeJS.ProcessEnv): number {
+  return rssLimitMb(env) * BYTES_PER_MB;
+}
+
 const DEFAULT_CHECK_INTERVAL = 60 * 1000;
 const HEAP_SNAPSHOT_KEEP = 3;
 
@@ -92,7 +99,7 @@ export interface LimitsHandle {
 }
 
 export function makeLimits(deps: LimitsDeps): LimitsHandle {
-  const rssLimit = deps.rssLimitBytes ?? DEFAULT_RSS_LIMIT_MB * 1024 * 1024;
+  const rssLimit = deps.rssLimitBytes ?? DEFAULT_RSS_LIMIT_MB * BYTES_PER_MB;
   const keep = deps.snapshotsKeep ?? HEAP_SNAPSHOT_KEEP;
   let triggered = false;
 

@@ -38,6 +38,31 @@ async function withFreshLog<T>(
 }
 
 describe("dlog", () => {
+  test("never throws: an unwritable sink degrades to stderr, line intact", async () => {
+    await withFreshLog(
+      (logFile) => {
+        // Replace the state dir with a FILE so mkdir and append both fail.
+        fs.rmSync(path.dirname(logFile), { recursive: true, force: true });
+        fs.writeFileSync(path.dirname(logFile), "");
+      },
+      (dlog) => {
+        const written: string[] = [];
+        const spy = jest
+          .spyOn(process.stderr, "write")
+          .mockImplementation((chunk: string | Uint8Array) => {
+            written.push(String(chunk));
+            return true;
+          });
+        try {
+          expect(() => dlog("error", "uncaughtException: boom")).not.toThrow();
+        } finally {
+          spy.mockRestore();
+        }
+        expect(written.join("")).toMatch(/\[error\] uncaughtException: boom\n.*unwritable/);
+      },
+    );
+  });
+
   test("the line is on disk when dlog returns", async () => {
     await withFreshLog(
       () => {},

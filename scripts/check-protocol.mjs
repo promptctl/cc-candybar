@@ -98,6 +98,7 @@ const TS_GLYPH = "src/render/error-glyph.ts";
 const TS_STYLE = "src/render/diagnostic-style.ts";
 const TS_PATHS = "src/daemon/paths.ts";
 const TS_ACQUIRE = "src/daemon/acquire.ts";
+const TS_LIMITS_TEST = "test/daemon-limits.test.ts";
 const TS_LIMITS = "src/daemon/limits.ts";
 const RS_MAIN = "rust-client/src/main.rs";
 const RS_LAUNCH = "rust-client/src/launch.rs";
@@ -210,6 +211,18 @@ const CHECKS = [
     label: "glyph MAX_MESSAGE_LEN",
     ts: num(TS_GLYPH, /const MAX_MESSAGE_LEN = ([\d\s*]+);/),
     rust: num(RS_GLYPH, /const MAX_MESSAGE_LEN: usize = ([\d\s*]+);/),
+  },
+  // The budget grammar's test vectors: each side's test drives its own parser
+  // from its own list, so the lists themselves are the mirrored fact.
+  {
+    label: "budget grammar: accepted vectors",
+    ts: memberSet(TS_LIMITS_TEST, /const ACCEPT[\s\S]*?\];/, /("[^"]*", ?\d+)/g),
+    rust: memberSet(RS_LAUNCH, /const ACCEPT[\s\S]*?\];/, /("[^"]*", ?\d+)/g),
+  },
+  {
+    label: "budget grammar: rejected vectors",
+    ts: memberSet(TS_LIMITS_TEST, /const REJECT[\s\S]*?\];/, /"([^"]*)"/g),
+    rust: memberSet(RS_LAUNCH, /const REJECT[\s\S]*?\];/, /"([^"]*)"/g),
   },
   {
     label: "spawn-cooldown (ms)",

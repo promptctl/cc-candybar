@@ -50,7 +50,7 @@ import { RuntimeStats } from "./stats";
 import {
   makeLimits,
   realLimitsDeps,
-  rssLimitMb,
+  rssLimitBytes,
   type LimitsHandle,
 } from "./limits";
 import { armParentWatchdog, anchorFromEnv, pidAlive } from "./parent-watchdog";
@@ -161,7 +161,7 @@ let myStartTime: string | null = null;
 let breakerRegistryPath: string | null = null;
 
 // The parsed memory budget (bytes); set first thing in runDaemon.
-let rssLimitBytes = 0;
+let budgetBytes = 0;
 
 export function runDaemon(): void {
   // Catch-alls log + exit so the supervisor (the next client) can restart us.
@@ -193,7 +193,17 @@ export function runDaemon(): void {
   // registers us, before the bind, before the lease, and before a `daemon up`
   // line could claim a boot that is about to die. Parsed once, threaded into
   // armLimits and the boot line.
-  rssLimitBytes = rssLimitMb(process.env) * 1024 * 1024;
+  // [LAW:single-enforcer] Refused through the same death funnel as every other
+  // boot failure. A synchronous throw here is NOT uncaught — it lands in
+  // index.ts's catch, whose stderr the detached spawn discards — so the one
+  // line that says why the daemon never came up would go nowhere.
+  try {
+    budgetBytes = rssLimitBytes(process.env);
+  } catch (err) {
+    dlog("error", `refusing to boot: ${(err as Error).message}`);
+    shutdown(1);
+    return;
+  }
 
   // [LAW:single-enforcer] The fork-bomb circuit breaker runs FIRST among the
   // resource-committing steps (no dir created, no socket touched, no session
@@ -396,7 +406,7 @@ function onListening(sockPath: string): void {
     // question a silent SIGABRT crash-loop leaves open is "which cap was live".
     `daemon up: pid=${process.pid} v=${PROTOCOL_VERSION} sock=${sockPath} ` +
       `heapCap=${Math.round(v8.getHeapStatistics().heap_size_limit / 1048576)}MB ` +
-      `rssLimit=${Math.round(rssLimitBytes / 1048576)}MB`,
+      `rssLimit=${Math.round(budgetBytes / 1048576)}MB`,
   );
   // [LAW:single-enforcer] This bind is the one process-wide fact that answers
   // "did an outage just end" — see resetSpawnBackoff's doc comment in
@@ -480,7 +490,7 @@ let limits: LimitsHandle | null = null;
 function armLimits(): void {
   limits = makeLimits(
     realLimitsDeps(stats.startedAt.getTime(), (code) => shutdown(code), {
-      rssLimitBytes,
+      rssLimitBytes: budgetBytes,
     }),
   );
   limits.arm();

@@ -159,19 +159,32 @@ mod tests {
     // silently defaulted. The exact numbers are pinned TS↔Rust by
     // scripts/check-protocol.mjs, not here.
     //
-    // The vector table is the SAME table test/daemon-limits.test.ts runs
-    // against rssLimitMb/heapCapMb — one grammar, pinned from both sides.
+    // ACCEPT and REJECT are the SAME tables test/daemon-limits.test.ts runs
+    // against rssLimitMb/heapCapMb — one grammar, pinned from both sides by
+    // scripts/check-protocol.mjs, which diffs the two lists.
+    const ACCEPT: &[(&str, u64)] = &[("1024", 1024), (" 300 ", 300), ("007", 7)];
+    const REJECT: &[&str] = &[
+        "",
+        " ",
+        "0",
+        "-5",
+        "+10",
+        "abc",
+        "1.5",
+        "512MB",
+        "1_000",
+        "١٢",
+        "9007199254740992", // 2^53: past the safe-integer range
+        "99999999999999999999",
+    ];
+
     #[test]
     fn heap_cap_derives_from_rss_budget() {
         assert_eq!(heap_cap_mb(None), Ok(2048 * 2));
-        assert_eq!(heap_cap_mb(Some("1024")), Ok(2048));
-        assert_eq!(heap_cap_mb(Some(" 300 ")), Ok(600));
-        assert_eq!(heap_cap_mb(Some("007")), Ok(14));
-        for garbage in [
-            "", " ", "0", "-5", "+10", "abc", "1.5", "512MB", "1_000", "١٢",
-            "9007199254740992",            // 2^53: past JS's safe-integer range
-            "99999999999999999999",        // past u64
-        ] {
+        for (raw, mb) in ACCEPT {
+            assert_eq!(heap_cap_mb(Some(raw)), Ok(mb * 2), "{raw:?}");
+        }
+        for garbage in REJECT {
             assert!(heap_cap_mb(Some(garbage)).is_err(), "{garbage:?} accepted");
         }
     }
