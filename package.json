@@ -1,6 +1,6 @@
 {
   "name": "@promptctl/cc-candybar",
-  "version": "1.41.2",
+  "version": "1.41.3",
   "description": "Statusline renderer for Claude Code — a JSON5-configurable DSL with daemon-cached data sources, byte-clean palette-aware composition, and OSC8 click verbs.",
   "type": "module",
   "main": "./dist/index.mjs",
@@ -91,9 +91,9 @@
     "mobx": "^6.15.0"
   },
   "optionalDependencies": {
-    "@promptctl/cc-candybar-darwin-arm64": "1.41.2",
-    "@promptctl/cc-candybar-darwin-x64": "1.41.2",
-    "@promptctl/cc-candybar-linux-x64": "1.41.2",
-    "@promptctl/cc-candybar-linux-arm64": "1.41.2"
+    "@promptctl/cc-candybar-darwin-arm64": "1.41.3",
+    "@promptctl/cc-candybar-darwin-x64": "1.41.3",
+    "@promptctl/cc-candybar-linux-x64": "1.41.3",
+    "@promptctl/cc-candybar-linux-arm64": "1.41.3"
   }
 }
