@@ -1,3 +1,10 @@
+## [1.41.1](https://github.com/promptctl/cc-candybar/compare/v1.41.0...v1.41.1) (2026-09-03)
+
+
+### Bug Fixes
+
+* **daemon:** derive the V8 heap cap from the RSS budget (outage: silent SIGABRT crash-loop) ([#197](https://github.com/promptctl/cc-candybar/issues/197)) ([35067e9](https://github.com/promptctl/cc-candybar/commit/35067e94522c52304aba5f14651c4ca922bbd98f))
+
 # [1.41.0](https://github.com/promptctl/cc-candybar/compare/v1.40.0...v1.41.0) (2026-09-01)
 
 
