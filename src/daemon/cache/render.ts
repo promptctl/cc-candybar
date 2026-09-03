@@ -82,12 +82,23 @@ export interface RenderCacheObservers {
   readonly onReload?: (entry: ReloadedEntry) => void;
 }
 
-// [LAW:types-are-the-program] The observer's view of an entry: read-only,
-// and without the watcher handle — `Readonly` cannot stop a method call, and
-// `release()` is the one reach that would silently break the rebind
-// invariant (a released-but-non-null watcher never rebinds). Omission is
-// the only type that closes it.
-export type ReloadedEntry = Readonly<Omit<CacheEntry, "watcher">>;
+// [LAW:types-are-the-program] The observer's view of an entry: an ALLOW-LIST
+// of the load's outcome. Nothing that owns a resource — the watcher handle,
+// the SourceRegistry, the validator disposers, the render-cell sink — crosses
+// this seam, so a handle added to either type later is closed by
+// construction, not by remembering to omit it (`Readonly` alone would not:
+// it cannot stop a method call such as `dispose()`).
+export type ReloadedEntry = Readonly<
+  Pick<
+    CacheEntry,
+    | "projectDir"
+    | "cwd"
+    | "configFile"
+    | "configFilePath"
+    | "lastError"
+    | "lastWarning"
+  >
+> & { readonly state: Readonly<Pick<DslRenderState, "config">> | null };
 
 // [LAW:types-are-the-program] The DSL render state for an entry is one
 // optionally-null bundle, not five independently-optional fields. Either
