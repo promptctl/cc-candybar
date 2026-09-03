@@ -62,8 +62,8 @@ const HEAP_CAP_OVER_RSS: u64 = 2;
 // refuse to boot on the same malformed value, so spawning it would only add a
 // crash-loop on top of the operator error. [LAW:no-silent-failure]
 //
-// [LAW:one-source-of-truth] The grammar is the TS grammar verbatim — trimmed,
-// ASCII digits only, > 0, within JS's safe-integer range (2^53 − 1, the bound
+// [LAW:one-source-of-truth] The grammar is the TS grammar verbatim — ASCII
+// digits only, > 0, within JS's safe-integer range (2^53 − 1, the bound
 // `Number.isSafeInteger` applies on the daemon side) — so the spawner and the
 // daemon it spawns accept and reject the same values. `str::parse::<u64>`
 // alone would admit a leading `+` the daemon refuses, and a `u64` upper bound
@@ -75,9 +75,8 @@ pub fn heap_cap_mb(raw: Option<&str>) -> Result<u64, String> {
     let mb = match raw {
         None => DEFAULT_RSS_LIMIT_MB,
         Some(s) => {
-            let digits = s.trim();
-            let well_formed = !digits.is_empty() && digits.bytes().all(|b| b.is_ascii_digit());
-            match digits.parse::<u64>() {
+            let well_formed = !s.is_empty() && s.bytes().all(|b| b.is_ascii_digit());
+            match s.parse::<u64>() {
                 Ok(v) if well_formed && v > 0 && v <= JS_MAX_SAFE_INTEGER => v,
                 _ => return Err(reject(s)),
             }
@@ -162,10 +161,11 @@ mod tests {
     // ACCEPT and REJECT are the SAME tables test/daemon-limits.test.ts runs
     // against rssLimitMb/heapCapMb — one grammar, pinned from both sides by
     // scripts/check-protocol.mjs, which diffs the two lists.
-    const ACCEPT: &[(&str, u64)] = &[("1024", 1024), (" 300 ", 300), ("007", 7)];
+    const ACCEPT: &[(&str, u64)] = &[("1024", 1024), ("007", 7)];
     const REJECT: &[&str] = &[
         "",
         " ",
+        " 300 ",
         "0",
         "-5",
         "+10",

@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { MAX_BYTES } from "../src/daemon/log";
 
 // The log sink's contract (src/daemon/log.ts): a line is on disk the moment
 // dlog returns — no stream, nothing to flush — and the file self-rotates at
@@ -10,7 +11,6 @@ import path from "node:path";
 // sink's byte counter is module state, so each scenario gets a fresh tmp state
 // dir AND a fresh module instance (jest.resetModules + dynamic import). Nothing
 // here can reach the user's real daemon.log.
-const MAX_BYTES = 5 * 1024 * 1024;
 
 async function withFreshLog<T>(
   seed: (logFile: string) => void,

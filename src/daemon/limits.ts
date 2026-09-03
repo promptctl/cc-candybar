@@ -40,15 +40,14 @@ export const HEAP_CAP_OVER_RSS = 2;
 // did not ask for. [LAW:no-silent-failure]
 //
 // [LAW:one-source-of-truth] The grammar is ONE rule both runtimes apply
-// verbatim — trimmed, ASCII digits only, > 0, within the safe-integer range —
+// verbatim — ASCII digits only, > 0, within the safe-integer range —
 // so the spawner and the daemon it spawns accept and reject the same values
 // (rust-client/src/launch.rs heap_cap_mb). A grammar that differed by so much
 // as a leading `+` would let a client spawn a daemon that refuses to boot.
 export function rssLimitMb(env: NodeJS.ProcessEnv): number {
   const raw = env[RSS_LIMIT_ENV];
   if (raw === undefined) return DEFAULT_RSS_LIMIT_MB;
-  const digits = raw.trim();
-  const mb = /^\d+$/.test(digits) ? Number(digits) : NaN;
+  const mb = /^\d+$/.test(raw) ? Number(raw) : NaN;
   if (!Number.isSafeInteger(mb) || mb <= 0) {
     throw new Error(
       `${RSS_LIMIT_ENV} must be a positive integer (MB), got ${JSON.stringify(raw)}`,

@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { logPath } from "./paths";
 
-const MAX_BYTES = 5 * 1024 * 1024;
+export const MAX_BYTES = 5 * 1024 * 1024;
 const KEEP_GENERATIONS = 3;
 
 // [LAW:no-ambient-temporal-coupling] Every line is a synchronous append, so a
@@ -62,8 +62,9 @@ export function dlog(level: LogLevel, msg: string): void {
     // [LAW:no-silent-failure] exception: the failure IS the log sink, so it
     // cannot be reported through the log sink. A throw here would escape the
     // crash handlers that call dlog first (uncaughtException → dlog →
-    // shutdown), taking the clean-death path down with it. stderr is the one
-    // channel left; it carries the line and the reason it went there.
+    // shutdown), taking the clean-death path down with it. stderr carries the
+    // line and the reason — the terminal when the daemon runs by hand, and
+    // /dev/null under a detached spawn; the daemon keeps serving either way.
     process.stderr.write(
       `${line}cc-candybar: ${filePath} unwritable: ${(e as Error).message}\n`,
     );

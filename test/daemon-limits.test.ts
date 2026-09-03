@@ -170,12 +170,12 @@ describe("describeNextRestart", () => {
 // build.
 const ACCEPT: Array<[string, number]> = [
   ["1024", 1024],
-  [" 300 ", 300],
   ["007", 7],
 ];
 const REJECT = [
   "",
   " ",
+  " 300 ",
   "0",
   "-5",
   "+10",
