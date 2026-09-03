@@ -1,3 +1,10 @@
+## [1.41.3](https://github.com/promptctl/cc-candybar/compare/v1.41.2...v1.41.3) (2026-09-03)
+
+
+### Bug Fixes
+
+* **daemon:** RenderCache publishes reload completion; tests await it instead of polling a clock (brandon-testing-82q) ([#199](https://github.com/promptctl/cc-candybar/issues/199)) ([18a1c7b](https://github.com/promptctl/cc-candybar/commit/18a1c7b1e1488f355b6033d04b0890cd3c73b6f9))
+
 ## [1.41.2](https://github.com/promptctl/cc-candybar/compare/v1.41.1...v1.41.2) (2026-09-03)
 
 
