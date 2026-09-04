@@ -49,6 +49,10 @@ export const LAUNCH_CATEGORIES = [
   // (process-fingerprint.ts). Spawned only at daemon start + EADDRINUSE
   // arbitration — never per render — so it needs no rate limit.
   "process-fingerprint",
+  // The update notice's act (`pnpm build` in a checkout, `pnpm dlx … install`
+  // over a published install). One click, one long-running child; the
+  // notice's own running/failed state serialises clicks, so no rate limit.
+  "update.apply",
 ] as const;
 
 export type LaunchCategory = (typeof LAUNCH_CATEGORIES)[number];

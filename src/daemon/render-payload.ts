@@ -33,6 +33,7 @@ import {
   effectivePadding,
   effectiveStripStyle,
   effectiveThemeName,
+  DEFAULT_UPDATE_NOTICE,
 } from "../themes/policy.js";
 import { walkNodes } from "../config/dsl-types.js";
 import { extractTemplateRefs } from "../config/dsl-loader.js";
@@ -100,6 +101,10 @@ export interface EffectiveGlobals {
   readonly colorCompatibility: ColorCompatibility;
   readonly autoWrap: boolean;
   readonly padding: number;
+  // Whether the update notice may render for this session's config
+  // (Globals.updateNotice). No SessionState half: the per-session dismissal
+  // is keyed on the update's identity, not on this switch.
+  readonly updateNotice: boolean;
 }
 
 // [LAW:one-source-of-truth] THE resolution — one function, so the precedence
@@ -171,6 +176,8 @@ export function resolveEffectiveGlobals(
       globals.padding,
     ),
     charset: staged.charset ?? globals.charset ?? DEFAULT_CHARSET,
+    updateNotice:
+      staged.updateNotice ?? globals.updateNotice ?? DEFAULT_UPDATE_NOTICE,
     colorCompatibility:
       staged.colorCompatibility ??
       globals.colorCompatibility ??

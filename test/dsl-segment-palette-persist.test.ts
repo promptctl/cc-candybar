@@ -64,6 +64,7 @@ import { GitDataProvider } from "../src/daemon/cache/git";
 import { WatcherRegistry } from "../src/daemon/cache/watchers";
 import { ReloadSignal } from "./helpers/reload-signal";
 import { durableConfig, type DurableConfig } from "./helpers/durable-config";
+import { testVerbContext } from "./helpers/click";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 
@@ -289,7 +290,7 @@ function buildRuntime(src: string, sessionId = "s1", dflt?: DslConfig) {
   const disposers = deriveConfigActionValidators(config).map(({ key, spec }) =>
     registerConfigValidator(key, spec),
   );
-  const ctx: VerbContext = { sessionState, dlog: () => {} };
+  const ctx: VerbContext = testVerbContext(sessionState);
   const click = (url: string): void => {
     const { verb, value } = parseHandlerUrl(url);
     const effects =

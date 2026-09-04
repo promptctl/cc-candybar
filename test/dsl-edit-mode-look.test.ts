@@ -21,7 +21,7 @@ import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import { registerDslConfig, renderDsl } from "../src/dsl/render";
 import { SessionState } from "../src/daemon/session-state";
-import { clickUrl } from "./helpers/click";
+import { testVerbContext, clickUrl } from "./helpers/click";
 import { effectsUrl, VERB_SET_STATE } from "../src/click/wire";
 import { paletteForThemeName } from "../src/themes";
 import {
@@ -117,10 +117,7 @@ function setState(
   key: string,
   value: string,
 ): void {
-  clickUrl(effectsUrl([{ verb: VERB_SET_STATE, args: [SID, key, value] }]), {
-    sessionState,
-    dlog: () => {},
-  });
+  clickUrl(effectsUrl([{ verb: VERB_SET_STATE, args: [SID, key, value] }]), testVerbContext(sessionState));
 }
 
 // [LAW:single-enforcer] STATE_VALIDATORS is daemon-global and ref-counted, so a

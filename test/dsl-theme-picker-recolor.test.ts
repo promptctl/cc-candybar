@@ -17,7 +17,7 @@ import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import { registerDslConfig, renderDsl } from "../src/dsl/render";
 import { SessionState } from "../src/daemon/session-state";
-import { effectsOf, clickUrl, boldUrls } from "./helpers/click";
+import { testVerbContext, effectsOf, clickUrl, boldUrls } from "./helpers/click";
 import { effectsUrl, VERB_SET_STATE } from "../src/click/wire";
 import { effectiveThemeName, paletteForThemeName } from "../src/themes";
 
@@ -103,7 +103,7 @@ function clickTheme(sessionState: SessionState, theme: string): void {
   const url = effectsUrl([
     { verb: VERB_SET_STATE, args: [SID, "theme", theme] },
   ]);
-  clickUrl(url, { sessionState, dlog: () => {} });
+  clickUrl(url, testVerbContext(sessionState));
 }
 
 describe("DSL theme picker — live recolor (epic k5a done-gate #1)", () => {

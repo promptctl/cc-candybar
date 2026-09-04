@@ -46,7 +46,7 @@ import {
 import { VERBS, type VerbContext } from "../src/daemon/verbs";
 import { parseEffects, VERB_DISPATCH } from "../src/click/wire";
 import { parseHandlerUrl } from "../src/install/index";
-import { effectsOf } from "./helpers/click";
+import { testVerbContext, effectsOf } from "./helpers/click";
 import { stripAnsi } from "./helpers/daemon-e2e";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import type { ValidatedConfig } from "../src/config/dsl-types";
@@ -111,7 +111,7 @@ function rig(
       registerConfigValidator(key, spec),
     ),
   ];
-  const ctx: VerbContext = { sessionState, dlog: () => {} };
+  const ctx: VerbContext = testVerbContext(sessionState);
   return {
     config,
     render: () =>

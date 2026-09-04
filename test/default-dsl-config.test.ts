@@ -35,7 +35,7 @@ import {
   deriveActionValidators,
   registerStateValidator,
 } from "../src/daemon/verbs/state-validators";
-import { clickUrl } from "./helpers/click";
+import { testVerbContext, clickUrl } from "./helpers/click";
 import { effectsUrl, VERB_SET_STATE } from "../src/click/wire";
 import { presetNames } from "../src/config/presets";
 import {
@@ -305,7 +305,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
           { verb: VERB_SET_STATE, args: [SID, "settings.menu", "open"] },
           { verb: VERB_SET_STATE, args: [SID, "settings.config", "open"] },
         ]),
-        { sessionState, dlog: () => {} },
+        testVerbContext(sessionState),
       );
 
       const targetTheme = listResolvablePaletteNames().find(
@@ -323,7 +323,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
 
       clickUrl(
         effectsUrl([{ verb: VERB_SET_STATE, args: [SID, "theme", targetTheme] }]),
-        { sessionState, dlog: () => {} },
+        testVerbContext(sessionState),
       );
       const afterTheme = render();
       expect(afterTheme).toContain(targetTheme);
@@ -340,7 +340,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
       }
       clickUrl(
         effectsUrl([{ verb: VERB_SET_STATE, args: [SID, "look", targetLook] }]),
-        { sessionState, dlog: () => {} },
+        testVerbContext(sessionState),
       );
       const afterLook = render();
       expect(afterLook).toContain(targetLook);

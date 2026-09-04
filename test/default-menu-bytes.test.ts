@@ -49,7 +49,7 @@ import {
   DISCLOSURE_GLYPH_CLOSED,
   DISCLOSURE_GLYPH_OPEN,
 } from "../src/config/disclosure";
-import { effectsOf } from "./helpers/click";
+import { testVerbContext, effectsOf } from "./helpers/click";
 import { parseHandlerUrl } from "../src/install/index";
 import { parseEffects, VERB_DISPATCH, VERB_SET_STATE } from "../src/click/wire";
 import { VERBS } from "../src/daemon/verbs";
@@ -157,7 +157,7 @@ function buildRuntime(root: string) {
       registerConfigValidator(key, spec),
     ),
   ];
-  const ctx: VerbContext = { sessionState, dlog: () => {} };
+  const ctx: VerbContext = testVerbContext(sessionState);
   const render = (): string =>
     renderDsl(config, compiled, store, registry, PAYLOAD, basePalette, OPTS);
   const click = (url: string): void => {

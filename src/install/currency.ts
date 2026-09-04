@@ -50,13 +50,18 @@ function compareVersions(
 
 export const REGISTRY_URL = "https://registry.npmjs.org";
 
+// [LAW:one-source-of-truth] The published package's name, here in the leaf
+// both the install banner and the daemon's release watch read it from.
+export const PACKAGE_NAME = "@promptctl/cc-candybar";
+
 // The check rides at the end of an install; it may not hang one. A registry
 // that answers slower than this is reported as unreachable, not waited on.
 export const REGISTRY_TIMEOUT_MS = 5_000;
 
 // [LAW:effects-at-boundaries] The one network effect in the install path. It
-// takes `fetch` as a parameter so the pure core above and the tests never
-// touch the wire; the caller hands in the global. Every way the lookup can
+// takes `fetch` and the registry as parameters so the pure core above and the
+// tests never touch the wire; the caller hands in the global and REGISTRY_URL
+// (or the daemon's `CC_CANDYBAR_REGISTRY_URL` override). Every way the lookup can
 // fail to answer — refused, timed out, non-2xx, unparseable body, dist-tag not
 // a release — collapses to `failed` with its reason preserved, and a registry
 // that lists no `latest` tag at all is `absent`. [LAW:no-silent-failure] None
@@ -64,8 +69,9 @@ export const REGISTRY_TIMEOUT_MS = 5_000;
 export async function fetchLatestVersion(
   packageName: string,
   fetchImpl: typeof fetch,
+  registryUrl: string,
 ): Promise<Outcome<Version>> {
-  const url = `${REGISTRY_URL}/-/package/${encodeURIComponent(packageName)}/dist-tags`;
+  const url = `${registryUrl}/-/package/${encodeURIComponent(packageName)}/dist-tags`;
   try {
     const res = await fetchImpl(url, {
       signal: AbortSignal.timeout(REGISTRY_TIMEOUT_MS),

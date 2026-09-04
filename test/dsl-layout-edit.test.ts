@@ -51,7 +51,7 @@ import { registerDslConfig, renderDsl } from "../src/dsl/render";
 import { SessionState } from "../src/daemon/session-state";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import { ConfigError } from "../src/config/dsl-loader";
-import { effectsOf } from "./helpers/click";
+import { testVerbContext, effectsOf } from "./helpers/click";
 import { parseHandlerUrl } from "../src/install/index";
 import {
   encodeSegments,
@@ -458,7 +458,7 @@ function buildLayoutRuntime(src: string, sessionId = "s1") {
   const disposers = deriveConfigActionValidators(config).map(({ key, spec }) =>
     registerConfigValidator(key, spec),
   );
-  const ctx: VerbContext = { sessionState, dlog: () => {} };
+  const ctx: VerbContext = testVerbContext(sessionState);
   const click = (url: string): void => {
     const { verb, value } = parseHandlerUrl(url);
     const effects =
@@ -605,7 +605,7 @@ describe("apply-layout-op click → the config file", () => {
     const { dispose } = buildLayoutRuntime(SRC);
     const sessionState = new SessionState();
     durable.seedOrigin(sessionState, "s1");
-    const ctx: VerbContext = { sessionState, dlog: () => {} };
+    const ctx: VerbContext = testVerbContext(sessionState);
     const applyLayoutOp = VERBS.get("apply-layout-op")!;
     const before = durable.text();
     expect(() =>
@@ -626,10 +626,7 @@ describe("apply-layout-op click → the config file", () => {
   // own XDG path.
   test("a click on a session with no recorded render origin is refused — no file to write", () => {
     const { dispose } = buildLayoutRuntime(SRC);
-    const ctx: VerbContext = {
-      sessionState: new SessionState(),
-      dlog: () => {},
-    };
+    const ctx: VerbContext = testVerbContext(new SessionState());
     const applyLayoutOp = VERBS.get("apply-layout-op")!;
     expect(() =>
       applyLayoutOp(
@@ -851,7 +848,7 @@ function fireVerb(verb: string, ctx: VerbContext, ...args: string[]): void {
 // reads the same store the render published into.
 function originCtx(sessionState: SessionState, sessionId = "s1"): VerbContext {
   durable.seedOrigin(sessionState, sessionId);
-  return { sessionState, dlog: () => {} };
+  return testVerbContext(sessionState);
 }
 
 describe("RenderCache: authoredRoots — the file authors a root at the preset's path", () => {
