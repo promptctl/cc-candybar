@@ -187,10 +187,11 @@ function cacheKey(
   return projectDir + "\0" + cwd + "\0" + (configFile ?? "");
 }
 
-// [LAW:one-source-of-truth] The preset names whose tree the raw file authors,
-// asked at the path presetRoot() reports — the one decision of "where does
-// this preset's tree live" (src/config/presets.ts), projected onto the raw
-// shape rather than re-derived here.
+// [LAW:one-source-of-truth] The preset names whose layout the raw file
+// authors — a root FRAGMENT (a whole tree or a `{ rows }` map, either is
+// authorship) at the path presetRoot() reports, the one decision of "where
+// does this preset's layout live" (src/config/presets.ts), projected onto
+// the raw shape rather than re-derived here.
 // [LAW:one-source-of-truth] `config` must be the MERGED tree, before
 // validateConfig: edit chrome materializes an explicit `presets.<n>.root`
 // for every preset, so asked of the validated tree presetRoot() never

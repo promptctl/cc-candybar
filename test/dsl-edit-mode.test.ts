@@ -55,7 +55,8 @@ import {
   EDIT_TOGGLE_ACTION,
   EDIT_NS,
 } from "../src/config/loader/edit-mode";
-import { walkNodes, type LayoutNode } from "../src/config/dsl-types";
+import { walkNodes, type RootFragment } from "../src/config/dsl-types";
+import { fragmentNode } from "../src/config/root";
 import { RAW_DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { durableConfig, type DurableConfig } from "./helpers/durable-config";
 
@@ -87,9 +88,9 @@ function extractUrls(rendered: string): string[] {
 const ANSI = /\x1b\[[0-9;]*m|\x1b\]8;;[^\x1b]*\x1b\\/g;
 const stripAnsi = (s: string): string => s.replace(ANSI, "");
 
-function segmentNamesOf(root: LayoutNode): string[] {
+function segmentNamesOf(root: RootFragment): string[] {
   const out: string[] = [];
-  for (const node of walkNodes(root)) {
+  for (const node of walkNodes(fragmentNode(root))) {
     if (node.kind === "segment") out.push(node.name);
   }
   return out;

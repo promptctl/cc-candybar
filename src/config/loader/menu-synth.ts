@@ -31,6 +31,7 @@ import {
   type ReferencedCall,
 } from "@promptctl/go-template-js";
 import type { ActionDecl } from "../action.js";
+import { fragmentNode } from "../root.js";
 import type { Mutable, ValidateCtx } from "./validate-core.js";
 import {
   MENU_NS,
@@ -263,7 +264,7 @@ export function synthesizeMenuDecls(
   // template-only rule), and count each segment's placements for the reuse check.
   const placementCounts = new Map<string, number>();
   if (out.root !== undefined) {
-    for (const node of walkNodes(out.root)) {
+    for (const node of walkNodes(fragmentNode(out.root))) {
       if (typeof node.when === "string" && segmentReferencesMenu(node.when)) {
         menuIssue(
           ctx,

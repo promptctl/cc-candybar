@@ -18,14 +18,17 @@ import { GitDataProvider } from "../src/daemon/cache/git";
 import { SessionState } from "../src/daemon/session-state";
 import { WatcherRegistry } from "../src/daemon/cache/watchers";
 import { ReloadSignal } from "./helpers/reload-signal";
-import { walkNodes, type LayoutNode } from "../src/config/dsl-types";
+import { walkNodes, type LayoutNode, type Root } from "../src/config/dsl-types";
+import { rootNode } from "../src/config/root";
 import { SETTINGS_NS } from "../src/config/settings-menu";
 import { PRESET_FLOOR, presetRoot } from "../src/config/presets";
 
 // Flatten a layout tree to its segment names, in pre-order — the post-`root`
 // equivalent of the old `config.layout.flatMap(r => r.segments)`.
-const layoutSegments = (root: LayoutNode): string[] =>
-  [...walkNodes(root)].flatMap((n) => (n.kind === "segment" ? [n.name] : []));
+const layoutSegments = (root: Root): string[] =>
+  [...walkNodes(rootNode(root))].flatMap((n) =>
+    n.kind === "segment" ? [n.name] : [],
+  );
 
 // One horizontal container of segment refs — what { h: [...names] } lowers to.
 const oneRow = (...segments: string[]): LayoutNode => ({

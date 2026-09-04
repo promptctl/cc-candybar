@@ -21,20 +21,31 @@
 // whole bundled declaration first; otherwise the one-field file would shadow
 // the bundled decl and lose its template. A follow-up ticket proposes per-
 // field merge for those decls, after which materialization collapses to the
-// one field.
+// one field. A root's ROWS already merge by name (src/config/root.ts), so a
+// structural edit on a row the file inherits materializes that one row —
+// `root.rows.<name>` — and never the whole tree.
 
 import { BadVerbArgs } from "./verb-error";
 import fs from "node:fs";
 import path from "node:path";
 import { RAW_DEFAULT_DSL_CONFIG } from "../config/default-dsl-config.js";
-import type { Globals, LayoutNode, PresetDecl } from "../config/dsl-types.js";
+import type {
+  Globals,
+  LayoutNode,
+  PresetDecl,
+  Root,
+  RootFragment,
+} from "../config/dsl-types.js";
+import { isRowsFragment } from "../config/root.js";
 import {
   deleteValue as deleteAtPath,
+  hasSegmentRef,
   insertSegmentRef,
   json5Text,
   nodeAt,
   parseDocument,
   removeSegmentRef,
+  rowEntriesOf,
   setValue,
   type Node,
 } from "../config/json5-edit.js";
@@ -42,7 +53,6 @@ import type { LayoutOp } from "../config/layout-ops.js";
 import {
   parsePersistTarget,
   persistPath,
-  presetRootPath,
   type ConfigPath,
   type PersistTarget,
 } from "../config/loader/persist-target.js";
@@ -88,10 +98,7 @@ const BOOLEAN_FALSY = new Set(["0", "false", ""]);
 // "number" field is a caller bug (the range validator already canonicalized
 // it), so it throws loudly rather than writing a wrongly-typed value.
 export function persistValueText(key: string, raw: string): string {
-  const target = parsePersistTarget(key);
-  if (target === null || target.scope === "preset-root") {
-    throw new Error(`persistValueText: "${key}" does not name a value`);
-  }
+  const target = requireValueTarget(key);
   const kind =
     target.scope === "globals" ? GLOBALS_FIELD_KIND[target.field] : "string";
   if (kind === "string") return JSON.stringify(raw);
@@ -208,9 +215,25 @@ function authoredLayout(node: LayoutNode): unknown {
   return node;
 }
 
+// A root fragment as authored: a `{ rows }` map spells each row, a tree
+// spells itself.
+function authoredFragment(fragment: RootFragment): unknown {
+  return isRowsFragment(fragment)
+    ? {
+        rows: Object.fromEntries(
+          Object.entries(fragment.rows).map(([name, row]) => [
+            name,
+            authoredLayout(row),
+          ]),
+        ),
+        ...(fragment.when !== undefined && { when: fragment.when }),
+      }
+    : authoredLayout(fragment);
+}
+
 function authoredPreset(decl: PresetDecl): unknown {
   return {
-    ...(decl.root !== undefined && { root: authoredLayout(decl.root) }),
+    ...(decl.root !== undefined && { root: authoredFragment(decl.root) }),
     ...(decl.globals !== undefined && { globals: decl.globals }),
   };
 }
@@ -218,6 +241,7 @@ function authoredPreset(decl: PresetDecl): unknown {
 const RAW = RAW_DEFAULT_DSL_CONFIG;
 const RAW_SEGMENTS: Readonly<Record<string, unknown>> = RAW.segments;
 const RAW_PRESETS: Readonly<Record<string, PresetDecl>> = RAW.presets;
+const RAW_ROOT: Root = RAW.root;
 
 // [LAW:parse-dont-validate] The ONE place "who declares this unit" is
 // decided, by mergeWithDefault's own rule: the file's declaration wins by
@@ -257,53 +281,153 @@ function unitOf<T>(
     : { path: unitPath, value: spell(declaration.decl) };
 }
 
-function placementOf(doc: Node | null, target: PersistTarget): Placement {
+// [LAW:types-are-the-program] A target that names a VALUE — every scope but
+// the preset root, whose edits are structural (a row, not a scalar).
+type ValueTarget = Exclude<PersistTarget, { scope: "preset-root" }>;
+
+function valuePlacementOf(doc: Node | null, target: ValueTarget): Placement {
   if (target.scope === "globals") {
     return { path: persistPath(target), unit: null };
   }
-  if (target.scope === "segment-palette") {
-    const path = persistPath(target);
-    const own: ConfigPath = ["segments", target.segment];
+  const path = persistPath(target);
+  const own: ConfigPath = ["segments", target.segment];
+  return {
+    path,
+    unit: unitOf(
+      declarationOf(doc, own, RAW_SEGMENTS[target.segment], path.join(".")),
+      own,
+      (decl) => decl,
+    ),
+  };
+}
+
+// ─── The root cascade, as the file spells it ────────────────────────────────
+
+// [LAW:one-type-per-behavior] One layer of the root cascade a preset renders
+// (bundled root rows < file root < the preset's fragment — the order
+// mergeRoot folds in src/config/root.ts): its fragment in the AUTHORING
+// grammar, the config-file path a structural edit to it lands at, and what
+// the file must author first for that path to hold it — null for a layer the
+// file already authors. Every layer is spelled the way it would sit in the
+// file (a bundled one as the very text `ensureAuthored` would materialize),
+// so one grammar reader (json5-edit) answers "does this layer hold the
+// segment" for all of them [LAW:one-source-of-truth].
+interface RootLayer {
+  readonly path: ConfigPath;
+  readonly fragment: Node;
+  readonly unit: Placement["unit"];
+}
+
+function bundledDoc(value: unknown): Node {
+  return parseDocument(json5Text(value));
+}
+
+// The bundled default's root, one layer PER ROW: a first edit on an inherited
+// row materializes `root.rows.<name>` alone, the by-name cascade's own unit,
+// never the whole tree.
+function bundledRowLayers(): readonly RootLayer[] {
+  return Object.entries(RAW_ROOT.rows).map(([name, row]) => {
+    const authored = authoredLayout(row);
     return {
-      path,
-      unit: unitOf(
-        declarationOf(doc, own, RAW_SEGMENTS[target.segment], path.join(".")),
-        own,
-        (decl) => decl,
-      ),
+      path: ["root"],
+      fragment: bundledDoc({ rows: { [name]: authored } }),
+      unit: { path: ["root", "rows", name], value: authored },
     };
-  }
-  // presetRoot's rule (src/config/presets.ts): a preset declaring no root
-  // stages the config's own `root`. Which declaration answers "does it
-  // declare a root" is the same by-name resolution as the unit itself.
-  const own: ConfigPath = ["presets", target.preset];
+  });
+}
+
+function fileLayer(doc: Node | null, path: ConfigPath): RootLayer | null {
+  const fragment = doc === null ? undefined : nodeAt(doc, path);
+  return fragment === undefined ? null : { path, fragment, unit: null };
+}
+
+// [LAW:parse-dont-validate] The preset's fragment, by mergeWithDefault's own
+// rule: the file's declaration wins by name (its `root`, if any), else the
+// bundled one (materialized whole, `globals` included — presets still merge
+// wholesale by name), else the click is stale: the gate admitted a key from a
+// config this file no longer holds, and it must refuse, never fall through.
+function presetLayer(doc: Node | null, preset: string): RootLayer | null {
+  const own: ConfigPath = ["presets", preset];
+  const path: ConfigPath = [...own, "root"];
   const declaration = declarationOf(
     doc,
     own,
-    RAW_PRESETS[target.preset],
-    [...own, "root"].join("."),
+    RAW_PRESETS[preset],
+    path.join("."),
   );
-  const declaresRoot =
-    declaration.source === "file"
-      ? has(doc, [...own, "root"])
-      : declaration.decl.root !== undefined;
-  return declaresRoot
-    ? {
-        path: presetRootPath(target.preset, true),
-        unit: unitOf(declaration, own, authoredPreset),
-      }
+  if (declaration.source === "file") return fileLayer(doc, path);
+  const root = declaration.decl.root;
+  return root === undefined
+    ? null
     : {
-        path: presetRootPath(target.preset, false),
-        unit: unitOf(
-          declarationOf(doc, ["root"], RAW.root, "root"),
-          ["root"],
-          authoredLayout,
-        ),
+        path,
+        fragment: bundledDoc(authoredFragment(root)),
+        unit: { path: own, value: authoredPreset(declaration.decl) },
       };
 }
 
+// [LAW:one-source-of-truth] The merged rows with their PROVENANCE, folded by
+// the same algebra mergeRoot uses: a `{ rows }` layer spreads over the base
+// by name (a replaced row keeps its place, a new one appends), a whole tree
+// replaces the base outright. A tree is one block under an unauthorable key
+// — its positional rows can never be replaced individually (root.ts's
+// ROW_NAME_RE), so they are searched as the contiguous front they always
+// form, in the pre-order the bar renders.
+type Cascade = ReadonlyMap<
+  string,
+  { readonly layer: RootLayer; readonly node: Node }
+>;
+const TREE_BLOCK = "#";
+
+function applyLayer(base: Cascade, layer: RootLayer): Cascade {
+  const rows = rowEntriesOf(layer.fragment);
+  return rows === null
+    ? new Map([[TREE_BLOCK, { layer, node: layer.fragment }]])
+    : new Map([
+        ...base,
+        ...rows.map((row) => [row.key, { layer, node: row.value }] as const),
+      ]);
+}
+
+function cascadeOf(doc: Node | null, preset: string): Cascade {
+  const layers = [
+    ...bundledRowLayers(),
+    fileLayer(doc, ["root"]),
+    presetLayer(doc, preset),
+  ].filter((layer): layer is RootLayer => layer !== null);
+  return layers.reduce(applyLayer, new Map());
+}
+
+// [LAW:single-enforcer] THE answer to "which layer's row does this click
+// edit": the first merged row holding the segment, and that row's layer.
+// [LAW:no-silent-failure] No row holds it ⇒ the bar clicked rendered before
+// the row changed under it — loud, never a write somewhere plausible.
+function layoutPlacementOf(
+  doc: Node | null,
+  preset: string,
+  segment: string,
+): Placement {
+  for (const { layer, node } of cascadeOf(doc, preset).values()) {
+    if (hasSegmentRef(node, segment)) {
+      return { path: layer.path, unit: layer.unit };
+    }
+  }
+  throw new BadVerbArgs(
+    `presets.${preset}.root holds no segment "${segment}" — the bar you clicked is stale; it reloads on the next render`,
+  );
+}
+
+// `reset`'s path for a preset root: the fragment the preset stages (the
+// file's, or the bundled one's place in the file), else the config's own
+// `root` — the same fact presetRoot's reported path projects.
+function resetPathOf(doc: Node | null, target: PersistTarget): ConfigPath {
+  return target.scope === "preset-root"
+    ? (presetLayer(doc, target.preset)?.path ?? ["root"])
+    : persistPath(target);
+}
+
 // [LAW:dataflow-not-control-flow] Always runs; identity when the file already
-// authors the unit (placementOf resolved it to null).
+// authors the unit (the placement resolved it to null).
 function ensureAuthored(text: string, { unit }: Placement): string {
   return unit === null
     ? text
@@ -314,6 +438,14 @@ function requireTarget(key: string): PersistTarget {
   const target = parsePersistTarget(key);
   if (target === null) {
     throw new Error(`"${key}" is not a valid persist target`);
+  }
+  return target;
+}
+
+function requireValueTarget(key: string): ValueTarget {
+  const target = requireTarget(key);
+  if (target.scope === "preset-root") {
+    throw new Error(`"${key}" names a layout, not a value`);
   }
   return target;
 }
@@ -330,8 +462,7 @@ export function readValue(
   file: string,
   key: string,
 ): string | number | boolean | undefined {
-  const target = requireTarget(key);
-  if (target.scope === "preset-root") return undefined;
+  const target = requireValueTarget(key);
   const doc = docOf(readConfigText(file) ?? "");
   const node = doc === null ? undefined : nodeAt(doc, persistPath(target));
   return node !== undefined && "value" in node ? node.value : undefined;
@@ -344,9 +475,9 @@ export function writeValue(
   key: string,
   raw: string,
 ): void {
-  const target = requireTarget(key);
+  const target = requireValueTarget(key);
   const before = readConfigText(file);
-  const placement = placementOf(docOf(before ?? ""), target);
+  const placement = valuePlacementOf(docOf(before ?? ""), target);
   const authored = ensureAuthored(before ?? "", placement);
   const after = setValue(authored, placement.path, persistValueText(key, raw));
   commit(store, file, { before, after });
@@ -361,16 +492,17 @@ export function deleteValue(store: EditStore, file: string, key: string): void {
   const target = requireTarget(key);
   const before = readConfigText(file);
   if (before === null) return;
-  const after = deleteAtPath(before, placementOf(docOf(before), target).path);
+  const after = deleteAtPath(before, resetPathOf(docOf(before), target));
   if (after === before) return;
   commit(store, file, { before, after });
 }
 
 /**
- * A structural edit to the tree a preset-root key names, applied to the
- * authored (A-grammar) tree in the file so its comments survive.
- * [LAW:no-silent-failure] A target/anchor the tree no longer holds is a loud
- * error — the click came from a bar rendered before the tree changed.
+ * A structural edit to the layout a preset-root key names, applied to the ROW
+ * of the cascade that holds the segment (the op's target, or the anchor it
+ * inserts beside), in the authored (A-grammar) text so its comments survive.
+ * [LAW:no-silent-failure] A target/anchor no row holds is a loud error — the
+ * click came from a bar rendered before the row changed.
  */
 export function applyLayoutOp(
   store: EditStore,
@@ -383,7 +515,12 @@ export function applyLayoutOp(
     throw new Error(`"${key}" is not a "presets.<name>.root" target`);
   }
   const before = readConfigText(file);
-  const placement = placementOf(docOf(before ?? ""), target);
+  const subject = op.op === "remove" ? op.target : op.anchor;
+  const placement = layoutPlacementOf(
+    docOf(before ?? ""),
+    target.preset,
+    subject,
+  );
   const authored = ensureAuthored(before ?? "", placement);
   const after =
     op.op === "remove"
@@ -396,9 +533,8 @@ export function applyLayoutOp(
           op.relation,
         );
   if (after === null) {
-    const missing = op.op === "remove" ? op.target : op.anchor;
     throw new BadVerbArgs(
-      `${placement.path.join(".")} in ${file} has no segment "${missing}" — the bar you clicked is stale; it reloads on the next render`,
+      `${placement.path.join(".")} in ${file} has no segment "${subject}" — the bar you clicked is stale; it reloads on the next render`,
     );
   }
   commit(store, file, { before, after });

@@ -6,9 +6,11 @@
 //
 // [LAW:single-enforcer] One default. User configs merge on top via
 // `mergeWithDefault`: globals shallow-merge per field, variables/segments/
-// helpers/actions/helpers merge by name (user wins per name), root replaces
-// wholesale when present. A user file only needs to declare what differs —
-// overriding one segment or variable takes a few lines. JSON5 supports
+// helpers/actions/presets merge by name (user wins per name), and root's
+// ROWS merge by name too (a `{ rows }` fragment restates only the rows it
+// names; a whole tree replaces them). A user file only needs to declare what
+// differs — overriding one segment, one variable, or one row takes a few
+// lines. JSON5 supports
 // inline comments so users can declare only the delta. The `.json` extension
 // is also accepted (JSON ⊂ JSON5, same parser); `.json5` is preferred when
 // both exist at the same location.
@@ -1185,15 +1187,22 @@ export const RAW_DEFAULT_DSL_CONFIG = {
     },
   },
 
-  // Default layout — the canonical LayoutNode tree (`satisfies DslConfig`
-  // requires the lowered form here; the terse Option-A `{ h/v/seg }` grammar is
-  // the loader's authoring surface for user JSON, not this typed literal — the
-  // one exception being `settingsDrawer` above, whose `kind: "group"` sugar has
-  // no canonical-form equivalent it could be hand-lowered to; see its own
-  // comment).
+  // Default layout — the canonical Root: a map of NAMED rows (`satisfies
+  // DslConfig` requires the lowered node form inside each row; the terse
+  // Option-A `{ h/v/seg }` grammar is the loader's authoring surface for user
+  // JSON, not this typed literal — the one exception being `settingsDrawer`
+  // above, whose `kind: "group"` sugar has no canonical-form equivalent it
+  // could be hand-lowered to; see its own comment).
   //
-  // Two always-visible rows stacked by the vertical container: an IDENTITY +
-  // ACTIONS row (where am I / what can I do here — the directory, the verbose
+  // [LAW:one-source-of-truth] The row NAMES are the merge keys. A user file's
+  // `root: { rows: { status: { h: [...] } } }` replaces exactly the row it
+  // names and inherits the other in place — the same by-name cascade every
+  // other section merges with — and `status: { h: [] }` removes one. This
+  // literal is read both as JSON (parsed like a user file) and as the typed
+  // base it merges onto, so the canonical shape and the authoring shape are
+  // one object by construction.
+  //
+  // Two always-visible rows: an IDENTITY + ACTIONS row (where am I / what can I do here — the directory, the verbose
   // `gitaculous` line, the quick-action tray: copy session id, open project /
   // transcript in the editor, and the settingsDrawer toggle) over a STATUS row
   // (what's happening now — model, context-window fill, prompt-cache warmth,
@@ -1214,10 +1223,8 @@ export const RAW_DEFAULT_DSL_CONFIG = {
   // paints an empty or placeholder cell. The directory and the tray have no
   // `when`, so row 1 always anchors the bar.
   root: {
-    kind: "container",
-    direction: "vertical",
-    children: [
-      {
+    rows: {
+      identity: {
         kind: "container",
         direction: "horizontal",
         children: [
@@ -1233,7 +1240,7 @@ export const RAW_DEFAULT_DSL_CONFIG = {
           settingsDrawer,
         ],
       },
-      {
+      status: {
         kind: "container",
         direction: "horizontal",
         children: [
@@ -1244,7 +1251,7 @@ export const RAW_DEFAULT_DSL_CONFIG = {
           { kind: "segment", name: "weekly" },
         ],
       },
-    ],
+    },
   },
 
   // [LAW:locality-or-seam] The quick-action tray's behaviors, decoupled by NAME

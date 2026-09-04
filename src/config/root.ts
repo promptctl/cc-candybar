@@ -99,19 +99,3 @@ export function mergeRoot(fragment: RootFragment, base: Root): Root {
 export function restages(fragment: RootFragment): boolean {
   return !isRowsFragment(fragment) || Object.keys(fragment.rows).length > 0;
 }
-
-// [LAW:single-enforcer] THE answer to "which row holds this segment" — the
-// edit-mode write-back materializes exactly that one row of the bundled
-// default (never the whole tree) before splicing it. Pre-order, so the first
-// occurrence wins, matching the text-level search json5-edit performs. Null
-// when no row holds it: the click came from a bar rendered before the row
-// changed, and the caller says so loudly.
-export function rowContaining(root: Root, segment: string): string | null {
-  const holds = (node: LayoutNode): boolean =>
-    node.kind === "segment"
-      ? node.name === segment
-      : node.children.some(holds);
-  return (
-    Object.entries(root.rows).find(([, row]) => holds(row))?.[0] ?? null
-  );
-}

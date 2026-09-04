@@ -538,8 +538,9 @@ export function deleteValue(text: string, path: readonly string[]): string {
 // [LAW:one-source-of-truth] The raw layout grammar the loader accepts
 // (src/config/loader/layout.ts): a bare string names a segment; `{ seg }` and
 // `{ kind: "segment", name }` name one with options; `h`/`v`/`children`
-// arrays hold the children of a container or group. Edits address a segment
-// by NAME, in the same pre-order the lowered-tree walk uses, so an op that
+// arrays hold the children of a container or group; a root's `rows` object
+// holds its named rows, each any layout node. Edits address a segment by
+// NAME, in the same pre-order the lowered-tree walk uses, so an op that
 // removes the first `weekly` removes the one the bar shows first.
 const CHILD_KEYS = ["h", "v", "children"] as const;
 
@@ -564,38 +565,68 @@ function childArraysOf(node: Node): readonly ArrayNode[] {
   );
 }
 
-// [LAW:types-are-the-program] A layout root is one of two shapes: a container
-// (an `h`/`v`/`children` array to splice) or the bare segment ref a bare
-// string / `{ seg }` object spells. The loader accepts both at a preset root
-// and edit chrome decorates both with `-`/`+`, but only the first has an
-// array to address. A bare ref IS the one-child horizontal container it
-// abbreviates, so it is rewritten as one here — the original text kept
-// verbatim as the sole child, its own `when` included — and the splices
-// below are total over every legal root: normalized once, never branched on
-// per site. The rewrite is only committed by an edit that then finds its
-// target, so a miss leaves the file untouched.
-function containerAt(
-  text: string,
-  rootPath: readonly string[],
-): { text: string; root: Node } | null {
-  const root = nodeAt(parseDocument(text), rootPath);
-  if (root === undefined) return null;
-  if (childArraysOf(root).length > 0) return { text, root };
-  const wrapped = setValue(text, rootPath, `{ h: [${textOf(text, root)}] }`);
-  return { text: wrapped, root: nodeAt(parseDocument(wrapped), rootPath)! };
+/**
+ * The named rows of a `{ rows }` root fragment, or null when the node is a
+ * whole tree — the same discriminator the loader reads (`"rows" in fragment`,
+ * src/config/root.ts), on the document.
+ */
+export function rowEntriesOf(node: Node): readonly Entry[] | null {
+  const rows = entryOf(node, "rows")?.value;
+  return rows?.kind === "object" ? rows.entries : null;
 }
 
-/** The array holding the first segment ref named `name`, and its index. */
-function findSegmentRef(
-  root: Node,
+// [LAW:types-are-the-program] Every node of a layout fragment in pre-order,
+// each with the config-file path it can be REWRITTEN at when it is a bare
+// segment ref — the fragment itself, or one member of its `rows` map — and
+// null for an array element, which is spliced in place. A bare ref IS the
+// one-child horizontal container it abbreviates; the walk carries the
+// address so `refAt` can normalize exactly that one ref and nothing beside
+// it.
+function* nodesIn(
+  node: Node,
+  bareAt: readonly string[] | null,
+): IterableIterator<{ node: Node; bareAt: readonly string[] | null }> {
+  yield { node, bareAt };
+  for (const array of childArraysOf(node)) {
+    for (const child of array.elements) yield* nodesIn(child, null);
+  }
+  for (const row of rowEntriesOf(node) ?? []) {
+    yield* nodesIn(
+      row.value,
+      bareAt === null ? null : [...bareAt, "rows", row.key],
+    );
+  }
+}
+
+/** Whether the fragment holds a segment ref named `name`, anywhere. */
+export function hasSegmentRef(root: Node, name: string): boolean {
+  for (const { node } of nodesIn(root, null)) {
+    if (segmentNameOf(node) === name) return true;
+  }
+  return false;
+}
+
+// [LAW:one-source-of-truth] The first segment ref named `name` under the
+// fragment at `rootPath`, as an array element — normalized once, here, so the
+// splices below are total over every legal shape. A ref that is the whole
+// fragment (`root: "directory"`) or a whole row (`rows: { sys: "demo" }`)
+// is rewritten as the one-child container it abbreviates — the original text
+// kept verbatim as the sole child, its own `when` included — and found again
+// inside it; every other byte, every other row, stays untouched. The rewrite
+// is only committed by an edit that then finds its target, so a miss leaves
+// the file as it was.
+function refAt(
+  text: string,
+  rootPath: readonly string[],
   name: string,
-): { array: ArrayNode; index: number } | null {
-  for (const array of childArraysOf(root)) {
-    for (const [index, child] of array.elements.entries()) {
-      if (segmentNameOf(child) === name) return { array, index };
-      const deeper = findSegmentRef(child, name);
-      if (deeper !== null) return deeper;
-    }
+): { text: string; ref: Node } | null {
+  const root = nodeAt(parseDocument(text), rootPath);
+  if (root === undefined) return null;
+  for (const { node, bareAt } of nodesIn(root, rootPath)) {
+    if (segmentNameOf(node) !== name) continue;
+    if (bareAt === null) return { text, ref: node };
+    const wrapped = setValue(text, bareAt, `{ h: [${textOf(text, node)}] }`);
+    return refAt(wrapped, rootPath, name);
   }
   return null;
 }
@@ -610,11 +641,8 @@ export function removeSegmentRef(
   rootPath: readonly string[],
   target: string,
 ): string | null {
-  const tree = containerAt(text, rootPath);
-  if (tree === null) return null;
-  const hit = findSegmentRef(tree.root, target);
-  if (hit === null) return null;
-  return removeMember(tree.text, hit.array.elements[hit.index]!.span);
+  const hit = refAt(text, rootPath, target);
+  return hit === null ? null : removeMember(hit.text, hit.ref.span);
 }
 
 /**
@@ -630,12 +658,9 @@ export function insertSegmentRef(
   anchor: string,
   relation: "before" | "after",
 ): string | null {
-  const tree = containerAt(text, rootPath);
-  if (tree === null) return null;
-  const hit = findSegmentRef(tree.root, anchor);
+  const hit = refAt(text, rootPath, anchor);
   if (hit === null) return null;
-  const src = tree.text;
-  const ref = hit.array.elements[hit.index]!;
+  const { text: src, ref } = hit;
   const newText = JSON.stringify(segment);
   const { commaEnd, line } = trailerAfter(src, ref.span.end);
   if (startsLine(src, ref.span.start) && line !== null) {

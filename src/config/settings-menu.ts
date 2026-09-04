@@ -1,9 +1,7 @@
 // [LAW:one-source-of-truth] candybar-settings-ui-aok.1 — THE global settings
 // menu: one disclosure that every rendered bar carries, whatever the config
-// says. It exists because `root` replaces wholesale: a user who writes `root:`
-// (the ordinary reason to write a config at all) silently deletes every
-// interactive surface the bundled default placed there — presets, edit mode,
-// the value controls. A door the user can delete by accident is not a door.
+// says — presets, edit mode, and the value controls are reachable from any
+// root an author writes, not only from rows they inherited.
 //
 // [LAW:dataflow-not-control-flow] Placement is a POSITION, never a mode. The
 // synthesis runs the same two total functions on every preset root, in the same
@@ -23,9 +21,9 @@
 // WHY THIS RUNS FROM validateConfig, BEFORE synthesizeEditChrome — the two
 // passes both rewrite every preset root, so their order is a real decision:
 //   • It cannot run at parse time (loader/*.ts) like group/menu synthesis,
-//     because the tree it must splice into only exists after merge: the user's
-//     `root` replaces the bundled default's, and it is the MERGED root the menu
-//     has to be present in.
+//     because the tree it must splice into only exists after merge: a file's
+//     rows merge by name over the bundled default's, and it is the MERGED root
+//     the menu has to be present in.
 //   • It runs BEFORE edit chrome so edit chrome walks the final content tree.
 //     Every name minted here lives under the reserved `settings.` namespace,
 //     which `isChromeExempt` excludes, so the menu never acquires a `+`/`-`
