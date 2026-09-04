@@ -79,11 +79,11 @@ An action declares exactly one of `set` / `persist` / `copy` / `open` /
 | `{ set: key, min: 0, max: 60, by: 2 }` | step the current value by `by`, wrapping in `[min, max]` |
 | `{ set: key, int: true }` | write any integer the render binds (a page cursor) |
 | `{ set: key, cycle: ["a", "b", "c"] }` | write the **successor** of the current value, wrapping; order members default-state-first |
-| `{ persist: field, to \| from \| min/max/by \| cycle, … }` | the SAME four value sources as `set`, but writes the **config `globals` default** durably (every session, survives daemon restart) instead of one session — see below. No `int` arm: a page cursor is never persisted. |
+| `{ persist: field, to \| from \| min/max/by \| cycle, … }` | the SAME four value sources as `set`, but writes `globals.<field>` into your **config file** (every session, survives daemon restart) instead of one session — see below. No `int` arm: a page cursor is never persisted. |
 | `{ set: key, persist: field, persistWhen: selectorKey, to \| from \| min/max/by \| cycle, … }` | ONE control, TWO destinations: write the same value to SessionState or to the durable `globals` default, chosen at click time by the boolean value of `selectorKey` — see below |
-| `{ reset: field }` | clear one persisted `globals` field, restoring the config-file/bundled value |
+| `{ reset: field }` | delete `globals.<field>` from your config file, so the bundled default shows through again |
 | `{ set: key, persist: field, persistWhen: selectorKey, … }` (durable click) | releases the session key as part of the same write, so the committed default is visible to the session that committed it |
-| `{ undo: true }` | step the overrides layer's **global history** one entry back — restores whatever a PRIOR `persist`/`reset` write changed, any key, not just the one this action names (it names none) |
+| `{ undo: true }` | step the config file's edit history (one stack per file) one entry back — restores whatever a PRIOR `persist`/`reset`/layout edit changed, any key, not just the one this action names (it names none) |
 | `{ redo: true }` | re-apply the most recently undone entry |
 | `{ copy: "template" }` | copy the evaluated template to the clipboard |
 | `{ open: "template" }` | open the evaluated target in the editor |
@@ -165,20 +165,38 @@ exactly the same over it:
 }
 ```
 
-### `persist` / `reset` — writing the config default, not a session pick
+### `persist` / `reset` — writing the config file, not a session pick
 
 Every other `set` in this doc changes what the CURRENT session sees. `persist`
-changes what EVERY session sees, from the next reload on — it writes into a
-daemon-owned overrides layer merged on top of your config file (bundled
-default < config file < persisted overrides < active preset < session pick <
-edit mode, in that order: a session's own `set` pick still wins over a
-persisted default for that one session). The config file on disk is never
-touched — a `persist` write is never something `cc-candybar check` or a
-`git diff` on your config will show.
+changes what EVERY session sees, from the next reload on — it writes the value
+into your config file itself, in place. Exactly one value span changes; every
+other byte of the file (comments, blank lines, key order, quote style, trailing
+commas) is preserved. There is no second durable store: the precedence chain is
+bundled default < config file < active preset < session pick < edit mode, so a
+session's own `set` pick still wins over the file's default for that one
+session. A `persist` click is a hand edit as far as the file can tell:
+`git diff` on your config shows it, `cc-candybar check` validates it, and
+nothing in the file records which of the two made it. No config file for any
+software on the planet shows whether the application's settings menu updated
+it or a human found it and hand-edited it, and this one is no different.
+
+`reset` is the delete half: it removes the path `persist` writes
+(`globals.<field>`), so the bundled default shows through again. A path your
+file never authored is left alone — nothing is written and nothing enters the
+edit history.
+
+The file a click writes is the config file your session's config search
+resolves to at the moment of the click — the same search the render runs
+(`$CC_CANDYBAR_CONFIG`, a project `.cc-candybar.json5`, or the XDG
+`config.json5`), so it is the file the next render reads. When no config file exists
+yet, the first `persist` creates one — at `$CC_CANDYBAR_CONFIG` if that is set,
+else `$XDG_CONFIG_HOME/cc-candybar/config.json5`. A click from a session that
+has not rendered yet has no file to write and fails loudly (`has not rendered
+yet — no config file to write`) rather than guessing.
 
 The `active preset` layer is a whole alternative arrangement: a named `root`
 and/or display-`globals` fragment, declared in a top-level `presets:` block and
-picked per session. It sits to the right of persisted overrides because the
+picked per session. It sits to the right of the config file because the
 chain is ordered by how late each layer is decided — everything left of the
 preset is read once when the config loads and is shared by every session, while
 the preset and the session pick are both resolved on every render. That is what
@@ -408,8 +426,9 @@ disagrees with.
 resolved config value — the same seam `{{ .theme.effective }}` rides for
 `palette` — so each trigger's label is always the value that actually
 rendered, never a restated guess. A charset or padding change takes effect
-on the very next render, live, with no daemon restart: `persist` writes the
-overrides file, which rides the config file's own watcher.
+on the very next render, live, with no daemon restart: `persist` edits the
+config file, and the daemon reloads it through the same watcher a hand edit
+trips.
 
 For `autoWrap` and `padding` you can offer the session-scoped version of the
 same control by swapping `persist:` for `set:`. Nothing else changes — same
@@ -510,8 +529,8 @@ Each preset's `root` goes through the same layout validator the top-level
 A `set` pick over `presets` is a per-session preview, exactly like `set:
 "palette"` — it changes what THIS session sees, from the next render, with no
 daemon restart. Pin one as the config default the SAME way you would a
-theme: `persist: "preset"` writes it into the overrides layer `set` never
-touches; `reset: "preset"` clears it. Nothing about `preset` makes this a
+theme: `persist: "preset"` writes `globals.preset` into your config file;
+`reset: "preset"` deletes it again. Nothing about `preset` makes this a
 special case — it is just another `Globals` field name to `persist`/`reset`,
 the same zero-engine-edits seam `segments.<name>.palette` rides above.
 
@@ -534,35 +553,31 @@ the same zero-engine-edits seam `segments.<name>.palette` rides above.
 }
 ```
 
-`persist: "preset"` carries one risk no other persisted field does. The
-overrides file `persist` writes to is ONE file shared by every project this
-daemon serves, but `presets` is a per-config domain — the second one, after
-`looks` — so the name a pin wrote for one project's config may not exist in
-the config of the next project this daemon renders. That case is handled the
-same way a stale session pick already is: the name collapses to `"default"`,
-visibly, rather than failing the whole render. It is never a load error,
-because the config that is loading it did not author it — only a preset name
-you actually typed into `globals.preset` in your OWN config file gets the
-load-time typo check, the same distinction `segments.<name>.palette` draws
-between a name your config declares and one it doesn't.
+The pin lands in the config file the session rendered, and `presets` is a
+per-config domain — the second one, after `looks` — so the name a pin writes
+is one that file's merged `presets` block already declares: the same domain
+the `{{ menu }}` picked it from. From then on it is an ordinary
+`globals.preset` line in your file. Delete or rename that preset by hand
+later and the load-time typo check catches the line exactly as it would one
+you typed yourself (`globals.preset "compact" does not match any declared
+preset`), because the file does not remember which of you wrote it.
 
 ### Editing a preset's layout: `removeSegment` / `insertSegment`
 
 A preset's `root` is data you write once. `removeSegment` and `insertSegment`
 are the click-driven seam for changing it: `persist` a *structural* edit
-against `presets.<name>.rootOps` (a reserved suffix distinct from the preset's
-own `root` field — see below) instead of naming a value source. Both are
-fully literal — the segment name(s), and for `insertSegment` an `anchor` and a
-`relation` of `"before"` or `"after"` — so each declared action is exactly one
-legal request, gated the same one-value way a literal `persist … to` already
-is.
+against `presets.<name>.root` — the config-file path of the preset's own
+`root` — instead of naming a value source. Both are fully literal — the
+segment name(s), and for `insertSegment` an `anchor` and a `relation` of
+`"before"` or `"after"` — so each declared action is exactly one legal
+request, gated the same one-value way a literal `persist … to` already is.
 
 ```json5 check:pass
 {
   variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
   actions: {
-    dropModel: { persist: "presets.compact.rootOps", removeSegment: "model" },
-    addGitPr: { persist: "presets.compact.rootOps", insertSegment: "gitPr", anchor: "directory", relation: "after" },
+    dropModel: { persist: "presets.compact.root", removeSegment: "model" },
+    addGitPr: { persist: "presets.compact.root", insertSegment: "gitPr", anchor: "directory", relation: "after" },
   },
   segments: {
     editControl: {
@@ -579,22 +594,36 @@ is.
 
 Position is addressed by the segment's own NAME, never by a sibling index — an
 index would point at the wrong node the moment an earlier edit shifted the
-tree under it. Clicks accumulate: each one appends one op to a log stored
-alongside the preset (never touching the preset's own declared `root`, and
-never your config file), and the daemon replays the whole log on top of the
-declared root every time it resolves that preset — so a remove and an insert
-from two separate clicks both land, in order, instead of the second clobbering
-the first. `reset: "presets.compact.rootOps"` clears the whole log at once,
-restoring the preset's declared root (a `set` twin doesn't exist either: a
-structural edit is always a durable write, the same way `persist`'s other
-arms already are). For undoing ONE op at a time instead of the whole log, see
-`undo`/`redo` below — the same global history mechanism steps a layout edit
-back exactly as it steps any other persisted write.
+tree under it. Each click rewrites the authored tree in your config file:
+one segment reference is spliced into or out of the `root` the file declares,
+in the same `{ h: [...] }` / bare-name grammar you write, with the comments
+around it intact. Two clicks land in order because the second edits the tree
+the first left behind. `reset: "presets.compact.root"` deletes the preset's
+`root` from the file; a preset with no root of its own stages your config's
+top-level `root`, so that is what `compact` renders after the reset. For a
+preset that never declared a root, the key addresses that top-level `root`
+itself, so both the clicks and the reset land there. A `set` twin doesn't
+exist either: a structural edit is always a durable write, the same way
+`persist`'s other arms already are. For stepping ONE click back instead of
+deleting the whole tree, see `undo`/`redo` below — the same history steps a
+layout edit back exactly as it steps any other durable write.
 
-A stale op — one naming a segment a later config change removed — is silently
-dropped when replayed, the same recovery `segments.<name>.palette` already
-gets for the identical situation: nothing left to apply it to, and nothing
-worth failing the whole render over.
+The target need not be a preset you wrote. `presets.<name>.root` works
+against the bundled `compact` and `verbose` too, with one thing to expect:
+`presets` merge by name wholesale, so the first click on a preset your file
+does not declare copies the whole bundled declaration — its `globals` and its
+`root` — into your file, then applies the edit. A file declaring only
+`presets.compact.root` would otherwise erase the bundled `compact`'s
+`padding: 0`. The same rule applies to a preset with no root of its own: the
+first click copies the bundled top-level `root` into your config's `root`.
+Per-field merge is a follow-up ticket; until then that first click adds a
+full declaration you are free to trim by hand.
+
+A click whose target or anchor the tree no longer holds — the bar rendered
+before a later edit removed that segment — is a loud click error (`… has no
+segment "model" — the bar you clicked is stale; it reloads on the next
+render`), never a silent drop. The file and the history are untouched, and
+the next render rebuilds the chrome against the current tree.
 
 ### Picking which segment to insert: `insertSegmentFrom`
 
@@ -610,7 +639,7 @@ drive a structural edit the same way it drives an ordinary `persist … from`:
 {
   variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
   actions: {
-    addAfterGit: { persist: "presets.compact.rootOps", insertSegmentFrom: ["gitPr", "model"], anchor: "git", relation: "after" },
+    addAfterGit: { persist: "presets.compact.root", insertSegmentFrom: ["gitPr", "model"], anchor: "git", relation: "after" },
   },
   segments: {
     editControl: {
@@ -633,13 +662,13 @@ itself special. The gate mirrors `insertSegment`'s: the derived allow-list is
 the encoded op token for every domain member, so a click naming a segment the
 domain never listed decodes to nothing the gate admits.
 
-### Undoing/redoing any persisted write: `undo` / `redo`
+### Undoing/redoing any durable write: `undo` / `redo`
 
-`reset` clears ONE named key outright — the coarse "forget this override"
-case. `undo`/`redo` are its fine-grained siblings: they step ONE GLOBAL
-history over every `persist`/`reset` write ever made to the overrides
-layer — a theme pin, a padding nudge, a segment-palette override, a
-`removeSegment`/`insertSegment` structural edit — back and forth, one entry
+`reset` deletes ONE named path outright — the coarse "forget this setting"
+case. `undo`/`redo` are its fine-grained siblings: they step the history of
+every durable write ever made to your config file — a theme pin, a
+padding nudge, a segment-palette pin, a `removeSegment`/`insertSegment`
+structural edit, an edit-mode `+`/`-`, a `reset` — back and forth, one entry
 at a time, regardless of which key or which config declared the action that
 made the write. Neither carries a key: there is nothing to name, since the
 history itself decides which entry moves.
@@ -662,20 +691,35 @@ history itself decides which entry moves.
 }
 ```
 
-The history is **daemon-global, not per-session** — `config-overrides.json`
-already has exactly one writer and no session-scoping (a `persist` write is
-daemon-global by design), so `undo`/`redo` step that same file rather than
-inventing a session axis it doesn't otherwise have. Two sessions can see each
-other's undos; that is the deliberate consequence of one shared bar default,
-not a bug.
+Each history entry is a whole-file snapshot of one config file before and
+after one edit, kept in `$XDG_STATE_HOME/cc-candybar/config-edit-history.json`,
+fifty entries deep — the oldest fall off, so a long-running daemon's history
+cannot grow without limit. `undo` writes the entry's `before` text back over
+the file. A first-ever write's `before` is the absent file, so undoing it
+removes the file rather than leaving an empty one the loader rejects.
+
+`undo` restores that snapshot only while the file still reads exactly as the
+entry's `after`. If you hand-edited the file since — or another daemon did —
+the click refuses, loudly, with `undo: <file> has changed since that edit —
+refusing to overwrite it`, and the entry stays where it is: overwriting would
+destroy work the history never saw. `redo` makes the mirror check against the
+entry's `before`. Your hand edit always stands; the way past the refusal is
+to edit the file again yourself.
+
+The history is **one stack per config file, not per session** — a durable
+write lands in the file your session's config search resolves to, and `undo`/`redo`
+step that file's stack. A daemon serving several projects keeps a stack for
+each file, so an undo from one project can never revert a write made to
+another's. Two sessions rendering the same file share its stack and can see
+each other's undos; that is the deliberate consequence of one shared bar
+default, not a bug.
 
 Clicking `undo` with nothing to undo — or `redo` with nothing to redo — is a
-loud, transient message in the bar (the same `click.error` channel any failed
-click surfaces through), never a silent no-op. A fresh `persist`/`reset`
-write after an `undo` abandons whatever was undone (the classic redo-stack
-branch: `redo` truncates rather than staying reachable past a new edit). The
-history is bounded — old entries fall off once a generous cap is exceeded —
-so a long-running daemon's history file cannot grow without limit.
+loud, transient message in the bar (`undo: history is empty, nothing to undo`
+/ `redo: nothing to redo`, on the same `click.error` channel any failed click
+surfaces through), never a silent no-op. A fresh durable write after an
+`undo` abandons whatever was undone (the classic redo-stack branch: `redo`
+truncates rather than staying reachable past a new edit).
 
 ## Edit mode: `+`/`-` chrome for free
 
@@ -775,13 +819,14 @@ same reason a preset's own globals may not name a preset: which preset is
 active keeps exactly one authority.
 
 Leaving edit mode needs no undo. The fragment is applied at resolution time
-while the mode is on; it is never written to session state or the overrides
-layer, so whatever governed before governs again the moment you toggle off.
+while the mode is on; it is never written to session state or the config
+file, so whatever governed before governs again the moment you toggle off.
 
-**Clicks land in the SAME `presets.<name>.rootOps` op log** `removeSegment`/
-`insertSegmentFrom` already write to — so `undo`/`redo` (above) cover an
-edit-mode click for free, and a structural edit made through edit mode
-survives a daemon restart exactly like a hand-authored one.
+**Clicks land in the SAME `presets.<name>.root` tree** `removeSegment`/
+`insertSegmentFrom` already write to — the preset's `root` in your config
+file — so `undo`/`redo` (above) cover an edit-mode click for free, and a
+structural edit made through edit mode survives a daemon restart exactly like
+a hand-authored one, because as far as the file can tell it is one.
 
 Segments already under a reserved namespace (`groups.`/`menus.`/`edit.`
 itself) are excluded from both halves — removing a group's own toggle or a
@@ -818,45 +863,44 @@ worth knowing before you wire your own trigger:
 
 ### Knowing when a preset's layout has been edited: `.preset.customized`
 
-Edit mode's `+`/`-` clicks land in `presets.<name>.rootOps` — an accumulated
-op log, replayed onto the preset's declared `root` on every reload. That
-means a preset's *rendered* layout can silently drift from the literal
-`root:` you can see in your config file: nothing in the bar told you an
-earlier click session left ops sitting there.
+Edit mode's `+`/`-` clicks rewrite `presets.<name>.root` in your config
+file, and a bundled preset's first click copies its whole declaration in
+there first (see "Editing a preset's layout" above). So a preset you never
+wrote can come to have a `root` in your file, and the bar should be able to
+say so.
 
 `.preset.customized` is that signal — a boolean input var, true exactly when
-the ACTIVE preset (`.preset.effective`) currently has at least one op that
-still DECODES (not merely a non-empty log: a token list that is entirely
-malformed — hand-edited, or written by a previous protocol version —
-replays as zero ops, and the signal agrees with that, never showing
-"customized" over a tree that's actually byte-identical to the declared
-root). It checks decode, not whether the op still resolves against your
-CURRENT tree — a later hand-authored edit that removes a segment a stored
-op still names turns that op into a no-op at replay (the same stale-op
-skip a live restart already applies), and the signal doesn't chase that:
-a rare, later-edit-triggered "customized" over a tree that hasn't actually
-changed is the accepted cost of a cheap per-render check over a full tree
-diff. Reference it in a `when` and pair it with `reset` over the SAME
-`presets.<name>.rootOps` key `removeSegment`/`insertSegmentFrom` already
-write to — clearing it drops the accumulated ops and restores the literal
-declared root on the next reload, with no new gate to register (the key is
+your config FILE authors a root at the ACTIVE preset's root path
+(`.preset.effective`): `presets.<name>.root` for a preset that declares one,
+your config's top-level `root` for a preset that stages it. Hand-written or
+click-written makes no difference, by design — the file does not record
+which, so the signal cannot either. It reads the file, not a diff: a `root`
+you typed yourself counts exactly as much as one a click left behind.
+Reference it in a `when` and pair it with `reset` over the SAME
+`presets.<name>.root` key `removeSegment`/`insertSegmentFrom` already write
+to — the reset deletes that root from the file, so the bundled declaration
+(or, for a preset staging the config root, the bundled two-row default)
+shows through on the next reload, with no new gate to register (the key is
 already writable the moment any structural-edit action targets it).
 
 ```json5 check:pass
 {
-  // `.preset.customized` reads the ACTIVE preset's op log
-  // (`.preset.effective`) — pin "compact" as the default so it's the one
-  // `dropModel`/`resetCompactLayout` (and this example's own narrative)
-  // are actually about, exactly like `persist: "preset"` above pins one
-  // for real.
+  // `.preset.customized` reads whether the FILE authors the ACTIVE preset's
+  // root (`.preset.effective`) — pin "compact" as the default so it's the
+  // one `dropModel`/`resetCompactLayout` (and this example's own
+  // narrative) are actually about, exactly like `persist: "preset"` above
+  // pins one for real. `compact` declares its own root here, so the key
+  // addresses `presets.compact.root` — a preset with no root of its own
+  // would send both the clicks and the reset to this config's `root`.
   globals: { preset: "compact" },
   variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
   actions: {
-    dropModel: { persist: "presets.compact.rootOps", removeSegment: "model" },
-    resetCompactLayout: { reset: "presets.compact.rootOps" },
+    dropModel: { persist: "presets.compact.root", removeSegment: "model" },
+    resetCompactLayout: { reset: "presets.compact.root" },
   },
   segments: {
     directory: { template: '~/project', bg: 'surface', fg: 'foreground' },
+    model: { template: 'opus', bg: 'surface', fg: 'foreground' },
     layoutStatus: {
       template: '{{ action "resetCompactLayout" "↺ layout customized" }}',
       when: '{{ .preset.customized }}',
@@ -864,17 +908,29 @@ already writable the moment any structural-edit action targets it).
     },
   },
   presets: {
-    compact: { globals: { padding: 0 } },
+    compact: { root: { h: ["directory", "model"] }, globals: { padding: 0 } },
   },
-  root: { v: ["directory", "layoutStatus"] },
+  root: { v: ["directory", "model", "layoutStatus"] },
 }
 ```
 
+In this example the banner is on from the first render — the file authors
+`presets.compact.root` — and `resetCompactLayout` deletes that root, leaving
+`compact` to stage the config's own `root`. Because that top-level `root` is
+authored too, the signal stays true, and a second reset would delete it.
+That is the honest reading of "the file authors a root": a config that
+writes its own `root` is customized relative to the bundled default, whether
+a click or a keyboard did it.
+
 **Edit mode synthesizes this for you too.** Referencing `edit.toggle`
 (above) doesn't just splice `-`/`+` per gap — it also prepends this exact
-banner, `when`-gated the same way, above every preset's chrome-spliced root,
-targeting that preset's own `rootOps` key. You only need to author it
-yourself in a config that edits `presets.<name>.rootOps` WITHOUT wiring edit
+banner above every preset's chrome-spliced root, targeting that preset's own
+`presets.<name>.root` key. The synthesized banner is edit chrome like `-`/`+`,
+so it is gated on edit mode being open AND `.preset.customized` — a config
+that authors its own `root` is "customized" from its first render, and a
+permanent one-click deletion of that root outside edit mode is not a status
+row. Author the banner yourself when you want it visible regardless of edit
+mode, or in a config that edits `presets.<name>.root` WITHOUT wiring edit
 mode at all (the pattern above).
 
 ### Persisting a per-segment field: `segments.<name>.palette`
@@ -916,6 +972,19 @@ segment you haven't written yet is a load error naming the segments you
 DO have), and the value source must be `to`/`from`/`cycle` — never a
 bounded stepper (`min`/`max`/`by`), because a palette is a NAME, not a
 number.
+
+"A segment your config declares" includes the bundled ones — `directory`,
+`git`, `model`, and the rest merge into every config by name — so
+`segments.model.palette` is a legal target in a file that never mentions
+`model`. What that first write does to the file is worth knowing before you
+see the diff: `segments` merge by name wholesale, so a file declaring only
+`segments: { model: { palette: "nord" } }` would replace the whole bundled
+`model` segment with one that has no template. The write therefore copies
+the entire bundled `model` declaration into your file first, then sets its
+`palette`. A segment your file already declares gets only the one `palette`
+line inserted or replaced. Per-field merge is a follow-up ticket; until then
+expect the first pin on a bundled segment to add a full declaration you can
+trim by hand, and `reset` to remove only the `palette` line from it.
 
 Like `charset` and `colorCompatibility` above, a segment's `palette:` has no
 SessionState half — `persist` is its only seam, so there is no session
@@ -1606,7 +1675,7 @@ Same load-time check as `segments.<name>.palette`, one seam over:
 
 ```json5 check:fail
 {
-  actions: { dropGhost: { persist: "presets.compact.rootOps", removeSegment: "ghost" } },
+  actions: { dropGhost: { persist: "presets.compact.root", removeSegment: "ghost" } },
   segments: { sidebar: { template: "sidebar" } },
   presets: { compact: { root: "sidebar" } },
 }
@@ -1616,14 +1685,14 @@ Same load-time check as `segments.<name>.palette`, one seam over:
 removeSegment "ghost" is not a declared segment
 ```
 
-### A value source other than `removeSegment`/`insertSegment`/`insertSegmentFrom` over a `rootOps` target
+### A value source other than `removeSegment`/`insertSegment`/`insertSegmentFrom` over a preset-root target
 
-`presets.<name>.rootOps` addresses a tree, not a scalar — `to`/`from`/`cycle`/
+`presets.<name>.root` addresses a tree, not a scalar — `to`/`from`/`cycle`/
 a bounded stepper have no meaning as a tree op:
 
 ```json5 check:fail
 {
-  actions: { bumpLayout: { persist: "presets.compact.rootOps", min: 0, max: 1, by: 1 } },
+  actions: { bumpLayout: { persist: "presets.compact.root", min: 0, max: 1, by: 1 } },
   segments: { sidebar: { template: "sidebar" } },
   presets: { compact: { root: "sidebar" } },
 }
@@ -1644,14 +1713,15 @@ can only be paired with "removeSegment", "insertSegment", or "insertSegmentFrom"
    inventing a new shape.
 5. If you added a `persist` action, you paired it with a `reset` (the
    drawer's convention — an undoable default is always undoable from the
-   bar itself), and you verified it with an actual restart: render once,
-   kill the daemon, start it fresh, render again with a brand-new
-   `session.id`. `check` validates your config structurally (parse, merge,
-   validate, render) but never simulates clicks, so it cannot catch a
-   `persist` action that targets a valid but unintended Globals field (a
-   typo'd field name IS caught at load time — this is about a real field,
-   just the wrong one). Watch out for the session-pick trap specifically: if
-   you're ALSO testing the matching `set` action in the same session, that
-   session's own pick will keep winning over your persisted default (by
-   design — see "persist / reset" above), which can look like the persist
-   write silently failed when it didn't.
+   bar itself), and you verified it by clicking it and reading the diff:
+   `git diff` (or a before/after copy) of the config file the session
+   rendered shows exactly one value changed and nothing else touched, and
+   the next render reflects it. `check` validates your config structurally
+   (parse, merge, validate, render) but never simulates clicks, so it
+   cannot catch a `persist` action that targets a valid but unintended
+   Globals field (a typo'd field name IS caught at load time — this is
+   about a real field, just the wrong one). Watch out for the session-pick
+   trap specifically: if you're ALSO testing the matching `set` action in
+   the same session, that session's own pick will keep winning over the
+   file's default (by design — see "persist / reset" above), which can look
+   like the persist write silently failed when the diff says it didn't.

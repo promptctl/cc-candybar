@@ -142,7 +142,7 @@ export type CompiledActionDecl =
       readonly members: readonly string[];
     }
   // [LAW:one-source-of-truth] The gated undo for a persistent write: clears
-  // one config-overrides key. Carries only the key — there is no value to
+  // one key from the config file. Carries only the key — there is no value to
   // realize, so it shares copy/open's "no gate" shape at compile time (the
   // GATE is the key-membership check the reset-config verb handler applies).
   | { readonly kind: "reset"; readonly key: string }
@@ -167,8 +167,8 @@ export type CompiledActionDecl =
       readonly relation: "before" | "after";
       readonly options: readonly string[];
     }
-  // [LAW:one-source-of-truth] brandon-layout-edit-2gc.2's global history
-  // step over the overrides layer — `reset`'s fine-grained sibling. No key:
+  // [LAW:one-source-of-truth] brandon-layout-edit-2gc.2's history step over
+  // the session's config file's edits — `reset`'s fine-grained sibling. No key:
   // there is nothing to carry, since the history stack (not this action) is
   // what decides which entry moves.
   | { readonly kind: "undo" }

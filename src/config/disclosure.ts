@@ -129,10 +129,17 @@ export function disclosureGate(
   first: DisclosureRef,
   ...rest: readonly DisclosureRef[]
 ): string {
-  const terms = [first, ...rest]
-    .map((o) => `(eq .${o.variable} "${escapeTemplateLiteral(o.member)}")`)
-    .join(" ");
+  const terms = [first, ...rest].map(disclosureTerm).join(" ");
   return `{{ and ${terms} }}`;
+}
+
+// [LAW:one-source-of-truth] THE spelling of "this disclosure is open" as one
+// term of a larger predicate. `disclosureGate` is the all-disclosures case;
+// a gate that conjoins a disclosure with a NON-disclosure fact (edit-chrome's
+// banner: edit mode open AND the preset customized) composes this same term
+// rather than re-spelling `eq` beside a second copy of the escaping.
+export function disclosureTerm(ref: DisclosureRef): string {
+  return `(eq .${ref.variable} "${escapeTemplateLiteral(ref.member)}")`;
 }
 
 // [LAW:single-enforcer] THE trigger template a disclosure's toggle segment

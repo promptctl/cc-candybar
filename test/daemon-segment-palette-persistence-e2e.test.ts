@@ -13,7 +13,9 @@ import { readFileSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
+import JSON5 from "json5";
 import { PROTOCOL_VERSION } from "../src/daemon/protocol";
+import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { parseHandlerUrl } from "../src/install/index";
 import { effectsUrl, VERB_SET_STATE } from "../src/click/wire";
 import { effectsOf } from "./helpers/click";
@@ -127,7 +129,7 @@ async function waitForRenderChange(
 
 describe("candybar-config-engine-71o.6: real-daemon segment-palette click → persist → restart", () => {
   test("bundled default: clicking directory's palette-forever menu, over the real socket, survives a cold restart and leaves every other segment's palette untouched", async () => {
-    const { env, sockPath, stateDir, removeTmpDirs } = prepareIsolatedDaemonEnv(
+    const { env, sockPath, removeTmpDirs } = prepareIsolatedDaemonEnv(
       "cc-candybar-seg-palette-e2e",
     );
     const projectDir = mkdtempSync(
@@ -226,7 +228,7 @@ describe("candybar-config-engine-71o.6: real-daemon segment-palette click → pe
       await click(sockPath, applyUrl!);
 
       // Live re-render, same session, no daemon restart — the persisted
-      // override rides the config file's own watcher, which reloads
+      // palette rides the config file's own watcher, which reloads
       // asynchronously (see waitForRenderChange). `opened` (captured right
       // after the drawer was opened, same drawer-open state as the
       // post-click render, but BEFORE the click) is the right baseline for
@@ -235,8 +237,8 @@ describe("candybar-config-engine-71o.6: real-daemon segment-palette click → pe
       // `before` was rendered with the drawer CLOSED. With drawer state
       // held constant, this proves the persisted palette actually reached
       // the rendered `directory` segment's colors — not just that the
-      // overrides file was written (asserted below): a fully broken
-      // applySegmentPaletteOverrides overlay would time out here.
+      // config file was written (asserted below): a broken reload of
+      // the file's own declaration would time out here.
       const afterClick = await waitForRenderChange(
         sockPath,
         SID,
@@ -248,22 +250,26 @@ describe("candybar-config-engine-71o.6: real-daemon segment-palette click → pe
       // the override changed exactly one segment's palette, nothing else.
       expect(afterClick.split("\n").at(-1)).toBe(statusRowBefore);
 
-      // The hand-authored file is byte-identical — persist never touches it.
-      expect(readFileSync(userConfigPath, "utf8")).toBe(userConfigBody);
-
-      const overridesPath = path.join(stateDir, "config-overrides.json");
-      const overrides = JSON.parse(readFileSync(overridesPath, "utf8")) as {
-        "segments.directory.palette"?: string;
+      // [LAW:one-source-of-truth] The config FILE is the durable store
+      // (candybar-config-dqe). `segments` merge by name WHOLESALE, so pinning
+      // a palette on a segment the file does not declare first materializes
+      // the WHOLE bundled `directory` declaration into the file, then sets
+      // its `palette` — and nothing else: no globals field, no other
+      // segment.
+      const written = JSON5.parse(readFileSync(userConfigPath, "utf8")) as {
+        globals: Record<string, unknown>;
+        segments: Record<string, { template?: string; palette?: string }>;
       };
-      // Exactly one key was ever persisted by this whole flow — no globals
-      // field, no other segment, leaked into the overrides file.
-      expect(overrides).toEqual({
-        "segments.directory.palette": targetPalette,
-      });
+      expect(written.globals).toEqual({});
+      expect(Object.keys(written.segments)).toEqual(["directory"]);
+      expect(written.segments.directory!.palette).toBe(targetPalette);
+      expect(written.segments.directory!.template).toBe(
+        DEFAULT_DSL_CONFIG.segments.directory!.template,
+      );
+      const afterFirstWrite = readFileSync(userConfigPath, "utf8");
 
-      // Kill this daemon and start a FRESH one against the SAME state dir
-      // (same overrides file) — a real cold restart, not an in-process
-      // cache rebuild.
+      // Kill this daemon and start a FRESH one against the SAME config file
+      // — a real cold restart, not an in-process cache rebuild.
       await killAndWait(daemon);
       daemon = await spawnDaemonWithEnv(env);
 
@@ -277,8 +283,9 @@ describe("candybar-config-engine-71o.6: real-daemon segment-palette click → pe
       const freshOut = await render(sockPath, FRESH_SID, projectDir);
       expect(freshOut.split("\n").at(-1)).toBe(statusRowBefore);
 
-      // The hand-authored file is STILL byte-identical after the restart.
-      expect(readFileSync(userConfigPath, "utf8")).toBe(userConfigBody);
+      // The file is STILL exactly what the click wrote — a restart reads it,
+      // never rewrites it.
+      expect(readFileSync(userConfigPath, "utf8")).toBe(afterFirstWrite);
     } finally {
       if (daemon) daemon.killTree();
       removeTmpDirs();

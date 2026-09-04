@@ -21,7 +21,7 @@ import { numericGlobalsSeeds } from "../../config/loader/globals";
 import { encodeLayoutOp } from "../../config/layout-ops";
 import {
   parsePersistTarget,
-  presetRootOpsKey,
+  presetRootKey,
 } from "../../config/loader/persist-target";
 import {
   clampSeed,
@@ -84,7 +84,7 @@ function actionKeySpecs(
   // insertSegment's segment/anchor/relation), so — exactly like a literal
   // `to` — there is exactly ONE legal value this declared action can ever
   // request: its own encoded op token. Multiple layout actions targeting the
-  // same "presets.<name>.rootOps" key each contribute one allow-list member,
+  // same "presets.<name>.root" key each contribute one allow-list member,
   // unioned by mergeContributions below, same as multiple `to` actions on
   // one key already do.
   if ("removeSegment" in a) {
@@ -157,17 +157,16 @@ function actionKeySpecs(
   ];
 }
 
-// [LAW:one-source-of-truth] The unset seed for a bounded `persist` key (e.g.
-// a padding stepper) is the value that would render with NO override yet —
-// the merged config's OWN globals field, before this reload's overrides are
-// applied. Mirrors stateKeySeeds' "the bar's current display, not silently
-// min" rule for SessionState steppers.
+// [LAW:one-source-of-truth] The seed for a bounded `persist` key (e.g. a
+// padding stepper) is the merged config's OWN globals field — the value the
+// bar renders with today. Mirrors stateKeySeeds' "the bar's current display,
+// not silently min" rule for SessionState steppers.
 function configKeySeeds(config: DslConfig): ReadonlyMap<string, number> {
   return numericGlobalsSeeds(config.globals);
 }
 
 // [LAW:one-source-of-truth] Every preset a config's action table ALREADY
-// targets via a `presets.<name>.rootOps` key (persist OR reset — the
+// targets via a `presets.<name>.root` key (persist OR reset — the
 // contribution is keyed off intent to use structural editing for that
 // preset, not off "this config has any presets block") stays a
 // registered key EVEN when that preset's CURRENT tree has no
@@ -187,18 +186,18 @@ function configKeySeeds(config: DslConfig): ReadonlyMap<string, number> {
 // preset" — a config with a `presets` block but ZERO persist/reset actions
 // over it has no structural-editing surface at all, so it registers
 // nothing here, preserving this module's own "zero baseline keys" floor
-// (a globals field, and now a preset's rootOps, is writable only because
+// (a globals field, and now a preset's root, is writable only because
 // SOME action names it).
-function presetRootOpsContributions(config: DslConfig): KeySpecContribution[] {
+function presetRootContributions(config: DslConfig): KeySpecContribution[] {
   const presets = new Set<string>();
   for (const a of writeDestinations(config)) {
     const key = "persist" in a ? a.persist : "reset" in a ? a.reset : null;
     if (key === null) continue;
     const target = parsePersistTarget(key);
-    if (target?.scope === "preset-root-ops") presets.add(target.preset);
+    if (target?.scope === "preset-root") presets.add(target.preset);
   }
   return [...presets].map((name) => ({
-    key: presetRootOpsKey(name),
+    key: presetRootKey(name),
     spec: { kind: "allow-list", allowed: [] },
   }));
 }
@@ -216,7 +215,7 @@ function actionContributions(config: DslConfig): KeySpecContribution[] {
     ...addableSegmentDomains(config),
   ]);
   return [
-    ...presetRootOpsContributions(config),
+    ...presetRootContributions(config),
     ...writeDestinations(config).flatMap((a) =>
       actionKeySpecs(a, seeds, perConfigDomains),
     ),

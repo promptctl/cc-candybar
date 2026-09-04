@@ -385,8 +385,8 @@ export const RAW_DEFAULT_DSL_CONFIG = {
       path: "preset.effective",
       default: "",
     },
-    // [LAW:one-source-of-truth] brandon-layout-edit-2gc.5 — presetIsCustomized
-    // over the SAME reload's presetRootOps, resolved alongside preset.effective
+    // [LAW:one-source-of-truth] brandon-layout-edit-2gc.5 — does the config
+    // file author the active preset's root, resolved alongside preset.effective
     // (RenderPayload.preset.customized). edit-chrome.ts's synthesized "↺ …
     // customized" segment gates on this directly; a hand-authored config can
     // read it too for its own reset affordance.
@@ -1276,8 +1276,8 @@ export const RAW_DEFAULT_DSL_CONFIG = {
     // selector to choose between — which is exactly why
     // candybar-settings-ui-aok.3 left them here while moving every
     // both-halves setting into the settings menu as one dual control. Each
-    // writes the config DEFAULT through the daemon-owned overrides layer
-    // (never the hand-authored file itself), gated by the SAME
+    // writes the config DEFAULT into the config file itself (candybar-
+    // config-dqe: the file is the one durable store), gated by the SAME
     // deriveConfigActionValidators pass, and is paired with a `reset` so a
     // drawer choice is always undoable from the bar.
     applyCharsetForever: { persist: "charset", from: "charsets" },

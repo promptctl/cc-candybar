@@ -58,7 +58,13 @@ import { armParentWatchdog, anchorFromEnv, pidAlive } from "./parent-watchdog";
 import { resetSpawnBackoff } from "./acquire";
 import { SessionState } from "./session-state";
 import { FileSessionStorage } from "./session-state-file";
-import { VERBS, BadVerbArgs, SESSION_CONFIG_OVERRIDE_KEY } from "./verbs";
+import {
+  VERBS,
+  BadVerbArgs,
+  SESSION_CONFIG_OVERRIDE_KEY,
+  SESSION_RENDER_ORIGIN_KEY,
+  encodeRenderOrigin,
+} from "./verbs";
 import {
   effectsUrl,
   VERB_SHOW_CONFIG_ERROR,
@@ -71,7 +77,6 @@ import { DEBUG_WHATS, isDebugWhat } from "./debug-types";
 import { expandHome } from "../config/dsl-loader.js";
 import { renderDsl } from "../dsl/render.js";
 import { lookKeyByName, paletteForThemeName } from "../themes/index.js";
-import { presetIsCustomized } from "../config/presets.js";
 import {
   renderStripCells,
   DEFAULT_CHARSET,
@@ -896,6 +901,22 @@ async function handleRequest(req: Request): Promise<HandledRequest> {
         req.cwd,
         sessionConfigFile,
       );
+      // [LAW:one-source-of-truth] Record the inputs THIS render resolved its
+      // config from, so a durable click on this session resolves the same
+      // chain and writes the file the next reload reads (verbs/index.ts
+      // sessionConfigFile) — never a path re-derived from the daemon's own
+      // cwd. Compared before writing: every
+      // set() persists and fires the session's MobX atom, so an unconditional
+      // per-render write would invalidate every state-driven computed each
+      // render.
+      const origin = encodeRenderOrigin({
+        projectDir,
+        cwd: req.cwd,
+        configFile: sessionConfigFile ?? null,
+      });
+      if (sessionState.get(sessionId, SESSION_RENDER_ORIGIN_KEY) !== origin) {
+        sessionState.set(sessionId, SESSION_RENDER_ORIGIN_KEY, origin);
+      }
       // [LAW:parse-dont-validate] The ONE checkpoint for everything the client
       // observed and the daemon cannot. Raw `req.*` hint fields are not read
       // past this line; `hints` is the stamped type the render path consumes.
@@ -925,20 +946,17 @@ async function handleRequest(req: Request): Promise<HandledRequest> {
         // readers, so a label can never disagree with the bar. The precedence
         // the resolver applies, and why each rung sits where it does, lives
         // with the chain (resolveEffectiveGlobals, and src/config/presets.ts).
-        // Read alongside the config, from the same entry, in one statement —
-        // which is exactly what the closure below claims about it.
-        const presetRootOps = entry.state.presetRootOps;
+        // [LAW:one-source-of-truth] `.preset.customized` reads THIS entry's
+        // authoredRoots — the set computed from the SAME raw parse that
+        // produced entry.state.config, on the same reload — never a fresh
+        // file read here that could race a concurrent write and disagree
+        // with the tree that actually rendered. That is why it arrives as
+        // a closure over this entry rather than a lookup inside the resolver.
+        const { authoredRoots } = entry.state;
         const effective: EffectiveGlobals = resolveEffectiveGlobals(
           entry.state.config,
           (key: string) => sessionState.get(req.hookData.session_id, key),
-          // [LAW:one-source-of-truth] brandon-layout-edit-2gc.5 — read from
-          // THIS entry's own presetRootOps (the record that fed the SAME
-          // reload that produced entry.state.config), never a fresh
-          // loadOverrides() here — a second read could race a concurrent
-          // write and disagree with the tree that actually rendered. That is
-          // why it arrives as a closure over this entry rather than being
-          // looked up inside the resolver.
-          (preset: string) => presetIsCustomized(presetRootOps, preset),
+          (preset: string) => authoredRoots.has(preset),
         );
         const payload = await buildRenderPayload(
           req.hookData,
