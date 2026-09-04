@@ -92,7 +92,7 @@ async function main(): Promise<void> {
     // Default fallthrough = the existing stdin-driven render flow.
     const subcommand = process.argv[2];
     if (subcommand === "install") {
-      runInstall(process.argv.slice(3));
+      await runInstall(process.argv.slice(3));
       process.exit(0);
     }
     if (subcommand === "install-url-handler") {
