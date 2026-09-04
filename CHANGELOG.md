@@ -1,3 +1,10 @@
+# [1.48.0](https://github.com/promptctl/cc-candybar/compare/v1.47.0...v1.48.0) (2026-09-04)
+
+
+### Features
+
+* **themes:** the state colour — enforce the state/decoration contrast floor (candybar-render-ai7.2) ([#207](https://github.com/promptctl/cc-candybar/issues/207)) ([ddd3a15](https://github.com/promptctl/cc-candybar/commit/ddd3a154f583e446165e6e2f9bfb8f6318b7e93a))
+
 # [1.47.0](https://github.com/promptctl/cc-candybar/compare/v1.46.0...v1.47.0) (2026-09-04)
 
 
