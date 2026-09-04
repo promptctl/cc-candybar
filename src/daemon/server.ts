@@ -2,10 +2,11 @@ import fs from "node:fs";
 import net from "node:net";
 import v8 from "node:v8";
 import process from "node:process";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 import {
   daemonDir,
+  diagnosticsDir,
   ensureSocketParentSafe,
   leasePath,
   leasePathFor,
@@ -65,11 +66,6 @@ import {
   SESSION_RENDER_ORIGIN_KEY,
   encodeRenderOrigin,
 } from "./verbs";
-import {
-  effectsUrl,
-  VERB_SHOW_CONFIG_ERROR,
-  VERB_SHOW_CONFIG_WARNING,
-} from "../click/wire.js";
 import { validateHookData } from "../utils/schema-validator.js";
 import { setLaunchStats } from "../proc/launch";
 import { buildDebugSnapshot } from "./debug";
@@ -98,14 +94,13 @@ import {
 import { ContextProvider } from "../segments/context.js";
 import { MetricsProvider } from "../segments/metrics.js";
 import { TmuxService } from "../segments/tmux.js";
-import { sanitizeAndTruncate } from "../render/diagnostic-text.js";
 import {
-  ANSI_RESET,
-  DIAGNOSTIC_ERROR_BG,
-  DIAGNOSTIC_ERROR_FG,
-  DIAGNOSTIC_WARNING_BG,
-  DIAGNOSTIC_WARNING_FG,
-} from "../render/diagnostic-style.js";
+  collectDiagnostics,
+  composeWithDiagnostics,
+  diagnosticRowCap,
+  formatDiagnosticDump,
+} from "../render/diagnostic-strip.js";
+import { DiagnosticDump } from "./diagnostic-dump.js";
 
 // [LAW:one-source-of-truth] one cache instance per daemon process — multiple
 // instances would defeat the share-across-sessions invariant.
@@ -131,6 +126,9 @@ const usageStore = new SessionUsageStore();
 // relay, subcommands) does no disk I/O. The daemon binds the file-backed
 // storage in runDaemon(), making it the sole reader/writer of the state file.
 const sessionState = new SessionState();
+// [LAW:locality-or-seam] Same terms as sessionState: naming the directory is
+// free; the daemon wipes it in runDaemon() (reset) and is the only writer.
+const diagnosticDump = new DiagnosticDump(diagnosticsDir());
 // [LAW:one-source-of-truth] One provider per data shape, shared across every
 // render in this daemon. The render cache owns DSL-state-per-config; these
 // providers serve the augmented payload that flows through every render.
@@ -276,6 +274,9 @@ export function runDaemon(): void {
   sessionState.useStorage(
     new FileSessionStorage(sessionStatePath(), 500, dlog),
   );
+  // The dump directory is a cold-rebuilt cache like every other: whatever a
+  // previous daemon wrote there is unnamed by any strip this one renders.
+  diagnosticDump.reset();
 
   // [LAW:single-enforcer] Same death funnel as the signals and the RSS backstop:
   // the watchdog calls shutdown(0), it never exits on its own. A production
@@ -933,6 +934,7 @@ async function handleRequest(req: Request): Promise<HandledRequest> {
       const hints = parseClientHints(req);
       const termCols = hints.termCols;
       const width = applyClaudeCodeReserve(termCols ?? DEFAULT_TERMINAL_WIDTH);
+      const rowCap = diagnosticRowCap(hints.termRows);
       const renderOpts: BuildLineOptions = { ...RENDER_OPTS_BASE, width };
       // [LAW:dataflow-not-control-flow] One composition every render: the
       // entry always holds a renderable state (the bundled default until a
@@ -1037,18 +1039,29 @@ async function handleRequest(req: Request): Promise<HandledRequest> {
       // Null when the error is not a load error, or no file resolved.
       const failedConfigFile =
         entry.lastError === null ? null : entry.configFilePath;
-      const output = composeWithDiagnostics(
-        body,
-        combinedError,
-        combinedWarning,
+      const diagnostics = collectDiagnostics(combinedError, combinedWarning, {
+        fullTextFile: diagnosticDump.pathFor(sessionId),
         failedConfigFile,
+      });
+      // [LAW:effects-at-boundaries] The one write the strip depends on, at
+      // the edge: the session's dump file mirrors this render's diagnostics
+      // (present with the full text, absent when there are none) before the
+      // strip that links it goes out.
+      diagnosticDump.sync(
+        sessionId,
+        diagnostics === null ? null : formatDiagnosticDump(diagnostics),
       );
+      const output = composeWithDiagnostics(body, diagnostics, {
+        width,
+        rowCap,
+        colorCompatibility: effective.colorCompatibility,
+      });
       const ms = Date.now() - t0;
       const g = gitService.getStats();
       const u = usageStore.getStats();
       dlog(
         "info",
-        `render sid=${req.hookData.session_id ?? "?"} took=${ms}ms termCols=${termCols ?? "?"} width=${width} git=${g.size}/${g.hits}h/${g.misses}m usage=${u.size}/${u.hits}h/${u.misses}m err=${combinedError ? "Y" : "N"} warn=${combinedWarning ? "Y" : "N"}`,
+        `render sid=${req.hookData.session_id ?? "?"} took=${ms}ms termCols=${termCols ?? "?"} termRows=${hints.termRows ?? "?"} width=${width} git=${g.size}/${g.hits}h/${g.misses}m usage=${u.size}/${u.hits}h/${u.misses}m err=${combinedError ? "Y" : "N"} warn=${combinedWarning ? "Y" : "N"}`,
       );
       return stay({ ok: true, output: output + "\n" });
     } catch (e) {
@@ -1125,36 +1138,6 @@ async function handleRequest(req: Request): Promise<HandledRequest> {
   });
 }
 
-// --- diagnostics composition ---
-//
-// [LAW:no-silent-fallbacks] Bad config can't quietly degrade output. The
-// render pipeline carries two independent diagnostic channels:
-//   error   — load-fatal: parse/validation failed; bar is last-known-good
-//             or empty. Rendered red.
-//   warning — advisory: load succeeded but something needs attention (e.g.
-//             same-location .json5 + .json collision). Rendered amber.
-// Either way the failure is visible at the point of impact, and each
-// channel has its own click verb (show-config-error / show-config-warning)
-// so the operator can copy the message to clipboard for inspection.
-//
-// [LAW:one-type-per-behavior] Two severities → two channels. The
-// composer's signature carries both; severity is encoded in WHICH
-// argument is non-null, not in a string prefix or a tag inside the
-// message. The two icons render independently — both can show at once.
-//
-// [LAW:types-are-the-program] The diagnostic's visible text IS (a
-// projection of) the underlying message — not a constant label that hides
-// the content behind a click. The leading ⚠ + background color carry
-// severity; the rest of the cell is the actual error/warning, sanitized
-// and clipped to a single-line budget. A label divorced from the message
-// would be the type lying about what's in the channel.
-// [LAW:one-source-of-truth] Style constants come from the shared leaf
-// (src/render/diagnostic-style.ts) — the same visual identity the client's
-// permanent glyph uses. Only the OSC-8 link plumbing is local here.
-const OSC8_OPEN = "\x1b]8;;";
-const OSC8_CLOSE = "\x1b]8;;\x1b\\";
-const ST = "\x1b\\";
-
 // [LAW:single-enforcer][LAW:no-silent-fallbacks] Parse render-path args with
 // the standard util at the trust boundary. `--config <path>` is the sole
 // valid render flag; every other flag is surfaced as a render-time
@@ -1193,111 +1176,6 @@ function parseRenderArgs(args: string[]): {
     unknownFlagsError:
       unknown.length > 0 ? `Unknown flags: ${unknown.join(", ")}` : null,
   };
-}
-
-// Per-line visible budget and max rows for multi-line diagnostic blocks.
-// Messages from the config validator (formatIssues) are already structured
-// as one line per issue, so splitting there is the natural unit of display.
-// Deliberately decoupled from DEFAULT_TERMINAL_WIDTH: that constant means
-// "raw terminal cols we assume" and is reserved-against before reaching the
-// renderer; this one is a direct visible-char cap on already-rendered
-// diagnostic text. They happen to share the value 120 today but have
-// different semantic intents.
-const MAX_DIAGNOSTIC_LINE_LEN = 120;
-const MAX_DIAGNOSTIC_LINES = 8;
-
-function makeDiagnosticLink(
-  verb: typeof VERB_SHOW_CONFIG_ERROR | typeof VERB_SHOW_CONFIG_WARNING,
-  message: string,
-  bg: string,
-  fg: string,
-): string {
-  // Full message in the OSC-8 URL (clipboard-copy on click) — truncation
-  // only affects what is visible, never what is accessible. [LAW:single-enforcer]
-  // The click URL is born through effectsUrl like every other click — one
-  // single-effect dispatch list, no second URL-format in the codebase.
-  const url = effectsUrl([{ verb, args: [message] }]);
-  // [LAW:dataflow-not-control-flow] Split on natural line boundaries from
-  // the source message (config validator emits one issue per line), sanitize
-  // each line individually, then render each as a separate styled row.
-  // This preserves structured multi-line output instead of collapsing N
-  // issues into a single truncated string the user cannot read.
-  const lines = message
-    .split(/\r\n|\r|\n/)
-    .map((l) => sanitizeAndTruncate(l, MAX_DIAGNOSTIC_LINE_LEN))
-    .filter(Boolean)
-    .slice(0, MAX_DIAGNOSTIC_LINES);
-  if (lines.length === 0) return "";
-  const first = `${OSC8_OPEN}${url}${ST}${bg}${fg} ⚠ ${lines[0]} ${ANSI_RESET}${OSC8_CLOSE}`;
-  const rest = lines
-    .slice(1)
-    .map(
-      (l) =>
-        `${OSC8_OPEN}${url}${ST}${bg}${fg}   ${l} ${ANSI_RESET}${OSC8_CLOSE}`,
-    );
-  return [first, ...rest].join("\n");
-}
-
-// [LAW:no-silent-failure] The row that reopens the file a load error names,
-// as a plain `file://` OSC-8 link. Deliberately NOT a `cc-candybar://` click:
-// that scheme is registered by `cc-candybar install`, the same tooling that
-// may be misconfigured when a config fails — an escape hatch must not share a
-// dependency with the thing that may be broken. The terminal opens the link
-// itself; pathToFileURL owns the percent-encoding.
-function openFileRow(file: string, bg: string, fg: string): string {
-  const url = pathToFileURL(file).href;
-  const label = sanitizeAndTruncate(`↳ open ${file}`, MAX_DIAGNOSTIC_LINE_LEN);
-  return `${OSC8_OPEN}${url}${ST}${bg}${fg}   ${label} ${ANSI_RESET}${OSC8_CLOSE}`;
-}
-
-function composeWithDiagnostics(
-  body: string,
-  error: string | null,
-  warning: string | null,
-  failedConfigFile: string | null,
-): string {
-  // [LAW:dataflow-not-control-flow] Diagnostics list is data; the
-  // composer walks it. Each non-null channel contributes one or more prefix
-  // rows (makeDiagnosticLink returns a \n-joined multi-line block when the
-  // message has natural line breaks). Order is error-first (more severe),
-  // then warning, then body. The error block closes with the file:// row for
-  // the file that failed, when a file did.
-  const prefixes: string[] = [];
-  if (error) {
-    prefixes.push(
-      makeDiagnosticLink(
-        VERB_SHOW_CONFIG_ERROR,
-        error,
-        DIAGNOSTIC_ERROR_BG,
-        DIAGNOSTIC_ERROR_FG,
-      ),
-      ...(failedConfigFile === null
-        ? []
-        : [
-            openFileRow(
-              failedConfigFile,
-              DIAGNOSTIC_ERROR_BG,
-              DIAGNOSTIC_ERROR_FG,
-            ),
-          ]),
-    );
-  }
-  if (warning) {
-    prefixes.push(
-      makeDiagnosticLink(
-        VERB_SHOW_CONFIG_WARNING,
-        warning,
-        DIAGNOSTIC_WARNING_BG,
-        DIAGNOSTIC_WARNING_FG,
-      ),
-    );
-  }
-  if (prefixes.length === 0) return body;
-  // No body → emit the diagnostic strip alone (startup-error case). Body
-  // present → prepend on its own line so it's visible regardless of bar
-  // width. Multiple diagnostics stack on their own lines.
-  const strip = prefixes.join("\n");
-  return body ? `${strip}\n${body}` : strip;
 }
 
 // --- click verb dispatch ---

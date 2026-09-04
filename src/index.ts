@@ -27,15 +27,31 @@ import { PACKAGE_VERSION } from "./version";
 // statusline hook, stdin is the hook JSON pipe and stdout is the captured
 // statusline pipe, leaving stderr as the only stream still attached to the
 // parent terminal. Mirrors the Rust client's TIOCGWINSZ-on-STDERR_FILENO.
-function detectTermCols(): number | undefined {
-  const env = process.env.COLUMNS;
+// [LAW:one-type-per-behavior] One terminal-extent probe for both axes: the
+// shell's env var (COLUMNS / LINES, propagated to hook commands) first, then
+// the stderr TTY's own geometry (stdout is the captured statusline pipe).
+// `undefined` is the honest "could not determine", never a guessed size.
+function detectTermExtent(
+  envVar: "COLUMNS" | "LINES",
+  ttyExtent: number | undefined,
+): number | undefined {
+  const env = process.env[envVar];
   if (env) {
     const n = parseInt(env, 10);
     if (!isNaN(n) && n > 0) return n;
   }
-  const cols = process.stderr.columns;
-  if (cols && cols > 0) return cols;
+  if (ttyExtent && ttyExtent > 0) return ttyExtent;
   return undefined;
+}
+
+function detectTermCols(): number | undefined {
+  return detectTermExtent("COLUMNS", process.stderr.columns);
+}
+
+// The diagnostic strip's row cap reads this (src/render/diagnostic-strip.ts);
+// like termCols it is a client fact the detached daemon cannot observe.
+function detectTermRows(): number | undefined {
+  return detectTermExtent("LINES", process.stderr.rows);
 }
 
 // The env vars an SSH login shell inherits from sshd. Any one of them present
@@ -182,7 +198,11 @@ echo '{"session_id":"test-session","workspace":{"project_dir":"/path/to/project"
       hookData,
       process.argv,
       process.cwd(),
-      { termCols: detectTermCols(), ssh: detectSsh() },
+      {
+        termCols: detectTermCols(),
+        termRows: detectTermRows(),
+        ssh: detectSsh(),
+      },
     );
     // [LAW:types-are-the-program] Three variants, one per outcome kind. The
     // "kick on every failure" pattern was the load-bearing half of the
