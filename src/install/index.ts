@@ -8,12 +8,7 @@ import type { PermanentOutcome } from "../daemon/client-transport";
 import { obtainDaemonKick } from "../daemon/acquire";
 import { URL_SCHEME, VERB_COPY } from "../click/wire";
 import { DISCLOSURE_GLYPH_CLOSED } from "../config/disclosure";
-
-// [LAW:one-source-of-truth] Replaced at build time by tsdown's `define` option
-// from package.json — the single version stamp install output reports.
-declare const __PACKAGE_VERSION__: string;
-const PACKAGE_VERSION =
-  typeof __PACKAGE_VERSION__ !== "undefined" ? __PACKAGE_VERSION__ : "dev";
+import { PACKAGE_VERSION } from "../version";
 
 const PACKAGE_NAME = "@promptctl/cc-candybar";
 const BUNDLE_ID = "com.cccandybar.url-handler";

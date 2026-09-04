@@ -1,5 +1,6 @@
 import { DISCLOSURE_GLYPH_CLOSED } from "./config/disclosure";
 import { HELP_GLYPH_CLOSED } from "./config/help";
+import { NODE_FLAGS } from "./cli-flags";
 
 // [LAW:effects-at-boundaries] Pure data, no I/O — index.ts owns the console.log
 // effect. Kept as its own module so the text is importable (and testable) without
@@ -36,7 +37,8 @@ cc-candybar - Beautiful powerline statusline for Claude Code
 Usage: cc-candybar [options]
 
 Standalone Commands:
-  -h, --help               Show this help
+  ${NODE_FLAGS.help.join(", ").padEnd(25)}Show this help
+  ${NODE_FLAGS.version.join(", ").padEnd(25)}Print the version of this runtime (cc-candybar <version>)
 
 Debugging:
   CC_CANDYBAR_DEBUG=1      Enable debug logging for troubleshooting
