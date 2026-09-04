@@ -392,7 +392,7 @@ fn remaining_or_io(deadline: Instant) -> io::Result<Duration> {
 }
 
 // Pure terminal-geometry capture — no subprocess, no shell-out. Mirrors
-// detectTermExtent in src/index.ts: the env var first (COLUMNS / LINES, set
+// detectTermExtent in src/term-extent.ts: the env var first (COLUMNS / LINES, set
 // by Bash/Zsh and propagated to hook commands by Claude Code), then
 // TIOCGWINSZ on stderr (typically a TTY when run as a Claude hook — stdin is
 // the hook JSON pipe). Each axis is None when neither source has a usable
