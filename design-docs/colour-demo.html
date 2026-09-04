@@ -1,0 +1,197 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Colour from theme vocabulary — demo</title>
+<style>
+  body{background:#0f1115;color:#c9d1d9;font:13px/1.55 ui-monospace,SFMono-Regular,Menlo,monospace;margin:0;padding:26px 30px 60px}
+  h1{font-size:15px;letter-spacing:.09em;text-transform:uppercase;color:#7d8590;font-weight:600;margin:0 0 4px}
+  .sub{color:#6e7681;margin:0 0 20px;max-width:78ch}
+  .bar{display:flex;margin:0 0 2px}
+  .cell{padding:3px 11px;white-space:pre}
+  .ctl{display:flex;gap:22px;flex-wrap:wrap;align-items:center;background:#171a1f;padding:11px 15px;border-radius:6px;margin-bottom:6px}
+  .ctl label{display:flex;gap:7px;align-items:center;color:#8b949e;font-size:11px}
+  input[type=range]{width:118px}
+  select,button{background:#0f1115;color:#c9d1d9;border:1px solid #30363d;border-radius:4px;padding:3px 8px;font:inherit;font-size:11px}
+  button{cursor:pointer}
+  button:hover{background:#1c2027;border-color:#484f58}
+  em{color:#a5d6ff;font-style:normal}
+  .item{margin-bottom:20px;overflow-x:auto}
+  .tname{color:#565e68;font-size:10px;letter-spacing:.05em;margin:0 0 3px}
+</style>
+<body>
+<h1>Colour from the theme's own vocabulary</h1>
+<p class="sub">Every cell's background is <code>mix(base, themeHue, amount)</code> — both operands colours the theme already contains — with the entry chosen by the node's address in the layout tree. No hue rotation, no hand-picked colour. Real rich-js palettes: all 23 themes, each with its theme menu open and one entry's submenu open beneath it. Drag <em>settings-menu entries</em> or <em>extra cells</em>: under an n-free distribution, no cell other than the trigger being opened changes.</p>
+
+<div class="ctl">
+  <label>distribution <select id=dm></select></label>
+  <label>menu distribution <select id=ms></select></label>
+  <label>settings-menu entries <input type=range id=hl min=0 max=30><span id=hlv></span></label>
+  <label>extra cells in row 1 <input type=range id=xc min=0 max=4><span id=xcv></span></label>
+  <button id=rs>reset</button>
+</div>
+<div id=out></div>
+
+<script src="colour-demo-richjs.js"></script>
+<script>
+const {listThemePalettes, getThemePalette} = RJ;
+
+// ── distributions: (i,n) → position in [0,1] ──────────────────────────────────
+// One table, read at every level: the bar's rows and cells address the
+// vocabulary through it, and a menu band scales the same value into its own
+// window. van der Corput, golden angle and uniform never read n — the sibling
+// COUNT — so under them adding, removing or hiding a sibling moves nobody.
+// The other two read n and are kept for CLOSED sets (a menu's option domain).
+const PHI=0.6180339887498949;
+const vdc=i=>{let d=0,f=.5;while(i>0){d+=f*(i&1);i>>=1;f/=2}return d};
+const DIST={
+  'van der Corput'  :(i,n)=>vdc(i),
+  'golden angle'    :(i,n)=>(i*PHI)%1,
+  'ends-interleaved':(i,n)=>{const s=i%2===0?i/2:n-1-(i-1)/2;return (s+.5)/n},
+  'monotonic'       :(i,n)=>(i+.5)/n,
+  'uniform'         :()=>0.5,
+};
+
+// ── the tree ──────────────────────────────────────────────────────────────────
+// The real bundled bar's segments. A node is text plus what it opens: `menu` is
+// total, so "open" is `menu.length > 0` and a band is drawn for every non-empty
+// menu, recursively — a submenu is just an entry's own menu.
+const seg=(t,menu=[])=>({t,menu});
+const SUBMENU=['frappe','latte','macchiato','mocha'].map(t=>seg(` ${t} `));
+const MENU=['dracula','nord','gruvbox','rose-pine','catppuccin','tokyo-night']
+  .map(t=>seg(` ${t} `, t==='catppuccin'?SUBMENU:[]));
+const settings=n=>Array.from({length:n},(_,k)=>seg(` setting ${k+1} `));
+const extra=n=>Array.from({length:n},(_,k)=>seg(` new ${k+1} `));
+const treeFor=P=>[
+  [seg(' ~/c/cc-candybar '), seg(' (git) cc-candybar b5e87f8 ⟋ main ⏱ 4h '),
+   seg(' id ↗ proj ↗ log ↗ repo ✎ edit '), seg(' ≡ ▸ ', settings(P.HL)), ...extra(P.XC)],
+  [seg(' ✳ Opus 5 '), seg(' ◔ 281,953 (72%) '), seg(' ⏱ 59m '), seg(' ▣ 9% (1h 11m) '),
+   seg(' ◑ 41% (3d 5h) '), seg(' 🎨 atom-one-dark ▸ ', MENU)],
+];
+
+// ── THE THEME IS THE PALETTE ──────────────────────────────────────────────────
+// Tint the theme's own neutral surfaces toward the theme's own curated hues.
+// Every colour is then a blend of two colours the theme already contains, which
+// is why dracula yields purple/blue/pink and gruvbox sage/tan/gold. It needs no
+// light/dark branch: the base carries the lightness, so latte tints correctly.
+//
+// error/success/warning are deliberately NOT in this vocabulary. Decoration
+// cannot collide with meaning because meaning is not in the set.
+const DECOR_HUES=['primary','secondary','accent'];
+const DECOR_BASES=['surface','panel','surface-lighten-1'];
+const DECOR_AMTS=[0.16,0.30];
+// The decorative vocabulary, ordered. An address selects one entry; it does not
+// synthesise a colour. 3 x 3 x 2 = 18 backgrounds, all of them the theme's own.
+const DECOR=[];
+for(const a of DECOR_AMTS) for(const h of DECOR_HUES) for(const b of DECOR_BASES) DECOR.push({b,h,a});
+const mixc=(x,y,p)=>({red:x.red+(y.red-x.red)*p, green:x.green+(y.green-x.green)*p,
+                      blue:x.blue+(y.blue-x.blue)*p});
+const entry=idx=>DECOR[((idx%DECOR.length)+DECOR.length)%DECOR.length];
+
+// "State is the pure hue" was an ASSERTION about the palettes, and textual-dark
+// disproved it: its `secondary` is #004578, a navy already darker than most
+// surfaces, so its pure form landed on top of the decorative tints (contrast
+// 1.42). So the separation is ENFORCED: push the pure hue toward `foreground`
+// until it clears the most-tinted decorative cell this hue can produce on any
+// base. Vivid themes stop at the first step and are unchanged.
+const STATE_FLOOR=2.2;
+const DECOR_MAX_AMT=Math.max(...DECOR_AMTS);
+function stateColor(P,hueName){
+  const hue=P.get(hueName), fg=P.get('foreground');
+  const tints=DECOR_BASES.map(b=>mixc(P.get(b),hue,DECOR_MAX_AMT));
+  const pure=mixc(P.get('surface'),hue,0.92);
+  for(let k=0;k<=12;k++){ const c=mixc(pure,fg,k/12); if(tints.every(t=>CR(c,t)>=STATE_FLOOR)) return c; }
+  throw new Error(`${P.name}: ${hueName} cannot clear the ${STATE_FLOOR} state floor even at foreground`);
+}
+// STATE AND DECORATION MUST NOT SHARE A REGION. Decoration is always a TINT
+// (mix <= 0.30) and state is the pure hue: same family, at an intensity
+// decoration can never reach.
+function decorBg(P,idx,open){
+  const d=entry(idx);
+  return open ? stateColor(P,d.h) : mixc(P.get(d.b),P.get(d.h),d.a);
+}
+
+// DEPTH ADVANCES THE HUE. A nested disclosure takes the NEXT hue in the
+// vocabulary and recedes one more step toward `background`, so the two cues
+// agree. Depth is the only input, so nesting needs no new rule.
+function menuPlane(P,hostIdx,depth){
+  const d=entry(hostIdx);
+  const hi=(DECOR_HUES.indexOf(d.h)+depth)%DECOR_HUES.length;
+  const st=stateColor(P,DECOR_HUES[hi]);
+  return {st, plane:mixc(st,P.get('background'),Math.min(0.75,0.42+0.14*depth))};
+}
+// A TRIGGER IS DRAWN FROM WHAT IT OPENS, NOT FROM WHERE IT SITS: an item that
+// opens a disclosure takes the PEAK of its children's region. Its siblings are
+// placed along the plane→state axis by the band's distribution, inside a
+// window that keeps them visibly off both ends.
+function decorMenuBg(P,hostIdx,k,n,depth,opens,dist){
+  if(opens) return menuPlane(P,hostIdx,depth+1).st;
+  const {st,plane}=menuPlane(P,hostIdx,depth);
+  return mixc(plane,st,0.12+0.80*DIST[dist](k,n));
+}
+
+// ── colour is a pure function of a node's ADDRESS ─────────────────────────────
+// The [index, siblingCount] pairs from the root down select an entry. There is
+// no walk state: any node's colour is computable alone. With an n-free
+// distribution the count is never read, so the address is the indices alone.
+const pick=(addr,dist)=>{
+  let v=0, w=1;
+  for(const [i,n] of addr){ v+=DIST[dist](i,n)*w*DECOR.length; w*=0.37; }
+  return Math.round(v);
+};
+const bands=(host,menu,depth)=> menu.length===0 ? [] :
+  [menu.map((node,k)=>({node,host,k,n:menu.length,depth,opens:node.menu.length>0})),
+   ...menu.flatMap(n=>bands(host,n.menu,depth+1))];
+function walk(dist,P){
+  const rows=treeFor(P), R=rows.length;
+  return rows.map((row,r)=>{
+    const N=row.length;
+    const cells=row.map((node,i)=>({node, idx:pick([[r,R],[i,N]],dist), open:node.menu.length>0}));
+    return {cells, bands:cells.flatMap(c=>bands(c.idx,c.node.menu,0))};
+  });
+}
+
+// Pure hue is bright enough that the text colour has to be chosen, not assumed.
+const lin=v=>{v/=255;return v<=0.04045?v/12.92:((v+0.055)/1.055)**2.4};
+const RL=c=>0.2126*lin(c.red)+0.7152*lin(c.green)+0.0722*lin(c.blue);
+const CR=(a,b)=>{const x=RL(a),y=RL(b);return (Math.max(x,y)+0.05)/(Math.min(x,y)+0.05)};
+const readableOn=(P,bg)=>{const a=P.get('background'),b=P.get('foreground');
+  return CR(bg,a)>=CR(bg,b)?a:b;};
+const css=v=>`rgb(${v.red},${v.green},${v.blue})`;
+const span=(bg,fg,t)=>`<span class=cell style="background:${css(bg)};color:${css(fg)}">${t}</span>`;
+const bar=cells=>`<div class=bar>${cells.join('')}</div>`;
+
+function render(){
+  const P={HL:+hl.value, XC:+xc.value};
+  hlv.textContent=P.HL; xcv.textContent=P.XC;
+  const D=dm.value, M=ms.value, W=walk(D,P);
+  let h='';
+  for(const t of listThemePalettes()){
+    const base=getThemePalette(t);
+    h+=`<div class=item><div class=tname>${t}</div>`;
+    for(const {cells,bands} of W){
+      h+=bar(cells.map(x=>{
+        const bg=decorBg(base,x.idx,x.open);
+        return span(bg, x.open?readableOn(base,bg):base.get('foreground'), x.node.t);
+      }));
+      h+=bands.map(b=>bar(b.map(x=>{
+        const bg=decorMenuBg(base,x.host,x.k,x.n,x.depth,x.opens,M);
+        return span(bg, readableOn(base,bg), x.node.t);
+      }))).join('');
+    }
+    h+=`</div>`;
+  }
+  out.innerHTML=h;
+}
+// [LAW:one-source-of-truth] Defaults live here and nowhere else — the inputs are
+// seeded from this map, so `reset` restores the values the page loaded with.
+const DEFAULTS={dm:'van der Corput', ms:'van der Corput', hl:0, xc:0};
+const INPUTS={dm,ms,hl,xc};
+const applyDefaults=()=>{ for(const[k,el]of Object.entries(INPUTS)) el.value=DEFAULTS[k]; };
+
+dm.innerHTML=ms.innerHTML=Object.keys(DIST).map(n=>`<option>${n}</option>`).join('');
+applyDefaults();
+Object.values(INPUTS).forEach(e=>e.addEventListener('input',render));
+rs.addEventListener('click',()=>{applyDefaults();render();});
+render();
+</script>
+</body>
+</html>
