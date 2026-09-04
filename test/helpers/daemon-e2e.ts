@@ -12,7 +12,7 @@
 
 import path from "node:path";
 
-import { PROTOCOL_VERSION } from "../../src/daemon/protocol";
+import { PROTOCOL_VERSION, type ClientHints } from "../../src/daemon/protocol";
 import { parseHandlerUrl } from "../../src/install/index";
 import { effectsOf, type DecodedEffect } from "./click";
 import { sendDaemonRequest, waitForExit } from "./daemon-wire";
@@ -34,11 +34,14 @@ const REPLY_BUDGET_MS = 5000;
 // condition as a hard failure.
 const TIMEOUT_RETRY_BUDGET = 5;
 
-// One status-line render, as Claude Code would ask for it.
+// One status-line render, as Claude Code would ask for it. `hints` are the
+// client-observed facts (termCols/termRows/ssh) spread onto the request the
+// way the real client spreads them.
 export async function render(
   sockPath: string,
   sessionId: string,
   cwd: string,
+  hints: ClientHints = {},
 ): Promise<string> {
   for (let attempt = 1; ; attempt++) {
     const resp = await sendDaemonRequest(
@@ -56,6 +59,7 @@ export async function render(
         },
         args: [],
         cwd,
+        ...hints,
       },
       REPLY_BUDGET_MS,
     );

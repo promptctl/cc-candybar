@@ -18,24 +18,16 @@ import { planOutcome } from "./render/outcome-plan";
 import { HELP_TEXT } from "./help-text";
 import { NODE_FLAGS } from "./cli-flags";
 import { PACKAGE_VERSION } from "./version";
+import { detectTermExtent } from "./term-extent";
 
-// Read terminal width from the live shell context (no subprocess). Returns
-// undefined when nothing reliable is available; the daemon falls back to its
-// own pure lookup chain in that case. Always-COLUMNS-first because Bash
-// exports it on resize and Claude Code propagates it to hook commands.
-// stderr (not stdout) is the TTY-side fallback: when invoked as a Claude
-// statusline hook, stdin is the hook JSON pipe and stdout is the captured
-// statusline pipe, leaving stderr as the only stream still attached to the
-// parent terminal. Mirrors the Rust client's TIOCGWINSZ-on-STDERR_FILENO.
 function detectTermCols(): number | undefined {
-  const env = process.env.COLUMNS;
-  if (env) {
-    const n = parseInt(env, 10);
-    if (!isNaN(n) && n > 0) return n;
-  }
-  const cols = process.stderr.columns;
-  if (cols && cols > 0) return cols;
-  return undefined;
+  return detectTermExtent(process.env.COLUMNS, process.stderr.columns);
+}
+
+// The diagnostic strip's row cap reads this (src/render/diagnostic-strip.ts);
+// like termCols it is a client fact the detached daemon cannot observe.
+function detectTermRows(): number | undefined {
+  return detectTermExtent(process.env.LINES, process.stderr.rows);
 }
 
 // The env vars an SSH login shell inherits from sshd. Any one of them present
@@ -182,7 +174,11 @@ echo '{"session_id":"test-session","workspace":{"project_dir":"/path/to/project"
       hookData,
       process.argv,
       process.cwd(),
-      { termCols: detectTermCols(), ssh: detectSsh() },
+      {
+        termCols: detectTermCols(),
+        termRows: detectTermRows(),
+        ssh: detectSsh(),
+      },
     );
     // [LAW:types-are-the-program] Three variants, one per outcome kind. The
     // "kick on every failure" pattern was the load-bearing half of the
