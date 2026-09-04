@@ -34,7 +34,7 @@ Narrowing the span does not rescue it, and costs on both axes. Measuring minimum
 
 | placement | min adjacent | min any pair |
 |---|---|---|
-| today (42° step, unbounded) | 42 | 18 (it laps) |
+| today (14°/leaf, 42° between visible neighbours, unbounded) | 42 | 18 (it laps) |
 | bounded 85° span | 21 | 5.3 |
 | van der Corput, full circle | 68 | 22.5 |
 | true subdivision, full circle, rows on disjoint arcs | 45 | 22.5 |
@@ -86,9 +86,9 @@ The state boundary had to be enforced rather than assumed, because "the pure hue
 
 ### One distribution field, at every level
 
-Placement inside a region is a single per-instance field: the instance's **distribution**. A bar row is an instance and a menu band is an instance, and both use that one field — a menu is itself an instance, so its band's placement is just that instance's distribution. The demo exposes it as two dropdowns (`distribution` and `menu style`) but they are the same field at two levels: demo `scatter` is van der Corput (`0.12 + 0.80*vdc(k)`), demo `ramp` is monotonic, demo `alternating` is ends-interleaved. There is one mechanism here, not two.
+Placement inside a region is a single per-instance field: the instance's **distribution**. A bar row is an instance and a menu band is an instance, and both use that one field — a menu is itself an instance, so its band's placement is just that instance's distribution. The demo exposes it as two dropdowns — `distribution` for the bar, `menu distribution` for the bands — over one table: both levels read the same `f(i, n)`, the band only scaling it into its plane-to-state window. There is one mechanism here, not two.
 
-Four distributions ship — van der Corput (the default), golden angle, monotonic, ends-interleaved — plus `uniform`, the constant where every item is identical. This is one type with four instances, not four code paths: the distribution is a value the instance carries, so adding a fifth is data, not structure.
+Five distributions ship — van der Corput (the default), golden angle, monotonic, ends-interleaved, and `uniform`, the constant where every item is identical. This is one type with five instances, not five code paths: the distribution is a value the instance carries, so adding a fifth is data, not structure.
 
 Measured lightness spread across 6 items: a monotonic ramp gives 40 (dracula) / 50 (latte), and reads as a directional wedge — an ordering the items may or may not have; neutral-base variation gives 23/32 but repeats after 4 items, because only 4 neutrals exist; alternating gives 26/32.
 
@@ -122,7 +122,7 @@ Each of these was considered and measured. They are recorded with their reasons 
 
 **`hue.step` and its stepper knob are removed with no successor.** Nothing real was bound to it: the maintainer's live config declares only `applyTheme`, and the `hueUp`/`hueDown` pair exists solely as an illustration in CLAUDE.md.
 
-**The distribution is authorable per instance, defaulting to van der Corput.** All four values ship: van der Corput, golden angle, monotonic, ends-interleaved. This is one type with four instances, not four code paths — the distribution is a value the instance carries, so adding one is data, not structure. The cost of choosing an `n`-reading value is isolation, and it is the author's to spend; see "One distribution field, at every level".
+**The distribution is authorable per instance, defaulting to van der Corput.** All five values ship: van der Corput, golden angle, monotonic, ends-interleaved, uniform. This is one type with five instances, not five code paths — the distribution is a value the instance carries, so adding one is data, not structure. The cost of choosing an `n`-reading value is isolation, and it is the author's to spend; see "One distribution field, at every level".
 
 ## What gets deleted
 
@@ -138,16 +138,10 @@ The change is expected to be net-subtractive. If it isn't, the design is wrong.
 
 ## The demo
 
-`design-docs/colour-demo.html` is the evidence for every number above: it renders all 23 themes through the real rich-js palettes and reports the separations, contrasts and spreads quoted here.
+`design-docs/colour-demo.html` renders all 23 themes through the real rich-js palettes under the rule above; the separations, contrasts and spreads quoted here were measured with it while the rule was being chosen.
 
-Its rich-js browser bundle is gitignored. Regenerate it with:
-
-```
-pnpm dlx esbuild ./rj-entry.mjs --bundle --format=iife --global-name=RJ --outfile=design-docs/colour-demo-richjs.js
-```
-
-where `rj-entry.mjs` is one line:
+Its rich-js browser bundle is gitignored. Regenerate it from the repo root with:
 
 ```
-export { listThemePalettes, getThemePalette, transposePalette, IDENTITY } from '@promptctl/rich-js';
+echo "export { listThemePalettes, getThemePalette } from '@promptctl/rich-js';" | pnpm dlx esbuild --bundle --format=iife --global-name=RJ --outfile=design-docs/colour-demo-richjs.js
 ```
