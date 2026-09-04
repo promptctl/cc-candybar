@@ -57,10 +57,15 @@ function checkoutRootOf(bundlePath: string): string {
 const isSourceEntry = (name: string): boolean =>
   !name.startsWith(".") && !name.endsWith("~");
 
-// Every source file under `dir`, recursively, through symlinks. An entry
-// with no target — a dangling link, a file deleted between readdir and stat
-// during a `git pull` — has no stamp; it is not a failure of the walk.
-function fileStamps(dir: string): Stamp[] {
+// Every source file under `dir`, recursively, through symlinks, each real
+// directory visited once so a linked cycle is bounded by the walk itself.
+// An entry with no target — a dangling link, a file deleted between readdir
+// and stat during a `git pull` — has no stamp; it is not a failure of the
+// walk.
+function fileStamps(dir: string, visited = new Set<string>()): Stamp[] {
+  const real = fs.realpathSync(dir);
+  if (visited.has(real)) return [];
+  visited.add(real);
   return fs
     .readdirSync(dir)
     .filter(isSourceEntry)
@@ -69,7 +74,7 @@ function fileStamps(dir: string): Stamp[] {
       const st = fs.statSync(p, { throwIfNoEntry: false });
       if (st === undefined) return [];
       return st.isDirectory()
-        ? fileStamps(p)
+        ? fileStamps(p, visited)
         : [{ path: p, mtimeMs: st.mtimeMs }];
     });
 }

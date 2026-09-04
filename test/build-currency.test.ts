@@ -91,6 +91,14 @@ describe("assessBuild", () => {
       expect(v.newestSource.path).toBe(path.join(c.root, "src", "vendored", "lib.ts"));
   });
 
+  test("a symlink cycle is walked once: the verdict is computed, never unchecked", () => {
+    fs.symlinkSync(".", path.join(c.root, "src", "loop"));
+    fs.symlinkSync("..", path.join(c.root, "src", "daemon", "up"));
+    expect(assessBuild(c.entryUrl).kind).toBe("current");
+    touch(c.deep, T0 + HOUR_MS);
+    expect(assessBuild(c.entryUrl).kind).toBe("stale");
+  });
+
   test("a dangling symlink has no stamp: the verdict stays current, never unchecked", () => {
     fs.symlinkSync(path.join(c.root, "gone.ts"), path.join(c.root, "src", "dangling.ts"));
     expect(assessBuild(c.entryUrl).kind).toBe("current");
