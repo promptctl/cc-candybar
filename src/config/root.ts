@@ -94,8 +94,13 @@ export function mergeRoot(fragment: RootFragment, base: Root): Root {
 }
 
 // Whether a fragment restages anything at all — false exactly for the merge's
-// identity (an absent or empty rows map), which is when a preset renders the
-// config's own root untouched and its layout is authored at `root`.
+// identity (an absent or empty, ungated rows map), which is when a preset
+// renders the config's own root untouched and its layout is authored at
+// `root`. A `when` alone restages: it gates the whole bar.
 export function restages(fragment: RootFragment): boolean {
-  return !isRowsFragment(fragment) || Object.keys(fragment.rows).length > 0;
+  return (
+    !isRowsFragment(fragment) ||
+    fragment.when !== undefined ||
+    Object.keys(fragment.rows).length > 0
+  );
 }

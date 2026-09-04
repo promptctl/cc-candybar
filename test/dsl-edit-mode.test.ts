@@ -517,6 +517,23 @@ describe("edit mode click flow: toggle → remove → insert (menu) → undo × 
 
 // ─── chrome respects globals like any other segment ───────────────────────
 
+describe("a segment row's chrome rides its row", () => {
+  test("a bare-string row (`'trigger'` under the vertical root) renders as ONE line in edit mode, not four", () => {
+    const { render, click, dispose } = buildEditRuntime(BASE);
+    const closed = stripAnsi(render()).split("\n");
+    const toggleUrl = extractUrls(render()).find((u) =>
+      effectsOf(u).some(
+        (e) => e.args[1] === EDIT_MODE_KEY && e.args[2] === "open",
+      ),
+    )!;
+    click(toggleUrl);
+    const opened = stripAnsi(render()).split("\n");
+    expect(opened.some((line) => line.includes("-"))).toBe(true);
+    expect(opened.length).toBe(closed.length);
+    dispose();
+  });
+});
+
 describe("edit chrome is ordinary segment data — no special-cased render path", () => {
   test("padding applies to a chrome segment exactly like a hand-authored one", () => {
     const config = parseAndValidate("<test>", BASE, ALLOWED);

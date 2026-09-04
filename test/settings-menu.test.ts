@@ -301,6 +301,26 @@ describe("the anchor may be placed at most once", () => {
     }
   });
 
+  test("a preset's `{ rows }` fragment adding a second placement over the config's row fails, naming the preset", () => {
+    try {
+      parseAndValidate(
+        "<user>",
+        `{
+          globals: {},
+          root: { h: ['directory', '${SETTINGS_ANCHOR}'] },
+          presets: { wide: { root: { rows: { extra: { h: ['${SETTINGS_ANCHOR}'] } } } } },
+        }`,
+        ALLOWED,
+        DEFAULT_DSL_CONFIG,
+      );
+      throw new Error("expected a ConfigError");
+    } catch (err) {
+      expect(err).toBeInstanceOf(ConfigError);
+      expect((err as ConfigError).message).toContain("presets.wide.root");
+      expect((err as ConfigError).message).toContain("at most once");
+    }
+  });
+
   test("a user declaration under the reserved namespace is rejected", () => {
     expect(() =>
       parseAndValidate(

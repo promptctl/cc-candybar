@@ -478,22 +478,18 @@ export const GROUP_NS = "groups.";
 // keeping a second copy that could drift from the menu's. Group names are
 // forbidden from equaling the sentinel, so a cycle's two members are distinct.
 
-// [LAW:types-are-the-program] A group name must be template-addressable — it is
-// spliced into the synthesized `when` predicate and toggle template as
-// `.groups.<name>`, and Go-template field syntax admits identifier characters
-// only. The pattern IS that constraint; it also excludes quotes, slashes, and
-// dots, so a name needs no escaping anywhere it is spliced.
-const GROUP_NAME_RE = /^[A-Za-z_][A-Za-z0-9_]*$/;
-
+// [LAW:one-source-of-truth] A group name is spliced into the synthesized
+// `when` predicate and toggle template as `.groups.<name>`, so it shares
+// ROW_NAME_RE — the identifier constraint every spliced name carries.
 function groupNameSpec(): FieldSpec<string> {
   return {
     required: true,
-    json: { type: "string", pattern: GROUP_NAME_RE.source },
+    json: { type: "string", pattern: ROW_NAME_RE.source },
     parse: (ctx, path, field, raw) => {
       const v = raw[field];
       if (
         typeof v !== "string" ||
-        !GROUP_NAME_RE.test(v) ||
+        !ROW_NAME_RE.test(v) ||
         v === DISCLOSURE_CLOSED
       ) {
         ctx.issues.push({

@@ -24,7 +24,13 @@ import { registerDslConfig, renderDsl } from "../src/dsl/render";
 import { SessionState } from "../src/daemon/session-state";
 import { testVerbContext, clickUrl } from "./helpers/click";
 import { effectsUrl, VERB_SET_STATE } from "../src/click/wire";
-import { ConfigError } from "../src/config/dsl-loader";
+import {
+  ConfigError,
+  mergeWithDefault,
+  parseDslConfig,
+} from "../src/config/dsl-loader";
+import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
+import { rootNode } from "../src/config/root";
 import {
   deriveActionValidators,
   registerStateValidator,
@@ -33,6 +39,7 @@ import {
   PRESET_FLOOR,
   effectivePresetName,
   presetGlobals,
+  presetRoot,
 } from "../src/config/presets";
 import { paletteForThemeName } from "../src/themes";
 import { checkConfig } from "../src/check";
@@ -440,5 +447,29 @@ describe("cc-candybar check — presets", () => {
       (p) => checkConfig(p),
     );
     expect(outcome.kind).toBe("clean");
+  });
+});
+
+// ─── presetRoot: where a preset's layout is authored ─────────────────────────
+
+describe("presetRoot — the path a preset's layout is authored at", () => {
+  // Asked of the MERGED tree, before validateConfig materializes an explicit
+  // root for every preset (the same seam RenderCache's authoredRoots reads).
+  const merged = (src: string) =>
+    mergeWithDefault(parseDslConfig("<presets>", src, ALLOWED), DEFAULT_DSL_CONFIG);
+
+  test("an empty rows map restages nothing: the preset renders the config's root, authored at `root`", () => {
+    const cfg = merged(`{ presets: { P: { root: { rows: {} } } } }`);
+    expect(presetRoot(cfg, "P")).toEqual({ node: rootNode(cfg.root), path: "root" });
+  });
+
+  test("a `when` alone restages: it gates the whole bar, so the layout is authored at the preset", () => {
+    const cfg = merged(
+      `{ presets: { P: { root: { rows: {}, when: '{{ .x }}' } } } }`,
+    );
+    const { node, path } = presetRoot(cfg, "P");
+    expect(path).toBe("presets.P.root");
+    expect(node.when).toBe("{{ .x }}");
+    expect(node.children).toEqual(rootNode(cfg.root).children);
   });
 });

@@ -32,6 +32,7 @@ import { listGlobalsFieldNames } from "./globals.js";
 import { parsePersistTarget } from "./persist-target.js";
 import { presetNames, presetRoot } from "../presets.js";
 import { fragmentNode, rootNode } from "../root.js";
+import { segmentReferencesMenu } from "./menu-synth.js";
 import {
   canHostSessionState,
   countAnchors,
@@ -309,7 +310,17 @@ export function validateCrossReferences(
   // means one thing [LAW:single-enforcer] — and over the tree that RENDERS
   // (the preset's fragment merged over the config's root, presetRoot), because
   // a `{ rows }` fragment and a row it inherits can each place one.
-  const checkAnchorCount = (
+  //
+  // [LAW:types-are-the-program] A menu-hosting segment placed twice in one
+  // layout is the same ambiguity one level down: its disclosure open-state is
+  // keyed by segment name, so two placements would share one state and a
+  // click on either would toggle both. Identity stays name-derived (no
+  // placement path threaded into the key); two disclosures = two named
+  // segments. Counted over the same rendered tree, for the same reason.
+  const menuHosts = Object.entries(cfg.segments)
+    .filter(([, seg]) => segmentReferencesMenu(seg.template))
+    .map(([name]) => name);
+  const checkPlacementCounts = (
     tree: LayoutNode,
     layoutKey: string,
     layoutLine: number | undefined,
@@ -320,6 +331,21 @@ export function validateCrossReferences(
         message: `${layoutKey} places the global settings menu anchor "${SETTINGS_ANCHOR}" ${countAnchors(tree)} times — it may appear at most once per layout (it is one disclosure, and one state key holds one open state). Remove all but the placement you want; removing every placement puts the menu at its default position.`,
         line: layoutLine,
       });
+    }
+    const placements = new Map<string, number>();
+    for (const node of walkNodes(tree)) {
+      if (node.kind === "segment") {
+        placements.set(node.name, (placements.get(node.name) ?? 0) + 1);
+      }
+    }
+    for (const name of menuHosts) {
+      if ((placements.get(name) ?? 0) > 1) {
+        ctx.issues.push({
+          path: layoutKey,
+          message: `segment "${name}" hosts a {{ menu }} and is placed in the layout more than once — a menu's open-state is keyed by segment name, so the copies would share one state (clicking one would toggle both). Give each placement its own named segment.`,
+          line: layoutLine,
+        });
+      }
     }
   };
   // Walks what the author WROTE at this key (a whole tree, or the rows a
@@ -374,13 +400,13 @@ export function validateCrossReferences(
   };
   const layoutKey = authoredLayoutKey(ctx.source);
   const rootLine = findKeyLine(ctx.source, [layoutKey]);
-  checkAnchorCount(rootNode(cfg.root), layoutKey, rootLine);
+  checkPlacementCounts(rootNode(cfg.root), layoutKey, rootLine);
   checkLayoutTree(rootNode(cfg.root), layoutKey, rootLine);
   for (const [name, preset] of Object.entries(cfg.presets)) {
     if (preset.root === undefined) continue;
     const presetKey = `presets.${name}.root`;
     const presetLine = findKeyLine(ctx.source, ["presets", name, "root"]);
-    checkAnchorCount(presetRoot(cfg, name).node, presetKey, presetLine);
+    checkPlacementCounts(presetRoot(cfg, name).node, presetKey, presetLine);
     checkLayoutTree(fragmentNode(preset.root), presetKey, presetLine);
   }
 

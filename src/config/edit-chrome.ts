@@ -282,7 +282,7 @@ function spliceContainer(
       children.push(child);
       continue;
     }
-    children.push(
+    const cells: LayoutNode[] = [
       insertChrome(
         presetIdent,
         rootKey,
@@ -292,22 +292,39 @@ function spliceContainer(
         "before",
         artifacts,
       ),
+      child,
+      removeChrome(presetIdent, rootKey, child.name, artifacts),
+      ...(i === lastContent
+        ? [
+            insertChrome(
+              presetIdent,
+              rootKey,
+              String(posCounter.n++),
+              domainName,
+              child.name,
+              "after",
+              artifacts,
+            ),
+          ]
+        : []),
+    ];
+    // [LAW:one-type-per-behavior] A segment child of a VERTICAL container is a
+    // one-cell row (presetRoot stacks every root's rows vertically, so a bare
+    // `"sidebar"` root and a `rows: { sys: "demo" }` row both arrive this way);
+    // its chrome joins that row rather than becoming three rows of its own,
+    // under the row's own gate so the chrome hides with it.
+    children.push(
+      ...(node.direction === "vertical"
+        ? [
+            {
+              kind: "container" as const,
+              direction: "horizontal" as const,
+              children: cells,
+              ...(child.when !== undefined && { when: child.when }),
+            },
+          ]
+        : cells),
     );
-    children.push(child);
-    children.push(removeChrome(presetIdent, rootKey, child.name, artifacts));
-    if (i === lastContent) {
-      children.push(
-        insertChrome(
-          presetIdent,
-          rootKey,
-          String(posCounter.n++),
-          domainName,
-          child.name,
-          "after",
-          artifacts,
-        ),
-      );
-    }
   }
   return { ...node, children };
 }

@@ -148,6 +148,18 @@ describe("mergeWithDefault", () => {
     });
   });
 
+  test("rows: a fragment without `when` keeps the base's `when`", () => {
+    const gated: DslConfig = {
+      ...DFLT,
+      root: { ...DFLT.root, when: "{{ .gate }}" },
+    };
+    const raw: RawDslConfig = { root: { rows: { extra: hrow("a") } } };
+    expect(mergeWithDefault(raw, gated).root).toEqual({
+      rows: { ...DFLT.root.rows, extra: hrow("a") },
+      when: "{{ .gate }}",
+    });
+  });
+
   test("rows: `{ rows: {} }` is the merge's identity", () => {
     expect(mergeWithDefault({ root: { rows: {} } }, DFLT).root).toEqual(DFLT.root);
   });

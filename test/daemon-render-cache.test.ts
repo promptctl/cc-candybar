@@ -288,6 +288,45 @@ describe("RenderCache", () => {
     }
   });
 
+  test("a `{ rows }` fragment merges over the bundled rows and authors the floor preset's root", async () => {
+    const { dir, cleanup } = mkConfigDir();
+    const { cache, cleanups, reloads } = makeCache();
+    try {
+      const entry = cache.getOrCreate(dir, dir, undefined);
+      const bundledRows = Object.keys(entry.state.config.root.rows);
+      expect(entry.state.authoredRoots.has(PRESET_FLOOR)).toBe(false);
+
+      const cfg = join(dir, ".cc-candybar.json5");
+      await reloads.after(entry, () =>
+        writeFileSync(
+          cfg,
+          JSON.stringify({
+            globals: {},
+            variables: { x: { kind: "literal", value: "from-file" } },
+            segments: {
+              only: {
+                template: " {{ .x }} ",
+                bg: "surface",
+                fg: "foreground",
+              },
+            },
+            root: { rows: { extra: { h: ["only"] } } },
+          }),
+        ),
+      );
+      expect(entry.configFilePath).toBe(cfg);
+      expect(Object.keys(entry.state.config.root.rows)).toEqual([
+        ...bundledRows,
+        "extra",
+      ]);
+      expect(entry.state.config.root.rows.extra).toEqual(oneRow("only"));
+      expect(entry.state.authoredRoots.has(PRESET_FLOOR)).toBe(true);
+    } finally {
+      for (const fn of cleanups) fn();
+      cleanup();
+    }
+  });
+
   test(".json extension is loaded by the cache (legacy compat)", () => {
     const { dir, cleanup } = mkConfigDir();
     const { cache, cleanups } = makeCache();

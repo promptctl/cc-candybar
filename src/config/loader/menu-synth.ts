@@ -197,7 +197,9 @@ function parseCalls(
   }
 }
 
-function segmentReferencesMenu(template: string): boolean {
+// [LAW:single-enforcer] THE "does this segment host a menu" predicate — read
+// from the parsed AST, shared with cross-ref's placement-count check.
+export function segmentReferencesMenu(template: string): boolean {
   const engine = createEngine<string>({ fromString: (s) => s });
   try {
     return engine.parse(template).referencedFunctions().has(MENU_FUNC);
@@ -260,9 +262,10 @@ export function synthesizeMenuDecls(
     }
   }
 
-  // One walk over the layout: reject {{ menu }} in node `when` predicates (same
-  // template-only rule), and count each segment's placements for the reuse check.
-  const placementCounts = new Map<string, number>();
+  // Reject {{ menu }} in node `when` predicates (same template-only rule).
+  // The placement-count check (a menu host placed twice) lives in cross-ref,
+  // over the tree that RENDERS — a `{ rows }` fragment and a row it inherits
+  // can each place one, which this single raw file cannot see.
   if (out.root !== undefined) {
     for (const node of walkNodes(fragmentNode(out.root))) {
       if (typeof node.when === "string" && segmentReferencesMenu(node.when)) {
@@ -272,29 +275,6 @@ export function synthesizeMenuDecls(
           `a layout node's "when" predicate uses {{ menu }} — a menu is only valid in a segment's "template", not a node predicate. Move it into a segment.`,
         );
       }
-      if (node.kind === "segment") {
-        placementCounts.set(
-          node.name,
-          (placementCounts.get(node.name) ?? 0) + 1,
-        );
-      }
-    }
-  }
-
-  // [LAW:types-are-the-program] A menu-bearing segment placed in more than one
-  // layout slot is ambiguous: its disclosure open-state is keyed by segment name
-  // (one state for the segment), so two placements would share it and a click on
-  // one would toggle both. Reject the repeated placement — the ambiguity is
-  // unrepresentable, and identity stays name-derived (no placement path threaded
-  // into the key). Two independent disclosures = two named segments.
-  for (const [segName, seg] of Object.entries(segments)) {
-    if (!segmentReferencesMenu(seg.template)) continue;
-    if ((placementCounts.get(segName) ?? 0) > 1) {
-      menuIssue(
-        ctx,
-        `segments.${segName}`,
-        `segment "${segName}" hosts a {{ menu }} and is placed in the layout more than once — a menu's open-state is keyed by segment name, so the copies would share one state (clicking one would toggle both). Give each placement its own named segment.`,
-      );
     }
   }
 
