@@ -902,9 +902,10 @@ async function handleRequest(req: Request): Promise<HandledRequest> {
         sessionConfigFile,
       );
       // [LAW:one-source-of-truth] Record the inputs THIS render resolved its
-      // config from, so a durable click on this session writes the file this
-      // render read (verbs/index.ts sessionConfigFile) — never a path re-
-      // derived from the daemon's own cwd. Compared before writing: every
+      // config from, so a durable click on this session resolves the same
+      // chain and writes the file the next reload reads (verbs/index.ts
+      // sessionConfigFile) — never a path re-derived from the daemon's own
+      // cwd. Compared before writing: every
       // set() persists and fires the session's MobX atom, so an unconditional
       // per-render write would invalidate every state-driven computed each
       // render.

@@ -21,8 +21,9 @@
 //      from the file, so the next reload falls back to the bundled default.
 
 import { ownLinks, ownValidators } from "./helpers/ambient-chrome";
-import { writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import JSON5 from "json5";
 import { getThemePalette } from "@promptctl/rich-js";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
@@ -37,7 +38,7 @@ import {
 import { ConfigError } from "../src/config/dsl-loader";
 import { boldUrls, effectsOf } from "./helpers/click";
 import { parseHandlerUrl } from "../src/install/index";
-import { parseEffects, VERB_DISPATCH } from "../src/click/wire";
+import { encodeSegments, parseEffects, VERB_DISPATCH } from "../src/click/wire";
 import { VERBS } from "../src/daemon/verbs";
 import type { VerbContext } from "../src/daemon/verbs";
 import {
@@ -821,6 +822,51 @@ function makeCache(): {
   );
   return { cache, sessionState, cleanups, reloads };
 }
+
+describe("a durable click lands in the file the next reload reads", () => {
+  // [LAW:one-source-of-truth] The render records the RESOLUTION INPUTS, not
+  // a resolved path, and the click re-runs the same chain over them
+  // (durableConfigPath). That is the contract, pinned here because it is
+  // easy to mis-read as "the file the last render read": a candidate that
+  // appears after the render is exactly what RenderCache re-resolves to on
+  // its watcher, so the click must land THERE — a write to the superseded
+  // file would be invisible to every render after it.
+  test("no file yet creates the XDG tail; a project file appearing afterwards takes the next click", () => {
+    const config = parseAndValidate(
+      "<test>",
+      `{
+        variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
+        actions: { pin: { persist: "palette", from: "themes" } },
+      }`,
+      ALLOWED,
+    );
+    const disposers = deriveConfigActionValidators(config).map(
+      ({ key, spec }) => registerConfigValidator(key, spec),
+    );
+    const sessionState = new SessionState();
+    durable.seedOrigin(sessionState, "s1");
+    const ctx: VerbContext = { sessionState, dlog: () => {} };
+    const click = (palette: string): void =>
+      VERBS.get("set-config")!(encodeSegments(["s1", "palette", palette]), ctx);
+    const paletteIn = (file: string): unknown =>
+      (JSON5.parse(readFileSync(file, "utf8")) as { globals: { palette: unknown } })
+        .globals.palette;
+    try {
+      expect(durable.text()).toBeNull();
+      click("nord");
+      expect(paletteIn(durable.xdgConfigPath)).toBe("nord");
+      expect(durable.text()).toBeNull();
+
+      // The higher-precedence candidate appears between renders.
+      durable.write(`{ globals: { palette: "textual-dark" } }`);
+      click("dracula");
+      expect(paletteIn(durable.configPath)).toBe("dracula");
+      expect(paletteIn(durable.xdgConfigPath)).toBe("nord");
+    } finally {
+      for (const fn of disposers) fn();
+    }
+  });
+});
 
 describe("RenderCache: the config file is the durable store", () => {
   const GLOBALS_COMMENT = "// the hand-authored display defaults";

@@ -386,9 +386,14 @@ const stepState: VerbHandler = (rawValue, ctx) => {
 // [LAW:one-source-of-truth] The config FILE is the one durable store
 // (candybar-config-dqe). A click carries only a session id, so the render
 // records — under this daemon-internal key, the SESSION_CONFIG_OVERRIDE_KEY
-// precedent — the inputs its config resolution ran on, and a durable verb
-// resolves the SAME file from them (durableConfigPath). No re-derivation
-// from the daemon's own cwd, which describes whichever shell spawned it.
+// precedent — the INPUTS its config resolution ran on, and a durable verb
+// runs the same resolution over them at click time (durableConfigPath). The
+// file it lands in is the one the NEXT reload reads, not a snapshot of the
+// one the last render read: RenderCache re-resolves the same chain whenever
+// a candidate appears (a higher-precedence file supersedes a lower one), so
+// a recorded resolved path would be a second clock — a write to a file the
+// bar has already stopped reading. No re-derivation from the daemon's own
+// cwd either, which describes whichever shell spawned it.
 export const SESSION_RENDER_ORIGIN_KEY = "render-origin";
 
 // [LAW:types-are-the-program] Exactly the three inputs resolveDslConfigPath
