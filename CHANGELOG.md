@@ -1,3 +1,10 @@
+# [1.44.0](https://github.com/promptctl/cc-candybar/compare/v1.43.0...v1.44.0) (2026-09-04)
+
+
+### Features
+
+* **config:** the config file is the one durable store (candybar-config-dqe) ([#203](https://github.com/promptctl/cc-candybar/issues/203)) ([c097cb7](https://github.com/promptctl/cc-candybar/commit/c097cb75779c97ddefd49ea96e5dd7ab9a86324c))
+
 # [1.43.0](https://github.com/promptctl/cc-candybar/compare/v1.42.1...v1.43.0) (2026-09-04)
 
 
