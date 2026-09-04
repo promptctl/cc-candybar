@@ -4,20 +4,33 @@
 // branches. [LAW:behavior-not-structure] Every assertion is about bytes out
 // for addresses in; a different implementation of the same contract passes.
 
-import { blendRgb, getThemePalette, listThemePalettes, Palette } from "@promptctl/rich-js";
-import type { ColorRgba } from "@promptctl/rich-js";
+import {
+  blendRgb,
+  ColorRgba,
+  contrastRatio,
+  getThemePalette,
+  listThemePalettes,
+  Palette,
+} from "@promptctl/rich-js";
 import {
   DECOR_AMTS,
   DECOR_BASES,
   DECOR_HUES,
+  DECOR_MAX_AMOUNT,
   DECOR_VOCABULARY,
   DEFAULT_DISTRIBUTION,
   DISTRIBUTIONS,
+  STATE_FLOOR,
+  STATE_PURE_AMOUNT,
+  decorEntryColour,
   decorEntryFor,
   decorFor,
   paletteRole,
+  stateFor,
+  textOn,
   vocabularySelect,
   type Address,
+  type DecorHue,
   type Distribution,
   type DistributionName,
 } from "../src/themes/decor";
@@ -71,7 +84,7 @@ describe("the vocabulary", () => {
   test("every shipped theme carries every role the vocabulary names", () => {
     for (const name of listThemePalettes()) {
       const palette = getThemePalette(name);
-      for (const role of [...DECOR_BASES, ...DECOR_HUES]) {
+      for (const role of [...DECOR_BASES, ...DECOR_HUES, "foreground", "background"] as const) {
         expect(() => paletteRole(palette, role)).not.toThrow();
       }
     }
@@ -252,5 +265,101 @@ describe("done-when: a vocabulary of size 1 is a uniform bar", () => {
 
   test("an empty vocabulary has nothing to select and says so", () => {
     expect(() => vocabularySelect([], [], DISTRIBUTIONS.uniform)).toThrow(/empty vocabulary/);
+  });
+});
+
+// --- candybar-render-ai7.2: the state floor -----------------------------------
+// [LAW:verifiable-goals] Each `describe` is one line of the ticket's Done-when,
+// over the WHOLE registry — the failures the floor exists for were
+// theme-specific (textual-dark, textual-ansi, solarized-dark), so a sample
+// proves nothing.
+
+/** The most-tinted cell `hue` produces on each base — the tint region's edge. */
+function tintEdge(palette: Palette, hue: DecorHue) {
+  return DECOR_BASES.map((base) =>
+    decorEntryColour(palette, { base, hue, amount: DECOR_MAX_AMOUNT }),
+  );
+}
+
+/** The pure form of `hue`: where the search starts. */
+function pureHue(palette: Palette, hue: DecorHue) {
+  return blendRgb(paletteRole(palette, "surface"), paletteRole(palette, hue), STATE_PURE_AMOUNT);
+}
+
+const REGISTRY = listThemePalettes().map((name) => getThemePalette(name));
+
+describe("done-when: contrast(state, decorMax) >= 2.2 for every theme × hue × base", () => {
+  test("holds over the whole registry", () => {
+    for (const palette of REGISTRY) {
+      for (const hue of DECOR_HUES) {
+        const state = stateFor(palette, hue);
+        for (const [i, tint] of tintEdge(palette, hue).entries()) {
+          const ratio = contrastRatio(state, tint);
+          expect([palette.name, hue, DECOR_BASES[i], ratio >= STATE_FLOOR]).toEqual([
+            palette.name,
+            hue,
+            DECOR_BASES[i],
+            true,
+          ]);
+        }
+      }
+    }
+  });
+
+  test("the search reaches foreground itself: solarized-dark's secondary lands on the pole", () => {
+    const palette = getThemePalette("solarized-dark");
+    expect(stateFor(palette, "secondary").hex).toBe(paletteRole(palette, "foreground").hex);
+  });
+
+  test("a hue that cannot clear even at foreground throws, naming palette and hue", () => {
+    // Every role one grey: every candidate sits at contrast 1 against every tint.
+    const grey = new ColorRgba(128, 128, 128);
+    const roles = [...DECOR_BASES, ...DECOR_HUES, "foreground", "background"] as const;
+    const flat = new Palette("flat", true, new Map(roles.map((role) => [role, grey])));
+    expect(() => stateFor(flat, "primary")).toThrow(/"flat".*"primary".*foreground/);
+  });
+});
+
+describe("done-when: the enforcement is a floor, not a transform", () => {
+  test("a hue whose pure form already clears is byte-unchanged", () => {
+    let untouched = 0;
+    for (const palette of REGISTRY) {
+      for (const hue of DECOR_HUES) {
+        const pure = pureHue(palette, hue);
+        const clears = tintEdge(palette, hue).every(
+          (tint) => contrastRatio(pure, tint) >= STATE_FLOOR,
+        );
+        if (!clears) continue;
+        untouched++;
+        expect([palette.name, hue, stateFor(palette, hue).hex]).toEqual([
+          palette.name,
+          hue,
+          pure.hex,
+        ]);
+      }
+    }
+    // The measured registry: 30 of 69 pairs stay the pure mix. At least one
+    // must, or the "floor not transform" clause is vacuous.
+    expect(untouched).toBeGreaterThan(0);
+  });
+});
+
+describe("done-when: text on a state cell is contrast-chosen and clears 3:1 on every pair", () => {
+  test("is the better of the theme's two poles, and clears 3:1 over the whole registry", () => {
+    for (const palette of REGISTRY) {
+      const poles = [paletteRole(palette, "background"), paletteRole(palette, "foreground")];
+      for (const hue of DECOR_HUES) {
+        const state = stateFor(palette, hue);
+        const text = textOn(palette, state);
+        const best = Math.max(...poles.map((pole) => contrastRatio(state, pole)));
+        expect(poles.map((p) => p.hex)).toContain(text.hex);
+        expect([palette.name, hue, contrastRatio(state, text)]).toEqual([palette.name, hue, best]);
+        expect([palette.name, hue, contrastRatio(state, text) >= 3]).toEqual([
+          palette.name,
+          hue,
+          true,
+        ]);
+      }
+    }
   });
 });
