@@ -19,6 +19,21 @@ import {
 } from "../../src/click/wire";
 import { VERBS } from "../../src/daemon/verbs";
 import type { VerbContext } from "../../src/daemon/verbs";
+import type { SessionStateRW } from "../../src/daemon/session-state";
+
+// [LAW:one-source-of-truth] THE VerbContext a test hands the click path: a
+// silent log and an update act that refuses loudly — no test here has an
+// update watch, so an apply-update click reaching it is a test bug, never a
+// silent no-op. [LAW:no-silent-failure]
+export function testVerbContext(sessionState: SessionStateRW): VerbContext {
+  return {
+    sessionState,
+    dlog: () => {},
+    applyUpdate: () => {
+      throw new Error("apply-update: no update watch in this test");
+    },
+  };
+}
 
 export interface DecodedEffect {
   readonly verb: string;

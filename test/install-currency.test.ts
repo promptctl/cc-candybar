@@ -53,7 +53,7 @@ describe("fetchLatestVersion", () => {
       seen = { url: String(input), signal: init?.signal };
       return new Response(JSON.stringify({ latest: "1.41.3" }));
     };
-    await expect(fetchLatestVersion(PKG, spy)).resolves.toEqual(ok([1, 41, 3]));
+    await expect(fetchLatestVersion(PKG, spy, REGISTRY_URL)).resolves.toEqual(ok([1, 41, 3]));
     expect(seen?.url).toBe(DIST_TAGS_URL);
     expect(seen?.url).toContain("%40promptctl%2Fcc-candybar");
     expect(seen?.signal).toBeInstanceOf(AbortSignal);
@@ -63,26 +63,26 @@ describe("fetchLatestVersion", () => {
   // `failed` carrying its reason — never a rejection that would take the
   // install down, never a value that could read as current.
   test("a refused connection is `failed` with the error text", async () => {
-    await expect(fetchLatestVersion(PKG, unreachable)).resolves.toEqual(
+    await expect(fetchLatestVersion(PKG, unreachable, REGISTRY_URL)).resolves.toEqual(
       failed("getaddrinfo ENOTFOUND registry.npmjs.org"),
     );
   });
 
   test("a non-2xx response is `failed` naming the status", async () => {
     await expect(
-      fetchLatestVersion(PKG, registry("Unauthorized", 401)),
+      fetchLatestVersion(PKG, registry("Unauthorized", 401), REGISTRY_URL),
     ).resolves.toEqual(failed(`registry responded 401 for ${DIST_TAGS_URL}`));
   });
 
   test("a body without `latest` is `absent`", async () => {
     await expect(
-      fetchLatestVersion(PKG, registry({ next: "2.0.0" })),
+      fetchLatestVersion(PKG, registry({ next: "2.0.0" }), REGISTRY_URL),
     ).resolves.toEqual(ABSENT);
   });
 
   test("a `latest` that is not a release version is `failed`", async () => {
     await expect(
-      fetchLatestVersion(PKG, registry({ latest: "2.0.0-rc.1" })),
+      fetchLatestVersion(PKG, registry({ latest: "2.0.0-rc.1" }), REGISTRY_URL),
     ).resolves.toEqual(failed(expect.stringMatching(/not a release version/)));
   });
 });
@@ -196,7 +196,7 @@ describe("install currency, composed", () => {
   test("stale registry → stderr warning with the pinned command", async () => {
     const currency = assessCurrency(
       "1.26.0",
-      await fetchLatestVersion(PKG, registry({ latest: "1.34.0" })),
+      await fetchLatestVersion(PKG, registry({ latest: "1.34.0" }), REGISTRY_URL),
     );
     const report = currencyReport(PKG, currency);
     expect(report.stream).toBe("stderr");
@@ -206,7 +206,7 @@ describe("install currency, composed", () => {
   test("unreachable registry → a report (never a rejection) saying skipped", async () => {
     const currency = assessCurrency(
       "1.26.0",
-      await fetchLatestVersion(PKG, unreachable),
+      await fetchLatestVersion(PKG, unreachable, REGISTRY_URL),
     );
     const report = currencyReport(PKG, currency);
     expect(report.stream).toBe("stderr");
@@ -220,7 +220,7 @@ describe("install currency, composed", () => {
   test("non-release stamp + unreachable registry → still a report", async () => {
     const currency = assessCurrency(
       "dev",
-      await fetchLatestVersion(PKG, unreachable),
+      await fetchLatestVersion(PKG, unreachable, REGISTRY_URL),
     );
     expect(currencyReport(PKG, currency).text).toContain(
       '"dev" is not a release version',

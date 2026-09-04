@@ -94,6 +94,13 @@ export const VERB_APPLY_LAYOUT_OP = "apply-layout-op";
 // no-op.
 export const VERB_UNDO = "undo";
 export const VERB_REDO = "redo";
+// [LAW:effects-at-boundaries] The update notice's act (brandon-build-notice-
+// 5d6): rebuild a source checkout, or stage the newer release over an
+// install. Args: `[sessionId]` — carried for click.error surfacing only. The
+// verb takes NO command and NO version: the daemon runs the act its own
+// provenance implies (src/daemon/update-notice.ts), so nothing a URL carries
+// ever reaches a shell.
+export const VERB_APPLY_UPDATE = "apply-update";
 
 // [LAW:types-are-the-program] An effect to EMIT: a verb plus its raw (unencoded)
 // positional args. The wire owns all encoding — callers never percent-encode.

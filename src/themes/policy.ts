@@ -300,6 +300,10 @@ export type ColorCompatibility = (typeof COLOR_COMPATIBILITIES)[number];
 // [LAW:one-source-of-truth] The one statement of the globals.autoWrap default
 // (on — current behavior).
 export const DEFAULT_WRAP = true;
+// The update notice renders unless a config says otherwise: a developer
+// running a stale checkout, or a user on a superseded release, is told so
+// by default and opts OUT durably through the notice's own `[disable]`.
+export const DEFAULT_UPDATE_NOTICE = true;
 
 // [LAW:one-source-of-truth] The spelling of a boolean as a SessionState string.
 // SessionState holds strings, so "true"/"false" is the wire vocabulary for every

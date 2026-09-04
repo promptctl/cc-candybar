@@ -38,7 +38,7 @@ import { registerDslConfig, renderDsl } from "../src/dsl/render";
 import { SessionState } from "../src/daemon/session-state";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import { ConfigError } from "../src/config/dsl-loader";
-import { effectsOf } from "./helpers/click";
+import { testVerbContext, effectsOf } from "./helpers/click";
 import { parseHandlerUrl } from "../src/install/index";
 import { parseEffects, VERB_DISPATCH } from "../src/click/wire";
 import { VERBS } from "../src/daemon/verbs";
@@ -161,7 +161,7 @@ function buildEditRuntime(src: string, sessionId = "s1") {
   const configDisposers = deriveConfigActionValidators(config).map(
     ({ key, spec }) => registerConfigValidator(key, spec),
   );
-  const ctx: VerbContext = { sessionState, dlog: () => {} };
+  const ctx: VerbContext = testVerbContext(sessionState);
   const click = (url: string): void => {
     const { verb, value } = parseHandlerUrl(url);
     const effects =

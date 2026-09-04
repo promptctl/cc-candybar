@@ -20,6 +20,8 @@ export default [
         NodeJS: "readonly",
         __dirname: "readonly",
         __filename: "readonly",
+        // The build stamp tsdown bakes (src/build-stamps.d.ts).
+        __SOURCE_DIGEST__: "readonly",
         URL: "readonly",
         fetch: "readonly",
         AbortSignal: "readonly",
