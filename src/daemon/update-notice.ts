@@ -140,7 +140,11 @@ export function factsOf(update: Update): UpdateFacts {
 export type ActState =
   | { readonly kind: "idle" }
   | { readonly kind: "running" }
-  | { readonly kind: "failed"; readonly identity: string; readonly reason: string };
+  | {
+      readonly kind: "failed";
+      readonly identity: string;
+      readonly reason: string;
+    };
 const IDLE: ActState = { kind: "idle" };
 const RUNNING: ActState = { kind: "running" };
 
