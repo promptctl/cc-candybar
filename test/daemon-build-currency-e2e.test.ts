@@ -30,6 +30,7 @@ import {
   type RunningDaemon,
 } from "./helpers/spawn-isolated-daemon";
 import { builtBundle } from "./helpers/spawn-test-daemon";
+import { waitForExit } from "./helpers/daemon-wire";
 
 const REPO_ROOT = process.cwd();
 const REPO_BUNDLE = path.join(REPO_ROOT, "dist", "index.mjs");
@@ -116,7 +117,7 @@ function scratchLayout(source: Source): Scratch {
 async function withDaemon<T>(
   scratch: Scratch,
   envOverride: NodeJS.ProcessEnv,
-  body: (sockPath: string) => Promise<T>,
+  body: (sockPath: string, daemon: RunningDaemon) => Promise<T>,
 ): Promise<T> {
   const { env, sockPath, removeTmpDirs } = prepareIsolatedDaemonEnv("ccb-bc");
   let daemon: RunningDaemon | undefined;
@@ -125,7 +126,7 @@ async function withDaemon<T>(
       { ...env, ...envOverride },
       builtBundle(path.join(scratch.root, "dist", "index.mjs")),
     );
-    return await body(sockPath);
+    return await body(sockPath, daemon);
   } finally {
     if (daemon) await killAndWait(daemon);
     removeTmpDirs();
@@ -211,6 +212,40 @@ describe("brandon-build-notice-5d6: the daemon renders what is newer than it, wi
       expect(flowed(failed)).toMatch(/rebuild failed: non-zero \(exit \d+\): \S/);
       expect(flowed(failed)).toMatch(SOURCE_ROW);
     });
+  });
+
+  test("[rebuild] success: pnpm build ran in the checkout root, and the daemon restarted itself on the rebuilt bundle", async () => {
+    const s = scratchLayout("edited");
+    // A build tool stand-in, first on the daemon's PATH: records where and how
+    // it was run, then does the one thing a build does to a running daemon —
+    // replaces the bundle it watches.
+    const binDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccb-bc-bin-"));
+    const record = path.join(binDir, "invocation.json");
+    fs.writeFileSync(
+      path.join(binDir, "pnpm"),
+      `#!/bin/sh\nprintf '{"cwd":"%s","args":"%s"}' "$(pwd -P)" "$*" > ${JSON.stringify(record)}\ntouch dist/index.mjs\n`,
+      { mode: 0o755 },
+    );
+    try {
+      await withDaemon(s, { PATH: `${binDir}:${process.env.PATH}` }, async (sock, daemon) => {
+        const before = await render(sock, "bc-rebuilt", s.projectDir);
+        await click(sock, affordance(before, "apply-update"));
+        // The rebuilt bundle is the binary watch's restart signal: `onApplied`
+        // samples it at once and the daemon exits 0 for the next client to
+        // respawn from the fresh code — no minute-long wait, no failure line.
+        const exited = await Promise.race([
+          waitForExit(daemon.child),
+          new Promise<"timeout">((resolve) => setTimeout(resolve, 20_000, "timeout").unref()),
+        ]);
+        expect(exited).toEqual({ code: 0, signal: null });
+        expect(JSON.parse(fs.readFileSync(record, "utf8"))).toEqual({
+          cwd: fs.realpathSync(s.root),
+          args: "build",
+        });
+      });
+    } finally {
+      fs.rmSync(binDir, { recursive: true, force: true });
+    }
   });
 
   test("a published install (no src/) behind the registry renders the release notice", async () => {

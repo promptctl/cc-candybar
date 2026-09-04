@@ -134,9 +134,9 @@ export function factsOf(update: Update): UpdateFacts {
 
 // [LAW:types-are-the-program] The act's lifecycle as a value: idle, running
 // (one child at a time — a second click is refused, not queued), or failed
-// with the reason the notice shows until the next attempt. A failure names
-// the identity it was attempted against: the notice for a DIFFERENT newer
-// thing owes the reader no line about a build it never tried.
+// with the reason, named against the identity it was attempted on: the
+// notice for a DIFFERENT newer thing owes the reader no line about a build
+// it never tried.
 export type ActState =
   | { readonly kind: "idle" }
   | { readonly kind: "running" }

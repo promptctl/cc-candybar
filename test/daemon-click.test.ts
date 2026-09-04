@@ -9,7 +9,7 @@ import { SessionState } from "../src/daemon/session-state";
 import { VERBS, VERB_NAMES, BadVerbArgs } from "../src/daemon/verbs";
 import type { VerbContext } from "../src/daemon/verbs";
 import { registerStateValidator } from "../src/daemon/verbs/state-validators";
-import { encodeSegments, VERB_STEP_STATE } from "../src/click/wire";
+import { encodeSegments, VERB_STEP_STATE, VERB_APPLY_UPDATE } from "../src/click/wire";
 import { testVerbContext } from "./helpers/click";
 
 // --- SessionState unit tests ---
@@ -132,6 +132,26 @@ describe("click protocol", () => {
       const handler = VERBS.get(verb)!;
       expect(() => handler("%", ctx)).toThrow(BadVerbArgs);
     }
+  });
+});
+
+describe("apply-update verb", () => {
+  // [LAW:effects-at-boundaries] The wire carries only the session id; the
+  // handler's whole job is reaching the daemon's update watch through ctx.
+  test("a session id reaches ctx.applyUpdate once; a missing or unsafe one is BadVerbArgs and never does", () => {
+    let calls = 0;
+    const ctx: VerbContext = {
+      ...testVerbContext(new SessionState()),
+      applyUpdate: () => {
+        calls++;
+      },
+    };
+    const handler = VERBS.get(VERB_APPLY_UPDATE)!;
+    handler(encodeURIComponent("sess-1"), ctx);
+    expect(calls).toBe(1);
+    expect(() => handler("", ctx)).toThrow(BadVerbArgs);
+    expect(() => handler(encodeURIComponent("../etc"), ctx)).toThrow(BadVerbArgs);
+    expect(calls).toBe(1);
   });
 });
 

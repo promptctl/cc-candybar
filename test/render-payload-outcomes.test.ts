@@ -331,7 +331,7 @@ describe("buildRenderPayload — migrated lanes share the outcome contract", () 
 // payload verbatim (no name typo, no dropped field, unconditionally present
 // with no `wants` gate — exactly like theme/look).
 describe("buildRenderPayload — effective globals projection", () => {
-  test("every EffectiveGlobals field lands under its own *.effective payload key, unconditionally", async () => {
+  test("every template-facing EffectiveGlobals field lands under its own *.effective payload key, unconditionally; the two daemon-consumed fields have none", async () => {
     const effective: EffectiveGlobals = {
       theme: "nord",
       look: "vivid",
@@ -362,6 +362,10 @@ describe("buildRenderPayload — effective globals projection", () => {
     expect(payload.colorCompatibility).toEqual({ effective: "256" });
     expect(payload.autoWrap).toEqual({ effective: false });
     expect(payload.padding).toEqual({ effective: 3 });
+    // The daemon consumes these two itself — `updateNotice` gates the notice
+    // channel, `separator` feeds the joiner — and no template reads them.
+    expect(payload).not.toHaveProperty("updateNotice");
+    expect(payload).not.toHaveProperty("separator");
   });
 });
 
