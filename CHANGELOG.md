@@ -1,3 +1,10 @@
+# [1.47.0](https://github.com/promptctl/cc-candybar/compare/v1.46.0...v1.47.0) (2026-09-04)
+
+
+### Features
+
+* **themes:** the colour function — address -> theme vocabulary entry (candybar-render-ai7.1) ([#206](https://github.com/promptctl/cc-candybar/issues/206)) ([ddb966e](https://github.com/promptctl/cc-candybar/commit/ddb966ef3fd84970ec11af6ff9538186d7065e0f))
+
 # [1.46.0](https://github.com/promptctl/cc-candybar/compare/v1.45.0...v1.46.0) (2026-09-04)
 
 
