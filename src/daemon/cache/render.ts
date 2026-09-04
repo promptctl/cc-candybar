@@ -188,6 +188,11 @@ function cacheKey(
 // asked at the path presetRoot() reports — the one decision of "where does
 // this preset's tree live" (src/config/presets.ts), projected onto the raw
 // shape rather than re-derived here.
+// [LAW:one-source-of-truth] `config` must be the MERGED tree, before
+// validateConfig: edit chrome materializes an explicit `presets.<n>.root`
+// for every preset, so asked of the validated tree presetRoot() never
+// reports `root` and a file customizing a root-staging preset reads as
+// pristine.
 function authoredRoots(
   config: DslConfig,
   raw: RawDslConfig,
@@ -506,7 +511,7 @@ export class RenderCache {
       neededInputPaths: buildNeededPrefixes(config),
       lastRenderCellsBySegment: new Map<string, readonly RichText[]>(),
       validatorDisposers,
-      authoredRoots: authoredRoots(config, raw),
+      authoredRoots: authoredRoots(merged, raw),
     };
   }
 
