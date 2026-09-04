@@ -185,9 +185,10 @@ it or a human found it and hand-edited it, and this one is no different.
 file never authored is left alone — nothing is written and nothing enters the
 edit history.
 
-The file a click writes is the config file the session's render resolved,
-whichever step of the config search found it (`$CC_CANDYBAR_CONFIG`, a project
-`.cc-candybar.json5`, or the XDG `config.json5`). When no config file exists
+The file a click writes is the config file your session's config search
+resolves to at the moment of the click — the same search the render runs
+(`$CC_CANDYBAR_CONFIG`, a project `.cc-candybar.json5`, or the XDG
+`config.json5`), so it is the file the next render reads. When no config file exists
 yet, the first `persist` creates one — at `$CC_CANDYBAR_CONFIG` if that is set,
 else `$XDG_CONFIG_HOME/cc-candybar/config.json5`. A click from a session that
 has not rendered yet has no file to write and fails loudly (`has not rendered
@@ -706,7 +707,7 @@ entry's `before`. Your hand edit always stands; the way past the refusal is
 to edit the file again yourself.
 
 The history is **one stack per config file, not per session** — a durable
-write lands in the file your session's render resolved, and `undo`/`redo`
+write lands in the file your session's config search resolves to, and `undo`/`redo`
 step that file's stack. A daemon serving several projects keeps a stack for
 each file, so an undo from one project can never revert a write made to
 another's. Two sessions rendering the same file share its stack and can see
