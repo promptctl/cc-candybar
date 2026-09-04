@@ -176,6 +176,11 @@ function has(doc: Node | null, p: ConfigPath): boolean {
 // per field, as `globals` does). `value` is what the merged config holds
 // there now — the bundled declaration — or undefined when nothing does, which
 // `ensureAuthored` turns into a loud error rather than a hollow decl.
+// [LAW:types-are-the-program] `path` is the value span the key names; `unit`
+// is the by-name declaration the file must hold before that path exists —
+// the bundled declaration to materialize — or null when the file already
+// authors it (globals always; a segment/preset the file declares). There is
+// no "declared nowhere" placement: placementOf refuses instead.
 interface Placement {
   readonly path: ConfigPath;
   readonly unit: { readonly path: ConfigPath; readonly value: unknown } | null;
@@ -212,50 +217,95 @@ const RAW = RAW_DEFAULT_DSL_CONFIG;
 const RAW_SEGMENTS: Readonly<Record<string, unknown>> = RAW.segments;
 const RAW_PRESETS: Readonly<Record<string, PresetDecl>> = RAW.presets;
 
+// [LAW:parse-dont-validate] The ONE place "who declares this unit" is
+// decided, by mergeWithDefault's own rule: the file's declaration wins by
+// name (nothing to materialize), else the bundled one is what a first write
+// materializes, else there is no declaration. That last arm is the stale
+// click: the gate admitted a key from a config this file no longer holds (a
+// custom preset deleted by hand since the render, another session's file).
+// It must refuse, never fall through — for a preset, "not declared" once
+// read as "declares no root" and redirected the write onto the file's own
+// top-level `root`.
+type Declaration<T> =
+  | { readonly source: "file" }
+  | { readonly source: "bundled"; readonly decl: T };
+
+function declarationOf<T>(
+  doc: Node | null,
+  unitPath: ConfigPath,
+  bundled: T | undefined,
+  key: string,
+): Declaration<T> {
+  if (has(doc, unitPath)) return { source: "file" };
+  if (bundled === undefined) {
+    throw new Error(
+      `cannot persist ${key}: neither the config file nor the bundled default declares ${unitPath.join(".")}`,
+    );
+  }
+  return { source: "bundled", decl: bundled };
+}
+
+function unitOf<T>(
+  declaration: Declaration<T>,
+  unitPath: ConfigPath,
+  spell: (decl: T) => unknown,
+): Placement["unit"] {
+  return declaration.source === "file"
+    ? null
+    : { path: unitPath, value: spell(declaration.decl) };
+}
+
 function placementOf(doc: Node | null, target: PersistTarget): Placement {
   if (target.scope === "globals") {
     return { path: persistPath(target), unit: null };
   }
   if (target.scope === "segment-palette") {
+    const path = persistPath(target);
+    const own: ConfigPath = ["segments", target.segment];
     return {
-      path: persistPath(target),
-      unit: {
-        path: ["segments", target.segment],
-        value: RAW_SEGMENTS[target.segment],
-      },
+      path,
+      unit: unitOf(
+        declarationOf(doc, own, RAW_SEGMENTS[target.segment], path.join(".")),
+        own,
+        (decl) => decl,
+      ),
     };
   }
-  // [LAW:one-source-of-truth] The same by-name resolution mergeWithDefault
-  // applies: the file's declaration of this preset, wholesale, else the
-  // bundled one — and presetRoot's rule that a preset declaring no root
-  // stages the config's own `root` (src/config/presets.ts).
+  // presetRoot's rule (src/config/presets.ts): a preset declaring no root
+  // stages the config's own `root`. Which declaration answers "does it
+  // declare a root" is the same by-name resolution as the unit itself.
   const own: ConfigPath = ["presets", target.preset];
-  const declaresRoot = has(doc, own)
-    ? has(doc, [...own, "root"])
-    : RAW_PRESETS[target.preset]?.root !== undefined;
-  const bundled = RAW_PRESETS[target.preset];
-  return {
-    path: presetRootPath(target.preset, declaresRoot),
-    unit: declaresRoot
-      ? { path: own, value: bundled && authoredPreset(bundled) }
-      : { path: ["root"], value: authoredLayout(RAW.root) },
-  };
+  const declaration = declarationOf(
+    doc,
+    own,
+    RAW_PRESETS[target.preset],
+    [...own, "root"].join("."),
+  );
+  const declaresRoot =
+    declaration.source === "file"
+      ? has(doc, [...own, "root"])
+      : declaration.decl.root !== undefined;
+  return declaresRoot
+    ? {
+        path: presetRootPath(target.preset, true),
+        unit: unitOf(declaration, own, authoredPreset),
+      }
+    : {
+        path: presetRootPath(target.preset, false),
+        unit: unitOf(
+          declarationOf(doc, ["root"], RAW.root, "root"),
+          ["root"],
+          authoredLayout,
+        ),
+      };
 }
 
 // [LAW:dataflow-not-control-flow] Always runs; identity when the file already
-// authors the unit. [LAW:no-silent-failure] A unit neither the file nor the
-// bundled default declares cannot be materialized — the gate admitted a key
-// from a different config than this session renders — so it is an error, not
-// a hollow `{}` that would shadow a real declaration.
-function ensureAuthored(text: string, placement: Placement): string {
-  const { unit } = placement;
-  if (unit === null || has(docOf(text), unit.path)) return text;
-  if (unit.value === undefined) {
-    throw new Error(
-      `cannot persist ${placement.path.join(".")}: neither the config file nor the bundled default declares ${unit.path.join(".")}`,
-    );
-  }
-  return setValue(text, unit.path, json5Text(unit.value));
+// authors the unit (placementOf resolved it to null).
+function ensureAuthored(text: string, { unit }: Placement): string {
+  return unit === null
+    ? text
+    : setValue(text, unit.path, json5Text(unit.value));
 }
 
 function requireTarget(key: string): PersistTarget {

@@ -53,7 +53,13 @@ import { listResolvablePaletteNames } from "../src/themes/policy";
 import { ConfigError } from "../src/config/dsl-loader";
 import { effectsOf } from "./helpers/click";
 import { parseHandlerUrl } from "../src/install/index";
-import { parseEffects, VERB_DISPATCH } from "../src/click/wire";
+import {
+  encodeSegments,
+  parseEffects,
+  URL_SCHEME,
+  VERB_DISPATCH,
+  VERB_RESET_CONFIG,
+} from "../src/click/wire";
 import { VERBS } from "../src/daemon/verbs";
 import type { VerbContext } from "../src/daemon/verbs";
 import {
@@ -541,6 +547,45 @@ describe("apply-layout-op click → the config file", () => {
     expect(() => click(urls[1]!)).toThrow(/has no segment "git"/);
     expect(durable.parsed().root).toEqual({ v: [{ h: [] }, "bar"] });
     expect(durable.history().past).toHaveLength(2);
+    dispose();
+  });
+
+  // [LAW:no-silent-failure] A custom preset the file declared at render time
+  // and no longer does (deleted by hand before the reload landed) is declared
+  // NOWHERE — not "a preset declaring no root", which stages the shared
+  // `root`. Both the structural edit and the reset must refuse, and the
+  // file's own top-level root must survive untouched.
+  test("a click on a preset the file no longer declares is refused — never redirected onto the file's root", () => {
+    const ROOT = "{ v: [ { h: ['directory', 'git'] }, 'bar' ] }";
+    const SRC_CUSTOM = `{
+      globals: {},
+      variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
+      actions: {
+        removeDirectory: { persist: 'presets.mine.root', removeSegment: 'directory' },
+        resetMine: { reset: 'presets.mine.root' },
+      },
+      segments: {
+        directory: { template: 'd', bg: 'surface', fg: 'foreground' },
+        git: { template: 'g', bg: 'surface', fg: 'foreground' },
+        bar: { template: '{{ action "removeDirectory" "-" }} {{ action "resetMine" "r" }}', bg: 'surface', fg: 'foreground' },
+      },
+      root: ${ROOT},
+      presets: { mine: { root: { h: ['git', 'bar'] } } },
+    }`;
+    const { render, click, dispose } = buildLayoutRuntime(SRC_CUSTOM);
+    const urls = extractUrls(render());
+    // The hand edit: the preset declaration vanishes; everything else stays.
+    durable.write(SRC_CUSTOM.replace(/presets: \{ mine: [^\n]*\},/, "presets: {},"));
+    expect(durable.parsed().presets).toEqual({});
+
+    const undeclared = /neither the config file nor the bundled default declares presets\.mine/;
+    expect(() => click(urls[0]!)).toThrow(undeclared);
+    // The reset link is hand-built: the harness filters rendered preset-root
+    // resets as edit chrome's own banner, and the verb is what is under test.
+    const resetUrl = `${URL_SCHEME}://${VERB_RESET_CONFIG}/${encodeSegments(["s1", "presets.mine.root"])}`;
+    expect(() => click(resetUrl)).toThrow(undeclared);
+    expect(durable.parsed().root).toEqual({ v: [{ h: ["directory", "git"] }, "bar"] });
+    expect(durable.history().past).toHaveLength(0);
     dispose();
   });
 

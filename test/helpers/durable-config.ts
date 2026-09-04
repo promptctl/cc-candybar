@@ -66,14 +66,15 @@ export function durableConfig(prefix = "cc-candybar-durable-"): DurableConfig {
   );
   assignEnv(isolated);
   const configPath = join(root, ".cc-candybar.json5");
-  const readText = (): string | null => {
+  const readOrNull = (file: string): string | null => {
     try {
-      return readFileSync(configPath, "utf8");
+      return readFileSync(file, "utf8");
     } catch (e) {
       if ((e as NodeJS.ErrnoException).code === "ENOENT") return null;
       throw e;
     }
   };
+  const readText = (): string | null => readOrNull(configPath);
   return {
     projectDir: root,
     configPath,
@@ -82,9 +83,11 @@ export function durableConfig(prefix = "cc-candybar-durable-"): DurableConfig {
     write: (text) => writeFileSync(configPath, text),
     text: readText,
     parsed: () => JSON5.parse(readText() ?? "") as Record<string, unknown>,
+    // The history file itself is created by the first edit, so before one an
+    // absent file and an absent entry both read as the empty stack.
     history: (file = configPath) =>
       (
-        JSON.parse(readFileSync(configEditHistoryPath(), "utf8")) as Record<
+        JSON.parse(readOrNull(configEditHistoryPath()) ?? "{}") as Record<
           string,
           FileHistory
         >
