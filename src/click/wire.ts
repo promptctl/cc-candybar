@@ -51,10 +51,9 @@ export const VERB_SHOW_CONFIG_WARNING = "show-config-warning";
 // side-effect isolated to the verb handler; the renderer only sees the result.
 export const VERB_LOAD_CONFIG = "load-config";
 // [LAW:one-source-of-truth] `persist`'s twin of set-state/step-state: writes
-// land in the daemon-owned config-overrides layer (never the hand-authored
-// config file), which RenderCache merges on top of the user file every
-// reload — the SAME file-watcher path a hand edit already takes
-// (candybar-config-engine-71o.2). Args: `[sessionId, key, value]` — the
+// land in the session's config FILE (candybar-config-dqe — the one durable
+// store), spliced in place so comments survive, and reach the bar through
+// the SAME file-watcher path a hand edit already takes. Args: `[sessionId, key, value]` — the
 // sessionId is carried only for click.error surfacing, exactly like
 // set-state; the write itself is daemon-global, not session-scoped.
 // A durable write takes an OPTIONAL trailing segment: the SessionState key to
@@ -66,33 +65,33 @@ export const VERB_LOAD_CONFIG = "load-config";
 // every effect in a click by design; a pair would let a rejected write still
 // wipe the user's pick. Args: `[sessionId, key, value, releaseKey?]`.
 export const VERB_SET_CONFIG = "set-config";
-// [LAW:types-are-the-program] A RELATIVE nudge to a bounded config-overrides
+// [LAW:types-are-the-program] A RELATIVE nudge to a bounded config-file
 // key (e.g. a padding stepper) — the config twin of step-state. Args:
 // `[sessionId, key, by, releaseKey?]` — the same optional release segment
 // set-config takes, for the same reason.
 export const VERB_STEP_CONFIG = "step-config";
-// [LAW:one-source-of-truth] The gated undo for `persist`: clears one
-// config-overrides key, restoring the user-file/bundled-default value on the
-// next reload. Args: `[sessionId, key]`.
+// [LAW:one-source-of-truth] The gated undo for `persist`: deletes one key's
+// path from the config file, restoring the bundled-default value on the next
+// reload. Args: `[sessionId, key]`.
 export const VERB_RESET_CONFIG = "reset-config";
 // [LAW:one-type-per-behavior] brandon-layout-edit-2gc.1's structural-edit
 // verb — a THIRD write semantic beside set-config's plain overwrite and
-// step-config's numeric read-modify-write: read the current op-token LIST at
-// `key` (a "presets.<name>.rootOps" config-overrides target), append the
-// validated `op` token, write the whole list back. Args: `[sessionId, key,
-// op]` — `op` is one opaque token from src/config/layout-ops.ts's codec, the
-// SAME shape a `persist … to` literal's value would be, gated the SAME way
-// (validateConfigWrite) — only the write's SHAPE (append vs. overwrite)
-// differs, which is exactly why this is its own verb rather than another
-// VERB_SET_CONFIG value.
+// step-config's numeric read-modify-write: apply one tree op to the layout
+// the config file authors at `key` (a "presets.<name>.root" target). Args:
+// `[sessionId, key, op]` — `op` is one opaque token from
+// src/config/layout-ops.ts's codec, the SAME shape a `persist … to` literal's
+// value would be, gated the SAME way (validateConfigWrite) — only the write's
+// SHAPE (a tree edit vs. a value) differs, which is exactly why this is its
+// own verb rather than another VERB_SET_CONFIG value.
 export const VERB_APPLY_LAYOUT_OP = "apply-layout-op";
-// [LAW:one-source-of-truth] brandon-layout-edit-2gc.2's global history step
-// over the config-overrides layer — the fine-grained sibling of
-// VERB_RESET_CONFIG's coarse "clear one key". Args: `[sessionId]` — there is
-// no key: the history is ONE stack over every persist/reset write ever made
-// to the overrides file (config-overrides-store.ts), not a per-key log. An
-// empty stack is a loud BAD_REQUEST surfaced through click.error like any
-// other verb failure, never a silent no-op.
+// [LAW:one-source-of-truth] brandon-layout-edit-2gc.2's history step over
+// the session's config file — the fine-grained sibling of VERB_RESET_CONFIG's
+// coarse "delete one key". Args: `[sessionId]` — there is no key: a file's
+// history is one stack of whole-file snapshots over every persist/reset/
+// layout write made to it (config-file-store.ts), not a per-key log. An empty
+// stack, or a file edited by hand since the snapshot, is a loud BAD_REQUEST
+// surfaced through click.error like any other verb failure, never a silent
+// no-op.
 export const VERB_UNDO = "undo";
 export const VERB_REDO = "redo";
 

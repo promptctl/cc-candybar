@@ -232,8 +232,8 @@ function resetArm(
 // [LAW:one-type-per-behavior] `undo`/`redo` are copy/open/reset's shape one
 // step further reduced: a single required key whose only legal VALUE is the
 // literal `true` (mirrors intMarkerSpec — a marker, not data), because there
-// is no key to name: the history they step is one global stack over the
-// whole overrides layer, not a per-target write. `function`, not a const
+// is no key to name: the history they step is one stack per config file,
+// not a per-target write. `function`, not a const
 // arrow, so ACTION_ARMS above (built before this declaration in source
 // order) can reference it directly via hoisting.
 function markerArm(key: "undo" | "redo"): ArmParse<ActionDecl> {
@@ -250,7 +250,7 @@ function markerArm(key: "undo" | "redo"): ArmParse<ActionDecl> {
       issue(
         ctx,
         `${path}.${key}`,
-        `${key} must be the literal true (it takes no key — it steps the ONE global history over the whole overrides layer), got ${describeValue(raw[key])}`,
+        `${key} must be the literal true (it takes no key — it steps the history of the session's config file), got ${describeValue(raw[key])}`,
       );
       return null;
     }
@@ -388,7 +388,7 @@ function validateDiscriminatorKeys(
 
 // [LAW:one-source-of-truth] The wire verb name a discriminator's writes
 // travel over — `set-state` for `set` (SessionState), `set-config` for
-// `persist` (the config-overrides layer), and BOTH for a dual, whose one
+// `persist` (the config file), and BOTH for a dual, whose one
 // value crosses whichever wire the selector names. Threaded into the shared
 // field specs below so their "cannot be delivered on the X wire" messages
 // name the wire the value actually crosses, and the field/value noun ("set

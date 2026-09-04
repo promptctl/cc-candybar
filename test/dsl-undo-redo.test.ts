@@ -9,12 +9,14 @@
 //      it).
 //   3. deriveConfigActionValidators derives NOTHING for undo/redo — there is
 //      no value a template could smuggle, so there is no gate to derive.
-//   4. A click on undo/redo fires the REAL daemon handler, which steps ONE
-//      GLOBAL history over config-overrides.json — covering a `persist`
-//      literal overwrite, a `reset` clear, AND a `presets.<name>.rootOps`
-//      structural edit through the SAME mechanism (never a layout-specific
-//      code path), because the storage layer records every write as one
-//      (key, from, to) transition regardless of scope.
+//   4. A click on undo/redo fires the REAL daemon handler, which steps the
+//      history of edits to the SESSION's config file (candybar-config-dqe)
+//      — one stack per file, so a daemon serving several projects never
+//      undoes one project's write from another's bar — covering a
+//      `persist` literal overwrite, a `reset` delete, AND a
+//      `presets.<name>.root` structural edit through the SAME mechanism
+//      (never a layout-specific code path), because the store records every
+//      write as one whole-file {before, after} snapshot regardless of scope.
 //   5. Undo at the bottom / redo at the top of the stack are loud
 //      BAD_REQUESTs (surfaced as a transient click.error), never silent
 //      no-ops.
@@ -22,11 +24,13 @@
 //      classic branch).
 //   7. History survives a restart (a fresh read of the same on-disk files).
 //   8. The ring is bounded (MAX_HISTORY_DEPTH = 50).
+//   9. Undo refuses loudly when the file was edited by hand since the entry
+//      it would revert — it never overwrites work the history never saw.
 
 import { ownLinks, ownValidators } from "./helpers/ambient-chrome";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { undoEdit, writeValue } from "../src/daemon/config-file-store";
 import { getThemePalette } from "@promptctl/rich-js";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
@@ -44,7 +48,7 @@ import {
   deriveConfigActionValidators,
   registerConfigValidator,
 } from "../src/daemon/verbs/config-validators";
-import { encodeLayoutOp } from "../src/config/layout-ops";
+import { durableConfig, type DurableConfig } from "./helpers/durable-config";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 
@@ -177,11 +181,18 @@ describe("deriveConfigActionValidators over undo/redo actions", () => {
   });
 });
 
-// ─── end-to-end: click → real daemon handler → the overrides history ─────
+// ─── end-to-end: click → real daemon handler → the config-file history ───
 
+let durable: DurableConfig;
+
+// [LAW:one-source-of-truth] The runtime parses `src` for the render AND
+// writes the same text as the session's config file, so the tree a click
+// edits is the tree the bar rendered — exactly the daemon's own situation.
 function buildRuntime(src: string, sessionId = "s1") {
+  if (durable.text() === null) durable.write(src);
   const config = parseAndValidate("<test>", src, ALLOWED);
   const sessionState = new SessionState();
+  durable.seedOrigin(sessionState, sessionId);
   const store = new VariableStore();
   const registry = new SourceRegistry(store, "", undefined, sessionState);
   const compiled = registerDslConfig(config, registry);
@@ -214,39 +225,16 @@ function buildRuntime(src: string, sessionId = "s1") {
   return { config, store, render, click, dispose, ctx };
 }
 
-describe("undo/redo click → the overrides history", () => {
-  let savedXdgState: string | undefined;
-  let xdgStateDir: string;
-
+describe("undo/redo click → the config-file history", () => {
   beforeEach(() => {
-    savedXdgState = process.env.XDG_STATE_HOME;
-    xdgStateDir = mkdtempSync(join(tmpdir(), "cc-candybar-undoredo-state-"));
-    process.env.XDG_STATE_HOME = xdgStateDir;
+    durable = durableConfig("cc-candybar-undoredo-");
   });
   afterEach(() => {
-    if (savedXdgState === undefined) delete process.env.XDG_STATE_HOME;
-    else process.env.XDG_STATE_HOME = savedXdgState;
-    rmSync(xdgStateDir, { recursive: true, force: true });
+    durable.dispose();
   });
 
-  function overridesPath(): string {
-    return join(xdgStateDir, "cc-candybar", "config-overrides.json");
-  }
-  function historyPath(): string {
-    return join(xdgStateDir, "cc-candybar", "config-overrides-history.json");
-  }
-  function rawOverrides(): Record<string, unknown> {
-    return JSON.parse(readFileSync(overridesPath(), "utf8")) as Record<
-      string,
-      unknown
-    >;
-  }
-  function rawHistory(): { past: unknown[]; future: unknown[] } {
-    return JSON.parse(readFileSync(historyPath(), "utf8")) as {
-      past: unknown[];
-      future: unknown[];
-    };
-  }
+  const globals = (): Record<string, unknown> =>
+    (durable.parsed().globals ?? {}) as Record<string, unknown>;
 
   const SRC = `{
     globals: {},
@@ -254,7 +242,7 @@ describe("undo/redo click → the overrides history", () => {
     actions: {
       pinDracula: { persist: 'palette', to: 'dracula' },
       forgetPalette: { reset: 'palette' },
-      removeDirectory: { persist: 'presets.default.rootOps', removeSegment: 'directory' },
+      removeDirectory: { persist: 'presets.default.root', removeSegment: 'directory' },
       back: { undo: true },
       fwd: { redo: true },
     },
@@ -285,27 +273,29 @@ describe("undo/redo click → the overrides history", () => {
     return urls[idx]!;
   }
 
-  test("a persist literal write records a history entry; undo restores absence", () => {
+  test("a persist literal write records a history entry; undo restores the prior text byte-for-byte", () => {
     const runtime = buildRuntime(SRC);
+    const original = durable.text()!;
     runtime.click(urlFor(runtime, "pinDracula"));
-    expect(rawOverrides().palette).toBe("dracula");
-    expect(rawHistory().past).toEqual([
-      { key: "palette", from: null, to: "dracula" },
+    expect(globals().palette).toBe("dracula");
+    const written = durable.text()!;
+    expect(durable.history().past).toEqual([
+      { before: original, after: written },
     ]);
 
     runtime.click(urlFor(runtime, "back"));
-    expect(rawOverrides().palette).toBeUndefined();
-    const afterUndo = rawHistory();
+    expect(durable.text()).toBe(original);
+    const afterUndo = durable.history();
     expect(afterUndo.past).toEqual([]);
     expect(afterUndo.future).toEqual([
-      { key: "palette", from: null, to: "dracula" },
+      { before: original, after: written },
     ]);
 
     runtime.click(urlFor(runtime, "fwd"));
-    expect(rawOverrides().palette).toBe("dracula");
-    const afterRedo = rawHistory();
+    expect(durable.text()).toBe(written);
+    const afterRedo = durable.history();
     expect(afterRedo.past).toEqual([
-      { key: "palette", from: null, to: "dracula" },
+      { before: original, after: written },
     ]);
     expect(afterRedo.future).toEqual([]);
     runtime.dispose();
@@ -315,42 +305,63 @@ describe("undo/redo click → the overrides history", () => {
     const runtime = buildRuntime(SRC);
     runtime.click(urlFor(runtime, "pinDracula")); // palette: dracula
     runtime.click(urlFor(runtime, "pinDracula")); // palette: dracula (again — still a real write)
-    expect(rawHistory().past).toHaveLength(2);
+    expect(durable.history().past).toHaveLength(2);
     runtime.click(urlFor(runtime, "back"));
     // one entry popped; palette is still "dracula" (the entry undone SET it
     // to dracula from an already-dracula value) — assert the stack shrank.
-    expect(rawHistory().past).toHaveLength(1);
-    expect(rawHistory().future).toHaveLength(1);
+    expect(globals().palette).toBe("dracula");
+    expect(durable.history().past).toHaveLength(1);
+    expect(durable.history().future).toHaveLength(1);
     runtime.dispose();
   });
 
-  test("reset (a clear) is undoable too — one history over every write shape", () => {
+  test("reset (a delete) is undoable too — one history over every write shape", () => {
     const runtime = buildRuntime(SRC);
+    const original = durable.text()!;
     runtime.click(urlFor(runtime, "pinDracula"));
+    const pinned = durable.text()!;
     runtime.click(urlFor(runtime, "forgetPalette"));
-    expect(rawOverrides().palette).toBeUndefined();
-    expect(rawHistory().past).toEqual([
-      { key: "palette", from: null, to: "dracula" },
-      { key: "palette", from: "dracula", to: null },
+    expect(globals().palette).toBeUndefined();
+    expect(durable.history().past).toEqual([
+      { before: original, after: pinned },
+      { before: pinned, after: durable.text() },
     ]);
 
     runtime.click(urlFor(runtime, "back")); // undo the reset
-    expect(rawOverrides().palette).toBe("dracula");
+    expect(durable.text()).toBe(pinned);
+    expect(globals().palette).toBe("dracula");
     runtime.dispose();
   });
 
-  test("a rootOps structural edit undoes through the SAME mechanism — no layout-specific code", () => {
+  test("a structural (root) edit undoes through the SAME mechanism — no layout-specific code", () => {
     const runtime = buildRuntime(SRC);
+    const original = durable.text()!;
     runtime.click(urlFor(runtime, "removeDirectory"));
-    expect(
-      JSON.parse(rawOverrides()["presets.default.rootOps"] as string),
-    ).toEqual([encodeLayoutOp({ op: "remove", target: "directory" })]);
+    expect(durable.parsed().root).toEqual({ v: [{ h: ["git"] }, "bar"] });
 
     runtime.click(urlFor(runtime, "back"));
-    // the whole-log key returns to absent — the entry's `from` was null
-    // (the key never existed before the first op), which is exactly the
-    // coarse "reset" behavior, arrived at via the fine-grained undo.
-    expect(rawOverrides()["presets.default.rootOps"]).toBeUndefined();
+    // the whole file returns to its prior bytes — the entry's `before` is
+    // the authored tree, comments and all, arrived at via the fine-grained
+    // undo rather than a layout-shaped restore.
+    expect(durable.text()).toBe(original);
+    runtime.dispose();
+  });
+
+  test("undo refuses loudly when the file was hand-edited since the entry", () => {
+    const runtime = buildRuntime(SRC);
+    runtime.click(urlFor(runtime, "pinDracula"));
+    const written = durable.text()!;
+    const handEdited = written.replace("'dracula'", "'nord'").replace('"dracula"', '"nord"');
+    expect(handEdited).not.toBe(written);
+    writeFileSync(durable.configPath, handEdited);
+
+    expect(() => runtime.click(urlFor(runtime, "back"))).toThrow(
+      /has changed since that edit/,
+    );
+    // Nothing was overwritten, and the entry is still there to undo once
+    // the file is back in the state it promised to revert from.
+    expect(durable.text()).toBe(handEdited);
+    expect(durable.history().past).toHaveLength(1);
     runtime.dispose();
   });
 
@@ -374,10 +385,10 @@ describe("undo/redo click → the overrides history", () => {
     const runtime = buildRuntime(SRC);
     runtime.click(urlFor(runtime, "pinDracula"));
     runtime.click(urlFor(runtime, "back"));
-    expect(rawHistory().future).toHaveLength(1);
+    expect(durable.history().future).toHaveLength(1);
 
     runtime.click(urlFor(runtime, "pinDracula")); // a fresh edit — abandons the redo
-    expect(rawHistory().future).toEqual([]);
+    expect(durable.history().future).toEqual([]);
     expect(() => runtime.click(urlFor(runtime, "fwd"))).toThrow(
       /nothing to redo/,
     );
@@ -397,8 +408,39 @@ describe("undo/redo click → the overrides history", () => {
       /nothing to undo/,
     ); // past is empty post-undo
     restarted.click(urlFor(restarted, "fwd")); // redo survived the "restart"
-    expect(rawOverrides().palette).toBe("dracula");
+    expect(globals().palette).toBe("dracula");
     restarted.dispose();
+  });
+
+  // [LAW:types-are-the-program] The stack a session steps is the file its
+  // render resolved: a snapshot lives under its file's key, so an undo from
+  // project A cannot reach — let alone revert — a write made to project B.
+  test("history is one stack per file — undo of A leaves B's file and B's stack untouched", () => {
+    const store = { historyPath: durable.historyPath, logger: () => {} };
+    const fileA = durable.configPath;
+    const fileB = join(durable.projectDir, "other-project.json5");
+    writeFileSync(fileB, "{ globals: { palette: 'nord' } }\n");
+    const originalA = durable.text()!;
+    const originalB = readFileSync(fileB, "utf8");
+
+    writeValue(store, fileA, "palette", "dracula");
+    writeValue(store, fileB, "palette", "dracula"); // the most recent edit overall
+    const editedB = readFileSync(fileB, "utf8");
+
+    expect(undoEdit(store, fileA)).toEqual({
+      before: originalA,
+      after: durable.history(fileA).future[0]!.after,
+    });
+    expect(durable.text()).toBe(originalA);
+    expect(readFileSync(fileB, "utf8")).toBe(editedB);
+    expect(durable.history(fileB).past).toHaveLength(1);
+    expect(durable.history(fileB).future).toEqual([]);
+
+    // A fresh edit to A truncates only A's redo path.
+    writeValue(store, fileA, "palette", "nord");
+    expect(durable.history(fileA).future).toEqual([]);
+    expect(undoEdit(store, fileB)).toEqual({ before: originalB, after: editedB });
+    expect(readFileSync(fileB, "utf8")).toBe(originalB);
   });
 
   test("the ring is bounded — the oldest entry drops once MAX_HISTORY_DEPTH is exceeded", () => {
@@ -406,7 +448,7 @@ describe("undo/redo click → the overrides history", () => {
     for (let i = 0; i < 51; i++) {
       runtime.click(urlFor(runtime, "pinDracula"));
     }
-    const history = rawHistory();
+    const history = durable.history();
     expect(history.past).toHaveLength(50);
     expect(history.future).toEqual([]);
     runtime.dispose();

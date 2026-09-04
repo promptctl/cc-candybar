@@ -54,24 +54,12 @@ export function dslConfigCandidatePaths(
   cwd?: string,
   configFile?: string,
 ): readonly string[] {
-  // CLI --config wins over everything — highest precedence. Pre-expanded at
-  // the trust boundary; trust the type here.
-  if (configFile) {
-    return [configFile];
-  }
-
-  const envPath = process.env.CC_CANDYBAR_CONFIG;
-  if (envPath) {
-    // [LAW:single-enforcer] env-var is a separate trust boundary; expand here
-    // where the env is read, with the shared `expandHome` helper. [LAW:
-    // dataflow-not-control-flow] When the env var sets the path, it's the
-    // *only* candidate — the precedence chain collapses to one entry.
-    return [expandHome(envPath)];
-  }
+  // [LAW:dataflow-not-control-flow] An explicit override is the ONLY
+  // candidate — the precedence chain collapses to one entry.
+  const explicit = explicitConfigPath(configFile);
+  if (explicit !== null) return [explicit];
 
   const effectiveCwd = cwd ?? process.cwd();
-  const xdgConfigHome =
-    process.env.XDG_CONFIG_HOME ?? path.join(os.homedir(), ".config");
 
   return [
     ...(projectDir
@@ -82,10 +70,54 @@ export function dslConfigCandidatePaths(
     ...CONFIG_EXTENSIONS.map((ext) =>
       path.join(effectiveCwd, `.cc-candybar.${ext}`),
     ),
-    ...CONFIG_EXTENSIONS.map((ext) =>
-      path.join(xdgConfigHome, "cc-candybar", `config.${ext}`),
-    ),
+    ...CONFIG_EXTENSIONS.map((ext) => `${xdgConfigBase()}.${ext}`),
   ];
+}
+
+// [LAW:single-enforcer] The one explicit override of the precedence chain:
+// the CLI `--config` value (pre-expanded at the trust boundary in server.ts),
+// else `CC_CANDYBAR_CONFIG` (a separate trust boundary — expanded here, where
+// the env is read, with the shared `expandHome`). `null` means the standard
+// chain applies.
+function explicitConfigPath(configFile?: string): string | null {
+  if (configFile) return configFile;
+  const envPath = process.env.CC_CANDYBAR_CONFIG;
+  return envPath ? expandHome(envPath) : null;
+}
+
+// [LAW:one-source-of-truth] The extension-less base of the XDG location, the
+// tail of the precedence chain: `$XDG_CONFIG_HOME/cc-candybar/config`
+// (defaulting to `~/.config/cc-candybar/config`). The candidate enumerator
+// appends each accepted extension; `durableConfigPath` appends the
+// documented one.
+function xdgConfigBase(): string {
+  const xdgConfigHome =
+    process.env.XDG_CONFIG_HOME ?? path.join(os.homedir(), ".config");
+  return path.join(xdgConfigHome, "cc-candybar", "config");
+}
+
+/**
+ * The file a DURABLE write lands in (candybar-config-dqe): the config file
+ * the session's render resolved, or — when no candidate exists yet — the
+ * file a first-ever write creates: the explicit override if one is set,
+ * else the XDG `config.json5` at the tail of the same precedence chain.
+ *
+ * [LAW:one-source-of-truth] Built from the same enumerator and the same
+ * override/XDG units the resolver uses, so the file a click writes is the
+ * file the next reload reads — by construction, not by two lists agreeing.
+ * The `.json5` spelling is CONFIG_EXTENSIONS' head: the documented format,
+ * the one that wins a same-location tie.
+ */
+export function durableConfigPath(
+  projectDir?: string,
+  cwd?: string,
+  configFile?: string,
+): string {
+  return (
+    resolveDslConfigPath(projectDir, cwd, configFile) ??
+    explicitConfigPath(configFile) ??
+    `${xdgConfigBase()}.${CONFIG_EXTENSIONS[0]}`
+  );
 }
 
 /**

@@ -1,12 +1,13 @@
 // [LAW:verifiable-goals] Acceptance for candybar-config-engine-71o.6 —
 // per-segment palette override as a menu-able domain — mirroring
 // dsl-persist-actions.test.ts's model for the Globals-scoped `persist`
-// surface it generalizes:
+// surface it generalizes, over the config-FILE store (candybar-config-dqe):
 //
 //   1. parsePersistTarget classifies a bare persist/reset key STRING as
 //      either a Globals field or a `segments.<name>.palette` target — the
-//      one shared authority cross-ref.ts, config-overrides-store.ts, and
-//      the daemon write path all classify a key through.
+//      one shared authority cross-ref.ts, config-file-store.ts, and the
+//      daemon write path all classify a key through. A target IS a path
+//      into the config file (persistPath).
 //   2. loader/cross-ref.ts rejects a segment-palette key naming an
 //      undeclared segment, and rejects a bounded stepper (min/max/by) over
 //      one — both at LOAD time, not click time.
@@ -14,17 +15,24 @@
 //      segment-palette persist action as it does for a Globals one — zero
 //      new derivation code, just a differently-shaped key string.
 //   4. A click on a compiled persist action targeting `segments.<name>.
-//      palette` writes durably to the SAME overrides file Globals fields
-//      use, under the literal dotted key.
-//   5. RenderCache overlays a segment-palette override onto the segment's
-//      OWN `palette` field (never wholesale-replacing the segment, never
-//      touching the hand-authored file, never touching sibling segments),
-//      and it survives a real restart.
+//      palette` writes `palette` INTO THE CONFIG FILE'S declaration of that
+//      segment — the same file a Globals `persist` edits, at the path the
+//      key spells. A segment the file already declares changes in exactly
+//      one span: every other field, and every byte outside it (comments,
+//      quote style), survives verbatim. A segment the file does NOT declare
+//      but the bundled default does is materialized wholesale first
+//      (`segments` merge by name), then pinned. `reset` deletes `palette`
+//      from the file's declaration; a `palette` the file never authored
+//      changes nothing and records no history.
+//   5. RenderCache reads the pin back from the file through the SAME watcher
+//      a hand edit uses, patching the segment's OWN `palette` field (never
+//      wholesale-replacing it, never touching sibling segments); it survives
+//      a restart because the file IS the store; and a segment neither the
+//      file nor the bundled default declares cannot be pinned at all — the
+//      store refuses loudly rather than authoring a hollow declaration.
 
 import { ownLinks, ownValidators } from "./helpers/ambient-chrome";
-import { mkdtempSync, rmSync, writeFileSync, readFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { existsSync } from "node:fs";
 import { getThemePalette } from "@promptctl/rich-js";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
@@ -41,19 +49,21 @@ import {
   registerConfigValidator,
   validateConfigWrite,
 } from "../src/daemon/verbs/config-validators";
+import { writeValue, type EditStore } from "../src/daemon/config-file-store";
 import {
-  clearConfigOverride,
-  coercePersistValue,
-  loadConfigOverrides,
-  loadSegmentPaletteOverrides,
-  writeConfigOverride,
-} from "../src/daemon/config-overrides-store";
-import { parsePersistTarget } from "../src/config/loader/persist-target";
-import { applySegmentPaletteOverrides } from "../src/config/loader/merge";
+  parsePersistTarget,
+  persistPath,
+} from "../src/config/loader/persist-target";
+import {
+  DEFAULT_DSL_CONFIG,
+  RAW_DEFAULT_DSL_CONFIG,
+} from "../src/config/default-dsl-config";
 import type { DslConfig } from "../src/config/dsl-types";
 import { RenderCache } from "../src/daemon/cache/render";
 import { GitDataProvider } from "../src/daemon/cache/git";
 import { WatcherRegistry } from "../src/daemon/cache/watchers";
+import { ReloadSignal } from "./helpers/reload-signal";
+import { durableConfig, type DurableConfig } from "./helpers/durable-config";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 
@@ -79,12 +89,11 @@ function extractUrls(rendered: string): string[] {
   return ownLinks(urls);
 }
 
-function tmpFile(): { path: string; cleanup: () => void } {
-  const dir = mkdtempSync(join(tmpdir(), "cc-candybar-seg-palette-"));
-  return {
-    path: join(dir, "config-overrides.json"),
-    cleanup: () => rmSync(dir, { recursive: true, force: true }),
-  };
+type SegmentDecls = Record<string, Record<string, unknown>>;
+
+// The file's `segments` block, as JSON5 parses it — what a reload will see.
+function fileSegments(durable: DurableConfig): SegmentDecls {
+  return durable.parsed().segments as SegmentDecls;
 }
 
 // ─── parsePersistTarget: the shared key-classification authority ────────────
@@ -102,6 +111,12 @@ describe("parsePersistTarget", () => {
       scope: "segment-palette",
       segment: "directory",
     });
+  });
+
+  test("a segment-palette target IS the config-file path the key spells", () => {
+    expect(
+      persistPath({ scope: "segment-palette", segment: "directory" }),
+    ).toEqual(["segments", "directory", "palette"]);
   });
 
   test("rejects an unrelated string", () => {
@@ -242,151 +257,21 @@ describe("config-validators: segment-palette persist keys", () => {
   });
 });
 
-// ─── config-overrides-store: segment-palette keys share the flat file ───────
+// ─── end-to-end: click → the config file, through the real daemon handlers ──
 
-describe("config-overrides-store: segment-palette keys", () => {
-  test("write then load round-trips through the segment-scoped view only", () => {
-    const { path, cleanup } = tmpFile();
-    writeConfigOverride(path, "segments.sidebar.palette", "nord");
-    expect(loadSegmentPaletteOverrides(path)).toEqual({ sidebar: "nord" });
-    // Invisible to the Globals-scoped view — the two views partition the
-    // same flat file by key shape, never double-count an entry.
-    expect(loadConfigOverrides(path)).toEqual({});
-    cleanup();
-  });
+let durable: DurableConfig;
 
-  test("a globals write and a segment-palette write coexist in one file", () => {
-    const { path, cleanup } = tmpFile();
-    writeConfigOverride(path, "palette", "dracula");
-    writeConfigOverride(path, "segments.sidebar.palette", "nord");
-    expect(loadConfigOverrides(path)).toEqual({ palette: "dracula" });
-    expect(loadSegmentPaletteOverrides(path)).toEqual({ sidebar: "nord" });
-    cleanup();
-  });
-
-  test("clear removes exactly one segment-palette key, leaving a globals key intact", () => {
-    const { path, cleanup } = tmpFile();
-    writeConfigOverride(path, "palette", "dracula");
-    writeConfigOverride(path, "segments.sidebar.palette", "nord");
-    writeConfigOverride(path, "segments.other.palette", "gruvbox");
-    clearConfigOverride(path, "segments.sidebar.palette");
-    expect(loadSegmentPaletteOverrides(path)).toEqual({ other: "gruvbox" });
-    expect(loadConfigOverrides(path)).toEqual({ palette: "dracula" });
-    cleanup();
-  });
-
-  test("coercePersistValue passes a segment-palette value through as a bare string", () => {
-    expect(coercePersistValue("segments.sidebar.palette", "nord")).toBe("nord");
-  });
-
-  // [LAW:no-defensive-null-guards] A segment literally named "__proto__" is
-  // an unlikely but legal config author choice — nothing rejects it as a
-  // segment name today. loadSegmentPaletteOverrides must not crash (a
-  // plain-object accumulator's `out["__proto__"] = value` would hit
-  // Object.prototype's __proto__ setter, which throws on a non-object value
-  // in strict-mode ESM) and must round-trip the entry like any other name.
-  test("a segment named __proto__ round-trips without crashing", () => {
-    const { path, cleanup } = tmpFile();
-    writeConfigOverride(path, "segments.__proto__.palette", "nord");
-    expect(() => loadSegmentPaletteOverrides(path)).not.toThrow();
-    const result = loadSegmentPaletteOverrides(path);
-    // `{ __proto__: "nord" }` as an object LITERAL is the special
-    // prototype-setting form (silently dropped, since "nord" isn't an
-    // object) — Object.fromEntries creates a genuine OWN data property
-    // instead, the correct comparison target for what a real round-trip
-    // must produce.
-    expect(result).toEqual(Object.fromEntries([["__proto__", "nord"]]));
-    expect(Object.prototype.hasOwnProperty.call(result, "__proto__")).toBe(
-      true,
-    );
-    // The two views partition the SAME file by key shape (see the
-    // coexistence test above) — confirm that boundary holds at the
-    // __proto__ edge too, not just for ordinary keys: a bug in
-    // isValidOverrides/parsePersistTarget that let this key leak into the
-    // Globals-scoped projection would go undetected otherwise.
-    expect(loadConfigOverrides(path)).toEqual({});
-    cleanup();
-  });
-});
-
-// ─── applySegmentPaletteOverrides: the merge overlay ─────────────────────────
-
-describe("applySegmentPaletteOverrides", () => {
-  const baseConfig = (): DslConfig => ({
-    globals: { palette: "tokyo-night" },
-    variables: {},
-    segments: {
-      sidebar: {
-        template: "sidebar-text",
-        bg: "surface",
-        fg: "foreground",
-        when: "{{ true }}",
-      },
-      other: { template: "other-text", bg: "panel", fg: "foreground" },
-    },
-    root: { kind: "container", direction: "vertical", children: [] },
-    actions: {},
-    looks: {},
-    presets: {},
-    helpers: {},
-    editGlobals: {},
-  });
-
-  test("patches only the palette field, preserving every other field", () => {
-    const out = applySegmentPaletteOverrides(baseConfig(), {
-      sidebar: "nord",
-    });
-    expect(out.segments.sidebar).toEqual({
-      template: "sidebar-text",
-      bg: "surface",
-      fg: "foreground",
-      when: "{{ true }}",
-      palette: "nord",
-    });
-  });
-
-  test("leaves every other segment untouched", () => {
-    const before = baseConfig();
-    const out = applySegmentPaletteOverrides(before, { sidebar: "nord" });
-    expect(out.segments.other).toBe(before.segments.other);
-  });
-
-  test("an override naming a segment the config no longer declares is a no-op", () => {
-    const before = baseConfig();
-    const out = applySegmentPaletteOverrides(before, { ghost: "nord" });
-    expect(out.segments).toEqual(before.segments);
-  });
-
-  test("an empty overrides map returns the SAME config object (no needless copy)", () => {
-    const before = baseConfig();
-    expect(applySegmentPaletteOverrides(before, {})).toBe(before);
-  });
-
-  // [LAW:no-defensive-null-guards] The "stale override, segment since
-  // removed" no-op path (the test above) is exactly where a segment named
-  // `__proto__` is dangerous: `segments["__proto__"]` on a plain object with
-  // no OWN "__proto__" property reads the inherited accessor (not
-  // `undefined`), so a naive no-op guard wouldn't fire, and the following
-  // write would reach the setter. Must stay a genuine no-op, and the actual
-  // prototype chain must come out unharmed either way.
-  test("a stale override naming a since-removed segment called __proto__ is a no-op, not a prototype write", () => {
-    const before = baseConfig();
-    const overrides = Object.fromEntries([["__proto__", "nord"]]) as Record<
-      string,
-      string
-    >;
-    expect(() => applySegmentPaletteOverrides(before, overrides)).not.toThrow();
-    const out = applySegmentPaletteOverrides(before, overrides);
-    expect(out.segments).toEqual(before.segments);
-    expect(Object.getPrototypeOf({})).toBe(Object.prototype);
-  });
-});
-
-// ─── end-to-end: click → durable write, through the real daemon handlers ────
-
-function buildPersistRuntime(src: string, sessionId = "s1") {
-  const config = parseAndValidate("<test>", src, ALLOWED);
+// [LAW:one-source-of-truth] The runtime parses `src` for the render AND
+// writes the same text as the session's config file, so the tree a click
+// edits is the tree the bar rendered — exactly the daemon's own situation.
+// `dflt` is what the file merges over: the empty default by default, the
+// bundled DEFAULT_DSL_CONFIG when a test's subject is a segment the FILE does
+// not author but the bar still renders (the production cascade).
+function buildRuntime(src: string, sessionId = "s1", dflt?: DslConfig) {
+  if (durable.text() === null) durable.write(src);
+  const config = parseAndValidate("<test>", src, ALLOWED, dflt);
   const sessionState = new SessionState();
+  durable.seedOrigin(sessionState, sessionId);
   const store = new VariableStore();
   const registry = new SourceRegistry(store, "", undefined, sessionState);
   const compiled = registerDslConfig(config, registry);
@@ -419,21 +304,20 @@ function buildPersistRuntime(src: string, sessionId = "s1") {
   return { config, store, render, click, dispose };
 }
 
-describe("segment-palette persist action click → durable overrides write", () => {
-  let savedXdgState: string | undefined;
-  let xdgStateDir: string;
-
+describe("segment-palette persist action click → the config file", () => {
   beforeEach(() => {
-    savedXdgState = process.env.XDG_STATE_HOME;
-    xdgStateDir = mkdtempSync(join(tmpdir(), "cc-candybar-seg-persist-state-"));
-    process.env.XDG_STATE_HOME = xdgStateDir;
+    durable = durableConfig("cc-candybar-seg-persist-");
   });
   afterEach(() => {
-    if (savedXdgState === undefined) delete process.env.XDG_STATE_HOME;
-    else process.env.XDG_STATE_HOME = savedXdgState;
-    rmSync(xdgStateDir, { recursive: true, force: true });
+    durable.dispose();
   });
 
+  // The sidebar's declaration carries a `when` and sits under a comment, so
+  // the assertions can tell "one field spliced in" from "decl rewritten".
+  const SIDEBAR_DECL =
+    "sidebar: { template: 'sidebar-text', bg: 'surface', fg: 'foreground', when: '{{ true }}' }";
+  const SIDEBAR_COMMENT =
+    "// the sidebar's own declaration — a pin lands INSIDE it";
   const SRC = `{
     globals: {},
     variables: {
@@ -441,53 +325,161 @@ describe("segment-palette persist action click → durable overrides write", () 
     },
     actions: {
       applySidebarPalette: { persist: 'segments.sidebar.palette', from: 'themes' },
-      undoSidebarPalette: { reset: 'segments.sidebar.palette' },
+      forgetSidebarPalette: { reset: 'segments.sidebar.palette' },
     },
     segments: {
-      sidebar: { template: 'sidebar-text', bg: 'surface', fg: 'foreground' },
-      bar: { template: '{{ action "applySidebarPalette" "nord" }} {{ action "undoSidebarPalette" "↺" }}', bg: 'surface', fg: 'foreground' },
+      ${SIDEBAR_COMMENT}
+      ${SIDEBAR_DECL},
+      bar: { template: '{{ action "applySidebarPalette" "nord" }} {{ action "forgetSidebarPalette" "↺" }}', bg: 'surface', fg: 'foreground' },
     },
     root: { h: ['sidebar', 'bar'] },
   }`;
 
-  test("clicking writes segments.sidebar.palette to the overrides file, not the whole-bar palette", () => {
-    const { render, click, dispose } = buildPersistRuntime(SRC);
-    const out = render();
-    const urls = extractUrls(out);
-    const applyUrl = urls[0]!;
+  test("clicking writes palette INTO the file's sidebar declaration, not the whole-bar palette", () => {
+    const { render, click, dispose } = buildRuntime(SRC);
+    const original = durable.text()!;
+    const barBefore = fileSegments(durable).bar;
+    const applyUrl = extractUrls(render())[0]!;
     click(applyUrl);
-    const overridesPath = join(
-      xdgStateDir,
-      "cc-candybar",
-      "config-overrides.json",
-    );
-    expect(loadSegmentPaletteOverrides(overridesPath)).toEqual({
-      sidebar: "nord",
+
+    expect(fileSegments(durable).sidebar).toEqual({
+      template: "sidebar-text",
+      bg: "surface",
+      fg: "foreground",
+      when: "{{ true }}",
+      palette: "nord",
     });
-    expect(loadConfigOverrides(overridesPath)).toEqual({});
+    // Not a whole-bar pin: globals is still empty.
+    expect(durable.parsed().globals).toEqual({});
+    // The sibling segment is untouched.
+    expect(fileSegments(durable).bar).toEqual(barBefore);
+    // Exactly one span changed: the authored decl's text (its single quotes,
+    // its `when`) and the comment above it are still there verbatim — the
+    // pin was appended inside the decl, not rewritten around it.
+    const written = durable.text()!;
+    expect(written).toContain(SIDEBAR_COMMENT);
+    expect(written).toContain(SIDEBAR_DECL.slice(0, -2)); // up to the closing ` }`
+    expect(durable.history().past).toEqual([
+      { before: original, after: written },
+    ]);
     dispose();
   });
 
-  test("clicking reset clears the previously-persisted segment override", () => {
-    const overridesPath = join(
-      xdgStateDir,
-      "cc-candybar",
-      "config-overrides.json",
-    );
-    writeConfigOverride(overridesPath, "segments.sidebar.palette", "nord");
-    const { render, click, dispose } = buildPersistRuntime(SRC);
+  test("clicking reset deletes palette from the file's sidebar declaration, leaving its other fields", () => {
+    const { render, click, dispose } = buildRuntime(SRC);
+    const [applyUrl, resetUrl] = extractUrls(render());
+    click(applyUrl!);
+    expect(fileSegments(durable).sidebar!.palette).toBe("nord");
+
+    click(resetUrl!);
+    expect(fileSegments(durable).sidebar).toEqual({
+      template: "sidebar-text",
+      bg: "surface",
+      fg: "foreground",
+      when: "{{ true }}",
+    });
+    expect(durable.text()).toContain(SIDEBAR_COMMENT);
+    // The delete is its own history entry — one history over every shape.
+    expect(durable.history().past).toHaveLength(2);
+    dispose();
+  });
+
+  test("reset over a palette the file never authored changes nothing and records nothing", () => {
+    const { render, click, dispose } = buildRuntime(SRC);
+    const original = durable.text()!;
     const resetUrl = extractUrls(render())[1]!;
     click(resetUrl);
-    expect(loadSegmentPaletteOverrides(overridesPath)).toEqual({});
+    expect(durable.text()).toBe(original);
+    expect(existsSync(durable.historyPath)).toBe(false);
+    dispose();
+  });
+
+  // [LAW:one-source-of-truth] `segments` merge BY NAME, WHOLESALE, so a
+  // one-field `directory: { palette }` in the file would shadow the bundled
+  // decl and lose its template. The first pin on a bundled segment therefore
+  // copies the whole bundled declaration into the file, then sets palette.
+  test("pinning a segment the file does not declare materializes the bundled decl first, then sets palette", () => {
+    const SRC_BUNDLED = `{
+      globals: {},
+      variables: {
+        'session.id': { kind: 'input', path: 'session_id', default: '' },
+      },
+      actions: {
+        applyDirectoryPalette: { persist: 'segments.directory.palette', from: 'themes' },
+        forgetDirectoryPalette: { reset: 'segments.directory.palette' },
+      },
+      segments: {
+        bar: { template: '{{ action "applyDirectoryPalette" "nord" }} {{ action "forgetDirectoryPalette" "↺" }}', bg: 'surface', fg: 'foreground' },
+      },
+      root: { h: ['directory', 'bar'] },
+    }`;
+    const bundled = RAW_DEFAULT_DSL_CONFIG.segments.directory;
+    const { render, click, dispose } = buildRuntime(
+      SRC_BUNDLED,
+      "s1",
+      DEFAULT_DSL_CONFIG,
+    );
+    expect(fileSegments(durable).directory).toBeUndefined();
+
+    const [applyUrl, resetUrl] = extractUrls(render());
+    click(applyUrl!);
+    expect(fileSegments(durable).directory).toEqual({
+      ...bundled,
+      palette: "nord",
+    });
+    expect(fileSegments(durable).directory!.template).toBe(bundled.template);
+
+    // Reset deletes ONLY palette: the materialized decl stays authored,
+    // exactly as if the user had written it by hand.
+    click(resetUrl!);
+    expect(fileSegments(durable).directory).toEqual(bundled);
     dispose();
   });
 });
 
-// ─── RenderCache integration: merge, byte-identity, restart, isolation ──────
+// ─── config-file-store: what a segment-palette pin may target ───────────────
+
+describe("config-file-store: segment-palette placement", () => {
+  beforeEach(() => {
+    durable = durableConfig("cc-candybar-seg-store-");
+  });
+  afterEach(() => {
+    durable.dispose();
+  });
+
+  const store = (): EditStore => ({
+    historyPath: durable.historyPath,
+    logger: () => {},
+  });
+
+  // [LAW:no-silent-failure] The gate admits keys from the config a session
+  // rendered; a key naming a segment that neither this file nor the bundled
+  // default declares cannot be materialized, and a hollow `ghost: { palette }`
+  // would be a declaration with no template. The store refuses loudly and
+  // touches nothing.
+  test("a segment neither the file nor the bundled default declares cannot be pinned", () => {
+    const text = `{
+      globals: {},
+      segments: { sidebar: { template: 'sidebar-text', bg: 'surface', fg: 'foreground' } },
+      root: 'sidebar',
+    }`;
+    durable.write(text);
+    expect(() =>
+      writeValue(store(), durable.configPath, "segments.ghost.palette", "nord"),
+    ).toThrow(
+      /cannot edit segments\.ghost\.palette: neither the config file nor the bundled default declares segments\.ghost/,
+    );
+    expect(durable.text()).toBe(text);
+    expect(existsSync(durable.historyPath)).toBe(false);
+  });
+});
+
+// ─── RenderCache integration: reload, restart, isolation ────────────────────
 
 function makeCache(): {
   cache: RenderCache;
   cleanups: Array<() => void>;
+  reloads: ReloadSignal;
 } {
   const cleanups: Array<() => void> = [];
   const watchers = new WatcherRegistry({
@@ -501,152 +493,145 @@ function makeCache(): {
   });
   cleanups.push(() => gitService.close());
   const sessionState = new SessionState();
-  const cache = new RenderCache({ gitService, sessionState, watchers });
-  return { cache, cleanups };
+  const reloads = new ReloadSignal();
+  const cache = new RenderCache(
+    { gitService, sessionState, watchers },
+    { observers: reloads.observers },
+  );
+  return { cache, cleanups, reloads };
 }
 
-describe("RenderCache: segment-palette overrides merge into the effective config", () => {
-  let savedXdgState: string | undefined;
-  let savedXdgConfig: string | undefined;
-  let savedCcConfig: string | undefined;
-  let xdgStateDir: string;
-  let xdgConfigDir: string;
-  let projectDir: string;
-
+describe("RenderCache: a segment-palette pin in the config file is the effective config", () => {
   beforeEach(() => {
-    savedXdgState = process.env.XDG_STATE_HOME;
-    savedXdgConfig = process.env.XDG_CONFIG_HOME;
-    savedCcConfig = process.env.CC_CANDYBAR_CONFIG;
-    xdgStateDir = mkdtempSync(join(tmpdir(), "cc-candybar-seg-rc-state-"));
-    xdgConfigDir = mkdtempSync(join(tmpdir(), "cc-candybar-seg-rc-xdgcfg-"));
-    projectDir = mkdtempSync(join(tmpdir(), "cc-candybar-seg-rc-project-"));
-    process.env.XDG_STATE_HOME = xdgStateDir;
-    process.env.XDG_CONFIG_HOME = xdgConfigDir;
-    delete process.env.CC_CANDYBAR_CONFIG;
+    durable = durableConfig("cc-candybar-seg-rc-");
   });
   afterEach(() => {
-    if (savedXdgState === undefined) delete process.env.XDG_STATE_HOME;
-    else process.env.XDG_STATE_HOME = savedXdgState;
-    if (savedXdgConfig === undefined) delete process.env.XDG_CONFIG_HOME;
-    else process.env.XDG_CONFIG_HOME = savedXdgConfig;
-    if (savedCcConfig === undefined) delete process.env.CC_CANDYBAR_CONFIG;
-    else process.env.CC_CANDYBAR_CONFIG = savedCcConfig;
-    rmSync(xdgStateDir, { recursive: true, force: true });
-    rmSync(xdgConfigDir, { recursive: true, force: true });
-    rmSync(projectDir, { recursive: true, force: true });
+    durable.dispose();
   });
 
-  test("an override changes segments.sidebar.palette without touching the user config file or sibling segments", async () => {
-    const userConfigPath = join(projectDir, ".cc-candybar.json5");
-    const userConfigBody = JSON.stringify({
-      globals: { palette: "textual-dark" },
-      segments: {
-        sidebar: { template: "sidebar-text", bg: "surface", fg: "foreground" },
-        other: { template: "other-text", bg: "panel", fg: "foreground" },
-      },
-      root: { h: ["sidebar", "other"] },
-    });
-    writeFileSync(userConfigPath, userConfigBody);
+  const store = (): EditStore => ({
+    historyPath: durable.historyPath,
+    logger: () => {},
+  });
 
-    const overridesPath = join(
-      xdgStateDir,
-      "cc-candybar",
-      "config-overrides.json",
-    );
-    writeConfigOverride(overridesPath, "segments.sidebar.palette", "nord");
+  const OTHER_DECL =
+    "other: { template: 'other-text', bg: 'panel', fg: 'foreground' }";
+  const TWO_SEGMENTS = `{
+    globals: { palette: 'textual-dark' },
+    segments: {
+      sidebar: { template: 'sidebar-text', bg: 'surface', fg: 'foreground' },
+      // untouched by a pin on its sibling
+      ${OTHER_DECL},
+    },
+    root: { h: ['sidebar', 'other'] },
+  }`;
 
-    const { cache, cleanups } = makeCache();
+  test("a pin written by the store reloads through the SAME watcher a hand edit does, patching one field of one segment", async () => {
+    durable.write(TWO_SEGMENTS);
+    const { cache, cleanups, reloads } = makeCache();
     try {
-      const entry = cache.getOrCreate(projectDir, projectDir, undefined);
+      const entry = cache.getOrCreate(
+        durable.projectDir,
+        durable.projectDir,
+        undefined,
+      );
+      expect(entry.lastError).toBeNull();
+      expect(entry.state!.config.segments.sidebar!.palette).toBeUndefined();
+
+      await reloads.after(entry, () =>
+        writeValue(
+          store(),
+          durable.configPath,
+          "segments.sidebar.palette",
+          "nord",
+        ),
+      );
+
       expect(entry.lastError).toBeNull();
       expect(entry.state!.config.segments.sidebar!.palette).toBe("nord");
-      // Every other field of the overridden segment survives — the overlay
-      // patches ONE field, it does not wholesale-replace the segment.
+      // Every other field of the pinned segment survives — the write
+      // splices ONE field, it does not wholesale-replace the segment.
       expect(entry.state!.config.segments.sidebar!.template).toBe(
         "sidebar-text",
       );
       expect(entry.state!.config.segments.sidebar!.bg).toBe("surface");
-      // The sibling segment is completely unaffected.
+      // The sibling segment is completely unaffected — in the effective
+      // config AND in the file's own text.
       expect(entry.state!.config.segments.other!.palette).toBeUndefined();
       expect(entry.state!.config.segments.other!.template).toBe("other-text");
-      // The hand-authored file is byte-identical — the daemon never wrote to it.
-      expect(readFileSync(userConfigPath, "utf8")).toBe(userConfigBody);
+      expect(durable.text()).toContain(OTHER_DECL);
+      expect(durable.text()).toContain("// untouched by a pin on its sibling");
     } finally {
       for (const fn of cleanups) fn();
     }
   });
 
-  test("a segment-palette override survives a real restart", async () => {
-    const userConfigPath = join(projectDir, ".cc-candybar.json5");
-    writeFileSync(
-      userConfigPath,
-      JSON.stringify({
-        globals: {},
-        segments: {
-          sidebar: {
-            template: "sidebar-text",
-            bg: "surface",
-            fg: "foreground",
-          },
-        },
-        root: "sidebar",
-      }),
+  test("a segment-palette pin survives a real restart — the file IS the store", () => {
+    durable.write(`{
+      globals: {},
+      segments: { sidebar: { template: 'sidebar-text', bg: 'surface', fg: 'foreground' } },
+      root: 'sidebar',
+    }`);
+    writeValue(
+      store(),
+      durable.configPath,
+      "segments.sidebar.palette",
+      "gruvbox",
     );
-
-    const overridesPath = join(
-      xdgStateDir,
-      "cc-candybar",
-      "config-overrides.json",
-    );
-    writeConfigOverride(overridesPath, "segments.sidebar.palette", "gruvbox");
 
     const { cache, cleanups } = makeCache();
     try {
-      const entry = cache.getOrCreate(projectDir, projectDir, undefined);
+      const entry = cache.getOrCreate(
+        durable.projectDir,
+        durable.projectDir,
+        undefined,
+      );
       expect(entry.state!.config.segments.sidebar!.palette).toBe("gruvbox");
     } finally {
       for (const fn of cleanups) fn();
     }
 
-    // Restart: a fresh cache/services pair, reading only the overrides file
-    // on disk — no in-memory state carries over.
+    // Restart: a fresh cache/services pair, reading only the config file on
+    // disk — no in-memory state carries over.
     const { cache: restarted, cleanups: restartedCleanups } = makeCache();
     try {
-      const entry = restarted.getOrCreate(projectDir, projectDir, undefined);
+      const entry = restarted.getOrCreate(
+        durable.projectDir,
+        durable.projectDir,
+        undefined,
+      );
       expect(entry.state!.config.segments.sidebar!.palette).toBe("gruvbox");
     } finally {
       for (const fn of restartedCleanups) fn();
     }
   });
 
-  test("a segment-palette override for a segment the config no longer declares is a harmless no-op", async () => {
-    const userConfigPath = join(projectDir, ".cc-candybar.json5");
-    const userConfigBody = JSON.stringify({
+  test("a pin on a bundled segment the file never declared renders that segment with the bundled template AND the pin", () => {
+    durable.write(`{
       globals: {},
-      segments: {
-        sidebar: {
-          template: "sidebar-text",
-          bg: "surface",
-          fg: "foreground",
-        },
-      },
-      root: "sidebar",
-    });
-    writeFileSync(userConfigPath, userConfigBody);
-
-    const overridesPath = join(
-      xdgStateDir,
-      "cc-candybar",
-      "config-overrides.json",
+      segments: { sidebar: { template: 'sidebar-text', bg: 'surface', fg: 'foreground' } },
+      root: { h: ['directory', 'sidebar'] },
+    }`);
+    writeValue(
+      store(),
+      durable.configPath,
+      "segments.directory.palette",
+      "nord",
     );
-    // Names a segment that does not exist in this config at all.
-    writeConfigOverride(overridesPath, "segments.ghost.palette", "nord");
 
     const { cache, cleanups } = makeCache();
     try {
-      const entry = cache.getOrCreate(projectDir, projectDir, undefined);
+      const entry = cache.getOrCreate(
+        durable.projectDir,
+        durable.projectDir,
+        undefined,
+      );
       expect(entry.lastError).toBeNull();
-      expect(entry.state!.config.segments.sidebar!.palette).toBeUndefined();
+      const directory = entry.state!.config.segments.directory!;
+      expect(directory.palette).toBe("nord");
+      expect(directory.template).toBe(
+        RAW_DEFAULT_DSL_CONFIG.segments.directory.template,
+      );
     } finally {
       for (const fn of cleanups) fn();
     }

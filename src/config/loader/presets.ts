@@ -95,7 +95,7 @@ export function validatePresets(
     // literal go-template-js forbids, breaking synthesis for the WHOLE
     // config, not just this one preset. Unlike a label, a preset name is
     // also an identifier used across other seams (the `presets` domain, the
-    // `presets.<name>.rootOps` wire key), so this belongs in its general
+    // `presets.<name>.root` wire key), so this belongs in its general
     // validity check, not a narrower escape-harder fix at the one splice site.
     if (name === "" || name.includes("/") || /[\n\r]/.test(name)) {
       ctx.issues.push({

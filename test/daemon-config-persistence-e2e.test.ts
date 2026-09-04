@@ -13,9 +13,9 @@
 // actions — the epic's own acceptance bullet is specifically "a user
 // running the bundled default... can change (at least) default theme...
 // and padding... each change survives daemon restart" — plus one minimal
-// hand-authored user config file, present only to prove the daemon never
-// writes to it (persistent writes land in the daemon-owned overrides layer,
-// never the config file on disk).
+// hand-authored user config file, which IS the durable store
+// (candybar-config-dqe): a persist click edits exactly one value span in it
+// and every other byte — comments, blank lines, key style — survives.
 //
 // [LAW:verifiable-goals] candybar-settings-ui-aok.3 folded the two controls
 // per setting into ONE whose destination the `persist?` checkbox chooses, so
@@ -50,7 +50,7 @@ jest.setTimeout(30_000);
 
 describe("candybar-config-engine-71o.5: real-daemon click → persist → restart", () => {
   test("bundled default: clicking theme + padding forever, over the real socket, survives a cold daemon restart and a byte-identical config file", async () => {
-    const { env, sockPath, stateDir, removeTmpDirs } = prepareIsolatedDaemonEnv(
+    const { env, sockPath, removeTmpDirs } = prepareIsolatedDaemonEnv(
       "cc-candybar-config-e2e",
     );
     const projectDir = mkdtempSync(
@@ -58,8 +58,19 @@ describe("candybar-config-engine-71o.5: real-daemon click → persist → restar
     );
     const userConfigPath = path.join(projectDir, ".cc-candybar.json5");
     // No hand-authored actions — proves the epic acceptance bullet against
-    // the BUNDLED DEFAULT, not a config built to exercise the mechanism.
-    const userConfigBody = JSON.stringify({ globals: {}, segments: {} });
+    // the BUNDLED DEFAULT, not a config built to exercise the mechanism. The
+    // two fields the clicks below write are authored explicitly, at the
+    // bundled default's own values, so each durable write is a SPAN
+    // REPLACEMENT whose expected bytes this test can spell exactly.
+    const userConfigBody = `// hand-authored — a persist click edits one value span here, nothing else
+{
+  globals: {
+    palette: "tokyo-night", // the theme every session opens in
+    padding: 1,
+  },
+  segments: {},
+}
+`;
     writeFileSync(userConfigPath, userConfigBody);
 
     let daemon: RunningDaemon | undefined;
@@ -137,7 +148,7 @@ describe("candybar-config-engine-71o.5: real-daemon click → persist → restar
       // Take the unchecked click, then read a CONCURRENT session over the same
       // socket: the picker changed this conversation and left the other one
       // alone. That contrast is what "only this session" means, and only a
-      // second live session can show it — the overrides file being empty
+      // second live session can show it — the config file being unchanged
       // proves nothing about what another session renders.
       await click(sockPath, sessionThemeUrl!);
       const OTHER_SID = "e2e-session-concurrent";
@@ -237,7 +248,7 @@ describe("candybar-config-engine-71o.5: real-daemon click → persist → restar
       // any restart. Read it on the CONCURRENT session, which never picked a
       // theme — the clicking session cannot show this, because its own session
       // pick outranks a durable default for its own render (bundled default <
-      // config file < persisted overrides < preset < session pick). Asserting
+      // config file < preset < session pick). Asserting
       // durability there would conflate the two layers and pass on the session
       // value alone.
       // Read it on that same concurrent session, whose menu is already open
@@ -265,30 +276,19 @@ describe("candybar-config-engine-71o.5: real-daemon click → persist → restar
       );
       expect(committing).not.toContain(sessionTheme);
 
-      // The hand-authored file is byte-identical — persist never touches it.
-      expect(readFileSync(userConfigPath, "utf8")).toBe(userConfigBody);
+      // [LAW:verifiable-goals] The ticket's acceptance: the hand-authored file
+      // is byte-identical OUTSIDE the two value spans the clicks replaced —
+      // the leading comment, the trailing comment on the palette line, the
+      // blank structure, the unquoted keys, the trailing commas all survive.
+      // [LAW:one-source-of-truth] A stepper starts from what the bar SHOWS:
+      // the file's own `padding: 1`, so the first ▶ writes 2.
+      const expectedBody = userConfigBody
+        .replace('palette: "tokyo-night"', `palette: "${targetTheme}"`)
+        .replace("padding: 1", "padding: 2");
+      expect(readFileSync(userConfigPath, "utf8")).toBe(expectedBody);
 
-      const overridesPath = path.join(
-        stateDir,
-        "config-overrides.json",
-      );
-      const overrides = JSON.parse(readFileSync(overridesPath, "utf8")) as {
-        palette?: string;
-        padding?: number;
-      };
-      expect(overrides.palette).toBe(targetTheme);
-      // [LAW:one-source-of-truth] A stepper starts from what the bar SHOWS.
-      // The bundled default never literally sets `globals.padding` — it leans
-      // on the field's floor (DEFAULT_PADDING = 1) — so the first ▶ from an
-      // empty overrides file is 1 + 1 = 2. It used to be min(0) + 1 = 1, which
-      // meant the first ◀ on a bar reading `padding 1` wrapped to 16;
-      // candybar-settings-ui-aok.3 gave both write gates one seed source
-      // (numericGlobalsSeeds) that applies the floor.
-      expect(overrides.padding).toBe(2);
-
-      // Kill this daemon and start a FRESH one against the SAME state dir
-      // (same overrides file) — a real cold restart, not an in-process
-      // cache rebuild.
+      // Kill this daemon and start a FRESH one against the SAME config file
+      // — a real cold restart, not an in-process cache rebuild.
       await killAndWait(daemon);
       daemon = await spawnDaemonWithEnv(env);
 
@@ -321,8 +321,9 @@ describe("candybar-config-engine-71o.5: real-daemon click → persist → restar
       );
       expect(freshOut).toContain(targetTheme);
 
-      // The hand-authored file is STILL byte-identical after the restart.
-      expect(readFileSync(userConfigPath, "utf8")).toBe(userConfigBody);
+      // The file is STILL exactly the two-span edit after the restart — a
+      // restart reads it, never rewrites it.
+      expect(readFileSync(userConfigPath, "utf8")).toBe(expectedBody);
     } finally {
       if (daemon) daemon.killTree();
       removeTmpDirs();

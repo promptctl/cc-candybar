@@ -6,8 +6,8 @@
 // "✎" }}` cross-ref-checks and compiles exactly like any other action — no
 // bespoke "this action always exists" carve-out anywhere downstream. The
 // per-segment +/- CHROME is a separate, LATER pass
-// (src/config/edit-chrome.ts) that runs on the fully merged, preset-resolved,
-// rootOps-replayed config (inside validateConfig, not here) because it needs
+// (src/config/edit-chrome.ts) that runs on the fully merged, preset-resolved
+// config (inside validateConfig, not here) because it needs
 // data — which segments are in which preset's CURRENT tree — that does not
 // exist yet at this per-file parse stage. Splitting the two halves across two
 // synthesis points is not incidental: the toggle is authorable/cross-ref-able

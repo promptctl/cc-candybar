@@ -13,11 +13,7 @@
 // specific consumer, a cycle. Callers who want "the bundled default" import
 // DEFAULT_DSL_CONFIG from default-dsl-config.ts and pass it explicitly.
 
-import {
-  type DslConfig,
-  type RawDslConfig,
-  type SegmentDecl,
-} from "../dsl-types.js";
+import { type DslConfig, type RawDslConfig } from "../dsl-types.js";
 
 /**
  * Merge a RawDslConfig on top of a default DslConfig. Pure function.
@@ -64,52 +60,4 @@ export function mergeWithDefault(
     // from the bundled default.
     helpers: { ...dflt.helpers, ...(raw.helpers ?? {}) },
   };
-}
-
-// [LAW:one-source-of-truth] The segment-scoped half of the config-overrides
-// layer's merge (candybar-config-engine-71o.6) — the SAME "changes the
-// DEFAULT, never the hand-authored file" precedence mergeWithDefault's
-// `globals` cascade already applies, but patches ONE field (`palette`)
-// inside an already-merged segment rather than replacing the segment
-// wholesale. mergeWithDefault's `segments` cascade is deliberately per-name
-// WHOLESALE replacement (a user overriding a segment restates it in full,
-// same as any other by-name merge in this file) — routing a one-field
-// override through that cascade would silently drop every other field the
-// segment declares (template, bg, fg, when, vars...). This runs AFTER
-// mergeWithDefault, directly against the already-merged config, so it never
-// fights that cascade; it is its own, later, narrower merge step.
-//
-// [LAW:no-silent-failure] exception: a stale override naming a segment the
-// config no longer declares is not a load-time error — the CONFIG, not the
-// override, is the source of truth for which segments exist. Skipping it is
-// a no-op, not a swallowed failure: a fresh `persist` write can only ever
-// name a segment the config declares (cross-ref checks that at load time),
-// so a dangling entry here only happens after a later config edit removed
-// the segment, and there is nothing left for the override to apply to.
-//
-// [LAW:no-defensive-null-guards] exception: `Object.assign(Object.create(null),
-// ...)` instead of `{ ...config.segments }` — the SAME null-prototype hygiene
-// as the config-overrides-store.ts accumulators above (segment names come
-// from user config and this loop WRITES via bracket assignment, `segments[name]
-// = ...`, not a pure spread). Pure object spread never risks this (it defines
-// every key directly, never invoking an inherited setter), but a stale
-// override naming a since-removed segment `__proto__` hits exactly the
-// "no own property yet, so the read returns the inherited accessor and the
-// write invokes its setter" case a plain accumulator does not guard against.
-export function applySegmentPaletteOverrides(
-  config: DslConfig,
-  overrides: Readonly<Record<string, string>>,
-): DslConfig {
-  const entries = Object.entries(overrides);
-  if (entries.length === 0) return config;
-  const segments: Record<string, SegmentDecl> = Object.assign(
-    Object.create(null) as Record<string, SegmentDecl>,
-    config.segments,
-  );
-  for (const [name, palette] of entries) {
-    const seg = segments[name];
-    if (seg === undefined) continue;
-    segments[name] = { ...seg, palette };
-  }
-  return { ...config, segments };
 }
