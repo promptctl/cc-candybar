@@ -10,8 +10,25 @@ import path from "node:path";
 import { daemonPool, type DaemonPool } from "./daemon-pool";
 
 const REPO_ROOT = process.cwd();
-const ENTRY = path.join(REPO_ROOT, "src", "index.ts");
-const TSX_BIN = path.join(REPO_ROOT, "node_modules", ".bin", "tsx");
+
+// What process runs the daemon: a binary and the argument vector before the
+// `daemon` subcommand. The default runs the TypeScript source under tsx; a
+// test that must observe the daemon's real on-disk layout (the built bundle's
+// own `import.meta.url`) hands in `builtBundle(path)` instead.
+export interface DaemonEntry {
+  readonly bin: string;
+  readonly args: readonly string[];
+}
+
+export const TSX_SOURCE_ENTRY: DaemonEntry = {
+  bin: path.join(REPO_ROOT, "node_modules", ".bin", "tsx"),
+  args: [path.join(REPO_ROOT, "src", "index.ts")],
+};
+
+export const builtBundle = (bundlePath: string): DaemonEntry => ({
+  bin: process.execPath,
+  args: [bundlePath],
+});
 
 export interface TestDaemonProcess {
   child: ChildProcess;
@@ -38,11 +55,12 @@ export async function spawnTestDaemon(
   // isolated pool (see daemon-pool.test.ts) — every real spawn site in the
   // suite itself uses the default, shared, machine-global pool.
   pool: DaemonPool = daemonPool,
+  entry: DaemonEntry = TSX_SOURCE_ENTRY,
 ): Promise<TestDaemonProcess> {
   const slot = await pool.acquire();
   let child: ChildProcess;
   try {
-    child = spawn(TSX_BIN, [ENTRY, "daemon"], {
+    child = spawn(entry.bin, [...entry.args, "daemon"], {
       cwd: REPO_ROOT,
       env,
       stdio: ["ignore", "pipe", "pipe"],
