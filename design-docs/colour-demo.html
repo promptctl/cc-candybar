@@ -98,9 +98,8 @@ function stateColor(P,hueName){
   const hue=P.get(hueName), fg=P.get('foreground');
   const tints=DECOR_BASES.map(b=>mixc(P.get(b),hue,DECOR_MAX_AMT));
   const pure=mixc(P.get('surface'),hue,0.92);
-  let c=pure;
-  for(let k=0;k<=12;k++){ c=mixc(pure,fg,k/12); if(tints.every(t=>CR(c,t)>=STATE_FLOOR)) break; }
-  return c;
+  for(let k=0;k<=12;k++){ const c=mixc(pure,fg,k/12); if(tints.every(t=>CR(c,t)>=STATE_FLOOR)) return c; }
+  throw new Error(`${P.name}: ${hueName} cannot clear the ${STATE_FLOOR} state floor even at foreground`);
 }
 // STATE AND DECORATION MUST NOT SHARE A REGION. Decoration is always a TINT
 // (mix <= 0.30) and state is the pure hue: same family, at an intensity

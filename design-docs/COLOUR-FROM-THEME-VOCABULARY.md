@@ -39,7 +39,7 @@ Narrowing the span does not rescue it, and costs on both axes. Measuring minimum
 | van der Corput, full circle | 68 | 22.5 |
 | true subdivision, full circle, rows on disjoint arcs | 45 | 22.5 |
 
-Bounding the span is worse on *both* measures than the thing it was meant to improve. And subdivision degrades more gracefully than stepping as the bar grows: 7 cells 45.0 vs 42.0, 10 cells 22.5 vs 18.0, 20 cells 11.3 vs 6.0, 26 cells 11.3 vs 6.0.
+Bounding the span is worse on *both* measures than the thing it was meant to improve. And subdivision degrades more gracefully than stepping as the bar grows. Minimum separation between *any* pair, subdivision vs today: 7 cells 45.0 vs 42.0, 10 cells 22.5 vs 18.0, 20 cells 11.3 vs 6.0, 26 cells 11.3 vs 6.0. Bit reversal's closest pair is 360°/2^⌈log₂ n⌉ apart, so it halves only when the count crosses a power of two; stepping's closest pair is whichever 42°·d, for d < n, lands nearest a full turn, which is 6° as soon as d = 17 is in range.
 
 The general lesson, which the rest of the design is built on: cohesion has to come from the axes that do **not** vary — lightness and chroma held constant — not from narrowing the axis that carries the variety.
 
@@ -74,7 +74,7 @@ Confusion got solved three separate times by the same move: give each concern it
 
 The last row is the strongest guarantee in the design. Decoration cannot collide with meaning because meaning is **not in the set**. That is strictly stronger than the hue-anchoring it replaces, which only stopped semantic colours from moving while leaving decorative colours free to arrive at them.
 
-The state boundary had to be enforced rather than assumed, because "the pure hue is vivid" is false for some themes. textual-dark's `secondary` is `#004578`, a navy already darker than most surfaces; its pure form sat on top of the decorative tints at contrast 1.42, indistinguishable. textual-ansi's `primary` was worse, at 1.14. The fix is to push the pure hue toward `foreground` — as far as `foreground` itself — until contrast against the most-tinted cell of that same hue, on every base, reaches 2.2. Measured global minimum across 23 themes × 3 hues × 3 bases afterwards: 2.21, up from 1.14; solarized-dark's `secondary` is the one that needs the full push. Themes that were already vivid stop at step zero and are byte-unchanged.
+The state boundary had to be enforced rather than assumed, because "the pure hue is vivid" is false for some themes. textual-dark's `secondary` is `#004578`, a navy already darker than most surfaces; its pure form sat on top of the decorative tints at contrast 1.42, indistinguishable. textual-ansi's `primary` was worse, at 1.14. The fix is to push the pure hue toward `foreground` — as far as `foreground` itself — until contrast against the most-tinted cell of that same hue, on every base, reaches 2.2. Measured global minimum across 23 themes × 3 hues × 3 bases afterwards: 2.21, up from 1.14; solarized-dark's `secondary` is the one that needs the full push. Themes that were already vivid stop at step zero and are byte-unchanged. A theme whose hue cannot clear the floor even at `foreground` is a failure the demo throws on, never a quieter colour.
 
 ### Three disclosure rules
 
@@ -90,7 +90,7 @@ Placement inside a region is a single per-instance field: the instance's **distr
 
 Five distributions ship — van der Corput (the default), golden angle, monotonic, ends-interleaved, and `uniform`, the constant where every item is identical. This is one type with five instances, not five code paths: the distribution is a value the instance carries, so adding a fifth is data, not structure.
 
-Measured lightness spread across 6 items: a monotonic ramp gives 40 (dracula) / 50 (latte), and reads as a directional wedge — an ordering the items may or may not have; neutral-base variation gives 23/32 but repeats after 4 items, because only 4 neutrals exist; alternating gives 26/32.
+Measured across 6 items, a monotonic ramp spreads lightness by 40 (dracula) / 50 (latte), and reads as a directional wedge — an ordering the items may or may not have.
 
 **Isolation is a property of the chosen distribution, not of the system.** `vdc(i)` is bit reversal (0, .5, .25, .75, .125, …) and never reads `n`, the sibling count; golden angle doesn't either. Under those two, adding, removing or hiding a sibling moves nobody — verified by adding 25 menu entries and watching zero bar cells change. `monotonic` = `(i+0.5)/n` and `ends-interleaved` both read `n`, so choosing either forfeits isolation for that instance: one new sibling re-spaces every existing one in it.
 
