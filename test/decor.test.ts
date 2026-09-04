@@ -16,7 +16,6 @@ import {
   decorEntryFor,
   decorFor,
   paletteRole,
-  vocabularyIndex,
   vocabularySelect,
   type Address,
   type Distribution,
@@ -109,7 +108,7 @@ describe("the colour is mix(base, hue, amount) for the selected entry", () => {
       { index: 0, count: 2 },
       { index: 3, count: 6 },
     ];
-    expect(vocabularyIndex(address, DISTRIBUTIONS["van-der-corput"], DEMO_SIZE)).toBe(5);
+    expect(decorEntryFor(address, DISTRIBUTIONS["van-der-corput"])).toBe(DECOR_VOCABULARY[5]);
     expect(decorEntryFor(address, DISTRIBUTIONS["van-der-corput"])).toEqual({
       base: "surface-lighten-1",
       hue: "secondary",
@@ -119,7 +118,7 @@ describe("the colour is mix(base, hue, amount) for the selected entry", () => {
 
   test("the root selects entry 0", () => {
     for (const name of ALL_NAMES) {
-      expect(vocabularyIndex([], DISTRIBUTIONS[name], DECOR_VOCABULARY.length)).toBe(0);
+      expect(decorEntryFor([], DISTRIBUTIONS[name])).toBe(DECOR_VOCABULARY[0]);
     }
   });
 });
@@ -221,7 +220,10 @@ describe("done-when: permuting an unrelated subtree", () => {
       const distribution = DISTRIBUTIONS[name];
       for (const { seed, shape } of SHAPES) {
         const rng = seededRng(seed);
-        const parents = allNodes(shape).filter(({ path }) => nodeAt(shape, path).children.length >= 2);
+        // Below the root only: permuting the root's children leaves no node outside.
+        const parents = allNodes(shape).filter(
+          ({ path }) => path.length > 0 && nodeAt(shape, path).children.length >= 2,
+        );
         if (parents.length === 0) continue;
         const target = drawFrom(rng, parents).path;
         const before = colourMap(shape, distribution);

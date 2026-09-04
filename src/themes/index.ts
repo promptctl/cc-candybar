@@ -26,7 +26,6 @@ export {
   DECOR_VOCABULARY,
   DISTRIBUTIONS,
   DEFAULT_DISTRIBUTION,
-  vocabularyIndex,
   vocabularySelect,
   decorEntryFor,
   paletteRole,

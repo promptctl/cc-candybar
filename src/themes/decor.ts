@@ -131,10 +131,11 @@ const LEVEL_DECAY = 0.37;
 /**
  * The index into a vocabulary of `size` entries that `address` selects under
  * `distribution`: a weighted fold of the per-level positions, rounded, taken
- * modulo the size. Any size ≥ 1; a size of 1 selects entry 0 for every
- * address, which is what makes a one-entry vocabulary a uniform bar.
+ * modulo the size. A size of 1 selects entry 0 for every address, which is
+ * what makes a one-entry vocabulary a uniform bar. `vocabularySelect` is the
+ * sole caller and owns the size ≥ 1 precondition.
  */
-export function vocabularyIndex(
+function vocabularyIndex(
   address: Address,
   distribution: Distribution,
   size: number,
@@ -155,10 +156,10 @@ export function vocabularyIndex(
  * must yield that entry everywhere.
  *
  * [LAW:no-silent-failure] `vocabularyIndex` lands in `[0, size)` by
- * construction; an out-of-range read here is an empty vocabulary, which has
- * nothing to select, so it throws rather than returning an undefined entry.
+ * construction and `T` is non-nullable, so an undefined read here is exactly
+ * an empty vocabulary — nothing to select — and throws rather than returning it.
  */
-export function vocabularySelect<T>(
+export function vocabularySelect<T extends {}>(
   vocabulary: readonly T[],
   address: Address,
   distribution: Distribution,
