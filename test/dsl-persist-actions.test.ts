@@ -463,7 +463,7 @@ describe("persist action click → the config file", () => {
     expect(written).toContain(GLOBALS_COMMENT);
     expect(written).toContain("applyTheme: { persist: 'palette'");
     expect(durable.history().past).toEqual([
-      { file: durable.configPath, before: original, after: written },
+      { before: original, after: written },
     ]);
     dispose();
   });

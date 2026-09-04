@@ -17,7 +17,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import JSON5 from "json5";
 import type { SessionStateRW } from "../../src/daemon/session-state";
-import type { ConfigEdit } from "../../src/daemon/config-file-store";
+import type { FileHistory } from "../../src/daemon/config-file-store";
 import { configEditHistoryPath } from "../../src/daemon/paths";
 import {
   SESSION_RENDER_ORIGIN_KEY,
@@ -37,7 +37,8 @@ export interface DurableConfig {
   text(): string | null;
   /** The file parsed as JSON5 (throws when absent). */
   parsed(): Record<string, unknown>;
-  history(): { past: ConfigEdit[]; future: ConfigEdit[] };
+  /** The history stack of `configPath` (or `file`) — empty until its first edit. */
+  history(file?: string): FileHistory;
   /** What the render handler records so a click resolves this file. */
   seedOrigin(sessionState: SessionStateRW, sessionId: string): void;
   dispose(): void;
@@ -81,11 +82,13 @@ export function durableConfig(prefix = "cc-candybar-durable-"): DurableConfig {
     write: (text) => writeFileSync(configPath, text),
     text: readText,
     parsed: () => JSON5.parse(readText() ?? "") as Record<string, unknown>,
-    history: () =>
-      JSON.parse(readFileSync(configEditHistoryPath(), "utf8")) as {
-        past: ConfigEdit[];
-        future: ConfigEdit[];
-      },
+    history: (file = configPath) =>
+      (
+        JSON.parse(readFileSync(configEditHistoryPath(), "utf8")) as Record<
+          string,
+          FileHistory
+        >
+      )[file] ?? { past: [], future: [] },
     seedOrigin: (sessionState, sessionId) =>
       sessionState.set(
         sessionId,

@@ -360,7 +360,7 @@ describe("segment-palette persist action click → the config file", () => {
     expect(written).toContain(SIDEBAR_COMMENT);
     expect(written).toContain(SIDEBAR_DECL.slice(0, -2)); // up to the closing ` }`
     expect(durable.history().past).toEqual([
-      { file: durable.configPath, before: original, after: written },
+      { before: original, after: written },
     ]);
     dispose();
   });

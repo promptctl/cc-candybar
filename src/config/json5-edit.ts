@@ -187,6 +187,11 @@ class Scanner {
       this.skipTrivia();
       if (this.peek() === "}") break;
       const { key, span: keySpan } = this.key();
+      // [LAW:parse-dont-validate] JSON5 reads the LAST duplicate; an edit
+      // here would address one and leave the other live.
+      if (entries.some((e) => e.key === key)) {
+        throw new Json5EditError(`duplicate key "${key}"`, keySpan.start);
+      }
       this.skipTrivia();
       this.expect(":");
       const value = this.value();

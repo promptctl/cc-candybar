@@ -577,10 +577,12 @@ const applyLayoutOp: VerbHandler = (rawValue, ctx) => {
   );
 };
 
-// [LAW:one-source-of-truth] `reset`'s fine-grained sibling: step the ONE
-// daemon-owned history of config-file edits back one entry. No key, no
-// value — the history (config-file-store.ts) owns which entry moves and
-// what it restores; this handler is pure plumbing between the wire and it.
+// [LAW:one-source-of-truth] `reset`'s fine-grained sibling: step the history
+// of edits to the session's config file back one entry — the file the
+// session's render resolved, so one project's undo can never revert a write
+// made to another's. No key, no value — the history (config-file-store.ts)
+// owns which entry moves and what it restores; this handler is pure plumbing
+// between the wire and it.
 // [LAW:no-silent-failure] An empty stack is a loud BAD_REQUEST (dispatch's
 // aggregator turns it into a transient click.error), never a silent no-op —
 // the ticket's own done-gate. A file hand-edited since the entry is a loud
@@ -588,11 +590,11 @@ const applyLayoutOp: VerbHandler = (rawValue, ctx) => {
 const undoConfig: VerbHandler = (value, ctx) => {
   const [sessionId = ""] = decodeWire(() => decodeSegments(value));
   const sid = requireSessionId(sessionId);
-  const entry = undoEdit(editStore(ctx));
-  if (entry === null) {
+  const file = sessionConfigFile(ctx, sid);
+  if (undoEdit(editStore(ctx), file) === null) {
     throw new BadVerbArgs("undo: history is empty, nothing to undo");
   }
-  ctx.dlog("info", `undo: ${entry.file} (session=${sid})`);
+  ctx.dlog("info", `undo: ${file} (session=${sid})`);
 };
 
 // [LAW:one-source-of-truth] undo's mirror — steps the same history forward
@@ -600,11 +602,11 @@ const undoConfig: VerbHandler = (value, ctx) => {
 const redoConfig: VerbHandler = (value, ctx) => {
   const [sessionId = ""] = decodeWire(() => decodeSegments(value));
   const sid = requireSessionId(sessionId);
-  const entry = redoEdit(editStore(ctx));
-  if (entry === null) {
+  const file = sessionConfigFile(ctx, sid);
+  if (redoEdit(editStore(ctx), file) === null) {
     throw new BadVerbArgs("redo: nothing to redo");
   }
-  ctx.dlog("info", `redo: ${entry.file} (session=${sid})`);
+  ctx.dlog("info", `redo: ${file} (session=${sid})`);
 };
 
 // ─── Registry ───────────────────────────────────────────────────────────────

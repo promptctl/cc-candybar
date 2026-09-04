@@ -84,6 +84,18 @@ describe("parseDocument", () => {
     expect(() => parseDocument("{ a: 1 } x")).toThrow(/trailing content/);
     expect(() => parseDocument("{ a: 'unterminated }")).toThrow(/unterminated/);
   });
+
+  // [LAW:parse-dont-validate] JSON5 reads the LAST duplicate; a splice that
+  // addressed the first would leave the live value untouched, and a delete
+  // of the last would promote a value the user never chose.
+  test("a duplicate key is refused at parse, naming the key", () => {
+    expect(() =>
+      parseDocument("{ globals: { palette: 'a', palette: 'b' } }"),
+    ).toThrow(/duplicate key "palette"/);
+    expect(() =>
+      setValue("{ palette: 'a', palette: 'b' }", ["palette"], "'c'"),
+    ).toThrow(Json5EditError);
+  });
 });
 
 describe("setValue — replacing an existing value touches only that value's span", () => {

@@ -705,13 +705,13 @@ destroy work the history never saw. `redo` makes the mirror check against the
 entry's `before`. Your hand edit always stands; the way past the refusal is
 to edit the file again yourself.
 
-The history is **daemon-global, not per-session** — a durable write is
-daemon-global by design (one config file, every session), so `undo`/`redo`
-step one history rather than inventing a session axis the file doesn't have.
-Every entry names the file it edited, so a daemon serving several projects
-undoes each write into the file it came from. Two sessions can see each
-other's undos; that is the deliberate consequence of one shared bar default,
-not a bug.
+The history is **one stack per config file, not per session** — a durable
+write lands in the file your session's render resolved, and `undo`/`redo`
+step that file's stack. A daemon serving several projects keeps a stack for
+each file, so an undo from one project can never revert a write made to
+another's. Two sessions rendering the same file share its stack and can see
+each other's undos; that is the deliberate consequence of one shared bar
+default, not a bug.
 
 Clicking `undo` with nothing to undo — or `redo` with nothing to redo — is a
 loud, transient message in the bar (`undo: history is empty, nothing to undo`

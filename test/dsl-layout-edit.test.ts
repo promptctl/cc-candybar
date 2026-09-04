@@ -504,7 +504,7 @@ describe("apply-layout-op click → the config file", () => {
     // And the edit is ONE whole-file history entry — the same shape a
     // persist/reset records, so undo needs no layout-specific path.
     expect(durable.history().past).toEqual([
-      { file: durable.configPath, before: original, after: written },
+      { before: original, after: written },
     ]);
     dispose();
   });

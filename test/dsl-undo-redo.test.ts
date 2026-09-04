@@ -9,8 +9,10 @@
 //      it).
 //   3. deriveConfigActionValidators derives NOTHING for undo/redo — there is
 //      no value a template could smuggle, so there is no gate to derive.
-//   4. A click on undo/redo fires the REAL daemon handler, which steps ONE
-//      history of config-FILE edits (candybar-config-dqe) — covering a
+//   4. A click on undo/redo fires the REAL daemon handler, which steps the
+//      history of edits to the SESSION's config file (candybar-config-dqe)
+//      — one stack per file, so a daemon serving several projects never
+//      undoes one project's write from another's bar — covering a
 //      `persist` literal overwrite, a `reset` delete, AND a
 //      `presets.<name>.root` structural edit through the SAME mechanism
 //      (never a layout-specific code path), because the store records every
@@ -26,7 +28,9 @@
 //      it would revert — it never overwrites work the history never saw.
 
 import { ownLinks, ownValidators } from "./helpers/ambient-chrome";
-import { writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { undoEdit, writeValue } from "../src/daemon/config-file-store";
 import { getThemePalette } from "@promptctl/rich-js";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
@@ -276,7 +280,7 @@ describe("undo/redo click → the config-file history", () => {
     expect(globals().palette).toBe("dracula");
     const written = durable.text()!;
     expect(durable.history().past).toEqual([
-      { file: durable.configPath, before: original, after: written },
+      { before: original, after: written },
     ]);
 
     runtime.click(urlFor(runtime, "back"));
@@ -284,14 +288,14 @@ describe("undo/redo click → the config-file history", () => {
     const afterUndo = durable.history();
     expect(afterUndo.past).toEqual([]);
     expect(afterUndo.future).toEqual([
-      { file: durable.configPath, before: original, after: written },
+      { before: original, after: written },
     ]);
 
     runtime.click(urlFor(runtime, "fwd"));
     expect(durable.text()).toBe(written);
     const afterRedo = durable.history();
     expect(afterRedo.past).toEqual([
-      { file: durable.configPath, before: original, after: written },
+      { before: original, after: written },
     ]);
     expect(afterRedo.future).toEqual([]);
     runtime.dispose();
@@ -319,8 +323,8 @@ describe("undo/redo click → the config-file history", () => {
     runtime.click(urlFor(runtime, "forgetPalette"));
     expect(globals().palette).toBeUndefined();
     expect(durable.history().past).toEqual([
-      { file: durable.configPath, before: original, after: pinned },
-      { file: durable.configPath, before: pinned, after: durable.text() },
+      { before: original, after: pinned },
+      { before: pinned, after: durable.text() },
     ]);
 
     runtime.click(urlFor(runtime, "back")); // undo the reset
@@ -406,6 +410,37 @@ describe("undo/redo click → the config-file history", () => {
     restarted.click(urlFor(restarted, "fwd")); // redo survived the "restart"
     expect(globals().palette).toBe("dracula");
     restarted.dispose();
+  });
+
+  // [LAW:types-are-the-program] The stack a session steps is the file its
+  // render resolved: a snapshot lives under its file's key, so an undo from
+  // project A cannot reach — let alone revert — a write made to project B.
+  test("history is one stack per file — undo of A leaves B's file and B's stack untouched", () => {
+    const store = { historyPath: durable.historyPath, logger: () => {} };
+    const fileA = durable.configPath;
+    const fileB = join(durable.projectDir, "other-project.json5");
+    writeFileSync(fileB, "{ globals: { palette: 'nord' } }\n");
+    const originalA = durable.text()!;
+    const originalB = readFileSync(fileB, "utf8");
+
+    writeValue(store, fileA, "palette", "dracula");
+    writeValue(store, fileB, "palette", "dracula"); // the most recent edit overall
+    const editedB = readFileSync(fileB, "utf8");
+
+    expect(undoEdit(store, fileA)).toEqual({
+      before: originalA,
+      after: durable.history(fileA).future[0]!.after,
+    });
+    expect(durable.text()).toBe(originalA);
+    expect(readFileSync(fileB, "utf8")).toBe(editedB);
+    expect(durable.history(fileB).past).toHaveLength(1);
+    expect(durable.history(fileB).future).toEqual([]);
+
+    // A fresh edit to A truncates only A's redo path.
+    writeValue(store, fileA, "palette", "nord");
+    expect(durable.history(fileA).future).toEqual([]);
+    expect(undoEdit(store, fileB)).toEqual({ before: originalB, after: editedB });
+    expect(readFileSync(fileB, "utf8")).toBe(originalB);
   });
 
   test("the ring is bounded — the oldest entry drops once MAX_HISTORY_DEPTH is exceeded", () => {
