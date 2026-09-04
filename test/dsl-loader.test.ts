@@ -979,6 +979,25 @@ describe("loadDslConfig — root rows fragment", () => {
     },
   );
 
+  test("a bad row name inside a preset's fragment points at the preset's own `root` line", () => {
+    const src = [
+      `{`,
+      `  ${SEG},`,
+      `  root: { rows: { top: "a" } },`,
+      `  presets: { wide: {`,
+      `    root: { rows: {`,
+      `      "a-b": "b",`,
+      `    } },`,
+      `  } },`,
+      `}`,
+    ].join("\n");
+    const issue = expectError(src).issues.find((i) =>
+      /row name "a-b" must be an identifier/.test(i.message),
+    )!;
+    expect(issue.path).toBe("presets.wide.root.rows.a-b");
+    expect(issue.line).toBe(6);
+  });
+
   test("`rows` that is not an object is a loud error", () => {
     expect(() =>
       parseAndValidate(FILE, `{ ${SEG}, root: { rows: "a" } }`),

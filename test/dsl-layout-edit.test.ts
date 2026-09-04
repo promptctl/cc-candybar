@@ -1152,6 +1152,41 @@ describe("RenderCache: layout edits land in the file and reload from it", () => 
   // hand-authored segments/root/actions of its own, so every artifact here
   // — `toolbar`, `edit.toggle`, the addable domain, and the gate the clicks
   // pass — comes from DEFAULT_DSL_CONFIG's own edit chrome alone.
+  // [LAW:one-source-of-truth] The cascade resolves a click to ONE row — the
+  // first merged row holding the segment, bundled rows before the file's own
+  // new ones — and the splice must edit THAT row, not the first occurrence in
+  // file-text order. Here `directory` sits in the bundled identity row AND in
+  // the file's own `extra` row, and the file authors `extra` first.
+  test("a segment placed in an inherited row and a file row: the edit lands on the row the cascade resolved", () => {
+    durable.write(
+      `{ globals: {}, segments: {}, root: { rows: { extra: { h: ['directory'] } } } }`,
+    );
+    const { cache, sessionState, cleanups } = makeCache();
+    try {
+      const entry = cache.getOrCreate(
+        durable.projectDir,
+        durable.projectDir,
+        undefined,
+      );
+      expect(entry.lastError).toBeNull();
+      fireVerb(
+        "apply-layout-op",
+        originCtx(sessionState),
+        "s1",
+        "presets.default.root",
+        encodeLayoutOp({ op: "remove", target: "directory" }),
+      );
+      const parsed = durable.parsed() as {
+        root: { rows: Record<string, { h: string[] }> };
+      };
+      expect(Object.keys(parsed.root.rows)).toEqual(["extra", "identity"]);
+      expect(parsed.root.rows.extra!.h).toEqual(["directory"]);
+      expect(parsed.root.rows.identity!.h).not.toContain("directory");
+    } finally {
+      for (const fn of cleanups) fn();
+    }
+  });
+
   test("toolbar removed via edit mode is offered back by every remaining `+`, and a real reload restores it", () => {
     const bareUserConfig = `{ globals: {}, segments: {} }`;
     durable.write(bareUserConfig);

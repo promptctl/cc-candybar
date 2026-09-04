@@ -414,7 +414,7 @@ function rowsSpec(): FieldSpec<Root["rows"]> {
         ctx.issues.push({
           path: `${path}.${field}`,
           message: `"rows" must be an object of row name → layout node, got ${describeType(v)}`,
-          line: findKeyLine(ctx.source, ["root"]),
+          line: findKeyLine(ctx.source, [...path.split("."), field]),
         });
         return {};
       }
@@ -424,7 +424,7 @@ function rowsSpec(): FieldSpec<Root["rows"]> {
           ctx.issues.push({
             path: `${path}.${field}.${name}`,
             message: `row name "${name}" must be an identifier (letters, digits, _; not starting with a digit) — it names the row in the config file and merges by name over the bundled default's rows`,
-            line: findKeyLine(ctx.source, ["root"]),
+            line: findKeyLine(ctx.source, [...path.split("."), field, name]),
           });
           continue;
         }

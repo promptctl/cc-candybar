@@ -463,6 +463,23 @@ describe("presetRoot — the path a preset's layout is authored at", () => {
     expect(presetRoot(cfg, "P")).toEqual({ node: rootNode(cfg.root), path: "root" });
   });
 
+  test("a rows fragment restages: the inherited rows keep their place and the new row appends, authored at the preset", () => {
+    const cfg = merged(
+      `{ segments: { extra: { template: 'x' } }, presets: { P: { root: { rows: { extra: { h: ['extra'] } } } } } }`,
+    );
+    const { node, path } = presetRoot(cfg, "P");
+    expect(path).toBe("presets.P.root");
+    expect(node.when).toBeUndefined();
+    expect(node.children).toEqual([
+      ...rootNode(cfg.root).children,
+      {
+        kind: "container",
+        direction: "horizontal",
+        children: [{ kind: "segment", name: "extra" }],
+      },
+    ]);
+  });
+
   test("a `when` alone restages: it gates the whole bar, so the layout is authored at the preset", () => {
     const cfg = merged(
       `{ presets: { P: { root: { rows: {}, when: '{{ .x }}' } } } }`,

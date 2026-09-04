@@ -372,20 +372,36 @@ function presetLayer(doc: Node | null, preset: string): RootLayer | null {
 // replaces the base outright. A tree is one block under an unauthorable key
 // — its positional rows can never be replaced individually (root.ts's
 // ROW_NAME_RE), so they are searched as the contiguous front they always
-// form, in the pre-order the bar renders.
-type Cascade = ReadonlyMap<
-  string,
-  { readonly layer: RootLayer; readonly node: Node }
->;
+// form, in the pre-order the bar renders. Each entry carries the exact
+// config-file address a structural edit to it lands at — the row's own
+// `rows.<name>` member, or the whole tree — stamped here, where the layer's
+// shape is known, so the splice edits the row the cascade chose and never
+// re-searches the fragment in file order [LAW:parse-dont-validate].
+type Cascade = ReadonlyMap<string, Placement & { readonly node: Node }>;
 const TREE_BLOCK = "#";
 
 function applyLayer(base: Cascade, layer: RootLayer): Cascade {
   const rows = rowEntriesOf(layer.fragment);
   return rows === null
-    ? new Map([[TREE_BLOCK, { layer, node: layer.fragment }]])
+    ? new Map([
+        [
+          TREE_BLOCK,
+          { path: layer.path, unit: layer.unit, node: layer.fragment },
+        ],
+      ])
     : new Map([
         ...base,
-        ...rows.map((row) => [row.key, { layer, node: row.value }] as const),
+        ...rows.map(
+          (row) =>
+            [
+              row.key,
+              {
+                path: [...layer.path, "rows", row.key],
+                unit: layer.unit,
+                node: row.value,
+              },
+            ] as const,
+        ),
       ]);
 }
 
@@ -398,8 +414,8 @@ function cascadeOf(doc: Node | null, preset: string): Cascade {
   return layers.reduce(applyLayer, new Map());
 }
 
-// [LAW:single-enforcer] THE answer to "which layer's row does this click
-// edit": the first merged row holding the segment, and that row's layer.
+// [LAW:single-enforcer] THE answer to "which row does this click edit": the
+// first merged row holding the segment, at the address the cascade stamped.
 // [LAW:no-silent-failure] No row holds it ⇒ the bar clicked rendered before
 // the row changed under it — loud, never a write somewhere plausible.
 function layoutPlacementOf(
@@ -407,22 +423,24 @@ function layoutPlacementOf(
   preset: string,
   segment: string,
 ): Placement {
-  for (const { layer, node } of cascadeOf(doc, preset).values()) {
-    if (hasSegmentRef(node, segment)) {
-      return { path: layer.path, unit: layer.unit };
-    }
+  for (const { node, ...placement } of cascadeOf(doc, preset).values()) {
+    if (hasSegmentRef(node, segment)) return placement;
   }
   throw new BadVerbArgs(
-    `presets.${preset}.root holds no segment "${segment}" — the bar you clicked is stale; it reloads on the next render`,
+    `${stagedPathOf(doc, preset).join(".")} holds no segment "${segment}" — the bar you clicked is stale; it reloads on the next render`,
   );
 }
 
-// `reset`'s path for a preset root: the fragment the preset stages (the
+// The path a preset's layout is authored at: the fragment it stages (the
 // file's, or the bundled one's place in the file), else the config's own
 // `root` — the same fact presetRoot's reported path projects.
+function stagedPathOf(doc: Node | null, preset: string): ConfigPath {
+  return presetLayer(doc, preset)?.path ?? ["root"];
+}
+
 function resetPathOf(doc: Node | null, target: PersistTarget): ConfigPath {
   return target.scope === "preset-root"
-    ? (presetLayer(doc, target.preset)?.path ?? ["root"])
+    ? stagedPathOf(doc, target.preset)
     : persistPath(target);
 }
 

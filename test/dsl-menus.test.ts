@@ -363,6 +363,20 @@ describe("menu synthesis (derived identity, reserved namespace)", () => {
     }
   });
 
+  test("a preset's `{ rows }` fragment re-placing a menu host the inherited rows already place is rejected at the preset", () => {
+    const src = `{ presets: { wide: { root: { rows: { extra: { h: ['charsetControl'] } } } } } }`;
+    try {
+      parseAndValidate("<test>", src, ALLOWED, DEFAULT_DSL_CONFIG);
+      throw new Error("expected ConfigError");
+    } catch (e) {
+      expect(e).toBeInstanceOf(ConfigError);
+      const issue = (e as ConfigError).issues.find((i) =>
+        /"charsetControl" hosts a \{\{ menu \}\} and is placed in the layout more than once/.test(i.message),
+      )!;
+      expect(issue.path).toBe("presets.wide.root");
+    }
+  });
+
   test("a {{ menu }} inside a helper is rejected at load (no per-segment identity)", () => {
     const src = `{
       globals: {},
