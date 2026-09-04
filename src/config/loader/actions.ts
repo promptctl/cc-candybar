@@ -232,8 +232,8 @@ function resetArm(
 // [LAW:one-type-per-behavior] `undo`/`redo` are copy/open/reset's shape one
 // step further reduced: a single required key whose only legal VALUE is the
 // literal `true` (mirrors intMarkerSpec — a marker, not data), because there
-// is no key to name: the history they step is one global stack over the
-// whole config file, not a per-target write. `function`, not a const
+// is no key to name: the history they step is one stack per config file,
+// not a per-target write. `function`, not a const
 // arrow, so ACTION_ARMS above (built before this declaration in source
 // order) can reference it directly via hoisting.
 function markerArm(key: "undo" | "redo"): ArmParse<ActionDecl> {
@@ -250,7 +250,7 @@ function markerArm(key: "undo" | "redo"): ArmParse<ActionDecl> {
       issue(
         ctx,
         `${path}.${key}`,
-        `${key} must be the literal true (it takes no key — it steps the ONE global history over every durable config edit), got ${describeValue(raw[key])}`,
+        `${key} must be the literal true (it takes no key — it steps the history of the session's config file), got ${describeValue(raw[key])}`,
       );
       return null;
     }

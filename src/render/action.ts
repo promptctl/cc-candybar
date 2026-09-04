@@ -167,8 +167,8 @@ export type CompiledActionDecl =
       readonly relation: "before" | "after";
       readonly options: readonly string[];
     }
-  // [LAW:one-source-of-truth] brandon-layout-edit-2gc.2's global history
-  // step over the config file's edits — `reset`'s fine-grained sibling. No key:
+  // [LAW:one-source-of-truth] brandon-layout-edit-2gc.2's history step over
+  // the session's config file's edits — `reset`'s fine-grained sibling. No key:
   // there is nothing to carry, since the history stack (not this action) is
   // what decides which entry moves.
   | { readonly kind: "undo" }

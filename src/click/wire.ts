@@ -84,11 +84,11 @@ export const VERB_RESET_CONFIG = "reset-config";
 // SHAPE (a tree edit vs. a value) differs, which is exactly why this is its
 // own verb rather than another VERB_SET_CONFIG value.
 export const VERB_APPLY_LAYOUT_OP = "apply-layout-op";
-// [LAW:one-source-of-truth] brandon-layout-edit-2gc.2's global history step
-// over durable config edits — the fine-grained sibling of VERB_RESET_CONFIG's
-// coarse "delete one key". Args: `[sessionId]` — there is no key: the
-// history is ONE stack of whole-file snapshots over every persist/reset/
-// layout write ever made (config-file-store.ts), not a per-key log. An empty
+// [LAW:one-source-of-truth] brandon-layout-edit-2gc.2's history step over
+// the session's config file — the fine-grained sibling of VERB_RESET_CONFIG's
+// coarse "delete one key". Args: `[sessionId]` — there is no key: a file's
+// history is one stack of whole-file snapshots over every persist/reset/
+// layout write made to it (config-file-store.ts), not a per-key log. An empty
 // stack, or a file edited by hand since the snapshot, is a loud BAD_REQUEST
 // surfaced through click.error like any other verb failure, never a silent
 // no-op.

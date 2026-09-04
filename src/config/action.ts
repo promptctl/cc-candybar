@@ -47,11 +47,12 @@ export type { OptionDomain } from "./option-domain.js";
 //
 // [LAW:one-source-of-truth] `undo`/`redo` (brandon-layout-edit-2gc.2) are
 // `reset`'s FINE-GRAINED siblings: `reset` deletes one named key outright
-// (the coarse "forget this default" case); `undo`/`redo` step ONE GLOBAL
-// history of every durable edit ever made — whole-file snapshots, every key,
-// not just structural layout edits — back and forth. Neither carries a key:
-// the history is a single stack (config-file-store.ts owns it), so the
-// action is a bare marker, like `int: true` is for a set-int cursor.
+// (the coarse "forget this default" case); `undo`/`redo` step the history
+// of every durable edit made to the session's config file — whole-file
+// snapshots, every key, not just structural layout edits — back and forth.
+// Neither carries a key: a file's history is one stack (config-file-store.ts
+// owns one per file), so the action is a bare marker, like `int: true` is
+// for a set-int cursor.
 export const ACTION_KEYS = [
   "set",
   "persist",

@@ -664,8 +664,8 @@ domain never listed decodes to nothing the gate admits.
 ### Undoing/redoing any durable write: `undo` / `redo`
 
 `reset` deletes ONE named path outright — the coarse "forget this setting"
-case. `undo`/`redo` are its fine-grained siblings: they step ONE GLOBAL
-history over every durable write ever made to a config file — a theme pin, a
+case. `undo`/`redo` are its fine-grained siblings: they step the history of
+every durable write ever made to your config file — a theme pin, a
 padding nudge, a segment-palette pin, a `removeSegment`/`insertSegment`
 structural edit, an edit-mode `+`/`-`, a `reset` — back and forth, one entry
 at a time, regardless of which key or which config declared the action that
