@@ -98,6 +98,7 @@ function markers(relPath, patterns, description) {
 const TS_PROTOCOL = "src/daemon/protocol.ts";
 const TS_CLIENT = "src/daemon/client.ts";
 const TS_INDEX = "src/index.ts";
+const TS_CLI_FLAGS = "src/cli-flags.ts";
 const TS_GLYPH = "src/render/error-glyph.ts";
 const TS_STYLE = "src/render/diagnostic-style.ts";
 const TS_PATHS = "src/daemon/paths.ts";
@@ -196,7 +197,7 @@ const CHECKS = [
   {
     label: "Node-answered flag vocabulary",
     ts: memberSet(
-      TS_INDEX,
+      TS_CLI_FLAGS,
       /const NODE_FLAGS = \{[\s\S]+?\} as const;/,
       /"(-{1,2}[A-Za-z]+)"/g,
     ),

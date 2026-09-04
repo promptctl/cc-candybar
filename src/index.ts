@@ -16,6 +16,7 @@ import { runCheck } from "./check";
 import { obtainDaemonKick } from "./daemon/acquire";
 import { planOutcome } from "./render/outcome-plan";
 import { HELP_TEXT } from "./help-text";
+import { NODE_FLAGS } from "./cli-flags";
 import { PACKAGE_VERSION } from "./version";
 
 // Read terminal width from the live shell context (no subprocess). Returns
@@ -53,13 +54,6 @@ function detectTermCols(): number | undefined {
 // widen recall of a fact that is otherwise reported as a plain `false`.
 const SSH_ENV_VARS = ["SSH_CONNECTION", "SSH_CLIENT", "SSH_TTY"] as const;
 
-// [LAW:one-source-of-truth] The bare flags Node answers itself. The Rust client
-// routes exactly these to Node (its NODE_FLAGS; check-protocol diffs the two),
-// so a spelling added here without its mirror fails the build, not the user.
-const NODE_FLAGS = {
-  help: ["--help", "-h"],
-  version: ["--version", "-V"],
-} as const;
 const hasFlag = (flags: readonly string[]): boolean =>
   flags.some((f) => process.argv.includes(f));
 
