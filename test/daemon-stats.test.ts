@@ -1,5 +1,12 @@
 import { RuntimeStats } from "../src/daemon/stats";
 import { formatStats } from "../src/daemon/client-stats";
+import { PROTOCOL_VERSION } from "../src/daemon/protocol";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+
+// package.json is the version's sole authority; the tests read it the same way
+// the build does rather than restating the number.
+const pkg = JSON.parse(readFileSync(join(process.cwd(), "package.json"), "utf8")) as { version: string };
 
 describe("RuntimeStats.snapshot", () => {
   test("produces a stable shape with extras merged in", () => {
@@ -43,13 +50,28 @@ describe("RuntimeStats.snapshot", () => {
     expect(snap.pid).toBe(process.pid);
     expect(snap.rssBytes).toBeGreaterThan(0);
   });
+
+  // [LAW:one-source-of-truth] The snapshot's `version` is the daemon's package
+  // stamp (what `cc-candybar --version` prints for the same build), and the
+  // wire contract number lives under its own name — two facts, two fields.
+  test("version is the package stamp; protocolVersion is the wire contract", () => {
+    const snap = new RuntimeStats().snapshot({
+      gitCache: { size: 0, hits: 0, misses: 0, invalidations: 0, watchers: 0 },
+      usageCache: { size: 0, hits: 0, misses: 0, sweeps: 0 },
+      renderCacheSize: 0,
+      watchersActive: 0,
+    });
+    expect(snap.version).toBe(pkg.version);
+    expect(snap.protocolVersion).toBe(PROTOCOL_VERSION);
+  });
 });
 
 describe("formatStats", () => {
   test("renders human-readable output with hit rates", () => {
     const out = formatStats({
       pid: 1234,
-      version: 2,
+      version: "1.41.2",
+      protocolVersion: 2,
       startedAt: "2026-04-28T00:00:00.000Z",
       uptimeSec: 125,
       rssBytes: 50 * 1024 * 1024,
@@ -82,7 +104,8 @@ describe("formatStats", () => {
   test("hit rate is n/a when no observations", () => {
     const out = formatStats({
       pid: 1,
-      version: 2,
+      version: "1.41.2",
+      protocolVersion: 2,
       startedAt: "2026-04-28T00:00:00.000Z",
       uptimeSec: 0,
       rssBytes: 100,

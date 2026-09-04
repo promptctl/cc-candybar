@@ -5,6 +5,7 @@
 import type { LaunchCategory } from "../proc/launch";
 import type { LaunchStatsHandle } from "../proc/stats-handle";
 import { PROTOCOL_VERSION } from "./protocol";
+import { PACKAGE_VERSION } from "../version";
 
 // Rolling window for "last minute" counts. Keep timestamps for each launch in
 // a ring buffer; eviction happens lazily on read.
@@ -28,7 +29,11 @@ const HISTOGRAM_CAP = 16;
 
 export interface StatsSnapshot {
   pid: number;
-  version: number;
+  // [LAW:one-source-of-truth] The daemon's own baked package stamp — set
+  // against `cc-candybar --version` to diagnose client-vs-daemon skew in one
+  // step. The wire contract number is a different fact under its own name.
+  version: string;
+  protocolVersion: number;
   startedAt: string;
   uptimeSec: number;
   rssBytes: number;
@@ -199,7 +204,8 @@ export class RuntimeStats {
     const mem = process.memoryUsage();
     return {
       pid: process.pid,
-      version: PROTOCOL_VERSION,
+      version: PACKAGE_VERSION,
+      protocolVersion: PROTOCOL_VERSION,
       startedAt: this.startedAt.toISOString(),
       uptimeSec: Math.floor((Date.now() - this.startedAt.getTime()) / 1000),
       rssBytes: mem.rss,

@@ -1,6 +1,7 @@
 import os from "node:os";
 import path from "node:path";
 import crypto from "node:crypto";
+import { createRequire } from "node:module";
 
 import { PARENT_PID_ENV } from "../src/daemon/parent-watchdog";
 
@@ -13,6 +14,15 @@ import { PARENT_PID_ENV } from "../src/daemon/parent-watchdog";
 // spawned by the client, never under Jest, so it never sees this variable and
 // is never touched.
 process.env[PARENT_PID_ENV] = String(process.pid);
+
+// [LAW:single-enforcer] The one place the test suite stamps the package
+// version (scripts/version-stamp.cjs): this worker's own sandbox global, and —
+// through NODE_OPTIONS, inherited by every daemon a test spawns — each child's
+// too. Without it src/version.ts refuses to load.
+const stamp = createRequire(__filename)(
+  path.join(__dirname, "..", "scripts", "version-stamp.cjs"),
+) as { withStamp(nodeOptions: string | undefined): string };
+process.env.NODE_OPTIONS = stamp.withStamp(process.env.NODE_OPTIONS);
 
 // [LAW:single-enforcer] Guard every Jest worker from accidentally touching the
 // live daemon's socket at /tmp/cc-candybar-<uid>/socket. setupFiles re-runs in

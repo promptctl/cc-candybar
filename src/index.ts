@@ -16,6 +16,8 @@ import { runCheck } from "./check";
 import { obtainDaemonKick } from "./daemon/acquire";
 import { planOutcome } from "./render/outcome-plan";
 import { HELP_TEXT } from "./help-text";
+import { NODE_FLAGS } from "./cli-flags";
+import { PACKAGE_VERSION } from "./version";
 
 // Read terminal width from the live shell context (no subprocess). Returns
 // undefined when nothing reliable is available; the daemon falls back to its
@@ -52,6 +54,9 @@ function detectTermCols(): number | undefined {
 // widen recall of a fact that is otherwise reported as a plain `false`.
 const SSH_ENV_VARS = ["SSH_CONNECTION", "SSH_CLIENT", "SSH_TTY"] as const;
 
+const hasFlag = (flags: readonly string[]): boolean =>
+  flags.some((f) => process.argv.includes(f));
+
 // [LAW:dataflow-not-control-flow] A fold over the vocabulary, not a chain of
 // ifs — adding a name is a data edit.
 //
@@ -69,11 +74,16 @@ function showHelpText(): void {
 
 async function main(): Promise<void> {
   try {
-    const showHelp =
-      process.argv.includes("--help") || process.argv.includes("-h");
-
-    if (showHelp) {
+    if (hasFlag(NODE_FLAGS.help)) {
       showHelpText();
+      process.exit(0);
+    }
+    // [LAW:one-type-per-behavior] Answers "what is THIS binary" from the baked
+    // stamp alone — never a daemon probe, which would fail exactly when the
+    // flag is most needed (no working daemon). Daemon skew is the stats
+    // snapshot's `version` field.
+    if (hasFlag(NODE_FLAGS.version)) {
+      console.log(`cc-candybar ${PACKAGE_VERSION}`);
       process.exit(0);
     }
 
