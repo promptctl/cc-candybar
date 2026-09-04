@@ -19,7 +19,7 @@
 </style>
 <body>
 <h1>Colour from the theme's own vocabulary</h1>
-<p class="sub">Every cell's background is <code>mix(base, themeHue, amount)</code> — both operands colours the theme already contains — with the entry chosen by the node's address in the layout tree. No hue rotation, no hand-picked colour. Real rich-js palettes: all 23 themes, each with its theme menu open and one entry's submenu open beneath it. Drag <em>settings-menu entries</em> or <em>extra cells</em>: under an n-free distribution no existing cell changes.</p>
+<p class="sub">Every cell's background is <code>mix(base, themeHue, amount)</code> — both operands colours the theme already contains — with the entry chosen by the node's address in the layout tree. No hue rotation, no hand-picked colour. Real rich-js palettes: all 23 themes, each with its theme menu open and one entry's submenu open beneath it. Drag <em>settings-menu entries</em> or <em>extra cells</em>: under an n-free distribution, no cell other than the trigger being opened changes.</p>
 
 <div class="ctl">
   <label>distribution <select id=dm></select></label>
@@ -90,14 +90,16 @@ const entry=idx=>DECOR[((idx%DECOR.length)+DECOR.length)%DECOR.length];
 // disproved it: its `secondary` is #004578, a navy already darker than most
 // surfaces, so its pure form landed on top of the decorative tints (contrast
 // 1.42). So the separation is ENFORCED: push the pure hue toward `foreground`
-// until it clears the most-tinted decorative cell this hue can produce. Vivid
-// themes stop at the first step and are unchanged.
+// until it clears the most-tinted decorative cell this hue can produce on any
+// base. Vivid themes stop at the first step and are unchanged.
 const STATE_FLOOR=2.2;
+const DECOR_MAX_AMT=Math.max(...DECOR_AMTS);
 function stateColor(P,hueName){
-  const S=P.get('surface'), hue=P.get(hueName), fg=P.get('foreground');
-  const decorMax=mixc(S,hue,0.30), pure=mixc(S,hue,0.92);
+  const hue=P.get(hueName), fg=P.get('foreground');
+  const tints=DECOR_BASES.map(b=>mixc(P.get(b),hue,DECOR_MAX_AMT));
+  const pure=mixc(P.get('surface'),hue,0.92);
   let c=pure;
-  for(let k=0;k<=10;k++){ c=mixc(pure,fg,k*0.08); if(CR(c,decorMax)>=STATE_FLOOR) break; }
+  for(let k=0;k<=12;k++){ c=mixc(pure,fg,k/12); if(tints.every(t=>CR(c,t)>=STATE_FLOOR)) break; }
   return c;
 }
 // STATE AND DECORATION MUST NOT SHARE A REGION. Decoration is always a TINT

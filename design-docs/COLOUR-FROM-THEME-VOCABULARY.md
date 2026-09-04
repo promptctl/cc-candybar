@@ -74,7 +74,7 @@ Confusion got solved three separate times by the same move: give each concern it
 
 The last row is the strongest guarantee in the design. Decoration cannot collide with meaning because meaning is **not in the set**. That is strictly stronger than the hue-anchoring it replaces, which only stopped semantic colours from moving while leaving decorative colours free to arrive at them.
 
-The state boundary had to be enforced rather than assumed, because "the pure hue is vivid" is false for some themes. textual-dark's `secondary` is `#004578`, a navy already darker than most surfaces; its pure form sat on top of the decorative tints at contrast 1.42, indistinguishable. textual-ansi's `primary` was worse, at 1.14. The fix is to push the pure hue toward `foreground` until contrast against the most-tinted cell of that same hue reaches 2.2. Measured global minimum across 23 themes × 3 hues afterwards: 2.20, up from 1.14. Themes that were already vivid stop at step zero and are byte-unchanged.
+The state boundary had to be enforced rather than assumed, because "the pure hue is vivid" is false for some themes. textual-dark's `secondary` is `#004578`, a navy already darker than most surfaces; its pure form sat on top of the decorative tints at contrast 1.42, indistinguishable. textual-ansi's `primary` was worse, at 1.14. The fix is to push the pure hue toward `foreground` — as far as `foreground` itself — until contrast against the most-tinted cell of that same hue, on every base, reaches 2.2. Measured global minimum across 23 themes × 3 hues × 3 bases afterwards: 2.21, up from 1.14; solarized-dark's `secondary` is the one that needs the full push. Themes that were already vivid stop at step zero and are byte-unchanged.
 
 ### Three disclosure rules
 
