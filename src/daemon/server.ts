@@ -35,6 +35,7 @@ import {
   readRegistryEntry,
 } from "./fork-bomb-breaker";
 import { dlog } from "./log";
+import { makeBuildWatch } from "./build-currency";
 import {
   PROTOCOL_VERSION,
   encodeFrame,
@@ -154,7 +155,21 @@ const renderCache = new RenderCache(
 );
 
 const REQUEST_TIMEOUT_MS = 200;
+// One cadence for "how often does the daemon look at its build on disk" —
+// the binary watch (exit on a changed bundle) and the build watch (is the
+// bundle older than `src/`) both sample on it.
 const BIN_CHECK_INTERVAL_MS = 60 * 1000;
+
+// [LAW:single-enforcer] The daemon is the process that observes the bundle
+// it runs (armBinaryWatch restarts it on rebuild), so it is the one place
+// the bundle gets compared to the source beside it. The verdict rides the
+// same advisory warning channel as the config-collision detector — one
+// glyph, one click verb, no second rendering path (candybar-build-2s5).
+const buildWatch = makeBuildWatch({
+  entryUrl: import.meta.url,
+  intervalMs: BIN_CHECK_INTERVAL_MS,
+  log: dlog,
+});
 
 // Daemon entry point. Tries to bind the Unix socket — atomic bind() is the
 // single-instance enforcer (two daemons cannot both bind the same path; the
@@ -430,6 +445,7 @@ function onListening(sockPath: string): void {
   // longer applies once a daemon is actually serving.
   resetSpawnBackoff();
   armBinaryWatch();
+  buildWatch.arm();
   armLimits();
   armOwnershipWatch(sockPath, boundRead.identity);
 }
@@ -991,17 +1007,25 @@ async function handleRequest(req: Request): Promise<HandledRequest> {
         [unknownFlagsError, entry.lastError, clickError]
           .filter(Boolean)
           .join("\n") || null;
+      // [LAW:one-source-of-truth] The daemon-wide build verdict joins the
+      // per-config warning on the one warning channel, the way the click
+      // error joins the per-config error above. It goes first: a stale
+      // bundle undermines every config, and leading keeps its two rows
+      // inside the diagnostic row cap whatever the config adds.
+      const combinedWarning =
+        [buildWatch.warning(), entry.lastWarning].filter(Boolean).join("\n") ||
+        null;
       const output = composeWithDiagnostics(
         body,
         combinedError,
-        entry.lastWarning,
+        combinedWarning,
       );
       const ms = Date.now() - t0;
       const g = gitService.getStats();
       const u = usageStore.getStats();
       dlog(
         "info",
-        `render sid=${req.hookData.session_id ?? "?"} took=${ms}ms termCols=${termCols ?? "?"} width=${width} git=${g.size}/${g.hits}h/${g.misses}m usage=${u.size}/${u.hits}h/${u.misses}m err=${entry.lastError ? "Y" : "N"} warn=${entry.lastWarning ? "Y" : "N"}`,
+        `render sid=${req.hookData.session_id ?? "?"} took=${ms}ms termCols=${termCols ?? "?"} width=${width} git=${g.size}/${g.hits}h/${g.misses}m usage=${u.size}/${u.hits}h/${u.misses}m err=${combinedError ? "Y" : "N"} warn=${combinedWarning ? "Y" : "N"}`,
       );
       return stay({ ok: true, output: output + "\n" });
     } catch (e) {
