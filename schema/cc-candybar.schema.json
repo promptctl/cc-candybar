@@ -1118,7 +1118,7 @@
       }
     },
     "root": {
-      "$ref": "#/definitions/LayoutNode"
+      "$ref": "#/definitions/RootFragment"
     },
     "actions": {
       "type": "object",
@@ -1623,7 +1623,7 @@
         "type": "object",
         "properties": {
           "root": {
-            "$ref": "#/definitions/LayoutNode"
+            "$ref": "#/definitions/RootFragment"
           },
           "globals": {
             "type": "object",
@@ -1915,6 +1915,34 @@
           },
           "required": [
             "v"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "RootFragment": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/LayoutNode"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "rows": {
+              "type": "object",
+              "propertyNames": {
+                "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+              },
+              "additionalProperties": {
+                "$ref": "#/definitions/LayoutNode"
+              }
+            },
+            "when": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "rows"
           ],
           "additionalProperties": false
         }

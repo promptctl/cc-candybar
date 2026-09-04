@@ -14,6 +14,7 @@ import { parseAndValidate } from "./helpers/parse-and-validate";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import type { LayoutNode } from "../src/config/dsl-types";
+import { rootNode, rootOf } from "../src/config/root";
 
 const FILE = "/tmp/test.json5";
 
@@ -110,7 +111,7 @@ describe("loadDslConfig — top-level shape", () => {
       editGlobals: {},
       variables: {},
       segments: {},
-      root: { kind: "container", direction: "vertical", children: [] },
+      root: { rows: {} },
       actions: {},
       looks: {},
       presets: {},
@@ -766,7 +767,7 @@ describe("loadDslConfig — A-grammar (seg/h/v)", () => {
       FILE,
       `{ segments: { a: { template: "x" } }, root: "a" }`,
     );
-    expect(cfg.root).toEqual({ kind: "segment", name: "a" });
+    expect(cfg.root).toEqual(rootOf({ kind: "segment", name: "a" }));
   });
 
   test("{ seg } lowers to a segment node", () => {
@@ -774,7 +775,7 @@ describe("loadDslConfig — A-grammar (seg/h/v)", () => {
       FILE,
       `{ segments: { a: { template: "x" } }, root: { seg: "a" } }`,
     );
-    expect(cfg.root).toEqual({ kind: "segment", name: "a" });
+    expect(cfg.root).toEqual(rootOf({ kind: "segment", name: "a" }));
   });
 
   test("{ seg, when } preserves the predicate", () => {
@@ -782,7 +783,7 @@ describe("loadDslConfig — A-grammar (seg/h/v)", () => {
       FILE,
       `{ segments: { a: { template: "x" } }, root: { seg: "a", when: "{{ true }}" } }`,
     );
-    expect(cfg.root).toEqual({ kind: "segment", name: "a", when: "{{ true }}" });
+    expect(cfg.root).toEqual(rootOf({ kind: "segment", name: "a", when: "{{ true }}" }));
   });
 
   test("{ h: [...] } lowers to a horizontal container", () => {
@@ -790,14 +791,14 @@ describe("loadDslConfig — A-grammar (seg/h/v)", () => {
       FILE,
       `{ segments: { a: { template: "x" }, b: { template: "y" } }, root: { h: ["a", "b"] } }`,
     );
-    expect(cfg.root).toEqual({
+    expect(cfg.root).toEqual(rootOf({
       kind: "container",
       direction: "horizontal",
       children: [
         { kind: "segment", name: "a" },
         { kind: "segment", name: "b" },
       ],
-    });
+    }));
   });
 
   test("{ v: [...] } lowers to a vertical container", () => {
@@ -805,14 +806,14 @@ describe("loadDslConfig — A-grammar (seg/h/v)", () => {
       FILE,
       `{ segments: { a: { template: "x" }, b: { template: "y" } }, root: { v: ["a", "b"] } }`,
     );
-    expect(cfg.root).toEqual({
+    expect(cfg.root).toEqual(rootOf({
       kind: "container",
       direction: "vertical",
       children: [
         { kind: "segment", name: "a" },
         { kind: "segment", name: "b" },
       ],
-    });
+    }));
   });
 
   test("nested h-in-v-in-h lowers to the expected canonical tree", () => {
@@ -823,7 +824,7 @@ describe("loadDslConfig — A-grammar (seg/h/v)", () => {
         root: { h: [{ v: ["a", { h: ["b", "c"] }] }] },
       }`,
     );
-    expect(cfg.root).toEqual({
+    expect(cfg.root).toEqual(rootOf({
       kind: "container",
       direction: "horizontal",
       children: [
@@ -843,7 +844,7 @@ describe("loadDslConfig — A-grammar (seg/h/v)", () => {
           ],
         },
       ],
-    });
+    }));
   });
 
   test("{ h, when } preserves the predicate on the container", () => {
@@ -851,12 +852,12 @@ describe("loadDslConfig — A-grammar (seg/h/v)", () => {
       FILE,
       `{ segments: { a: { template: "x" } }, root: { h: ["a"], when: "{{ true }}" } }`,
     );
-    expect(cfg.root).toEqual({
+    expect(cfg.root).toEqual(rootOf({
       kind: "container",
       direction: "horizontal",
       children: [{ kind: "segment", name: "a" }],
       when: "{{ true }}",
-    });
+    }));
   });
 
   test("bijectivity: A-grammar and canonical spelling lower to identical trees", () => {
@@ -899,8 +900,7 @@ describe("loadDslConfig — A-grammar (seg/h/v)", () => {
     );
     // The group lowers to a vertical container whose body-container holds
     // { h: ["m", "n"] } — a horizontal container of two segment refs.
-    expect(cfg.root.kind).toBe("container");
-    const root = cfg.root as import("../src/config/dsl-types").ContainerNode;
+    const root = rootNode(cfg.root);
     expect(root.children[1]).toMatchObject({
       kind: "container",
       children: [
@@ -939,6 +939,60 @@ describe("loadDslConfig — A-grammar (seg/h/v)", () => {
 });
 
 // ─── Cross-reference validation ──────────────────────────────────────────────
+
+// ─── Root fragment: the `{ rows }` arm (brandon-config-merge-uk3) ────────────
+
+describe("loadDslConfig — root rows fragment", () => {
+  const SEG = `segments: { a: { template: "x" }, b: { template: "y" } }`;
+
+  test("a rows map names its rows and carries `when` to the bar", () => {
+    const cfg = parseAndValidate(
+      FILE,
+      `{ ${SEG}, root: { rows: { status: { h: ["a", "b"] } }, when: "{{ true }}" } }`,
+    );
+    expect(cfg.root).toEqual({
+      rows: {
+        status: {
+          kind: "container",
+          direction: "horizontal",
+          children: [
+            { kind: "segment", name: "a" },
+            { kind: "segment", name: "b" },
+          ],
+        },
+      },
+      when: "{{ true }}",
+    });
+  });
+
+  test("`{ rows: {} }` is the identity over the default", () => {
+    const cfg = parseAndValidate(FILE, `{ ${SEG}, root: { rows: {} } }`);
+    expect(cfg.root).toEqual({ rows: {} });
+  });
+
+  test.each(["1x", "a-b"])(
+    "a row name that is not an identifier (%s) is a loud error",
+    (name) => {
+      expect(() =>
+        parseAndValidate(FILE, `{ ${SEG}, root: { rows: { "${name}": "a" } } }`),
+      ).toThrow(/row name "[^"]+" must be an identifier/);
+    },
+  );
+
+  test("`rows` that is not an object is a loud error", () => {
+    expect(() =>
+      parseAndValidate(FILE, `{ ${SEG}, root: { rows: "a" } }`),
+    ).toThrow(/"rows" must be an object of row name → layout node, got string/);
+  });
+
+  test("a `rows` map nested inside a container is not a layout node", () => {
+    // Rows merge at a root, never at a container: inside a tree the object
+    // falls to the node grammar, which knows no `rows` key.
+    expect(() =>
+      parseAndValidate(FILE, `{ ${SEG}, root: { h: [{ rows: { r: "a" } }] } }`),
+    ).toThrow(/root\.h\[0\]\.kind.*a layout node "kind" must be/);
+  });
+});
 
 describe("loadDslConfig — cross-references", () => {
   test("root-authored config reports unknown segment under the `root` path", () => {
@@ -1458,10 +1512,10 @@ describe("loadDslConfig — valid corpus", () => {
       "branch", "constant", "cwd", "cwd_short", "home", "hostname",
       "load_avg", "now", "sid",
     ]);
-    expect(cfg.root).toEqual({
+    expect(cfg.root).toEqual(rootOf({
       kind: "container", direction: "horizontal",
       children: ["cwd", "branch", "load"].map((name) => ({ kind: "segment", name })),
-    });
+    }));
   });
 
   test("minimal valid config loads to canonical empty shape", () => {
@@ -1470,7 +1524,7 @@ describe("loadDslConfig — valid corpus", () => {
       editGlobals: {},
       variables: {},
       segments: {},
-      root: { kind: "container", direction: "vertical", children: [] },
+      root: { rows: {} },
       actions: {},
       looks: {},
       presets: {},

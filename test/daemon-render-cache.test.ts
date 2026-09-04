@@ -18,15 +18,15 @@ import { GitDataProvider } from "../src/daemon/cache/git";
 import { SessionState } from "../src/daemon/session-state";
 import { WatcherRegistry } from "../src/daemon/cache/watchers";
 import { ReloadSignal } from "./helpers/reload-signal";
-import { walkNodes, type LayoutNode, type Root } from "../src/config/dsl-types";
-import { rootNode } from "../src/config/root";
+import { walkNodes, type LayoutNode } from "../src/config/dsl-types";
+import { rootNode, rootOf } from "../src/config/root";
 import { SETTINGS_NS } from "../src/config/settings-menu";
 import { PRESET_FLOOR, presetRoot } from "../src/config/presets";
 
 // Flatten a layout tree to its segment names, in pre-order — the post-`root`
 // equivalent of the old `config.layout.flatMap(r => r.segments)`.
-const layoutSegments = (root: Root): string[] =>
-  [...walkNodes(rootNode(root))].flatMap((n) =>
+const layoutSegments = (root: LayoutNode): string[] =>
+  [...walkNodes(root)].flatMap((n) =>
     n.kind === "segment" ? [n.name] : [],
   );
 
@@ -133,7 +133,7 @@ describe("RenderCache", () => {
       expect(entry.lastError).toBeNull();
       // No file means state was built from the bundled default — every
       // built-in segment is declared.
-      expect(layoutSegments(entry.state.config.root).length).toBeGreaterThan(0);
+      expect(layoutSegments(rootNode(entry.state.config.root)).length).toBeGreaterThan(0);
       expect(entry.configFilePath).toBeNull();
     } finally {
       for (const fn of cleanups) fn();
@@ -194,7 +194,7 @@ describe("RenderCache", () => {
         ),
       );
       expect(entry.lastError).toBeNull();
-      expect(layoutSegments(entry.state.config.root)).toContain("t");
+      expect(layoutSegments(rootNode(entry.state.config.root))).toContain("t");
     } finally {
       for (const fn of cleanups) fn();
       cleanup();
@@ -254,7 +254,7 @@ describe("RenderCache", () => {
       // row of one segment — matching the default's row count of 1 — so
       // row count alone wouldn't prove the file was picked up.
       const defaultLayoutSegCount = layoutSegments(
-        entry.state.config.root,
+        rootNode(entry.state.config.root),
       ).length;
 
       // Create the project-local file. The watcher should fire.
@@ -277,9 +277,9 @@ describe("RenderCache", () => {
         ),
       );
       expect(entry.configFilePath).toBe(cfg);
-      expect(entry.state.config.root).toEqual(oneRow("only"));
+      expect(entry.state.config.root).toEqual(rootOf(oneRow("only")));
       // Sanity: was actually different from the default.
-      expect(layoutSegments(entry.state.config.root).length).not.toBe(
+      expect(layoutSegments(rootNode(entry.state.config.root)).length).not.toBe(
         defaultLayoutSegCount,
       );
     } finally {
@@ -313,7 +313,7 @@ describe("RenderCache", () => {
       const entry = cache.getOrCreate(dir, dir, undefined);
       expect(entry.lastError).toBeNull();
       expect(entry.configFilePath).toBe(cfg);
-      expect(entry.state.config.root).toEqual(oneRow("only"));
+      expect(entry.state.config.root).toEqual(rootOf(oneRow("only")));
     } finally {
       for (const fn of cleanups) fn();
       cleanup();

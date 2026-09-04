@@ -38,7 +38,8 @@ error cell in the bar. `cc-candybar lint` is an alias; `cc-candybar schema`
 prints the JSON Schema.
 
 A user config **merges onto the bundled default** by name (globals per-field;
-variables/segments/actions/looks/helpers per-name; `root` replaces wholesale).
+variables/segments/actions/looks/helpers/`root.rows` per-name; a whole tree at
+`root` replaces every row).
 Declare only what differs. The bundled default already declares `session.id`,
 `theme.effective`, `look.effective`, `term.cols`, every built-in segment, and a
 looks stdlib (`none`, `vivid`, `muted`, `dim`, `bright`, `inverted`) — never
@@ -629,14 +630,13 @@ against the bundled `compact` and `verbose` too, with one thing to expect:
 does not declare copies the whole bundled declaration — its `globals` and its
 `root` — into your file, then applies the edit. A file declaring only
 `presets.compact.root` would otherwise erase the bundled `compact`'s
-`padding: 0`. The same rule applies to a preset with no root of its own: the
-first click copies the bundled top-level `root` into your config's `root`.
-Per-field merge is a follow-up ticket; until then that first click adds a
-full declaration you are free to trim by hand.
+`padding: 0`. A preset staging your config's own root is narrower: the first
+click materializes only `root.rows.<row>` — the one bundled row holding the
+clicked segment, in the grammar you write — and edits that row.
 
 A click whose target or anchor the tree no longer holds — the bar rendered
-before a later edit removed that segment — is a loud click error (`… has no
-segment "model" — the bar you clicked is stale; it reloads on the next
+before a later edit removed that segment — is a loud click error (`… holds
+no segment "model" — the bar you clicked is stale; it reloads on the next
 render`), never a silent drop. The file and the history are untouched, and
 the next render rebuilds the chrome against the current tree.
 
@@ -1009,10 +1009,7 @@ globals that *do* have one.)
 ### The global settings menu: `settings.menu`
 
 One disclosure is present in **every** bar, whatever the config says: the
-global settings menu, rendered as `☰ ▸`. It exists because `root:` replaces the
-bundled default's wholesale, so a user config that declares its own `root` (the
-ordinary reason to write one) would otherwise delete every door into the
-features below along with it.
+global settings menu, rendered as `☰ ▸`.
 
 Opening it shows the always-available functionality:
 
@@ -1115,22 +1112,15 @@ Everything with BOTH halves — theme, look, style, preset, wrap, padding — li
 in the global settings menu instead, as one dual control each. That is the
 difference between the two surfaces: the menu is where a setting you can try
 per-session lives, and it cannot be deleted; the drawer is ordinary authored
-layout holding the durable-only knobs, and your own `root:` replaces it like
-any other segment.
+layout holding the durable-only knobs, and a row you author by name replaces
+it like any other segment.
 
-A user config's `root:` **replaces the bundled default's wholesale** (see the
-top-level project docs), so removing the drawer — or reshaping it — is a
-matter of authoring your own `root` without a `settings` group in it. Doing so
-no longer strands you: the global settings menu above is present either way,
-and with it every setting that has a session half. This reproduces the bundled
-default's two rows minus the drawer:
+Removing the drawer is replacing the `identity` row by name; the global
+settings menu above is present either way:
 
 ```json5 check:pass
 {
-  root: { v: [
-    { h: ["directory", "gitaculous", "toolbar"] },
-    { h: ["model", "context", "cacheTimer", "block", "weekly"] },
-  ] },
+  root: { rows: { identity: { h: ["directory", "gitaculous", "toolbar"] } } },
 }
 ```
 
