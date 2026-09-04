@@ -7,27 +7,33 @@
 // registry lookup as an `Outcome`, one total fold into a `Currency`, and one
 // formatter that describes the report for `runInstall` to perform.
 
-import { ABSENT, failed, ok, type Outcome } from "../utils/outcome";
+import { ABSENT, failed, type Outcome } from "../utils/outcome";
 
 // [LAW:types-are-the-program] A release version is exactly MAJOR.MINOR.PATCH.
 // semantic-release on `main` mints nothing else, and the ordering the currency
 // verdict needs is total only over that shape — so the parser refuses anything
-// else loudly rather than admitting a prerelease it could not order.
+// else rather than admitting a prerelease it could not order.
 export type Version = readonly [major: number, minor: number, patch: number];
 
 const RELEASE_VERSION = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
 
+// A parse either produces a value or fails with a reason; "absent" is not a
+// shape text can have.
+type Parsed<T> = Exclude<Outcome<T>, { kind: "absent" }>;
+
 // [LAW:parse-dont-validate] The one crossing from text to `Version`. Both the
 // baked stamp and the registry's dist-tag pass through here; downstream code
-// takes `Version` and never re-checks the shape.
-export function parseReleaseVersion(text: string): Version {
+// takes `Version` and never re-checks the shape. The failure is typed, not
+// thrown: on either side it flows into the `unchecked` verdict, so the
+// advisory check can never take the install down with it.
+export function parseReleaseVersion(text: string): Parsed<Version> {
   const m = RELEASE_VERSION.exec(text);
-  if (!m) {
-    throw new Error(
-      `"${text}" is not a release version (expected MAJOR.MINOR.PATCH)`,
-    );
-  }
-  return [Number(m[1]), Number(m[2]), Number(m[3])];
+  return m
+    ? { kind: "ok", value: [Number(m[1]), Number(m[2]), Number(m[3])] }
+    : {
+        kind: "failed",
+        reason: `"${text}" is not a release version (expected MAJOR.MINOR.PATCH)`,
+      };
 }
 
 export function formatVersion(v: Version): string {
@@ -59,7 +65,7 @@ export async function fetchLatestVersion(
   packageName: string,
   fetchImpl: typeof fetch,
 ): Promise<Outcome<Version>> {
-  const url = `${REGISTRY_URL}/-/package/${packageName}/dist-tags`;
+  const url = `${REGISTRY_URL}/-/package/${encodeURIComponent(packageName)}/dist-tags`;
   try {
     const res = await fetchImpl(url, {
       signal: AbortSignal.timeout(REGISTRY_TIMEOUT_MS),
@@ -71,15 +77,16 @@ export async function fetchLatestVersion(
     if (typeof tags.latest !== "string") {
       return ABSENT;
     }
-    return ok(parseReleaseVersion(tags.latest));
+    return parseReleaseVersion(tags.latest);
   } catch (err) {
     return failed(err instanceof Error ? err.message : String(err));
   }
 }
 
 // [LAW:types-are-the-program] The verdict. `unchecked` is its own arm rather
-// than a `current` with a flag: an install that could not ask the registry has
-// no currency, and no consumer may read it as having one.
+// than a `current` with a flag: an install that could not compare has no
+// currency, and no consumer may read it as having one. It carries the stamp
+// as text because the stamp itself may be what failed to parse.
 export type Currency =
   | { readonly kind: "current"; readonly installed: Version }
   | {
@@ -94,35 +101,47 @@ export type Currency =
     }
   | {
       readonly kind: "unchecked";
-      readonly installed: Version;
+      readonly installed: string;
       readonly reason: string;
     };
 
-// [LAW:dataflow-not-control-flow] One total fold: the lookup outcome and the
-// version ordering both flow in as values, and every combination lands in
-// exactly one arm.
+// [LAW:dataflow-not-control-flow] One total fold: the stamp, the lookup
+// outcome, and the version ordering all flow in as values, and every
+// combination lands in exactly one arm.
 export function assessCurrency(
-  installed: Version,
+  stamp: string,
   latest: Outcome<Version>,
 ): Currency {
+  const installed = parseReleaseVersion(stamp);
+  if (installed.kind === "failed") {
+    return { kind: "unchecked", installed: stamp, reason: installed.reason };
+  }
   switch (latest.kind) {
     case "failed":
-      return { kind: "unchecked", installed, reason: latest.reason };
+      return { kind: "unchecked", installed: stamp, reason: latest.reason };
     case "absent":
       return {
         kind: "unchecked",
-        installed,
+        installed: stamp,
         reason: "the registry lists no `latest` dist-tag",
       };
     case "ok": {
-      const order = compareVersions(installed, latest.value);
+      const order = compareVersions(installed.value, latest.value);
       if (order < 0) {
-        return { kind: "stale", installed, latest: latest.value };
+        return {
+          kind: "stale",
+          installed: installed.value,
+          latest: latest.value,
+        };
       }
       if (order > 0) {
-        return { kind: "ahead", installed, latest: latest.value };
+        return {
+          kind: "ahead",
+          installed: installed.value,
+          latest: latest.value,
+        };
       }
-      return { kind: "current", installed };
+      return { kind: "current", installed: installed.value };
     }
   }
 }
@@ -142,18 +161,17 @@ export function currencyReport(
   packageName: string,
   currency: Currency,
 ): CurrencyReport {
-  const installed = formatVersion(currency.installed);
   switch (currency.kind) {
     case "current":
       return {
         stream: "stdout",
-        text: `✓ cc-candybar ${installed} is the latest release.\n`,
+        text: `✓ cc-candybar ${formatVersion(currency.installed)} is the latest release.\n`,
       };
     case "ahead":
       return {
         stream: "stdout",
         text:
-          `cc-candybar ${installed} is newer than the registry's latest release ` +
+          `cc-candybar ${formatVersion(currency.installed)} is newer than the registry's latest release ` +
           `(${formatVersion(currency.latest)}): an unpublished build.\n`,
       };
     case "stale": {
@@ -161,7 +179,7 @@ export function currencyReport(
       return {
         stream: "stderr",
         text:
-          `⚠ cc-candybar ${installed} was staged, but the latest release is ${latest}.\n` +
+          `⚠ cc-candybar ${formatVersion(currency.installed)} was staged, but the latest release is ${latest}.\n` +
           `  pnpm's release-age gate (minimumReleaseAge) and its dlx cache can both\n` +
           `  resolve \`@latest\` to an older release without saying so.\n` +
           `  To install ${latest} now, name it explicitly:\n` +
@@ -172,7 +190,7 @@ export function currencyReport(
       return {
         stream: "stderr",
         text:
-          `⚠ Could not check for a cc-candybar release newer than ${installed} ` +
+          `⚠ Could not check for a cc-candybar release newer than ${currency.installed} ` +
           `(${currency.reason}); the registry check was skipped.\n`,
       };
   }

@@ -9,12 +9,7 @@ import { obtainDaemonKick } from "../daemon/acquire";
 import { URL_SCHEME, VERB_COPY } from "../click/wire";
 import { DISCLOSURE_GLYPH_CLOSED } from "../config/disclosure";
 import { PACKAGE_VERSION } from "../version";
-import {
-  assessCurrency,
-  currencyReport,
-  fetchLatestVersion,
-  parseReleaseVersion,
-} from "./currency";
+import { assessCurrency, currencyReport, fetchLatestVersion } from "./currency";
 
 const PACKAGE_NAME = "@promptctl/cc-candybar";
 const BUNDLE_ID = "com.cccandybar.url-handler";
@@ -464,10 +459,6 @@ export async function runInstall(rendererArgs: string[]): Promise<void> {
   const argsToInstall =
     filteredArgs.length > 0 ? filteredArgs : [...DEFAULT_INSTALL_ARGS];
 
-  // Precondition before any side effect: a stamp that is not a release
-  // version cannot be ordered against the registry, so it fails here with
-  // zero files written rather than after staging. [LAW:no-silent-failure]
-  const installed = parseReleaseVersion(PACKAGE_VERSION);
   // The lookup runs concurrently with the staging work below and is awaited
   // once, at the report; the install never waits on the network up front.
   const latest = fetchLatestVersion(PACKAGE_NAME, fetch);
@@ -491,7 +482,7 @@ export async function runInstall(rendererArgs: string[]): Promise<void> {
   // the verdict informs, it never fails the install. [LAW:no-silent-failure]
   const report = currencyReport(
     PACKAGE_NAME,
-    assessCurrency(installed, await latest),
+    assessCurrency(PACKAGE_VERSION, await latest),
   );
   process[report.stream].write(report.text);
 }

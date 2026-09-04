@@ -23,6 +23,7 @@ export default [
         URL: "readonly",
         fetch: "readonly",
         AbortSignal: "readonly",
+        Response: "readonly",
         setTimeout: "readonly",
         clearTimeout: "readonly",
         setInterval: "readonly",
