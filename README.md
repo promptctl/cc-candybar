@@ -24,6 +24,10 @@ A background daemon caches git state, usage data, and per-session values across 
 pnpm dlx @promptctl/cc-candybar@latest install
 ```
 
+npm is the only install channel: the GitHub releases are tags plus a changelog with no downloadable assets, and installing from a GitHub tag does not work (the built `dist/` is not committed).
+
+pnpm 11 delays freshly published packages (`minimumReleaseAge`), so on or near a release day `@latest` can silently resolve to an older version. `install` compares what it staged against the registry and warns when it is behind; to get a specific release immediately, name it: `pnpm dlx @promptctl/cc-candybar@<version> install`.
+
 That single command (re-run it any time to update to the latest release):
 
 1. Stages the runtime at a stable path independent of any package-manager cache — `~/Library/Application Support/CCCandybar/` on macOS, `$XDG_DATA_HOME/cc-candybar/` on Linux — as `bin/cc-candybar` (the prebuilt native render binary for your platform, or a node entry where none exists) beside `dist/index.mjs` (the daemon + CLI bundle).
