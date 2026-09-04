@@ -9,8 +9,8 @@
 //
 // Split into prepare/spawn primitives (not just one all-in-one call) because
 // a daemon-restart test needs to kill ONE daemon and spawn a SECOND against
-// the exact same env/socket/state-dir — the persisted-overrides file it's
-// proving survives a restart lives under that same XDG_STATE_HOME, so the
+// the exact same env/socket/state-dir — the config file and edit history
+// it's proving survive a restart live under that same XDG root, so the
 // tmpdirs must outlive the first daemon's death. `spawnIsolatedDaemon` is
 // the convenience wrapper for the (more common) single-daemon-per-test case.
 
@@ -190,7 +190,13 @@ export async function spawnDaemonWithEnv(
     );
   }
 
-  return { child, killTree: (signal) => { killTree(signal); release(); } };
+  return {
+    child,
+    killTree: (signal) => {
+      killTree(signal);
+      release();
+    },
+  };
 }
 
 export interface IsolatedDaemonHandle {

@@ -235,7 +235,7 @@ export interface DslConfig {
   // Its rung in the precedence chain is the RIGHTMOST one (see
   // src/config/presets.ts): it outranks even a session pick, because entering
   // edit mode is decided later than picking a style. Nothing writes it back to
-  // SessionState or the overrides layer, which is why leaving edit mode
+  // SessionState or the config file, which is why leaving edit mode
   // restores the previous look with no save/restore path
   // [LAW:dataflow-not-control-flow].
   readonly editGlobals: Partial<Globals>;

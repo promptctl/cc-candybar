@@ -493,7 +493,9 @@ describe("apply-layout-op click → the config file", () => {
     // One span changed; the rest of the file is the author's, byte for byte.
     const written = durable.text()!;
     expect(written).toContain(ROOT_COMMENT);
-    expect(written).toContain("removeDirectory: { persist: 'presets.default.root'");
+    expect(written).toContain(
+      "removeDirectory: { persist: 'presets.default.root'",
+    );
     expect(written).not.toBe(original);
     // And the edit is ONE whole-file history entry — the same shape a
     // persist/reset records, so undo needs no layout-specific path.
@@ -563,7 +565,10 @@ describe("apply-layout-op click → the config file", () => {
   // own XDG path.
   test("a click on a session with no recorded render origin is refused — no file to write", () => {
     const { dispose } = buildLayoutRuntime(SRC);
-    const ctx: VerbContext = { sessionState: new SessionState(), dlog: () => {} };
+    const ctx: VerbContext = {
+      sessionState: new SessionState(),
+      dlog: () => {},
+    };
     const applyLayoutOp = VERBS.get("apply-layout-op")!;
     expect(() =>
       applyLayoutOp(
@@ -897,7 +902,10 @@ describe("RenderCache: layout edits land in the file and reload from it", () => 
 }
 `;
 
-  const REMOVE_DIRECTORY = encodeLayoutOp({ op: "remove", target: "directory" });
+  const REMOVE_DIRECTORY = encodeLayoutOp({
+    op: "remove",
+    target: "directory",
+  });
   const INSERT_GITPR_AFTER_GIT = encodeLayoutOp({
     op: "insert",
     segment: "gitPr",
@@ -1075,8 +1083,11 @@ describe("RenderCache: layout edits land in the file and reload from it", () => 
 
       // A fresh cache — a real restart, not an in-process cache rebuild —
       // reloading against the SAME project dir (same config file).
-      const { cache: cache2, sessionState: sessionState2, cleanups: cleanups2 } =
-        makeCache();
+      const {
+        cache: cache2,
+        sessionState: sessionState2,
+        cleanups: cleanups2,
+      } = makeCache();
       try {
         const afterRemove = cache2.getOrCreate(
           durable.projectDir,
@@ -1179,8 +1190,11 @@ describe("RenderCache: layout edits land in the file and reload from it", () => 
         REMOVE_DIRECTORY,
       );
 
-      const { cache: cache2, sessionState: sessionState2, cleanups: cleanups2 } =
-        makeCache();
+      const {
+        cache: cache2,
+        sessionState: sessionState2,
+        cleanups: cleanups2,
+      } = makeCache();
       try {
         const customized = cache2.getOrCreate(
           durable.projectDir,
@@ -1290,8 +1304,11 @@ describe("RenderCache: layout edits land in the file and reload from it", () => 
       for (const fn of cleanups) fn();
     }
 
-    const { cache: cache2, sessionState: sessionState2, cleanups: cleanups2 } =
-      makeCache();
+    const {
+      cache: cache2,
+      sessionState: sessionState2,
+      cleanups: cleanups2,
+    } = makeCache();
     try {
       const emptied = cache2.getOrCreate(
         durable.projectDir,

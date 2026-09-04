@@ -14,15 +14,16 @@
 // full in docs/interaction-authoring.md ("persist / reset"), which is the ONE
 // place it is written down:
 //
-//   bundled default  <  user config file  <  persisted overrides
-//                    <  ACTIVE PRESET  <  session pick  <  EDIT MODE
+//   bundled default  <  CONFIG FILE  <  ACTIVE PRESET  <  session pick
+//                    <  EDIT MODE
 //
 // The preset's position is forced by its lifetime, not chosen. Everything to
 // its left is resolved once per RenderCache entry (an entry serves many
-// sessions: the user file and the overrides file are both read in buildState);
+// sessions: the config file is read in buildState — and it is the ONE durable
+// store, candybar-config-dqe, so a `persist` click edits that same file);
 // everything from the preset rightward is resolved per render, because the pick
 // is per session. The chain is therefore monotonic in "how late is this
-// decided", which is why a preset overrides a persisted default (switching to a
+// decided", which is why a preset overrides the file's default (switching to a
 // "compact" arrangement must actually change padding, even for a user who once
 // persisted a padding they liked) while a session's own click still wins over
 // the preset (a click is later still).
@@ -33,7 +34,7 @@
 // layer, and a session pick of "capsule" cannot survive into a mode whose whole
 // job is to stop segments reading as one continuous strip. It differs from
 // every rung to its left in LIFETIME rather than in kind: nothing writes it to
-// SessionState or the overrides layer, so leaving edit mode restores the
+// SessionState or the config file, so leaving edit mode restores the
 // previous look with no save/restore path — the session's own pick was never
 // overwritten, only out-ranked [LAW:dataflow-not-control-flow]. The rung itself
 // is the `staged` parameter of effectiveGlobal (themes/policy.ts); this comment

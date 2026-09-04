@@ -7,27 +7,21 @@
 //      page cursor is never persisted); reset is a single slash-free key.
 //   2. deriveConfigActionValidators derives the persistent-write gate from
 //      the SAME action table the `{{ action }}` fn realizes a click from —
-//      the config-overrides keyspace, kept separate from SessionState's.
+//      the config-file keyspace, kept separate from SessionState's.
 //   3. A click on a compiled persist-* action fires VERB_SET_CONFIG/
 //      VERB_STEP_CONFIG through the REAL daemon leaf handlers, which
-//      validate-then-write durably to the daemon-owned overrides file —
-//      never the hand-authored config file (byte-identical assertion).
-//   4. RenderCache merges the overrides layer on top of the user file every
-//      reload (bundled default < user file < overrides precedence), riding
-//      the SAME file-watcher path a hand edit to the config file already
-//      takes — no bespoke apply path.
-//   5. reset-config is gated by key membership and clears one override,
-//      restoring the pre-override value on the next reload.
+//      validate-then-write durably INTO THE SESSION'S CONFIG FILE
+//      (candybar-config-dqe): one value span replaced, every other byte —
+//      comments included — preserved, one whole-file history entry.
+//   4. RenderCache reads the edited file back through the SAME file-watcher
+//      path a hand edit already takes (bundled default < config file <
+//      active preset < session pick) — no bespoke apply path, and the write
+//      survives a restart because the file IS the write.
+//   5. reset-config is gated by key membership and deletes the key's path
+//      from the file, so the next reload falls back to the bundled default.
 
 import { ownLinks, ownValidators } from "./helpers/ambient-chrome";
-import {
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
-import { tmpdir } from "node:os";
+import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { getThemePalette } from "@promptctl/rich-js";
 import { parseAndValidate } from "./helpers/parse-and-validate";
@@ -56,21 +50,13 @@ import {
   deriveActionValidators,
   registerStateValidator,
 } from "../src/daemon/verbs/state-validators";
-import {
-  clearConfigOverride,
-  coercePersistValue,
-  isGlobalsField,
-  loadConfigOverrides,
-  writeConfigOverride,
-} from "../src/daemon/config-overrides-store";
+import { persistValueText, writeValue } from "../src/daemon/config-file-store";
+import { isGlobalsField } from "../src/config/loader/globals";
+import { durableConfig, type DurableConfig } from "./helpers/durable-config";
 import { RenderCache } from "../src/daemon/cache/render";
 import { GitDataProvider } from "../src/daemon/cache/git";
 import { WatcherRegistry } from "../src/daemon/cache/watchers";
-import {
-  PRESET_FLOOR,
-  effectivePresetName,
-  presetGlobals,
-} from "../src/config/presets";
+import { PRESET_FLOOR, presetGlobals } from "../src/config/presets";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 
@@ -100,80 +86,21 @@ function extractUrls(rendered: string): string[] {
   return ownLinks(urls);
 }
 
-function tmpFile(): { path: string; cleanup: () => void } {
-  const dir = mkdtempSync(join(tmpdir(), "cc-candybar-config-overrides-"));
-  return {
-    path: join(dir, "config-overrides.json"),
-    cleanup: () => rmSync(dir, { recursive: true, force: true }),
-  };
-}
+// [LAW:one-source-of-truth] The config FILE is the durable store a persist
+// click edits (candybar-config-dqe). One fixture for the whole file — every
+// test gets a fresh temp config root, whether or not it clicks — so there is
+// no per-describe "does this one need a file" decision to get wrong.
+let durable: DurableConfig;
+beforeEach(() => {
+  durable = durableConfig("cc-candybar-persist-");
+});
+afterEach(() => {
+  durable.dispose();
+});
 
-// ─── config-overrides-store: the daemon-owned overrides file ─────────────────
+// ─── config-file-store: the wire string → the file's typed JSON5 text ────────
 
-describe("config-overrides-store", () => {
-  test("missing file loads as empty overrides", () => {
-    const { path, cleanup } = tmpFile();
-    expect(loadConfigOverrides(path)).toEqual({});
-    cleanup();
-  });
-
-  test("write then load round-trips a string field", () => {
-    const { path, cleanup } = tmpFile();
-    writeConfigOverride(path, "palette", "nord");
-    expect(loadConfigOverrides(path)).toEqual({ palette: "nord" });
-    cleanup();
-  });
-
-  test("write then load round-trips a numeric field as a real number", () => {
-    const { path, cleanup } = tmpFile();
-    writeConfigOverride(path, "padding", 3);
-    const overrides = loadConfigOverrides(path);
-    expect(overrides.padding).toBe(3);
-    expect(typeof overrides.padding).toBe("number");
-    cleanup();
-  });
-
-  test("multiple writes accumulate (read-modify-write)", () => {
-    const { path, cleanup } = tmpFile();
-    writeConfigOverride(path, "palette", "nord");
-    writeConfigOverride(path, "look", "vivid");
-    expect(loadConfigOverrides(path)).toEqual({
-      palette: "nord",
-      look: "vivid",
-    });
-    cleanup();
-  });
-
-  test("clear removes exactly one key, leaving the rest", () => {
-    const { path, cleanup } = tmpFile();
-    writeConfigOverride(path, "palette", "nord");
-    writeConfigOverride(path, "look", "vivid");
-    clearConfigOverride(path, "palette");
-    expect(loadConfigOverrides(path)).toEqual({ look: "vivid" });
-    cleanup();
-  });
-
-  test("clear on an absent key is a no-op, not an error", () => {
-    const { path, cleanup } = tmpFile();
-    expect(() => clearConfigOverride(path, "palette")).not.toThrow();
-    expect(loadConfigOverrides(path)).toEqual({});
-    cleanup();
-  });
-
-  test("corrupt JSON recovers to empty, not a thrown error", () => {
-    const { path, cleanup } = tmpFile();
-    writeFileSync(path, "{ not valid json");
-    expect(loadConfigOverrides(path)).toEqual({});
-    cleanup();
-  });
-
-  test("a value of the wrong shape (whole file) recovers to empty", () => {
-    const { path, cleanup } = tmpFile();
-    writeFileSync(path, JSON.stringify({ padding: "sixteen" })); // string, not number
-    expect(loadConfigOverrides(path)).toEqual({});
-    cleanup();
-  });
-
+describe("persistValueText", () => {
   test("isGlobalsField accepts real Globals fields and rejects everything else", () => {
     expect(isGlobalsField("palette")).toBe(true);
     expect(isGlobalsField("padding")).toBe(true);
@@ -181,53 +108,63 @@ describe("config-overrides-store", () => {
     expect(isGlobalsField("__proto__")).toBe(false);
   });
 
-  test("coercePersistValue coerces per-field type from the canonical wire string", () => {
-    expect(coercePersistValue("palette", "nord")).toBe("nord");
-    expect(coercePersistValue("padding", "3")).toBe(3);
-    expect(coercePersistValue("autoWrap", "1")).toBe(true);
-    expect(coercePersistValue("autoWrap", "")).toBe(false);
+  test("lifts the canonical wire string into the field's typed JSON5 text", () => {
+    expect(persistValueText("palette", "nord")).toBe('"nord"');
+    expect(persistValueText("padding", "3")).toBe("3");
+    expect(persistValueText("autoWrap", "1")).toBe("true");
+    expect(persistValueText("autoWrap", "")).toBe("false");
   });
 
   // [LAW:verifiable-goals] A `persist` boolean field's gate is an ALLOW-LIST
   // (a `cycle`/`to` action's declared members pass through membership-checked
   // but otherwise VERBATIM), not validateBoolean's own canonicalizing
   // SessionState validator — so a config author writing `cycle: ["true",
-  // "false"]` or `to: "0"` reaches coercePersistValue with the raw member,
-  // not a pre-canonicalized "1"/"". All four canonical boolean-ish wire
-  // strings must coerce, not just the canonical "1"/"" pair.
-  test("coercePersistValue accepts every canonical boolean-ish wire string, not just 1/empty", () => {
-    expect(coercePersistValue("autoWrap", "true")).toBe(true);
-    expect(coercePersistValue("autoWrap", "1")).toBe(true);
-    expect(coercePersistValue("autoWrap", "false")).toBe(false);
-    expect(coercePersistValue("autoWrap", "0")).toBe(false);
-    expect(coercePersistValue("autoWrap", "")).toBe(false);
+  // "false"]` or `to: "0"` reaches persistValueText with the raw member, not
+  // a pre-canonicalized "1"/"". All four canonical boolean-ish wire strings
+  // must lift, not just the canonical "1"/"" pair.
+  test("accepts every canonical boolean-ish wire string, not just 1/empty", () => {
+    expect(persistValueText("autoWrap", "true")).toBe("true");
+    expect(persistValueText("autoWrap", "1")).toBe("true");
+    expect(persistValueText("autoWrap", "false")).toBe("false");
+    expect(persistValueText("autoWrap", "0")).toBe("false");
+    expect(persistValueText("autoWrap", "")).toBe("false");
   });
 
-  test("coercePersistValue throws loudly on an undeliverable numeric string", () => {
-    expect(() => coercePersistValue("padding", "not-a-number")).toThrow(
+  test("throws loudly on an undeliverable numeric string", () => {
+    expect(() => persistValueText("padding", "not-a-number")).toThrow(
       /expects a number/,
     );
   });
 
-  test("coercePersistValue throws loudly on an undeliverable boolean string", () => {
-    expect(() => coercePersistValue("autoWrap", "maybe")).toThrow(
+  test("throws loudly on an undeliverable boolean string", () => {
+    expect(() => persistValueText("autoWrap", "maybe")).toThrow(
       /expects boolean-ish/,
+    );
+  });
+
+  test("a preset-root key names a tree, not a value — refused", () => {
+    expect(() => persistValueText("presets.compact.root", "x")).toThrow(
+      /does not name a value/,
     );
   });
 
   // [LAW:no-silent-failure] A write failure must be OBSERVABLE by the caller
   // — the verb handler logs "set-config: ..." as a success on the line right
   // after this call, so a swallowed failure would let that log lie. Point
-  // the write at a path whose parent cannot be created (a file standing
-  // where a directory is expected) to force a real fs failure.
-  test("writeConfigOverride throws (not silently swallows) when the write fails", () => {
-    const { path: blocker, cleanup } = tmpFile();
+  // the write at a path whose parent cannot be a directory (a file standing
+  // where one is expected) to force a real fs failure.
+  test("writeValue throws (not silently swallows) when the write fails", () => {
+    const blocker = join(durable.projectDir, "blocker");
     writeFileSync(blocker, "not a directory");
-    const impossiblePath = join(blocker, "config-overrides.json");
+    const impossiblePath = join(blocker, "config.json5");
     expect(() =>
-      writeConfigOverride(impossiblePath, "palette", "nord"),
+      writeValue(
+        { historyPath: durable.historyPath, logger: () => {} },
+        impossiblePath,
+        "palette",
+        "nord",
+      ),
     ).toThrow();
-    cleanup();
   });
 });
 
@@ -449,9 +386,14 @@ describe("persist/reset action loader shape", () => {
 
 // ─── end-to-end: click → durable write, through the real daemon handlers ─────
 
+// [LAW:one-source-of-truth] The runtime parses `src` for the render AND
+// writes the same text as the session's config file, so the value a click
+// edits sits in the file the bar rendered from — the daemon's own situation.
 function buildPersistRuntime(src: string, sessionId = "s1") {
+  durable.write(src);
   const config = parseAndValidate("<test>", src, ALLOWED);
   const sessionState = new SessionState();
+  durable.seedOrigin(sessionState, sessionId);
   const store = new VariableStore();
   const registry = new SourceRegistry(store, "", undefined, sessionState);
   const compiled = registerDslConfig(config, registry);
@@ -484,22 +426,15 @@ function buildPersistRuntime(src: string, sessionId = "s1") {
   return { config, store, render, click, dispose };
 }
 
-describe("persist action click → durable overrides write", () => {
-  let savedXdgState: string | undefined;
-  let xdgStateDir: string;
+describe("persist action click → the config file", () => {
+  const globalsInFile = (): Record<string, unknown> =>
+    (durable.parsed().globals ?? {}) as Record<string, unknown>;
 
-  beforeEach(() => {
-    savedXdgState = process.env.XDG_STATE_HOME;
-    xdgStateDir = mkdtempSync(join(tmpdir(), "cc-candybar-persist-state-"));
-    process.env.XDG_STATE_HOME = xdgStateDir;
-  });
-  afterEach(() => {
-    if (savedXdgState === undefined) delete process.env.XDG_STATE_HOME;
-    else process.env.XDG_STATE_HOME = savedXdgState;
-    rmSync(xdgStateDir, { recursive: true, force: true });
-  });
-
+  // The comment beside `globals` is the canary: a click edits ONE value span
+  // and everything else in the file — this comment included — survives.
+  const GLOBALS_COMMENT = "// the hand-authored display defaults";
   const SRC = `{
+    ${GLOBALS_COMMENT}
     globals: {},
     variables: {
       'session.id': { kind: 'input', path: 'session_id', default: '' },
@@ -513,35 +448,36 @@ describe("persist action click → durable overrides write", () => {
     root: 'bar',
   }`;
 
-  test("clicking a persist-option action writes the overrides file durably", () => {
+  test("clicking a persist-option action writes globals.palette into the config file", () => {
     const { render, click, dispose } = buildPersistRuntime(SRC);
+    const original = durable.text()!;
     const out = render();
     const urls = extractUrls(out);
     // The first link is applyTheme bound to "nord" (the display text).
     const applyUrl = effectsOf(urls[0]!)[0]!;
     expect(applyUrl.verb).toBe("set-config");
     click(urls[0]!);
-    const overrides = loadConfigOverrides(
-      join(xdgStateDir, "cc-candybar", "config-overrides.json"),
-    );
-    expect(overrides).toEqual({ palette: "nord" });
+    expect(globalsInFile()).toEqual({ palette: "nord" });
+    // One span changed; the rest of the file is the author's, byte for byte.
+    const written = durable.text()!;
+    expect(written).toContain(GLOBALS_COMMENT);
+    expect(written).toContain("applyTheme: { persist: 'palette'");
+    expect(durable.history().past).toEqual([
+      { file: durable.configPath, before: original, after: written },
+    ]);
     dispose();
   });
 
-  test("clicking reset clears a previously-persisted override", () => {
-    const overridesPath = join(
-      xdgStateDir,
-      "cc-candybar",
-      "config-overrides.json",
-    );
-    writeConfigOverride(overridesPath, "palette", "nord");
+  test("clicking reset deletes the persisted key from the file", () => {
     const { render, click, dispose } = buildPersistRuntime(SRC);
-    const out = render();
-    const urls = extractUrls(out);
+    const urls = extractUrls(render());
+    click(urls[0]!);
+    expect(globalsInFile()).toEqual({ palette: "nord" });
     const resetUrl = urls[1]!;
     expect(effectsOf(resetUrl)[0]!.verb).toBe("reset-config");
     click(resetUrl);
-    expect(loadConfigOverrides(overridesPath)).toEqual({});
+    expect(globalsInFile()).toEqual({});
+    expect(durable.text()).toContain(GLOBALS_COMMENT);
     dispose();
   });
 
@@ -563,32 +499,25 @@ describe("persist action click → durable overrides write", () => {
     presets: { compact: {} },
   }`;
 
-  test("clicking a persist-option action over preset writes the overrides file durably", () => {
+  test("clicking a persist-option action over preset writes globals.preset into the config file", () => {
     const { render, click, dispose } = buildPersistRuntime(SRC_PRESET);
     const urls = extractUrls(render());
     const applyUrl = effectsOf(urls[0]!)[0]!;
     expect(applyUrl.verb).toBe("set-config");
     click(urls[0]!);
-    const overrides = loadConfigOverrides(
-      join(xdgStateDir, "cc-candybar", "config-overrides.json"),
-    );
-    expect(overrides).toEqual({ preset: "compact" });
+    expect(globalsInFile()).toEqual({ preset: "compact" });
     dispose();
   });
 
-  test("clicking reset clears a previously-persisted preset override", () => {
-    const overridesPath = join(
-      xdgStateDir,
-      "cc-candybar",
-      "config-overrides.json",
-    );
-    writeConfigOverride(overridesPath, "preset", "compact");
+  test("clicking reset deletes the persisted preset from the file", () => {
     const { render, click, dispose } = buildPersistRuntime(SRC_PRESET);
     const urls = extractUrls(render());
+    click(urls[0]!);
+    expect(globalsInFile()).toEqual({ preset: "compact" });
     const resetUrl = urls[1]!;
     expect(effectsOf(resetUrl)[0]!.verb).toBe("reset-config");
     click(resetUrl);
-    expect(loadConfigOverrides(overridesPath)).toEqual({});
+    expect(globalsInFile()).toEqual({});
     dispose();
   });
 
@@ -617,8 +546,10 @@ describe("persist action click → durable overrides write", () => {
       },
       root: 'bar',
     }`;
+    durable.write(src);
     const config = parseAndValidate("<test>", src, ALLOWED);
     const sessionState = new SessionState();
+    durable.seedOrigin(sessionState, "s1");
     const store = new VariableStore();
     const registry = new SourceRegistry(store, "", undefined, sessionState);
     const compiled = registerDslConfig(config, registry);
@@ -675,10 +606,7 @@ describe("persist action click → durable overrides write", () => {
       ).toBe(false);
 
       click(asciiUrl!);
-      const overrides = loadConfigOverrides(
-        join(xdgStateDir, "cc-candybar", "config-overrides.json"),
-      );
-      expect(overrides).toEqual({ charset: "ascii" });
+      expect(globalsInFile()).toEqual({ charset: "ascii" });
     } finally {
       stateDisposers.forEach((d) => d());
       configDisposers.forEach((d) => d());
@@ -711,10 +639,7 @@ describe("persist action click → durable overrides write", () => {
     const effect = effectsOf(urls[0]!)[0]!;
     expect(effect.verb).toBe("set-config");
     click(urls[0]!);
-    const overrides = loadConfigOverrides(
-      join(xdgStateDir, "cc-candybar", "config-overrides.json"),
-    );
-    expect(overrides).toEqual({ look: "vivid" });
+    expect(globalsInFile()).toEqual({ look: "vivid" });
     dispose();
   });
 
@@ -727,10 +652,7 @@ describe("persist action click → durable overrides write", () => {
     // Unset counts as the first member ("truecolor"); the click writes the
     // successor ("256") — same "unknown current counts as first" rule the
     // renderer's cycleIndex uses.
-    const overrides = loadConfigOverrides(
-      join(xdgStateDir, "cc-candybar", "config-overrides.json"),
-    );
-    expect(overrides).toEqual({ colorCompatibility: "256" });
+    expect(globalsInFile()).toEqual({ colorCompatibility: "256" });
     dispose();
   });
 
@@ -746,11 +668,8 @@ describe("persist action click → durable overrides write", () => {
     // on a bar reading `padding 1` wrap to 16, and both write gates now read
     // the same seed source (numericGlobalsSeeds).
     click(urls[2]!); // unset seeds from the floor (1) + by (1) = 2
-    click(urls[2]!); // reads the just-written override (2) + by (1) = 3
-    const overrides = loadConfigOverrides(
-      join(xdgStateDir, "cc-candybar", "config-overrides.json"),
-    );
-    expect(overrides).toEqual({ padding: 3 });
+    click(urls[2]!); // reads the just-written file value (2) + by (1) = 3
+    expect(globalsInFile()).toEqual({ padding: 3 });
     dispose();
   });
 
@@ -787,8 +706,8 @@ describe("persist action click → durable overrides write", () => {
   // [LAW:verifiable-goals] candybar-config-engine-71o.3: autoWrap is the one
   // BOOLEAN field among the newly-exposed globals — proves a persist-cycle
   // over it round-trips through coercePersistValue's boolean branch (not
-  // just its own unit test above) and lands as a real JS boolean in the
-  // overrides file, not the string "false".
+  // just its own unit test above) and lands as a real JSON5 boolean in the
+  // file, not the string "false".
   test("clicking a persist-cycle action over the boolean autoWrap field writes a real boolean", () => {
     const { render, click, dispose } = buildPersistRuntime(`{
       globals: {},
@@ -799,10 +718,7 @@ describe("persist action click → durable overrides write", () => {
     }`);
     const urls = extractUrls(render());
     click(urls[0]!); // unset counts as "true" (first member); writes successor "false"
-    const overrides = loadConfigOverrides(
-      join(xdgStateDir, "cc-candybar", "config-overrides.json"),
-    );
-    expect(overrides).toEqual({ autoWrap: false });
+    expect(globalsInFile()).toEqual({ autoWrap: false });
     dispose();
   });
 
@@ -854,10 +770,12 @@ describe("persist action click → durable overrides write", () => {
       }`,
       ALLOWED,
     );
-    const disposers = deriveConfigActionValidators(config).map(({ key, spec }) =>
-      registerConfigValidator(key, spec),
+    const disposers = deriveConfigActionValidators(config).map(
+      ({ key, spec }) => registerConfigValidator(key, spec),
     );
     const sessionState = new SessionState();
+    durable.write(`{ globals: {}, segments: {} }`);
+    durable.seedOrigin(sessionState, "s1");
     const ctx: VerbContext = { sessionState, dlog: () => {} };
     const enc = (v: string) => encodeURIComponent(v);
     try {
@@ -869,21 +787,18 @@ describe("persist action click → durable overrides write", () => {
       ).toThrow(/unknown session key/);
       // The durable half is on disk regardless: the release ran after it, and
       // its failure is reported rather than swallowed or compensated.
-      expect(
-        loadConfigOverrides(
-          join(xdgStateDir, "cc-candybar", "config-overrides.json"),
-        ),
-      ).toEqual({ palette: "nord" });
+      expect(globalsInFile()).toEqual({ palette: "nord" });
     } finally {
       for (const d of disposers) d();
     }
   });
 });
 
-// ─── RenderCache integration: merge precedence + reload + byte-identity ──────
+// ─── RenderCache integration: the file is the store, reload, restart ────────
 
 function makeCache(): {
   cache: RenderCache;
+  sessionState: SessionState;
   cleanups: Array<() => void>;
   reloads: ReloadSignal;
 } {
@@ -904,201 +819,89 @@ function makeCache(): {
     { gitService, sessionState, watchers },
     { observers: reloads.observers },
   );
-  return { cache, cleanups, reloads };
+  return { cache, sessionState, cleanups, reloads };
 }
 
-describe("RenderCache: persistent overrides merge into the effective config", () => {
-  let savedXdgState: string | undefined;
-  let savedXdgConfig: string | undefined;
+describe("RenderCache: the config file is the durable store", () => {
   let savedCcConfig: string | undefined;
-  let xdgStateDir: string;
-  let xdgConfigDir: string;
-  let projectDir: string;
 
   beforeEach(() => {
-    savedXdgState = process.env.XDG_STATE_HOME;
-    savedXdgConfig = process.env.XDG_CONFIG_HOME;
     savedCcConfig = process.env.CC_CANDYBAR_CONFIG;
-    xdgStateDir = mkdtempSync(join(tmpdir(), "cc-candybar-rc-state-"));
-    xdgConfigDir = mkdtempSync(join(tmpdir(), "cc-candybar-rc-xdgcfg-"));
-    projectDir = mkdtempSync(join(tmpdir(), "cc-candybar-rc-project-"));
-    process.env.XDG_STATE_HOME = xdgStateDir;
-    process.env.XDG_CONFIG_HOME = xdgConfigDir;
     delete process.env.CC_CANDYBAR_CONFIG;
   });
   afterEach(() => {
-    if (savedXdgState === undefined) delete process.env.XDG_STATE_HOME;
-    else process.env.XDG_STATE_HOME = savedXdgState;
-    if (savedXdgConfig === undefined) delete process.env.XDG_CONFIG_HOME;
-    else process.env.XDG_CONFIG_HOME = savedXdgConfig;
     if (savedCcConfig === undefined) delete process.env.CC_CANDYBAR_CONFIG;
     else process.env.CC_CANDYBAR_CONFIG = savedCcConfig;
-    rmSync(xdgStateDir, { recursive: true, force: true });
-    rmSync(xdgConfigDir, { recursive: true, force: true });
-    rmSync(projectDir, { recursive: true, force: true });
   });
 
-  test("an override changes globals.palette without touching the user config file", async () => {
-    const userConfigPath = join(projectDir, ".cc-candybar.json5");
-    const userConfigBody = JSON.stringify({
-      globals: { palette: "textual-dark" },
-      segments: {},
-    });
-    writeFileSync(userConfigPath, userConfigBody);
+  const GLOBALS_COMMENT = "// the hand-authored display defaults";
 
-    const overridesPath = join(
-      xdgStateDir,
-      "cc-candybar",
-      "config-overrides.json",
-    );
-    writeConfigOverride(overridesPath, "palette", "nord");
-
-    const { cache, cleanups } = makeCache();
+  // [LAW:one-source-of-truth] The click's write reaches the LIVE cache through
+  // the SAME watcher a hand edit to the file fires — there is no second
+  // "overrides changed" channel. The first application is the click itself;
+  // a retry (fs.watch has no ready signal — see reload-signal.ts) re-touches
+  // the file with the bytes the click left, so every application ends in the
+  // same on-disk state and emits an event. Then a REAL restart (a brand-new
+  // RenderCache + GitDataProvider + WatcherRegistry — exactly what the daemon
+  // process rebuilds from scratch, reading nothing but the file on disk)
+  // sees the same value: the write survives because the file IS the write.
+  test("a set-config click edits globals.palette in the file, the live cache reloads it, and a restart reads it back", async () => {
+    // Declares its own `pin` action so the cache's derived gate admits
+    // exactly the value the test fires — the same gate a rendered click
+    // passes through.
+    durable.write(`{
+  ${GLOBALS_COMMENT}
+  globals: { palette: "textual-dark" },
+  segments: {},
+  actions: { pin: { persist: "palette", from: "themes" } },
+}
+`);
+    const { cache, sessionState, cleanups, reloads } = makeCache();
     try {
-      const entry = cache.getOrCreate(projectDir, projectDir, undefined);
+      const entry = cache.getOrCreate(
+        durable.projectDir,
+        durable.projectDir,
+        undefined,
+      );
       expect(entry.lastError).toBeNull();
-      // overrides win over the user file's own globals.palette
+      expect(entry.state!.config.globals.palette).toBe("textual-dark");
+
+      durable.seedOrigin(sessionState, "s1");
+      const ctx: VerbContext = { sessionState, dlog: () => {} };
+      let clicked = false;
+      await reloads.after(entry, () => {
+        if (clicked) {
+          writeFileSync(durable.configPath, durable.text()!);
+          return;
+        }
+        clicked = true;
+        VERBS.get("set-config")!(
+          ["s1", "palette", "nord"].map(encodeURIComponent).join("/"),
+          ctx,
+        );
+      });
+
+      expect(entry.lastError).toBeNull();
       expect(entry.state!.config.globals.palette).toBe("nord");
-      // the hand-authored file is byte-identical — the daemon never wrote to it
-      expect(readFileSync(userConfigPath, "utf8")).toBe(userConfigBody);
-    } finally {
-      for (const fn of cleanups) fn();
-    }
-  });
-
-  // [LAW:verifiable-goals] candybar-config-engine-71o.3's epic acceptance,
-  // asserted for one of the newly-exposed fields (charset has no
-  // SessionState half at all — unlike palette, "every session sees it" is
-  // not even a precedence question, it's the ONLY resolution there is): a
-  // persisted override survives a REAL restart (a brand-new RenderCache +
-  // GitDataProvider + WatcherRegistry — exactly what the daemon process
-  // rebuilds from scratch on restart, reading nothing but the overrides file
-  // on disk) and a brand-new session/project pairing sees it too.
-  test("an override changes globals.charset without touching the user config file, and survives a restart", async () => {
-    const userConfigPath = join(projectDir, ".cc-candybar.json5");
-    const userConfigBody = JSON.stringify({
-      globals: { charset: "unicode" },
-      segments: {},
-    });
-    writeFileSync(userConfigPath, userConfigBody);
-
-    const overridesPath = join(
-      xdgStateDir,
-      "cc-candybar",
-      "config-overrides.json",
-    );
-    writeConfigOverride(overridesPath, "charset", "ascii");
-
-    const { cache, cleanups } = makeCache();
-    try {
-      const entry = cache.getOrCreate(projectDir, projectDir, undefined);
-      expect(entry.lastError).toBeNull();
-      expect(entry.state!.config.globals.charset).toBe("ascii");
-      expect(readFileSync(userConfigPath, "utf8")).toBe(userConfigBody);
-    } finally {
-      for (const fn of cleanups) fn();
-    }
-
-    // Restart: a fresh cache/services pair, reading only the overrides file
-    // on disk — no in-memory state carries over.
-    const { cache: restarted, cleanups: restartedCleanups } = makeCache();
-    try {
-      const entry = restarted.getOrCreate(projectDir, projectDir, undefined);
-      expect(entry.state!.config.globals.charset).toBe("ascii");
-    } finally {
-      for (const fn of restartedCleanups) fn();
-    }
-  });
-
-  // [LAW:verifiable-goals] brandon-presets-0yk.2 done-gate: "the choice
-  // survives a daemon restart and appears in a new session" — `preset` is
-  // just another Globals field to the persist/restart machinery above, so
-  // this mirrors the charset test verbatim, one field over.
-  test("an override changes globals.preset without touching the user config file, and survives a restart", async () => {
-    const userConfigPath = join(projectDir, ".cc-candybar.json5");
-    const userConfigBody = JSON.stringify({
-      globals: {},
-      segments: {},
-      presets: { both: {} },
-    });
-    writeFileSync(userConfigPath, userConfigBody);
-
-    const overridesPath = join(
-      xdgStateDir,
-      "cc-candybar",
-      "config-overrides.json",
-    );
-    writeConfigOverride(overridesPath, "preset", "both");
-
-    const { cache, cleanups } = makeCache();
-    try {
-      const entry = cache.getOrCreate(projectDir, projectDir, undefined);
-      expect(entry.lastError).toBeNull();
-      expect(entry.state!.config.globals.preset).toBe("both");
-      expect(readFileSync(userConfigPath, "utf8")).toBe(userConfigBody);
-    } finally {
-      for (const fn of cleanups) fn();
-    }
-
-    const { cache: restarted, cleanups: restartedCleanups } = makeCache();
-    try {
-      const entry = restarted.getOrCreate(projectDir, projectDir, undefined);
-      expect(entry.state!.config.globals.preset).toBe("both");
-    } finally {
-      for (const fn of restartedCleanups) fn();
-    }
-  });
-
-  // [LAW:verifiable-goals] brandon-presets-0yk.2: the risk `persist: "preset"`
-  // introduces that no other persisted field carries. The overrides file at
-  // configOverridesPath() is ONE file shared by EVERY project on the machine
-  // (candybar-config-engine-71o.2), but `presets` is a per-config domain — a
-  // name valid for the project that persisted it may not exist in the next
-  // project this same daemon serves. Without sanitizePersistedPresetOverride
-  // (src/config/presets.ts), the merged globals.preset would reach
-  // validateConfig's cross-ref check and fail the ENTIRE render fatally, for
-  // a config that never even mentions presets. The epic's binding guardrail
-  // ("a stale or deleted preset name collapses to the floor, visibly ... do
-  // not throw") must hold for this layer exactly as it already does for a
-  // stale SessionState pick.
-  test("a persisted preset name this config doesn't declare drops silently instead of failing the render", async () => {
-    const userConfigPath = join(projectDir, ".cc-candybar.json5");
-    writeFileSync(
-      userConfigPath,
-      // No `presets` block at all — this project never opted in.
-      JSON.stringify({ globals: {}, segments: {} }),
-    );
-
-    const overridesPath = join(
-      xdgStateDir,
-      "cc-candybar",
-      "config-overrides.json",
-    );
-    // Written by a `persist: "preset"` click against a DIFFERENT project's
-    // config, which declared this name. This project never did — and unlike
-    // "compact"/"verbose" (brandon-presets-0yk.3's bundled library, merged by
-    // name into EVERY project, so a stale-name test can no longer use either
-    // as its "undeclared here" example), a name this fictitious cannot
-    // collide with the bundled library either.
-    writeConfigOverride(overridesPath, "preset", "widescreen-workstation-only");
-
-    const { cache, cleanups } = makeCache();
-    try {
-      const entry = cache.getOrCreate(projectDir, projectDir, undefined);
-      expect(entry.lastError).toBeNull();
-      expect(entry.state).not.toBeNull();
-      expect(entry.state!.config.globals.preset).toBeUndefined();
-      // Falls through to the same floor collapse a stale SessionState pick
-      // gets — the label and the arrangement stay in agreement.
       expect(
-        effectivePresetName(
-          null,
-          entry.state!.config.globals.preset,
-          entry.state!.config.presets,
-        ),
-      ).toBe(PRESET_FLOOR);
+        (durable.parsed().globals as Record<string, unknown>).palette,
+      ).toBe("nord");
+      expect(durable.text()).toContain(GLOBALS_COMMENT);
     } finally {
       for (const fn of cleanups) fn();
+    }
+
+    const { cache: restarted, cleanups: restartedCleanups } = makeCache();
+    try {
+      const entry = restarted.getOrCreate(
+        durable.projectDir,
+        durable.projectDir,
+        undefined,
+      );
+      expect(entry.lastError).toBeNull();
+      expect(entry.state!.config.globals.palette).toBe("nord");
+    } finally {
+      for (const fn of restartedCleanups) fn();
     }
   });
 
@@ -1106,43 +909,36 @@ describe("RenderCache: persistent overrides merge into the effective config", ()
   // presets with pending overrides behaves as documented, asserted by a
   // test" — the precedence chain in docs/interaction-authoring.md and
   // src/config/presets.ts, driven through the REAL RenderCache (so the
-  // persisted override is genuinely baked into config.globals, not asserted
+  // file's globals are genuinely baked into config.globals, not asserted
   // against a hand-built fixture) and the real presetGlobals composition the
-  // daemon calls: a preset's own fields win over a persisted default (a
+  // daemon calls: a preset's own fields win over the file's default (a
   // "compact" preset must actually change padding, even for a user who once
   // persisted a padding they liked); a field the active preset says nothing
-  // about still reads the persisted default underneath it.
-  test("an active preset's own field wins over a persisted default; a field the preset doesn't touch keeps reading the persisted default", async () => {
-    const userConfigPath = join(projectDir, ".cc-candybar.json5");
-    writeFileSync(
-      userConfigPath,
+  // about still reads the file's default underneath it.
+  test("an active preset's own field wins over the file's default; a field the preset doesn't touch keeps reading the file", () => {
+    durable.write(
       JSON.stringify({
-        globals: {},
+        globals: { padding: 2, charset: "ascii" },
         segments: {},
         presets: { roomy: { globals: { padding: 4 } } },
       }),
     );
-
-    const overridesPath = join(
-      xdgStateDir,
-      "cc-candybar",
-      "config-overrides.json",
-    );
-    writeConfigOverride(overridesPath, "padding", 2);
-    writeConfigOverride(overridesPath, "charset", "ascii");
-
     const { cache, cleanups } = makeCache();
     try {
-      const entry = cache.getOrCreate(projectDir, projectDir, undefined);
+      const entry = cache.getOrCreate(
+        durable.projectDir,
+        durable.projectDir,
+        undefined,
+      );
       expect(entry.lastError).toBeNull();
 
-      // No active preset (the floor): the persisted overrides apply as-is.
+      // No active preset (the floor): the file's globals apply as-is.
       const atFloor = presetGlobals(entry.state!.config, PRESET_FLOOR);
       expect(atFloor.padding).toBe(2);
       expect(atFloor.charset).toBe("ascii");
 
-      // "roomy" declares padding — it wins over the persisted 2. It says
-      // nothing about charset — the persisted "ascii" survives underneath.
+      // "roomy" declares padding — it wins over the file's 2. It says
+      // nothing about charset — the file's "ascii" survives underneath.
       const atRoomy = presetGlobals(entry.state!.config, "roomy");
       expect(atRoomy.padding).toBe(4);
       expect(atRoomy.charset).toBe("ascii");
@@ -1152,84 +948,44 @@ describe("RenderCache: persistent overrides merge into the effective config", ()
   });
 
   // [LAW:verifiable-goals] The precedence chain the epic requires documented
-  // AND asserted: bundled default < user file < persisted overrides <
-  // session pick. A `persist` write changes the DEFAULT every session reads;
-  // it must NOT override a session's own `set` pick for that session — the
-  // effective* resolution (unchanged by this ticket) already reads session
-  // state before the config default, so this proves the new override layer
-  // slots into that existing precedence rather than a parallel one.
-  test("a session's own set-state pick still wins over a persisted default", async () => {
-    const userConfigPath = join(projectDir, ".cc-candybar.json5");
-    writeFileSync(
-      userConfigPath,
-      JSON.stringify({ globals: {}, segments: {} }),
+  // AND asserted: bundled default < config file < session pick. A `persist`
+  // write changes the DEFAULT every session reads; it must NOT override a
+  // session's own `set` pick for that session — the effective* resolution
+  // reads session state before the config default.
+  test("a session's own set-state pick still wins over the file's default", () => {
+    durable.write(
+      JSON.stringify({ globals: { palette: "nord" }, segments: {} }),
     );
-
-    const overridesPath = join(
-      xdgStateDir,
-      "cc-candybar",
-      "config-overrides.json",
-    );
-    writeConfigOverride(overridesPath, "palette", "nord");
-
     const { cache, cleanups } = makeCache();
     try {
-      const entry = cache.getOrCreate(projectDir, projectDir, undefined);
-      // The persisted default is now every session's starting point.
+      const entry = cache.getOrCreate(
+        durable.projectDir,
+        durable.projectDir,
+        undefined,
+      );
+      // The file's default is every session's starting point.
       expect(entry.state!.config.globals.palette).toBe("nord");
 
       // A session that picked its own theme via `set` still overrides it —
-      // effectiveThemeName is unchanged by this ticket: session state is
-      // consulted BEFORE globals.palette, so the persisted layer only ever
-      // changes what a session sees when it hasn't picked anything itself.
+      // session state is consulted BEFORE globals.palette, so the file only
+      // ever changes what a session sees when it hasn't picked anything.
       const sessionState = new SessionState();
       sessionState.set("s1", "theme", "dracula");
       expect(
-        effectiveThemeName(undefined, 
+        effectiveThemeName(
+          undefined,
           sessionState.get("s1", "theme"),
           entry.state!.config.globals.palette,
         ),
       ).toBe("dracula");
-      // A session that never picked reads the persisted default.
+      // A session that never picked reads the file's default.
       expect(
-        effectiveThemeName(undefined, 
+        effectiveThemeName(
+          undefined,
           sessionState.get("s2-no-pick", "theme"),
           entry.state!.config.globals.palette,
         ),
       ).toBe("nord");
-    } finally {
-      for (const fn of cleanups) fn();
-    }
-  });
-
-  test("writing the overrides file after the entry loads triggers a reload via the existing watcher", async () => {
-    const userConfigPath = join(projectDir, ".cc-candybar.json5");
-    writeFileSync(
-      userConfigPath,
-      JSON.stringify({ globals: {}, segments: {} }),
-    );
-    // The overrides dir must exist BEFORE the first watcher build — fs.watch
-    // on a not-yet-existing dir is skipped (documented limitation in
-    // rebindWatcher: a dir created after the entry's first build only starts
-    // being watched on the entry's NEXT build). Real daemon startup always
-    // creates stateDir() first (runDaemon's `mkdirSync(daemonDir())`), so
-    // this mirrors production ordering, not a workaround for the test.
-    mkdirSync(join(xdgStateDir, "cc-candybar"), { recursive: true });
-
-    const { cache, cleanups, reloads } = makeCache();
-    try {
-      const entry = cache.getOrCreate(projectDir, projectDir, undefined);
-      expect(entry.state!.config.globals.palette).not.toBe("nord");
-
-      const overridesPath = join(
-        xdgStateDir,
-        "cc-candybar",
-        "config-overrides.json",
-      );
-      await reloads.after(entry, () =>
-        writeConfigOverride(overridesPath, "palette", "nord"),
-      );
-      expect(entry.state!.config.globals.palette).toBe("nord");
     } finally {
       for (const fn of cleanups) fn();
     }

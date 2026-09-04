@@ -168,7 +168,7 @@ export type CompiledActionDecl =
       readonly options: readonly string[];
     }
   // [LAW:one-source-of-truth] brandon-layout-edit-2gc.2's global history
-  // step over the overrides layer — `reset`'s fine-grained sibling. No key:
+  // step over the config file's edits — `reset`'s fine-grained sibling. No key:
   // there is nothing to carry, since the history stack (not this action) is
   // what decides which entry moves.
   | { readonly kind: "undo" }
