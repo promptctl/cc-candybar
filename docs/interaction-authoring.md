@@ -375,16 +375,18 @@ second list to drift out of sync).
 
 `updateNotice` is config-only in the same way, for a different reason. It is
 the boolean (default `true`) behind the `⬆ Newer source: … [rebuild]
-[dismiss] [disable]` row the daemon shows above the bar when the code
-rendering it is older than the checkout's `src/` (or, for a published
-install, than the registry's latest release). Its `[disable]` affordance IS
+[dismiss] [disable]` row the daemon shows above the bar when the bundle
+rendering it was built from source other than the `src/` beside it — an
+identity check, so a checkout to an older commit trips it too — or, for a
+published install, when the registry's latest release is newer than the
+installed one. Its `[disable]` affordance IS
 `{ persist: "updateNotice", to: "false" }` — the config file, durably. The
 per-session spelling is not a `set:` on this key but the row's own
 `[dismiss]`, which writes the session key `update.dismissed` with the
 identity of the newer thing, so a dismissal lapses by itself the next time
 something newer appears. There is no `updateNotices` domain and no
-`.effective` projection to label a control with: a bar that shows the row
-has the field on, and a bar that never shows it has it off.
+`.effective` projection to label a control with: the row itself is the
+only display the field has.
 
 `autoWrap` and `padding` DO have a session half, because how much bar fits on
 your screen right now is a taste that legitimately differs between a wide

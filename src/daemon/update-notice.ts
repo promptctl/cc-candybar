@@ -134,11 +134,13 @@ export function factsOf(update: Update): UpdateFacts {
 
 // [LAW:types-are-the-program] The act's lifecycle as a value: idle, running
 // (one child at a time — a second click is refused, not queued), or failed
-// with the reason the notice shows until the next attempt.
+// with the reason the notice shows until the next attempt. A failure names
+// the identity it was attempted against: the notice for a DIFFERENT newer
+// thing owes the reader no line about a build it never tried.
 export type ActState =
   | { readonly kind: "idle" }
   | { readonly kind: "running" }
-  | { readonly kind: "failed"; readonly reason: string };
+  | { readonly kind: "failed"; readonly identity: string; readonly reason: string };
 const IDLE: ActState = { kind: "idle" };
 const RUNNING: ActState = { kind: "running" };
 
@@ -167,7 +169,9 @@ export function updateNotice(
   const facts = factsOf(update);
   const sentence = `${facts.headline}: ${facts.newer}. You're on ${facts.running}.`;
   const failure =
-    act.kind === "failed" ? [`${facts.act} failed: ${act.reason}`] : [];
+    act.kind === "failed" && act.identity === identity
+      ? [`${facts.act} failed: ${act.reason}`]
+      : [];
   const message = [sentence, ...failure].join("\n");
   // The sentence copies itself (the warning verb's clipboard), like every
   // other diagnostic row; the affordances each carry their own effect.
@@ -443,7 +447,7 @@ export function makeUpdateWatch(opts: UpdateWatchOptions): UpdateWatch {
           return;
         }
         const reason = failureReason(result);
-        act = { kind: "failed", reason };
+        act = { kind: "failed", identity: updateIdentity(update), reason };
         log("error", `apply-update: ${facts.act} failed: ${reason}`);
       });
     },

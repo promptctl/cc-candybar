@@ -13,6 +13,7 @@ import {
   updateOf,
   UPDATE_DISMISSED_KEY,
   UPDATE_NOTICE_FIELD,
+  type ActState,
   type Update,
 } from "../src/daemon/update-notice";
 import type { BuildCurrency, SourceStamp } from "../src/daemon/build-currency";
@@ -126,14 +127,30 @@ describe("updateNotice", () => {
     expect(verbs).not.toContain("apply-update");
   });
 
+  const FAILED: ActState = {
+    kind: "failed",
+    identity: updateIdentity(SOURCE),
+    reason: "non-zero (exit 1): boom",
+  };
+
   test("a failed act adds a second line naming the failure, and offers the act again", () => {
-    const [ch] = updateNotice(SOURCE, { kind: "failed", reason: "non-zero (exit 1): boom" }, ctx());
+    const [ch] = updateNotice(SOURCE, FAILED, ctx());
     expect(ch!.lines).toHaveLength(2);
     expect(ch!.lines[1]![0]!.text).toBe("rebuild failed: non-zero (exit 1): boom");
     expect(ch!.lines[0][1]!.text).toBe("[rebuild]");
     expect(ch!.message).toBe(
       "Newer source: 9.9.9 [abcdef0]. You're on 1.0.0 [0123456].\nrebuild failed: non-zero (exit 1): boom",
     );
+  });
+
+  test("a failure names the attempt it came from: a different newer thing shows no failure line", () => {
+    const newerStill: Update = {
+      ...SOURCE,
+      newer: { version: "9.9.10", digest: "fedcba9876543210".repeat(4) },
+    };
+    const [ch] = updateNotice(newerStill, FAILED, ctx());
+    expect(ch!.lines).toHaveLength(1);
+    expect(ch!.message).toBe("Newer source: 9.9.10 [fedcba9]. You're on 1.0.0 [0123456].");
   });
 
   test("composed: the row reads as the sentence and its three clicks, each word linked to its own effect", () => {
