@@ -1,3 +1,10 @@
+## [1.42.1](https://github.com/promptctl/cc-candybar/compare/v1.42.0...v1.42.1) (2026-09-04)
+
+
+### Bug Fixes
+
+* **install:** compare the staged version to the registry's latest and warn loudly on a stale install (candybar-install-7fs) ([#201](https://github.com/promptctl/cc-candybar/issues/201)) ([0be0a6d](https://github.com/promptctl/cc-candybar/commit/0be0a6dba49cc373ff58f056c791d02dbe7d54d5))
+
 # [1.42.0](https://github.com/promptctl/cc-candybar/compare/v1.41.3...v1.42.0) (2026-09-04)
 
 
