@@ -70,6 +70,7 @@ const GLOBALS_FIELD_KIND: Readonly<
   autoWrap: "boolean",
   padding: "number",
   charset: "string",
+  updateNotice: "boolean",
   colorCompatibility: "string",
 };
 

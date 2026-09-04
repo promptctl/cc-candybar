@@ -34,7 +34,7 @@ import {
 } from "../src/daemon/verbs/state-validators";
 import { ConfigError } from "../src/config/dsl-loader";
 import { registerOptionDomain } from "../src/config/option-domain";
-import { effectsOf, boldUrls } from "./helpers/click";
+import { testVerbContext, effectsOf, boldUrls } from "./helpers/click";
 import { parseHandlerUrl } from "../src/install/index";
 import {
   parseEffects,
@@ -107,7 +107,7 @@ function buildRuntime(src: string, sessionId = "s1") {
     registerStateValidator(key, spec),
   );
   const sideEffects: SideEffect[] = [];
-  const ctx: VerbContext = { sessionState, dlog: () => {} };
+  const ctx: VerbContext = testVerbContext(sessionState);
   const click = (url: string): void => {
     const { verb, value } = parseHandlerUrl(url);
     const effects =

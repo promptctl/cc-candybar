@@ -95,6 +95,7 @@ const GLOBALS_FIELDS: FieldSpecMap<Globals> = {
   // vocabularies pickJoiner can render — validates by membership, emits a
   // JSON-Schema `enum` from the same CHARSETS literal.
   charset: optionalEnumSpec(CHARSETS),
+  updateNotice: optionalBooleanSpec(),
   // Closed enum with a bespoke "auto" rejection — see colorCompatibilitySpec.
   colorCompatibility: colorCompatibilitySpec,
 };

@@ -86,9 +86,10 @@ describe("candybar-settings-ui-0gz: a config that fails to load", () => {
       expect(text).toContain(configPath);
       expect(text).toContain("trigger needs a display");
 
-      // 2. The way back needs no handler of ours: the strip's last row is
-      //    file:// OSC-8 links to the complete text the daemon dumped and to
-      //    the path that failed. The dump holds the whole message, verbatim.
+      // 2. The way back needs no handler of ours: the strip's last row is a
+      //    file:// OSC-8 link to the path that failed. The whole message is
+      //    on screen (nothing was elided), so the trailer offers no "full
+      //    text" link — but the dump holds the whole message, verbatim.
       const dumpPath = path.join(
         env.XDG_STATE_HOME!,
         "cc-candybar",
@@ -96,10 +97,10 @@ describe("candybar-settings-ui-0gz: a config that fails to load", () => {
         `${SID}.txt`,
       );
       const urls = extractUrls(rendered);
-      expect(urls).toContain(pathToFileURL(dumpPath).href);
+      expect(urls).not.toContain(pathToFileURL(dumpPath).href);
       expect(urls).toContain(pathToFileURL(configPath).href);
       // The path is middle-truncated into the row (the URL is whole).
-      expect(text).toMatch(/↳ open full text · open \/.*config\.json5\n/);
+      expect(text).toMatch(/↳ open \/.*config\.json5\n/);
       const dumped = readFileSync(dumpPath, "utf8");
       expect(dumped).toMatch(/^ERROR\n/);
       expect(dumped).toContain(`Invalid config in ${configDir}`);
@@ -107,7 +108,8 @@ describe("candybar-settings-ui-0gz: a config that fails to load", () => {
 
       // 2b. The strip is shaped by the client's terminal, not a constant:
       //     every row fits the reported width, and the reported rows cap it
-      //     with the elision counted on the last row.
+      //     with the elision counted on the last row — which is when the
+      //     full text is worth a link, so the dump's file:// URL rides there.
       const narrow = await render(sockPath, SID, projectDir, {
         termCols: 60,
         termRows: 3,
@@ -122,6 +124,7 @@ describe("candybar-settings-ui-0gz: a config that fails to load", () => {
         expect(new RichText(row).cellLength).toBeLessThanOrEqual(58);
       }
       expect(stripRows[2]).toMatch(/^↳ \d+ more rows · open full text · /);
+      expect(extractUrls(narrow)).toContain(pathToFileURL(dumpPath).href);
 
       // 3. Beneath the error, a working bar: the bundled default, settings
       //    menu included — and its click is honored by the real gate.

@@ -10,6 +10,7 @@ import { VERBS, VERB_NAMES, BadVerbArgs } from "../src/daemon/verbs";
 import type { VerbContext } from "../src/daemon/verbs";
 import { registerStateValidator } from "../src/daemon/verbs/state-validators";
 import { encodeSegments, VERB_STEP_STATE } from "../src/click/wire";
+import { testVerbContext } from "./helpers/click";
 
 // --- SessionState unit tests ---
 
@@ -126,10 +127,7 @@ describe("click protocol", () => {
     // throw a raw URIError — without reclassification it would surface as an
     // operational RENDER_FAILED. Pins the single-arg (copy) and multi-seg
     // (set-state) codecs at their shared decode boundary.
-    const ctx: VerbContext = {
-      sessionState: new SessionState(),
-      dlog: () => {},
-    };
+    const ctx: VerbContext = testVerbContext(new SessionState());
     for (const verb of ["copy", "set-state"]) {
       const handler = VERBS.get(verb)!;
       expect(() => handler("%", ctx)).toThrow(BadVerbArgs);
@@ -198,7 +196,7 @@ describe("step-state handler", () => {
   const KEY = "step-test-hue";
   function setup() {
     const sessionState = new SessionState();
-    const ctx: VerbContext = { sessionState, dlog: () => {} };
+    const ctx: VerbContext = testVerbContext(sessionState);
     // The range registry is the single source of bounds + the unset seed.
     const dispose = registerStateValidator(KEY, {
       kind: "range",
@@ -248,7 +246,7 @@ describe("step-state handler", () => {
   test("a non-integer delta is BadVerbArgs (→ BAD_REQUEST)", () => {
     const { dispose } = setup();
     const step = VERBS.get(VERB_STEP_STATE)!;
-    const ctx: VerbContext = { sessionState: new SessionState(), dlog: () => {} };
+    const ctx: VerbContext = testVerbContext(new SessionState());
     expect(() =>
       step(encodeSegments(["s1", KEY, "x"]), ctx),
     ).toThrow(BadVerbArgs);
@@ -257,7 +255,7 @@ describe("step-state handler", () => {
 
   test("a key with no range registration is rejected, not silently stepped", () => {
     const step = VERBS.get(VERB_STEP_STATE)!;
-    const ctx: VerbContext = { sessionState: new SessionState(), dlog: () => {} };
+    const ctx: VerbContext = testVerbContext(new SessionState());
     expect(() =>
       step(encodeSegments(["s1", "not-a-stepper", "2"]), ctx),
     ).toThrow(BadVerbArgs);

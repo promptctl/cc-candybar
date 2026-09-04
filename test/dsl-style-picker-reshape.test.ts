@@ -16,7 +16,7 @@ import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import { registerDslConfig, renderDsl } from "../src/dsl/render";
 import { SessionState } from "../src/daemon/session-state";
-import { clickUrl } from "./helpers/click";
+import { testVerbContext, clickUrl } from "./helpers/click";
 import { effectsUrl, VERB_SET_STATE } from "../src/click/wire";
 import {
   effectiveStripStyle,
@@ -76,7 +76,7 @@ function buildRuntime() {
 function clickStyle(sessionState: SessionState, style: string): void {
   // Drive the real wire end-to-end: emit the set-state URL the picker would.
   const url = effectsUrl([{ verb: VERB_SET_STATE, args: [SID, "style", style] }]);
-  clickUrl(url, { sessionState, dlog: () => {} });
+  clickUrl(url, testVerbContext(sessionState));
 }
 
 describe("DSL style picker — live reshape", () => {

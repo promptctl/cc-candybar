@@ -22,7 +22,7 @@ import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import { registerDslConfig, renderDsl } from "../src/dsl/render";
 import { SessionState } from "../src/daemon/session-state";
-import { clickUrl } from "./helpers/click";
+import { testVerbContext, clickUrl } from "./helpers/click";
 import { effectsUrl, VERB_SET_STATE } from "../src/click/wire";
 import { ConfigError } from "../src/config/dsl-loader";
 import {
@@ -290,10 +290,7 @@ describe("preset selection — the arrangement the bar renders", () => {
   }
 
   const clickPreset = (sessionState: SessionState, preset: string): void => {
-    clickUrl(effectsUrl([{ verb: VERB_SET_STATE, args: [SID, "preset", preset] }]), {
-      sessionState,
-      dlog: () => {},
-    });
+    clickUrl(effectsUrl([{ verb: VERB_SET_STATE, args: [SID, "preset", preset] }]), testVerbContext(sessionState));
   };
 
   test("with no pick, the floor renders the config's own root", () => {

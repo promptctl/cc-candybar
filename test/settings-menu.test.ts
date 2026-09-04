@@ -40,7 +40,7 @@ import {
   SETTINGS_NS,
 } from "../src/config/settings-menu";
 import { EDIT_MODE_KEY } from "../src/config/loader/edit-mode";
-import { effectsOf } from "./helpers/click";
+import { testVerbContext, effectsOf } from "./helpers/click";
 import { parseHandlerUrl } from "../src/install/index";
 import { parseEffects, VERB_DISPATCH } from "../src/click/wire";
 import { VERBS } from "../src/daemon/verbs";
@@ -95,7 +95,7 @@ function buildRuntime(src: string) {
   const disposers = deriveActionValidators(config).map(({ key, spec }) =>
     registerStateValidator(key, spec),
   );
-  const ctx: VerbContext = { sessionState, dlog: () => {} };
+  const ctx: VerbContext = testVerbContext(sessionState);
   const click = (url: string): void => {
     const { verb, value } = parseHandlerUrl(url);
     const effects =

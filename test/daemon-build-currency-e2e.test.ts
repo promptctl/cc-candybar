@@ -1,19 +1,29 @@
-// [LAW:verifiable-goals] candybar-build-2s5's acceptance criteria against the
-// REAL bundle: a daemon spawned from `<checkout>/dist/index.mjs` reads its own
-// `import.meta.url`, so only the built artifact in a real checkout layout can
-// exercise the positive path — the tsx harness runs `src/index.ts`, whose
-// entry resolves to `src/src` and is always `not-source-checkout`. Each case
-// copies the bundle into a scratch checkout, sets the mtimes directly, and
-// reads the rendered rows over the socket: the build row rides the same
-// warning channel as the config-collision detector and leads it.
+// [LAW:verifiable-goals] brandon-build-notice-5d6's done-when against the REAL
+// bundle: a daemon spawned from `<checkout>/dist/index.mjs` reads its own
+// `import.meta.url` and the digest baked into it, so only the built artifact
+// in a checkout-shaped directory can exercise the notice — the tsx harness
+// runs `src/index.ts`, whose entry resolves to `src/src` and is always
+// `not-source-checkout`. Each case copies the bundle into a scratch checkout
+// and reads the rendered rows over the socket; every click is the affordance
+// the bar rendered, found by what it does and dispatched through the wire.
 
 import fs from "node:fs";
+import http from "node:http";
 import os from "node:os";
 import path from "node:path";
-import { pathToFileURL } from "node:url";
 
-import { assessBuild, REBUILD_HINT } from "../src/daemon/build-currency";
-import { killAndWait, render, stripAnsi } from "./helpers/daemon-e2e";
+import { sourceDigest } from "../src/source-digest";
+import { PACKAGE_VERSION } from "../src/version";
+import { UPDATE_DISMISSED_KEY, UPDATE_NOTICE_FIELD } from "../src/daemon/update-notice";
+import {
+  click,
+  extractUrls,
+  findUrl,
+  killAndWait,
+  render,
+  renderUntil,
+  stripAnsi,
+} from "./helpers/daemon-e2e";
 import {
   prepareIsolatedDaemonEnv,
   spawnDaemonWithEnv,
@@ -21,55 +31,81 @@ import {
 } from "./helpers/spawn-isolated-daemon";
 import { builtBundle } from "./helpers/spawn-test-daemon";
 
-const REPO_BUNDLE = path.join(process.cwd(), "dist", "index.mjs");
-const HOUR_MS = 60 * 60 * 1000;
-const STALE_ROW =
-  /^\s*⚠ stale build: dist\/index\.mjs \d{4}-\d\d-\d\d \d\d:\d\d:\d\d < src\/edited\.ts \d{4}-\d\d-\d\d \d\d:\d\d:\d\d\s*$/;
-const WARNING_URL_BEFORE_STALE_ROW =
-  /\x1b\]8;;(cc-candybar:\/\/[^\x1b]*)\x1b\\[^\n]*⚠ stale build/;
+const REPO_ROOT = process.cwd();
+const REPO_BUNDLE = path.join(REPO_ROOT, "dist", "index.mjs");
+const REPO_SRC = path.join(REPO_ROOT, "src");
+const HOUR_S = 60 * 60;
+const V = PACKAGE_VERSION.replace(/\./g, "\\.");
+const SOURCE_ROW = new RegExp(
+  `⬆ Newer source: 9\\.9\\.9 \\[[0-9a-f]{7}\\]\\. You're on ${V} \\[[0-9a-f]{7}\\]\\. \\[rebuild\\] \\[dismiss\\] \\[disable\\]`,
+);
+const RELEASE_ROW = new RegExp(
+  `⬆ Newer release: 99\\.0\\.0\\. You're on ${V}\\. \\[upgrade\\] \\[dismiss\\] \\[disable\\]`,
+);
+
+// The strip wraps at the render width; a notice is one sentence however many
+// rows it took, so assertions read the strip as flowed text.
+const flowed = (raw: string): string =>
+  stripAnsi(raw).split("\n").join(" ").replace(/\s+/g, " ");
+const rowsOf = (raw: string): string[] => stripAnsi(raw).split("\n");
+const hasNotice = (raw: string): boolean => stripAnsi(raw).includes("⬆");
 
 // [LAW:no-silent-failure] The feature checks its own test's precondition: a
-// missing or out-of-date `dist/` would run a bundle without the code under
-// test and fail on something unrelated. CI builds before `pnpm test`.
+// bundle not built from the current `src/` carries another digest, and every
+// verdict below would be about that build. CI builds before `pnpm test`.
 beforeAll(() => {
-  const v = assessBuild(pathToFileURL(REPO_BUNDLE).href);
-  if (v.kind !== "current") {
+  const digest = sourceDigest(REPO_SRC);
+  if (!fs.readFileSync(REPO_BUNDLE, "utf8").includes(digest)) {
     throw new Error(
-      `dist/index.mjs is ${v.kind === "stale" ? "older than src/" : v.kind}` +
-        " — this test spawns the built bundle; run `pnpm build` first",
+      "dist/index.mjs was not built from the current src/ — this test spawns the built bundle; run `pnpm build` first",
     );
   }
 });
 
 interface Scratch {
   readonly root: string;
-  readonly bundle: string;
   readonly projectDir: string;
+  readonly configFile: string;
   remove(): void;
 }
 
-// A checkout-shaped directory holding a copy of the built bundle, plus a
-// project dir whose `.json5`/`.json` pair trips the collision detector so
-// the render carries a per-config warning to order against.
-function scratchLayout(withSource: boolean): Scratch {
+type Source = "edited" | "real-with-bumped-mtimes" | "none";
+
+function bumpMtimes(dir: string): void {
+  const t = Date.now() / 1000 + HOUR_S;
+  for (const name of fs.readdirSync(dir)) {
+    const p = path.join(dir, name);
+    if (fs.lstatSync(p).isDirectory()) bumpMtimes(p);
+    fs.lutimesSync(p, t, t);
+  }
+}
+
+// A checkout-shaped directory holding a copy of the built bundle and a
+// package.json naming the source's version, plus a project dir whose
+// `.json5`/`.json` pair trips the collision detector so the render carries a
+// per-config warning to order against.
+function scratchLayout(source: Source): Scratch {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "ccb-bc-"));
-  const bundle = path.join(root, "dist", "index.mjs");
-  fs.mkdirSync(path.dirname(bundle));
-  fs.copyFileSync(REPO_BUNDLE, bundle);
-  if (withSource) {
-    const edited = path.join(root, "src", "edited.ts");
-    fs.mkdirSync(path.dirname(edited));
-    fs.writeFileSync(edited, "");
-    const t = (fs.statSync(bundle).mtimeMs + HOUR_MS) / 1000;
-    fs.utimesSync(edited, t, t);
+  fs.mkdirSync(path.join(root, "dist"));
+  fs.copyFileSync(REPO_BUNDLE, path.join(root, "dist", "index.mjs"));
+  fs.writeFileSync(path.join(root, "package.json"), '{ "version": "9.9.9" }\n');
+  const src = path.join(root, "src");
+  if (source === "edited") {
+    fs.mkdirSync(src);
+    fs.writeFileSync(path.join(src, "edited.ts"), "export const edited = true;\n");
+  }
+  if (source === "real-with-bumped-mtimes") {
+    fs.cpSync(REPO_SRC, src, { recursive: true });
+    bumpMtimes(src);
   }
   const projectDir = fs.mkdtempSync(path.join(os.tmpdir(), "ccb-bc-proj-"));
-  fs.writeFileSync(path.join(projectDir, ".cc-candybar.json5"), "{}");
+  const configFile = path.join(projectDir, ".cc-candybar.json5");
+  fs.writeFileSync(configFile, "{}");
   fs.writeFileSync(path.join(projectDir, ".cc-candybar.json"), "{}");
   return {
     root,
-    bundle,
     projectDir,
+    configFile,
     remove: () => {
       fs.rmSync(root, { recursive: true, force: true });
       fs.rmSync(projectDir, { recursive: true, force: true });
@@ -77,59 +113,133 @@ function scratchLayout(withSource: boolean): Scratch {
   };
 }
 
-async function renderFrom(
+async function withDaemon<T>(
   scratch: Scratch,
-  sessionId: string,
-): Promise<string> {
+  envOverride: NodeJS.ProcessEnv,
+  body: (sockPath: string) => Promise<T>,
+): Promise<T> {
   const { env, sockPath, removeTmpDirs } = prepareIsolatedDaemonEnv("ccb-bc");
   let daemon: RunningDaemon | undefined;
   try {
-    daemon = await spawnDaemonWithEnv(env, builtBundle(scratch.bundle));
-    return await render(sockPath, sessionId, scratch.projectDir);
+    daemon = await spawnDaemonWithEnv(
+      { ...env, ...envOverride },
+      builtBundle(path.join(scratch.root, "dist", "index.mjs")),
+    );
+    return await body(sockPath);
   } finally {
     if (daemon) await killAndWait(daemon);
     removeTmpDirs();
+    scratch.remove();
   }
 }
 
-describe("candybar-build-2s5: the daemon renders a stale build as an advisory warning", () => {
-  test("a source file newer than the bundle: build row first, rebuild hint, then the config warning", async () => {
-    const scratch = scratchLayout(true);
-    try {
-      const raw = await renderFrom(scratch, "bc-stale");
-      const rows = stripAnsi(raw).split("\n");
-      expect(rows[0]).toMatch(STALE_ROW);
-      expect(rows[1]).toContain(REBUILD_HINT);
-      expect(rows[2]).toContain("config-extension collision");
-      expect(rows.length).toBeGreaterThan(3);
-      const url = WARNING_URL_BEFORE_STALE_ROW.exec(raw)?.[1];
-      expect(url).toContain("show-config-warning");
-    } finally {
-      scratch.remove();
-    }
+const affordance = (raw: string, verb: string, key?: string): string => {
+  const url = findUrl(extractUrls(raw), (effects) =>
+    effects.some((e) => e.verb === verb && (key === undefined || e.args[1] === key)),
+  );
+  if (url === undefined) throw new Error(`no rendered affordance for ${verb} ${key ?? ""}`);
+  return url;
+};
+
+describe("brandon-build-notice-5d6: the daemon renders what is newer than it, with its clicks", () => {
+  test("edited source: the notice leads, then the config warning, and no trailer — the strip shows everything", async () => {
+    const s = scratchLayout("edited");
+    await withDaemon(s, {}, async (sock) => {
+      const raw = await render(sock, "bc-stale", s.projectDir);
+      const rows = rowsOf(raw);
+      expect(flowed(raw)).toMatch(SOURCE_ROW);
+      expect(rows[0]).toMatch(/^⬆ Newer source/);
+      const warning = rows.findIndex((r) => r.includes("config-extension collision"));
+      expect(warning).toBeGreaterThan(0);
+      expect(rows.filter((r) => r.startsWith("↳"))).toEqual([]);
+    });
   });
 
-  test("the same checkout after a rebuild renders no build row; the config warning leads", async () => {
-    const scratch = scratchLayout(true);
-    try {
-      const t = (fs.statSync(scratch.bundle).mtimeMs + 2 * HOUR_MS) / 1000;
-      fs.utimesSync(scratch.bundle, t, t);
-      const rows = stripAnsi(await renderFrom(scratch, "bc-rebuilt")).split("\n");
-      expect(rows[0]).toContain("config-extension collision");
-      expect(rows.join("\n")).not.toContain("stale build");
-    } finally {
-      scratch.remove();
-    }
+  // The ticket's criterion: mtime churn from a checkout or rebase over
+  // identical bytes must not cry wolf.
+  test("the real source with every mtime bumped renders no notice; the config warning leads", async () => {
+    const s = scratchLayout("real-with-bumped-mtimes");
+    await withDaemon(s, {}, async (sock) => {
+      const raw = await render(sock, "bc-churn", s.projectDir);
+      expect(hasNotice(raw)).toBe(false);
+      expect(rowsOf(raw)[0]).toContain("config-extension collision");
+    });
   });
 
-  test("a bundle with no src/ beside it (the published install) renders no build row", async () => {
-    const scratch = scratchLayout(false);
+  test("[dismiss] hides the notice for this session, from the next render", async () => {
+    const s = scratchLayout("edited");
+    await withDaemon(s, {}, async (sock) => {
+      const before = await render(sock, "bc-dismiss", s.projectDir);
+      expect(hasNotice(before)).toBe(true);
+      await click(sock, affordance(before, "set-state", UPDATE_DISMISSED_KEY));
+      const after = await render(sock, "bc-dismiss", s.projectDir);
+      expect(hasNotice(after)).toBe(false);
+      expect(rowsOf(after)[0]).toContain("config-extension collision");
+    });
+  });
+
+  test("[disable] writes updateNotice: false into the session's config file, and the notice is gone once it reloads", async () => {
+    const s = scratchLayout("edited");
+    await withDaemon(s, {}, async (sock) => {
+      const before = await render(sock, "bc-disable", s.projectDir);
+      expect(hasNotice(before)).toBe(true);
+      await click(sock, affordance(before, "set-config", UPDATE_NOTICE_FIELD));
+      expect(fs.readFileSync(s.configFile, "utf8")).toMatch(/updateNotice:\s*false/);
+      await renderUntil(
+        sock,
+        "bc-disable",
+        s.projectDir,
+        (r) => !hasNotice(r),
+        "the bar without the update notice",
+      );
+    });
+  });
+
+  test("[rebuild] runs pnpm build in the checkout; a failure is said on the notice's second line", async () => {
+    const s = scratchLayout("edited");
+    await withDaemon(s, {}, async (sock) => {
+      const before = await render(sock, "bc-rebuild", s.projectDir);
+      await click(sock, affordance(before, "apply-update"));
+      const failed = await renderUntil(
+        sock,
+        "bc-rebuild",
+        s.projectDir,
+        (r) => /rebuild failed:/.test(stripAnsi(r)),
+        "the rebuild failure",
+        20_000,
+      );
+      expect(flowed(failed)).toMatch(/rebuild failed: non-zero \(exit \d+\): \S/);
+      expect(flowed(failed)).toMatch(SOURCE_ROW);
+    });
+  });
+
+  test("a published install (no src/) behind the registry renders the release notice", async () => {
+    const registry = http.createServer((_req, res) => {
+      res.setHeader("content-type", "application/json");
+      res.end(JSON.stringify({ latest: "99.0.0" }));
+    });
+    await new Promise<void>((resolve) => registry.listen(0, "127.0.0.1", resolve));
+    const { port } = registry.address() as { port: number };
     try {
-      const rows = stripAnsi(await renderFrom(scratch, "bc-published")).split("\n");
-      expect(rows[0]).toContain("config-extension collision");
-      expect(rows.join("\n")).not.toContain("stale build");
+      const s = scratchLayout("none");
+      await withDaemon(
+        s,
+        { CC_CANDYBAR_REGISTRY_URL: `http://127.0.0.1:${port}` },
+        async (sock) => {
+          const raw = await renderUntil(
+            sock,
+            "bc-release",
+            s.projectDir,
+            hasNotice,
+            "the release notice",
+          );
+          expect(flowed(raw)).toMatch(RELEASE_ROW);
+          const upgrade = affordance(raw, "apply-update");
+          expect(upgrade).toContain("apply-update");
+        },
+      );
     } finally {
-      scratch.remove();
+      await new Promise<void>((resolve) => registry.close(() => resolve()));
     }
   });
 });

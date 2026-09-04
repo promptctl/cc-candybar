@@ -36,3 +36,11 @@ process.env.CC_CANDYBAR_SOCKET = path.join(
   `cc-candybar-jest-${crypto.randomUUID()}`,
   "socket",
 );
+
+// [LAW:single-enforcer] No test daemon ever asks npm what the latest release
+// is: the tsx-harness daemons run `src/index.ts`, whose entry resolves to a
+// not-source-checkout layout, exactly the shape that polls the registry
+// (src/daemon/update-notice.ts). A closed port answers instantly with a typed
+// `unchecked`; the e2e test that exercises the release arm points this at a
+// local server of its own.
+process.env.CC_CANDYBAR_REGISTRY_URL = "http://127.0.0.1:1";
