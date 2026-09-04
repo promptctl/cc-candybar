@@ -40,7 +40,7 @@ import {
   HELP_TEXT,
   PERSIST_HELP,
 } from "../src/help-text";
-import { clickUrl, effectsOf } from "./helpers/click";
+import { testVerbContext, clickUrl, effectsOf } from "./helpers/click";
 import type { DslConfig } from "../src/config/dsl-types";
 
 const SID = "s-help";
@@ -129,7 +129,7 @@ function buildRuntime(src: string = TWO_SEGMENT_ROOT) {
   };
 
   const click = (url: string): void =>
-    clickUrl(url, { sessionState, dlog: () => {} });
+    clickUrl(url, testVerbContext(sessionState));
 
   // [LAW:behavior-not-structure] Which segments are `(?)` triggers is read off
   // what they RENDER — the help glyph — so the assertions survive any renaming

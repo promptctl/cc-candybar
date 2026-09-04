@@ -17,10 +17,10 @@ import {
 import { parseHandlerUrl } from "../src/install/index";
 import { VERBS, BadVerbArgs } from "../src/daemon/verbs";
 import { SessionState } from "../src/daemon/session-state";
-import { effectsOf, clickUrl } from "./helpers/click";
+import { testVerbContext, effectsOf, clickUrl } from "./helpers/click";
 
 const SID = "s1";
-const ctx = (sessionState: SessionState) => ({ sessionState, dlog: () => {} });
+const ctx = (sessionState: SessionState) => (testVerbContext(sessionState));
 
 describe("click wire — encode/decode round-trip", () => {
   test("a single effect serializes to a dispatch URL and decodes back", () => {

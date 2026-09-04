@@ -18,7 +18,7 @@ import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import { registerDslConfig, renderDsl } from "../src/dsl/render";
 import { SessionState } from "../src/daemon/session-state";
-import { clickUrl } from "./helpers/click";
+import { testVerbContext, clickUrl } from "./helpers/click";
 import { effectsUrl, VERB_SET_STATE } from "../src/click/wire";
 import {
   ConfigError,
@@ -300,7 +300,7 @@ describe("look click — live whole-bar recolor over the active theme", () => {
   const clickLook = (sessionState: SessionState, look: string): void => {
     clickUrl(
       effectsUrl([{ verb: VERB_SET_STATE, args: [SID, "look", look] }]),
-      { sessionState, dlog: () => {} },
+      testVerbContext(sessionState),
     );
   };
 

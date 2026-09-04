@@ -9,9 +9,14 @@ import { obtainDaemonKick } from "../daemon/acquire";
 import { URL_SCHEME, VERB_COPY } from "../click/wire";
 import { DISCLOSURE_GLYPH_CLOSED } from "../config/disclosure";
 import { PACKAGE_VERSION } from "../version";
-import { assessCurrency, currencyReport, fetchLatestVersion } from "./currency";
+import {
+  assessCurrency,
+  currencyReport,
+  fetchLatestVersion,
+  PACKAGE_NAME,
+  REGISTRY_URL,
+} from "./currency";
 
-const PACKAGE_NAME = "@promptctl/cc-candybar";
 const BUNDLE_ID = "com.cccandybar.url-handler";
 const APP_NAME = "CCCandybarURLHandler";
 
@@ -483,7 +488,7 @@ export async function runInstall(rendererArgs: string[]): Promise<void> {
     PACKAGE_NAME,
     assessCurrency(
       PACKAGE_VERSION,
-      await fetchLatestVersion(PACKAGE_NAME, fetch),
+      await fetchLatestVersion(PACKAGE_NAME, fetch, REGISTRY_URL),
     ),
   );
   process[report.stream].write(report.text);

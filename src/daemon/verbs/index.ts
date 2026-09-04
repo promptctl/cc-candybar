@@ -46,6 +46,7 @@ import {
   decodeSegments,
   parseEffects,
   VERB_APPLY_LAYOUT_OP,
+  VERB_APPLY_UPDATE,
   VERB_COPY,
   VERB_DISPATCH,
   VERB_OPEN_VSCODE,
@@ -65,6 +66,10 @@ import {
 export interface VerbContext {
   readonly sessionState: SessionStateRW;
   readonly dlog: (level: "info" | "warn" | "error", msg: string) => void;
+  // [LAW:effects-at-boundaries] The update notice's act (src/daemon/
+  // update-notice.ts), handed in by the daemon: the verb names the effect,
+  // the watch that knows what is newer performs it.
+  readonly applyUpdate: () => void;
 }
 
 // [LAW:types-are-the-program] The handler IS the contract — it takes the
@@ -619,6 +624,15 @@ const redoConfig: VerbHandler = (value, ctx) => {
   ctx.dlog("info", `redo: ${file} (session=${sid})`);
 };
 
+// [LAW:effects-at-boundaries] The update notice's `[rebuild]` / `[upgrade]`
+// click (brandon-build-notice-5d6). The wire carries only the session id (for
+// click.error surfacing); the daemon's update watch decides what to run from
+// its own provenance, so no command or version ever arrives from a URL.
+const applyUpdate: VerbHandler = (value, ctx) => {
+  requireSessionId(oneArg(value));
+  ctx.applyUpdate();
+};
+
 // ─── Registry ───────────────────────────────────────────────────────────────
 
 // [LAW:one-source-of-truth] The LEAF verbs — every click effect that does real
@@ -686,6 +700,7 @@ const LEAF_VERBS = new Map<string, VerbHandler>([
   [VERB_SHOW_CONFIG_ERROR, showConfigError],
   [VERB_SHOW_CONFIG_WARNING, showConfigWarning],
   [VERB_TOOLBAR_TOGGLE, toolbarToggle],
+  [VERB_APPLY_UPDATE, applyUpdate],
 ]);
 
 // [LAW:dataflow-not-control-flow] One click is an ordered list of effects; the
@@ -715,9 +730,9 @@ const dispatch: VerbHandler = (rawValue, ctx) => {
   for (const { verb, value } of parseEffects(rawValue)) {
     // Extract session ID from the first session-bearing effect for error display.
     // set-state, step-state, set-config, step-config, reset-config,
-    // apply-layout-op, undo, redo, and toolbar-toggle all carry the session id
-    // as their first segment, so a failing step surfaces in the bar like any
-    // other.
+    // apply-layout-op, undo, redo, toolbar-toggle, and apply-update all carry
+    // the session id as their first segment, so a failing step surfaces in
+    // the bar like any other.
     if (
       !sessionId &&
       (verb === VERB_SET_STATE ||
@@ -728,7 +743,8 @@ const dispatch: VerbHandler = (rawValue, ctx) => {
         verb === VERB_APPLY_LAYOUT_OP ||
         verb === VERB_UNDO ||
         verb === VERB_REDO ||
-        verb === VERB_TOOLBAR_TOGGLE)
+        verb === VERB_TOOLBAR_TOGGLE ||
+        verb === VERB_APPLY_UPDATE)
     ) {
       const parts = decodeSegments(value);
       if (parts.length > 0 && parts[0]) sessionId = parts[0];

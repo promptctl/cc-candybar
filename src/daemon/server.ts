@@ -36,7 +36,8 @@ import {
   readRegistryEntry,
 } from "./fork-bomb-breaker";
 import { dlog } from "./log";
-import { makeBuildWatch } from "./build-currency";
+import { makeUpdateWatch, UPDATE_DISMISSED_KEY } from "./update-notice";
+import { REGISTRY_URL } from "../install/currency";
 import {
   PROTOCOL_VERSION,
   encodeFrame,
@@ -160,18 +161,80 @@ const renderCache = new RenderCache(
 
 const REQUEST_TIMEOUT_MS = 200;
 // One cadence for "how often does the daemon look at its build on disk" —
-// the binary watch (exit on a changed bundle) and the build watch (is the
-// bundle older than `src/`) both sample on it.
+// the binary watch (exit on a changed bundle) and the update watch (does the
+// bundle match `src/`) both sample on it.
 const BIN_CHECK_INTERVAL_MS = 60 * 1000;
+// The registry is a network resource with releases hours apart; ask rarely.
+const RELEASE_CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000;
+
+// --- binary-mtime self-restart ---
+//
+// If the daemon's compiled output changes on disk (rebuild, upgrade, edit),
+// exit at the next sample so the next client respawns from the fresh code.
+// Cheap (one statSync/min) and avoids the user having to manually kill the
+// daemon during development. unref() so this timer doesn't hold the process
+// alive. `checkNow` is the same sampler the interval runs, for the moment the
+// daemon itself changed the bundle (the update notice's rebuild) and need not
+// wait a minute to notice.
+function makeBinaryWatch(): { arm(): void; checkNow(): void } {
+  // Watch the resolved entry point, not the bin shim — npm run build updates
+  // dist/index.mjs but the bin/cc-candybar shim never changes.
+  const entryUrl = import.meta.url;
+  const targets: string[] = [];
+  if (entryUrl.startsWith("file://")) {
+    targets.push(fileURLToPath(entryUrl));
+  }
+  // Also watch argv[1] as fallback (covers global installs, symlinks, etc.)
+  if (process.argv[1]) targets.push(process.argv[1]!);
+
+  const originalMtimes = new Map<string, number>();
+  for (const t of targets) {
+    try {
+      originalMtimes.set(t, fs.statSync(t).mtimeMs);
+    } catch {
+      // File may not exist yet — skip it.
+    }
+  }
+  let timer: NodeJS.Timeout | null = null;
+  const sample = (): void => {
+    for (const [t, originalMtime] of originalMtimes) {
+      try {
+        const nowMtime = fs.statSync(t).mtimeMs;
+        if (nowMtime !== originalMtime) {
+          dlog("info", `binary mtime changed (${t}); shutting down`);
+          if (timer) clearInterval(timer);
+          shutdown(0);
+          return;
+        }
+      } catch (e) {
+        dlog("warn", `bin stat failed: ${(e as Error).message}`);
+      }
+    }
+  };
+  return {
+    arm() {
+      if (originalMtimes.size === 0) return;
+      timer = setInterval(sample, BIN_CHECK_INTERVAL_MS);
+      timer.unref();
+    },
+    checkNow: sample,
+  };
+}
+const binaryWatch = makeBinaryWatch();
 
 // [LAW:single-enforcer] The daemon is the process that observes the bundle
-// it runs (armBinaryWatch restarts it on rebuild), so it is the one place
-// the bundle gets compared to the source beside it. The verdict rides the
-// same advisory warning channel as the config-collision detector — one
-// glyph, one click verb, no second rendering path (candybar-build-2s5).
-const buildWatch = makeBuildWatch({
+// it runs (the binary watch restarts it on rebuild), so it is the one place
+// that knows whether something newer than that bundle exists — the source
+// beside it, or a published release — and the one owner of the notice's
+// clicks (src/daemon/update-notice.ts). The notice is a diagnostic channel of
+// its own, folded between the error and warning channels.
+const updateWatch = makeUpdateWatch({
   entryUrl: import.meta.url,
   intervalMs: BIN_CHECK_INTERVAL_MS,
+  releaseIntervalMs: RELEASE_CHECK_INTERVAL_MS,
+  registryUrl: process.env.CC_CANDYBAR_REGISTRY_URL ?? REGISTRY_URL,
+  fetchImpl: fetch,
+  onApplied: () => binaryWatch.checkNow(),
   log: dlog,
 });
 
@@ -454,8 +517,8 @@ function onListening(sockPath: string): void {
   const wipeFailure = diagnosticDump.reset();
   if (wipeFailure !== null)
     dlog("warn", `diagnostic dump wipe failed: ${wipeFailure}`);
-  armBinaryWatch();
-  buildWatch.arm();
+  binaryWatch.arm();
+  updateWatch.arm();
   armLimits();
   armOwnershipWatch(sockPath, boundRead.identity);
 }
@@ -480,51 +543,6 @@ function armOwnershipWatch(sockPath: string, bound: SocketIdentity): void {
     shutdown: (code) => shutdown(code),
     log: dlog,
   }).arm();
-}
-
-// --- binary-mtime self-restart ---
-//
-// If the daemon's compiled output changes on disk (rebuild, upgrade, edit),
-// exit at the next sample so the next client respawns from the fresh code.
-// Cheap (one statSync/min) and avoids the user having to manually kill the
-// daemon during development. unref() so this timer doesn't hold the process alive.
-function armBinaryWatch(): void {
-  // Watch the resolved entry point, not the bin shim — npm run build updates
-  // dist/index.mjs but the bin/cc-candybar shim never changes.
-  const entryUrl = import.meta.url;
-  const targets: string[] = [];
-  if (entryUrl.startsWith("file://")) {
-    targets.push(fileURLToPath(entryUrl));
-  }
-  // Also watch argv[1] as fallback (covers global installs, symlinks, etc.)
-  if (process.argv[1]) targets.push(process.argv[1]!);
-
-  const originalMtimes = new Map<string, number>();
-  for (const t of targets) {
-    try {
-      originalMtimes.set(t, fs.statSync(t).mtimeMs);
-    } catch {
-      // File may not exist yet — skip it.
-    }
-  }
-  if (originalMtimes.size === 0) return;
-
-  const timer = setInterval(() => {
-    for (const [t, originalMtime] of originalMtimes) {
-      try {
-        const nowMtime = fs.statSync(t).mtimeMs;
-        if (nowMtime !== originalMtime) {
-          dlog("info", `binary mtime changed (${t}); shutting down`);
-          clearInterval(timer);
-          shutdown(0);
-          return;
-        }
-      } catch (e) {
-        dlog("warn", `bin stat failed: ${(e as Error).message}`);
-      }
-    }
-  }, BIN_CHECK_INTERVAL_MS);
-  timer.unref();
 }
 
 // --- self-shutdown on RSS / age ---
@@ -1028,21 +1046,25 @@ async function handleRequest(req: Request): Promise<HandledRequest> {
       const combinedError = [unknownFlagsError, entry.lastError, clickError]
         .filter(Boolean)
         .join("\n");
-      // [LAW:one-source-of-truth] The daemon-wide build verdict joins the
-      // per-config warning on the one warning channel, the way the click
-      // error joins the per-config error above. It goes first: a stale
-      // bundle undermines every config, and leading keeps its two rows
-      // inside the diagnostic row cap whatever the config adds.
-      const combinedWarning = [buildWatch.warning(), entry.lastWarning]
-        .filter(Boolean)
-        .join("\n");
+      // [LAW:one-source-of-truth] The daemon-wide update notice, read for
+      // THIS session: what it dismissed and whether its config allows the
+      // notice — both values, folded by the notice into zero or one channel.
+      const updates = updateWatch.notice({
+        sessionId,
+        dismissed: sessionState.get(sessionId, UPDATE_DISMISSED_KEY),
+        enabled: effective.updateNotice,
+      });
       // [LAW:no-silent-failure] The file whose load failed rides beside its
       // error so the strip can offer it as a file:// link — the way back into
       // the file when our own click path may be the thing that is broken.
       // Null when the error is not a load error, or no file resolved.
       const failedConfigFile =
         entry.lastError === null ? null : entry.configFilePath;
-      const diagnostics = collectDiagnostics(combinedError, combinedWarning);
+      const diagnostics = collectDiagnostics(
+        combinedError,
+        updates,
+        entry.lastWarning ?? "",
+      );
       // [LAW:effects-at-boundaries] The one write the strip depends on, at
       // the edge: the session's dump file mirrors this render's diagnostics
       // (present with the full text, absent when there are none) before the
@@ -1071,7 +1093,7 @@ async function handleRequest(req: Request): Promise<HandledRequest> {
       const u = usageStore.getStats();
       dlog(
         "info",
-        `render sid=${req.hookData.session_id ?? "?"} took=${ms}ms termCols=${termCols ?? "?"} termRows=${hints.termRows ?? "?"} width=${width} git=${g.size}/${g.hits}h/${g.misses}m usage=${u.size}/${u.hits}h/${u.misses}m err=${combinedError ? "Y" : "N"} warn=${combinedWarning ? "Y" : "N"}`,
+        `render sid=${req.hookData.session_id ?? "?"} took=${ms}ms termCols=${termCols ?? "?"} termRows=${hints.termRows ?? "?"} width=${width} git=${g.size}/${g.hits}h/${g.misses}m usage=${u.size}/${u.hits}h/${u.misses}m err=${combinedError ? "Y" : "N"} upd=${updates.length} warn=${entry.lastWarning ? "Y" : "N"}`,
       );
       return stay({ ok: true, output: output + "\n" });
     } catch (e) {
@@ -1197,7 +1219,7 @@ function parseRenderArgs(args: string[]): {
 // response code: BadVerbArgs (invalid input shape) becomes BAD_REQUEST; any
 // other Error (operational failure) becomes RENDER_FAILED. No string matching.
 
-const verbCtx = { sessionState, dlog };
+const verbCtx = { sessionState, dlog, applyUpdate: () => updateWatch.act() };
 
 // [LAW:single-enforcer] Style + color compatibility shared by the render
 // path and the lazy debug-side per-segment serializer. Per-request `width`

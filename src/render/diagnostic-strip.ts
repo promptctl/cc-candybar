@@ -1,5 +1,6 @@
 // The per-render diagnostic strip: the red/amber rows above the bar that
-// carry a config error, a click error, or an advisory warning.
+// carry a config error, a click error, an update notice, or an advisory
+// warning.
 //
 // [LAW:one-source-of-truth] The strip is ordinary render data. Every
 // diagnostic line becomes word cells that flow through the SAME
@@ -42,33 +43,67 @@ export function diagnosticRowCap(termRows: number | undefined): number {
   return Math.min(MAX_DIAGNOSTIC_ROWS, termRows ?? MAX_DIAGNOSTIC_ROWS);
 }
 
+// [LAW:one-type-per-behavior] Errors, update notices and warnings are one
+// shape: rows of linked words under a severity. What differs is data — the
+// severity's heading (the dump file's section title), its leading glyph, and
+// its colour pair. Order in `channels` is severity order (error first) — the
+// composer keeps it, and the trailer takes the first channel's colours.
+export interface DiagnosticSeverity {
+  readonly heading: string;
+  readonly glyph: string;
+  readonly colors: DiagnosticColors;
+}
+export const ERROR_SEVERITY: DiagnosticSeverity = {
+  heading: "ERROR",
+  glyph: "⚠",
+  colors: DIAGNOSTIC_ERROR_COLORS,
+};
+export const WARNING_SEVERITY: DiagnosticSeverity = {
+  heading: "WARNING",
+  glyph: "⚠",
+  colors: DIAGNOSTIC_WARNING_COLORS,
+};
+// An update notice is advisory like a warning — same colours — but it is an
+// offer, not an alarm, and its glyph says so.
+export const UPDATE_SEVERITY: DiagnosticSeverity = {
+  heading: "UPDATE",
+  glyph: "⬆",
+  colors: DIAGNOSTIC_WARNING_COLORS,
+};
+
+// [LAW:parse-dont-validate] A run of words sharing one click. The text is
+// sanitized at construction — `diagnosticSpan` is the only constructor — so
+// every span the composer meets is already safe to emit, whatever produced
+// it (a validator message, a subprocess's stderr, a version string).
+export interface DiagnosticSpan {
+  readonly text: string;
+  readonly link: string;
+}
+export function diagnosticSpan(text: string, link: string): DiagnosticSpan {
+  return { text: sanitizeText(text), link };
+}
+export type DiagnosticLine = readonly [DiagnosticSpan, ...DiagnosticSpan[]];
+
 // [LAW:no-silent-failure] Bad config can't quietly degrade output. The render
-// pipeline carries two independent diagnostic channels:
+// pipeline carries independent diagnostic channels:
 //   error   — load-fatal: parse/validation failed (the bar beneath is
 //             last-known-good or the bundled default), a click that failed,
 //             or an unknown render flag. Rendered red.
+//   update  — a newer source tree or release exists than the code rendering
+//             the bar (src/daemon/update-notice.ts), with its clicks.
 //   warning — advisory: load succeeded but something needs attention (a
-//             same-location .json5 + .json collision, a stale bundle).
-//             Rendered amber.
+//             same-location .json5 + .json collision). Rendered amber.
 // Either way the failure is visible at the point of impact, as (a projection
 // of) the underlying message — never a constant label hiding the content
 // behind a click. The glyph and background carry severity; the rest is the
 // text itself, sanitized, wrapped, never clipped mid-word.
-//
-// [LAW:one-type-per-behavior] Errors and warnings are one shape: a message,
-// a colour pair, and the click verb that copies the text. What differs is
-// data. Order in `channels` is severity order (error first) — the composer
-// keeps it, and the trailer takes the first channel's colours.
 export interface DiagnosticChannel {
-  readonly verb:
-    | typeof VERB_SHOW_CONFIG_ERROR
-    | typeof VERB_SHOW_CONFIG_WARNING;
-  readonly colors: DiagnosticColors;
-  // Verbatim: the dump's content and the copy click's payload.
+  readonly severity: DiagnosticSeverity;
+  // Verbatim: the dump's content.
   readonly message: string;
-  // What the strip shows: the message's sanitized lines, blank ones dropped.
-  // Non-empty by construction — a message with no visible line is no channel.
-  readonly lines: readonly [string, ...string[]];
+  // What the strip shows. Non-empty by construction — a message with no
+  // visible line is no channel.
+  readonly lines: readonly [DiagnosticLine, ...DiagnosticLine[]];
 }
 
 // The complete, unwrapped, un-truncated text — formatDiagnosticDump's
@@ -94,8 +129,8 @@ export interface DiagnosticLinks {
 
 // [LAW:types-are-the-program] Non-empty by construction: `channels` carries
 // at least one member and each member at least one line, so a Diagnostics
-// always has rows and always earns its trailer. "Nothing to show" is `null`,
-// decided once in collectDiagnostics.
+// always has rows. "Nothing to show" is `null`, decided once in
+// collectDiagnostics.
 export interface Diagnostics {
   readonly channels: readonly [DiagnosticChannel, ...DiagnosticChannel[]];
 }
@@ -108,33 +143,44 @@ export interface DiagnosticGeometry {
   readonly colorCompatibility: ColorCompatibility;
 }
 
-// [LAW:parse-dont-validate] The one place two message texts become a typed
-// Diagnostics-or-nothing. Downstream never re-asks "is there an error": a
-// text with nothing visible in it — empty, whitespace, control characters —
-// is the same "nothing to show" as no text at all, decided here.
+// [LAW:parse-dont-validate] The one place the render's diagnostics become a
+// typed Diagnostics-or-nothing, in severity order: the error text, the update
+// notice channels (already shaped — their lines carry per-word clicks), the
+// warning text. Downstream never re-asks "is there an error": a text with
+// nothing visible in it — empty, whitespace, control characters — is the
+// same "nothing to show" as no text at all, decided here.
 export function collectDiagnostics(
   error: string,
+  updates: readonly DiagnosticChannel[],
   warning: string,
 ): Diagnostics | null {
   const [first, ...rest] = [
-    channelOf(error, VERB_SHOW_CONFIG_ERROR, DIAGNOSTIC_ERROR_COLORS),
-    channelOf(warning, VERB_SHOW_CONFIG_WARNING, DIAGNOSTIC_WARNING_COLORS),
+    messageChannel(error, ERROR_SEVERITY, VERB_SHOW_CONFIG_ERROR),
+    updates,
+    messageChannel(warning, WARNING_SEVERITY, VERB_SHOW_CONFIG_WARNING),
   ].flat();
   return first === undefined ? null : { channels: [first, ...rest] };
 }
 
-function channelOf(
+// A plain message as a channel: every visible line one span, every span the
+// click that copies the whole message. Blank lines are dropped; a message
+// with no visible line contributes no channel.
+export function messageChannel(
   message: string,
-  verb: DiagnosticChannel["verb"],
-  colors: DiagnosticColors,
+  severity: DiagnosticSeverity,
+  verb: typeof VERB_SHOW_CONFIG_ERROR | typeof VERB_SHOW_CONFIG_WARNING,
 ): DiagnosticChannel[] {
+  // The click URL is born through effectsUrl like every other click — the
+  // full message rides in it, so a copy is never an excerpt.
+  const link = effectsUrl([{ verb, args: [message] }]);
   const [first, ...rest] = message
     .split(/\r\n|\r|\n/)
-    .map(sanitizeText)
-    .filter(Boolean);
+    .map((line) => diagnosticSpan(line, link))
+    .filter((span) => span.text !== "")
+    .map((span): DiagnosticLine => [span]);
   return first === undefined
     ? []
-    : [{ verb, colors, message, lines: [first, ...rest] }];
+    : [{ severity, message, lines: [first, ...rest] }];
 }
 
 // The dump file's content: every channel's message verbatim, in severity
@@ -142,24 +188,23 @@ function channelOf(
 // is the text the strip is an excerpt of.
 export function formatDiagnosticDump(diagnostics: Diagnostics): string {
   return diagnostics.channels
-    .map((ch) => `${DUMP_HEADINGS[ch.verb]}\n${ch.message}\n`)
+    .map((ch) => `${ch.severity.heading}\n${ch.message}\n`)
     .join("\n");
 }
-const DUMP_HEADINGS = {
-  [VERB_SHOW_CONFIG_ERROR]: "ERROR",
-  [VERB_SHOW_CONFIG_WARNING]: "WARNING",
-} as const;
 
-const GLYPH = "⚠";
 // Continuation issue lines (the validator emits one issue per line) indent
 // under the glyph; wrapped continuations of a single line start at column 0,
 // which is how the eye tells "next issue" from "same issue, next row".
 const ISSUE_INDENT = " ";
 
 // [LAW:dataflow-not-control-flow] The strip is a fold: channels → rows, rows
-// sliced to the cap less one, then the trailer. The cap and the elision count
-// are values; there is no "if it fits" path distinct from the "if it doesn't"
-// path — a strip that fits simply elides zero rows.
+// sliced to what the cap leaves after the trailer, then the trailer. The
+// trailer is a value of zero or one rows: it exists when it has something to
+// offer — rows the cap dropped (so the full text is worth a link) or a
+// failing config file (the way back in) — and a strip whose rows all fit
+// ends on its last row, with nothing to open. The cap and the elision count
+// are values; there is no "if it fits" path distinct from the "if it
+// doesn't" path.
 export function composeWithDiagnostics(
   body: string,
   diagnostics: Diagnostics | null,
@@ -169,11 +214,13 @@ export function composeWithDiagnostics(
   if (diagnostics === null) return body;
   const opts = stripOptions(geometry);
   const rows = diagnostics.channels.flatMap((ch) => channelRows(ch, opts));
-  const shown = rows.slice(0, geometry.rowCap - 1);
-  const strip = [
-    ...shown,
-    trailerRow(diagnostics, links, rows.length - shown.length, opts),
-  ].join("\n");
+  const trailed =
+    links.failedConfigFile !== null || rows.length > geometry.rowCap;
+  const shown = rows.slice(0, geometry.rowCap - Number(trailed));
+  const trailer = trailed
+    ? [trailerRow(diagnostics, links, rows.length - shown.length, opts)]
+    : [];
+  const strip = [...shown, ...trailer].join("\n");
   // No body → the strip alone (renderDsl produced nothing). Body present →
   // the strip sits above it on its own rows.
   return body ? `${strip}\n${body}` : strip;
@@ -197,69 +244,85 @@ function stripOptions(geometry: DiagnosticGeometry): BuildLineOptions {
   };
 }
 
-// One channel → its wrapped rows. Every word is a cell; a word wider than a
-// row is folded at cell boundaries (rich-js chopCells, the same cell algebra
-// FlexStrip packs by) so nothing overflows the width — a long path breaks
-// across rows rather than past the edge. Whole words stay whole.
+// One channel → its wrapped rows. Every word is a cell carrying its span's
+// click; a word wider than a row is folded at cell boundaries (rich-js
+// chopCells, the same cell algebra FlexStrip packs by) so nothing overflows
+// the width — a long path breaks across rows rather than past the edge.
+// Whole words stay whole.
 function channelRows(ch: DiagnosticChannel, opts: BuildLineOptions): string[] {
-  // The click URL is born through effectsUrl like every other click — the
-  // full message rides in it, so a copy is never an excerpt.
-  const style = new Style({
-    bgcolor: ch.colors.bg,
-    color: ch.colors.fg,
-    link: effectsUrl([{ verb: ch.verb, args: [ch.message] }]),
+  const base = new Style({
+    bgcolor: ch.severity.colors.bg,
+    color: ch.severity.colors.fg,
   });
   // A cell plus its trailing space must fit one row, so words fold at width−1
   // — never below the widest glyph (2 cells): a fold narrower than one glyph
   // is not a fold, and a 1–2 cell terminal simply cannot hold one.
   const fold = asCellCol(Math.max(2, opts.width - 1));
+  const cell = (word: string, style: Style): RichText =>
+    new RichText(`${word} `, { style, end: "", noWrap: true });
   return ch.lines.flatMap((line, i) => {
-    const prefix = i === 0 ? GLYPH : ISSUE_INDENT;
-    const words = [prefix, ...line.split(" ")].flatMap((w) =>
-      chopCells(w, fold),
+    // The prefix takes the line's first click, so the glyph is part of the
+    // same affordance as the words after it.
+    const prefix = cell(
+      i === 0 ? ch.severity.glyph : ISSUE_INDENT,
+      base.withLink(line[0].link),
     );
-    const cells = words.map(
-      (w) => new RichText(`${w} `, { style, end: "", noWrap: true }),
-    );
-    return renderStripCells(cells, opts).split("\n");
+    const cells = line.flatMap((span) => {
+      const style = base.withLink(span.link);
+      return span.text
+        .split(" ")
+        .flatMap((w) => chopCells(w, fold))
+        .map((w) => cell(w, style));
+    });
+    return renderStripCells([prefix, ...cells], opts).split("\n");
   });
 }
 
-// The strip's last row, always exactly one row that fits: the elision count
-// when the cap dropped rows, then the `file://` affordances. The config path
-// is middle-truncated into the width that remains after the fixed text,
-// keeping its head and tail (the parts that identify a path); then the
-// assembled row is clipped to the width, so a terminal narrower than the
-// fixed text still gets one row inside it. The link carries the full URL
-// regardless of what is visible.
+// The strip's last row when the strip earns one, always exactly one row that
+// fits: the elision count and the `file://` link to the full text when the
+// cap dropped rows, and the failing config file when there is one. The
+// config path is middle-truncated into the width that remains after the
+// fixed text, keeping its head and tail (the parts that identify a path);
+// then the assembled row is clipped to the width, so a terminal narrower
+// than the fixed text still gets one row inside it. The link carries the
+// full URL regardless of what is visible.
 function trailerRow(
   diagnostics: Diagnostics,
   links: DiagnosticLinks,
   elided: number,
   opts: BuildLineOptions,
 ): string {
-  const { colors } = diagnostics.channels[0];
+  const { colors } = diagnostics.channels[0].severity;
   const { fullText, failedConfigFile } = links;
   const base = new Style({ bgcolor: colors.bg, color: colors.fg });
   const frag = (text: string, style: Style): RichText =>
     new RichText(text, { style, end: "", noWrap: true });
-  const head = [
-    frag(`↳ ${elided > 0 ? `${elided} more rows · ` : ""}`, base),
-    fullText.kind === "file"
-      ? frag("open full text", base.withLink(pathToFileURL(fullText.path).href))
-      : frag(`full text unavailable: ${sanitizeText(fullText.reason)}`, base),
-  ];
+  const more =
+    elided > 0
+      ? [
+          frag(`${elided} more rows · `, base),
+          fullText.kind === "file"
+            ? frag(
+                "open full text",
+                base.withLink(pathToFileURL(fullText.path).href),
+              )
+            : frag(
+                `full text unavailable: ${sanitizeText(fullText.reason)}`,
+                base,
+              ),
+        ]
+      : [];
   const config =
     failedConfigFile === null
       ? []
       : [
-          frag(" · open ", base),
+          frag(`${more.length > 0 ? " · " : ""}open `, base),
           frag(
             sanitizeText(failedConfigFile),
             base.withLink(pathToFileURL(failedConfigFile).href),
           ),
         ];
-  const fixed = [...head, ...config.slice(0, -1)];
+  const fixed = [frag("↳ ", base), ...more, ...config.slice(0, -1)];
   const fixedWidth = fixed.reduce((n, f) => n + f.cellLength, 0);
   const path = config
     .slice(-1)

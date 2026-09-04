@@ -53,6 +53,9 @@
             "ascii"
           ]
         },
+        "updateNotice": {
+          "type": "boolean"
+        },
         "colorCompatibility": {
           "enum": [
             "truecolor",
@@ -1671,6 +1674,9 @@
                   "ascii"
                 ]
               },
+              "updateNotice": {
+                "type": "boolean"
+              },
               "colorCompatibility": {
                 "enum": [
                   "truecolor",
@@ -1734,6 +1740,9 @@
             "unicode",
             "ascii"
           ]
+        },
+        "updateNotice": {
+          "type": "boolean"
         },
         "colorCompatibility": {
           "enum": [
