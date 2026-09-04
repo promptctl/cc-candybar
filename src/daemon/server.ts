@@ -1009,9 +1009,11 @@ async function handleRequest(req: Request): Promise<HandledRequest> {
           .join("\n") || null;
       // [LAW:one-source-of-truth] The daemon-wide build verdict joins the
       // per-config warning on the one warning channel, the way the click
-      // error joins the per-config error above.
+      // error joins the per-config error above. It goes first: a stale
+      // bundle undermines every config, and leading keeps its two rows
+      // inside the diagnostic row cap whatever the config adds.
       const combinedWarning =
-        [entry.lastWarning, buildWatch.warning()].filter(Boolean).join("\n") ||
+        [buildWatch.warning(), entry.lastWarning].filter(Boolean).join("\n") ||
         null;
       const output = composeWithDiagnostics(
         body,

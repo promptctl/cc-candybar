@@ -19,7 +19,12 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-import { spawnTestDaemon } from "./spawn-test-daemon";
+import {
+  spawnTestDaemon,
+  TSX_SOURCE_ENTRY,
+  type DaemonEntry,
+} from "./spawn-test-daemon";
+import { daemonPool } from "./daemon-pool";
 import { sendDaemonRequest } from "./daemon-wire";
 import { PROTOCOL_VERSION } from "../../src/daemon/protocol";
 
@@ -145,6 +150,7 @@ export interface RunningDaemon {
 // binds, never a caller-supplied guess.
 export async function spawnDaemonWithEnv(
   env: NodeJS.ProcessEnv,
+  entry: DaemonEntry = TSX_SOURCE_ENTRY,
 ): Promise<RunningDaemon> {
   const sockPath = env.CC_CANDYBAR_SOCKET;
   if (!sockPath) {
@@ -153,7 +159,7 @@ export async function spawnDaemonWithEnv(
         "prepareIsolatedDaemonEnv to build env)",
     );
   }
-  const daemon = await spawnTestDaemon(env);
+  const daemon = await spawnTestDaemon(env, daemonPool, entry);
   const { child, killTree, release } = daemon;
 
   const deadline = Date.now() + 5000;

@@ -49,15 +49,26 @@ function checkoutRootOf(bundlePath: string): string {
   return path.dirname(path.dirname(bundlePath));
 }
 
-// Every regular file under `dir`, recursively. Symlinks are stat-followed
+// Dotfiles and `~` backups are never source: `.DS_Store` is rewritten by
+// Finder browsing a directory and editors park swap files beside the file
+// being edited, so counting them would fake a stale verdict from no source
+// change at all. A deny-list of "never source" holds for every bundler; an
+// extension allow-list would be a second copy of the import graph.
+const isSourceEntry = (name: string): boolean =>
+  !name.startsWith(".") && !name.endsWith("~");
+
+// Every source file under `dir`, recursively. Symlinks are stat-followed
 // like any other entry; directories recurse.
 function fileStamps(dir: string): Stamp[] {
-  return fs.readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
-    const p = path.join(dir, entry.name);
-    return entry.isDirectory()
-      ? fileStamps(p)
-      : [{ path: p, mtimeMs: fs.statSync(p).mtimeMs }];
-  });
+  return fs
+    .readdirSync(dir, { withFileTypes: true })
+    .filter((entry) => isSourceEntry(entry.name))
+    .flatMap((entry) => {
+      const p = path.join(dir, entry.name);
+      return entry.isDirectory()
+        ? fileStamps(p)
+        : [{ path: p, mtimeMs: fs.statSync(p).mtimeMs }];
+    });
 }
 
 // [LAW:effects-at-boundaries] The one place this module touches the

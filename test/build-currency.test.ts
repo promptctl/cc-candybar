@@ -73,6 +73,14 @@ describe("assessBuild", () => {
     });
   });
 
+  test("dotfiles and ~ backups newer than the bundle are not source and do not make it stale", () => {
+    touch(path.join(c.root, "src", ".DS_Store"), T0 + HOUR_MS);
+    touch(path.join(c.root, "src", "daemon", ".render.ts.swp"), T0 + HOUR_MS);
+    touch(path.join(c.root, "src", "index.ts~"), T0 + HOUR_MS);
+    touch(path.join(c.root, "src", ".hidden", "x.ts"), T0 + HOUR_MS);
+    expect(assessBuild(c.entryUrl).kind).toBe("current");
+  });
+
   test("equal mtimes are current (a build that finished within the same tick is not stale)", () => {
     touch(c.deep, T0);
     expect(assessBuild(c.entryUrl).kind).toBe("current");
