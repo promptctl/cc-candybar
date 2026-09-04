@@ -823,17 +823,6 @@ function makeCache(): {
 }
 
 describe("RenderCache: the config file is the durable store", () => {
-  let savedCcConfig: string | undefined;
-
-  beforeEach(() => {
-    savedCcConfig = process.env.CC_CANDYBAR_CONFIG;
-    delete process.env.CC_CANDYBAR_CONFIG;
-  });
-  afterEach(() => {
-    if (savedCcConfig === undefined) delete process.env.CC_CANDYBAR_CONFIG;
-    else process.env.CC_CANDYBAR_CONFIG = savedCcConfig;
-  });
-
   const GLOBALS_COMMENT = "// the hand-authored display defaults";
 
   // [LAW:one-source-of-truth] The click's write reaches the LIVE cache through

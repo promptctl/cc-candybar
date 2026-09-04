@@ -798,16 +798,10 @@ function originCtx(sessionState: SessionState, sessionId = "s1"): VerbContext {
 }
 
 describe("RenderCache: authoredRoots — the file authors a root at the preset's path", () => {
-  let savedCcConfig: string | undefined;
-
   beforeEach(() => {
     durable = durableConfig("cc-candybar-layout-authored-");
-    savedCcConfig = process.env.CC_CANDYBAR_CONFIG;
-    delete process.env.CC_CANDYBAR_CONFIG;
   });
   afterEach(() => {
-    if (savedCcConfig === undefined) delete process.env.CC_CANDYBAR_CONFIG;
-    else process.env.CC_CANDYBAR_CONFIG = savedCcConfig;
     durable.dispose();
   });
 
@@ -868,16 +862,10 @@ describe("RenderCache: authoredRoots — the file authors a root at the preset's
 });
 
 describe("RenderCache: layout edits land in the file and reload from it", () => {
-  let savedCcConfig: string | undefined;
-
   beforeEach(() => {
     durable = durableConfig("cc-candybar-layout-rc-");
-    savedCcConfig = process.env.CC_CANDYBAR_CONFIG;
-    delete process.env.CC_CANDYBAR_CONFIG;
   });
   afterEach(() => {
-    if (savedCcConfig === undefined) delete process.env.CC_CANDYBAR_CONFIG;
-    else process.env.CC_CANDYBAR_CONFIG = savedCcConfig;
     durable.dispose();
   });
 

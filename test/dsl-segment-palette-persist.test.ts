@@ -502,16 +502,10 @@ function makeCache(): {
 }
 
 describe("RenderCache: a segment-palette pin in the config file is the effective config", () => {
-  let savedCcConfig: string | undefined;
-
   beforeEach(() => {
     durable = durableConfig("cc-candybar-seg-rc-");
-    savedCcConfig = process.env.CC_CANDYBAR_CONFIG;
-    delete process.env.CC_CANDYBAR_CONFIG;
   });
   afterEach(() => {
-    if (savedCcConfig === undefined) delete process.env.CC_CANDYBAR_CONFIG;
-    else process.env.CC_CANDYBAR_CONFIG = savedCcConfig;
     durable.dispose();
   });
 

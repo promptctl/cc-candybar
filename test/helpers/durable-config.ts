@@ -6,10 +6,11 @@
 // stands those three up under one temp root and tears them down together,
 // so no suite re-spells the origin key or the history path.
 //
-// [LAW:effects-at-boundaries] XDG_STATE_HOME and XDG_CONFIG_HOME are pointed
-// at the temp root for the fixture's lifetime — the history path and the
-// first-ever-write fallback both derive from them — and restored on dispose,
-// so a suite can never edit the developer's own defaults.
+// [LAW:single-enforcer] Every env var that steers where a durable write lands
+// is isolated here, for the fixture's lifetime, and restored on dispose: the
+// XDG pair derive the history path and the first-ever-write fallback, and
+// CC_CANDYBAR_CONFIG outranks the whole chain — left alone, a developer's own
+// setting would route every click in every suite to their real config file.
 
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -42,12 +43,27 @@ export interface DurableConfig {
   dispose(): void;
 }
 
+type EnvVars = Readonly<Record<string, string | undefined>>;
+
+/** Set each var to its value; undefined unsets it. */
+function assignEnv(vars: EnvVars): void {
+  for (const [name, value] of Object.entries(vars)) {
+    if (value === undefined) delete process.env[name];
+    else process.env[name] = value;
+  }
+}
+
 export function durableConfig(prefix = "cc-candybar-durable-"): DurableConfig {
-  const savedState = process.env.XDG_STATE_HOME;
-  const savedConfig = process.env.XDG_CONFIG_HOME;
   const root = mkdtempSync(join(tmpdir(), prefix));
-  process.env.XDG_STATE_HOME = join(root, "state");
-  process.env.XDG_CONFIG_HOME = join(root, "xdg-config");
+  const isolated: EnvVars = {
+    XDG_STATE_HOME: join(root, "state"),
+    XDG_CONFIG_HOME: join(root, "xdg-config"),
+    CC_CANDYBAR_CONFIG: undefined,
+  };
+  const saved: EnvVars = Object.fromEntries(
+    Object.keys(isolated).map((name) => [name, process.env[name]]),
+  );
+  assignEnv(isolated);
   const configPath = join(root, ".cc-candybar.json5");
   const readText = (): string | null => {
     try {
@@ -77,10 +93,7 @@ export function durableConfig(prefix = "cc-candybar-durable-"): DurableConfig {
         encodeRenderOrigin({ projectDir: root, cwd: root, configFile: null }),
       ),
     dispose: () => {
-      if (savedState === undefined) delete process.env.XDG_STATE_HOME;
-      else process.env.XDG_STATE_HOME = savedState;
-      if (savedConfig === undefined) delete process.env.XDG_CONFIG_HOME;
-      else process.env.XDG_CONFIG_HOME = savedConfig;
+      assignEnv(saved);
       rmSync(root, { recursive: true, force: true });
     },
   };
