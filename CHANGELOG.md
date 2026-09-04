@@ -1,3 +1,10 @@
+# [1.42.0](https://github.com/promptctl/cc-candybar/compare/v1.41.3...v1.42.0) (2026-09-04)
+
+
+### Features
+
+* **cli:** `--version`/`-V` prints the baked package stamp; daemon-stats carries its own (candybar-cli-0x2) ([#200](https://github.com/promptctl/cc-candybar/issues/200)) ([69c92f7](https://github.com/promptctl/cc-candybar/commit/69c92f72a21621b6860d91e6e971c4dbfd29023c))
+
 ## [1.41.3](https://github.com/promptctl/cc-candybar/compare/v1.41.2...v1.41.3) (2026-09-03)
 
 
