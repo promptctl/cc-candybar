@@ -1,3 +1,10 @@
+# [1.43.0](https://github.com/promptctl/cc-candybar/compare/v1.42.1...v1.43.0) (2026-09-04)
+
+
+### Features
+
+* **daemon:** warn when the bundle is older than the source beside it (candybar-build-2s5) ([#202](https://github.com/promptctl/cc-candybar/issues/202)) ([04eac87](https://github.com/promptctl/cc-candybar/commit/04eac87e644fa5ad339b28df678dd508bc7c302e)), closes [#78](https://github.com/promptctl/cc-candybar/issues/78)
+
 ## [1.42.1](https://github.com/promptctl/cc-candybar/compare/v1.42.0...v1.42.1) (2026-09-04)
 
 
