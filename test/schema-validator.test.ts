@@ -144,6 +144,17 @@ describe("validateHookData — type mismatches", () => {
     );
   });
 
+  test("session_id as an ill-formed string (lone surrogate)", () => {
+    const hook = { ...VALID_HOOK, session_id: "abc\ud800" };
+    expect(validateHookData(hook).report.typeMismatches).toContainEqual(
+      expect.objectContaining({
+        path: "session_id",
+        expected: "string",
+        got: "ill-formed string",
+      }),
+    );
+  });
+
   test("cwd as boolean", () => {
     const hook = { ...VALID_HOOK, cwd: true };
     expect(validateHookData(hook).report.typeMismatches).toContainEqual(

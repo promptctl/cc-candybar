@@ -43,15 +43,17 @@ export interface RenderRequest {
   // through parseClientHints at the receive boundary, never read these
   // directly. See the ClientHints doc block for the absence semantics.
   termCols?: number;
+  termRows?: number;
   ssh?: boolean;
 }
 
 // [LAW:locality-or-seam] The seam for "a fact the daemon cannot observe about
 // the session it is rendering for". `termCols` established the pattern; `ssh`
-// is the second member, and the documented-but-unbuilt client-aware
-// `colorCompatibility: "auto"` is the next. Naming the set as ONE type is what
-// keeps that third addition a field rather than another sanitizer, another
-// wire read, and another parameter threaded through the render path.
+// and `termRows` (the diagnostic strip's row cap) followed it, and the
+// documented-but-unbuilt client-aware `colorCompatibility: "auto"` is the
+// next. Naming the set as ONE type is what keeps each addition a field
+// rather than another sanitizer, another wire read, and another parameter
+// threaded through the render path.
 //
 // [LAW:parse-dont-validate] This is the stamped type. `RenderRequest`'s
 // same-named fields are raw JSON of unknown provenance; a `ClientHints` has
@@ -60,9 +62,11 @@ export interface RenderRequest {
 // [LAW:types-are-the-program] Both fields are optional, but they mean
 // DIFFERENT things by absence, and each is the strongest true theorem for its
 // own fact:
-//   • `termCols` absent — the client tried and could not determine a width
-//     (no COLUMNS, no TTY on stderr). A genuine "unknown", reachable from any
-//     client version.
+//   • `termCols` / `termRows` absent — the client tried and could not
+//     determine that extent (no COLUMNS/LINES, no TTY on stderr). A genuine
+//     "unknown", reachable from any client version — and for `termRows` also
+//     the old-client case, which reads the same way: no row cap from the
+//     client, so the daemon's own ceiling applies.
 //   • `ssh` absent — the client did not REPORT. A current client always knows
 //     (its own env is total on this question) and so always sends `true` or
 //     `false`; absence therefore means one thing only: a client too old to
@@ -75,6 +79,7 @@ export interface RenderRequest {
 //     surfaces.
 export interface ClientHints {
   readonly termCols?: number;
+  readonly termRows?: number;
   readonly ssh?: boolean;
 }
 
@@ -83,32 +88,36 @@ export interface ClientHints {
 // own validity rule) but nothing outside this function calls them, so a new
 // hint cannot reach the render path un-sanitized.
 export function parseClientHints(req: RenderRequest): ClientHints {
-  const termCols = sanitizeTermCols(req.termCols);
+  const termCols = sanitizeTermExtent(req.termCols);
+  const termRows = sanitizeTermExtent(req.termRows);
   const ssh = sanitizeSsh(req.ssh);
   return {
     ...(termCols !== undefined && { termCols }),
+    ...(termRows !== undefined && { termRows }),
     ...(ssh !== undefined && { ssh }),
   };
 }
 
 // [LAW:no-defensive-null-guards] exception: trust boundary. The wire is
-// untrusted JSON; downstream code treats termCols as an integer in a sane
-// range. Validate once here so the type's promise is true.
+// untrusted JSON; downstream code treats a terminal extent (cols or rows) as
+// an integer in a sane range. Validate once here so the type's promise is
+// true. [LAW:one-type-per-behavior] Columns and rows are the same fact about
+// two axes — one sanitizer, two call sites.
 //
 // Pathologically large values are capped (not rejected) so a future
 // genuinely-huge terminal still renders — 10000 is two orders of magnitude
-// above the largest plausible real terminal.
-const MAX_TERM_COLS = 10000;
-export function sanitizeTermCols(v: unknown): number | undefined {
+// above the largest plausible real terminal on either axis.
+const MAX_TERM_EXTENT = 10000;
+export function sanitizeTermExtent(v: unknown): number | undefined {
   if (typeof v !== "number") return undefined;
   if (!Number.isFinite(v)) return undefined;
   const n = Math.floor(v);
   if (n <= 0) return undefined;
-  return n > MAX_TERM_COLS ? MAX_TERM_COLS : n;
+  return n > MAX_TERM_EXTENT ? MAX_TERM_EXTENT : n;
 }
 
 // [LAW:no-defensive-null-guards] exception: trust boundary, same shape as
-// sanitizeTermCols. A non-boolean (absent, or a malformed/hostile frame) is
+// sanitizeTermExtent. A non-boolean (absent, or a malformed/hostile frame) is
 // NOT coerced to `false` — the three wire states stay three
 // ([LAW:no-silent-failure]): true, false, and "no answer from this client".
 export function sanitizeSsh(v: unknown): boolean | undefined {

@@ -85,17 +85,9 @@ export function validateHookData(raw: unknown): {
     if (value === undefined || value === null) {
       report.missingRequired.push(path);
     } else {
-      const actualType = Array.isArray(value) ? "array" : typeof value;
-      const mismatch =
-        expectedType === "object"
-          ? actualType !== "object"
-          : actualType !== expectedType;
-      if (mismatch) {
-        report.typeMismatches.push({
-          path,
-          expected: expectedType,
-          got: actualType,
-        });
+      const got = kindOf(value);
+      if (got !== expectedType) {
+        report.typeMismatches.push({ path, expected: expectedType, got });
       }
     }
   }
@@ -107,6 +99,17 @@ export function validateHookData(raw: unknown): {
   }
 
   return { data: raw as ClaudeHookData, report };
+}
+
+// [LAW:parse-dont-validate] A value's kind in REQUIRED_FIELDS' vocabulary.
+// A string counts only when well-formed: past this border, hook strings are
+// safe to encode into paths and URLs (a lone surrogate would make
+// encodeURIComponent throw inland), and their encodings are injective.
+function kindOf(value: unknown): string {
+  if (Array.isArray(value)) return "array";
+  if (typeof value === "string" && !value.isWellFormed())
+    return "ill-formed string";
+  return typeof value;
 }
 
 function resolvePath(obj: Record<string, unknown>, dotPath: string): unknown {
