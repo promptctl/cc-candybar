@@ -530,6 +530,27 @@ function childArraysOf(node: Node): readonly ArrayNode[] {
   );
 }
 
+// [LAW:types-are-the-program] A layout root is one of two shapes: a container
+// (an `h`/`v`/`children` array to splice) or the bare segment ref a bare
+// string / `{ seg }` object spells. The loader accepts both at a preset root
+// and edit chrome decorates both with `-`/`+`, but only the first has an
+// array to address. A bare ref IS the one-child horizontal container it
+// abbreviates, so it is rewritten as one here — the original text kept
+// verbatim as the sole child, its own `when` included — and the splices
+// below are total over every legal root: normalized once, never branched on
+// per site. The rewrite is only committed by an edit that then finds its
+// target, so a miss leaves the file untouched.
+function containerAt(
+  text: string,
+  rootPath: readonly string[],
+): { text: string; root: Node } | null {
+  const root = nodeAt(parseDocument(text), rootPath);
+  if (root === undefined) return null;
+  if (childArraysOf(root).length > 0) return { text, root };
+  const wrapped = setValue(text, rootPath, `{ h: [${textOf(text, root)}] }`);
+  return { text: wrapped, root: nodeAt(parseDocument(wrapped), rootPath)! };
+}
+
 /** The array holding the first segment ref named `name`, and its index. */
 function findSegmentRef(
   root: Node,
@@ -555,10 +576,11 @@ export function removeSegmentRef(
   rootPath: readonly string[],
   target: string,
 ): string | null {
-  const root = nodeAt(parseDocument(text), rootPath);
-  const hit = root === undefined ? null : findSegmentRef(root, target);
+  const tree = containerAt(text, rootPath);
+  if (tree === null) return null;
+  const hit = findSegmentRef(tree.root, target);
   if (hit === null) return null;
-  return removeMember(text, hit.array.elements[hit.index]!.span);
+  return removeMember(tree.text, hit.array.elements[hit.index]!.span);
 }
 
 /**
@@ -574,23 +596,22 @@ export function insertSegmentRef(
   anchor: string,
   relation: "before" | "after",
 ): string | null {
-  const root = nodeAt(parseDocument(text), rootPath);
-  const hit = root === undefined ? null : findSegmentRef(root, anchor);
+  const tree = containerAt(text, rootPath);
+  if (tree === null) return null;
+  const hit = findSegmentRef(tree.root, anchor);
   if (hit === null) return null;
+  const src = tree.text;
   const ref = hit.array.elements[hit.index]!;
   const newText = JSON.stringify(segment);
-  const { lineEnd } = trailerAfter(text, ref.span.end);
-  if (startsLine(text, ref.span.start) && lineEnd !== -1) {
-    const indent = text.slice(
-      lineStartOf(text, ref.span.start),
-      ref.span.start,
-    );
+  const { lineEnd } = trailerAfter(src, ref.span.end);
+  if (startsLine(src, ref.span.start) && lineEnd !== -1) {
+    const indent = src.slice(lineStartOf(src, ref.span.start), ref.span.start);
     return relation === "after"
-      ? insertLineAfter(text, ref.span, newText, indent)
-      : splice(text, ref.span.start, ref.span.start, `${newText},\n${indent}`);
+      ? insertLineAfter(src, ref.span, newText, indent)
+      : splice(src, ref.span.start, ref.span.start, `${newText},\n${indent}`);
   }
-  const refText = textOf(text, ref);
+  const refText = textOf(src, ref);
   const pair =
     relation === "before" ? `${newText}, ${refText}` : `${refText}, ${newText}`;
-  return splice(text, ref.span.start, ref.span.end, pair);
+  return splice(src, ref.span.start, ref.span.end, pair);
 }

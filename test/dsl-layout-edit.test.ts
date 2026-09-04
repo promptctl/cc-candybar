@@ -74,7 +74,7 @@ import {
 } from "../src/config/edit-chrome";
 import { GitDataProvider } from "../src/daemon/cache/git";
 import { WatcherRegistry } from "../src/daemon/cache/watchers";
-import { encodeLayoutOp } from "../src/config/layout-ops";
+import { encodeLayoutOp, type LayoutOp } from "../src/config/layout-ops";
 import { walkNodes, type LayoutNode } from "../src/config/dsl-types";
 import { presetRoot } from "../src/config/presets";
 import { durableConfig, type DurableConfig } from "./helpers/durable-config";
@@ -958,6 +958,69 @@ describe("RenderCache: layout edits land in the file and reload from it", () => 
       expect(durable.text()).toContain(ROOT_COMMENT);
     } finally {
       for (const fn of cleanups) fn();
+    }
+  });
+
+  // A preset whose root is a bare segment ref (`root: "sidebar"`) gets the
+  // same `-`/`+` chrome as a container root, so its clicks must land: the
+  // editor addresses it as the one-child container it abbreviates, and the
+  // tree edited down to nothing still loads.
+  test("layout edits land on a bare-segment preset root, down to an empty container that still loads", () => {
+    durable.write(`{
+  globals: {},
+  segments: {
+    sidebar: { template: "s", bg: "surface", fg: "foreground" },
+    clock: { template: "c", bg: "surface", fg: "foreground" },
+  },
+  actions: {
+    add: { persist: "presets.compact.root", insertSegment: "clock", anchor: "sidebar", relation: "after" },
+    rmSidebar: { persist: "presets.compact.root", removeSegment: "sidebar" },
+    rmClock: { persist: "presets.compact.root", removeSegment: "clock" },
+  },
+  root: { h: ["sidebar"] },
+  presets: { compact: { root: "sidebar" } },
+}
+`);
+    const { cache, sessionState, cleanups } = makeCache();
+    try {
+      const entry = cache.getOrCreate(
+        durable.projectDir,
+        durable.projectDir,
+        undefined,
+      );
+      expect(entry.lastError).toBeNull();
+      expect(presetNamesOf(entry, "compact")).toEqual(["sidebar"]);
+      const ctx = originCtx(sessionState);
+      const fire = (op: LayoutOp): void =>
+        fireVerb(
+          "apply-layout-op",
+          ctx,
+          "s1",
+          "presets.compact.root",
+          encodeLayoutOp(op),
+        );
+      fire({ op: "insert", segment: "clock", anchor: "sidebar", relation: "after" });
+      expect(durable.parsed().presets).toEqual({
+        compact: { root: { h: ["sidebar", "clock"] } },
+      });
+      fire({ op: "remove", target: "sidebar" });
+      fire({ op: "remove", target: "clock" });
+      expect(durable.parsed().presets).toEqual({ compact: { root: { h: [] } } });
+    } finally {
+      for (const fn of cleanups) fn();
+    }
+
+    const { cache: restarted, cleanups: restartedCleanups } = makeCache();
+    try {
+      const entry = restarted.getOrCreate(
+        durable.projectDir,
+        durable.projectDir,
+        undefined,
+      );
+      expect(entry.lastError).toBeNull();
+      expect(presetNamesOf(entry, "compact")).toEqual([]);
+    } finally {
+      for (const fn of restartedCleanups) fn();
     }
   });
 

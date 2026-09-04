@@ -273,6 +273,40 @@ describe("insertSegmentRef", () => {
   });
 });
 
+// A preset root may be a bare segment ref — `root: "sidebar"` or the gated
+// `{ seg, when }` object (loader/layout.ts accepts both) — and edit chrome
+// splices `-`/`+` beside it like any other segment. The editors address it
+// as the one-child horizontal container it abbreviates, so the click lands
+// instead of failing as "stale" on a file that never changed.
+describe("a bare-segment root is the one-child container it abbreviates", () => {
+  const bare = `{ presets: { compact: { root: "sidebar" } } }`;
+  const gated = `{ presets: { compact: { root: { seg: "sidebar", when: "{{ .x }}" } } } }`;
+  const path = ["presets", "compact", "root"];
+
+  test("remove of the sole segment leaves an empty container, the root's own span rewritten", () => {
+    expect(removeSegmentRef(bare, path, "sidebar")).toBe(
+      `{ presets: { compact: { root: { h: [] } } } }`,
+    );
+    expect(removeSegmentRef(gated, path, "sidebar")).toBe(
+      `{ presets: { compact: { root: { h: [] } } } }`,
+    );
+  });
+
+  test("insert beside the sole segment keeps the original ref verbatim, its when included", () => {
+    expect(insertSegmentRef(bare, path, "clock", "sidebar", "after")).toBe(
+      `{ presets: { compact: { root: { h: ["sidebar", "clock"] } } } }`,
+    );
+    expect(insertSegmentRef(gated, path, "clock", "sidebar", "before")).toBe(
+      `{ presets: { compact: { root: { h: ["clock", { seg: "sidebar", when: "{{ .x }}" }] } } } }`,
+    );
+  });
+
+  test("a miss on a bare root is still null — the normalization is never committed alone", () => {
+    expect(removeSegmentRef(bare, path, "zzz")).toBeNull();
+    expect(insertSegmentRef(bare, path, "clock", "zzz", "after")).toBeNull();
+  });
+});
+
 describe("json5Text", () => {
   test("identifier keys unquoted, others quoted, one member per line, nested indentation", () => {
     expect(json5Text({ template: "{{ .x }}", "v1.c": [1, { a: true }], empty: {}, none: [] })).toBe(
