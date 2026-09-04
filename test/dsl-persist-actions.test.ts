@@ -897,7 +897,7 @@ describe("RenderCache: the config file is the durable store", () => {
         undefined,
       );
       expect(entry.lastError).toBeNull();
-      expect(entry.state!.config.globals.palette).toBe("textual-dark");
+      expect(entry.state.config.globals.palette).toBe("textual-dark");
 
       durable.seedOrigin(sessionState, "s1");
       const ctx: VerbContext = { sessionState, dlog: () => {} };
@@ -915,7 +915,7 @@ describe("RenderCache: the config file is the durable store", () => {
       });
 
       expect(entry.lastError).toBeNull();
-      expect(entry.state!.config.globals.palette).toBe("nord");
+      expect(entry.state.config.globals.palette).toBe("nord");
       expect(
         (durable.parsed().globals as Record<string, unknown>).palette,
       ).toBe("nord");
@@ -932,7 +932,7 @@ describe("RenderCache: the config file is the durable store", () => {
         undefined,
       );
       expect(entry.lastError).toBeNull();
-      expect(entry.state!.config.globals.palette).toBe("nord");
+      expect(entry.state.config.globals.palette).toBe("nord");
     } finally {
       for (const fn of restartedCleanups) fn();
     }
@@ -966,13 +966,13 @@ describe("RenderCache: the config file is the durable store", () => {
       expect(entry.lastError).toBeNull();
 
       // No active preset (the floor): the file's globals apply as-is.
-      const atFloor = presetGlobals(entry.state!.config, PRESET_FLOOR);
+      const atFloor = presetGlobals(entry.state.config, PRESET_FLOOR);
       expect(atFloor.padding).toBe(2);
       expect(atFloor.charset).toBe("ascii");
 
       // "roomy" declares padding — it wins over the file's 2. It says
       // nothing about charset — the file's "ascii" survives underneath.
-      const atRoomy = presetGlobals(entry.state!.config, "roomy");
+      const atRoomy = presetGlobals(entry.state.config, "roomy");
       expect(atRoomy.padding).toBe(4);
       expect(atRoomy.charset).toBe("ascii");
     } finally {
@@ -997,7 +997,7 @@ describe("RenderCache: the config file is the durable store", () => {
         undefined,
       );
       // The file's default is every session's starting point.
-      expect(entry.state!.config.globals.palette).toBe("nord");
+      expect(entry.state.config.globals.palette).toBe("nord");
 
       // A session that picked its own theme via `set` still overrides it —
       // session state is consulted BEFORE globals.palette, so the file only
@@ -1008,7 +1008,7 @@ describe("RenderCache: the config file is the durable store", () => {
         effectiveThemeName(
           undefined,
           sessionState.get("s1", "theme"),
-          entry.state!.config.globals.palette,
+          entry.state.config.globals.palette,
         ),
       ).toBe("dracula");
       // A session that never picked reads the file's default.
@@ -1016,7 +1016,7 @@ describe("RenderCache: the config file is the durable store", () => {
         effectiveThemeName(
           undefined,
           sessionState.get("s2-no-pick", "theme"),
-          entry.state!.config.globals.palette,
+          entry.state.config.globals.palette,
         ),
       ).toBe("nord");
     } finally {

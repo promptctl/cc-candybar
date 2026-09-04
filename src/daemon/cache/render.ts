@@ -98,13 +98,16 @@ export type ReloadedEntry = Readonly<
     | "lastError"
     | "lastWarning"
   >
-> & { readonly state: Readonly<Pick<DslRenderState, "config">> | null };
+> & { readonly state: Readonly<Pick<DslRenderState, "config">> };
 
 // [LAW:types-are-the-program] The DSL render state for an entry is one
-// optionally-null bundle, not five independently-optional fields. Either
-// every field is populated (a render is possible) or all are null (parse
-// failed and we never had a valid config) — the type makes any other
-// combination unrepresentable.
+// bundle, never null: an entry can ALWAYS render. It is seeded with the
+// bundled default's state at creation (candybar-settings-ui-0gz) and
+// replaced by each config that loads; a config that fails to load leaves it
+// as it was. So the bar under a load error is the best config the entry has
+// — the last one that loaded, or the bundled default before any has — and
+// the settings menu (the door back to the file) exists from the first
+// render, through the same synthesis every config gets.
 //
 // `neededInputPaths` is the layout-reachable closure of input paths,
 // computed once at registration. The daemon's payload builder reads it
@@ -141,11 +144,11 @@ export interface DslRenderState {
 }
 
 // [LAW:one-source-of-truth] Each entry tracks the last *valid* DSL state +
-// the last error AND last warning from a reload attempt. We never overwrite
-// a valid state with nothing — a parse error means "show the warning but
-// keep rendering with what we had". Errors are scoped to the cache key
-// (which includes cwd / projectDir) so a broken config in repo A cannot
-// pollute repo B.
+// the last error AND last warning from a reload attempt. A state is only
+// ever replaced by a state — a load failure means "show the error but keep
+// rendering with what we had", and what we had is the bundled default until
+// a config loads. Errors are scoped to the cache key (which includes cwd /
+// projectDir) so a broken config in repo A cannot pollute repo B.
 //
 // [LAW:one-type-per-behavior] error and warning are distinct severities, so
 // they get distinct channels. `lastError` is load-fatal (config didn't
@@ -166,7 +169,7 @@ export interface CacheEntry {
   configFilePath: string | null;
   lastError: string | null;
   lastWarning: string | null;
-  state: DslRenderState | null;
+  state: DslRenderState;
   watcher: WatcherHandle | null;
   // The key `watcher` was acquired under — the identity of its target set.
   watcherKey: string | null;
@@ -277,8 +280,8 @@ export class RenderCache {
   }
 
   // [LAW:dataflow-not-control-flow] One uniform shape: every entry has the
-  // same fields, populated to nulls when reload failed. The renderer reads
-  // the data; no special-case branches between "first load", "reload",
+  // same fields and a renderable state. The renderer reads the data; no
+  // special-case branches between "first load", "reload",
   // "reload-after-error".
   getOrCreate(
     projectDir: string,
@@ -294,6 +297,12 @@ export class RenderCache {
       return existing;
     }
 
+    // [LAW:no-silent-failure] Seeded with the bundled default so a config
+    // that fails its FIRST load still yields a bar — the error rides the
+    // diagnostic strip above it, loud, and the settings menu is the door back
+    // to the file. The default validates by program invariant
+    // (test/default-dsl-config.test.ts); a throw here is a daemon bug and
+    // surfaces as the request's failure, never a half-built entry.
     const entry: CacheEntry = {
       projectDir,
       cwd,
@@ -301,7 +310,7 @@ export class RenderCache {
       configFilePath: null,
       lastError: null,
       lastWarning: null,
-      state: null,
+      state: this.buildState(cwd, null),
       watcher: null,
       watcherKey: null,
     };
@@ -315,17 +324,17 @@ export class RenderCache {
     // [LAW:dataflow-not-control-flow]
     this.entries.set(key, entry);
     if (this.entries.size > this.maxEntries) {
-      const oldest = this.entries.keys().next().value;
+      const oldest = this.entries.entries().next().value;
       if (oldest !== undefined) {
-        const evicted = this.entries.get(oldest);
+        const [oldestKey, evicted] = oldest;
         // [LAW:single-enforcer] dispose the registry on eviction — it owns
         // timers, fs watchers, and git subscriptions. Dropping the entry
         // without dispose leaks every async handle the config declared. The
         // validator disposers free this entry's writable-key entries too.
-        evicted?.state?.registry.dispose();
-        evicted?.state?.validatorDisposers.forEach((dispose) => dispose());
-        evicted?.watcher?.release();
-        this.entries.delete(oldest);
+        evicted.state.registry.dispose();
+        evicted.state.validatorDisposers.forEach((dispose) => dispose());
+        evicted.watcher?.release();
+        this.entries.delete(oldestKey);
       }
     }
     this.reloadInto(entry);
@@ -335,10 +344,10 @@ export class RenderCache {
 
   // Populate (or re-populate) `entry` from the current state of disk.
   //
-  // - Parse success: dispose the prior state (if any), build fresh store +
+  // - Parse success: dispose the prior state, build fresh store +
   //   registry + compiled, clear lastError.
-  // - Parse failure: keep the prior state, set lastError. First-time
-  //   failures leave state null (startup-error case).
+  // - Parse failure: keep the prior state (the bundled default seed on a
+  //   first-ever failure), set lastError.
   //
   // [LAW:single-enforcer] hot-reload contract: any reload that produces a
   // new DslConfig disposes the old SourceRegistry before constructing a new
@@ -374,13 +383,14 @@ export class RenderCache {
     // construction step has succeeded. A failure at any step — parse,
     // registration, palette resolution — leaves `entry.state` and
     // `entry.state.registry` untouched, so the daemon keeps rendering the
-    // last-known-good config plus a warning icon (composeWithDiagnostics
-    // reads `entry.lastError` and `entry.lastWarning`). The
+    // last-known-good config — the bundled default until one has loaded —
+    // plus the error strip (composeWithDiagnostics reads `entry.lastError`
+    // and `entry.lastWarning`). The
     // "[LAW:single-enforcer] dispose before swap" contract holds for the
     // swap; the construction is upstream of it.
     let newState: DslRenderState;
     try {
-      newState = this.buildState(entry, resolvedPath);
+      newState = this.buildState(entry.cwd, resolvedPath);
     } catch (err) {
       entry.lastError =
         err instanceof ConfigError
@@ -399,8 +409,8 @@ export class RenderCache {
     // disposers own this entry's writable-key entries in the global registry.
     // Both are disposed in one step before the swap — dropping either reference
     // without disposing would leak handles or shadow the new config's keys.
-    entry.state?.registry.dispose();
-    entry.state?.validatorDisposers.forEach((dispose) => dispose());
+    entry.state.registry.dispose();
+    entry.state.validatorDisposers.forEach((dispose) => dispose());
     entry.lastError = null;
     entry.state = newState;
     // [LAW:dataflow-not-control-flow] Partial-load warnings (variable
@@ -421,10 +431,7 @@ export class RenderCache {
   // failure inside disposes the partially-built registry so we don't leak
   // timers/watchers from a half-constructed reload, then rethrows so the
   // caller (loadFromDisk) preserves the prior `entry.state` unchanged.
-  private buildState(
-    entry: CacheEntry,
-    resolvedPath: string | null,
-  ): DslRenderState {
+  private buildState(cwd: string, resolvedPath: string | null): DslRenderState {
     // [LAW:dataflow-not-control-flow][LAW:single-enforcer] Three primitives,
     // straight-line composition. `loadConfig(null)` returns the bundled
     // default (uniform merge against empty raw); `validateConfig` is the
@@ -470,9 +477,7 @@ export class RenderCache {
       // [LAW:one-source-of-truth] The action runtime reads session.id + current
       // picker values from registry.variableStore — the same store this entry's
       // registry declares into — so no store reference is threaded separately.
-      compiled = registerDslConfig(config, registry, {
-        cwd: entry.cwd,
-      });
+      compiled = registerDslConfig(config, registry, { cwd });
       // [LAW:one-source-of-truth] Derive the writable-key validators from the
       // config's action table (the sole interaction authority) through one
       // coherence merge (deriveActionValidators), then register them so the click
@@ -557,17 +562,14 @@ export class RenderCache {
     return this.entries.size;
   }
 
-  // [LAW:single-enforcer] One read path for "any populated state" used by
+  // [LAW:single-enforcer] One read path for "any entry's state" used by
   // the debug protocol's introspection (`debug vars` / `segments` / `config`).
-  // Iterates existing entries — does NOT call getOrCreate, so debug
+  // Reads existing entries — does NOT call getOrCreate, so debug
   // introspection never has the side effect of creating a fresh cache entry
   // (with its own SourceRegistry timers/watchers) tied to the daemon's own
-  // `process.cwd()`. Returns null when the cache has no successfully-loaded
-  // entry; debug responses are empty in that case by construction.
-  firstPopulatedState(): DslRenderState | null {
-    for (const entry of this.entries.values()) {
-      if (entry.state !== null) return entry.state;
-    }
-    return null;
+  // `process.cwd()`. Null only when the cache is empty; debug responses are
+  // empty in that case by construction.
+  firstState(): DslRenderState | null {
+    return this.entries.values().next().value?.state ?? null;
   }
 }

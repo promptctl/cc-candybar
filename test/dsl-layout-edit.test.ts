@@ -837,7 +837,7 @@ function segmentNamesOf(root: LayoutNode): string[] {
 // The content names of the tree a preset renders, read the way the render
 // does (presetRoot — a preset staging the config root reads `root`).
 function presetNamesOf(entry: CacheEntry, preset: string): string[] {
-  return segmentNamesOf(presetRoot(entry.state!.config, preset).node);
+  return segmentNamesOf(presetRoot(entry.state.config, preset).node);
 }
 
 // Fire one leaf verb through the REAL handler, with the wire's own encoding
@@ -871,7 +871,7 @@ describe("RenderCache: authoredRoots — the file authors a root at the preset's
         undefined,
       );
       expect(entry.lastError).toBeNull();
-      return entry.state!.authoredRoots;
+      return entry.state.authoredRoots;
     } finally {
       for (const fn of cleanups) fn();
     }
@@ -978,7 +978,7 @@ describe("RenderCache: layout edits land in the file and reload from it", () => 
       expect(presetNamesOf(entry, "default")).toEqual(["directory", "git"]);
       // Hand-authored `root` → already "customized" before any click: the
       // banner's fact is "the file authors this tree", by whichever hand.
-      expect(entry.state!.authoredRoots.has("default")).toBe(true);
+      expect(entry.state.authoredRoots.has("default")).toBe(true);
 
       const ctx = originCtx(sessionState);
       let clicked = false;
@@ -1170,7 +1170,7 @@ describe("RenderCache: layout edits land in the file and reload from it", () => 
       );
       expect(before.lastError).toBeNull();
       expect(presetNamesOf(before, "default")).toContain("toolbar");
-      expect(before.state!.authoredRoots.has("default")).toBe(false);
+      expect(before.state.authoredRoots.has("default")).toBe(false);
 
       // Edit mode's own `-` beside toolbar: the token its synthesized action
       // declares, through the gate this cache entry registered for it.
@@ -1204,7 +1204,7 @@ describe("RenderCache: layout edits land in the file and reload from it", () => 
         );
         expect(afterRemove.lastError).toBeNull();
         expect(presetNamesOf(afterRemove, "default")).not.toContain("toolbar");
-        expect(afterRemove.state!.authoredRoots.has("default")).toBe(true);
+        expect(afterRemove.state.authoredRoots.has("default")).toBe(true);
         // The trigger is gone, but the REST of the preset's chrome is still
         // there — other `-`/`+` affordances remain, so the bar isn't a dead
         // end (only the render's own `when` gate hides them until a session
@@ -1212,7 +1212,7 @@ describe("RenderCache: layout edits land in the file and reload from it", () => 
         // confirm the STRUCTURE is intact).
         const allNames: string[] = [];
         for (const node of walkNodes(
-          presetRoot(afterRemove.state!.config, "default").node,
+          presetRoot(afterRemove.state.config, "default").node,
         )) {
           if (node.kind === "segment") allNames.push(node.name);
         }
@@ -1222,7 +1222,7 @@ describe("RenderCache: layout edits land in the file and reload from it", () => 
         // every `+` in this preset ranges the SAME addable domain, computed
         // fresh from the tree above, so any of them offers it back.
         expect(
-          addableSegmentDomains(afterRemove.state!.config).get(
+          addableSegmentDomains(afterRemove.state.config).get(
             addableDomainName("default"),
           ),
         ).toContain("toolbar");
@@ -1286,7 +1286,7 @@ describe("RenderCache: layout edits land in the file and reload from it", () => 
         undefined,
       );
       expect(before.lastError).toBeNull();
-      expect(before.state!.authoredRoots.has("default")).toBe(false);
+      expect(before.state.authoredRoots.has("default")).toBe(false);
       const namesBefore = presetNamesOf(before, "default");
       expect(namesBefore).toContain("directory");
 
@@ -1310,14 +1310,14 @@ describe("RenderCache: layout edits land in the file and reload from it", () => 
           undefined,
         );
         expect(customized.lastError).toBeNull();
-        expect(customized.state!.authoredRoots.has("default")).toBe(true);
+        expect(customized.state.authoredRoots.has("default")).toBe(true);
         expect(presetNamesOf(customized, "default")).toEqual(
           namesBefore.filter((n) => n !== "directory"),
         );
         // The synthesized reset action targets the SAME key the +/-
         // affordances already write — no second gate to register.
         const resetActionNames = Object.entries(
-          customized.state!.config.actions,
+          customized.state.config.actions,
         )
           .filter(([, a]) => "reset" in a && a.reset === "presets.default.root")
           .map(([name]) => name);
@@ -1343,7 +1343,7 @@ describe("RenderCache: layout edits land in the file and reload from it", () => 
             undefined,
           );
           expect(restored.lastError).toBeNull();
-          expect(restored.state!.authoredRoots.has("default")).toBe(false);
+          expect(restored.state.authoredRoots.has("default")).toBe(false);
           expect(presetNamesOf(restored, "default")).toEqual(namesBefore);
         } finally {
           for (const fn of cleanups3) fn();
@@ -1388,7 +1388,7 @@ describe("RenderCache: layout edits land in the file and reload from it", () => 
         "git",
         "context",
       ]);
-      expect(entry.state!.authoredRoots.has("compact")).toBe(false);
+      expect(entry.state.authoredRoots.has("compact")).toBe(false);
 
       const ctx = originCtx(sessionState);
       const compactRemove = (target: string): void =>
@@ -1424,7 +1424,7 @@ describe("RenderCache: layout edits land in the file and reload from it", () => 
         undefined,
       );
       expect(emptied.lastError).toBeNull();
-      expect(emptied.state!.authoredRoots.has("compact")).toBe(true);
+      expect(emptied.state.authoredRoots.has("compact")).toBe(true);
       expect(presetNamesOf(emptied, "compact")).toEqual([]);
 
       // Would throw BadVerbArgs("unknown config key") before the
@@ -1452,7 +1452,7 @@ describe("RenderCache: layout edits land in the file and reload from it", () => 
         undefined,
       );
       expect(restored.lastError).toBeNull();
-      expect(restored.state!.authoredRoots.has("compact")).toBe(false);
+      expect(restored.state.authoredRoots.has("compact")).toBe(false);
     } finally {
       for (const fn of cleanups3) fn();
     }
