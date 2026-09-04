@@ -27,12 +27,9 @@ export class DiagnosticDump {
   // strip names it before the daemon writes it, so the two agree by
   // construction rather than by return value.
   pathFor(sessionId: string): string {
-    // toWellFormed: the id is hook input, and a lone surrogate would make
-    // encodeURIComponent throw — a hostile id must not cost the render.
-    return path.join(
-      this.dir,
-      `${encodeURIComponent(sessionId.toWellFormed())}.txt`,
-    );
+    // The id is a well-formed string past validateHookData, so the encoding
+    // is total and injective: distinct sessions never share a file.
+    return path.join(this.dir, `${encodeURIComponent(sessionId)}.txt`);
   }
 
   // Bring the session's file in line with `text`: present with this content,
@@ -61,9 +58,16 @@ export class DiagnosticDump {
     }
   }
 
-  // Daemon start: forget everything, on disk and in memory.
-  reset(): void {
-    fs.rmSync(this.dir, { recursive: true, force: true });
+  // Daemon start: forget everything, on disk and in memory. The same shape
+  // as sync: a wipe the filesystem refuses is a reason, not a throw that
+  // would take the daemon down over its auxiliary directory.
+  reset(): string | null {
     this.written.clear();
+    try {
+      fs.rmSync(this.dir, { recursive: true, force: true });
+      return null;
+    } catch (e) {
+      return `${this.dir}: ${(e as Error).message}`;
+    }
   }
 }

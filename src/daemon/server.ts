@@ -451,7 +451,9 @@ function onListening(sockPath: string): void {
   // previous daemon wrote there is unnamed by any strip this one renders.
   // After the bind win, like every other "we are the daemon" effect: a
   // process that loses the race must never touch the winner's files.
-  diagnosticDump.reset();
+  const wipeFailure = diagnosticDump.reset();
+  if (wipeFailure !== null)
+    dlog("warn", `diagnostic dump wipe failed: ${wipeFailure}`);
   armBinaryWatch();
   buildWatch.arm();
   armLimits();
@@ -1023,18 +1025,17 @@ async function handleRequest(req: Request): Promise<HandledRequest> {
       );
       if (clickError)
         sessionState.clear(req.hookData.session_id, "click.error");
-      const combinedError =
-        [unknownFlagsError, entry.lastError, clickError]
-          .filter(Boolean)
-          .join("\n") || null;
+      const combinedError = [unknownFlagsError, entry.lastError, clickError]
+        .filter(Boolean)
+        .join("\n");
       // [LAW:one-source-of-truth] The daemon-wide build verdict joins the
       // per-config warning on the one warning channel, the way the click
       // error joins the per-config error above. It goes first: a stale
       // bundle undermines every config, and leading keeps its two rows
       // inside the diagnostic row cap whatever the config adds.
-      const combinedWarning =
-        [buildWatch.warning(), entry.lastWarning].filter(Boolean).join("\n") ||
-        null;
+      const combinedWarning = [buildWatch.warning(), entry.lastWarning]
+        .filter(Boolean)
+        .join("\n");
       // [LAW:no-silent-failure] The file whose load failed rides beside its
       // error so the strip can offer it as a file:// link — the way back into
       // the file when our own click path may be the thing that is broken.

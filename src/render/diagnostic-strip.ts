@@ -64,7 +64,11 @@ export interface DiagnosticChannel {
     | typeof VERB_SHOW_CONFIG_ERROR
     | typeof VERB_SHOW_CONFIG_WARNING;
   readonly colors: DiagnosticColors;
+  // Verbatim: the dump's content and the copy click's payload.
   readonly message: string;
+  // What the strip shows: the message's sanitized lines, blank ones dropped.
+  // Non-empty by construction — a message with no visible line is no channel.
+  readonly lines: readonly [string, ...string[]];
 }
 
 // The complete, unwrapped, un-truncated text — formatDiagnosticDump's
@@ -89,8 +93,9 @@ export interface DiagnosticLinks {
 }
 
 // [LAW:types-are-the-program] Non-empty by construction: `channels` carries
-// at least one member, so a Diagnostics always has rows and always earns
-// its trailer. "Nothing to show" is `null`, decided once in collectDiagnostics.
+// at least one member and each member at least one line, so a Diagnostics
+// always has rows and always earns its trailer. "Nothing to show" is `null`,
+// decided once in collectDiagnostics.
 export interface Diagnostics {
   readonly channels: readonly [DiagnosticChannel, ...DiagnosticChannel[]];
 }
@@ -103,29 +108,33 @@ export interface DiagnosticGeometry {
   readonly colorCompatibility: ColorCompatibility;
 }
 
-// [LAW:parse-dont-validate] The one place two nullable channels become a
-// typed Diagnostics-or-nothing. Downstream never re-asks "is there an error".
+// [LAW:parse-dont-validate] The one place two message texts become a typed
+// Diagnostics-or-nothing. Downstream never re-asks "is there an error": a
+// text with nothing visible in it — empty, whitespace, control characters —
+// is the same "nothing to show" as no text at all, decided here.
 export function collectDiagnostics(
-  error: string | null,
-  warning: string | null,
+  error: string,
+  warning: string,
 ): Diagnostics | null {
-  const channels: DiagnosticChannel[] = [];
-  if (error !== null) {
-    channels.push({
-      verb: VERB_SHOW_CONFIG_ERROR,
-      colors: DIAGNOSTIC_ERROR_COLORS,
-      message: error,
-    });
-  }
-  if (warning !== null) {
-    channels.push({
-      verb: VERB_SHOW_CONFIG_WARNING,
-      colors: DIAGNOSTIC_WARNING_COLORS,
-      message: warning,
-    });
-  }
-  const [first, ...rest] = channels;
+  const [first, ...rest] = [
+    channelOf(error, VERB_SHOW_CONFIG_ERROR, DIAGNOSTIC_ERROR_COLORS),
+    channelOf(warning, VERB_SHOW_CONFIG_WARNING, DIAGNOSTIC_WARNING_COLORS),
+  ].flat();
   return first === undefined ? null : { channels: [first, ...rest] };
+}
+
+function channelOf(
+  message: string,
+  verb: DiagnosticChannel["verb"],
+  colors: DiagnosticColors,
+): DiagnosticChannel[] {
+  const [first, ...rest] = message
+    .split(/\r\n|\r|\n/)
+    .map(sanitizeText)
+    .filter(Boolean);
+  return first === undefined
+    ? []
+    : [{ verb, colors, message, lines: [first, ...rest] }];
 }
 
 // The dump file's content: every channel's message verbatim, in severity
@@ -200,15 +209,11 @@ function channelRows(ch: DiagnosticChannel, opts: BuildLineOptions): string[] {
     color: ch.colors.fg,
     link: effectsUrl([{ verb: ch.verb, args: [ch.message] }]),
   });
-  const lines = ch.message
-    .split(/\r\n|\r|\n/)
-    .map(sanitizeText)
-    .filter(Boolean);
   // A cell plus its trailing space must fit one row, so words fold at width−1
   // — never below the widest glyph (2 cells): a fold narrower than one glyph
   // is not a fold, and a 1–2 cell terminal simply cannot hold one.
   const fold = asCellCol(Math.max(2, opts.width - 1));
-  return lines.flatMap((line, i) => {
+  return ch.lines.flatMap((line, i) => {
     const prefix = i === 0 ? GLYPH : ISSUE_INDENT;
     const words = [prefix, ...line.split(" ")].flatMap((w) =>
       chopCells(w, fold),

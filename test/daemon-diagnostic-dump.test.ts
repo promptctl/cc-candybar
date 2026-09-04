@@ -4,6 +4,7 @@
 // when the desired state changes.
 
 import {
+  chmodSync,
   existsSync,
   mkdtempSync,
   readFileSync,
@@ -28,8 +29,6 @@ describe("DiagnosticDump", () => {
     expect(path.dirname(p)).toBe(path.join(root, "diagnostics"));
     expect(path.basename(p)).toBe("..%2Fx%2Fy.txt");
     expect(existsSync(p)).toBe(false);
-    // A lone surrogate is hook input like any other id; it names a path.
-    expect(path.basename(dump.pathFor("\ud800"))).toBe("%EF%BF%BD.txt");
   });
 
   test("writes the text, rewrites only on change, removes on null", () => {
@@ -68,6 +67,21 @@ describe("DiagnosticDump", () => {
     dump.reset();
     expect(existsSync(path.join(root, "diagnostics"))).toBe(false);
     dump.sync("a", "x"); // forgotten → written again
+    expect(readFileSync(dump.pathFor("a"), "utf8")).toBe("x");
+  });
+
+  test("a wipe the filesystem refuses is reported as a reason, not thrown, and memory is still cleared", () => {
+    dump.sync("a", "x");
+    // A read-only parent: the directory's own entry cannot be unlinked.
+    chmodSync(root, 0o500);
+    try {
+      expect(dump.reset()).toMatch(/diagnostics: /);
+    } finally {
+      chmodSync(root, 0o700);
+    }
+    rmSync(path.join(root, "diagnostics"), { recursive: true, force: true });
+    // Forgotten regardless: the next sync writes, it does not skip.
+    expect(dump.sync("a", "x")).toBeNull();
     expect(readFileSync(dump.pathFor("a"), "utf8")).toBe("x");
   });
 });

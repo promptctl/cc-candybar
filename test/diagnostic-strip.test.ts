@@ -53,7 +53,7 @@ const wordsNarrowerThan = (width: number): string[] =>
   ERROR.split(/\s+/).filter((w) => w.length > 0 && cellWidth(w) < width);
 
 describe("candybar-diagnostics-avi: the diagnostic strip", () => {
-  const diag = collectDiagnostics(ERROR, null)!;
+  const diag = collectDiagnostics(ERROR, "")!;
 
   test.each([80, 120])(
     "wraps every row within %d cells and clips no word mid-word",
@@ -91,7 +91,7 @@ describe("candybar-diagnostics-avi: the diagnostic strip", () => {
       Array.from({ length: 40 }, (_, i) => `issue number ${i + 1} is here`).join(
         "\n",
       ),
-      null)!;
+      "")!;
     expect(diagnosticRowCap(undefined)).toBe(MAX_DIAGNOSTIC_ROWS);
     expect(diagnosticRowCap(50)).toBe(MAX_DIAGNOSTIC_ROWS);
     expect(diagnosticRowCap(12)).toBe(12);
@@ -110,7 +110,7 @@ describe("candybar-diagnostics-avi: the diagnostic strip", () => {
   });
 
   test("a strip that fits elides nothing and says so by saying nothing", () => {
-    const small = collectDiagnostics("one line", null)!;
+    const small = collectDiagnostics("one line", "")!;
     const rows = rowsOf(composeWithDiagnostics("", small, LINKS, geometry(80)));
     expect(rows).toEqual([
       "⚠ one line ",
@@ -138,7 +138,7 @@ describe("candybar-diagnostics-avi: the diagnostic strip", () => {
   });
 
   test("without a failed config file the trailer offers only the full text", () => {
-    const d = collectDiagnostics("boom", null)!;
+    const d = collectDiagnostics("boom", "")!;
     const rows = rowsOf(
       composeWithDiagnostics("", d, { ...LINKS, failedConfigFile: null }, geometry(80)),
     );
@@ -146,7 +146,7 @@ describe("candybar-diagnostics-avi: the diagnostic strip", () => {
   });
 
   test("a dump the daemon could not write is said in the trailer, not linked", () => {
-    const d = collectDiagnostics("boom", null)!;
+    const d = collectDiagnostics("boom", "")!;
     const out = composeWithDiagnostics(
       "",
       d,
@@ -173,8 +173,17 @@ describe("candybar-diagnostics-avi: the diagnostic strip", () => {
   });
 
   test("no diagnostics → the body, untouched", () => {
-    expect(collectDiagnostics(null, null)).toBeNull();
+    expect(collectDiagnostics("", "")).toBeNull();
     expect(composeWithDiagnostics("BODY", null, LINKS, geometry(80))).toBe("BODY");
+  });
+
+  // A message with nothing visible in it is nothing to show — never a strip
+  // that is only a trailer. The channel that does have a line survives.
+  test("a message that sanitizes to no line is no channel", () => {
+    expect(collectDiagnostics("  \n\t\x1b \r\n", "")).toBeNull();
+    const warned = collectDiagnostics("   ", "advisory")!;
+    expect(warned.channels).toHaveLength(1);
+    expect(warned.channels[0].lines).toEqual(["advisory"]);
   });
 
   test("the dump holds every channel's message verbatim — unwrapped, unsanitized", () => {
@@ -185,13 +194,13 @@ describe("candybar-diagnostics-avi: the diagnostic strip", () => {
   });
 
   test("control characters in a message cannot escape the styled cell", () => {
-    const hostile = collectDiagnostics("x\x1b[31mred\x9bCSI", null)!;
+    const hostile = collectDiagnostics("x\x1b[31mred\x9bCSI", "")!;
     const first = rowsOf(composeWithDiagnostics("", hostile, LINKS, geometry(80)))[0]!;
     expect(first).toBe("⚠ x [31mred CSI ");
   });
 
   test("control characters in the failed config path cannot escape the trailer", () => {
-    const hostile = collectDiagnostics(ERROR, null)!;
+    const hostile = collectDiagnostics(ERROR, "")!;
     const out = composeWithDiagnostics(
       "",
       hostile,
@@ -213,6 +222,24 @@ describe("candybar-diagnostics-avi: the diagnostic strip", () => {
       expect(rows).toHaveLength(5);
       for (const row of rows) expect(cellWidth(row)).toBeLessThanOrEqual(width);
       expect(rows.at(-1)).toMatch(/^↳/);
+    },
+  );
+
+  // The failed config path is middle-truncated into the width the fixed
+  // text leaves — a 1-cell budget at 25 — and a path of wide glyphs must
+  // fit that budget like an ASCII one, its visible part linking the whole
+  // path whatever is shown.
+  test.each([25, 26, 30, 40, 60])(
+    "a wide-glyph config path fits the trailer at a %d-cell width",
+    (width) => {
+      const wide = { ...LINKS, failedConfigFile: LONG_PATH };
+      const one = collectDiagnostics("boom", "")!;
+      const out = composeWithDiagnostics("", one, wide, geometry(width, 5));
+      const rows = rowsOf(out);
+      expect(rows).toHaveLength(2);
+      for (const row of rows) expect(cellWidth(row)).toBeLessThanOrEqual(width);
+      expect(rows.at(-1)).toMatch(/^↳ open full text · open \S/);
+      expect(extractUrls(out)).toContain(pathToFileURL(LONG_PATH).href);
     },
   );
 
