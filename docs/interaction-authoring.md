@@ -923,10 +923,14 @@ a click or a keyboard did it.
 
 **Edit mode synthesizes this for you too.** Referencing `edit.toggle`
 (above) doesn't just splice `-`/`+` per gap — it also prepends this exact
-banner, `when`-gated the same way, above every preset's chrome-spliced root,
-targeting that preset's own `presets.<name>.root` key. You only need to
-author it yourself in a config that edits `presets.<name>.root` WITHOUT
-wiring edit mode at all (the pattern above).
+banner above every preset's chrome-spliced root, targeting that preset's own
+`presets.<name>.root` key. The synthesized banner is edit chrome like `-`/`+`,
+so it is gated on edit mode being open AND `.preset.customized` — a config
+that authors its own `root` is "customized" from its first render, and a
+permanent one-click deletion of that root outside edit mode is not a status
+row. Author the banner yourself when you want it visible regardless of edit
+mode, or in a config that edits `presets.<name>.root` WITHOUT wiring edit
+mode at all (the pattern above).
 
 ### Persisting a per-segment field: `segments.<name>.palette`
 

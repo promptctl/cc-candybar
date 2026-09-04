@@ -63,7 +63,11 @@ import {
 } from "../src/daemon/verbs/config-validators";
 import { RenderCache } from "../src/daemon/cache/render";
 import type { CacheEntry } from "../src/daemon/cache/render";
-import { EDIT_NS } from "../src/config/loader/edit-mode";
+import {
+  EDIT_NS,
+  EDIT_MODE_KEY,
+  EDIT_MODE_OPEN,
+} from "../src/config/loader/edit-mode";
 import {
   addableSegmentDomains,
   addableDomainName,
@@ -621,12 +625,11 @@ describe('the "customized" banner escapes quote/backslash preset names', () => {
     // The compile itself (parse every synthesized template) must not throw —
     // an unescaped quote would break the Go-template source.
     const store = new VariableStore();
-    const registry = new SourceRegistry(
-      store,
-      "",
-      undefined,
-      new SessionState(),
-    );
+    // The banner is edit chrome: visible only with edit mode open AND the
+    // preset customized, so the render below opens edit mode for "s1".
+    const sessionState = new SessionState();
+    sessionState.set("s1", EDIT_MODE_KEY, EDIT_MODE_OPEN);
+    const registry = new SourceRegistry(store, "", undefined, sessionState);
     let compiled: ReturnType<typeof registerDslConfig>;
     expect(() => {
       compiled = registerDslConfig(config, registry);
@@ -685,12 +688,9 @@ describe("the reset banner respects a preset root's own top-level `when`", () =>
 
   function renderGated(config: ReturnType<typeof buildConfig>): string {
     const store = new VariableStore();
-    const registry = new SourceRegistry(
-      store,
-      "",
-      undefined,
-      new SessionState(),
-    );
+    const sessionState = new SessionState();
+    sessionState.set("s1", EDIT_MODE_KEY, EDIT_MODE_OPEN);
+    const registry = new SourceRegistry(store, "", undefined, sessionState);
     try {
       const compiled = registerDslConfig(config, registry);
       const basePalette = getThemePalette("textual-dark"!);

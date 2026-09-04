@@ -1241,7 +1241,13 @@ describe("bundled preset library renders clean at every width — brandon-preset
       () => false,
     );
     const store = new VariableStore();
-    const registry = new SourceRegistry(store, "", undefined, new SessionState());
+    // [LAW:one-source-of-truth] The registry's session reader IS sessionPick:
+    // the `state` vars the templates read (edit.mode gating the chrome, the
+    // ↺ banner) and the globals resolved above answer from one session, not
+    // from a fresh SessionState that disagrees with it about edit mode.
+    const registry = new SourceRegistry(store, "", undefined, {
+      get: (_sessionId, key) => sessionPick(key, name),
+    });
     try {
       const compiled = registerDslConfig(VALIDATED, registry, {
         cwd: "/tmp",
@@ -1365,24 +1371,39 @@ describe("bundled preset library renders clean at every width — brandon-preset
   // brandon-layout-edit-2gc.5 — the visible diagnostic for a preset whose
   // root the config file authors (candybar-config-dqe's `customized`):
   // edit-chrome.ts's synthesized banner is spliced UNCONDITIONALLY
-  // ([LAW:dataflow-not-control-flow]), so this pins BOTH values of the same
-  // predicate rather than only the "never customized" case the sweep above
-  // already covers implicitly.
-  test("customized preset shows the reset banner; a clean one doesn't", () => {
+  // ([LAW:dataflow-not-control-flow]) and is edit chrome, so it shows only
+  // with edit mode open AND the preset customized. This pins all three
+  // cells that matter: both terms true, and each term alone.
+  test("customized preset shows the reset banner in edit mode; not outside it, nor when clean", () => {
     // eslint-disable-next-line no-control-regex
     const ANSI = /\x1b\[[0-9;]*m|\x1b\]8;;[^\x1b]*\x1b\\/g;
     const withCustomized = (base: Record<string, unknown>) => ({
       ...base,
       preset: { effective: "default", customized: true },
     });
-    const customizedLine = renderPreset(
+    const editing = renderPreset(
+      "default",
+      200,
+      withCustomized,
+      editingSession,
+    ).rendered.replace(ANSI, "");
+    expect(editing).toContain("↺ default customized");
+
+    // A hand-authored root is "customized" from its first render; outside
+    // edit mode that must not put a one-click reset of it on the bar.
+    const viewing = renderPreset(
       "default",
       200,
       withCustomized,
     ).rendered.replace(ANSI, "");
-    expect(customizedLine).toContain("↺ default customized");
+    expect(viewing).not.toContain("↺");
 
-    const cleanLine = renderPreset("default", 200).rendered.replace(ANSI, "");
-    expect(cleanLine).not.toContain("↺");
+    const clean = renderPreset(
+      "default",
+      200,
+      undefined,
+      editingSession,
+    ).rendered.replace(ANSI, "");
+    expect(clean).not.toContain("↺");
   });
 });

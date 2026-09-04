@@ -57,22 +57,33 @@ import {
   escapeTemplateLiteral,
   disclosureCycleAction,
   disclosureStateVar,
+  disclosureTerm,
 } from "./disclosure.js";
 
-// [LAW:dataflow-not-control-flow] brandon-layout-edit-2gc.5's diagnostic gate
-// — read the SAME way EDIT_MODE_GATE is: a bare boolean input var, false
-// only on the literal text "false" (evaluateWhen's documented contract).
+// [LAW:dataflow-not-control-flow] brandon-layout-edit-2gc.5's diagnostic gate.
 // `.preset.customized` is a per-render payload fact (does the config FILE
 // author a root for whichever preset is ACTIVE — entry.state.authoredRoots),
-// not config-time
-// knowledge, so the banner below is spliced UNCONDITIONALLY for every
-// preset — same shape, every reload — and this predicate is what decides
-// whether it's visible, never a branch in this synthesis pass.
+// not config-time knowledge, so the banner below is spliced UNCONDITIONALLY
+// for every preset — same shape, every reload — and this predicate is what
+// decides whether it's visible, never a branch in this synthesis pass.
+//
+// [LAW:one-type-per-behavior] The banner is an edit affordance of the same
+// class as `-`/`+` — one click rewrites the file's root — so it shows under
+// the same condition they do (edit mode open) AND only when it has something
+// to reset. Under candybar-config-dqe "customized" means "the file authors a
+// root", the ordinary state of every hand-written config; a banner gated on
+// that alone would sit permanently on such bars, outside edit mode, as a
+// one-click deletion of the author's own layout. The edit-mode term is
+// disclosureTerm over the SAME ref every other chrome gate derives from; the
+// customized term is the bare boolean input var, false only on the literal
+// text "false" (evaluateWhen's documented contract), and `and` yields the
+// last argument when every term is truthy — so the conjunction reads back
+// exactly as the boolean does.
 // [LAW:one-source-of-truth] Exported: test/helpers/ambient-chrome.ts filters this
 // ensured name out of "what did the AUTHOR declare" assertions and must read the
 // same string, never a second copy that a rename here would leave behind.
 export const PRESET_CUSTOMIZED_VAR = "preset.customized";
-const PRESET_CUSTOMIZED_GATE = `{{ .${PRESET_CUSTOMIZED_VAR} }}`;
+const CUSTOMIZED_BANNER_GATE = `{{ and ${disclosureTerm(EDIT_MODE_REF)} .${PRESET_CUSTOMIZED_VAR} }}`;
 
 // [LAW:one-source-of-truth] group/menu-synthesized segments (`groups.`/
 // `menus.`) and edit mode's own trigger/chrome (`edit.`) are structural —
@@ -305,11 +316,12 @@ function spliceContainer(
 // that isn't about ONE gap but about the preset's authored root as a whole —
 // synthesized the SAME way (one reset action targeting this preset's exact
 // `persist` key, one segment hosting `{{ action }}`), UNCONDITIONALLY, with
-// visibility carried entirely by PRESET_CUSTOMIZED_GATE
+// visibility carried entirely by CUSTOMIZED_BANNER_GATE
 // [LAW:dataflow-not-control-flow]. It gets its own ROW (not a slot in the
 // row-interleaved chrome spliceContainer builds) because it is not bound to any
-// one segment gap — it is a fact about the whole tree — visible or not by the
-// SAME `when` every other synthesized affordance here already uses.
+// one segment gap — it is a fact about the whole tree — visible or not by a
+// `when` that is every other synthesized affordance's edit-mode gate narrowed
+// by the one extra fact this affordance depends on.
 //
 // candybar-settings-ui-aok.6 hangs edit mode's `(?)` off the same content — its
 // BODY is a per-preset row on the same footing as the banner, so this function
@@ -354,7 +366,7 @@ function wrapWithPresetRows(
   const label = escapeTemplateLiteral(presetName);
   artifacts.segments[chromeSegName] = {
     template: `{{ action "${actionName}" "↺ ${label} customized" }}`,
-    when: PRESET_CUSTOMIZED_GATE,
+    when: CUSTOMIZED_BANNER_GATE,
   };
   // [LAW:no-silent-failure] A preset's root may carry its OWN top-level
   // `when` (the A-grammar's container schemas all permit one) — an author
