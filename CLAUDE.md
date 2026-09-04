@@ -98,7 +98,9 @@ Add a new built-in segment by:
 
 All color math (palette hydration, reference resolution, darken/lighten/mix/contrast, **OKLCH** transposition) lives in **rich-js** — cc-candybar's `src/themes/` keeps no color arithmetic of its own, only name/string policy (`src/themes/policy.ts`: `resolvePaletteName`, `effectiveThemeName`, `listResolvablePaletteNames`, `STRIP_STYLES`/`effectiveStripStyle`, …) and memoized palette construction (`src/themes/palette-resolvers.ts`: `paletteForThemeName(name)` — the single name→`Palette` enforcer — and `transposedPalette(base, key)`, a memoized wrapper over rich-js `transposePalette` taking a full `ThemeKey`, its cache keyed on all four axes). The DSL config picks a palette via `globals.palette`, but the **effective** rendered theme is resolved per render from `effectiveThemeName(sessionState.theme, globals.palette)` (session choice over config default), so a theme click recolors the whole bar live; a per-segment `palette:` is an explicit override that ignores the session theme (frozen at registration in `registerDslConfig`), and the `hue.step` variable — read by `renderDsl` via the conventional `HUE_STEP_VAR` name, NOT a globals field (a literal pins it; a `state` var driven by hue stepper actions — the `{{ action "hueUp" … }}` idiom — makes it live, session-over-default) — drives the per-segment whole-theme hue transposition (anchors error/success/warning hue-locked by rich-js `ANCHORED_ROOTS`).
 
-`hue.step` is **not** load-bearing: it exists only as a cheap way to get colour variety across adjacent segments, and every part of the colour system behaves identically with it at 0. Nothing may be built that assumes it is present. Its current implementation — a counter the render walk advances per segment — is renderer-side control flow; now that colour math is authorable, the same variety is expressible as ordinary config data (`bg: '{{ shiftHue (color "surface") 14 }}'`), which is the direction any replacement should take.
+**Decorative colour by address** (`src/themes/decor.ts`, epic candybar-render-ai7): `decorFor(palette, address, distribution)` is the pure function that replaces what `hue.step` was for (colour variety across segments; the stepper knob itself is deleted with no successor) — a node's tree address selects one entry of the theme's own `DECOR_BASES × DECOR_HUES × DECOR_AMTS` vocabulary and blends it with rich-js `blendRgb`; `error`/`success`/`warning` are excluded from the vocabulary at the type level. Rationale and measurements: `design-docs/COLOUR-FROM-THEME-VOCABULARY.md`. Not yet wired into the render walk (ai7.4).
+
+`hue.step` is a counter the render walk advances per segment, and its pre-order arithmetic has leaked into `edit-chrome.ts` and `settings-menu.ts` comments; ai7.4 deletes it in favour of `decorFor`, so nothing new may depend on it.
 
 ### Colors are values (`{{ color }}` / `{{ fg }}` / `{{ bgOf }}`)
 
@@ -150,7 +152,7 @@ Interaction is **decoupled by name**. The clickable *representation* (a region o
 
 `registerDslConfig` builds a **per-config** engine and injects the `action`/`picker` FuncMap entries as data (`[LAW:one-way-deps]` — the generic engine never imports the feature). The compiled actions and the FuncMap close over one `ActionRuntime` holding the live `VariableStore`, so a click reads `session.id` and the current value from the same source the rest of the render does. `renderDsl` is unchanged.
 
-Example (a user config — the bundled default declares no actions; this mirrors the maintainer's live config):
+Example (a user config — the bundled default declares no actions; illustrative only, the maintainer's live config declares just `applyTheme`):
 
 ```json5
 actions: {
