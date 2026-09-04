@@ -50,7 +50,6 @@ import {
 } from "../src/daemon/verbs/config-validators";
 import { registerStateValidator } from "../src/daemon/verbs/state-validators";
 import { encodeLayoutOp } from "../src/config/layout-ops";
-import { collectSegmentNames } from "../src/config/layout-ops";
 import {
   EDIT_MODE_KEY,
   EDIT_TOGGLE_ACTION,

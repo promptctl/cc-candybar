@@ -467,7 +467,7 @@ describe("config-file-store: segment-palette placement", () => {
     expect(() =>
       writeValue(store(), durable.configPath, "segments.ghost.palette", "nord"),
     ).toThrow(
-      /cannot persist segments\.ghost\.palette: neither the config file nor the bundled default declares segments\.ghost/,
+      /cannot edit segments\.ghost\.palette: neither the config file nor the bundled default declares segments\.ghost/,
     );
     expect(durable.text()).toBe(text);
     expect(existsSync(durable.historyPath)).toBe(false);

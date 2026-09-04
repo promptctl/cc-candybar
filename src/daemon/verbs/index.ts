@@ -75,15 +75,8 @@ export interface VerbContext {
 // throw a BadVerbArgs error which the dispatcher surfaces as BAD_REQUEST.
 export type VerbHandler = (value: string, ctx: VerbContext) => void;
 
-// [LAW:types-are-the-program] Argument-shape failures are structurally
-// distinct from operational failures. The dispatcher uses `instanceof` to
-// route BadVerbArgs to BAD_REQUEST and any other Error to RENDER_FAILED.
-export class BadVerbArgs extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = "BadVerbArgs";
-  }
-}
+import { BadVerbArgs } from "../verb-error";
+export { BadVerbArgs };
 
 // ─── Argument decoders ───────────────────────────────────────────────────────
 
@@ -314,18 +307,28 @@ function wrapStep(n: number, min: number, max: number): number {
 // config keyspace: there is no value to validate, only a legitimate target to
 // clear. Absent segment = nothing to release, which is every ordinary persist
 // click [LAW:dataflow-not-control-flow].
-function releaseSessionKey(
-  release: string,
-  sid: string,
-  ctx: VerbContext,
-  verb: string,
-): void {
-  if (!release) return;
+// [LAW:no-ambient-temporal-coupling] The release key is checked BEFORE the
+// durable write and cleared AFTER it — one handler owns that order. A dual's
+// `set` half renamed by a reload between render and click would otherwise
+// refuse only after the file had already changed: a click reported failed
+// whose write landed, with the session pick left shadowing the new default.
+function parseRelease(release: string, verb: string): string | null {
+  if (!release) return null;
   if (!listStateKeys().includes(release)) {
     throw new BadVerbArgs(
       `${verb}: unknown session key "${release}" to release (have: ${listStateKeys().join(", ")})`,
     );
   }
+  return release;
+}
+
+function releaseSessionKey(
+  release: string | null,
+  sid: string,
+  ctx: VerbContext,
+  verb: string,
+): void {
+  if (release === null) return;
   ctx.sessionState.clear(sid, release);
   ctx.dlog("info", `${verb}: released session key ${release} (session=${sid})`);
 }
@@ -475,13 +478,14 @@ const setConfig: VerbHandler = (rawValue, ctx) => {
   }
   const result = validateConfigWrite(key, incoming);
   if (!result.ok) throw new BadVerbArgs(`set-config: ${result.reason}`);
+  const releaseKey = parseRelease(release, "set-config");
   const file = sessionConfigFile(ctx, sid);
   writeValue(editStore(ctx), file, key, result.value);
   ctx.dlog(
     "info",
     `set-config: ${key}=${result.value} → ${file} (session=${sid})`,
   );
-  releaseSessionKey(release, sid, ctx, "set-config");
+  releaseSessionKey(releaseKey, sid, ctx, "set-config");
 };
 
 // [LAW:one-source-of-truth] `persist`'s twin of stepState: a RELATIVE nudge
@@ -504,6 +508,7 @@ const stepConfig: VerbHandler = (rawValue, ctx) => {
     );
   }
   const by = parseInt(byRaw, 10);
+  const releaseKey = parseRelease(release, "step-config");
   const params = rangeParamsForConfig(key);
   if (!params) {
     throw new BadVerbArgs(
@@ -525,7 +530,7 @@ const stepConfig: VerbHandler = (rawValue, ctx) => {
     "info",
     `step-config: ${key} ${current}→${result.value} (by ${by}) → ${file} (session=${sid})`,
   );
-  releaseSessionKey(release, sid, ctx, "step-config");
+  releaseSessionKey(releaseKey, sid, ctx, "step-config");
 };
 
 // [LAW:one-source-of-truth] `reset`: delete the key's path from the session's

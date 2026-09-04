@@ -753,13 +753,12 @@ describe("persist action click → the config file", () => {
   // happens only after the write landed, so a failure can never cost the user
   // their session pick with nothing durable in its place.
   //
-  // This pins the order from the failing end. An unregistered release key —
-  // what a stale link carries after a reload narrowed the gates — must fail
-  // LOUDLY and leave the durable write that already succeeded intact on disk.
-  // A release that silently no-op'd, or one that somehow rolled the write
-  // back, would both pass a happy-path test; only this direction distinguishes
-  // them.
-  test("a bad release key fails loudly AFTER the durable write has landed", () => {
+  // [LAW:no-ambient-temporal-coupling] The release KEY is checked before the
+  // write, though: an unregistered one — what a stale link carries after a
+  // reload renamed the dual's `set` half — refuses with the file untouched.
+  // The alternative (write, then refuse) is a click reported failed whose
+  // write landed, with the session pick left shadowing the new default.
+  test("a bad release key fails loudly BEFORE the durable write, leaving the file untouched", () => {
     const config = parseAndValidate(
       "<test>",
       `{
@@ -786,9 +785,8 @@ describe("persist action click → the config file", () => {
           ctx,
         ),
       ).toThrow(/unknown session key/);
-      // The durable half is on disk regardless: the release ran after it, and
-      // its failure is reported rather than swallowed or compensated.
-      expect(globalsInFile()).toEqual({ palette: "nord" });
+      expect(globalsInFile()).toEqual({});
+      expect(durable.history().past).toHaveLength(0);
     } finally {
       for (const d of disposers) d();
     }

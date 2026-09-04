@@ -23,6 +23,7 @@
 // field merge for those decls, after which materialization collapses to the
 // one field.
 
+import { BadVerbArgs } from "./verb-error";
 import fs from "node:fs";
 import path from "node:path";
 import { RAW_DEFAULT_DSL_CONFIG } from "../config/default-dsl-config.js";
@@ -238,8 +239,8 @@ function declarationOf<T>(
 ): Declaration<T> {
   if (has(doc, unitPath)) return { source: "file" };
   if (bundled === undefined) {
-    throw new Error(
-      `cannot persist ${key}: neither the config file nor the bundled default declares ${unitPath.join(".")}`,
+    throw new BadVerbArgs(
+      `cannot edit ${key}: neither the config file nor the bundled default declares ${unitPath.join(".")}`,
     );
   }
   return { source: "bundled", decl: bundled };
@@ -395,7 +396,7 @@ export function applyLayoutOp(
         );
   if (after === null) {
     const missing = op.op === "remove" ? op.target : op.anchor;
-    throw new Error(
+    throw new BadVerbArgs(
       `${placement.path.join(".")} in ${file} has no segment "${missing}" — the bar you clicked is stale; it reloads on the next render`,
     );
   }
@@ -593,7 +594,7 @@ function requireFileState(
   verb: "undo" | "redo",
 ): void {
   if (readConfigText(file) !== expected) {
-    throw new Error(
+    throw new BadVerbArgs(
       `${verb}: ${file} has changed since that edit — refusing to overwrite it`,
     );
   }

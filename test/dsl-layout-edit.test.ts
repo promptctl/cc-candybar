@@ -229,6 +229,18 @@ describe("cross-ref: presets.<name>.root target", () => {
     presets: { compact: {} },
   }`;
 
+  test("a tree op on a non-preset-root target is a load error, not a click-time one", () => {
+    for (const key of ["padding", "segments.git.palette"]) {
+      expect(() =>
+        parseAndValidate(
+          "<test>",
+          base(`{ rm: { persist: '${key}', removeSegment: 'directory' } }`),
+          ALLOWED,
+        ),
+      ).toThrow(/is not a "presets\.<name>\.root" target — "removeSegment" is a tree op/);
+    }
+  });
+
   test("an undeclared preset name is a load error", () => {
     expect(() =>
       parseAndValidate(

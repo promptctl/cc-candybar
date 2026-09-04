@@ -209,6 +209,19 @@ export function validateCrossReferences(
       });
       continue;
     }
+    // [LAW:single-enforcer] The arm-pairing check in both directions: a
+    // tree op names a preset-root target (checkPresetRootTarget rejects the
+    // absence), and only a preset-root target takes a tree op — otherwise
+    // the click's own "not a presets.<name>.root target" is the first sign.
+    const treeOps = TREE_OP_ARMS.filter((arm) => arm in a);
+    if (target.scope !== "preset-root" && treeOps.length > 0) {
+      ctx.issues.push({
+        path: `actions.${name}.${discriminator}`,
+        message: `actions.${name}: "${key}" is not a "presets.<name>.root" target — ${treeOps.map((arm) => `"${arm}"`).join("/")} is a tree op and applies only to one`,
+        line: findKeyLine(ctx.source, ["actions", name, discriminator]),
+      });
+      continue;
+    }
     if (target.scope === "preset-root") {
       checkPresetRootTarget(
         ctx,
@@ -490,6 +503,12 @@ export function validateCrossReferences(
 // removeSegment/insertSegment address a tree — a `to`/`from`/cycle/bounded
 // literal has no meaning as "a tree"), and every segment name
 // the op names must be declared.
+const TREE_OP_ARMS = [
+  "removeSegment",
+  "insertSegment",
+  "insertSegmentFrom",
+] as const;
+
 function checkPresetRootTarget(
   ctx: ValidateCtx,
   cfg: DslConfig,

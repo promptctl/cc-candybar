@@ -83,7 +83,7 @@ An action declares exactly one of `set` / `persist` / `copy` / `open` /
 | `{ set: key, persist: field, persistWhen: selectorKey, to \| from \| min/max/by \| cycle, … }` | ONE control, TWO destinations: write the same value to SessionState or to the durable `globals` default, chosen at click time by the boolean value of `selectorKey` — see below |
 | `{ reset: field }` | delete `globals.<field>` from your config file, so the bundled default shows through again |
 | `{ set: key, persist: field, persistWhen: selectorKey, … }` (durable click) | releases the session key as part of the same write, so the committed default is visible to the session that committed it |
-| `{ undo: true }` | step the config file's **global edit history** one entry back — restores whatever a PRIOR `persist`/`reset`/layout edit changed, any key, not just the one this action names (it names none) |
+| `{ undo: true }` | step the config file's edit history (one stack per file) one entry back — restores whatever a PRIOR `persist`/`reset`/layout edit changed, any key, not just the one this action names (it names none) |
 | `{ redo: true }` | re-apply the most recently undone entry |
 | `{ copy: "template" }` | copy the evaluated template to the clipboard |
 | `{ open: "template" }` | open the evaluated target in the editor |
