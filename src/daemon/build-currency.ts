@@ -57,17 +57,20 @@ function checkoutRootOf(bundlePath: string): string {
 const isSourceEntry = (name: string): boolean =>
   !name.startsWith(".") && !name.endsWith("~");
 
-// Every source file under `dir`, recursively. Symlinks are stat-followed
-// like any other entry; directories recurse.
+// Every source file under `dir`, recursively, through symlinks. An entry
+// with no target — a dangling link, a file deleted between readdir and stat
+// during a `git pull` — has no stamp; it is not a failure of the walk.
 function fileStamps(dir: string): Stamp[] {
   return fs
-    .readdirSync(dir, { withFileTypes: true })
-    .filter((entry) => isSourceEntry(entry.name))
-    .flatMap((entry) => {
-      const p = path.join(dir, entry.name);
-      return entry.isDirectory()
+    .readdirSync(dir)
+    .filter(isSourceEntry)
+    .flatMap((name) => {
+      const p = path.join(dir, name);
+      const st = fs.statSync(p, { throwIfNoEntry: false });
+      if (st === undefined) return [];
+      return st.isDirectory()
         ? fileStamps(p)
-        : [{ path: p, mtimeMs: fs.statSync(p).mtimeMs }];
+        : [{ path: p, mtimeMs: st.mtimeMs }];
     });
 }
 

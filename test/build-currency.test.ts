@@ -81,6 +81,21 @@ describe("assessBuild", () => {
     expect(assessBuild(c.entryUrl).kind).toBe("current");
   });
 
+  test("a symlinked directory recurses: a newer file behind the link makes it stale", () => {
+    const shared = path.join(c.root, "shared-pkg");
+    touch(path.join(shared, "lib.ts"), T0 + HOUR_MS);
+    fs.symlinkSync(shared, path.join(c.root, "src", "vendored"));
+    const v = assessBuild(c.entryUrl);
+    expect(v.kind).toBe("stale");
+    if (v.kind === "stale")
+      expect(v.newestSource.path).toBe(path.join(c.root, "src", "vendored", "lib.ts"));
+  });
+
+  test("a dangling symlink has no stamp: the verdict stays current, never unchecked", () => {
+    fs.symlinkSync(path.join(c.root, "gone.ts"), path.join(c.root, "src", "dangling.ts"));
+    expect(assessBuild(c.entryUrl).kind).toBe("current");
+  });
+
   test("equal mtimes are current (a build that finished within the same tick is not stale)", () => {
     touch(c.deep, T0);
     expect(assessBuild(c.entryUrl).kind).toBe("current");
