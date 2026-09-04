@@ -51,17 +51,17 @@ function isReservedChromeKey(key: string): boolean {
     // calls menuStateKey directly), and `ident()` collapses the dots — so a
     // bundled-default config really does derive 30+ keys under this prefix.
     key.startsWith(`${MENU_NS}edit_`) ||
-    // Edit chrome registers a rootOps op-log key per preset the moment any
+    // Edit chrome registers a preset-root key per preset the moment any
     // `+`/`-` affordance exists — which is now every config, since the settings
     // menu makes edit mode reachable from every bar.
     //
     // [LAW:parse-dont-validate] Asked of the canonical parser rather than
-    // matched as `presets.` + `.rootOps`. persist-target.ts owns that format
+    // matched as `presets.` + `.root`. persist-target.ts owns that format
     // (its own comment records two write-side spellings drifting before they
     // were consolidated), and its regex captures greedily so a dotted preset
     // name like "v1.compact" round-trips — a hand-rolled prefix/suffix pair
     // gets that silently wrong.
-    parsePersistTarget(key)?.scope === "preset-root-ops"
+    parsePersistTarget(key)?.scope === "preset-root"
   );
 }
 
@@ -136,7 +136,7 @@ export function ownValidators<T extends { key: string }>(
 // wire encoding. Every key-writing verb takes `[sessionId, key, …]`; the rest
 // (apply-layout-op, undo/redo, copy, open) write no key and so contribute none
 // — which is what keeps a layout-edit affordance out of these filters, since
-// its op-log write is a preset's business, not the settings menu's.
+// its layout write is a preset's business, not the settings menu's.
 const KEY_WRITING_VERBS = new Set<string>([
   VERB_SET_STATE,
   VERB_STEP_STATE,

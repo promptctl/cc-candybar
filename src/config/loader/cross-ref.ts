@@ -204,13 +204,13 @@ export function validateCrossReferences(
     if (target === null) {
       ctx.issues.push({
         path: `actions.${name}.${discriminator}`,
-        message: `actions.${name}: "${key}" is not a config globals field (have: ${listGlobalsFieldNames().join(", ")}), a "segments.<name>.palette" target, or a "presets.<name>.rootOps" target`,
+        message: `actions.${name}: "${key}" is not a config globals field (have: ${listGlobalsFieldNames().join(", ")}), a "segments.<name>.palette" target, or a "presets.<name>.root" target`,
         line: findKeyLine(ctx.source, ["actions", name, discriminator]),
       });
       continue;
     }
-    if (target.scope === "preset-root-ops") {
-      checkPresetRootOpsTarget(
+    if (target.scope === "preset-root") {
+      checkPresetRootTarget(
         ctx,
         cfg,
         name,
@@ -488,9 +488,9 @@ export function validateCrossReferences(
 // the preset name must be real (mirrors globals.preset's check earlier in
 // this function), the arm pairing must make sense for this scope (only
 // removeSegment/insertSegment address a tree — a `to`/`from`/cycle/bounded
-// literal has no meaning as "the current op log"), and every segment name
+// literal has no meaning as "a tree"), and every segment name
 // the op names must be declared.
-function checkPresetRootOpsTarget(
+function checkPresetRootTarget(
   ctx: ValidateCtx,
   cfg: DslConfig,
   name: string,
@@ -512,8 +512,8 @@ function checkPresetRootOpsTarget(
   // [LAW:one-source-of-truth] `reset` has no value-source arm to check — its
   // shape is a bare `{ reset: key }` — so the arm-pairing/segment checks
   // below are `persist`-only, exactly as the "reset" action's clean-slate
-  // undo is meant to be: it clears the whole op log regardless of what wrote
-  // it.
+  // undo is meant to be: it deletes the whole authored root regardless of
+  // what wrote it.
   if (discriminator === "reset") return;
   const hasRemove = "removeSegment" in a;
   const hasInsert = "insertSegment" in a;
@@ -524,7 +524,7 @@ function checkPresetRootOpsTarget(
   if (!hasRemove && !hasInsert && !hasInsertFrom) {
     ctx.issues.push({
       path: at,
-      message: `actions.${name}: "${key}" is a "presets.<name>.rootOps" target and can only be paired with "removeSegment", "insertSegment", or "insertSegmentFrom" (not "to"/"from"/"cycle"/bounded — those have no meaning as a tree op)`,
+      message: `actions.${name}: "${key}" is a "presets.<name>.root" target and can only be paired with "removeSegment", "insertSegment", or "insertSegmentFrom" (not "to"/"from"/"cycle"/bounded — those have no meaning as a tree op)`,
       line,
     });
     return;
@@ -591,8 +591,8 @@ function declaresStateKey(cfg: DslConfig, key: string): boolean {
 // [LAW:dataflow-not-control-flow] A config emits a set-state, set-config,
 // reset-config, undo, OR redo click — and so needs session.id — when any
 // declared action is a `set` (literal/option/bounded/cycle), a `persist`
-// (its config-overrides twin), a `reset` (persist's gated undo), or an
-// `undo`/`redo` (the overrides layer's global history step) — all five
+// (its config-file twin), a `reset` (persist's gated undo), or an
+// `undo`/`redo` (the config-edit history's global step) — all five
 // carry session.id on the wire for click-error surfacing (an empty history
 // stack is a loud, session-scoped miss, not a silent no-op). copy/open
 // actions write nothing, so they embed no session.id.

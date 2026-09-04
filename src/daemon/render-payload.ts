@@ -78,14 +78,14 @@ export interface EffectiveGlobals {
   // carried alongside so a menu label states the arrangement that actually
   // rendered [LAW:one-source-of-truth].
   readonly preset: string;
-  // [LAW:one-source-of-truth] brandon-layout-edit-2gc.5 — the SAME "does the
-  // active preset have accumulated rootOps right now" fact
-  // presetIsCustomized derives, resolved alongside `preset` (not a second
-  // lookup later) because both come from the SAME entry.state read: the
-  // resolved name and the resolved op-log presence must trace to one
-  // rebuild, or a diagnostic could name the wrong preset after a reload
-  // lands mid-render. Not itself a display value either — see `preset`'s
-  // own comment.
+  // [LAW:one-source-of-truth] brandon-layout-edit-2gc.5 — does the config
+  // FILE author a root for the active preset (candybar-config-dqe: a `+`/`-`
+  // edit writes the file, so "customized" and "hand-written" are one fact by
+  // design), resolved alongside `preset` (not a second lookup later) because
+  // both come from the SAME entry.state read: the resolved name and the
+  // authored-roots set must trace to one rebuild, or a diagnostic could name
+  // the wrong preset after a reload lands mid-render. Not itself a display
+  // value either — see `preset`'s own comment.
   readonly presetCustomized: boolean;
   readonly style: StripStyle;
   // [LAW:one-source-of-truth] The cell separator `plain` renders between
@@ -108,8 +108,8 @@ export interface EffectiveGlobals {
 // and `cc-candybar check`'s), which is two clocks: the check command's job is
 // to render what the daemon would render, and a rung added to one copy is a
 // rung silently missing from the other. The callers differ only in WHERE a
-// session value comes from and whether an overrides log exists to be customized
-// by, so both arrive as parameters and nothing else forks
+// session value comes from and whether the file authors the active preset's
+// root, so both arrive as parameters and nothing else forks
 // [LAW:dataflow-not-control-flow].
 //
 // `sessionPick` is the reader for one SessionState key. `check` passes a

@@ -7,8 +7,8 @@
 // the walk that renders it learns nothing new. The difference from group
 // sugar is WHEN this can run: a group is authored data, lowered per file
 // before merge; edit chrome is DERIVED from which segments are actually in
-// the tree, which is only known after merge, preset-root resolution, and
-// rootOps replay. So this runs from validateConfig, on the fully resolved
+// the tree, which is only known after merge and preset-root resolution. So
+// this runs from validateConfig, on the fully resolved
 // config each declared preset stages — see synthesizeEditChrome below.
 //
 // [LAW:single-enforcer] The +/- affordances reuse EXISTING primitives
@@ -32,7 +32,7 @@ import type {
 } from "./dsl-types.js";
 import { collectSegmentNames } from "./layout-ops.js";
 import { presetByName, presetNames, presetRoot } from "./presets.js";
-import { presetRootOpsKey } from "./loader/persist-target.js";
+import { presetRootKey } from "./loader/persist-target.js";
 import { ident } from "./ident.js";
 import {
   EDIT_MODE_GATE,
@@ -62,8 +62,9 @@ import {
 // [LAW:dataflow-not-control-flow] brandon-layout-edit-2gc.5's diagnostic gate
 // — read the SAME way EDIT_MODE_GATE is: a bare boolean input var, false
 // only on the literal text "false" (evaluateWhen's documented contract).
-// `.preset.customized` is a per-render payload fact (presetIsCustomized over
-// entry.state.presetRootOps for whichever preset is ACTIVE), not config-time
+// `.preset.customized` is a per-render payload fact (does the config FILE
+// author a root for whichever preset is ACTIVE — entry.state.authoredRoots),
+// not config-time
 // knowledge, so the banner below is spliced UNCONDITIONALLY for every
 // preset — same shape, every reload — and this predicate is what decides
 // whether it's visible, never a branch in this synthesis pass.
@@ -120,7 +121,7 @@ export function addableDomainName(presetName: string): string {
 
 // [LAW:one-source-of-truth] THE per-preset "what can `+` offer here" set:
 // every declared, non-exempt segment name minus the ones already present
-// anywhere in that preset's CURRENT (merged, rootOps-replayed) tree. Exported
+// anywhere in that preset's CURRENT (merged) tree. Exported
 // so render.ts's registerDslConfig and config-validators.ts's
 // deriveConfigActionValidators — the two sites that resolve `from` domains —
 // merge this into `perConfigDomainsFor`'s map without each re-deriving it
@@ -150,14 +151,14 @@ export function addableSegmentDomains(
 // `removeSegment` action plus the segment that hosts its `{{ action }}`.
 function removeChrome(
   presetIdent: string,
-  rootOpsKey: string,
+  rootKey: string,
   segName: string,
   artifacts: ChromeArtifacts,
 ): SegmentNode {
   const actionName = `${EDIT_NS}${presetIdent}.remove.${ident(segName)}`;
   const chromeSegName = `${EDIT_NS}${presetIdent}.removeSeg.${ident(segName)}`;
   artifacts.actions[actionName] = {
-    persist: rootOpsKey,
+    persist: rootKey,
     removeSegment: segName,
   };
   artifacts.segments[chromeSegName] = {
@@ -177,7 +178,7 @@ function removeChrome(
 // functions, not by re-deriving the shape.
 function insertChrome(
   presetIdent: string,
-  rootOpsKey: string,
+  rootKey: string,
   posIdent: string,
   domainName: OptionDomain,
   anchor: string,
@@ -187,7 +188,7 @@ function insertChrome(
   const applyName = `${EDIT_NS}${presetIdent}.insert.${posIdent}`;
   const chromeSegName = `${EDIT_NS}${presetIdent}.insertSeg.${posIdent}`;
   artifacts.actions[applyName] = {
-    persist: rootOpsKey,
+    persist: rootKey,
     insertSegmentFrom: domainName,
     anchor,
     relation,
@@ -235,7 +236,7 @@ function insertChrome(
 function spliceContainer(
   node: ContainerNode,
   presetIdent: string,
-  rootOpsKey: string,
+  rootKey: string,
   domainName: OptionDomain,
   artifacts: ChromeArtifacts,
   posCounter: { n: number },
@@ -258,7 +259,7 @@ function spliceContainer(
         spliceContainer(
           child,
           presetIdent,
-          rootOpsKey,
+          rootKey,
           domainName,
           artifacts,
           posCounter,
@@ -273,7 +274,7 @@ function spliceContainer(
     children.push(
       insertChrome(
         presetIdent,
-        rootOpsKey,
+        rootKey,
         String(posCounter.n++),
         domainName,
         child.name,
@@ -282,12 +283,12 @@ function spliceContainer(
       ),
     );
     children.push(child);
-    children.push(removeChrome(presetIdent, rootOpsKey, child.name, artifacts));
+    children.push(removeChrome(presetIdent, rootKey, child.name, artifacts));
     if (i === lastContent) {
       children.push(
         insertChrome(
           presetIdent,
-          rootOpsKey,
+          rootKey,
           String(posCounter.n++),
           domainName,
           child.name,
@@ -301,7 +302,7 @@ function spliceContainer(
 }
 
 // brandon-layout-edit-2gc.5's other per-preset affordance: a `+`/`-` sibling
-// that isn't about ONE gap but about the preset's rootOps log as a whole —
+// that isn't about ONE gap but about the preset's authored root as a whole —
 // synthesized the SAME way (one reset action targeting this preset's exact
 // `persist` key, one segment hosting `{{ action }}`), UNCONDITIONALLY, with
 // visibility carried entirely by PRESET_CUSTOMIZED_GATE
@@ -319,22 +320,23 @@ function wrapWithPresetRows(
   splicedRoot: LayoutNode,
   presetName: string,
   presetIdent: string,
-  rootOpsKey: string,
+  rootKey: string,
   artifacts: ChromeArtifacts,
   help: HelpDisclosure,
 ): LayoutNode {
   const actionName = `${EDIT_NS}${presetIdent}.resetLayout`;
   const chromeSegName = `${EDIT_NS}${presetIdent}.customized`;
-  // [LAW:no-silent-failure] `reset` clears `rootOpsKey` outright, restoring
-  // presetRoot's own fallback (the config's literal, hand-authored root) on
-  // the next reload — the exact undo the ticket's guardrail asked for.
-  // `rootOpsKey` is gated the SAME way every other `presets.<name>.rootOps`
-  // target is (deriveConfigActionValidators), and is ALWAYS a registered
-  // key — config-validators.ts's presetRootOpsContributions registers it
+  // [LAW:no-silent-failure] `reset` deletes the root the file authors at
+  // `rootKey`'s path (candybar-config-dqe), restoring the bundled preset's
+  // own tree — or, for a preset that stages the config root, the bundled
+  // root — on the next reload. `rootKey` is gated the SAME way every other
+  // `presets.<name>.root` target is (deriveConfigActionValidators), and is
+  // ALWAYS a registered key — config-validators.ts's presetRootContributions
+  // registers it
   // for every declared preset UNCONDITIONALLY, specifically so a preset
   // edited down to zero non-exempt segments (no removeChrome/insertChrome
   // persist actions left to register it) doesn't orphan this exact click.
-  artifacts.actions[actionName] = { reset: rootOpsKey };
+  artifacts.actions[actionName] = { reset: rootKey };
   // [LAW:one-source-of-truth] The banner reads `.preset.customized`, so THIS
   // pass is what requires that variable — not whichever config happens to
   // declare it. The bundled default does, which is why the dependency stayed
@@ -455,7 +457,7 @@ function spliceEditChromeForPreset(
   help: HelpDisclosure,
 ): LayoutNode {
   const { node } = presetRoot(config, presetName);
-  const rootOpsKey = presetRootOpsKey(presetName);
+  const rootKey = presetRootKey(presetName);
   const domainName = addableDomainName(presetName);
   const presetIdent = ident(presetName);
   const posCounter = { n: 0 };
@@ -479,7 +481,7 @@ function spliceEditChromeForPreset(
   const spliced = spliceContainer(
     container,
     presetIdent,
-    rootOpsKey,
+    rootKey,
     domainName,
     artifacts,
     posCounter,
@@ -488,7 +490,7 @@ function spliceEditChromeForPreset(
     spliced,
     presetName,
     presetIdent,
-    rootOpsKey,
+    rootKey,
     artifacts,
     help,
   );
