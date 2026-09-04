@@ -73,7 +73,10 @@ export type ConfigPath = readonly string[];
 // own `root` (presetRoot in src/config/presets.ts), and an edit to it lands
 // there — `presetRootPath` takes that fact as data so the resolution is not
 // re-derived here.
-export function presetRootPath(preset: string, declaresRoot: boolean): ConfigPath {
+export function presetRootPath(
+  preset: string,
+  declaresRoot: boolean,
+): ConfigPath {
   return declaresRoot ? ["presets", preset, "root"] : ["root"];
 }
 

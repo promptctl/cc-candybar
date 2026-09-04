@@ -96,7 +96,9 @@ export function persistValueText(key: string, raw: string): string {
   if (kind === "number") {
     const n = Number(raw);
     if (!Number.isFinite(n)) {
-      throw new Error(`persistValueText: "${key}" expects a number, got "${raw}"`);
+      throw new Error(
+        `persistValueText: "${key}" expects a number, got "${raw}"`,
+      );
     }
     return String(n);
   }
@@ -386,7 +388,10 @@ function loadHistory(store: EditStore): HistoryState {
   } catch (e) {
     const code = (e as NodeJS.ErrnoException).code;
     if (code !== "ENOENT") {
-      store.logger("warn", `config-edit-history read failed (${code}); starting empty`);
+      store.logger(
+        "warn",
+        `config-edit-history read failed (${code}); starting empty`,
+      );
     }
     return EMPTY_HISTORY;
   }
@@ -403,7 +408,10 @@ function loadHistory(store: EditStore): HistoryState {
   } catch {
     // fall through to the warn below
   }
-  store.logger("warn", "config-edit-history load: unexpected shape, starting empty");
+  store.logger(
+    "warn",
+    "config-edit-history load: unexpected shape, starting empty",
+  );
   return EMPTY_HISTORY;
 }
 
@@ -422,7 +430,9 @@ function writeHistory(store: EditStore, state: HistoryState): void {
 
 function capPush<T>(arr: readonly T[], entry: T): readonly T[] {
   const next = [...arr, entry];
-  return next.length > MAX_HISTORY_DEPTH ? next.slice(-MAX_HISTORY_DEPTH) : next;
+  return next.length > MAX_HISTORY_DEPTH
+    ? next.slice(-MAX_HISTORY_DEPTH)
+    : next;
 }
 
 // [LAW:one-source-of-truth] Every tracked edit lands here — the file write

@@ -8,11 +8,13 @@ import {
   resolveDslConfigPath,
   dslConfigCandidatePaths,
   detectConfigCollisions,
-  mergeWithDefault,
-  applySegmentPaletteOverrides,
   ConfigError,
 } from "../../config/dsl-loader.js";
-import type { ValidatedConfig } from "../../config/dsl-types.js";
+import type {
+  DslConfig,
+  RawDslConfig,
+  ValidatedConfig,
+} from "../../config/dsl-types.js";
 import { DEFAULT_DSL_CONFIG } from "../../config/default-dsl-config.js";
 import { registerDslConfig, type CompiledConfig } from "../../dsl/render.js";
 import {
@@ -23,18 +25,16 @@ import {
   deriveConfigActionValidators,
   registerConfigValidator,
 } from "../verbs/config-validators.js";
-import { loadOverrides } from "../config-overrides-store.js";
-import { configOverridesPath } from "../paths.js";
-import {
-  applyPresetRootOpsOverrides,
-  sanitizePersistedPresetOverride,
-  sanitizePersistedPresetRootOps,
-} from "../../config/presets.js";
+import { presetNames, presetRoot } from "../../config/presets.js";
 import { VariableStore } from "../../var-system/store.js";
 import { SourceRegistry } from "../../var-system/sources.js";
 import type { GitDataProvider } from "./git.js";
 import type { SessionStateRW } from "../session-state.js";
-import type { WatcherRegistry, WatcherHandle } from "./watchers.js";
+import type {
+  WatcherRegistry,
+  WatcherHandle,
+  WatchTargets,
+} from "./watchers.js";
 import { dlog } from "../log.js";
 
 // [LAW:one-source-of-truth] Each cache entry owns the live DSL state for a
@@ -125,21 +125,14 @@ export interface DslRenderState {
   readonly compiled: CompiledConfig;
   readonly neededInputPaths: ReadonlySet<string>;
   readonly lastRenderCellsBySegment: Map<string, readonly RichText[]>;
-  // [LAW:one-source-of-truth] The accumulated-ops record this reload read
-  // from the overrides file, sanitized against THIS config's declared
-  // presets (sanitizePersistedPresetRootOps — never the raw file content: a
-  // stale entry naming a preset from a different project must not surface
-  // as "customized" here either) — the exact input
-  // applyPresetRootOpsOverrides replayed into `config.presets[name].root`
-  // above. Carried alongside the replayed config because the replay
-  // CONSUMES the op count: by the time a preset's tree is spliced/
-  // validated, nothing about it says how many ops (if any) produced it.
-  // brandon-layout-edit-2gc.5 reads this per render (keyed by the active
-  // preset name) to answer "does the bar's current arrangement differ from
-  // what's literally in the user's file" without a second overrides read
-  // (this entry rebuilds on the SAME watcher that rebuilds `config`, so the
-  // two never drift).
-  readonly presetRootOps: Readonly<Record<string, readonly string[]>>;
+  // [LAW:one-source-of-truth] The preset names whose layout tree the config
+  // FILE authors at the path presetRoot() reports for them (candybar-config-
+  // dqe): `root` for a preset staging the config's own root, `presets.<n>.
+  // root` otherwise. This is what `.preset.customized` means now — the file
+  // declares that tree, whether a hand wrote it or a `+`/`-` click did; the
+  // two are indistinguishable by design. Computed from the SAME raw parse
+  // that produced `config`, on the SAME reload, so the two never drift.
+  readonly authoredRoots: ReadonlySet<string>;
   // [LAW:single-enforcer] Disposers for the SessionState validators this config
   // installed (derived from its action table). Disposed on swap/eviction in the
   // same dispose-before-swap transaction as the SourceRegistry, so a reload
@@ -175,6 +168,8 @@ export interface CacheEntry {
   lastWarning: string | null;
   state: DslRenderState | null;
   watcher: WatcherHandle | null;
+  // The key `watcher` was acquired under — the identity of its target set.
+  watcherKey: string | null;
 }
 
 // [LAW:one-source-of-truth] Cache key includes every input that affects DSL
@@ -187,6 +182,78 @@ function cacheKey(
   configFile: string | undefined,
 ): string {
   return projectDir + "\0" + cwd + "\0" + (configFile ?? "");
+}
+
+// [LAW:one-source-of-truth] The preset names whose tree the raw file authors,
+// asked at the path presetRoot() reports — the one decision of "where does
+// this preset's tree live" (src/config/presets.ts), projected onto the raw
+// shape rather than re-derived here.
+function authoredRoots(
+  config: DslConfig,
+  raw: RawDslConfig,
+): ReadonlySet<string> {
+  return new Set(
+    presetNames(config.presets).filter((name) =>
+      presetRoot(config, name).path === "root"
+        ? raw.root !== undefined
+        : raw.presets?.[name]?.root !== undefined,
+    ),
+  );
+}
+
+// [LAW:dataflow-not-control-flow] Every candidate yields ONE (dir, name) watch
+// tuple: the nearest EXISTING ancestor directory, and the path component
+// directly beneath it. A candidate whose parent exists watches that parent
+// for the file's basename; one whose parent does not exist yet (a fresh
+// install, before ~/.config/cc-candybar/ is created) watches the deepest
+// ancestor that does, for the missing directory's name — so the mkdir a
+// first-ever durable write performs is itself a reload trigger, and that
+// reload's rebind descends to watch the new directory. One rule; no "does
+// the XDG dir exist" branch, no location the chain consults but nobody
+// watches.
+function nearestWatchTarget(candidate: string): {
+  readonly dir: string;
+  readonly name: string;
+} {
+  let name = path.basename(candidate);
+  let dir = path.dirname(candidate);
+  while (!fs.existsSync(dir)) {
+    name = path.basename(dir);
+    dir = path.dirname(dir);
+  }
+  return { dir, name };
+}
+
+// [LAW:single-enforcer] Same enumerator the resolver uses, so the watcher
+// covers the exact set of paths the next reload would consult — a `--config`
+// override collapses to one candidate; absent, the precedence chain unfolds
+// in full. The resolved file (when one exists) is ALSO watched by inode, so
+// an in-place write fires as well as an atomic rename. Directories are
+// deduped with their filename filters unioned, and the whole set is sorted
+// so equal sets spell equal signatures.
+function watchTargetsFor(
+  entry: CacheEntry,
+  resolvedPath: string | null,
+): WatchTargets {
+  const byDir = new Map<string, Set<string>>();
+  for (const candidate of dslConfigCandidatePaths(
+    entry.projectDir,
+    entry.cwd,
+    entry.configFile,
+  )) {
+    const { dir, name } = nearestWatchTarget(candidate);
+    if (!byDir.has(dir)) byDir.set(dir, new Set());
+    byDir.get(dir)!.add(name);
+  }
+  return {
+    files: resolvedPath !== null ? [resolvedPath] : [],
+    dirs: [...byDir.entries()]
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([dirPath, names]) => ({
+        path: dirPath,
+        filenames: [...names].sort(),
+      })),
+  };
 }
 
 export class RenderCache {
@@ -231,6 +298,7 @@ export class RenderCache {
       lastWarning: null,
       state: null,
       watcher: null,
+      watcherKey: null,
     };
     // [LAW:single-enforcer] Insert, bound, then load — in that order. From the
     // moment the entry owns live handles it is reachable for eviction and
@@ -362,78 +430,12 @@ export class RenderCache {
     // cross-ref diagnostics on the daemon path carry real line numbers and the
     // authored-surface (root vs layout) discriminator works — the file is read
     // once inside loadConfig, not re-read here.
-    const { config: merged, source } = loadConfig(
-      resolvedPath,
-      DEFAULT_DSL_CONFIG,
-    );
-    // [LAW:one-source-of-truth] The persistent config-overrides layer
-    // (candybar-config-engine-71o.2) is a SECOND application of the SAME
-    // mergeWithDefault cascade the user file already went through — no new
-    // merge semantics, just one more layer at bundled-default < user-file <
-    // overrides precedence (a `persist` write changes the DEFAULT; a session
-    // pick still overrides it per-session via effective* resolution,
-    // unchanged). Always applied, even when the overrides file is empty —
-    // an empty overrides object merges as a no-op, so there is no
-    // "has overrides?" branch [LAW:dataflow-not-control-flow]. One
-    // loadOverrides read serves BOTH halves below (globals + segment-palette)
-    // — the overrides file backs two different merge shapes, not two reads.
-    const overrides = loadOverrides(configOverridesPath(), dlog);
-    // [LAW:no-silent-failure] `preset` is a per-config domain riding a
-    // machine-global overrides file (src/config/presets.ts —
-    // sanitizePersistedPresetOverride) — a persisted pick from another
-    // project's config must not fail THIS config's load. Every other
-    // globals field is registry-static (palette/style/charset/…), so this
-    // is the one field that needs sanitizing before the merge below.
-    const sanitizedGlobalsOverride = sanitizePersistedPresetOverride(
-      overrides.globals,
-      merged.presets,
-    );
-    const withGlobalsOverrides = mergeWithDefault(
-      { globals: sanitizedGlobalsOverride },
-      merged,
-    );
-    // [LAW:one-source-of-truth] The segment-scoped half of the SAME overrides
-    // file (candybar-config-engine-71o.6) — a later, narrower merge step, not
-    // a second override layer: mergeWithDefault's `segments` cascade replaces
-    // a named segment WHOLESALE, so a one-field palette override rides its
-    // own overlay (applySegmentPaletteOverrides) against the already-merged
-    // config instead, patching `palette` without dropping the segment's other
-    // fields. Order versus the globals merge above doesn't matter — the two
-    // touch disjoint parts of the config (`globals` vs `segments[name]`).
-    const withOverrides = applySegmentPaletteOverrides(
-      withGlobalsOverrides,
-      overrides.segmentPalette,
-    );
-    // [LAW:no-silent-failure] Drop any entry naming a preset THIS config
-    // never declared before replay ever sees it — the shared overrides file
-    // outlives any one project's preset names (brandon-layout-edit-2gc.5 PR
-    // review: without this, a stale entry from a DIFFERENT project reaches
-    // applyPresetRootOpsOverrides -> presetRoot -> presetByName, which
-    // throws for an undeclared name, failing this unrelated project's
-    // ENTIRE render). Sanitized against `merged.presets` — the SAME config
-    // sanitizePersistedPresetOverride checks `globals.preset` against, two
-    // lines up, for the identical reason.
-    const sanitizedPresetRootOps = sanitizePersistedPresetRootOps(
-      overrides.presetRootOps,
-      merged.presets,
-    );
-    // [LAW:one-source-of-truth] brandon-layout-edit-2gc.1's replay step —
-    // the SAME "patch an already-merged config" cascade as the segment-
-    // palette overlay above, one field over (a preset's `root` instead of a
-    // segment's `palette`). Runs last so validateConfig's cross-ref walk
-    // proves the OPS-PATCHED tree, not the pre-edit one — a structural edit
-    // that referenced a segment removed by a later config change is caught
-    // exactly like a hand-authored preset root naming the same segment would
-    // be.
-    const withPresetRootOps = applyPresetRootOpsOverrides(
-      withOverrides,
-      sanitizedPresetRootOps,
-    );
-    const config = validateConfig(
-      withPresetRootOps,
-      resolvedPath ?? "<default>",
+    const {
+      config: merged,
+      raw,
       source,
-    );
+    } = loadConfig(resolvedPath, DEFAULT_DSL_CONFIG);
+    const config = validateConfig(merged, resolvedPath ?? "<default>", source);
 
     const store = new VariableStore();
     // [LAW:single-enforcer] Inject the daemon's shared GitDataProvider so
@@ -504,87 +506,30 @@ export class RenderCache {
       neededInputPaths: buildNeededPrefixes(config),
       lastRenderCellsBySegment: new Map<string, readonly RichText[]>(),
       validatorDisposers,
-      presetRootOps: sanitizedPresetRootOps,
+      authoredRoots: authoredRoots(config, raw),
     };
   }
 
-  // [LAW:single-enforcer] One watcher-rebind decision per reload. If the
-  // resolved path changed (including null↔non-null transitions), or no
-  // watcher is currently held, install a fresh watcher set keyed by the
-  // current resolved path (or `<none>` when nothing exists). The "watch all
-  // candidates when no file exists" behavior lives in rebindWatcher.
+  // [LAW:single-enforcer] One watcher-rebind decision per reload: the watch
+  // target set is DERIVED from disk (which candidate resolved, which
+  // ancestor directories exist right now), and the entry rebinds exactly when
+  // that derived set differs from the one it holds. A resolved-path change
+  // (including null↔non-null) is one way the set changes; a candidate's
+  // parent directory appearing is another — the same rule covers both, so
+  // there is no separate "did the path change" test to drift from it.
   private refreshWatcher(entry: CacheEntry, resolvedPath: string | null): void {
-    if (resolvedPath !== entry.configFilePath || entry.watcher === null) {
-      entry.configFilePath = resolvedPath;
-      this.rebindWatcher(entry, resolvedPath);
-    }
-  }
-
-  private rebindWatcher(entry: CacheEntry, targetPath: string | null): void {
-    if (entry.watcher) {
-      entry.watcher.release();
-      entry.watcher = null;
-    }
-    // [LAW:dataflow-not-control-flow] Two outcomes from one rule:
-    //   resolved path exists → watch THAT file + its parent dir (catches
-    //     in-place writes and atomic-rename writes that replace the inode)
-    //   no resolved path     → watch EVERY candidate's parent dir so the
-    //     creation of any file in the resolution chain triggers reload.
-    // Either way the watcher set is built from a single list of (dir,
-    // filename-filter) tuples; the only variability is whether the
-    // currently-resolved file is also added to `files` for inode-level
-    // watching.
-    // [LAW:dataflow-not-control-flow] fs.watch on a non-existent directory
-    // throws; on a fresh install $XDG_CONFIG_HOME/cc-candybar doesn't exist
-    // yet. Filter candidates to those whose parent directory exists *at
-    // this moment* — that's the bounded set of locations we can usefully
-    // watch. (A user creating the XDG dir later would only get hot-reload
-    // for the project-local / cwd locations until the daemon next builds
-    // an entry; this is a documented limitation, not a contract violation.)
-    // [LAW:single-enforcer] Same enumerator the resolver uses, so the watcher
-    // covers the exact same set of paths the next reload would consult — a
-    // `--config` override collapses to one candidate; absent, the precedence
-    // chain unfolds in full.
-    //
-    // [LAW:dataflow-not-control-flow] configOverridesPath() rides the SAME
-    // candidate list, not a second watch branch: "reload rides the existing
-    // watcher" (candybar-config-engine-71o.2) means a persistent config write
-    // is just one more file in the resolution chain the loop below already
-    // handles uniformly (existence-gated, watched via its parent dir so the
-    // file's first-ever creation also triggers reload).
-    const candidates = [
-      ...dslConfigCandidatePaths(entry.projectDir, entry.cwd, entry.configFile),
-      configOverridesPath(),
-    ];
-    const dirSet = new Map<string, Set<string>>();
-    for (const candidate of candidates) {
-      const dir = path.dirname(candidate);
-      if (!fs.existsSync(dir)) continue;
-      const base = path.basename(candidate);
-      if (!dirSet.has(dir)) dirSet.set(dir, new Set());
-      dirSet.get(dir)!.add(base);
-    }
-    const dirs = [...dirSet.entries()].map(([dirPath, names]) => ({
-      path: dirPath,
-      filenames: [...names],
-    }));
-
-    // [LAW:single-enforcer] Watcher keys are per-cache-entry, not per-file.
-    // WatcherRegistry.acquire() is share-by-key — multiple entries that
-    // resolve to the same config file would otherwise share one watcher
-    // slot whose `onInvalidate` is overwritten by the last acquire, and
-    // earlier entries would never reload on file changes. Including
-    // (projectDir, cwd, configFile) in every key guarantees each entry owns
-    // its own watcher slot bound to its own reload callback.
-    const key = `config:${entry.projectDir}:${entry.cwd}:${entry.configFile ?? ""}:${targetPath ?? "<none>"}`;
-
-    entry.watcher = this.deps.watchers.acquire(
-      key,
-      {
-        files: targetPath !== null ? [targetPath] : [],
-        dirs,
-      },
-      () => this.onConfigChanged(entry),
+    entry.configFilePath = resolvedPath;
+    const targets = watchTargetsFor(entry, resolvedPath);
+    // [LAW:one-source-of-truth] WatcherRegistry shares slots by key and keeps
+    // the FIRST acquire's targets, so the key must name the target set —
+    // the signature is the key, and "rebind when the set changed" and "the
+    // key changed" are the same fact.
+    const key = `config:${entry.projectDir}:${entry.cwd}:${entry.configFile ?? ""}:${JSON.stringify(targets)}`;
+    if (entry.watcher !== null && entry.watcherKey === key) return;
+    entry.watcher?.release();
+    entry.watcherKey = key;
+    entry.watcher = this.deps.watchers.acquire(key, targets, () =>
+      this.onConfigChanged(entry),
     );
   }
 

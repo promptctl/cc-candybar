@@ -131,7 +131,7 @@ export function rangeParamsFor(key: string): RangeParams | null {
 
 // [LAW:one-source-of-truth] The ONE place mapping a decoupled ACTION to the
 // validator key SPEC it declares, for `set` (SessionState) actions. See
-// config-validators.ts's actionKeySpecs for the `persist` (config-overrides)
+// config-validators.ts's actionKeySpecs for the `persist` (config-file)
 // twin — same shape, different action key and target keyspace.
 function actionKeySpecs(
   a: ActionDecl,
@@ -199,7 +199,7 @@ function dropBaselineAllowLists(
 // resolves for a GLOBALS field, since a session stepper over `padding` starts
 // from the padding the bar is showing, not from a state var nobody declared.
 //
-// The globals half is the SAME function the config-overrides gate seeds from
+// The globals half is the SAME function the config-file gate seeds from
 // (numericGlobalsSeeds), so a session stepper and its durable twin cannot
 // start from different numbers. Before it existed, the settings menu's session
 // padding stepper seeded from `min`: a bar reading `padding 1` answered its

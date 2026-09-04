@@ -228,7 +228,7 @@ export interface RenderPayload extends ClaudeHookData {
   // the shape a `when`-gated status segment reads (`.preset.customized`)
   // beside the trigger's own `.preset.effective` label. Required for the
   // same reason as `effective`: resolved unconditionally per render from
-  // presetIsCustomized, never absent.
+  // the render cache's authoredRoots, never absent.
   readonly preset: { readonly effective: string; readonly customized: boolean };
   // [LAW:one-type-per-behavior] style/charset/colorCompatibility/autoWrap/
   // padding are theme/look's twins over the remaining persistable globals

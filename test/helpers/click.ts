@@ -27,7 +27,7 @@ export interface DecodedEffect {
 
 // [LAW:one-source-of-truth] Decode an effect's value the SAME way the daemon's
 // handler does, so the helper cannot mask a back-compat decode regression:
-// set-state/step-state and their config-overrides twins set-config/step-config/
+// set-state/step-state and their config-file twins set-config/step-config/
 // reset-config are the multi-argument verbs (slash-segmented); every other verb
 // takes ONE argument — the whole value decoded once — so a direct `copy/a/b`
 // reports one arg "a/b" (exactly what the copy handler copies), not two.

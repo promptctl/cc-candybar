@@ -311,7 +311,12 @@ function entryText(path: readonly string[], valueText: string): string {
 
 // ─── Splicing ────────────────────────────────────────────────────────────────
 
-function splice(text: string, start: number, end: number, insert: string): string {
+function splice(
+  text: string,
+  start: number,
+  end: number,
+  insert: string,
+): string {
   return text.slice(0, start) + insert + text.slice(end);
 }
 
@@ -412,7 +417,7 @@ function appendMember(
   container: ObjectNode | ArrayNode,
   memberText: string,
 ): string {
-  const members: readonly { span: Span }[] =
+  const members: ReadonlyArray<{ span: Span }> =
     container.kind === "object" ? container.entries : container.elements;
   const last = members[members.length - 1];
   const baseIndent = indentOfLine(text, container.span.start);
@@ -427,7 +432,10 @@ function appendMember(
   }
   const { commaEnd, lineEnd } = trailerAfter(text, last.span.end);
   if (startsLine(text, last.span.start) && lineEnd !== -1) {
-    const indent = text.slice(lineStartOf(text, last.span.start), last.span.start);
+    const indent = text.slice(
+      lineStartOf(text, last.span.start),
+      last.span.start,
+    );
     return insertLineAfter(text, last.span, memberText, indent);
   }
   const at = commaEnd === -1 ? last.span.end : commaEnd;
@@ -573,7 +581,10 @@ export function insertSegmentRef(
   const newText = JSON.stringify(segment);
   const { lineEnd } = trailerAfter(text, ref.span.end);
   if (startsLine(text, ref.span.start) && lineEnd !== -1) {
-    const indent = text.slice(lineStartOf(text, ref.span.start), ref.span.start);
+    const indent = text.slice(
+      lineStartOf(text, ref.span.start),
+      ref.span.start,
+    );
     return relation === "after"
       ? insertLineAfter(text, ref.span, newText, indent)
       : splice(text, ref.span.start, ref.span.start, `${newText},\n${indent}`);

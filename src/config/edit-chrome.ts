@@ -173,7 +173,7 @@ function removeChrome(
 // it. The menu's own disclosure (open state, page cursor, toggle action) is
 // synthesized here by calling the SAME pure functions menu-synth.ts's
 // file-parse-time pass calls — this pass runs too late to piggyback on that
-// pass directly (it needs post-merge/post-rootOps data menu-synth.ts's
+// pass directly (it needs post-merge data menu-synth.ts's
 // per-file timing does not have), so parity is achieved by sharing the
 // functions, not by re-deriving the shape.
 function insertChrome(

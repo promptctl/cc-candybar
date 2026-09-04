@@ -1234,8 +1234,8 @@ describe("bundled preset library renders clean at every width — brandon-preset
     const effective: EffectiveGlobals = resolveEffectiveGlobals(
       DEFAULT_DSL_CONFIG,
       (key) => sessionPick(key, name),
-      // A fresh install/session has never clicked +/-, so no preset carries
-      // accumulated rootOps by default — the realistic baseline for the
+      // A fresh install has no config file authoring any preset's root, so no
+      // preset is customized by default — the realistic baseline for the
       // "renders clean" sweep below. The dedicated "customized" test further
       // down overrides `.preset.customized` via `withPayload` instead.
       () => false,
@@ -1362,8 +1362,9 @@ describe("bundled preset library renders clean at every width — brandon-preset
     expect(line).toMatch(/[▁▂▃▄▅▆▇█]/); // tokenSparkline's own block glyphs
   });
 
-  // brandon-layout-edit-2gc.5 — the visible diagnostic for accumulated
-  // rootOps: edit-chrome.ts's synthesized banner is spliced UNCONDITIONALLY
+  // brandon-layout-edit-2gc.5 — the visible diagnostic for a preset whose
+  // root the config file authors (candybar-config-dqe's `customized`):
+  // edit-chrome.ts's synthesized banner is spliced UNCONDITIONALLY
   // ([LAW:dataflow-not-control-flow]), so this pins BOTH values of the same
   // predicate rather than only the "never customized" case the sweep above
   // already covers implicitly.

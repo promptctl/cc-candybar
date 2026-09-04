@@ -96,7 +96,7 @@ export function clampSeed(
 //
 // [LAW:one-source-of-truth] `wire` names the ACTUAL wire this allow-list's
 // values travel over — "set-state" for SessionState keys, "set-config" for
-// config-overrides keys — so the slash-rejection message points at the wire
+// config-file (persist) keys — so the slash-rejection message points at the wire
 // the operator is actually debugging. Defaults to "set-state" (this
 // factory's original, sole caller) so existing direct callers (tests) don't
 // need to pass it; validatorForSpec passes the correct wire for its noun.
@@ -247,7 +247,7 @@ export function mergeKeySpecs(
 
 // [LAW:one-source-of-truth] The click-wire verb name a keyspace's writes
 // travel over — "set-state" for the SessionState keyspace, "set-config" for
-// config-overrides. Mirrors loader/actions.ts's wireName (same concept, the
+// the config file. Mirrors loader/actions.ts's wireName (same concept, the
 // loader's discriminator vocabulary is "set"/"persist" instead of
 // "state"/"config").
 function wireForNoun(noun: string): string {
@@ -339,7 +339,7 @@ export interface ValidatorRegistry {
 // [LAW:one-type-per-behavior] ONE registry implementation, instantiated once
 // per keyspace. `baseline` seeds PERMANENT entries (raw KeyValidator
 // functions, never re-claimable — SessionState's legacy theme/style/
-// toolbar-expanded); an empty baseline (config-overrides' keyspace) means
+// toolbar-expanded); an empty baseline (the config-file keyspace) means
 // every key is fully derived from the action table, exactly the epic's
 // "zero engine edits to add a menu-able field" goal. `noun` names the
 // keyspace in every message ("state"/"config") so the two instances stay
