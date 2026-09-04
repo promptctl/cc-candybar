@@ -413,16 +413,17 @@ fn detect_term_extents() -> (Option<u32>, Option<u32>) {
         (0, 0)
     };
     (
-        detect_term_extent("COLUMNS", tty_cols),
-        detect_term_extent("LINES", tty_rows),
+        detect_term_extent(env::var("COLUMNS").ok(), tty_cols),
+        detect_term_extent(env::var("LINES").ok(), tty_rows),
     )
 }
 
 // [LAW:one-type-per-behavior] Columns and rows are the same fact about two
 // axes: env var, then the TTY's answer, then None. Zero is "no answer" on
-// both sources.
-fn detect_term_extent(env_var: &str, tty_extent: u32) -> Option<u32> {
-    if let Ok(s) = env::var(env_var) {
+// both sources. `parse::<u32>` is what the TS client's detectTermExtent
+// mirrors (src/term-extent.ts) — both suites pin the same table.
+fn detect_term_extent(env_value: Option<String>, tty_extent: u32) -> Option<u32> {
+    if let Some(s) = env_value {
         if let Ok(n) = s.parse::<u32>() {
             if n > 0 {
                 return Some(n);
@@ -956,6 +957,23 @@ fn spawn_daemon_detached() {
 mod tests {
     use super::*;
     use std::io;
+
+    // The same table as test/term-extent.test.ts: both runtimes must read
+    // the same COLUMNS/LINES value from the same shell, or neither.
+    #[test]
+    fn detect_term_extent_parses_exactly_what_the_ts_client_parses() {
+        let env = |s: &str| detect_term_extent(Some(s.to_string()), 0);
+        assert_eq!(env("80"), Some(80));
+        assert_eq!(env("+80"), Some(80));
+        assert_eq!(env("080"), Some(80));
+        assert_eq!(env("4294967295"), Some(4294967295));
+        for rejected in ["", "0", " 80", "80 ", "80.5", "80\n", "80abc", "-80", "4294967296"] {
+            assert_eq!(env(rejected), None, "{rejected:?}");
+        }
+        assert_eq!(detect_term_extent(Some("x".to_string()), 24), Some(24));
+        assert_eq!(detect_term_extent(None, 24), Some(24));
+        assert_eq!(detect_term_extent(None, 0), None);
+    }
 
     // [LAW:one-type-per-behavior] InvalidData/InvalidInput from the protocol
     // layer (write_frame/read_frame emit them for oversized frames) are

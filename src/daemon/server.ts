@@ -274,10 +274,6 @@ export function runDaemon(): void {
   sessionState.useStorage(
     new FileSessionStorage(sessionStatePath(), 500, dlog),
   );
-  // The dump directory is a cold-rebuilt cache like every other: whatever a
-  // previous daemon wrote there is unnamed by any strip this one renders.
-  diagnosticDump.reset();
-
   // [LAW:single-enforcer] Same death funnel as the signals and the RSS backstop:
   // the watchdog calls shutdown(0), it never exits on its own. A production
   // daemon has no spawner to outlive (env unset) and arms an inert handle; only
@@ -450,6 +446,11 @@ function onListening(sockPath: string): void {
   // acquire.ts. Any consecutive-spawn backoff accumulated getting here no
   // longer applies once a daemon is actually serving.
   resetSpawnBackoff();
+  // The dump directory is a cold-rebuilt cache like every other: whatever a
+  // previous daemon wrote there is unnamed by any strip this one renders.
+  // After the bind win, like every other "we are the daemon" effect: a
+  // process that loses the race must never touch the winner's files.
+  diagnosticDump.reset();
   armBinaryWatch();
   buildWatch.arm();
   armLimits();
@@ -1039,25 +1040,30 @@ async function handleRequest(req: Request): Promise<HandledRequest> {
       // Null when the error is not a load error, or no file resolved.
       const failedConfigFile =
         entry.lastError === null ? null : entry.configFilePath;
-      const diagnostics = collectDiagnostics(combinedError, combinedWarning, {
-        fullTextFile: diagnosticDump.pathFor(sessionId),
-        failedConfigFile,
-      });
+      const diagnostics = collectDiagnostics(combinedError, combinedWarning);
       // [LAW:effects-at-boundaries] The one write the strip depends on, at
       // the edge: the session's dump file mirrors this render's diagnostics
       // (present with the full text, absent when there are none) before the
-      // strip that links it goes out.
+      // strip that links it goes out — and the link is built from the
+      // write's outcome, so the trailer never names a file that is not there.
       const dumpFailure = diagnosticDump.sync(
         sessionId,
         diagnostics === null ? null : formatDiagnosticDump(diagnostics),
       );
       if (dumpFailure !== null)
         dlog("warn", `diagnostic dump failed: ${dumpFailure}`);
-      const output = composeWithDiagnostics(body, diagnostics, {
-        width,
-        rowCap,
-        colorCompatibility: effective.colorCompatibility,
-      });
+      const output = composeWithDiagnostics(
+        body,
+        diagnostics,
+        {
+          fullText:
+            dumpFailure === null
+              ? { kind: "file", path: diagnosticDump.pathFor(sessionId) }
+              : { kind: "unavailable", reason: dumpFailure },
+          failedConfigFile,
+        },
+        { width, rowCap, colorCompatibility: effective.colorCompatibility },
+      );
       const ms = Date.now() - t0;
       const g = gitService.getStats();
       const u = usageStore.getStats();

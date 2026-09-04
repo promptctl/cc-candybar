@@ -50,9 +50,10 @@ export interface RenderRequest {
 // [LAW:locality-or-seam] The seam for "a fact the daemon cannot observe about
 // the session it is rendering for". `termCols` established the pattern; `ssh`
 // and `termRows` (the diagnostic strip's row cap) followed it, and the
-// documented-but-unbuilt client-aware `colorCompatibility: "auto"` is the next. Naming the set as ONE type is what
-// keeps that third addition a field rather than another sanitizer, another
-// wire read, and another parameter threaded through the render path.
+// documented-but-unbuilt client-aware `colorCompatibility: "auto"` is the
+// next. Naming the set as ONE type is what keeps each addition a field
+// rather than another sanitizer, another wire read, and another parameter
+// threaded through the render path.
 //
 // [LAW:parse-dont-validate] This is the stamped type. `RenderRequest`'s
 // same-named fields are raw JSON of unknown provenance; a `ClientHints` has

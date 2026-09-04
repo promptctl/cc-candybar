@@ -27,7 +27,12 @@ export class DiagnosticDump {
   // strip names it before the daemon writes it, so the two agree by
   // construction rather than by return value.
   pathFor(sessionId: string): string {
-    return path.join(this.dir, `${encodeURIComponent(sessionId)}.txt`);
+    // toWellFormed: the id is hook input, and a lone surrogate would make
+    // encodeURIComponent throw — a hostile id must not cost the render.
+    return path.join(
+      this.dir,
+      `${encodeURIComponent(sessionId.toWellFormed())}.txt`,
+    );
   }
 
   // Bring the session's file in line with `text`: present with this content,

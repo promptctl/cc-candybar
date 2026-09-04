@@ -36,6 +36,7 @@ handleRequest (server.ts)
   └─ renderCache.getOrCreate(...)        — cache HIT in steady state, no work
   └─ buildRenderPayload(...)             — reads provider snapshots, no spawn
   └─ renderDslLine(...)                  — pure CPU
+  └─ diagnosticDump.sync(...)            — the one synchronous fs write, taken only when the diagnostic text changed
   └─ composeWithDiagnostics(...)         — string assembly
 ```
 

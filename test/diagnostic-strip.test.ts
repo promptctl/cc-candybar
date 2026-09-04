@@ -14,12 +14,16 @@ import {
   formatDiagnosticDump,
   MAX_DIAGNOSTIC_ROWS,
   type DiagnosticGeometry,
+  type DiagnosticLinks,
 } from "../src/render/diagnostic-strip";
 import { extractUrls, stripAnsi } from "./helpers/daemon-e2e";
 
 const FULL = "/tmp/state/cc-candybar/diagnostics/sid.txt";
 const CONFIG = "/Users/someone/.config/cc-candybar/config.json5";
-const LINKS = { fullTextFile: FULL, failedConfigFile: CONFIG };
+const LINKS: DiagnosticLinks = {
+  fullText: { kind: "file", path: FULL },
+  failedConfigFile: CONFIG,
+};
 
 const geometry = (
   width: number,
@@ -49,12 +53,12 @@ const wordsNarrowerThan = (width: number): string[] =>
   ERROR.split(/\s+/).filter((w) => w.length > 0 && cellWidth(w) < width);
 
 describe("candybar-diagnostics-avi: the diagnostic strip", () => {
-  const diag = collectDiagnostics(ERROR, null, LINKS)!;
+  const diag = collectDiagnostics(ERROR, null)!;
 
   test.each([80, 120])(
     "wraps every row within %d cells and clips no word mid-word",
     (width) => {
-      const out = composeWithDiagnostics("BODY", diag, geometry(width));
+      const out = composeWithDiagnostics("BODY", diag, LINKS, geometry(width));
       const rows = rowsOf(out);
       expect(rows[rows.length - 1]).toBe("BODY");
       const strip = rows.slice(0, -1);
@@ -71,7 +75,7 @@ describe("candybar-diagnostics-avi: the diagnostic strip", () => {
   );
 
   test("a word wider than the row folds at the width instead of overflowing", () => {
-    const out = composeWithDiagnostics("", diag, geometry(40, 100));
+    const out = composeWithDiagnostics("", diag, LINKS, geometry(40, 100));
     for (const row of rowsOf(out)) expect(cellWidth(row)).toBeLessThanOrEqual(40);
     // The long path is present in full across consecutive rows (a wide glyph
     // that straddles the fold is padded to the row edge, so strip every
@@ -87,29 +91,27 @@ describe("candybar-diagnostics-avi: the diagnostic strip", () => {
       Array.from({ length: 40 }, (_, i) => `issue number ${i + 1} is here`).join(
         "\n",
       ),
-      null,
-      LINKS,
-    )!;
+      null)!;
     expect(diagnosticRowCap(undefined)).toBe(MAX_DIAGNOSTIC_ROWS);
     expect(diagnosticRowCap(50)).toBe(MAX_DIAGNOSTIC_ROWS);
     expect(diagnosticRowCap(12)).toBe(12);
 
     const capped = rowsOf(
-      composeWithDiagnostics("", many, geometry(120, diagnosticRowCap(50))),
+      composeWithDiagnostics("", many, LINKS, geometry(120, diagnosticRowCap(50))),
     );
     expect(capped).toHaveLength(20);
     expect(capped[19]).toMatch(/^↳ 21 more rows · open full text · open /);
 
     const tight = rowsOf(
-      composeWithDiagnostics("", many, geometry(120, diagnosticRowCap(12))),
+      composeWithDiagnostics("", many, LINKS, geometry(120, diagnosticRowCap(12))),
     );
     expect(tight).toHaveLength(12);
     expect(tight[11]).toMatch(/^↳ 29 more rows · /);
   });
 
   test("a strip that fits elides nothing and says so by saying nothing", () => {
-    const small = collectDiagnostics("one line", null, LINKS)!;
-    const rows = rowsOf(composeWithDiagnostics("", small, geometry(80)));
+    const small = collectDiagnostics("one line", null)!;
+    const rows = rowsOf(composeWithDiagnostics("", small, LINKS, geometry(80)));
     expect(rows).toEqual([
       "⚠ one line ",
       `↳ open full text · open ${CONFIG}`,
@@ -117,7 +119,7 @@ describe("candybar-diagnostics-avi: the diagnostic strip", () => {
   });
 
   test("the last row links the full text and the failing config as plain file:// URLs", () => {
-    const out = composeWithDiagnostics("BODY", diag, geometry(120));
+    const out = composeWithDiagnostics("BODY", diag, LINKS, geometry(120));
     const urls = extractUrls(out);
     expect(urls).toContain(pathToFileURL(FULL).href);
     expect(urls).toContain(pathToFileURL(CONFIG).href);
@@ -128,7 +130,7 @@ describe("candybar-diagnostics-avi: the diagnostic strip", () => {
   });
 
   test("a narrow row middle-truncates the config path but the link keeps the full URL", () => {
-    const out = composeWithDiagnostics("", diag, geometry(50));
+    const out = composeWithDiagnostics("", diag, LINKS, geometry(50));
     const last = rowsOf(out).at(-1)!;
     expect(cellWidth(last)).toBeLessThanOrEqual(50);
     expect(last).toMatch(/^↳ open full text · open \/Users\/.*….*config\.json5$/);
@@ -136,21 +138,32 @@ describe("candybar-diagnostics-avi: the diagnostic strip", () => {
   });
 
   test("without a failed config file the trailer offers only the full text", () => {
-    const d = collectDiagnostics("boom", null, {
-      fullTextFile: FULL,
-      failedConfigFile: null,
-    })!;
-    const rows = rowsOf(composeWithDiagnostics("", d, geometry(80)));
+    const d = collectDiagnostics("boom", null)!;
+    const rows = rowsOf(
+      composeWithDiagnostics("", d, { ...LINKS, failedConfigFile: null }, geometry(80)),
+    );
     expect(rows.at(-1)).toBe("↳ open full text");
   });
 
+  test("a dump the daemon could not write is said in the trailer, not linked", () => {
+    const d = collectDiagnostics("boom", null)!;
+    const out = composeWithDiagnostics(
+      "",
+      d,
+      { fullText: { kind: "unavailable", reason: "ENOSPC: no\x1bspace" }, failedConfigFile: null },
+      geometry(80),
+    );
+    expect(rowsOf(out).at(-1)).toBe("↳ full text unavailable: ENOSPC: no space");
+    expect(extractUrls(out).filter((u) => u.startsWith("file://"))).toEqual([]);
+  });
+
   test("error rows precede warning rows; one trailer closes the strip", () => {
-    const both = collectDiagnostics("bad thing", "advisory", LINKS)!;
+    const both = collectDiagnostics("bad thing", "advisory")!;
     expect(both.channels.map((c) => c.verb)).toEqual([
       "show-config-error",
       "show-config-warning",
     ]);
-    const rows = rowsOf(composeWithDiagnostics("BODY", both, geometry(80)));
+    const rows = rowsOf(composeWithDiagnostics("BODY", both, LINKS, geometry(80)));
     expect(rows).toEqual([
       "⚠ bad thing ",
       "⚠ advisory ",
@@ -160,29 +173,31 @@ describe("candybar-diagnostics-avi: the diagnostic strip", () => {
   });
 
   test("no diagnostics → the body, untouched", () => {
-    expect(collectDiagnostics(null, null, LINKS)).toBeNull();
-    expect(composeWithDiagnostics("BODY", null, geometry(80))).toBe("BODY");
+    expect(collectDiagnostics(null, null)).toBeNull();
+    expect(composeWithDiagnostics("BODY", null, LINKS, geometry(80))).toBe("BODY");
   });
 
   test("the dump holds every channel's message verbatim — unwrapped, unsanitized", () => {
-    const both = collectDiagnostics(ERROR, "warn\ttab", LINKS)!;
+    const both = collectDiagnostics(ERROR, "warn\ttab")!;
     expect(formatDiagnosticDump(both)).toBe(
       `ERROR\n${ERROR}\n\nWARNING\nwarn\ttab\n`,
     );
   });
 
   test("control characters in a message cannot escape the styled cell", () => {
-    const hostile = collectDiagnostics("x\x1b[31mred\x9bCSI", null, LINKS)!;
-    const first = rowsOf(composeWithDiagnostics("", hostile, geometry(80)))[0]!;
+    const hostile = collectDiagnostics("x\x1b[31mred\x9bCSI", null)!;
+    const first = rowsOf(composeWithDiagnostics("", hostile, LINKS, geometry(80)))[0]!;
     expect(first).toBe("⚠ x [31mred CSI ");
   });
 
   test("control characters in the failed config path cannot escape the trailer", () => {
-    const hostile = collectDiagnostics(ERROR, null, {
-      fullTextFile: FULL,
-      failedConfigFile: "/a/\x1b[31mb.json5",
-    })!;
-    const out = composeWithDiagnostics("", hostile, geometry(80));
+    const hostile = collectDiagnostics(ERROR, null)!;
+    const out = composeWithDiagnostics(
+      "",
+      hostile,
+      { ...LINKS, failedConfigFile: "/a/\x1b[31mb.json5" },
+      geometry(80),
+    );
     expect(out).not.toContain("\x1b[31m");
     expect(rowsOf(out).at(-1)).toContain("open /a/ [31mb.json5");
   });
@@ -193,7 +208,7 @@ describe("candybar-diagnostics-avi: the diagnostic strip", () => {
   test.each([3, 8, 16, 24, 39])(
     "the trailer fits a %d-cell width narrower than its own fixed text",
     (width) => {
-      const out = composeWithDiagnostics("", diag, geometry(width, 5));
+      const out = composeWithDiagnostics("", diag, LINKS, geometry(width, 5));
       const rows = rowsOf(out);
       expect(rows).toHaveLength(5);
       for (const row of rows) expect(cellWidth(row)).toBeLessThanOrEqual(width);
@@ -205,7 +220,7 @@ describe("candybar-diagnostics-avi: the diagnostic strip", () => {
   // or a throw — the width is a client hint): every row is at most that
   // glyph and its space.
   test.each([1, 2])("a %d-cell width renders, bounded by one wide glyph", (width) => {
-    const rows = rowsOf(composeWithDiagnostics("", diag, geometry(width, 5)));
+    const rows = rowsOf(composeWithDiagnostics("", diag, LINKS, geometry(width, 5)));
     expect(rows).toHaveLength(5);
     for (const row of rows) expect(cellWidth(row)).toBeLessThanOrEqual(3);
   });

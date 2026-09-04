@@ -28,6 +28,8 @@ describe("DiagnosticDump", () => {
     expect(path.dirname(p)).toBe(path.join(root, "diagnostics"));
     expect(path.basename(p)).toBe("..%2Fx%2Fy.txt");
     expect(existsSync(p)).toBe(false);
+    // A lone surrogate is hook input like any other id; it names a path.
+    expect(path.basename(dump.pathFor("\ud800"))).toBe("%EF%BF%BD.txt");
   });
 
   test("writes the text, rewrites only on change, removes on null", () => {

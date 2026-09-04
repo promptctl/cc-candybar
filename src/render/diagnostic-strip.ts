@@ -67,12 +67,23 @@ export interface DiagnosticChannel {
   readonly message: string;
 }
 
+// The complete, unwrapped, un-truncated text — formatDiagnosticDump's
+// output — as the daemon wrote it, or why it could not. Linked as `file://`
+// because that URL needs no handler of ours: a config error is precisely the
+// moment to assume the `cc-candybar://` scheme may be unregistered.
+//
+// [LAW:no-silent-failure] A dump the daemon failed to write is SAID in the
+// trailer, never linked: the affordance on screen matches the disk.
+export type FullTextLink =
+  | { readonly kind: "file"; readonly path: string }
+  | { readonly kind: "unavailable"; readonly reason: string };
+
+// [LAW:no-ambient-temporal-coupling] Links are a separate composer input,
+// not a Diagnostics field: the full-text link is the OUTCOME of the dump
+// write, which the daemon performs after the channels exist and before the
+// strip goes out. A Diagnostics cannot name a file that is not written yet.
 export interface DiagnosticLinks {
-  // The complete, unwrapped, un-truncated text — formatDiagnosticDump's
-  // output — as the daemon wrote it. Linked as `file://` because that URL
-  // needs no handler of ours: a config error is precisely the moment to
-  // assume the `cc-candybar://` scheme may be unregistered.
-  readonly fullTextFile: string;
+  readonly fullText: FullTextLink;
   // The config file whose load failed, when the error is a load error.
   readonly failedConfigFile: string | null;
 }
@@ -82,7 +93,6 @@ export interface DiagnosticLinks {
 // its trailer. "Nothing to show" is `null`, decided once in collectDiagnostics.
 export interface Diagnostics {
   readonly channels: readonly [DiagnosticChannel, ...DiagnosticChannel[]];
-  readonly links: DiagnosticLinks;
 }
 
 export interface DiagnosticGeometry {
@@ -98,7 +108,6 @@ export interface DiagnosticGeometry {
 export function collectDiagnostics(
   error: string | null,
   warning: string | null,
-  links: DiagnosticLinks,
 ): Diagnostics | null {
   const channels: DiagnosticChannel[] = [];
   if (error !== null) {
@@ -116,7 +125,7 @@ export function collectDiagnostics(
     });
   }
   const [first, ...rest] = channels;
-  return first === undefined ? null : { channels: [first, ...rest], links };
+  return first === undefined ? null : { channels: [first, ...rest] };
 }
 
 // The dump file's content: every channel's message verbatim, in severity
@@ -145,6 +154,7 @@ const ISSUE_INDENT = " ";
 export function composeWithDiagnostics(
   body: string,
   diagnostics: Diagnostics | null,
+  links: DiagnosticLinks,
   geometry: DiagnosticGeometry,
 ): string {
   if (diagnostics === null) return body;
@@ -153,7 +163,7 @@ export function composeWithDiagnostics(
   const shown = rows.slice(0, geometry.rowCap - 1);
   const strip = [
     ...shown,
-    trailerRow(diagnostics, rows.length - shown.length, opts),
+    trailerRow(diagnostics, links, rows.length - shown.length, opts),
   ].join("\n");
   // No body → the strip alone (renderDsl produced nothing). Body present →
   // the strip sits above it on its own rows.
@@ -219,17 +229,20 @@ function channelRows(ch: DiagnosticChannel, opts: BuildLineOptions): string[] {
 // regardless of what is visible.
 function trailerRow(
   diagnostics: Diagnostics,
+  links: DiagnosticLinks,
   elided: number,
   opts: BuildLineOptions,
 ): string {
   const { colors } = diagnostics.channels[0];
-  const { fullTextFile, failedConfigFile } = diagnostics.links;
+  const { fullText, failedConfigFile } = links;
   const base = new Style({ bgcolor: colors.bg, color: colors.fg });
   const frag = (text: string, style: Style): RichText =>
     new RichText(text, { style, end: "", noWrap: true });
   const head = [
     frag(`↳ ${elided > 0 ? `${elided} more rows · ` : ""}`, base),
-    frag("open full text", base.withLink(pathToFileURL(fullTextFile).href)),
+    fullText.kind === "file"
+      ? frag("open full text", base.withLink(pathToFileURL(fullText.path).href))
+      : frag(`full text unavailable: ${sanitizeText(fullText.reason)}`, base),
   ];
   const config =
     failedConfigFile === null
