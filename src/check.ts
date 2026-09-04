@@ -300,11 +300,10 @@ function loadRegisterRender(
       // agrees with it today — which is the whole reason check renders what the
       // daemon would render rather than something adjacent.
       () => null,
-      // [LAW:no-silent-failure] `check` validates a config file in isolation
-      // — it never reads the daemon-owned overrides file, so there is no
-      // rootOps log to be customized BY. false is the honest value for THIS
-      // (primary, returned) render, not a stand-in default: a fresh session
-      // has never customized anything. A second render pass below also
+      // [LAW:no-silent-failure] `check` renders the file as the bundled
+      // default's peer, never as a customization OF it — a root the file
+      // authors is simply the bar `check` verifies, so `.preset.customized`
+      // is false for THIS (primary, returned) render. A second render pass below also
       // exercises `true`, so a `.preset.customized`-gated segment still
       // gets checked — just not through this value.
       () => false,

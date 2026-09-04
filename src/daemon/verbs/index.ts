@@ -19,7 +19,6 @@
 //   cc-candybar://<verb>/<value>   where <value> may itself contain `/`.
 
 import { launchSync } from "../../proc/launch";
-import type { Globals } from "../../config/dsl-types";
 import type { SessionStateRW } from "../session-state";
 import {
   listStateKeys,
@@ -32,17 +31,17 @@ import {
   validateConfigWrite,
 } from "./config-validators";
 import {
-  clearConfigOverride,
-  coercePersistValue,
-  isGlobalsField,
-  loadConfigOverrides,
-  loadOverrides,
-  redoLastOverride,
-  undoLastOverride,
-  writeConfigOverride,
-} from "../config-overrides-store";
-import { configOverridesPath } from "../paths";
-import { parsePersistTarget } from "../../config/loader/persist-target";
+  applyLayoutOp as applyLayoutOpToFile,
+  deleteValue,
+  readValue,
+  redoEdit,
+  undoEdit,
+  writeValue,
+  type EditStore,
+} from "../config-file-store";
+import { configEditHistoryPath } from "../paths";
+import { durableConfigPath } from "../../config/loader/discovery";
+import { decodeLayoutOp } from "../../config/layout-ops";
 import {
   decodeSegments,
   parseEffects,
@@ -76,15 +75,8 @@ export interface VerbContext {
 // throw a BadVerbArgs error which the dispatcher surfaces as BAD_REQUEST.
 export type VerbHandler = (value: string, ctx: VerbContext) => void;
 
-// [LAW:types-are-the-program] Argument-shape failures are structurally
-// distinct from operational failures. The dispatcher uses `instanceof` to
-// route BadVerbArgs to BAD_REQUEST and any other Error to RENDER_FAILED.
-export class BadVerbArgs extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = "BadVerbArgs";
-  }
-}
+import { BadVerbArgs } from "../verb-error";
+export { BadVerbArgs };
 
 // ─── Argument decoders ───────────────────────────────────────────────────────
 
@@ -315,18 +307,28 @@ function wrapStep(n: number, min: number, max: number): number {
 // config keyspace: there is no value to validate, only a legitimate target to
 // clear. Absent segment = nothing to release, which is every ordinary persist
 // click [LAW:dataflow-not-control-flow].
-function releaseSessionKey(
-  release: string,
-  sid: string,
-  ctx: VerbContext,
-  verb: string,
-): void {
-  if (!release) return;
+// [LAW:no-ambient-temporal-coupling] The release key is checked BEFORE the
+// durable write and cleared AFTER it — one handler owns that order. A dual's
+// `set` half renamed by a reload between render and click would otherwise
+// refuse only after the file had already changed: a click reported failed
+// whose write landed, with the session pick left shadowing the new default.
+function parseRelease(release: string, verb: string): string | null {
+  if (!release) return null;
   if (!listStateKeys().includes(release)) {
     throw new BadVerbArgs(
       `${verb}: unknown session key "${release}" to release (have: ${listStateKeys().join(", ")})`,
     );
   }
+  return release;
+}
+
+function releaseSessionKey(
+  release: string | null,
+  sid: string,
+  ctx: VerbContext,
+  verb: string,
+): void {
+  if (release === null) return;
   ctx.sessionState.clear(sid, release);
   ctx.dlog("info", `${verb}: released session key ${release} (session=${sid})`);
 }
@@ -382,28 +384,85 @@ const stepState: VerbHandler = (rawValue, ctx) => {
   );
 };
 
-// [LAW:no-defensive-null-guards] Range-bounded (stepper) persist targets are
-// globals-only by construction: loader/cross-ref.ts (candybar-config-engine-
-// 71o.6) rejects a `min`/`max`/`by` persist arm over a `segments.<name>.
-// palette` target at config-LOAD time, so a validated write reaching
-// stepConfig with a range spec is a real Globals field by construction —
-// this assertion is the type-narrowing boundary (for the `overrides[key]`
-// index below), not a runtime possibility. setConfig has no such need:
-// coercePersistValue classifies a bare string key itself.
-function assertGlobalsField(key: string): asserts key is keyof Globals {
-  if (!isGlobalsField(key)) {
-    throw new Error(
-      `step-config: "${key}" validated as a bounded config-writable key but ` +
-        `is not a Globals field — registration/loader invariant broken`,
+// ─── The durable store: which file, and the history over it ─────────────────
+
+// [LAW:one-source-of-truth] The config FILE is the one durable store
+// (candybar-config-dqe). A click carries only a session id, so the render
+// records — under this daemon-internal key, the SESSION_CONFIG_OVERRIDE_KEY
+// precedent — the INPUTS its config resolution ran on, and a durable verb
+// runs the same resolution over them at click time (durableConfigPath). The
+// file it lands in is the one the NEXT reload reads, not a snapshot of the
+// one the last render read: RenderCache re-resolves the same chain whenever
+// a candidate appears (a higher-precedence file supersedes a lower one), so
+// a recorded resolved path would be a second clock — a write to a file the
+// bar has already stopped reading. No re-derivation from the daemon's own
+// cwd either, which describes whichever shell spawned it.
+export const SESSION_RENDER_ORIGIN_KEY = "render-origin";
+
+// [LAW:types-are-the-program] Exactly the three inputs resolveDslConfigPath
+// takes. `configFile` is the session's explicit override (`--config` or a
+// load-config pick) or null.
+export interface RenderOrigin {
+  readonly projectDir: string;
+  readonly cwd: string;
+  readonly configFile: string | null;
+}
+
+export function encodeRenderOrigin(origin: RenderOrigin): string {
+  return JSON.stringify(origin);
+}
+
+// [LAW:parse-dont-validate] The one boundary that lifts the stored string
+// back into a RenderOrigin; a wrong shape is a loud BadVerbArgs, never a
+// guessed path.
+function parseRenderOrigin(raw: string): RenderOrigin {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    throw new BadVerbArgs(`render origin is not JSON: ${raw}`);
+  }
+  if (parsed === null || typeof parsed !== "object") {
+    throw new BadVerbArgs(`render origin is not an object: ${raw}`);
+  }
+  const { projectDir, cwd, configFile } = parsed as Record<string, unknown>;
+  if (
+    typeof projectDir !== "string" ||
+    typeof cwd !== "string" ||
+    (configFile !== null && typeof configFile !== "string")
+  ) {
+    throw new BadVerbArgs(`render origin has the wrong shape: ${raw}`);
+  }
+  return { projectDir, cwd, configFile };
+}
+
+// [LAW:no-silent-failure] A session that has never rendered has no origin
+// and therefore no file to write — a loud BadVerbArgs, not the daemon's
+// own XDG guess.
+function sessionConfigFile(ctx: VerbContext, sid: string): string {
+  const raw = ctx.sessionState.get(sid, SESSION_RENDER_ORIGIN_KEY);
+  if (raw === null) {
+    throw new BadVerbArgs(
+      `session ${sid} has not rendered yet — no config file to write`,
     );
   }
+  const origin = parseRenderOrigin(raw);
+  return durableConfigPath(
+    origin.projectDir,
+    origin.cwd,
+    origin.configFile ?? undefined,
+  );
+}
+
+function editStore(ctx: VerbContext): EditStore {
+  return { historyPath: configEditHistoryPath(), logger: ctx.dlog };
 }
 
 // [LAW:single-enforcer] `persist`'s twin of setState: the SAME validate-then-
-// write shape, writing through config-overrides-store instead of
-// SessionState. The write is DURABLE — RenderCache's file watcher on
-// configOverridesPath() (src/daemon/cache/render.ts) picks it up on the next
-// reload, exactly as an edit to the hand-authored config file would.
+// write shape, writing into the session's config file instead of
+// SessionState. The write is DURABLE — RenderCache's watcher on that file
+// (src/daemon/cache/render.ts) picks it up on the next reload, exactly as a
+// hand edit would; the two are indistinguishable by design.
 // [LAW:no-silent-fallbacks] Unknown key or out-of-domain value is a loud
 // BAD_REQUEST — the SAME gate `set-state` uses (validateConfigWrite),
 // derived from the SAME action table (deriveConfigActionValidators).
@@ -419,16 +478,20 @@ const setConfig: VerbHandler = (rawValue, ctx) => {
   }
   const result = validateConfigWrite(key, incoming);
   if (!result.ok) throw new BadVerbArgs(`set-config: ${result.reason}`);
-  const typed = coercePersistValue(key, result.value);
-  writeConfigOverride(configOverridesPath(), key, typed, ctx.dlog);
-  ctx.dlog("info", `set-config: ${key}=${result.value} (session=${sid})`);
-  releaseSessionKey(release, sid, ctx, "set-config");
+  const releaseKey = parseRelease(release, "set-config");
+  const file = sessionConfigFile(ctx, sid);
+  writeValue(editStore(ctx), file, key, result.value);
+  ctx.dlog(
+    "info",
+    `set-config: ${key}=${result.value} → ${file} (session=${sid})`,
+  );
+  releaseSessionKey(releaseKey, sid, ctx, "set-config");
 };
 
 // [LAW:one-source-of-truth] `persist`'s twin of stepState: a RELATIVE nudge
-// against the current override (or the merged config's own value when
-// unset — rangeParamsForConfig's seed), wrapped and re-validated through the
-// SAME range gate, then written durably.
+// against the value the file declares (or the merged config's own value when
+// it declares none — rangeParamsForConfig's seed), wrapped and re-validated
+// through the SAME range gate, then written durably.
 const stepConfig: VerbHandler = (rawValue, ctx) => {
   const [sessionId = "", key = "", byRaw = "", release = ""] = decodeWire(() =>
     decodeSegments(rawValue),
@@ -445,6 +508,7 @@ const stepConfig: VerbHandler = (rawValue, ctx) => {
     );
   }
   const by = parseInt(byRaw, 10);
+  const releaseKey = parseRelease(release, "step-config");
   const params = rangeParamsForConfig(key);
   if (!params) {
     throw new BadVerbArgs(
@@ -452,9 +516,8 @@ const stepConfig: VerbHandler = (rawValue, ctx) => {
         `(have keys: ${listConfigKeys().join(", ")})`,
     );
   }
-  assertGlobalsField(key);
-  const overrides = loadConfigOverrides(configOverridesPath(), ctx.dlog);
-  const stored = overrides[key];
+  const file = sessionConfigFile(ctx, sid);
+  const stored = readValue(file, key);
   const current =
     typeof stored === "number"
       ? Math.max(params.min, Math.min(params.max, stored))
@@ -462,19 +525,19 @@ const stepConfig: VerbHandler = (rawValue, ctx) => {
   const next = wrapStep(current + by, params.min, params.max);
   const result = validateConfigWrite(key, String(next));
   if (!result.ok) throw new BadVerbArgs(`step-config: ${result.reason}`);
-  const typed = coercePersistValue(key, result.value);
-  writeConfigOverride(configOverridesPath(), key, typed, ctx.dlog);
+  writeValue(editStore(ctx), file, key, result.value);
   ctx.dlog(
     "info",
-    `step-config: ${key} ${current}→${result.value} (by ${by}, session=${sid})`,
+    `step-config: ${key} ${current}→${result.value} (by ${by}) → ${file} (session=${sid})`,
   );
-  releaseSessionKey(release, sid, ctx, "step-config");
+  releaseSessionKey(releaseKey, sid, ctx, "step-config");
 };
 
-// [LAW:one-source-of-truth] The gated undo for `persist`: clears one
-// config-overrides key, restoring the user-file/bundled-default value on the
-// next reload. Gated by key MEMBERSHIP (listConfigKeys) rather than a value
-// domain — there is no value to validate, only a legitimate target to clear.
+// [LAW:one-source-of-truth] `reset`: delete the key's path from the session's
+// config file, so the next reload falls back to the bundled default (or,
+// for a preset root, the config's own root). Gated by key MEMBERSHIP
+// (listConfigKeys) rather than a value domain — there is no value to
+// validate, only a legitimate target to clear.
 const resetConfig: VerbHandler = (value, ctx) => {
   const [sessionId = "", key = ""] = decodeWire(() => decodeSegments(value));
   const sid = requireSessionId(sessionId);
@@ -483,22 +546,21 @@ const resetConfig: VerbHandler = (value, ctx) => {
       `reset-config: unknown config key "${key}" (have: ${listConfigKeys().join(", ")})`,
     );
   }
-  clearConfigOverride(configOverridesPath(), key, ctx.dlog);
-  ctx.dlog("info", `reset-config: ${key} (session=${sid})`);
+  const file = sessionConfigFile(ctx, sid);
+  deleteValue(editStore(ctx), file, key);
+  ctx.dlog("info", `reset-config: ${key} ← ${file} (session=${sid})`);
 };
 
-// [LAW:one-source-of-truth] brandon-layout-edit-2gc.1's structural-edit
-// write: a THIRD config-overrides write shape beside setConfig's overwrite
-// and stepConfig's numeric read-modify-write — read the current op-token
-// list at `key`, append the validated op, write the whole list back. Gated
-// by the SAME allow-list machinery setConfig uses (validateConfigWrite,
-// derived from a config's declared removeSegment/insertSegment actions) —
-// an op token no action declares is a loud BAD_REQUEST, never silently
-// appended. `key` must resolve to the preset-root-ops scope specifically
-// (never a globals/segment-palette key smuggled in through this verb) —
-// checked here rather than trusted from the gate, since the gate only
-// proves the VALUE is allowed for that key, not that the key's SCOPE
-// matches this verb's read-modify-write shape.
+// [LAW:one-source-of-truth] brandon-layout-edit-2gc.1's structural edit:
+// the validated op token is applied ONCE, to the authored tree in the
+// session's config file (config-file-store.ts over json5-edit.ts), so the
+// file IS the edited layout and its comments survive. Gated by the SAME
+// allow-list machinery setConfig uses (validateConfigWrite, derived from a
+// config's declared removeSegment/insertSegment actions) — an op token no
+// action declares is a loud BAD_REQUEST. [LAW:parse-dont-validate] The
+// gate proves the VALUE is one an action allows; decodeLayoutOp stamps its
+// shape, and the store proves the KEY is a preset-root target — a globals
+// or segment-palette key smuggled through this verb is refused there.
 const applyLayoutOp: VerbHandler = (rawValue, ctx) => {
   const [sessionId = "", key = "", opToken = ""] = decodeWire(() =>
     decodeSegments(rawValue),
@@ -511,51 +573,50 @@ const applyLayoutOp: VerbHandler = (rawValue, ctx) => {
   }
   const result = validateConfigWrite(key, opToken);
   if (!result.ok) throw new BadVerbArgs(`apply-layout-op: ${result.reason}`);
-  const target = parsePersistTarget(key);
-  if (target === null || target.scope !== "preset-root-ops") {
+  const op = decodeLayoutOp(result.value);
+  if (op === null) {
     throw new BadVerbArgs(
-      `apply-layout-op: "${key}" is not a "presets.<name>.rootOps" target`,
+      `apply-layout-op: "${result.value}" is not a layout op token`,
     );
   }
-  const existing =
-    loadOverrides(configOverridesPath(), ctx.dlog).presetRootOps[
-      target.preset
-    ] ?? [];
-  const next = JSON.stringify([...existing, result.value]);
-  writeConfigOverride(configOverridesPath(), key, next, ctx.dlog);
+  const file = sessionConfigFile(ctx, sid);
+  applyLayoutOpToFile(editStore(ctx), file, key, op);
   ctx.dlog(
     "info",
-    `apply-layout-op: ${key} += ${result.value} (session=${sid})`,
+    `apply-layout-op: ${key} ${result.value} → ${file} (session=${sid})`,
   );
 };
 
-// [LAW:one-source-of-truth] `reset`'s fine-grained sibling: step the ONE
-// global history over the overrides layer back one entry. No key, no value —
-// the history store (config-overrides-store.ts) owns which entry moves and
-// what it restores; this handler is pure plumbing between the wire and it.
+// [LAW:one-source-of-truth] `reset`'s fine-grained sibling: step the history
+// of edits to the session's config file back one entry — the file the
+// session's render resolved, so one project's undo can never revert a write
+// made to another's. No key, no value — the history (config-file-store.ts)
+// owns which entry moves and what it restores; this handler is pure plumbing
+// between the wire and it.
 // [LAW:no-silent-failure] An empty stack is a loud BAD_REQUEST (dispatch's
 // aggregator turns it into a transient click.error), never a silent no-op —
-// the ticket's own done-gate.
+// the ticket's own done-gate. A file hand-edited since the entry is a loud
+// refusal from the store, surfaced the same way.
 const undoConfig: VerbHandler = (value, ctx) => {
   const [sessionId = ""] = decodeWire(() => decodeSegments(value));
   const sid = requireSessionId(sessionId);
-  const entry = undoLastOverride(configOverridesPath(), ctx.dlog);
-  if (entry === null) {
+  const file = sessionConfigFile(ctx, sid);
+  if (undoEdit(editStore(ctx), file) === null) {
     throw new BadVerbArgs("undo: history is empty, nothing to undo");
   }
-  ctx.dlog("info", `undo: ${entry.key} (session=${sid})`);
+  ctx.dlog("info", `undo: ${file} (session=${sid})`);
 };
 
-// [LAW:one-source-of-truth] undo's mirror — steps the same global history
-// forward one entry.
+// [LAW:one-source-of-truth] undo's mirror — steps the same history forward
+// one entry.
 const redoConfig: VerbHandler = (value, ctx) => {
   const [sessionId = ""] = decodeWire(() => decodeSegments(value));
   const sid = requireSessionId(sessionId);
-  const entry = redoLastOverride(configOverridesPath(), ctx.dlog);
-  if (entry === null) {
+  const file = sessionConfigFile(ctx, sid);
+  if (redoEdit(editStore(ctx), file) === null) {
     throw new BadVerbArgs("redo: nothing to redo");
   }
-  ctx.dlog("info", `redo: ${entry.key} (session=${sid})`);
+  ctx.dlog("info", `redo: ${file} (session=${sid})`);
 };
 
 // ─── Registry ───────────────────────────────────────────────────────────────

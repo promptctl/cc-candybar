@@ -70,12 +70,10 @@ export {
   expandHome,
   dslConfigCandidatePaths,
   resolveDslConfigPath,
+  durableConfigPath,
   detectConfigCollisions,
 } from "./loader/discovery.js";
-export {
-  mergeWithDefault,
-  applySegmentPaletteOverrides,
-} from "./loader/merge.js";
+export { mergeWithDefault } from "./loader/merge.js";
 export {
   extractTemplateRefs,
   extractActionRefs,
@@ -102,10 +100,12 @@ export {
  * specific consumer — a cycle every caller who wants "the bundled default"
  * resolves explicitly by importing DEFAULT_DSL_CONFIG themselves.
  *
- * [LAW:one-source-of-truth] The source is returned alongside the config so the
- * caller can hand it to validateConfig — cross-ref diagnostics (line numbers,
- * the authored-surface discriminator) are derived from it, and the file is read
- * exactly once here rather than re-read downstream.
+ * [LAW:one-source-of-truth] The source and the parsed raw shape are returned
+ * alongside the config so the caller can hand the source to validateConfig —
+ * cross-ref diagnostics (line numbers, the authored-surface discriminator) are
+ * derived from it — and ask the raw shape what the file itself AUTHORS (which
+ * preset roots it declares; candybar-config-dqe's `preset.customized`), all
+ * from one read rather than a re-read or a re-parse downstream.
  *
  * Throws ConfigError on JSON5 syntax / structural / per-record validation
  * failures. Cross-references and cycles are validateConfig()'s job.
@@ -117,11 +117,11 @@ export function loadConfig(
   path: string | null,
   dflt: DslConfig,
   allowedPalettes?: ReadonlySet<string>,
-): { config: DslConfig; source: string } {
+): { config: DslConfig; raw: RawDslConfig; source: string } {
   const source = path === null ? "" : fs.readFileSync(path, "utf-8");
   const raw: RawDslConfig =
     path === null ? {} : parseDslConfig(path, source, allowedPalettes);
-  return { config: mergeWithDefault(raw, dflt), source };
+  return { config: mergeWithDefault(raw, dflt), raw, source };
 }
 
 /**
@@ -149,8 +149,8 @@ export function validateConfig(
   }
   // [LAW:one-source-of-truth] Edit-mode's CHROME half (brandon-layout-edit-
   // 2gc.3), synthesized HERE — not in parseDslConfig alongside the toggle —
-  // because it needs the fully merged, preset-resolved, rootOps-replayed
-  // tree cross-ref/cycles just proved sound. Its own output (segment refs
+  // because it needs the fully merged, preset-resolved tree cross-ref/cycles
+  // just proved sound. Its own output (segment refs
   // into freshly-synthesized segments, actions into freshly-synthesized
   // actions) is correct by construction and does not re-enter cross-ref/
   // cycle checking, exactly as group/menu synthesis's output doesn't either.
@@ -306,7 +306,7 @@ function validateTopLevel(
   // `edit.toggle` exist in EVERY parsed file and a hand-authored trigger
   // segment cross-ref-checks normally. The CHROME half (the per-position +/-
   // affordances) runs later, in validateConfig, once the merged/preset-
-  // resolved/rootOps-replayed tree exists to derive it from.
+  // resolved tree exists to derive it from.
   synthesizeEditModeToggle(ctx, out);
   // [LAW:one-source-of-truth] The global settings menu reserves its namespace
   // here and synthesizes NOTHING here: the tree it must be present in only

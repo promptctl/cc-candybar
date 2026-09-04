@@ -21,9 +21,7 @@
 //   5. The controls are REACHABLE from that two-segment root: the menu the
 //      user cannot delete carries them.
 
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { durableConfig, type DurableConfig } from "./helpers/durable-config";
 import { getThemePalette } from "@promptctl/rich-js";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { ConfigError } from "../src/config/dsl-loader";
@@ -81,7 +79,13 @@ function opts() {
 // settings menu is synthesized), install the derived gates the daemon
 // installs, and expose render/click over the real handlers. Every assertion
 // below reads the same bar a running daemon would produce.
-function rig(source: string): {
+// `durable`, when given, is the session's config file: the rig writes `source`
+// there and records the render origin a durable click resolves it from — the
+// same two facts a real render leaves behind for a real click.
+function rig(
+  source: string,
+  durable?: DurableConfig,
+): {
   config: ValidatedConfig;
   render: () => string;
   click: (url: string) => void;
@@ -94,6 +98,8 @@ function rig(source: string): {
     DEFAULT_DSL_CONFIG,
   );
   const sessionState = new SessionState();
+  durable?.write(source);
+  durable?.seedOrigin(sessionState, SID);
   const store = new VariableStore();
   const registry = new SourceRegistry(store, "", undefined, sessionState);
   const compiled = registerDslConfig(config, registry, { cwd: "/tmp" });
@@ -270,7 +276,7 @@ describe("the dual-destination action arm", () => {
       parseAndValidate(
         "<test>",
         base(
-          `{ t: { set: 'x', persist: 'presets.default.rootOps', persistWhen: 'persist', removeSegment: 'd' } }`,
+          `{ t: { set: 'x', persist: 'presets.default.root', persistWhen: 'persist', removeSegment: 'd' } }`,
         ),
         ALLOWED,
       ),
@@ -385,17 +391,14 @@ describe("a dual derives exactly what its two halves derive", () => {
 
 describe("the config menu, reached from a user config whose root is one row", () => {
   let r: ReturnType<typeof rig>;
-  // A durable click writes configOverridesPath() for real, so point the state
-  // dir at a temp directory for the duration — otherwise this suite would edit
-  // the developer's own persisted defaults.
-  let savedXdgState: string | undefined;
-  let stateDir: string;
+  // A durable click edits the session's config file for real, so this suite
+  // hands the rig a temp file (and a temp edit history) for the duration —
+  // never the developer's own config.
+  let durable: DurableConfig;
 
   beforeEach(() => {
-    savedXdgState = process.env.XDG_STATE_HOME;
-    stateDir = mkdtempSync(join(tmpdir(), "cc-candybar-settings-menu-state-"));
-    process.env.XDG_STATE_HOME = stateDir;
-    r = rig(TWO_SEGMENT_ROOT);
+    durable = durableConfig("cc-candybar-settings-menu-");
+    r = rig(TWO_SEGMENT_ROOT, durable);
     // Open the menu and its config row — the two clicks a "☰ ▸" then
     // "⚙ config ▸" tap dispatches. Both affordances are found in the rendered
     // bytes, never constructed, so this also proves they are REACHABLE.
@@ -408,9 +411,7 @@ describe("the config menu, reached from a user config whose root is one row", ()
   });
   afterEach(() => {
     r.dispose();
-    if (savedXdgState === undefined) delete process.env.XDG_STATE_HOME;
-    else process.env.XDG_STATE_HOME = savedXdgState;
-    rmSync(stateDir, { recursive: true, force: true });
+    durable.dispose();
   });
 
   test("every setting the menu owns is one control, reachable from that root", () => {
@@ -499,9 +500,14 @@ describe("the config menu, reached from a user config whose root is one row", ()
     // …and the session override is GONE, which is the half of the fix this rig
     // can see: the label falls back to the value the config resolves, the slot
     // the durable write now fills. (That the durable value then shows through
-    // needs the overrides layer this rig has no RenderCache to load — the
-    // real-daemon e2e covers it, with a cold restart on top.)
+    // needs the config-file reload this rig has no RenderCache for — the
+    // real-daemon e2e covers it, with a cold restart on top.) The write itself
+    // landed in the file: the cycle's successor of the tried-out "off" is
+    // "on", so that is the durable default now.
     expect(plain(committed)).toContain("wrap: on");
+    expect((durable.parsed().globals as { autoWrap?: boolean }).autoWrap).toBe(
+      true,
+    );
   });
 
   // The bounded arm is a genuinely different code path from the pickers': a
