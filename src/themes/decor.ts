@@ -14,7 +14,12 @@
 // cc-candybar keeps the POLICY (which roles, which amounts, which address
 // formula) and no colour arithmetic of its own.
 
-import { blendRgb, type ColorRgba, type Palette } from "@promptctl/rich-js";
+import {
+  blendRgb,
+  contrastRatio,
+  type ColorRgba,
+  type Palette,
+} from "@promptctl/rich-js";
 
 // --- The vocabulary -----------------------------------------------------------
 
@@ -35,6 +40,18 @@ export type DecorBase = (typeof DECOR_BASES)[number];
 /** Tint amounts. Decoration never exceeds the largest — that bound is the tint region's edge. */
 export const DECOR_AMTS = [0.16, 0.3] as const;
 export type DecorAmount = (typeof DECOR_AMTS)[number];
+
+/** The tint region's edge: the most-tinted cell any hue can produce. Derived, never restated. */
+export const DECOR_MAX_AMOUNT: DecorAmount = DECOR_AMTS.reduce((a, b) =>
+  b > a ? b : a,
+);
+
+/**
+ * The theme's two poles. Directional cues are mixes toward them — active
+ * toward `foreground`, recessed toward `background` — which is what makes the
+ * cues invert on their own between light and dark themes, with no branch.
+ */
+export type ThemePole = "foreground" | "background";
 
 /** The roles whose meaning decoration must never borrow. */
 export type SemanticRole = "error" | "success" | "warning";
@@ -186,7 +203,7 @@ export const decorEntryFor = (
  */
 export function paletteRole(
   palette: Palette,
-  role: DecorBase | DecorHue,
+  role: DecorBase | DecorHue | ThemePole,
 ): ColorRgba {
   const colour = palette.get(role);
   if (colour === undefined) {
@@ -198,18 +215,97 @@ export function paletteRole(
 }
 
 /**
- * A node's decorative background: the theme's `base` tinted toward the theme's
- * `hue` by `amount`, for the entry its address selects.
+ * The colour of one vocabulary entry in `palette`: the theme's `base` tinted
+ * toward the theme's `hue` by `amount`. [LAW:one-source-of-truth] The one
+ * place the rule is spelled — `decorFor` renders through it and `stateFor`
+ * measures against it, so the floor is enforced against the very bytes a tint
+ * cell will show, not a second transcription of the formula.
  */
-export function decorFor(
+export function decorEntryColour(
   palette: Palette,
-  address: Address,
-  distribution: Distribution,
+  { base, hue, amount }: DecorEntry,
 ): ColorRgba {
-  const { base, hue, amount } = decorEntryFor(address, distribution);
   return blendRgb(
     paletteRole(palette, base),
     paletteRole(palette, hue),
     amount,
   );
+}
+
+/** A node's decorative background: the colour of the entry its address selects. */
+export const decorFor = (
+  palette: Palette,
+  address: Address,
+  distribution: Distribution,
+): ColorRgba => decorEntryColour(palette, decorEntryFor(address, distribution));
+
+// --- The state region ---------------------------------------------------------
+
+/**
+ * The contrast a state cell must hold above every tint cell of its own hue.
+ * Enforced rather than assumed because "the pure hue is vivid" is false for
+ * some palettes (textual-dark's `secondary` sat on its tints at 1.42, and
+ * textual-ansi's `primary` at 1.14 — see the design doc's region model).
+ */
+export const STATE_FLOOR = 2.2;
+
+/** The pure form of a hue: the rule's own mix near the top of its range, where the search starts. */
+export const STATE_PURE_AMOUNT = 0.92;
+
+/**
+ * The search toward `foreground` runs in twelfths and is allowed to reach
+ * `foreground` itself (solarized-dark's `secondary` clears only at the pole).
+ */
+const STATE_STEPS = 12;
+
+/**
+ * The state colour of `hue`: an open disclosure's trigger is drawn here. The
+ * pure form of the hue, pushed toward `foreground` in twelfths until it clears
+ * `STATE_FLOOR` against the most-tinted cell that hue produces on EVERY base.
+ * A hue that already clears at step zero is byte-unchanged — the enforcement
+ * is a floor, not a transform.
+ *
+ * [LAW:dataflow-not-control-flow] Thirteen candidates, one predicate, the
+ * first that passes; the values decide, not a branch per theme.
+ * [LAW:no-silent-failure] A hue that cannot clear even at `foreground` throws
+ * naming palette and hue — never a quieter colour.
+ */
+export function stateFor(palette: Palette, hue: DecorHue): ColorRgba {
+  const tintEdge = DECOR_VOCABULARY.filter(
+    (entry) => entry.hue === hue && entry.amount === DECOR_MAX_AMOUNT,
+  ).map((entry) => decorEntryColour(palette, entry));
+  const pure = blendRgb(
+    paletteRole(palette, "surface"),
+    paletteRole(palette, hue),
+    STATE_PURE_AMOUNT,
+  );
+  const foreground = paletteRole(palette, "foreground");
+  const state = Array.from({ length: STATE_STEPS + 1 }, (_, k) =>
+    blendRgb(pure, foreground, k / STATE_STEPS),
+  ).find((candidate) =>
+    tintEdge.every((tint) => contrastRatio(candidate, tint) >= STATE_FLOOR),
+  );
+  if (state === undefined) {
+    throw new Error(
+      `palette "${palette.name}": "${hue}" cannot clear the ${STATE_FLOOR} state floor even at foreground`,
+    );
+  }
+  return state;
+}
+
+/**
+ * The text colour for a state cell: whichever of the theme's two poles reads
+ * better on `background`. A fixed foreground measurably fails on pure hues
+ * (design doc, Decisions), so text on a state cell is chosen, never assumed.
+ * Symmetric on ties; the one pole that clears is the one returned.
+ */
+export function textOn(palette: Palette, background: ColorRgba): ColorRgba {
+  const poles: readonly ThemePole[] = ["background", "foreground"];
+  return poles
+    .map((pole) => paletteRole(palette, pole))
+    .reduce((best, pole) =>
+      contrastRatio(background, pole) > contrastRatio(background, best)
+        ? pole
+        : best,
+    );
 }
