@@ -238,7 +238,7 @@ fn render(argv: &[String], hook_data: &serde_json::Value) -> RenderOutcome {
     // live shell context, then trusted by the daemon. The daemon's own env
     // reflects whichever shell launched it — not the active terminal, and not
     // whether THIS session arrived over SSH.
-    let term_cols = detect_term_cols();
+    let (term_cols, term_rows) = detect_term_extents();
     let ssh = detect_ssh();
 
     let mut request = serde_json::json!({
@@ -252,12 +252,15 @@ fn render(argv: &[String], hook_data: &serde_json::Value) -> RenderOutcome {
     // [LAW:one-source-of-truth] scripts/check-protocol.mjs diffs the key set in
     // this block against that interface — add a hint in both runtimes at once.
     //
-    // termCols is CONDITIONAL: absence is the honest "could not determine".
-    // ssh is UNCONDITIONAL: our own env is a total answer, so we always state
-    // it, which reserves absence to mean "client too old to report" and keeps
-    // that distinguishable from a genuine local session.
+    // termCols / termRows are CONDITIONAL: absence is the honest "could not
+    // determine". ssh is UNCONDITIONAL: our own env is a total answer, so we
+    // always state it, which reserves absence to mean "client too old to
+    // report" and keeps that distinguishable from a genuine local session.
     if let Some(cols) = term_cols {
         request["termCols"] = serde_json::Value::from(cols);
+    }
+    if let Some(rows) = term_rows {
+        request["termRows"] = serde_json::Value::from(rows);
     }
     request["ssh"] = serde_json::Value::from(ssh);
     // --- end client hints ---
@@ -388,22 +391,15 @@ fn remaining_or_io(deadline: Instant) -> io::Result<Duration> {
         .ok_or_else(|| io::Error::new(io::ErrorKind::TimedOut, "deadline exceeded"))
 }
 
-// Pure terminal-width capture — no subprocess, no shell-out. Tries the env
-// first (set by Bash/Zsh and propagated to hook commands by Claude Code) and
-// falls back to TIOCGWINSZ on stderr (typically a TTY when run as a Claude
-// hook — stdin is the hook JSON pipe). Returns None when neither source has
-// a usable value; the daemon will treat absence as "unknown width" and let
-// its own pure lookup chain decide.
-fn detect_term_cols() -> Option<u32> {
-    if let Ok(s) = env::var("COLUMNS") {
-        if let Ok(n) = s.parse::<u32>() {
-            if n > 0 {
-                return Some(n);
-            }
-        }
-    }
-    // TIOCGWINSZ on stderr. stdin is a pipe (the hook JSON), but stderr is
-    // typically the parent terminal when launched as a Claude statusline hook.
+// Pure terminal-geometry capture — no subprocess, no shell-out. Mirrors
+// detectTermExtent in src/term-extent.ts: the env var first (COLUMNS / LINES, set
+// by Bash/Zsh and propagated to hook commands by Claude Code), then
+// TIOCGWINSZ on stderr (typically a TTY when run as a Claude hook — stdin is
+// the hook JSON pipe). Each axis is None when neither source has a usable
+// value; the daemon treats absence as "unknown" and applies its own default.
+fn detect_term_extents() -> (Option<u32>, Option<u32>) {
+    // One ioctl answers both axes; a failed call leaves both zero, which the
+    // per-axis fold below reads as "no TTY answer" the same as an env miss.
     let mut ws = libc::winsize {
         ws_row: 0,
         ws_col: 0,
@@ -411,8 +407,31 @@ fn detect_term_cols() -> Option<u32> {
         ws_ypixel: 0,
     };
     let rc = unsafe { libc::ioctl(libc::STDERR_FILENO, libc::TIOCGWINSZ, &mut ws) };
-    if rc == 0 && ws.ws_col > 0 {
-        return Some(ws.ws_col as u32);
+    let (tty_cols, tty_rows) = if rc == 0 {
+        (ws.ws_col as u32, ws.ws_row as u32)
+    } else {
+        (0, 0)
+    };
+    (
+        detect_term_extent(env::var("COLUMNS").ok(), tty_cols),
+        detect_term_extent(env::var("LINES").ok(), tty_rows),
+    )
+}
+
+// [LAW:one-type-per-behavior] Columns and rows are the same fact about two
+// axes: env var, then the TTY's answer, then None. Zero is "no answer" on
+// both sources. `parse::<u32>` is what the TS client's detectTermExtent
+// mirrors (src/term-extent.ts) — both suites pin the same table.
+fn detect_term_extent(env_value: Option<String>, tty_extent: u32) -> Option<u32> {
+    if let Some(s) = env_value {
+        if let Ok(n) = s.parse::<u32>() {
+            if n > 0 {
+                return Some(n);
+            }
+        }
+    }
+    if tty_extent > 0 {
+        return Some(tty_extent);
     }
     None
 }
@@ -938,6 +957,23 @@ fn spawn_daemon_detached() {
 mod tests {
     use super::*;
     use std::io;
+
+    // The same table as test/term-extent.test.ts: both runtimes must read
+    // the same COLUMNS/LINES value from the same shell, or neither.
+    #[test]
+    fn detect_term_extent_parses_exactly_what_the_ts_client_parses() {
+        let env = |s: &str| detect_term_extent(Some(s.to_string()), 0);
+        assert_eq!(env("80"), Some(80));
+        assert_eq!(env("+80"), Some(80));
+        assert_eq!(env("080"), Some(80));
+        assert_eq!(env("4294967295"), Some(4294967295));
+        for rejected in ["", "0", " 80", "80 ", "80.5", "80\n", "80abc", "-80", "4294967296"] {
+            assert_eq!(env(rejected), None, "{rejected:?}");
+        }
+        assert_eq!(detect_term_extent(Some("x".to_string()), 24), Some(24));
+        assert_eq!(detect_term_extent(None, 24), Some(24));
+        assert_eq!(detect_term_extent(None, 0), None);
+    }
 
     // [LAW:one-type-per-behavior] InvalidData/InvalidInput from the protocol
     // layer (write_frame/read_frame emit them for oversized frames) are

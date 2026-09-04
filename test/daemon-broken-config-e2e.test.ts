@@ -5,14 +5,24 @@
 // made mandatory. Before this ticket that render was the red strip alone:
 // nothing to click, no menu, no way back into the file from the bar.
 //
-// Two facts are asserted, and the second is the one that matters when the
-// bar is broken: the error is loud and the bar beneath it is the bundled
-// default WITH the settings menu; and the strip offers the failing file as a
-// plain `file://` link — a URL the terminal opens itself, so the recovery
-// path does not depend on the `cc-candybar://` handler `cc-candybar install`
-// registers, which is exactly the tooling that may be misconfigured.
+// Three facts are asserted, and the last two are the ones that matter when
+// the bar is broken: the error is loud and the bar beneath it is the bundled
+// default WITH the settings menu; the strip's last row offers the failing
+// file AND the complete error text as plain `file://` links — URLs the
+// terminal opens itself, so the recovery path does not depend on the
+// `cc-candybar://` handler `cc-candybar install` registers, which is exactly
+// the tooling that may be misconfigured (this daemon has none registered);
+// and the strip wraps to the client's width and caps at the client's rows
+// (candybar-diagnostics-avi).
 
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdtempSync,
+  mkdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
@@ -22,6 +32,7 @@ import {
   extractUrls,
   killAndWait,
   render,
+  renderUntil,
   stripAnsi,
   urlWriting,
 } from "./helpers/daemon-e2e";
@@ -31,6 +42,7 @@ import {
   type RunningDaemon,
 } from "./helpers/spawn-isolated-daemon";
 import { SETTINGS_ANCHOR } from "../src/config/settings-menu";
+import { RichText } from "@promptctl/rich-js";
 
 jest.setTimeout(30_000);
 
@@ -68,14 +80,48 @@ describe("candybar-settings-ui-0gz: a config that fails to load", () => {
       const rendered = await render(sockPath, SID, projectDir);
       const text = stripAnsi(rendered);
 
-      // 1. The error stays loud — the strip is the truth about the file.
-      expect(text).toContain(`⚠ Invalid config in ${configDir}`);
+      // 1. The error stays loud — the strip is the truth about the file. The
+      //    path is one word, so the wrap keeps it whole on a row of its own.
+      expect(text).toContain("⚠ Invalid config in");
+      expect(text).toContain(configPath);
       expect(text).toContain("trigger needs a display");
 
-      // 2. The way back into the file needs no handler of ours: a file://
-      //    OSC-8 link to the path that failed, on a row naming it.
-      expect(extractUrls(rendered)).toContain(pathToFileURL(configPath).href);
-      expect(text).toContain(`↳ open ${configPath}`);
+      // 2. The way back needs no handler of ours: the strip's last row is
+      //    file:// OSC-8 links to the complete text the daemon dumped and to
+      //    the path that failed. The dump holds the whole message, verbatim.
+      const dumpPath = path.join(
+        env.XDG_STATE_HOME!,
+        "cc-candybar",
+        "diagnostics",
+        `${SID}.txt`,
+      );
+      const urls = extractUrls(rendered);
+      expect(urls).toContain(pathToFileURL(dumpPath).href);
+      expect(urls).toContain(pathToFileURL(configPath).href);
+      // The path is middle-truncated into the row (the URL is whole).
+      expect(text).toMatch(/↳ open full text · open \/.*config\.json5\n/);
+      const dumped = readFileSync(dumpPath, "utf8");
+      expect(dumped).toMatch(/^ERROR\n/);
+      expect(dumped).toContain(`Invalid config in ${configDir}`);
+      expect(dumped).toContain("trigger needs a display");
+
+      // 2b. The strip is shaped by the client's terminal, not a constant:
+      //     every row fits the reported width, and the reported rows cap it
+      //     with the elision counted on the last row.
+      const narrow = await render(sockPath, SID, projectDir, {
+        termCols: 60,
+        termRows: 3,
+      });
+      const narrowRows = stripAnsi(narrow).split("\n");
+      const stripRows = narrowRows.slice(
+        0,
+        narrowRows.findIndex((r) => r.startsWith("↳ ")) + 1,
+      );
+      expect(stripRows).toHaveLength(3);
+      for (const row of stripRows) {
+        expect(new RichText(row).cellLength).toBeLessThanOrEqual(58);
+      }
+      expect(stripRows[2]).toMatch(/^↳ \d+ more rows · open full text · /);
 
       // 3. Beneath the error, a working bar: the bundled default, settings
       //    menu included — and its click is honored by the real gate.
@@ -85,6 +131,21 @@ describe("candybar-settings-ui-0gz: a config that fails to load", () => {
       expect(opened).toContain("☰ ▾");
       expect(opened).toContain("▦"); // preset switching is reachable
       expect(opened).toContain("trigger needs a display"); // still loud
+
+      // 4. Repairing the file removes the dump: the directory mirrors the
+      //    last render's diagnostics, never a history of them.
+      writeFileSync(configPath, JSON.stringify({ root: { h: ["directory"] } }));
+      const repaired = await renderUntil(
+        sockPath,
+        SID,
+        projectDir,
+        (out) => !stripAnsi(out).includes("trigger needs a display"),
+        "the repaired config",
+      );
+      expect(extractUrls(repaired)).not.toContain(
+        pathToFileURL(dumpPath).href,
+      );
+      expect(existsSync(dumpPath)).toBe(false);
     } finally {
       if (daemon) await killAndWait(daemon);
       rmSync(projectDir, { recursive: true, force: true });
