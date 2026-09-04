@@ -1,3 +1,10 @@
+# [1.49.0](https://github.com/promptctl/cc-candybar/compare/v1.48.0...v1.49.0) (2026-09-04)
+
+
+### Features
+
+* **daemon:** the update notice — digest-identified build currency with rebuild/dismiss/disable (brandon-build-notice-5d6) ([#208](https://github.com/promptctl/cc-candybar/issues/208)) ([0024ca9](https://github.com/promptctl/cc-candybar/commit/0024ca9137a0cb908240a7d43927f6d6e887c08c))
+
 # [1.48.0](https://github.com/promptctl/cc-candybar/compare/v1.47.0...v1.48.0) (2026-09-04)
 
 
