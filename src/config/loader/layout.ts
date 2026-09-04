@@ -25,10 +25,13 @@ import {
   type Direction,
   type LayoutNode,
   type RawDslConfig,
+  type Root,
+  type RootFragment,
   type SegmentDecl,
   type SegmentNode,
   type VariableDecl,
 } from "../dsl-types.js";
+import { ROW_NAME_RE } from "../root.js";
 import type { ActionDecl } from "../action.js";
 import {
   DISCLOSURE_CLOSED,
@@ -66,6 +69,10 @@ import {
 // schema at this path; `childrenSpec` and the top-level `root` both point here.
 export const LAYOUT_NODE_REF = "#/definitions/LayoutNode";
 export const LAYOUT_NODE_DEF_NAME = "LayoutNode";
+// The definition a `root:` (top-level or a preset's) is validated against: a
+// whole tree (the node definition above) or a `{ rows }` map of named nodes.
+export const ROOT_FRAGMENT_REF = "#/definitions/RootFragment";
+export const ROOT_FRAGMENT_DEF_NAME = "RootFragment";
 
 // ─── Root node grammar (`root`) ──────────────────────────────────────────────
 
@@ -385,6 +392,76 @@ export const validateRoot = (
   });
   return EMPTY_VERTICAL_NODE;
 };
+
+// ─── Root fragment (`root:` — a whole tree or a `{ rows }` map) ──────────────
+
+// [LAW:types-are-the-program] The rows map: name → node, each name an
+// identifier (ROW_NAME_RE — never integer-like, so authoring order survives the
+// by-name spread) and each value any layout node. A bad name is a loud issue
+// and the row is dropped from the recovery value; parseDslConfig throws once
+// any issue exists, so the recovery never renders.
+function rowsSpec(): FieldSpec<Root["rows"]> {
+  return {
+    required: true,
+    json: {
+      type: "object",
+      propertyNames: { pattern: ROW_NAME_RE.source },
+      additionalProperties: { $ref: LAYOUT_NODE_REF },
+    },
+    parse: (ctx, path, field, raw) => {
+      const v = raw[field];
+      if (!isPlainObject(v)) {
+        ctx.issues.push({
+          path: `${path}.${field}`,
+          message: `"rows" must be an object of row name → layout node, got ${describeType(v)}`,
+          line: findKeyLine(ctx.source, ["root"]),
+        });
+        return {};
+      }
+      const rows: Record<string, LayoutNode> = {};
+      for (const [name, node] of Object.entries(v)) {
+        if (!ROW_NAME_RE.test(name)) {
+          ctx.issues.push({
+            path: `${path}.${field}.${name}`,
+            message: `row name "${name}" must be an identifier (letters, digits, _; not starting with a digit) — it names the row in the config file and merges by name over the bundled default's rows`,
+            line: findKeyLine(ctx.source, ["root"]),
+          });
+          continue;
+        }
+        rows[name] = validateRoot(ctx, `${path}.${field}.${name}`, node);
+      }
+      return rows;
+    },
+  };
+}
+
+const ROWS_SCHEMA: RecordSchema<Root> = {
+  noun: "root key",
+  fields: { rows: rowsSpec(), when: optionalStringSpec() },
+};
+
+// [LAW:types-are-the-program] The two intents a `root:` can spell, dispatched
+// on the shape the author wrote: a `{ rows }` object is the by-name fragment,
+// anything else is a whole tree through the node grammar above. A `rows`
+// object nested INSIDE a node is not a fragment and falls to validateRoot's
+// own rejection — rows merge at a root, never at a container.
+export function validateRootFragment(
+  ctx: ValidateCtx,
+  path: string,
+  raw: unknown,
+): RootFragment {
+  if (isPlainObject(raw) && "rows" in raw) {
+    return record(ctx, ROWS_SCHEMA, path, raw) ?? { rows: {} };
+  }
+  return validateRoot(ctx, path, raw);
+}
+
+// [LAW:one-source-of-truth] The RootFragment definition: the anyOf of exactly
+// the two arms `validateRootFragment` dispatches over, each derived from the
+// schema the validator interprets.
+export function rootFragmentJson(): JsonNode {
+  return { anyOf: [{ $ref: LAYOUT_NODE_REF }, recordJson(ROWS_SCHEMA)] };
+}
 
 // ─── Group sugar (`kind: "group"`) ───────────────────────────────────────────
 

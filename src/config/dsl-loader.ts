@@ -7,7 +7,8 @@
 //
 //   mergeWithDefault (RawDslConfig + DslConfig → DslConfig)
 //     Cascade: shallow merge globals fields, by-name merge variables and
-//     segments, wholesale root replacement when present. Pure function.
+//     segments, by-name merge of root's rows (a whole tree replaces). Pure
+//     function.
 //
 //   validateConfig (DslConfig → ValidatedConfig)
 //     Cross-references + cycle detection on the merged shape. Sole producer
@@ -46,7 +47,7 @@ import { mergeWithDefault } from "./loader/merge.js";
 import { validateEditGlobals, validateGlobals } from "./loader/globals.js";
 import { validateVariables } from "./loader/variables.js";
 import { validateSegments } from "./loader/segments.js";
-import { synthesizeGroupDecls, validateRoot } from "./loader/layout.js";
+import { synthesizeGroupDecls, validateRootFragment } from "./loader/layout.js";
 import { synthesizeMenuDecls } from "./loader/menu-synth.js";
 import { synthesizeEditModeToggle } from "./loader/edit-mode.js";
 import { synthesizeEditChrome } from "./edit-chrome.js";
@@ -269,12 +270,13 @@ function validateTopLevel(
       line: findKeyLine(ctx.source, ["layout"]),
     });
   }
-  if (raw.root !== undefined) out.root = validateRoot(ctx, "root", raw.root);
+  if (raw.root !== undefined)
+    out.root = validateRootFragment(ctx, "root", raw.root);
   if (raw.actions !== undefined)
     out.actions = validateActions(ctx, raw.actions);
   if (raw.looks !== undefined) out.looks = validateLooks(ctx, raw.looks);
   // [LAW:one-source-of-truth] Parsed BEFORE the synthesis passes below, because
-  // a preset's `root` runs through the same validateRoot and therefore collects
+  // a preset's `root` runs through the same validateRootFragment and therefore collects
   // its group sugar into the same `ctx.groups` the top-level root does — the
   // synthesized artifacts must see every group the config declares, wherever it
   // was staged from.
