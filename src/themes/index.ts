@@ -18,3 +18,27 @@ export {
 export type { StripStyle } from "./policy.js";
 
 export { paletteForThemeName, transposedPalette } from "./palette-resolvers.js";
+
+export {
+  DECOR_HUES,
+  DECOR_BASES,
+  DECOR_AMTS,
+  DECOR_VOCABULARY,
+  DISTRIBUTIONS,
+  DEFAULT_DISTRIBUTION,
+  vocabularySelect,
+  decorEntryFor,
+  paletteRole,
+  decorFor,
+} from "./decor.js";
+export type {
+  DecorHue,
+  DecorBase,
+  DecorAmount,
+  DecorEntry,
+  SemanticRole,
+  Distribution,
+  DistributionName,
+  AddressStep,
+  Address,
+} from "./decor.js";
