@@ -2,7 +2,7 @@ import fs from "node:fs";
 import net from "node:net";
 import v8 from "node:v8";
 import process from "node:process";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
 import {
   daemonDir,
@@ -934,83 +934,81 @@ async function handleRequest(req: Request): Promise<HandledRequest> {
       const termCols = hints.termCols;
       const width = applyClaudeCodeReserve(termCols ?? DEFAULT_TERMINAL_WIDTH);
       const renderOpts: BuildLineOptions = { ...RENDER_OPTS_BASE, width };
-      // [LAW:dataflow-not-control-flow] Two outcomes fall out of one rule:
-      // body = state ? renderDsl(state) : "" ; output = body + icon
-      // No special-case branches — same composition every render.
-      let body = "";
-      if (entry.state !== null) {
-        // [LAW:one-source-of-truth] Every globals field resolved ONCE per
-        // render, here — before the payload build, so the same struct feeds
-        // BOTH the payload's `*.effective` fields (what a trigger label says)
-        // AND renderOpts below (what actually renders). One resolution, two
-        // readers, so a label can never disagree with the bar. The precedence
-        // the resolver applies, and why each rung sits where it does, lives
-        // with the chain (resolveEffectiveGlobals, and src/config/presets.ts).
-        // [LAW:one-source-of-truth] `.preset.customized` reads THIS entry's
-        // authoredRoots — the set computed from the SAME raw parse that
-        // produced entry.state.config, on the same reload — never a fresh
-        // file read here that could race a concurrent write and disagree
-        // with the tree that actually rendered. That is why it arrives as
-        // a closure over this entry rather than a lookup inside the resolver.
-        const { authoredRoots } = entry.state;
-        const effective: EffectiveGlobals = resolveEffectiveGlobals(
-          entry.state.config,
-          (key: string) => sessionState.get(req.hookData.session_id, key),
-          (preset: string) => authoredRoots.has(preset),
-        );
-        const payload = await buildRenderPayload(
-          req.hookData,
-          payloadDeps,
-          req.cwd,
-          entry.state.neededInputPaths,
-          effective,
-          hints,
-        );
-        // [LAW:one-source-of-truth][LAW:dataflow-not-control-flow] basePalette
-        // is derived from the same effective theme resolved above — so a theme
-        // click recolors the whole bar on the next render. Not frozen on the
-        // cache entry (one entry serves many sessions). paletteForThemeName
-        // memoizes, so the per-render cost is one Map lookup once the theme is
-        // warm.
-        const basePalette = paletteForThemeName(effective.theme);
-        // [LAW:one-source-of-truth] Every renderOpts field below reuses the
-        // SAME `effective` struct the payload was just built from — no second
-        // `?? DEFAULT_X` computation to drift from it.
-        renderOpts.style = effective.style;
-        // The `plain` joiner's cell separator. Assigned unconditionally like
-        // every field around it: `undefined` is a value pickJoiner already
-        // reads as "PlainJoiner's own default", not an absence to branch on.
-        renderOpts.separator = effective.separator;
-        renderOpts.wrap = effective.autoWrap;
-        renderOpts.padding = effective.padding;
-        renderOpts.charset = effective.charset;
-        renderOpts.colorCompatibility = effective.colorCompatibility;
-        // [LAW:single-enforcer] renderDsl internally calls
-        // `registry.applyInput(payload)` as its first step (see step 1 in
-        // src/dsl/render.ts). The daemon must not pre-apply — doing so
-        // would run the MobX action twice per render and clear last_error
-        // diagnostics on the round trip.
-        body = renderDsl(
-          entry.state.config,
-          entry.state.compiled,
-          entry.state.store,
-          entry.state.registry,
-          payload,
-          basePalette,
-          renderOpts,
-          // [LAW:single-enforcer] The per-segment StripCell sink for the
-          // `debug segments` projection. Its identity stays stable for the
-          // cache entry's lifetime; renderDsl clears + repopulates it
-          // in place. Cells are cheap (already computed during the render);
-          // the per-segment ANSI serialization happens lazily inside the
-          // debug handler so normal renders pay no extra serializer cost.
-          { perSegmentSink: entry.state.lastRenderCellsBySegment },
-          {
-            look: lookKeyByName(entry.state.config.looks, effective.look),
-            preset: effective.preset,
-          },
-        );
-      }
+      // [LAW:dataflow-not-control-flow] One composition every render: the
+      // entry always holds a renderable state (the bundled default until a
+      // config loads — src/daemon/cache/render.ts), so body = renderDsl(state)
+      // and output = diagnostics + body, with no "did the config load" branch.
+      // [LAW:one-source-of-truth] Every globals field resolved ONCE per
+      // render, here — before the payload build, so the same struct feeds
+      // BOTH the payload's `*.effective` fields (what a trigger label says)
+      // AND renderOpts below (what actually renders). One resolution, two
+      // readers, so a label can never disagree with the bar. The precedence
+      // the resolver applies, and why each rung sits where it does, lives
+      // with the chain (resolveEffectiveGlobals, and src/config/presets.ts).
+      // [LAW:one-source-of-truth] `.preset.customized` reads THIS entry's
+      // authoredRoots — the set computed from the SAME raw parse that
+      // produced entry.state.config, on the same reload — never a fresh
+      // file read here that could race a concurrent write and disagree
+      // with the tree that actually rendered. That is why it arrives as
+      // a closure over this entry rather than a lookup inside the resolver.
+      const { authoredRoots } = entry.state;
+      const effective: EffectiveGlobals = resolveEffectiveGlobals(
+        entry.state.config,
+        (key: string) => sessionState.get(req.hookData.session_id, key),
+        (preset: string) => authoredRoots.has(preset),
+      );
+      const payload = await buildRenderPayload(
+        req.hookData,
+        payloadDeps,
+        req.cwd,
+        entry.state.neededInputPaths,
+        effective,
+        hints,
+      );
+      // [LAW:one-source-of-truth][LAW:dataflow-not-control-flow] basePalette
+      // is derived from the same effective theme resolved above — so a theme
+      // click recolors the whole bar on the next render. Not frozen on the
+      // cache entry (one entry serves many sessions). paletteForThemeName
+      // memoizes, so the per-render cost is one Map lookup once the theme is
+      // warm.
+      const basePalette = paletteForThemeName(effective.theme);
+      // [LAW:one-source-of-truth] Every renderOpts field below reuses the
+      // SAME `effective` struct the payload was just built from — no second
+      // `?? DEFAULT_X` computation to drift from it.
+      renderOpts.style = effective.style;
+      // The `plain` joiner's cell separator. Assigned unconditionally like
+      // every field around it: `undefined` is a value pickJoiner already
+      // reads as "PlainJoiner's own default", not an absence to branch on.
+      renderOpts.separator = effective.separator;
+      renderOpts.wrap = effective.autoWrap;
+      renderOpts.padding = effective.padding;
+      renderOpts.charset = effective.charset;
+      renderOpts.colorCompatibility = effective.colorCompatibility;
+      // [LAW:single-enforcer] renderDsl internally calls
+      // `registry.applyInput(payload)` as its first step (see step 1 in
+      // src/dsl/render.ts). The daemon must not pre-apply — doing so
+      // would run the MobX action twice per render and clear last_error
+      // diagnostics on the round trip.
+      const body = renderDsl(
+        entry.state.config,
+        entry.state.compiled,
+        entry.state.store,
+        entry.state.registry,
+        payload,
+        basePalette,
+        renderOpts,
+        // [LAW:single-enforcer] The per-segment StripCell sink for the
+        // `debug segments` projection. Its identity stays stable for the
+        // cache entry's lifetime; renderDsl clears + repopulates it
+        // in place. Cells are cheap (already computed during the render);
+        // the per-segment ANSI serialization happens lazily inside the
+        // debug handler so normal renders pay no extra serializer cost.
+        { perSegmentSink: entry.state.lastRenderCellsBySegment },
+        {
+          look: lookKeyByName(entry.state.config.looks, effective.look),
+          preset: effective.preset,
+        },
+      );
       // [LAW:one-source-of-truth] Consume the transient click error written by
       // dispatch on partial/total effect failure, then clear it so it shows
       // exactly once. Only called when non-null to avoid a no-op persist+MobX
@@ -1033,10 +1031,17 @@ async function handleRequest(req: Request): Promise<HandledRequest> {
       const combinedWarning =
         [buildWatch.warning(), entry.lastWarning].filter(Boolean).join("\n") ||
         null;
+      // [LAW:no-silent-failure] The file whose load failed rides beside its
+      // error so the strip can offer it as a file:// link — the way back into
+      // the file when our own click path may be the thing that is broken.
+      // Null when the error is not a load error, or no file resolved.
+      const failedConfigFile =
+        entry.lastError === null ? null : entry.configFilePath;
       const output = composeWithDiagnostics(
         body,
         combinedError,
         combinedWarning,
+        failedConfigFile,
       );
       const ms = Date.now() - t0;
       const g = gitService.getStats();
@@ -1078,12 +1083,12 @@ async function handleRequest(req: Request): Promise<HandledRequest> {
     // (projectDir, cwd) and the debug request carrying neither, we sample
     // the first populated existing entry — sufficient for `debug vars`,
     // `debug segments`, `debug config` against the active workload.
-    // firstPopulatedState iterates existing entries only; it does NOT
+    // firstState reads existing entries only; it does NOT
     // create a fresh one, so debug introspection never has the side effect
     // of standing up a new (projectDir=undefined) cache entry tied to the
     // daemon's own process.cwd(). A future debug-target selector would
     // thread (projectDir, cwd) through the wire.
-    const dbgEntry = renderCache.firstPopulatedState();
+    const dbgEntry = renderCache.firstState();
     // [LAW:dataflow-not-control-flow] Lazy per-segment serialization: the
     // cache stores StripCell arrays (cheap, written by renderDsl).
     // The debug projection needs strings, so serialize only for the
@@ -1233,16 +1238,30 @@ function makeDiagnosticLink(
   return [first, ...rest].join("\n");
 }
 
+// [LAW:no-silent-failure] The row that reopens the file a load error names,
+// as a plain `file://` OSC-8 link. Deliberately NOT a `cc-candybar://` click:
+// that scheme is registered by `cc-candybar install`, the same tooling that
+// may be misconfigured when a config fails — an escape hatch must not share a
+// dependency with the thing that may be broken. The terminal opens the link
+// itself; pathToFileURL owns the percent-encoding.
+function openFileRow(file: string, bg: string, fg: string): string {
+  const url = pathToFileURL(file).href;
+  const label = sanitizeAndTruncate(`↳ open ${file}`, MAX_DIAGNOSTIC_LINE_LEN);
+  return `${OSC8_OPEN}${url}${ST}${bg}${fg}   ${label} ${ANSI_RESET}${OSC8_CLOSE}`;
+}
+
 function composeWithDiagnostics(
   body: string,
   error: string | null,
   warning: string | null,
+  failedConfigFile: string | null,
 ): string {
   // [LAW:dataflow-not-control-flow] Diagnostics list is data; the
   // composer walks it. Each non-null channel contributes one or more prefix
   // rows (makeDiagnosticLink returns a \n-joined multi-line block when the
   // message has natural line breaks). Order is error-first (more severe),
-  // then warning, then body.
+  // then warning, then body. The error block closes with the file:// row for
+  // the file that failed, when a file did.
   const prefixes: string[] = [];
   if (error) {
     prefixes.push(
@@ -1252,6 +1271,15 @@ function composeWithDiagnostics(
         DIAGNOSTIC_ERROR_BG,
         DIAGNOSTIC_ERROR_FG,
       ),
+      ...(failedConfigFile === null
+        ? []
+        : [
+            openFileRow(
+              failedConfigFile,
+              DIAGNOSTIC_ERROR_BG,
+              DIAGNOSTIC_ERROR_FG,
+            ),
+          ]),
     );
   }
   if (warning) {

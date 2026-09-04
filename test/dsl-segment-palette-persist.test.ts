@@ -536,7 +536,7 @@ describe("RenderCache: a segment-palette pin in the config file is the effective
         undefined,
       );
       expect(entry.lastError).toBeNull();
-      expect(entry.state!.config.segments.sidebar!.palette).toBeUndefined();
+      expect(entry.state.config.segments.sidebar!.palette).toBeUndefined();
 
       await reloads.after(entry, () =>
         writeValue(
@@ -548,17 +548,17 @@ describe("RenderCache: a segment-palette pin in the config file is the effective
       );
 
       expect(entry.lastError).toBeNull();
-      expect(entry.state!.config.segments.sidebar!.palette).toBe("nord");
+      expect(entry.state.config.segments.sidebar!.palette).toBe("nord");
       // Every other field of the pinned segment survives — the write
       // splices ONE field, it does not wholesale-replace the segment.
-      expect(entry.state!.config.segments.sidebar!.template).toBe(
+      expect(entry.state.config.segments.sidebar!.template).toBe(
         "sidebar-text",
       );
-      expect(entry.state!.config.segments.sidebar!.bg).toBe("surface");
+      expect(entry.state.config.segments.sidebar!.bg).toBe("surface");
       // The sibling segment is completely unaffected — in the effective
       // config AND in the file's own text.
-      expect(entry.state!.config.segments.other!.palette).toBeUndefined();
-      expect(entry.state!.config.segments.other!.template).toBe("other-text");
+      expect(entry.state.config.segments.other!.palette).toBeUndefined();
+      expect(entry.state.config.segments.other!.template).toBe("other-text");
       expect(durable.text()).toContain(OTHER_DECL);
       expect(durable.text()).toContain("// untouched by a pin on its sibling");
     } finally {
@@ -586,7 +586,7 @@ describe("RenderCache: a segment-palette pin in the config file is the effective
         durable.projectDir,
         undefined,
       );
-      expect(entry.state!.config.segments.sidebar!.palette).toBe("gruvbox");
+      expect(entry.state.config.segments.sidebar!.palette).toBe("gruvbox");
     } finally {
       for (const fn of cleanups) fn();
     }
@@ -600,7 +600,7 @@ describe("RenderCache: a segment-palette pin in the config file is the effective
         durable.projectDir,
         undefined,
       );
-      expect(entry.state!.config.segments.sidebar!.palette).toBe("gruvbox");
+      expect(entry.state.config.segments.sidebar!.palette).toBe("gruvbox");
     } finally {
       for (const fn of restartedCleanups) fn();
     }
@@ -627,7 +627,7 @@ describe("RenderCache: a segment-palette pin in the config file is the effective
         undefined,
       );
       expect(entry.lastError).toBeNull();
-      const directory = entry.state!.config.segments.directory!;
+      const directory = entry.state.config.segments.directory!;
       expect(directory.palette).toBe("nord");
       expect(directory.template).toBe(
         RAW_DEFAULT_DSL_CONFIG.segments.directory.template,

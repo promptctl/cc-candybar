@@ -19,6 +19,8 @@ import { SessionState } from "../src/daemon/session-state";
 import { WatcherRegistry } from "../src/daemon/cache/watchers";
 import { ReloadSignal } from "./helpers/reload-signal";
 import { walkNodes, type LayoutNode } from "../src/config/dsl-types";
+import { SETTINGS_NS } from "../src/config/settings-menu";
+import { PRESET_FLOOR, presetRoot } from "../src/config/presets";
 
 // Flatten a layout tree to its segment names, in pre-order — the post-`root`
 // equivalent of the old `config.layout.flatMap(r => r.segments)`.
@@ -128,14 +130,72 @@ describe("RenderCache", () => {
       expect(entry.lastError).toBeNull();
       // No file means state was built from the bundled default — every
       // built-in segment is declared.
-      expect(entry.state).not.toBeNull();
-      expect(layoutSegments(entry.state!.config.root).length).toBeGreaterThan(
-        0,
-      );
+      expect(layoutSegments(entry.state.config.root).length).toBeGreaterThan(0);
       expect(entry.configFilePath).toBeNull();
     } finally {
       for (const fn of cleanups) fn();
       cleanup();
+    }
+  });
+
+  // [LAW:verifiable-goals] candybar-settings-ui-0gz: a config that fails its
+  // FIRST load — before the entry ever held a good one — still renders, from
+  // the bundled default, with the error beside it. Broken the way it broke
+  // live: a stale `{{ menu }}` call missing its trigger displays.
+  test("a config that fails on first sight renders the bundled default under its error", async () => {
+    const { dir, cleanup } = mkConfigDir();
+    const { dir: bare, cleanup: cleanupBare } = mkConfigDir();
+    const { cache, cleanups, reloads } = makeCache();
+    try {
+      const cfg = join(dir, ".cc-candybar.json5");
+      writeFileSync(
+        cfg,
+        JSON.stringify({
+          actions: { applyTheme: { set: "theme", from: "themes" } },
+          segments: {
+            t: {
+              template: '{{ menu "applyTheme" }}',
+              bg: "surface",
+              fg: "foreground",
+            },
+          },
+          root: { h: ["t"] },
+        }),
+      );
+      const entry = cache.getOrCreate(dir, dir, undefined);
+      // The error is loud AND names the file...
+      expect(entry.lastError).toMatch(/trigger needs a display/);
+      expect(entry.configFilePath).toBe(cfg);
+      // ...while the state is the bundled default's: the same tree a
+      // no-file entry builds, settings menu included — one synthesis, not a
+      // second "safe mode" config.
+      const fallback = cache.getOrCreate(bare, bare, undefined);
+      const menuOf = (root: LayoutNode): string[] =>
+        layoutSegments(root).filter((n) => n.startsWith(SETTINGS_NS));
+      const floor = presetRoot(entry.state.config, PRESET_FLOOR).node;
+      expect(floor).toEqual(
+        presetRoot(fallback.state.config, PRESET_FLOOR).node,
+      );
+      expect(menuOf(floor).length).toBeGreaterThan(0);
+
+      // Repairing the file swaps the user's config in and clears the error.
+      await reloads.after(entry, () =>
+        writeFileSync(
+          cfg,
+          JSON.stringify({
+            segments: {
+              t: { template: "fixed", bg: "surface", fg: "foreground" },
+            },
+            root: { h: ["t"] },
+          }),
+        ),
+      );
+      expect(entry.lastError).toBeNull();
+      expect(layoutSegments(entry.state.config.root)).toContain("t");
+    } finally {
+      for (const fn of cleanups) fn();
+      cleanup();
+      cleanupBare();
     }
   });
 
@@ -159,10 +219,9 @@ describe("RenderCache", () => {
       const entry = cache.getOrCreate(dir, dir, undefined);
       expect(entry.lastError).toBeNull();
       const goodState = entry.state;
-      expect(goodState).not.toBeNull();
       // Pin the specific state's identity — build-then-swap means a
       // failed reload must not touch this object reference.
-      const goodConfigRef = goodState!.config;
+      const goodConfigRef = goodState.config;
 
       // Step 2: overwrite the file with garbage. The watcher fires, the
       // cache reloads, buildState throws (JSON5 parse error), and the
@@ -173,7 +232,7 @@ describe("RenderCache", () => {
 
       expect(entry.lastError).not.toBeNull();
       expect(entry.state).toBe(goodState); // identity preserved
-      expect(entry.state!.config).toBe(goodConfigRef);
+      expect(entry.state.config).toBe(goodConfigRef);
     } finally {
       for (const fn of cleanups) fn();
       cleanup();
@@ -192,7 +251,7 @@ describe("RenderCache", () => {
       // row of one segment — matching the default's row count of 1 — so
       // row count alone wouldn't prove the file was picked up.
       const defaultLayoutSegCount = layoutSegments(
-        entry.state!.config.root,
+        entry.state.config.root,
       ).length;
 
       // Create the project-local file. The watcher should fire.
@@ -215,9 +274,9 @@ describe("RenderCache", () => {
         ),
       );
       expect(entry.configFilePath).toBe(cfg);
-      expect(entry.state!.config.root).toEqual(oneRow("only"));
+      expect(entry.state.config.root).toEqual(oneRow("only"));
       // Sanity: was actually different from the default.
-      expect(layoutSegments(entry.state!.config.root).length).not.toBe(
+      expect(layoutSegments(entry.state.config.root).length).not.toBe(
         defaultLayoutSegCount,
       );
     } finally {
@@ -251,7 +310,7 @@ describe("RenderCache", () => {
       const entry = cache.getOrCreate(dir, dir, undefined);
       expect(entry.lastError).toBeNull();
       expect(entry.configFilePath).toBe(cfg);
-      expect(entry.state!.config.root).toEqual(oneRow("only"));
+      expect(entry.state.config.root).toEqual(oneRow("only"));
     } finally {
       for (const fn of cleanups) fn();
       cleanup();
@@ -317,13 +376,13 @@ describe("RenderCache", () => {
       // The entry — and the live registry + watcher it owns — is in the
       // cache, so eviction/dispose can still reach it.
       expect(cache.size).toBe(1);
-      expect(cache.firstPopulatedState()).not.toBeNull();
+      expect(cache.firstState()).not.toBeNull();
       expect(watchers.size()).toBe(1);
       // A second lookup finds it rather than building a duplicate: the
       // observer (which would throw again) does not run, and no second
       // watcher opens.
       const found = cache.getOrCreate(dir, dir, undefined);
-      expect(found.state).toBe(cache.firstPopulatedState());
+      expect(found.state).toBe(cache.firstState());
       expect(cache.size).toBe(1);
       expect(watchers.size()).toBe(1);
     } finally {
@@ -441,8 +500,6 @@ describe("RenderCache", () => {
       // Both entries loaded cleanly — no validator clash on the shared page key.
       expect(a.lastError).toBeNull();
       expect(b.lastError).toBeNull();
-      expect(a.state).not.toBeNull();
-      expect(b.state).not.toBeNull();
       expect(a).not.toBe(b);
     } finally {
       for (const fn of cleanups) fn();
