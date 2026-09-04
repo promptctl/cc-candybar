@@ -99,13 +99,17 @@ describe("the colour is mix(base, hue, amount) for the selected entry", () => {
   });
 
   test("ports the demo's pick formula: row then cell, decaying weight, rounded", () => {
+    // The pinned index is the demo's value at the demo's vocabulary size; a
+    // resized vocabulary fails here first, naming the drift.
+    const DEMO_SIZE = 18;
+    expect(DECOR_VOCABULARY).toHaveLength(DEMO_SIZE);
     // Row 0 of 2 (vdc 0 -> 0), cell 3 of 6 (vdc 0.75 × 0.37 × 18 = 4.995 -> 5):
     // entry 5 is amount-major index 0, hue 1, base 2.
     const address: Address = [
       { index: 0, count: 2 },
       { index: 3, count: 6 },
     ];
-    expect(vocabularyIndex(address, DISTRIBUTIONS["van-der-corput"], 18)).toBe(5);
+    expect(vocabularyIndex(address, DISTRIBUTIONS["van-der-corput"], DEMO_SIZE)).toBe(5);
     expect(decorEntryFor(address, DISTRIBUTIONS["van-der-corput"])).toEqual({
       base: "surface-lighten-1",
       hue: "secondary",
