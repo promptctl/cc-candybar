@@ -307,6 +307,52 @@ describe("a bare-segment root is the one-child container it abbreviates", () => 
   });
 });
 
+// A CRLF-authored file (core.autocrlf, an editor default) keeps its own
+// terminator: a removed member takes both bytes of its line ending, and a
+// synthesized line ends the way the file's lines do — never a mixed-EOL file.
+describe("a CRLF document keeps its own line terminator", () => {
+  const CRLF = CONFIG.replace(/\n/g, "\r\n");
+  const noBareLf = (text: string): void => {
+    expect(text.replace(/\r\n/g, "")).not.toContain("\n");
+  };
+
+  test("remove takes the whole CRLF line, comment included", () => {
+    const after = removeSegmentRef(CRLF, ["root"], "model")!;
+    expect(after).toBe(CRLF.replace(`      "model", // the model\r\n`, ""));
+    noBareLf(after);
+  });
+
+  test("insert after / before an own-line anchor ends the new line in CRLF", () => {
+    const after = insertSegmentRef(CRLF, ["root"], "speed", "model", "after")!;
+    expect(after).toBe(
+      CRLF.replace(`      "model", // the model\r\n`, `      "model", // the model\r\n      "speed",\r\n`),
+    );
+    noBareLf(after);
+    const before = insertSegmentRef(CRLF, ["root"], "speed", "context", "before")!;
+    expect(before).toBe(CRLF.replace(`      "context",\r\n`, `      "speed",\r\n      "context",\r\n`));
+    noBareLf(before);
+  });
+
+  test("an appended entry and a nested multi-line value use CRLF", () => {
+    const appended = setValue(CRLF, ["segments", "directory", "fg"], '"text"');
+    expect(appended).toBe(
+      CRLF.replace(`      palette: "nord",\r\n`, `      palette: "nord",\r\n      fg: "text",\r\n`),
+    );
+    noBareLf(appended);
+    const nested = setValue(CRLF, ["presets", "mine", "root"], json5Text({ h: ["a"] }));
+    expect(JSON5.parse(nested)).toMatchObject({ presets: { mine: { root: { h: ["a"] } } } });
+    noBareLf(nested);
+  });
+
+  test("an empty document takes LF; a CRLF-only document takes CRLF", () => {
+    expect(setValue("", ["globals", "padding"], "2")).not.toContain("\r");
+    const crlf = setValue("\r\n", ["globals", "padding"], "2");
+    expect(JSON5.parse(crlf)).toEqual({ globals: { padding: 2 } });
+    expect(crlf).toContain("\r\n");
+    noBareLf(crlf);
+  });
+});
+
 describe("json5Text", () => {
   test("identifier keys unquoted, others quoted, one member per line, nested indentation", () => {
     expect(json5Text({ template: "{{ .x }}", "v1.c": [1, { a: true }], empty: {}, none: [] })).toBe(

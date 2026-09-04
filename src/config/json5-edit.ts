@@ -278,7 +278,7 @@ export function keyText(key: string): string {
 export function json5Text(value: unknown): string {
   if (Array.isArray(value)) {
     if (value.length === 0) return "[]";
-    const items = value.map((v) => `  ${reindent(json5Text(v), "  ")},`);
+    const items = value.map((v) => `  ${reindent(json5Text(v), "  ", "\n")},`);
     return `[\n${items.join("\n")}\n]`;
   }
   if (value !== null && typeof value === "object") {
@@ -287,16 +287,29 @@ export function json5Text(value: unknown): string {
     );
     if (entries.length === 0) return "{}";
     const items = entries.map(
-      ([k, v]) => `  ${keyText(k)}: ${reindent(json5Text(v), "  ")},`,
+      ([k, v]) => `  ${keyText(k)}: ${reindent(json5Text(v), "  ", "\n")},`,
     );
     return `{\n${items.join("\n")}\n}`;
   }
   return JSON.stringify(value);
 }
 
-/** Indent every line after the first by `indent` (nesting a multi-line value). */
-export function reindent(valueText: string, indent: string): string {
-  return valueText.split("\n").join(`\n${indent}`);
+/** The document's line terminator: CRLF when it uses one anywhere, else LF. */
+function eolOf(text: string): string {
+  return text.includes("\r\n") ? "\r\n" : "\n";
+}
+
+/**
+ * Indent every line after the first by `indent` (nesting a multi-line value)
+ * and end each on `eol`. [LAW:single-enforcer] Synthesized text is built on
+ * LF; this is the one place it takes the document's own terminator.
+ */
+export function reindent(
+  valueText: string,
+  indent: string,
+  eol: string,
+): string {
+  return valueText.split("\n").join(`${eol}${indent}`);
 }
 
 /** `key: value` for a path's steps, nesting one object per intermediate step. */
@@ -305,7 +318,7 @@ function entryText(path: readonly string[], valueText: string): string {
   const inner =
     rest.length === 0
       ? valueText
-      : `{\n  ${reindent(entryText(rest, valueText), "  ")},\n}`;
+      : `{\n  ${reindent(entryText(rest, valueText), "  ", "\n")},\n}`;
   return `${keyText(head)}: ${inner}`;
 }
 
@@ -339,26 +352,34 @@ function startsLine(text: string, offset: number): boolean {
   return isBlank(text.slice(lineStartOf(text, offset), offset));
 }
 
+/** An optional line comment, then the line's terminator (CRLF, LF, or the text's end). */
+const LINE_TRAILER = /(?:\/\/[^\n]*?)?(\r\n|\n|$)/y;
+
+/** Where a line ends: its terminator's start, and the next line's start (both EOF at the text's end). */
+interface LineEnd {
+  readonly at: number;
+  readonly next: number;
+}
+
 /**
- * The bytes right after a member span: an optional comma, then whether the
- * rest of the line holds nothing but an optional line comment. `lineEnd` is
- * the offset of that line's newline (or the text's end) when so, -1 otherwise.
+ * The bytes right after a member span: an optional comma, then the line's
+ * end when the rest of the line holds nothing but an optional line comment,
+ * else null.
  */
 function trailerAfter(
   text: string,
   end: number,
-): { commaEnd: number; lineEnd: number } {
+): { commaEnd: number; line: LineEnd | null } {
   let i = end;
   while (i < text.length && (text[i] === " " || text[i] === "\t")) i++;
   const commaEnd = text[i] === "," ? i + 1 : -1;
   if (commaEnd !== -1) i = commaEnd;
   while (i < text.length && (text[i] === " " || text[i] === "\t")) i++;
-  if (text.startsWith("//", i)) {
-    const nl = text.indexOf("\n", i);
-    i = nl === -1 ? text.length : nl;
-  }
-  const lineEnd = i === text.length || text[i] === "\n" ? i : -1;
-  return { commaEnd, lineEnd };
+  LINE_TRAILER.lastIndex = i;
+  const m = LINE_TRAILER.exec(text);
+  if (m === null) return { commaEnd, line: null };
+  const next = i + m[0].length;
+  return { commaEnd, line: { at: next - m[1]!.length, next } };
 }
 
 /**
@@ -369,10 +390,9 @@ function trailerAfter(
  * takes one adjacent comma and the spaces beside it.
  */
 function removeMember(text: string, span: Span): string {
-  const { commaEnd, lineEnd } = trailerAfter(text, span.end);
-  if (startsLine(text, span.start) && lineEnd !== -1) {
-    const ls = lineStartOf(text, span.start);
-    return splice(text, ls, Math.min(lineEnd + 1, text.length), "");
+  const { commaEnd, line } = trailerAfter(text, span.end);
+  if (startsLine(text, span.start) && line !== null) {
+    return splice(text, lineStartOf(text, span.start), line.next, "");
   }
   if (commaEnd !== -1) {
     let end = commaEnd;
@@ -388,22 +408,23 @@ function removeMember(text: string, span: Span): string {
 }
 
 /**
- * Insert `memberText` as its own line after the member at `span`, which ends
- * its line (trailerAfter's lineEnd !== -1). The new line goes AFTER any
- * trailing line comment — that comment belongs to the existing member and
- * stays on its line — and mirrors the member's trailing-comma style.
+ * Insert `memberText` as its own line after the member at `span`, whose
+ * trailer ends its line. The new line goes AFTER any trailing line comment —
+ * that comment belongs to the existing member and stays on its line — and
+ * mirrors the member's trailing-comma style.
  */
 function insertLineAfter(
   text: string,
   span: Span,
+  trailer: { commaEnd: number; line: LineEnd },
   memberText: string,
   indent: string,
 ): string {
-  const { commaEnd, lineEnd } = trailerAfter(text, span.end);
-  const hasComma = commaEnd !== -1;
+  const hasComma = trailer.commaEnd !== -1;
   const withComma = hasComma ? text : splice(text, span.end, span.end, ",");
-  const at = lineEnd + (hasComma ? 0 : 1);
-  const line = `\n${indent}${reindent(memberText, indent)}${hasComma ? "," : ""}`;
+  const at = trailer.line.at + (hasComma ? 0 : 1);
+  const eol = eolOf(text);
+  const line = `${eol}${indent}${reindent(memberText, indent, eol)}${hasComma ? "," : ""}`;
   return splice(withComma, at, at, line);
 }
 
@@ -423,20 +444,27 @@ function appendMember(
   const baseIndent = indentOfLine(text, container.span.start);
   if (last === undefined) {
     const inner = baseIndent + "  ";
+    const eol = eolOf(text);
     return splice(
       text,
       container.span.start + 1,
       container.span.end - 1,
-      `\n${inner}${reindent(memberText, inner)},\n${baseIndent}`,
+      `${eol}${inner}${reindent(memberText, inner, eol)},${eol}${baseIndent}`,
     );
   }
-  const { commaEnd, lineEnd } = trailerAfter(text, last.span.end);
-  if (startsLine(text, last.span.start) && lineEnd !== -1) {
+  const { commaEnd, line } = trailerAfter(text, last.span.end);
+  if (startsLine(text, last.span.start) && line !== null) {
     const indent = text.slice(
       lineStartOf(text, last.span.start),
       last.span.start,
     );
-    return insertLineAfter(text, last.span, memberText, indent);
+    return insertLineAfter(
+      text,
+      last.span,
+      { commaEnd, line },
+      memberText,
+      indent,
+    );
   }
   const at = commaEnd === -1 ? last.span.end : commaEnd;
   const sep = commaEnd === -1 ? ", " : " ";
@@ -459,7 +487,8 @@ export function setValue(
     throw new Json5EditError("setValue needs a non-empty path", 0);
   }
   if (/^\s*$/.test(text)) {
-    return `{\n  ${reindent(entryText(path, valueText), "  ")},\n}\n`;
+    const eol = eolOf(text);
+    return `{${eol}  ${reindent(entryText(path, valueText), "  ", eol)},${eol}}${eol}`;
   }
   let node: Node = parseDocument(text);
   for (let i = 0; i < path.length; i++) {
@@ -479,7 +508,7 @@ export function setValue(
         text,
         entry.value.span.start,
         entry.value.span.end,
-        reindent(valueText, indent),
+        reindent(valueText, indent, eolOf(text)),
       );
     }
     node = entry.value;
@@ -603,12 +632,17 @@ export function insertSegmentRef(
   const src = tree.text;
   const ref = hit.array.elements[hit.index]!;
   const newText = JSON.stringify(segment);
-  const { lineEnd } = trailerAfter(src, ref.span.end);
-  if (startsLine(src, ref.span.start) && lineEnd !== -1) {
+  const { commaEnd, line } = trailerAfter(src, ref.span.end);
+  if (startsLine(src, ref.span.start) && line !== null) {
     const indent = src.slice(lineStartOf(src, ref.span.start), ref.span.start);
     return relation === "after"
-      ? insertLineAfter(src, ref.span, newText, indent)
-      : splice(src, ref.span.start, ref.span.start, `${newText},\n${indent}`);
+      ? insertLineAfter(src, ref.span, { commaEnd, line }, newText, indent)
+      : splice(
+          src,
+          ref.span.start,
+          ref.span.start,
+          `${newText},${eolOf(src)}${indent}`,
+        );
   }
   const refText = textOf(src, ref);
   const pair =
