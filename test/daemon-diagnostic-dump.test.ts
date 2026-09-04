@@ -3,7 +3,13 @@
 // exact content, absent when there is none — and the disk is touched only
 // when the desired state changes.
 
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import {
+  existsSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { DiagnosticDump } from "../src/daemon/diagnostic-dump";
@@ -42,6 +48,16 @@ describe("DiagnosticDump", () => {
     // Absent stays absent without a directory ever being created for it.
     dump.sync("other", null);
     expect(existsSync(path.join(root, "diagnostics"))).toBe(true);
+  });
+
+  test("a write the filesystem refuses is reported as a reason, not thrown, and is retried", () => {
+    // A file where the directory should be: mkdir -p fails with ENOTDIR/EEXIST.
+    writeFileSync(path.join(root, "diagnostics"), "");
+    expect(dump.sync("sid", "ERROR\nboom\n")).toMatch(/sid\.txt: /);
+    rmSync(path.join(root, "diagnostics"));
+    // Nothing was recorded, so the same text is written on the next render.
+    expect(dump.sync("sid", "ERROR\nboom\n")).toBeNull();
+    expect(readFileSync(dump.pathFor("sid"), "utf8")).toBe("ERROR\nboom\n");
   });
 
   test("reset wipes the directory and forgets what was written", () => {

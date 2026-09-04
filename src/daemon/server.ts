@@ -1047,10 +1047,12 @@ async function handleRequest(req: Request): Promise<HandledRequest> {
       // the edge: the session's dump file mirrors this render's diagnostics
       // (present with the full text, absent when there are none) before the
       // strip that links it goes out.
-      diagnosticDump.sync(
+      const dumpFailure = diagnosticDump.sync(
         sessionId,
         diagnostics === null ? null : formatDiagnosticDump(diagnostics),
       );
+      if (dumpFailure !== null)
+        dlog("warn", `diagnostic dump failed: ${dumpFailure}`);
       const output = composeWithDiagnostics(body, diagnostics, {
         width,
         rowCap,

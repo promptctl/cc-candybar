@@ -31,21 +31,29 @@ export class DiagnosticDump {
   }
 
   // Bring the session's file in line with `text`: present with this content,
-  // or absent when null.
-  sync(sessionId: string, text: string | null): void {
+  // or absent when null. Returns the fs failure's reason, or null — the same
+  // shape as writeLease: the dump is best-effort beside the strip, which
+  // already shows the text, so a failed write must not cost the render. The
+  // memory of what was written is left as it was, so the next render retries.
+  sync(sessionId: string, text: string | null): string | null {
     const file = this.pathFor(sessionId);
     // "Never written" and "absent" are the same desired state, so a session
     // that has never errored costs no syscall per render.
     const last = this.written.get(sessionId) ?? null;
-    if (text === last) return;
-    if (text === null) {
-      fs.rmSync(file, { force: true });
-      this.written.delete(sessionId);
-      return;
+    if (text === last) return null;
+    try {
+      if (text === null) {
+        fs.rmSync(file, { force: true });
+        this.written.delete(sessionId);
+      } else {
+        fs.mkdirSync(this.dir, { recursive: true, mode: 0o700 });
+        fs.writeFileSync(file, text, { mode: 0o600 });
+        this.written.set(sessionId, text);
+      }
+      return null;
+    } catch (e) {
+      return `${file}: ${(e as Error).message}`;
     }
-    fs.mkdirSync(this.dir, { recursive: true, mode: 0o700 });
-    fs.writeFileSync(file, text, { mode: 0o600 });
-    this.written.set(sessionId, text);
   }
 
   // Daemon start: forget everything, on disk and in memory.

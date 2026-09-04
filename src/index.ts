@@ -36,9 +36,13 @@ function detectTermExtent(
   ttyExtent: number | undefined,
 ): number | undefined {
   const env = process.env[envVar];
-  if (env) {
-    const n = parseInt(env, 10);
-    if (!isNaN(n) && n > 0) return n;
+  // [LAW:one-source-of-truth] Exactly what the Rust client's
+  // `str::parse::<u32>` accepts — an optional `+`, then digits only, within
+  // u32 — so both runtimes read the same value from the same shell or
+  // neither does.
+  if (env !== undefined && /^\+?\d+$/.test(env)) {
+    const n = Number(env);
+    if (n > 0 && n <= 0xffff_ffff) return n;
   }
   if (ttyExtent && ttyExtent > 0) return ttyExtent;
   return undefined;

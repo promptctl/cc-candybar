@@ -194,8 +194,10 @@ function channelRows(ch: DiagnosticChannel, opts: BuildLineOptions): string[] {
     .split(/\r\n|\r|\n/)
     .map(sanitizeText)
     .filter(Boolean);
-  // A cell plus its trailing space must fit one row, so words fold at width−1.
-  const fold = asCellCol(Math.max(1, opts.width - 1));
+  // A cell plus its trailing space must fit one row, so words fold at width−1
+  // — never below the widest glyph (2 cells): a fold narrower than one glyph
+  // is not a fold, and a 1–2 cell terminal simply cannot hold one.
+  const fold = asCellCol(Math.max(2, opts.width - 1));
   return lines.flatMap((line, i) => {
     const prefix = i === 0 ? GLYPH : ISSUE_INDENT;
     const words = [prefix, ...line.split(" ")].flatMap((w) =>
@@ -208,11 +210,13 @@ function channelRows(ch: DiagnosticChannel, opts: BuildLineOptions): string[] {
   });
 }
 
-// The strip's last row, always exactly one row: the elision count when the
-// cap dropped rows, then the `file://` affordances. The config path is
-// middle-truncated into the width that remains after the fixed text, keeping
-// its head and tail (the parts that identify a path); the link carries the
-// full URL regardless of what is visible.
+// The strip's last row, always exactly one row that fits: the elision count
+// when the cap dropped rows, then the `file://` affordances. The config path
+// is middle-truncated into the width that remains after the fixed text,
+// keeping its head and tail (the parts that identify a path); then the
+// assembled row is clipped to the width, so a terminal narrower than the
+// fixed text still gets one row inside it. The link carries the full URL
+// regardless of what is visible.
 function trailerRow(
   diagnostics: Diagnostics,
   elided: number,
@@ -233,7 +237,7 @@ function trailerRow(
       : [
           frag(" · open ", base),
           frag(
-            failedConfigFile,
+            sanitizeText(failedConfigFile),
             base.withLink(pathToFileURL(failedConfigFile).href),
           ),
         ];
@@ -244,7 +248,9 @@ function trailerRow(
     .map((p) =>
       p.truncate(Math.max(1, opts.width - fixedWidth), { mode: "middle" }),
     );
-  const row = RichText.fromFragments([...fixed, ...path]);
+  const row = RichText.fromFragments([...fixed, ...path]).truncate(opts.width, {
+    overflow: "ellipsis",
+  });
   row.noWrap = true;
   return renderStripCells([row], opts);
 }

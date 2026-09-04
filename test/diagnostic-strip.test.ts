@@ -176,4 +176,37 @@ describe("candybar-diagnostics-avi: the diagnostic strip", () => {
     const first = rowsOf(composeWithDiagnostics("", hostile, geometry(80)))[0]!;
     expect(first).toBe("⚠ x [31mred CSI ");
   });
+
+  test("control characters in the failed config path cannot escape the trailer", () => {
+    const hostile = collectDiagnostics(ERROR, null, {
+      fullTextFile: FULL,
+      failedConfigFile: "/a/\x1b[31mb.json5",
+    })!;
+    const out = composeWithDiagnostics("", hostile, geometry(80));
+    expect(out).not.toContain("\x1b[31m");
+    expect(rowsOf(out).at(-1)).toContain("open /a/ [31mb.json5");
+  });
+
+  // The trailer's fixed text alone is wider than a very narrow terminal; the
+  // row must still fit, as every other row does, at any width that can hold
+  // one wide glyph and its trailing space.
+  test.each([3, 8, 16, 24, 39])(
+    "the trailer fits a %d-cell width narrower than its own fixed text",
+    (width) => {
+      const out = composeWithDiagnostics("", diag, geometry(width, 5));
+      const rows = rowsOf(out);
+      expect(rows).toHaveLength(5);
+      for (const row of rows) expect(cellWidth(row)).toBeLessThanOrEqual(width);
+      expect(rows.at(-1)).toMatch(/^↳/);
+    },
+  );
+
+  // A width that cannot hold one wide glyph is still rendered (never a hang
+  // or a throw — the width is a client hint): every row is at most that
+  // glyph and its space.
+  test.each([1, 2])("a %d-cell width renders, bounded by one wide glyph", (width) => {
+    const rows = rowsOf(composeWithDiagnostics("", diag, geometry(width, 5)));
+    expect(rows).toHaveLength(5);
+    for (const row of rows) expect(cellWidth(row)).toBeLessThanOrEqual(3);
+  });
 });
