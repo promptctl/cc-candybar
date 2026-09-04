@@ -1,3 +1,10 @@
+# [1.45.0](https://github.com/promptctl/cc-candybar/compare/v1.44.0...v1.45.0) (2026-09-04)
+
+
+### Features
+
+* **daemon:** the settings menu survives a config that fails to load (candybar-settings-ui-0gz) ([#204](https://github.com/promptctl/cc-candybar/issues/204)) ([78c32f0](https://github.com/promptctl/cc-candybar/commit/78c32f0c4d03ce3394973a7dc3852a07bb64c044))
+
 # [1.44.0](https://github.com/promptctl/cc-candybar/compare/v1.43.0...v1.44.0) (2026-09-04)
 
 
