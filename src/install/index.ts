@@ -459,10 +459,6 @@ export async function runInstall(rendererArgs: string[]): Promise<void> {
   const argsToInstall =
     filteredArgs.length > 0 ? filteredArgs : [...DEFAULT_INSTALL_ARGS];
 
-  // The lookup runs concurrently with the staging work below and is awaited
-  // once, at the report; the install never waits on the network up front.
-  const latest = fetchLatestVersion(PACKAGE_NAME, fetch);
-
   const staged = runStageRuntime();
 
   if (process.platform === "darwin") {
@@ -477,12 +473,18 @@ export async function runInstall(rendererArgs: string[]): Promise<void> {
 
   process.stdout.write(installSuccessMessage());
 
-  // Last, so a stale-version warning is the final thing on screen rather than
-  // scrolled past by the success banner. The staged runtime works either way;
-  // the verdict informs, it never fails the install. [LAW:no-silent-failure]
+  // Last: a stale-version warning is the final thing on screen, and the
+  // lookup starts only after the synchronous work above — spawnSync blocks
+  // the event loop, so a fetch started earlier could not progress and would
+  // burn its timeout budget idle. [LAW:no-ambient-temporal-coupling] The
+  // staged runtime works either way; the verdict informs, it never fails the
+  // install. [LAW:no-silent-failure]
   const report = currencyReport(
     PACKAGE_NAME,
-    assessCurrency(PACKAGE_VERSION, await latest),
+    assessCurrency(
+      PACKAGE_VERSION,
+      await fetchLatestVersion(PACKAGE_NAME, fetch),
+    ),
   );
   process[report.stream].write(report.text);
 }
