@@ -57,24 +57,23 @@ function checkoutRootOf(bundlePath: string): string {
 const isSourceEntry = (name: string): boolean =>
   !name.startsWith(".") && !name.endsWith("~");
 
-// Every source file under `dir`, recursively, through symlinks, each real
-// directory visited once so a linked cycle is bounded by the walk itself.
-// An entry with no target — a dangling link, a file deleted between readdir
-// and stat during a `git pull` — has no stamp; it is not a failure of the
-// walk.
-function fileStamps(dir: string, visited = new Set<string>()): Stamp[] {
-  const real = fs.realpathSync(dir);
-  if (visited.has(real)) return [];
-  visited.add(real);
+// Every source file under `dir`, recursively. A symlink is an entry — its
+// own mtime, never its target: the source of a checkout is what lives under
+// its `src/`, and a link into another tree is that tree's business, not a
+// path to walk (so no cycle and no wandering into an external tree is
+// representable). An entry deleted between readdir and lstat during a
+// `git pull` has no stamp; an unreadable directory throws to `unchecked`,
+// because a verdict that omits part of the source would be a lie.
+function fileStamps(dir: string): Stamp[] {
   return fs
     .readdirSync(dir)
     .filter(isSourceEntry)
     .flatMap((name) => {
       const p = path.join(dir, name);
-      const st = fs.statSync(p, { throwIfNoEntry: false });
+      const st = fs.lstatSync(p, { throwIfNoEntry: false });
       if (st === undefined) return [];
       return st.isDirectory()
-        ? fileStamps(p, visited)
+        ? fileStamps(p)
         : [{ path: p, mtimeMs: st.mtimeMs }];
     });
 }

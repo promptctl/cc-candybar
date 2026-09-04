@@ -81,28 +81,47 @@ describe("assessBuild", () => {
     expect(assessBuild(c.entryUrl).kind).toBe("current");
   });
 
-  test("a symlinked directory recurses: a newer file behind the link makes it stale", () => {
-    const shared = path.join(c.root, "shared-pkg");
-    touch(path.join(shared, "lib.ts"), T0 + HOUR_MS);
-    fs.symlinkSync(shared, path.join(c.root, "src", "vendored"));
+  test("a symlink is an entry stamped by its own mtime, never followed into its target", () => {
+    const external = path.join(c.root, "elsewhere");
+    touch(path.join(external, "lib.ts"), T0 + HOUR_MS);
+    const link = path.join(c.root, "src", "vendored");
+    fs.symlinkSync(external, link);
+    fs.lutimesSync(link, (T0 - HOUR_MS) / 1000, (T0 - HOUR_MS) / 1000);
+    expect(assessBuild(c.entryUrl).kind).toBe("current");
+    fs.lutimesSync(link, (T0 + HOUR_MS) / 1000, (T0 + HOUR_MS) / 1000);
     const v = assessBuild(c.entryUrl);
     expect(v.kind).toBe("stale");
-    if (v.kind === "stale")
-      expect(v.newestSource.path).toBe(path.join(c.root, "src", "vendored", "lib.ts"));
+    if (v.kind === "stale") expect(v.newestSource.path).toBe(link);
   });
 
-  test("a symlink cycle is walked once: the verdict is computed, never unchecked", () => {
-    fs.symlinkSync(".", path.join(c.root, "src", "loop"));
-    fs.symlinkSync("..", path.join(c.root, "src", "daemon", "up"));
+  test("a self-link and a dangling link are entries, not paths: the verdict is computed", () => {
+    for (const [name, target] of [
+      ["loop", "."],
+      ["up", ".."],
+      ["dangling.ts", path.join(c.root, "gone.ts")],
+    ] as const) {
+      const link = path.join(c.root, "src", name);
+      fs.symlinkSync(target, link);
+      fs.lutimesSync(link, (T0 - HOUR_MS) / 1000, (T0 - HOUR_MS) / 1000);
+    }
     expect(assessBuild(c.entryUrl).kind).toBe("current");
-    touch(c.deep, T0 + HOUR_MS);
-    expect(assessBuild(c.entryUrl).kind).toBe("stale");
   });
 
-  test("a dangling symlink has no stamp: the verdict stays current, never unchecked", () => {
-    fs.symlinkSync(path.join(c.root, "gone.ts"), path.join(c.root, "src", "dangling.ts"));
-    expect(assessBuild(c.entryUrl).kind).toBe("current");
-  });
+  // Root ignores directory permissions, so the condition cannot be built.
+  (process.getuid?.() === 0 ? test.skip : test)(
+    "an unreadable source directory is unchecked naming the reason, never a verdict over partial source",
+    () => {
+      const dir = path.join(c.root, "src", "daemon");
+      fs.chmodSync(dir, 0o000);
+      try {
+        const v = assessBuild(c.entryUrl);
+        expect(v.kind).toBe("unchecked");
+        if (v.kind === "unchecked") expect(v.reason).toMatch(/EACCES/);
+      } finally {
+        fs.chmodSync(dir, 0o755);
+      }
+    },
+  );
 
   test("equal mtimes are current (a build that finished within the same tick is not stale)", () => {
     touch(c.deep, T0);
