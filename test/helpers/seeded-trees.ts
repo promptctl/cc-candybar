@@ -108,15 +108,18 @@ export const isUnder = (ancestor: Path, path: Path): boolean =>
 
 export const pathKey = (path: Path): string => path.join(".");
 
-/** A draw of `count` shapes plus their seeds, so a failure names the seed that produced it. */
+/**
+ * `count` shapes with their seeds. A test that draws against a shape makes
+ * its own `seededRng(seed)` — no rng is shared across tests, so an isolated
+ * run replays exactly the draws a full run made, and a failure names its seed.
+ */
 export function drawShapes(
   baseSeed: number,
   count: number,
   bounds: ShapeBounds,
-): readonly { seed: number; shape: Shape; rng: Rng }[] {
+): readonly { seed: number; shape: Shape }[] {
   return Array.from({ length: count }, (_, i) => {
     const seed = baseSeed + i;
-    const rng = seededRng(seed);
-    return { seed, shape: drawShape(rng, bounds), rng };
+    return { seed, shape: drawShape(seededRng(seed), bounds) };
   });
 }

@@ -100,7 +100,7 @@ All color math (palette hydration, reference resolution, darken/lighten/mix/cont
 
 **Decorative colour by address** (`src/themes/decor.ts`, epic candybar-render-ai7): `decorFor(palette, address, distribution)` is the pure replacement for `hue.step` — a node's tree address selects one entry of the theme's own `DECOR_BASES × DECOR_HUES × DECOR_AMTS` vocabulary and blends it with rich-js `blendRgb`; `error`/`success`/`warning` are excluded from the vocabulary at the type level. Rationale and measurements: `design-docs/COLOUR-FROM-THEME-VOCABULARY.md`. Not yet wired into the render walk (ai7.4).
 
-`hue.step` is **not** load-bearing: it exists only as a cheap way to get colour variety across adjacent segments, and every part of the colour system behaves identically with it at 0. Nothing may be built that assumes it is present. Its current implementation — a counter the render walk advances per segment — is renderer-side control flow; now that colour math is authorable, the same variety is expressible as ordinary config data (`bg: '{{ shiftHue (color "surface") 14 }}'`), which is the direction any replacement should take.
+`hue.step` is **not** load-bearing: it exists only as a cheap way to get colour variety across adjacent segments, and every part of the colour system behaves identically with it at 0. Nothing may be built that assumes it is present. Its current implementation — a counter the render walk advances per segment — is renderer-side control flow; its replacement is `decorFor` above (per-segment authored colour math was measured and rejected in the design doc).
 
 ### Colors are values (`{{ color }}` / `{{ fg }}` / `{{ bgOf }}`)
 

@@ -29,6 +29,7 @@ import {
   isUnder,
   nodeAt,
   pathKey,
+  seededRng,
   withChildrenPermuted,
   withSiblingAdded,
   type Shape,
@@ -155,7 +156,8 @@ describe("done-when: any node's colour is computable alone", () => {
   test("visiting order and visited set do not change a node's colour", () => {
     for (const name of ALL_NAMES) {
       const distribution = DISTRIBUTIONS[name];
-      for (const { seed, shape, rng } of SHAPES) {
+      for (const { seed, shape } of SHAPES) {
+        const rng = seededRng(seed);
         const nodes = allNodes(shape);
         const inOrder = colourMap(shape, distribution);
         // A single node, evaluated with no other node ever visited.
@@ -178,7 +180,8 @@ describe("done-when: adding a sibling", () => {
   test("changes no existing node under the n-free distributions", () => {
     for (const name of N_FREE) {
       const distribution = DISTRIBUTIONS[name];
-      for (const { seed, shape, rng } of SHAPES) {
+      for (const { seed, shape } of SHAPES) {
+        const rng = seededRng(seed);
         const nodes = allNodes(shape);
         const target = drawFrom(rng, nodes).path;
         const before = colourMap(shape, distribution);
@@ -194,7 +197,8 @@ describe("done-when: adding a sibling", () => {
     for (const name of N_READING) {
       const distribution = DISTRIBUTIONS[name];
       let moved = 0;
-      for (const { shape, rng } of SHAPES) {
+      for (const { seed, shape } of SHAPES) {
+        const rng = seededRng(seed);
         const parents = allNodes(shape).filter(({ path }) => nodeAt(shape, path).children.length >= 2);
         if (parents.length === 0) continue;
         const target = drawFrom(rng, parents).path;
@@ -211,7 +215,8 @@ describe("done-when: permuting an unrelated subtree", () => {
   test("leaves every node outside it byte-identical, under every distribution", () => {
     for (const name of ALL_NAMES) {
       const distribution = DISTRIBUTIONS[name];
-      for (const { seed, shape, rng } of SHAPES) {
+      for (const { seed, shape } of SHAPES) {
+        const rng = seededRng(seed);
         const parents = allNodes(shape).filter(({ path }) => nodeAt(shape, path).children.length >= 2);
         if (parents.length === 0) continue;
         const target = drawFrom(rng, parents).path;
