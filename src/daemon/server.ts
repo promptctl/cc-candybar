@@ -127,7 +127,8 @@ const usageStore = new SessionUsageStore();
 // storage in runDaemon(), making it the sole reader/writer of the state file.
 const sessionState = new SessionState();
 // [LAW:locality-or-seam] Same terms as sessionState: naming the directory is
-// free; the daemon wipes it in runDaemon() (reset) and is the only writer.
+// free; the daemon wipes it in onListening() (reset), once the bind is
+// won, and is the only writer.
 const diagnosticDump = new DiagnosticDump(diagnosticsDir());
 // [LAW:one-source-of-truth] One provider per data shape, shared across every
 // render in this daemon. The render cache owns DSL-state-per-config; these
