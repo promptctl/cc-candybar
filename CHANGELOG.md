@@ -1,3 +1,10 @@
+# [1.46.0](https://github.com/promptctl/cc-candybar/compare/v1.45.0...v1.46.0) (2026-09-04)
+
+
+### Features
+
+* **diagnostics:** wrap the config error to the terminal, cap its rows, link the full text as file:// (candybar-diagnostics-avi) ([#205](https://github.com/promptctl/cc-candybar/issues/205)) ([12005cc](https://github.com/promptctl/cc-candybar/commit/12005ccd9f7f07b5f197f771e5476049b534a536))
+
 # [1.45.0](https://github.com/promptctl/cc-candybar/compare/v1.44.0...v1.45.0) (2026-09-04)
 
 
