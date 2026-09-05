@@ -16,7 +16,6 @@ import {
   VERB_STEP_CONFIG,
   VERB_STEP_STATE,
   VERB_UNDO,
-  VERB_DOCTOR_RUN,
   VERB_DOCTOR_FIX,
 } from "../../src/click/wire";
 import { VERBS } from "../../src/daemon/verbs";
@@ -65,7 +64,6 @@ const MULTI_ARG_VERBS = new Set<string>([
   VERB_UNDO,
   VERB_REDO,
   VERB_APPLY_LAYOUT_OP,
-  VERB_DOCTOR_RUN,
   VERB_DOCTOR_FIX,
 ]);
 function decodeArgs(verb: string, value: string): string[] {

@@ -75,12 +75,12 @@ function settingsEnv(text: string): Readonly<Record<string, unknown>> {
   if (/^\s*$/.test(text)) return {};
   const parsed: unknown = JSON5.parse(text);
   if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
-    throw new Error("~/.claude/settings.json is not a JSON object");
+    throw new Error("not a JSON object");
   }
   const env = (parsed as Record<string, unknown>).env;
   if (env === undefined) return {};
   if (typeof env !== "object" || env === null || Array.isArray(env)) {
-    throw new Error("~/.claude/settings.json `env` is not an object");
+    throw new Error("`env` is not an object");
   }
   return env as Record<string, unknown>;
 }
@@ -94,13 +94,30 @@ function tmuxFacts(edge: DoctorEdge, hint: ClientHints["tmux"]): TmuxFacts {
   return { kind: "inside", hint, termfeatures: edge.probeTmux(hint) };
 }
 
+// The one place that names the file: every failure — a JSON5 parse error,
+// a non-object document, a non-object `env` — surfaces as "cannot read <the
+// path this edge was built with>", so a test's temp path and the real
+// ~/.claude/settings.json are reported the same way.
+export function readClaudeSettingsEnv(
+  edge: DoctorEdge,
+): DoctorFacts["claudeSettingsEnv"] {
+  try {
+    return settingsEnv(readSettingsText(edge));
+  } catch (e) {
+    throw new Error(
+      `cannot read ${edge.claudeSettingsPath}: ${e instanceof Error ? e.message : String(e)}`,
+      { cause: e },
+    );
+  }
+}
+
 export function gatherFacts(
   edge: DoctorEdge,
   tmuxHint: ClientHints["tmux"],
 ): DoctorFacts {
   return {
     tmux: tmuxFacts(edge, tmuxHint),
-    claudeSettingsEnv: settingsEnv(readSettingsText(edge)),
+    claudeSettingsEnv: readClaudeSettingsEnv(edge),
   };
 }
 
@@ -122,6 +139,11 @@ export function applyFix(edge: DoctorEdge, fix: Fix): void {
       );
       fs.mkdirSync(path.dirname(edge.claudeSettingsPath), { recursive: true });
       fs.writeFileSync(edge.claudeSettingsPath, next);
+      return;
+    }
+    default: {
+      const _exhaustive: never = fix.kind;
+      return _exhaustive;
     }
   }
 }

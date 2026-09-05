@@ -118,8 +118,7 @@ async function main(): Promise<void> {
     }
     // [LAW:single-enforcer] The doctor's CLI projection: the SAME check fold
     // the bar's 🩺 click runs, over this process's own environment (which IS
-    // Claude Code's when run from a Claude Code shell). Exit 0 all ok, 1 any
-    // failed, 2 usage.
+    // Claude Code's when run from a Claude Code shell).
     if (subcommand === "doctor") {
       runDoctorCli(process.argv.slice(3)); // owns its own exit code
       return;

@@ -121,7 +121,7 @@ export function parseClientHints(
 // malformed frame never becomes a half-true set of tmux facts.
 export function sanitizeTmux(v: unknown): TmuxHint | null | undefined {
   if (v === null) return null;
-  if (typeof v !== "object" || v === undefined) return undefined;
+  if (typeof v !== "object") return undefined;
   const o = v as Record<string, unknown>;
   const { socket, pane, truecolor } = o;
   if (typeof socket !== "string" || socket === "") return undefined;

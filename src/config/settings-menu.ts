@@ -52,7 +52,6 @@ import {
   DISCLOSURE_GLYPH_OPEN,
   disclosureCycleAction,
   disclosureNode,
-  escapeTemplateLiteral,
   disclosureStateVar,
   disclosureTrigger,
 } from "./disclosure.js";
@@ -691,12 +690,11 @@ function declareDoctorRows(artifacts: MenuArtifacts): void {
       artifacts.variables[key] = { kind: "state", key, default: VERDICT_UNRUN };
     }
     artifacts.actions[fix] = { doctor: "fix", check: c.name };
-    const label = escapeTemplateLiteral(c.label);
     artifacts.segments[doctorRowSeg(c.name)] = {
       when: `{{ ne .${keys.verdict} "${VERDICT_UNRUN}" }}`,
       template:
-        `{{ if eq .${keys.verdict} "${VERDICT_OK}" }}✓ ${label}` +
-        `{{ else }}✗ ${label} — {{ .${keys.reason} }}` +
+        `{{ if eq .${keys.verdict} "${VERDICT_OK}" }}✓ ${c.label}` +
+        `{{ else }}✗ ${c.label} — {{ .${keys.reason} }}` +
         `{{ if eq .${keys.fixable} "${BOOLEAN_TRUE}" }} {{ action "${fix}" "[fix]" }}{{ end }}` +
         `{{ end }}`,
     };

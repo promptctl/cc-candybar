@@ -77,9 +77,10 @@ Subcommands:
 
 Config tooling:
   doctor                   Check your setup the way the bar's 🩺 doctor does —
-                           one line per check. Exit 0 all ok, 1 any failed.
-                           Run it from a Claude Code shell (or inside the same
-                           tmux pane) so it sees Claude Code's own environment.
+                           one line per check. Exit 0 all ok, 1 any failed,
+                           2 usage error / unreadable settings. Run it from a
+                           Claude Code shell (or inside the same tmux pane) so
+                           it sees Claude Code's own environment.
   check [config-file]      Validate a config on the full render pipeline (parse
                            → merge → validate → register → render) with no
                            daemon. With no path, checks the same file the daemon

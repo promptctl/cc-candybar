@@ -103,8 +103,12 @@ function buildRuntime(tmux: TmuxHint | null) {
     registerStateValidator(key, spec),
   );
   const settingsPath = path.join(dir, "settings.json");
+  let probes = 0;
   const doctor: DoctorEdge = {
-    probeTmux: () => ({ kind: "ok", value: ["osc7", "RGB", "sixel"] }),
+    probeTmux: () => {
+      probes += 1;
+      return { kind: "ok", value: ["osc7", "RGB", "sixel"] };
+    },
     claudeSettingsPath: settingsPath,
   };
   const ctx: VerbContext = { ...testVerbContext(sessionState), doctor };
@@ -147,6 +151,7 @@ function buildRuntime(tmux: TmuxHint | null) {
     clickVerb,
     urlOfVerb,
     openTools,
+    probes: () => probes,
     dispose,
   };
 }
@@ -193,6 +198,9 @@ describe("☰ ▸ 🧰 tools ▸ 🩺 doctor", () => {
     );
 
     rt.clickVerb(VERB_DOCTOR_FIX);
+    // one probe for the run click, one for the fix click — the post-fix
+    // report re-reads only the settings env the fix changed
+    expect(rt.probes()).toBe(2);
     expect(JSON.parse(fs.readFileSync(rt.settingsPath, "utf8"))).toEqual({
       env: { FORCE_COLOR: "3", [TMUX_TRUECOLOR_VAR]: "1" },
       model: "opus",

@@ -65,9 +65,14 @@ import {
   VERB_DOCTOR_FIX,
 } from "../../click/wire";
 import { parseClientHints } from "../protocol";
-import { checkByName, runDoctor } from "../../doctor/checks";
+import { checkByName, runDoctor, type DoctorFacts } from "../../doctor/checks";
 import { doctorReportPairs } from "../../doctor/report";
-import { applyFix, gatherFacts, type DoctorEdge } from "../../doctor/edge";
+import {
+  applyFix,
+  gatherFacts,
+  readClaudeSettingsEnv,
+  type DoctorEdge,
+} from "../../doctor/edge";
 
 export interface VerbContext {
   readonly sessionState: SessionStateRW;
@@ -679,8 +684,7 @@ function sessionHints(
 
 // [LAW:single-enforcer] One write of the whole report, through setBatch — the
 // row cap flips, the reason and fixable land, in one reactive transaction.
-function writeReport(ctx: VerbContext, sid: string): void {
-  const facts = gatherFacts(ctx.doctor, sessionHints(ctx, sid).tmux);
+function writeReport(ctx: VerbContext, sid: string, facts: DoctorFacts): void {
   const reports = runDoctor(facts);
   ctx.sessionState.setBatch(sid, doctorReportPairs(reports));
   ctx.dlog(
@@ -690,13 +694,15 @@ function writeReport(ctx: VerbContext, sid: string): void {
 }
 
 const doctorRun: VerbHandler = (value, ctx) => {
-  writeReport(ctx, requireSessionId(oneArg(value)));
+  const sid = requireSessionId(oneArg(value));
+  writeReport(ctx, sid, gatherFacts(ctx.doctor, sessionHints(ctx, sid).tmux));
 };
 
 // Re-probe THIS check at click time and perform the fix its fresh verdict
 // carries — never a fix cached from the render that drew the `[fix]`, because
 // the world may have moved (the var got set, the tmux server went away). Then
-// re-run, so the row flips to the truthful post-fix reason.
+// re-run over the one fact the fix changed — the settings env — so the row
+// flips to the truthful post-fix reason without a second tmux probe.
 const doctorFix: VerbHandler = (value, ctx) => {
   const [sessionId = "", checkName = ""] = decodeWire(() =>
     decodeSegments(value),
@@ -706,9 +712,8 @@ const doctorFix: VerbHandler = (value, ctx) => {
   if (check === undefined) {
     throw new BadVerbArgs(`doctor-fix: unknown check "${checkName}"`);
   }
-  const verdict = check.probe(
-    gatherFacts(ctx.doctor, sessionHints(ctx, sid).tmux),
-  );
+  const facts = gatherFacts(ctx.doctor, sessionHints(ctx, sid).tmux);
+  const verdict = check.probe(facts);
   if (verdict.ok || verdict.fix === undefined) {
     throw new BadVerbArgs(`doctor-fix: ${check.label} has nothing to fix`);
   }
@@ -717,7 +722,10 @@ const doctorFix: VerbHandler = (value, ctx) => {
     "info",
     `doctor-fix: ${check.name} → ${verdict.fix.kind} ${verdict.fix.name}=${verdict.fix.value} (session=${sid})`,
   );
-  writeReport(ctx, sid);
+  writeReport(ctx, sid, {
+    ...facts,
+    claudeSettingsEnv: readClaudeSettingsEnv(ctx.doctor),
+  });
 };
 
 // ─── Registry ───────────────────────────────────────────────────────────────

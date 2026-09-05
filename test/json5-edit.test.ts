@@ -468,6 +468,16 @@ describe("setValue — the JSON dialect mints strict JSON", () => {
     expect(JSON.parse(after)).toEqual({ env: { X: "1" } });
   });
 
+  test("appending after an existing inline member", () => {
+    const after = setValue(
+      '{ "env": { "A": "1" } }',
+      ["env", "X"],
+      '"1"',
+      JSON_DIALECT,
+    );
+    expect(JSON.parse(after)).toEqual({ env: { A: "1", X: "1" } });
+  });
+
   test("appending after an existing member quotes the key", () => {
     const after = setValue(
       '{\n  "env": {\n    "A": "1"\n  }\n}\n',
