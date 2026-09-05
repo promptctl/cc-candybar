@@ -36,6 +36,7 @@ import {
   DEFAULT_UPDATE_NOTICE,
 } from "../themes/policy.js";
 import { walkNodes } from "../config/dsl-types.js";
+import { rootNode } from "../config/root.js";
 import { extractTemplateRefs } from "../config/dsl-loader.js";
 import type { GitInfo, GitInfoOptions } from "../segments/git.js";
 import { ABSENT, failed, type Outcome } from "../utils/outcome.js";
@@ -719,7 +720,7 @@ export function buildNeededPrefixes(config: DslConfig): ReadonlySet<string> {
   const frontier: string[] = [];
   const visited = new Set<string>();
 
-  for (const node of walkNodes(config.root)) {
+  for (const node of walkNodes(rootNode(config.root))) {
     // A node's `when` references variables too — seed them so a provider feeding
     // only a predicate (e.g. a state var gating a row/container) isn't gated out.
     if (node.when)

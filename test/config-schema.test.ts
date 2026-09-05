@@ -37,6 +37,14 @@ beforeAll(() => {
 // Structurally valid AND semantically valid — schema accepts, loader accepts.
 const GOOD: ReadonlyArray<readonly [string, string]> = [
   ["empty config", `{}`],
+  [
+    "rows-form root (merges by row name)",
+    `{ segments: { a: { template: 'a' } }, root: { rows: { extra: { h: ['a'] } } } }`,
+  ],
+  [
+    "rows-form root with a bar-level when",
+    `{ segments: { a: { template: 'a' } }, root: { rows: { extra: 'a' }, when: '{{ true }}' } }`,
+  ],
   ["globals only", `{ globals: { palette: 'dracula', default_bg: 'surface' } }`],
   [
     "A-grammar multi-row layout (v-arm)",
@@ -148,6 +156,8 @@ const GOOD: ReadonlyArray<readonly [string, string]> = [
 // Structurally broken — schema rejects, loader rejects.
 const BAD_STRUCTURAL: ReadonlyArray<readonly [string, string]> = [
   ["unknown top-level key", `{ segmnets: {} }`],
+  ["non-identifier row name", `{ segments: { a: { template: 'a' } }, root: { rows: { 'a-b': 'a' } } }`],
+  ["non-object rows", `{ root: { rows: 'a' } }`],
   ["non-string template", `{ segments: { a: { template: 42 } } }`],
   ["bad direction enum", `{ root: { kind: 'container', direction: 'diagonal', children: [] } }`],
   ["unknown variable kind", `{ variables: { x: { kind: 'bogus' } } }`],

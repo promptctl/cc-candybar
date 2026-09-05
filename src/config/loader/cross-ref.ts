@@ -30,7 +30,9 @@ import {
 } from "../option-domain.js";
 import { listGlobalsFieldNames } from "./globals.js";
 import { parsePersistTarget } from "./persist-target.js";
-import { presetNames } from "../presets.js";
+import { presetNames, presetRoot } from "../presets.js";
+import { fragmentNode, rootNode } from "../root.js";
+import { segmentReferencesMenu } from "./menu-synth.js";
 import {
   canHostSessionState,
   countAnchors,
@@ -298,26 +300,62 @@ export function validateCrossReferences(
   // [LAW:single-enforcer] The menu precondition is asked once, of the same
   // predicate synthesizeSettingsMenu gates on, and read by every tree walked.
   const menuWillSynthesize = canHostSessionState(cfg);
+  // [LAW:one-source-of-truth] The global settings menu's anchor is a POSITION
+  // an author may place and the walk below must therefore accept, even though
+  // no config declares a segment by that name — synthesizeSettingsMenu provides
+  // it unconditionally, immediately after these checks pass. Two placements is
+  // the real error: one state key holds one open state, so a second anchor
+  // would be a second toggle writing one disclosure, with two bodies claiming
+  // to be it. Counted over the SAME census the synthesis reads, so "placed"
+  // means one thing [LAW:single-enforcer] — and over the tree that RENDERS
+  // (the preset's fragment merged over the config's root, presetRoot), because
+  // a `{ rows }` fragment and a row it inherits can each place one.
+  //
+  // [LAW:types-are-the-program] A menu-hosting segment placed twice in one
+  // layout is the same ambiguity one level down: its disclosure open-state is
+  // keyed by segment name, so two placements would share one state and a
+  // click on either would toggle both. Identity stays name-derived (no
+  // placement path threaded into the key); two disclosures = two named
+  // segments. Counted over the same rendered tree, for the same reason.
+  const menuHosts = Object.entries(cfg.segments)
+    .filter(([, seg]) => segmentReferencesMenu(seg.template))
+    .map(([name]) => name);
+  const checkPlacementCounts = (
+    tree: LayoutNode,
+    layoutKey: string,
+    layoutLine: number | undefined,
+  ): void => {
+    if (countAnchors(tree) > 1) {
+      ctx.issues.push({
+        path: layoutKey,
+        message: `${layoutKey} places the global settings menu anchor "${SETTINGS_ANCHOR}" ${countAnchors(tree)} times — it may appear at most once per layout (it is one disclosure, and one state key holds one open state). Remove all but the placement you want; removing every placement puts the menu at its default position.`,
+        line: layoutLine,
+      });
+    }
+    const placements = new Map<string, number>();
+    for (const node of walkNodes(tree)) {
+      if (node.kind === "segment") {
+        placements.set(node.name, (placements.get(node.name) ?? 0) + 1);
+      }
+    }
+    for (const name of menuHosts) {
+      if ((placements.get(name) ?? 0) > 1) {
+        ctx.issues.push({
+          path: layoutKey,
+          message: `segment "${name}" hosts a {{ menu }} and is placed in the layout more than once — a menu's open-state is keyed by segment name, so the copies would share one state (clicking one would toggle both). Give each placement its own named segment.`,
+          line: layoutLine,
+        });
+      }
+    }
+  };
+  // Walks what the author WROTE at this key (a whole tree, or the rows a
+  // fragment names), so an unknown segment is reported against the layout
+  // that names it rather than against a row it inherited.
   const checkLayoutTree = (
     root: LayoutNode,
     layoutKey: string,
     layoutLine: number | undefined,
   ): void => {
-    // [LAW:one-source-of-truth] The global settings menu's anchor is a POSITION
-    // an author may place and this walk must therefore accept, even though no
-    // config declares a segment by that name — synthesizeSettingsMenu provides
-    // it unconditionally, immediately after these checks pass. Two placements is
-    // the real error: one state key holds one open state, so a second anchor
-    // would be a second toggle writing one disclosure, with two bodies claiming
-    // to be it. Counted over the SAME census the synthesis reads, so "placed"
-    // means one thing [LAW:single-enforcer].
-    if (countAnchors(root) > 1) {
-      ctx.issues.push({
-        path: layoutKey,
-        message: `${layoutKey} places the global settings menu anchor "${SETTINGS_ANCHOR}" ${countAnchors(root)} times — it may appear at most once per layout (it is one disclosure, and one state key holds one open state). Remove all but the placement you want; removing every placement puts the menu at its default position.`,
-        line: layoutLine,
-      });
-    }
     for (const node of walkNodes(root)) {
       // [LAW:locality-or-seam] A node's `when` reads the global scope (bare
       // globals + namespaced segment vars) — the same existence-check shape as a
@@ -361,14 +399,28 @@ export function validateCrossReferences(
     }
   };
   const layoutKey = authoredLayoutKey(ctx.source);
-  checkLayoutTree(cfg.root, layoutKey, findKeyLine(ctx.source, [layoutKey]));
+  checkLayoutTree(
+    rootNode(cfg.root),
+    layoutKey,
+    findKeyLine(ctx.source, [layoutKey]),
+  );
   for (const [name, preset] of Object.entries(cfg.presets)) {
     if (preset.root === undefined) continue;
-    checkLayoutTree(
-      preset.root,
-      `presets.${name}.root`,
-      findKeyLine(ctx.source, ["presets", name, "root"]),
-    );
+    const presetKey = `presets.${name}.root`;
+    const presetLine = findKeyLine(ctx.source, ["presets", name, "root"]);
+    checkLayoutTree(fragmentNode(preset.root), presetKey, presetLine);
+  }
+  // [LAW:one-source-of-truth] Placement counts run over the tree each preset
+  // RENDERS, keyed by the path presetRoot reports it authored at — so a
+  // fragment that is the merge identity collapses onto `root` by data and is
+  // neither re-walked nor reported under a path nothing edits.
+  const rendered = new Map<string, LayoutNode>([["root", rootNode(cfg.root)]]);
+  for (const name of presetNames(cfg.presets)) {
+    const { node, path } = presetRoot(cfg, name);
+    rendered.set(path, node);
+  }
+  for (const [key, tree] of rendered) {
+    checkPlacementCounts(tree, key, findKeyLine(ctx.source, key.split(".")));
   }
 
   // For each variable's template/cache.key, every dotted ref must exist

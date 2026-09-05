@@ -24,24 +24,24 @@ import {
 } from "./validate-core.js";
 import { findKeyLine } from "./diagnostics.js";
 import { presetGlobalsJson, validatePresetGlobals } from "./globals.js";
-import { LAYOUT_NODE_REF, validateRoot } from "./layout.js";
+import { ROOT_FRAGMENT_REF, validateRootFragment } from "./layout.js";
 import type { PresetDecl } from "../dsl-types.js";
 
 // [LAW:one-source-of-truth] A preset's `root` runs through THE layout validator
-// — the same `validateRoot` the top-level `root:` uses, not a reduced copy — so
-// the A-grammar, the group sugar, and every migration error read identically
-// wherever a layout is authored. Group sugar declared inside a preset therefore
+// — the same `validateRootFragment` the top-level `root:` uses, not a reduced
+// copy — so the A-grammar, the `{ rows }` map, the group sugar, and every
+// migration error read identically wherever a layout is authored. Group sugar declared inside a preset therefore
 // also lands in `ctx.groups` and synthesizes its state var / cycle action /
 // toggle segment into the shared sections, exactly as a top-level group does:
 // the synthesized artifacts are process-lifetime (see PresetDecl's cap), the
 // preset only chooses whether to stage them.
 const presetRootSpec: FieldSpec<NonNullable<PresetDecl["root"]>> = {
   required: false,
-  json: { $ref: LAYOUT_NODE_REF },
+  json: { $ref: ROOT_FRAGMENT_REF },
   parse: (ctx, path, field, raw) =>
     raw[field] === undefined
       ? undefined
-      : validateRoot(ctx, `${path}.${field}`, raw[field]),
+      : validateRootFragment(ctx, `${path}.${field}`, raw[field]),
 };
 
 // [LAW:one-source-of-truth] A preset's `globals` runs through the globals field

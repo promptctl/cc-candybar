@@ -1,7 +1,7 @@
 // [LAW:one-source-of-truth] The single point that merges a raw user config
 // onto a default DslConfig to fill missing keys. A user file declares only
 // what differs; the cascade here (shallow-merge globals, by-name merge
-// variables/segments/actions, wholesale root replacement) is the one place
+// variables/segments/actions/…, by-name merge of root's rows) is the one place
 // "absent means inherit" is decided. This file changes when the merge
 // semantics change.
 //
@@ -14,6 +14,7 @@
 // DEFAULT_DSL_CONFIG from default-dsl-config.ts and pass it explicitly.
 
 import { type DslConfig, type RawDslConfig } from "../dsl-types.js";
+import { EMPTY_ROWS, mergeRoot } from "../root.js";
 
 /**
  * Merge a RawDslConfig on top of a default DslConfig. Pure function.
@@ -21,8 +22,10 @@ import { type DslConfig, type RawDslConfig } from "../dsl-types.js";
  *   globals    : shallow merge per field (user wins per-field)
  *   variables  : merge by name (user wins per-name)
  *   segments   : merge by name (user wins per-name)
- *   root       : the canonical layout tree. Authored via the A-grammar (`root`)
- *                replaces wholesale; absent → default's tree.
+ *   root       : merge by row name (user wins per-name) when the user wrote a
+ *                `{ rows }` map; a whole tree replaces the default's rows
+ *                (root.ts's mergeRoot — the one fold presets reuse); absent
+ *                → the empty rows map, the merge's identity.
  *                [LAW:one-source-of-truth] `layout:` is rejected at parse time
  *                with a migration error (removed in 2de.19), so only `root`
  *                ever reaches this function.
@@ -35,7 +38,7 @@ export function mergeWithDefault(
     globals: { ...dflt.globals, ...(raw.globals ?? {}) },
     variables: { ...dflt.variables, ...(raw.variables ?? {}) },
     segments: { ...dflt.segments, ...(raw.segments ?? {}) },
-    root: raw.root !== undefined ? raw.root : dflt.root,
+    root: mergeRoot(raw.root ?? EMPTY_ROWS, dflt.root),
     // [LAW:one-source-of-truth] actions merge by name, same cascade — a user
     // declares only the actions that differ from the bundled default (which
     // ships none).

@@ -97,6 +97,34 @@ export interface ContainerNode {
 
 export type LayoutNode = ContainerNode | SegmentNode;
 
+// [LAW:types-are-the-program] THE canonical root: an insertion-ordered map of
+// NAMED rows, stacked vertically (`rootNode` in root.ts is the one projection
+// to the tree the render walk consumes). Every shipped root is a vertical stack
+// of rows — a bare `h` root is one row — so the map is the strongest theorem
+// that is still true of the domain, and it is exactly the shape the by-name
+// cascade every other section merges with (`{ ...dflt.rows, ...raw.rows }`):
+// a file declares only the rows that differ, the rest inherit in place, a new
+// name appends, and an empty row (`{ h: [] }`, a container contributing no
+// line) removes one. Row names are identifiers — never integer-like, which is
+// what keeps JS property order equal to authoring order under that spread —
+// and a whole-tree fragment lowers to positional rows named `#1`, `#2`, …
+// (unauthorable by the identifier rule, so they can never shadow a user's).
+// `when` gates the whole bar, carried up from a tree's top node.
+export interface Root {
+  readonly rows: Readonly<Record<string, LayoutNode>>;
+  readonly when?: string;
+}
+
+// [LAW:types-are-the-program] What a file or a preset AUTHORS at `root`: a
+// whole tree ("here is my bar" — replaces the base's rows outright) or a rows
+// map ("here are my rows" — merges by name over the base). The two are the
+// author's own two intents, discriminated by the shape they wrote (`"rows" in
+// fragment`), and that is the single branch `mergeRoot` folds over. A tree
+// fragment's JSON is a LayoutNode and a rows fragment's JSON is a Root, so the
+// canonical shape and the authoring shape coincide — the raw default literal
+// is read as both without translation.
+export type RootFragment = LayoutNode | Root;
+
 // [LAW:types-are-the-program] The `group` SUGAR as collected at parse — an
 // INPUT-only shape, never a canonical LayoutNode kind: arranging + gating are
 // behaviors `container` already has, so "group" may only be a spelling. The
@@ -151,11 +179,14 @@ export function* walkNodes(node: LayoutNode): IterableIterator<LayoutNode> {
 // each render, never what the daemon REGISTERS once per process. An unbounded
 // preset would just be a second config file with extra steps.
 export interface PresetDecl {
-  // Absent ⇒ this preset does not restage the layout; the config's own `root`
-  // renders. A preset declares only its delta [LAW:carrying-cost] — a preset
-  // that had to restate every row to change one would be a copy, and copies go
-  // stale silently while continuing to look intentional.
-  readonly root?: LayoutNode;
+  // The preset's layout as a FRAGMENT over the config's own root (root.ts's
+  // mergeRoot): a tree restages the whole bar, a rows map restages only the
+  // rows it names, and absent — the empty rows map, the merge's identity —
+  // restages nothing, so the config's own root renders. A preset declares only
+  // its delta [LAW:carrying-cost] — a preset that had to restate every row to
+  // change one would be a copy, and copies go stale silently while continuing
+  // to look intentional.
+  readonly root?: RootFragment;
   // Absent ⇒ no display-default changes. Shallow-merged OVER the config's own
   // globals when this preset is active, so a preset naming `padding` says
   // nothing about `charset`.
@@ -166,7 +197,9 @@ export interface RawDslConfig {
   readonly globals?: Partial<Globals>;
   readonly variables?: Readonly<Record<string, VariableDecl>>;
   readonly segments?: Readonly<Record<string, SegmentDecl>>;
-  readonly root?: LayoutNode;
+  // A fragment over the bundled default's root — see RootFragment: a tree
+  // replaces the default's rows, a rows map merges over them by name.
+  readonly root?: RootFragment;
   readonly actions?: Readonly<Record<string, ActionDecl>>;
   // Named config fragments ("presets"): each an alternative `root`/`globals`
   // arrangement selected per session, the exact twin of `looks` one level up
@@ -193,10 +226,12 @@ export interface DslConfig {
   readonly globals: Globals;
   readonly variables: Readonly<Record<string, VariableDecl>>;
   readonly segments: Readonly<Record<string, SegmentDecl>>;
-  // [LAW:one-source-of-truth] The SINGLE canonical layout representation authored
-  // via the A-grammar (seg/h/v node arms, group sugar). No legacy sugar reaches
-  // this field; the loader rejects `layout:` and `kind:"cells"` with migration errors.
-  readonly root: LayoutNode;
+  // [LAW:one-source-of-truth] The SINGLE canonical layout representation: the
+  // merged rows map (see Root). Authored via the A-grammar (seg/h/v node arms,
+  // group sugar) as a whole tree or a `{ rows }` map; no legacy sugar reaches
+  // this field — the loader rejects `layout:` and `kind:"cells"` with
+  // migration errors. Consumers that walk a tree take `rootNode(root)`.
+  readonly root: Root;
   // [LAW:locality-or-seam] The named seam between click BEHAVIOR and the
   // clickable REPRESENTATION. Each entry is a statically-declared effect a
   // segment template binds a region to via `{{ action "name" … }}`. The
@@ -222,7 +257,7 @@ export interface DslConfig {
   // [LAW:one-source-of-truth] The display globals edit mode stages while it is
   // on — the `globals` half of the fragment whose `root` half edit chrome
   // already stages (src/config/edit-chrome.ts). Merges FIELD BY FIELD with the
-  // bundled default's (like `globals` itself, not wholesale like `root`), so a
+  // bundled default's (like `globals` itself and `root`'s rows), so a
   // user retuning the separator keeps the bundled `style: "plain"`.
   //
   // [LAW:types-are-the-program] `Partial<Globals>`, deliberately NOT

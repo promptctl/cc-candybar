@@ -30,6 +30,7 @@ import {
   type DaemonDslState,
 } from "../src/daemon/debug";
 import { parseAndValidate } from "./helpers/parse-and-validate";
+import { rootOf } from "../src/config/root";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import { registerDslConfig } from "../src/dsl/render";
@@ -365,14 +366,14 @@ describe("introspectConfig with populated state", () => {
     const state = buildPopulatedState();
     const config = introspectConfig(state);
     expect(config).not.toBeNull();
-    expect(config?.root).toEqual({
+    expect(config?.root).toEqual(rootOf({
       kind: "container",
       direction: "horizontal",
       children: [
         { kind: "segment", name: "intro" },
         { kind: "segment", name: "plain" },
       ],
-    });
+    }));
     expect(ownDeclNames(Object.keys(config?.variables ?? {})).sort()).toEqual([
       "derived",
       "greeting",
@@ -391,14 +392,14 @@ describe("introspectConfig with populated state", () => {
     const state = buildPopulatedState();
     const config = introspectConfig(state);
     const wireShape = JSON.parse(JSON.stringify(config));
-    expect(wireShape.root).toEqual({
+    expect(wireShape.root).toEqual(rootOf({
       kind: "container",
       direction: "horizontal",
       children: [
         { kind: "segment", name: "intro" },
         { kind: "segment", name: "plain" },
       ],
-    });
+    }));
     expect(wireShape.variables.greeting.kind).toBe("literal");
     expect(wireShape.segments.intro.template).toBe(
       "{{ .greeting }} {{ .session.id }}",

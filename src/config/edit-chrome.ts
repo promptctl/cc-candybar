@@ -282,7 +282,7 @@ function spliceContainer(
       children.push(child);
       continue;
     }
-    children.push(
+    const cells: LayoutNode[] = [
       insertChrome(
         presetIdent,
         rootKey,
@@ -292,22 +292,39 @@ function spliceContainer(
         "before",
         artifacts,
       ),
+      child,
+      removeChrome(presetIdent, rootKey, child.name, artifacts),
+      ...(i === lastContent
+        ? [
+            insertChrome(
+              presetIdent,
+              rootKey,
+              String(posCounter.n++),
+              domainName,
+              child.name,
+              "after",
+              artifacts,
+            ),
+          ]
+        : []),
+    ];
+    // [LAW:one-type-per-behavior] A segment child of a VERTICAL container is a
+    // one-cell row (presetRoot stacks every root's rows vertically, so a bare
+    // `"sidebar"` root and a `rows: { sys: "demo" }` row both arrive this way);
+    // its chrome joins that row rather than becoming three rows of its own,
+    // under the row's own gate so the chrome hides with it.
+    children.push(
+      ...(node.direction === "vertical"
+        ? [
+            {
+              kind: "container" as const,
+              direction: "horizontal" as const,
+              children: cells,
+              ...(child.when !== undefined && { when: child.when }),
+            },
+          ]
+        : cells),
     );
-    children.push(child);
-    children.push(removeChrome(presetIdent, rootKey, child.name, artifacts));
-    if (i === lastContent) {
-      children.push(
-        insertChrome(
-          presetIdent,
-          rootKey,
-          String(posCounter.n++),
-          domainName,
-          child.name,
-          "after",
-          artifacts,
-        ),
-      );
-    }
   }
   return { ...node, children };
 }
@@ -457,11 +474,11 @@ function withTrailingCell(node: LayoutNode, cell: LayoutNode): LayoutNode {
   return { ...node, children: [...node.children, cell] };
 }
 
-// One preset's chrome-spliced root. A bare-segment root (the A-grammar
-// collapses a single top-level segment ref to `{ kind: "segment", name }`
-// with no enclosing container) is wrapped in a synthetic horizontal
-// container for splicing purposes — the wrap becomes the real returned root,
-// which is exactly right: a lone segment needs a `+` on each side too.
+// One preset's chrome-spliced root. presetRoot always yields a container —
+// the merged rows stacked vertically — so a bare-segment fragment (the
+// A-grammar's `{ seg, when }` shorthand is a legal root) arrives already
+// wrapped as its one row, its own `when` lifted to the root, and a lone
+// segment gets a `+` on each side like any other.
 function spliceEditChromeForPreset(
   config: DslConfig,
   presetName: string,
@@ -473,25 +490,8 @@ function spliceEditChromeForPreset(
   const domainName = addableDomainName(presetName);
   const presetIdent = ident(presetName);
   const posCounter = { n: 0 };
-  // [LAW:no-silent-failure] The bare-segment-root case (the A-grammar's
-  // `{ seg, when }` shorthand is a legal PresetDecl.root) carries its OWN
-  // `when` onto this synthetic wrapper too — wrapWithPresetRows's own
-  // when-carry-up reads `splicedRoot.when`, which is this wrapper's `when`
-  // once spliceContainer's `{...node, children}` passes it through
-  // unchanged; without copying it here, a bare-segment preset root's own
-  // gate would never reach that carry-up at all, leaking the reset banner
-  // past it exactly like the container case did before that fix.
-  const container: ContainerNode =
-    node.kind === "container"
-      ? node
-      : {
-          kind: "container",
-          direction: "horizontal",
-          children: [node],
-          ...(node.when !== undefined && { when: node.when }),
-        };
   const spliced = spliceContainer(
-    container,
+    node,
     presetIdent,
     rootKey,
     domainName,

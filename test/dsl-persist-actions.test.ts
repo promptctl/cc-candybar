@@ -145,7 +145,7 @@ describe("persistValueText", () => {
 
   test("a preset-root key names a tree, not a value — refused", () => {
     expect(() => persistValueText("presets.compact.root", "x")).toThrow(
-      /does not name a value/,
+      /names a layout, not a value/,
     );
   });
 

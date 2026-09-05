@@ -44,11 +44,12 @@
 // leaf that deliberately never imports dsl-types.ts) can import PRESET_NAMES
 // from here without a runtime cycle.
 import type {
+  ContainerNode,
   DslConfig,
   Globals,
-  LayoutNode,
   PresetDecl,
 } from "./dsl-types.js";
+import { EMPTY_ROWS, mergeRoot, restages, rootNode } from "./root.js";
 import { effectiveMemberName } from "../themes/policy.js";
 
 // [LAW:one-source-of-truth] The floor preset's name, spelled once. `looks` has
@@ -141,8 +142,11 @@ export function presetByName(
 }
 
 // A preset's layout AND the config path that layout was authored at, as a total
-// function of the name: a preset that declares no `root` stages the config's own
-// root, which lives at `root` and not under this preset's name.
+// function of the name: the preset's fragment merged over the config's own root
+// (root.ts's mergeRoot — the SAME fold a file's root takes over the bundled
+// default's). A preset that restages nothing — no root, or an empty rows map —
+// renders the config's own root, which lives at `root` and not under this
+// preset's name.
 //
 // [LAW:one-source-of-truth] Both halves come from ONE decision on purpose. The
 // fallback used to be resolved here while the diagnostic path was spelled
@@ -155,14 +159,15 @@ export function presetByName(
 export function presetRoot(
   config: DslConfig,
   name: string,
-): { readonly node: LayoutNode; readonly path: string } {
-  // [LAW:dataflow-not-control-flow] A projection returning DATA, not a branch
-  // around an operation: both arms yield the same shape, and the discriminator
-  // (did this preset declare a root?) is a fact the fragment already carries.
-  const own = presetByName(config.presets, name).root;
-  return own === undefined
-    ? { node: config.root, path: "root" }
-    : { node: own, path: `presets.${name}.root` };
+): { readonly node: ContainerNode; readonly path: string } {
+  // [LAW:dataflow-not-control-flow] One merge for every preset — the floor's
+  // empty fragment is the identity, not an arm — and the path is a projection
+  // of the same fact the merge folds over (does the fragment restage anything?).
+  const fragment = presetByName(config.presets, name).root ?? EMPTY_ROWS;
+  return {
+    node: rootNode(mergeRoot(fragment, config.root)),
+    path: restages(fragment) ? `presets.${name}.root` : "root",
+  };
 }
 
 // [LAW:dataflow-not-control-flow] A preset's display globals, as a total

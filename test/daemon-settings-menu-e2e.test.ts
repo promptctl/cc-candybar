@@ -1,10 +1,10 @@
 // [LAW:verifiable-goals] candybar-settings-ui-aok.1's headline acceptance,
 // measured the only way the ticket accepts: from a USER CONFIG FILE whose
-// `root` is a single row of two segments, resolved by a REAL daemon over a
-// REAL socket. That is the shape that broke — `root` replaces the bundled
-// default's wholesale, and the maintainer's own config is exactly this shape,
-// which is why presets, edit mode, and the eight value controls were
-// unreachable for the person they were built for.
+// `root` is a whole tree of one row of two segments, resolved by a REAL
+// daemon over a REAL socket. A tree replaces the bundled rows, and the
+// maintainer's own config is exactly this shape, which is why presets, edit
+// mode, and the eight value controls were unreachable for the person they
+// were built for.
 //
 // The in-process suite (test/settings-menu.test.ts) proves the synthesis. This
 // one proves the thing the epic actually claims: that a user who writes a
