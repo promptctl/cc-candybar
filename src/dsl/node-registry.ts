@@ -239,10 +239,9 @@ const containerType: NodeType<"container"> = {
     };
   },
   render(node, ctx) {
-    // [LAW:dataflow-not-control-flow] A container advances NO hue unit itself; its
-    // children do, walked in order so positional hue stays stable. Hidden or not,
-    // every child is rendered (parentVisible threads the gate) so hidden subtrees
-    // still advance the cursor.
+    // [LAW:dataflow-not-control-flow] Every child is walked, hidden or not:
+    // visibility is a value `parentVisible` threads, never a skipped call, and a
+    // child's address is its (index, count) here, unchanged by any sibling's `when`.
     return composeBlocks(
       node.direction,
       node.children.map((child, index) =>

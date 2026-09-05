@@ -371,11 +371,11 @@ export function registerDslConfig(
       // segment currently rendering — the same palette its `bg:`/`fg:` resolve
       // from, published by the walk. Binding it to a palette captured HERE
       // (registration runs once per config load, renders happen per tick) was
-      // the two-clocks bug this seam exists to close: a session theme click, a
-      // look, or a per-segment hue rotation moved a segment's background while
-      // every in-body color stayed where it was, so one segment painted from
-      // two palettes at once. Reading live costs nothing structurally — FuncMap
-      // bodies run at evaluate time, so parse-once/evaluate-many is untouched.
+      // the two-clocks bug this seam exists to close: a session theme click or
+      // a look moved a segment's background while every in-body color stayed
+      // where it was, so one segment painted from two palettes at once. Reading
+      // live costs nothing structurally — FuncMap bodies run at evaluate time,
+      // so parse-once/evaluate-many is untouched.
       // `{{ bgOf }}` rides the same record. [LAW:rich-js-owns-color-math]
       ...segmentColorFuncs(activeSegment),
       // [LAW:one-type-per-behavior] The per-config sibling of the static

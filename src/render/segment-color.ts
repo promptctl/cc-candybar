@@ -29,8 +29,8 @@ import {
  *
  * That divergence was not exotic. Any session theme click moved the segment's
  * background while leaving every in-body semantic color where it was; a look
- * or a per-segment hue rotation did the same. Reading the live palette makes
- * the two agree by construction rather than by coincidence.
+ * did the same. Reading the live palette makes the two agree by construction
+ * rather than by coincidence.
  *
  * **Why `bgOf` exists.** De-emphasis — drawing labels, punctuation and ids
  * quieter than the facts they frame — is "move this color toward the

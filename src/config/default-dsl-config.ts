@@ -826,9 +826,8 @@ export const RAW_DEFAULT_DSL_CONFIG = {
     // wants it always-on overrides this one segment's `when` to `"true"`.
     //
     // `bg: "warning"` is load-bearing, not decoration: warning is one of the
-    // hue-ANCHORED palette roots, so it survives every theme, look, and
-    // per-segment hue transposition still reading as an alert. Any other slot
-    // would drift with the hue stepper and could land camouflaged against its
+    // hue-ANCHORED palette roots, so it survives every theme and look still
+    // reading as an alert. Any other slot could land camouflaged against its
     // neighbours — exactly what a "wrong machine" warning must never do.
     // `contrastOn (bgOf)` then derives a readable foreground from whatever that
     // resolves to, rather than betting a fixed `foreground` stays legible.

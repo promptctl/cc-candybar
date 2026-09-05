@@ -90,8 +90,7 @@ export interface ContainerNode {
   readonly direction: Direction;
   readonly children: readonly LayoutNode[];
   // A container's `when` gates the whole subtree: a hidden container emits no
-  // lines, but its descendants are still walked so per-segment hue indices stay
-  // positionally stable.
+  // lines.
   readonly when?: string;
 }
 
