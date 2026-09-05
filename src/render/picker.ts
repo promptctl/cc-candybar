@@ -44,14 +44,16 @@ import {
   requireActiveSegment,
   type ActiveSegmentRef,
 } from "./active-segment.js";
-import type { AddressStep } from "../themes/decor.js";
+import { placedBy, type Position } from "../themes/decor.js";
 
 // [LAW:locality-or-seam] How an option cell is coloured, as a VALUE the caller
-// hands in: the picker places item `step` (which option, of how many) and
-// knows nothing of bands, hues or depth. Both callers supply the band of the
-// segment the picker renders inside (`bandItemStyle`), so a menu body and a
-// standalone `{{ picker }}` colour their items by one rule.
-export type ItemStyle = (step: AddressStep) => Style;
+// hands in: the picker lays out item `position` (which option, of how many)
+// and knows nothing of bands, hues, depth or how the instance PLACES its
+// options — the caller completes the position into an address step with its
+// own distribution. Both callers supply the band of the segment the picker
+// renders inside (`bandItemStyle`), so a menu body and a standalone
+// `{{ picker }}` colour their items by one rule.
+export type ItemStyle = (position: Position) => Style;
 
 const PICKER_PREV = "←";
 const PICKER_NEXT = "→";
@@ -391,8 +393,14 @@ export function pickerFuncs(
           closeOnPick === true,
           paged === true,
           runtime,
-          (step) =>
-            bandItemStyle(requireActiveSegment(activeSegment, "picker"), step),
+          // A bare `{{ picker }}` authors no options dict, so it places by
+          // the default — the same resolution a `{{ menu }}` with no
+          // "distribution" option makes.
+          (position) =>
+            bandItemStyle(requireActiveSegment(activeSegment, "picker"), {
+              ...position,
+              distribution: placedBy(undefined),
+            }),
         );
       },
       argTypes: ["string", "string", "bool", "bool"],

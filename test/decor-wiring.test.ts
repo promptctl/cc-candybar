@@ -26,16 +26,10 @@ import { SessionState } from "../src/daemon/session-state";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import { transposedPalette } from "../src/themes/palette-resolvers";
 import { PRESET_FLOOR } from "../src/config/presets";
-import {
-  decorFor,
-  DEFAULT_DISTRIBUTION,
-  DISTRIBUTIONS,
-  type Address,
-} from "../src/themes/decor";
+import { decorFor, DISTRIBUTIONS, type Address } from "../src/themes/decor";
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 const THEME = "textual-dark";
-const DISTRIBUTION = DISTRIBUTIONS[DEFAULT_DISTRIBUTION];
 
 const OPTS = {
   style: "powerline" as const,
@@ -53,7 +47,7 @@ function addressOf(root: CompiledNode, name: string): Address {
     for (const [index, child] of node.children.entries()) {
       const found = walk(child, [
         ...address,
-        { index, count: node.children.length },
+        { index, count: node.children.length, distribution: node.distribution },
       ]);
       if (found !== undefined) return found;
     }
@@ -94,7 +88,6 @@ function build(src: string, look?: ThemeKey, dflt?: DslConfig) {
     decorFor(
       transposedPalette(getThemePalette(THEME), look ?? IDENTITY_KEY),
       addressOf(root, name),
-      DISTRIBUTION,
     ).hex;
   return { render, root, bgOf, fgOf, expectedTint, dispose: () => registry.dispose() };
 }
@@ -279,6 +272,122 @@ describe("candybar-render-ai7.5 — the bundled default authors a `bg:` only to 
     for (const name of ["directory", "model", "gitaculous", "toolbar", SETTINGS_ANCHOR]) {
       expect([name, rt.bgOf(name)]).toEqual([name, rt.expectedTint(name)]);
     }
+    rt.dispose();
+  });
+});
+
+// [LAW:verifiable-goals] candybar-render-ai7.8: the distribution is an
+// authored, per-instance field. Each test is one line of the ticket's
+// Done-when. [LAW:behavior-not-structure] Expectations are bytes out for a
+// config in — the "authored row" case computes its expectation from the MODEL
+// over an address built WITHOUT the field, re-placing the row's own step, so a
+// compile that ignored the field could not satisfy it.
+describe("candybar-render-ai7.8 — `distribution` is authored per placer", () => {
+  const CELLS = ["a", "b", "c", "d"] as const;
+  const tree = (rowField: string, rootField = ""): string => `{
+    globals: { palette: '${THEME}' },
+    variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
+    segments: {
+      a: { template: 'A' }, b: { template: 'B' }, c: { template: 'C' }, d: { template: 'D' },
+    },
+    root: { v: [ { h: ['a', 'b', 'c']${rowField} }, { h: ['d'] } ]${rootField} },
+  }`;
+  const tints = (src: string): readonly string[] => {
+    const rt = build(src);
+    rt.render();
+    const out = CELLS.map((n) => rt.bgOf(n));
+    rt.dispose();
+    return out;
+  };
+
+  test("omitting the field renders byte-identical to `distribution: 'van-der-corput'`", () => {
+    expect(tints(tree(""))).toEqual(tints(tree(", distribution: 'van-der-corput'")));
+  });
+
+  test("a row's authored distribution places that row's cells — and only that row's", () => {
+    const plain = build(tree(""));
+    const rt = build(tree(", distribution: 'monotonic'"));
+    rt.render();
+    const palette = transposedPalette(getThemePalette(THEME), IDENTITY_KEY);
+    for (const name of ["a", "b", "c"]) {
+      const address = addressOf(plain.root, name);
+      const own = address[address.length - 1]!;
+      const rePlaced: Address = [
+        ...address.slice(0, -1),
+        { ...own, distribution: DISTRIBUTIONS.monotonic },
+      ];
+      expect([name, rt.bgOf(name)]).toEqual([name, decorFor(palette, rePlaced).hex]);
+    }
+    // The field reached the tint: the row no longer matches its unauthored self…
+    plain.render();
+    expect(["a", "b", "c"].map((n) => rt.bgOf(n))).not.toEqual(
+      ["a", "b", "c"].map((n) => plain.bgOf(n)),
+    );
+    // …and the sibling row is an instance of its own, untouched.
+    expect(rt.bgOf("d")).toBe(plain.bgOf("d"));
+    plain.dispose();
+    rt.dispose();
+  });
+
+  test("a whole-tree root's authored distribution places the ROWS: one placer in every cell's lineage moves, the one placing the authored rows", () => {
+    const plain = build(tree(""));
+    const rt = build(tree("", ", distribution: 'monotonic'"));
+    rt.render();
+    plain.render();
+    const palette = transposedPalette(getThemePalette(THEME), IDENTITY_KEY);
+    for (const name of CELLS) {
+      const authored = addressOf(rt.root, name);
+      const unauthored = addressOf(plain.root, name);
+      // Same lineage — synthesis wraps the authored root, and that wrapper
+      // and every row keep their own placement…
+      const shape = (a: Address) => a.map(({ index, count }) => ({ index, count }));
+      expect(shape(authored)).toEqual(shape(unauthored));
+      // …while exactly one step's placer changed: the authored root's, whose
+      // two rows hold `a b c` (row 0) and `d` (row 1).
+      const moved = authored.filter(
+        (step, i) => step.distribution !== unauthored[i]!.distribution,
+      );
+      expect([name, moved]).toEqual([
+        name,
+        [{ index: name === "d" ? 1 : 0, count: 2, distribution: DISTRIBUTIONS.monotonic }],
+      ]);
+      expect([name, rt.bgOf(name)]).toEqual([name, decorFor(palette, authored).hex]);
+    }
+    expect(CELLS.map((n) => rt.bgOf(n))).not.toEqual(
+      CELLS.map((n) => plain.bgOf(n)),
+    );
+    plain.dispose();
+    rt.dispose();
+  });
+
+  test("an unknown name is a load error naming the five", () => {
+    expect(() => build(tree(", distribution: 'spiral'"))).toThrow(
+      /distribution must be one of: van-der-corput, golden-angle, ends-interleaved, monotonic, uniform; got "spiral"/,
+    );
+  });
+
+  test("a group carries the same field for its body", () => {
+    const group = (field: string): string => `{
+      globals: { palette: '${THEME}' },
+      variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
+      segments: { a: { template: 'A' }, b: { template: 'B' }, c: { template: 'C' } },
+      root: { v: [
+        { kind: 'group', name: 'more', label: 'more', open: true, direction: 'horizontal'${field},
+          children: ['a', 'b', 'c'] },
+      ] },
+    }`;
+    const plain = build(group(""));
+    plain.render();
+    const rt = build(group(", distribution: 'monotonic'"));
+    rt.render();
+    expect(["a", "b", "c"].map((n) => rt.bgOf(n))).not.toEqual(
+      ["a", "b", "c"].map((n) => plain.bgOf(n)),
+    );
+    expect(rt.bgOf("groups.more")).toBe(plain.bgOf("groups.more"));
+    expect(() => build(group(", distribution: 'spiral'"))).toThrow(
+      /distribution must be one of: van-der-corput, golden-angle, ends-interleaved, monotonic, uniform/,
+    );
+    plain.dispose();
     rt.dispose();
   });
 });

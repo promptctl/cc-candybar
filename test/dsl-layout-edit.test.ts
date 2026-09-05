@@ -51,7 +51,8 @@ import { SourceRegistry } from "../src/var-system/sources";
 import { registerDslConfig, renderDsl } from "../src/dsl/render";
 import { SessionState } from "../src/daemon/session-state";
 import { listResolvablePaletteNames } from "../src/themes/policy";
-import { ConfigError } from "../src/config/dsl-loader";
+import { ConfigError, parseDslConfig } from "../src/config/dsl-loader";
+import { authoredFragment } from "../src/daemon/config-file-store";
 import { testVerbContext, effectsOf } from "./helpers/click";
 import { parseHandlerUrl } from "../src/install/index";
 import {
@@ -82,7 +83,12 @@ import {
 import { GitDataProvider } from "../src/daemon/cache/git";
 import { WatcherRegistry } from "../src/daemon/cache/watchers";
 import { encodeLayoutOp, type LayoutOp } from "../src/config/layout-ops";
-import { walkNodes, type LayoutNode } from "../src/config/dsl-types";
+import {
+  walkNodes,
+  type LayoutNode,
+  type Root,
+  type RootFragment,
+} from "../src/config/dsl-types";
 import { presetRoot } from "../src/config/presets";
 import { durableConfig, type DurableConfig } from "./helpers/durable-config";
 import { ReloadSignal } from "./helpers/reload-signal";
@@ -300,6 +306,70 @@ describe("cross-ref: presets.<name>.root target", () => {
         ALLOWED,
       ),
     ).not.toThrow();
+  });
+});
+
+// ─── authoredFragment: the authoring spelling of a canonical root ────────────
+
+// [LAW:one-source-of-truth] A materialized layout is written in the grammar a
+// user writes and read back by the one loader; the spelling is lossless, own
+// fields included, or a click-written row would reload as something the user
+// never configured.
+describe("authoredFragment — lossless over every own field", () => {
+  const readBack = (fragment: RootFragment): RootFragment =>
+    parseDslConfig(
+      "<authored>",
+      JSON.stringify({ root: authoredFragment(fragment) }),
+      ALLOWED,
+    ).root!;
+
+  test("a tree keeps the root's `when`/`distribution` and a row's `distribution`", () => {
+    const tree: LayoutNode = {
+      kind: "container",
+      direction: "vertical",
+      when: "{{ .x }}",
+      distribution: "monotonic",
+      children: [
+        {
+          kind: "container",
+          direction: "horizontal",
+          distribution: "golden-angle",
+          children: [
+            { kind: "segment", name: "directory" },
+            { kind: "segment", name: "git", when: "{{ .y }}" },
+          ],
+        },
+        { kind: "segment", name: "bar" },
+      ],
+    };
+    expect(authoredFragment(tree)).toEqual({
+      v: [
+        {
+          h: ["directory", { seg: "git", when: "{{ .y }}" }],
+          distribution: "golden-angle",
+        },
+        "bar",
+      ],
+      when: "{{ .x }}",
+      distribution: "monotonic",
+    });
+    expect(readBack(tree)).toEqual(tree);
+  });
+
+  test("a rows map keeps its own fields beside its rows", () => {
+    const root: Root = {
+      rows: {
+        main: {
+          kind: "container",
+          direction: "horizontal",
+          distribution: "uniform",
+          children: [{ kind: "segment", name: "directory" }],
+        },
+      },
+      when: "{{ .x }}",
+      distribution: "ends-interleaved",
+    };
+    expect(readBack(root)).toEqual(root);
   });
 });
 
@@ -599,6 +669,36 @@ describe("apply-layout-op click → the config file", () => {
     expect(() => click(resetUrl)).toThrow(undeclared);
     expect(durable.parsed().root).toEqual({ v: [{ h: ["directory", "git"] }, "bar"] });
     expect(durable.history().past).toHaveLength(0);
+    dispose();
+  });
+
+  // [LAW:one-source-of-truth] `restagesFragment` (the document) and
+  // `restages` (the loader) must classify one fragment alike: a preset whose
+  // root is an empty rows map carrying only a `distribution` IS staged, so its
+  // reset deletes `presets.<p>.root` — never the file's own top-level root.
+  test("a reset on a preset authored as `{ rows: {}, distribution }` deletes the preset's root, not the file's", () => {
+    const ROOT = "{ v: [ { h: ['directory', 'git'] }, 'bar' ] }";
+    const SRC_PLACED = `{
+      globals: {},
+      variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
+      actions: {
+        resetMine: { reset: 'presets.mine.root' },
+      },
+      segments: {
+        directory: { template: 'd', bg: 'surface', fg: 'foreground' },
+        git: { template: 'g', bg: 'surface', fg: 'foreground' },
+        bar: { template: '{{ action "resetMine" "r" }}', bg: 'surface', fg: 'foreground' },
+      },
+      root: ${ROOT},
+      presets: { mine: { root: { rows: {}, distribution: 'monotonic' } } },
+    }`;
+    const { render, click, dispose } = buildLayoutRuntime(SRC_PLACED);
+    render();
+    const resetUrl = `${URL_SCHEME}://${VERB_RESET_CONFIG}/${encodeSegments(["s1", "presets.mine.root"])}`;
+    click(resetUrl);
+    expect(durable.parsed().presets).toEqual({ mine: {} });
+    expect(durable.parsed().root).toEqual({ v: [{ h: ["directory", "git"] }, "bar"] });
+    expect(durable.history().past).toHaveLength(1);
     dispose();
   });
 

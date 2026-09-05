@@ -106,6 +106,27 @@ const vanDerCorput: Distribution = (index) => {
 };
 
 /**
+ * The config spelling of the five shipped distributions, default first — the
+ * vocabulary a container's or a `{{ menu }}`'s `distribution` field validates
+ * against, and the order a load error lists them in. [LAW:one-source-of-truth]
+ * The table below is typed over THIS tuple, so a name without a function, or a
+ * function without a name, is a compile error.
+ */
+export const DISTRIBUTION_NAMES = [
+  "van-der-corput",
+  "golden-angle",
+  "ends-interleaved",
+  "monotonic",
+  "uniform",
+] as const;
+export type DistributionName = (typeof DISTRIBUTION_NAMES)[number];
+
+/** [LAW:parse-dont-validate] The narrowing from an authored value to a name. */
+export const isDistributionName = (value: unknown): value is DistributionName =>
+  typeof value === "string" &&
+  (DISTRIBUTION_NAMES as readonly string[]).includes(value);
+
+/**
  * The five shipped distributions. Isolation is a property of the CHOSEN
  * distribution, not of the system: `van-der-corput`, `golden-angle` and
  * `uniform` never read the sibling count, so under them adding, removing or
@@ -122,17 +143,37 @@ export const DISTRIBUTIONS = {
   },
   monotonic: (index, count) => (index + 0.5) / count,
   uniform: () => 0.5,
-} as const satisfies Record<string, Distribution>;
-export type DistributionName = keyof typeof DISTRIBUTIONS;
+} as const satisfies Record<DistributionName, Distribution>;
 
 export const DEFAULT_DISTRIBUTION: DistributionName = "van-der-corput";
 
+/**
+ * [LAW:single-enforcer] THE resolution of an authored distribution NAME to the
+ * function an instance places by — an absent name is the default. Every placer
+ * (a compiled container, a `{{ menu }}`'s options, a bare `{{ picker }}`) reads
+ * "omitted yields van der Corput" through this one call, so no two of them can
+ * default differently.
+ */
+export const placedBy = (name: DistributionName | undefined): Distribution =>
+  DISTRIBUTIONS[name ?? DEFAULT_DISTRIBUTION];
+
 // --- Address -> entry ---------------------------------------------------------
 
-/** One step down the tree: which child, of how many. `0 <= index < count`. */
-export interface AddressStep {
+/** Which child, of how many. `0 <= index < count`. */
+export interface Position {
   readonly index: number;
   readonly count: number;
+}
+
+/**
+ * One step down the tree: a position, placed by the PARENT's distribution —
+ * the one field every placer carries, read here at every level of the tree.
+ * [LAW:dataflow-not-control-flow] A step carries the function it is placed by,
+ * so the fold below calls whatever each level was handed; a tree mixing five
+ * distributions is five values, not five code paths.
+ */
+export interface AddressStep extends Position {
+  readonly distribution: Distribution;
 }
 
 /** The steps from the root to a node. The root's address is empty. */
@@ -146,20 +187,17 @@ export type Address = readonly AddressStep[];
 const LEVEL_DECAY = 0.37;
 
 /**
- * The index into a vocabulary of `size` entries that `address` selects under
- * `distribution`: a weighted fold of the per-level positions, rounded, taken
- * modulo the size. A size of 1 selects entry 0 for every address, which is
- * what makes a one-entry vocabulary a uniform bar. `vocabularySelect` is the
- * sole caller and owns the size ≥ 1 precondition.
+ * The index into a vocabulary of `size` entries that `address` selects: a
+ * weighted fold of the per-level positions — each level placed by its own
+ * step's distribution — rounded, taken modulo the size. A size of 1 selects
+ * entry 0 for every address, which is what makes a one-entry vocabulary a
+ * uniform bar. `vocabularySelect` is the sole caller and owns the size ≥ 1
+ * precondition.
  */
-function vocabularyIndex(
-  address: Address,
-  distribution: Distribution,
-  size: number,
-): number {
+function vocabularyIndex(address: Address, size: number): number {
   let value = 0;
   let weight = 1;
-  for (const { index, count } of address) {
+  for (const { index, count, distribution } of address) {
     value += distribution(index, count) * weight * size;
     weight *= LEVEL_DECAY;
   }
@@ -179,20 +217,16 @@ function vocabularyIndex(
 export function vocabularySelect<T extends {}>(
   vocabulary: readonly T[],
   address: Address,
-  distribution: Distribution,
 ): T {
-  const entry =
-    vocabulary[vocabularyIndex(address, distribution, vocabulary.length)];
+  const entry = vocabulary[vocabularyIndex(address, vocabulary.length)];
   if (entry === undefined)
     throw new Error("vocabularySelect: empty vocabulary");
   return entry;
 }
 
 /** The decorative entry a node's address selects. */
-export const decorEntryFor = (
-  address: Address,
-  distribution: Distribution,
-): DecorEntry => vocabularySelect(DECOR_VOCABULARY, address, distribution);
+export const decorEntryFor = (address: Address): DecorEntry =>
+  vocabularySelect(DECOR_VOCABULARY, address);
 
 /**
  * [LAW:parse-dont-validate] The one unit that turns a palette role NAME into a
@@ -233,11 +267,8 @@ export function decorEntryColour(
 }
 
 /** A node's decorative background: the colour of the entry its address selects. */
-export const decorFor = (
-  palette: Palette,
-  address: Address,
-  distribution: Distribution,
-): ColorRgba => decorEntryColour(palette, decorEntryFor(address, distribution));
+export const decorFor = (palette: Palette, address: Address): ColorRgba =>
+  decorEntryColour(palette, decorEntryFor(address));
 
 // --- The state region ---------------------------------------------------------
 
@@ -400,22 +431,22 @@ export function bandFor(palette: Palette, disclosure: Disclosure): Band {
 const BAND_MEMO = new WeakMap<Palette, Map<string, Band>>();
 
 /**
- * The colour of item `step` (which of how many) in the band `disclosure`
- * opens: placed along the plane→state axis by the band's own `distribution`,
- * inside `BAND_WINDOW`. The same `f(index, count)` the bar's rows and cells
- * address the vocabulary through — one placement mechanism at every level; a
- * band only scales it into its plane-to-state window.
+ * The colour of item `step` (which of how many, placed by the band's own
+ * distribution) in the band `disclosure` opens: placed along the plane→state
+ * axis inside `BAND_WINDOW`. A band is one more step on its trigger's address,
+ * so the step is the SAME shape the bar's rows and cells address the
+ * vocabulary through — one placement mechanism at every level; a band only
+ * scales it into its plane-to-state window.
  */
 export function bandItemFor(
   palette: Palette,
   disclosure: Disclosure,
-  step: AddressStep,
-  distribution: Distribution,
+  { index, count, distribution }: AddressStep,
 ): ColorRgba {
   const { state, plane } = bandFor(palette, disclosure);
   return blendRgb(
     plane,
     state,
-    BAND_WINDOW.floor + BAND_WINDOW.span * distribution(step.index, step.count),
+    BAND_WINDOW.floor + BAND_WINDOW.span * distribution(index, count),
   );
 }
