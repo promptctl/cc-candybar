@@ -8,9 +8,9 @@
 //
 // [LAW:single-enforcer] Every env var that steers where a durable write lands
 // is isolated here, for the fixture's lifetime, and restored on dispose: the
-// XDG pair derive the history path and the first-ever-write fallback, and
-// CC_CANDYBAR_CONFIG outranks the whole chain — left alone, a developer's own
-// setting would route every click in every suite to their real config file.
+// XDG pair derive the history path and the first-ever-write fallback. (A
+// developer's own CC_CANDYBAR_CONFIG cannot leak in: the daemon reads none —
+// it is a client hint, composed into the render origin, brandon-config-5g8.)
 
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -39,8 +39,15 @@ export interface DurableConfig {
   parsed(): Record<string, unknown>;
   /** The history stack of `configPath` (or `file`) — empty until its first edit. */
   history(file?: string): FileHistory;
-  /** What the render handler records so a click resolves this file. */
-  seedOrigin(sessionState: SessionStateRW, sessionId: string): void;
+  /**
+   * What the render handler records so a click resolves this file — or, with
+   * `configFile`, the explicit path the session's render was composed from.
+   */
+  seedOrigin(
+    sessionState: SessionStateRW,
+    sessionId: string,
+    configFile?: string,
+  ): void;
   dispose(): void;
 }
 
@@ -59,7 +66,6 @@ export function durableConfig(prefix = "cc-candybar-durable-"): DurableConfig {
   const isolated: EnvVars = {
     XDG_STATE_HOME: join(root, "state"),
     XDG_CONFIG_HOME: join(root, "xdg-config"),
-    CC_CANDYBAR_CONFIG: undefined,
   };
   const saved: EnvVars = Object.fromEntries(
     Object.keys(isolated).map((name) => [name, process.env[name]]),
@@ -92,11 +98,15 @@ export function durableConfig(prefix = "cc-candybar-durable-"): DurableConfig {
           FileHistory
         >
       )[file] ?? { past: [], future: [] },
-    seedOrigin: (sessionState, sessionId) =>
+    seedOrigin: (sessionState, sessionId, configFile) =>
       sessionState.set(
         sessionId,
         SESSION_RENDER_ORIGIN_KEY,
-        encodeRenderOrigin({ projectDir: root, cwd: root, configFile: null }),
+        encodeRenderOrigin({
+          projectDir: root,
+          cwd: root,
+          configFile: configFile ?? null,
+        }),
       ),
     dispose: () => {
       assignEnv(saved);

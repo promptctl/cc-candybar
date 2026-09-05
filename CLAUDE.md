@@ -68,9 +68,9 @@ Wire format lives in `src/daemon/protocol.ts`. The Rust client mirrors the wire 
 
 ### Config resolution (`src/config/dsl-loader.ts`)
 
-`resolveDslConfigPath(projectDir, cwd)` picks the first existing path from this order:
+`resolveDslConfig(projectDir, cwd, configFile)` picks the first existing path from this order:
 
-1. `$CC_CANDYBAR_CONFIG` (env var, literal path with `~` expansion)
+1. `$CC_CANDYBAR_CONFIG` — read by the **client** (`src/config-hint.ts`, mirrored in the Rust client) and sent as the `configEnv` client hint, composed at the request boundary in `server.ts` as the lowest of three (a session's load-config pick > `--config` > the hint); the daemon consults no env of its own for it (it is detached, so its env is whichever shell spawned it — brandon-config-5g8). Resolution is the typed `ConfigResolution` (`file` | `default` | `missing` | `unreadable`), the product of one fold over the candidate list whose presence probe is three-state (`present` | `absent` | `Unchecked{path,error}` — only ENOENT is absence). `file`/`default` carry `unchecked`: chain locations a stat could not see past (an unsearchable directory, a symlink loop), each rendered as a `Config location could not be checked: <path> — <error>` line while the search went on to the next verified candidate, never halting on a guess. An explicit path that names no file is `missing` (`Config file not found: <path>`), and one stat could not see is `unreadable` carrying the errno (`Config file could not be read: <path> — <error>`); both render the bundled default under that warning (liveness: the watcher loads the file when it can be read), never the silent `default`. `configResolutionNotice` is the one spelling of all three, rendered by `RenderCache` and by `cc-candybar check` alike.
 2. `<projectDir>/.cc-candybar.json5` (then `.json` at the same location)
 3. `<cwd>/.cc-candybar.json5` (then `.json`)
 4. `$XDG_CONFIG_HOME/cc-candybar/config.json5` (then `.json`; defaults to `~/.config/cc-candybar/config.json5`)

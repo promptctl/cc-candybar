@@ -13,6 +13,7 @@
 import path from "node:path";
 
 import { PROTOCOL_VERSION, type ClientHints } from "../../src/daemon/protocol";
+import type { ClaudeHookData } from "../../src/utils/claude";
 import { parseHandlerUrl } from "../../src/install/index";
 import { effectsOf, type DecodedEffect } from "./click";
 import { sendDaemonRequest, waitForExit } from "./daemon-wire";
@@ -34,14 +35,29 @@ const REPLY_BUDGET_MS = 5000;
 // condition as a hard failure.
 const TIMEOUT_RETRY_BUDGET = 5;
 
+// The Status hook payload Claude Code sends, as `render` below relays it and
+// as the real client reads it from stdin.
+export function hookData(sessionId: string, cwd: string): ClaudeHookData {
+  return {
+    hook_event_name: "Status",
+    session_id: sessionId,
+    transcript_path: path.join(cwd, "transcript.jsonl"),
+    cwd,
+    model: { id: "claude-opus-4-7", display_name: "Opus 4.7" },
+    workspace: { current_dir: cwd, project_dir: cwd, added_dirs: [] },
+  };
+}
+
 // One status-line render, as Claude Code would ask for it. `hints` are the
 // client-observed facts (termCols/termRows/ssh) spread onto the request the
-// way the real client spreads them.
+// way the real client spreads them; `args` is the client's argv (binary path
+// first, as parseRenderArgs expects), empty for a bare render.
 export async function render(
   sockPath: string,
   sessionId: string,
   cwd: string,
   hints: ClientHints = {},
+  args: string[] = [],
 ): Promise<string> {
   for (let attempt = 1; ; attempt++) {
     const resp = await sendDaemonRequest(
@@ -49,15 +65,8 @@ export async function render(
       {
         v: PROTOCOL_VERSION,
         kind: "render",
-        hookData: {
-          hook_event_name: "Status",
-          session_id: sessionId,
-          transcript_path: path.join(cwd, "transcript.jsonl"),
-          cwd,
-          model: { id: "claude-opus-4-7", display_name: "Opus 4.7" },
-          workspace: { current_dir: cwd, project_dir: cwd, added_dirs: [] },
-        },
-        args: [],
+        hookData: hookData(sessionId, cwd),
+        args,
         cwd,
         ...hints,
       },

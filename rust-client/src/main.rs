@@ -241,6 +241,7 @@ fn render(argv: &[String], hook_data: &serde_json::Value) -> RenderOutcome {
     let (term_cols, term_rows) = detect_term_extents();
     let ssh = detect_ssh();
     let tmux = detect_tmux();
+    let config_env = detect_config_env();
 
     let mut request = serde_json::json!({
         "v": PROTOCOL_VERSION,
@@ -267,6 +268,11 @@ fn render(argv: &[String], hook_data: &serde_json::Value) -> RenderOutcome {
     // tmux is UNCONDITIONAL too: `null` is the affirmative "not in tmux", an
     // object is the tmux facts — absence stays "client too old to report".
     request["tmux"] = tmux;
+    // configEnv is CONDITIONAL like termCols: an unset-or-empty variable is
+    // the affirmative "no override", spelled as an absent field.
+    if let Some(path) = config_env {
+        request["configEnv"] = serde_json::Value::from(path);
+    }
     // --- end client hints ---
     let body = match serde_json::to_vec(&request) {
         Ok(b) => b,
@@ -472,6 +478,19 @@ const TMUX_ENV: TmuxEnv = TmuxEnv {
     pane: "TMUX_PANE",
     truecolor: "CLAUDE_CODE_TMUX_TRUECOLOR",
 };
+
+// The explicit config path the session's shell carries — mirrors CONFIG_ENV
+// in src/config-hint.ts, diffed by scripts/check-protocol.mjs. The daemon is
+// detached and reads no CC_CANDYBAR_CONFIG of its own (brandon-config-5g8:
+// an override set on the client never reached a running daemon), so only the
+// client can report it. Raw here; `~` is expanded where the daemon stamps it.
+const CONFIG_ENV: &str = "CC_CANDYBAR_CONFIG";
+
+// [LAW:dataflow-not-control-flow] Total by construction, like detect_ssh:
+// unset-or-empty is the affirmative "no override" (`None`), never a failure.
+fn detect_config_env() -> Option<String> {
+    env::var(CONFIG_ENV).ok().filter(|v| !v.is_empty())
+}
 
 fn detect_tmux() -> serde_json::Value {
     let raw = |name: &str| env::var(name).ok();
