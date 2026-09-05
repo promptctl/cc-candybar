@@ -225,11 +225,11 @@ function insertChrome(
   //
   // [LAW:no-silent-failure] It is deliberately NOT one static display. A preset
   // has N insertion points whose rendered rows are byte-identical, and their
-  // dropped bodies are identical too — so with no per-state display, an open `+`
-  // is indistinguishable from the two beside it and the bar silently stops
-  // answering "which one did I open". The tint that marks other open menus
-  // (node-registry's `drops.length > 0`) cannot answer it either: this segment
-  // declares no bg, so there is nothing to tint.
+  // dropped bodies are identical too. The open one does wear its band's state
+  // colour (node-registry picks `styles.trigger` whenever a segment has drops,
+  // authored bg or not), but colour alone is a hint the glyph should not
+  // depend on: with one static display, "which one did I open" would rest on
+  // a tint the terminal's colour depth may flatten. The `✕` names it.
   artifacts.segments[chromeSegName] = {
     template: `{{ menu "${applyName}" "+" "${DISCLOSURE_GLYPH_CLOSE}" }}`,
     when: EDIT_MODE_GATE,

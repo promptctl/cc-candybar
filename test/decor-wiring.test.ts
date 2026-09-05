@@ -21,6 +21,7 @@ import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import { registerDslConfig, renderDsl } from "../src/dsl/render";
 import type { CompiledNode } from "../src/dsl/node-registry";
+import type { DslConfig } from "../src/config/dsl-types";
 import { SessionState } from "../src/daemon/session-state";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import { transposedPalette } from "../src/themes/palette-resolvers";
@@ -63,8 +64,8 @@ function addressOf(root: CompiledNode, name: string): Address {
   return found;
 }
 
-function build(src: string, look?: ThemeKey) {
-  const config = parseAndValidate("<test>", src, ALLOWED);
+function build(src: string, look?: ThemeKey, dflt?: DslConfig) {
+  const config = parseAndValidate("<test>", src, ALLOWED, dflt);
   const store = new VariableStore();
   const registry = new SourceRegistry(store, "", undefined, new SessionState());
   const compiled = registerDslConfig(config, registry);
@@ -199,5 +200,85 @@ describe("candybar-render-ai7.4 — the walk paints the closed cell with decorFo
     expect(looked.bgOf("a")).not.toBe(plain.bgOf("a"));
     plain.dispose();
     looked.dispose();
+  });
+});
+
+// --- candybar-render-ai7.5: the bundled default spends no role on decoration --
+//
+// Before .5 the bundled segments named `surface` / `panel` / `surface-active`
+// so that neighbours would look different — hand-curated variety the
+// vocabulary now supplies by address. What survives is MEANING: a threshold
+// template (context / block / weekly / burnrate) or a hue-anchored alert
+// (host's `warning`). [LAW:behavior-not-structure] The first test states that
+// rule over whatever the bundled config declares — a new segment joins the
+// rule by existing; the second and third measure the rendered cells.
+
+import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
+import { SETTINGS_ANCHOR } from "../src/config/settings-menu";
+import type { SemanticRole } from "../src/themes/decor";
+
+// [LAW:types-are-the-program] Keyed on the SemanticRole union, so a role added
+// to (or removed from) the type is a compile error here, not a silent gap.
+const ALERT_ROLE: Record<SemanticRole, true> = {
+  error: true,
+  success: true,
+  warning: true,
+};
+
+/** A payload that trips every bundled threshold and reveals every alert. */
+const HOT = {
+  workspace: { current_dir: "/w/p", project_dir: "/w/p" },
+  model: { display_name: "Opus" },
+  git: { branch: "main", repoName: "p" },
+  host: { ssh: true, user: "u", name: "h" },
+  context: { totalTokens: 1000, contextLeft: 10 },
+  block: { nativeUtilization: 95, resetsAt: 1, etaMinutes: 1 },
+  weekly: { percentage: 95, resetsAt: 1, etaMinutes: 1 },
+};
+
+// `burnrate` is declared but opt-in (not in the bundled root); a third row
+// merged by name roots it beside the bundled identity/status rows.
+const BUNDLED = `{
+  globals: { palette: '${THEME}' },
+  root: { rows: { probe: { h: ['burnrate'] } } },
+}`;
+
+describe("candybar-render-ai7.5 — the bundled default authors a `bg:` only to state meaning", () => {
+  test("every authored `bg:` is a threshold template or a hue-anchored alert role", () => {
+    const authored = Object.entries(DEFAULT_DSL_CONFIG.segments).flatMap(
+      ([name, seg]) => (seg.bg === undefined ? [] : [[name, seg.bg] as const]),
+    );
+    // [LAW:no-silent-failure] The sweep must not have taken the
+    // meaning-bearing specs with it: some segment still states something.
+    expect(authored.length).toBeGreaterThan(0);
+    for (const [name, bg] of authored) {
+      expect([name, bg.includes("{{") || bg in ALERT_ROLE]).toEqual([name, true]);
+    }
+  });
+
+  test("the threshold and alert cells still paint meaning over the tint", () => {
+    const rt = build(BUNDLED, undefined, DEFAULT_DSL_CONFIG);
+    rt.render(HOT);
+    const palette = getThemePalette(THEME);
+    const error = palette.get("error")!.hex;
+    const warning = palette.get("warning")!.hex;
+    expect(rt.bgOf("context")).toBe(error);
+    expect(rt.bgOf("block")).toBe(error);
+    expect(rt.bgOf("weekly")).toBe(error);
+    expect(rt.bgOf("burnrate")).toBe(error);
+    expect(rt.bgOf("host")).toBe(warning);
+    for (const name of ["context", "block", "weekly", "burnrate", "host"]) {
+      expect([name, rt.bgOf(name)]).not.toEqual([name, rt.expectedTint(name)]);
+    }
+    rt.dispose();
+  });
+
+  test("every other bundled cell — the settings door included — wears its address's tint", () => {
+    const rt = build(BUNDLED, undefined, DEFAULT_DSL_CONFIG);
+    rt.render(HOT);
+    for (const name of ["directory", "model", "gitaculous", "toolbar", SETTINGS_ANCHOR]) {
+      expect([name, rt.bgOf(name)]).toEqual([name, rt.expectedTint(name)]);
+    }
+    rt.dispose();
   });
 });
