@@ -90,8 +90,8 @@ export interface RenderRequest {
 //   • `configEnv` absent — the client's shell carries no `CC_CANDYBAR_CONFIG`
 //     (or the client is too old to report one; both read the same way: no
 //     override from the client, the precedence chain applies). Present, it is
-//     the `~`-expanded path the client named, composed with `--config` at
-//     the request boundary (server.ts) and never with the daemon's own env —
+//     the `~`-expanded path the client named; server.ts composes it beneath
+//     a load-config pick and `--config`, never with the daemon's own env —
 //     the override that ticket brandon-config-5g8 measured going nowhere.
 export interface ClientHints {
   readonly termCols?: number;

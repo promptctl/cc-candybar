@@ -14,16 +14,22 @@ import path from "node:path";
 // format > compatibility tail).
 const CONFIG_EXTENSIONS = ["json5", "json"] as const;
 
-// [LAW:no-silent-failure] Presence, not readability. `fs.existsSync` answers
-// false to EVERY stat failure, so a file behind an unsearchable directory
-// resolved as "not found" — a permissions problem reported as a wrong path.
-// Only ENOENT is absence; any other failure is a file that IS there, and the
-// loader's own read reports the real errno on the strip.
-function present(p: string): boolean {
+// [LAW:types-are-the-program] One stat, carried as the fact it found rather
+// than collapsed to a boolean: `fs.existsSync` answers false to EVERY stat
+// failure, so a file behind an unsearchable directory resolved as "not found"
+// — a permissions problem reported as a wrong path. Only ENOENT is `absent`;
+// any other failure is `unknown`, something stat cannot see past. The
+// resolver treats `unknown` as a file the loader must read (its read reports
+// the real errno on the strip); the collision detector counts only `present`
+// (it has no read to correct a guess).
+type Presence = "present" | "absent" | "unknown";
+function presence(p: string): Presence {
   try {
-    return fs.statSync(p, { throwIfNoEntry: false }) !== undefined;
+    return fs.statSync(p, { throwIfNoEntry: false }) === undefined
+      ? "absent"
+      : "present";
   } catch {
-    return true;
+    return "unknown";
   }
 }
 
@@ -50,9 +56,9 @@ export function expandHome(p: string): string {
  * cache uses this to watch every candidate location so the creation of any
  * file in the resolution chain triggers hot-reload.
  *
- * `configFile` is the highest-precedence entry — the explicit path the
- * CLIENT named, its `--config` flag or its `CC_CANDYBAR_CONFIG` (already
- * made literal by `sanitizeConfigPath`). When present, it is the
+ * `configFile` is the highest-precedence entry — the explicit path
+ * server.ts composed for the session (load-config pick > `--config` >
+ * `configEnv` hint, already literal). When present, it is the
  * sole candidate and the rest of the precedence chain is bypassed. This
  * module reads no environment of its own: the daemon is detached and
  * one-per-user, so its env answers for whichever shell spawned it, not for
@@ -106,8 +112,8 @@ function xdgConfigBase(): string {
  *   • `file` — a candidate exists; load it.
  *   • `default` — the precedence chain named no explicit file and none of
  *     its locations exist. The bundled default is what the user asked for.
- *   • `missing` — the client named a file (`--config`, `CC_CANDYBAR_CONFIG`)
- *     and it is absent. The bundled default renders so a long-running bar
+ *   • `missing` — an explicit file was named (`configFile`) and it is
+ *     absent. The bundled default renders so a long-running bar
  *     stays live and the watcher recovers when the file appears — but it is
  *     not what the user asked for, and the render says so.
  *
@@ -124,8 +130,8 @@ export type ConfigResolution =
 
 /**
  * Resolution order for the user's DSL config file:
- *   1. `configFile` — the client's explicit path (`--config <path>`, else its
- *      `CC_CANDYBAR_CONFIG`; both `~`-expanded at the wire boundary)
+ *   1. `configFile` — the session's explicit path (load-config pick >
+ *      `--config` > `configEnv` hint, composed literal in server.ts)
  *   2. `<projectDir>/.cc-candybar.json5`
  *   3. `<projectDir>/.cc-candybar.json`
  *   4. `<cwd>/.cc-candybar.json5`
@@ -135,7 +141,7 @@ export type ConfigResolution =
  *   7. `$XDG_CONFIG_HOME/cc-candybar/config.json`
  *
  * [LAW:dataflow-not-control-flow] The locations array is data; the search is
- * `locations.find(present)`. Adding a layer is a new array entry, not a new
+ * `find` over `presence`. Adding a layer is a new array entry, not a new
  * branch. Extension support is a property of the candidate list, not the
  * search.
  *
@@ -148,7 +154,7 @@ export function resolveDslConfig(
   configFile?: string,
 ): ConfigResolution {
   const found = dslConfigCandidatePaths(projectDir, cwd, configFile).find(
-    present,
+    (p) => presence(p) !== "absent",
   );
   if (found !== undefined) return { kind: "file", path: found };
   return configFile === undefined
@@ -233,7 +239,7 @@ export function detectConfigCollisions(
   for (const candidate of candidates) {
     if (seen.has(candidate)) continue;
     seen.add(candidate);
-    if (!present(candidate)) continue;
+    if (presence(candidate) !== "present") continue;
     uniqueExisting.push(candidate);
   }
   // Group by (dir + base-without-extension). A group with > 1 existing

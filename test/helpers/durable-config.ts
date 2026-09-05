@@ -39,8 +39,15 @@ export interface DurableConfig {
   parsed(): Record<string, unknown>;
   /** The history stack of `configPath` (or `file`) — empty until its first edit. */
   history(file?: string): FileHistory;
-  /** What the render handler records so a click resolves this file. */
-  seedOrigin(sessionState: SessionStateRW, sessionId: string): void;
+  /**
+   * What the render handler records so a click resolves this file — or, with
+   * `configFile`, the explicit path the session's render was composed from.
+   */
+  seedOrigin(
+    sessionState: SessionStateRW,
+    sessionId: string,
+    configFile?: string,
+  ): void;
   dispose(): void;
 }
 
@@ -91,11 +98,15 @@ export function durableConfig(prefix = "cc-candybar-durable-"): DurableConfig {
           FileHistory
         >
       )[file] ?? { past: [], future: [] },
-    seedOrigin: (sessionState, sessionId) =>
+    seedOrigin: (sessionState, sessionId, configFile) =>
       sessionState.set(
         sessionId,
         SESSION_RENDER_ORIGIN_KEY,
-        encodeRenderOrigin({ projectDir: root, cwd: root, configFile: null }),
+        encodeRenderOrigin({
+          projectDir: root,
+          cwd: root,
+          configFile: configFile ?? null,
+        }),
       ),
     dispose: () => {
       assignEnv(saved);

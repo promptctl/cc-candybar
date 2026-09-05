@@ -25,6 +25,10 @@ import {
   detectConfigCollisions,
 } from "../src/config/dsl-loader";
 
+// Root bypasses directory permissions, so the unsearchable-directory fixtures
+// cannot exist for it.
+const asRoot = process.getuid?.() === 0;
+
 function mkdir(): { dir: string; cleanup: () => void } {
   const dir = mkdtempSync(join(tmpdir(), "cc-candybar-resolution-"));
   return {
@@ -247,7 +251,6 @@ describe("resolveDslConfig", () => {
   // the real errno, instead of a "not found" notice about a path that is
   // right. Root bypasses directory permissions, so the fixture cannot exist
   // for it.
-  const asRoot = process.getuid?.() === 0;
   (asRoot ? test.skip : test)(
     "an explicit file behind an unsearchable directory is `file`, not `missing`",
     () => {
@@ -339,6 +342,30 @@ describe("detectConfigCollisions", () => {
       cleanup();
     }
   });
+
+  // Presence the detector cannot verify is not a collision: an unsearchable
+  // location stats `unknown` for both spellings, and the resolver's read of
+  // the first is what reports the errno — a fabricated "shadows" warning
+  // beside it would assert a fact nothing checked.
+  (asRoot ? test.skip : test)(
+    "reports nothing for a location it cannot search",
+    () => {
+      const { dir, cleanup } = mkdir();
+      const restore = isolateEnv(dir);
+      const locked = join(dir, "locked");
+      mkdirSync(locked);
+      writeFileSync(join(locked, ".cc-candybar.json5"), VALID_CFG);
+      writeFileSync(join(locked, ".cc-candybar.json"), VALID_CFG);
+      chmodSync(locked, 0o000);
+      try {
+        expect(detectConfigCollisions(locked, locked)).toBeNull();
+      } finally {
+        chmodSync(locked, 0o755);
+        restore();
+        cleanup();
+      }
+    },
+  );
 
   test("ignores cross-location pairs (proj/.json5 + cwd/.json is not a collision)", () => {
     const { dir, cleanup } = mkdir();

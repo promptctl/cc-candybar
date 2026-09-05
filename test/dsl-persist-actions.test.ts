@@ -21,7 +21,7 @@
 //      from the file, so the next reload falls back to the bundled default.
 
 import { ownLinks, ownValidators } from "./helpers/ambient-chrome";
-import { readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import JSON5 from "json5";
 import { getThemePalette } from "@promptctl/rich-js";
@@ -822,6 +822,45 @@ function makeCache(): {
 }
 
 describe("a durable click lands in the file the next reload reads", () => {
+  // The origin's `configFile` is the explicit path server.ts composed for the
+  // session (load-config pick > `--config` > `configEnv` hint). It is the sole
+  // candidate: the click lands there — creating the file when it is `missing`
+  // — and never falls through to the project file or the XDG tail.
+  test("an origin with an explicit path writes that path, even before it exists", () => {
+    const config = parseAndValidate(
+      "<test>",
+      `{
+        variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
+        actions: { pin: { persist: "palette", from: "themes" } },
+      }`,
+      ALLOWED,
+    );
+    const disposers = deriveConfigActionValidators(config).map(
+      ({ key, spec }) => registerConfigValidator(key, spec),
+    );
+    const sessionState = new SessionState();
+    const named = join(durable.projectDir, "named.json5");
+    durable.seedOrigin(sessionState, "s1", named);
+    durable.write(`{ globals: { palette: "textual-dark" } }`);
+    const ctx: VerbContext = testVerbContext(sessionState);
+    try {
+      VERBS.get("set-config")!(encodeSegments(["s1", "palette", "nord"]), ctx);
+      expect(
+        (
+          JSON5.parse(readFileSync(named, "utf8")) as {
+            globals: { palette: unknown };
+          }
+        ).globals.palette,
+      ).toBe("nord");
+      expect(durable.parsed()).toEqual({
+        globals: { palette: "textual-dark" },
+      });
+      expect(existsSync(durable.xdgConfigPath)).toBe(false);
+    } finally {
+      for (const fn of disposers) fn();
+    }
+  });
+
   // [LAW:one-source-of-truth] The render records the RESOLUTION INPUTS, not
   // a resolved path, and the click re-runs the same chain over them
   // (durableConfigPath). That is the contract, pinned here because it is
@@ -847,8 +886,11 @@ describe("a durable click lands in the file the next reload reads", () => {
     const click = (palette: string): void =>
       VERBS.get("set-config")!(encodeSegments(["s1", "palette", palette]), ctx);
     const paletteIn = (file: string): unknown =>
-      (JSON5.parse(readFileSync(file, "utf8")) as { globals: { palette: unknown } })
-        .globals.palette;
+      (
+        JSON5.parse(readFileSync(file, "utf8")) as {
+          globals: { palette: unknown };
+        }
+      ).globals.palette;
     try {
       expect(durable.text()).toBeNull();
       click("nord");

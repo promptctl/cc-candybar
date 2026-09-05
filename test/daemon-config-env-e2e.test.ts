@@ -62,8 +62,9 @@ describe("brandon-config-5g8: a client's CC_CANDYBAR_CONFIG reaches a running da
     removeTmpDirs();
   });
 
-  // Three renders, three different bars:
+  // Four renders, four different bars:
   //   • no override — the bundled default, no strip;
+  //   • an override naming a valid file — that file's own bar, no strip;
   //   • an override naming a file the loader rejects — the red strip naming
   //     the file and its first issue, enough to send the user to `check`;
   //   • an override naming a file that does not exist — the bar says so, and
@@ -83,8 +84,18 @@ describe("brandon-config-5g8: a client's CC_CANDYBAR_CONFIG reaches a running da
       }),
     );
 
+    const viaValid = stripAnsi(
+      await render(sockPath, "cfg-env-valid", projectDir, {
+        configEnv: override,
+      }),
+    );
+
     expect(plain).not.toContain("Invalid config");
     expect(plain).not.toContain("Config file not found");
+
+    expect(viaValid).toContain("OVERRIDE-WINS");
+    expect(viaValid).not.toContain("Invalid config");
+    expect(viaValid).not.toContain("Config file not found");
 
     expect(viaRejected).toContain("⚠ Invalid config in");
     expect(viaRejected).toContain(rejected);

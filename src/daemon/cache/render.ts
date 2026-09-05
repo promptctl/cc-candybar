@@ -177,7 +177,7 @@ export interface CacheEntry {
 }
 
 // [LAW:one-source-of-truth] Cache key includes every input that affects DSL
-// resolution: projectDir, cwd, and the resolved `--config` file (if provided).
+// resolution: projectDir, cwd, and the session's explicit config path (if any).
 // `projectDir`/`cwd` are real strings by construction (validated upstream);
 // `configFile` collapses absent → empty in the key, distinct from any real path.
 function cacheKey(
@@ -235,8 +235,8 @@ function nearestWatchTarget(candidate: string): {
 }
 
 // [LAW:single-enforcer] Same enumerator the resolver uses, so the watcher
-// covers the exact set of paths the next reload would consult — a `--config`
-// override collapses to one candidate; absent, the precedence chain unfolds
+// covers the exact set of paths the next reload would consult — an explicit
+// `configFile` collapses to one candidate; absent, the precedence chain unfolds
 // in full. The resolved file (when one exists) is ALSO watched by inode, so
 // an in-place write fires as well as an atomic rename. Directories are
 // deduped with their filename filters unioned, and the whole set is sorted
