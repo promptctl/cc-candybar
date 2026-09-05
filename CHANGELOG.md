@@ -1,3 +1,10 @@
+# [1.56.0](https://github.com/promptctl/cc-candybar/compare/v1.55.0...v1.56.0) (2026-09-05)
+
+
+### Features
+
+* **doctor:** settings menu 🧰 tools › 🩺 doctor; first check repairs Claude Code's 256-colour downgrade in tmux (brandon-doctor-b6a) ([#216](https://github.com/promptctl/cc-candybar/issues/216)) ([c79fd80](https://github.com/promptctl/cc-candybar/commit/c79fd80ae82c341960b83c126a904a4aeb2f1aa7))
+
 # [1.55.0](https://github.com/promptctl/cc-candybar/compare/v1.54.0...v1.55.0) (2026-09-05)
 
 
