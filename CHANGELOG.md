@@ -1,3 +1,10 @@
+# [1.53.0](https://github.com/promptctl/cc-candybar/compare/v1.52.0...v1.53.0) (2026-09-05)
+
+
+### Features
+
+* **config:** author no decorative `bg:` — the vocabulary tint is every cell's floor (candybar-render-ai7.5) ([#212](https://github.com/promptctl/cc-candybar/issues/212)) ([6867eb6](https://github.com/promptctl/cc-candybar/commit/6867eb62fbe5b894277f53dd761b2b8a36ce1464)), closes [#1e1e1e](https://github.com/promptctl/cc-candybar/issues/1e1e1e) [#242f38](https://github.com/promptctl/cc-candybar/issues/242f38)
+
 # [1.52.0](https://github.com/promptctl/cc-candybar/compare/v1.51.0...v1.52.0) (2026-09-05)
 
 
