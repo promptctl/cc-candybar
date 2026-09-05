@@ -59,10 +59,6 @@ The file is a **complete** replacement for the bundled default — no merge laye
     branch:  { kind: 'shell', command: 'git branch --show-current',
                cache: { ttl: '5s' }, default: '' },
     clock:   { kind: 'time', layout: '15:04:05', cache: { ttl: '1s' } },
-    // per-segment hue rotation (degrees), read by the renderer. A literal pins
-    // it; make it `{ kind: 'state', key: 'hue-step' }` + a stepper widget to
-    // adjust it live.
-    'hue.step': { kind: 'literal', value: 14 },
   },
   segments: {
     user:      { template: ' {{ .user }} ',   bg: 'primary', fg: 'auto' },
@@ -117,7 +113,7 @@ Each segment is a DSL declaration with a `template` (text + interpolation + styl
 
 ## Themes
 
-The DSL config picks a base palette via `globals.palette` (e.g. `textual-dark`, `gruvbox`). Each segment may override with its own `palette:` field, and `bg`/`fg` evaluate as palette spec names (`primary`, `surface`, `panel`, `accent`, `foreground`, `auto`, `warning`, `error`, …). Color math runs through OKLCH for perceptual uniformity; the `hue.step` variable (read via the conventional `HUE_STEP_VAR` name) rotates adjacent segments by that many degrees to keep them visually distinct without authoring per-segment colors — a literal pins it, a `state` var driven by a stepper widget makes it adjustable live.
+The DSL config picks a base palette via `globals.palette` (e.g. `textual-dark`, `gruvbox`). Each segment may override with its own `palette:` field, and `bg`/`fg` evaluate as palette spec names (`primary`, `surface`, `panel`, `accent`, `foreground`, `auto`, `warning`, `error`, …). Color math runs through OKLCH for perceptual uniformity.
 
 ## Installation
 

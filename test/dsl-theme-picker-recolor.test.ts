@@ -40,7 +40,6 @@ const SRC = `{
   variables: {
     'session.id': { kind: 'input', path: 'session_id', default: '' },
     theme: { kind: 'state', key: 'theme', default: '${BASE_THEME}' },
-    'hue.step': { kind: 'literal', value: 14 },
   },
   actions: {
     applyTheme: { set: 'theme', from: 'themes' },

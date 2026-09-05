@@ -20,8 +20,8 @@ import {
  *
  * **Why `color` reads a live palette.** A segment's rendered palette is not a
  * property of the loaded config — it is the base theme (session choice over
- * config default) adapted by the render's look and the segment's hue shift,
- * all resolved per render, per segment. Binding `color` to a palette captured
+ * config default) adapted by the render's look, resolved per render. Binding
+ * `color` to a palette captured
  * when the config loaded put the *body* of a template on a different palette
  * than the `bg:`/`fg:` of the very same segment, so `{{ color "primary" }}`
  * and `bg: "primary"` could name one thing and paint two.
@@ -29,8 +29,8 @@ import {
  *
  * That divergence was not exotic. Any session theme click moved the segment's
  * background while leaving every in-body semantic color where it was; a look
- * or a per-segment hue rotation did the same. Reading the live palette makes
- * the two agree by construction rather than by coincidence.
+ * did the same. Reading the live palette makes the two agree by construction
+ * rather than by coincidence.
  *
  * **Why `bgOf` exists.** De-emphasis — drawing labels, punctuation and ids
  * quieter than the facts they frame — is "move this color toward the

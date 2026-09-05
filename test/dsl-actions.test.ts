@@ -430,13 +430,13 @@ describe("2de.12 — bounded set action", () => {
     globals: {},
     variables: {
       'session.id': { kind: 'input', path: 'session_id', default: '' },
-      'hue.step': { kind: 'state', key: 'hue', default: '14' },
+      level: { kind: 'state', key: 'level', default: '14' },
     },
     actions: {
-      down: { set: 'hue', min: 0, max: 60, by: -2 },
-      up: { set: 'hue', min: 0, max: 60, by: 2 },
+      down: { set: 'level', min: 0, max: 60, by: -2 },
+      up: { set: 'level', min: 0, max: 60, by: 2 },
     },
-    segments: { bar: { template: '{{ action "down" "◀" }} {{.hue.step}} {{ action "up" "▶" }}', bg: 'surface', fg: 'foreground' } },
+    segments: { bar: { template: '{{ action "down" "◀" }} {{.level}} {{ action "up" "▶" }}', bg: 'surface', fg: 'foreground' } },
     root: 'bar',
   }`;
 
@@ -448,8 +448,8 @@ describe("2de.12 — bounded set action", () => {
     // The link carries the irreducible intent — the signed delta — NOT a value
     // computed from the rendered `current` (the idempotent-absolute bug).
     expect(urls.map(effectsOf)).toEqual([
-      [{ verb: "step-state", args: ["s1", "hue", "-2"] }],
-      [{ verb: "step-state", args: ["s1", "hue", "2"] }],
+      [{ verb: "step-state", args: ["s1", "level", "-2"] }],
+      [{ verb: "step-state", args: ["s1", "level", "2"] }],
     ]);
     dispose();
   });
@@ -459,7 +459,7 @@ describe("2de.12 — bounded set action", () => {
   test("the step-state link is byte-identical across renders at different current values", () => {
     const { render, sessionState, dispose } = buildRuntime(SRC);
     const at14 = extractUrls(render());
-    sessionState.set("s1", "hue", "58");
+    sessionState.set("s1", "level", "58");
     const at58 = extractUrls(render());
     expect(stripAnsi(render())).toContain("◀ 58 ▶");
     expect(at58).toEqual(at14); // identical link strings despite 14 → 58
@@ -474,30 +474,30 @@ describe("2de.12 — bounded set action", () => {
     click(up);
     click(up);
     click(up); // same URL string, three times, no render between
-    expect(sessionState.get("s1", "hue")).toBe("20"); // 14 → 16 → 18 → 20
+    expect(sessionState.get("s1", "level")).toBe("20"); // 14 → 16 → 18 → 20
     dispose();
   });
 
   test("the first click seeds from the variable default (14), not from min", () => {
     const { render, click, sessionState, dispose } = buildRuntime(SRC);
-    expect(sessionState.get("s1", "hue")).toBeNull(); // unset
+    expect(sessionState.get("s1", "level")).toBeNull(); // unset
     click(extractUrls(render())[1]!); // ▶ from a never-written key
-    expect(sessionState.get("s1", "hue")).toBe("16"); // 14+2, NOT 0+2
+    expect(sessionState.get("s1", "level")).toBe("16"); // 14+2, NOT 0+2
     dispose();
   });
 
   test("navigation WRAPS past a bound to the other end at apply time", () => {
     const { render, click, sessionState, dispose } = buildRuntime(SRC);
-    sessionState.set("s1", "hue", "60"); // max
+    sessionState.set("s1", "level", "60"); // max
     click(extractUrls(render())[1]!); // ▶: 60 +2 wraps to min, not clamped to 60
-    expect(sessionState.get("s1", "hue")).toBe("0");
+    expect(sessionState.get("s1", "level")).toBe("0");
     dispose();
   });
 
   test("two bounded actions on one key merge to a single range gate carrying the seed", () => {
     const config = parseAndValidate("<test>", SRC, ALLOWED);
     expect(ownValidators(config, deriveActionValidators(config))).toEqual([
-      { key: "hue", spec: { kind: "range", min: 0, max: 60, seed: 14 } },
+      { key: "level", spec: { kind: "range", min: 0, max: 60, seed: 14 } },
     ]);
   });
 

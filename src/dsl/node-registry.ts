@@ -13,17 +13,17 @@
 //
 // [LAW:one-way-deps] This module sits BELOW render.ts (the driver): it imports
 // the leaf render/template helpers directly and receives the two recursive
-// capabilities (compileChild, renderChild) + the hue counter as DATA from the
-// driver. It must NOT import render.ts — that would invert the layering. render.ts
-// imports the compiled types + nodeType() from here, one-way.
+// capabilities (compileChild, renderChild) from the driver. It must NOT import
+// render.ts — that would invert the layering. render.ts imports the compiled
+// types + nodeType() from here, one-way.
 //
-// Hue is per-segment DECORATIVE only: each `segment` advances the cursor by one
-// unit (a container advances none), so colors stay positionally stable. It
-// carries NO structural meaning — unit cohesion is structural (one segment = one
-// strip item), not a function of matching backgrounds.
+// Colour is DECORATIVE only: a segment's tint derives from its address (where
+// it sits in the tree) and carries NO structural meaning — unit cohesion is
+// structural (one segment = one strip item), not a function of matching
+// backgrounds.
 
-import { RichText, IDENTITY } from "@promptctl/rich-js";
-import type { Palette, Style, ThemeKey } from "@promptctl/rich-js";
+import { RichText } from "@promptctl/rich-js";
+import type { Palette, Style } from "@promptctl/rich-js";
 import type { Template } from "@promptctl/go-template-js";
 import type {
   LayoutNode,
@@ -31,7 +31,6 @@ import type {
   SegmentDecl,
 } from "../config/dsl-types.js";
 import { splitCellsIntoLines } from "../render/split-lines.js";
-import { transposedPalette } from "../themes/index.js";
 import type { Address, AddressStep } from "../themes/decor.js";
 import {
   fragmentsToCells,
@@ -93,26 +92,20 @@ export interface NodeCompileCtx {
   compileChild(node: LayoutNode, path: string): CompiledNode;
 }
 
-// [LAW:single-enforcer] The render-time context. The hue COUNTER lives in the
-// driver; ctx exposes only nextHueShift() (advance + return this unit's shift) so
-// there is exactly one mutator. `visible` is THIS node's computed visibility
-// (the driver ANDs node.when with the parent's). renderChild continues the walk.
+// [LAW:single-enforcer] The render-time context. `visible` is THIS node's
+// computed visibility (the driver ANDs node.when with the parent's).
+// renderChild continues the walk.
 export interface NodeRenderCtx {
   readonly scope: object;
-  readonly basePalette: Palette;
-  // [LAW:one-source-of-truth] The render-wide look (the session's chosen
-  // theme-adaptation, resolved by the caller via effectiveLookName →
-  // lookKeyByName), threaded by the driver — one ThemeKey per render, IDENTITY
-  // when no look is chosen. Composed with the per-segment hue shift into ONE
-  // transposition key at the segment leaf.
-  readonly look: ThemeKey;
+  // [LAW:one-source-of-truth] The render's palette: the base theme (session
+  // choice over config default) under the render's look, transposed ONCE by
+  // the driver — every unpinned segment colours from this one object.
+  readonly palette: Palette;
   readonly visible: boolean;
   // [LAW:one-source-of-truth] The render-wide intra-cell padding (resolved
   // globals.padding), threaded by the driver from BuildLineOptions into every
   // segment's layout — one value per render, never re-defaulted per node.
   readonly padding: number;
-  // Advance the walk-owned hue cursor by one unit and return that unit's shift.
-  nextHueShift(): number;
   // [LAW:effects-at-boundaries] THIS node's address: the (index, count) steps
   // from the root, extended by one step per container level by the driver.
   // A pure fact about position — unchanged by any node being hidden — that
@@ -246,10 +239,9 @@ const containerType: NodeType<"container"> = {
     };
   },
   render(node, ctx) {
-    // [LAW:dataflow-not-control-flow] A container advances NO hue unit itself; its
-    // children do, walked in order so positional hue stays stable. Hidden or not,
-    // every child is rendered (parentVisible threads the gate) so hidden subtrees
-    // still advance the cursor.
+    // [LAW:dataflow-not-control-flow] Every child is walked, hidden or not:
+    // visibility is a value `parentVisible` threads, never a skipped call, and a
+    // child's address is its (index, count) here, unchanged by any sibling's `when`.
     return composeBlocks(
       node.direction,
       node.children.map((child, index) =>
@@ -280,11 +272,6 @@ const segmentType: NodeType<"segment"> = {
       throw new Error(`Layout segment "${node.name}" has no matching segment`);
     }
     const { seg, compiled: segCompiled } = found;
-
-    // [LAW:single-enforcer] Advance the hue cursor BEFORE the visibility gate so a
-    // hidden segment still consumes its unit — siblings after it keep their
-    // positionally-stable colors regardless of which segments are hidden.
-    const hueShift = ctx.nextHueShift();
     if (!ctx.visible) return [];
 
     // [LAW:no-silent-failure] Wrap the whole render body in a try/catch so a
@@ -299,29 +286,17 @@ const segmentType: NodeType<"segment"> = {
       if (!evaluateWhen(segCompiled.when, ctx.scope)) return [];
 
       // [LAW:dataflow-not-control-flow] The per-segment variability is WHICH
-      // palette — the base palette (per-segment override or basePalette)
-      // transposed by the render's look + this segment's hueShift, folded into
-      // ONE ThemeKey for a SINGLE transposePalette call (chaining two
-      // transpositions would double-pay OKLCH quantization and collide the
-      // transpose memo — see transposedPalette). An explicit per-segment
-      // `palette:` pin IGNORES the look, exactly as it ignores the session
-      // theme: the pin's presence is the discriminator, and its arm carries the
-      // identity look — a value choice, not a skipped operation.
-      const lookKey = segCompiled.palette !== undefined ? IDENTITY : ctx.look;
-      const palette = transposedPalette(
-        segCompiled.palette ?? ctx.basePalette,
-        {
-          ...lookKey,
-          hueShift: lookKey.hueShift + hueShift,
-        },
-      );
+      // palette: an explicit `palette:` pin, or the render's palette (the base
+      // theme under the look). A pin IGNORES the look exactly as it ignores the
+      // session theme — the pin's presence is the discriminator.
+      const palette = segCompiled.palette ?? ctx.palette;
 
       // [LAW:one-source-of-truth] ONE palette for this segment: its `bg:`, its
       // `fg:`, and every `{{ color }}` in its body resolve from this same
       // object. That is the whole reason the segment is entered before its body
       // evaluates rather than after — a body coloured from a palette resolved
       // independently of the cell it sits in is two palettes in one segment,
-      // and they diverge the moment a theme, look, or hue shift moves.
+      // and they diverge the moment a theme or look moves.
       const styles = ctx.enterSegment(
         node.name,
         palette,

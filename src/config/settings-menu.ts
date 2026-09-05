@@ -427,28 +427,10 @@ function expandAnchor(
                 // The `(?)` rides the row that already exists, immediately
                 // after the control it explains — so closed help costs no row
                 // and widens the bar by one cell, and open help reads as an
-                // answer to the checkbox on its left.
-                //
-                // Mid-row, DELIBERATELY, unlike edit mode's `(?)`, which
-                // edit-chrome.ts goes to lengths to trail. The difference is
-                // structural, not a discipline applied in one file and skipped
-                // here. `nextHueShift` (src/dsl/render.ts:697) counts segment
-                // leaves in pre-order, so a leaf's hue index is the number of
-                // leaves before it — which makes the consequence arithmetic:
-                // reordering leaves WITHIN a subtree cannot change the index of
-                // any leaf AFTER it, since the subtree's leaf count does not
-                // move. Edit chrome WRAPS the whole tree, so trailing there is
-                // after every existing leaf and costs zero. This menu splices
-                // MID-TREE at an anchor `withAnchor` lets the author put
-                // anywhere, so no position inside it is after the rest of the
-                // bar: the leaves it adds — this trigger plus one per
-                // PERSIST_HELP line, a count that lives in help-text.ts and is
-                // deliberately not copied here — shift everything past the
-                // anchor wherever inside the menu they sit. Trailing would cost
-                // the adjacency that IS the affordance. The fix is decoupling
-                // colour from tree position — candybar-render-y5h, which fixes
-                // every mid-tree synthesis at once rather than one file at a
-                // time.
+                // answer to the checkbox on its left. Mid-row, unlike edit
+                // mode's `(?)`, which trails the content it wraps: this menu is
+                // its own subtree, so a cell placed inside it moves no node of
+                // the bar around it, and the adjacency IS the affordance.
                 help.trigger,
                 ...PRIMARY_CONTROLS.map(
                   (c): LayoutNode => ({
