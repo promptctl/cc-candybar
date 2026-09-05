@@ -175,13 +175,14 @@ describe("bdi.4 — formatLongTimeRemaining helper (input = whole minutes)", () 
 });
 
 describe("bdi.4 — minutesUntilReset func against a frozen clock", () => {
-  // round(max(0, epoch*1000 - now)/60000). Future rounds to whole minutes; a
-  // 30s remainder rounds half-up to 1; a 29s remainder rounds to 0; past clamps.
+  // ceil(max(0, epoch*1000 - now)/60000). Any time left reads as at least 1;
+  // a whole minute reads exactly; the instant itself and the past clamp to 0.
   test.each<[number, string]>([
     [NOW_SEC, "0"],
-    [NOW_SEC + 29, "0"],
-    [NOW_SEC + 30, "1"],
+    [NOW_SEC + 1, "1"],
+    [NOW_SEC + 59, "1"],
     [NOW_SEC + 60, "1"],
+    [NOW_SEC + 61, "2"],
     [NOW_SEC + 90 * 60, "90"],
     [NOW_SEC - 3600, "0"],
     [NOW_SEC - 1, "0"],

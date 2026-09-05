@@ -173,15 +173,16 @@ export function ccCandybarFuncs(): FuncMap {
 // evaluation; tests inject a frozen clock for determinism.
 export function formatterFuncs(clock: () => Date = () => new Date()): FuncMap {
   return {
-    // Epoch-seconds → whole minutes until that instant, clamped at 0 for a past
-    // expiry: round(max(0, epoch*1000 − now)/60000). Consumed by the block/weekly
-    // segments (`formatLongTimeRemaining (minutesUntilReset .resetsAt)`) and the
-    // cacheTimer warmth countdown (numeric `le` thresholds).
+    // Epoch-seconds → minutes until that instant, the last partial minute
+    // counted whole and a past expiry clamped at 0: ceil(max(0, epoch*1000 −
+    // now)/60000). A countdown reads 0 only once the instant has passed —
+    // rounding read "0m" for the last half minute of a limit still at 100%.
+    // Consumed by the block/weekly segments (`formatLongTimeRemaining
+    // (minutesUntilReset .resetsAt)`) and the cacheTimer warmth countdown
+    // (numeric `le` thresholds).
     minutesUntilReset: {
       fn: (epochSeconds: number) =>
-        Math.round(
-          Math.max(0, epochSeconds * 1000 - clock().getTime()) / 60000,
-        ),
+        Math.ceil(Math.max(0, epochSeconds * 1000 - clock().getTime()) / 60000),
       // [LAW:types-are-the-program] An epoch is integer-valued; `int` rejects a
       // fractional or precision-losing carrier at the gate.
       argTypes: ["int"],
