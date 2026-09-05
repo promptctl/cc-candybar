@@ -898,21 +898,27 @@ describe("loadDslConfig — A-grammar (seg/h/v)", () => {
         variables: { "session.id": { kind: "input", path: "session_id", default: "" } },
       }`,
     );
-    // The group lowers to a vertical container whose body-container holds
-    // { h: ["m", "n"] } — a horizontal container of two segment refs.
+    // The group lowers to its toggle segment with the body hung on it; the
+    // body holds { h: ["m", "n"] } — a horizontal container of two segment refs.
     const root = rootNode(cfg.root);
-    expect(root.children[1]).toMatchObject({
-      kind: "container",
-      children: [
-        {
+    expect(root.children[0]).toMatchObject({
+      kind: "segment",
+      name: "groups.g",
+      opens: {
+        body: {
           kind: "container",
-          direction: "horizontal",
           children: [
-            { kind: "segment", name: "m" },
-            { kind: "segment", name: "n" },
+            {
+              kind: "container",
+              direction: "horizontal",
+              children: [
+                { kind: "segment", name: "m" },
+                { kind: "segment", name: "n" },
+              ],
+            },
           ],
         },
-      ],
+      },
     });
   });
 

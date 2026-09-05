@@ -799,8 +799,9 @@ static, non-interactive bar the gate exists to leave alone.
 
 **It's a splice, not a render branch.** Edit mode is not a special render
 mode — `-`/`+` are ordinary `SegmentDecl`s with ordinary `removeSegment`/
-`insertSegmentFrom` actions, spliced into the SAME tree shape `kind: "group"`
-sugar already lowers into. Toggling `edit.mode` changes which `when`
+`insertSegmentFrom` actions, spliced into the same container and segment
+nodes every root lowers to — inside disclosure bodies too, so the cells of an
+open group keep their `+`/`-`. Toggling `edit.mode` changes which `when`
 predicates pass; it never changes what code runs. Padding, charset, and
 strip style apply to chrome exactly as they apply to any segment you'd write
 by hand.

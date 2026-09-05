@@ -42,7 +42,7 @@ import {
   DISCLOSURE_GLYPH_CLOSED,
   DISCLOSURE_GLYPH_OPEN,
   disclosureCycleAction,
-  disclosureGate,
+  disclosureNode,
   disclosureStateVar,
   disclosureTrigger,
 } from "../disclosure.js";
@@ -186,7 +186,12 @@ function childrenSpec(
   };
 }
 
-const SEGMENT_NODE_SCHEMA: RecordSchema<SegmentNode> = {
+// [LAW:types-are-the-program] The AUTHORABLE segment node: `opens` — the
+// disclosure body a trigger hangs (candybar-render-ai7.9) — is deliberately
+// not a field here. Records reject unknown keys, so a config spelling it is a
+// load error, and `disclosureNode` (src/config/disclosure.ts) stays the only
+// producer of a body. The Omit is the statement, checked by the field map.
+const SEGMENT_NODE_SCHEMA: RecordSchema<Omit<SegmentNode, "opens">> = {
   noun: "layout-node key",
   fields: {
     kind: literalSpec("segment"),
@@ -619,29 +624,28 @@ function groupStateKey(g: { name: string; key?: string }): string {
   return g.key ?? GROUP_NS + g.name;
 }
 
-// [LAW:one-source-of-truth] Lower a group to the canonical grammar. The toggle
-// segment ref and the body predicate both derive from the group's name — the
-// same name the synthesis names the state var with, so the predicate reads
-// exactly the var the toggle's cycle writes. The body is open exactly when the
-// key holds THIS group's name (a sibling's name or "closed" hides it — the
-// accordion falls out of one key holding one name).
+// [LAW:one-source-of-truth] Lower a group to the canonical grammar: the toggle
+// segment with the body hung on it (`disclosureNode`, the one lowering every
+// disclosure takes). The toggle's ref and the body's open state both derive
+// from the group's name — the same name the synthesis names the state var
+// with, so the walk's gate reads exactly the var the toggle's cycle writes.
+// The body is open exactly when the key holds THIS group's name (a sibling's
+// name or "closed" hides it — the accordion falls out of one key holding one
+// name). The group's own `when` gates the toggle, and a hidden toggle renders
+// no body.
 function lowerGroup(g: GroupNodeInput): LayoutNode {
   const ref = GROUP_NS + g.name;
-  return {
-    kind: "container",
-    direction: "vertical",
-    children: [
-      { kind: "segment", name: ref },
-      {
-        kind: "container",
-        direction: g.direction ?? "vertical",
-        children: g.children,
-        when: disclosureGate({ variable: ref, member: g.name }),
-        ...(g.distribution !== undefined && { distribution: g.distribution }),
-      },
-    ],
-    ...(g.when !== undefined && { when: g.when }),
-  };
+  return disclosureNode(
+    ref,
+    { variable: ref, member: g.name },
+    {
+      kind: "container",
+      direction: g.direction ?? "vertical",
+      children: g.children,
+      ...(g.distribution !== undefined && { distribution: g.distribution }),
+    },
+    g.when,
+  );
 }
 
 function groupIssue(ctx: ValidateCtx, path: string, message: string): void {

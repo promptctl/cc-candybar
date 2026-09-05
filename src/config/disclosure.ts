@@ -21,7 +21,12 @@
 // `src/config/loader/reserved-namespace.ts`.
 
 import type { ActionDecl } from "./action.js";
-import type { VariableDecl } from "./dsl-types.js";
+import type {
+  ContainerNode,
+  DisclosureRef,
+  SegmentNode,
+  VariableDecl,
+} from "./dsl-types.js";
 
 // The "nothing open" sentinel a disclosure's key starts from and returns to on
 // close. A disclosure's MEMBER (a group name / a menu apply-action name) may
@@ -102,14 +107,28 @@ export function escapeTemplateLiteral(s: string): string {
   return s.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
 }
 
-// [LAW:types-are-the-program] One open disclosure, named by the two strings that
-// decide it: the VARIABLE a body reads and the MEMBER value that means "this one
-// is open". They are distinct because a group's variable is per-group
-// (`groups.<name>`) while its state KEY may be shared with accordion siblings —
-// so the pair, never a lone key, is what identifies an open state.
-export interface DisclosureRef {
-  readonly variable: string;
-  readonly member: string;
+// [LAW:one-source-of-truth] THE lowering of a disclosure to the tree: ONE
+// segment node — the trigger — with the body it opens hung on it
+// (`SegmentNode.opens`, candybar-render-ai7.9). Group sugar, the global
+// settings menu and its `⚙ config` sub-disclosure, and every `(?)` all lower
+// through this call, so there is one shape for "a trigger and its body" and
+// the render walk learns it once. The body carries no `when`: its openness is
+// `ref`, read by the walk through `disclosureGate` at compile — a gate spelled
+// on the body beside the trigger's cycle would be a second copy of one fact.
+// `when` gates the TRIGGER (and, through it, the body — a hidden trigger
+// renders nothing under it), which is what a group's own `when` means.
+export function disclosureNode(
+  name: string,
+  ref: DisclosureRef,
+  body: ContainerNode,
+  when?: string,
+): SegmentNode {
+  return {
+    kind: "segment",
+    name,
+    opens: { ref, body },
+    ...(when !== undefined && { when }),
+  };
 }
 
 // [LAW:single-enforcer] THE body predicate a disclosure implies. Variadic

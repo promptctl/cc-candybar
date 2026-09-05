@@ -21,14 +21,15 @@
 // are indistinguishable at render. Nothing here is a new render concept.
 
 import type { ActionDecl as ActionDeclType, OptionDomain } from "./action.js";
-import type {
-  ContainerNode,
-  DslConfig,
-  LayoutNode,
-  PresetDecl,
-  SegmentDecl,
-  SegmentNode,
-  VariableDecl,
+import {
+  mapOpens,
+  type ContainerNode,
+  type DslConfig,
+  type LayoutNode,
+  type PresetDecl,
+  type SegmentDecl,
+  type SegmentNode,
+  type VariableDecl,
 } from "./dsl-types.js";
 import { collectSegmentNames } from "./layout-ops.js";
 import { presetByName, presetNames, presetRoot } from "./presets.js";
@@ -40,7 +41,7 @@ import {
   EDIT_NS,
   EDIT_TOGGLE_ACTION,
 } from "./loader/edit-mode.js";
-import { declareHelp, type HelpDisclosure } from "./help.js";
+import { declareHelp } from "./help.js";
 import { EDIT_MODE_HELP } from "../help-text.js";
 import { GROUP_NS } from "./loader/layout.js";
 import { SETTINGS_NS } from "./settings-menu.js";
@@ -242,8 +243,11 @@ function insertChrome(
 // consecutive segments read `+ [seg1 -] + [seg2 -] + [seg3 -] +` — N+1 insert
 // points, N remove points); a container child recurses; an exempt segment
 // (a group toggle, a menu host, edit mode's own chrome) passes through
-// untouched. `posCounter` is threaded by reference so position identifiers
-// stay unique across the WHOLE preset tree, not just one container.
+// untouched — but the disclosure BODY a segment hangs (a group's children,
+// the settings rows) recurses like any container, so the cells inside an
+// open group keep their `+`/`-` while the toggle that opens it has none.
+// `posCounter` is threaded by reference so position identifiers stay unique
+// across the WHOLE preset tree, not just one container.
 function spliceContainer(
   node: ContainerNode,
   presetIdent: string,
@@ -264,22 +268,23 @@ function spliceContainer(
       child.kind === "segment" && !isChromeExempt(child.name) ? i : idx,
     -1,
   );
+  const splice = (body: ContainerNode): ContainerNode =>
+    spliceContainer(
+      body,
+      presetIdent,
+      rootKey,
+      domainName,
+      artifacts,
+      posCounter,
+    );
   for (const [i, child] of node.children.entries()) {
     if (child.kind === "container") {
-      children.push(
-        spliceContainer(
-          child,
-          presetIdent,
-          rootKey,
-          domainName,
-          artifacts,
-          posCounter,
-        ),
-      );
+      children.push(splice(child));
       continue;
     }
+    const spliced = mapOpens(child, splice);
     if (isChromeExempt(child.name)) {
-      children.push(child);
+      children.push(spliced);
       continue;
     }
     const cells: LayoutNode[] = [
@@ -292,7 +297,7 @@ function spliceContainer(
         "before",
         artifacts,
       ),
-      child,
+      spliced,
       removeChrome(presetIdent, rootKey, child.name, artifacts),
       ...(i === lastContent
         ? [
@@ -340,18 +345,16 @@ function spliceContainer(
 // `when` that is every other synthesized affordance's edit-mode gate narrowed
 // by the one extra fact this affordance depends on.
 //
-// candybar-settings-ui-aok.6 hangs edit mode's `(?)` off the same content — its
-// BODY is a per-preset row on the same footing as the banner, so this function
-// now brackets the content rather than only preceding it, which is what its name
-// says and why it is no longer "prepend". Its TRIGGER is not a row; see
-// withTrailingCell.
+// candybar-settings-ui-aok.6 hangs edit mode's `(?)` off the same content. Its
+// body hangs on the trigger (`SegmentNode.opens`) and drops below whichever row
+// the trigger rides, so this function places ONE cell; see withTrailingCell.
 function wrapWithPresetRows(
   splicedRoot: LayoutNode,
   presetName: string,
   presetIdent: string,
   rootKey: string,
   artifacts: ChromeArtifacts,
-  help: HelpDisclosure,
+  help: SegmentNode,
 ): LayoutNode {
   const actionName = `${EDIT_NS}${presetIdent}.resetLayout`;
   const chromeSegName = `${EDIT_NS}${presetIdent}.customized`;
@@ -397,21 +400,19 @@ function wrapWithPresetRows(
     direction: "vertical",
     children: [
       { kind: "segment", name: chromeSegName },
-      withTrailingCell(splicedRoot, help.trigger),
-      // The body is a ROW of its own, and only while the disclosure is open —
-      // dropping BELOW the row that revealed it, like every other disclosure
-      // body in this codebase.
-      help.body,
+      // The `(?)`'s body drops BELOW the row the trigger rides while the
+      // disclosure is open, like every other disclosure body in this codebase.
+      withTrailingCell(splicedRoot, help),
     ],
     ...(splicedRoot.when !== undefined && { when: splicedRoot.when }),
   };
 }
 
-// [LAW:one-source-of-truth] `HelpDisclosure.trigger` is a CELL, and its contract
-// is that the caller joins it to a row it ALREADY HAS — the settings menu pushes
-// it into the row holding `persist?`. Edit mode's rows are the ones
-// spliceContainer just built, so the trigger joins the last of them. Two
-// constraints pin that placement and nothing else satisfies both:
+// [LAW:one-source-of-truth] The `(?)` is a CELL, and its contract is that the
+// caller joins it to a row it ALREADY HAS — the settings menu pushes it into
+// the row holding `persist?`. Edit mode's rows are the ones spliceContainer
+// just built, so the trigger joins the last of them. Two constraints pin that
+// placement and nothing else satisfies both:
 //
 //  - Closed help must cost no LINE. A trigger given its own vertical slot is a
 //    permanent row for the whole time edit mode is on, since a trigger's `when`
@@ -427,13 +428,13 @@ function wrapWithPresetRows(
 // trigger you must already have opened something else to reach is not a trigger.
 // A container's `when` reaches every descendant, so descending into a
 // `when`-bearing container would silently make its gate the trigger's gate.
-// `kind: "group"` is the shape that makes this concrete rather than theoretical:
-// lowerGroup emits `{vertical, children: [toggle, {…, when: groupGate}]}`, so a
-// preset root ending in a group — ordinary authoring the A-grammar endorses —
-// would otherwise put the `(?)` INSIDE that group's collapsible body, gated on
-// edit mode AND a disclosure most groups default closed. Pairing beside a gated
-// SEGMENT is a different act and stays allowed: `{h: [gatedSeg, cell]}` puts the
-// cell beside the gate rather than under it.
+// Pairing beside a gated SEGMENT is a different act and stays allowed:
+// `{h: [gatedSeg, cell]}` puts the cell beside the gate rather than under it.
+// A disclosure BODY is never descended into either, by shape: it hangs on its
+// trigger segment (`SegmentNode.opens`) rather than sitting in the children
+// list, so a preset root ending in a `kind: "group"` — ordinary authoring the
+// A-grammar endorses — pairs the `(?)` beside the group's toggle, never inside
+// a body most groups default closed.
 //
 // For a root whose last row is gated the three requirements are jointly
 // unsatisfiable, so the priority is stated rather than left to whichever branch
@@ -477,7 +478,7 @@ function spliceEditChromeForPreset(
   config: DslConfig,
   presetName: string,
   artifacts: ChromeArtifacts,
-  help: HelpDisclosure,
+  help: SegmentNode,
 ): LayoutNode {
   const { node } = presetRoot(config, presetName);
   const rootKey = presetRootKey(presetName);

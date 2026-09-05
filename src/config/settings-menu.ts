@@ -35,24 +35,27 @@
 //     load-bearing in that direction too, not merely tidy.
 
 import type { ActionDecl } from "./action.js";
-import type {
-  DslConfig,
-  LayoutNode,
-  PresetDecl,
-  SegmentDecl,
-  VariableDecl,
+import {
+  mapOpens,
+  walkNodes,
+  type DisclosureRef,
+  type DslConfig,
+  type LayoutNode,
+  type PresetDecl,
+  type SegmentDecl,
+  type SegmentNode,
+  type VariableDecl,
 } from "./dsl-types.js";
 import {
   DISCLOSURE_CLOSED,
   DISCLOSURE_GLYPH_CLOSED,
   DISCLOSURE_GLYPH_OPEN,
   disclosureCycleAction,
-  disclosureGate,
+  disclosureNode,
   disclosureStateVar,
   disclosureTrigger,
-  type DisclosureRef,
 } from "./disclosure.js";
-import { declareHelp, type HelpDisclosure } from "./help.js";
+import { declareHelp } from "./help.js";
 import { PERSIST_HELP } from "../help-text.js";
 import {
   EDIT_MODE_KEY,
@@ -143,25 +146,24 @@ const CONFIG_REF: DisclosureRef = {
   member: SETTINGS_OPEN,
 };
 
-// Gated on BOTH keys — a config row left open yesterday must not render beside
-// a closed menu today. Nesting is conjunction, which is why it is one list.
-const CONFIG_OPEN_GATE = disclosureGate(SETTINGS_REF, CONFIG_REF);
-
 // The `(?)` that explains `persist?` — the one control in this menu whose
 // behaviour a user cannot infer from its label, which is exactly why the ticket
 // named it as a required use site. Its body says what the NEXT click does, in
 // the same two sentences `--help` prints.
 const PERSIST_HELP_SEG = `${SETTINGS_NS}help.persist`;
 
-// [LAW:one-source-of-truth] The panel's text colour, spelled once. The help
-// cells must wear the same one as the controls they explain, and that
-// agreement is only guaranteed if there is one value to hand both. No `bg:`:
-// a settings cell states nothing by its background, so it wears the
-// vocabulary tint its address selects like every other decorated segment
-// (candybar-render-ai7.5) — the closed `☰` sits among tinted siblings, and a
-// flat `surface` there would be the one cell reading "different" for no
-// meaning.
-const SETTINGS_TEXT = { fg: "foreground" } as const;
+// [LAW:one-source-of-truth] The door is the ONE cell of this menu that
+// authors a text colour. Every other cell — the controls, the `(?)` and its
+// lines, the ⚙ trigger — sits on the band its trigger opens, where the text
+// is CHOSEN against the band item the cell wears (`textOn`, the walk's text
+// floor for an unauthored `fg:`; candybar-render-ai7.9). A fixed `foreground`
+// there measures as low as 1.1 : 1 against the pale states and items of the
+// dark themes (atom-one-dark, catppuccin-frappe, solarized-dark), so the body
+// authors nothing and the floor decides. No `bg:` anywhere: a settings cell
+// states nothing by its background, so the closed `☰` wears the vocabulary
+// tint its address selects like every other decorated segment
+// (candybar-render-ai7.5), and the body cells wear their band's items.
+const DOOR_TEXT = { fg: "foreground" } as const;
 
 // [LAW:one-source-of-truth] One accordion key for every picker in the menu:
 // one key holds one open member, so opening a theme picker closes the look
@@ -304,12 +306,6 @@ const controlSeg = (name: string): string => `${SETTINGS_NS}${name}`;
 const controlApply = (name: string): string => `${SETTINGS_NS}apply.${name}`;
 const controlReset = (name: string): string => `${SETTINGS_NS}reset.${name}`;
 
-// [LAW:one-source-of-truth] The predicate the body container gates on, derived
-// from the same anchor string the toggle's cycle writes — spelled once here,
-// exactly as lowerGroup derives a group body's `when` from the group's own
-// reference name.
-const SETTINGS_OPEN_GATE = disclosureGate(SETTINGS_REF);
-
 // [LAW:single-enforcer] The one answer to "is this segment reference the global
 // menu's anchor". cross-ref.ts asks it to accept an authored placement of a name
 // no config declares (this pass provides it, unconditionally, immediately after
@@ -401,78 +397,84 @@ function withAnchor(node: LayoutNode): AnchoredRoot {
 // (is there more than one?). One traversal definition, so "placed" cannot mean
 // different things to the two.
 export function countAnchors(node: LayoutNode): number {
-  if (node.kind === "segment") return isSettingsAnchor(node.name) ? 1 : 0;
-  return node.children.reduce((n, child) => n + countAnchors(child), 0);
+  let n = 0;
+  for (const each of walkNodes(node)) {
+    if (each.kind === "segment" && isSettingsAnchor(each.name)) n += 1;
+  }
+  return n;
 }
 
-// [LAW:one-type-per-behavior] The lowering, identical in shape to lowerGroup's:
-// a vertical pair of the toggle segment and a `when`-gated body. Replaces the
-// anchor leaf wherever it sits, so the author's chosen position is the menu's
-// position with nothing else moved.
+// [LAW:one-type-per-behavior] The lowering, THE one every disclosure takes
+// (`disclosureNode`, as lowerGroup): the anchor leaf becomes the toggle with
+// the menu's body hung on it, wherever it sits, so the author's chosen
+// position is the menu's position with nothing else moved. The `⚙ config`
+// row is a disclosure INSIDE that body — nesting is structure, not a second
+// gate: a config row left open yesterday cannot render beside a closed menu
+// today because it hangs on a trigger the closed menu does not render. The
+// walk colours the body on the ☰ cell's band and the config row on the
+// band ⚙ opens one depth further (candybar-render-ai7.9).
 function expandAnchor(
   node: AnchoredRoot | LayoutNode,
-  help: HelpDisclosure,
+  help: SegmentNode,
 ): LayoutNode {
   if (node.kind === "segment") {
     return isSettingsAnchor(node.name)
-      ? {
-          kind: "container",
-          direction: "vertical",
-          children: [
-            node,
-            // Row one: what the menu is FOR — the persist? selector that says
-            // where every setting below it lands, the preset switcher, the
-            // door into the config menu, and the door into edit mode.
-            {
-              kind: "container",
-              direction: "horizontal",
-              children: [
-                { kind: "segment", name: PERSIST_SEG },
-                // The `(?)` rides the row that already exists, immediately
-                // after the control it explains — so closed help costs no row
-                // and widens the bar by one cell, and open help reads as an
-                // answer to the checkbox on its left. Mid-row, unlike edit
-                // mode's `(?)`, which trails the content it wraps: this menu is
-                // its own subtree, so a cell placed inside it moves no node of
-                // the bar around it, and the adjacency IS the affordance.
-                help.trigger,
-                ...PRIMARY_CONTROLS.map(
-                  (c): LayoutNode => ({
-                    kind: "segment",
-                    name: controlSeg(c.name),
-                  }),
-                ),
-                { kind: "segment", name: CONFIG_SEG },
-                { kind: "segment", name: EDIT_SEG },
-              ],
-              when: SETTINGS_OPEN_GATE,
-            },
-            // The help body: one row, present only while the `(?)` is open,
-            // directly under the row that asked the question.
-            help.body,
-            // Row two: the display settings, behind their own disclosure so
-            // the menu opens narrow. Gated on BOTH keys — a config row left
-            // open yesterday must not render beside a closed menu today; one
-            // gate per disclosure, and this row is inside two of them.
-            {
-              kind: "container",
-              direction: "horizontal",
-              children: [
-                ...CONFIG_CONTROLS.map(
-                  (c): LayoutNode => ({
-                    kind: "segment",
-                    name: controlSeg(c.name),
-                  }),
-                ),
-                { kind: "segment", name: WRAP_SEG },
-                { kind: "segment", name: PADDING_SEG },
-              ],
-              when: CONFIG_OPEN_GATE,
-            },
-          ],
-        }
-      : node;
+      ? disclosureNode(
+          node.name,
+          SETTINGS_REF,
+          // What the menu is FOR — the persist? selector that says where every
+          // setting below it lands, the preset switcher, the door into the
+          // config menu, and the door into edit mode.
+          {
+            kind: "container",
+            direction: "horizontal",
+            children: [
+              { kind: "segment", name: PERSIST_SEG },
+              // The `(?)` rides the row that already exists, immediately
+              // after the control it explains — so closed help costs no row
+              // and widens the bar by one cell, and open help reads as an
+              // answer to the checkbox on its left. Mid-row, unlike edit
+              // mode's `(?)`, which trails the content it wraps: this menu is
+              // its own subtree, so a cell placed inside it moves no node of
+              // the bar around it, and the adjacency IS the affordance. Its
+              // body drops below this row, before the config row's.
+              help,
+              ...PRIMARY_CONTROLS.map(
+                (c): LayoutNode => ({
+                  kind: "segment",
+                  name: controlSeg(c.name),
+                }),
+              ),
+              // The display settings, behind their own disclosure so the
+              // menu opens narrow.
+              disclosureNode(CONFIG_SEG, CONFIG_REF, {
+                kind: "container",
+                direction: "horizontal",
+                children: [
+                  ...CONFIG_CONTROLS.map(
+                    (c): LayoutNode => ({
+                      kind: "segment",
+                      name: controlSeg(c.name),
+                    }),
+                  ),
+                  { kind: "segment", name: WRAP_SEG },
+                  { kind: "segment", name: PADDING_SEG },
+                ],
+              }),
+              { kind: "segment", name: EDIT_SEG },
+            ],
+          },
+          node.when,
+        )
+      : // An anchor placed inside a group's body is still the anchor.
+        mapOpens(node, (body) => expandContainer(body, help));
   }
+  return expandContainer(node, help);
+}
+
+function expandContainer<
+  N extends { readonly children: readonly LayoutNode[] },
+>(node: N, help: SegmentNode): N {
   return {
     ...node,
     children: node.children.map((child) => expandAnchor(child, help)),
@@ -525,7 +527,7 @@ function declareHostedMenu(
 // comment in default-dsl-config.ts for that hazard in its original form).
 function settingsArtifacts(): {
   artifacts: MenuArtifacts;
-  help: HelpDisclosure;
+  help: SegmentNode;
 } {
   const artifacts: MenuArtifacts = {
     variables: {
@@ -552,14 +554,13 @@ function settingsArtifacts(): {
           `☰ ${DISCLOSURE_GLYPH_CLOSED}`,
           `☰ ${DISCLOSURE_GLYPH_OPEN}`,
         ),
-        ...SETTINGS_TEXT,
+        ...DOOR_TEXT,
       },
       // [LAW:representation] The checkbox states what the NEXT write does,
       // which is why the glyph and the word live together: "☑ persist?" is
       // the whole explanation of where the click below it lands.
       [PERSIST_SEG]: {
         template: `{{ action "${PERSIST_SEG}" "☐ persist?" "☑ persist?" }}`,
-        ...SETTINGS_TEXT,
       },
       [CONFIG_SEG]: {
         template: disclosureTrigger(
@@ -567,7 +568,6 @@ function settingsArtifacts(): {
           `⚙ config ${DISCLOSURE_GLYPH_CLOSED}`,
           `⚙ config ${DISCLOSURE_GLYPH_OPEN}`,
         ),
-        ...SETTINGS_TEXT,
       },
       // [LAW:one-type-per-behavior] Both non-picker controls read the same
       // `.effective` projection their picker siblings read, and write the
@@ -577,7 +577,6 @@ function settingsArtifacts(): {
         template:
           `{{ action "${controlApply("wrap")}" "wrap: on" "wrap: off" }} ` +
           `{{ action "${controlReset("wrap")}" "↺" }}`,
-        ...SETTINGS_TEXT,
       },
       [PADDING_SEG]: {
         template:
@@ -585,7 +584,6 @@ function settingsArtifacts(): {
           "padding {{ .padding.effective }} " +
           `{{ action "${controlApply("padding")}.up" "▶" }} ` +
           `{{ action "${controlReset("padding")}" "↺" }}`,
-        ...SETTINGS_TEXT,
       },
       // The entry point edit mode never had: `edit.toggle` is a reserved action
       // whose only bundled reference lives in the `toolbar` segment, which a
@@ -593,7 +591,6 @@ function settingsArtifacts(): {
       // from a segment no config can drop.
       [EDIT_SEG]: {
         template: `{{ action "${EDIT_TOGGLE_ACTION}" "✎ edit" "✎ done" }}`,
-        ...SETTINGS_TEXT,
       },
     },
   };
@@ -608,8 +605,8 @@ function settingsArtifacts(): {
   );
   declareSettingControls(artifacts);
   // [LAW:one-source-of-truth] The `(?)` is minted here, with the panel it
-  // belongs to, and its two NODES are returned so `expandAnchor` places them by
-  // the value it is handed rather than by re-deriving names this pass already
+  // belongs to, and its NODE is returned so `expandAnchor` places it by the
+  // value it is handed rather than by re-deriving names this pass already
   // owns. Nested in SETTINGS_REF, so closing the menu takes the open help with
   // it.
   const help = declareHelp(
@@ -617,7 +614,6 @@ function settingsArtifacts(): {
     PERSIST_HELP,
     [SETTINGS_REF],
     artifacts,
-    SETTINGS_TEXT,
   );
   return { artifacts, help };
 }
@@ -645,7 +641,6 @@ function declareSettingControls(artifacts: MenuArtifacts): void {
         `{{ menu "${apply}" "${DISCLOSURE_GLYPH_CLOSED}" "${DISCLOSURE_GLYPH_OPEN}" ` +
         `(dict "key" "${PICKER_KEY}" "closeOnPick" true) }} ` +
         `{{ action "${controlReset(c.name)}" "↺" }}`,
-      ...SETTINGS_TEXT,
     };
     artifacts.actions[apply] = {
       set: c.sessionKey,

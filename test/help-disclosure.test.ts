@@ -289,8 +289,9 @@ describe("the config menu's (?)", () => {
   });
 
   test("closing the menu takes the open help with it", () => {
-    // A nested disclosure's body is gated on its own key AND every enclosing
-    // one, so an open `(?)` cannot outlive the panel it explains.
+    // A nested disclosure's body hangs on its trigger, and the trigger sits
+    // inside the enclosing body, so an open `(?)` cannot outlive the panel it
+    // explains.
     const rt = buildRuntime();
     openSettingsMenu(rt);
     rt.toggleHelp(rt.render(200));
@@ -448,12 +449,11 @@ describe("a closed (?) rides a row rather than adding one", () => {
 // through a full round of review. These are the shapes, not the branches: a
 // rewrite that finds the last row some other way must still pass.
 //
-// The group case is the regression test, and its assertion is VISIBILITY rather
-// than placement. A group's body is a conditional subtree, not a row; a trigger
-// landing inside it renders nothing at all while the group is closed, which is
-// the closed-state invisibility this ticket exists to remove. That case also
-// pins the priority the walk encodes — a trigger you can see, in a config where
-// riding a row would mean hiding it, beats a trigger that costs no line.
+// The group case is the regression test: its body hangs on the toggle, not in
+// the children list, so the `(?)` pairs beside the toggle and never lands in a
+// body most groups default closed. The gated-row case pins the priority the walk
+// encodes — a trigger you can see, in a config where riding the last row would
+// gate it, beats a trigger that costs no line.
 describe("edit mode's (?) survives any root shape", () => {
   const shapes: Array<[string, string, boolean]> = [
     ["one row", `{ root: { h: ['directory', 'model'] } }`, true],
@@ -468,13 +468,19 @@ describe("edit mode's (?) survives any root shape", () => {
       `{ root: { v: [{ h: ['directory'] }, { v: [{ h: ['model', 'context'] }] }] } }`,
       true,
     ],
-    // Gated last row: riding it would gate the trigger on that disclosure too,
-    // so the walk stops short and spends a line instead.
     [
       "a row then a closed group",
       `{ root: { v: [
          { h: ['directory', 'model'] },
          { kind: 'group', name: 'extra', label: 'extra', children: ['context'] },
+       ] } }`,
+      true,
+    ],
+    [
+      "a row then a gated row",
+      `{ root: { v: [
+         { h: ['directory', 'model'] },
+         { h: ['context'], when: '{{ false }}' },
        ] } }`,
       false,
     ],
@@ -487,16 +493,13 @@ describe("edit mode's (?) survives any root shape", () => {
     expect(triggerLines(rt)).toHaveLength(1);
   });
 
-  test.each(shapes.filter(([, , rides]) => rides))(
-    "%s: and rides a row",
-    (_name, src) => {
-      const rt = buildRuntime(src);
-      enterEditMode(rt);
-      const [host] = triggerLines(rt);
+  test.each(shapes)("%s: and rides a row (%p)", (_name, src, rides) => {
+    const rt = buildRuntime(src);
+    enterEditMode(rt);
+    const [host] = triggerLines(rt);
 
-      expect(host!.replaceAll(HELP_GLYPH_CLOSED, "").trim()).not.toBe("");
-    },
-  );
+    expect(host!.replaceAll(HELP_GLYPH_CLOSED, "").trim() !== "").toBe(rides);
+  });
 });
 
 // A type-only anchor so a rename of DslConfig surfaces here too.
