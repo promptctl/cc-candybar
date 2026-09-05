@@ -983,7 +983,7 @@ export const RAW_DEFAULT_DSL_CONFIG = {
     block: {
       template:
         "◱ {{ round .block.nativeUtilization }}% " +
-        '({{ template "formatLongTimeRemaining" (minutesUntilReset .block.resetsAt) }})',
+        '({{ template "formatLongTimeRemaining" (add 1 (minutesUntilReset .block.resetsAt)) }})',
       bg: blockLikeBg(
         ".block.nativeUtilization",
         ".block.budget.warningThreshold",
@@ -995,7 +995,7 @@ export const RAW_DEFAULT_DSL_CONFIG = {
     weekly: {
       template:
         "◑ {{ round .weekly.percentage }}% " +
-        '({{ template "formatLongTimeRemaining" (minutesUntilReset .weekly.resetsAt) }})',
+        '({{ template "formatLongTimeRemaining" (add 1 (minutesUntilReset .weekly.resetsAt)) }})',
       bg: blockLikeBg(".weekly.percentage", ".weekly.budget.warningThreshold"),
       fg: blockLikeFg(".weekly.percentage"),
       when: "{{ gt .weekly.resetsAt 0 }}",
