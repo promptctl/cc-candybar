@@ -1,7 +1,7 @@
 Can you see these joiner glyphs clearly?
 
-  powerline:  one  two  three
-  capsule:    one   two 
+  powerline:  one  two  three
+  capsule:     one    two 
 
 If you see boxes, blank spaces, or question marks instead of arrow and
 half-circle shapes, choose "No" below.
