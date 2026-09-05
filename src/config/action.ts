@@ -61,6 +61,7 @@ export const ACTION_KEYS = [
   "reset",
   "undo",
   "redo",
+  "doctor",
 ] as const;
 export type ActionKey = (typeof ACTION_KEYS)[number];
 
@@ -185,6 +186,14 @@ export type ActionDecl =
   | { readonly reset: string }
   | { readonly undo: true }
   | { readonly redo: true }
+  // [LAW:effects-at-boundaries] The doctor (brandon-doctor-b6a): `run` folds
+  // every check over the session's recorded client facts and writes the
+  // report into SessionState; `fix` performs the repair the named check's
+  // fresh verdict carries. `check` is a name in `CHECKS` (src/doctor/checks.ts)
+  // — a load error otherwise — so the URL carries nothing the daemon has not
+  // already declared. No `set`, so no validator derives (like copy/open).
+  | { readonly doctor: "run" }
+  | { readonly doctor: "fix"; readonly check: string }
   | DualActionDecl;
 
 // [LAW:one-source-of-truth] The key whose PRESENCE makes an action
@@ -325,4 +334,12 @@ export function actionBindsUndo(a: ActionDecl): boolean {
 }
 export function actionBindsRedo(a: ActionDecl): boolean {
   return "redo" in a;
+}
+
+// [LAW:dataflow-not-control-flow] Does this action run or fix the doctor? Both
+// doctor verbs carry session.id first on the wire (the report is written into
+// that session's state, and a failure surfaces there), so it joins the same
+// session.id requirement the others do.
+export function actionBindsDoctor(a: ActionDecl): boolean {
+  return "doctor" in a;
 }

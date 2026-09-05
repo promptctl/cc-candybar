@@ -240,6 +240,7 @@ fn render(argv: &[String], hook_data: &serde_json::Value) -> RenderOutcome {
     // whether THIS session arrived over SSH.
     let (term_cols, term_rows) = detect_term_extents();
     let ssh = detect_ssh();
+    let tmux = detect_tmux();
 
     let mut request = serde_json::json!({
         "v": PROTOCOL_VERSION,
@@ -263,6 +264,9 @@ fn render(argv: &[String], hook_data: &serde_json::Value) -> RenderOutcome {
         request["termRows"] = serde_json::Value::from(rows);
     }
     request["ssh"] = serde_json::Value::from(ssh);
+    // tmux is UNCONDITIONAL too: `null` is the affirmative "not in tmux", an
+    // object is the tmux facts — absence stays "client too old to report".
+    request["tmux"] = tmux;
     // --- end client hints ---
     let body = match serde_json::to_vec(&request) {
         Ok(b) => b,
@@ -449,6 +453,30 @@ fn detect_ssh() -> bool {
     SSH_ENV_VARS
         .iter()
         .any(|name| env::var(name).is_ok_and(|v| !v.is_empty()))
+}
+
+// The tmux facts the doctor's tmux-truecolor check reasons over — mirrors
+// TMUX_ENV in src/tmux-hint.ts (socket var, pane var, Claude Code's truecolor
+// switch), diffed by scripts/check-protocol.mjs. Both runtimes must agree on
+// what "in tmux" means, or the native fast path and the node fallback would
+// report the same session differently.
+const TMUX_ENV: [&str; 3] = ["TMUX", "TMUX_PANE", "CLAUDE_CODE_TMUX_TRUECOLOR"];
+
+// [LAW:dataflow-not-control-flow] Total by construction, like detect_ssh:
+// `Null` is the affirmative "not in tmux" (TMUX or TMUX_PANE empty), an object
+// is the facts. `socket` is the part of TMUX before its first comma (the value
+// is `socket,server-pid,session-id`); `truecolor` is the switch's value, or
+// `null` for unset-or-empty — both falsy to Claude Code's own truthiness test.
+fn detect_tmux() -> serde_json::Value {
+    let non_empty = |name: &str| env::var(name).ok().filter(|v| !v.is_empty());
+    match (non_empty(TMUX_ENV[0]), non_empty(TMUX_ENV[1])) {
+        (Some(tmux), Some(pane)) => serde_json::json!({
+            "socket": tmux.split(',').next().unwrap_or(""),
+            "pane": pane,
+            "truecolor": non_empty(TMUX_ENV[2]),
+        }),
+        _ => serde_json::Value::Null,
+    }
 }
 
 // Path families — must agree with src/daemon/paths.ts or the client can't

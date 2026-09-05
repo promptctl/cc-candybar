@@ -18,6 +18,7 @@ import {
   actionBindsPersist,
   actionBindsRedo,
   actionBindsReset,
+  actionBindsDoctor,
   actionBindsSet,
   actionIsDual,
   PERSIST_WHEN,
@@ -674,7 +675,8 @@ function hasActionSetAction(cfg: DslConfig): boolean {
       actionBindsPersist(a) ||
       actionBindsReset(a) ||
       actionBindsUndo(a) ||
-      actionBindsRedo(a),
+      actionBindsRedo(a) ||
+      actionBindsDoctor(a),
   );
 }
 

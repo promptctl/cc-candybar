@@ -69,7 +69,7 @@ the wire is derived from the same declarations, so a template cannot smuggle an
 un-gated write.
 
 An action declares exactly one of `set` / `persist` / `copy` / `open` /
-`reset` / `undo` / `redo` — or, for one control that writes *either* store,
+`reset` / `undo` / `redo` / `doctor` — or, for one control that writes *either* store,
 `set` and `persist` together with a `persistWhen` selector. A `set`, a
 `persist`, or a dual declares exactly one value source:
 
@@ -88,6 +88,8 @@ An action declares exactly one of `set` / `persist` / `copy` / `open` /
 | `{ redo: true }` | re-apply the most recently undone entry |
 | `{ copy: "template" }` | copy the evaluated template to the clipboard |
 | `{ open: "template" }` | open the evaluated target in the editor |
+| `{ doctor: "run" }` | run every doctor check over the facts the session's last render reported and write the report into SessionState (the settings menu's `🩺 doctor` button) |
+| `{ doctor: "fix", check: "tmuxTruecolor" }` | re-probe that ONE check at click time and perform the fix its fresh verdict carries; refused loudly when there is nothing left to fix. `check` must name a bundled check — any other name is a load error |
 
 A `set` action writing SessionState needs a matching `state` **variable** to
 read the value back into templates: `{ kind: "state", key: "<same key>",
@@ -1023,7 +1025,7 @@ Opening it shows the always-available functionality:
 
 ```
 ☰ ▾
-  ☐ persist?  (?)   ▦ default ▸ ↺   ⚙ config ▾   ✎ edit
+  ☐ persist?  (?)   ▦ default ▸ ↺   ⚙ config ▾   🧰 tools ▸   ✎ edit
      🎨 tokyo-night ▸ ↺   ◐ none ▸ ↺   ✦ powerline ▸ ↺   wrap: on ↺   ◀ padding 1 ▶ ↺
 ```
 
@@ -1041,6 +1043,16 @@ Opening it shows the always-available functionality:
   deliberately absent — they describe your terminal rather than a taste that
   varies session to session, so they have no session half to choose between and
   stay config-file settings.
+- **`🧰 tools`** opens the `🩺 doctor`: click it and one row per check drops
+  under it, `✓ tmux truecolor` or `✗ tmux truecolor — <reason> [fix]`. A check
+  probes your setup for a fault outside cc-candybar that makes the bar look
+  broken; `[fix]` repairs it in place (the first check writes
+  `CLAUDE_CODE_TMUX_TRUECOLOR=1` into the `env` of `~/.claude/settings.json`,
+  which takes effect for Claude Code sessions started afterwards, and the row
+  says so). The checks reason over the facts the statusline client reported on
+  the session's last render — not the daemon's own environment — and
+  `cc-candybar doctor` runs the same checks from a shell, with the exit code as
+  the verdict.
 
 Every picker in the menu shares one accordion key, so opening the look picker
 closes the theme picker: the panel is narrow, and two open drop-downs would

@@ -99,6 +99,7 @@ const TS_PROTOCOL = "src/daemon/protocol.ts";
 const TS_CLIENT = "src/daemon/client.ts";
 const TS_INDEX = "src/index.ts";
 const TS_CLI_FLAGS = "src/cli-flags.ts";
+const TS_TMUX_HINT = "src/tmux-hint.ts";
 const TS_GLYPH = "src/render/error-glyph.ts";
 const TS_STYLE = "src/render/diagnostic-style.ts";
 const TS_PATHS = "src/daemon/paths.ts";
@@ -190,6 +191,22 @@ const CHECKS = [
       RS_MAIN,
       /const SSH_ENV_VARS: \[&str; \d+\] = \[[\s\S]+?\];/,
       /"(SSH_\w+)"/g,
+    ),
+  },
+  // What "this session is in tmux" MEANS, and which env var Claude Code's own
+  // truecolor switch lives in. Same drift hazard as the SSH row: the doctor's
+  // tmux-truecolor check reasons over whichever client rendered last.
+  {
+    label: "tmux hint env vocabulary",
+    ts: memberSet(
+      TS_TMUX_HINT,
+      /export const TMUX_ENV = \{[\s\S]+?\} as const;/,
+      /"([A-Z_]+)"/g,
+    ),
+    rust: memberSet(
+      RS_MAIN,
+      /const TMUX_ENV: \[&str; \d+\] = \[[\s\S]+?\];/,
+      /"([A-Z_]+)"/g,
     ),
   },
   // Which bare flags Node answers. The Rust client must route every spelling

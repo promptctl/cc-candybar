@@ -19,6 +19,8 @@ import { HELP_TEXT } from "./help-text";
 import { NODE_FLAGS } from "./cli-flags";
 import { PACKAGE_VERSION } from "./version";
 import { detectTermExtent } from "./term-extent";
+import { detectTmuxHint } from "./tmux-hint";
+import { runDoctorCli } from "./doctor/cli";
 
 function detectTermCols(): number | undefined {
   return detectTermExtent(process.env.COLUMNS, process.stderr.columns);
@@ -114,6 +116,14 @@ async function main(): Promise<void> {
       runSchema(); // owns its own exit code
       return;
     }
+    // [LAW:single-enforcer] The doctor's CLI projection: the SAME check fold
+    // the bar's 🩺 click runs, over this process's own environment (which IS
+    // Claude Code's when run from a Claude Code shell). Exit 0 all ok, 1 any
+    // failed, 2 usage.
+    if (subcommand === "doctor") {
+      runDoctorCli(process.argv.slice(3)); // owns its own exit code
+      return;
+    }
     // [LAW:dataflow-not-control-flow] vars/segments/config are ONE handler
     // parameterized by `what` — the subcommand name IS the DebugWhat. The guard
     // is the canonical list (debug-types), so a new debug projection is reachable
@@ -178,6 +188,9 @@ echo '{"session_id":"test-session","workspace":{"project_dir":"/path/to/project"
         termCols: detectTermCols(),
         termRows: detectTermRows(),
         ssh: detectSsh(),
+        // Total like ssh: `null` is the affirmative "not in tmux", so an
+        // absent hint on the daemon side means only "client too old".
+        tmux: detectTmuxHint(process.env),
       },
     );
     // [LAW:types-are-the-program] Three variants, one per outcome kind. The

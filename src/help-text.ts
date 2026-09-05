@@ -54,6 +54,8 @@ Configuration:
   ☰ ${DISCLOSURE_GLYPH_CLOSED} on the bar for preset switching, edit mode, and a config menu
   of clickable theme/look/style/wrap/padding controls. The \`persist?\`
   checkbox there chooses where a change lands: ${PERSIST_HELP.join(", ")}.
+  Its 🧰 tools row holds 🩺 doctor: click it to check your setup, and click a
+  failed row's [fix] to repair it (the same checks \`cc-candybar doctor\` runs).
 
   Anywhere the bar shows ${HELP_GLYPH_CLOSED}, clicking it reveals these same instructions
   in place. In edit mode: ${EDIT_MODE_HELP.join(", ")}.
@@ -74,6 +76,10 @@ Subcommands:
                            request totals. Does not spawn a daemon.
 
 Config tooling:
+  doctor                   Check your setup the way the bar's 🩺 doctor does —
+                           one line per check. Exit 0 all ok, 1 any failed.
+                           Run it from a Claude Code shell (or inside the same
+                           tmux pane) so it sees Claude Code's own environment.
   check [config-file]      Validate a config on the full render pipeline (parse
                            → merge → validate → register → render) with no
                            daemon. With no path, checks the same file the daemon

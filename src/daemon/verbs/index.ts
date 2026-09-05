@@ -61,7 +61,13 @@ import {
   VERB_SHOW_CONFIG_WARNING,
   VERB_TOOLBAR_TOGGLE,
   VERB_UNDO,
+  VERB_DOCTOR_RUN,
+  VERB_DOCTOR_FIX,
 } from "../../click/wire";
+import { parseClientHints } from "../protocol";
+import { checkByName, runDoctor } from "../../doctor/checks";
+import { doctorReportPairs } from "../../doctor/report";
+import { applyFix, gatherFacts, type DoctorEdge } from "../../doctor/edge";
 
 export interface VerbContext {
   readonly sessionState: SessionStateRW;
@@ -70,6 +76,10 @@ export interface VerbContext {
   // update-notice.ts), handed in by the daemon: the verb names the effect,
   // the watch that knows what is newer performs it.
   readonly applyUpdate: () => void;
+  // [LAW:effects-at-boundaries] The doctor's edge (src/doctor/edge.ts): the
+  // tmux query and the settings.json read/write, handed in so the handlers
+  // below stay a fold over pure verdicts and a test drives them with fakes.
+  readonly doctor: DoctorEdge;
 }
 
 // [LAW:types-are-the-program] The handler IS the contract — it takes the
@@ -633,6 +643,83 @@ const applyUpdate: VerbHandler = (value, ctx) => {
   ctx.applyUpdate();
 };
 
+// ─── Doctor (brandon-doctor-b6a) ────────────────────────────────────────────
+
+// [LAW:one-source-of-truth] Where the daemon records each session's STAMPED
+// client hints (server.ts writes `JSON.stringify(parseClientHints(req))` here
+// on every render that changes them) — the SESSION_RENDER_ORIGIN_KEY move for
+// client facts. A click carries no hints, so the doctor reasons over the facts
+// of the session's last render, read back through the SAME checkpoint the live
+// frame crossed (parseClientHints), never over the daemon's own env.
+export const SESSION_CLIENT_HINTS_KEY = "client-hints";
+
+// [LAW:no-silent-failure] A session that has never rendered has no hints —
+// a loud BadVerbArgs, not a doctor run over a guessed "not in tmux".
+function sessionHints(
+  ctx: VerbContext,
+  sid: string,
+): ReturnType<typeof parseClientHints> {
+  const raw = ctx.sessionState.get(sid, SESSION_CLIENT_HINTS_KEY);
+  if (raw === null) {
+    throw new BadVerbArgs(
+      `session ${sid} has not rendered yet — no client facts to diagnose`,
+    );
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    throw new BadVerbArgs(`client hints record is not JSON: ${raw}`);
+  }
+  if (typeof parsed !== "object" || parsed === null) {
+    throw new BadVerbArgs(`client hints record is not an object: ${raw}`);
+  }
+  return parseClientHints(parsed as Record<string, unknown>);
+}
+
+// [LAW:single-enforcer] One write of the whole report, through setBatch — the
+// row cap flips, the reason and fixable land, in one reactive transaction.
+function writeReport(ctx: VerbContext, sid: string): void {
+  const facts = gatherFacts(ctx.doctor, sessionHints(ctx, sid).tmux);
+  const reports = runDoctor(facts);
+  ctx.sessionState.setBatch(sid, doctorReportPairs(reports));
+  ctx.dlog(
+    "info",
+    `doctor: ${reports.map((r) => `${r.check.name}=${r.verdict.ok ? "ok" : "failed"}`).join(" ")} (session=${sid})`,
+  );
+}
+
+const doctorRun: VerbHandler = (value, ctx) => {
+  writeReport(ctx, requireSessionId(oneArg(value)));
+};
+
+// Re-probe THIS check at click time and perform the fix its fresh verdict
+// carries — never a fix cached from the render that drew the `[fix]`, because
+// the world may have moved (the var got set, the tmux server went away). Then
+// re-run, so the row flips to the truthful post-fix reason.
+const doctorFix: VerbHandler = (value, ctx) => {
+  const [sessionId = "", checkName = ""] = decodeWire(() =>
+    decodeSegments(value),
+  );
+  const sid = requireSessionId(sessionId);
+  const check = checkByName(checkName);
+  if (check === undefined) {
+    throw new BadVerbArgs(`doctor-fix: unknown check "${checkName}"`);
+  }
+  const verdict = check.probe(
+    gatherFacts(ctx.doctor, sessionHints(ctx, sid).tmux),
+  );
+  if (verdict.ok || verdict.fix === undefined) {
+    throw new BadVerbArgs(`doctor-fix: ${check.label} has nothing to fix`);
+  }
+  applyFix(ctx.doctor, verdict.fix);
+  ctx.dlog(
+    "info",
+    `doctor-fix: ${check.name} → ${verdict.fix.kind} ${verdict.fix.name}=${verdict.fix.value} (session=${sid})`,
+  );
+  writeReport(ctx, sid);
+};
+
 // ─── Registry ───────────────────────────────────────────────────────────────
 
 // [LAW:one-source-of-truth] The LEAF verbs — every click effect that does real
@@ -701,6 +788,27 @@ const LEAF_VERBS = new Map<string, VerbHandler>([
   [VERB_SHOW_CONFIG_WARNING, showConfigWarning],
   [VERB_TOOLBAR_TOGGLE, toolbarToggle],
   [VERB_APPLY_UPDATE, applyUpdate],
+  [VERB_DOCTOR_RUN, doctorRun],
+  [VERB_DOCTOR_FIX, doctorFix],
+]);
+
+// [LAW:one-source-of-truth] The verbs whose FIRST wire segment is the session
+// id — the set `dispatch` reads to know which session a failing click should
+// surface its error in. Membership here is the fact; a verb that carries the
+// session id first joins by one row, not one more `||`.
+const SESSION_FIRST_VERBS: ReadonlySet<string> = new Set([
+  VERB_SET_STATE,
+  VERB_STEP_STATE,
+  VERB_SET_CONFIG,
+  VERB_STEP_CONFIG,
+  VERB_RESET_CONFIG,
+  VERB_APPLY_LAYOUT_OP,
+  VERB_UNDO,
+  VERB_REDO,
+  VERB_TOOLBAR_TOGGLE,
+  VERB_APPLY_UPDATE,
+  VERB_DOCTOR_RUN,
+  VERB_DOCTOR_FIX,
 ]);
 
 // [LAW:dataflow-not-control-flow] One click is an ordered list of effects; the
@@ -728,24 +836,10 @@ const dispatch: VerbHandler = (rawValue, ctx) => {
   let operational = false;
   let sessionId: string | null = null;
   for (const { verb, value } of parseEffects(rawValue)) {
-    // Extract session ID from the first session-bearing effect for error display.
-    // set-state, step-state, set-config, step-config, reset-config,
-    // apply-layout-op, undo, redo, toolbar-toggle, and apply-update all carry
-    // the session id as their first segment, so a failing step surfaces in
-    // the bar like any other.
-    if (
-      !sessionId &&
-      (verb === VERB_SET_STATE ||
-        verb === VERB_STEP_STATE ||
-        verb === VERB_SET_CONFIG ||
-        verb === VERB_STEP_CONFIG ||
-        verb === VERB_RESET_CONFIG ||
-        verb === VERB_APPLY_LAYOUT_OP ||
-        verb === VERB_UNDO ||
-        verb === VERB_REDO ||
-        verb === VERB_TOOLBAR_TOGGLE ||
-        verb === VERB_APPLY_UPDATE)
-    ) {
+    // Extract session ID from the first session-bearing effect for error
+    // display — every SESSION_FIRST_VERBS member carries it as its first
+    // segment, so a failing step surfaces in the bar like any other.
+    if (!sessionId && SESSION_FIRST_VERBS.has(verb)) {
       const parts = decodeSegments(value);
       if (parts.length > 0 && parts[0]) sessionId = parts[0];
     }

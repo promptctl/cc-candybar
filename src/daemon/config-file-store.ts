@@ -42,6 +42,7 @@ import {
   hasSegmentRef,
   insertSegmentRef,
   json5Text,
+  JSON5_DIALECT,
   nodeAt,
   parseDocument,
   removeSegmentRef,
@@ -456,7 +457,7 @@ function resetPathOf(doc: Node | null, target: PersistTarget): ConfigPath {
 function ensureAuthored(text: string, { unit }: Placement): string {
   return unit === null
     ? text
-    : setValue(text, unit.path, json5Text(unit.value));
+    : setValue(text, unit.path, json5Text(unit.value), JSON5_DIALECT);
 }
 
 function requireTarget(key: string): PersistTarget {
@@ -504,7 +505,12 @@ export function writeValue(
   const before = readConfigText(file);
   const placement = valuePlacementOf(docOf(before ?? ""), target);
   const authored = ensureAuthored(before ?? "", placement);
-  const after = setValue(authored, placement.path, persistValueText(key, raw));
+  const after = setValue(
+    authored,
+    placement.path,
+    persistValueText(key, raw),
+    JSON5_DIALECT,
+  );
   commit(store, file, { before, after });
 }
 

@@ -65,9 +65,11 @@ import {
   BadVerbArgs,
   SESSION_CONFIG_OVERRIDE_KEY,
   SESSION_RENDER_ORIGIN_KEY,
+  SESSION_CLIENT_HINTS_KEY,
   encodeRenderOrigin,
 } from "./verbs";
 import { validateHookData } from "../utils/schema-validator.js";
+import { productionEdge } from "../doctor/edge";
 import { setLaunchStats } from "../proc/launch";
 import { buildDebugSnapshot } from "./debug";
 import { DEBUG_WHATS, isDebugWhat } from "./debug-types";
@@ -954,6 +956,17 @@ async function handleRequest(req: Request): Promise<HandledRequest> {
       // post-reserve" with no semantic split between wire-supplied and
       // fallback values.
       const hints = parseClientHints(req);
+      // [LAW:one-source-of-truth] Record the STAMPED hints per session — the
+      // SESSION_RENDER_ORIGIN_KEY move for client facts: a click arrives with
+      // no hints of its own, so the doctor (verbs/index.ts) reads the facts of
+      // this session's last render from here, re-parsed through the same
+      // checkpoint. Compared before writing for the same reason as the origin.
+      const hintRecord = JSON.stringify(hints);
+      if (
+        sessionState.get(sessionId, SESSION_CLIENT_HINTS_KEY) !== hintRecord
+      ) {
+        sessionState.set(sessionId, SESSION_CLIENT_HINTS_KEY, hintRecord);
+      }
       const termCols = hints.termCols;
       const width = applyClaudeCodeReserve(termCols ?? DEFAULT_TERMINAL_WIDTH);
       const rowCap = diagnosticRowCap(hints.termRows);
@@ -1219,7 +1232,12 @@ function parseRenderArgs(args: string[]): {
 // response code: BadVerbArgs (invalid input shape) becomes BAD_REQUEST; any
 // other Error (operational failure) becomes RENDER_FAILED. No string matching.
 
-const verbCtx = { sessionState, dlog, applyUpdate: () => updateWatch.act() };
+const verbCtx = {
+  sessionState,
+  dlog,
+  applyUpdate: () => updateWatch.act(),
+  doctor: productionEdge(),
+};
 
 // [LAW:single-enforcer] Style + color compatibility shared by the render
 // path and the lazy debug-side per-segment serializer. Per-request `width`

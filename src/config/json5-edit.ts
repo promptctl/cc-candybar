@@ -275,6 +275,30 @@ export function keyText(key: string): string {
 }
 
 /**
+ * The dialect SYNTHESIZED text is written in — a fact about the file's
+ * consumer, which neither the text nor its path can tell the splicer: the
+ * cc-candybar loader reads `.json` and `.json5` alike through the JSON5 parser,
+ * so bare keys and trailing commas are legal in either; Claude Code reads its
+ * settings.json strictly, so there they are corruption. Edits that mirror an
+ * existing member's style (insertLineAfter) need no dialect — a JSON file has
+ * no trailing comma to mirror — so the dialect reaches only the text minted
+ * with no neighbour to copy: a key, and the comma after a container's last
+ * member. [LAW:one-type-per-behavior] One splicer, two values.
+ * [LAW:dataflow-not-control-flow] The same synthesis runs for both; the
+ * dialect is data it reads, never a branch it takes.
+ */
+export interface Dialect {
+  readonly key: (key: string) => string;
+  readonly trailingComma: "," | "";
+}
+
+export const JSON5_DIALECT: Dialect = { key: keyText, trailingComma: "," };
+export const JSON_DIALECT: Dialect = {
+  key: (key) => JSON.stringify(key),
+  trailingComma: "",
+};
+
+/**
  * A JSON value as JSON5 text — identifier keys unquoted, one member per line,
  * two-space indent — so materialized text (a bundled segment decl, a layout
  * tree) reads like the authored surface rather than JSON.stringify output.
@@ -318,13 +342,17 @@ export function reindent(
 }
 
 /** `key: value` for a path's steps, nesting one object per intermediate step. */
-function entryText(path: readonly string[], valueText: string): string {
+function entryText(
+  path: readonly string[],
+  valueText: string,
+  dialect: Dialect,
+): string {
   const [head, ...rest] = path as [string, ...string[]];
   const inner =
     rest.length === 0
       ? valueText
-      : `{\n  ${reindent(entryText(rest, valueText), "  ", "\n")},\n}`;
-  return `${keyText(head)}: ${inner}`;
+      : `{\n  ${reindent(entryText(rest, valueText, dialect), "  ", "\n")}${dialect.trailingComma}\n}`;
+  return `${dialect.key(head)}: ${inner}`;
 }
 
 // ─── Splicing ────────────────────────────────────────────────────────────────
@@ -442,6 +470,7 @@ function appendMember(
   text: string,
   container: ObjectNode | ArrayNode,
   memberText: string,
+  dialect: Dialect,
 ): string {
   const members: ReadonlyArray<{ span: Span }> =
     container.kind === "object" ? container.entries : container.elements;
@@ -454,7 +483,7 @@ function appendMember(
       text,
       container.span.start + 1,
       container.span.end - 1,
-      `${eol}${inner}${reindent(memberText, inner, eol)},${eol}${baseIndent}`,
+      `${eol}${inner}${reindent(memberText, inner, eol)}${dialect.trailingComma}${eol}${baseIndent}`,
     );
   }
   const { commaEnd, line } = trailerAfter(text, last.span.end);
@@ -487,13 +516,14 @@ export function setValue(
   text: string,
   path: readonly string[],
   valueText: string,
+  dialect: Dialect,
 ): string {
   if (path.length === 0) {
     throw new Json5EditError("setValue needs a non-empty path", 0);
   }
   if (/^\s*$/.test(text)) {
     const eol = eolOf(text);
-    return `{${eol}  ${reindent(entryText(path, valueText), "  ", eol)},${eol}}${eol}`;
+    return `{${eol}  ${reindent(entryText(path, valueText, dialect), "  ", eol)}${dialect.trailingComma}${eol}}${eol}`;
   }
   let node: Node = parseDocument(text);
   for (let i = 0; i < path.length; i++) {
@@ -505,7 +535,12 @@ export function setValue(
     }
     const entry = entryOf(node, path[i]!);
     if (entry === undefined) {
-      return appendMember(text, node, entryText(path.slice(i), valueText));
+      return appendMember(
+        text,
+        node,
+        entryText(path.slice(i), valueText, dialect),
+        dialect,
+      );
     }
     if (i === path.length - 1) {
       const indent = indentOfLine(text, entry.keySpan.start);
@@ -643,7 +678,12 @@ function refAt(
   for (const { node, bareAt } of nodesIn(root, rootPath)) {
     if (segmentNameOf(node) !== name) continue;
     if (bareAt === null) return { text, ref: node };
-    const wrapped = setValue(text, bareAt, `{ h: [${textOf(text, node)}] }`);
+    const wrapped = setValue(
+      text,
+      bareAt,
+      `{ h: [${textOf(text, node)}] }`,
+      JSON5_DIALECT,
+    );
     return refAt(wrapped, rootPath, name);
   }
   return null;

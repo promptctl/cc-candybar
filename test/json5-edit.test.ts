@@ -16,9 +16,20 @@ import {
   removeSegmentRef,
   restagesFragment,
   rowEntriesOf,
-  setValue,
+  setValue as setValueIn,
+  JSON5_DIALECT,
+  JSON_DIALECT,
+  type Dialect,
   textOf,
 } from "../src/config/json5-edit";
+
+// The cc-candybar config is the JSON5 consumer; every case below edits it.
+const setValue = (
+  text: string,
+  path: readonly string[],
+  valueText: string,
+  dialect: Dialect = JSON5_DIALECT,
+): string => setValueIn(text, path, valueText, dialect);
 
 const CONFIG = `{
   // ─── header comment ───────────────────────────────────────────────
@@ -429,5 +440,41 @@ describe("json5Text", () => {
     expect(JSON5.parse(json5Text({ template: "{{ .x }}", "v1.c": [1, { a: true }] }))).toEqual({
       template: "{{ .x }}", "v1.c": [1, { a: true }],
     });
+  });
+});
+
+// [LAW:behavior-not-structure] The JSON dialect: what a strict-JSON consumer
+// (Claude Code's settings.json) can read back — quoted keys, no trailing comma
+// on minted containers — while an existing member's style is still mirrored.
+describe("setValue — the JSON dialect mints strict JSON", () => {
+  test("an empty document", () => {
+    const after = setValue("", ["env", "X"], '"1"', JSON_DIALECT);
+    expect(JSON.parse(after)).toEqual({ env: { X: "1" } });
+    expect(after).toBe('{\n  "env": {\n    "X": "1"\n  }\n}\n');
+  });
+
+  test("a missing intermediate object", () => {
+    const after = setValue(
+      '{\n  "model": "opus"\n}\n',
+      ["env", "X"],
+      '"1"',
+      JSON_DIALECT,
+    );
+    expect(JSON.parse(after)).toEqual({ model: "opus", env: { X: "1" } });
+  });
+
+  test("an empty container", () => {
+    const after = setValue('{ "env": {} }', ["env", "X"], '"1"', JSON_DIALECT);
+    expect(JSON.parse(after)).toEqual({ env: { X: "1" } });
+  });
+
+  test("appending after an existing member quotes the key", () => {
+    const after = setValue(
+      '{\n  "env": {\n    "A": "1"\n  }\n}\n',
+      ["env", "X"],
+      '"1"',
+      JSON_DIALECT,
+    );
+    expect(JSON.parse(after)).toEqual({ env: { A: "1", X: "1" } });
   });
 });

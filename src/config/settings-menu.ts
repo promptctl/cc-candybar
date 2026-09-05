@@ -52,11 +52,18 @@ import {
   DISCLOSURE_GLYPH_OPEN,
   disclosureCycleAction,
   disclosureNode,
+  escapeTemplateLiteral,
   disclosureStateVar,
   disclosureTrigger,
 } from "./disclosure.js";
 import { declareHelp } from "./help.js";
 import { PERSIST_HELP } from "../help-text.js";
+import { CHECKS } from "../doctor/checks.js";
+import {
+  doctorReportKeys,
+  VERDICT_OK,
+  VERDICT_UNRUN,
+} from "../doctor/report.js";
 import {
   EDIT_MODE_KEY,
   EDIT_MODE_OPEN,
@@ -145,6 +152,25 @@ const CONFIG_REF: DisclosureRef = {
   variable: CONFIG_SEG,
   member: SETTINGS_OPEN,
 };
+
+// ─── The tools menu and the doctor (brandon-doctor-b6a) ─────────────────────
+//
+// `🧰 tools` is `⚙ config`'s sibling: a disclosure inside the settings body
+// holding the `🩺 doctor` button and, once it has run, one row per check. The
+// report is SessionState (src/doctor/report.ts) read by `state` variables
+// minted here from the same CHECKS list the fold runs over, so a second check
+// is one more row in that list and no edit here [LAW:one-type-per-behavior].
+// Its body is VERTICAL — one row per check, dropped under the tools row — so a
+// long reason never widens the settings band it hangs from.
+const TOOLS_SEG = `${SETTINGS_NS}tools`;
+const TOOLS_REF: DisclosureRef = {
+  variable: TOOLS_SEG,
+  member: SETTINGS_OPEN,
+};
+const DOCTOR_SEG = `${SETTINGS_NS}doctor`;
+const DOCTOR_RUN_ACTION = `${DOCTOR_SEG}.run`;
+const doctorFixAction = (check: string): string => `${DOCTOR_SEG}.fix.${check}`;
+const doctorRowSeg = (check: string): string => `${DOCTOR_SEG}.${check}`;
 
 // The `(?)` that explains `persist?` — the one control in this menu whose
 // behaviour a user cannot infer from its label, which is exactly why the ticket
@@ -461,6 +487,21 @@ function expandAnchor(
                   { kind: "segment", name: PADDING_SEG },
                 ],
               }),
+              // The tools, behind their own disclosure: the doctor button,
+              // then one row per check once it has run.
+              disclosureNode(TOOLS_SEG, TOOLS_REF, {
+                kind: "container",
+                direction: "vertical",
+                children: [
+                  { kind: "segment", name: DOCTOR_SEG },
+                  ...CHECKS.map(
+                    (c): LayoutNode => ({
+                      kind: "segment",
+                      name: doctorRowSeg(c.name),
+                    }),
+                  ),
+                ],
+              }),
               { kind: "segment", name: EDIT_SEG },
             ],
           },
@@ -536,6 +577,8 @@ function settingsArtifacts(): {
     actions: {
       [SETTINGS_ANCHOR]: disclosureCycleAction(SETTINGS_ANCHOR, SETTINGS_OPEN),
       [CONFIG_SEG]: disclosureCycleAction(CONFIG_SEG, SETTINGS_OPEN),
+      [TOOLS_SEG]: disclosureCycleAction(TOOLS_SEG, SETTINGS_OPEN),
+      [DOCTOR_RUN_ACTION]: { doctor: "run" },
       // [LAW:one-source-of-truth] The selector is an ordinary session cycle
       // over the one boolean spelling SessionState uses — off first, because
       // an unwritten key counts as the first member and the menu opens in
@@ -568,6 +611,16 @@ function settingsArtifacts(): {
           `⚙ config ${DISCLOSURE_GLYPH_CLOSED}`,
           `⚙ config ${DISCLOSURE_GLYPH_OPEN}`,
         ),
+      },
+      [TOOLS_SEG]: {
+        template: disclosureTrigger(
+          TOOLS_SEG,
+          `🧰 tools ${DISCLOSURE_GLYPH_CLOSED}`,
+          `🧰 tools ${DISCLOSURE_GLYPH_OPEN}`,
+        ),
+      },
+      [DOCTOR_SEG]: {
+        template: `{{ action "${DOCTOR_RUN_ACTION}" "🩺 doctor" }}`,
       },
       // [LAW:one-type-per-behavior] Both non-picker controls read the same
       // `.effective` projection their picker siblings read, and write the
@@ -603,7 +656,12 @@ function settingsArtifacts(): {
     CONFIG_SEG,
     DISCLOSURE_CLOSED,
   );
+  artifacts.variables[TOOLS_SEG] = disclosureStateVar(
+    TOOLS_SEG,
+    DISCLOSURE_CLOSED,
+  );
   declareSettingControls(artifacts);
+  declareDoctorRows(artifacts);
   // [LAW:one-source-of-truth] The `(?)` is minted here, with the panel it
   // belongs to, and its NODE is returned so `expandAnchor` places it by the
   // value it is handed rather than by re-deriving names this pass already
@@ -616,6 +674,33 @@ function settingsArtifacts(): {
     artifacts,
   );
   return { artifacts, help };
+}
+
+// [LAW:one-source-of-truth] One report row per check, minted from the CHECKS
+// list the doctor folds over, its keys from the SAME `doctorReportKeys` the
+// doctor verbs write through. A row exists exactly when its check has run
+// (`verdict` left its unrun default); it reads `✓ label`, or `✗ label — reason`
+// with a `[fix]` bound to that check's own fix action when the verdict carried
+// one. The `[fix]` is `{ doctor: "fix", check }` — the daemon re-probes the
+// check at click time and refuses loudly if there is nothing left to fix.
+function declareDoctorRows(artifacts: MenuArtifacts): void {
+  for (const c of CHECKS) {
+    const keys = doctorReportKeys(c.name);
+    const fix = doctorFixAction(c.name);
+    for (const key of Object.values(keys)) {
+      artifacts.variables[key] = { kind: "state", key, default: VERDICT_UNRUN };
+    }
+    artifacts.actions[fix] = { doctor: "fix", check: c.name };
+    const label = escapeTemplateLiteral(c.label);
+    artifacts.segments[doctorRowSeg(c.name)] = {
+      when: `{{ ne .${keys.verdict} "${VERDICT_UNRUN}" }}`,
+      template:
+        `{{ if eq .${keys.verdict} "${VERDICT_OK}" }}✓ ${label}` +
+        `{{ else }}✗ ${label} — {{ .${keys.reason} }}` +
+        `{{ if eq .${keys.fixable} "${BOOLEAN_TRUE}" }} {{ action "${fix}" "[fix]" }}{{ end }}` +
+        `{{ end }}`,
+    };
+  }
 }
 
 // [LAW:one-source-of-truth] Every setting the menu offers, minted from the one

@@ -9,6 +9,7 @@ import { obtainDaemonKick } from "../daemon/acquire";
 import { URL_SCHEME, VERB_COPY } from "../click/wire";
 import { DISCLOSURE_GLYPH_CLOSED } from "../config/disclosure";
 import { PACKAGE_VERSION } from "../version";
+import { claudeSettingsPath } from "../claude-settings";
 import {
   assessCurrency,
   currencyReport,
@@ -51,10 +52,6 @@ function buildStatusLineCommand(
 
 function appBundlePath(): string {
   return path.join(os.homedir(), "Applications", `${APP_NAME}.app`);
-}
-
-function settingsJsonPath(): string {
-  return path.join(os.homedir(), ".claude", "settings.json");
 }
 
 function ensureMacOS(): void {
@@ -500,7 +497,7 @@ function updateClaudeSettings(
   force: boolean,
   overridePath?: string,
 ): void {
-  const target = overridePath ?? settingsJsonPath();
+  const target = overridePath ?? claudeSettingsPath();
   fs.mkdirSync(path.dirname(target), { recursive: true });
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
