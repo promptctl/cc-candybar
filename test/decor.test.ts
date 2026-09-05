@@ -23,6 +23,7 @@ import {
   DECOR_VOCABULARY,
   DEFAULT_DISTRIBUTION,
   DISTRIBUTIONS,
+  LEVEL_DECAY,
   STATE_FLOOR,
   STATE_PURE_AMOUNT,
   bandFor,
@@ -36,6 +37,7 @@ import {
   textOn,
   vocabularySelect,
   type Address,
+  type AddressStep,
   type DecorHue,
   type Distribution,
   type DistributionName,
@@ -458,11 +460,9 @@ describe("a band is a plane", () => {
     for (const palette of THEMES) {
       const { state, plane } = bandFor(palette, disclosure);
       // `uniform` puts every item at the window's midpoint — the formula, once.
-      const mid = bandItemFor(palette, disclosure, {
-        index: 0,
-        count: 1,
-        distribution: DISTRIBUTIONS.uniform,
-      });
+      const mid = bandItemFor(palette, disclosure, [
+        { index: 0, count: 1, distribution: DISTRIBUTIONS.uniform },
+      ]);
       expect(mid.hex).toBe(
         blendRgb(plane, state, BAND_WINDOW.floor + BAND_WINDOW.span * 0.5).hex,
       );
@@ -470,11 +470,9 @@ describe("a band is a plane", () => {
       // the one before it, and none is the plane or the state (the window
       // keeps them off both ends).
       const distances = [0, 1, 2, 3].map((index) => {
-        const item = bandItemFor(palette, disclosure, {
-          index,
-          count: 4,
-          distribution: DISTRIBUTIONS.monotonic,
-        });
+        const item = bandItemFor(palette, disclosure, [
+          { index, count: 4, distribution: DISTRIBUTIONS.monotonic },
+        ]);
         expect(item.hex).not.toBe(plane.hex);
         expect(item.hex).not.toBe(state.hex);
         return deltaE(item, plane);
@@ -482,6 +480,50 @@ describe("a band is a plane", () => {
       for (let i = 1; i < distances.length; i++) {
         expect(distances[i]!).toBeGreaterThan(distances[i - 1]!);
       }
+    }
+  });
+
+  test("a nested address folds the same way: each level decayed, the sum taken modulo 1", () => {
+    const disclosure = { hue: "primary", depth: 0 } as const;
+    const step = (index: number): AddressStep => ({
+      index,
+      count: 4,
+      distribution: DISTRIBUTIONS.monotonic,
+    });
+    // The documented fold, stated once: `d0 + d1·LEVEL_DECAY`, modulo 1.
+    const expected = (palette: Palette, address: Address) => {
+      const { state, plane } = bandFor(palette, disclosure);
+      const axis =
+        address.reduce(
+          (sum, { index, count, distribution }, level) =>
+            sum + distribution(index, count) * LEVEL_DECAY ** level,
+          0,
+        ) % 1;
+      return blendRgb(plane, state, BAND_WINDOW.floor + BAND_WINDOW.span * axis).hex;
+    };
+    for (const palette of THEMES) {
+      const { state, plane } = bandFor(palette, disclosure);
+      // A row of four under the second cell of a row of four: every nested
+      // cell lands where the fold says, inside the window, and the four are
+      // pairwise distinct — from each other and from their parent's own place.
+      const parent = bandItemFor(palette, disclosure, [step(1)]);
+      const nested = [0, 1, 2, 3].map((index) => {
+        const item = bandItemFor(palette, disclosure, [step(1), step(index)]);
+        expect(item.hex).toBe(expected(palette, [step(1), step(index)]));
+        expect(item.hex).not.toBe(plane.hex);
+        expect(item.hex).not.toBe(state.hex);
+        return item.hex;
+      });
+      expect(new Set([parent.hex, ...nested]).size).toBe(5);
+      // The row decides the coarse position and the cell refines it: the
+      // same two steps in the other order land somewhere else.
+      expect(bandItemFor(palette, disclosure, [step(3), step(0)]).hex).not.toBe(
+        bandItemFor(palette, disclosure, [step(0), step(3)]).hex,
+      );
+      // A raw sum past 1 (0.875 + 0.875·0.37) wraps into the same window.
+      const wrapped = bandItemFor(palette, disclosure, [step(3), step(3)]);
+      expect(wrapped.hex).toBe(expected(palette, [step(3), step(3)]));
+      expect(deltaE(wrapped, plane)).toBeLessThan(deltaE(parent, plane));
     }
   });
 
@@ -498,11 +540,9 @@ describe("a band is a plane", () => {
         const cells = [
           plane,
           ...[0, 1, 2, 3, 4, 5].map((index) =>
-            bandItemFor(palette, disclosure, {
-              index,
-              count: 6,
-              distribution: DISTRIBUTIONS[DEFAULT_DISTRIBUTION],
-            }),
+            bandItemFor(palette, disclosure, [
+              { index, count: 6, distribution: DISTRIBUTIONS[DEFAULT_DISTRIBUTION] },
+            ]),
           ),
         ];
         for (const cell of cells) {

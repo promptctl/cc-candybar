@@ -57,11 +57,13 @@ import {
 import { segmentColorFuncs } from "../render/segment-color.js";
 import { stateCell } from "../render/band-style.js";
 import {
+  BAR_ROOT,
   bandFor,
-  decorEntryColour,
-  decorEntryFor,
-  type Address,
+  bandRoot,
+  decorationFor,
+  descend,
   type AddressStep,
+  type Region,
 } from "../themes/decor.js";
 // [LAW:one-way-deps] The node-type registry sits below this driver: it owns the
 // compiled node shapes + each kind's compile/render, dispatched via nodeType().
@@ -69,6 +71,7 @@ import {
 // capabilities; it never re-switches on node kind.
 import {
   nodeType,
+  type Compiled,
   type CompiledNode,
   type CompiledSegment,
   type CompiledSegments,
@@ -514,16 +517,24 @@ export function registerDslConfig(
       );
     }
   };
-  const compileNode = (node: LayoutNode, path: string): CompiledNode => {
+  const compileNode = <N extends LayoutNode>(
+    node: N,
+    path: string,
+  ): Compiled<N> => {
     const cctx: NodeCompileCtx = {
       path,
       when:
         node.when === undefined
           ? undefined
           : parseNodeField(node.when, path, "when"),
+      parse: (src, field) => parseNodeField(src, path, field),
       compileChild: compileNode,
     };
-    return nodeType(node.kind).compile(node, cctx);
+    // [LAW:types-are-the-program] The registry pairs each kind with the
+    // compile that returns that kind's own compiled arm (nodeType's documented
+    // cast); this restates the pairing at the call site so a container hands
+    // back a compiled container, not the union.
+    return nodeType(node.kind).compile(node, cctx) as Compiled<N>;
   };
 
   // [LAW:one-source-of-truth] One compiled tree per declared preset, built
@@ -549,27 +560,6 @@ export function registerDslConfig(
     loadWarnings,
   };
 }
-
-// [LAW:one-source-of-truth] What a segment at `address` is dealt: ONE
-// vocabulary entry, read once and projected twice — its colour is the TINT the
-// closed cell wears, and its hue names the DISCLOSURE the segment opens (at band
-// depth 0). One selection, so the cell and the band it drops cannot disagree
-// about their hue; the band is one more step on the same address (design doc,
-// "a band is a plane"), never a second position.
-//
-// Depth is 0 for every segment until a disclosure BODY is a fact the compiled
-// tree carries (candybar-render-ai7.9): today a group's body is a `when`-gated
-// container the walk cannot tell from any other, so a `{{ menu }}` inside one
-// opens at the depth the walk can see. The model already takes the depth; the
-// tree does not yet supply it.
-const BAR_DEPTH = 0;
-const decorationAt = (palette: Palette, address: Address) => {
-  const entry = decorEntryFor(address);
-  return {
-    tint: decorEntryColour(palette, entry),
-    disclosure: { hue: entry.hue, depth: BAR_DEPTH },
-  };
-};
 
 // ─── renderDsl ───────────────────────────────────────────────────────────────
 
@@ -720,20 +710,27 @@ export function renderDsl(
   // state with one writer, never ambient context a reader has to hope is
   // current. Enter/exit are a pair by construction: every path that publishes
   // goes through the first, every path that finishes goes through the second.
+  //
+  // [LAW:one-source-of-truth] What the segment is dealt is ONE `decorationFor`
+  // read of its region (src/themes/decor.ts): the tint its closed cell wears,
+  // the text an unauthored `fg:` defaults to, and the disclosure it opens —
+  // so the cell, the band it drops, and the body hung under it cannot disagree
+  // about their hue.
   const enterSegment = (
     segName: string,
     palette: Palette,
-    address: Address,
+    region: Region,
     bgTemplate: Template<RichText> | undefined,
     fgTemplate: Template<RichText> | undefined,
   ): SegmentStyles => {
-    const { tint, disclosure } = decorationAt(palette, address);
+    const { tint, text, disclosure } = decorationFor(palette, region);
     const closed = resolveSegmentColors(
       compiled.activeSegment,
       segName,
       palette,
       disclosure,
       tint,
+      text,
       bgTemplate,
       fgTemplate,
       scope,
@@ -743,6 +740,7 @@ export function renderDsl(
       closed,
       trigger: stateCell(palette, band.state),
       band: stateCell(palette, band.plane),
+      disclosure,
     };
   };
   const exitSegment = (fragments: readonly RichText[]): readonly RichText[] => {
@@ -759,7 +757,7 @@ export function renderDsl(
   const renderNode = (
     node: CompiledNode,
     parentVisible: boolean,
-    address: Address,
+    region: Region,
   ): RenderedLines => {
     const visible = parentVisible && evaluateWhen(node.when, scope);
     const ctx: NodeRenderCtx = {
@@ -767,14 +765,20 @@ export function renderDsl(
       palette,
       visible,
       padding: opts.padding,
-      address,
+      region,
       perSegmentSink,
       onSegmentError,
       enterSegment,
       exitSegment,
       lookupSegment,
       renderChild: (child, childVisible, step: AddressStep) =>
-        renderNode(child, childVisible, [...address, step]),
+        renderNode(child, childVisible, descend(region, step)),
+      // A disclosure body starts a NEW region: the root of the band its
+      // trigger opens. Depth is a fact of that band — counted up by
+      // `decorationFor` each time a band item opens the next — so a nested
+      // `{{ menu }}` inside ☰ → ⚙ lands at depth 2 with no walk state.
+      renderBody: (body, open, band) =>
+        renderNode(body, visible && open, bandRoot(band)),
     };
     return nodeType(node.kind).render(node, ctx);
   };
@@ -799,7 +803,7 @@ export function renderDsl(
         `(have: ${[...compiled.roots.keys()].join(", ")})`,
     );
   }
-  return renderNode(root, true, [])
+  return renderNode(root, true, BAR_ROOT)
     .map((line) => renderStripCells(line, opts))
     .join("\n");
 }

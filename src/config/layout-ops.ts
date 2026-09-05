@@ -13,7 +13,7 @@
 // then IS the edited tree, and every reload reads it like any hand-written
 // root. This module owns only the op's shape and its wire codec.
 
-import type { LayoutNode } from "./dsl-types.js";
+import { walkNodes, type LayoutNode } from "./dsl-types.js";
 
 // [LAW:types-are-the-program] The two operations brandon-layout-edit-2gc.1
 // ships. Both address position by NAME, never by index. A future op (e.g.
@@ -73,16 +73,12 @@ export function decodeLayoutOp(token: string): LayoutOp | null {
 // against every declared segment, which are ADDABLE (populate the `+`
 // picker's domain). A name appearing more than once collapses to one entry —
 // callers that care about occurrence COUNT (none currently do) need a
-// different walk.
+// different walk. Reads `walkNodes`, THE traversal, so a segment inside a
+// disclosure body counts as present exactly as the render reaches it.
 export function collectSegmentNames(root: LayoutNode): ReadonlySet<string> {
   const out = new Set<string>();
-  const walk = (node: LayoutNode): void => {
-    if (node.kind === "segment") {
-      out.add(node.name);
-      return;
-    }
-    for (const child of node.children) walk(child);
-  };
-  walk(root);
+  for (const node of walkNodes(root)) {
+    if (node.kind === "segment") out.add(node.name);
+  }
   return out;
 }
