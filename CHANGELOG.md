@@ -1,3 +1,10 @@
+# [1.55.0](https://github.com/promptctl/cc-candybar/compare/v1.54.0...v1.55.0) (2026-09-05)
+
+
+### Features
+
+* **render:** a disclosure body is a node fact; depth reaches the walk (candybar-render-ai7.9) ([#215](https://github.com/promptctl/cc-candybar/issues/215)) ([e22ac57](https://github.com/promptctl/cc-candybar/commit/e22ac576bf62a4d4437b109090b2135543901b67)), closes [#e0e0e0](https://github.com/promptctl/cc-candybar/issues/e0e0e0)
+
 # [1.54.0](https://github.com/promptctl/cc-candybar/compare/v1.53.0...v1.54.0) (2026-09-05)
 
 
