@@ -20,7 +20,6 @@ import type {
   CacheDecl,
   LayoutNode,
 } from "../config/dsl-types.js";
-import { HUE_STEP_VAR } from "../config/dsl-types.js";
 import { perConfigDomainsFor } from "../config/option-domain.js";
 import { PRESET_FLOOR, presetNames, presetRoot } from "../config/presets.js";
 import { addableSegmentDomains } from "../config/edit-chrome.js";
@@ -33,7 +32,7 @@ import {
 } from "../var-system/sources.js";
 import type { BuildLineOptions } from "../render/strip.js";
 import { DEFAULT_PADDING, renderStripCells } from "../render/strip.js";
-import { paletteForThemeName } from "../themes/index.js";
+import { paletteForThemeName, transposedPalette } from "../themes/index.js";
 import { buildScope } from "../template-engine/scope.js";
 import {
   createCcCandybarEngine,
@@ -59,6 +58,7 @@ import { segmentColorFuncs } from "../render/segment-color.js";
 import { stateCell } from "../render/band-style.js";
 import {
   bandFor,
+  decorEntryColour,
   decorEntryFor,
   DEFAULT_DISTRIBUTION,
   DISTRIBUTIONS,
@@ -552,11 +552,12 @@ export function registerDslConfig(
   };
 }
 
-// [LAW:one-source-of-truth] Which disclosure a segment at `address` opens: the
-// vocabulary hue its address selects — the SAME selection candybar-render-ai7.4
-// will paint the closed cell with — at band depth 0. The band a segment drops
-// is one more step on its address (design doc, "a band is a plane"), so the
-// hue is the cell's and nothing about the band is a second position.
+// [LAW:one-source-of-truth] What a segment at `address` is dealt: ONE
+// vocabulary entry, read once and projected twice — its colour is the TINT the
+// closed cell wears, and its hue names the DISCLOSURE the segment opens (at band
+// depth 0). One selection, so the cell and the band it drops cannot disagree
+// about their hue; the band is one more step on the same address (design doc,
+// "a band is a plane"), never a second position.
 //
 // Depth is 0 for every segment until a disclosure BODY is a fact the compiled
 // tree carries (candybar-render-ai7.9): today a group's body is a `when`-gated
@@ -564,10 +565,13 @@ export function registerDslConfig(
 // opens at the depth the walk can see. The model already takes the depth; the
 // tree does not yet supply it.
 const BAR_DEPTH = 0;
-const disclosureAt = (address: Address) => ({
-  hue: decorEntryFor(address, DISTRIBUTIONS[DEFAULT_DISTRIBUTION]).hue,
-  depth: BAR_DEPTH,
-});
+const decorationAt = (palette: Palette, address: Address) => {
+  const entry = decorEntryFor(address, DISTRIBUTIONS[DEFAULT_DISTRIBUTION]);
+  return {
+    tint: decorEntryColour(palette, entry),
+    disclosure: { hue: entry.hue, depth: BAR_DEPTH },
+  };
+};
 
 // ─── renderDsl ───────────────────────────────────────────────────────────────
 
@@ -580,10 +584,10 @@ const disclosureAt = (address: Address) => ({
  *   3. Walk the compiled layout tree (renderNode) in pre-order, producing a list
  *      of LINES OF CELLS (not yet serialized). A `container` composes its
  *      children's blocks by its `direction` (vertical stacks, horizontal zips
- *      cells per row); a `cells` leaf evaluates its segments into cell lines. A
- *      node whose `when` (or an ancestor's) is false contributes no line, but its
- *      segments still advance the hue index so visible siblings keep
- *      positionally-stable colors.
+ *      cells per row); a `segment` leaf evaluates into cell lines. A node whose
+ *      `when` (or an ancestor's) is false contributes no line; its ADDRESS — the
+ *      position its colours derive from — is unchanged by being hidden, so
+ *      visible siblings keep their colours.
  *   4. Serialize each composed line through the ONE strip joiner and join "\n".
  *
  * [LAW:single-enforcer] The daemon calls this verbatim — no alternate render
@@ -593,11 +597,6 @@ const disclosureAt = (address: Address) => ({
  * segment count are all data; a deeper tree is more recursion, not more code.
  * The projection (how a container maps children onto the plane) is the
  * `direction` VALUE, not a branch in the walk.
- *
- * Hue rotation: the segment index driving each `hueShift` advances in pre-order
- * across the whole tree, including hidden subtrees. Re-shaping a flat row list
- * into nested containers keeps every segment's color; toggling a node's
- * visibility does not recolor the nodes after it.
  */
 // [LAW:locality-or-seam] The optional render observers, bundled as ONE named bag
 // so a caller states what it passes by name — no positional tail to count, no
@@ -641,8 +640,8 @@ export interface RenderObservers {
 export interface RenderSelection {
   // The resolved look, as a ThemeKey: effectiveLookName over SessionState/
   // globals, then lookKeyByName — resolved by the caller exactly how basePalette
-  // is. IDENTITY is the "none" look. Composed with each segment's hue shift into
-  // ONE transposition.
+  // is. IDENTITY is the "none" look; the base palette is transposed by it ONCE
+  // per render.
   readonly look?: ThemeKey;
   // The resolved preset NAME: effectivePresetName over SessionState/globals,
   // collapsed to the floor if stale. Selects which of `compiled.roots` this
@@ -688,34 +687,13 @@ export function renderDsl(
   compiled.menuRuntime.action.padding = opts.padding;
 
   const scope = buildScope(store);
-  // [LAW:one-source-of-truth] hueStep is a value in the store like every other
-  // render input — NOT a second source in globals. A config declares the
-  // conventional hue-step variable and renderDsl reads that one source here. The
-  // kind decides liveness with no change here: a `state` var lets a stepper drive
-  // it live (session value over the declared default, the same session-over-
-  // default the theme uses), a literal pins it (the bundled default's fixed 14°).
-  // [LAW:no-defensive-null-guards] Two real, representable states both mean "no
-  // rotation yet" (step 0): the variable is absent (an empty-default merge), OR
-  // it is a `state` var with no default that no click has written yet (reads the
-  // registry's empty fallback ""). Coerce to a finite number or 0 — a render must
-  // never throw on a valid config. Number("") and Number("abc") collapse to the
-  // 0 floor; any finite value (the literal default, a session pick) flows through.
-  const rawHue = store.has(HUE_STEP_VAR) ? Number(store.read(HUE_STEP_VAR)) : 0;
-  const hueStep = Number.isFinite(rawHue) ? rawHue : 0;
+  // [LAW:one-source-of-truth] The render's palette: the base theme under the
+  // session's look, transposed ONCE here — every unpinned segment colours from
+  // this one object, so a look click recolours the whole bar from one
+  // transposition, not one per segment.
+  const palette = transposedPalette(basePalette, look);
 
   perSegmentSink?.clear();
-
-  // [LAW:single-enforcer] The hue cursor: one counter, advanced in pre-order
-  // across the whole tree (visible or not) by segment leaves only — a container
-  // advances none — so per-segment colors stay positionally stable regardless of
-  // nesting or which nodes are hidden. ctx exposes nextHueShift() as the single
-  // mutator. Hue is decorative: it carries no structural meaning.
-  const hue = { value: 0 };
-  const nextHueShift = (): number => {
-    const shift = hue.value * hueStep;
-    hue.value += 1;
-    return shift;
-  };
 
   // [LAW:no-defensive-null-guards] A segment node names one segment; resolve it to
   // its decl + compiled form. Both are always present together (loader validates,
@@ -751,12 +729,13 @@ export function renderDsl(
     bgTemplate: Template<RichText> | undefined,
     fgTemplate: Template<RichText> | undefined,
   ): SegmentStyles => {
-    const disclosure = disclosureAt(address);
+    const { tint, disclosure } = decorationAt(palette, address);
     const closed = resolveSegmentColors(
       compiled.activeSegment,
       segName,
       palette,
       disclosure,
+      tint,
       bgTemplate,
       fgTemplate,
       scope,
@@ -787,11 +766,9 @@ export function renderDsl(
     const visible = parentVisible && evaluateWhen(node.when, scope);
     const ctx: NodeRenderCtx = {
       scope,
-      basePalette,
-      look,
+      palette,
       visible,
       padding: opts.padding,
-      nextHueShift,
       address,
       perSegmentSink,
       onSegmentError,

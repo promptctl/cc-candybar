@@ -108,19 +108,19 @@ toolbar:
 {
   variables: {
     workMode: { kind: "state", key: "work-mode", default: "focus" },
-    "hue.step": { kind: "state", key: "hue-step", default: "14" },
+    detail: { kind: "state", key: "detail", default: "1" },
     project_dir: { kind: "input", path: "workspace.project_dir", default: "" },
   },
   actions: {
     cycleMode: { set: "work-mode", cycle: ["focus", "review", "debug"] },
-    hueDown: { set: "hue-step", min: 0, max: 60, by: -2 },
-    hueUp: { set: "hue-step", min: 0, max: 60, by: 2 },
+    detailDown: { set: "detail", min: 0, max: 3, by: -1 },
+    detailUp: { set: "detail", min: 0, max: 3, by: 1 },
     copySession: { copy: "{{ .session.id }}" },
     openProject: { open: "vscode://file/{{ urlEncode .project_dir }}" },
   },
   segments: {
     controls: {
-      template: '{{ action "cycleMode" "🎯 focus" "🔍 review" "🐛 debug" }} ⬡ {{ action "hueDown" "◀" }} {{ .hue.step }}° {{ action "hueUp" "▶" }} {{ action "copySession" "⎘ id" }} {{ action "openProject" "↗ proj" }}',
+      template: '{{ action "cycleMode" "🎯 focus" "🔍 review" "🐛 debug" }} ◧ {{ action "detailDown" "◀" }} {{ .detail }} {{ action "detailUp" "▶" }} {{ action "copySession" "⎘ id" }} {{ action "openProject" "↗ proj" }}',
       bg: "surface", fg: "foreground",
     },
   },

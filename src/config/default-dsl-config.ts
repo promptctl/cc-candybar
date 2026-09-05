@@ -313,11 +313,9 @@ export const RAW_DEFAULT_DSL_CONFIG = {
     // catppuccin-latte — a light palette that landed as a drive-by in an
     // unrelated formatting-cleanup commit and read poorly on the dark
     // terminals most users run — after live-clicking every registry theme
-    // through the settings menu's theme picker: it stays legible as the
-    // per-row hue-step shifts each
-    // row's hue, where warmer bases (gruvbox, dracula) drifted toward mud
-    // and the pastel ones (rose-pine, atom-one) washed out at this
-    // contrast.
+    // through the settings menu's theme picker: it stays legible where
+    // warmer bases (gruvbox, dracula) drifted toward mud and the pastel
+    // ones (rose-pine, atom-one) washed out at this contrast.
     palette: "tokyo-night",
   },
 
@@ -445,19 +443,6 @@ export const RAW_DEFAULT_DSL_CONFIG = {
       type: "number",
       default: 80,
     },
-
-    // [LAW:one-source-of-truth] The per-segment hue-rotation step renderDsl
-    // reads (HUE_STEP_VAR) — a value in the store like every other render input,
-    // NOT a globals field. [LAW:types-are-the-program] In the bundled default it
-    // is a LITERAL: nothing here writes the "hue-step" SessionState key (the
-    // default declares no interactive actions), so a fixed 14° is the strongest
-    // TRUE theorem — a `state` var would claim a session-variability the default
-    // never exercises and force a SessionState on every consumer. A user makes
-    // hue live by overriding this one variable to `{ kind: "state", key:
-    // "hue-step" }` and adding a pair of bounded stepper actions — the same
-    // two-part pattern the theme picker uses.
-    // 14°: adjacent segments stay visually distinct without per-segment colors.
-    "hue.step": { kind: "literal", value: 14 },
 
     // home flows through the augmented payload (buildRenderPayload reads
     // HOME, falling back to USERPROFILE on Windows where HOME is often
@@ -864,8 +849,8 @@ export const RAW_DEFAULT_DSL_CONFIG = {
       // A computed `fg:` — the field is a template evaluating to a color
       // reference, and `bgOf` is available here because a segment's background
       // is resolved before its foreground. Structural text therefore sits a
-      // fixed distance from THIS segment's background whatever theme, look, or
-      // hue shift is in effect.
+      // fixed distance from THIS segment's background whatever theme or look
+      // is in effect.
       fg: GIT_QUIET_FG,
       when: '{{ ne .git.branch "" }}',
     },

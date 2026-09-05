@@ -613,13 +613,3 @@ export const TRUNCATE_MODES: readonly TruncateMode[] = [
 // — the usable terminal width renderDsl injects each render. One name shared by
 // the declaration (default config) and the picker's read, so they cannot drift.
 export const TERM_COLS_VAR = "term.cols";
-
-// [LAW:one-source-of-truth] The conventional variable per-segment hue rotation
-// reads. hueStep is NOT a globals field (that would be a second source for a
-// render-time value); it is a value in the store like every other render input.
-// A config declares this variable — as a `state` var so a stepper can drive it
-// live (session value over the declared default, the same session-over-default
-// the theme uses), or as any kind for a fixed value. renderDsl reads it through
-// this one name; a bounded stepper action writes the SessionState key it reads.
-// Absent ≡ no rotation (step 0) — the degenerate case, not a special branch.
-export const HUE_STEP_VAR = "hue.step";

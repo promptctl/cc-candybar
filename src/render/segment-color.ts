@@ -20,8 +20,8 @@ import {
  *
  * **Why `color` reads a live palette.** A segment's rendered palette is not a
  * property of the loaded config — it is the base theme (session choice over
- * config default) adapted by the render's look and the segment's hue shift,
- * all resolved per render, per segment. Binding `color` to a palette captured
+ * config default) adapted by the render's look, resolved per render. Binding
+ * `color` to a palette captured
  * when the config loaded put the *body* of a template on a different palette
  * than the `bg:`/`fg:` of the very same segment, so `{{ color "primary" }}`
  * and `bg: "primary"` could name one thing and paint two.

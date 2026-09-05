@@ -77,25 +77,51 @@ function resolve(
   fg: Template<RichText> | undefined,
   scope: object = {},
 ): Style {
-  return resolveSegmentColors(h.ref, SEG, palette, DISCLOSURE, bg, fg, scope);
+  return resolveSegmentColors(
+    h.ref,
+    SEG,
+    palette,
+    DISCLOSURE,
+    TINT,
+    bg,
+    fg,
+    scope,
+  );
 }
 
 // This file is about bg/fg resolution; the disclosure only rides the record.
 const DISCLOSURE: Disclosure = { hue: "primary", depth: 0 };
+// The tint the walk dealt this segment's address — a colour no palette role
+// here spells, so a background equal to it can only have come from the floor.
+const TINT = parseRgbHex("102030");
 
 // ────────────────────────────────────────────────────────────────────────────
-// 1. Both templates absent → null Style (no color override)
+// 1. No bg template → the tint IS the background (a segment always has one);
+//    no fg template → no foreground override.
 // ────────────────────────────────────────────────────────────────────────────
 
-describe("no bg/fg templates → null Style", () => {
-  test("undefined bg and fg → Style.isNull", () => {
+describe("no bg/fg templates → the tint, and no foreground", () => {
+  test("undefined bg → the address's tint; undefined fg → color unset", () => {
     const style = resolve(
       makeHarness(),
       makeTestPalette(),
       undefined,
       undefined,
     );
-    expect(style.isNull).toBe(true);
+    expect(style.bgcolor?.value?.hex).toBe(TINT.hex);
+    expect(style.color).toBeUndefined();
+  });
+
+  test("an authored bg paints over the tint — meaning outranks decoration", () => {
+    const h = makeHarness();
+    const style = resolve(h, makeTestPalette(), h.parse("error"), undefined);
+    expect(style.bgcolor?.value?.hex).toBe("#ff4444");
+  });
+
+  test("{{ bgOf }} in a fg template reads the tint when no bg is authored", () => {
+    const h = makeHarness();
+    const style = resolve(h, makeTestPalette(), undefined, h.parse("{{ bgOf }}"));
+    expect(style.color?.value?.hex).toBe(TINT.hex);
   });
 });
 

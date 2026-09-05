@@ -29,7 +29,7 @@
 //
 // What to try:
 //   Click "▸ theme"  → open the theme picker; click any theme to apply.
-//   Click "◀"/"▶"   → step the hue rotation in 2° increments.
+//   Click "◀"/"▶"   → step the detail level through 0..3.
 //   Click "▸ style"  → open the style picker.
 //   Click "⟳ mode"   → cycle through focus / review / debug.
 //   Click "📂"       → OSC-8 link, opens current dir in VSCode.
@@ -58,12 +58,10 @@
     "activeTheme": { kind: "state", key: "theme",       default: "" },
     "activeStyle": { kind: "state", key: "style",       default: "" },
 
-    // Hue rotation step (degrees). Written by hueUp/hueDown (bounded).
-    // renderDsl reads the conventional "hue.step" name (HUE_STEP_VAR) to
-    // apply per-segment hue transposition — this name is the contract.
+    // Detail level (0..3). Written by detailUp/detailDown (bounded).
     // [LAW:types-are-the-program] Declared as `state` here (not `literal`)
     // because the bounded stepper writes it; a literal is unwritable.
-    "hue.step": { kind: "state", key: "hue-step", default: "0" },
+    "detail": { kind: "state", key: "detail", default: "1" },
 
     // Picker page cursors. Written by themePage/stylePage (int).
     // -1 = closed; 0..N = open at page N.
@@ -103,8 +101,8 @@
     // Writes wrap(current ± by) clamped to [min, max].
     // The renderer emits the ABSOLUTE new value — rapid clicks accumulate
     // without racing (unlike a relative "current+by" evaluated at click time).
-    hueUp:   { set: "hue-step", min: 0, max: 60, by: 2 },
-    hueDown: { set: "hue-step", min: 0, max: 60, by: -2 },
+    detailUp:   { set: "detail", min: 0, max: 3, by: 1 },
+    detailDown: { set: "detail", min: 0, max: 3, by: -1 },
 
     // ── 5. set + int (integer cursor) ─────────────────────────────────────
     // Writes any integer the picker renders at the click site.
@@ -143,10 +141,10 @@
   // ── Segments ──────────────────────────────────────────────────────────────
   segments: {
     // ── Theme control ──────────────────────────────────────────────────────
-    // set-literal (openThemeMenu), bounded steppers (hueUp/hueDown) in one row.
+    // set-literal (openThemeMenu), bounded steppers (detailUp/detailDown) in one row.
     // {{ action "name" "display" }} — single display for all states.
     themeControl: {
-      template: ' 🎨 {{ if .activeTheme }}{{ .activeTheme }}{{ else }}(default){{ end }} {{ action "openThemeMenu" "▸" }}  ⬡ {{ action "hueDown" "◀" }} {{ .hue.step }}° {{ action "hueUp" "▶" }} ',
+      template: ' 🎨 {{ if .activeTheme }}{{ .activeTheme }}{{ else }}(default){{ end }} {{ action "openThemeMenu" "▸" }}  ◧ {{ action "detailDown" "◀" }} {{ .detail }} {{ action "detailUp" "▶" }} ',
       bg: "surface",
       fg: "foreground",
     },
@@ -219,8 +217,8 @@
 
     // ── Accordion body segments ─────────────────────────────────────────────
     // These are referenced inside group children below.
-    hueBody: {
-      template: ' ⬡ {{ action "hueDown" "◀" }} {{ .hue.step }}° {{ action "hueUp" "▶" }} (hue rotation demo) ',
+    stepperBody: {
+      template: ' ◧ {{ action "detailDown" "◀" }} {{ .detail }} {{ action "detailUp" "▶" }} (bounded stepper demo) ',
       bg: "surface",
       fg: "foreground",
     },
@@ -257,8 +255,8 @@
   //   { kind: "segment", name: "segmentName" }
   //   { kind: "group", name, label, key?, open?, direction?, bg?, fg?, when?, children }
   //
-  // A container's `when` gates its entire subtree (hidden subtree emits no
-  // rows; segments inside still contribute to the hue-index sequence).
+  // A container's `when` gates its entire subtree (a hidden subtree emits no
+  // rows).
   root: {
     kind: "container",
     direction: "vertical",
@@ -296,17 +294,17 @@
       },
 
       // ── Standalone group ───────────────────────────────────────────────
-      // No `key:` → the group manages its own key ("groups.hueTools").
-      // The synthesized toggle segment renders "▸ hue tools" / "▾ hue tools".
-      // Clicking cycles between "closed" and "hueTools".
+      // No `key:` → the group manages its own key ("groups.stepperTools").
+      // The synthesized toggle segment renders "▸ stepper" / "▾ stepper".
+      // Clicking cycles between "closed" and "stepperTools".
       // `open: true` → starts expanded.
       {
         kind: "group",
-        name: "hueTools",
-        label: "hue tools",
+        name: "stepperTools",
+        label: "stepper",
         open: true,
         children: [
-          { kind: "segment", name: "hueBody" },
+          { kind: "segment", name: "stepperBody" },
         ],
       },
 
@@ -322,13 +320,13 @@
         children: [
           {
             kind: "group",
-            name: "huePanel",          // opens when key == "huePanel"
-            label: "hue",
+            name: "stepperPanel",      // opens when key == "stepperPanel"
+            label: "stepper",
             key: "controlPanel",       // shared accordion key
             bg: "surface",
             fg: "foreground",
             children: [
-              { kind: "segment", name: "hueBody" },
+              { kind: "segment", name: "stepperBody" },
             ],
           },
           {
