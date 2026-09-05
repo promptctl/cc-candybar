@@ -1,3 +1,10 @@
+# [1.50.0](https://github.com/promptctl/cc-candybar/compare/v1.49.0...v1.50.0) (2026-09-05)
+
+
+### Features
+
+* **config:** root merges by named row — `{ rows }` fragments cascade like every other section (brandon-config-merge-uk3) ([#209](https://github.com/promptctl/cc-candybar/issues/209)) ([1171771](https://github.com/promptctl/cc-candybar/commit/11717715501ca71d74f53200da1b048d82fb8c48))
+
 # [1.49.0](https://github.com/promptctl/cc-candybar/compare/v1.48.0...v1.49.0) (2026-09-04)
 
 
