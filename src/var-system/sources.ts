@@ -28,7 +28,15 @@ import { createCcCandybarEngine } from "../template-engine/engine.js";
 import { buildScope } from "../template-engine/scope.js";
 import { GitDataProvider } from "../daemon/cache/git.js";
 import type { GitInfo } from "../segments/git.js";
-import { orElse } from "../utils/outcome.js";
+import { ok, failed, orElse, ABSENT, type Outcome } from "../utils/outcome.js";
+import {
+  jsonParser,
+  regexParser,
+  textParser,
+  type Parser,
+  type SourceParse,
+} from "./parse.js";
+import type { JsonValue } from "./types.js";
 import type { SessionStateReader } from "../daemon/session-state.js";
 
 // ─── CachePolicy ─────────────────────────────────────────────────────────────
@@ -86,18 +94,25 @@ export function parseDuration(s: string): number {
 
 // ─── Source-kind option bags ──────────────────────────────────────────────────
 
+// [LAW:decomposition] A user source is a READER (what text arrives: a
+// command's stdout, a file's content or first line) and a PARSER (what value
+// that text becomes — see parse.ts). The two are orthogonal data: shell and
+// file differ only in reader; text/regex/json differ only in parser; every
+// combination means what it says. The fallback lives in the parser arm, in
+// that arm's output domain.
 export interface ShellOptions {
-  readonly regex?: string;
   readonly cache: CachePolicy;
-  readonly varDefault?: string;
+  readonly parse: SourceParse;
 }
 
+export type ReadMode = "whole" | "first-line";
+
 export interface FileOptions {
-  // Ignored when regex is set (regex implies whole-file scan).
-  readonly readMode?: "whole" | "first-line";
-  readonly regex?: string;
+  // What text the file yields to the parser: its whole content (default) or
+  // its first line.
+  readonly readMode?: ReadMode;
   readonly cache: CachePolicy;
-  readonly varDefault?: string;
+  readonly parse: SourceParse;
 }
 
 export interface TemplateOptions {
@@ -163,38 +178,56 @@ async function execShell(
   return { stdout: r.stdout, exitCode: r.exitCode ?? 1 };
 }
 
-interface FileResult {
-  content?: string;
-  error?: string;
+// [LAW:effects-at-boundaries] A reader is the effect half of a source: it
+// performs the read and classifies its own failure (a non-zero exit, an
+// unreadable file) as a value. `where` names the text's origin for the
+// parser's failure message ("regex no-match in output of \"uptime\"").
+interface SourceReader {
+  readonly where: string;
+  read(): Promise<Outcome<string>>;
 }
 
-// Read a file and extract the relevant text fragment.
-// Returns {error} on I/O failure or regex no-match; {content} on success.
-async function readFileContent(
-  filePath: string,
-  readMode: "whole" | "first-line" | undefined,
-  regex: string | undefined,
-): Promise<FileResult> {
-  let raw: string;
-  try {
-    raw = await fsReadFile(filePath, "utf8");
-  } catch {
-    return { error: `file unreadable: ${filePath}` };
-  }
-
-  if (regex !== undefined) {
-    const m = new RegExp(regex).exec(raw);
-    if (!m?.[1]) return { error: `regex no-match in "${filePath}"` };
-    return { content: m[1].replace(/\n/g, " ") };
-  }
-
-  if (readMode === "first-line") {
-    return { content: (raw.split("\n")[0] ?? "").trim() };
-  }
-
-  // whole (default): newlines → spaces, trailing whitespace stripped
-  return { content: raw.replace(/\n/g, " ").trim() };
+function shellReader(command: string): SourceReader {
+  return {
+    where: `output of "${command}"`,
+    read: async () => {
+      const { stdout, exitCode } = await execShell(command);
+      return exitCode === 0
+        ? ok(stdout)
+        : failed(`shell "${command}" exited with code ${exitCode}`);
+    },
+  };
 }
+
+function fileReader(filePath: string, readMode: ReadMode): SourceReader {
+  return {
+    where: `"${filePath}"`,
+    read: async () => {
+      try {
+        const raw = await fsReadFile(filePath, "utf8");
+        return ok(readMode === "first-line" ? (raw.split("\n")[0] ?? "") : raw);
+      } catch {
+        return failed(`file unreadable: ${filePath}`);
+      }
+    },
+  };
+}
+
+// The parse step over a read's outcome: a failed read passes through
+// untouched (it already names its origin); a failed parse gains the origin.
+function parsed<V>(
+  read: Outcome<string>,
+  parser: Parser<V>,
+  where: string,
+): Outcome<V> {
+  if (read.kind !== "ok") return read;
+  const out = parser(read.value);
+  return out.kind === "failed" ? failed(`${out.reason} in ${where}`) : out;
+}
+
+// The publish half of a source, closed over its store node: takes what the
+// reader yielded, parses it, and writes the node — value or fallback.
+type Publish = (read: Outcome<string>) => void;
 
 // ─── Go reference-time formatter ─────────────────────────────────────────────
 
@@ -539,8 +572,12 @@ export class SourceRegistry {
   // Collects all cleanup callbacks (TTL unsubscribes, watch unsubscribes,
   // MobX reaction disposers) so dispose() tears everything down in one call.
   private readonly cleanups: Array<() => void> = [];
-  // Guards against concurrent executions of the same async source.
-  private readonly inFlight = new Set<string>();
+  // [LAW:no-ambient-temporal-coupling] The in-flight run of each async
+  // source, by name: one run per source at a time (a refresh that fires
+  // while the previous run is still out is dropped), and `settled()` is the
+  // explicit "every source has completed its current run" state a caller
+  // (`cc-candybar check`) awaits instead of guessing a delay.
+  private readonly inFlight = new Map<string, Promise<void>>();
   // Shared engine instance — parse() is expensive; the engine is reused for
   // all key: template compilations.
   // [LAW:one-source-of-truth] One engine per registry, not one per variable.
@@ -633,34 +670,143 @@ export class SourceRegistry {
 
   // ─── Async source kinds ───────────────────────────────────────────────────
 
-  // shell: spawn command in /bin/sh; capture stdout; optional regex group-1 extract;
-  // newlines → spaces. Box initialises to fallback; async execution fills it in.
-  // [LAW:dataflow-not-control-flow] Box always holds a valid value; the cache
-  // policy drives when it is refreshed, not whether the box exists.
+  // shell: spawn command in /bin/sh, its stdout is the text the parser sees.
   declareShell(name: string, command: string, opts: ShellOptions): void {
-    const cache = clampShellCache(name, opts.cache);
-    this.store.defineBox(name, "string", this.stringInitial(opts.varDefault));
-    const update = () =>
-      void this.updateFromShell(name, command, opts.regex, opts.varDefault);
+    this.declareSource(
+      name,
+      shellReader(command),
+      clampShellCache(name, opts.cache),
+      opts.parse,
+    );
+  }
+
+  // file: read the file at path (whole, or its first line) as the text the
+  // parser sees.
+  declareFile(name: string, filePath: string, opts: FileOptions): void {
+    this.declareSource(
+      name,
+      fileReader(filePath, opts.readMode ?? "whole"),
+      opts.cache,
+      opts.parse,
+    );
+  }
+
+  // [LAW:single-enforcer] THE user-source pipeline: read → parse → publish,
+  // once at declaration and again whenever the cache policy fires. Shell and
+  // file are two readers through this one function; text/regex/json are
+  // three parsers through it. The node always holds a valid value from
+  // declaration on (the fallback until the first run completes) — the cache
+  // policy drives WHEN it is refreshed, never whether the node exists
+  // [LAW:dataflow-not-control-flow].
+  private declareSource(
+    name: string,
+    reader: SourceReader,
+    cache: CachePolicy,
+    parse: SourceParse,
+  ): void {
+    const publish = this.publisherFor(name, parse, reader.where);
+    const update = () => this.runSource(name, reader, publish);
     update(); // initial run
     this.registerCachePolicy(name, cache, update);
   }
 
-  // file: read file at path; whole / first-line / regex group-1 extract; newlines → spaces.
-  // Box initialises to fallback; async read fills it in.
-  // [LAW:dataflow-not-control-flow] Same invariant as declareShell.
-  declareFile(name: string, filePath: string, opts: FileOptions): void {
-    this.store.defineBox(name, "string", this.stringInitial(opts.varDefault));
-    const update = () =>
-      void this.updateFromFile(
+  // [LAW:one-type-per-behavior] One total projection of the parser arm onto
+  // the node it publishes: the text arms publish a string box, the json arm a
+  // document. Selected once, at declaration — the pipeline never asks again.
+  private publisherFor(
+    name: string,
+    parse: SourceParse,
+    where: string,
+  ): Publish {
+    switch (parse.kind) {
+      case "text":
+        return this.scalarPublisher(name, textParser, parse.default, where);
+      case "regex":
+        return this.scalarPublisher(
+          name,
+          regexParser(parse.regex),
+          parse.default,
+          where,
+        );
+      case "json":
+        return this.documentPublisher(name, parse.default, where);
+    }
+  }
+
+  private scalarPublisher(
+    name: string,
+    parser: Parser<string>,
+    varDefault: string | undefined,
+    where: string,
+  ): Publish {
+    const fallback = this.stringInitial(varDefault);
+    this.store.defineBox(name, "string", fallback);
+    return (read) => {
+      const outcome = parsed(read, parser, where);
+      this.noteOutcome(name, outcome);
+      this.store.setBox(name, orElse(outcome, fallback));
+    };
+  }
+
+  // A document's fallback is the declared default, or NO document: without a
+  // default the node holds the failure itself (absent until the first scan,
+  // failed with its reason after a bad one), which the scope proxy surfaces
+  // as an error naming the variable [LAW:no-silent-failure] — a document has
+  // no honest empty value the way a string has "".
+  private documentPublisher(
+    name: string,
+    varDefault: JsonValue | undefined,
+    where: string,
+  ): Publish {
+    const fallback: Outcome<JsonValue> =
+      varDefault === undefined ? ABSENT : ok(varDefault);
+    this.store.defineDocument(name, fallback);
+    return (read) => {
+      const outcome = parsed(read, jsonParser, where);
+      this.noteOutcome(name, outcome);
+      this.store.setDocument(
         name,
-        filePath,
-        opts.readMode,
-        opts.regex,
-        opts.varDefault,
+        outcome.kind === "ok" || varDefault === undefined ? outcome : fallback,
       );
-    update(); // initial run
-    this.registerCachePolicy(name, opts.cache, update);
+    };
+  }
+
+  private runSource(
+    name: string,
+    reader: SourceReader,
+    publish: Publish,
+  ): void {
+    if (this.inFlight.has(name)) return;
+    const run = reader
+      .read()
+      .then(publish)
+      .finally(() => this.inFlight.delete(name));
+    this.inFlight.set(name, run);
+  }
+
+  // [LAW:no-ambient-temporal-coupling] Resolves when every async source's
+  // current run — and every run one of them triggered (a `depends_on`
+  // reaction fires inside a publish) — has completed, or at the deadline.
+  // The value is the names still in flight: empty when all settled. This is
+  // the state a one-shot render (`cc-candybar check`) awaits so it renders
+  // what the sources yielded, never a guessed delay; the registry owns the
+  // timer, so no caller races one of its own.
+  async settled(withinMs: number): Promise<readonly string[]> {
+    const deadline = Date.now() + withinMs;
+    while (this.inFlight.size > 0) {
+      const remaining = deadline - Date.now();
+      if (remaining <= 0) break;
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const outcome = await Promise.race([
+        Promise.all(this.inFlight.values()).then(() => "settled" as const),
+        new Promise<"deadline">((resolve) => {
+          timer = setTimeout(() => resolve("deadline"), remaining);
+        }),
+      ]);
+      clearTimeout(timer);
+      if (outcome === "deadline") break;
+    }
+    return [...this.inFlight.keys()];
   }
 
   // template: a variable whose value is derived by evaluating a go-template
@@ -930,75 +1076,12 @@ export class SourceRegistry {
         // not in whether the update executes — the update always runs when
         // the joined snapshot changes.
         const disposer: IReactionDisposer = reaction(
-          () =>
-            policy.varNames.map((n) => String(this.store.read(n))).join(","),
+          () => policy.varNames.map((n) => this.store.changeKey(n)).join(","),
           update,
         );
         this.cleanups.push(disposer);
         break;
       }
-    }
-  }
-
-  private async updateFromShell(
-    name: string,
-    command: string,
-    regex: string | undefined,
-    varDefault: string | undefined,
-  ): Promise<void> {
-    if (this.inFlight.has(name)) return;
-    this.inFlight.add(name);
-    try {
-      const { stdout, exitCode } = await execShell(command);
-      if (exitCode !== 0) {
-        this.applyFallback(
-          name,
-          "string",
-          varDefault,
-          `shell "${command}" exited with code ${exitCode}`,
-        );
-        return;
-      }
-      if (regex !== undefined) {
-        const m = new RegExp(regex).exec(stdout);
-        if (!m?.[1]) {
-          this.applyFallback(
-            name,
-            "string",
-            varDefault,
-            `regex no-match in output of "${command}"`,
-          );
-          return;
-        }
-        this.store.setBox(name, m[1].replace(/\n/g, " "));
-      } else {
-        this.store.setBox(name, stdout.replace(/\n/g, " ").trim());
-      }
-      this.lastErrors.delete(name);
-    } finally {
-      this.inFlight.delete(name);
-    }
-  }
-
-  private async updateFromFile(
-    name: string,
-    filePath: string,
-    readMode: "whole" | "first-line" | undefined,
-    regex: string | undefined,
-    varDefault: string | undefined,
-  ): Promise<void> {
-    if (this.inFlight.has(name)) return;
-    this.inFlight.add(name);
-    try {
-      const result = await readFileContent(filePath, readMode, regex);
-      if (result.error !== undefined) {
-        this.applyFallback(name, "string", varDefault, result.error);
-        return;
-      }
-      this.store.setBox(name, result.content ?? "");
-      this.lastErrors.delete(name);
-    } finally {
-      this.inFlight.delete(name);
     }
   }
 
@@ -1043,5 +1126,16 @@ export class SourceRegistry {
 
   private recordError(name: string, message: string): void {
     this.lastErrors.set(name, { timestamp: Date.now(), message });
+  }
+
+  // [LAW:single-enforcer] The one fold from a source outcome to the
+  // variable's error record: ok clears it, anything else records the reason.
+  private noteOutcome(name: string, outcome: Outcome<unknown>): void {
+    if (outcome.kind === "ok") this.lastErrors.delete(name);
+    else
+      this.recordError(
+        name,
+        outcome.kind === "failed" ? outcome.reason : "no value",
+      );
   }
 }

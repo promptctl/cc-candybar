@@ -6,6 +6,8 @@ import { buildScope } from "../src/template-engine/scope";
 import { ccCandybarFuncs } from "../src/template-engine/funcs";
 import { VariableStore } from "../src/var-system/store";
 import { MissingFieldError, ParseError } from "@promptctl/go-template-js";
+import { ABSENT, failed, ok } from "../src/utils/outcome";
+import { toDocument } from "../src/var-system/parse";
 
 // Helper: evaluate a template against a plain-object scope, return joined text.
 function evalText(source: string, scope: object): string {
@@ -300,6 +302,64 @@ describe("error cases", () => {
     const scope = buildScope(store);
     const tpl = engine.parse("{{ .session.notreal }}");
     expect(() => tpl.evaluate(scope)).toThrow(MissingFieldError);
+  });
+});
+
+// ────────────────────────────────────────────────────────────────
+// 8b. Documents in scope (a `parse: { json }` source)
+// ────────────────────────────────────────────────────────────────
+
+// [LAW:behavior-not-structure] A document variable's fields are dotted reads,
+// like an input var's payload subtree; its non-value states are errors that
+// name the variable — never an empty render.
+describe("documents in scope", () => {
+  function docStore(outcome: Parameters<VariableStore["defineDocument"]>[1]) {
+    const store = new VariableStore();
+    store.defineDocument("budget", outcome);
+    store.defineBox("session.id", "string", "s1");
+    return store;
+  }
+
+  test("fields read by dotted path, nested and at the leaf", () => {
+    const store = docStore(
+      ok(toDocument({ spent: 12.5, limits: { daily: 20 }, tags: ["a", "b"] })),
+    );
+    expect(evalStore("{{ .budget.spent }}/{{ .budget.limits.daily }}", store)).toBe(
+      "12.5/20",
+    );
+    expect(evalStore("{{ index .budget.tags 1 }}", store)).toBe("b");
+    expect(evalStore("{{ len .budget.tags }}", store)).toBe("2");
+  });
+
+  test("a document sits beside scalar namespaces in one scope", () => {
+    const store = docStore(ok(toDocument({ spent: 1 })));
+    expect(evalStore("{{ .session.id }}:{{ .budget.spent }}", store)).toBe("s1:1");
+  });
+
+  test("a missing field is a MissingFieldError, like a payload field", () => {
+    const store = docStore(ok(toDocument({ spent: 1 })));
+    const tpl = createCcCandybarEngine().parse("{{ .budget.nope }}");
+    expect(() => tpl.evaluate(buildScope(store))).toThrow(MissingFieldError);
+  });
+
+  test("prototype names are not fields of a document", () => {
+    const store = docStore(ok(toDocument({ spent: 1 })));
+    const tpl = createCcCandybarEngine().parse("{{ .budget.constructor }}");
+    expect(() => tpl.evaluate(buildScope(store))).toThrow(MissingFieldError);
+  });
+
+  test("a document not yet scanned reads as an error naming the variable", () => {
+    const store = docStore(ABSENT);
+    expect(() => evalStore("{{ .budget.spent }}", store)).toThrow(
+      'variable "budget" has no value yet: its source has not completed a scan',
+    );
+  });
+
+  test("a failed scan reads as an error carrying the variable and the reason", () => {
+    const store = docStore(failed("JSON parse failed: Unexpected token }"));
+    expect(() => evalStore("{{ .budget.spent }}", store)).toThrow(
+      'variable "budget": JSON parse failed: Unexpected token }',
+    );
   });
 });
 

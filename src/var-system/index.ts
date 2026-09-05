@@ -1,7 +1,21 @@
-export { VariableStore, type VarNode } from "./store";
+export {
+  VariableStore,
+  type VarNode,
+  type DocumentNode,
+  type StoreNode,
+} from "./store";
+export {
+  type SourceParse,
+  type Parser,
+  textParser,
+  regexParser,
+  jsonParser,
+  toDocument,
+} from "./parse";
 export {
   type VarType,
   type VarValue,
+  type JsonValue,
   typeOf,
   toString,
   toNumber,
@@ -15,6 +29,7 @@ export {
   type CachePolicy,
   type ShellOptions,
   type FileOptions,
+  type ReadMode,
   type TemplateOptions,
   type TimeOptions,
   type GitField,

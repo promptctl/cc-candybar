@@ -16,7 +16,8 @@ import {
   type IObservableValue,
   type IComputedValue,
 } from "mobx";
-import { typeOf, type VarType, type VarValue } from "./types";
+import { typeOf, type JsonValue, type VarType, type VarValue } from "./types";
+import type { Outcome } from "../utils/outcome.js";
 
 export interface VarNode {
   readonly name: string;
@@ -101,6 +102,54 @@ class ComputedNode implements VarNode {
   }
 }
 
+// [LAW:types-are-the-program] A document node: the namespace a `parse: { json }`
+// source publishes. It holds an Outcome, never a bare document — "not yet
+// scanned" (absent) and "the scan failed: <why>" (failed) are states a
+// template read must see, so the failure travels WITH the value to the one
+// place that unwraps it (the scope proxy, src/template-engine/scope.ts) and
+// surfaces there naming the variable. A scalar box has no such states: its
+// fallback is a string. Same observable-box mechanics as BoxNode (deep:false —
+// a scan replaces the whole document, dependents invalidate once).
+export interface DocumentNode {
+  readonly name: string;
+  readonly kind: "document";
+  read(): Outcome<JsonValue>;
+  lastUpdatedMs(): number;
+}
+
+class DocumentCell implements DocumentNode {
+  readonly kind = "document" as const;
+  private readonly cell: IObservableValue<Outcome<JsonValue>>;
+  private lastSetAt: number;
+
+  constructor(
+    readonly name: string,
+    initial: Outcome<JsonValue>,
+  ) {
+    this.cell = observable.box(initial, { deep: false });
+    this.lastSetAt = Date.now();
+  }
+
+  read(): Outcome<JsonValue> {
+    return this.cell.get();
+  }
+
+  set(value: Outcome<JsonValue>): void {
+    this.cell.set(value);
+    this.lastSetAt = Date.now();
+  }
+
+  lastUpdatedMs(): number {
+    return this.lastSetAt;
+  }
+}
+
+// [LAW:one-type-per-behavior] Every node the store holds. `read`'s result type
+// is the discriminator's payload: a VarNode reads a VarValue, a DocumentNode
+// an Outcome<JsonValue>; a consumer that must be total over both (the scope
+// proxy, debug introspection) switches on `kind` once.
+export type StoreNode = VarNode | DocumentNode;
+
 function assertType(
   name: string,
   declared: VarType,
@@ -121,11 +170,16 @@ function assertType(
 // one while renders read the other.
 
 export class VariableStore {
-  private readonly nodes = new Map<string, VarNode>();
+  private readonly nodes = new Map<string, StoreNode>();
 
   defineBox(name: string, type: VarType, initial: VarValue): void {
     this.assertNotDefined(name);
     this.nodes.set(name, new BoxNode(name, type, initial));
+  }
+
+  defineDocument(name: string, initial: Outcome<JsonValue>): void {
+    this.assertNotDefined(name);
+    this.nodes.set(name, new DocumentCell(name, initial));
   }
 
   // Computed deriver receives a `read` function that returns the value
@@ -143,7 +197,27 @@ export class VariableStore {
   }
 
   read(name: string): VarValue {
-    return this.requireNode(name).read();
+    return this.requireVar(name).read();
+  }
+
+  readDocument(name: string): Outcome<JsonValue> {
+    const node = this.requireNode(name);
+    if (node.kind !== "document") {
+      throw new TypeError(
+        `Variable "${name}" is a ${node.kind}, not a document`,
+      );
+    }
+    return node.read();
+  }
+
+  setDocument(name: string, value: Outcome<JsonValue>): void {
+    const node = this.requireNode(name);
+    if (node.kind !== "document") {
+      throw new TypeError(
+        `Variable "${name}" is a ${node.kind}, not a document (use defineDocument to create one)`,
+      );
+    }
+    mobxRunInAction(() => (node as DocumentCell).set(value));
   }
 
   setBox(name: string, value: VarValue): void {
@@ -174,11 +248,23 @@ export class VariableStore {
   }
 
   getType(name: string): VarType {
-    return this.requireNode(name).type;
+    return this.requireVar(name).type;
   }
 
-  getKind(name: string): "box" | "computed" {
+  getKind(name: string): StoreNode["kind"] {
     return this.requireNode(name).kind;
+  }
+
+  // [LAW:one-source-of-truth] A string that changes exactly when the node's
+  // value does — the ONE spelling a change-driven reaction (a `depends_on`
+  // cache policy) compares, total over node kinds so a document can be
+  // depended on like a scalar. Structural for documents: a rescan yielding
+  // the same content is not a change.
+  changeKey(name: string): string {
+    const node = this.requireNode(name);
+    return node.kind === "document"
+      ? JSON.stringify(node.read())
+      : String(node.read());
   }
 
   // [LAW:types-are-the-program] Introspection (src/daemon/debug.ts) needs
@@ -194,24 +280,44 @@ export class VariableStore {
   // round-1 dedup fix in introspectVars relies on the caller getting both
   // type/kind and a read() in one go without paying for a second
   // requireNode. The wrapper preserves that.
-  getNode(name: string): VarNode {
+  getNode(name: string): StoreNode {
     const node = this.requireNode(name);
-    return {
-      name: node.name,
-      type: node.type,
-      kind: node.kind,
-      read: () => node.read(),
-      lastUpdatedMs: () => node.lastUpdatedMs(),
-    };
+    return node.kind === "document"
+      ? {
+          name: node.name,
+          kind: node.kind,
+          read: () => node.read(),
+          lastUpdatedMs: () => node.lastUpdatedMs(),
+        }
+      : {
+          name: node.name,
+          type: node.type,
+          kind: node.kind,
+          read: () => node.read(),
+          lastUpdatedMs: () => node.lastUpdatedMs(),
+        };
   }
 
   names(): string[] {
     return [...this.nodes.keys()];
   }
 
-  private requireNode(name: string): VarNode {
+  private requireNode(name: string): StoreNode {
     const node = this.nodes.get(name);
     if (!node) throw new ReferenceError(`Unknown variable "${name}"`);
+    return node;
+  }
+
+  // [LAW:parse-dont-validate] The scalar reads (`read`, `getType`) demand a
+  // VarNode; a document reached through them is a caller asking a namespace
+  // for a scalar, said so by name rather than coerced to text.
+  private requireVar(name: string): VarNode {
+    const node = this.requireNode(name);
+    if (node.kind === "document") {
+      throw new TypeError(
+        `Variable "${name}" is a document; read its fields by path (.${name}.<field>)`,
+      );
+    }
     return node;
   }
 

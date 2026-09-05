@@ -16,6 +16,7 @@ import {
   describeValue,
   oneOfPresent,
   oneOfPresentJson,
+  reject,
   type FieldSpec,
   type JsonNode,
   type OneOfPresentSchema,
@@ -75,17 +76,6 @@ export function optionalCacheSpec(): FieldSpec<CacheDecl> {
     json: cacheJson(),
     parse: (ctx, path, _field, raw) => optionalCache(ctx, path, raw),
   };
-}
-
-// [LAW:single-enforcer] One arm helper to push a variant's bespoke message and
-// drop — the message is the only thing that varies per arm, carried as DATA.
-function reject<M>(ctx: ValidateCtx, path: string, message: string): M | null {
-  ctx.issues.push({
-    path,
-    message,
-    line: findKeyLine(ctx.source, path.split(".")),
-  });
-  return null;
 }
 
 // [LAW:types-are-the-program] The cache schema declared as DATA: arm keys in

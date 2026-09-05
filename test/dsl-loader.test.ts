@@ -459,6 +459,163 @@ describe("loadDslConfig — variable source kinds", () => {
   });
 });
 
+// ─── Parse step ──────────────────────────────────────────────────────────────
+
+// [LAW:behavior-not-structure] The parse step is a present-key union like
+// `cache:`; these pin the loader's contract for it — each arm, exactly-one,
+// the retired `regex:` spelling, the pattern proofs, and `default` living in
+// the arm's output domain — through the real parse→validate entry.
+describe("loadDslConfig — the parse step of shell/file sources", () => {
+  const shell = (fields: string) =>
+    `{ variables: { x: { kind: "shell", command: "echo", cache: { never: true }${fields ? `, ${fields}` : ""} } } }`;
+
+  test("each arm loads and is recorded as written", () => {
+    expect(
+      parseAndValidate(FILE, shell(`parse: { text: true }`)).variables.x,
+    ).toEqual({
+      kind: "shell",
+      command: "echo",
+      cache: { never: true },
+      parse: { text: true },
+    });
+    expect(
+      parseAndValidate(FILE, shell(`parse: { regex: "v([0-9]+)" }`)).variables
+        .x,
+    ).toMatchObject({ parse: { regex: "v([0-9]+)" } });
+    expect(
+      parseAndValidate(FILE, shell(`parse: { json: true }`)).variables.x,
+    ).toMatchObject({ parse: { json: true } });
+  });
+
+  test("an absent parse stays absent (declareOne reads it as the text arm)", () => {
+    expect(parseAndValidate(FILE, shell(``)).variables.x).not.toHaveProperty(
+      "parse",
+    );
+  });
+
+  test("two arms at once → exactly one of", () => {
+    expectIssue(shell(`parse: { text: true, json: true }`), {
+      path: "variables.x.parse",
+      message:
+        "parse must declare exactly one of: text, regex, json (found: text, json)",
+    });
+  });
+
+  test("an unknown parse key names the vocabulary", () => {
+    expectIssue(shell(`parse: { format: "json" }`), {
+      path: "variables.x.parse.format",
+      message:
+        'Unknown parse key "format". Expected exactly one of: text, regex, json',
+    });
+  });
+
+  test("the retired top-level regex: is a migration-pointing error, not an alias", () => {
+    expectIssue(shell(`regex: "v([0-9]+)"`), {
+      path: "variables.x.regex",
+      message: 'parse: { regex: "v([0-9]+)" }',
+    });
+    expectIssue(
+      `{ variables: { x: { kind: "file", path: "/p", regex: "(x)", cache: { never: true } } } }`,
+      { path: "variables.x.regex", message: "was retired" },
+    );
+  });
+
+  test("the text/json flags must be the literal true", () => {
+    expectIssue(shell(`parse: { json: "yes" }`), {
+      path: "variables.x.parse.json",
+      message: "parse.json must be the literal boolean true",
+    });
+    expectIssue(shell(`parse: { text: 1 }`), {
+      path: "variables.x.parse.text",
+      message: "parse.text must be the literal boolean true",
+    });
+  });
+
+  test("a regex must compile and must carry the capture group the runtime reads", () => {
+    expectIssue(shell(`parse: { regex: "(" }`), {
+      path: "variables.x.parse.regex",
+      message: "parse.regex is not a valid regular expression",
+    });
+    expectIssue(shell(`parse: { regex: "v[0-9]+" }`), {
+      path: "variables.x.parse.regex",
+      message: "parse.regex must contain a capture group",
+    });
+    expectIssue(shell(`parse: { regex: 42 }`), {
+      path: "variables.x.parse.regex",
+      message: "parse.regex must be a pattern string",
+    });
+  });
+
+  test("default lives in the arm's output domain: a string under text/regex", () => {
+    expectIssue(shell(`default: 3`), {
+      path: "variables.x.default",
+      message: "variables.x.default must be a string",
+    });
+    expectIssue(shell(`parse: { regex: "(x)" }, default: { a: 1 }`), {
+      path: "variables.x.default",
+      message: "variables.x.default must be a string",
+    });
+    expect(
+      parseAndValidate(FILE, shell(`parse: { regex: "(x)" }, default: "—"`))
+        .variables.x,
+    ).toMatchObject({ default: "—" });
+  });
+
+  test("default lives in the arm's output domain: a JSON document under json", () => {
+    expect(
+      parseAndValidate(
+        FILE,
+        shell(`parse: { json: true }, default: { spent: 0, tags: ["a"] }`),
+      ).variables.x,
+    ).toMatchObject({ default: { spent: 0, tags: ["a"] } });
+    // A JSON scalar is a document too; null is not a fallback anyone can read.
+    expect(
+      parseAndValidate(FILE, shell(`parse: { json: true }, default: "plain"`))
+        .variables.x,
+    ).toMatchObject({ default: "plain" });
+    expectIssue(shell(`parse: { json: true }, default: null`), {
+      path: "variables.x.default",
+      message: "variables.x.default must be a JSON value",
+    });
+  });
+
+  test("a json source's fields are dotted reads the cross-ref check accepts; a text source's are not", () => {
+    const withSeg = (vars: string) =>
+      `{ variables: { ${vars} }, segments: { s: { template: "{{ .budget.spent }}/{{ .budget.limits.daily }}" } }, root: { h: ["s"] } }`;
+    expect(() =>
+      parseAndValidate(
+        FILE,
+        withSeg(`budget: { kind: "shell", command: "echo", parse: { json: true }, cache: { never: true } }`),
+      ),
+    ).not.toThrow();
+    expectIssue(
+      withSeg(`budget: { kind: "shell", command: "echo", cache: { never: true } }`),
+      {
+        path: "segments.s.template",
+        message: 'Template references unknown variable ".budget.spent"',
+      },
+    );
+    // A segment-local document is namespaced like any local.
+    expect(() =>
+      parseAndValidate(
+        FILE,
+        `{ segments: { s: { template: "{{ .s.doc.a }}", vars: { doc: { kind: "file", path: "/p", parse: { json: true }, cache: { never: true } } } } }, root: { h: ["s"] } }`,
+      ),
+    ).not.toThrow();
+  });
+
+  test("file sources take the same parse step beside readMode", () => {
+    const ok = parseAndValidate(
+      FILE,
+      `{ variables: { x: { kind: "file", path: "/p", readMode: "first-line", parse: { json: true }, cache: { never: true } } } }`,
+    );
+    expect(ok.variables.x).toMatchObject({
+      readMode: "first-line",
+      parse: { json: true },
+    });
+  });
+});
+
 // ─── Cache policies ──────────────────────────────────────────────────────────
 
 describe("loadDslConfig — cache policies", () => {
@@ -1499,7 +1656,7 @@ describe("loadDslConfig — valid corpus", () => {
         home: { kind: "env", name: "HOME" },
         load_avg: {
           kind: "shell", command: "uptime",
-          regex: "load average:\\\\s*([0-9.]+)",
+          parse: { regex: "load average:\\\\s*([0-9.]+)" },
           cache: { ttl: "5s" },
           default: "—",
         },

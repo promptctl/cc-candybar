@@ -77,11 +77,16 @@
     // ── 4. file ─────────────────────────────────────────────────────────────
     // Reads a file from disk. Paths MUST be absolute — ~ is not expanded.
     //
-    // readMode:
-    //   "first-line"  — only the first line (default)
-    //   "whole"       — full file contents (newlines converted to spaces)
+    // readMode — WHAT TEXT the file yields (a reader fact):
+    //   "whole"       — full file contents (default; newlines become spaces)
+    //   "first-line"  — only the first line
     //
-    // regex: capture group 1 is extracted from the content when present.
+    // parse — what the text becomes (the same step shell sources have):
+    //   absent / { text: true } — the text itself
+    //   { regex: "…" }          — capture group 1 of the text
+    //   { json: true }          — the text parsed once as a document; read its
+    //                             fields by dotted path (see demo.pkg below)
+    // The parser applies to whichever text readMode selected.
     //
     // Cache options (pick one):
     //   { watch_file: "/abs/path" }  — re-read on inotify/FSEvents change
@@ -101,21 +106,23 @@
     },
 
     // /etc/shells is static — read once at startup (never cache).
-    // regex extracts just the shell name from the first path line.
+    // The regex arm extracts just the shell name from the first path line.
     "demo.defaultShell": {
       kind: "file",
       path: "/etc/shells",
       readMode: "first-line",
-      regex: "([^/\\s]+)\\s*$",      // capture the trailing word after the last /
+      parse: { regex: "([^/\\s]+)\\s*$" },  // the trailing word after the last /
       cache: { never: true },
       default: "",
     },
 
     // ── 5. shell ────────────────────────────────────────────────────────────
-    // Spawns a subprocess in /bin/sh. stdout (trimmed) is the value.
-    // The minimum shell TTL is 10 s — shorter ttl values are clamped up.
+    // Spawns a subprocess in /bin/sh. stdout is the text the parse step sees
+    // (absent parse: trimmed text is the value). The minimum shell TTL is
+    // 10 s — shorter ttl values are clamped up.
     //
-    // Same cache vocabulary as file. watch_file and ttl are most common.
+    // Same cache and parse vocabulary as file. watch_file and ttl are most
+    // common.
 
     // OS kernel name ("Darwin" on macOS, "Linux" on Linux). Static → never.
     "demo.os": {
@@ -138,9 +145,24 @@
     "demo.nodeVer": {
       kind: "shell",
       command: "node --version 2>/dev/null",
-      regex: "v?([0-9]+\\.[0-9]+)",  // extract "major.minor" from "v22.13.0"
+      parse: { regex: "v?([0-9]+\\.[0-9]+)" },  // "major.minor" out of "v22.13.0"
       cache: { key: "{{ .demo.shell }}" },
       default: "",
+    },
+
+    // One scan, many fields. `parse: { json: true }` parses stdout ONCE into
+    // a document; every field is a dotted read (`.demo.pkg.name`), never a
+    // second spawn. The command here is a literal echo so this example runs
+    // anywhere; a real one is any script that prints JSON (`gh api …`, a
+    // budget tracker, `jq`). `default` is in the parser's output domain — a
+    // document — and is what reads until the first scan lands or when a scan
+    // fails (without one, a failed scan renders ⚠ naming the variable).
+    "demo.pkg": {
+      kind: "shell",
+      command: "echo '{\"name\": \"cc-candybar\", \"deps\": {\"runtime\": 3}}'",
+      parse: { json: true },
+      cache: { never: true },
+      default: { name: "?", deps: { runtime: 0 } },
     },
 
     // ── 6. template ─────────────────────────────────────────────────────────
@@ -311,6 +333,13 @@
       when: '{{ ne .demo.nodeVer "" }}',
     },
 
+    // ── A json document, read by dotted path ─────────────────────────────
+    demoPkg: {
+      template: " 📦 {{ .demo.pkg.name }} · {{ .demo.pkg.deps.runtime }} deps ",
+      bg: "panel",
+      fg: "foreground",
+    },
+
     // ── Time variables ────────────────────────────────────────────────────
     demoClock: {
       template: " 🕐 {{ .demo.clock }}  {{ .demo.date }} ",
@@ -397,7 +426,7 @@
   // row stack); `{ h: [...] }` is a horizontal powerline row; a bare string
   // names a segment leaf. Single-segment rows are just the bare leaf.
   root: { v: [
-    { h: ["demoIdentity", "demoClock"] },
+    { h: ["demoIdentity", "demoClock", "demoPkg"] },
     { h: ["demoLiterals", "demoEnv"] },
     "demoSystem",
     { h: ["demoGit", "demoGitStatus"] },

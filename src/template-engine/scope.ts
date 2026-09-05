@@ -9,6 +9,8 @@
 // proxy must define a `has` trap as well as `get`.
 
 import type { VariableStore } from "../var-system/store.js";
+import type { JsonValue } from "../var-system/types.js";
+import type { Outcome } from "../utils/outcome.js";
 
 // Build the scope object the engine receives as `.` (dot).
 // Call once per render; the returned object is a read-only view of the store
@@ -41,9 +43,13 @@ function makeProxy(
       if (typeof key !== "string") return undefined;
       const fullKey = prefix ? `${prefix}.${key}` : key;
 
-      // Leaf: exact variable in the store.
+      // Leaf: exact variable in the store. A document leaf hands the engine
+      // the document itself — its fields are the rest of the chain.
       if (names.has(fullKey)) {
-        return store.read(fullKey);
+        const node = store.getNode(fullKey);
+        return node.kind === "document"
+          ? unwrapDocument(fullKey, node.read())
+          : node.read();
       }
 
       // Interior: a namespace prefix for at least one stored variable.
@@ -59,4 +65,22 @@ function makeProxy(
       return undefined;
     },
   });
+}
+
+// [LAW:no-silent-failure] THE place a document's non-value states become an
+// error: a read of a document that has not been scanned, or whose scan
+// failed, throws naming the variable and the reason. The segment reading it
+// renders that message as its ⚠ cell (and `cc-candybar check` fails on it);
+// a document never reads as an empty value.
+function unwrapDocument(name: string, doc: Outcome<JsonValue>): JsonValue {
+  switch (doc.kind) {
+    case "ok":
+      return doc.value;
+    case "absent":
+      throw new Error(
+        `variable "${name}" has no value yet: its source has not completed a scan`,
+      );
+    case "failed":
+      throw new Error(`variable "${name}": ${doc.reason}`);
+  }
 }

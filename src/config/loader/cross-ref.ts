@@ -49,6 +49,7 @@ import {
   extractPickerMenuRefs,
   extractTemplateRefs,
   refResolves,
+  type TemplateScope,
 } from "./refs.js";
 
 // [LAW:one-source-of-truth] The renamed built-in segments: old name → current
@@ -270,11 +271,7 @@ export function validateCrossReferences(
   // set exist at runtime. One set for every reference surface, template refs
   // and depends_on lists alike: a name's meaning is a pure function of the
   // name string, never of which segment declares or renders it.
-  const templateScope = new Set<string>(Object.keys(cfg.variables));
-  for (const [segName, seg] of Object.entries(cfg.segments)) {
-    if (!seg.vars) continue;
-    for (const v of Object.keys(seg.vars)) templateScope.add(`${segName}.${v}`);
-  }
+  const templateScope = templateScopeOf(cfg);
 
   // [LAW:single-enforcer] ONE pre-order walk over the canonical node tree owns
   // every layout cross-ref: each cells node's segment names must resolve to a
@@ -678,21 +675,49 @@ function hasActionSetAction(cfg: DslConfig): boolean {
   );
 }
 
+// [LAW:one-source-of-truth] The one scope every reference surface resolves
+// against, built from the same declarations src/dsl/render.ts registers:
+// globals under their bare names, segment locals under segName.varName — and
+// which of those are documents (a json-parsed shell/file source).
+function templateScopeOf(cfg: DslConfig): TemplateScope {
+  const names = new Set<string>();
+  const documents = new Set<string>();
+  const declare = (name: string, v: VariableDecl): void => {
+    names.add(name);
+    if (isDocumentDecl(v)) documents.add(name);
+  };
+  for (const [name, v] of Object.entries(cfg.variables)) declare(name, v);
+  for (const [segName, seg] of Object.entries(cfg.segments)) {
+    for (const [name, v] of Object.entries(seg.vars ?? {})) {
+      declare(`${segName}.${name}`, v);
+    }
+  }
+  return { names, documents };
+}
+
+function isDocumentDecl(v: VariableDecl): boolean {
+  return (
+    (v.kind === "shell" || v.kind === "file") &&
+    v.parse !== undefined &&
+    "json" in v.parse
+  );
+}
+
 function checkVarRefs(
   ctx: ValidateCtx,
   declPath: string,
   v: VariableDecl,
-  allVars: Set<string>,
+  scope: TemplateScope,
   segCtx?: string,
 ): void {
   if (v.kind === "template") {
-    checkTemplateRefs(ctx, `${declPath}.template`, v.template, allVars, {
+    checkTemplateRefs(ctx, `${declPath}.template`, v.template, scope, {
       segCtx,
     });
   }
   if (hasCacheField(v)) {
     if (v.cache && "key" in v.cache) {
-      checkTemplateRefs(ctx, `${declPath}.cache.key`, v.cache.key, allVars, {
+      checkTemplateRefs(ctx, `${declPath}.cache.key`, v.cache.key, scope, {
         segCtx,
       });
     }
@@ -703,7 +728,7 @@ function checkDependsOn(
   ctx: ValidateCtx,
   declPath: string,
   v: VariableDecl,
-  allVars: Set<string>,
+  scope: TemplateScope,
   segCtx?: string,
 ): void {
   if (!hasCacheField(v)) return;
@@ -716,10 +741,10 @@ function checkDependsOn(
     // verbatim, and the store is an exact-key map. A dotted prefix that
     // merely navigates INTO a value (resolvable in a template) is not a
     // store key and would throw at runtime.
-    if (allVars.has(target)) continue;
+    if (scope.names.has(target)) continue;
     const namespaced = segCtx !== undefined ? `${segCtx}.${target}` : undefined;
     const hint =
-      namespaced !== undefined && allVars.has(namespaced)
+      namespaced !== undefined && scope.names.has(namespaced)
         ? ` (segment-local vars are namespaced — write "${namespaced}")`
         : "";
     ctx.issues.push({
@@ -738,7 +763,7 @@ function checkTemplateRefs(
   ctx: ValidateCtx,
   declPath: string,
   template: string,
-  allVars: Set<string>,
+  scope: TemplateScope,
   opts?: {
     // [LAW:one-source-of-truth] Callers whose `declPath` is not a literal key
     // path into the source (a node `when`, whose canonical tree position no
@@ -753,11 +778,11 @@ function checkTemplateRefs(
   },
 ): void {
   for (const ref of extractTemplateRefs(template)) {
-    if (refResolves(ref, allVars)) continue;
+    if (refResolves(ref, scope)) continue;
     const namespaced =
       opts?.segCtx !== undefined ? `${opts.segCtx}.${ref}` : undefined;
     const hint =
-      namespaced !== undefined && refResolves(namespaced, allVars)
+      namespaced !== undefined && refResolves(namespaced, scope)
         ? ` (segment-local vars are namespaced — write ".${namespaced}")`
         : "";
     ctx.issues.push({

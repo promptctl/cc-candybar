@@ -26,6 +26,7 @@ import type {
   StripStyle,
 } from "../themes/policy.js";
 import type { DistributionName } from "../themes/decor.js";
+import type { JsonValue } from "../var-system/types.js";
 
 // [LAW:types-are-the-program] Three stages, three names.
 //
@@ -496,19 +497,45 @@ export interface EnvVarDecl {
 export interface FileVarDecl {
   readonly kind: "file";
   readonly path: string;
+  // What text the file yields to the parser — the whole file (default) or
+  // its first line. A READER fact, orthogonal to `parse`: a regex or json
+  // parse applies to whichever text readMode selected.
   readonly readMode?: "whole" | "first-line";
-  readonly regex?: string;
+  readonly parse?: ParseDecl;
   readonly cache: CacheDecl;
-  readonly default?: string;
+  readonly default?: SourceDefault;
 }
 
 export interface ShellVarDecl {
   readonly kind: "shell";
   readonly command: string;
-  readonly regex?: string;
+  readonly parse?: ParseDecl;
   readonly cache: CacheDecl;
-  readonly default?: string;
+  readonly default?: SourceDefault;
 }
+
+// [LAW:types-are-the-program] The parse step of a shell/file source, authored
+// as a present-key union exactly like `cache:`: `{ text: true }` is the
+// identity (and what an absent `parse:` means), `{ regex: "…" }` slices
+// capture group 1 out of the text, `{ json: true }` parses the whole text as
+// a DOCUMENT whose fields templates read by dotted path (`.budget.spent`) —
+// the way an `input` var's payload subtree is read. The loader (parseSpec in
+// loader/variables.ts) interprets it, declareOne (src/dsl/render.ts) lowers
+// it onto the runtime's SourceParse. The retired top-level `regex:` is a
+// migration-pointing load error, not an alias — one spelling per fact.
+export type ParseDecl =
+  | { readonly text: true }
+  | { readonly regex: string }
+  | { readonly json: true };
+
+export const PARSE_KEYS = ["text", "regex", "json"] as const;
+
+// A source's `default` lives in its parser's OUTPUT domain — a string for the
+// text/regex arms, a JSON document for the json arm. The type is the union of
+// both domains; the loader's sourceDefaultSpec is the single enforcer of the
+// arm↔default pairing, and declareOne's lowering trusts that stamp. `null` is
+// excluded: a document with no fields is not a fallback anyone can read.
+export type SourceDefault = Exclude<JsonValue, null>;
 
 export interface TemplateVarDecl {
   readonly kind: "template";

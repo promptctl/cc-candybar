@@ -37,8 +37,9 @@ const exampleFiles = fs
 
 // Run one example through the shipped check pipeline; the rendered line for
 // content assertions.
-function renderExample(file: string): string {
-  return expectClean(file, checkConfig(path.join(examplesDir, file))).rendered;
+async function renderExample(file: string): Promise<string> {
+  return expectClean(file, await checkConfig(path.join(examplesDir, file)))
+    .rendered;
 }
 
 // ANSI SGR + OSC-8 hyperlink stripped, leaving the visible glyph text. The
@@ -68,8 +69,8 @@ describe("shipped example configs (examples/*.json5)", () => {
 
   test.each(exampleFiles)(
     "%s is clean under `cc-candybar check` (exit 0) and renders",
-    (file) => {
-      expectClean(file, checkConfig(path.join(examplesDir, file)));
+    async (file) => {
+      expectClean(file, await checkConfig(path.join(examplesDir, file)));
     },
   );
 
@@ -78,8 +79,8 @@ describe("shipped example configs (examples/*.json5)", () => {
   // doesn't throw. This is the guard for the git-with-◷ override, both directory
   // forms (fish-abbreviated + unabbreviated), and the metrics segment — the
   // exact branches a minimal payload would gate off.
-  test("legacy-parity renders the full legacy information set", () => {
-    const out = visible(renderExample("legacy-parity.json5"));
+  test("legacy-parity renders the full legacy information set", async () => {
+    const out = visible(await renderExample("legacy-parity.json5"));
     // git (line 3) with the ◷ time-since-commit override → "13m" from 780s.
     expect(out).toContain("⎇ main");
     expect(out).toContain("◷ 13m");
@@ -110,8 +111,10 @@ describe("shipped example configs (examples/*.json5)", () => {
 // (`globals: { preset: "<name>" }`) — not a hand-built render rig, the actual
 // CLI entry point, on a real temp file on disk.
 describe("bundled preset library is clean under `cc-candybar check`", () => {
-  const withPresetConfig = <T,>(preset: string, fn: (configPath: string) => T): T =>
-    withTempConfig(JSON.stringify({ globals: { preset } }), fn);
+  const withPresetConfig = <T,>(
+    preset: string,
+    fn: (configPath: string) => Promise<T> | T,
+  ): Promise<T> => withTempConfig(JSON.stringify({ globals: { preset } }), fn);
 
   // Guard against the domain silently shrinking to just the floor — a preset
   // this suite never iterates would be a preset never `check`-tested.
@@ -121,8 +124,10 @@ describe("bundled preset library is clean under `cc-candybar check`", () => {
 
   test.each(presetNames(DEFAULT_DSL_CONFIG.presets))(
     'a config picking preset "%s" is clean under check (exit 0) and renders',
-    (preset) => {
-      withPresetConfig(preset, (p) => expectClean(`preset "${preset}"`, checkConfig(p)));
+    async (preset) => {
+      await withPresetConfig(preset, async (p) =>
+        expectClean(`preset "${preset}"`, await checkConfig(p)),
+      );
     },
   );
 });
@@ -132,8 +137,8 @@ describe("bundled preset library is clean under `cc-candybar check`", () => {
 // default's rows, so the bundled identity row renders unchanged above it —
 // through the same `cc-candybar check` entry as everything above.
 describe("a `{ rows }` root merges by name over the bundled default", () => {
-  test("declaring only the status row keeps the bundled identity row above it", () => {
-    const outcome = checkText(
+  test("declaring only the status row keeps the bundled identity row above it", async () => {
+    const outcome = await checkText(
       "rows-merge",
       `{ root: { rows: { status: { h: ["model", "context"] } } } }`,
     );

@@ -87,14 +87,32 @@ export function extractPickerMenuRefs(template: string): Set<string> {
   return refs;
 }
 
-// A ref resolves if (a) the full dotted name is a declared variable, OR
-// (b) it's a strict prefix of some declared variable (namespace navigation
-// like .session in `.session.id` when only `session.id` is declared).
-export function refResolves(ref: string, allVars: Set<string>): boolean {
-  if (allVars.has(ref)) return true;
+// [LAW:types-are-the-program] What a template reference resolves against:
+// the declared variable NAMES (exactly the keys the runtime store holds) and,
+// among them, the DOCUMENTS — `parse: { json }` sources whose fields are a
+// namespace UNDER the name (the scope proxy hands the engine the document and
+// `.doc.a.b` is a field walk the loader cannot see into; a missing field is
+// the runtime's MissingFieldError, as for a payload field). One value, so
+// every reference surface — template refs, `when`, cache.key — resolves the
+// same way; `depends_on` reads `names` alone (the reaction calls the store by
+// exact key).
+export interface TemplateScope {
+  readonly names: ReadonlySet<string>;
+  readonly documents: ReadonlySet<string>;
+}
+
+// A ref resolves if (a) the full dotted name is a declared variable, (b) it
+// is a strict prefix of some declared variable (namespace navigation like
+// .session in `.session.id` when only `session.id` is declared), or (c) a
+// declared document is a strict prefix of it (a field read).
+export function refResolves(ref: string, scope: TemplateScope): boolean {
+  if (scope.names.has(ref)) return true;
   const prefix = `${ref}.`;
-  for (const name of allVars) {
+  for (const name of scope.names) {
     if (name.startsWith(prefix)) return true;
+  }
+  for (const doc of scope.documents) {
+    if (ref.startsWith(`${doc}.`)) return true;
   }
   return false;
 }

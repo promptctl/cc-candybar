@@ -6,6 +6,21 @@
 export type VarType = "string" | "number" | "boolean";
 export type VarValue = string | number | boolean;
 
+// [LAW:types-are-the-program] A document: the value of a `parse: { json }`
+// source. Deliberately NOT a VarValue — a document is a NAMESPACE, not a
+// scalar: templates read its leaves by dotted path (`.budget.spent`), the way
+// an `input` var's payload subtree is read, and the store holds it in its own
+// node kind (VariableStore.defineDocument) beside the scalar boxes. The leaves
+// are JSON's scalars; `null` reads as a missing field. Objects carry null
+// prototypes (see parse.ts toDocument).
+export type JsonValue =
+  | string
+  | number
+  | boolean
+  | null
+  | readonly JsonValue[]
+  | { readonly [key: string]: JsonValue };
+
 export function typeOf(v: VarValue): VarType {
   const t = typeof v;
   if (t === "string" || t === "number" || t === "boolean") return t;
