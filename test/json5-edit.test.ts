@@ -14,6 +14,7 @@ import {
   nodeAt,
   parseDocument,
   removeSegmentRef,
+  restagesFragment,
   rowEntriesOf,
   setValue,
   textOf,
@@ -353,6 +354,17 @@ describe("a `{ rows }` root: edits reach the named rows", () => {
     const fragment = nodeAt(parseDocument(rows), ["root"])!;
     expect(rowEntriesOf(fragment)?.map((e) => e.key)).toEqual(["a", "sys", "b"]);
     expect(rowEntriesOf(nodeAt(parseDocument(CONFIG), ["root"])!)).toBeNull();
+  });
+
+  test("restagesFragment: a tree restages, and so does any entry beside `rows` — the loader's `restages` on the document", () => {
+    const at = (src: string): boolean =>
+      restagesFragment(nodeAt(parseDocument(src), ["root"])!);
+    expect(at(`{ root: { rows: {} } }`)).toBe(false);
+    expect(at(`{ root: { rows: {}, when: '{{ .x }}' } }`)).toBe(true);
+    expect(at(`{ root: { rows: {}, distribution: 'monotonic' } }`)).toBe(true);
+    expect(at(`{ root: { rows: { a: 'demo' } } }`)).toBe(true);
+    expect(at(`{ root: 'demo' }`)).toBe(true);
+    expect(at(`{ root: { h: ['demo'] } }`)).toBe(true);
   });
 
   test("hasSegmentRef sees through rows, bare and arrayed alike", () => {

@@ -63,9 +63,9 @@ const N_READING: DistributionName[] = ["monotonic", "ends-interleaved"];
 /** path -> hex, computed by visiting each node alone. */
 function colourMap(shape: Shape, distribution: Distribution): Map<string, string> {
   return new Map(
-    allNodes(shape).map(({ path, address }) => [
+    allNodes(shape, distribution).map(({ path, address }) => [
       pathKey(path),
-      decorFor(DRACULA, address, distribution).hex,
+      decorFor(DRACULA, address).hex,
     ]),
   );
 }
@@ -99,19 +99,17 @@ describe("the vocabulary", () => {
   test("a palette missing a role fails loudly, naming palette and role", () => {
     const bare = new Palette("bare", true, new Map<string, ColorRgba>());
     expect(() => paletteRole(bare, "accent")).toThrow(/"bare".*"accent"/);
-    expect(() => decorFor(bare, [], DISTRIBUTIONS.uniform)).toThrow(/"bare"/);
+    expect(() => decorFor(bare, [])).toThrow(/"bare"/);
   });
 });
 
 describe("the colour is mix(base, hue, amount) for the selected entry", () => {
   test("matches rich-js blendRgb of the theme's own two colours", () => {
     for (const { shape } of SHAPES.slice(0, 5)) {
-      for (const { address } of allNodes(shape)) {
-        const { base, hue, amount } = decorEntryFor(address, DISTRIBUTIONS[DEFAULT_DISTRIBUTION]);
+      for (const { address } of allNodes(shape, DISTRIBUTIONS[DEFAULT_DISTRIBUTION])) {
+        const { base, hue, amount } = decorEntryFor(address);
         const expected = blendRgb(paletteRole(DRACULA, base), paletteRole(DRACULA, hue), amount);
-        expect(decorFor(DRACULA, address, DISTRIBUTIONS[DEFAULT_DISTRIBUTION]).hex).toBe(
-          expected.hex,
-        );
+        expect(decorFor(DRACULA, address).hex).toBe(expected.hex);
       }
     }
   });
@@ -123,22 +121,39 @@ describe("the colour is mix(base, hue, amount) for the selected entry", () => {
     expect(DECOR_VOCABULARY).toHaveLength(DEMO_SIZE);
     // Row 0 of 2 (vdc 0 -> 0), cell 3 of 6 (vdc 0.75 × 0.37 × 18 = 4.995 -> 5):
     // entry 5 is amount-major index 0, hue 1, base 2.
+    const vdc = DISTRIBUTIONS["van-der-corput"];
     const address: Address = [
-      { index: 0, count: 2 },
-      { index: 3, count: 6 },
+      { index: 0, count: 2, distribution: vdc },
+      { index: 3, count: 6, distribution: vdc },
     ];
-    expect(decorEntryFor(address, DISTRIBUTIONS["van-der-corput"])).toBe(DECOR_VOCABULARY[5]);
-    expect(decorEntryFor(address, DISTRIBUTIONS["van-der-corput"])).toEqual({
+    expect(decorEntryFor(address)).toBe(DECOR_VOCABULARY[5]);
+    expect(decorEntryFor(address)).toEqual({
       base: "surface-lighten-1",
       hue: "secondary",
       amount: 0.16,
     });
   });
 
+  test("each step is placed by its OWN distribution: a heterogeneous address folds per step", () => {
+    // Row 0 of 2 under monotonic (0.25), cell 3 of 6 under vdc (0.75):
+    // round(0.25·18 + 0.75·0.37·18) = round(9.495) = 9. A fold reusing one
+    // function for every step lands elsewhere — 5 with vdc for both, 8 with
+    // monotonic for both — so the per-step property is what this pins.
+    const vdc = DISTRIBUTIONS["van-der-corput"];
+    const mixed: Address = [
+      { index: 0, count: 2, distribution: DISTRIBUTIONS.monotonic },
+      { index: 3, count: 6, distribution: vdc },
+    ];
+    expect(decorEntryFor(mixed)).toBe(DECOR_VOCABULARY[9]);
+    const uniformly = (distribution: Distribution): Address =>
+      mixed.map((step) => ({ ...step, distribution }));
+    expect(decorEntryFor(uniformly(vdc))).toBe(DECOR_VOCABULARY[5]);
+    expect(decorEntryFor(uniformly(DISTRIBUTIONS.monotonic))).toBe(DECOR_VOCABULARY[8]);
+  });
+
   test("the root selects entry 0", () => {
-    for (const name of ALL_NAMES) {
-      expect(decorEntryFor([], DISTRIBUTIONS[name])).toBe(DECOR_VOCABULARY[0]);
-    }
+    // The empty address has no step to place, so no distribution can reach it.
+    expect(decorEntryFor([])).toBe(DECOR_VOCABULARY[0]);
   });
 });
 
@@ -180,18 +195,18 @@ describe("done-when: any node's colour is computable alone", () => {
       const distribution = DISTRIBUTIONS[name];
       for (const { seed, shape } of SHAPES) {
         const rng = seededRng(seed);
-        const nodes = allNodes(shape);
+        const nodes = allNodes(shape, distribution);
         const inOrder = colourMap(shape, distribution);
         // A single node, evaluated with no other node ever visited.
         const lone = drawFrom(rng, nodes);
-        expect([name, seed, decorFor(DRACULA, lone.address, distribution).hex]).toEqual([
+        expect([name, seed, decorFor(DRACULA, lone.address).hex]).toEqual([
           name,
           seed,
           inOrder.get(pathKey(lone.path)),
         ]);
         // The whole tree, evaluated back to front — a walk cursor would diverge here.
         for (const { path, address } of [...nodes].reverse()) {
-          expect(decorFor(DRACULA, address, distribution).hex).toBe(inOrder.get(pathKey(path)));
+          expect(decorFor(DRACULA, address).hex).toBe(inOrder.get(pathKey(path)));
         }
       }
     }
@@ -204,7 +219,7 @@ describe("done-when: adding a sibling", () => {
       const distribution = DISTRIBUTIONS[name];
       for (const { seed, shape } of SHAPES) {
         const rng = seededRng(seed);
-        const nodes = allNodes(shape);
+        const nodes = allNodes(shape, distribution);
         const target = drawFrom(rng, nodes).path;
         const before = colourMap(shape, distribution);
         const after = colourMap(withSiblingAdded(shape, target), distribution);
@@ -221,7 +236,7 @@ describe("done-when: adding a sibling", () => {
       let moved = 0;
       for (const { seed, shape } of SHAPES) {
         const rng = seededRng(seed);
-        const parents = allNodes(shape).filter(({ path }) => nodeAt(shape, path).children.length >= 2);
+        const parents = allNodes(shape, distribution).filter(({ path }) => nodeAt(shape, path).children.length >= 2);
         if (parents.length === 0) continue;
         const target = drawFrom(rng, parents).path;
         const before = colourMap(shape, distribution);
@@ -240,14 +255,14 @@ describe("done-when: permuting an unrelated subtree", () => {
       for (const { seed, shape } of SHAPES) {
         const rng = seededRng(seed);
         // Below the root only: permuting the root's children leaves no node outside.
-        const parents = allNodes(shape).filter(
+        const parents = allNodes(shape, distribution).filter(
           ({ path }) => path.length > 0 && nodeAt(shape, path).children.length >= 2,
         );
         if (parents.length === 0) continue;
         const target = drawFrom(rng, parents).path;
         const before = colourMap(shape, distribution);
         const after = colourMap(withChildrenPermuted(shape, target, rng), distribution);
-        for (const { path } of allNodes(shape)) {
+        for (const { path } of allNodes(shape, distribution)) {
           if (isUnder(target, path) && path.length > target.length) continue;
           const key = pathKey(path);
           expect([name, seed, key, after.get(key)]).toEqual([name, seed, key, before.get(key)]);
@@ -262,15 +277,15 @@ describe("done-when: a vocabulary of size 1 is a uniform bar", () => {
     const only = { base: "surface", hue: "primary", amount: 0.16 } as const;
     for (const name of ALL_NAMES) {
       for (const { shape } of SHAPES) {
-        for (const { address } of allNodes(shape)) {
-          expect(vocabularySelect([only], address, DISTRIBUTIONS[name])).toBe(only);
+        for (const { address } of allNodes(shape, DISTRIBUTIONS[name])) {
+          expect(vocabularySelect([only], address)).toBe(only);
         }
       }
     }
   });
 
   test("an empty vocabulary has nothing to select and says so", () => {
-    expect(() => vocabularySelect([], [], DISTRIBUTIONS.uniform)).toThrow(/empty vocabulary/);
+    expect(() => vocabularySelect([], [])).toThrow(/empty vocabulary/);
   });
 });
 
@@ -443,12 +458,11 @@ describe("a band is a plane", () => {
     for (const palette of THEMES) {
       const { state, plane } = bandFor(palette, disclosure);
       // `uniform` puts every item at the window's midpoint — the formula, once.
-      const mid = bandItemFor(
-        palette,
-        disclosure,
-        { index: 0, count: 1 },
-        DISTRIBUTIONS.uniform,
-      );
+      const mid = bandItemFor(palette, disclosure, {
+        index: 0,
+        count: 1,
+        distribution: DISTRIBUTIONS.uniform,
+      });
       expect(mid.hex).toBe(
         blendRgb(plane, state, BAND_WINDOW.floor + BAND_WINDOW.span * 0.5).hex,
       );
@@ -456,12 +470,11 @@ describe("a band is a plane", () => {
       // the one before it, and none is the plane or the state (the window
       // keeps them off both ends).
       const distances = [0, 1, 2, 3].map((index) => {
-        const item = bandItemFor(
-          palette,
-          disclosure,
-          { index, count: 4 },
-          DISTRIBUTIONS.monotonic,
-        );
+        const item = bandItemFor(palette, disclosure, {
+          index,
+          count: 4,
+          distribution: DISTRIBUTIONS.monotonic,
+        });
         expect(item.hex).not.toBe(plane.hex);
         expect(item.hex).not.toBe(state.hex);
         return deltaE(item, plane);
@@ -485,12 +498,11 @@ describe("a band is a plane", () => {
         const cells = [
           plane,
           ...[0, 1, 2, 3, 4, 5].map((index) =>
-            bandItemFor(
-              palette,
-              disclosure,
-              { index, count: 6 },
-              DISTRIBUTIONS[DEFAULT_DISTRIBUTION],
-            ),
+            bandItemFor(palette, disclosure, {
+              index,
+              count: 6,
+              distribution: DISTRIBUTIONS[DEFAULT_DISTRIBUTION],
+            }),
           ),
         ];
         for (const cell of cells) {

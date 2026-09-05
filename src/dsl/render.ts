@@ -60,8 +60,6 @@ import {
   bandFor,
   decorEntryColour,
   decorEntryFor,
-  DEFAULT_DISTRIBUTION,
-  DISTRIBUTIONS,
   type Address,
   type AddressStep,
 } from "../themes/decor.js";
@@ -566,7 +564,7 @@ export function registerDslConfig(
 // tree does not yet supply it.
 const BAR_DEPTH = 0;
 const decorationAt = (palette: Palette, address: Address) => {
-  const entry = decorEntryFor(address, DISTRIBUTIONS[DEFAULT_DISTRIBUTION]);
+  const entry = decorEntryFor(address);
   return {
     tint: decorEntryColour(palette, entry),
     disclosure: { hue: entry.hue, depth: BAR_DEPTH },

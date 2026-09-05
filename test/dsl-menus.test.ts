@@ -64,7 +64,7 @@ function addressOf(root: CompiledNode, name: string): Address {
     for (const [index, child] of node.children.entries()) {
       const found = walk(child, [
         ...address,
-        { index, count: node.children.length },
+        { index, count: node.children.length, distribution: node.distribution },
       ]);
       if (found !== undefined) return found;
     }
@@ -649,7 +649,7 @@ describe("toggle round trip + drop stacking", () => {
     render();
     const address = addressOf(compiled.roots.get(PRESET_FLOOR)!, "themepicker");
     const disclosure = {
-      hue: decorEntryFor(address, DISTRIBUTIONS[DEFAULT_DISTRIBUTION]).hue,
+      hue: decorEntryFor(address).hue,
       depth: 0,
     };
     const band = bandFor(palette, disclosure);
@@ -674,12 +674,11 @@ describe("toggle round trip + drop stacking", () => {
       const style = span.style;
       if (typeof style === "string") throw new Error("span style is a name, not a Style");
       expect(style.bgcolor?.value?.hex).toBe(
-        bandItemFor(
-          palette,
-          disclosure,
-          { index, count: options.length },
-          DISTRIBUTIONS[DEFAULT_DISTRIBUTION],
-        ).hex,
+        bandItemFor(palette, disclosure, {
+          index,
+          count: options.length,
+          distribution: DISTRIBUTIONS[DEFAULT_DISTRIBUTION],
+        }).hex,
       );
     }
     dispose();
@@ -1169,5 +1168,68 @@ describe("aok.4 — group and menu resolve their trigger display by one rule", (
     expect(() =>
       parseAndValidate("<test>", BOTH("", `"a" "b" "c"`), ALLOWED),
     ).toThrow(/cycles 2 members; bind one display per member \(2\)/);
+  });
+});
+
+// candybar-render-ai7.8: a menu is an instance too — its band places its
+// options by the SAME `distribution` field a container carries, spelled in the
+// menu's options dict; the picker knows positions, the menu knows placement.
+describe("a menu's `distribution` option places its band", () => {
+  const WITH = (dictEntry: string): string =>
+    MENU_SRC.replace(
+      '{{ menu "applyTheme" "▸" "▾" }}',
+      `{{ menu "applyTheme" "▸" "▾" (dict ${dictEntry}) }}`,
+    );
+
+  test("`monotonic` places every option cell by monotonic over the whole domain", () => {
+    const { render, sink, compiled, palette, clickToggle, dispose } = buildRuntime(
+      WITH('"distribution" "monotonic"'),
+    );
+    render();
+    clickToggle(render(), TKEY, "applyTheme");
+    render();
+    const address = addressOf(compiled.roots.get(PRESET_FLOOR)!, "themepicker");
+    const disclosure = { hue: decorEntryFor(address).hue, depth: 0 };
+    const body = sink.get("themepicker")![1]!;
+    const options = [...ALLOWED];
+    const optionSpans = body.spans.filter(
+      (s) =>
+        typeof s.style !== "string" &&
+        s.style.link !== undefined &&
+        options.includes(body.plain.slice(s.start, s.end)),
+    );
+    expect(optionSpans.length).toBeGreaterThan(1);
+    let differsFromDefault = 0;
+    for (const span of optionSpans) {
+      const index = options.indexOf(body.plain.slice(span.start, span.end));
+      const style = span.style;
+      if (typeof style === "string") throw new Error("span style is a name, not a Style");
+      const step = { index, count: options.length };
+      expect(style.bgcolor?.value?.hex).toBe(
+        bandItemFor(palette, disclosure, { ...step, distribution: DISTRIBUTIONS.monotonic }).hex,
+      );
+      if (
+        style.bgcolor?.value?.hex !==
+        bandItemFor(palette, disclosure, {
+          ...step,
+          distribution: DISTRIBUTIONS[DEFAULT_DISTRIBUTION],
+        }).hex
+      )
+        differsFromDefault++;
+    }
+    expect(differsFromDefault).toBeGreaterThan(0);
+    dispose();
+  });
+
+  test("an unknown distribution name is a load error naming the five", () => {
+    expect(() => parseAndValidate("<test>", WITH('"distribution" "spiral"'), ALLOWED)).toThrow(
+      /"distribution" must be one of: van-der-corput, golden-angle, ends-interleaved, monotonic, uniform; got "spiral"/,
+    );
+  });
+
+  test("the unknown-option error lists `distribution` in the vocabulary", () => {
+    expect(() => parseAndValidate("<test>", WITH('"distributon" "uniform"'), ALLOWED)).toThrow(
+      /unknown \{\{ menu \}\} option "distributon".*"distribution" \(one of "van-der-corput"/,
+    );
   });
 });
