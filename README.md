@@ -40,7 +40,7 @@ Restart Claude Code. The statusline appears with the bundled default layout — 
 
 Drop a `.cc-candybar.json5` (or `.cc-candybar.json` — both extensions are accepted) at any of these locations (highest precedence first):
 
-1. `$CC_CANDYBAR_CONFIG` in the statusline command's environment (literal path, supports `~` expansion). It is read by the client on every render and carried to the daemon, so it can differ per session; a path that names no file renders the bundled default under a warning that says so.
+1. `$CC_CANDYBAR_CONFIG` in the statusline command's environment (literal path, supports `~` expansion). It is read by the client on every render and carried to the daemon, so it can differ per session. A path that names no file renders the bundled default under a `Config file not found` warning, and one the daemon cannot stat (behind an unsearchable directory, say) under `Config file could not be read` with the error — either way the bar stays live and loads the file once it can.
 2. `<project>/.cc-candybar.json5` (then `.json` at the same location)
 3. `<cwd>/.cc-candybar.json5` (then `.json`)
 4. `$XDG_CONFIG_HOME/cc-candybar/config.json5` (then `.json`; defaults to `~/.config/cc-candybar/config.json5`)

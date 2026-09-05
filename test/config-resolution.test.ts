@@ -85,6 +85,26 @@ describe("dslConfigCandidatePaths", () => {
     }
   });
 
+  // projectDir === cwd is the common shape of a hook payload; the project
+  // and cwd rungs then spell the same two paths, and a consumer that probed
+  // or reported them twice would name one location twice.
+  test("the same directory as project and cwd yields each path once", () => {
+    const { dir, cleanup } = mkdir();
+    const restore = isolateEnv(dir);
+    try {
+      const candidates = dslConfigCandidatePaths(dir, dir);
+      expect(candidates).toEqual([
+        join(dir, ".cc-candybar.json5"),
+        join(dir, ".cc-candybar.json"),
+        join(dir, "cc-candybar", "config.json5"),
+        join(dir, "cc-candybar", "config.json"),
+      ]);
+    } finally {
+      restore();
+      cleanup();
+    }
+  });
+
   test("an explicit configFile collapses precedence to one entry", () => {
     const { dir, cleanup } = mkdir();
     const restore = isolateEnv(dir);
@@ -325,6 +345,12 @@ describe("resolveDslConfig", () => {
         expect(notice).toContain(join(locked, ".cc-candybar.json"));
         expect(notice?.split("\n")).toHaveLength(2);
         expect(durableConfigPath(locked, cwd)).toBe(cwdFile);
+        // The same directory as both project and cwd is still ONE location:
+        // two unchecked entries (one per extension), two notice lines.
+        const sameDir = resolveDslConfig(locked, locked);
+        expect(sameDir.kind).toBe("default");
+        expect(sameDir).toHaveProperty("unchecked.length", 2);
+        expect(configResolutionNotice(sameDir)?.split("\n")).toHaveLength(2);
       } finally {
         chmodSync(locked, 0o755);
         restore();

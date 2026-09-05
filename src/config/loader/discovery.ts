@@ -72,6 +72,12 @@ export function expandHome(p: string): string {
  * [LAW:dataflow-not-control-flow] Location is the dominant precedence axis;
  * extension breaks ties within a location. Encoded as a nested flat-map: each
  * location yields one path per extension in order. No branches on extension.
+ *
+ * Each path appears ONCE: when projectDir and cwd are the same directory (the
+ * common case — the daemon often resolves both from one hook payload) the
+ * project and cwd rungs spell identical strings, and a second occurrence is
+ * a duplicate of *position in the chain*, not of a file on disk. Deduped
+ * here so no consumer probes, watches, or reports one location twice.
  */
 export function dslConfigCandidatePaths(
   projectDir?: string,
@@ -85,15 +91,17 @@ export function dslConfigCandidatePaths(
   const effectiveCwd = cwd ?? process.cwd();
 
   return [
-    ...(projectDir
-      ? CONFIG_EXTENSIONS.map((ext) =>
-          path.join(projectDir, `.cc-candybar.${ext}`),
-        )
-      : []),
-    ...CONFIG_EXTENSIONS.map((ext) =>
-      path.join(effectiveCwd, `.cc-candybar.${ext}`),
-    ),
-    ...CONFIG_EXTENSIONS.map((ext) => `${xdgConfigBase()}.${ext}`),
+    ...new Set([
+      ...(projectDir
+        ? CONFIG_EXTENSIONS.map((ext) =>
+            path.join(projectDir, `.cc-candybar.${ext}`),
+          )
+        : []),
+      ...CONFIG_EXTENSIONS.map((ext) =>
+        path.join(effectiveCwd, `.cc-candybar.${ext}`),
+      ),
+      ...CONFIG_EXTENSIONS.map((ext) => `${xdgConfigBase()}.${ext}`),
+    ]),
   ];
 }
 
@@ -266,26 +274,15 @@ export function detectConfigCollisions(
   projectDir?: string,
   cwd?: string,
 ): string | null {
-  const candidates = dslConfigCandidatePaths(projectDir, cwd);
-  // [LAW:dataflow-not-control-flow] Dedupe candidates by full path first.
-  // When projectDir === cwd (a very common case — the daemon often resolves
-  // both from the same hook payload), the enumerator yields the same path
-  // at both precedence levels. That is a structural duplicate of *position
-  // in the precedence list*, not a same-location duplicate of *files on
-  // disk*. The latter is what collision detection is for; the former is
-  // noise that would fire a false positive.
-  const seen = new Set<string>();
-  const uniqueExisting: string[] = [];
-  for (const candidate of candidates) {
-    if (seen.has(candidate)) continue;
-    seen.add(candidate);
-    if (presence(candidate) !== "present") continue;
-    uniqueExisting.push(candidate);
-  }
+  // The enumerator yields each path once, so an existing member here is a
+  // file on disk, never the same candidate seen from two chain positions.
+  const existing = dslConfigCandidatePaths(projectDir, cwd).filter(
+    (candidate) => presence(candidate) === "present",
+  );
   // Group by (dir + base-without-extension). A group with > 1 existing
   // member is a collision at that logical location.
   const groups = new Map<string, string[]>();
-  for (const candidate of uniqueExisting) {
+  for (const candidate of existing) {
     const dir = path.dirname(candidate);
     const base = path.basename(candidate).replace(/\.(json5|json)$/, "");
     const key = path.join(dir, base);

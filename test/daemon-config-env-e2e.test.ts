@@ -165,12 +165,16 @@ describe("brandon-config-5g8: a client's CC_CANDYBAR_CONFIG reaches a running da
     const sid = "cfg-env-real-client";
     // Warm the entry so the client's one bounded request cannot hit a cold
     // first-load timeout (a real client shows a blank line and retries on
-    // the next tick; a test has no next tick).
+    // the next tick; a test has no next tick). The cache key is
+    // (projectDir, cwd, configFile) and the client reports ITS OWN cwd as
+    // `req.cwd`, so it is spawned in projectDir: the entry it hits is the
+    // one this warmed.
     await render(sockPath, sid, projectDir, { configEnv: override });
     const client = spawnSync(
       process.execPath,
       [path.join(process.cwd(), "dist", "index.mjs")],
       {
+        cwd: projectDir,
         env: { ...env, CC_CANDYBAR_CONFIG: override },
         input: JSON.stringify(hookData(sid, projectDir)),
         encoding: "utf8",
