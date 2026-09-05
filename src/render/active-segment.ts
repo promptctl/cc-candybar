@@ -17,10 +17,19 @@
 // phase instead of a plausible-looking wrong color.
 
 import type { ColorRgba, Palette } from "@promptctl/rich-js";
+import type { Disclosure } from "../themes/decor.js";
 
 export interface ActiveSegment {
   /** The segment's declared name — `{{ menu }}` derives its identity from it. */
   readonly segName: string;
+  /**
+   * The disclosure this segment would open: the vocabulary hue its address
+   * was dealt, at its band depth. A `{{ menu }}`'s body colours its option
+   * cells as items of THIS band, and the walk draws the segment itself as the
+   * band's trigger when the body is open — one record, so the trigger and the
+   * items it opens cannot be coloured from two different hues.
+   */
+  readonly disclosure: Disclosure;
   /**
    * The palette this segment's colors resolve from: the base theme (session
    * choice over config default, or an explicit per-segment `palette:` pin)
