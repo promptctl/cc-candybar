@@ -38,6 +38,7 @@ import {
   validateStateWrite,
 } from "../src/daemon/verbs/state-validators";
 import { ConfigError } from "../src/config/dsl-loader";
+import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { testVerbContext, effectsOf } from "./helpers/click";
 import { parseHandlerUrl } from "../src/install/index";
 import { parseEffects, VERB_DISPATCH } from "../src/click/wire";
@@ -330,6 +331,25 @@ describe("menu synthesis (derived identity, reserved namespace)", () => {
     }
   });
 
+  test("a {{ menu }} in a rows-form row's `when` is rejected (the fragment is lowered before the walk)", () => {
+    const src = `{
+      globals: {},
+      variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
+      actions: { applyTheme: { set: 'theme', from: 'themes' } },
+      segments: { s: { template: 'X', bg: 'surface', fg: 'foreground' } },
+      root: { rows: { r: { h: ['s'], when: '{{ menu "applyTheme" "▸" "▾" }}' } } },
+    }`;
+    try {
+      parseAndValidate("<test>", src, ALLOWED);
+      throw new Error("expected ConfigError");
+    } catch (e) {
+      expect(e).toBeInstanceOf(ConfigError);
+      expect((e as ConfigError).message).toMatch(
+        /a layout node's "when" predicate uses \{\{ menu \}\}/,
+      );
+    }
+  });
+
   test("a menu-bearing segment placed more than once is rejected (shared open-state)", () => {
     const src = `{
       globals: {},
@@ -346,6 +366,33 @@ describe("menu synthesis (derived identity, reserved namespace)", () => {
       expect((e as ConfigError).message).toMatch(
         /placed in the layout more than once/,
       );
+    }
+  });
+
+  test("a `{ rows }` fragment re-placing a menu host the inherited rows already place is rejected — counted over the tree that renders", () => {
+    const src = `{ root: { rows: { extra: { h: ['charsetControl'] } } } }`;
+    try {
+      parseAndValidate("<test>", src, ALLOWED, DEFAULT_DSL_CONFIG);
+      throw new Error("expected ConfigError");
+    } catch (e) {
+      expect(e).toBeInstanceOf(ConfigError);
+      expect((e as ConfigError).message).toMatch(
+        /"charsetControl" hosts a \{\{ menu \}\} and is placed in the layout more than once/,
+      );
+    }
+  });
+
+  test("a preset's `{ rows }` fragment re-placing a menu host the inherited rows already place is rejected at the preset", () => {
+    const src = `{ presets: { wide: { root: { rows: { extra: { h: ['charsetControl'] } } } } } }`;
+    try {
+      parseAndValidate("<test>", src, ALLOWED, DEFAULT_DSL_CONFIG);
+      throw new Error("expected ConfigError");
+    } catch (e) {
+      expect(e).toBeInstanceOf(ConfigError);
+      const issue = (e as ConfigError).issues.find((i) =>
+        /"charsetControl" hosts a \{\{ menu \}\} and is placed in the layout more than once/.test(i.message),
+      )!;
+      expect(issue.path).toBe("presets.wide.root");
     }
   });
 

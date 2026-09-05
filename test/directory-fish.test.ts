@@ -25,15 +25,13 @@ const SERIALIZED = JSON.stringify(RAW_DEFAULT_DSL_CONFIG, null, 2);
 // that segment's text. Plain style + ascii + padding 0 strips all chrome, so
 // after removing ANSI/OSC-8 escapes what remains IS the directory string.
 const dirOnlyRoot = {
-  kind: "container" as const,
-  direction: "vertical" as const,
-  children: [
-    {
+  rows: {
+    main: {
       kind: "container" as const,
       direction: "horizontal" as const,
       children: [{ kind: "segment" as const, name: "directory" }],
     },
-  ],
+  },
 };
 
 // eslint-disable-next-line no-control-regex

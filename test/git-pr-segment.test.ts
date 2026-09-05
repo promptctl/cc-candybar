@@ -63,15 +63,13 @@ function renderGitPr(git: Record<string, unknown>): string {
     actions: dropEditNs(base.actions),
     segments: dropEditNs(base.segments),
     root: {
-      kind: "container" as const,
-      direction: "vertical" as const,
-      children: [
-        {
+      rows: {
+        main: {
           kind: "container" as const,
           direction: "horizontal" as const,
           children: [{ kind: "segment" as const, name: "gitPr" }],
         },
-      ],
+      },
     },
   };
   const store = new VariableStore();

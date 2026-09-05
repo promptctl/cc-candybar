@@ -59,6 +59,19 @@ function visible(line: string): string {
     .replace(/\x1b\]8;;[^\x07\x1b]*(?:\x1b\\|\x07)/g, "");
 }
 
+// Run `fn` against a real temp config file holding `text` — the actual CLI
+// entry point on the actual filesystem, not a hand-built render rig.
+function withTempConfig<T>(text: string, fn: (configPath: string) => T): T {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "ccb-example-configs-"));
+  const configPath = path.join(dir, ".cc-candybar.json5");
+  fs.writeFileSync(configPath, text);
+  try {
+    return fn(configPath);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+}
+
 describe("shipped example configs (examples/*.json5)", () => {
   // Guard against the glob silently matching nothing (a moved directory would
   // make every it.each below vanish and the suite pass vacuously).
@@ -126,16 +139,8 @@ describe("shipped example configs (examples/*.json5)", () => {
 // (`globals: { preset: "<name>" }`) — not a hand-built render rig, the actual
 // CLI entry point, on a real temp file on disk.
 describe("bundled preset library is clean under `cc-candybar check`", () => {
-  const withPresetConfig = <T,>(preset: string, fn: (configPath: string) => T): T => {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "ccb-bundled-presets-"));
-    const configPath = path.join(dir, ".cc-candybar.json5");
-    fs.writeFileSync(configPath, JSON.stringify({ globals: { preset } }));
-    try {
-      return fn(configPath);
-    } finally {
-      fs.rmSync(dir, { recursive: true, force: true });
-    }
-  };
+  const withPresetConfig = <T,>(preset: string, fn: (configPath: string) => T): T =>
+    withTempConfig(JSON.stringify({ globals: { preset } }), fn);
 
   // Guard against the domain silently shrinking to just the floor — a preset
   // this suite never iterates would be a preset never `check`-tested.
@@ -156,4 +161,29 @@ describe("bundled preset library is clean under `cc-candybar check`", () => {
       expect(outcome.rendered.length).toBeGreaterThan(0);
     },
   );
+});
+
+// [LAW:verifiable-goals] brandon-config-merge-uk3's done-when: a user file
+// declaring ONLY one named row merges that row by name over the bundled
+// default's rows, so the bundled identity row renders unchanged above it —
+// through the same `cc-candybar check` entry as everything above.
+describe("a `{ rows }` root merges by name over the bundled default", () => {
+  test("declaring only the status row keeps the bundled identity row above it", () => {
+    const outcome = withTempConfig(
+      `{ root: { rows: { status: { h: ["model", "context"] } } } }`,
+      checkConfig,
+    );
+    if (outcome.kind !== "clean") {
+      throw new Error(`${outcome.kind}: ${"message" in outcome ? outcome.message : ""}`);
+    }
+    const [identity, status, ...rest] = visible(outcome.rendered).split("\n");
+    expect(rest).toEqual([]);
+    // The bundled identity row, untouched: the fish-abbreviated directory
+    // the check payload's cwd renders to.
+    expect(identity).toContain("~/c/c/src");
+    // The user's status row: model and context, and none of the bundled
+    // status row's other segments (block/weekly quota).
+    expect(status).toContain("Opus 4.8");
+    expect(status).not.toContain("21%");
+  });
 });
