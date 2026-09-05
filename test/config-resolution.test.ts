@@ -12,7 +12,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import {
-  resolveDslConfigPath,
+  resolveDslConfig,
+  missingConfigNotice,
+  durableConfigPath,
   dslConfigCandidatePaths,
   detectConfigCollisions,
 } from "../src/config/dsl-loader";
@@ -73,13 +75,38 @@ describe("dslConfigCandidatePaths", () => {
     }
   });
 
-  test("CC_CANDYBAR_CONFIG collapses precedence to one entry", () => {
+  test("an explicit configFile collapses precedence to one entry", () => {
+    const { dir, cleanup } = mkdir();
+    const restore = isolateEnv(dir);
+    try {
+      const candidates = dslConfigCandidatePaths(
+        "/proj",
+        "/cwd",
+        "/explicit/path/to/config.json",
+      );
+      expect(candidates).toEqual(["/explicit/path/to/config.json"]);
+    } finally {
+      restore();
+      cleanup();
+    }
+  });
+
+  // brandon-config-5g8: the daemon is detached, so ITS environment describes
+  // whichever shell spawned it, not the session being rendered. The client
+  // reports its CC_CANDYBAR_CONFIG as a hint (src/config-hint.ts) and the
+  // daemon composes it into `configFile` at the request boundary — the
+  // resolver never reads the variable itself.
+  test("the process's own CC_CANDYBAR_CONFIG is not consulted", () => {
     const { dir, cleanup } = mkdir();
     const restore = isolateEnv(dir);
     try {
       process.env.CC_CANDYBAR_CONFIG = "/explicit/path/to/config.json";
-      const candidates = dslConfigCandidatePaths("/proj", "/cwd");
-      expect(candidates).toEqual(["/explicit/path/to/config.json"]);
+      expect(dslConfigCandidatePaths("/proj", "/cwd")).toEqual(
+        dslConfigCandidatePaths("/proj", "/cwd", undefined),
+      );
+      expect(dslConfigCandidatePaths("/proj", "/cwd")).not.toContain(
+        "/explicit/path/to/config.json",
+      );
     } finally {
       restore();
       cleanup();
@@ -87,7 +114,7 @@ describe("dslConfigCandidatePaths", () => {
   });
 });
 
-describe("resolveDslConfigPath", () => {
+describe("resolveDslConfig", () => {
   test(".json at XDG resolves when no .json5 exists anywhere", () => {
     const { dir, cleanup } = mkdir();
     const restore = isolateEnv(dir);
@@ -98,8 +125,8 @@ describe("resolveDslConfigPath", () => {
       writeFileSync(jsonPath, VALID_CFG);
       // No project, no cwd files. The .json at XDG is the only existing
       // candidate; the resolver must find it despite the legacy extension.
-      const resolved = resolveDslConfigPath(undefined, dir);
-      expect(resolved).toBe(jsonPath);
+      const resolved = resolveDslConfig(undefined, dir);
+      expect(resolved).toEqual({ kind: "file", path: jsonPath });
     } finally {
       restore();
       cleanup();
@@ -116,9 +143,9 @@ describe("resolveDslConfigPath", () => {
       const jsonPath = join(xdgCfgDir, "config.json");
       writeFileSync(json5Path, VALID_CFG);
       writeFileSync(jsonPath, VALID_CFG);
-      const resolved = resolveDslConfigPath(undefined, dir);
+      const resolved = resolveDslConfig(undefined, dir);
       // Documented format outranks the legacy compatibility tail.
-      expect(resolved).toBe(json5Path);
+      expect(resolved).toEqual({ kind: "file", path: json5Path });
     } finally {
       restore();
       cleanup();
@@ -140,20 +167,69 @@ describe("resolveDslConfigPath", () => {
       writeFileSync(xdgJson5, VALID_CFG);
 
       // Location dominates extension: project-local .json beats global .json5.
-      const resolved = resolveDslConfigPath(proj, dir);
-      expect(resolved).toBe(projJson);
+      const resolved = resolveDslConfig(proj, dir);
+      expect(resolved).toEqual({ kind: "file", path: projJson });
     } finally {
       restore();
       cleanup();
     }
   });
 
-  test("returns null when no candidate exists", () => {
+  test("is `default` when no candidate exists — with nothing to say", () => {
     const { dir, cleanup } = mkdir();
     const restore = isolateEnv(dir);
     try {
       // No files written anywhere — XDG dir doesn't even exist.
-      expect(resolveDslConfigPath(undefined, dir)).toBeNull();
+      const resolved = resolveDslConfig(undefined, dir);
+      expect(resolved).toEqual({ kind: "default" });
+      expect(missingConfigNotice(resolved)).toBeNull();
+      // A first durable write lands at the XDG tail, documented spelling.
+      expect(durableConfigPath(undefined, dir)).toBe(
+        join(dir, "cc-candybar", "config.json5"),
+      );
+    } finally {
+      restore();
+      cleanup();
+    }
+  });
+
+  test("an explicit file that exists is `file`, whatever the chain holds", () => {
+    const { dir, cleanup } = mkdir();
+    const restore = isolateEnv(dir);
+    try {
+      const named = join(dir, "named.json5");
+      const local = join(dir, ".cc-candybar.json5");
+      writeFileSync(named, VALID_CFG);
+      writeFileSync(local, VALID_CFG);
+      expect(resolveDslConfig(dir, dir, named)).toEqual({
+        kind: "file",
+        path: named,
+      });
+      expect(durableConfigPath(dir, dir, named)).toBe(named);
+    } finally {
+      restore();
+      cleanup();
+    }
+  });
+
+  // brandon-config-5g8: an explicit path to an absent file used to resolve
+  // to the same null as "no config anywhere", so the bar rendered the
+  // bundled default byte-identically to no override at all. `missing` is
+  // its own arm, carries the path, and has a notice — while the chain is
+  // NOT consulted (the user named a file; a project-local one is not it).
+  test("an explicit file that is absent is `missing`, not `default`", () => {
+    const { dir, cleanup } = mkdir();
+    const restore = isolateEnv(dir);
+    try {
+      const named = join(dir, "absent.json5");
+      writeFileSync(join(dir, ".cc-candybar.json5"), VALID_CFG);
+      const resolved = resolveDslConfig(dir, dir, named);
+      expect(resolved).toEqual({ kind: "missing", path: named });
+      expect(missingConfigNotice(resolved)).toBe(
+        `Config file not found: ${named} — rendering the bundled default until it appears`,
+      );
+      // A durable write creates the file the bar is waiting for.
+      expect(durableConfigPath(dir, dir, named)).toBe(named);
     } finally {
       restore();
       cleanup();

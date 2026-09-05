@@ -17,6 +17,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { checkConfig, checkPlan } from "../src/check";
+import { detectConfigEnv } from "../src/config-hint";
 
 let dir: string;
 
@@ -27,9 +28,9 @@ afterAll(() => {
   fs.rmSync(dir, { recursive: true, force: true });
 });
 
-// Default-path resolution reads $CC_CANDYBAR_CONFIG and $XDG_CONFIG_HOME
-// (dslConfigCandidatePaths); pin both per test so the developer's real config
-// can never leak into a verdict.
+// Default-path resolution reads $XDG_CONFIG_HOME (dslConfigCandidatePaths);
+// pin it per test so the developer's real config can never leak into a
+// verdict. $CC_CANDYBAR_CONFIG is pinned too because one test sets it.
 const SAVED_ENV = {
   CC_CANDYBAR_CONFIG: process.env.CC_CANDYBAR_CONFIG,
   XDG_CONFIG_HOME: process.env.XDG_CONFIG_HOME,
@@ -318,15 +319,29 @@ describe("checkConfig — default resolution (the daemon's own chain)", () => {
     if (outcome.kind === "clean") expect(outcome.configPath).toBe(p);
   });
 
-  it("honors $CC_CANDYBAR_CONFIG like the daemon's resolver", () => {
+  // brandon-config-5g8: $CC_CANDYBAR_CONFIG is a fact of the CLI's own shell,
+  // read at the CLI edge (runCheck → detectConfigEnv) and passed as the
+  // explicit target — the way the statusline client sends it as a hint. So
+  // an override naming an absent file is `unreadable`, never a clean verdict
+  // about a bundled default the user did not ask for.
+  it("takes $CC_CANDYBAR_CONFIG as the explicit target, not as a resolver input", () => {
     const p = write(
       "env-config.json5",
       `{ segments: { a: { template: 'env' } }, root: { h: ['a'] } }`,
     );
+    const cwd = path.join(dir, "empty-cwd");
     process.env.CC_CANDYBAR_CONFIG = p;
-    const outcome = checkConfig(undefined, path.join(dir, "empty-cwd"));
-    expect(outcome.kind).toBe("clean");
-    if (outcome.kind === "clean") expect(outcome.configPath).toBe(p);
+    // The resolver itself is blind to the variable...
+    const blind = checkConfig(undefined, cwd);
+    expect(blind.kind).toBe("clean");
+    if (blind.kind === "clean") expect(blind.configPath).toBeNull();
+    // ...the CLI edge lifts it into the target.
+    const viaEnv = checkConfig(detectConfigEnv(process.env), cwd);
+    expect(viaEnv.kind).toBe("clean");
+    if (viaEnv.kind === "clean") expect(viaEnv.configPath).toBe(p);
+    process.env.CC_CANDYBAR_CONFIG = path.join(dir, "absent.json5");
+    const absent = checkConfig(detectConfigEnv(process.env), cwd);
+    expect(absent.kind).toBe("unreadable");
   });
 
   it("surfaces the .json5/.json collision as a warning on a CLEAN exit", () => {

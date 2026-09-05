@@ -5,7 +5,8 @@ import { buildNeededPrefixes } from "../render-payload.js";
 import {
   loadConfig,
   validateConfig,
-  resolveDslConfigPath,
+  resolveDslConfig,
+  missingConfigNotice,
   dslConfigCandidatePaths,
   detectConfigCollisions,
   ConfigError,
@@ -265,6 +266,12 @@ function watchTargetsFor(
   };
 }
 
+// The warning channel is ONE string (composeWithDiagnostics splits it into
+// rows); absent advisories are nulls in the list, an empty list is null.
+function joinWarnings(parts: ReadonlyArray<string | null>): string | null {
+  return parts.filter(Boolean).join("\n") || null;
+}
+
 // [LAW:types-are-the-program] One attempt at loading a config from disk. The
 // two arms are exclusive by construction: a state XOR an error message, never
 // both, never neither — so a caller folding it cannot see a "loaded but also
@@ -406,15 +413,23 @@ export class RenderCache {
     cwd: string,
     configFile: string | undefined,
   ): LoadOutcome {
-    const resolvedPath = resolveDslConfigPath(projectDir, cwd, configFile);
+    const resolution = resolveDslConfig(projectDir, cwd, configFile);
+    // `file` loads; `default` and `missing` both build the bundled default —
+    // the difference between those two is a notice, below, not a load path.
+    const resolvedPath = resolution.kind === "file" ? resolution.path : null;
 
-    // [LAW:dataflow-not-control-flow] Collision detection runs every load,
-    // independent of load success — even if the .json5 fails to parse, the
-    // user still wants to know they have a shadowed .json sibling. Pure
+    // [LAW:dataflow-not-control-flow] Advisories run every load, independent
+    // of load success — even if the .json5 fails to parse, the user still
+    // wants to know they have a shadowed .json sibling; an explicit path to
+    // an absent file is named whatever the default then does. Pure
     // file-existence checks, so cheap. The watcher already monitors every
-    // candidate path, so creating/removing a duplicate triggers reload and
-    // re-detection automatically; nothing else needs to invalidate this.
-    const collisions = detectConfigCollisions(projectDir, cwd);
+    // candidate path, so creating/removing a duplicate — or the named file
+    // appearing — triggers reload and re-detection automatically; nothing
+    // else needs to invalidate this.
+    const advisories = [
+      detectConfigCollisions(projectDir, cwd),
+      missingConfigNotice(resolution),
+    ];
 
     // [LAW:dataflow-not-control-flow] A failure at any step — parse,
     // registration, palette resolution — is the `error` arm; the caller's
@@ -428,7 +443,7 @@ export class RenderCache {
     } catch (err) {
       return {
         resolvedPath,
-        warning: collisions,
+        warning: joinWarnings(advisories),
         state: null,
         error:
           err instanceof ConfigError
@@ -441,10 +456,12 @@ export class RenderCache {
     // [LAW:dataflow-not-control-flow] Partial-load warnings (variable
     // declaration failures that didn't abort the load) flow through the same
     // warning channel as collision warnings; both visible at once.
-    const warning =
-      [collisions, ...state.compiled.loadWarnings].filter(Boolean).join("\n") ||
-      null;
-    return { resolvedPath, warning, state, error: null };
+    return {
+      resolvedPath,
+      warning: joinWarnings([...advisories, ...state.compiled.loadWarnings]),
+      state,
+      error: null,
+    };
   }
 
   // [LAW:single-enforcer] Construct the full new state — parsed config,

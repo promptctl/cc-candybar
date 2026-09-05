@@ -9,7 +9,7 @@
 //
 // [LAW:single-enforcer] No parallel validation path: the verdict is reached
 // through the exact functions the daemon runs (RenderCache.reloadInto →
-// buildState, then the per-request render in server.ts) — resolveDslConfigPath →
+// buildState, then the per-request render in server.ts) — resolveDslConfig →
 // detectConfigCollisions → loadConfig → validateConfig → registerDslConfig →
 // deriveActionValidators → renderDsl. "check passes" and "the daemon renders"
 // cannot diverge, because they are one code path.
@@ -20,11 +20,13 @@ import process from "node:process";
 import {
   loadConfig,
   validateConfig,
-  resolveDslConfigPath,
+  resolveDslConfig,
   detectConfigCollisions,
   ConfigError,
 } from "./config/dsl-loader.js";
 import { expandHome } from "./config/loader/discovery.js";
+import type { ConfigResolution } from "./config/loader/discovery.js";
+import { detectConfigEnv } from "./config-hint.js";
 import { DEFAULT_DSL_CONFIG } from "./config/default-dsl-config.js";
 import { VariableStore } from "./var-system/store.js";
 import { SourceRegistry } from "./var-system/sources.js";
@@ -163,11 +165,21 @@ export type CheckOutcome =
       readonly message: string;
     };
 
+// The no-target search names no explicit file, so `missing` is unreachable
+// here; the projection is file-or-default.
+function resolvedFile(resolution: ConfigResolution): string | null {
+  return resolution.kind === "file" ? resolution.path : null;
+}
+
 // Run the daemon's load-and-render pipeline against one config target.
 //
-// With no target, the path resolves exactly as the daemon resolves it
-// (resolveDslConfigPath: $CC_CANDYBAR_CONFIG → project/cwd → XDG), so the file
-// this checks IS the file the daemon would load from this directory.
+// With no target, the path resolves exactly as the daemon resolves it for a
+// client with no override (resolveDslConfig: project/cwd → XDG), so the file
+// this checks IS the file the daemon would load from this directory. The
+// CLI's own `$CC_CANDYBAR_CONFIG` enters as the target (runCheck), the way
+// the statusline client sends it as a hint — a set override always names
+// the file, so an absent one is `unreadable` here, never a clean verdict
+// about the bundled default.
 //
 // [LAW:no-silent-failure] With an explicit target, the named file must exist
 // and be readable — a missing file is `unreadable`, never a fall-through to the
@@ -189,7 +201,7 @@ export function checkConfig(
   const configPath =
     target !== undefined
       ? path.resolve(expandHome(target))
-      : resolveDslConfigPath(cwd, cwd);
+      : resolvedFile(resolveDslConfig(cwd, cwd));
   if (target !== undefined && configPath !== null) {
     // throwIfNoEntry suppresses only ENOENT (left for the content read to
     // classify); EACCES/EPERM on the probe itself is equally "could not read
@@ -470,7 +482,7 @@ export function runCheck(args: readonly string[]): never {
     );
     process.exit(EXIT_USAGE);
   }
-  const plan = checkPlan(checkConfig(args[0]));
+  const plan = checkPlan(checkConfig(args[0] ?? detectConfigEnv(process.env)));
   process.stdout.write(plan.stdout);
   process.stderr.write(plan.stderr);
   process.exit(plan.code);

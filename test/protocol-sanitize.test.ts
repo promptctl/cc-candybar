@@ -3,6 +3,8 @@
 // integer ≤ MAX) or undefined before the renderer ever sees it. The renderer
 // is allowed to trust the type.
 
+import os from "node:os";
+import path from "node:path";
 import {
   parseClientHints,
   sanitizeSsh,
@@ -24,9 +26,12 @@ describe("sanitizeTermExtent (wire trust boundary)", () => {
     [0, undefined],
     [-1, undefined],
     [-200, undefined],
-  ])("rejects non-positive / non-finite / non-number input (%p)", (input, expected) => {
-    expect(sanitizeTermExtent(input)).toBe(expected);
-  });
+  ])(
+    "rejects non-positive / non-finite / non-number input (%p)",
+    (input, expected) => {
+      expect(sanitizeTermExtent(input)).toBe(expected);
+    },
+  );
 
   test("accepts plain positive integers", () => {
     expect(sanitizeTermExtent(1)).toBe(1);
@@ -105,9 +110,12 @@ describe("sanitizeTmux (wire trust boundary)", () => {
     { socket: "/s", pane: "%1" },
     { socket: "/s", pane: "%1", truecolor: "" },
     { socket: "/s", pane: "%1", truecolor: 1 },
-  ])("maps a malformed or absent hint %p to undefined, never to null", (input) => {
-    expect(sanitizeTmux(input)).toBeUndefined();
-  });
+  ])(
+    "maps a malformed or absent hint %p to undefined, never to null",
+    (input) => {
+      expect(sanitizeTmux(input)).toBeUndefined();
+    },
+  );
 });
 
 describe("parseClientHints (the one wire checkpoint)", () => {
@@ -123,12 +131,33 @@ describe("parseClientHints (the one wire checkpoint)", () => {
 
   test("carries every hint through when the client reported them all", () => {
     expect(
-      parseClientHints(req({ termCols: 120, termRows: 40, ssh: true })),
+      parseClientHints(
+        req({
+          termCols: 120,
+          termRows: 40,
+          ssh: true,
+          configEnv: "/etc/candybar.json5",
+        }),
+      ),
     ).toEqual({
       termCols: 120,
       termRows: 40,
       ssh: true,
+      configEnv: "/etc/candybar.json5",
     });
+  });
+
+  // brandon-config-5g8: the client's CC_CANDYBAR_CONFIG crosses the wire raw
+  // and is made literal at this one checkpoint — the same `~` rule
+  // parseRenderArgs applies to `--config`. Empty or non-string is "no
+  // override": absent, never an empty path the resolver would look for.
+  test("configEnv is ~-expanded, and junk or empty is absent", () => {
+    expect(parseClientHints(req({ configEnv: "~/c.json5" })).configEnv).toBe(
+      path.join(os.homedir(), "c.json5"),
+    );
+    expect("configEnv" in parseClientHints(req({ configEnv: "" }))).toBe(false);
+    expect("configEnv" in parseClientHints(req({ configEnv: 42 }))).toBe(false);
+    expect("configEnv" in parseClientHints(req({}))).toBe(false);
   });
 
   // termRows is the third hint: same sanitizer as termCols, same absence

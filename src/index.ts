@@ -20,6 +20,7 @@ import { NODE_FLAGS } from "./cli-flags";
 import { PACKAGE_VERSION } from "./version";
 import { detectTermExtent } from "./term-extent";
 import { detectTmuxHint } from "./tmux-hint";
+import { detectConfigEnv } from "./config-hint";
 import { runDoctorCli } from "./doctor/cli";
 
 function detectTermCols(): number | undefined {
@@ -190,6 +191,9 @@ echo '{"session_id":"test-session","workspace":{"project_dir":"/path/to/project"
         // Total like ssh: `null` is the affirmative "not in tmux", so an
         // absent hint on the daemon side means only "client too old".
         tmux: detectTmuxHint(process.env),
+        // Conditional like termCols: absent IS "no override", so the daemon
+        // resolves the precedence chain. The daemon reads no env of its own.
+        configEnv: detectConfigEnv(process.env),
       },
     );
     // [LAW:types-are-the-program] Three variants, one per outcome kind. The

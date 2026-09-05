@@ -8,9 +8,9 @@
 //
 // [LAW:single-enforcer] Every env var that steers where a durable write lands
 // is isolated here, for the fixture's lifetime, and restored on dispose: the
-// XDG pair derive the history path and the first-ever-write fallback, and
-// CC_CANDYBAR_CONFIG outranks the whole chain — left alone, a developer's own
-// setting would route every click in every suite to their real config file.
+// XDG pair derive the history path and the first-ever-write fallback. (A
+// developer's own CC_CANDYBAR_CONFIG cannot leak in: the daemon reads none —
+// it is a client hint, composed into the render origin, brandon-config-5g8.)
 
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -59,7 +59,6 @@ export function durableConfig(prefix = "cc-candybar-durable-"): DurableConfig {
   const isolated: EnvVars = {
     XDG_STATE_HOME: join(root, "state"),
     XDG_CONFIG_HOME: join(root, "xdg-config"),
-    CC_CANDYBAR_CONFIG: undefined,
   };
   const saved: EnvVars = Object.fromEntries(
     Object.keys(isolated).map((name) => [name, process.env[name]]),

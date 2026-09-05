@@ -15,10 +15,10 @@ import path from "node:path";
 const CONFIG_EXTENSIONS = ["json5", "json"] as const;
 
 // [LAW:single-enforcer] One implementation of `~`-prefix expansion, called at
-// each trust boundary that takes a user-supplied path. The CLI `--config`
-// value is expanded in `parseRenderArgs` (server.ts) before it ever reaches
-// here; `CC_CANDYBAR_CONFIG` is expanded below where the env var is read.
-// One function, one rule, two callers.
+// each trust boundary that takes a user-supplied path: the CLI `--config`
+// value in `parseRenderArgs` and the client's `CC_CANDYBAR_CONFIG` hint in
+// `parseClientHints` (both server-side, src/daemon), and the `check` CLI's
+// target. Every path that reaches this module is already literal.
 //
 // [LAW:enumeration-gap] Only the shell-standard home-expansion forms trigger
 // replacement: bare `~`, `~/...`, or `~\...` on Windows. A string like
@@ -37,12 +37,15 @@ export function expandHome(p: string): string {
  * cache uses this to watch every candidate location so the creation of any
  * file in the resolution chain triggers hot-reload.
  *
- * `configFile` is the highest-precedence entry — the path resolved from the
- * client's `--config` flag (already `~`-expanded at the trust boundary in
- * server.ts). When present, it is the sole candidate and the rest of the
- * precedence chain is bypassed.
+ * `configFile` is the highest-precedence entry — the explicit path the
+ * CLIENT named, its `--config` flag or its `CC_CANDYBAR_CONFIG` (already
+ * `~`-expanded at the trust boundary in server.ts). When present, it is the
+ * sole candidate and the rest of the precedence chain is bypassed. This
+ * module reads no environment of its own: the daemon is detached and
+ * one-per-user, so its env answers for whichever shell spawned it, not for
+ * the session being rendered ([LAW:no-ambient-temporal-coupling]).
  *
- * [LAW:single-enforcer] One enumerator; `resolveDslConfigPath` finds the
+ * [LAW:single-enforcer] One enumerator; `resolveDslConfig` finds the
  * first that exists, watchers listen on all of them, no second list.
  *
  * [LAW:dataflow-not-control-flow] Location is the dominant precedence axis;
@@ -56,8 +59,7 @@ export function dslConfigCandidatePaths(
 ): readonly string[] {
   // [LAW:dataflow-not-control-flow] An explicit override is the ONLY
   // candidate — the precedence chain collapses to one entry.
-  const explicit = explicitConfigPath(configFile);
-  if (explicit !== null) return [explicit];
+  if (configFile !== undefined) return [configFile];
 
   const effectiveCwd = cwd ?? process.cwd();
 
@@ -74,17 +76,6 @@ export function dslConfigCandidatePaths(
   ];
 }
 
-// [LAW:single-enforcer] The one explicit override of the precedence chain:
-// the CLI `--config` value (pre-expanded at the trust boundary in server.ts),
-// else `CC_CANDYBAR_CONFIG` (a separate trust boundary — expanded here, where
-// the env is read, with the shared `expandHome`). `null` means the standard
-// chain applies.
-function explicitConfigPath(configFile?: string): string | null {
-  if (configFile) return configFile;
-  const envPath = process.env.CC_CANDYBAR_CONFIG;
-  return envPath ? expandHome(envPath) : null;
-}
-
 // [LAW:one-source-of-truth] The extension-less base of the XDG location, the
 // tail of the precedence chain: `$XDG_CONFIG_HOME/cc-candybar/config`
 // (defaulting to `~/.config/cc-candybar/config`). The candidate enumerator
@@ -97,42 +88,38 @@ function xdgConfigBase(): string {
 }
 
 /**
- * The file a DURABLE write lands in (candybar-config-dqe): the config file
- * the session's render resolved, or — when no candidate exists yet — the
- * file a first-ever write creates: the explicit override if one is set,
- * else the XDG `config.json5` at the tail of the same precedence chain.
+ * What the config search found. Three outcomes, and the two that render the
+ * bundled default are NOT the same fact:
+ *   • `file` — a candidate exists; load it.
+ *   • `default` — the precedence chain named no explicit file and none of
+ *     its locations exist. The bundled default is what the user asked for.
+ *   • `missing` — the client named a file (`--config`, `CC_CANDYBAR_CONFIG`)
+ *     and it is absent. The bundled default renders so a long-running bar
+ *     stays live and the watcher recovers when the file appears — but it is
+ *     not what the user asked for, and the render says so.
  *
- * [LAW:one-source-of-truth] Built from the same enumerator and the same
- * override/XDG units the resolver uses, so the file a click writes is the
- * file the next reload reads — by construction, not by two lists agreeing.
- * The `.json5` spelling is CONFIG_EXTENSIONS' head: the documented format,
- * the one that wins a same-location tie.
+ * [LAW:types-are-the-program] `string | null` collapsed `default` and
+ * `missing` into one null, which is how an explicit path to a nonexistent
+ * file rendered byte-identically to no config at all (brandon-config-5g8).
+ * The path rides on `missing` so the message and the durable-write target
+ * both name it without re-deriving it from the inputs.
  */
-export function durableConfigPath(
-  projectDir?: string,
-  cwd?: string,
-  configFile?: string,
-): string {
-  return (
-    resolveDslConfigPath(projectDir, cwd, configFile) ??
-    explicitConfigPath(configFile) ??
-    `${xdgConfigBase()}.${CONFIG_EXTENSIONS[0]}`
-  );
-}
+export type ConfigResolution =
+  | { readonly kind: "file"; readonly path: string }
+  | { readonly kind: "default" }
+  | { readonly kind: "missing"; readonly path: string };
 
 /**
  * Resolution order for the user's DSL config file:
- *   1. `configFile` (the CLI `--config <path>` value, already `~`-expanded)
- *   2. $CC_CANDYBAR_CONFIG env var (literal path, `~`-expanded here)
- *   3. `<projectDir>/.cc-candybar.json5`
- *   4. `<projectDir>/.cc-candybar.json`
- *   5. `<cwd>/.cc-candybar.json5`
- *   6. `<cwd>/.cc-candybar.json`
- *   7. `$XDG_CONFIG_HOME/cc-candybar/config.json5`
+ *   1. `configFile` — the client's explicit path (`--config <path>`, else its
+ *      `CC_CANDYBAR_CONFIG`; both `~`-expanded at the wire boundary)
+ *   2. `<projectDir>/.cc-candybar.json5`
+ *   3. `<projectDir>/.cc-candybar.json`
+ *   4. `<cwd>/.cc-candybar.json5`
+ *   5. `<cwd>/.cc-candybar.json`
+ *   6. `$XDG_CONFIG_HOME/cc-candybar/config.json5`
  *      (defaulting to `~/.config/cc-candybar/config.json5`)
- *   8. `$XDG_CONFIG_HOME/cc-candybar/config.json`
- *
- * Returns the first path that exists, or null if none do.
+ *   7. `$XDG_CONFIG_HOME/cc-candybar/config.json`
  *
  * [LAW:dataflow-not-control-flow] The locations array is data; the search is
  * `locations.find(fs.existsSync)`. Adding a layer is a new array entry, not a
@@ -142,15 +129,59 @@ export function durableConfigPath(
  * [LAW:single-enforcer] Built on top of `dslConfigCandidatePaths` — the
  * precedence list lives in one place.
  */
-export function resolveDslConfigPath(
+export function resolveDslConfig(
   projectDir?: string,
   cwd?: string,
   configFile?: string,
-): string | null {
-  return (
-    dslConfigCandidatePaths(projectDir, cwd, configFile).find(fs.existsSync) ??
-    null
+): ConfigResolution {
+  const found = dslConfigCandidatePaths(projectDir, cwd, configFile).find(
+    fs.existsSync,
   );
+  if (found !== undefined) return { kind: "file", path: found };
+  return configFile === undefined
+    ? { kind: "default" }
+    : { kind: "missing", path: configFile };
+}
+
+/**
+ * The file a DURABLE write lands in (candybar-config-dqe): the config file
+ * the session's render resolved, or — when no candidate exists yet — the
+ * file a first-ever write creates: the explicit path if the client named
+ * one, else the XDG `config.json5` at the tail of the same precedence chain.
+ *
+ * [LAW:one-source-of-truth] A projection of the same resolution the render
+ * runs, so the file a click writes is the file the next reload reads — by
+ * construction, not by two lists agreeing. `missing` carries its path, so a
+ * first write under an explicit override creates exactly the file the bar
+ * is waiting for. The `.json5` spelling is CONFIG_EXTENSIONS' head: the
+ * documented format, the one that wins a same-location tie.
+ */
+export function durableConfigPath(
+  projectDir?: string,
+  cwd?: string,
+  configFile?: string,
+): string {
+  const resolved = resolveDslConfig(projectDir, cwd, configFile);
+  return resolved.kind === "default"
+    ? `${xdgConfigBase()}.${CONFIG_EXTENSIONS[0]}`
+    : resolved.path;
+}
+
+/**
+ * The advisory a `missing` resolution renders — the one spelling of "you
+ * named a file that is not there", beside the collision notice it rides the
+ * strip with. Total over the union: the other two arms have nothing to say.
+ *
+ * [LAW:no-silent-failure] The bar still renders (the bundled default, for
+ * liveness), but never silently: the row names the absent path so the user
+ * can tell a rejected override from no override at all.
+ */
+export function missingConfigNotice(
+  resolution: ConfigResolution,
+): string | null {
+  return resolution.kind === "missing"
+    ? `Config file not found: ${resolution.path} — rendering the bundled default until it appears`
+    : null;
 }
 
 /**

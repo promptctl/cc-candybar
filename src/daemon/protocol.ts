@@ -3,6 +3,7 @@ import type { ClaudeHookData } from "../utils/claude";
 import type { StatsSnapshot } from "./stats";
 import type { DebugSnapshot, DebugWhat } from "./debug-types";
 import type { TmuxHint } from "../tmux-hint";
+import { expandHome } from "../config/loader/discovery";
 
 // [LAW:types-are-the-program] PROTOCOL_VERSION encodes one thing:
 // "old-client × new-daemon (or vice versa) cannot communicate." It moves on
@@ -47,6 +48,7 @@ export interface RenderRequest {
   termRows?: number;
   ssh?: boolean;
   tmux?: TmuxHint | null;
+  configEnv?: string;
 }
 
 // [LAW:locality-or-seam] The seam for "a fact the daemon cannot observe about
@@ -85,11 +87,18 @@ export interface RenderRequest {
 //     facts the doctor's tmux-truecolor check reasons over (src/doctor). The
 //     daemon records the parsed hints per session (SESSION_CLIENT_HINTS_KEY)
 //     so a click, which carries no hints of its own, can read them.
+//   • `configEnv` absent — the client's shell carries no `CC_CANDYBAR_CONFIG`
+//     (or the client is too old to report one; both read the same way: no
+//     override from the client, the precedence chain applies). Present, it is
+//     the `~`-expanded path the client named, composed with `--config` at
+//     the request boundary (server.ts) and never with the daemon's own env —
+//     the override that ticket brandon-config-5g8 measured going nowhere.
 export interface ClientHints {
   readonly termCols?: number;
   readonly termRows?: number;
   readonly ssh?: boolean;
   readonly tmux?: TmuxHint | null;
+  readonly configEnv?: string;
 }
 
 // [LAW:single-enforcer] The ONE checkpoint where wire-supplied client hints
@@ -106,12 +115,23 @@ export function parseClientHints(
   const termRows = sanitizeTermExtent(req.termRows);
   const ssh = sanitizeSsh(req.ssh);
   const tmux = sanitizeTmux(req.tmux);
+  const configEnv = sanitizeConfigEnv(req.configEnv);
   return {
     ...(termCols !== undefined && { termCols }),
     ...(termRows !== undefined && { termRows }),
     ...(ssh !== undefined && { ssh }),
     ...(tmux !== undefined && { tmux }),
+    ...(configEnv !== undefined && { configEnv }),
   };
+}
+
+// [LAW:no-defensive-null-guards] exception: trust boundary, same shape as
+// sanitizeSsh. A non-string or empty value is "no override" (`undefined`),
+// never an empty path. `~` is expanded HERE, the same rule `parseRenderArgs`
+// applies to `--config`, so every consumer downstream receives a literal path
+// and the resolver never sees a `~` from either spelling.
+export function sanitizeConfigEnv(v: unknown): string | undefined {
+  return typeof v === "string" && v !== "" ? expandHome(v) : undefined;
 }
 
 // [LAW:no-defensive-null-guards] exception: trust boundary, same shape as
