@@ -1,3 +1,10 @@
+# [1.51.0](https://github.com/promptctl/cc-candybar/compare/v1.50.0...v1.51.0) (2026-09-05)
+
+
+### Features
+
+* **render:** disclosure bands — trigger wears the state of the band it opens, items on the plane, focusTint deleted (candybar-render-ai7.3) ([#210](https://github.com/promptctl/cc-candybar/issues/210)) ([df779c2](https://github.com/promptctl/cc-candybar/commit/df779c2d4a9fabee5a85f1e4ddd799c4dcdb9e08))
+
 # [1.50.0](https://github.com/promptctl/cc-candybar/compare/v1.49.0...v1.50.0) (2026-09-05)
 
 
