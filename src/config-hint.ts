@@ -8,8 +8,8 @@
 // (brandon-config-5g8 measured exactly that: an override set on the client
 // never reached a daemon that was already running, so a rejected config
 // rendered byte-identically to none). So the client reports it as a hint and
-// the daemon composes it with `--config` at the request boundary
-// (server.ts) — the daemon reads no `CC_CANDYBAR_CONFIG` of its own.
+// server.ts composes it beneath a load-config pick and `--config` at the
+// request boundary — the daemon reads no `CC_CANDYBAR_CONFIG` of its own.
 //
 // [LAW:one-source-of-truth] The variable name is mirrored by the Rust client
 // (rust-client/src/main.rs, CONFIG_ENV) and diffed by scripts/check-protocol.mjs,
@@ -19,9 +19,9 @@ export const CONFIG_ENV = "CC_CANDYBAR_CONFIG";
 
 // [LAW:dataflow-not-control-flow] Total over the client's environment: an
 // unset or empty variable is the affirmative "no override" — `undefined`, the
-// hint left off the wire — never a failure to determine. The value is raw:
-// `~` is expanded where the daemon stamps the hint (parseClientHints), the
-// one place every client-supplied path is made literal.
+// hint left off the wire — never a failure to determine. The value is raw;
+// each consumer makes it literal (`sanitizeConfigPath` on the daemon side,
+// `checkConfig` on the CLI side), never this probe.
 export function detectConfigEnv(
   env: Readonly<Record<string, string | undefined>>,
 ): string | undefined {

@@ -105,12 +105,14 @@ describe("RenderCache", () => {
   });
 
   // The resolver's presence predicate is not `existsSync`: a named file
-  // behind an unsearchable directory is `file`, so the read's own EACCES is
-  // the error the strip carries — never the `missing` notice claiming a
-  // correct path was not found. Root bypasses directory permissions.
+  // behind an unsearchable directory is `unreadable`, so the bundled default
+  // renders (liveness — the watcher recovers when the directory opens) under
+  // an advisory carrying the stat's own EACCES — never the `missing` notice
+  // claiming a correct path was not found, and never a load-fatal error
+  // about a file nothing read. Root bypasses directory permissions.
   const asRoot = process.getuid?.() === 0;
   (asRoot ? test.skip : test)(
-    "an explicit path behind an unsearchable directory reports the read error, not `not found`",
+    "an explicit path behind an unsearchable directory renders the default under a could-not-read advisory",
     () => {
       const { cache, cleanups } = makeCache();
       const { dir, cleanup } = mkConfigDir();
@@ -127,9 +129,13 @@ describe("RenderCache", () => {
       chmodSync(locked, 0o000);
       try {
         const entry = cache.getOrCreate(dir, dir, cfg);
-        expect(entry.lastWarning ?? "").not.toContain("Config file not found");
-        expect(entry.lastError).toContain("EACCES");
-        expect(entry.lastError).toContain(cfg);
+        expect(entry.lastError).toBeNull();
+        expect(entry.configFilePath).toBeNull();
+        expect(entry.lastWarning).toContain(
+          `Config file could not be read: ${cfg}`,
+        );
+        expect(entry.lastWarning).toContain("EACCES");
+        expect(entry.lastWarning).not.toContain("Config file not found");
       } finally {
         chmodSync(locked, 0o755);
         for (const c of cleanups) c();

@@ -18,18 +18,20 @@ const CONFIG_EXTENSIONS = ["json5", "json"] as const;
 // than collapsed to a boolean: `fs.existsSync` answers false to EVERY stat
 // failure, so a file behind an unsearchable directory resolved as "not found"
 // — a permissions problem reported as a wrong path. Only ENOENT is `absent`;
-// any other failure is `unknown`, something stat cannot see past. The
-// resolver treats `unknown` as a file the loader must read (its read reports
-// the real errno on the strip); the collision detector counts only `present`
-// (it has no read to correct a guess).
-type Presence = "present" | "absent" | "unknown";
-function presence(p: string): Presence {
+// any other failure is an `Unchecked` location stat could not see past, which
+// the resolution carries as data — no consumer guesses whether a file is there.
+export interface Unchecked {
+  readonly path: string;
+  readonly error: string;
+}
+type Presence = "present" | "absent" | Unchecked;
+function presence(path: string): Presence {
   try {
-    return fs.statSync(p, { throwIfNoEntry: false }) === undefined
+    return fs.statSync(path, { throwIfNoEntry: false }) === undefined
       ? "absent"
       : "present";
-  } catch {
-    return "unknown";
+  } catch (e) {
+    return { path, error: (e as Error).message };
   }
 }
 
@@ -107,15 +109,20 @@ function xdgConfigBase(): string {
 }
 
 /**
- * What the config search found. Three outcomes, and the two that render the
+ * What the config search found. Four outcomes, and the three that render the
  * bundled default are NOT the same fact:
- *   • `file` — a candidate exists; load it.
+ *   • `file` — a verified candidate; load it.
  *   • `default` — the precedence chain named no explicit file and none of
  *     its locations exist. The bundled default is what the user asked for.
  *   • `missing` — an explicit file was named (`configFile`) and it is
  *     absent. The bundled default renders so a long-running bar
  *     stays live and the watcher recovers when the file appears — but it is
  *     not what the user asked for, and the render says so.
+ *   • `unreadable` — an explicit file was named and stat could not see it
+ *     (an unsearchable directory, a symlink loop); the errno rides the arm.
+ * `file` and `default` carry `unchecked`: chain locations stat could not see
+ * past on the way. A lower, verified candidate still wins — the search never
+ * stops on a guess — and the notice names each location it had to skip.
  *
  * [LAW:types-are-the-program] `string | null` collapsed `default` and
  * `missing` into one null, which is how an explicit path to a nonexistent
@@ -124,9 +131,18 @@ function xdgConfigBase(): string {
  * both name it without re-deriving it from the inputs.
  */
 export type ConfigResolution =
-  | { readonly kind: "file"; readonly path: string }
-  | { readonly kind: "default" }
-  | { readonly kind: "missing"; readonly path: string };
+  | {
+      readonly kind: "file";
+      readonly path: string;
+      readonly unchecked: readonly Unchecked[];
+    }
+  | { readonly kind: "default"; readonly unchecked: readonly Unchecked[] }
+  | { readonly kind: "missing"; readonly path: string }
+  | {
+      readonly kind: "unreadable";
+      readonly path: string;
+      readonly error: string;
+    };
 
 /**
  * Resolution order for the user's DSL config file:
@@ -141,7 +157,7 @@ export type ConfigResolution =
  *   7. `$XDG_CONFIG_HOME/cc-candybar/config.json`
  *
  * [LAW:dataflow-not-control-flow] The locations array is data; the search is
- * `find` over `presence`. Adding a layer is a new array entry, not a new
+ * one fold over `presence`. Adding a layer is a new array entry, not a new
  * branch. Extension support is a property of the candidate list, not the
  * search.
  *
@@ -153,13 +169,18 @@ export function resolveDslConfig(
   cwd?: string,
   configFile?: string,
 ): ConfigResolution {
-  const found = dslConfigCandidatePaths(projectDir, cwd, configFile).find(
-    (p) => presence(p) !== "absent",
-  );
-  if (found !== undefined) return { kind: "file", path: found };
-  return configFile === undefined
-    ? { kind: "default" }
-    : { kind: "missing", path: configFile };
+  const unchecked: Unchecked[] = [];
+  for (const path of dslConfigCandidatePaths(projectDir, cwd, configFile)) {
+    const p = presence(path);
+    if (p === "present") return { kind: "file", path, unchecked };
+    if (p !== "absent") unchecked.push(p);
+  }
+  if (configFile === undefined) return { kind: "default", unchecked };
+  // An explicit path is the sole candidate: its one probe is the verdict.
+  const [own] = unchecked;
+  return own === undefined
+    ? { kind: "missing", path: configFile }
+    : { kind: "unreadable", ...own };
 }
 
 /**
@@ -187,20 +208,39 @@ export function durableConfigPath(
 }
 
 /**
- * The advisory a `missing` resolution renders — the one spelling of "you
- * named a file that is not there", beside the collision notice it rides the
- * strip with. Total over the union: the other two arms have nothing to say.
+ * The advisory a resolution renders beside the collision notice on the
+ * strip: one line per location the search could not check, and the one
+ * spelling each of "you named a file that is not there" / "…that cannot be
+ * read". Total over the union; a verified `file` with nothing skipped says
+ * nothing.
  *
  * [LAW:no-silent-failure] The bar still renders (the bundled default, for
- * liveness), but never silently: the row names the absent path so the user
- * can tell a rejected override from no override at all.
+ * liveness), but never silently: every row names its path, so the user can
+ * tell a rejected override, an unreadable one, and a skipped location from
+ * no override at all.
  */
-export function missingConfigNotice(
+export function configResolutionNotice(
   resolution: ConfigResolution,
 ): string | null {
-  return resolution.kind === "missing"
-    ? `Config file not found: ${resolution.path} — rendering the bundled default until it appears`
-    : null;
+  return noticeLines(resolution).join("\n") || null;
+}
+
+function noticeLines(resolution: ConfigResolution): readonly string[] {
+  switch (resolution.kind) {
+    case "file":
+    case "default":
+      return resolution.unchecked.map(
+        (u) => `Config location could not be checked: ${u.path} — ${u.error}`,
+      );
+    case "missing":
+      return [
+        `Config file not found: ${resolution.path} — rendering the bundled default until it appears`,
+      ];
+    case "unreadable":
+      return [
+        `Config file could not be read: ${resolution.path} — ${resolution.error} — rendering the bundled default until it can be`,
+      ];
+  }
 }
 
 /**

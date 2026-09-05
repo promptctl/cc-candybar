@@ -19,7 +19,7 @@ import { join } from "node:path";
 
 import {
   resolveDslConfig,
-  missingConfigNotice,
+  configResolutionNotice,
   durableConfigPath,
   dslConfigCandidatePaths,
   detectConfigCollisions,
@@ -136,7 +136,7 @@ describe("resolveDslConfig", () => {
       // No project, no cwd files. The .json at XDG is the only existing
       // candidate; the resolver must find it despite the legacy extension.
       const resolved = resolveDslConfig(undefined, dir);
-      expect(resolved).toEqual({ kind: "file", path: jsonPath });
+      expect(resolved).toEqual({ kind: "file", path: jsonPath, unchecked: [] });
     } finally {
       restore();
       cleanup();
@@ -155,7 +155,11 @@ describe("resolveDslConfig", () => {
       writeFileSync(jsonPath, VALID_CFG);
       const resolved = resolveDslConfig(undefined, dir);
       // Documented format outranks the legacy compatibility tail.
-      expect(resolved).toEqual({ kind: "file", path: json5Path });
+      expect(resolved).toEqual({
+        kind: "file",
+        path: json5Path,
+        unchecked: [],
+      });
     } finally {
       restore();
       cleanup();
@@ -178,7 +182,7 @@ describe("resolveDslConfig", () => {
 
       // Location dominates extension: project-local .json beats global .json5.
       const resolved = resolveDslConfig(proj, dir);
-      expect(resolved).toEqual({ kind: "file", path: projJson });
+      expect(resolved).toEqual({ kind: "file", path: projJson, unchecked: [] });
     } finally {
       restore();
       cleanup();
@@ -191,8 +195,8 @@ describe("resolveDslConfig", () => {
     try {
       // No files written anywhere — XDG dir doesn't even exist.
       const resolved = resolveDslConfig(undefined, dir);
-      expect(resolved).toEqual({ kind: "default" });
-      expect(missingConfigNotice(resolved)).toBeNull();
+      expect(resolved).toEqual({ kind: "default", unchecked: [] });
+      expect(configResolutionNotice(resolved)).toBeNull();
       // A first durable write lands at the XDG tail, documented spelling.
       expect(durableConfigPath(undefined, dir)).toBe(
         join(dir, "cc-candybar", "config.json5"),
@@ -214,6 +218,7 @@ describe("resolveDslConfig", () => {
       expect(resolveDslConfig(dir, dir, named)).toEqual({
         kind: "file",
         path: named,
+        unchecked: [],
       });
       expect(durableConfigPath(dir, dir, named)).toBe(named);
     } finally {
@@ -235,7 +240,7 @@ describe("resolveDslConfig", () => {
       writeFileSync(join(dir, ".cc-candybar.json5"), VALID_CFG);
       const resolved = resolveDslConfig(dir, dir, named);
       expect(resolved).toEqual({ kind: "missing", path: named });
-      expect(missingConfigNotice(resolved)).toBe(
+      expect(configResolutionNotice(resolved)).toBe(
         `Config file not found: ${named} — rendering the bundled default until it appears`,
       );
       // A durable write creates the file the bar is waiting for.
@@ -246,13 +251,13 @@ describe("resolveDslConfig", () => {
     }
   });
 
-  // Only ENOENT is absence. A file behind an unsearchable directory stats
-  // EACCES — it IS there, so it resolves `file` and the loader's read reports
-  // the real errno, instead of a "not found" notice about a path that is
-  // right. Root bypasses directory permissions, so the fixture cannot exist
-  // for it.
+  // Only ENOENT is absence. An explicit file behind an unsearchable
+  // directory stats EACCES — the search cannot tell whether it is there, so
+  // the verdict is `unreadable` carrying that errno, never a "not found"
+  // notice about a path that may be right. Root bypasses directory
+  // permissions, so the fixture cannot exist for it.
   (asRoot ? test.skip : test)(
-    "an explicit file behind an unsearchable directory is `file`, not `missing`",
+    "an explicit file behind an unsearchable directory is `unreadable`, not `missing`",
     () => {
       const { dir, cleanup } = mkdir();
       const restore = isolateEnv(dir);
@@ -262,10 +267,64 @@ describe("resolveDslConfig", () => {
       writeFileSync(named, VALID_CFG);
       chmodSync(locked, 0o000);
       try {
-        expect(resolveDslConfig(dir, dir, named)).toEqual({
-          kind: "file",
+        const resolved = resolveDslConfig(dir, dir, named);
+        expect(resolved).toEqual({
+          kind: "unreadable",
           path: named,
+          error: expect.stringContaining("EACCES"),
         });
+        expect(configResolutionNotice(resolved)).toMatch(
+          /^Config file could not be read: /,
+        );
+        expect(configResolutionNotice(resolved)).toContain(named);
+      } finally {
+        chmodSync(locked, 0o755);
+        restore();
+        cleanup();
+      }
+    },
+  );
+
+  // The automatic chain never halts on a guess: a location stat cannot see
+  // past is carried as `unchecked` and the search continues, so a verified
+  // lower candidate still wins — and the notice names every skipped
+  // location, one per line, so the user knows the project-local file (if
+  // any) was not the one loaded.
+  (asRoot ? test.skip : test)(
+    "an unsearchable chain location is skipped and named, not fatal",
+    () => {
+      const { dir, cleanup } = mkdir();
+      const restore = isolateEnv(dir);
+      const locked = join(dir, "locked");
+      const cwd = join(dir, "cwd");
+      mkdirSync(locked);
+      mkdirSync(cwd);
+      writeFileSync(join(locked, ".cc-candybar.json5"), VALID_CFG);
+      const cwdFile = join(cwd, ".cc-candybar.json5");
+      writeFileSync(cwdFile, VALID_CFG);
+      chmodSync(locked, 0o000);
+      try {
+        const resolved = resolveDslConfig(locked, cwd);
+        expect(resolved).toEqual({
+          kind: "file",
+          path: cwdFile,
+          unchecked: [
+            {
+              path: join(locked, ".cc-candybar.json5"),
+              error: expect.stringContaining("EACCES"),
+            },
+            {
+              path: join(locked, ".cc-candybar.json"),
+              error: expect.stringContaining("EACCES"),
+            },
+          ],
+        });
+        const notice = configResolutionNotice(resolved);
+        expect(notice).toContain("Config location could not be checked");
+        expect(notice).toContain(join(locked, ".cc-candybar.json5"));
+        expect(notice).toContain(join(locked, ".cc-candybar.json"));
+        expect(notice?.split("\n")).toHaveLength(2);
+        expect(durableConfigPath(locked, cwd)).toBe(cwdFile);
       } finally {
         chmodSync(locked, 0o755);
         restore();
@@ -344,9 +403,9 @@ describe("detectConfigCollisions", () => {
   });
 
   // Presence the detector cannot verify is not a collision: an unsearchable
-  // location stats `unknown` for both spellings, and the resolver's read of
-  // the first is what reports the errno — a fabricated "shadows" warning
-  // beside it would assert a fact nothing checked.
+  // location is `Unchecked` for both spellings, and the resolver's notice is
+  // what names the errno — a fabricated "shadows" warning beside it would
+  // assert a fact nothing checked.
   (asRoot ? test.skip : test)(
     "reports nothing for a location it cannot search",
     () => {

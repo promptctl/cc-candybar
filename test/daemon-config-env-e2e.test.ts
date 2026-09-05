@@ -7,12 +7,19 @@
 // variable, and every override arrives the only way a client can send one:
 // as the `configEnv` hint, the `--config` flag, or a load-config click.
 
+import { spawnSync } from "node:child_process";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
 import { VERB_LOAD_CONFIG } from "../src/click/wire";
-import { click, killAndWait, render, stripAnsi } from "./helpers/daemon-e2e";
+import {
+  click,
+  hookData,
+  killAndWait,
+  render,
+  stripAnsi,
+} from "./helpers/daemon-e2e";
 import {
   prepareIsolatedDaemonEnv,
   spawnDaemonWithEnv,
@@ -26,6 +33,7 @@ const configFlag = (p: string): string[] => ["cc-candybar", "--config", p];
 
 describe("brandon-config-5g8: a client's CC_CANDYBAR_CONFIG reaches a running daemon", () => {
   let sockPath: string;
+  let env: NodeJS.ProcessEnv;
   let removeTmpDirs: () => void;
   let projectDir: string;
   let daemon: RunningDaemon | undefined;
@@ -38,6 +46,7 @@ describe("brandon-config-5g8: a client's CC_CANDYBAR_CONFIG reaches a running da
   beforeAll(async () => {
     const prepared = prepareIsolatedDaemonEnv("cc-candybar-config-env-e2e");
     sockPath = prepared.sockPath;
+    env = prepared.env;
     removeTmpDirs = prepared.removeTmpDirs;
     // The daemon's own shell says nothing — as in production, where the
     // daemon was spawned by whichever session came first.
@@ -145,5 +154,33 @@ describe("brandon-config-5g8: a client's CC_CANDYBAR_CONFIG reaches a running da
     expect(pickOverBoth).toContain("OVERRIDE-WINS");
     expect(pickOverBoth).not.toContain("Invalid config");
     expect(pickOverBoth).not.toContain("Config file not found");
+  });
+
+  // The production wiring end to end: the REAL client (`dist/index.mjs`,
+  // the bundle `cc-candybar install` stages) reads the hook payload from
+  // stdin, lifts CC_CANDYBAR_CONFIG from ITS OWN environment into the
+  // `configEnv` hint (src/index.ts), and relays it over the socket — the
+  // daemon, spawned without the variable, renders the hinted file's bar.
+  test("the real client carries its own CC_CANDYBAR_CONFIG to the daemon", async () => {
+    const sid = "cfg-env-real-client";
+    // Warm the entry so the client's one bounded request cannot hit a cold
+    // first-load timeout (a real client shows a blank line and retries on
+    // the next tick; a test has no next tick).
+    await render(sockPath, sid, projectDir, { configEnv: override });
+    const client = spawnSync(
+      process.execPath,
+      [path.join(process.cwd(), "dist", "index.mjs")],
+      {
+        env: { ...env, CC_CANDYBAR_CONFIG: override },
+        input: JSON.stringify(hookData(sid, projectDir)),
+        encoding: "utf8",
+        timeout: 10_000,
+      },
+    );
+    expect(client.status).toBe(0);
+    const bar = stripAnsi(client.stdout);
+    expect(bar).toContain("OVERRIDE-WINS");
+    expect(bar).not.toContain("Invalid config");
+    expect(bar).not.toContain("Config file not found");
   });
 });

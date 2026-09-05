@@ -71,11 +71,11 @@ export {
   expandHome,
   dslConfigCandidatePaths,
   resolveDslConfig,
-  missingConfigNotice,
+  configResolutionNotice,
   durableConfigPath,
   detectConfigCollisions,
 } from "./loader/discovery.js";
-export type { ConfigResolution } from "./loader/discovery.js";
+export type { ConfigResolution, Unchecked } from "./loader/discovery.js";
 export { mergeWithDefault } from "./loader/merge.js";
 export {
   extractTemplateRefs,

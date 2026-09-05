@@ -6,7 +6,7 @@ import {
   loadConfig,
   validateConfig,
   resolveDslConfig,
-  missingConfigNotice,
+  configResolutionNotice,
   dslConfigCandidatePaths,
   detectConfigCollisions,
   ConfigError,
@@ -414,8 +414,8 @@ export class RenderCache {
     configFile: string | undefined,
   ): LoadOutcome {
     const resolution = resolveDslConfig(projectDir, cwd, configFile);
-    // `file` loads; `default` and `missing` both build the bundled default —
-    // the difference between those two is a notice, below, not a load path.
+    // `file` loads; every other arm builds the bundled default — what
+    // distinguishes them is a notice, below, not a load path.
     const resolvedPath = resolution.kind === "file" ? resolution.path : null;
 
     // [LAW:dataflow-not-control-flow] Advisories run every load, independent
@@ -428,7 +428,7 @@ export class RenderCache {
     // else needs to invalidate this.
     const advisories = [
       detectConfigCollisions(projectDir, cwd),
-      missingConfigNotice(resolution),
+      configResolutionNotice(resolution),
     ];
 
     // [LAW:dataflow-not-control-flow] A failure at any step — parse,

@@ -197,7 +197,8 @@ edit history.
 The file a click writes is the config file your session's config search
 resolves to at the moment of the click — the same search the render runs
 (an explicit path — a load-config pick, `--config`, or `$CC_CANDYBAR_CONFIG` —
-else a project `.cc-candybar.json5`, else the XDG `config.json5`), so it is the
+else a project `.cc-candybar.json5`, else the cwd `.cc-candybar.json5`, else
+the XDG `config.json5`), so it is the
 file the next render reads. When no config file exists yet, the first `persist`
 creates one — at the explicit path if one is set, else
 `$XDG_CONFIG_HOME/cc-candybar/config.json5`. A click from a session that
