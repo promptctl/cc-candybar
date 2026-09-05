@@ -25,6 +25,7 @@ import {
 import { createActiveSegmentRef } from "../src/render/active-segment";
 import type { ActiveSegmentRef } from "../src/render/active-segment";
 import { segmentColorFuncs } from "../src/render/segment-color";
+import type { Disclosure } from "../src/themes/decor";
 import {
   transposedPalette,
   paletteForThemeName,
@@ -76,8 +77,11 @@ function resolve(
   fg: Template<RichText> | undefined,
   scope: object = {},
 ): Style {
-  return resolveSegmentColors(h.ref, SEG, palette, bg, fg, scope);
+  return resolveSegmentColors(h.ref, SEG, palette, DISCLOSURE, bg, fg, scope);
 }
+
+// This file is about bg/fg resolution; the disclosure only rides the record.
+const DISCLOSURE: Disclosure = { hue: "primary", depth: 0 };
 
 // ────────────────────────────────────────────────────────────────────────────
 // 1. Both templates absent → null Style (no color override)
@@ -324,7 +328,12 @@ describe("segment color functions in the engine", () => {
     const ref = createActiveSegmentRef();
     const engine = createCcCandybarEngine(segmentColorFuncs(ref));
     const tpl = engine.parse('{{ fg (color "primary") "hello" }}');
-    ref.current = { segName: SEG, palette: makeTestPalette(), bg: undefined };
+    ref.current = {
+      segName: SEG,
+      palette: makeTestPalette(),
+      disclosure: DISCLOSURE,
+      bg: undefined,
+    };
     const fragments = tpl.evaluate({});
     expect(fragments[0]?.style?.color?.value?.hex).toBe("#4488ff");
     expect(fragments[0]?.plain).toBe("hello");

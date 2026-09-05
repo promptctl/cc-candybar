@@ -511,13 +511,15 @@ export function linkFragment(
   text: string,
   url: string,
   active: boolean,
+  base?: Style,
 ): RichText {
   // [LAW:one-source-of-truth] Build the link span exactly as rich-js's `link`
   // does: a Style carrying the OSC-8 url. `active` rides as bold so the
   // currently-selected value reads as current — a value on the span, not a
-  // branch in the walk.
+  // branch in the walk. `base` is the cell's own colouring (a band item's
+  // state-region Style), which the link and current-mark ride on top of.
   const rt = new RichText(text, {
-    style: new Style({ link: url, bold: active }),
+    style: Style.combine([base, new Style({ link: url, bold: active })]),
   });
   rt.noWrap = true;
   rt.end = "";
