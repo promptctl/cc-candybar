@@ -511,15 +511,26 @@ export const bandRoot = (band: Disclosure): Region => ({
 });
 
 /**
+ * The foreground an UNAUTHORED `fg:` wears on `background` — the background
+ * the cell actually resolves to, tint or authored `bg:`, so the choice can
+ * never be measured against a colour the cell does not paint.
+ * [LAW:one-source-of-truth]
+ */
+export type TextFloor = (background: ColorRgba) => ColorRgba | undefined;
+
+/** The bar's floor: the terminal keeps its own text, whatever the background. */
+export const TERMINAL_TEXT: TextFloor = () => undefined;
+
+/**
  * What a segment in a region is dealt. `tint` is the colour its CLOSED cell
- * wears; `text` is the foreground an UNAUTHORED `fg:` defaults to — the
- * terminal's own on the bar, and on a band the theme pole that reads better on
- * the tint, because text on a state-region cell is chosen (design doc,
- * Decisions); `disclosure` is the band the segment opens if it is a trigger.
+ * wears; `text` is the floor an UNAUTHORED `fg:` defaults to — the terminal's
+ * own on the bar, and on a band the theme pole that reads better on the
+ * cell's background, because text on a state-region cell is chosen (design
+ * doc, Decisions); `disclosure` is the band the segment opens if it is a trigger.
  */
 export interface Decoration {
   readonly tint: ColorRgba;
-  readonly text: ColorRgba | undefined;
+  readonly text: TextFloor;
   readonly disclosure: Disclosure;
 }
 
@@ -538,7 +549,7 @@ export function decorationFor(palette: Palette, region: Region): Decoration {
       const entry = decorEntryFor(region.address);
       return {
         tint: decorEntryColour(palette, entry),
-        text: undefined,
+        text: TERMINAL_TEXT,
         disclosure: { hue: entry.hue, depth: 0 },
       };
     }
@@ -546,7 +557,7 @@ export function decorationFor(palette: Palette, region: Region): Decoration {
       const tint = bandItemFor(palette, region.band, region.address);
       return {
         tint,
-        text: textOn(palette, tint),
+        text: (background) => textOn(palette, background),
         disclosure: { hue: region.band.hue, depth: region.band.depth + 1 },
       };
     }

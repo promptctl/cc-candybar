@@ -25,7 +25,7 @@ import {
 import { createActiveSegmentRef } from "../src/render/active-segment";
 import type { ActiveSegmentRef } from "../src/render/active-segment";
 import { segmentColorFuncs } from "../src/render/segment-color";
-import type { Disclosure } from "../src/themes/decor";
+import { TERMINAL_TEXT, type Disclosure, type TextFloor } from "../src/themes/decor";
 import {
   transposedPalette,
   paletteForThemeName,
@@ -76,7 +76,7 @@ function resolve(
   bg: Template<RichText> | undefined,
   fg: Template<RichText> | undefined,
   scope: object = {},
-  text: ColorRgba | undefined = undefined,
+  text: TextFloor = TERMINAL_TEXT,
 ): Style {
   return resolveSegmentColors(
     h.ref,
@@ -96,8 +96,9 @@ const DISCLOSURE: Disclosure = { hue: "primary", depth: 0 };
 // The tint the walk dealt this segment's address — a colour no palette role
 // here spells, so a background equal to it can only have come from the floor.
 const TINT = parseRgbHex("102030");
-// The text the walk chose for a band cell — likewise unspelled by any role.
-const TEXT = parseRgbHex("f0e0d0");
+// A band's floor, standing in for `textOn`: the text IS the background it was
+// asked about, so the assertion sees which background the floor was handed.
+const TEXT_IS_BG: TextFloor = (background) => background;
 
 // ────────────────────────────────────────────────────────────────────────────
 // 1. No bg template → the tint IS the background (a segment always has one);
@@ -122,21 +123,27 @@ describe("no bg/fg templates → the tint, and no foreground", () => {
     expect(style.bgcolor?.value?.hex).toBe("#ff4444");
   });
 
-  test("undefined fg → the region's text, when the walk chose one", () => {
+  test("undefined fg → the region's floor, chosen on the tint when no bg is authored", () => {
     const style = resolve(
       makeHarness(),
       makeTestPalette(),
       undefined,
       undefined,
       {},
-      TEXT,
+      TEXT_IS_BG,
     );
-    expect(style.color?.value?.hex).toBe(TEXT.hex);
+    expect(style.color?.value?.hex).toBe(TINT.hex);
   });
 
-  test("an authored fg paints over the region's text", () => {
+  test("undefined fg → the floor chosen on the AUTHORED bg, never the tint it painted over", () => {
     const h = makeHarness();
-    const style = resolve(h, makeTestPalette(), undefined, h.parse("error"), {}, TEXT);
+    const style = resolve(h, makeTestPalette(), h.parse("error"), undefined, {}, TEXT_IS_BG);
+    expect(style.color?.value?.hex).toBe("#ff4444");
+  });
+
+  test("an authored fg paints over the region's floor", () => {
+    const h = makeHarness();
+    const style = resolve(h, makeTestPalette(), undefined, h.parse("error"), {}, TEXT_IS_BG);
     expect(style.color?.value?.hex).toBe("#ff4444");
   });
 

@@ -14,8 +14,8 @@
 // [LAW:dataflow-not-control-flow] Steps execute unconditionally; the option
 // values (undefined template = no spec) are what decides the output, not
 // whether steps run. An absent bg spec resolves to the region's tint; an
-// absent fg resolves to the region's text floor (unset on the bar, so cells
-// keep their own).
+// absent fg resolves to the region's text floor on the background the cell
+// resolved to (unset on the bar, so cells keep their own).
 
 import {
   Style,
@@ -27,7 +27,7 @@ import type { ColorRgba, Palette } from "@promptctl/rich-js";
 import type { RichText } from "@promptctl/rich-js";
 import type { Template } from "@promptctl/go-template-js";
 import type { ActiveSegmentRef } from "../render/active-segment.js";
-import type { Disclosure } from "../themes/decor.js";
+import type { Disclosure, TextFloor } from "../themes/decor.js";
 
 export class ColorSpecError extends Error {
   constructor(spec: string, role: "bg" | "fg", detail: string) {
@@ -61,8 +61,9 @@ export class ColorSpecError extends Error {
  * segment type is the discriminator: no segment is asked whether it "looks
  * decorative", the absence of an authored spec IS the decorated case. `text`
  * is the same floor for the foreground: what an unauthored `fg:` defaults to
- * — nothing on the bar (cells keep their own), the contrast-chosen pole on a
- * band, where a fixed foreground measurably fails (design doc, Decisions).
+ * on the background phase 1 resolved — nothing on the bar (cells keep their
+ * own), the pole that reads on THAT background on a band, where a fixed
+ * foreground measurably fails (design doc, Decisions).
  *
  * Looks are not this function's concern: they live upstream as WHICH palette
  * it is handed, so bg, fg, and the body all resolve from one palette and their
@@ -74,7 +75,7 @@ export function resolveSegmentColors(
   palette: Palette,
   disclosure: Disclosure,
   tint: ColorRgba,
-  text: ColorRgba | undefined,
+  text: TextFloor,
   bgTemplate: Template<RichText> | undefined,
   fgTemplate: Template<RichText> | undefined,
   scope: object,
@@ -100,7 +101,7 @@ export function resolveSegmentColors(
   active.bg = bgColor;
   const fgSpec = evalToPlainText(fgTemplate, scope);
   const fgColor =
-    fgSpec !== undefined ? resolveRef(palette, fgSpec, "fg") : text;
+    fgSpec !== undefined ? resolveRef(palette, fgSpec, "fg") : text(bgColor);
 
   return new Style({
     bgcolor: ColorSpec.fromRgba(bgColor),

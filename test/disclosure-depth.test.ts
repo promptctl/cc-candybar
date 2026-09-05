@@ -371,11 +371,12 @@ const GROUP_SRC = `{
     b: { template: 'B', fg: 'error' },
     c: { template: 'C' },
     d: { template: 'D' },
+    e: { template: 'E', bg: 'warning' },
   },
   root: { v: [
     { h: ['a'] },
     { kind: 'group', name: 'outer', label: 'outer', direction: 'horizontal',
-      children: ['b', { kind: 'group', name: 'inner', label: 'inner', children: ['d'] }, 'c'] },
+      children: ['b', { kind: 'group', name: 'inner', label: 'inner', children: ['d'] }, 'c', 'e'] },
   ] },
 }`;
 
@@ -406,6 +407,21 @@ describe("candybar-render-ai7.9 — a group's toggle is a trigger", () => {
     rt.clickWriting(toggle, toggle, DISCLOSURE_CLOSED);
     rt.render();
     expect(rt.bgOf(toggle)).toBe(tint);
+  });
+
+  test("a body cell's chosen text reads on the background it WEARS — an authored bg, not the tint", () => {
+    const rt = build(GROUP_SRC);
+    const { palette } = rt;
+    rt.render();
+    rt.clickWriting("groups.outer", "groups.outer", "outer");
+    rt.render();
+    const authored = palette.get("warning")!;
+    expect(rt.bgOf("e")).toBe(authored.hex);
+    expect(rt.fgOf("e")).toBe(textOn(palette, authored).hex);
+    // The case is only a case because the two poles differ here.
+    const tint = decorationFor(palette, regionOf(rt.root, palette, "e")).tint;
+    expect(textOn(palette, authored).hex).not.toBe(textOn(palette, tint).hex);
+    rt.dispose();
   });
 
   test("a group nested in a group's body opens the next depth", () => {
