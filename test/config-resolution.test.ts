@@ -7,15 +7,27 @@
 //   - location precedence (project > cwd > XDG) overrides extension
 //   - detectConfigCollisions surfaces same-location duplicates
 
-import { mkdtempSync, rmSync, writeFileSync, mkdirSync } from "node:fs";
+import {
+  chmodSync,
+  mkdtempSync,
+  rmSync,
+  writeFileSync,
+  mkdirSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import {
-  resolveDslConfigPath,
+  resolveDslConfig,
+  configResolutionNotice,
+  durableConfigPath,
   dslConfigCandidatePaths,
   detectConfigCollisions,
 } from "../src/config/dsl-loader";
+
+// Root bypasses directory permissions, so the unsearchable-directory fixtures
+// cannot exist for it.
+const asRoot = process.getuid?.() === 0;
 
 function mkdir(): { dir: string; cleanup: () => void } {
   const dir = mkdtempSync(join(tmpdir(), "cc-candybar-resolution-"));
@@ -73,13 +85,58 @@ describe("dslConfigCandidatePaths", () => {
     }
   });
 
-  test("CC_CANDYBAR_CONFIG collapses precedence to one entry", () => {
+  // projectDir === cwd is the common shape of a hook payload; the project
+  // and cwd rungs then spell the same two paths, and a consumer that probed
+  // or reported them twice would name one location twice.
+  test("the same directory as project and cwd yields each path once", () => {
+    const { dir, cleanup } = mkdir();
+    const restore = isolateEnv(dir);
+    try {
+      const candidates = dslConfigCandidatePaths(dir, dir);
+      expect(candidates).toEqual([
+        join(dir, ".cc-candybar.json5"),
+        join(dir, ".cc-candybar.json"),
+        join(dir, "cc-candybar", "config.json5"),
+        join(dir, "cc-candybar", "config.json"),
+      ]);
+    } finally {
+      restore();
+      cleanup();
+    }
+  });
+
+  test("an explicit configFile collapses precedence to one entry", () => {
+    const { dir, cleanup } = mkdir();
+    const restore = isolateEnv(dir);
+    try {
+      const candidates = dslConfigCandidatePaths(
+        "/proj",
+        "/cwd",
+        "/explicit/path/to/config.json",
+      );
+      expect(candidates).toEqual(["/explicit/path/to/config.json"]);
+    } finally {
+      restore();
+      cleanup();
+    }
+  });
+
+  // brandon-config-5g8: the daemon is detached, so ITS environment describes
+  // whichever shell spawned it, not the session being rendered. The client
+  // reports its CC_CANDYBAR_CONFIG as a hint (src/config-hint.ts) and the
+  // daemon composes it into `configFile` at the request boundary — the
+  // resolver never reads the variable itself.
+  test("the process's own CC_CANDYBAR_CONFIG is not consulted", () => {
     const { dir, cleanup } = mkdir();
     const restore = isolateEnv(dir);
     try {
       process.env.CC_CANDYBAR_CONFIG = "/explicit/path/to/config.json";
-      const candidates = dslConfigCandidatePaths("/proj", "/cwd");
-      expect(candidates).toEqual(["/explicit/path/to/config.json"]);
+      expect(dslConfigCandidatePaths("/proj", "/cwd")).toEqual(
+        dslConfigCandidatePaths("/proj", "/cwd", undefined),
+      );
+      expect(dslConfigCandidatePaths("/proj", "/cwd")).not.toContain(
+        "/explicit/path/to/config.json",
+      );
     } finally {
       restore();
       cleanup();
@@ -87,7 +144,7 @@ describe("dslConfigCandidatePaths", () => {
   });
 });
 
-describe("resolveDslConfigPath", () => {
+describe("resolveDslConfig", () => {
   test(".json at XDG resolves when no .json5 exists anywhere", () => {
     const { dir, cleanup } = mkdir();
     const restore = isolateEnv(dir);
@@ -98,8 +155,8 @@ describe("resolveDslConfigPath", () => {
       writeFileSync(jsonPath, VALID_CFG);
       // No project, no cwd files. The .json at XDG is the only existing
       // candidate; the resolver must find it despite the legacy extension.
-      const resolved = resolveDslConfigPath(undefined, dir);
-      expect(resolved).toBe(jsonPath);
+      const resolved = resolveDslConfig(undefined, dir);
+      expect(resolved).toEqual({ kind: "file", path: jsonPath, unchecked: [] });
     } finally {
       restore();
       cleanup();
@@ -116,9 +173,13 @@ describe("resolveDslConfigPath", () => {
       const jsonPath = join(xdgCfgDir, "config.json");
       writeFileSync(json5Path, VALID_CFG);
       writeFileSync(jsonPath, VALID_CFG);
-      const resolved = resolveDslConfigPath(undefined, dir);
+      const resolved = resolveDslConfig(undefined, dir);
       // Documented format outranks the legacy compatibility tail.
-      expect(resolved).toBe(json5Path);
+      expect(resolved).toEqual({
+        kind: "file",
+        path: json5Path,
+        unchecked: [],
+      });
     } finally {
       restore();
       cleanup();
@@ -140,25 +201,163 @@ describe("resolveDslConfigPath", () => {
       writeFileSync(xdgJson5, VALID_CFG);
 
       // Location dominates extension: project-local .json beats global .json5.
-      const resolved = resolveDslConfigPath(proj, dir);
-      expect(resolved).toBe(projJson);
+      const resolved = resolveDslConfig(proj, dir);
+      expect(resolved).toEqual({ kind: "file", path: projJson, unchecked: [] });
     } finally {
       restore();
       cleanup();
     }
   });
 
-  test("returns null when no candidate exists", () => {
+  test("is `default` when no candidate exists — with nothing to say", () => {
     const { dir, cleanup } = mkdir();
     const restore = isolateEnv(dir);
     try {
       // No files written anywhere — XDG dir doesn't even exist.
-      expect(resolveDslConfigPath(undefined, dir)).toBeNull();
+      const resolved = resolveDslConfig(undefined, dir);
+      expect(resolved).toEqual({ kind: "default", unchecked: [] });
+      expect(configResolutionNotice(resolved)).toBeNull();
+      // A first durable write lands at the XDG tail, documented spelling.
+      expect(durableConfigPath(undefined, dir)).toBe(
+        join(dir, "cc-candybar", "config.json5"),
+      );
     } finally {
       restore();
       cleanup();
     }
   });
+
+  test("an explicit file that exists is `file`, whatever the chain holds", () => {
+    const { dir, cleanup } = mkdir();
+    const restore = isolateEnv(dir);
+    try {
+      const named = join(dir, "named.json5");
+      const local = join(dir, ".cc-candybar.json5");
+      writeFileSync(named, VALID_CFG);
+      writeFileSync(local, VALID_CFG);
+      expect(resolveDslConfig(dir, dir, named)).toEqual({
+        kind: "file",
+        path: named,
+        unchecked: [],
+      });
+      expect(durableConfigPath(dir, dir, named)).toBe(named);
+    } finally {
+      restore();
+      cleanup();
+    }
+  });
+
+  // brandon-config-5g8: an explicit path to an absent file used to resolve
+  // to the same null as "no config anywhere", so the bar rendered the
+  // bundled default byte-identically to no override at all. `missing` is
+  // its own arm, carries the path, and has a notice — while the chain is
+  // NOT consulted (the user named a file; a project-local one is not it).
+  test("an explicit file that is absent is `missing`, not `default`", () => {
+    const { dir, cleanup } = mkdir();
+    const restore = isolateEnv(dir);
+    try {
+      const named = join(dir, "absent.json5");
+      writeFileSync(join(dir, ".cc-candybar.json5"), VALID_CFG);
+      const resolved = resolveDslConfig(dir, dir, named);
+      expect(resolved).toEqual({ kind: "missing", path: named });
+      expect(configResolutionNotice(resolved)).toBe(
+        `Config file not found: ${named} — rendering the bundled default until it appears`,
+      );
+      // A durable write creates the file the bar is waiting for.
+      expect(durableConfigPath(dir, dir, named)).toBe(named);
+    } finally {
+      restore();
+      cleanup();
+    }
+  });
+
+  // Only ENOENT is absence. An explicit file behind an unsearchable
+  // directory stats EACCES — the search cannot tell whether it is there, so
+  // the verdict is `unreadable` carrying that errno, never a "not found"
+  // notice about a path that may be right. Root bypasses directory
+  // permissions, so the fixture cannot exist for it.
+  (asRoot ? test.skip : test)(
+    "an explicit file behind an unsearchable directory is `unreadable`, not `missing`",
+    () => {
+      const { dir, cleanup } = mkdir();
+      const restore = isolateEnv(dir);
+      const locked = join(dir, "locked");
+      mkdirSync(locked);
+      const named = join(locked, "named.json5");
+      writeFileSync(named, VALID_CFG);
+      chmodSync(locked, 0o000);
+      try {
+        const resolved = resolveDslConfig(dir, dir, named);
+        expect(resolved).toEqual({
+          kind: "unreadable",
+          path: named,
+          error: expect.stringContaining("EACCES"),
+        });
+        expect(configResolutionNotice(resolved)).toMatch(
+          /^Config file could not be read: /,
+        );
+        expect(configResolutionNotice(resolved)).toContain(named);
+      } finally {
+        chmodSync(locked, 0o755);
+        restore();
+        cleanup();
+      }
+    },
+  );
+
+  // The automatic chain never halts on a guess: a location stat cannot see
+  // past is carried as `unchecked` and the search continues, so a verified
+  // lower candidate still wins — and the notice names every skipped
+  // location, one per line, so the user knows the project-local file (if
+  // any) was not the one loaded.
+  (asRoot ? test.skip : test)(
+    "an unsearchable chain location is skipped and named, not fatal",
+    () => {
+      const { dir, cleanup } = mkdir();
+      const restore = isolateEnv(dir);
+      const locked = join(dir, "locked");
+      const cwd = join(dir, "cwd");
+      mkdirSync(locked);
+      mkdirSync(cwd);
+      writeFileSync(join(locked, ".cc-candybar.json5"), VALID_CFG);
+      const cwdFile = join(cwd, ".cc-candybar.json5");
+      writeFileSync(cwdFile, VALID_CFG);
+      chmodSync(locked, 0o000);
+      try {
+        const resolved = resolveDslConfig(locked, cwd);
+        expect(resolved).toEqual({
+          kind: "file",
+          path: cwdFile,
+          unchecked: [
+            {
+              path: join(locked, ".cc-candybar.json5"),
+              error: expect.stringContaining("EACCES"),
+            },
+            {
+              path: join(locked, ".cc-candybar.json"),
+              error: expect.stringContaining("EACCES"),
+            },
+          ],
+        });
+        const notice = configResolutionNotice(resolved);
+        expect(notice).toContain("Config location could not be checked");
+        expect(notice).toContain(join(locked, ".cc-candybar.json5"));
+        expect(notice).toContain(join(locked, ".cc-candybar.json"));
+        expect(notice?.split("\n")).toHaveLength(2);
+        expect(durableConfigPath(locked, cwd)).toBe(cwdFile);
+        // The same directory as both project and cwd is still ONE location:
+        // two unchecked entries (one per extension), two notice lines.
+        const sameDir = resolveDslConfig(locked, locked);
+        expect(sameDir.kind).toBe("default");
+        expect(sameDir).toHaveProperty("unchecked.length", 2);
+        expect(configResolutionNotice(sameDir)?.split("\n")).toHaveLength(2);
+      } finally {
+        chmodSync(locked, 0o755);
+        restore();
+        cleanup();
+      }
+    },
+  );
 });
 
 describe("detectConfigCollisions", () => {
@@ -228,6 +427,30 @@ describe("detectConfigCollisions", () => {
       cleanup();
     }
   });
+
+  // Presence the detector cannot verify is not a collision: an unsearchable
+  // location is `Unchecked` for both spellings, and the resolver's notice is
+  // what names the errno — a fabricated "shadows" warning beside it would
+  // assert a fact nothing checked.
+  (asRoot ? test.skip : test)(
+    "reports nothing for a location it cannot search",
+    () => {
+      const { dir, cleanup } = mkdir();
+      const restore = isolateEnv(dir);
+      const locked = join(dir, "locked");
+      mkdirSync(locked);
+      writeFileSync(join(locked, ".cc-candybar.json5"), VALID_CFG);
+      writeFileSync(join(locked, ".cc-candybar.json"), VALID_CFG);
+      chmodSync(locked, 0o000);
+      try {
+        expect(detectConfigCollisions(locked, locked)).toBeNull();
+      } finally {
+        chmodSync(locked, 0o755);
+        restore();
+        cleanup();
+      }
+    },
+  );
 
   test("ignores cross-location pairs (proj/.json5 + cwd/.json is not a collision)", () => {
     const { dir, cleanup } = mkdir();

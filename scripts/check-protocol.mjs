@@ -100,6 +100,7 @@ const TS_CLIENT = "src/daemon/client.ts";
 const TS_INDEX = "src/index.ts";
 const TS_CLI_FLAGS = "src/cli-flags.ts";
 const TS_TMUX_HINT = "src/tmux-hint.ts";
+const TS_CONFIG_HINT = "src/config-hint.ts";
 const TS_GLYPH = "src/render/error-glyph.ts";
 const TS_STYLE = "src/render/diagnostic-style.ts";
 const TS_PATHS = "src/daemon/paths.ts";
@@ -209,6 +210,22 @@ const CHECKS = [
       RS_MAIN,
       /const TMUX_ENV: TmuxEnv = TmuxEnv \{[\s\S]+?\};/,
       /(\w+): "([A-Z_]+)"/g,
+    ),
+  },
+  // Which env var names the client's explicit config. Same drift hazard as
+  // the tmux row: a renamed variable would not fail — the native client would
+  // silently stop reporting the override the node fallback still reports.
+  {
+    label: "config hint env var",
+    ts: memberSet(
+      TS_CONFIG_HINT,
+      /export const CONFIG_ENV = "[A-Z_]+";/,
+      /"([A-Z_]+)"/g,
+    ),
+    rust: memberSet(
+      RS_MAIN,
+      /const CONFIG_ENV: &str = "[A-Z_]+";/,
+      /"([A-Z_]+)"/g,
     ),
   },
   // The tmux hint's own wire shape: the field names the Rust client builds

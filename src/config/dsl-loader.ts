@@ -70,10 +70,12 @@ export type { ConfigIssue } from "./loader/diagnostics.js";
 export {
   expandHome,
   dslConfigCandidatePaths,
-  resolveDslConfigPath,
+  resolveDslConfig,
+  configResolutionNotice,
   durableConfigPath,
   detectConfigCollisions,
 } from "./loader/discovery.js";
+export type { ConfigResolution, Unchecked } from "./loader/discovery.js";
 export { mergeWithDefault } from "./loader/merge.js";
 export {
   extractTemplateRefs,

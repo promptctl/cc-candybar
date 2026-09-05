@@ -16,7 +16,8 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { checkConfig, checkPlan } from "../src/check";
+import { checkConfig, checkPlan, runCheck } from "../src/check";
+import { detectConfigEnv } from "../src/config-hint";
 
 let dir: string;
 
@@ -27,9 +28,9 @@ afterAll(() => {
   fs.rmSync(dir, { recursive: true, force: true });
 });
 
-// Default-path resolution reads $CC_CANDYBAR_CONFIG and $XDG_CONFIG_HOME
-// (dslConfigCandidatePaths); pin both per test so the developer's real config
-// can never leak into a verdict.
+// Default-path resolution reads $XDG_CONFIG_HOME (dslConfigCandidatePaths);
+// pin it per test so the developer's real config can never leak into a
+// verdict. $CC_CANDYBAR_CONFIG is pinned too because one test sets it.
 const SAVED_ENV = {
   CC_CANDYBAR_CONFIG: process.env.CC_CANDYBAR_CONFIG,
   XDG_CONFIG_HOME: process.env.XDG_CONFIG_HOME,
@@ -318,15 +319,29 @@ describe("checkConfig — default resolution (the daemon's own chain)", () => {
     if (outcome.kind === "clean") expect(outcome.configPath).toBe(p);
   });
 
-  it("honors $CC_CANDYBAR_CONFIG like the daemon's resolver", () => {
+  // brandon-config-5g8: $CC_CANDYBAR_CONFIG is a fact of the CLI's own shell,
+  // read at the CLI edge (runCheck → detectConfigEnv) and passed as the
+  // explicit target — the way the statusline client sends it as a hint. So
+  // an override naming an absent file is `unreadable`, never a clean verdict
+  // about a bundled default the user did not ask for.
+  it("takes $CC_CANDYBAR_CONFIG as the explicit target, not as a resolver input", () => {
     const p = write(
       "env-config.json5",
       `{ segments: { a: { template: 'env' } }, root: { h: ['a'] } }`,
     );
+    const cwd = path.join(dir, "empty-cwd");
     process.env.CC_CANDYBAR_CONFIG = p;
-    const outcome = checkConfig(undefined, path.join(dir, "empty-cwd"));
-    expect(outcome.kind).toBe("clean");
-    if (outcome.kind === "clean") expect(outcome.configPath).toBe(p);
+    // The resolver itself is blind to the variable...
+    const blind = checkConfig(undefined, cwd);
+    expect(blind.kind).toBe("clean");
+    if (blind.kind === "clean") expect(blind.configPath).toBeNull();
+    // ...the CLI edge lifts it into the target.
+    const viaEnv = checkConfig(detectConfigEnv(process.env), cwd);
+    expect(viaEnv.kind).toBe("clean");
+    if (viaEnv.kind === "clean") expect(viaEnv.configPath).toBe(p);
+    process.env.CC_CANDYBAR_CONFIG = path.join(dir, "absent.json5");
+    const absent = checkConfig(detectConfigEnv(process.env), cwd);
+    expect(absent.kind).toBe("unreadable");
   });
 
   it("surfaces the .json5/.json collision as a warning on a CLEAN exit", () => {
@@ -395,5 +410,63 @@ describe("checkPlan — the text/exit-code contract", () => {
     });
     expect(plan.code).toBe(2);
     expect(plan.stderr).toContain("gone.json5");
+  });
+});
+
+// `runCheck` is the argv edge: it owns process.exit and the streams, and it is
+// where an explicit argument and the CLI's own $CC_CANDYBAR_CONFIG meet. The
+// spies turn its exit into a thrown code so that composition is observable
+// in-process — everything below the edge is covered through checkConfig.
+describe("runCheck — the argv edge", () => {
+  class Exit {
+    constructor(readonly code: number) {}
+  }
+  function run(args: string[]): {
+    code: number;
+    stdout: string;
+    stderr: string;
+  } {
+    let stdout = "";
+    let stderr = "";
+    const out = jest
+      .spyOn(process.stdout, "write")
+      .mockImplementation((chunk) => ((stdout += String(chunk)), true));
+    const err = jest
+      .spyOn(process.stderr, "write")
+      .mockImplementation((chunk) => ((stderr += String(chunk)), true));
+    const exit = jest.spyOn(process, "exit").mockImplementation(((
+      code?: number,
+    ) => {
+      throw new Exit(code ?? 0);
+    }) as never);
+    try {
+      runCheck(args);
+    } catch (e) {
+      if (e instanceof Exit) return { code: e.code, stdout, stderr };
+      throw e;
+    } finally {
+      out.mockRestore();
+      err.mockRestore();
+      exit.mockRestore();
+    }
+    throw new Error("runCheck returned instead of exiting");
+  }
+
+  it("an explicit argument outranks $CC_CANDYBAR_CONFIG; without one the variable is the target", () => {
+    const ok = write(
+      "edge-ok.json5",
+      `{ segments: { a: { template: 'ok' } }, root: { h: ['a'] } }`,
+    );
+    const bad = write("edge-bad.json5", `{ theme: "dracula" }`);
+    process.env.CC_CANDYBAR_CONFIG = bad;
+
+    const viaArg = run([ok]);
+    expect(viaArg.code).toBe(0);
+    expect(viaArg.stdout).toContain(`✓ ${ok}: config OK`);
+
+    const viaEnv = run([]);
+    expect(viaEnv.code).toBe(1);
+    expect(viaEnv.stderr).toContain(`✗ ${bad}`);
+    expect(viaEnv.stderr).toContain('Unknown top-level key "theme"');
   });
 });
