@@ -709,7 +709,9 @@ const doctorFix: VerbHandler = (value, ctx) => {
   const facts = gatherFacts(ctx.doctor, sessionHints(ctx, sid).tmux);
   const verdict = check.probe(facts);
   if (verdict.ok || verdict.fix === undefined) {
-    throw new BadVerbArgs(`doctor-fix: ${check.label} has nothing to fix`);
+    throw new BadVerbArgs(
+      `doctor-fix: ${check.label} — ${verdict.ok ? "nothing to fix" : verdict.reason}`,
+    );
   }
   const after = applyFix(ctx.doctor, verdict.fix, facts);
   ctx.dlog(

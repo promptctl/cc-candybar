@@ -42,11 +42,12 @@ function probeTmux(hint: TmuxHint): TermFeatures {
     category: "doctor.tmux",
   });
   if (!result.ok) {
-    const detail = (result.error ?? result.stderr).trim();
-    return {
-      kind: "failed",
-      reason: `tmux display -p failed (${result.reason}${detail ? `: ${detail}` : ""})`,
-    };
+    // `error` is a whole sentence when present (rate-limited, timeout, spawn);
+    // a non-zero exit has only its stderr to say.
+    const detail =
+      result.error ??
+      [result.reason, result.stderr.trim()].filter((s) => s !== "").join(": ");
+    return { kind: "failed", reason: `tmux display -p failed (${detail})` };
   }
   return {
     kind: "ok",
