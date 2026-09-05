@@ -3,6 +3,7 @@ import path from "node:path";
 import os from "node:os";
 import { createRequire } from "node:module";
 import { launchSync } from "../proc/launch";
+import { writeAtomic } from "../utils/atomic-write";
 import { tryClickViaDaemon } from "../daemon/client";
 import type { PermanentOutcome } from "../daemon/client-transport";
 import { obtainDaemonKick } from "../daemon/acquire";
@@ -542,7 +543,7 @@ function updateClaudeSettings(
     command: buildStatusLineCommand(binPath, rendererArgs),
   };
 
-  fs.writeFileSync(target, JSON.stringify(settings, null, 2));
+  writeAtomic(target, JSON.stringify(settings, null, 2));
   process.stdout.write(`Updated ${target}\n`);
 }
 

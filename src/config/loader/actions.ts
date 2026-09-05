@@ -286,14 +286,8 @@ function doctorArm(
   raw: Record<string, unknown>,
 ): ActionDecl | null {
   const verb = raw.doctor;
-  if (verb !== "run" && verb !== "fix") {
-    issue(
-      ctx,
-      `${path}.doctor`,
-      `doctor must be "run" or "fix", got ${describeValue(verb)}`,
-    );
-    return null;
-  }
+  // Every failing key is reported before returning, like the sibling arms: a
+  // run takes no check; any other verb may carry one.
   const allowed = verb === "run" ? ["doctor"] : ["doctor", "check"];
   for (const k of Object.keys(raw)) {
     if (!allowed.includes(k))
@@ -302,6 +296,14 @@ function doctorArm(
         `${path}.${k}`,
         `Unknown key "${k}" on a doctor action. Expected only: ${allowed.join(", ")}`,
       );
+  }
+  if (verb !== "run" && verb !== "fix") {
+    issue(
+      ctx,
+      `${path}.doctor`,
+      `doctor must be "run" or "fix", got ${describeValue(verb)}`,
+    );
+    return null;
   }
   if (verb === "run") return { doctor: "run" };
   const check = raw.check;

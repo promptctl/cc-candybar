@@ -214,6 +214,17 @@ describe("☰ ▸ 🧰 tools ▸ 🩺 doctor", () => {
     rt.dispose();
   });
 
+  // [LAW:no-silent-failure] A session the daemon never rendered has no client
+  // facts; the doctor refuses loudly rather than diagnose a guessed "not in
+  // tmux".
+  test("a doctor-run click for a session that never rendered is refused", () => {
+    const rt = buildRuntime(HINT);
+    const url = `cc-candybar://${VERB_DOCTOR_RUN}/never-rendered`;
+    expect(() => rt.click(url)).toThrow(BadVerbArgs);
+    expect(() => rt.click(url)).toThrow(/never-rendered has not rendered yet/);
+    rt.dispose();
+  });
+
   // [LAW:no-silent-failure] A stale `[fix]` URL (the world moved since the
   // render that drew it) is refused loudly, never a silent second write.
   test("a second fix click is refused: nothing left to fix", () => {

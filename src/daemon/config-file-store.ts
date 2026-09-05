@@ -27,6 +27,7 @@
 
 import { BadVerbArgs } from "./verb-error";
 import fs from "node:fs";
+import { writeAtomic } from "../utils/atomic-write.js";
 import path from "node:path";
 import { RAW_DEFAULT_DSL_CONFIG } from "../config/default-dsl-config.js";
 import type {
@@ -132,19 +133,6 @@ export function readConfigText(file: string): string | null {
   }
 }
 
-// [LAW:one-source-of-truth] The one tmp+rename: a reader never sees a torn
-// file, and a rename that fails leaves no orphaned tmp behind.
-function writeAtomic(file: string, text: string, mode?: number): void {
-  const tmp = `${file}.tmp`;
-  try {
-    fs.writeFileSync(tmp, text, mode === undefined ? {} : { mode });
-    fs.renameSync(tmp, file);
-  } catch (e) {
-    fs.rmSync(tmp, { force: true });
-    throw e;
-  }
-}
-
 // [LAW:no-silent-failure] The existing file's mode survives (a hand-authored
 // file keeps whatever the user gave it) and a first-ever file takes the
 // process umask like any file the user would create. `null` text is the
@@ -162,8 +150,7 @@ function writeConfigText(
       return;
     }
     fs.mkdirSync(path.dirname(file), { recursive: true });
-    const existing = fs.statSync(file, { throwIfNoEntry: false });
-    writeAtomic(file, text, existing?.mode);
+    writeAtomic(file, text);
   } catch (e) {
     const message = `config write failed (${file}): ${(e as Error).message}`;
     logger("error", message);

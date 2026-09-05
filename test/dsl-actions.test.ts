@@ -771,6 +771,12 @@ describe("2de.12 — loader proves the ActionDecl invariants", () => {
     );
   });
 
+  test("a bad doctor verb and an unknown key are both reported in one pass", () => {
+    const source = base(`{ a: { doctor: 'reset', oops: 1 } }`);
+    expectIssue(source, /Unknown key "oops" on a doctor action/);
+    expectIssue(source, /doctor must be "run" or "fix"/);
+  });
+
   test("an unresolved `{{ action }}` reference is rejected", () => {
     expectIssue(
       base(`{ a: { set: 'k', to: 'v' } }`, '{{ action "ghost" "?" }}'),

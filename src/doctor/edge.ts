@@ -10,6 +10,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { claudeSettingsPath } from "../claude-settings.js";
 import { JSON_DIALECT, setValue } from "../config/json5-edit.js";
+import { writeAtomic } from "../utils/atomic-write.js";
 import type { ClientHints } from "../daemon/protocol.js";
 import { launchSync } from "../proc/launch.js";
 import type { TmuxHint } from "../tmux-hint.js";
@@ -146,7 +147,7 @@ export function applyFix(
         JSON_DIALECT,
       );
       fs.mkdirSync(path.dirname(edge.claudeSettingsPath), { recursive: true });
-      fs.writeFileSync(edge.claudeSettingsPath, next);
+      writeAtomic(edge.claudeSettingsPath, next);
       return { ...facts, claudeSettingsEnv: readClaudeSettingsEnv(edge) };
     }
     default: {
