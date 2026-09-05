@@ -1,0 +1,8 @@
+{
+  "globals": {
+    "palette": "replace:THEME",
+    "style": "replace:STYLE",
+    "charset": "replace:CHARSET",
+    "preset": "replace:PRESET"
+  }
+}
