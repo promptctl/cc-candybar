@@ -12,9 +12,9 @@ Tracking tickets: the epic `candybar-render-ai7` and its children. The tickets a
 
 It **selects** from the theme; it never **synthesizes** a new colour. Everything below is why that sentence is the whole design, and what had to be measured before it could be written.
 
-## What `hue.step` actually does
+## What `hue.step` did
 
-`hue.step` is a global pre-order counter over segment leaves. Leaf *i* gets `hueShift = i * 14` degrees, applied to the whole theme palette through `transposePalette`. A segment's colour is therefore a function of **how many leaves precede it anywhere in the tree** — not of what it is, not of where it sits, not of what it belongs to.
+`hue.step` was a global pre-order counter over segment leaves. Leaf *i* gets `hueShift = i * 14` degrees, applied to the whole theme palette through `transposePalette`. A segment's colour is therefore a function of **how many leaves precede it anywhere in the tree** — not of what it is, not of where it sits, not of what it belongs to.
 
 Solving the live bar's emitted RGB back to hue indices shows what that buys. Visible segments sit at indices 2, 5, 8, 11 (row 1) and 22, 25, 28, 31, 34, 37 (row 2). Nothing visible is at index 0. Adjacent visible segments are exactly 3 apart, because gated-off edit-mode chrome (the `+`/`-` affordances) is interleaved between every pair and the cursor advances over hidden leaves by design. Verification deltas were 1–7 out of 255, which is screenshot sampling noise.
 
@@ -80,7 +80,7 @@ The state boundary had to be enforced rather than assumed, because "the pure hue
 
 **A band is a plane.** Its items are distributed around their trigger's state colour, pulled toward `background`.
 
-**Depth advances the hue.** A nested disclosure takes the *next* vocabulary hue and recedes one step further (`0.42 + 0.14 * depth`, capped at 0.75). Two cues move together, which is what makes the hue wrap at depth 3 safe — the recession still separates what the hue no longer does.
+**Depth advances the hue.** A nested disclosure takes the *next* vocabulary hue and recedes one step further (`0.42 + 0.14 * depth`, capped at 0.75). Two cues move together across every depth the bar reaches: the bundled ☰ → ⚙ → picker is depth 2, and adjacent planes at depths 0→1 and 1→2 stay at least .035 ΔE apart on every theme × hue. Depth 3 is the limit. The cap leaves only .05 of recession between depths 2 and 3 while the hue has wrapped onto one already used, and 20 of the 69 theme × hue lineages fall to .016–.034. A trigger still stands off its plane there; adjacent planes do not, and nothing shipped reaches depth 3. `test/decor.test.ts` pins the covered depths and records the limit.
 
 **A trigger is drawn from what it opens, not from where it sits.** It takes the peak of its children's region. Without this, a submenu's parent is coloured as one of its siblings and nothing connects it to the thing it opened.
 
@@ -120,21 +120,21 @@ Each of these was considered and measured. They are recorded with their reasons 
 
 **Truecolor is the target.** `colorCompatibility` is an explicit setting and the daemon cannot detect client depth — which is why `"auto"` is deliberately unrepresentable. At 256 and ansi the vocabulary degrades toward flat, which is the floor the design already guarantees.
 
-**`hue.step` and its stepper knob are removed with no successor.** Nothing real was bound to it: the maintainer's live config declares only `applyTheme`, and the `hueUp`/`hueDown` pair exists solely as an illustration in CLAUDE.md.
+**`hue.step` and its stepper knob were removed with no successor** (ai7.4). Nothing real was bound to it: the maintainer's live config declared only `applyTheme`, and the `hueUp`/`hueDown` pair existed solely as an illustration in CLAUDE.md, which went with it.
 
 **The distribution is authorable per instance, defaulting to van der Corput.** All five values ship: van der Corput, golden angle, monotonic, ends-interleaved, uniform. This is one type with five instances, not five code paths — the distribution is a value the instance carries, so adding one is data, not structure. The cost of choosing an `n`-reading value is isolation, and it is the author's to spend; see "One distribution field, at every level".
 
-## What gets deleted
+## What was deleted
 
-- `HUE_STEP_VAR` (`src/config/dsl-types.ts`).
-- `nextHueShift` and the hue cursor (`src/dsl/render.ts:697-707`).
-- The advance-before-the-visibility-gate contract (`src/dsl/node-registry.ts:262`) and its three separate explanations in `render.ts`, `settings-menu.ts` and `edit-chrome.ts`.
-- `focusTint` (`src/dsl/render.ts:545-559`).
-- Decorative role-picking in the bundled default — segments naming `panel` or `surface-active` purely so they look different from a neighbour.
+- `HUE_STEP_VAR` and the `hue.step` variable (ai7.4).
+- `nextHueShift` and the hue cursor in the render walk (ai7.4).
+- The advance-before-the-visibility-gate contract and its three separate explanations in `render.ts`, `settings-menu.ts` and `edit-chrome.ts` (ai7.4).
+- `focusTint` (ai7.3).
+- Decorative role-picking in the bundled default — segments naming `panel` or `surface-active` purely so they look different from a neighbour (ai7.5).
 
-The change is expected to be net-subtractive. If it isn't, the design is wrong.
+The change was expected to be net-subtractive, with the design counted wrong if it wasn't. It was not net-subtractive: the five PRs added 817 lines to `src/` and removed 324. What went was a counter; what arrived carries the state floor and the band model, neither of which the counter had, and both of which the measurements above demanded. The design stands on those measurements, not on the line count.
 
-**CLAUDE.md's claim that "`hue.step` is not load-bearing" is wrong twice over.** It *is* load-bearing: `edit-chrome.ts` and `settings-menu.ts` both carry pre-order arithmetic in their comments for no purpose other than reasoning about the hue cursor. And the replacement direction it states — authoring `bg: '{{ shiftHue (color "surface") 14 }}'` per segment — is exactly the hand-curation this design rules out. Both sentences go with the mechanism.
+**CLAUDE.md's claim that "`hue.step` is not load-bearing" was wrong twice over.** It *was* load-bearing: `edit-chrome.ts` and `settings-menu.ts` both carried pre-order arithmetic in their comments for no purpose other than reasoning about the hue cursor. And the replacement direction it stated — authoring `bg: '{{ shiftHue (color "surface") 14 }}'` per segment — was exactly the hand-curation this design rules out. Both sentences went with the mechanism.
 
 ## The demo
 

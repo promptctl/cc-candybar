@@ -328,9 +328,11 @@ export interface Disclosure {
 /**
  * How far a band's plane recedes from its state colour toward `background`:
  * `base + perDepth × depth`, capped. Two cues move with depth — the hue
- * advances and the plane recedes — which is what keeps depth 3 (where the hue
- * wraps) apart from depth 0: the recession still separates what the hue no
- * longer does.
+ * advances and the plane recedes. The cap is the limit: between depths 2 and
+ * 3 only 0.05 of recession remains while `hueAtDepth` has wrapped onto a hue
+ * already used, so adjacent planes are guaranteed apart only through depth 2
+ * (the bundled ☰ → ⚙ → picker). A trigger still stands off its plane at
+ * depth 3; `test/decor.test.ts` pins the covered depths.
  */
 export const BAND_RECESSION = {
   base: 0.42,
