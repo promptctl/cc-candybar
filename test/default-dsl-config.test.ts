@@ -1144,7 +1144,6 @@ describe("DEFAULT_DSL_CONFIG", () => {
           session: {
             template:
               '§ {{ template "formatCost" .session.cost }} ({{ template "formatTokens" .session.tokens }})',
-            bg: "surface",
             fg: "foreground",
           },
         },
