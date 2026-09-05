@@ -19,9 +19,9 @@ You are running an interactive setup wizard to configure the cc-candybar statusl
 - One question per step. Wait for the user's answer before moving on. Do not skip or combine steps.
 - Track the user's choices as four variables: `charset`, `theme`, `style`, `preset`. Every later command and the final config are built from exactly those four.
 - Do NOT use the Agent tool or Explore subagents. Everything you need is in this document.
-- Do NOT read source code from the cc-candybar package. The preview script and the `check` command are the only things you run against it.
+- Do NOT read source code from the cc-candybar package. Run only the subcommands this document names (`install`, `check`) and the plugin's preview script against it.
 - IMPORTANT: After running any Bash or Read tool, repeat the key output as text in your response. Some users have a collapsed UI mode where tool outputs need a click to expand. Relay versions, option names, file paths, and command results in your text so the user sees them without expanding.
-- Two things this wizard never does, however natural they feel in the moment: it never edits `~/.claude/settings.json` by hand (Step 6's installer writes that entry), and it never carries its own list of theme names (Step 3's preview output is the list).
+- Two things this wizard never does, however natural they feel in the moment: it never edits `~/.claude/settings.json` by hand (Step 9's installer writes that entry), and it never carries its own list of theme names (Step 3's preview output is the list).
 
 ## Step 1: Check Node.js
 
@@ -164,15 +164,7 @@ Then ask:
   - "compact" -> Set `preset=compact`
   - "verbose" -> Set `preset=verbose`
 
-## Step 6: Install the runtime
-
-```bash
-npx -y @promptctl/cc-candybar@latest install
-```
-
-This stages the runtime and writes the `statusLine` entry into `~/.claude/settings.json` itself. Relay the command's output in your text. If it exits non-zero, show the error and stop; do not open settings.json to finish the job by hand.
-
-## Step 7: Existing config
+## Step 6: Existing config
 
 The config file is `~/.config/cc-candybar/config.json5`. A `config.json` beside it at the same location is a collision the bar warns about, so check for both:
 
@@ -181,16 +173,22 @@ test -f ~/.config/cc-candybar/config.json5 && echo "json5_exists" || echo "json5
 test -f ~/.config/cc-candybar/config.json && echo "json_exists" || echo "json_not_found"
 ```
 
-If neither exists, continue to Step 8. If either exists, name the file(s) found and ask:
+If neither exists, continue to Step 7. If either exists, name the file(s) found and ask:
 
 - **Question**: "Found an existing cc-candybar config. What should I do?"
 - **Header**: "Existing Config"
 - **Options**:
-  - "Replace it" -> If `config.json` exists, run `mv ~/.config/cc-candybar/config.json ~/.config/cc-candybar/config.json.bak` so it cannot shadow the new file. Continue to Step 8 (which overwrites `config.json5`).
-  - "Back it up first" -> Run `cp ~/.config/cc-candybar/config.json5 ~/.config/cc-candybar/config.json5.bak` if `config.json5` exists, and `cp ~/.config/cc-candybar/config.json ~/.config/cc-candybar/config.json.bak` if `config.json` exists. Then proceed exactly as "Replace it".
+  - "Replace it" -> If `config.json` exists, run `mv ~/.config/cc-candybar/config.json ~/.config/cc-candybar/config.json.bak.${stamp}` so it cannot shadow the new file. Continue to Step 7 (which overwrites `config.json5`).
+  - "Back it up first" -> Run `cp ~/.config/cc-candybar/config.json5 ~/.config/cc-candybar/config.json5.bak.${stamp}` if `config.json5` exists. Then proceed exactly as "Replace it".
   - "Keep it and exit" -> Tell the user nothing was changed and stop.
 
-## Step 8: Write the config
+Every backup name carries `${stamp}`, so a later wizard run never overwrites an earlier backup. Compute it as the first line of the same Bash call as the `cp`/`mv` (shell variables do not survive between calls), and name the backup path(s) in your text afterwards:
+
+```bash
+stamp=$(date -u +%Y%m%dT%H%M%SZ)
+```
+
+## Step 7: Write the config
 
 1. Read the template with the Read tool:
 
@@ -209,7 +207,7 @@ If neither exists, continue to Step 8. If either exists, name the file(s) found 
 
 3. Write the result to `~/.config/cc-candybar/config.json5` with the Write tool (create the directory if needed). Do NOT read or merge with any existing config; the file is replaced whole.
 
-## Step 9: Verify
+## Step 8: Verify
 
 Check that the written config loads:
 
@@ -217,9 +215,27 @@ Check that the written config loads:
 npx -y @promptctl/cc-candybar@latest check ~/.config/cc-candybar/config.json5
 ```
 
-Exit 0 and a `✓` line mean the config loads. A `✗` block names the problem: show it to the user verbatim and stop. Do not continue to the preview or the success message, and do not claim the setup worked.
+Exit 0 and a `✓` line mean the config loads. A `✗` block names the problem: show it to the user verbatim and stop. Do not continue to the installer, the preview or the success message, and do not claim the setup worked.
 
-If the check passed, render the user's bar:
+## Step 9: Install the runtime
+
+```bash
+npx -y @promptctl/cc-candybar@latest install
+```
+
+This stages the runtime and writes the `statusLine` entry into `~/.claude/settings.json` itself. Relay the command's output in your text. If it exits non-zero, show the error and stop; do not open settings.json to finish the job by hand.
+
+Exit 0 has two outcomes, told apart by the output:
+
+- A line beginning `Updated ` followed by the settings path: settings.json was written. Continue to Step 10.
+- `Skipping settings.json update: existing statusLine.command appears customized.` followed by a `Current:` line: the installer found a statusLine command it did not write and left it alone. Relay the `Current:` command in your text, then ask:
+  - **Question**: "Your settings.json already has a statusLine command. Replace it with cc-candybar?"
+  - **Header**: "statusLine"
+  - **Options**:
+    - "Replace it with cc-candybar" -> Run `npx -y @promptctl/cc-candybar@latest install --force`, relay its output, and continue to Step 10.
+    - "Keep my existing statusLine" -> Continue to Step 10; the success message says the bar is not wired up.
+
+## Step 10: Preview
 
 > [!IMPORTANT]
 > You cannot render ANSI escape codes or nerd font glyphs in your text output.
@@ -232,9 +248,9 @@ ${CLAUDE_PLUGIN_ROOT}/bin/preview.sh --theme=${theme} --style=${style} --charset
 
 Tell the user: "Your statusline is in the bash output above. Expand it if needed."
 
-## Step 10: Success message
+## Step 11: Success message
 
-Display:
+Display the message below. The `~/.claude/settings.json` line under **Files written** belongs there only if Step 9 printed `Updated `. If the user kept their existing statusLine, drop that line and make item 1 of **What now**: "Your existing statusLine was left in place, so the bar will not appear until `statusLine.command` in `~/.claude/settings.json` points at cc-candybar. Rerun `/candybar` and choose Replace to have the installer do it."
 
 ````markdown
 Setup complete.
