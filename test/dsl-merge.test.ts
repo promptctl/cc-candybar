@@ -9,8 +9,9 @@ import {
   validateConfig,
   ConfigError,
 } from "../src/config/dsl-loader";
-import { rootOf } from "../src/config/root";
+import { rootNode, rootOf } from "../src/config/root";
 import type {
+  ContainerNode,
   DslConfig,
   LayoutNode,
   RawDslConfig,
@@ -117,6 +118,37 @@ describe("mergeWithDefault", () => {
     });
   });
 
+  test("root: a tree's `distribution` lifts to the bar — it places the rows", () => {
+    const raw: RawDslConfig = {
+      root: { ...vert(["a"]), distribution: "monotonic" },
+    };
+    expect(mergeWithDefault(raw, DFLT).root).toEqual({
+      rows: { "#1": hrow("a") },
+      distribution: "monotonic",
+    });
+  });
+
+  test("root: a single-row tree keeps its `distribution` on the row it places", () => {
+    const row: ContainerNode = {
+      ...(hrow("a", "b") as ContainerNode),
+      distribution: "monotonic",
+    };
+    expect(mergeWithDefault({ root: row }, DFLT).root).toEqual({
+      rows: { "#1": row },
+    });
+  });
+
+  test("root: rootNode inverts rootOf for a vertical tree, own fields included", () => {
+    const tree: ContainerNode = {
+      kind: "container",
+      direction: "vertical",
+      children: [hrow("a"), hrow("b")],
+      when: "{{ .x }}",
+      distribution: "golden-angle",
+    };
+    expect(rootNode(rootOf(tree))).toEqual(tree);
+  });
+
   test("rows: replace one row by name, in place — the other inherited", () => {
     const raw: RawDslConfig = { root: { rows: { main: hrow("b", "a") } } };
     expect(mergeWithDefault(raw, DFLT).root).toEqual({
@@ -145,6 +177,14 @@ describe("mergeWithDefault", () => {
     expect(mergeWithDefault(raw, DFLT).root).toEqual({
       ...DFLT.root,
       when: "{{ .x }}",
+    });
+  });
+
+  test("rows: `distribution` is carried like a globals field", () => {
+    const raw: RawDslConfig = { root: { rows: {}, distribution: "monotonic" } };
+    expect(mergeWithDefault(raw, DFLT).root).toEqual({
+      ...DFLT.root,
+      distribution: "monotonic",
     });
   });
 

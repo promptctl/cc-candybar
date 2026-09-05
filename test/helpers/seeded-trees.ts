@@ -6,7 +6,7 @@
 // [LAW:effects-at-boundaries] No ambient randomness: every generator takes the
 // rng it draws from.
 
-import type { Address } from "../../src/themes/decor";
+import type { Address, Distribution } from "../../src/themes/decor";
 
 /** A deterministic PRNG (mulberry32) — uniform in [0, 1). */
 export type Rng = () => number;
@@ -57,13 +57,22 @@ export function drawShape(rng: Rng, bounds: ShapeBounds, depth = 0): Shape {
   };
 }
 
-/** Every node's path with its address (index, sibling count) pairs, pre-order. */
-export function allNodes(shape: Shape): readonly { path: Path; address: Address }[] {
+/**
+ * Every node's path with its address, pre-order — every level placed by the
+ * one `distribution` (a shape carries no placer field; the test chooses it).
+ */
+export function allNodes(
+  shape: Shape,
+  distribution: Distribution,
+): readonly { path: Path; address: Address }[] {
   const out: { path: Path; address: Address }[] = [];
   const walk = (node: Shape, path: Path, address: Address): void => {
     out.push({ path, address });
     node.children.forEach((child, index) =>
-      walk(child, [...path, index], [...address, { index, count: node.children.length }]),
+      walk(child, [...path, index], [
+        ...address,
+        { index, count: node.children.length, distribution },
+      ]),
     );
   };
   walk(shape, [], []);

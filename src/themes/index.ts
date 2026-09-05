@@ -25,7 +25,9 @@ export {
   DECOR_AMTS,
   DECOR_VOCABULARY,
   DISTRIBUTIONS,
+  DISTRIBUTION_NAMES,
   DEFAULT_DISTRIBUTION,
+  placedBy,
   vocabularySelect,
   decorEntryFor,
   paletteRole,
@@ -39,6 +41,7 @@ export type {
   SemanticRole,
   Distribution,
   DistributionName,
+  Position,
   AddressStep,
   Address,
 } from "./decor.js";

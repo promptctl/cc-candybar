@@ -25,6 +25,7 @@ import type {
   ColorCompatibility,
   StripStyle,
 } from "../themes/policy.js";
+import type { DistributionName } from "../themes/decor.js";
 
 // [LAW:types-are-the-program] Three stages, three names.
 //
@@ -92,6 +93,14 @@ export interface ContainerNode {
   // A container's `when` gates the whole subtree: a hidden container emits no
   // lines.
   readonly when?: string;
+  // How this container PLACES its children when their decorative colour is
+  // selected from the theme's vocabulary (src/themes/decor.ts): the name of one
+  // of the five shipped distributions. Absent ≡ `van-der-corput`, resolved once
+  // at compile (`placedBy`). Per instance, not global: a `{{ menu }}`'s band is
+  // the other kind of placer and carries the SAME field in its options dict.
+  // Choosing `monotonic` / `ends-interleaved` reads the sibling count, so adding
+  // a child re-spaces its siblings — a trade the author spends knowingly.
+  readonly distribution?: DistributionName;
 }
 
 export type LayoutNode = ContainerNode | SegmentNode;
@@ -108,10 +117,18 @@ export type LayoutNode = ContainerNode | SegmentNode;
 // what keeps JS property order equal to authoring order under that spread —
 // and a whole-tree fragment lowers to positional rows named `#1`, `#2`, …
 // (unauthorable by the identifier rule, so they can never shadow a user's).
-// `when` gates the whole bar, carried up from a tree's top node.
-export interface Root {
+// The root IS the vertical container its rows stack into, so it carries every
+// field a container owns besides the children it places — `when` gates the
+// whole bar, `distribution` places the rows — by derivation, not by listing: a
+// field added to ContainerNode reaches the root, its lowering (`rootOf`), its
+// projection (`rootNode`), and the rows-fragment schema (RecordSchema<Root>
+// fails to typecheck until it lists the field) without a second edit.
+export type ContainerOwn = Omit<
+  ContainerNode,
+  "kind" | "direction" | "children"
+>;
+export interface Root extends ContainerOwn {
   readonly rows: Readonly<Record<string, LayoutNode>>;
-  readonly when?: string;
 }
 
 // [LAW:types-are-the-program] What a file or a preset AUTHORS at `root`: a

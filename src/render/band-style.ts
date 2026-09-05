@@ -6,13 +6,7 @@
 
 import { ColorSpec, Style } from "@promptctl/rich-js";
 import type { ColorRgba, Palette } from "@promptctl/rich-js";
-import {
-  bandItemFor,
-  DEFAULT_DISTRIBUTION,
-  DISTRIBUTIONS,
-  textOn,
-  type AddressStep,
-} from "../themes/decor.js";
+import { bandItemFor, textOn, type AddressStep } from "../themes/decor.js";
 import type { ActiveSegment } from "./active-segment.js";
 
 /**
@@ -32,17 +26,12 @@ export function stateCell(palette: Palette, background: ColorRgba): Style {
 
 /**
  * The Style of item `step` in the band the active segment opens. The band is
- * an instance, so its placement is the instance's distribution — the bundled
- * default until candybar-render-ai7.8 makes it an authored field.
+ * an instance, so the step arrives placed by the instance's own distribution —
+ * the `{{ menu }}`'s authored `distribution` option, or the default.
  */
 export function bandItemStyle(active: ActiveSegment, step: AddressStep): Style {
   return stateCell(
     active.palette,
-    bandItemFor(
-      active.palette,
-      active.disclosure,
-      step,
-      DISTRIBUTIONS[DEFAULT_DISTRIBUTION],
-    ),
+    bandItemFor(active.palette, active.disclosure, step),
   );
 }

@@ -207,29 +207,27 @@ function authoredLayout(node: LayoutNode): unknown {
       : { seg: node.name, when: node.when };
   }
   if (node.kind === "container") {
+    const { kind, direction, children, ...own } = node;
     return {
-      [node.direction === "horizontal" ? "h" : "v"]:
-        node.children.map(authoredLayout),
-      ...(node.when !== undefined && { when: node.when }),
+      [direction === "horizontal" ? "h" : "v"]: children.map(authoredLayout),
+      ...own,
     };
   }
   return node;
 }
 
 // A root fragment as authored: a `{ rows }` map spells each row, a tree
-// spells itself.
-function authoredFragment(fragment: RootFragment): unknown {
-  return isRowsFragment(fragment)
-    ? {
-        rows: Object.fromEntries(
-          Object.entries(fragment.rows).map(([name, row]) => [
-            name,
-            authoredLayout(row),
-          ]),
-        ),
-        ...(fragment.when !== undefined && { when: fragment.when }),
-      }
-    : authoredLayout(fragment);
+// spells itself. Lossless: the loader reads the spelling back to the same
+// canonical fragment, own fields included (pinned in test/dsl-layout-edit).
+export function authoredFragment(fragment: RootFragment): unknown {
+  if (!isRowsFragment(fragment)) return authoredLayout(fragment);
+  const { rows, ...own } = fragment;
+  return {
+    rows: Object.fromEntries(
+      Object.entries(rows).map(([name, row]) => [name, authoredLayout(row)]),
+    ),
+    ...own,
+  };
 }
 
 function authoredPreset(decl: PresetDecl): unknown {

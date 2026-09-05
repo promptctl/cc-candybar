@@ -1195,6 +1195,7 @@ Rare knobs travel as **one trailing `(dict …)`** — note Go template syntax:
 | `closeOnPick` | bool | `false` | picking an option also closes the menu (default: stay open to try options in a row) |
 | `paged` | bool | `true` | paginate the body to the terminal width with ←/→ (a short domain shows one page, no arrows); `false` wraps instead |
 | `key` | string | omitted | accordion grouping: menus sharing a key are mutually exclusive — opening one closes the others. Omitted = independent |
+| `distribution` | string | `"van-der-corput"` | how the dropped band places its options' tints — one of the five names in the `distribution` section below. The same field a `{ h }`/`{ v }` row carries; a menu is a placer too |
 
 Two menus in an accordion (one open at a time), the style pick closing its
 menu:
@@ -1287,7 +1288,7 @@ Unknown look key "saturation". Expected one of: hueShift, chromaScale, lightness
 A group collapses an arbitrary layout subtree behind a synthesized ▸/▾ toggle
 segment. Declared inline in `root`:
 
-`{ kind: "group", name, label, children, open?, direction?, key?, bg?, fg?, when? }`
+`{ kind: "group", name, label, children, open?, direction?, key?, bg?, fg?, when?, distribution? }`
 
 - `name` — an identifier (letters/digits/`_`, not starting with a digit, never
   `"closed"`); it names the synthesized `groups.*` artifacts.
@@ -1300,6 +1301,9 @@ segment. Declared inline in `root`:
   parent hides its children; child open-state persists invisibly).
 - `open: true` — initially open; at most one group per shared key.
 - `direction` — how the body container stacks (`vertical` default).
+- `distribution` — how the body container places its children's tints; it is
+  the body's field, not the toggle's (the same field a `{ h }`/`{ v }` row
+  carries — see `distribution` below).
 
 The accordion drawer:
 
@@ -1322,6 +1326,70 @@ The accordion drawer:
 The `groups.` and `menus.` namespaces are **reserved** in all three sections
 (variables, actions, segments) — synthesis owns them unconditionally, whether
 or not any group/menu exists in your config.
+
+## `distribution` — how a placer spreads its cells' tints
+
+A segment with no `bg:` wears a tint selected from the theme's vocabulary by
+its position among its siblings (the convention stated above every example).
+`distribution` is the one field that says *how* a placer spreads those
+positions across the vocabulary. There are two kinds of placer and one field:
+
+- a **container** — `{ h: [...], distribution: "…" }`, `{ v: [...] }`,
+  `{ kind: "container", … }`, or a `{ kind: "group", … }`, where it places the
+  group's **body** (the container its children sit in). The top-level `root`
+  is one: as a whole tree, `root: { v: [...], distribution: "…" }` places its
+  rows; as a `{ rows: { … }, distribution: "…" }` fragment it carries the
+  field per field like `when` — absent, the base root's placement stays;
+  alone over `rows: {}`, it re-places the rows a preset inherits;
+- a **`{{ menu }}`** — `(dict "distribution" "…")` in its options dict, placing
+  the options of the band it drops.
+
+Omit it and the placer uses `van-der-corput`. It is per instance: a row with
+`monotonic` recolours only its own cells; every other row and every menu keeps
+its own placement.
+
+| name | reads the sibling count? | what you get |
+|---|---|---|
+| `van-der-corput` (default) | no | bit-reversal sequence 0, ½, ¼, ¾, ⅛, … — neighbours land far apart |
+| `golden-angle` | no | index × φ mod 1 — the same isolation, a different spread |
+| `uniform` | no | every child at ½ — one tint for the whole row |
+| `monotonic` | yes | an evenly spaced ramp in declaration order |
+| `ends-interleaved` | yes | evenly spaced, alternating from both ends inward |
+
+Isolation is a property of the distribution you chose, not of the system.
+A count-free distribution gives it for free: declaring another child or
+deleting one recolours nobody. `monotonic` and `ends-interleaved` read the
+count, so declaring one more child re-spaces its siblings — you spend that
+isolation to buy an ordered ramp. That is a fair trade wherever the set is
+closed, and a menu's option domain is exactly that: the count *is* the set,
+nothing is ever added behind its back. A `when`-hidden child still counts under
+every distribution (every child is walked), so a predicate flipping re-spaces
+nothing.
+
+The field on both placers — a row keeping isolation under a different spread,
+a menu ramping its closed domain:
+
+```json5 check:pass
+{
+  actions: {
+    applyTheme: { set: "theme", from: "themes" },
+  },
+  segments: {
+    themeControl: {
+      template: '🎨 {{ .theme.effective }} {{ menu "applyTheme" "▸" "▾" (dict "distribution" "monotonic") }}',
+      fg: "foreground",
+    },
+  },
+  root: { v: [
+    { h: ["directory", "model"] },
+    { h: ["context", "cacheTimer", "block", "weekly"], distribution: "golden-angle" },
+    "themeControl",
+  ] },
+}
+```
+
+An unknown name is a load error listing the five (see "An unknown distribution
+name" below).
 
 ## `(?)` — instructions where they are needed
 
@@ -1412,7 +1480,25 @@ with defaults:
 ```
 
 ```error
-unknown {{ menu }} option "closeonpick" — the options dict takes "closeOnPick" (bool, default false), "paged" (bool, default true), "key" (string, accordion grouping)
+unknown {{ menu }} option "closeonpick" — the options dict takes "closeOnPick" (bool, default false), "paged" (bool, default true), "key" (string, accordion grouping), "distribution" (one of "van-der-corput", "golden-angle", "ends-interleaved", "monotonic", "uniform"; default "van-der-corput")
+```
+
+### An unknown distribution name
+
+The field validates against the five names; the error lists them in the order
+it always lists them. A `{{ menu }}`'s `(dict "distribution" "spiral")` fails
+with the same list, prefixed `{{ menu }} option "distribution"`:
+
+```json5 check:fail
+{
+  root: { v: [
+    { h: ["directory", "model"], distribution: "spiral" },
+  ] },
+}
+```
+
+```error
+root.v[0].distribution must be one of: van-der-corput, golden-angle, ends-interleaved, monotonic, uniform; got "spiral"
 ```
 
 ### Commas inside `(dict …)`

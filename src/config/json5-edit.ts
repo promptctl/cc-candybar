@@ -577,13 +577,19 @@ export function rowEntriesOf(node: Node): readonly Entry[] | null {
 
 /**
  * Whether a root fragment restages anything — false exactly for the merge's
- * identity, an ungated empty rows map — root.ts's `restages` read off the
- * document, so the file store and the loader classify one fragment alike.
+ * identity, an empty rows map carrying no own field — root.ts's `restages`
+ * read off the document, so the file store and the loader classify one
+ * fragment alike: a tree restages, and so does any entry beside `rows`,
+ * exactly as any own field beside `rows` does there. [LAW:one-source-of-truth]
+ * the two are one predicate on two substrates; change them together.
  */
 export function restagesFragment(node: Node): boolean {
+  if (node.kind !== "object") return true;
   const rows = rowEntriesOf(node);
   return (
-    rows === null || rows.length > 0 || entryOf(node, "when") !== undefined
+    rows === null ||
+    rows.length > 0 ||
+    node.entries.some((entry) => entry.key !== "rows")
   );
 }
 
