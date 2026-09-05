@@ -750,6 +750,33 @@ describe("2de.12 — loader proves the ActionDecl invariants", () => {
     );
   });
 
+  test("a doctor action's verb is run or fix", () => {
+    expectIssue(
+      base(`{ a: { doctor: 'reset' } }`),
+      /doctor must be "run" or "fix"/,
+    );
+  });
+
+  test("a doctor fix names a declared check", () => {
+    expectIssue(
+      base(`{ a: { doctor: 'fix', check: 'ghost' } }`),
+      /doctor fix must name a check \(have: tmuxTruecolor\)/,
+    );
+  });
+
+  test("an unknown key on a doctor action is rejected", () => {
+    expectIssue(
+      base(`{ a: { doctor: 'run', oops: 1 } }`),
+      /Unknown key "oops" on a doctor action/,
+    );
+  });
+
+  test("a bad doctor verb and an unknown key are both reported in one pass", () => {
+    const source = base(`{ a: { doctor: 'reset', oops: 1 } }`);
+    expectIssue(source, /Unknown key "oops" on a doctor action/);
+    expectIssue(source, /doctor must be "run" or "fix"/);
+  });
+
   test("an unresolved `{{ action }}` reference is rejected", () => {
     expectIssue(
       base(`{ a: { set: 'k', to: 'v' } }`, '{{ action "ghost" "?" }}'),

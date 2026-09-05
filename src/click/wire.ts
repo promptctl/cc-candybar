@@ -102,6 +102,16 @@ export const VERB_REDO = "redo";
 // ever reaches a shell.
 export const VERB_APPLY_UPDATE = "apply-update";
 
+// [LAW:effects-at-boundaries] The doctor (brandon-doctor-b6a). `doctor-run`
+// args: `[sessionId]` — runs every check over the session's RECORDED client
+// hints and writes the report into that session's state. `doctor-fix` args:
+// `[sessionId, checkName]` — re-probes that one check and performs the fix its
+// verdict carries, then re-runs. The check name is gated by membership in
+// `CHECKS` (src/doctor/checks.ts); no command, path, or value ever rides the
+// URL — the fix is whatever the check's own verdict describes.
+export const VERB_DOCTOR_RUN = "doctor-run";
+export const VERB_DOCTOR_FIX = "doctor-fix";
+
 // [LAW:types-are-the-program] An effect to EMIT: a verb plus its raw (unencoded)
 // positional args. The wire owns all encoding — callers never percent-encode.
 // set-state's args are `[sessionId, key, value, …]`; copy/open carry one arg.

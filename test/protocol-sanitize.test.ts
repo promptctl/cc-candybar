@@ -7,6 +7,7 @@ import {
   parseClientHints,
   sanitizeSsh,
   sanitizeTermExtent,
+  sanitizeTmux,
 } from "../src/daemon/protocol";
 
 describe("sanitizeTermExtent (wire trust boundary)", () => {
@@ -70,6 +71,45 @@ describe("sanitizeSsh (wire trust boundary)", () => {
   );
 });
 
+// [LAW:behavior-not-structure] The tmux hint's THREE-STATE wire semantics:
+// `null` is the client's affirmative "not in tmux", an object is the facts,
+// and anything else is "no answer" — never "not in tmux", because collapsing
+// them is how a client too old to report would read as a healthy setup.
+describe("sanitizeTmux (wire trust boundary)", () => {
+  const HINT = { socket: "/tmp/tmux-501/default", pane: "%3", truecolor: null };
+
+  test("null passes through as null (reported: not in tmux)", () => {
+    expect(sanitizeTmux(null)).toBeNull();
+  });
+
+  test("a well-formed hint passes through with exactly its three fields", () => {
+    expect(sanitizeTmux(HINT)).toEqual(HINT);
+    expect(sanitizeTmux({ ...HINT, truecolor: "1" })).toEqual({
+      ...HINT,
+      truecolor: "1",
+    });
+    expect(sanitizeTmux({ ...HINT, extra: true })).toEqual(HINT);
+  });
+
+  test.each([
+    undefined,
+    "in-tmux",
+    1,
+    true,
+    [],
+    {},
+    { socket: "/s" },
+    { socket: "", pane: "%1", truecolor: null },
+    { socket: "/s", pane: "", truecolor: null },
+    { socket: 1, pane: "%1", truecolor: null },
+    { socket: "/s", pane: "%1" },
+    { socket: "/s", pane: "%1", truecolor: "" },
+    { socket: "/s", pane: "%1", truecolor: 1 },
+  ])("maps a malformed or absent hint %p to undefined, never to null", (input) => {
+    expect(sanitizeTmux(input)).toBeUndefined();
+  });
+});
+
 describe("parseClientHints (the one wire checkpoint)", () => {
   const req = (extra: Record<string, unknown>) =>
     ({
@@ -114,6 +154,17 @@ describe("parseClientHints (the one wire checkpoint)", () => {
     const hints = parseClientHints(req({ termCols: 80 }));
     expect("ssh" in hints).toBe(false);
     expect(hints.termCols).toBe(80);
+  });
+
+  test("tmux:null (not in tmux) is carried, and is NOT absence", () => {
+    const hints = parseClientHints(req({ termCols: 80, tmux: null }));
+    expect(hints.tmux).toBeNull();
+    expect("tmux" in hints).toBe(true);
+  });
+
+  test("an absent or malformed tmux hint is omitted, not nulled", () => {
+    expect("tmux" in parseClientHints(req({ termCols: 80 }))).toBe(false);
+    expect("tmux" in parseClientHints(req({ tmux: "yes" }))).toBe(false);
   });
 
   test("each hint fails independently — a junk width does not lose a good ssh", () => {

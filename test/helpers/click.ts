@@ -16,6 +16,7 @@ import {
   VERB_STEP_CONFIG,
   VERB_STEP_STATE,
   VERB_UNDO,
+  VERB_DOCTOR_FIX,
 } from "../../src/click/wire";
 import { VERBS } from "../../src/daemon/verbs";
 import type { VerbContext } from "../../src/daemon/verbs";
@@ -31,6 +32,14 @@ export function testVerbContext(sessionState: SessionStateRW): VerbContext {
     dlog: () => {},
     applyUpdate: () => {
       throw new Error("apply-update: no update watch in this test");
+    },
+    // Same posture for the doctor's edge: a test that drives a doctor click
+    // hands in its own fake edge; reaching this one is a test bug.
+    doctor: {
+      probeTmux: () => {
+        throw new Error("doctor: no tmux edge in this test");
+      },
+      claudeSettingsPath: "/nonexistent/settings.json",
     },
   };
 }
@@ -55,6 +64,7 @@ const MULTI_ARG_VERBS = new Set<string>([
   VERB_UNDO,
   VERB_REDO,
   VERB_APPLY_LAYOUT_OP,
+  VERB_DOCTOR_FIX,
 ]);
 function decodeArgs(verb: string, value: string): string[] {
   return MULTI_ARG_VERBS.has(verb)

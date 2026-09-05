@@ -47,6 +47,8 @@ import {
   VERB_STEP_CONFIG,
   VERB_STEP_STATE,
   VERB_UNDO,
+  VERB_DOCTOR_RUN,
+  VERB_DOCTOR_FIX,
   type Effect,
 } from "../click/wire.js";
 
@@ -173,6 +175,11 @@ export type CompiledActionDecl =
   // what decides which entry moves.
   | { readonly kind: "undo" }
   | { readonly kind: "redo" }
+  // [LAW:effects-at-boundaries] The doctor's two triggers (brandon-doctor-b6a):
+  // the check name is compiled in from the declaration (already gated against
+  // CHECKS at load), so the click carries only what the config declared.
+  | { readonly kind: "doctor-run" }
+  | { readonly kind: "doctor-fix"; readonly check: string }
   // [LAW:dataflow-not-control-flow] candybar-settings-ui-aok.3's ONE control
   // per setting. Both destinations are compiled here as the ordinary
   // single-destination shapes they are, and `selector` names the session key
@@ -419,6 +426,11 @@ function compileAction(
   }
   if ("reset" in action) {
     return { kind: "reset", key: action.reset };
+  }
+  if ("doctor" in action) {
+    return action.doctor === "run"
+      ? { kind: "doctor-run" }
+      : { kind: "doctor-fix", check: action.check };
   }
   return "undo" in action ? { kind: "undo" } : { kind: "redo" };
 }
@@ -701,6 +713,18 @@ export function realize(
     case "redo":
       return {
         effects: [{ verb: VERB_REDO, args: [sessionId] }],
+        active: false,
+      };
+    // Never "active": running the doctor and applying a fix are one-shot
+    // triggers; the report they produce is state the ROW segments read.
+    case "doctor-run":
+      return {
+        effects: [{ verb: VERB_DOCTOR_RUN, args: [sessionId] }],
+        active: false,
+      };
+    case "doctor-fix":
+      return {
+        effects: [{ verb: VERB_DOCTOR_FIX, args: [sessionId, c.check] }],
         active: false,
       };
     // [LAW:one-source-of-truth] The op is fixed at compile time (see
