@@ -219,17 +219,14 @@ function authoredLayout(node: LayoutNode): unknown {
 // A root fragment as authored: a `{ rows }` map spells each row, a tree
 // spells itself.
 function authoredFragment(fragment: RootFragment): unknown {
-  return isRowsFragment(fragment)
-    ? {
-        rows: Object.fromEntries(
-          Object.entries(fragment.rows).map(([name, row]) => [
-            name,
-            authoredLayout(row),
-          ]),
-        ),
-        ...(fragment.when !== undefined && { when: fragment.when }),
-      }
-    : authoredLayout(fragment);
+  if (!isRowsFragment(fragment)) return authoredLayout(fragment);
+  const { rows, ...own } = fragment;
+  return {
+    rows: Object.fromEntries(
+      Object.entries(rows).map(([name, row]) => [name, authoredLayout(row)]),
+    ),
+    ...own,
+  };
 }
 
 function authoredPreset(decl: PresetDecl): unknown {

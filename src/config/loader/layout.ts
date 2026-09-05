@@ -455,7 +455,11 @@ function rowsSpec(): FieldSpec<Root["rows"]> {
 
 const ROWS_SCHEMA: RecordSchema<Root> = {
   noun: "root key",
-  fields: { rows: rowsSpec(), when: optionalStringSpec() },
+  fields: {
+    rows: rowsSpec(),
+    when: optionalStringSpec(),
+    distribution: distributionSpec(),
+  },
 };
 
 // [LAW:types-are-the-program] The two intents a `root:` can spell, dispatched

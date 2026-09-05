@@ -284,13 +284,13 @@ describe("candybar-render-ai7.5 — the bundled default authors a `bg:` only to 
 // compile that ignored the field could not satisfy it.
 describe("candybar-render-ai7.8 — `distribution` is authored per placer", () => {
   const CELLS = ["a", "b", "c", "d"] as const;
-  const tree = (rowField: string): string => `{
+  const tree = (rowField: string, rootField = ""): string => `{
     globals: { palette: '${THEME}' },
     variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
     segments: {
       a: { template: 'A' }, b: { template: 'B' }, c: { template: 'C' }, d: { template: 'D' },
     },
-    root: { v: [ { h: ['a', 'b', 'c']${rowField} }, { h: ['d'] } ] },
+    root: { v: [ { h: ['a', 'b', 'c']${rowField} }, { h: ['d'] } ]${rootField} },
   }`;
   const tints = (src: string): readonly string[] => {
     const rt = build(src);
@@ -325,6 +325,37 @@ describe("candybar-render-ai7.8 — `distribution` is authored per placer", () =
     );
     // …and the sibling row is an instance of its own, untouched.
     expect(rt.bgOf("d")).toBe(plain.bgOf("d"));
+    plain.dispose();
+    rt.dispose();
+  });
+
+  test("a whole-tree root's authored distribution places the ROWS: one placer in every cell's lineage moves, the one placing the authored rows", () => {
+    const plain = build(tree(""));
+    const rt = build(tree("", ", distribution: 'monotonic'"));
+    rt.render();
+    plain.render();
+    const palette = transposedPalette(getThemePalette(THEME), IDENTITY_KEY);
+    for (const name of CELLS) {
+      const authored = addressOf(rt.root, name);
+      const unauthored = addressOf(plain.root, name);
+      // Same lineage — synthesis wraps the authored root, and that wrapper
+      // and every row keep their own placement…
+      const shape = (a: Address) => a.map(({ index, count }) => ({ index, count }));
+      expect(shape(authored)).toEqual(shape(unauthored));
+      // …while exactly one step's placer changed: the authored root's, whose
+      // two rows hold `a b c` (row 0) and `d` (row 1).
+      const moved = authored.filter(
+        (step, i) => step.distribution !== unauthored[i]!.distribution,
+      );
+      expect([name, moved]).toEqual([
+        name,
+        [{ index: name === "d" ? 1 : 0, count: 2, distribution: DISTRIBUTIONS.monotonic }],
+      ]);
+      expect([name, rt.bgOf(name)]).toEqual([name, decorFor(palette, authored).hex]);
+    }
+    expect(CELLS.map((n) => rt.bgOf(n))).not.toEqual(
+      CELLS.map((n) => plain.bgOf(n)),
+    );
     plain.dispose();
     rt.dispose();
   });

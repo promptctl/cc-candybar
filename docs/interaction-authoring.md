@@ -1336,7 +1336,11 @@ positions across the vocabulary. There are two kinds of placer and one field:
 
 - a **container** — `{ h: [...], distribution: "…" }`, `{ v: [...] }`,
   `{ kind: "container", … }`, or a `{ kind: "group", … }`, where it places the
-  group's **body** (the container its children sit in);
+  group's **body** (the container its children sit in). The top-level `root`
+  is one: as a whole tree, `root: { v: [...], distribution: "…" }` places its
+  rows; as a `{ rows: { … }, distribution: "…" }` fragment it carries the
+  field per field like `when` — absent, the base root's placement stays;
+  alone over `rows: {}`, it re-places the rows a preset inherits;
 - a **`{{ menu }}`** — `(dict "distribution" "…")` in its options dict, placing
   the options of the band it drops.
 

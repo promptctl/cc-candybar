@@ -117,10 +117,18 @@ export type LayoutNode = ContainerNode | SegmentNode;
 // what keeps JS property order equal to authoring order under that spread —
 // and a whole-tree fragment lowers to positional rows named `#1`, `#2`, …
 // (unauthorable by the identifier rule, so they can never shadow a user's).
-// `when` gates the whole bar, carried up from a tree's top node.
-export interface Root {
+// The root IS the vertical container its rows stack into, so it carries every
+// field a container owns besides the children it places — `when` gates the
+// whole bar, `distribution` places the rows — by derivation, not by listing: a
+// field added to ContainerNode reaches the root, its lowering (`rootOf`), its
+// projection (`rootNode`), and the rows-fragment schema (RecordSchema<Root>
+// fails to typecheck until it lists the field) without a second edit.
+export type ContainerOwn = Omit<
+  ContainerNode,
+  "kind" | "direction" | "children"
+>;
+export interface Root extends ContainerOwn {
   readonly rows: Readonly<Record<string, LayoutNode>>;
-  readonly when?: string;
 }
 
 // [LAW:types-are-the-program] What a file or a preset AUTHORS at `root`: a

@@ -43,34 +43,43 @@ export function isRowsFragment(fragment: RootFragment): fragment is Root {
   return "rows" in fragment;
 }
 
+function positionalRows(rows: readonly LayoutNode[]): Root["rows"] {
+  return Object.fromEntries(rows.map((row, i) => [positionalRowName(i), row]));
+}
+
 // [LAW:one-source-of-truth] Lower a whole tree to rows. A vertical container's
-// children ARE its rows and its `when` gates the bar; any other node is the
-// bar's single row, its own `when` lifted to the root for the same reason (a
-// gate on the only row is a gate on the bar). Total, and `rootNode` inverts it
+// children ARE its rows and everything else it owns (`when`, `distribution`,
+// …) IS the root's own — the root is that container, so its own fields cross
+// as one rest-spread, never a hand-picked field. Any other node is the bar's
+// single row, its own `when` lifted to the root (a gate on the only row is a
+// gate on the bar) while the rest — a horizontal row's `distribution` places
+// THAT row's cells — stays on the row. Total, and `rootNode` inverts it
 // exactly for a vertical tree — a spliced tree round-trips byte-identical
 // through synthesis — while a single-row tree gains only the vertical wrapper
 // every root has anyway.
 export function rootOf(node: LayoutNode): Root {
+  if (node.kind === "container" && node.direction === "vertical") {
+    const { kind, direction, children, ...own } = node;
+    return { ...own, rows: positionalRows(children) };
+  }
   const { when, ...rest } = node;
-  const rows: LayoutNode[] =
-    node.kind === "container" && node.direction === "vertical"
-      ? [...node.children]
-      : [rest as LayoutNode];
   return {
-    rows: Object.fromEntries(rows.map((row, i) => [positionalRowName(i), row])),
     ...(when !== undefined && { when }),
+    rows: positionalRows([rest as LayoutNode]),
   };
 }
 
 // [LAW:one-source-of-truth] THE projection from the canonical root to the
-// tree every walk consumes: the rows stacked vertically, gated by the root's
-// `when`. Always a container, so no consumer wraps a bare-segment root itself.
+// tree every walk consumes: the rows stacked vertically, carrying the root's
+// own fields verbatim. Always a container, so no consumer wraps a bare-segment
+// root itself.
 export function rootNode(root: Root): ContainerNode {
+  const { rows, ...own } = root;
   return {
     kind: "container",
     direction: "vertical",
-    children: Object.values(root.rows),
-    ...(root.when !== undefined && { when: root.when }),
+    children: Object.values(rows),
+    ...own,
   };
 }
 
@@ -94,13 +103,15 @@ export function mergeRoot(fragment: RootFragment, base: Root): Root {
 }
 
 // Whether a fragment restages anything at all — false exactly for the merge's
-// identity (an absent or empty, ungated rows map), which is when a preset
-// renders the config's own root untouched and its layout is authored at
-// `root`. A `when` alone restages: it gates the whole bar.
+// identity (an absent or empty rows map carrying no own field), which is when
+// a preset renders the config's own root untouched and its layout is authored
+// at `root`. Any own field alone restages: a `when` gates the whole bar, a
+// `distribution` re-places its rows.
 export function restages(fragment: RootFragment): boolean {
+  if (!isRowsFragment(fragment)) return true;
+  const { rows, ...own } = fragment;
   return (
-    !isRowsFragment(fragment) ||
-    fragment.when !== undefined ||
-    Object.keys(fragment.rows).length > 0
+    Object.values(own).some((v) => v !== undefined) ||
+    Object.keys(rows).length > 0
   );
 }

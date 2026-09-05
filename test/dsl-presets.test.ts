@@ -489,4 +489,22 @@ describe("presetRoot — the path a preset's layout is authored at", () => {
     expect(node.when).toBe("{{ .x }}");
     expect(node.children).toEqual(rootNode(cfg.root).children);
   });
+
+  test("a `distribution` alone restages: it re-places the rows, so the layout is authored at the preset", () => {
+    const cfg = merged(
+      `{ presets: { P: { root: { rows: {}, distribution: 'monotonic' } } } }`,
+    );
+    const { node, path } = presetRoot(cfg, "P");
+    expect(path).toBe("presets.P.root");
+    expect(node.distribution).toBe("monotonic");
+    expect(node.children).toEqual(rootNode(cfg.root).children);
+  });
+
+  test("a rows fragment's unknown distribution is the load error a container's is", () => {
+    expect(() =>
+      merged(`{ presets: { P: { root: { rows: {}, distribution: 'spiral' } } } }`),
+    ).toThrow(
+      /distribution must be one of: van-der-corput, golden-angle, ends-interleaved, monotonic, uniform; got "spiral"/,
+    );
+  });
 });
