@@ -13,9 +13,9 @@
 //
 // [LAW:one-way-deps] This module sits BELOW render.ts (the driver): it imports
 // the leaf render/template helpers directly and receives the two recursive
-// capabilities (compileChild, renderChild) + the hue counter as DATA from the
-// driver. It must NOT import render.ts — that would invert the layering. render.ts
-// imports the compiled types + nodeType() from here, one-way.
+// capabilities (compileChild, renderChild) from the driver. It must NOT import
+// render.ts — that would invert the layering. render.ts imports the compiled
+// types + nodeType() from here, one-way.
 //
 // Colour is DECORATIVE only: a segment's tint derives from its address (where
 // it sits in the tree) and carries NO structural meaning — unit cohesion is

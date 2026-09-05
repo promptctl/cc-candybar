@@ -67,8 +67,8 @@ import {
 } from "../themes/decor.js";
 // [LAW:one-way-deps] The node-type registry sits below this driver: it owns the
 // compiled node shapes + each kind's compile/render, dispatched via nodeType().
-// render.ts threads the recursion (compileChild/renderChild) + the hue counter in
-// as capabilities; it never re-switches on node kind.
+// render.ts threads the recursion (compileChild/renderChild) in as
+// capabilities; it never re-switches on node kind.
 import {
   nodeType,
   type CompiledNode,
