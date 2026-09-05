@@ -194,8 +194,8 @@ function dropBaselineAllowLists(
 
 // [LAW:one-source-of-truth] The value a bounded key renders with before any
 // click, from the two places that can define it: a `state` variable's integer
-// `default` (the only source for a key of the config's own invention, like a
-// hue stepper), and — winning for the fields it covers — what the config
+// `default` (the only source for a key of the config's own invention), and —
+// winning for the fields it covers — what the config
 // resolves for a GLOBALS field, since a session stepper over `padding` starts
 // from the padding the bar is showing, not from a state var nobody declared.
 //

@@ -13,7 +13,7 @@
 //
 // What's on the bar:
 //   Row 1 (always)  — directory · git · model · context · cache warmth · 5h & 7d quota
-//   Row 2 (always)  — 🎨 theme ▸ · ⬡ hue stepper · ✦ style ▸ · 🎯 work-mode chip · ⎘/↗ quick actions
+//   Row 2 (always)  — 🎨 theme ▸ · ✦ style ▸ · 🎯 work-mode chip · ⎘/↗ quick actions
 //   Disclosures     — the theme/style ▸ glyphs toggle ▸↔▾; an open menu drops its
 //                     picker body directly below row 2. Each {{ menu }} is
 //                     INDEPENDENT (no shared key), so theme and style can be open
@@ -38,11 +38,6 @@
     // No page-cursor var either: each {{ menu }} synthesizes its own page
     // cursor (state var + int action) under the reserved menus.* namespace,
     // alongside its open-state.
-    // The per-segment hue-rotation step renderDsl reads (HUE_STEP_VAR), a
-    // kind:'state' var (over the bundled literal) so the stepper drives it LIVE
-    // (session over default). The range gate (0..60) is derived from the stepper.
-    "hue.step": { kind: "state", key: "hue-step", default: "14" },
-
     // ── Style picker (companion to the theme picker) ────────────────────────
     // The session powerline shape, written by applyStyle (from: "styles" ⇒ the
     // STRIP_STYLES domain: powerline/capsule/plain). The daemon resolves it per
@@ -68,11 +63,6 @@
   // REPRESENTATION lives in the segment templates below; each binds a region to
   // one of these by NAME. The writable-key gate derives from this table.
   actions: {
-    // The hue stepper: two bounded actions over 'hue-step', 0..60. ◀ steps −2 /
-    // ▶ steps +2, WRAPPING at the bounds; renderDsl reads the same value to
-    // rotate hue. The range gate owns the bounds.
-    hueDown: { set: "hue-step", min: 0, max: 60, by: -2 },
-    hueUp: { set: "hue-step", min: 0, max: 60, by: 2 },
     // Apply a theme — the picker binds each option's value into this set. The
     // {{ menu }} it feeds synthesizes its own page cursor; no page action here.
     applyTheme: { set: "theme", from: "themes" },
@@ -110,15 +100,6 @@
     //   name, so nothing here names the menu or a key — see menu-keys.ts.
     trigger: {
       template: '🎨 {{ .theme.effective }} {{ menu "applyTheme" "▸" "▾" }}',
-      bg: "surface",
-      fg: "foreground",
-    },
-    // The hue stepper, its own segment now (the menu must be the last token in
-    // the theme control — its dropped body would otherwise carry these controls
-    // below the row). ⬡ ◀ −2 / ▶ +2 over 'hue-step', wrapping; renderDsl reads
-    // the same value to rotate per-segment hue.
-    hueStepper: {
-      template: '⬡ {{ action "hueDown" "◀" }} {{ printf "%2s" .hue.step }}° {{ action "hueUp" "▶" }}',
       bg: "surface",
       fg: "foreground",
     },
@@ -179,12 +160,12 @@
   root: { v: [
     // Dense info row (always on).
     { h: ["directory", "gitaculous", "model", "context", "cacheTimer", "block", "weekly"] },
-    // Control bar (always on): theme control, hue stepper, style control,
+    // Control bar (always on): theme control, style control,
     // work-mode chip, quick-action toolbar. The theme/style {{ menu }} disclosures
     // live here; when one opens, its picker body drops onto the line directly
     // below this row (no separate when-gated reveal row — openness is the value of
     // the derived menus.* key, not a gated reveal [LAW:dataflow-not-control-flow]).
-    { h: ["trigger", "hueStepper", "styleControl", "modeControl", "toolbar"] },
+    { h: ["trigger", "styleControl", "modeControl", "toolbar"] },
     // Accordion drawer: two sibling groups sharing the "drawer" key, so opening
     // one auto-closes the other — one key holds one open name, no accordion
     // "mode" [LAW:dataflow-not-control-flow]. The group sugar synthesizes each

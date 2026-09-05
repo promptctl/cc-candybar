@@ -417,16 +417,10 @@ function wrapWithPresetRows(
 //    permanent row for the whole time edit mode is on, since a trigger's `when`
 //    is its host surface's, never its own open state (a trigger you must open in
 //    order to see could never be opened).
-//  - Closed help must cost no COLOUR. The hue cursor (src/dsl/render.ts:696)
-//    advances in pre-order over every segment leaf — VISIBLE OR NOT, so that
-//    toggling a disclosure never recolours the bar — which means a leaf inserted
-//    AHEAD of the content shifts the hue index of everything after it. An
-//    earlier draft put the `(?)` first and recoloured every cell of the bundled
-//    default (status row 33;41;59 → 49;36;52) with edit mode still OFF. Trailing
-//    the last row is the one position that moves no other leaf.
-//
-// Those two together disqualify the reset-banner row, which sits above the
-// content.
+//  - Closed help must not MOVE the content. A cell trailing the last row sits
+//    after every existing leaf, so no authored node's address — the position
+//    its colour derives from — changes; the reset-banner row sits above the
+//    content and is ruled out on that ground.
 //
 // A THIRD requirement decides how far the descent may go, and it outranks the
 // other two: the trigger must be visible exactly when EDIT MODE is, since a
@@ -443,7 +437,7 @@ function wrapWithPresetRows(
 //
 // For a root whose last row is gated the three requirements are jointly
 // unsatisfiable, so the priority is stated rather than left to whichever branch
-// the recursion happens to reach: visible (always) > no recolour (always, since
+// the recursion happens to reach: visible (always) > no move (always, since
 // appending is still after every existing leaf) > no extra line (surrendered
 // here, in exactly the configs where riding a row was never possible).
 //

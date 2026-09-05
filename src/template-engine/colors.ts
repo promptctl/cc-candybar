@@ -13,9 +13,8 @@
 //
 // [LAW:dataflow-not-control-flow] Steps execute unconditionally; the option
 // values (undefined template = no spec) are what decides the output, not
-// whether steps run. Absent bg or fg → Style fields are undefined → Style.isNull
-// → fragmentsToStripCells's baseStyle merge is a no-op, cells flow through
-// unchanged.
+// whether steps run. An absent bg spec resolves to the address's tint; an
+// absent fg leaves the Style's foreground unset, so cells keep their own.
 
 import {
   Style,
@@ -53,18 +52,25 @@ export class ColorSpecError extends Error {
  * There is no "is this a name or a color" branch anywhere — one total
  * function over both. [LAW:dataflow-not-control-flow]
  *
- * Undefined template → that color is not set in the returned Style, so cells
- * fall through to their own style (or no color if they have none).
+ * A segment always has a background. `tint` is the decorative one its address
+ * was dealt from the theme's own vocabulary — the floor every segment wears;
+ * an authored `bg:` states MEANING (a threshold's `error`, a context's
+ * `surface-active`) and paints over it. [LAW:dataflow-not-control-flow] The
+ * `bg?:` optionality already in the segment type is the discriminator: no
+ * segment is asked whether it "looks decorative", the absence of an authored
+ * spec IS the decorated case. Undefined fg template → no foreground set, so
+ * cells fall through to their own style.
  *
- * Hue rotation and looks are not this function's concern: they live upstream
- * as WHICH palette it is handed, so bg, fg, and the body all resolve from one
- * palette and their theme-designed relationships are preserved.
+ * Looks are not this function's concern: they live upstream as WHICH palette
+ * it is handed, so bg, fg, and the body all resolve from one palette and their
+ * theme-designed relationships are preserved.
  */
 export function resolveSegmentColors(
   ref: ActiveSegmentRef,
   segName: string,
   palette: Palette,
   disclosure: Disclosure,
+  tint: ColorRgba,
   bgTemplate: Template<RichText> | undefined,
   fgTemplate: Template<RichText> | undefined,
   scope: object,
@@ -81,10 +87,10 @@ export function resolveSegmentColors(
   };
   ref.current = active;
 
-  // Phase 1 — background.
+  // Phase 1 — background: the authored spec, else the address's tint.
   const bgSpec = evalToPlainText(bgTemplate, scope);
   const bgColor =
-    bgSpec !== undefined ? resolveRef(palette, bgSpec, "bg") : undefined;
+    bgSpec !== undefined ? resolveRef(palette, bgSpec, "bg") : tint;
 
   // Phase 2 — publish it, then foreground, which may now ask about it.
   active.bg = bgColor;
@@ -93,7 +99,7 @@ export function resolveSegmentColors(
     fgSpec !== undefined ? resolveRef(palette, fgSpec, "fg") : undefined;
 
   return new Style({
-    bgcolor: bgColor !== undefined ? ColorSpec.fromRgba(bgColor) : undefined,
+    bgcolor: ColorSpec.fromRgba(bgColor),
     color: fgColor !== undefined ? ColorSpec.fromRgba(fgColor) : undefined,
   });
 }
