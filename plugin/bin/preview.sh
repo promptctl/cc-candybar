@@ -83,22 +83,28 @@ render_request() {
     (cd "${REPO}" && sample_json | "${CLIENT[@]}" "$@")
 }
 
+# The daemon's stats answer: success when it is up, its refusal on stdout when not.
+probe_daemon() {
+    { "${CLIENT[@]}" daemon-stats --json >/dev/null; } 2>&1
+}
+
 # The first request on a cold daemon spawns it in the background and prints an
 # empty line; a preview must not be that line. Kick once, then wait until the
-# daemon answers a stats request, failing loudly if it never does.
+# daemon answers or the deadline passes. The bound is wall-clock, not a probe
+# count: a probe through npx costs seconds, a native one milliseconds.
 ensure_daemon() {
-    local attempt probe
-    for attempt in $(seq 1 50); do
-        if probe="$("${CLIENT[@]}" daemon-stats --json 2>&1 >/dev/null)"; then
-            return 0
-        fi
-        if [[ "${attempt}" -eq 1 ]]; then
-            render_request >/dev/null
+    local probe deadline=$((SECONDS + 15))
+    if probe="$(probe_daemon)"; then
+        return 0
+    fi
+    render_request >/dev/null
+    until probe="$(probe_daemon)"; do
+        if ((SECONDS >= deadline)); then
+            printf 'preview: the cc-candybar daemon did not start within 15s: %s\n' "${probe}" >&2
+            exit 1
         fi
         sleep 0.1
     done
-    printf 'preview: the cc-candybar daemon did not start: %s\n' "${probe}" >&2
-    exit 1
 }
 
 # The wizard's substitution, exactly: the template with its four placeholders
