@@ -106,7 +106,8 @@ export function mergeRoot(fragment: RootFragment, base: Root): Root {
 // identity (an absent or empty rows map carrying no own field), which is when
 // a preset renders the config's own root untouched and its layout is authored
 // at `root`. Any own field alone restages: a `when` gates the whole bar, a
-// `distribution` re-places its rows.
+// `distribution` re-places its rows. json5-edit's `restagesFragment` is this
+// predicate read off the document; change them together.
 export function restages(fragment: RootFragment): boolean {
   if (!isRowsFragment(fragment)) return true;
   const { rows, ...own } = fragment;

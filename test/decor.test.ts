@@ -134,6 +134,23 @@ describe("the colour is mix(base, hue, amount) for the selected entry", () => {
     });
   });
 
+  test("each step is placed by its OWN distribution: a heterogeneous address folds per step", () => {
+    // Row 0 of 2 under monotonic (0.25), cell 3 of 6 under vdc (0.75):
+    // round(0.25·18 + 0.75·0.37·18) = round(9.495) = 9. A fold reusing one
+    // function for every step lands elsewhere — 5 with vdc for both, 8 with
+    // monotonic for both — so the per-step property is what this pins.
+    const vdc = DISTRIBUTIONS["van-der-corput"];
+    const mixed: Address = [
+      { index: 0, count: 2, distribution: DISTRIBUTIONS.monotonic },
+      { index: 3, count: 6, distribution: vdc },
+    ];
+    expect(decorEntryFor(mixed)).toBe(DECOR_VOCABULARY[9]);
+    const uniformly = (distribution: Distribution): Address =>
+      mixed.map((step) => ({ ...step, distribution }));
+    expect(decorEntryFor(uniformly(vdc))).toBe(DECOR_VOCABULARY[5]);
+    expect(decorEntryFor(uniformly(DISTRIBUTIONS.monotonic))).toBe(DECOR_VOCABULARY[8]);
+  });
+
   test("the root selects entry 0", () => {
     // The empty address has no step to place, so no distribution can reach it.
     expect(decorEntryFor([])).toBe(DECOR_VOCABULARY[0]);
