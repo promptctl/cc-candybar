@@ -47,27 +47,24 @@ Drop a `.cc-candybar.json5` (or `.cc-candybar.json` — both extensions are acce
 
 JSON is a strict subset of JSON5, so the same parser handles both — `.json5` is the documented format (supports inline comments, trailing commas, unquoted keys), `.json` is the legacy/compat extension. When both exist at the same location, `.json5` wins and the bar shows a persistent warning so you can remove the shadowed duplicate.
 
-The file is a **complete** replacement for the bundled default — no merge layer. Start by copying `src/demo/statusline.json5` from the repo as a minimal example, or `src/config/default-dsl-config.ts` for the full standard library.
+The file **merges onto the bundled default**, so it declares only what differs. `globals` merge per field; the named sections (`variables`, `segments`, `actions`, `helpers`, …) merge by name, your entry winning; `root` merges per named row (`identity` and `status` in the bundled default; a whole tree at `root` replaces every row). The bundled default is `src/config/default-dsl-config.ts`, and fuller starting points live under `examples/`. Run `cc-candybar check <path>` to load a file exactly as the daemon will: exit 0 means it renders, exit 1 prints the error with the path and line to fix.
 
-```json5
-// minimal example — user, directory, branch, model, session, clock
+<!-- The check:pass fence below is loaded by test/doc-snippets.test.ts through
+     `cc-candybar check` — edit it and run that test, so the README example
+     cannot drift from the loader. -->
+
+```json5 check:pass
+// A theme, one new segment, and the row it joins. Everything else — the
+// identity row, every other segment and variable — is inherited.
 {
-  globals: { palette: 'textual-dark' },
+  globals: { palette: 'catppuccin-mocha' },
   variables: {
-    user:    { kind: 'env', name: 'USER', default: 'anon' },
-    cwd:     { kind: 'input', path: 'workspace.current_dir', default: '?' },
-    branch:  { kind: 'shell', command: 'git branch --show-current',
-               cache: { ttl: '5s' }, default: '' },
-    clock:   { kind: 'time', layout: '15:04:05', cache: { ttl: '1s' } },
+    clock: { kind: 'time', layout: '15:04' }, // Go reference-time layout, re-read every second
   },
   segments: {
-    user:      { template: ' {{ .user }} ',   bg: 'primary', fg: 'auto' },
-    directory: { template: ' {{ basename .cwd }} ', bg: 'surface', fg: 'foreground' },
-    branch:    { template: ' {{ .branch }} ', bg: 'accent',  fg: 'auto',
-                 when: '{{ ne .branch "" }}' },
-    clock:     { template: ' {{ .clock }} ',  bg: 'primary', fg: 'auto' },
+    clock: { template: '{{ .clock }}' },
   },
-  layout: ['user', 'directory', 'branch', 'clock'],
+  root: { rows: { status: { h: ['model', 'context', 'clock'] } } },
 }
 ```
 
@@ -113,7 +110,7 @@ Each segment is a DSL declaration with a `template` (text + interpolation + styl
 
 ## Themes
 
-The DSL config picks a base palette via `globals.palette` (e.g. `textual-dark`, `gruvbox`). Each segment may override with its own `palette:` field, and `bg`/`fg` evaluate as palette spec names (`primary`, `surface`, `panel`, `accent`, `foreground`, `auto`, `warning`, `error`, …). Color math runs through OKLCH for perceptual uniformity.
+The DSL config picks a base palette via `globals.palette` (e.g. `textual-dark`, `gruvbox`). Each segment may override with its own `palette:` field, and `bg`/`fg` take a palette colour name (`primary`, `surface`, `panel`, `accent`, `foreground`, `warning`, `error`, …) or a computed colour such as `{{ darken (color "primary") 2 }}`; a segment that authors no `bg` wears the theme's decorative tint for its position. Color math runs through OKLCH for perceptual uniformity.
 
 ## Installation
 
