@@ -124,10 +124,10 @@ const paint = (fact: keyof typeof GIT_COLOR, content: string): string =>
 // inversion is why these templates carry no de-emphasis markup at all.
 //
 // The blend target is the segment's OWN background (`bgOf`), not the theme's
-// `background`. The git segments render on `surface-active`, so a palette
-// `foreground-muted` — which blends toward `background` — would be muted
-// toward a color that is not behind them, and would read either too loud or
-// too faint depending on how far the surface sits from the base.
+// `background`. The git segments wear their address's vocabulary tint, so a
+// palette `foreground-muted` — which blends toward `background` — would be
+// muted toward a color that is not behind them, and would read either too
+// loud or too faint depending on how far the tint sits from the base.
 //
 // The `readableOn` floor is what makes the result theme-independent, and it is
 // not decoration: the bare 60% blend measures 1.93–3.10 contrast across the
@@ -775,8 +775,15 @@ export const RAW_DEFAULT_DSL_CONFIG = {
   },
 
   // ─── Segments ──────────────────────────────────────────────────────────────
-  // Every built-in. Templates ported from the parity bindings; bg/fg are
-  // palette spec names resolved against the active theme. `when` predicates
+  // Every built-in. Templates ported from the parity bindings; `fg:` (and the
+  // few `bg:`) are palette spec names resolved against the active theme.
+  //
+  // [LAW:dataflow-not-control-flow] A segment authors a `bg:` only when the
+  // colour STATES something — a threshold (context/block/weekly/burnrate) or
+  // an alert (host). Every other cell wears the vocabulary tint its address
+  // selects (src/themes/decor.ts, candybar-render-ai7.5); naming `surface` /
+  // `panel` / `surface-active` for looks alone was hand-curated variety, and
+  // the theme now supplies variety by position. `when` predicates
   // hide a segment when its primary signal is absent (no git repo, no version
   // field, no env var, no tmux, no rate-limit window).
   //
@@ -788,30 +795,25 @@ export const RAW_DEFAULT_DSL_CONFIG = {
   segments: {
     directory: {
       template: DIR_TEMPLATE,
-      bg: "surface",
       fg: "foreground",
     },
     model: {
       template: "✱ {{ formatModelName .model.display_name }}",
-      bg: "panel",
       fg: "foreground",
       when: '{{ ne .model.display_name "" }}',
     },
     sessionId: {
       template: "⌗{{ trunc 8 .session.id }}",
-      bg: "surface",
       fg: "foreground",
       when: '{{ ne .session.id "" }}',
     },
     version: {
       template: "◈ v{{ .version }}",
-      bg: "surface",
       fg: "foreground",
       when: '{{ ne .version "" }}',
     },
     tmux: {
       template: 'tmux:{{ .tmux.session | default "none" }}',
-      bg: "surface-active",
       fg: "foreground",
       when: '{{ ne .tmux.session "" }}',
     },
@@ -844,7 +846,6 @@ export const RAW_DEFAULT_DSL_CONFIG = {
     },
     git: {
       template: GIT_TEMPLATE,
-      bg: "surface-active",
       // A computed `fg:` — the field is a template evaluating to a color
       // reference, and `bgOf` is available here because a segment's background
       // is resolved before its foreground. Structural text therefore sits a
@@ -896,7 +897,6 @@ export const RAW_DEFAULT_DSL_CONFIG = {
         "{{ end }}]{{ end }}" +
         `{{ if gt .git.stash 0 }} ${paint("stash", '(printf "(%v stashed)" .git.stash)')}{{ end }}` +
         '{{ if gt .git.timeSinceCommit 0 }} ◷ {{ template "formatTimeSince" .git.timeSinceCommit }}{{ end }}',
-      bg: "surface-active",
       fg: GIT_QUIET_FG,
       when: '{{ ne .git.branch "" }}',
     },
@@ -916,7 +916,6 @@ export const RAW_DEFAULT_DSL_CONFIG = {
         '{{ if ne .git.prUrl "" }}' +
         '{{ link .git.prUrl (printf "⇆ #%v" .git.prNumber) }}' +
         "{{ else }}⚠ PR{{ end }}",
-      bg: "surface-active",
       fg: "foreground",
       when: '{{ or (ne .git.prUrl "") (ne .git.prError "") }}',
     },
@@ -967,21 +966,18 @@ export const RAW_DEFAULT_DSL_CONFIG = {
         ' {{ action "openProject" "↗ proj" }} {{ action "openTranscript" "↗ log" }}' +
         '{{ if ne .git.repoUrl "" }} {{ link .git.repoUrl "↗ repo" }}{{ end }}' +
         ' {{ action "edit.toggle" "✎ edit" "✎ done" }}',
-      bg: "surface",
       fg: "foreground",
     },
     session: {
       template:
         '§ {{ template "formatCost" .session.cost }} ({{ template "formatTokens" .session.tokens }})' +
         '{{ template "budgetStatus" (dict "cost" .session.cost "budget" .session.budget.amount "warn" .session.budget.warningThreshold) }}',
-      bg: "surface",
       fg: "foreground",
     },
     today: {
       template:
         '☉ {{ template "formatCost" .today.cost }} ({{ template "formatTokens" .today.tokens }})' +
         '{{ template "budgetStatus" (dict "cost" .today.cost "budget" .today.budget.amount "warn" .today.budget.warningThreshold) }}',
-      bg: "surface",
       fg: "foreground",
     },
     block: {
@@ -1035,7 +1031,6 @@ export const RAW_DEFAULT_DSL_CONFIG = {
         '⇅ out {{ template "formatSpeed" .speed.output }} · ' +
         'in {{ template "formatSpeed" .speed.input }} · ' +
         'tot {{ template "formatSpeed" .speed.total }}',
-      bg: "panel",
       fg: "foreground",
       when: "{{ gt .session.tokens 0 }}",
     },
@@ -1050,7 +1045,6 @@ export const RAW_DEFAULT_DSL_CONFIG = {
     // history lives in the daemon ring, the template only draws.
     tokenSparkline: {
       template: "⚡ {{ sparkline .speed.history 24 }}",
-      bg: "panel",
       fg: "foreground",
       when: '{{ ne .speed.history "" }}',
     },
@@ -1058,14 +1052,14 @@ export const RAW_DEFAULT_DSL_CONFIG = {
     // to 0, so an expired cache renders "cold" (and reads red via the ≤8
     // arm) rather than a negative number. [LAW:dataflow-not-control-flow]
     // glyph + "cold"/"Nm" + color all derive from the one expiry value; the
-    // provider supplies no display state. Constant `surface` bg with a
-    // fg-only threshold cascade mirrors the legacy inline-colored text
-    // (warm = normal, ≤20m = warning, ≤8m/cold = error).
+    // provider supplies no display state. No `bg:` — the cell keeps its
+    // vocabulary tint and the threshold rides the fg alone, mirroring the
+    // legacy inline-colored text (warm = normal, ≤20m = warning, ≤8m/cold =
+    // error).
     cacheTimer: {
       template:
         "◴ {{ if le (minutesUntilReset .cache.expiresAt) 0 }}cold" +
         "{{ else }}{{ minutesUntilReset .cache.expiresAt }}m{{ end }}",
-      bg: "surface",
       fg:
         "{{ if le (minutesUntilReset .cache.expiresAt) 8 }}error" +
         "{{ else }}{{ if le (minutesUntilReset .cache.expiresAt) 20 }}warning" +
@@ -1107,7 +1101,6 @@ export const RAW_DEFAULT_DSL_CONFIG = {
         "{{ if .metrics.messageCount }} ◆ {{ .metrics.messageCount }}{{ end }}" +
         "{{ if .metrics.linesAdded }} + {{ .metrics.linesAdded }}{{ end }}" +
         "{{ if .metrics.linesRemoved }} - {{ .metrics.linesRemoved }}{{ end }} ",
-      bg: "panel",
       fg: "foreground",
       when:
         "{{ or .metrics.lastResponseTime .metrics.responseTime" +
@@ -1129,7 +1122,6 @@ export const RAW_DEFAULT_DSL_CONFIG = {
         "{{ .charset.effective }} " +
         `{{ menu "applyCharsetForever" "${DISCLOSURE_GLYPH_CLOSED}" "${DISCLOSURE_GLYPH_OPEN}" }} ` +
         '{{ action "resetCharset" "↺" }}',
-      bg: "surface",
       fg: "foreground",
     },
     colorCompatControl: {
@@ -1137,7 +1129,6 @@ export const RAW_DEFAULT_DSL_CONFIG = {
         "{{ .colorCompatibility.effective }} " +
         `{{ menu "applyColorCompatForever" "${DISCLOSURE_GLYPH_CLOSED}" "${DISCLOSURE_GLYPH_OPEN}" }} ` +
         '{{ action "resetColorCompat" "↺" }}',
-      bg: "surface",
       fg: "foreground",
     },
     // [LAW:verifiable-goals] candybar-config-engine-71o.6's own acceptance
@@ -1166,7 +1157,6 @@ export const RAW_DEFAULT_DSL_CONFIG = {
         "🎨 directory " +
         `{{ menu "applyDirectoryPaletteForever" "${DISCLOSURE_GLYPH_CLOSED}" "${DISCLOSURE_GLYPH_OPEN}" }} ` +
         '{{ action "resetDirectoryPalette" "↺" }}',
-      bg: "surface",
       fg: "foreground",
     },
   },
