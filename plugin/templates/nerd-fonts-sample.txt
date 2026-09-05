@@ -1,5 +1,7 @@
-Can you see these icons clearly?
+Can you see these joiner glyphs clearly?
 
-  folder    code    branch   󰚩 robot
+  powerline:  one  two  three
+  capsule:     one    two 
 
-If you see boxes or blank spaces instead of icons, choose "No" below.
+If you see boxes, blank spaces, or question marks instead of arrow and
+half-circle shapes, choose "No" below.

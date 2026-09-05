@@ -21,12 +21,12 @@
 // (brandon-config-aoi): this test is what keeps that proof honest over time.
 
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
 
-import { checkConfig, checkPlan } from "../src/check";
+import { checkConfig } from "../src/check";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { presetNames } from "../src/config/presets";
+import { checkText, expectClean, withTempConfig } from "./helpers/check-config";
 
 const examplesDir = path.join(__dirname, "..", "examples");
 
@@ -35,17 +35,10 @@ const exampleFiles = fs
   .filter((f) => f.endsWith(".json5"))
   .sort();
 
-// Run one example through the shipped check pipeline; fail loudly with the
-// diagnostic if it is anything but clean, else return the rendered line for
+// Run one example through the shipped check pipeline; the rendered line for
 // content assertions.
 function renderExample(file: string): string {
-  const outcome = checkConfig(path.join(examplesDir, file));
-  if (outcome.kind !== "clean") {
-    throw new Error(
-      `${file}: ${outcome.kind}: ${"message" in outcome ? outcome.message : ""}`,
-    );
-  }
-  return outcome.rendered;
+  return expectClean(file, checkConfig(path.join(examplesDir, file))).rendered;
 }
 
 // ANSI SGR + OSC-8 hyperlink stripped, leaving the visible glyph text. The
@@ -57,19 +50,6 @@ function visible(line: string): string {
     .replace(/\x1b\[[0-9;]*m/g, "")
     // eslint-disable-next-line no-control-regex
     .replace(/\x1b\]8;;[^\x07\x1b]*(?:\x1b\\|\x07)/g, "");
-}
-
-// Run `fn` against a real temp config file holding `text` — the actual CLI
-// entry point on the actual filesystem, not a hand-built render rig.
-function withTempConfig<T>(text: string, fn: (configPath: string) => T): T {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "ccb-example-configs-"));
-  const configPath = path.join(dir, ".cc-candybar.json5");
-  fs.writeFileSync(configPath, text);
-  try {
-    return fn(configPath);
-  } finally {
-    fs.rmSync(dir, { recursive: true, force: true });
-  }
 }
 
 describe("shipped example configs (examples/*.json5)", () => {
@@ -89,16 +69,7 @@ describe("shipped example configs (examples/*.json5)", () => {
   test.each(exampleFiles)(
     "%s is clean under `cc-candybar check` (exit 0) and renders",
     (file) => {
-      const outcome = checkConfig(path.join(examplesDir, file));
-      // Fail with the outcome's own diagnostic, not an opaque kind mismatch —
-      // a broken example should name its actual load error in the Jest output.
-      if (outcome.kind !== "clean") {
-        throw new Error(
-          `${file}: ${outcome.kind}: ${"message" in outcome ? outcome.message : ""}`,
-        );
-      }
-      expect(checkPlan(outcome).code).toBe(0);
-      expect(outcome.rendered.length).toBeGreaterThan(0);
+      expectClean(file, checkConfig(path.join(examplesDir, file)));
     },
   );
 
@@ -151,14 +122,7 @@ describe("bundled preset library is clean under `cc-candybar check`", () => {
   test.each(presetNames(DEFAULT_DSL_CONFIG.presets))(
     'a config picking preset "%s" is clean under check (exit 0) and renders',
     (preset) => {
-      const outcome = withPresetConfig(preset, (p) => checkConfig(p));
-      if (outcome.kind !== "clean") {
-        throw new Error(
-          `preset "${preset}": ${outcome.kind}: ${"message" in outcome ? outcome.message : ""}`,
-        );
-      }
-      expect(checkPlan(outcome).code).toBe(0);
-      expect(outcome.rendered.length).toBeGreaterThan(0);
+      withPresetConfig(preset, (p) => expectClean(`preset "${preset}"`, checkConfig(p)));
     },
   );
 });
@@ -169,13 +133,10 @@ describe("bundled preset library is clean under `cc-candybar check`", () => {
 // through the same `cc-candybar check` entry as everything above.
 describe("a `{ rows }` root merges by name over the bundled default", () => {
   test("declaring only the status row keeps the bundled identity row above it", () => {
-    const outcome = withTempConfig(
+    const outcome = checkText(
+      "rows-merge",
       `{ root: { rows: { status: { h: ["model", "context"] } } } }`,
-      checkConfig,
     );
-    if (outcome.kind !== "clean") {
-      throw new Error(`${outcome.kind}: ${"message" in outcome ? outcome.message : ""}`);
-    }
     const [identity, status, ...rest] = visible(outcome.rendered).split("\n");
     expect(rest).toEqual([]);
     // The bundled identity row, untouched: the fish-abbreviated directory
