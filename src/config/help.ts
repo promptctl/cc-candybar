@@ -43,12 +43,11 @@ import {
 //
 // [LAW:no-silent-failure] Deliberately per-state rather than one static `(?)`.
 // Several `(?)` triggers can be visible at once (edit mode's and the config
-// menu's, whenever both surfaces are open), and the tint that distinguishes
-// other open disclosures — node-registry's `drops.length > 0` — recolours a
-// segment's RESOLVED BACKGROUND, so it is a no-op on any segment declaring no
-// bg. .5 gave edit mode a look at the GLOBALS level only, which left its insert
-// chrome without one; the trigger's own text is therefore the only place the
-// open state can be read, exactly as it is for the `+` beside it.
+// menu's, whenever both surfaces are open). An open one does wear its band's
+// state colour (node-registry picks `styles.trigger` whenever a segment has
+// drops, authored bg or not), but colour is a hint the terminal's colour depth
+// may flatten; the trigger's own text is the one place the open state can
+// always be read, exactly as it is for the `+` beside it.
 export const HELP_GLYPH_CLOSED = "(?)";
 
 // The open member of a help disclosure's binary key: it holds this or the shared
@@ -93,7 +92,7 @@ export function declareHelp(
   lines: readonly string[],
   within: readonly DisclosureRef[],
   out: HelpArtifacts,
-  surface?: { readonly bg: string; readonly fg: string },
+  text?: { readonly fg: string },
 ): HelpDisclosure {
   const self: DisclosureRef = { variable: name, member: HELP_OPEN };
   out.variables[name] = disclosureStateVar(name, DISCLOSURE_CLOSED);
@@ -104,7 +103,7 @@ export function declareHelp(
       HELP_GLYPH_CLOSED,
       DISCLOSURE_GLYPH_CLOSE,
     ),
-    ...surface,
+    ...text,
     // The trigger is visible wherever its host surface is. An unnested `(?)`
     // (`within` empty) is always visible, and declares no `when` at all.
     ...gateOf(within),
@@ -126,7 +125,7 @@ export function declareHelp(
     // nowhere else — the render walk ANDs an ancestor's `when` into every
     // descendant (src/dsl/render.ts:764), so a copy here would be a second
     // enforcer of one predicate with nothing keeping the two equal.
-    out.segments[lineName] = { template: line, ...surface };
+    out.segments[lineName] = { template: line, ...text };
     return { kind: "segment", name: lineName };
   });
 

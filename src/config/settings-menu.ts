@@ -153,11 +153,15 @@ const CONFIG_OPEN_GATE = disclosureGate(SETTINGS_REF, CONFIG_REF);
 // the same two sentences `--help` prints.
 const PERSIST_HELP_SEG = `${SETTINGS_NS}help.persist`;
 
-// [LAW:one-source-of-truth] The panel's surface colours, spelled once. The help
-// cells must wear the same ones as the controls they explain — a `(?)` body in
-// a different colour reads as a different panel — and that agreement is only
-// guaranteed if there is one value to hand both.
-const SETTINGS_SURFACE = { bg: "surface", fg: "foreground" } as const;
+// [LAW:one-source-of-truth] The panel's text colour, spelled once. The help
+// cells must wear the same one as the controls they explain, and that
+// agreement is only guaranteed if there is one value to hand both. No `bg:`:
+// a settings cell states nothing by its background, so it wears the
+// vocabulary tint its address selects like every other decorated segment
+// (candybar-render-ai7.5) — the closed `☰` sits among tinted siblings, and a
+// flat `surface` there would be the one cell reading "different" for no
+// meaning.
+const SETTINGS_TEXT = { fg: "foreground" } as const;
 
 // [LAW:one-source-of-truth] One accordion key for every picker in the menu:
 // one key holds one open member, so opening a theme picker closes the look
@@ -548,14 +552,14 @@ function settingsArtifacts(): {
           `☰ ${DISCLOSURE_GLYPH_CLOSED}`,
           `☰ ${DISCLOSURE_GLYPH_OPEN}`,
         ),
-        ...SETTINGS_SURFACE,
+        ...SETTINGS_TEXT,
       },
       // [LAW:representation] The checkbox states what the NEXT write does,
       // which is why the glyph and the word live together: "☑ persist?" is
       // the whole explanation of where the click below it lands.
       [PERSIST_SEG]: {
         template: `{{ action "${PERSIST_SEG}" "☐ persist?" "☑ persist?" }}`,
-        ...SETTINGS_SURFACE,
+        ...SETTINGS_TEXT,
       },
       [CONFIG_SEG]: {
         template: disclosureTrigger(
@@ -563,7 +567,7 @@ function settingsArtifacts(): {
           `⚙ config ${DISCLOSURE_GLYPH_CLOSED}`,
           `⚙ config ${DISCLOSURE_GLYPH_OPEN}`,
         ),
-        ...SETTINGS_SURFACE,
+        ...SETTINGS_TEXT,
       },
       // [LAW:one-type-per-behavior] Both non-picker controls read the same
       // `.effective` projection their picker siblings read, and write the
@@ -573,7 +577,7 @@ function settingsArtifacts(): {
         template:
           `{{ action "${controlApply("wrap")}" "wrap: on" "wrap: off" }} ` +
           `{{ action "${controlReset("wrap")}" "↺" }}`,
-        ...SETTINGS_SURFACE,
+        ...SETTINGS_TEXT,
       },
       [PADDING_SEG]: {
         template:
@@ -581,7 +585,7 @@ function settingsArtifacts(): {
           "padding {{ .padding.effective }} " +
           `{{ action "${controlApply("padding")}.up" "▶" }} ` +
           `{{ action "${controlReset("padding")}" "↺" }}`,
-        ...SETTINGS_SURFACE,
+        ...SETTINGS_TEXT,
       },
       // The entry point edit mode never had: `edit.toggle` is a reserved action
       // whose only bundled reference lives in the `toolbar` segment, which a
@@ -589,7 +593,7 @@ function settingsArtifacts(): {
       // from a segment no config can drop.
       [EDIT_SEG]: {
         template: `{{ action "${EDIT_TOGGLE_ACTION}" "✎ edit" "✎ done" }}`,
-        ...SETTINGS_SURFACE,
+        ...SETTINGS_TEXT,
       },
     },
   };
@@ -613,7 +617,7 @@ function settingsArtifacts(): {
     PERSIST_HELP,
     [SETTINGS_REF],
     artifacts,
-    SETTINGS_SURFACE,
+    SETTINGS_TEXT,
   );
   return { artifacts, help };
 }
@@ -641,7 +645,7 @@ function declareSettingControls(artifacts: MenuArtifacts): void {
         `{{ menu "${apply}" "${DISCLOSURE_GLYPH_CLOSED}" "${DISCLOSURE_GLYPH_OPEN}" ` +
         `(dict "key" "${PICKER_KEY}" "closeOnPick" true) }} ` +
         `{{ action "${controlReset(c.name)}" "↺" }}`,
-      ...SETTINGS_SURFACE,
+      ...SETTINGS_TEXT,
     };
     artifacts.actions[apply] = {
       set: c.sessionKey,
