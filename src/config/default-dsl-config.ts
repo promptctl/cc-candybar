@@ -983,7 +983,7 @@ export const RAW_DEFAULT_DSL_CONFIG = {
     block: {
       template:
         "◱ {{ round .block.nativeUtilization }}% " +
-        '({{ template "formatLongTimeRemaining" (minutesUntilReset .block.resetsAt) }})',
+        '({{ template "formatResetCountdown" .block.resetsAt }})',
       bg: blockLikeBg(
         ".block.nativeUtilization",
         ".block.budget.warningThreshold",
@@ -995,7 +995,7 @@ export const RAW_DEFAULT_DSL_CONFIG = {
     weekly: {
       template:
         "◑ {{ round .weekly.percentage }}% " +
-        '({{ template "formatLongTimeRemaining" (minutesUntilReset .weekly.resetsAt) }})',
+        '({{ template "formatResetCountdown" .weekly.resetsAt }})',
       bg: blockLikeBg(".weekly.percentage", ".weekly.budget.warningThreshold"),
       fg: blockLikeFg(".weekly.percentage"),
       when: "{{ gt .weekly.resetsAt 0 }}",
@@ -1579,6 +1579,15 @@ export const RAW_DEFAULT_DSL_CONFIG = {
       "{{ else if ge . 60 }}{{ $h := div . 60 }}{{ $m := mod . 60 }}" +
       "{{ if gt $m 0 }}{{ $h }}h {{ $m }}m{{ else }}{{ $h }}h{{ end }}" +
       "{{ else }}{{ . }}m{{ end }}",
+    // Reset countdown (input = epoch seconds): the minute in progress counts,
+    // so a reset seconds away reads "1m" and the bar never shows "0m" while
+    // time remains. A uniform +1 over the rounded whole minutes, deliberately
+    // not a floor at 1 — a floor is a special case on the last minute, and the
+    // one bias reads the same at every distance. The block/weekly segments
+    // are its only callers; the cacheTimer keeps the raw minutesUntilReset,
+    // where 0 means cold.
+    formatResetCountdown:
+      '{{ template "formatLongTimeRemaining" (add 1 (minutesUntilReset .)) }}',
   },
 } satisfies DslConfig;
 

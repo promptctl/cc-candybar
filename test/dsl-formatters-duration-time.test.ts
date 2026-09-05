@@ -189,14 +189,16 @@ describe("bdi.4 — minutesUntilReset func against a frozen clock", () => {
     expect(render("[{{ minutesUntilReset .e }}]", { e })).toContain(`[${want}]`);
   });
 
-  // The block/weekly composition: minutesUntilReset feeds formatLongTimeRemaining.
-  // e = now + 2940 minutes → 2940 → "2d 1h".
-  test("composes formatLongTimeRemaining (minutesUntilReset .e)", () => {
+  // The block/weekly composition, `formatResetCountdown`: the minute in
+  // progress counts, so a reset seconds away reads "1m" (never "0m") and the
+  // rounded whole minutes read one more than the arithmetic at every distance.
+  test.each<[number, string]>([
+    [NOW_SEC + 10, "1m"],
+    [NOW_SEC + 90 * 60, "1h 31m"],
+    [NOW_SEC + 2940 * 60, "2d 1h"],
+  ])("formatResetCountdown(%p) renders %p", (e, want) => {
     expect(
-      render(
-        '[{{ template "formatLongTimeRemaining" (minutesUntilReset .e) }}]',
-        { e: NOW_SEC + 2940 * 60 },
-      ),
-    ).toContain("[2d 1h]");
+      render('[{{ template "formatResetCountdown" .e }}]', { e }),
+    ).toContain(`[${want}]`);
   });
 });

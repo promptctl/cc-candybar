@@ -78,6 +78,14 @@ const GOOD: ReadonlyArray<readonly [string, string]> = [
     }`,
   ],
   [
+    "doctor actions (run, and fix naming its check)",
+    `{
+      segments: { t: { template: '{{ action "run" "🩺" }} {{ action "fix" "[fix]" }}' } },
+      actions: { run: { doctor: 'run' }, fix: { doctor: 'fix', check: 'tmuxTruecolor' } },
+      root: { h: ['t'] },
+    }`,
+  ],
+  [
     "cycle action (2de.4 toggle form)",
     `{
       segments: { t: { template: '{{ action "toggle" "▸" "▾" }}' } },
@@ -156,6 +164,8 @@ const GOOD: ReadonlyArray<readonly [string, string]> = [
 // Structurally broken — schema rejects, loader rejects.
 const BAD_STRUCTURAL: ReadonlyArray<readonly [string, string]> = [
   ["unknown top-level key", `{ segmnets: {} }`],
+  ["bad doctor verb", `{ actions: { d: { doctor: 'bogus' } } }`],
+  ["doctor run carrying a check", `{ actions: { d: { doctor: 'run', check: 'tmuxTruecolor' } } }`],
   ["non-identifier row name", `{ segments: { a: { template: 'a' } }, root: { rows: { 'a-b': 'a' } } }`],
   ["non-object rows", `{ root: { rows: 'a' } }`],
   ["non-string template", `{ segments: { a: { template: 42 } } }`],
