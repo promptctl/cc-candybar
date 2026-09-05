@@ -61,7 +61,7 @@ describe("applyFix (claude-settings-env)", () => {
 }
 `;
     const edge = writeSettings("settings.json", before);
-    applyFix(edge, FIX);
+    const facts = applyFix(edge, FIX, gatherFacts(edge, null));
     const after = fs.readFileSync(edge.claudeSettingsPath, "utf8");
     expect(JSON.parse(after)).toEqual({
       permissions: { allow: ["Bash(ls:*)"] },
@@ -71,6 +71,11 @@ describe("applyFix (claude-settings-env)", () => {
         [TMUX_TRUECOLOR_VAR]: "1",
       },
       model: "opus",
+    });
+    expect(facts.claudeSettingsEnv).toEqual({
+      DISABLE_AUTOUPDATER: "1",
+      FORCE_COLOR: "3",
+      [TMUX_TRUECOLOR_VAR]: "1",
     });
     assertOnlyInserted(
       before,
@@ -85,7 +90,7 @@ describe("applyFix (claude-settings-env)", () => {
 }
 `;
     const edge = writeSettings("settings.json", before);
-    applyFix(edge, FIX);
+    applyFix(edge, FIX, gatherFacts(edge, null));
     const after = fs.readFileSync(edge.claudeSettingsPath, "utf8");
     expect(JSON.parse(after)).toEqual({
       model: "opus",
@@ -101,14 +106,14 @@ describe("applyFix (claude-settings-env)", () => {
   test("a stale value is overwritten in place, not duplicated", () => {
     const before = `{ "env": { "${TMUX_TRUECOLOR_VAR}": "" } }\n`;
     const edge = writeSettings("settings.json", before);
-    applyFix(edge, FIX);
+    applyFix(edge, FIX, gatherFacts(edge, null));
     const after = fs.readFileSync(edge.claudeSettingsPath, "utf8");
     expect(after).toBe(`{ "env": { "${TMUX_TRUECOLOR_VAR}": "1" } }\n`);
   });
 
   test("no settings file: the file (and its directory) is created", () => {
     const edge = edgeAt(path.join("nested", "settings.json"));
-    applyFix(edge, FIX);
+    applyFix(edge, FIX, gatherFacts(edge, null));
     expect(JSON.parse(fs.readFileSync(edge.claudeSettingsPath, "utf8"))).toEqual({
       env: { [TMUX_TRUECOLOR_VAR]: "1" },
     });

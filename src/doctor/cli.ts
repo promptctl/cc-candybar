@@ -12,14 +12,44 @@
 // recorded client hint there — and the fold is one function either way.
 
 import process from "node:process";
+import type { CliPlan } from "../check.js";
 import { DISCLOSURE_GLYPH_CLOSED } from "../config/disclosure.js";
 import { detectTmuxHint } from "../tmux-hint.js";
-import { runDoctor, type DoctorFacts } from "./checks.js";
-import { gatherFacts, productionEdge } from "./edge.js";
+import { runDoctor, type CheckReport, type DoctorFacts } from "./checks.js";
+import { gatherFacts, productionEdge, type DoctorEdge } from "./edge.js";
 
 const EXIT_OK = 0;
 const EXIT_FAILED = 1;
 const EXIT_USAGE = 2;
+
+const FIX_HINT = ` (fix: click ☰ ${DISCLOSURE_GLYPH_CLOSED} 🧰 tools ${DISCLOSURE_GLYPH_CLOSED} 🩺 doctor, then [fix] on the bar)`;
+
+function reportLine({ check, verdict }: CheckReport): string {
+  return verdict.ok
+    ? `✓ ${check.label}\n`
+    : `✗ ${check.label} — ${verdict.reason}${verdict.fix === undefined ? "" : FIX_HINT}\n`;
+}
+
+// [LAW:effects-at-boundaries] The whole CLI as data: facts in, (streams,
+// exit code) out. `runDoctorCli` performs it; a test reads it.
+export function doctorPlan(
+  edge: DoctorEdge,
+  env: Readonly<Record<string, string | undefined>>,
+): CliPlan {
+  let facts: DoctorFacts;
+  try {
+    facts = gatherFacts(edge, detectTmuxHint(env));
+  } catch (e) {
+    const message = e instanceof Error ? e.message : String(e);
+    return { stdout: "", stderr: `doctor: ${message}\n`, code: EXIT_USAGE };
+  }
+  const reports = runDoctor(facts);
+  return {
+    stdout: reports.map(reportLine).join(""),
+    stderr: "",
+    code: reports.every((r) => r.verdict.ok) ? EXIT_OK : EXIT_FAILED,
+  };
+}
 
 export function runDoctorCli(args: readonly string[]): never {
   if (args.length > 0) {
@@ -28,26 +58,8 @@ export function runDoctorCli(args: readonly string[]): never {
     );
     process.exit(EXIT_USAGE);
   }
-  let facts: DoctorFacts;
-  try {
-    facts = gatherFacts(productionEdge(), detectTmuxHint(process.env));
-  } catch (e) {
-    process.stderr.write(
-      `doctor: ${e instanceof Error ? e.message : String(e)}\n`,
-    );
-    process.exit(EXIT_USAGE);
-  }
-  const reports = runDoctor(facts);
-  for (const { check, verdict } of reports) {
-    process.stdout.write(
-      verdict.ok
-        ? `✓ ${check.label}\n`
-        : `✗ ${check.label} — ${verdict.reason}${
-            verdict.fix === undefined
-              ? ""
-              : ` (fix: click ☰ ${DISCLOSURE_GLYPH_CLOSED} 🧰 tools ${DISCLOSURE_GLYPH_CLOSED} 🩺 doctor, then [fix] on the bar)`
-          }\n`,
-    );
-  }
-  process.exit(reports.every((r) => r.verdict.ok) ? EXIT_OK : EXIT_FAILED);
+  const plan = doctorPlan(productionEdge(), process.env);
+  process.stdout.write(plan.stdout);
+  process.stderr.write(plan.stderr);
+  process.exit(plan.code);
 }

@@ -67,12 +67,7 @@ import {
 import { parseClientHints } from "../protocol";
 import { checkByName, runDoctor, type DoctorFacts } from "../../doctor/checks";
 import { doctorReportPairs } from "../../doctor/report";
-import {
-  applyFix,
-  gatherFacts,
-  readClaudeSettingsEnv,
-  type DoctorEdge,
-} from "../../doctor/edge";
+import { applyFix, gatherFacts, type DoctorEdge } from "../../doctor/edge";
 
 export interface VerbContext {
   readonly sessionState: SessionStateRW;
@@ -701,8 +696,7 @@ const doctorRun: VerbHandler = (value, ctx) => {
 // Re-probe THIS check at click time and perform the fix its fresh verdict
 // carries — never a fix cached from the render that drew the `[fix]`, because
 // the world may have moved (the var got set, the tmux server went away). Then
-// re-run over the one fact the fix changed — the settings env — so the row
-// flips to the truthful post-fix reason without a second tmux probe.
+// re-run over the post-fix facts, so the row flips to the truthful reason.
 const doctorFix: VerbHandler = (value, ctx) => {
   const [sessionId = "", checkName = ""] = decodeWire(() =>
     decodeSegments(value),
@@ -717,15 +711,12 @@ const doctorFix: VerbHandler = (value, ctx) => {
   if (verdict.ok || verdict.fix === undefined) {
     throw new BadVerbArgs(`doctor-fix: ${check.label} has nothing to fix`);
   }
-  applyFix(ctx.doctor, verdict.fix);
+  const after = applyFix(ctx.doctor, verdict.fix, facts);
   ctx.dlog(
     "info",
     `doctor-fix: ${check.name} → ${verdict.fix.kind} ${verdict.fix.name}=${verdict.fix.value} (session=${sid})`,
   );
-  writeReport(ctx, sid, {
-    ...facts,
-    claudeSettingsEnv: readClaudeSettingsEnv(ctx.doctor),
-  });
+  writeReport(ctx, sid, after);
 };
 
 // ─── Registry ───────────────────────────────────────────────────────────────

@@ -660,14 +660,12 @@ function declaresStateKey(cfg: DslConfig, key: string): boolean {
   return stateVars(cfg).some((v) => v.kind === "state" && v.key === key);
 }
 
-// [LAW:dataflow-not-control-flow] A config emits a set-state, set-config,
-// reset-config, undo, OR redo click — and so needs session.id — when any
-// declared action is a `set` (literal/option/bounded/cycle), a `persist`
-// (its config-file twin), a `reset` (persist's gated undo), or an
-// `undo`/`redo` (the config-edit history's global step) — all five
-// carry session.id on the wire for click-error surfacing (an empty history
-// stack is a loud, session-scoped miss, not a silent no-op). copy/open
-// actions write nothing, so they embed no session.id.
+// [LAW:dataflow-not-control-flow] A config needs session.id when any declared
+// action carries it on the wire — `set` (literal/option/bounded/cycle),
+// `persist`, `reset`, `undo`/`redo`, and both `doctor` verbs — so a click
+// error (an empty history stack, nothing left to fix) surfaces on the session
+// that clicked, never as a silent no-op. copy/open write nothing and embed
+// no session.id.
 function hasActionSetAction(cfg: DslConfig): boolean {
   return Object.values(cfg.actions).some(
     (a) =>

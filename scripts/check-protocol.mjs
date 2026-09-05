@@ -195,18 +195,37 @@ const CHECKS = [
   },
   // What "this session is in tmux" MEANS, and which env var Claude Code's own
   // truecolor switch lives in. Same drift hazard as the SSH row: the doctor's
-  // tmux-truecolor check reasons over whichever client rendered last.
+  // tmux-truecolor check reasons over whichever client rendered last. Both
+  // sides are named roles, so the member is `role=VAR` — a swapped pair is
+  // drift even when the set of names is unchanged.
   {
     label: "tmux hint env vocabulary",
     ts: memberSet(
       TS_TMUX_HINT,
       /export const TMUX_ENV = \{[\s\S]+?\} as const;/,
-      /"([A-Z_]+)"/g,
+      /(\w+): "([A-Z_]+)"/g,
     ),
     rust: memberSet(
       RS_MAIN,
-      /const TMUX_ENV: \[&str; \d+\] = \[[\s\S]+?\];/,
-      /"([A-Z_]+)"/g,
+      /const TMUX_ENV: TmuxEnv = TmuxEnv \{[\s\S]+?\};/,
+      /(\w+): "([A-Z_]+)"/g,
+    ),
+  },
+  // The tmux hint's own wire shape: the field names the Rust client builds
+  // into the object against the TS type the daemon sanitizes it into. A
+  // renamed field would not fail — sanitizeTmux would read every native
+  // hint as "unreported".
+  {
+    label: "tmux hint wire keys",
+    ts: memberSet(
+      TS_TMUX_HINT,
+      /export interface TmuxHint \{[\s\S]+?\n\}/,
+      /readonly (\w+):/g,
+    ),
+    rust: memberSet(
+      RS_MAIN,
+      /fn tmux_hint\([\s\S]+?json!\(\{[\s\S]+?\}\)/,
+      /"(\w+)":/g,
     ),
   },
   // Which bare flags Node answers. The Rust client must route every spelling

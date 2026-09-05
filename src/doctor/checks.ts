@@ -13,7 +13,7 @@
 // from this list, the CLI prints one line per entry, the verbs gate `[fix]` by
 // membership in it.
 
-import type { TmuxHint } from "../tmux-hint.js";
+import { TMUX_ENV, type TmuxHint } from "../tmux-hint.js";
 import type { Outcome } from "../utils/outcome.js";
 
 // [LAW:types-are-the-program] tmux's own verdict on the attached terminal's
@@ -76,7 +76,7 @@ export interface CheckReport {
   readonly verdict: Verdict;
 }
 
-export const TMUX_TRUECOLOR_VAR = "CLAUDE_CODE_TMUX_TRUECOLOR";
+export const TMUX_TRUECOLOR_VAR = TMUX_ENV.truecolor;
 
 // Diagnosed 2026-09-04 (brandon-doctor-b6a): Claude Code re-encodes the
 // statusline at 256 colours whenever TMUX is in its environment, unless its own

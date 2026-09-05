@@ -98,7 +98,7 @@ function tmuxFacts(edge: DoctorEdge, hint: ClientHints["tmux"]): TmuxFacts {
 // a non-object document, a non-object `env` — surfaces as "cannot read <the
 // path this edge was built with>", so a test's temp path and the real
 // ~/.claude/settings.json are reported the same way.
-export function readClaudeSettingsEnv(
+function readClaudeSettingsEnv(
   edge: DoctorEdge,
 ): DoctorFacts["claudeSettingsEnv"] {
   try {
@@ -127,7 +127,15 @@ export function gatherFacts(
 // other byte of the user's file survives — comments, ordering, indentation.
 // In the JSON dialect: Claude Code parses settings.json strictly, so a bare
 // key or a trailing comma here would break every Claude Code launch.
-export function applyFix(edge: DoctorEdge, fix: Fix): void {
+//
+// Returns the facts with the one this fix changed re-read — the performer of
+// an effect is the one place that knows what it touched, so a post-fix report
+// cannot reuse a stale fact or re-probe an unchanged one.
+export function applyFix(
+  edge: DoctorEdge,
+  fix: Fix,
+  facts: DoctorFacts,
+): DoctorFacts {
   switch (fix.kind) {
     case "claude-settings-env": {
       const text = readSettingsText(edge);
@@ -139,7 +147,7 @@ export function applyFix(edge: DoctorEdge, fix: Fix): void {
       );
       fs.mkdirSync(path.dirname(edge.claudeSettingsPath), { recursive: true });
       fs.writeFileSync(edge.claudeSettingsPath, next);
-      return;
+      return { ...facts, claudeSettingsEnv: readClaudeSettingsEnv(edge) };
     }
     default: {
       const _exhaustive: never = fix.kind;

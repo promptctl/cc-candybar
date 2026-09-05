@@ -460,20 +460,42 @@ fn detect_ssh() -> bool {
 // switch), diffed by scripts/check-protocol.mjs. Both runtimes must agree on
 // what "in tmux" means, or the native fast path and the node fallback would
 // report the same session differently.
-const TMUX_ENV: [&str; 3] = ["TMUX", "TMUX_PANE", "CLAUDE_CODE_TMUX_TRUECOLOR"];
+// Named roles, read by name: a reordering cannot change which variable plays
+// which part, and the check diffs `role=VAR` pairs against the TS object.
+struct TmuxEnv {
+    socket: &'static str,
+    pane: &'static str,
+    truecolor: &'static str,
+}
+const TMUX_ENV: TmuxEnv = TmuxEnv {
+    socket: "TMUX",
+    pane: "TMUX_PANE",
+    truecolor: "CLAUDE_CODE_TMUX_TRUECOLOR",
+};
+
+fn detect_tmux() -> serde_json::Value {
+    let raw = |name: &str| env::var(name).ok();
+    tmux_hint(raw(TMUX_ENV.socket), raw(TMUX_ENV.pane), raw(TMUX_ENV.truecolor))
+}
 
 // [LAW:dataflow-not-control-flow] Total by construction, like detect_ssh:
-// `Null` is the affirmative "not in tmux" (TMUX or TMUX_PANE empty), an object
-// is the facts. `socket` is the part of TMUX before its first comma (the value
-// is `socket,server-pid,session-id`); `truecolor` is the switch's value, or
-// `null` for unset-or-empty — both falsy to Claude Code's own truthiness test.
-fn detect_tmux() -> serde_json::Value {
-    let non_empty = |name: &str| env::var(name).ok().filter(|v| !v.is_empty());
-    match (non_empty(TMUX_ENV[0]), non_empty(TMUX_ENV[1])) {
+// `Null` is the affirmative "not in tmux" (TMUX or TMUX_PANE unset-or-empty),
+// an object is the facts. `socket` is the part of TMUX before its first comma
+// (the value is `socket,server-pid,session-id`); `truecolor` is the switch's
+// value, or `null` for unset-or-empty — both falsy to Claude Code's own
+// truthiness test. Pure over the three raw env values so the table in
+// test/doctor-checks.test.ts can be run against it.
+fn tmux_hint(
+    tmux: Option<String>,
+    pane: Option<String>,
+    truecolor: Option<String>,
+) -> serde_json::Value {
+    let non_empty = |v: Option<String>| v.filter(|v| !v.is_empty());
+    match (non_empty(tmux), non_empty(pane)) {
         (Some(tmux), Some(pane)) => serde_json::json!({
             "socket": tmux.split(',').next().unwrap_or(""),
             "pane": pane,
-            "truecolor": non_empty(TMUX_ENV[2]),
+            "truecolor": non_empty(truecolor),
         }),
         _ => serde_json::Value::Null,
     }
@@ -1001,6 +1023,31 @@ mod tests {
         assert_eq!(detect_term_extent(Some("x".to_string()), 24), Some(24));
         assert_eq!(detect_term_extent(None, 24), Some(24));
         assert_eq!(detect_term_extent(None, 0), None);
+    }
+
+    // The same table as test/doctor-checks.test.ts (detectTmuxHint): in tmux
+    // iff TMUX and TMUX_PANE are both non-empty; socket is TMUX up to its
+    // first comma; truecolor is the raw value or null.
+    #[test]
+    fn tmux_hint_reads_exactly_what_the_ts_client_reads() {
+        let s = |v: &str| Some(v.to_string());
+        let socket = "/tmp/tmux-501/default,123,0";
+        assert_eq!(tmux_hint(None, None, None), serde_json::Value::Null);
+        assert_eq!(tmux_hint(s(socket), None, None), serde_json::Value::Null);
+        assert_eq!(tmux_hint(None, s("%1"), None), serde_json::Value::Null);
+        assert_eq!(tmux_hint(s(""), s("%1"), None), serde_json::Value::Null);
+        assert_eq!(
+            tmux_hint(s(socket), s("%1"), None),
+            serde_json::json!({ "socket": "/tmp/tmux-501/default", "pane": "%1", "truecolor": null })
+        );
+        assert_eq!(
+            tmux_hint(s(socket), s("%1"), s("1")),
+            serde_json::json!({ "socket": "/tmp/tmux-501/default", "pane": "%1", "truecolor": "1" })
+        );
+        assert_eq!(
+            tmux_hint(s(socket), s("%1"), s("")),
+            serde_json::json!({ "socket": "/tmp/tmux-501/default", "pane": "%1", "truecolor": null })
+        );
     }
 
     // [LAW:one-type-per-behavior] InvalidData/InvalidInput from the protocol
