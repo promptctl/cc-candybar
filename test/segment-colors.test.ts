@@ -76,6 +76,7 @@ function resolve(
   bg: Template<RichText> | undefined,
   fg: Template<RichText> | undefined,
   scope: object = {},
+  text: ColorRgba | undefined = undefined,
 ): Style {
   return resolveSegmentColors(
     h.ref,
@@ -83,7 +84,7 @@ function resolve(
     palette,
     DISCLOSURE,
     TINT,
-    undefined,
+    text,
     bg,
     fg,
     scope,
@@ -95,6 +96,8 @@ const DISCLOSURE: Disclosure = { hue: "primary", depth: 0 };
 // The tint the walk dealt this segment's address — a colour no palette role
 // here spells, so a background equal to it can only have come from the floor.
 const TINT = parseRgbHex("102030");
+// The text the walk chose for a band cell — likewise unspelled by any role.
+const TEXT = parseRgbHex("f0e0d0");
 
 // ────────────────────────────────────────────────────────────────────────────
 // 1. No bg template → the tint IS the background (a segment always has one);
@@ -117,6 +120,24 @@ describe("no bg/fg templates → the tint, and no foreground", () => {
     const h = makeHarness();
     const style = resolve(h, makeTestPalette(), h.parse("error"), undefined);
     expect(style.bgcolor?.value?.hex).toBe("#ff4444");
+  });
+
+  test("undefined fg → the region's text, when the walk chose one", () => {
+    const style = resolve(
+      makeHarness(),
+      makeTestPalette(),
+      undefined,
+      undefined,
+      {},
+      TEXT,
+    );
+    expect(style.color?.value?.hex).toBe(TEXT.hex);
+  });
+
+  test("an authored fg paints over the region's text", () => {
+    const h = makeHarness();
+    const style = resolve(h, makeTestPalette(), undefined, h.parse("error"), {}, TEXT);
+    expect(style.color?.value?.hex).toBe("#ff4444");
   });
 
   test("{{ bgOf }} in a fg template reads the tint when no bg is authored", () => {
