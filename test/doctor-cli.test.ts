@@ -36,6 +36,18 @@ describe("doctorPlan", () => {
     });
   });
 
+  // Claude Code parses settings.json strictly; a file it would refuse is not
+  // readable, whatever a looser parser makes of it.
+  test("a settings.json that is JSON5 but not JSON is exit 2 naming the file", () => {
+    const e = edge();
+    fs.writeFileSync(e.claudeSettingsPath, '{ "env": { "A": "1", }, }');
+    const plan = doctorPlan(e, IN_TMUX);
+    expect(plan.stdout).toBe("");
+    expect(plan.code).toBe(2);
+    expect(plan.stderr).toMatch(/\n$/);
+    expect(plan.stderr.startsWith(`doctor: cannot read ${e.claudeSettingsPath}: `)).toBe(true);
+  });
+
   test("every check ok is exit 0, one ✓ line per check", () => {
     expect(doctorPlan(edge(), {})).toEqual({
       stdout: "✓ tmux truecolor\n",

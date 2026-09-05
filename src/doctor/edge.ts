@@ -8,7 +8,6 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import JSON5 from "json5";
 import { claudeSettingsPath } from "../claude-settings.js";
 import { JSON_DIALECT, setValue } from "../config/json5-edit.js";
 import type { ClientHints } from "../daemon/protocol.js";
@@ -74,7 +73,7 @@ function readSettingsText(edge: DoctorEdge): string {
 
 function settingsEnv(text: string): Readonly<Record<string, unknown>> {
   if (/^\s*$/.test(text)) return {};
-  const parsed: unknown = JSON5.parse(text);
+  const parsed: unknown = JSON_DIALECT.parse(text);
   if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
     throw new Error("not a JSON object");
   }
@@ -95,7 +94,7 @@ function tmuxFacts(edge: DoctorEdge, hint: ClientHints["tmux"]): TmuxFacts {
   return { kind: "inside", hint, termfeatures: edge.probeTmux(hint) };
 }
 
-// The one place that names the file: every failure — a JSON5 parse error,
+// The one place that names the file: every failure — a JSON parse error,
 // a non-object document, a non-object `env` — surfaces as "cannot read <the
 // path this edge was built with>", so a test's temp path and the real
 // ~/.claude/settings.json are reported the same way.

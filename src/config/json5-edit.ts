@@ -286,16 +286,26 @@ export function keyText(key: string): string {
  * member. [LAW:one-type-per-behavior] One splicer, two values.
  * [LAW:dataflow-not-control-flow] The same synthesis runs for both; the
  * dialect is data it reads, never a branch it takes.
+ *
+ * `parse` is the same fact read in the other direction: a reader that accepts
+ * more than the file's consumer does would call a file readable that the
+ * consumer refuses, and then splice into it [LAW:one-source-of-truth].
  */
 export interface Dialect {
   readonly key: (key: string) => string;
   readonly trailingComma: "," | "";
+  readonly parse: (text: string) => unknown;
 }
 
-export const JSON5_DIALECT: Dialect = { key: keyText, trailingComma: "," };
+export const JSON5_DIALECT: Dialect = {
+  key: keyText,
+  trailingComma: ",",
+  parse: (text) => JSON5.parse(text),
+};
 export const JSON_DIALECT: Dialect = {
   key: (key) => JSON.stringify(key),
   trailingComma: "",
+  parse: (text) => JSON.parse(text),
 };
 
 /**

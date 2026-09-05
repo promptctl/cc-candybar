@@ -174,9 +174,10 @@ export function ccCandybarFuncs(): FuncMap {
 export function formatterFuncs(clock: () => Date = () => new Date()): FuncMap {
   return {
     // Epoch-seconds → whole minutes until that instant, clamped at 0 for a past
-    // expiry: round(max(0, epoch*1000 − now)/60000). Consumed by the block/weekly
-    // segments (`formatLongTimeRemaining (add 1 (minutesUntilReset .resetsAt))`)
-    // and the cacheTimer warmth countdown (numeric `le` thresholds, 0 = cold).
+    // expiry: round(max(0, epoch*1000 − now)/60000). Consumed by the
+    // `formatResetCountdown` helper (block/weekly, which adds the minute in
+    // progress) and the cacheTimer warmth countdown (numeric `le` thresholds,
+    // 0 = cold).
     minutesUntilReset: {
       fn: (epochSeconds: number) =>
         Math.round(
