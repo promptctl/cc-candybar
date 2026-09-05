@@ -1,3 +1,10 @@
+# [1.52.0](https://github.com/promptctl/cc-candybar/compare/v1.51.0...v1.52.0) (2026-09-05)
+
+
+### Features
+
+* **render:** paint the closed cell from the vocabulary; delete the hue cursor (candybar-render-ai7.4) ([#211](https://github.com/promptctl/cc-candybar/issues/211)) ([d6fb1f1](https://github.com/promptctl/cc-candybar/commit/d6fb1f124908ef985ad97dbe0eeeaa5ac764e619)), closes [#242f38](https://github.com/promptctl/cc-candybar/issues/242f38)
+
 # [1.51.0](https://github.com/promptctl/cc-candybar/compare/v1.50.0...v1.51.0) (2026-09-05)
 
 
