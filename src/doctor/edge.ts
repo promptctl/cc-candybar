@@ -39,7 +39,7 @@ function probeTmux(hint: TmuxHint): TermFeatures {
       "#{client_termfeatures}",
     ],
     timeoutMs: 2000,
-    category: "tmux",
+    category: "doctor.tmux",
   });
   if (!result.ok) {
     const detail = (result.error ?? result.stderr).trim();
