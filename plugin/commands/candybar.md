@@ -178,7 +178,7 @@ If neither exists, continue to Step 7. If either exists, name the file(s) found 
 - **Question**: "Found an existing cc-candybar config. What should I do?"
 - **Header**: "Existing Config"
 - **Options**:
-  - "Replace it" -> If `config.json` exists, run `mv ~/.config/cc-candybar/config.json ~/.config/cc-candybar/config.json.bak.${stamp}` so it cannot shadow the new file. Continue to Step 7 (which overwrites `config.json5`).
+  - "Replace it" -> If `config.json` exists, run `mv ~/.config/cc-candybar/config.json ~/.config/cc-candybar/config.json.bak.${stamp}` so the bar does not warn about the two files colliding. Continue to Step 7 (which overwrites `config.json5`).
   - "Back it up first" -> Run `cp ~/.config/cc-candybar/config.json5 ~/.config/cc-candybar/config.json5.bak.${stamp}` if `config.json5` exists. Then proceed exactly as "Replace it".
   - "Keep it and exit" -> Tell the user nothing was changed and stop.
 

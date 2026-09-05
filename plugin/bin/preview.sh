@@ -83,7 +83,6 @@ render_request() {
     (cd "${REPO}" && sample_json | "${CLIENT[@]}" "$@")
 }
 
-# The daemon's stats answer: success when it is up, its refusal on stdout when not.
 probe_daemon() {
     { "${CLIENT[@]}" daemon-stats --json >/dev/null; } 2>&1
 }
@@ -120,13 +119,8 @@ fill_template() {
     printf '%s' "${out}"
 }
 
-# Check the filled config the way the wizard's user would (exit 1 names the
-# error), then render it.
 render() {
-    local config
-    config="$(fill_template "$@")"
-    "${CLIENT[@]}" check "${config}" >/dev/null
-    render_request --config="${config}"
+    render_request --config="$(fill_template "$@")"
     printf '\n'
 }
 
@@ -156,6 +150,10 @@ main() {
     find_client
     make_fixture
     ensure_daemon
+    # The flag values are checked once, as the wizard's user would see them
+    # (exit 1 names the error). A compare varies one axis over its array, whose
+    # members test/plugin-templates.test.ts pins to the loader's own domain.
+    "${CLIENT[@]}" check "$(fill_template "${THEME}" "${STYLE}" "${CHARSET}" "${PRESET}")" >/dev/null
 
     local name
     case "${COMPARE}" in
