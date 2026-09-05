@@ -82,7 +82,7 @@ The state boundary had to be enforced rather than assumed, because "the pure hue
 
 **Depth advances the hue.** A nested disclosure takes the *next* vocabulary hue and recedes one step further (`0.42 + 0.14 * depth`, capped at 0.75). Two cues move together across every depth the bar reaches: the bundled ☰ → ⚙ → picker is depth 2, and adjacent planes at depths 0→1 and 1→2 stay at least .035 ΔE apart on every theme × hue. Depth 3 is the limit. The cap leaves only .05 of recession between depths 2 and 3 while the hue has wrapped onto one already used, and 20 of the 69 theme × hue lineages fall to .016–.034. A trigger still stands off its plane there; adjacent planes do not, and nothing shipped reaches depth 3. `test/decor.test.ts` pins the covered depths and records the limit.
 
-**A trigger is drawn from what it opens, not from where it sits.** It takes the peak of its children's region. Without this, a submenu's parent is coloured as one of its siblings and nothing connects it to the thing it opened.
+**A trigger is drawn from what it opens, not from where it sits.** It takes the peak of its children's region. Without this, a submenu's parent is coloured as one of its siblings and nothing connects it to the thing it opened. In code a node's position is a `Region` (`src/themes/decor.ts`): on the bar, an address into the vocabulary; on a band, the `Disclosure` its trigger was dealt plus the steps since the body's root — so a body needs nothing of its trigger's position, only what the trigger opened, which is why the body hangs on the trigger node rather than beside it.
 
 ### One distribution field, at every level
 

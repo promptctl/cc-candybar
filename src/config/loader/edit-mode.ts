@@ -46,14 +46,17 @@
 
 import { createEngine } from "@promptctl/go-template-js";
 import type { Mutable, ValidateCtx } from "./validate-core.js";
-import type { RawDslConfig, VariableDecl } from "../dsl-types.js";
+import type {
+  DisclosureRef,
+  RawDslConfig,
+  VariableDecl,
+} from "../dsl-types.js";
 import type { ActionDecl } from "../action.js";
 import {
   DISCLOSURE_CLOSED,
   disclosureCycleAction,
   disclosureGate,
   disclosureStateVar,
-  type DisclosureRef,
 } from "../disclosure.js";
 import { reservedNamespaceCollisions } from "./reserved-namespace.js";
 

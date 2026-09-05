@@ -184,7 +184,7 @@ export type Address = readonly AddressStep[];
  * row decides the coarse position and the cell refines it. The value the
  * evidence demo was validated with; the doc's separations were measured under it.
  */
-const LEVEL_DECAY = 0.37;
+export const LEVEL_DECAY = 0.37;
 
 /**
  * The index into a vocabulary of `size` entries that `address` selects: a
@@ -203,6 +203,28 @@ function vocabularyIndex(address: Address, size: number): number {
   }
   const raw = Math.round(value) % size;
   return raw < 0 ? raw + size : raw;
+}
+
+/**
+ * Where `address` lands on a band's plane→state axis, in [0, 1): the same
+ * weighted fold `vocabularyIndex` runs — each level placed by its own step's
+ * distribution, decaying by `LEVEL_DECAY` — taken modulo 1 instead of
+ * rounded into a vocabulary. One step yields exactly that step's placement
+ * (`d % 1 === d` for `d` in [0, 1)), so a picker's options, one step each
+ * under their trigger, land where they always did; the empty address (the
+ * band's root) lands at 0. The two folds are kept as two spellings rather
+ * than one shared helper because `vocabularyIndex` scales by `size` INSIDE
+ * the sum, and reassociating that product would move bytes in every
+ * committed snapshot for no gain.
+ */
+function bandAxis(address: Address): number {
+  let value = 0;
+  let weight = 1;
+  for (const { index, count, distribution } of address) {
+    value += distribution(index, count) * weight;
+    weight *= LEVEL_DECAY;
+  }
+  return value % 1;
 }
 
 /**
@@ -431,22 +453,113 @@ export function bandFor(palette: Palette, disclosure: Disclosure): Band {
 const BAND_MEMO = new WeakMap<Palette, Map<string, Band>>();
 
 /**
- * The colour of item `step` (which of how many, placed by the band's own
- * distribution) in the band `disclosure` opens: placed along the plane→state
- * axis inside `BAND_WINDOW`. A band is one more step on its trigger's address,
- * so the step is the SAME shape the bar's rows and cells address the
+ * The colour of the item at `address` — its steps from the band's root, each
+ * placed by its parent's own distribution — in the band `disclosure` opens:
+ * placed along the plane→state axis inside `BAND_WINDOW`. A band's items are
+ * addressed by the SAME step shape the bar's rows and cells address the
  * vocabulary through — one placement mechanism at every level; a band only
- * scales it into its plane-to-state window.
+ * folds the steps onto its plane-to-state axis (`bandAxis`) instead of into
+ * the vocabulary. A picker's options are one step each; a group's body is a
+ * container whose cells may nest, and nests fold the same way.
  */
 export function bandItemFor(
   palette: Palette,
   disclosure: Disclosure,
-  { index, count, distribution }: AddressStep,
+  address: Address,
 ): ColorRgba {
   const { state, plane } = bandFor(palette, disclosure);
   return blendRgb(
     plane,
     state,
-    BAND_WINDOW.floor + BAND_WINDOW.span * distribution(index, count),
+    BAND_WINDOW.floor + BAND_WINDOW.span * bandAxis(address),
   );
+}
+
+// --- Regions -------------------------------------------------------------------
+
+/**
+ * Where a node stands in the colour model (design doc, "The region model"):
+ * on the BAR, where its address selects a vocabulary entry, or on a BAND — the
+ * plane a disclosure hung under its trigger — where its address is the steps
+ * since that band's root and places it along the band's axis. The band's
+ * `Disclosure` is the hue and depth its TRIGGER computed; nothing about the
+ * trigger's own position enters, which is what lets a body hang on its
+ * trigger and still be coloured without walk order [LAW:types-are-the-program].
+ */
+export type Region =
+  | { readonly kind: "bar"; readonly address: Address }
+  | {
+      readonly kind: "band";
+      readonly band: Disclosure;
+      readonly address: Address;
+    };
+
+/** The bar's root: the top of the layout tree, before any step. */
+export const BAR_ROOT: Region = { kind: "bar", address: [] };
+
+/** One step down within the same region — a container placing a child. */
+export const descend = (region: Region, step: AddressStep): Region => ({
+  ...region,
+  address: [...region.address, step],
+});
+
+/** The root of the band `band` opens — where a disclosure body starts. */
+export const bandRoot = (band: Disclosure): Region => ({
+  kind: "band",
+  band,
+  address: [],
+});
+
+/**
+ * The foreground an UNAUTHORED `fg:` wears on `background` — the background
+ * the cell actually resolves to, tint or authored `bg:`, so the choice can
+ * never be measured against a colour the cell does not paint.
+ * [LAW:one-source-of-truth]
+ */
+export type TextFloor = (background: ColorRgba) => ColorRgba | undefined;
+
+/** The bar's floor: the terminal keeps its own text, whatever the background. */
+export const TERMINAL_TEXT: TextFloor = () => undefined;
+
+/**
+ * What a segment in a region is dealt. `tint` is the colour its CLOSED cell
+ * wears; `text` is the floor an UNAUTHORED `fg:` defaults to — the terminal's
+ * own on the bar, and on a band the theme pole that reads better on the
+ * cell's background, because text on a state-region cell is chosen (design
+ * doc, Decisions); `disclosure` is the band the segment opens if it is a trigger.
+ */
+export interface Decoration {
+  readonly tint: ColorRgba;
+  readonly text: TextFloor;
+  readonly disclosure: Disclosure;
+}
+
+/**
+ * [LAW:one-source-of-truth] ONE read per segment, projected three ways. On the
+ * bar, one vocabulary entry gives both the tint and the hue of the band the
+ * cell opens (at depth 0), so a cell and the band it drops cannot disagree
+ * about their hue. On a band, the item is placed by its address and OPENS the
+ * next band of the same lineage: the band's own hue one depth further — the
+ * demo's `menuPlane(host, depth + 1)` — a natural counted up from the band it
+ * stands on, never arithmetic back from a position.
+ */
+export function decorationFor(palette: Palette, region: Region): Decoration {
+  switch (region.kind) {
+    case "bar": {
+      const entry = decorEntryFor(region.address);
+      return {
+        tint: decorEntryColour(palette, entry),
+        text: TERMINAL_TEXT,
+        disclosure: { hue: entry.hue, depth: 0 },
+      };
+    }
+    case "band": {
+      const tint = bandItemFor(palette, region.band, region.address);
+      return {
+        tint,
+        text: (background) => textOn(palette, background),
+        disclosure: { hue: region.band.hue, depth: region.band.depth + 1 },
+      };
+    }
+  }
 }

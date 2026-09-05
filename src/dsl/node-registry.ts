@@ -30,12 +30,14 @@ import type {
   Direction,
   SegmentDecl,
 } from "../config/dsl-types.js";
+import { disclosureGate } from "../config/disclosure.js";
 import { splitCellsIntoLines } from "../render/split-lines.js";
 import {
   placedBy,
-  type Address,
   type AddressStep,
+  type Disclosure,
   type Distribution,
+  type Region,
 } from "../themes/decor.js";
 import {
   fragmentsToCells,
@@ -53,6 +55,14 @@ export interface CompiledSegmentNode {
   readonly kind: "segment";
   readonly when?: Template<RichText>;
   readonly name: string;
+  // The disclosure body this segment opens (SegmentNode.opens), with its
+  // openness parsed ONCE from the ref — `disclosureGate(ref)` — so the body's
+  // gate is derived from the same pair the trigger's cycle writes.
+  readonly opens?: CompiledOpens;
+}
+export interface CompiledOpens {
+  readonly open: Template<RichText>;
+  readonly body: CompiledContainerNode;
 }
 export interface CompiledContainerNode {
   readonly kind: "container";
@@ -65,6 +75,14 @@ export interface CompiledContainerNode {
   readonly distribution: Distribution;
 }
 export type CompiledNode = CompiledSegmentNode | CompiledContainerNode;
+
+// [LAW:types-are-the-program] The compiled arm of a raw node kind: a
+// ContainerNode compiles to a CompiledContainerNode, never to the union, so a
+// disclosure body — a container by type — stays a container once compiled.
+export type Compiled<N extends LayoutNode> = Extract<
+  CompiledNode,
+  { kind: N["kind"] }
+>;
 
 // Pre-parsed templates and pre-resolved palette for one segment, built once at
 // registration. A `segment` node names one; render looks it up via
@@ -96,9 +114,12 @@ export interface NodeCompileCtx {
   readonly path: string;
   // The node's own `when`, already parsed by the driver (one parse-when site).
   readonly when?: Template<RichText>;
+  // Parse one more template field of THIS node through the driver's one
+  // parse site, so its error names `path.field` like a `when` does.
+  parse(src: string, field: string): Template<RichText>;
   // Compile a child node (the recursion, injected so this module needn't import
-  // the driver).
-  compileChild(node: LayoutNode, path: string): CompiledNode;
+  // the driver). Generic so a container child compiles to a container.
+  compileChild<N extends LayoutNode>(node: N, path: string): Compiled<N>;
 }
 
 // [LAW:single-enforcer] The render-time context. `visible` is THIS node's
@@ -115,12 +136,14 @@ export interface NodeRenderCtx {
   // globals.padding), threaded by the driver from BuildLineOptions into every
   // segment's layout — one value per render, never re-defaulted per node.
   readonly padding: number;
-  // [LAW:effects-at-boundaries] THIS node's address: the (index, count) steps
-  // from the root, extended by one step per container level by the driver.
-  // A pure fact about position — unchanged by any node being hidden — that
-  // the segment hands to `enterSegment` so its colours derive from where it
-  // sits, with no walk state read.
-  readonly address: Address;
+  // [LAW:effects-at-boundaries] THIS node's region: the bar with the
+  // (index, count) steps from the root, or the band a disclosure body hangs
+  // on with the steps since that body — extended by one step per container
+  // level by the driver, re-rooted onto a band by `renderBody`. A pure fact
+  // about position — unchanged by any node being hidden — that the segment
+  // hands to `enterSegment` so its colours derive from where it sits, with no
+  // walk state read.
+  readonly region: Region;
   readonly perSegmentSink?: Map<string, readonly RichText[]>;
   // [LAW:no-silent-failure] Optional observer for the per-segment render catch
   // below: a caught evaluation error renders as a visible ⚠ error cell (partial
@@ -147,7 +170,7 @@ export interface NodeRenderCtx {
   enterSegment(
     segName: string,
     palette: Palette,
-    address: Address,
+    region: Region,
     bgTemplate: Template<RichText> | undefined,
     fgTemplate: Template<RichText> | undefined,
   ): SegmentStyles;
@@ -166,6 +189,14 @@ export interface NodeRenderCtx {
     parentVisible: boolean,
     step: AddressStep,
   ): RenderedLines;
+  // Continue the walk into the body a segment opens: rendered at the root of
+  // the band `band` (the disclosure the trigger computed at entry), visible
+  // exactly when the trigger is and `open` holds.
+  renderBody(
+    body: CompiledContainerNode,
+    open: boolean,
+    band: Disclosure,
+  ): RenderedLines;
 }
 
 // [LAW:types-are-the-program] Every Style a segment can wear, resolved at
@@ -173,11 +204,14 @@ export interface NodeRenderCtx {
 // state colour of the band it opens — what it wears while that band is dropped
 // below it; `band` is that band's plane, the floor its dropped lines sit on.
 // Which one a line wears is a VALUE the walk selects by the drop's presence,
-// never a transform applied after the fact.
+// never a transform applied after the fact. `disclosure` is the band those
+// two were drawn from, returned so the body the segment opens is rendered on
+// the SAME band its trigger wears — one read, no second derivation.
 export interface SegmentStyles {
   readonly closed: Style;
   readonly trigger: Style;
   readonly band: Style;
+  readonly disclosure: Disclosure;
 }
 
 // ─── Composition ───────────────────────────────────────────────────────────────
@@ -272,6 +306,14 @@ const segmentType: NodeType<"segment"> = {
       kind: "segment",
       when: cctx.when,
       name: node.name,
+      // [LAW:one-source-of-truth] The body's openness is the ref, spelled as a
+      // predicate by the one `disclosureGate` every disclosure reads through.
+      ...(node.opens !== undefined && {
+        opens: {
+          open: cctx.parse(disclosureGate(node.opens.ref), "opens"),
+          body: cctx.compileChild(node.opens.body, `${cctx.path}.opens.body`),
+        },
+      }),
     };
   },
   render(node, ctx) {
@@ -312,7 +354,7 @@ const segmentType: NodeType<"segment"> = {
       const styles = ctx.enterSegment(
         node.name,
         palette,
-        ctx.address,
+        ctx.region,
         segCompiled.bg,
         segCompiled.fg,
       );
@@ -322,12 +364,24 @@ const segmentType: NodeType<"segment"> = {
       // sit anywhere in the template and content after it stays inline. Each
       // becomes one full-width line stacked below the segment's row.
       const drops = ctx.exitSegment(fragments);
-      // [LAW:dataflow-not-control-flow] Open is the PRESENCE of a drop: a
-      // segment with an open menu (it contributed a body) is the TRIGGER of
-      // the band it dropped, and wears that band's state colour — drawn from
-      // what it opens, not from where it sits. No state re-read; the drop list
-      // IS the open-menu signal, and the two Styles were both resolved at entry.
-      const baseStyle = drops.length > 0 ? styles.trigger : styles.closed;
+      // The disclosure body this segment opens (a group's, the settings menu's,
+      // a `(?)`'s), walked AFTER exit — its cells are segments of their own,
+      // each entering the seam in turn — on the band this trigger computed.
+      // Walked open or closed, like every child: visibility is a value.
+      const bodyOpen =
+        node.opens !== undefined && evaluateWhen(node.opens.open, ctx.scope);
+      const bodyLines =
+        node.opens === undefined
+          ? []
+          : ctx.renderBody(node.opens.body, bodyOpen, styles.disclosure);
+      // [LAW:dataflow-not-control-flow] Open is the PRESENCE of something
+      // under the segment: a dropped menu body, or an open disclosure body.
+      // Either way the segment is the TRIGGER of the band below it and wears
+      // that band's state colour — drawn from what it opens, not from where
+      // it sits. No state re-read beyond the body's own gate; the drop list
+      // IS the open-menu signal, and every Style was resolved at entry.
+      const open = drops.length > 0 || bodyOpen;
+      const baseStyle = open ? styles.trigger : styles.closed;
       const layout = {
         width: seg.width ?? "auto",
         justify: seg.justify ?? "left",
@@ -361,10 +415,15 @@ const segmentType: NodeType<"segment"> = {
       );
       const laidLines = [...inlineLines, ...dropLines];
 
+      // The sink holds THIS segment's cells — its inline row(s) and the menu
+      // bands it dropped. A disclosure body's cells belong to the segments in
+      // it, each of which sinks its own.
       if (ctx.perSegmentSink !== undefined) {
         ctx.perSegmentSink.set(node.name, laidLines.flat());
       }
-      return laidLines;
+      // Below row 0 every line is a drop: menu bands first (template order),
+      // then the disclosure body, in the order they hang under the trigger.
+      return [...laidLines, ...bodyLines];
     } catch (err) {
       const message = (err as Error).message ?? String(err);
       ctx.onSegmentError?.(node.name, message);

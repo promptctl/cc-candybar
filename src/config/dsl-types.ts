@@ -84,6 +84,49 @@ export interface SegmentNode {
   // [LAW:dataflow-not-control-flow] Absent `when` ≡ always-rendered. A node-level
   // predicate, ANDed with the segment-decl's own `when` at render.
   readonly when?: string;
+  // [LAW:types-are-the-program] The disclosure BODY this segment opens, hung on
+  // the trigger that opens it (candybar-render-ai7.9). A body is a plane under
+  // its trigger, not a sibling of it: the band it is coloured on takes the
+  // trigger's own vocabulary hue, and a body that sat beside its trigger could
+  // reach that hue only through walk order. `ref` names the open state; the
+  // body carries no `when` of its own — the walk derives "open" from `ref`
+  // (`disclosureGate`) at compile, so the gate and the trigger's cycle cannot
+  // drift. A hidden trigger (its `when` or its decl's) renders no body.
+  // Synthesis-only: `disclosureNode` (src/config/disclosure.ts) is the one
+  // producer and the loader's segment schema does not list the field, so no
+  // config can author it.
+  readonly opens?: Opens;
+}
+
+export interface Opens {
+  readonly ref: DisclosureRef;
+  readonly body: ContainerNode;
+}
+
+// [LAW:types-are-the-program] One open disclosure, named by the two strings that
+// decide it: the VARIABLE a body reads and the MEMBER value that means "this one
+// is open". They are distinct because a group's variable is per-group
+// (`groups.<name>`) while its state KEY may be shared with accordion siblings —
+// so the pair, never a lone key, is what identifies an open state. It lives
+// here, beside the node that carries it, so the tree type and the disclosure
+// primitive (src/config/disclosure.ts) read one definition.
+export interface DisclosureRef {
+  readonly variable: string;
+  readonly member: string;
+}
+
+// [LAW:dataflow-not-control-flow] A segment with the body it opens rewritten by
+// `f` — total: a segment that opens nothing is returned as it is. Every tree
+// rewrite that recurses into containers (edit chrome's splice, the settings
+// anchor's expansion) recurses into bodies through this one function, so a
+// body can never be the subtree a rewrite forgot.
+export function mapOpens(
+  node: SegmentNode,
+  f: (body: ContainerNode) => ContainerNode,
+): SegmentNode {
+  return node.opens === undefined
+    ? node
+    : { ...node, opens: { ...node.opens, body: f(node.opens.body) } };
 }
 
 export interface ContainerNode {
@@ -168,9 +211,20 @@ export interface GroupSugarDecl {
 // this — none re-recurses the tree itself.
 export function* walkNodes(node: LayoutNode): IterableIterator<LayoutNode> {
   yield node;
-  if (node.kind === "container") {
-    for (const child of node.children) yield* walkNodes(child);
-  }
+  // A disclosure body is part of the tree its trigger stands in — a segment
+  // inside one is reachable, referenced, and cross-checked like any other.
+  for (const child of childrenOf(node)) yield* walkNodes(child);
+}
+
+// [LAW:one-source-of-truth] THE subtrees a node owns: a container's children,
+// a segment's disclosure body. The walk and every count over it read this, so
+// "what is under this node" has one answer for both kinds.
+export function childrenOf(node: LayoutNode): readonly LayoutNode[] {
+  return node.kind === "container"
+    ? node.children
+    : node.opens === undefined
+      ? []
+      : [node.opens.body];
 }
 
 // [LAW:types-are-the-program] A PRESET is a named config FRAGMENT — one

@@ -24,15 +24,21 @@
 // hand-maintained copies [LAW:one-source-of-truth].
 
 import type { ActionDecl } from "./action.js";
-import type { LayoutNode, SegmentDecl, VariableDecl } from "./dsl-types.js";
+import type {
+  DisclosureRef,
+  LayoutNode,
+  SegmentDecl,
+  SegmentNode,
+  VariableDecl,
+} from "./dsl-types.js";
 import {
   DISCLOSURE_CLOSED,
   DISCLOSURE_GLYPH_CLOSE,
   disclosureCycleAction,
   disclosureGate,
+  disclosureNode,
   disclosureStateVar,
   disclosureTrigger,
-  type DisclosureRef,
 } from "./disclosure.js";
 
 // [LAW:one-source-of-truth] The trigger's closed text, one spelling for the
@@ -64,36 +70,29 @@ export interface HelpArtifacts {
   readonly segments: Record<string, SegmentDecl>;
 }
 
-// [LAW:types-are-the-program] The two nodes a caller must place, returned
-// separately because they belong in different rows and only the caller knows
-// which: the trigger is a CELL that joins a row the caller already has (so
-// opening help never widens the bar and closed help costs no row), and the body
-// is a ROW of its own that exists only while the disclosure is open.
-export interface HelpDisclosure {
-  readonly trigger: LayoutNode;
-  readonly body: LayoutNode;
-}
-
-// Mint one `(?)` and its body.
+// Mint one `(?)` with its body hung on it: ONE node the caller places as a
+// CELL in a row it already has (so opening help never widens the bar and closed
+// help costs no row); the body is a row of its own that drops below that row
+// while the disclosure is open, exactly as a group's body drops below its
+// toggle (`disclosureNode`, the one lowering).
 //
 // `name` is the reserved-namespace base every artifact derives from — the
 // trigger segment, the state variable and the cycle action all take it
 // verbatim, the same one-name-four-artifacts convention `groups.<name>` and
-// `settings.menu` already use, so the toggle's click and the body's gate cannot
-// address different keys [LAW:one-source-of-truth].
+// `settings.menu` already use, so the toggle's click and the body's open state
+// cannot address different keys [LAW:one-source-of-truth].
 //
-// `within` names the disclosures this help sits INSIDE (edit mode, the settings
-// menu). Both nodes inherit those gates, so a `(?)` opened inside a surface that
-// is then closed cannot leave its body stranded on the bar — the body's gate is
-// its own ref AND every enclosing one, which is what "open" actually means for a
-// nested disclosure [LAW:dataflow-not-control-flow].
+// `within` names the disclosures this help sits INSIDE without hanging on
+// structurally (edit mode's `(?)` trails a row edit chrome gates by `when`).
+// The trigger inherits those gates, and a hidden trigger renders no body, so a
+// `(?)` opened inside a surface that is then closed cannot leave its body
+// stranded on the bar [LAW:dataflow-not-control-flow].
 export function declareHelp(
   name: string,
   lines: readonly string[],
   within: readonly DisclosureRef[],
   out: HelpArtifacts,
-  text?: { readonly fg: string },
-): HelpDisclosure {
+): SegmentNode {
   const self: DisclosureRef = { variable: name, member: HELP_OPEN };
   out.variables[name] = disclosureStateVar(name, DISCLOSURE_CLOSED);
   out.actions[name] = disclosureCycleAction(name, HELP_OPEN);
@@ -103,7 +102,6 @@ export function declareHelp(
       HELP_GLYPH_CLOSED,
       DISCLOSURE_GLYPH_CLOSE,
     ),
-    ...text,
     // The trigger is visible wherever its host surface is. An unnested `(?)`
     // (`within` empty) is always visible, and declares no `when` at all.
     ...gateOf(within),
@@ -118,26 +116,20 @@ export function declareHelp(
   // what makes "the bar's help IS the corpus" checkable as identity rather than
   // as string similarity: the declaration a test reads and the sentence
   // `src/help-text.ts` exports are one value, byte for byte.
-  const bodyGate = disclosureGate(self, ...within);
   const children = lines.map((line, i): LayoutNode => {
     const lineName = `${name}.${i}`;
-    // [LAW:single-enforcer] The gate lives on the body container below and
-    // nowhere else — the render walk ANDs an ancestor's `when` into every
-    // descendant (src/dsl/render.ts:764), so a copy here would be a second
-    // enforcer of one predicate with nothing keeping the two equal.
-    out.segments[lineName] = { template: line, ...text };
+    // [LAW:single-enforcer] The body's openness is the trigger's ref, read by
+    // the render walk; a `when` here would be a second enforcer of one
+    // predicate with nothing keeping the two equal.
+    out.segments[lineName] = { template: line };
     return { kind: "segment", name: lineName };
   });
 
-  return {
-    trigger: { kind: "segment", name },
-    body: {
-      kind: "container",
-      direction: "horizontal",
-      children,
-      when: bodyGate,
-    },
-  };
+  return disclosureNode(name, self, {
+    kind: "container",
+    direction: "horizontal",
+    children,
+  });
 }
 
 // The enclosing gate as an optional `when` field — the codebase's standard

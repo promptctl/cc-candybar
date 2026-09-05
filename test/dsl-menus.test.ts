@@ -674,11 +674,9 @@ describe("toggle round trip + drop stacking", () => {
       const style = span.style;
       if (typeof style === "string") throw new Error("span style is a name, not a Style");
       expect(style.bgcolor?.value?.hex).toBe(
-        bandItemFor(palette, disclosure, {
-          index,
-          count: options.length,
-          distribution: DISTRIBUTIONS[DEFAULT_DISTRIBUTION],
-        }).hex,
+        bandItemFor(palette, disclosure, [
+          { index, count: options.length, distribution: DISTRIBUTIONS[DEFAULT_DISTRIBUTION] },
+        ]).hex,
       );
     }
     dispose();
@@ -1206,14 +1204,13 @@ describe("a menu's `distribution` option places its band", () => {
       if (typeof style === "string") throw new Error("span style is a name, not a Style");
       const step = { index, count: options.length };
       expect(style.bgcolor?.value?.hex).toBe(
-        bandItemFor(palette, disclosure, { ...step, distribution: DISTRIBUTIONS.monotonic }).hex,
+        bandItemFor(palette, disclosure, [{ ...step, distribution: DISTRIBUTIONS.monotonic }]).hex,
       );
       if (
         style.bgcolor?.value?.hex !==
-        bandItemFor(palette, disclosure, {
-          ...step,
-          distribution: DISTRIBUTIONS[DEFAULT_DISTRIBUTION],
-        }).hex
+        bandItemFor(palette, disclosure, [
+          { ...step, distribution: DISTRIBUTIONS[DEFAULT_DISTRIBUTION] },
+        ]).hex
       )
         differsFromDefault++;
     }
