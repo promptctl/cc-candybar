@@ -44,6 +44,36 @@ import { parseHandlerUrl } from "../src/install/index";
 import { parseEffects, VERB_DISPATCH } from "../src/click/wire";
 import { VERBS } from "../src/daemon/verbs";
 import type { VerbContext } from "../src/daemon/verbs";
+import type { RichText } from "@promptctl/rich-js";
+import { PRESET_FLOOR } from "../src/config/presets";
+import type { CompiledNode } from "../src/dsl/node-registry";
+import {
+  bandFor,
+  bandItemFor,
+  decorEntryFor,
+  DEFAULT_DISTRIBUTION,
+  DISTRIBUTIONS,
+  textOn,
+  type Address,
+} from "../src/themes/decor";
+
+/** The address of the segment named `name` in a compiled tree, or throw. */
+function addressOf(root: CompiledNode, name: string): Address {
+  const walk = (node: CompiledNode, address: Address): Address | undefined => {
+    if (node.kind === "segment") return node.name === name ? address : undefined;
+    for (const [index, child] of node.children.entries()) {
+      const found = walk(child, [
+        ...address,
+        { index, count: node.children.length },
+      ]);
+      if (found !== undefined) return found;
+    }
+    return undefined;
+  };
+  const found = walk(root, []);
+  if (found === undefined) throw new Error(`no segment "${name}" in the tree`);
+  return found;
+}
 
 const ALLOWED = new Set(listResolvablePaletteNames());
 
@@ -91,6 +121,7 @@ function buildRuntime(src: string, sessionId = "s1") {
   const registry = new SourceRegistry(store, "", undefined, sessionState);
   const compiled = registerDslConfig(config, registry);
   const basePalette = getThemePalette("textual-dark"!);
+  const sink = new Map<string, readonly RichText[]>();
   const render = (): string =>
     renderDsl(
       config,
@@ -100,6 +131,7 @@ function buildRuntime(src: string, sessionId = "s1") {
       { session_id: sessionId, project_dir: "/tmp/proj" },
       basePalette,
       opts(),
+      { perSegmentSink: sink },
     );
   const disposers = deriveActionValidators(config).map(({ key, spec }) =>
     registerStateValidator(key, spec),
@@ -123,7 +155,18 @@ function buildRuntime(src: string, sessionId = "s1") {
     click(url);
   };
   const dispose = (): void => disposers.forEach((d) => d());
-  return { config, store, sessionState, render, click, clickToggle, dispose };
+  return {
+    config,
+    compiled,
+    store,
+    sessionState,
+    sink,
+    palette: basePalette,
+    render,
+    click,
+    clickToggle,
+    dispose,
+  };
 }
 
 // A theme picker menu beside a plain label, in one horizontal row. Identity is
@@ -138,6 +181,9 @@ const MENU_SRC = `{
   variables: {
     'session.id': { kind: 'input', path: 'session_id', default: '' },
     'term.cols': { kind: 'input', path: 'term.cols', type: 'number', default: 80 },
+    // Hue rotation off, so the walk's per-segment palette IS the base palette
+    // and the band assertions below can compute their expectation from it.
+    'hue.step': { kind: 'literal', value: 0 },
   },
   actions: {
     applyTheme: { set: 'theme', from: 'themes' },
@@ -591,13 +637,78 @@ describe("toggle round trip + drop stacking", () => {
     dispose();
   });
 
-  test("the open menu's segment is focus-tinted (a new background appears)", () => {
-    const { render, clickToggle, dispose } = buildRuntime(MENU_SRC);
-    const closedBgs = bgCodes(render());
+  // [LAW:verifiable-goals] candybar-render-ai7.3: an open menu's segment is
+  // the TRIGGER of the band it drops — it wears that band's state colour, its
+  // dropped line sits on the band's plane, and each option cell is placed in
+  // the band by its index over the whole option domain. The expected bytes
+  // come from the model (bandFor / bandItemFor over the segment's address),
+  // not from a lightening of the authored bg: no transform of "surface"
+  // reproduces them, which is the "no lightening transform remains" line.
+  test("the open trigger wears the state of the band it opens; its items are that band's", () => {
+    const { render, sink, compiled, palette, clickToggle, dispose } =
+      buildRuntime(MENU_SRC);
+    render();
     clickToggle(render(), TKEY, "applyTheme");
-    const openBgs = bgCodes(render());
-    const added = [...openBgs].filter((c) => !closedBgs.has(c));
-    expect(added.length).toBeGreaterThan(0);
+    render();
+    const address = addressOf(compiled.roots.get(PRESET_FLOOR)!, "themepicker");
+    const disclosure = {
+      hue: decorEntryFor(address, DISTRIBUTIONS[DEFAULT_DISTRIBUTION]).hue,
+      depth: 0,
+    };
+    const band = bandFor(palette, disclosure);
+    const cells = sink.get("themepicker")!;
+    // Row 0 is the trigger: state colour, text from the pole that reads on it.
+    const trigger = cells[0]!;
+    expect(trigger.style?.bgcolor?.value?.hex).toBe(band.state.hex);
+    expect(trigger.style?.color?.value?.hex).toBe(textOn(palette, band.state).hex);
+    // The dropped line is the band: its plane, and every option cell placed
+    // by (index, count) over the WHOLE domain — one item per theme name, in
+    // the domain's own order (ALLOWED is that list, insertion-ordered).
+    const body = cells[1]!;
+    expect(body.style?.bgcolor?.value?.hex).toBe(band.plane.hex);
+    const options = [...ALLOWED];
+    const spans = body.spans.filter(
+      (s) => typeof s.style !== "string" && s.style.link !== undefined,
+    );
+    const optionSpans = spans.filter((s) => options.includes(body.plain.slice(s.start, s.end)));
+    expect(optionSpans.length).toBeGreaterThan(1);
+    for (const span of optionSpans) {
+      const index = options.indexOf(body.plain.slice(span.start, span.end));
+      const style = span.style;
+      if (typeof style === "string") throw new Error("span style is a name, not a Style");
+      expect(style.bgcolor?.value?.hex).toBe(
+        bandItemFor(
+          palette,
+          disclosure,
+          { index, count: options.length },
+          DISTRIBUTIONS[DEFAULT_DISTRIBUTION],
+        ).hex,
+      );
+    }
+    dispose();
+  });
+
+  // The instance-boundary property: a band is one more step on ITS trigger's
+  // address, so opening it is invisible to every other segment's colour.
+  test("opening a menu changes the colour of no other cell", () => {
+    const { render, sink, clickToggle, dispose } = buildRuntime(MENU_SRC);
+    const snapshot = (): Map<string, string> => {
+      render();
+      return new Map(
+        [...sink.entries()].map(([name, cells]) => [
+          name,
+          cells.map((c) => `${c.plain}|${c.style?.bgcolor?.value?.hex}|${c.style?.color?.value?.hex}`).join("\n"),
+        ]),
+      );
+    };
+    const closed = snapshot();
+    clickToggle(render(), TKEY, "applyTheme");
+    const open = snapshot();
+    for (const [name, bytes] of closed) {
+      if (name === "themepicker") continue;
+      expect(open.get(name)).toBe(bytes);
+    }
+    expect(open.get("themepicker")).not.toBe(closed.get("themepicker"));
     dispose();
   });
 

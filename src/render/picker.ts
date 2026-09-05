@@ -24,6 +24,7 @@
 // as data). The generic engine never imports this module.
 
 import { RichText } from "@promptctl/rich-js";
+import type { Style } from "@promptctl/rich-js";
 import type { FuncMap } from "@promptctl/go-template-js";
 import { toNumber } from "../var-system/types.js";
 import { stripChromeCols } from "./strip.js";
@@ -38,6 +39,19 @@ import {
   type CompiledActionDecl,
 } from "./action.js";
 import { DISCLOSURE_GLYPH_CLOSE } from "../config/disclosure.js";
+import { bandItemStyle } from "./band-style.js";
+import {
+  requireActiveSegment,
+  type ActiveSegmentRef,
+} from "./active-segment.js";
+import type { AddressStep } from "../themes/decor.js";
+
+// [LAW:locality-or-seam] How an option cell is coloured, as a VALUE the caller
+// hands in: the picker places item `step` (which option, of how many) and
+// knows nothing of bands, hues or depth. Both callers supply the band of the
+// segment the picker renders inside (`bandItemStyle`), so a menu body and a
+// standalone `{{ picker }}` colour their items by one rule.
+export type ItemStyle = (step: AddressStep) => Style;
 
 const PICKER_PREV = "←";
 const PICKER_NEXT = "→";
@@ -196,6 +210,7 @@ export function renderPicker(
   closeOnPick: boolean,
   paged: boolean,
   runtime: ActionRuntime,
+  itemStyle: ItemStyle,
 ): RichText {
   const apply = requireOptionKind(runtime, applyName);
   // [LAW:one-source-of-truth] The GRID reads the resolved half above (its
@@ -309,9 +324,19 @@ export function renderPicker(
   if (pageIdx > 0) {
     frags.push(linkFragment(PICKER_PREV, pageUrl(pageIdx - 1), false));
   }
+  // [LAW:dataflow-not-control-flow] An item is placed by its index in the
+  // WHOLE option domain, not on its page: paging changes which cells show,
+  // never what colour an option is.
   for (const i of pageCells) {
     const option = apply.options[i]!;
-    frags.push(linkFragment(option, optionUrl(option), option === current));
+    frags.push(
+      linkFragment(
+        option,
+        optionUrl(option),
+        option === current,
+        itemStyle({ index: i, count: apply.options.length }),
+      ),
+    );
   }
   if (pageIdx < pages.length - 1) {
     frags.push(linkFragment(PICKER_NEXT, pageUrl(pageIdx + 1), false));
@@ -337,7 +362,10 @@ export function renderPicker(
 //
 // [LAW:one-way-deps] The caller injects this FuncMap into createCcCandybarEngine
 // (capabilities-over-context) so the generic engine never imports the picker.
-export function pickerFuncs(runtime: ActionRuntime): FuncMap {
+export function pickerFuncs(
+  runtime: ActionRuntime,
+  activeSegment: ActiveSegmentRef,
+): FuncMap {
   return {
     picker: {
       fn: (
@@ -363,6 +391,8 @@ export function pickerFuncs(runtime: ActionRuntime): FuncMap {
           closeOnPick === true,
           paged === true,
           runtime,
+          (step) =>
+            bandItemStyle(requireActiveSegment(activeSegment, "picker"), step),
         );
       },
       argTypes: ["string", "string", "bool", "bool"],

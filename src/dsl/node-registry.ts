@@ -32,6 +32,7 @@ import type {
 } from "../config/dsl-types.js";
 import { splitCellsIntoLines } from "../render/split-lines.js";
 import { transposedPalette } from "../themes/index.js";
+import type { Address, AddressStep } from "../themes/decor.js";
 import {
   fragmentsToCells,
   evaluateWhen,
@@ -112,6 +113,12 @@ export interface NodeRenderCtx {
   readonly padding: number;
   // Advance the walk-owned hue cursor by one unit and return that unit's shift.
   nextHueShift(): number;
+  // [LAW:effects-at-boundaries] THIS node's address: the (index, count) steps
+  // from the root, extended by one step per container level by the driver.
+  // A pure fact about position — unchanged by any node being hidden — that
+  // the segment hands to `enterSegment` so its colours derive from where it
+  // sits, with no walk state read.
+  readonly address: Address;
   readonly perSegmentSink?: Map<string, readonly RichText[]>;
   // [LAW:no-silent-failure] Optional observer for the per-segment render catch
   // below: a caught evaluation error renders as a visible ⚠ error cell (partial
@@ -138,15 +145,11 @@ export interface NodeRenderCtx {
   enterSegment(
     segName: string,
     palette: Palette,
+    address: Address,
     bgTemplate: Template<RichText> | undefined,
     fgTemplate: Template<RichText> | undefined,
-  ): Style;
+  ): SegmentStyles;
   exitSegment(fragments: readonly RichText[]): readonly RichText[];
-  // [LAW:locality-or-seam] The focus transform, injected as a capability (rich-js
-  // owns the color math — see render.ts). Applied to the segment's baseStyle when
-  // it has an open menu (it contributed drops), so the whole focused segment —
-  // inline trigger + dropped body band — reads as highlighted.
-  focusTint(style: Style): Style;
   // Resolve a segment name to its decl + compiled form (the driver closes over
   // config.segments + the compiled segments).
   lookupSegment(
@@ -154,8 +157,25 @@ export interface NodeRenderCtx {
   ):
     | { readonly seg: SegmentDecl; readonly compiled: CompiledSegment }
     | undefined;
-  // Continue the walk into a child node (parentVisible = this node's visibility).
-  renderChild(node: CompiledNode, parentVisible: boolean): RenderedLines;
+  // Continue the walk into a child node (parentVisible = this node's
+  // visibility; step = which child of how many, extending the address).
+  renderChild(
+    node: CompiledNode,
+    parentVisible: boolean,
+    step: AddressStep,
+  ): RenderedLines;
+}
+
+// [LAW:types-are-the-program] Every Style a segment can wear, resolved at
+// entry as one value. `closed` is its authored `bg:`/`fg:`; `trigger` is the
+// state colour of the band it opens — what it wears while that band is dropped
+// below it; `band` is that band's plane, the floor its dropped lines sit on.
+// Which one a line wears is a VALUE the walk selects by the drop's presence,
+// never a transform applied after the fact.
+export interface SegmentStyles {
+  readonly closed: Style;
+  readonly trigger: Style;
+  readonly band: Style;
 }
 
 // ─── Composition ───────────────────────────────────────────────────────────────
@@ -232,7 +252,12 @@ const containerType: NodeType<"container"> = {
     // still advance the cursor.
     return composeBlocks(
       node.direction,
-      node.children.map((child) => ctx.renderChild(child, ctx.visible)),
+      node.children.map((child, index) =>
+        ctx.renderChild(child, ctx.visible, {
+          index,
+          count: node.children.length,
+        }),
+      ),
     );
   },
 };
@@ -297,9 +322,10 @@ const segmentType: NodeType<"segment"> = {
       // evaluates rather than after — a body coloured from a palette resolved
       // independently of the cell it sits in is two palettes in one segment,
       // and they diverge the moment a theme, look, or hue shift moves.
-      const resolvedStyle = ctx.enterSegment(
+      const styles = ctx.enterSegment(
         node.name,
         palette,
+        ctx.address,
         segCompiled.bg,
         segCompiled.fg,
       );
@@ -309,12 +335,12 @@ const segmentType: NodeType<"segment"> = {
       // sit anywhere in the template and content after it stays inline. Each
       // becomes one full-width line stacked below the segment's row.
       const drops = ctx.exitSegment(fragments);
-      // [LAW:dataflow-not-control-flow] Focus is the PRESENCE of a drop: a segment
-      // with an open menu (it contributed a body) lightens, so the whole focused
-      // segment — inline trigger + dropped band — reads as highlighted. No state
-      // re-read; the drop list IS the open-menu signal.
-      const baseStyle =
-        drops.length > 0 ? ctx.focusTint(resolvedStyle) : resolvedStyle;
+      // [LAW:dataflow-not-control-flow] Open is the PRESENCE of a drop: a
+      // segment with an open menu (it contributed a body) is the TRIGGER of
+      // the band it dropped, and wears that band's state colour — drawn from
+      // what it opens, not from where it sits. No state re-read; the drop list
+      // IS the open-menu signal, and the two Styles were both resolved at entry.
+      const baseStyle = drops.length > 0 ? styles.trigger : styles.closed;
       const layout = {
         width: seg.width ?? "auto",
         justify: seg.justify ?? "left",
@@ -336,11 +362,15 @@ const segmentType: NodeType<"segment"> = {
       const inlineLines = splitCellsIntoLines(
         fragmentsToCells(fragments, baseStyle),
       ).map((line) => applySegmentLayout(line, layout));
-      // Each open menu body is one full-width dropped line, in the segment's
-      // (focus-tinted) bg, stacked after the inline row(s). composeBlocks then
-      // drops every line below row 0 below the enclosing horizontal row.
+      // Each open menu body is one full-width dropped line on the band's
+      // PLANE — the recessed floor its items are placed above — stacked after
+      // the inline row(s). composeBlocks then drops every line below row 0
+      // below the enclosing horizontal row.
       const dropLines = drops.map((body) =>
-        applySegmentLayout(fragmentsToCells([body], baseStyle), layout),
+        applySegmentLayout(fragmentsToCells([body], styles.band), {
+          ...layout,
+          baseStyle: styles.band,
+        }),
       );
       const laidLines = [...inlineLines, ...dropLines];
 

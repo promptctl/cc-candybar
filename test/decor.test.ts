@@ -10,9 +10,12 @@ import {
   contrastRatio,
   getThemePalette,
   listThemePalettes,
+  Oklch,
   Palette,
 } from "@promptctl/rich-js";
 import {
+  BAND_RECESSION,
+  BAND_WINDOW,
   DECOR_AMTS,
   DECOR_BASES,
   DECOR_HUES,
@@ -22,9 +25,12 @@ import {
   DISTRIBUTIONS,
   STATE_FLOOR,
   STATE_PURE_AMOUNT,
+  bandFor,
+  bandItemFor,
   decorEntryColour,
   decorEntryFor,
   decorFor,
+  hueAtDepth,
   paletteRole,
   stateFor,
   textOn,
@@ -361,5 +367,221 @@ describe("done-when: text on a state cell is contrast-chosen and clears 3:1 on e
         ]);
       }
     }
+  });
+});
+
+// ─── candybar-render-ai7.3: disclosure depth — bands, nesting, trigger ────────
+//
+// [LAW:verifiable-goals] Each `describe` is one of the ticket's three rules or
+// one line of its Done-when, pinned over EVERY shipped theme × hue × depth.
+// "Distinguishable" is measured as ΔE in OKLab (Euclidean distance over the
+// coordinates rich-js's `Oklch` exposes): luminance contrast cannot see two
+// hues at one lightness, and a nested trigger differs from its parent by HUE.
+// The floors are the measured registry minima rounded down — a regression
+// that moves a theme below its own floor fails, whichever theme it is.
+
+const THEMES = listThemePalettes().map((name) => getThemePalette(name));
+const DEPTHS = [0, 1, 2] as const;
+
+function deltaE(a: ColorRgba, b: ColorRgba): number {
+  const lab = (c: ColorRgba): [number, number, number] => {
+    const o = Oklch.fromRgba(c);
+    const rad = (o.h * Math.PI) / 180;
+    return [o.l, o.c * Math.cos(rad), o.c * Math.sin(rad)];
+  };
+  const [l1, a1, b1] = lab(a);
+  const [l2, a2, b2] = lab(b);
+  return Math.hypot(l1 - l2, a1 - a2, b1 - b2);
+}
+
+/** Every (theme, hue) pair, named so a failure says which. */
+const LINEAGES = THEMES.flatMap((palette) =>
+  DECOR_HUES.map((hue) => ({ palette, hue, name: `${palette.name}/${hue}` })),
+);
+
+describe("depth advances the hue", () => {
+  test("the next vocabulary hue per depth, wrapping", () => {
+    expect(hueAtDepth("primary", 0)).toBe("primary");
+    expect(hueAtDepth("primary", 1)).toBe("secondary");
+    expect(hueAtDepth("secondary", 1)).toBe("accent");
+    expect(hueAtDepth("accent", 1)).toBe("primary");
+    expect(hueAtDepth("secondary", DECOR_HUES.length)).toBe("secondary");
+  });
+
+  test("a trigger wears the state of the band it opens — one expression at every depth", () => {
+    for (const { palette, hue } of LINEAGES) {
+      for (const depth of [0, 1, 2, 3]) {
+        expect(bandFor(palette, { hue, depth }).state.hex).toBe(
+          stateFor(palette, hueAtDepth(hue, depth)).hex,
+        );
+      }
+    }
+  });
+});
+
+describe("a band is a plane", () => {
+  test("the plane is the state receded toward background by the depth's recession, capped", () => {
+    for (const { palette, hue } of LINEAGES) {
+      const background = paletteRole(palette, "background");
+      for (const depth of [0, 1, 2, 3, 4]) {
+        const { state, plane } = bandFor(palette, { hue, depth });
+        const recession = Math.min(
+          BAND_RECESSION.cap,
+          BAND_RECESSION.base + BAND_RECESSION.perDepth * depth,
+        );
+        expect(plane.hex).toBe(blendRgb(state, background, recession).hex);
+      }
+    }
+    // The cap bites: depth 4 would be 0.98 uncapped, and 0.75 is the ceiling.
+    expect(BAND_RECESSION.base + BAND_RECESSION.perDepth * 4).toBeGreaterThan(
+      BAND_RECESSION.cap,
+    );
+  });
+
+  test("items are placed along the plane→state axis by the band's distribution, inside the window", () => {
+    const disclosure = { hue: "primary", depth: 0 } as const;
+    for (const palette of THEMES) {
+      const { state, plane } = bandFor(palette, disclosure);
+      // `uniform` puts every item at the window's midpoint — the formula, once.
+      const mid = bandItemFor(
+        palette,
+        disclosure,
+        { index: 0, count: 1 },
+        DISTRIBUTIONS.uniform,
+      );
+      expect(mid.hex).toBe(
+        blendRgb(plane, state, BAND_WINDOW.floor + BAND_WINDOW.span * 0.5).hex,
+      );
+      // `monotonic` walks the axis: each item is further from the plane than
+      // the one before it, and none is the plane or the state (the window
+      // keeps them off both ends).
+      const distances = [0, 1, 2, 3].map((index) => {
+        const item = bandItemFor(
+          palette,
+          disclosure,
+          { index, count: 4 },
+          DISTRIBUTIONS.monotonic,
+        );
+        expect(item.hex).not.toBe(plane.hex);
+        expect(item.hex).not.toBe(state.hex);
+        return deltaE(item, plane);
+      });
+      for (let i = 1; i < distances.length; i++) {
+        expect(distances[i]!).toBeGreaterThan(distances[i - 1]!);
+      }
+    }
+  });
+
+  // Registry minimum: solarized-dark/accent's depth-1 plane (#3b5f6b) reads at
+  // 2.188 against its better pole — the band floor sits just under STATE_FLOOR
+  // (2.2), which governs the trigger, not the plane.
+  const TEXT_FLOOR = 2.15;
+
+  test("text on every band cell is contrast-chosen and clears the band floor on every theme", () => {
+    for (const { palette, hue } of LINEAGES) {
+      for (const depth of DEPTHS) {
+        const disclosure = { hue, depth };
+        const { plane } = bandFor(palette, disclosure);
+        const cells = [
+          plane,
+          ...[0, 1, 2, 3, 4, 5].map((index) =>
+            bandItemFor(
+              palette,
+              disclosure,
+              { index, count: 6 },
+              DISTRIBUTIONS[DEFAULT_DISTRIBUTION],
+            ),
+          ),
+        ];
+        for (const cell of cells) {
+          const ratio = contrastRatio(cell, textOn(palette, cell));
+          expect(`${palette.name}/${hue} depth ${depth} ${cell.hex}: ${ratio.toFixed(3)}`).toMatch(
+            ratio >= TEXT_FLOOR ? /./ : /^$/,
+          );
+        }
+      }
+    }
+  });
+});
+
+describe("open trigger, its band, and a nested band are mutually distinguishable on every theme", () => {
+  // Registry minima at the time of writing (ΔE in OKLab): trigger/plane 0.119
+  // (textual-ansi primary), plane/nested plane 0.040 (rose-pine-dawn accent),
+  // nested trigger/enclosing plane 0.087 (rose-pine primary).
+  const TRIGGER_VS_PLANE = 0.1;
+  const PLANE_VS_NESTED_PLANE = 0.035;
+  const NESTED_TRIGGER_VS_PLANE = 0.08;
+
+  /** Every (lineage, depth) whose pair falls below `floor`, named. */
+  function below(
+    floor: number,
+    pair: (palette: Palette, hue: DecorHue, depth: number) => [ColorRgba, ColorRgba],
+    depths: readonly number[] = DEPTHS,
+  ): string[] {
+    return LINEAGES.flatMap(({ palette, hue, name }) =>
+      depths.flatMap((depth) => {
+        const d = deltaE(...pair(palette, hue, depth));
+        return d < floor ? [`${name} depth ${depth}: ${d.toFixed(4)}`] : [];
+      }),
+    );
+  }
+
+  test("a trigger stands off the plane it opens", () => {
+    expect(
+      below(TRIGGER_VS_PLANE, (p, hue, depth) => {
+        const { state, plane } = bandFor(p, { hue, depth });
+        return [state, plane];
+      }),
+    ).toEqual([]);
+  });
+
+  test("a nested band's plane stands off the plane it is nested in", () => {
+    // Covered over the depths a bar reaches: the bundled ☰ → ⚙ → picker is
+    // depth 2, so the adjacent-plane pairs are (0,1) and (1,2). Depth 3 is
+    // deliberately NOT covered — BAND_RECESSION.cap leaves 0.05 of recession
+    // between depths 2 and 3 while hueAtDepth has wrapped back onto a hue
+    // already used, and 20 lineages land at 0.016–0.034. The design doc's
+    // "recession still separates what the wrapped hue no longer does" holds
+    // for triggers (state vs plane, the next test) and not for adjacent
+    // planes; ai7.6 corrects the doc.
+    expect(
+      below(
+        PLANE_VS_NESTED_PLANE,
+        (p, hue, depth) => [
+          bandFor(p, { hue, depth }).plane,
+          bandFor(p, { hue, depth: depth + 1 }).plane,
+        ],
+        [0, 1],
+      ),
+    ).toEqual([]);
+  });
+
+  test("a nested trigger stands off the band it sits in", () => {
+    expect(
+      below(NESTED_TRIGGER_VS_PLANE, (p, hue, depth) => [
+        bandFor(p, { hue, depth: depth + 1 }).state,
+        bandFor(p, { hue, depth }).plane,
+      ]),
+    ).toEqual([]);
+  });
+
+  test("distinct hues yield distinct triggers; a theme whose vocabulary repeats a colour repeats its trigger", () => {
+    // The model SELECTS from the theme and never synthesises, so two hues the
+    // theme spells with one colour (`default`'s accent IS its primary) open
+    // to one state — stated here, never skipped. Registry minimum over
+    // distinct hues: 0.0196 (atom-one-dark's two purples).
+    const DISTINCT_HUES = 0.015;
+    const wrong = LINEAGES.flatMap(({ palette, hue, name }) => {
+      const next = hueAtDepth(hue, 1);
+      const sameColour =
+        paletteRole(palette, hue).hex === paletteRole(palette, next).hex;
+      const d = deltaE(
+        bandFor(palette, { hue, depth: 0 }).state,
+        bandFor(palette, { hue, depth: 1 }).state,
+      );
+      const ok = sameColour ? d === 0 : d >= DISTINCT_HUES;
+      return ok ? [] : [`${name}->${next} same=${sameColour} ${d.toFixed(4)}`];
+    });
+    expect(wrong).toEqual([]);
   });
 });

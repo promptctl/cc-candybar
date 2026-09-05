@@ -12,7 +12,7 @@
 // govern output, not whether operations run.
 
 import type { RichText, Palette, ThemeKey } from "@promptctl/rich-js";
-import { ColorSpec, Style, lighten, IDENTITY } from "@promptctl/rich-js";
+import { IDENTITY } from "@promptctl/rich-js";
 import { Defines, type Engine, type Template } from "@promptctl/go-template-js";
 import type {
   ValidatedConfig,
@@ -56,6 +56,15 @@ import {
   type ActiveSegmentRef,
 } from "../render/active-segment.js";
 import { segmentColorFuncs } from "../render/segment-color.js";
+import { stateCell } from "../render/band-style.js";
+import {
+  bandFor,
+  decorEntryFor,
+  DEFAULT_DISTRIBUTION,
+  DISTRIBUTIONS,
+  type Address,
+  type AddressStep,
+} from "../themes/decor.js";
 // [LAW:one-way-deps] The node-type registry sits below this driver: it owns the
 // compiled node shapes + each kind's compile/render, dispatched via nodeType().
 // render.ts threads the recursion (compileChild/renderChild) + the hue counter in
@@ -68,6 +77,7 @@ import {
   type RenderedLines,
   type NodeCompileCtx,
   type NodeRenderCtx,
+  type SegmentStyles,
 } from "./node-registry.js";
 
 // ─── Compiled config ───────────────────────────────────────────────────────────
@@ -355,7 +365,7 @@ export function registerDslConfig(
   const engine = createCcCandybarEngine(
     {
       ...actionFuncs(actionRuntime),
-      ...pickerFuncs(actionRuntime),
+      ...pickerFuncs(actionRuntime, activeSegment),
       ...menuFuncs(menuRuntime),
       // [LAW:one-source-of-truth] `{{ color }}` reads the palette of the
       // segment currently rendering — the same palette its `bg:`/`fg:` resolve
@@ -542,21 +552,22 @@ export function registerDslConfig(
   };
 }
 
-// [LAW:dataflow-not-control-flow] The focus tint: when a segment's own menu is
-// open it is "focused", so its base background is lightened (rich-js owns the
-// math — see [[rich-js-owns-color-math]]). The transform is RELATIVE to the
-// resolved background, so any host theme tints to a consistent step above its own
-// surface; a segment with no background (transparent) has nothing to lighten and
-// passes through unchanged. One level ≈ 10% lightness — a subtle "this is active".
-const MENU_FOCUS_LIGHTEN_LEVELS = 1;
-function focusTint(style: Style): Style {
-  const bg = style.bgcolor;
-  if (bg === undefined) return style;
-  const lit = ColorSpec.fromRgba(
-    lighten(bg.getTruecolor(), MENU_FOCUS_LIGHTEN_LEVELS),
-  );
-  return new Style({ bgcolor: lit, color: style.color });
-}
+// [LAW:one-source-of-truth] Which disclosure a segment at `address` opens: the
+// vocabulary hue its address selects — the SAME selection candybar-render-ai7.4
+// will paint the closed cell with — at band depth 0. The band a segment drops
+// is one more step on its address (design doc, "a band is a plane"), so the
+// hue is the cell's and nothing about the band is a second position.
+//
+// Depth is 0 for every segment until a disclosure BODY is a fact the compiled
+// tree carries (candybar-render-ai7.9): today a group's body is a `when`-gated
+// container the walk cannot tell from any other, so a `{{ menu }}` inside one
+// opens at the depth the walk can see. The model already takes the depth; the
+// tree does not yet supply it.
+const BAR_DEPTH = 0;
+const disclosureAt = (address: Address) => ({
+  hue: decorEntryFor(address, DISTRIBUTIONS[DEFAULT_DISTRIBUTION]).hue,
+  depth: BAR_DEPTH,
+});
 
 // ─── renderDsl ───────────────────────────────────────────────────────────────
 
@@ -720,8 +731,12 @@ export function renderDsl(
   // [LAW:single-enforcer] The segment seam, owned here as a symmetric pair.
   // `enterSegment` establishes everything a segment's templates may ask about
   // themselves — the name `{{ menu }}` derives its identity from, the palette
-  // `{{ color }}` resolves against, the background `{{ bgOf }}` returns — and
-  // returns the resolved base Style. `exitSegment` collects the menu bodies the
+  // `{{ color }}` resolves against, the background `{{ bgOf }}` returns, the
+  // band a `{{ menu }}` body colours its items by — and returns every Style
+  // the segment can wear: its authored `closed` Style, and the `trigger` /
+  // `band` pair of the band it opens (the state colour and its plane), both
+  // from the one `bandFor` read so the trigger and its dropped band cannot
+  // disagree about their hue. `exitSegment` collects the menu bodies the
   // fragments carried as metadata and tears the record back down.
   //
   // [LAW:no-ambient-temporal-coupling] The record is set and cleared around each
@@ -732,17 +747,27 @@ export function renderDsl(
   const enterSegment = (
     segName: string,
     palette: Palette,
+    address: Address,
     bgTemplate: Template<RichText> | undefined,
     fgTemplate: Template<RichText> | undefined,
-  ): Style =>
-    resolveSegmentColors(
+  ): SegmentStyles => {
+    const disclosure = disclosureAt(address);
+    const closed = resolveSegmentColors(
       compiled.activeSegment,
       segName,
       palette,
+      disclosure,
       bgTemplate,
       fgTemplate,
       scope,
     );
+    const band = bandFor(palette, disclosure);
+    return {
+      closed,
+      trigger: stateCell(palette, band.state),
+      band: stateCell(palette, band.plane),
+    };
+  };
   const exitSegment = (fragments: readonly RichText[]): readonly RichText[] => {
     compiled.activeSegment.current = null;
     return collectMenuDrops(fragments);
@@ -757,6 +782,7 @@ export function renderDsl(
   const renderNode = (
     node: CompiledNode,
     parentVisible: boolean,
+    address: Address,
   ): RenderedLines => {
     const visible = parentVisible && evaluateWhen(node.when, scope);
     const ctx: NodeRenderCtx = {
@@ -766,13 +792,14 @@ export function renderDsl(
       visible,
       padding: opts.padding,
       nextHueShift,
+      address,
       perSegmentSink,
       onSegmentError,
       enterSegment,
       exitSegment,
-      focusTint,
       lookupSegment,
-      renderChild: renderNode,
+      renderChild: (child, childVisible, step: AddressStep) =>
+        renderNode(child, childVisible, [...address, step]),
     };
     return nodeType(node.kind).render(node, ctx);
   };
@@ -797,7 +824,7 @@ export function renderDsl(
         `(have: ${[...compiled.roots.keys()].join(", ")})`,
     );
   }
-  return renderNode(root, true)
+  return renderNode(root, true, [])
     .map((line) => renderStripCells(line, opts))
     .join("\n");
 }
