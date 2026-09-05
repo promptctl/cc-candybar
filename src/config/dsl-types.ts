@@ -25,6 +25,7 @@ import type {
   ColorCompatibility,
   StripStyle,
 } from "../themes/policy.js";
+import type { DistributionName } from "../themes/decor.js";
 
 // [LAW:types-are-the-program] Three stages, three names.
 //
@@ -92,6 +93,14 @@ export interface ContainerNode {
   // A container's `when` gates the whole subtree: a hidden container emits no
   // lines.
   readonly when?: string;
+  // How this container PLACES its children when their decorative colour is
+  // selected from the theme's vocabulary (src/themes/decor.ts): the name of one
+  // of the five shipped distributions. Absent ≡ `van-der-corput`, resolved once
+  // at compile (`placedBy`). Per instance, not global: a `{{ menu }}`'s band is
+  // the other kind of placer and carries the SAME field in its options dict.
+  // Choosing `monotonic` / `ends-interleaved` reads the sibling count, so adding
+  // a child re-spaces its siblings — a trade the author spends knowingly.
+  readonly distribution?: DistributionName;
 }
 
 export type LayoutNode = ContainerNode | SegmentNode;

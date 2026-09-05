@@ -23,6 +23,13 @@
 //               can see in the template, never on tree position.
 
 import { ident } from "./ident.js";
+import {
+  DEFAULT_DISTRIBUTION,
+  DISTRIBUTION_NAMES,
+  isDistributionName,
+  placedBy,
+  type Distribution,
+} from "../themes/decor.js";
 
 // [LAW:one-source-of-truth] The reserved namespace every synthesized menu
 // artifact (state var + cycle action) lives under, mirroring group sugar's
@@ -88,7 +95,25 @@ export interface MenuOptions {
   readonly closeOnPick: boolean;
   readonly paged: boolean;
   readonly key: string | undefined;
+  // [LAW:parse-dont-validate] The band's placer field, already resolved: the
+  // SAME `distribution` a container carries (dsl-types ContainerNode) — a menu
+  // is an instance too, and its band places its options by this. An authored
+  // name is validated against DISTRIBUTION_NAMES here; absent ≡ van der Corput.
+  readonly distribution: Distribution;
 }
+
+const MENU_OPTION_NAMES = [
+  "closeOnPick",
+  "paged",
+  "key",
+  "distribution",
+] as const;
+type MenuOptionName = (typeof MENU_OPTION_NAMES)[number];
+const isMenuOptionName = (name: string): name is MenuOptionName =>
+  (MENU_OPTION_NAMES as readonly string[]).includes(name);
+export const MENU_OPTIONS_VOCABULARY =
+  `"closeOnPick" (bool, default false), "paged" (bool, default true), ` +
+  `"key" (string, accordion grouping), "distribution" (one of ${DISTRIBUTION_NAMES.map((n) => `"${n}"`).join(", ")}; default "${DEFAULT_DISTRIBUTION}")`;
 
 // [LAW:one-source-of-truth] THE reader of a menu's options dict — the loader
 // folds it over `staticDictEntries` (gating identity at load) and the renderer
@@ -101,9 +126,9 @@ export function parseMenuOptions(
   entries: Readonly<Record<string, unknown>>,
 ): MenuOptions {
   for (const name of Object.keys(entries)) {
-    if (name !== "closeOnPick" && name !== "paged" && name !== "key") {
+    if (!isMenuOptionName(name)) {
       throw new Error(
-        `unknown {{ menu }} option "${name}" — the options dict takes "closeOnPick" (bool, default false), "paged" (bool, default true), "key" (string, accordion grouping)`,
+        `unknown {{ menu }} option "${name}" — the options dict takes ${MENU_OPTIONS_VOCABULARY}`,
       );
     }
   }
@@ -131,9 +156,16 @@ export function parseMenuOptions(
       `{{ menu }} has an empty accordion key — a shared key must be a non-empty name (or omit "key" for an independent menu)`,
     );
   }
+  const distribution = entries["distribution"];
+  if (distribution !== undefined && !isDistributionName(distribution)) {
+    throw new Error(
+      `{{ menu }} option "distribution" must be one of: ${DISTRIBUTION_NAMES.join(", ")}; got ${JSON.stringify(distribution)}`,
+    );
+  }
   return {
     closeOnPick: bool("closeOnPick", false),
     paged: bool("paged", true),
     key,
+    distribution: placedBy(distribution),
   };
 }

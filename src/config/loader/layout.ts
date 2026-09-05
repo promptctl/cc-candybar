@@ -34,6 +34,10 @@ import {
 import { ROW_NAME_RE } from "../root.js";
 import type { ActionDecl } from "../action.js";
 import {
+  DISTRIBUTION_NAMES,
+  type DistributionName,
+} from "../../themes/decor.js";
+import {
   DISCLOSURE_CLOSED,
   DISCLOSURE_GLYPH_CLOSED,
   DISCLOSURE_GLYPH_OPEN,
@@ -191,6 +195,13 @@ const SEGMENT_NODE_SCHEMA: RecordSchema<SegmentNode> = {
   },
 };
 
+// [LAW:one-source-of-truth] The one spec for a placer's `distribution` field —
+// the container arms and the group body all validate through it, against the
+// same DISTRIBUTION_NAMES the render resolves by, so an unknown name is a load
+// error listing exactly the names a render would accept.
+const distributionSpec = (): FieldSpec<DistributionName> =>
+  optionalEnumSpec(DISTRIBUTION_NAMES);
+
 const CONTAINER_SCHEMA: RecordSchema<ContainerNode> = {
   noun: "layout-node key",
   fields: {
@@ -198,6 +209,7 @@ const CONTAINER_SCHEMA: RecordSchema<ContainerNode> = {
     direction: directionSpec(),
     children: childrenSpec(lazy(() => validateRoot)),
     when: optionalStringSpec(),
+    distribution: distributionSpec(),
   },
 };
 
@@ -243,6 +255,7 @@ const SEG_ARM_SCHEMA: RecordSchema<SegArmNode> = {
 interface HArmNode {
   readonly h: readonly LayoutNode[];
   readonly when?: string;
+  readonly distribution?: DistributionName;
 }
 
 const H_ARM_SCHEMA: RecordSchema<HArmNode> = {
@@ -250,12 +263,14 @@ const H_ARM_SCHEMA: RecordSchema<HArmNode> = {
   fields: {
     h: childrenSpec(lazy(() => validateRoot)),
     when: optionalStringSpec(),
+    distribution: distributionSpec(),
   },
 };
 
 interface VArmNode {
   readonly v: readonly LayoutNode[];
   readonly when?: string;
+  readonly distribution?: DistributionName;
 }
 
 const V_ARM_SCHEMA: RecordSchema<VArmNode> = {
@@ -263,6 +278,7 @@ const V_ARM_SCHEMA: RecordSchema<VArmNode> = {
   fields: {
     v: childrenSpec(lazy(() => validateRoot)),
     when: optionalStringSpec(),
+    distribution: distributionSpec(),
   },
 };
 
@@ -373,6 +389,7 @@ export const validateRoot = (
       direction: "horizontal",
       children: arm.h,
       ...(arm.when !== undefined && { when: arm.when }),
+      ...(arm.distribution !== undefined && { distribution: arm.distribution }),
     };
   }
   if (hasV) {
@@ -383,6 +400,7 @@ export const validateRoot = (
       direction: "vertical",
       children: arm.v,
       ...(arm.when !== undefined && { when: arm.when }),
+      ...(arm.distribution !== undefined && { distribution: arm.distribution }),
     };
   }
   ctx.issues.push({
@@ -532,7 +550,9 @@ function groupKeySpec(): FieldSpec<string> {
 // BODY (the children container) — the toggle row always stacks above it;
 // `key` opts sibling groups into one accordion (shared key ⇒ one open at a
 // time); `open` picks the key's initial state; `bg`/`fg` paint the toggle
-// segment; `when` gates the whole group (toggle included).
+// segment; `when` gates the whole group (toggle included); `distribution`
+// is the BODY container's placer field (dsl-types ContainerNode), since the
+// body is the container the group's children are placed in.
 interface GroupNodeInput {
   readonly kind: "group";
   readonly name: string;
@@ -543,6 +563,7 @@ interface GroupNodeInput {
   readonly bg?: string;
   readonly fg?: string;
   readonly when?: string;
+  readonly distribution?: DistributionName;
   readonly children: readonly LayoutNode[];
 }
 
@@ -582,6 +603,7 @@ const GROUP_SCHEMA: RecordSchema<GroupNodeInput> = {
     bg: optionalStringSpec(),
     fg: optionalStringSpec(),
     when: optionalStringSpec(),
+    distribution: distributionSpec(),
     children: childrenSpec(lazy(() => validateRoot)),
   },
 };
@@ -611,6 +633,7 @@ function lowerGroup(g: GroupNodeInput): LayoutNode {
         direction: g.direction ?? "vertical",
         children: g.children,
         when: disclosureGate({ variable: ref, member: g.name }),
+        ...(g.distribution !== undefined && { distribution: g.distribution }),
       },
     ],
     ...(g.when !== undefined && { when: g.when }),

@@ -31,7 +31,12 @@ import type {
   SegmentDecl,
 } from "../config/dsl-types.js";
 import { splitCellsIntoLines } from "../render/split-lines.js";
-import type { Address, AddressStep } from "../themes/decor.js";
+import {
+  placedBy,
+  type Address,
+  type AddressStep,
+  type Distribution,
+} from "../themes/decor.js";
 import {
   fragmentsToCells,
   evaluateWhen,
@@ -54,6 +59,10 @@ export interface CompiledContainerNode {
   readonly direction: Direction;
   readonly when?: Template<RichText>;
   readonly children: readonly CompiledNode[];
+  // [LAW:parse-dont-validate] The authored NAME (or its absence) resolved ONCE
+  // to the function this container places its children by — every child's
+  // address step carries it, so the walk never re-reads the config.
+  readonly distribution: Distribution;
 }
 export type CompiledNode = CompiledSegmentNode | CompiledContainerNode;
 
@@ -233,6 +242,7 @@ const containerType: NodeType<"container"> = {
       kind: "container",
       direction: node.direction,
       when: cctx.when,
+      distribution: placedBy(node.distribution),
       children: node.children.map((child, i) =>
         cctx.compileChild(child, `${cctx.path}.children[${i}]`),
       ),
@@ -241,13 +251,15 @@ const containerType: NodeType<"container"> = {
   render(node, ctx) {
     // [LAW:dataflow-not-control-flow] Every child is walked, hidden or not:
     // visibility is a value `parentVisible` threads, never a skipped call, and a
-    // child's address is its (index, count) here, unchanged by any sibling's `when`.
+    // child's address step is its (index, count) here, placed by THIS
+    // container's distribution — unchanged by any sibling's `when`.
     return composeBlocks(
       node.direction,
       node.children.map((child, index) =>
         ctx.renderChild(child, ctx.visible, {
           index,
           count: node.children.length,
+          distribution: node.distribution,
         }),
       ),
     );

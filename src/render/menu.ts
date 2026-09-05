@@ -188,8 +188,14 @@ function renderMenu(
           options.paged,
           action,
           // [LAW:one-source-of-truth] The body's items are the band THIS
-          // segment opens — the same record the walk draws the trigger from.
-          (step) => bandItemStyle(placement, step),
+          // segment opens — the same record the walk draws the trigger from —
+          // placed by THIS menu's distribution: the picker knows positions,
+          // the instance knows how it places them.
+          (position) =>
+            bandItemStyle(placement, {
+              ...position,
+              distribution: options.distribution,
+            }),
         ),
       ]
     : [];
