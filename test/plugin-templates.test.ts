@@ -41,15 +41,24 @@ const wizardDoc = fs.readFileSync(
   "utf8",
 );
 
-// Placeholder name → every value the wizard may put there. A placeholder the
-// template introduces that has no row here is an untested claim, and fails
-// below by name.
+// Placeholder name → every value the wizard may put there.
 const DOMAINS: Readonly<Record<string, readonly string[]>> = {
   THEME: listResolvablePaletteNames(),
   STYLE: STRIP_STYLES,
   CHARSET: CHARSETS,
   PRESET: presetNames(DEFAULT_DSL_CONFIG.presets),
 };
+
+// [LAW:parse-dont-validate] The one crossing from a placeholder name to its
+// domain. A placeholder the template introduces without a row above is an
+// untested claim, and fails the suite here, by name, as it is collected.
+function domainOf(name: string): readonly string[] {
+  const domain = DOMAINS[name];
+  if (domain === undefined) {
+    throw new Error(`placeholder replace:${name} has no domain in this suite`);
+  }
+  return domain;
+}
 
 // The wizard's own placeholder spelling, `replace:NAME`, wherever it appears.
 function placeholdersIn(text: string): string[] {
@@ -92,17 +101,13 @@ describe("plugin config templates (plugin/templates/*.json)", () => {
     const template = fs.readFileSync(path.join(templatesDir, file), "utf8");
     const names = placeholdersIn(template);
 
-    test("every placeholder names a domain this suite can fill", () => {
-      expect(names.filter((n) => !(n in DOMAINS))).toEqual([]);
-    });
-
     // One fill per (placeholder, value): the first member of every domain as
     // the base, with one placeholder swept over its whole domain at a time.
     // Every value the wizard can offer is exercised; the loader's per-key
     // validation is what makes the axes independent.
-    const base = Object.fromEntries(names.map((n) => [n, DOMAINS[n]![0]!]));
+    const base = Object.fromEntries(names.map((n) => [n, domainOf(n)[0]!]));
     const fills = names.flatMap((n) =>
-      DOMAINS[n]!.map((v): [string, Record<string, string>] => [
+      domainOf(n).map((v): [string, Record<string, string>] => [
         `${n}=${v}`,
         { ...base, [n]: v },
       ]),
