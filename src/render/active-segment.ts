@@ -33,7 +33,7 @@ export interface ActiveSegment {
   /**
    * The palette this segment's colors resolve from: the base theme (session
    * choice over config default, or an explicit per-segment `palette:` pin)
-   * after the render's look and this segment's hue shift.
+   * after the render's look.
    *
    * Template bodies read colors through THIS, not through a palette captured
    * when the config was loaded — otherwise `{{ color "primary" }}` inside a
@@ -41,7 +41,8 @@ export interface ActiveSegment {
    */
   readonly palette: Palette;
   /**
-   * The segment's resolved background, once known.
+   * The segment's resolved background, once known: the authored `bg:`, else
+   * the tint its address was dealt.
    *
    * Undefined during evaluation of the segment's own `bg:` template — the
    * ordering is bg, then fg, then body, and a background cannot be an input to

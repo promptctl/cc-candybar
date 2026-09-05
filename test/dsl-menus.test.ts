@@ -181,9 +181,6 @@ const MENU_SRC = `{
   variables: {
     'session.id': { kind: 'input', path: 'session_id', default: '' },
     'term.cols': { kind: 'input', path: 'term.cols', type: 'number', default: 80 },
-    // Hue rotation off, so the walk's per-segment palette IS the base palette
-    // and the band assertions below can compute their expectation from it.
-    'hue.step': { kind: 'literal', value: 0 },
   },
   actions: {
     applyTheme: { set: 'theme', from: 'themes' },

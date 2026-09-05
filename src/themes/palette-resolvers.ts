@@ -2,18 +2,16 @@
 // NAMES and ThemeKey axes (data); rich-js owns every color value operation. Two
 // memos live here: a theme name -> base palette, and a (base, ThemeKey) ->
 // transposed palette. They compose — the per-render base palette feeds the
-// per-segment transposition (the session look's axes + the segment's hue shift,
-// folded into one key by the caller).
+// per-render look transposition.
 //
 // [LAW:no-shared-mutable-globals] Single owner: this module. Both Maps are pure
 // memos of pure rich-js functions, keyed by immutable inputs (resolved theme
 // name; palette name + the four ThemeKey axes). rich-js palettes are immutable
 // registry singletons, so a cached palette never goes stale. Key spaces are
-// bounded by #themes and #themes × #declared looks × #distinct hueShifts
-// (hueShift = look shift + segIndex*hueStep, segIndex bounded by layout; look
-// axes bounded by the loaded configs' looks blocks) — both small. Shared on
-// purpose: a theme's base palette and its gruvbox+42° transposition are each
-// computed once per process, not once per RenderCache entry or per render.
+// bounded by #themes and #themes × #declared looks (look axes bounded by the
+// loaded configs' looks blocks) — both small. Shared on purpose: a theme's
+// base palette and its gruvbox-under-`vivid` transposition are each computed
+// once per process, not once per RenderCache entry or per render.
 // Read/written only through the two functions below.
 
 import { transposePalette, getThemePalette } from "@promptctl/rich-js";
@@ -52,9 +50,8 @@ export function paletteForThemeName(name: string): Palette {
 
 /**
  * `base` transposed by a full ThemeKey — the adapted-palette constructor:
- * (base palette, key) → palette. The caller
- * composes whatever axes it carries (a look's four axes, the per-segment hue
- * shift) into ONE key and this makes ONE transposePalette call — never chain
+ * (base palette, key) → palette. The caller composes whatever axes it carries
+ * (a look's four axes) into ONE key and this makes ONE transposePalette call — never chain
  * two transpositions: chaining double-pays OKLCH quantization AND collides this
  * memo (a transposed palette keeps the base palette's name, so a re-transposed
  * gruvbox-with-look and plain gruvbox would share cache keys).

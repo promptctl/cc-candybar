@@ -243,7 +243,6 @@ describe("look click — live whole-bar recolor over the active theme", () => {
     variables: {
       'session.id': { kind: 'input', path: 'session_id', default: '' },
       look: { kind: 'state', key: 'look', default: 'none' },
-      'hue.step': { kind: 'literal', value: 14 },
     },
     actions: { applyLook: { set: 'look', from: 'looks' } },
     looks: { none: {}, inverted: { lightnessScale: -1, lightnessShift: 1 } },

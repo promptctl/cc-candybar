@@ -72,7 +72,7 @@ import type { ActiveSegmentRef } from "./active-segment.js";
 // same compiled table + store as every other helper) and READS the walk-published
 // active segment — both inputs, never written by the helper. The record is
 // mutated only by the single owner (the render walk, around each segment eval) —
-// the spatial cousin of the hue cursor, one mutator, never ambient.
+// one mutator, never ambient.
 // [LAW:no-ambient-temporal-coupling]
 export interface MenuRuntime {
   readonly action: ActionRuntime;

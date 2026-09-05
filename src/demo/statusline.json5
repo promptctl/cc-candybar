@@ -37,12 +37,6 @@
     // time — the system clock, formatted with a Go reference-time layout.
     clock: { kind: 'time', layout: '15:04:05', cache: { ttl: '1s' } },
 
-    // literal — a fixed value read like any other var. Here it drives the
-    // per-segment hue rotation (HUE_STEP_VAR): adjacent segments rotate 14° so
-    // they stay distinct. Make it a `state` var + a stepper widget to adjust it
-    // live; a literal is the fixed-value form.
-    'hue.step': { kind: 'literal', value: 14 },
-
     // (file and git kinds exist too — omitted here to stay minimal.)
   },
 

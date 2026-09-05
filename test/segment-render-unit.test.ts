@@ -98,15 +98,14 @@ describe("segment is the rendering unit (2de.10)", () => {
   });
 
   test("two adjacent same-bg segments read as TWO units — the structural chevron survives equal bg", () => {
-    // hue.step = 0 freezes the per-segment hue rotation, so `a` and `b` — same
-    // bg spec, same palette — resolve to the SAME background. The mid-join
+    // `a` and `b` author the same bg spec against the same palette, so they
+    // resolve to the SAME background. The mid-join
     // between them must still be painted (it would be invisible, equal fg/bg,
     // but it is a real cell): the boundary is structural, not bg-decided.
     const src = `{
       globals: { palette: 'textual-dark' },
       variables: {
         'session.id': { kind: 'input', path: 'session_id', default: '' },
-        'hue.step': { kind: 'literal', value: 0 },
       },
       segments: {
         a: { template: 'AAA', bg: 'surface', fg: 'foreground' },
