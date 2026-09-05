@@ -5,25 +5,20 @@
   },
   "metadata": {
     "description": "CCCandybar statusline setup wizard",
-    "version": "1.0.0"
+    "version": "2.0.0"
   },
   "plugins": [
     {
       "name": "cc-candybar",
       "source": "./plugin",
-      "description": "Interactive setup wizard for theme, style, segment, and budget configuration",
-      "version": "1.0.0",
+      "description": "Interactive setup wizard for theme, style, charset, and preset",
+      "version": "2.0.0",
       "author": {
         "name": "promptctl"
       },
       "homepage": "https://github.com/promptctl/cc-candybar",
       "repository": "https://github.com/promptctl/cc-candybar",
-      "keywords": [
-        "powerline",
-        "statusline",
-        "claude-code",
-        "themes"
-      ],
+      "keywords": ["powerline", "statusline", "claude-code", "themes"],
       "category": "statusline",
       "tags": ["statusline", "powerline", "customization"]
     }
