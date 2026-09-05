@@ -309,3 +309,111 @@ export function textOn(palette: Palette, background: ColorRgba): ColorRgba {
         : best,
     );
 }
+
+// --- Disclosure: bands ---------------------------------------------------------
+
+/**
+ * Where a disclosure sits in the colour model: the vocabulary hue of the bar
+ * cell that roots it, and how many bands deep it is. `depth` 0 is a bar cell's
+ * own band; a disclosure opened from inside that band is depth 1, and so on.
+ * The address never enters here — a band is NOT a tree position, it is a
+ * plane hung under a trigger, so the only positional fact it needs is the hue
+ * its root cell was dealt.
+ */
+export interface Disclosure {
+  readonly hue: DecorHue;
+  readonly depth: number;
+}
+
+/**
+ * How far a band's plane recedes from its state colour toward `background`:
+ * `base + perDepth × depth`, capped. Two cues move with depth — the hue
+ * advances and the plane recedes — which is what keeps depth 3 (where the hue
+ * wraps) apart from depth 0: the recession still separates what the hue no
+ * longer does.
+ */
+export const BAND_RECESSION = {
+  base: 0.42,
+  perDepth: 0.14,
+  cap: 0.75,
+} as const;
+
+/**
+ * The window along the plane→state axis a band's items are placed in, as a
+ * fraction of that axis: they start `floor` above the plane and never reach
+ * the state, so no item is the plane and none is its own trigger.
+ */
+export const BAND_WINDOW = { floor: 0.12, span: 0.8 } as const;
+
+/** The vocabulary hue `depth` steps after `hue`, wrapping — depth advances the hue. */
+export function hueAtDepth(hue: DecorHue, depth: number): DecorHue {
+  const index = (DECOR_HUES.indexOf(hue) + depth) % DECOR_HUES.length;
+  // [LAW:no-defensive-null-guards] The index is in range by construction; the
+  // `!` states that, it does not guard it.
+  return DECOR_HUES[index]!;
+}
+
+/**
+ * A disclosure's band: two colours of one hue. `state` is its peak — the
+ * colour the trigger that opened it wears, so a trigger is drawn from what it
+ * OPENS, not from where it sits — and `plane` is its floor, the state receded
+ * toward `background`.
+ */
+export interface Band {
+  readonly state: ColorRgba;
+  readonly plane: ColorRgba;
+}
+
+/**
+ * The band `disclosure` opens. One expression for every depth: the state of
+ * the depth-advanced hue, and that state pulled toward `background` by the
+ * depth's recession. The trigger of the band and the band itself are the SAME
+ * value read twice, so they cannot disagree about which hue they share.
+ *
+ * Memoised per (palette, hue, depth): the render walk asks for every segment's
+ * band on every render, and palettes are memoised objects (transposedPalette),
+ * so the key is stable and the search in `stateFor` runs once per palette.
+ */
+export function bandFor(palette: Palette, disclosure: Disclosure): Band {
+  const key = `${disclosure.hue}|${disclosure.depth}`;
+  let bands = BAND_MEMO.get(palette);
+  if (bands === undefined) {
+    bands = new Map();
+    BAND_MEMO.set(palette, bands);
+  }
+  const hit = bands.get(key);
+  if (hit !== undefined) return hit;
+  const state = stateFor(palette, hueAtDepth(disclosure.hue, disclosure.depth));
+  const recession = Math.min(
+    BAND_RECESSION.cap,
+    BAND_RECESSION.base + BAND_RECESSION.perDepth * disclosure.depth,
+  );
+  const band = {
+    state,
+    plane: blendRgb(state, paletteRole(palette, "background"), recession),
+  };
+  bands.set(key, band);
+  return band;
+}
+const BAND_MEMO = new WeakMap<Palette, Map<string, Band>>();
+
+/**
+ * The colour of item `step` (which of how many) in the band `disclosure`
+ * opens: placed along the plane→state axis by the band's own `distribution`,
+ * inside `BAND_WINDOW`. The same `f(index, count)` the bar's rows and cells
+ * address the vocabulary through — one placement mechanism at every level; a
+ * band only scales it into its plane-to-state window.
+ */
+export function bandItemFor(
+  palette: Palette,
+  disclosure: Disclosure,
+  step: AddressStep,
+  distribution: Distribution,
+): ColorRgba {
+  const { state, plane } = bandFor(palette, disclosure);
+  return blendRgb(
+    plane,
+    state,
+    BAND_WINDOW.floor + BAND_WINDOW.span * distribution(step.index, step.count),
+  );
+}

@@ -27,6 +27,7 @@ import type { ColorRgba, Palette } from "@promptctl/rich-js";
 import type { RichText } from "@promptctl/rich-js";
 import type { Template } from "@promptctl/go-template-js";
 import type { ActiveSegmentRef } from "../render/active-segment.js";
+import type { Disclosure } from "../themes/decor.js";
 
 export class ColorSpecError extends Error {
   constructor(spec: string, role: "bg" | "fg", detail: string) {
@@ -63,14 +64,21 @@ export function resolveSegmentColors(
   ref: ActiveSegmentRef,
   segName: string,
   palette: Palette,
+  disclosure: Disclosure,
   bgTemplate: Template<RichText> | undefined,
   fgTemplate: Template<RichText> | undefined,
   scope: object,
 ): Style {
-  // Phase 0 — the palette is live from here until the walk clears it, so
+  // Phase 0 — the palette (and the disclosure a `{{ menu }}` body colours its
+  // items by) are live from here until the walk clears them, so
   // `{{ color … }}` in the bg template, the fg template, and the body all read
   // this one palette. `bg` starts undefined: it is what phase 1 computes.
-  const active = { segName, palette, bg: undefined as ColorRgba | undefined };
+  const active = {
+    segName,
+    palette,
+    disclosure,
+    bg: undefined as ColorRgba | undefined,
+  };
   ref.current = active;
 
   // Phase 1 — background.

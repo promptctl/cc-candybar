@@ -241,11 +241,11 @@ describe("edit mode's (?)", () => {
 
     rt.toggleHelp(rt.render(200));
     const open = stripAnsi(rt.render(200));
-    // The trigger now wears ✕ instead of (?) — the open state is readable
-    // without a tint, which is load-bearing because these chrome segments
-    // declare no bg for focusTint to recolour. Asserted as the ABSENCE of the
-    // unique "(?)": edit mode's insert chrome wears ✕ too, so its presence
-    // alone identifies nothing.
+    // The trigger now wears ✕ instead of (?) — the open state is readable in
+    // plain text, which matters to a colourless client (colorCompatibility
+    // "none", `cc-candybar check`) that never sees the band's state colour.
+    // Asserted as the ABSENCE of the unique "(?)": edit mode's insert chrome
+    // wears ✕ too, so its presence alone identifies nothing.
     expect(open).not.toContain(HELP_GLYPH_CLOSED);
     expect(open).toContain(DISCLOSURE_GLYPH_CLOSE);
     for (const line of EDIT_MODE_HELP) expect(open).toContain(line);

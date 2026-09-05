@@ -57,6 +57,7 @@ import { DISCLOSURE_CLOSED, pickCycleDisplay } from "../config/disclosure.js";
 import { effectsUrl, VERB_SET_STATE } from "../click/wire.js";
 import { linkFragment, readVar, type ActionRuntime } from "./action.js";
 import { renderPicker } from "./picker.js";
+import { bandItemStyle } from "./band-style.js";
 import type { ActiveSegmentRef } from "./active-segment.js";
 
 // [LAW:one-type-per-behavior] A `{{ menu }}` needs one structural fact it cannot
@@ -186,6 +187,9 @@ function renderMenu(
           options.closeOnPick,
           options.paged,
           action,
+          // [LAW:one-source-of-truth] The body's items are the band THIS
+          // segment opens — the same record the walk draws the trigger from.
+          (step) => bandItemStyle(placement, step),
         ),
       ]
     : [];
