@@ -543,7 +543,7 @@ describe("open trigger, its band, and a nested band are mutually distinguishable
     // already used, and 20 lineages land at 0.016–0.034. The design doc's
     // "recession still separates what the wrapped hue no longer does" holds
     // for triggers (state vs plane, the next test) and not for adjacent
-    // planes; ai7.6 corrects the doc.
+    // planes; the design doc states the limit (ai7.6).
     expect(
       below(
         PLANE_VS_NESTED_PLANE,

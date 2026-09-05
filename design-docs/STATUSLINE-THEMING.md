@@ -4,7 +4,7 @@
 
 Tracking tickets:
 - `brandon-segment-dsl-segment-render-wd5.3` — Template `bg`/`fg` + palette resolver + auto-contrast context
-- `brandon-segment-dsl-segment-render-wd5.4` — `hueStep` threading through palette resolution
+- `brandon-segment-dsl-segment-render-wd5.4` — `hueStep` threading through palette resolution. Shipped as `hue.step`, then deleted with no successor by `candybar-render-ai7`: decorative colour now comes from the theme's own vocabulary, selected by tree address — see `COLOUR-FROM-THEME-VOCABULARY.md`.
 - `brandon-segment-dsl-config-3rq.2` — Per-segment palette switch in config schema
 
 Stale content below this line. Read for historical context only — the recommendations on TUI parity, palette location, and variant-state tinting are no longer authoritative. The DSL proposal is the source of truth.
