@@ -14,6 +14,19 @@ import path from "node:path";
 // format > compatibility tail).
 const CONFIG_EXTENSIONS = ["json5", "json"] as const;
 
+// [LAW:no-silent-failure] Presence, not readability. `fs.existsSync` answers
+// false to EVERY stat failure, so a file behind an unsearchable directory
+// resolved as "not found" — a permissions problem reported as a wrong path.
+// Only ENOENT is absence; any other failure is a file that IS there, and the
+// loader's own read reports the real errno on the strip.
+function present(p: string): boolean {
+  try {
+    return fs.statSync(p, { throwIfNoEntry: false }) !== undefined;
+  } catch {
+    return true;
+  }
+}
+
 // [LAW:single-enforcer] One implementation of `~`-prefix expansion, called at
 // each trust boundary that takes a user-supplied path: `sanitizeConfigPath`
 // (src/daemon/protocol.ts — both the `--config` flag and the client's
@@ -122,8 +135,8 @@ export type ConfigResolution =
  *   7. `$XDG_CONFIG_HOME/cc-candybar/config.json`
  *
  * [LAW:dataflow-not-control-flow] The locations array is data; the search is
- * `locations.find(fs.existsSync)`. Adding a layer is a new array entry, not a
- * new branch. Extension support is a property of the candidate list, not the
+ * `locations.find(present)`. Adding a layer is a new array entry, not a new
+ * branch. Extension support is a property of the candidate list, not the
  * search.
  *
  * [LAW:single-enforcer] Built on top of `dslConfigCandidatePaths` — the
@@ -135,7 +148,7 @@ export function resolveDslConfig(
   configFile?: string,
 ): ConfigResolution {
   const found = dslConfigCandidatePaths(projectDir, cwd, configFile).find(
-    fs.existsSync,
+    present,
   );
   if (found !== undefined) return { kind: "file", path: found };
   return configFile === undefined
@@ -220,7 +233,7 @@ export function detectConfigCollisions(
   for (const candidate of candidates) {
     if (seen.has(candidate)) continue;
     seen.add(candidate);
-    if (!fs.existsSync(candidate)) continue;
+    if (!present(candidate)) continue;
     uniqueExisting.push(candidate);
   }
   // Group by (dir + base-without-extension). A group with > 1 existing

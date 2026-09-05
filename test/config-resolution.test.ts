@@ -7,7 +7,13 @@
 //   - location precedence (project > cwd > XDG) overrides extension
 //   - detectConfigCollisions surfaces same-location duplicates
 
-import { mkdtempSync, rmSync, writeFileSync, mkdirSync } from "node:fs";
+import {
+  chmodSync,
+  mkdtempSync,
+  rmSync,
+  writeFileSync,
+  mkdirSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -235,6 +241,35 @@ describe("resolveDslConfig", () => {
       cleanup();
     }
   });
+
+  // Only ENOENT is absence. A file behind an unsearchable directory stats
+  // EACCES — it IS there, so it resolves `file` and the loader's read reports
+  // the real errno, instead of a "not found" notice about a path that is
+  // right. Root bypasses directory permissions, so the fixture cannot exist
+  // for it.
+  const asRoot = process.getuid?.() === 0;
+  (asRoot ? test.skip : test)(
+    "an explicit file behind an unsearchable directory is `file`, not `missing`",
+    () => {
+      const { dir, cleanup } = mkdir();
+      const restore = isolateEnv(dir);
+      const locked = join(dir, "locked");
+      mkdirSync(locked);
+      const named = join(locked, "named.json5");
+      writeFileSync(named, VALID_CFG);
+      chmodSync(locked, 0o000);
+      try {
+        expect(resolveDslConfig(dir, dir, named)).toEqual({
+          kind: "file",
+          path: named,
+        });
+      } finally {
+        chmodSync(locked, 0o755);
+        restore();
+        cleanup();
+      }
+    },
+  );
 });
 
 describe("detectConfigCollisions", () => {

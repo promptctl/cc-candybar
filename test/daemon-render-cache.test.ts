@@ -5,7 +5,14 @@
 // eviction. The legacy renderer's render-cache tests were deleted in
 // bzh.2; this is the new, smaller test set scoped to the DSL spine.
 
-import { mkdtempSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  mkdirSync,
+  mkdtempSync,
+  rmSync,
+  unlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -96,6 +103,40 @@ describe("RenderCache", () => {
     else process.env.XDG_CONFIG_HOME = savedXdg;
     rmSync(xdgIsolateDir, { recursive: true, force: true });
   });
+
+  // The resolver's presence predicate is not `existsSync`: a named file
+  // behind an unsearchable directory is `file`, so the read's own EACCES is
+  // the error the strip carries — never the `missing` notice claiming a
+  // correct path was not found. Root bypasses directory permissions.
+  const asRoot = process.getuid?.() === 0;
+  (asRoot ? test.skip : test)(
+    "an explicit path behind an unsearchable directory reports the read error, not `not found`",
+    () => {
+      const { cache, cleanups } = makeCache();
+      const { dir, cleanup } = mkConfigDir();
+      const locked = join(dir, "locked");
+      mkdirSync(locked);
+      const cfg = join(locked, "named.json5");
+      writeFileSync(
+        cfg,
+        JSON.stringify({
+          segments: { t: { template: "named" } },
+          root: { h: ["t"] },
+        }),
+      );
+      chmodSync(locked, 0o000);
+      try {
+        const entry = cache.getOrCreate(dir, dir, cfg);
+        expect(entry.lastWarning ?? "").not.toContain("Config file not found");
+        expect(entry.lastError).toContain("EACCES");
+        expect(entry.lastError).toContain(cfg);
+      } finally {
+        chmodSync(locked, 0o755);
+        for (const c of cleanups) c();
+        cleanup();
+      }
+    },
+  );
 
   // brandon-config-5g8: an explicit path to an absent file is the `missing`
   // resolution — the bundled default renders (liveness: a long-running bar
