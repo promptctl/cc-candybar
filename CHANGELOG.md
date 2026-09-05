@@ -1,3 +1,10 @@
+# [1.54.0](https://github.com/promptctl/cc-candybar/compare/v1.53.0...v1.54.0) (2026-09-05)
+
+
+### Features
+
+* **config:** author the placement distribution per placer (candybar-render-ai7.8) ([#214](https://github.com/promptctl/cc-candybar/issues/214)) ([fd59660](https://github.com/promptctl/cc-candybar/commit/fd59660abc5a02eb4889856108c95a34994f57c7))
+
 # [1.53.0](https://github.com/promptctl/cc-candybar/compare/v1.52.0...v1.53.0) (2026-09-05)
 
 
