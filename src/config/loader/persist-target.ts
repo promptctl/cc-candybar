@@ -23,10 +23,10 @@ import { isGlobalsField } from "./globals.js";
 export type PersistTarget =
   | { readonly scope: "globals"; readonly field: keyof Globals }
   | { readonly scope: "segment-palette"; readonly segment: string }
-  // The layout tree one preset renders — `presets.<name>.root` in the file,
-  // or the config's own `root` for a preset that stages it (see
-  // presetRootPath below). A structural edit (remove/insert a segment)
-  // rewrites that tree in place.
+  // The layout one preset renders. A structural edit (remove/insert a
+  // segment) lands in the ROW of the cascade that holds the segment —
+  // `presets.<name>.root` or the config's own `root`, the file's or the
+  // bundled default's — resolved by the config-file store per click.
   | { readonly scope: "preset-root"; readonly preset: string };
 
 // [LAW:locality-or-seam] `segments.<name>.palette` reuses the SAME dotted
@@ -67,18 +67,6 @@ export function parsePersistTarget(key: string): PersistTarget | null {
 // json5-edit's setValue/deleteValue/nodeAt navigate by — so a dotted preset
 // name is one step, never re-split on "." downstream.
 export type ConfigPath = readonly string[];
-
-// [LAW:one-source-of-truth] Where a preset's tree lives when the preset
-// declares one of its own. A preset that declares NO root stages the config's
-// own `root` (presetRoot in src/config/presets.ts), and an edit to it lands
-// there — `presetRootPath` takes that fact as data so the resolution is not
-// re-derived here.
-export function presetRootPath(
-  preset: string,
-  declaresRoot: boolean,
-): ConfigPath {
-  return declaresRoot ? ["presets", preset, "root"] : ["root"];
-}
 
 export function persistPath(
   target: Exclude<PersistTarget, { scope: "preset-root" }>,

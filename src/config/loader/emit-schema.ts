@@ -21,7 +21,9 @@ import { presetsJson } from "./presets.js";
 import {
   layoutNodeJson,
   LAYOUT_NODE_DEF_NAME,
-  LAYOUT_NODE_REF,
+  rootFragmentJson,
+  ROOT_FRAGMENT_DEF_NAME,
+  ROOT_FRAGMENT_REF,
 } from "./layout.js";
 import type { JsonNode } from "./validate-core.js";
 
@@ -34,7 +36,9 @@ export const SCHEMA_ID =
 // optional (a user file declares only what differs from the bundled default), so
 // the object carries no `required`. Each property is one module's emitted shape —
 // the same composition `validateConfig` performs over the validators. `root`
-// references the LayoutNode definition that closes the node recursion via `$ref`.
+// references the RootFragment definition (a whole tree or a `{ rows }` map),
+// whose tree arm is the LayoutNode definition that closes the node recursion
+// via `$ref`.
 export function emitConfigSchema(): JsonNode {
   return {
     $schema: "http://json-schema.org/draft-07/schema#",
@@ -46,7 +50,7 @@ export function emitConfigSchema(): JsonNode {
       globals: globalsJson(),
       variables: variablesMapJson(),
       segments: segmentsJson(),
-      root: { $ref: LAYOUT_NODE_REF },
+      root: { $ref: ROOT_FRAGMENT_REF },
       actions: actionsJson(),
       looks: looksJson(),
       presets: presetsJson(),
@@ -55,6 +59,7 @@ export function emitConfigSchema(): JsonNode {
     },
     definitions: {
       [LAYOUT_NODE_DEF_NAME]: layoutNodeJson(),
+      [ROOT_FRAGMENT_DEF_NAME]: rootFragmentJson(),
     },
   };
 }

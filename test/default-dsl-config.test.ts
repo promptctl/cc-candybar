@@ -13,6 +13,7 @@ import {
   RAW_DEFAULT_DSL_CONFIG,
 } from "../src/config/default-dsl-config";
 import { walkNodes, type ValidatedConfig } from "../src/config/dsl-types";
+import { rootNode, rootOf } from "../src/config/root";
 import {
   parseDslConfig,
   mergeWithDefault,
@@ -111,7 +112,7 @@ const narrowToSegment = (
     );
   return {
     ...parsed,
-    root: oneSegmentRoot(segment),
+    root: rootOf(oneSegmentRoot(segment)),
     presets: {},
     variables: dropEditChrome(parsed.variables),
     actions: dropEditChrome(parsed.actions),
@@ -124,11 +125,12 @@ describe("DEFAULT_DSL_CONFIG", () => {
     const parsed = parseAndValidate("<default>", SERIALIZED);
     expect(Object.keys(parsed.variables).length).toBeGreaterThan(0);
     expect(Object.keys(parsed.segments).length).toBeGreaterThan(0);
-    expect(parsed.root.kind).toBe("container");
+    // The two named rows ARE the merge keys a user file restates one of.
+    expect(Object.keys(parsed.root.rows)).toEqual(["identity", "status"]);
   });
 
   test("every layout entry is a declared segment", () => {
-    for (const node of walkNodes(DEFAULT_DSL_CONFIG.root)) {
+    for (const node of walkNodes(rootNode(DEFAULT_DSL_CONFIG.root))) {
       if (node.kind !== "segment") continue;
       // Array form: a synthesized group toggle's name (e.g. "groups.settings")
       // contains a literal dot, which toHaveProperty's default dotted-path
@@ -166,7 +168,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
   // telemetry stay opt-in.
   test("default root renders exactly the two-row identity+status segment set plus the collapsed settingsDrawer", () => {
     const laidOut = new Set<string>();
-    for (const node of walkNodes(DEFAULT_DSL_CONFIG.root)) {
+    for (const node of walkNodes(rootNode(DEFAULT_DSL_CONFIG.root))) {
       if (node.kind === "segment") laidOut.add(node.name);
     }
     expect([...laidOut].sort()).toEqual(

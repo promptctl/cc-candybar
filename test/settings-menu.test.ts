@@ -2,11 +2,11 @@
 // settings menu, driven through the real loader (parse → merge → validate), the
 // real spine (registerDslConfig + renderDsl), and the real set-state gate.
 //
-// The measuring stick the ticket names: a USER config whose `root` is a single
-// row of two segments. That is the shape that broke — `root` replaces wholesale,
-// so writing one deletes every interactive surface the bundled default placed
-// there. A change that only works from the bundled default has fixed nothing,
-// so every case below starts from a user file merged over DEFAULT_DSL_CONFIG.
+// The measuring stick the ticket names: a USER config whose `root` is a whole
+// tree of one row of two segments — a tree replaces the bundled rows, so the
+// menu must be spliced into the user's own row. A change that only works from
+// the bundled default has fixed nothing, so every case below starts from a
+// user file merged over DEFAULT_DSL_CONFIG.
 //
 //   1. The menu renders from a minimal user root, and from it a user reaches
 //      preset switching and edit mode.
@@ -297,6 +297,26 @@ describe("the anchor may be placed at most once", () => {
     } catch (err) {
       expect(err).toBeInstanceOf(ConfigError);
       expect((err as ConfigError).message).toContain(SETTINGS_ANCHOR);
+      expect((err as ConfigError).message).toContain("at most once");
+    }
+  });
+
+  test("a preset's `{ rows }` fragment adding a second placement over the config's row fails, naming the preset", () => {
+    try {
+      parseAndValidate(
+        "<user>",
+        `{
+          globals: {},
+          root: { h: ['directory', '${SETTINGS_ANCHOR}'] },
+          presets: { wide: { root: { rows: { extra: { h: ['${SETTINGS_ANCHOR}'] } } } } },
+        }`,
+        ALLOWED,
+        DEFAULT_DSL_CONFIG,
+      );
+      throw new Error("expected a ConfigError");
+    } catch (err) {
+      expect(err).toBeInstanceOf(ConfigError);
+      expect((err as ConfigError).message).toContain("presets.wide.root");
       expect((err as ConfigError).message).toContain("at most once");
     }
   });

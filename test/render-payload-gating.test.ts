@@ -12,21 +12,19 @@ import type {
   EffectiveGlobals,
   RenderPayloadDeps,
 } from "../src/daemon/render-payload";
-import type { DslConfig, LayoutNode } from "../src/config/dsl-types";
+import type { DslConfig, Root } from "../src/config/dsl-types";
 import { ABSENT } from "../src/utils/outcome";
 
 // One vertical container holding one horizontal container of segment refs — the
 // canonical root for a single row.
-const rootOf = (...segments: string[]): LayoutNode => ({
-  kind: "container",
-  direction: "vertical",
-  children: [
-    {
+const rootOf = (...segments: string[]): Root => ({
+  rows: {
+    main: {
       kind: "container",
       direction: "horizontal",
       children: segments.map((name) => ({ kind: "segment" as const, name })),
     },
-  ],
+  },
 });
 
 interface CallCounts {
@@ -255,10 +253,8 @@ describe("buildRenderPayload — layout-driven provider gating", () => {
       variables: SHARED_VARIABLES,
       segments: SHARED_SEGMENTS,
       root: {
-        kind: "container",
-        direction: "vertical",
+        rows: { main: { kind: "segment", name: "directory" } },
         when: '{{ gt (int .metrics.sessionDuration) 0 }}',
-        children: [{ kind: "segment", name: "directory" }],
       },
       actions: {},
       looks: {},

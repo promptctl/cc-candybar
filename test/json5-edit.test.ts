@@ -7,12 +7,14 @@
 import JSON5 from "json5";
 import {
   deleteValue,
+  hasSegmentRef,
   insertSegmentRef,
   json5Text,
   Json5EditError,
   nodeAt,
   parseDocument,
   removeSegmentRef,
+  rowEntriesOf,
   setValue,
   textOf,
 } from "../src/config/json5-edit";
@@ -316,6 +318,48 @@ describe("a bare-segment root is the one-child container it abbreviates", () => 
   test("a miss on a bare root is still null — the normalization is never committed alone", () => {
     expect(removeSegmentRef(bare, path, "zzz")).toBeNull();
     expect(insertSegmentRef(bare, path, "clock", "zzz", "after")).toBeNull();
+  });
+});
+
+// [LAW:one-source-of-truth] A `{ rows }` root fragment (brandon-config-merge-uk3):
+// the edits descend into each named row, a bare-string row is the one-child
+// container it abbreviates (the same normalization a bare root gets), and
+// every sibling row stays byte-identical.
+describe("a `{ rows }` root: edits reach the named rows", () => {
+  const rows = `{ root: { rows: {
+    a: { h: ["x", "y"] }, // row a
+    sys: "demo",
+    b: { h: ["z"] },
+  } } }`;
+
+  test("remove / insert inside one row leave the other rows verbatim", () => {
+    expect(removeSegmentRef(rows, ["root"], "y")).toBe(rows.replace(`["x", "y"]`, `["x"]`));
+    expect(insertSegmentRef(rows, ["root"], "w", "z", "before")).toBe(
+      rows.replace(`["z"]`, `["w", "z"]`),
+    );
+  });
+
+  test("a bare-string row is normalized to the container it abbreviates, alone", () => {
+    expect(removeSegmentRef(rows, ["root"], "demo")).toBe(
+      rows.replace(`sys: "demo"`, `sys: { h: [] }`),
+    );
+    expect(insertSegmentRef(rows, ["root"], "clock", "demo", "after")).toBe(
+      rows.replace(`sys: "demo"`, `sys: { h: ["demo", "clock"] }`),
+    );
+    expect(removeSegmentRef(rows, ["root"], "zzz")).toBeNull();
+  });
+
+  test("rowEntriesOf names the rows in authored order; a tree has none", () => {
+    const fragment = nodeAt(parseDocument(rows), ["root"])!;
+    expect(rowEntriesOf(fragment)?.map((e) => e.key)).toEqual(["a", "sys", "b"]);
+    expect(rowEntriesOf(nodeAt(parseDocument(CONFIG), ["root"])!)).toBeNull();
+  });
+
+  test("hasSegmentRef sees through rows, bare and arrayed alike", () => {
+    const fragment = nodeAt(parseDocument(rows), ["root"])!;
+    expect(hasSegmentRef(fragment, "demo")).toBe(true);
+    expect(hasSegmentRef(fragment, "z")).toBe(true);
+    expect(hasSegmentRef(fragment, "nope")).toBe(false);
   });
 });
 

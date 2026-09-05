@@ -26,9 +26,10 @@
 //   5. RenderCache reads the edited tree back through the SAME watcher-driven
 //      reload path a hand edit to the config file takes (bundled default <
 //      CONFIG FILE < ACTIVE PRESET), and the edit survives a real restart
-//      because the file IS the edit. A first-ever edit under a bundled
-//      preset's name materializes the whole bundled declaration first
-//      (`segments`/`presets` merge by name, wholesale).
+//      because the file IS the edit. A first-ever edit on a bundled root
+//      row materializes `root.rows.<row>` alone (rows merge by name); one
+//      under a bundled preset's name materializes the whole bundled
+//      declaration (`segments`/`presets` still merge by name, wholesale).
 //   6. brandon-layout-edit-2gc.5's own done-gate: "customized" is now the
 //      fact that the config FILE authors a root at the path presetRoot()
 //      reports for the active preset (`root` for a preset staging the
@@ -550,13 +551,13 @@ describe("apply-layout-op click → the config file", () => {
     const afterFirst = durable.text()!;
 
     // The same `-` again: "directory" is already gone.
-    expect(() => click(urls[0]!)).toThrow(/has no segment "directory"/);
+    expect(() => click(urls[0]!)).toThrow(/holds no segment "directory".*stale/);
     expect(durable.text()).toBe(afterFirst);
     expect(durable.history().past).toHaveLength(1);
 
     // An insert whose anchor was removed since the render, likewise.
     click(urls[2]!); // remove git
-    expect(() => click(urls[1]!)).toThrow(/has no segment "git"/);
+    expect(() => click(urls[1]!)).toThrow(/holds no segment "git".*stale/);
     expect(durable.parsed().root).toEqual({ v: [{ h: [] }, "bar"] });
     expect(durable.history().past).toHaveLength(2);
     dispose();
@@ -1151,6 +1152,80 @@ describe("RenderCache: layout edits land in the file and reload from it", () => 
   // hand-authored segments/root/actions of its own, so every artifact here
   // — `toolbar`, `edit.toggle`, the addable domain, and the gate the clicks
   // pass — comes from DEFAULT_DSL_CONFIG's own edit chrome alone.
+  // [LAW:one-source-of-truth] The cascade resolves a click to ONE row — the
+  // first merged row holding the segment, bundled rows before the file's own
+  // new ones — and the splice must edit THAT row, not the first occurrence in
+  // file-text order. Here `directory` sits in the bundled identity row AND in
+  // the file's own `extra` row, and the file authors `extra` first.
+  test("a segment placed in an inherited row and a file row: the edit lands on the row the cascade resolved", () => {
+    durable.write(
+      `{ globals: {}, segments: {}, root: { rows: { extra: { h: ['directory'] } } } }`,
+    );
+    const { cache, sessionState, cleanups } = makeCache();
+    try {
+      const entry = cache.getOrCreate(
+        durable.projectDir,
+        durable.projectDir,
+        undefined,
+      );
+      expect(entry.lastError).toBeNull();
+      fireVerb(
+        "apply-layout-op",
+        originCtx(sessionState),
+        "s1",
+        "presets.default.root",
+        encodeLayoutOp({ op: "remove", target: "directory" }),
+      );
+      const parsed = durable.parsed() as {
+        root: { rows: Record<string, { h: string[] }> };
+      };
+      expect(Object.keys(parsed.root.rows)).toEqual(["extra", "identity"]);
+      expect(parsed.root.rows.extra!.h).toEqual(["directory"]);
+      expect(parsed.root.rows.identity!.h).not.toContain("directory");
+    } finally {
+      for (const fn of cleanups) fn();
+    }
+  });
+
+  // [LAW:one-source-of-truth] `presets.default.root: { rows: {} }` is the
+  // merge identity: presetRoot reports the preset authored at `root`, so the
+  // store must edit `root` too — and name it when the click is stale.
+  test("a preset declaring the identity fragment stages the config's root: the edit and the stale error both name `root`", () => {
+    durable.write(
+      `{ globals: {}, segments: {}, presets: { default: { root: { rows: {} } } } }`,
+    );
+    const { cache, sessionState, cleanups } = makeCache();
+    try {
+      const entry = cache.getOrCreate(
+        durable.projectDir,
+        durable.projectDir,
+        undefined,
+      );
+      expect(entry.lastError).toBeNull();
+      expect(entry.state.authoredRoots.has("default")).toBe(false);
+      const removeDirectory = (): void =>
+        fireVerb(
+          "apply-layout-op",
+          originCtx(sessionState),
+          "s1",
+          "presets.default.root",
+          encodeLayoutOp({ op: "remove", target: "directory" }),
+        );
+      removeDirectory();
+      const parsed = durable.parsed() as {
+        root: { rows: Record<string, { h: string[] }> };
+        presets: { default: { root: unknown } };
+      };
+      expect(Object.keys(parsed.root.rows)).toEqual(["identity"]);
+      expect(parsed.root.rows.identity!.h).not.toContain("directory");
+      expect(parsed.presets.default.root).toEqual({ rows: {} });
+      // The same click again is stale, and names the root it stages.
+      expect(removeDirectory).toThrow(/^root holds no segment "directory"/);
+    } finally {
+      for (const fn of cleanups) fn();
+    }
+  });
+
   test("toolbar removed via edit mode is offered back by every remaining `+`, and a real reload restores it", () => {
     const bareUserConfig = `{ globals: {}, segments: {} }`;
     durable.write(bareUserConfig);
@@ -1178,11 +1253,18 @@ describe("RenderCache: layout edits land in the file and reload from it", () => 
         "presets.default.root",
         encodeLayoutOp({ op: "remove", target: "toolbar" }),
       );
-      // MATERIALIZATION: the file never authored a root, so the whole
-      // bundled root was copied in (authoring grammar) and then edited —
-      // its siblings untouched.
-      const parsed = durable.parsed();
-      expect(parsed.root).toBeDefined();
+      // MATERIALIZATION: the file never authored a root, so ONLY the
+      // bundled row holding `toolbar` was copied in (`root.rows.identity`,
+      // authoring grammar) and then edited — the status row stays inherited,
+      // and every other section is untouched.
+      const parsed = durable.parsed() as {
+        root: { rows: Record<string, { h: string[] }> };
+        globals: unknown;
+        segments: unknown;
+      };
+      expect(Object.keys(parsed.root.rows)).toEqual(["identity"]);
+      expect(parsed.root.rows.identity!.h).not.toContain("toolbar");
+      expect(parsed.root.rows.identity!.h).toContain("directory");
       expect(parsed.globals).toEqual({});
       expect(parsed.segments).toEqual({});
 

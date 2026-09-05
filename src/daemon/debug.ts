@@ -26,6 +26,7 @@ import type { VariableStore } from "../var-system/store";
 import type { SourceRegistry } from "../var-system/sources";
 import type { DslConfig, SourceKind, VariableDecl } from "../config/dsl-types";
 import { walkNodes } from "../config/dsl-types";
+import { rootNode } from "../config/root";
 import { extractTemplateRefs } from "../config/dsl-loader";
 import type { CompiledConfig } from "../dsl/render";
 import type {
@@ -187,7 +188,7 @@ export function introspectSegments(
 function orderedSegmentNames(config: DslConfig): readonly string[] {
   const out: string[] = [];
   const seen = new Set<string>();
-  for (const node of walkNodes(config.root)) {
+  for (const node of walkNodes(rootNode(config.root))) {
     if (node.kind !== "segment") continue;
     if (config.segments[node.name] && !seen.has(node.name)) {
       out.push(node.name);
