@@ -1,3 +1,10 @@
+## [1.56.1](https://github.com/promptctl/cc-candybar/compare/v1.56.0...v1.56.1) (2026-09-05)
+
+
+### Bug Fixes
+
+* **config:** CC_CANDYBAR_CONFIG is a client hint; a missing explicit config is loud (brandon-config-5g8) ([#218](https://github.com/promptctl/cc-candybar/issues/218)) ([b07df7f](https://github.com/promptctl/cc-candybar/commit/b07df7f84a3e7e3b2598339717be22d739326054))
+
 # [1.56.0](https://github.com/promptctl/cc-candybar/compare/v1.55.0...v1.56.0) (2026-09-05)
 
 
