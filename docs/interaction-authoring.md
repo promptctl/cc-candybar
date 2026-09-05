@@ -618,7 +618,8 @@ the first left behind. `reset: "presets.compact.root"` deletes the preset's
 `root` from the file; a preset with no root of its own stages your config's
 top-level `root`, so that is what `compact` renders after the reset. For a
 preset that never declared a root, the key addresses that top-level `root`
-itself, so both the clicks and the reset land there. A `set` twin doesn't
+itself: the reset deletes it, and a click edits the one row of it holding
+the clicked segment. A `set` twin doesn't
 exist either: a structural edit is always a durable write, the same way
 `persist`'s other arms already are. For stepping ONE click back instead of
 deleting the whole tree, see `undo`/`redo` below — the same history steps a

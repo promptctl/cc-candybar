@@ -1187,6 +1187,45 @@ describe("RenderCache: layout edits land in the file and reload from it", () => 
     }
   });
 
+  // [LAW:one-source-of-truth] `presets.default.root: { rows: {} }` is the
+  // merge identity: presetRoot reports the preset authored at `root`, so the
+  // store must edit `root` too — and name it when the click is stale.
+  test("a preset declaring the identity fragment stages the config's root: the edit and the stale error both name `root`", () => {
+    durable.write(
+      `{ globals: {}, segments: {}, presets: { default: { root: { rows: {} } } } }`,
+    );
+    const { cache, sessionState, cleanups } = makeCache();
+    try {
+      const entry = cache.getOrCreate(
+        durable.projectDir,
+        durable.projectDir,
+        undefined,
+      );
+      expect(entry.lastError).toBeNull();
+      expect(entry.state.authoredRoots.has("default")).toBe(false);
+      const removeDirectory = (): void =>
+        fireVerb(
+          "apply-layout-op",
+          originCtx(sessionState),
+          "s1",
+          "presets.default.root",
+          encodeLayoutOp({ op: "remove", target: "directory" }),
+        );
+      removeDirectory();
+      const parsed = durable.parsed() as {
+        root: { rows: Record<string, { h: string[] }> };
+        presets: { default: { root: unknown } };
+      };
+      expect(Object.keys(parsed.root.rows)).toEqual(["identity"]);
+      expect(parsed.root.rows.identity!.h).not.toContain("directory");
+      expect(parsed.presets.default.root).toEqual({ rows: {} });
+      // The same click again is stale, and names the root it stages.
+      expect(removeDirectory).toThrow(/^root holds no segment "directory"/);
+    } finally {
+      for (const fn of cleanups) fn();
+    }
+  });
+
   test("toolbar removed via edit mode is offered back by every remaining `+`, and a real reload restores it", () => {
     const bareUserConfig = `{ globals: {}, segments: {} }`;
     durable.write(bareUserConfig);

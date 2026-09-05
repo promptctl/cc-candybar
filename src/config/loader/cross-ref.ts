@@ -399,15 +399,28 @@ export function validateCrossReferences(
     }
   };
   const layoutKey = authoredLayoutKey(ctx.source);
-  const rootLine = findKeyLine(ctx.source, [layoutKey]);
-  checkPlacementCounts(rootNode(cfg.root), layoutKey, rootLine);
-  checkLayoutTree(rootNode(cfg.root), layoutKey, rootLine);
+  checkLayoutTree(
+    rootNode(cfg.root),
+    layoutKey,
+    findKeyLine(ctx.source, [layoutKey]),
+  );
   for (const [name, preset] of Object.entries(cfg.presets)) {
     if (preset.root === undefined) continue;
     const presetKey = `presets.${name}.root`;
     const presetLine = findKeyLine(ctx.source, ["presets", name, "root"]);
-    checkPlacementCounts(presetRoot(cfg, name).node, presetKey, presetLine);
     checkLayoutTree(fragmentNode(preset.root), presetKey, presetLine);
+  }
+  // [LAW:one-source-of-truth] Placement counts run over the tree each preset
+  // RENDERS, keyed by the path presetRoot reports it authored at — so a
+  // fragment that is the merge identity collapses onto `root` by data and is
+  // neither re-walked nor reported under a path nothing edits.
+  const rendered = new Map<string, LayoutNode>([["root", rootNode(cfg.root)]]);
+  for (const name of presetNames(cfg.presets)) {
+    const { node, path } = presetRoot(cfg, name);
+    rendered.set(path, node);
+  }
+  for (const [key, tree] of rendered) {
+    checkPlacementCounts(tree, key, findKeyLine(ctx.source, key.split(".")));
   }
 
   // For each variable's template/cache.key, every dotted ref must exist

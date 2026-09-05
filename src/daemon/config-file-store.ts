@@ -45,6 +45,7 @@ import {
   nodeAt,
   parseDocument,
   removeSegmentRef,
+  restagesFragment,
   rowEntriesOf,
   setValue,
   type Node,
@@ -346,6 +347,10 @@ function fileLayer(doc: Node | null, path: ConfigPath): RootLayer | null {
 // bundled one (materialized whole, `globals` included — presets still merge
 // wholesale by name), else the click is stale: the gate admitted a key from a
 // config this file no longer holds, and it must refuse, never fall through.
+// [LAW:one-source-of-truth] A declared fragment that is the merge identity
+// stages the config's own root, exactly as presetRoot classifies it
+// (root.ts's `restages`), so every path this module names agrees with the
+// one the renderer reports.
 function presetLayer(doc: Node | null, preset: string): RootLayer | null {
   const own: ConfigPath = ["presets", preset];
   const path: ConfigPath = [...own, "root"];
@@ -355,15 +360,19 @@ function presetLayer(doc: Node | null, preset: string): RootLayer | null {
     RAW_PRESETS[preset],
     path.join("."),
   );
-  if (declaration.source === "file") return fileLayer(doc, path);
-  const root = declaration.decl.root;
-  return root === undefined
-    ? null
-    : {
-        path,
-        fragment: bundledDoc(authoredFragment(root)),
-        unit: { path: own, value: authoredPreset(declaration.decl) },
-      };
+  const root =
+    declaration.source === "file" ? undefined : declaration.decl.root;
+  const layer =
+    declaration.source === "file"
+      ? fileLayer(doc, path)
+      : root === undefined
+        ? null
+        : {
+            path,
+            fragment: bundledDoc(authoredFragment(root)),
+            unit: { path: own, value: authoredPreset(declaration.decl) },
+          };
+  return layer !== null && restagesFragment(layer.fragment) ? layer : null;
 }
 
 // [LAW:one-source-of-truth] The merged rows with their PROVENANCE, folded by

@@ -331,6 +331,25 @@ describe("menu synthesis (derived identity, reserved namespace)", () => {
     }
   });
 
+  test("a {{ menu }} in a rows-form row's `when` is rejected (the fragment is lowered before the walk)", () => {
+    const src = `{
+      globals: {},
+      variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
+      actions: { applyTheme: { set: 'theme', from: 'themes' } },
+      segments: { s: { template: 'X', bg: 'surface', fg: 'foreground' } },
+      root: { rows: { r: { h: ['s'], when: '{{ menu "applyTheme" "▸" "▾" }}' } } },
+    }`;
+    try {
+      parseAndValidate("<test>", src, ALLOWED);
+      throw new Error("expected ConfigError");
+    } catch (e) {
+      expect(e).toBeInstanceOf(ConfigError);
+      expect((e as ConfigError).message).toMatch(
+        /a layout node's "when" predicate uses \{\{ menu \}\}/,
+      );
+    }
+  });
+
   test("a menu-bearing segment placed more than once is rejected (shared open-state)", () => {
     const src = `{
       globals: {},

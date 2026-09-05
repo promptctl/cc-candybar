@@ -575,6 +575,18 @@ export function rowEntriesOf(node: Node): readonly Entry[] | null {
   return rows?.kind === "object" ? rows.entries : null;
 }
 
+/**
+ * Whether a root fragment restages anything — false exactly for the merge's
+ * identity, an ungated empty rows map — root.ts's `restages` read off the
+ * document, so the file store and the loader classify one fragment alike.
+ */
+export function restagesFragment(node: Node): boolean {
+  const rows = rowEntriesOf(node);
+  return (
+    rows === null || rows.length > 0 || entryOf(node, "when") !== undefined
+  );
+}
+
 // [LAW:types-are-the-program] Every node of a layout fragment in pre-order,
 // each with the config-file path it can be REWRITTEN at when it is a bare
 // segment ref — the fragment itself, or one member of its `rows` map — and
