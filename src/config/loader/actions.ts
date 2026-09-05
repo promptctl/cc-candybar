@@ -26,6 +26,7 @@ import {
   type OptionDomain,
 } from "../action.js";
 import { findKeyLine } from "./diagnostics.js";
+import { CHECKS, checkByName } from "../../doctor/checks.js";
 import {
   describeType,
   describeValue,
@@ -143,6 +144,7 @@ const ACTION_ARMS: Record<ActionKey, ArmParse<ActionDecl>> = {
   reset: resetArm,
   undo: markerArm("undo"),
   redo: markerArm("redo"),
+  doctor: doctorArm,
 };
 
 // [LAW:one-source-of-truth] A copy/open action emits the closed single-key
@@ -171,6 +173,7 @@ function actionDeclJson(): JsonNode {
       templateArmJson("reset"),
       markerArmJson("undo"),
       markerArmJson("redo"),
+      ...doctorArmJson(),
     ],
   };
 }
@@ -268,6 +271,73 @@ function markerArmJson(key: "undo" | "redo"): JsonNode {
     required: [key],
     additionalProperties: false,
   };
+}
+
+// [LAW:types-are-the-program] `doctor` (brandon-doctor-b6a) is a two-member
+// enum on its own key — `"run"` alone, or `"fix"` with the `check` it repairs.
+// The check name is gated HERE against `CHECKS` (src/doctor/checks.ts), the
+// same list the daemon's doctor-fix verb gates the wire against, so an authored
+// `[fix]` over a check that does not exist is a load error naming the ones
+// that do, never a click-time BAD_REQUEST. `function`, not a const arrow, so
+// ACTION_ARMS above can reference it directly via hoisting.
+function doctorArm(
+  ctx: ValidateCtx,
+  path: string,
+  raw: Record<string, unknown>,
+): ActionDecl | null {
+  const verb = raw.doctor;
+  // Every failing key is reported before returning, like the sibling arms: a
+  // run takes no check; any other verb may carry one.
+  const allowed = verb === "run" ? ["doctor"] : ["doctor", "check"];
+  for (const k of Object.keys(raw)) {
+    if (!allowed.includes(k))
+      issue(
+        ctx,
+        `${path}.${k}`,
+        `Unknown key "${k}" on a doctor action. Expected only: ${allowed.join(", ")}`,
+      );
+  }
+  if (verb !== "run" && verb !== "fix") {
+    issue(
+      ctx,
+      `${path}.doctor`,
+      `doctor must be "run" or "fix", got ${describeValue(verb)}`,
+    );
+    return null;
+  }
+  if (verb === "run") return { doctor: "run" };
+  const check = raw.check;
+  if (typeof check !== "string" || checkByName(check) === undefined) {
+    issue(
+      ctx,
+      `${path}.check`,
+      `doctor fix must name a check (have: ${CHECKS.map((c) => c.name).join(", ")}), got ${describeValue(check)}`,
+    );
+    return null;
+  }
+  return { doctor: "fix", check };
+}
+
+// [LAW:one-source-of-truth] Two schema members for the two arms `doctorArm`
+// parses, the check enum drawn from the same CHECKS list.
+function doctorArmJson(): readonly JsonNode[] {
+  return [
+    {
+      type: "object",
+      properties: { doctor: { const: "run" } },
+      required: ["doctor"],
+      additionalProperties: false,
+    },
+    {
+      type: "object",
+      properties: {
+        doctor: { const: "fix" },
+        check: { enum: CHECKS.map((c) => c.name) },
+      },
+      required: ["doctor", "check"],
+      additionalProperties: false,
+    },
+  ];
 }
 
 // ─── The `set` value-source sub-union ────────────────────────────────────────

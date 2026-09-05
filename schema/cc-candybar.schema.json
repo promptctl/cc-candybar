@@ -1591,6 +1591,36 @@
               "redo"
             ],
             "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "doctor": {
+                "const": "run"
+              }
+            },
+            "required": [
+              "doctor"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "doctor": {
+                "const": "fix"
+              },
+              "check": {
+                "enum": [
+                  "tmuxTruecolor"
+                ]
+              }
+            },
+            "required": [
+              "doctor",
+              "check"
+            ],
+            "additionalProperties": false
           }
         ]
       }

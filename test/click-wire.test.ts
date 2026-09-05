@@ -12,6 +12,8 @@ import {
   decodeSegments,
   VERB_COPY,
   VERB_DISPATCH,
+  VERB_DOCTOR_FIX,
+  VERB_DOCTOR_RUN,
   VERB_SET_STATE,
 } from "../src/click/wire";
 import { parseHandlerUrl } from "../src/install/index";
@@ -119,6 +121,15 @@ describe("parseHandlerUrl — verb split, value raw", () => {
     expect(effectsOf("cc-candybar://set-state/s1/theme/nord")).toEqual([
       { verb: "set-state", args: ["s1", "theme", "nord"] },
     ]);
+    // The doctor verbs: doctor-run takes the session alone (whole decode),
+    // doctor-fix the session and the check (segmented) — the classification a
+    // prior round caught drifting.
+    expect(effectsOf(`cc-candybar://${VERB_DOCTOR_RUN}/a/b`)).toEqual([
+      { verb: VERB_DOCTOR_RUN, args: ["a/b"] },
+    ]);
+    expect(
+      effectsOf(`cc-candybar://${VERB_DOCTOR_FIX}/s1/tmuxTruecolor`),
+    ).toEqual([{ verb: VERB_DOCTOR_FIX, args: ["s1", "tmuxTruecolor"] }]);
   });
 });
 

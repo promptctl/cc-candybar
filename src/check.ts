@@ -417,7 +417,7 @@ const EXIT_USAGE = 2;
 // the two unconditional writes + exit against it. Verdict on stdout, every
 // diagnostic (warnings included) on stderr — so `check` in a pipeline yields a
 // parseable verdict while a human still sees the advisories.
-export interface CheckPlan {
+export interface CliPlan {
   readonly stdout: string;
   readonly stderr: string;
   readonly code: number;
@@ -427,7 +427,7 @@ function warningLines(warnings: readonly string[]): string {
   return warnings.map((w) => `warning: ${w}\n`).join("");
 }
 
-export function checkPlan(o: CheckOutcome): CheckPlan {
+export function checkPlan(o: CheckOutcome): CliPlan {
   switch (o.kind) {
     case "clean": {
       const where = o.configPath ?? "bundled default (no config file found)";

@@ -2,6 +2,7 @@ import type { Socket } from "node:net";
 import type { ClaudeHookData } from "../utils/claude";
 import type { StatsSnapshot } from "./stats";
 import type { DebugSnapshot, DebugWhat } from "./debug-types";
+import type { TmuxHint } from "../tmux-hint";
 
 // [LAW:types-are-the-program] PROTOCOL_VERSION encodes one thing:
 // "old-client × new-daemon (or vice versa) cannot communicate." It moves on
@@ -45,6 +46,7 @@ export interface RenderRequest {
   termCols?: number;
   termRows?: number;
   ssh?: boolean;
+  tmux?: TmuxHint | null;
 }
 
 // [LAW:locality-or-seam] The seam for "a fact the daemon cannot observe about
@@ -77,25 +79,56 @@ export interface RenderRequest {
 //     payload field, where the DSL input-fallback chain emits the declared
 //     default AND records a `last_error` that `cc-candybar debug vars`
 //     surfaces.
+//   • `tmux` has THREE states, and they are never collapsed: absent — the
+//     client did not report (too old, same as `ssh`); `null` — the client
+//     reported "not in tmux" (total, like `ssh: false`); an object — the tmux
+//     facts the doctor's tmux-truecolor check reasons over (src/doctor). The
+//     daemon records the parsed hints per session (SESSION_CLIENT_HINTS_KEY)
+//     so a click, which carries no hints of its own, can read them.
 export interface ClientHints {
   readonly termCols?: number;
   readonly termRows?: number;
   readonly ssh?: boolean;
+  readonly tmux?: TmuxHint | null;
 }
 
 // [LAW:single-enforcer] The ONE checkpoint where wire-supplied client hints
 // become trusted values. Per-field sanitizers stay separate (each fact has its
 // own validity rule) but nothing outside this function calls them, so a new
-// hint cannot reach the render path un-sanitized.
-export function parseClientHints(req: RenderRequest): ClientHints {
+// hint cannot reach the render path un-sanitized. The parameter is the hint
+// field-set over `unknown` rather than `RenderRequest`, so the daemon can push a
+// RECORDED hint (JSON it wrote itself, read back from SessionState) through the
+// same checkpoint a live frame crosses — one stamp, two provenances.
+export function parseClientHints(
+  req: Partial<Record<keyof ClientHints, unknown>>,
+): ClientHints {
   const termCols = sanitizeTermExtent(req.termCols);
   const termRows = sanitizeTermExtent(req.termRows);
   const ssh = sanitizeSsh(req.ssh);
+  const tmux = sanitizeTmux(req.tmux);
   return {
     ...(termCols !== undefined && { termCols }),
     ...(termRows !== undefined && { termRows }),
     ...(ssh !== undefined && { ssh }),
+    ...(tmux !== undefined && { tmux }),
   };
+}
+
+// [LAW:no-defensive-null-guards] exception: trust boundary, same shape as
+// sanitizeSsh. `null` is the client's affirmative "not in tmux" and passes
+// through as `null`; an object must carry exactly the TmuxHint fields with
+// their types, or the hint is treated as unreported (`undefined`) — a
+// malformed frame never becomes a half-true set of tmux facts.
+export function sanitizeTmux(v: unknown): TmuxHint | null | undefined {
+  if (v === null) return null;
+  if (typeof v !== "object") return undefined;
+  const o = v as Record<string, unknown>;
+  const { socket, pane, truecolor } = o;
+  if (typeof socket !== "string" || socket === "") return undefined;
+  if (typeof pane !== "string" || pane === "") return undefined;
+  if (truecolor !== null && (typeof truecolor !== "string" || truecolor === ""))
+    return undefined;
+  return { socket, pane, truecolor };
 }
 
 // [LAW:no-defensive-null-guards] exception: trust boundary. The wire is
