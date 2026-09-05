@@ -296,9 +296,9 @@ context: {
 
 The fg template's resolved spec (e.g., `"auto 60%"`) is resolved against the segment's resolved bg as `{ against: <bg hex> }` per-call. No stateful resolver, no precomputation. This is per-segment, per-render — small constant cost.
 
-### `hueStep` (per-segment hue rotation)
+### `hueStep` (per-segment hue rotation) — superseded
 
-`globals.hueStep` (degrees) gives the statusline visual variation across segments. The renderer assigns each segment a position-based `hueIndex`; the resolver receives `hueIndex * hueStep` as a rotation parameter and applies it (in OKLCH space) to non-semantic palette colors. Semantic specs (`error`, `warning`, `success`, `info`) are exempt from rotation. Default `hueStep: 0` (no rotation). Existing implementation: `src/themes/oklch.ts` + `src/themes/cascade.ts` — moves into the new resolver.
+This section proposed rotating the palette per segment by a position-based hue index. It shipped as `hue.step` and was deleted with no successor by `candybar-render-ai7`: a segment with no `bg:` now wears one of the theme's own colours, selected by its address in the layout tree. The rule, the measurements behind it, and why rotation lost are in `COLOUR-FROM-THEME-VOCABULARY.md`.
 
 ### What this replaces
 

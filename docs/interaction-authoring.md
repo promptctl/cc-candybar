@@ -101,6 +101,12 @@ action over a field with no such variable (a hand-authored globals field with
 no projection of its own) still writes correctly; it just has no "current
 selection" highlight.
 
+Every example below authors `fg:` and no `bg:`. A segment with no `bg:` wears
+a tint the theme derives from the segment's position in its row, so neighbours
+differ without anyone choosing colours. An authored `bg:` is reserved for
+meaning — a threshold's `error`, an alert's `warning` — and paints over the
+tint.
+
 The canonical control-strip config — cycle chip, bounded stepper, copy/open
 toolbar:
 
@@ -121,7 +127,7 @@ toolbar:
   segments: {
     controls: {
       template: '{{ action "cycleMode" "🎯 focus" "🔍 review" "🐛 debug" }} ◧ {{ action "detailDown" "◀" }} {{ .detail }} {{ action "detailUp" "▶" }} {{ action "copySession" "⎘ id" }} {{ action "openProject" "↗ proj" }}',
-      bg: "surface", fg: "foreground",
+      fg: "foreground",
     },
   },
   root: { v: ["controls"] },
@@ -159,7 +165,7 @@ exactly the same over it:
   segments: {
     sortControl: {
       template: '↕ {{ .sortOrder }} {{ menu "applySort" "▸" "▾" }}',
-      bg: "surface", fg: "foreground",
+      fg: "foreground",
     },
   },
   root: { v: ["sortControl"] },
@@ -225,7 +231,7 @@ always undoable from the bar itself:
   segments: {
     themeControls: {
       template: '{{ action "applyThemeForever" "nord" }} {{ action "forgetTheme" "↺" }}',
-      bg: "surface", fg: "foreground",
+      fg: "foreground",
     },
   },
   root: { v: ["themeControls"] },
@@ -266,7 +272,7 @@ click lands:
   segments: {
     themeControl: {
       template: '{{ action "persistToggle" "☐ persist?" "☑ persist?" }} 🎨 {{ .theme.effective }} {{ menu "applyTheme" "▸" "▾" }}',
-      bg: "surface", fg: "foreground",
+      fg: "foreground",
     },
   },
   root: { v: ["themeControl"] },
@@ -320,7 +326,7 @@ destination to choose between:
       int: true,
     },
   },
-  segments: { d: { template: "d", bg: "surface", fg: "foreground" } },
+  segments: { d: { template: "d", fg: "foreground" } },
   root: { v: ["d"] },
 }
 ```
@@ -344,7 +350,7 @@ load error rather than a quietly single-destination action:
       from: "themes",
     },
   },
-  segments: { d: { template: "d", bg: "surface", fg: "foreground" } },
+  segments: { d: { template: "d", fg: "foreground" } },
   root: { v: ["d"] },
 }
 ```
@@ -415,19 +421,19 @@ disagrees with.
   segments: {
     charsetControl: {
       template: '{{ .charset.effective }} {{ menu "applyCharset" "▸" "▾" }}',
-      bg: "surface", fg: "foreground",
+      fg: "foreground",
     },
     colorControl: {
       template: '{{ .colorCompatibility.effective }} {{ menu "applyColorCompat" "▸" "▾" }}',
-      bg: "surface", fg: "foreground",
+      fg: "foreground",
     },
     wrapToggle: {
       template: '{{ action "toggleWrap" "wrap: on" "wrap: off" }}',
-      bg: "surface", fg: "foreground",
+      fg: "foreground",
     },
     paddingControl: {
       template: '{{ action "paddingDown" "◀" }} padding {{ .padding.effective }} {{ action "paddingUp" "▶" }}',
-      bg: "surface", fg: "foreground",
+      fg: "foreground",
     },
   },
   root: { v: [
@@ -469,7 +475,7 @@ control for "just this terminal" beside one for "everywhere":
   segments: {
     layoutControls: {
       template: '{{ action "padHereDown" "◀" }} padding {{ .padding.effective }} {{ action "padHereUp" "▶" }}  {{ action "wrapHere" "wrap: on" "wrap: off" }}  {{ action "wrapEverywhere" "pin wrap: on" "pin wrap: off" }}',
-      bg: "surface", fg: "foreground",
+      fg: "foreground",
     },
   },
   root: { v: [{ h: ["directory", "layoutControls"] }] },
@@ -514,7 +520,7 @@ with `globals: { preset: "compact" }`.
   segments: {
     presetControl: {
       template: '▦ {{ .activePreset }} {{ menu "applyPreset" "▸" "▾" }}',
-      bg: "surface", fg: "foreground",
+      fg: "foreground",
     },
   },
   presets: {
@@ -559,7 +565,7 @@ the same zero-engine-edits seam `segments.<name>.palette` rides above.
   segments: {
     pinControl: {
       template: '📌 {{ menu "pinPreset" "▸" "▾" }} {{ action "unpinPreset" "↺" }}',
-      bg: "surface", fg: "foreground",
+      fg: "foreground",
     },
   },
   presets: {
@@ -598,7 +604,7 @@ request, gated the same one-value way a literal `persist … to` already is.
   segments: {
     editControl: {
       template: '{{ action "dropModel" "-model" }} {{ action "addGitPr" "+gitPr" }}',
-      bg: "surface", fg: "foreground",
+      fg: "foreground",
     },
   },
   presets: {
@@ -660,7 +666,7 @@ drive a structural edit the same way it drives an ordinary `persist … from`:
   segments: {
     editControl: {
       template: '{{ menu "addAfterGit" "+" "✕" }}',
-      bg: "surface", fg: "foreground",
+      fg: "foreground",
     },
   },
   presets: {
@@ -700,7 +706,7 @@ history itself decides which entry moves.
   segments: {
     bar: {
       template: '{{ action "pinDracula" "🎨" }} {{ action "back" "◀" }} {{ action "fwd" "▶" }}',
-      bg: "surface", fg: "foreground",
+      fg: "foreground",
     },
   },
   root: "bar",
@@ -751,9 +757,9 @@ your trigger toggles.
 {
   variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
   segments: {
-    directory: { template: '~/project', bg: 'surface', fg: 'foreground' },
-    git: { template: '⎇ main', bg: 'surface', fg: 'foreground' },
-    editControl: { template: '{{ action "edit.toggle" "✎" }}', bg: 'surface', fg: 'foreground' },
+    directory: { template: '~/project', fg: 'foreground' },
+    git: { template: '⎇ main', fg: 'foreground' },
+    editControl: { template: '{{ action "edit.toggle" "✎" }}', fg: 'foreground' },
   },
   root: { v: [ { h: ['directory', 'git'] }, 'editControl' ] },
 }
@@ -813,8 +819,8 @@ The bundled default stages plain joiners with a visible separator:
   editGlobals: { style: 'plain', default_separator: ' | ' },
   variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
   segments: {
-    directory: { template: '~/project', bg: 'surface', fg: 'foreground' },
-    editControl: { template: '{{ action "edit.toggle" "✎" }}', bg: 'surface', fg: 'foreground' },
+    directory: { template: '~/project', fg: 'foreground' },
+    editControl: { template: '{{ action "edit.toggle" "✎" }}', fg: 'foreground' },
   },
   root: { h: ['directory', 'editControl'] },
 }
@@ -915,12 +921,12 @@ already writable the moment any structural-edit action targets it).
     resetCompactLayout: { reset: "presets.compact.root" },
   },
   segments: {
-    directory: { template: '~/project', bg: 'surface', fg: 'foreground' },
-    model: { template: 'opus', bg: 'surface', fg: 'foreground' },
+    directory: { template: '~/project', fg: 'foreground' },
+    model: { template: 'opus', fg: 'foreground' },
     layoutStatus: {
       template: '{{ action "resetCompactLayout" "↺ layout customized" }}',
       when: '{{ .preset.customized }}',
-      bg: "surface", fg: "foreground",
+      fg: "foreground",
     },
   },
   presets: {
@@ -966,10 +972,10 @@ declares.
     resetSidebarPalette: { reset: "segments.sidebar.palette" },
   },
   segments: {
-    sidebar: { template: "sidebar", bg: "surface", fg: "foreground" },
+    sidebar: { template: "sidebar", fg: "foreground" },
     sidebarPaletteControl: {
       template: '🎨 {{ menu "applySidebarPalette" "▸" "▾" }} {{ action "resetSidebarPalette" "↺" }}',
-      bg: "surface", fg: "foreground",
+      fg: "foreground",
     },
   },
   root: { v: [{ h: ["sidebar", "sidebarPaletteControl"] }] },
@@ -1151,7 +1157,7 @@ open.
   segments: {
     themeControl: {
       template: '🎨 {{ .theme.effective }} {{ menu "applyTheme" "▸" "▾" }}',
-      bg: "surface", fg: "foreground",
+      fg: "foreground",
     },
   },
   root: { v: [
@@ -1202,11 +1208,11 @@ menu:
   segments: {
     themeControl: {
       template: '🎨 {{ .theme.effective }} {{ menu "applyTheme" "▸" "▾" (dict "key" "pickers") }}',
-      bg: "surface", fg: "foreground",
+      fg: "foreground",
     },
     styleControl: {
       template: '✦ style {{ menu "applyStyle" "▸" "▾" (dict "key" "pickers" "closeOnPick" true) }}',
-      bg: "surface", fg: "foreground",
+      fg: "foreground",
     },
   },
   root: { v: [
@@ -1250,7 +1256,7 @@ ignores the session theme.
   segments: {
     lookControl: {
       template: '◐ {{ .look.effective }} {{ menu "applyLook" "▸" "▾" }}',
-      bg: "surface", fg: "foreground",
+      fg: "foreground",
     },
   },
   root: { v: [
@@ -1300,8 +1306,8 @@ The accordion drawer:
 ```json5 check:pass
 {
   segments: {
-    sessionDetails: { template: '🪪 {{ trunc 8 .session.id }}', bg: "surface", fg: "foreground" },
-    links: { template: '{{ link "https://github.com/promptctl/cc-candybar" "↗ repo" }}', bg: "surface", fg: "foreground" },
+    sessionDetails: { template: '🪪 {{ trunc 8 .session.id }}', fg: "foreground" },
+    links: { template: '{{ link "https://github.com/promptctl/cc-candybar" "↗ repo" }}', fg: "foreground" },
   },
   root: { v: [
     { h: ["directory", "model"] },
@@ -1349,8 +1355,8 @@ row of text cells the bundled ones render.
 ```json5 check:pass
 {
   segments: {
-    deploy: { template: '🚀 staging', bg: "surface", fg: "foreground" },
-    deployHelp: { template: 'green = deployed, amber = building', bg: "surface", fg: "foreground" },
+    deploy: { template: '🚀 staging', fg: "foreground" },
+    deployHelp: { template: 'green = deployed, amber = building', fg: "foreground" },
   },
   root: { v: [
     { h: ["directory", "deploy", { kind: "group", name: "deployHelp", label: "(?)", children: ["deployHelp"] }] },
@@ -1358,17 +1364,12 @@ row of text cells the bundled ones render.
 }
 ```
 
-Two things worth knowing before you place one:
-
-- **Keep help short.** A body cell is a cell like any other, so a long sentence
-  wraps and costs extra rows at narrow widths. One complete thought per cell,
-  each leading with the glyph it explains, is what the bundled help does.
-- **Put it at the very end of your `root`, not merely after the segment it
-  explains.** Segment hue advances in tree order across *every* segment in the
-  whole tree, visible or hidden, so a cell shifts the colour of everything that
-  follows it anywhere — including later rows. A `(?)` at the end of your last
-  row costs nothing; the same `(?)` at the end of your *first* row recolours
-  every row below it, whether or not anyone opens it.
+Keep help short. A body cell is a cell like any other, so a long sentence
+wraps and costs extra rows at narrow widths. One complete thought per cell,
+each leading with the glyph it explains, is what the bundled help does. Place
+the group wherever it reads best, usually right after the segment it explains:
+a cell's colour is fixed by its own position in its row, so adding a `(?)`
+recolours nothing outside the row it joins.
 
 ## Mistakes and the errors they produce
 
