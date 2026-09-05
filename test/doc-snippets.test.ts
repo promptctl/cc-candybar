@@ -1,14 +1,21 @@
-// [LAW:one-source-of-truth] The interaction authoring reference
-// (docs/interaction-authoring.md) teaches an AGENT author by example: canonical
-// configs that must load, and mistakes paired with the loader's ACTUAL error
-// text. Both halves rot silently if untested — a drifted example teaches the
-// next agent a stale spelling, and a drifted error quote teaches it to expect
-// text the loader no longer prints. This suite extracts every annotated snippet
-// from the doc and drives it through checkConfig — the same entry function
-// `cc-candybar check` runs — so the doc, the CLI, and the daemon cannot
-// disagree about what loads or what an error says.
+// [LAW:one-source-of-truth] The docs teach by example: the interaction
+// authoring reference (docs/interaction-authoring.md) shows an AGENT author
+// canonical configs that must load and mistakes paired with the loader's ACTUAL
+// error text; the README shows a human the merge model with one config. Every
+// such snippet rots silently if untested — a drifted example teaches the next
+// reader a stale spelling (the README's example once used a deleted `layout:`
+// sugar for a release cycle, brandon-docs-3vl), and a drifted error quote
+// teaches it to expect text the loader no longer prints. This suite extracts
+// every annotated snippet from every listed doc and drives it through
+// checkConfig — the same entry function `cc-candybar check` runs — so the docs,
+// the CLI, and the daemon cannot disagree about what loads or what an error says.
 //
-// Snippet contract (stated in the doc's header comment):
+// [LAW:one-type-per-behavior] One snippet contract, N docs: a doc is a row in
+// DOCS carrying only what differs — its path and the floor each snippet family
+// must clear, which guards the extractor against a format drift that matches
+// nothing and lets the suite pass vacuously.
+//
+// Snippet contract (stated in each doc's header comment):
 //   ```json5 check:pass  — a complete config; must be clean (exit 0, no warnings)
 //   ```json5 check:fail  — a complete config; must be fatal (exit 1), and the
 //                          IMMEDIATELY FOLLOWING fenced block, tagged `error`,
@@ -21,18 +28,30 @@ import os from "node:os";
 import path from "node:path";
 import { checkConfig, checkPlan } from "../src/check";
 
-const DOC = path.join(__dirname, "..", "docs", "interaction-authoring.md");
+const ROOT = path.join(__dirname, "..");
+
+interface Doc {
+  readonly path: string;
+  readonly minPass: number;
+  readonly minFail: number;
+}
+
+const DOCS: readonly Doc[] = [
+  { path: "docs/interaction-authoring.md", minPass: 4, minFail: 10 },
+  { path: "README.md", minPass: 1, minFail: 0 },
+];
 
 interface Fence {
+  readonly doc: string;
   readonly info: string;
   readonly body: string;
   readonly line: number;
 }
 
-// One pass over the doc: every fenced block, in document order, with its info
+// One pass over a doc: every fenced block, in document order, with its info
 // string and 1-based opening line (for failure messages that point at the doc).
-function extractFences(source: string): Fence[] {
-  const lines = source.split("\n");
+function extractFences(doc: string): Fence[] {
+  const lines = fs.readFileSync(path.join(ROOT, doc), "utf8").split("\n");
   const fences: Fence[] = [];
   let open: { info: string; line: number; body: string[] } | null = null;
   for (let i = 0; i < lines.length; i++) {
@@ -42,6 +61,7 @@ function extractFences(source: string): Fence[] {
         open = { info: line.slice(3).trim(), line: i + 1, body: [] };
       } else {
         fences.push({
+          doc,
           info: open.info,
           body: open.body.join("\n"),
           line: open.line,
@@ -58,7 +78,8 @@ function extractFences(source: string): Fence[] {
   return fences;
 }
 
-const fences = extractFences(fs.readFileSync(DOC, "utf8"));
+const fencesByDoc = new Map(DOCS.map((d) => [d.path, extractFences(d.path)]));
+const fences = [...fencesByDoc.values()].flat();
 
 let dir: string;
 beforeAll(() => {
@@ -81,22 +102,31 @@ afterAll(() => {
 });
 
 function checkSnippet(f: Fence): ReturnType<typeof checkConfig> {
-  const p = path.join(dir, `snippet-L${f.line}.json5`);
+  const p = path.join(dir, `${path.basename(f.doc)}-L${f.line}.json5`);
   fs.writeFileSync(p, f.body);
   return checkConfig(p, dir);
 }
 
-const passSnippets = fences.filter((f) => f.info === "json5 check:pass");
-const failSnippets = fences
-  .map((f, i) => ({ f, next: fences[i + 1] }))
-  .filter(({ f }) => f.info === "json5 check:fail");
+const isPass = (f: Fence): boolean => f.info === "json5 check:pass";
+const isFail = (f: Fence): boolean => f.info === "json5 check:fail";
 
-describe("docs/interaction-authoring.md snippet contract", () => {
+const passSnippets = fences.filter(isPass);
+// A fail snippet's quoted error is the fence that follows it IN ITS OWN DOC —
+// pair within each doc, so a doc's last fence can never borrow the next doc's
+// first as its quote.
+const failSnippets = [...fencesByDoc.values()].flatMap((docFences) =>
+  docFences
+    .map((f, i) => ({ f, next: docFences[i + 1] }))
+    .filter(({ f }) => isFail(f)),
+);
+
+describe("doc snippet contract", () => {
   // Guard the extractor: a format drift that matches nothing must fail loudly,
   // not let the whole suite pass vacuously.
-  test("the doc contains the expected snippet families", () => {
-    expect(passSnippets.length).toBeGreaterThanOrEqual(4);
-    expect(failSnippets.length).toBeGreaterThanOrEqual(10);
+  test.each(DOCS)("$path contains the expected snippet families", (doc) => {
+    const own = fencesByDoc.get(doc.path)!;
+    expect(own.filter(isPass).length).toBeGreaterThanOrEqual(doc.minPass);
+    expect(own.filter(isFail).length).toBeGreaterThanOrEqual(doc.minFail);
   });
 
   test("every json5 fence is annotated check:pass or check:fail", () => {
@@ -107,17 +137,17 @@ describe("docs/interaction-authoring.md snippet contract", () => {
         f.info !== "json5 check:fail",
     );
     expect(
-      unannotated.map((f) => `line ${f.line}: \`\`\`${f.info}`),
+      unannotated.map((f) => `${f.doc} line ${f.line}: \`\`\`${f.info}`),
     ).toEqual([]);
   });
 
-  test.each(passSnippets.map((f) => [f.line, f] as const))(
-    "pass snippet at doc line %d is clean under check (exit 0, no warnings)",
-    (_line, f) => {
+  test.each(passSnippets.map((f) => [f.doc, f.line, f] as const))(
+    "pass snippet at %s line %d is clean under check (exit 0, no warnings)",
+    (_doc, _line, f) => {
       const outcome = checkSnippet(f);
       if (outcome.kind !== "clean") {
         throw new Error(
-          `doc line ${f.line}: expected clean, got ${outcome.kind}: ${
+          `${f.doc} line ${f.line}: expected clean, got ${outcome.kind}: ${
             "message" in outcome ? outcome.message : ""
           }`,
         );
@@ -128,15 +158,17 @@ describe("docs/interaction-authoring.md snippet contract", () => {
     },
   );
 
-  test.each(failSnippets.map(({ f, next }) => [f.line, f, next] as const))(
-    "fail snippet at doc line %d is fatal and prints its quoted error",
-    (_line, f, next) => {
+  test.each(
+    failSnippets.map(({ f, next }) => [f.doc, f.line, f, next] as const),
+  )(
+    "fail snippet at %s line %d is fatal and prints its quoted error",
+    (_doc, _line, f, next) => {
       // The block immediately after a check:fail snippet is its quoted error —
       // the doc's contract, enforced here so a snippet can never drift away
       // from its quote.
       if (next === undefined || next.info !== "error") {
         throw new Error(
-          `doc line ${f.line}: a check:fail snippet must be immediately followed by an \`\`\`error block quoting the real message`,
+          `${f.doc} line ${f.line}: a check:fail snippet must be immediately followed by an \`\`\`error block quoting the real message`,
         );
       }
       const quoted = next.body.trim();
@@ -144,7 +176,7 @@ describe("docs/interaction-authoring.md snippet contract", () => {
       const outcome = checkSnippet(f);
       if (outcome.kind !== "fatal") {
         throw new Error(
-          `doc line ${f.line}: expected fatal, got ${outcome.kind}`,
+          `${f.doc} line ${f.line}: expected fatal, got ${outcome.kind}`,
         );
       }
       const plan = checkPlan(outcome);
@@ -155,7 +187,7 @@ describe("docs/interaction-authoring.md snippet contract", () => {
       // sentence and this assertion are one contract, not a stricter shadow.
       if (!plan.stderr.includes(quoted)) {
         throw new Error(
-          `doc line ${next.line}: quoted error text does not match check's actual stderr.\n` +
+          `${f.doc} line ${next.line}: quoted error text does not match check's actual stderr.\n` +
             `quoted:\n${quoted}\n\nactual stderr:\n${plan.stderr}`,
         );
       }
