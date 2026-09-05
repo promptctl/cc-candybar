@@ -5,7 +5,14 @@
 // eviction. The legacy renderer's render-cache tests were deleted in
 // bzh.2; this is the new, smaller test set scoped to the DSL spine.
 
-import { mkdtempSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  mkdirSync,
+  mkdtempSync,
+  rmSync,
+  unlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -26,9 +33,7 @@ import { PRESET_FLOOR, presetRoot } from "../src/config/presets";
 // Flatten a layout tree to its segment names, in pre-order — the post-`root`
 // equivalent of the old `config.layout.flatMap(r => r.segments)`.
 const layoutSegments = (root: LayoutNode): string[] =>
-  [...walkNodes(root)].flatMap((n) =>
-    n.kind === "segment" ? [n.name] : [],
-  );
+  [...walkNodes(root)].flatMap((n) => (n.kind === "segment" ? [n.name] : []));
 
 // One horizontal container of segment refs — what { h: [...names] } lowers to.
 const oneRow = (...segments: string[]): LayoutNode => ({
@@ -79,28 +84,101 @@ function mkConfigDir(): { dir: string; cleanup: () => void } {
 }
 
 describe("RenderCache", () => {
-  // [LAW:single-enforcer] Isolate XDG_CONFIG_HOME and CC_CANDYBAR_CONFIG for
-  // every test in this file. dslConfigCandidatePaths consults both at call
-  // time; without isolation, tests would pick up the user's real config at
+  // [LAW:single-enforcer] Isolate XDG_CONFIG_HOME for every test in this
+  // file. dslConfigCandidatePaths consults it at call time (and reads no
+  // CC_CANDYBAR_CONFIG — that is a client hint, brandon-config-5g8); without
+  // isolation, tests would pick up the user's real config at
   // `$HOME/.config/cc-candybar/config.{json5,json}` and fail in ways
   // unrelated to what they're asserting. The override points at a fresh
   // tmpdir scoped to this test suite so the XDG layer is empty by default.
   let xdgIsolateDir: string;
   let savedXdg: string | undefined;
-  let savedCfg: string | undefined;
   beforeAll(() => {
     xdgIsolateDir = mkdtempSync(join(tmpdir(), "cc-candybar-cache-xdg-"));
     savedXdg = process.env.XDG_CONFIG_HOME;
-    savedCfg = process.env.CC_CANDYBAR_CONFIG;
     process.env.XDG_CONFIG_HOME = xdgIsolateDir;
-    delete process.env.CC_CANDYBAR_CONFIG;
   });
   afterAll(() => {
     if (savedXdg === undefined) delete process.env.XDG_CONFIG_HOME;
     else process.env.XDG_CONFIG_HOME = savedXdg;
-    if (savedCfg === undefined) delete process.env.CC_CANDYBAR_CONFIG;
-    else process.env.CC_CANDYBAR_CONFIG = savedCfg;
     rmSync(xdgIsolateDir, { recursive: true, force: true });
+  });
+
+  // The resolver's presence predicate is not `existsSync`: a named file
+  // behind an unsearchable directory is `unreadable`, so the bundled default
+  // renders (liveness — the watcher recovers when the directory opens) under
+  // an advisory carrying the stat's own EACCES — never the `missing` notice
+  // claiming a correct path was not found, and never a load-fatal error
+  // about a file nothing read. Root bypasses directory permissions.
+  const asRoot = process.getuid?.() === 0;
+  (asRoot ? test.skip : test)(
+    "an explicit path behind an unsearchable directory renders the default under a could-not-read advisory",
+    () => {
+      const { cache, cleanups } = makeCache();
+      const { dir, cleanup } = mkConfigDir();
+      const locked = join(dir, "locked");
+      mkdirSync(locked);
+      const cfg = join(locked, "named.json5");
+      writeFileSync(
+        cfg,
+        JSON.stringify({
+          segments: { t: { template: "named" } },
+          root: { h: ["t"] },
+        }),
+      );
+      chmodSync(locked, 0o000);
+      try {
+        const entry = cache.getOrCreate(dir, dir, cfg);
+        expect(entry.lastError).toBeNull();
+        expect(entry.configFilePath).toBeNull();
+        expect(entry.lastWarning).toContain(
+          `Config file could not be read: ${cfg}`,
+        );
+        expect(entry.lastWarning).toContain("EACCES");
+        expect(entry.lastWarning).not.toContain("Config file not found");
+      } finally {
+        chmodSync(locked, 0o755);
+        for (const c of cleanups) c();
+        cleanup();
+      }
+    },
+  );
+
+  // brandon-config-5g8: an explicit path to an absent file is the `missing`
+  // resolution — the bundled default renders (liveness: a long-running bar
+  // must not go dark waiting for a file) under a warning that NAMES the
+  // path, so it is never the same render as "no config". The explicit path
+  // is the sole watch candidate, so the file appearing swaps it in.
+  test("an explicit path to an absent file is loud, and loads when the file appears", async () => {
+    const { cache, cleanups, reloads } = makeCache();
+    const { dir, cleanup } = mkConfigDir();
+    try {
+      const cfg = join(dir, "named.json5");
+      const entry = cache.getOrCreate(dir, dir, cfg);
+      expect(entry.lastError).toBeNull();
+      expect(entry.configFilePath).toBeNull();
+      expect(entry.lastWarning).toContain(`Config file not found: ${cfg}`);
+      // The state beneath the warning is the bundled default's.
+      expect(entry.state.config.root).toEqual(
+        cache.getOrCreate(dir, dir, undefined).state.config.root,
+      );
+
+      await reloads.after(entry, () =>
+        writeFileSync(
+          cfg,
+          JSON.stringify({
+            segments: { t: { template: "named" } },
+            root: { h: ["t"] },
+          }),
+        ),
+      );
+      expect(entry.lastWarning).toBeNull();
+      expect(entry.configFilePath).toBe(cfg);
+      expect(layoutSegments(rootNode(entry.state.config.root))).toContain("t");
+    } finally {
+      for (const fn of cleanups) fn();
+      cleanup();
+    }
   });
 
   test("cache identity is (projectDir, cwd, configFile)", () => {
@@ -133,7 +211,9 @@ describe("RenderCache", () => {
       expect(entry.lastError).toBeNull();
       // No file means state was built from the bundled default — every
       // built-in segment is declared.
-      expect(layoutSegments(rootNode(entry.state.config.root)).length).toBeGreaterThan(0);
+      expect(
+        layoutSegments(rootNode(entry.state.config.root)).length,
+      ).toBeGreaterThan(0);
       expect(entry.configFilePath).toBeNull();
     } finally {
       for (const fn of cleanups) fn();

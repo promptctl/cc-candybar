@@ -3,6 +3,7 @@ import type { ClaudeHookData } from "../utils/claude";
 import type { StatsSnapshot } from "./stats";
 import type { DebugSnapshot, DebugWhat } from "./debug-types";
 import type { TmuxHint } from "../tmux-hint";
+import { expandHome } from "../config/dsl-loader";
 
 // [LAW:types-are-the-program] PROTOCOL_VERSION encodes one thing:
 // "old-client × new-daemon (or vice versa) cannot communicate." It moves on
@@ -47,6 +48,7 @@ export interface RenderRequest {
   termRows?: number;
   ssh?: boolean;
   tmux?: TmuxHint | null;
+  configEnv?: string;
 }
 
 // [LAW:locality-or-seam] The seam for "a fact the daemon cannot observe about
@@ -85,17 +87,24 @@ export interface RenderRequest {
 //     facts the doctor's tmux-truecolor check reasons over (src/doctor). The
 //     daemon records the parsed hints per session (SESSION_CLIENT_HINTS_KEY)
 //     so a click, which carries no hints of its own, can read them.
+//   • `configEnv` absent — the client's shell carries no `CC_CANDYBAR_CONFIG`
+//     (or the client is too old to report one; both read the same way: no
+//     override from the client, the precedence chain applies). Present, it is
+//     the `~`-expanded path the client named; server.ts composes it beneath
+//     a load-config pick and `--config`, never with the daemon's own env —
+//     the override that ticket brandon-config-5g8 measured going nowhere.
 export interface ClientHints {
   readonly termCols?: number;
   readonly termRows?: number;
   readonly ssh?: boolean;
   readonly tmux?: TmuxHint | null;
+  readonly configEnv?: string;
 }
 
 // [LAW:single-enforcer] The ONE checkpoint where wire-supplied client hints
 // become trusted values. Per-field sanitizers stay separate (each fact has its
-// own validity rule) but nothing outside this function calls them, so a new
-// hint cannot reach the render path un-sanitized. The parameter is the hint
+// own validity rule) but every hint crosses HERE, so a new hint cannot reach
+// the render path un-sanitized. The parameter is the hint
 // field-set over `unknown` rather than `RenderRequest`, so the daemon can push a
 // RECORDED hint (JSON it wrote itself, read back from SessionState) through the
 // same checkpoint a live frame crosses — one stamp, two provenances.
@@ -106,12 +115,23 @@ export function parseClientHints(
   const termRows = sanitizeTermExtent(req.termRows);
   const ssh = sanitizeSsh(req.ssh);
   const tmux = sanitizeTmux(req.tmux);
+  const configEnv = sanitizeConfigPath(req.configEnv);
   return {
     ...(termCols !== undefined && { termCols }),
     ...(termRows !== undefined && { termRows }),
     ...(ssh !== undefined && { ssh }),
     ...(tmux !== undefined && { tmux }),
+    ...(configEnv !== undefined && { configEnv }),
   };
+}
+
+// [LAW:single-enforcer] The one rule for a client-supplied explicit config
+// path, whichever spelling carried it — the `configEnv` hint here, the
+// `--config` flag in server.ts's parseRenderArgs. A non-string or empty value
+// is "no override" (`undefined`), never an empty path; `~` is expanded, so the
+// resolver only ever sees a literal path.
+export function sanitizeConfigPath(v: unknown): string | undefined {
+  return typeof v === "string" && v !== "" ? expandHome(v) : undefined;
 }
 
 // [LAW:no-defensive-null-guards] exception: trust boundary, same shape as

@@ -43,6 +43,7 @@ import {
   encodeFrame,
   makeFrameReader,
   parseClientHints,
+  sanitizeConfigPath,
 } from "./protocol";
 import type { Request, Response } from "./protocol";
 import { GitDataProvider } from "./cache/git";
@@ -73,7 +74,6 @@ import { productionEdge } from "../doctor/edge";
 import { setLaunchStats } from "../proc/launch";
 import { buildDebugSnapshot } from "./debug";
 import { DEBUG_WHATS, isDebugWhat } from "./debug-types";
-import { expandHome } from "../config/dsl-loader.js";
 import { renderDsl } from "../dsl/render.js";
 import { lookKeyByName, paletteForThemeName } from "../themes/index.js";
 import {
@@ -916,32 +916,7 @@ async function handleRequest(req: Request): Promise<HandledRequest> {
       // daemon's process.cwd(), so config resolution depends only on request
       // data — the daemon's own working directory must not influence output.
       const { configFile, unknownFlagsError } = parseRenderArgs(req.args);
-      // [LAW:effects-at-boundaries] The load-config verb writes per-session
-      // config overrides into SessionState; this is the one read point.
       const sessionId = req.hookData.session_id;
-      const sessionConfigFile =
-        sessionState.get(sessionId, SESSION_CONFIG_OVERRIDE_KEY) ?? configFile;
-      const entry = renderCache.getOrCreate(
-        projectDir,
-        req.cwd,
-        sessionConfigFile,
-      );
-      // [LAW:one-source-of-truth] Record the inputs THIS render resolved its
-      // config from, so a durable click on this session resolves the same
-      // chain and writes the file the next reload reads (verbs/index.ts
-      // sessionConfigFile) — never a path re-derived from the daemon's own
-      // cwd. Compared before writing: every
-      // set() persists and fires the session's MobX atom, so an unconditional
-      // per-render write would invalidate every state-driven computed each
-      // render.
-      const origin = encodeRenderOrigin({
-        projectDir,
-        cwd: req.cwd,
-        configFile: sessionConfigFile ?? null,
-      });
-      if (sessionState.get(sessionId, SESSION_RENDER_ORIGIN_KEY) !== origin) {
-        sessionState.set(sessionId, SESSION_RENDER_ORIGIN_KEY, origin);
-      }
       // [LAW:parse-dont-validate] The ONE checkpoint for everything the client
       // observed and the daemon cannot. Raw `req.*` hint fields are not read
       // past this line; `hints` is the stamped type the render path consumes.
@@ -966,6 +941,38 @@ async function handleRequest(req: Request): Promise<HandledRequest> {
         sessionState.get(sessionId, SESSION_CLIENT_HINTS_KEY) !== hintRecord
       ) {
         sessionState.set(sessionId, SESSION_CLIENT_HINTS_KEY, hintRecord);
+      }
+      // [LAW:effects-at-boundaries] The load-config verb writes per-session
+      // config overrides into SessionState; this is the one read point.
+      // [LAW:one-source-of-truth] The explicit config path has three
+      // spellings and ONE precedence, composed here: a load-config pick, the
+      // `--config` flag, the client's `CC_CANDYBAR_CONFIG` hint. All three are
+      // client facts; the daemon's own env is never consulted
+      // (brandon-config-5g8).
+      const sessionConfigFile =
+        sessionState.get(sessionId, SESSION_CONFIG_OVERRIDE_KEY) ??
+        configFile ??
+        hints.configEnv;
+      const entry = renderCache.getOrCreate(
+        projectDir,
+        req.cwd,
+        sessionConfigFile,
+      );
+      // [LAW:one-source-of-truth] Record the inputs THIS render resolved its
+      // config from, so a durable click on this session resolves the same
+      // chain and writes the file the next reload reads (verbs/index.ts
+      // sessionConfigFile) — never a path re-derived from the daemon's own
+      // cwd. Compared before writing: every
+      // set() persists and fires the session's MobX atom, so an unconditional
+      // per-render write would invalidate every state-driven computed each
+      // render.
+      const origin = encodeRenderOrigin({
+        projectDir,
+        cwd: req.cwd,
+        configFile: sessionConfigFile ?? null,
+      });
+      if (sessionState.get(sessionId, SESSION_RENDER_ORIGIN_KEY) !== origin) {
+        sessionState.set(sessionId, SESSION_RENDER_ORIGIN_KEY, origin);
       }
       const termCols = hints.termCols;
       const width = applyClaudeCodeReserve(termCols ?? DEFAULT_TERMINAL_WIDTH);
@@ -1187,8 +1194,8 @@ async function handleRequest(req: Request): Promise<HandledRequest> {
 // the standard util at the trust boundary. `--config <path>` is the sole
 // valid render flag; every other flag is surfaced as a render-time
 // diagnostic icon (caller composes it alongside config errors). The
-// `--config` value is `~`-expanded here, so every consumer downstream
-// receives a literal path — no caller has to remember to expand it.
+// `--config` value crosses `sanitizeConfigPath`, the same rule as the
+// `configEnv` hint: empty is no override, `~` is expanded once, here.
 //
 // `tokens: true, strict: false, allowPositionals: true` together let the
 // parser emit a token entry for every flag (known or unknown) without
@@ -1215,9 +1222,8 @@ function parseRenderArgs(args: string[]): {
         .map((t) => `--${t.name}`),
     ),
   ];
-  const rawConfig = values.config as string | undefined;
   return {
-    configFile: rawConfig === undefined ? undefined : expandHome(rawConfig),
+    configFile: sanitizeConfigPath(values.config),
     unknownFlagsError:
       unknown.length > 0 ? `Unknown flags: ${unknown.join(", ")}` : null,
   };
