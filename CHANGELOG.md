@@ -1,3 +1,10 @@
+## [1.56.2](https://github.com/promptctl/cc-candybar/compare/v1.56.1...v1.56.2) (2026-09-05)
+
+
+### Bug Fixes
+
+* **plugin:** rebuild the setup wizard on the current config model (brandon-plugin-templates-irq) ([#219](https://github.com/promptctl/cc-candybar/issues/219)) ([281f368](https://github.com/promptctl/cc-candybar/commit/281f3685bf9e8ff1f82aaeab5b15834f852a7c79))
+
 ## [1.56.1](https://github.com/promptctl/cc-candybar/compare/v1.56.0...v1.56.1) (2026-09-05)
 
 
