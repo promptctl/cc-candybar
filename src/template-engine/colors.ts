@@ -13,8 +13,9 @@
 //
 // [LAW:dataflow-not-control-flow] Steps execute unconditionally; the option
 // values (undefined template = no spec) are what decides the output, not
-// whether steps run. An absent bg spec resolves to the address's tint; an
-// absent fg leaves the Style's foreground unset, so cells keep their own.
+// whether steps run. An absent bg spec resolves to the region's tint; an
+// absent fg resolves to the region's text floor (unset on the bar, so cells
+// keep their own).
 
 import {
   Style,
@@ -52,14 +53,16 @@ export class ColorSpecError extends Error {
  * There is no "is this a name or a color" branch anywhere — one total
  * function over both. [LAW:dataflow-not-control-flow]
  *
- * A segment always has a background. `tint` is the decorative one its address
- * was dealt from the theme's own vocabulary — the floor every segment wears;
- * an authored `bg:` states MEANING (a threshold's `error`, a context's
- * `surface-active`) and paints over it. [LAW:dataflow-not-control-flow] The
- * `bg?:` optionality already in the segment type is the discriminator: no
- * segment is asked whether it "looks decorative", the absence of an authored
- * spec IS the decorated case. Undefined fg template → no foreground set, so
- * cells fall through to their own style.
+ * A segment always has a background. `tint` is the decorative one its region
+ * dealt it — a vocabulary entry on the bar, a band item under a trigger — the
+ * floor every segment wears; an authored `bg:` states MEANING (a threshold's
+ * `error`, a context's `surface-active`) and paints over it.
+ * [LAW:dataflow-not-control-flow] The `bg?:` optionality already in the
+ * segment type is the discriminator: no segment is asked whether it "looks
+ * decorative", the absence of an authored spec IS the decorated case. `text`
+ * is the same floor for the foreground: what an unauthored `fg:` defaults to
+ * — nothing on the bar (cells keep their own), the contrast-chosen pole on a
+ * band, where a fixed foreground measurably fails (design doc, Decisions).
  *
  * Looks are not this function's concern: they live upstream as WHICH palette
  * it is handed, so bg, fg, and the body all resolve from one palette and their
@@ -71,6 +74,7 @@ export function resolveSegmentColors(
   palette: Palette,
   disclosure: Disclosure,
   tint: ColorRgba,
+  text: ColorRgba | undefined,
   bgTemplate: Template<RichText> | undefined,
   fgTemplate: Template<RichText> | undefined,
   scope: object,
@@ -87,7 +91,7 @@ export function resolveSegmentColors(
   };
   ref.current = active;
 
-  // Phase 1 — background: the authored spec, else the address's tint.
+  // Phase 1 — background: the authored spec, else the region's tint.
   const bgSpec = evalToPlainText(bgTemplate, scope);
   const bgColor =
     bgSpec !== undefined ? resolveRef(palette, bgSpec, "bg") : tint;
@@ -96,7 +100,7 @@ export function resolveSegmentColors(
   active.bg = bgColor;
   const fgSpec = evalToPlainText(fgTemplate, scope);
   const fgColor =
-    fgSpec !== undefined ? resolveRef(palette, fgSpec, "fg") : undefined;
+    fgSpec !== undefined ? resolveRef(palette, fgSpec, "fg") : text;
 
   return new Style({
     bgcolor: ColorSpec.fromRgba(bgColor),

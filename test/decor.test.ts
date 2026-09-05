@@ -458,11 +458,9 @@ describe("a band is a plane", () => {
     for (const palette of THEMES) {
       const { state, plane } = bandFor(palette, disclosure);
       // `uniform` puts every item at the window's midpoint — the formula, once.
-      const mid = bandItemFor(palette, disclosure, {
-        index: 0,
-        count: 1,
-        distribution: DISTRIBUTIONS.uniform,
-      });
+      const mid = bandItemFor(palette, disclosure, [
+        { index: 0, count: 1, distribution: DISTRIBUTIONS.uniform },
+      ]);
       expect(mid.hex).toBe(
         blendRgb(plane, state, BAND_WINDOW.floor + BAND_WINDOW.span * 0.5).hex,
       );
@@ -470,11 +468,9 @@ describe("a band is a plane", () => {
       // the one before it, and none is the plane or the state (the window
       // keeps them off both ends).
       const distances = [0, 1, 2, 3].map((index) => {
-        const item = bandItemFor(palette, disclosure, {
-          index,
-          count: 4,
-          distribution: DISTRIBUTIONS.monotonic,
-        });
+        const item = bandItemFor(palette, disclosure, [
+          { index, count: 4, distribution: DISTRIBUTIONS.monotonic },
+        ]);
         expect(item.hex).not.toBe(plane.hex);
         expect(item.hex).not.toBe(state.hex);
         return deltaE(item, plane);
@@ -498,11 +494,9 @@ describe("a band is a plane", () => {
         const cells = [
           plane,
           ...[0, 1, 2, 3, 4, 5].map((index) =>
-            bandItemFor(palette, disclosure, {
-              index,
-              count: 6,
-              distribution: DISTRIBUTIONS[DEFAULT_DISTRIBUTION],
-            }),
+            bandItemFor(palette, disclosure, [
+              { index, count: 6, distribution: DISTRIBUTIONS[DEFAULT_DISTRIBUTION] },
+            ]),
           ),
         ];
         for (const cell of cells) {

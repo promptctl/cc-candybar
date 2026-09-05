@@ -289,8 +289,9 @@ describe("the config menu's (?)", () => {
   });
 
   test("closing the menu takes the open help with it", () => {
-    // A nested disclosure's body is gated on its own key AND every enclosing
-    // one, so an open `(?)` cannot outlive the panel it explains.
+    // A nested disclosure's body hangs on its trigger, and the trigger sits
+    // inside the enclosing body, so an open `(?)` cannot outlive the panel it
+    // explains.
     const rt = buildRuntime();
     openSettingsMenu(rt);
     rt.toggleHelp(rt.render(200));

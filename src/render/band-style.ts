@@ -32,6 +32,6 @@ export function stateCell(palette: Palette, background: ColorRgba): Style {
 export function bandItemStyle(active: ActiveSegment, step: AddressStep): Style {
   return stateCell(
     active.palette,
-    bandItemFor(active.palette, active.disclosure, step),
+    bandItemFor(active.palette, active.disclosure, [step]),
   );
 }

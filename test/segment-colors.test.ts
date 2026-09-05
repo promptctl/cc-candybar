@@ -83,6 +83,7 @@ function resolve(
     palette,
     DISCLOSURE,
     TINT,
+    undefined,
     bg,
     fg,
     scope,
