@@ -184,7 +184,7 @@ export type Address = readonly AddressStep[];
  * row decides the coarse position and the cell refines it. The value the
  * evidence demo was validated with; the doc's separations were measured under it.
  */
-const LEVEL_DECAY = 0.37;
+export const LEVEL_DECAY = 0.37;
 
 /**
  * The index into a vocabulary of `size` entries that `address` selects: a
