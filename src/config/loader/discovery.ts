@@ -15,10 +15,10 @@ import path from "node:path";
 const CONFIG_EXTENSIONS = ["json5", "json"] as const;
 
 // [LAW:single-enforcer] One implementation of `~`-prefix expansion, called at
-// each trust boundary that takes a user-supplied path: the CLI `--config`
-// value in `parseRenderArgs` and the client's `CC_CANDYBAR_CONFIG` hint in
-// `parseClientHints` (both server-side, src/daemon), and the `check` CLI's
-// target. Every path that reaches this module is already literal.
+// each trust boundary that takes a user-supplied path: `sanitizeConfigPath`
+// (src/daemon/protocol.ts — both the `--config` flag and the client's
+// `CC_CANDYBAR_CONFIG` hint) and the `check` CLI's target. Every path that
+// reaches this module is already literal.
 //
 // [LAW:enumeration-gap] Only the shell-standard home-expansion forms trigger
 // replacement: bare `~`, `~/...`, or `~\...` on Windows. A string like
@@ -39,7 +39,7 @@ export function expandHome(p: string): string {
  *
  * `configFile` is the highest-precedence entry — the explicit path the
  * CLIENT named, its `--config` flag or its `CC_CANDYBAR_CONFIG` (already
- * `~`-expanded at the trust boundary in server.ts). When present, it is the
+ * made literal by `sanitizeConfigPath`). When present, it is the
  * sole candidate and the rest of the precedence chain is bypassed. This
  * module reads no environment of its own: the daemon is detached and
  * one-per-user, so its env answers for whichever shell spawned it, not for

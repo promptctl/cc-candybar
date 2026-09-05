@@ -43,6 +43,7 @@ import {
   encodeFrame,
   makeFrameReader,
   parseClientHints,
+  sanitizeConfigPath,
 } from "./protocol";
 import type { Request, Response } from "./protocol";
 import { GitDataProvider } from "./cache/git";
@@ -73,7 +74,6 @@ import { productionEdge } from "../doctor/edge";
 import { setLaunchStats } from "../proc/launch";
 import { buildDebugSnapshot } from "./debug";
 import { DEBUG_WHATS, isDebugWhat } from "./debug-types";
-import { expandHome } from "../config/dsl-loader.js";
 import { renderDsl } from "../dsl/render.js";
 import { lookKeyByName, paletteForThemeName } from "../themes/index.js";
 import {
@@ -1194,8 +1194,8 @@ async function handleRequest(req: Request): Promise<HandledRequest> {
 // the standard util at the trust boundary. `--config <path>` is the sole
 // valid render flag; every other flag is surfaced as a render-time
 // diagnostic icon (caller composes it alongside config errors). The
-// `--config` value is `~`-expanded here, so every consumer downstream
-// receives a literal path — no caller has to remember to expand it.
+// `--config` value crosses `sanitizeConfigPath`, the same rule as the
+// `configEnv` hint: empty is no override, `~` is expanded once, here.
 //
 // `tokens: true, strict: false, allowPositionals: true` together let the
 // parser emit a token entry for every flag (known or unknown) without
@@ -1222,9 +1222,8 @@ function parseRenderArgs(args: string[]): {
         .map((t) => `--${t.name}`),
     ),
   ];
-  const rawConfig = values.config as string | undefined;
   return {
-    configFile: rawConfig === undefined ? undefined : expandHome(rawConfig),
+    configFile: sanitizeConfigPath(values.config),
     unknownFlagsError:
       unknown.length > 0 ? `Unknown flags: ${unknown.join(", ")}` : null,
   };

@@ -16,7 +16,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { checkConfig, checkPlan } from "../src/check";
+import { checkConfig, checkPlan, runCheck } from "../src/check";
 import { detectConfigEnv } from "../src/config-hint";
 
 let dir: string;
@@ -410,5 +410,63 @@ describe("checkPlan — the text/exit-code contract", () => {
     });
     expect(plan.code).toBe(2);
     expect(plan.stderr).toContain("gone.json5");
+  });
+});
+
+// `runCheck` is the argv edge: it owns process.exit and the streams, and it is
+// where an explicit argument and the CLI's own $CC_CANDYBAR_CONFIG meet. The
+// spies turn its exit into a thrown code so that composition is observable
+// in-process — everything below the edge is covered through checkConfig.
+describe("runCheck — the argv edge", () => {
+  class Exit {
+    constructor(readonly code: number) {}
+  }
+  function run(args: string[]): {
+    code: number;
+    stdout: string;
+    stderr: string;
+  } {
+    let stdout = "";
+    let stderr = "";
+    const out = jest
+      .spyOn(process.stdout, "write")
+      .mockImplementation((chunk) => ((stdout += String(chunk)), true));
+    const err = jest
+      .spyOn(process.stderr, "write")
+      .mockImplementation((chunk) => ((stderr += String(chunk)), true));
+    const exit = jest.spyOn(process, "exit").mockImplementation(((
+      code?: number,
+    ) => {
+      throw new Exit(code ?? 0);
+    }) as never);
+    try {
+      runCheck(args);
+    } catch (e) {
+      if (e instanceof Exit) return { code: e.code, stdout, stderr };
+      throw e;
+    } finally {
+      out.mockRestore();
+      err.mockRestore();
+      exit.mockRestore();
+    }
+    throw new Error("runCheck returned instead of exiting");
+  }
+
+  it("an explicit argument outranks $CC_CANDYBAR_CONFIG; without one the variable is the target", () => {
+    const ok = write(
+      "edge-ok.json5",
+      `{ segments: { a: { template: 'ok' } }, root: { h: ['a'] } }`,
+    );
+    const bad = write("edge-bad.json5", `{ theme: "dracula" }`);
+    process.env.CC_CANDYBAR_CONFIG = bad;
+
+    const viaArg = run([ok]);
+    expect(viaArg.code).toBe(0);
+    expect(viaArg.stdout).toContain(`✓ ${ok}: config OK`);
+
+    const viaEnv = run([]);
+    expect(viaEnv.code).toBe(1);
+    expect(viaEnv.stderr).toContain(`✗ ${bad}`);
+    expect(viaEnv.stderr).toContain('Unknown top-level key "theme"');
   });
 });

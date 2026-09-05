@@ -36,12 +36,14 @@ const TIMEOUT_RETRY_BUDGET = 5;
 
 // One status-line render, as Claude Code would ask for it. `hints` are the
 // client-observed facts (termCols/termRows/ssh) spread onto the request the
-// way the real client spreads them.
+// way the real client spreads them; `args` is the client's argv (binary path
+// first, as parseRenderArgs expects), empty for a bare render.
 export async function render(
   sockPath: string,
   sessionId: string,
   cwd: string,
   hints: ClientHints = {},
+  args: string[] = [],
 ): Promise<string> {
   for (let attempt = 1; ; attempt++) {
     const resp = await sendDaemonRequest(
@@ -57,7 +59,7 @@ export async function render(
           model: { id: "claude-opus-4-7", display_name: "Opus 4.7" },
           workspace: { current_dir: cwd, project_dir: cwd, added_dirs: [] },
         },
-        args: [],
+        args,
         cwd,
         ...hints,
       },

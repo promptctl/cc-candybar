@@ -414,7 +414,7 @@ const stepState: VerbHandler = (rawValue, ctx) => {
 // cwd either, which describes whichever shell spawned it.
 export const SESSION_RENDER_ORIGIN_KEY = "render-origin";
 
-// [LAW:types-are-the-program] Exactly the three inputs resolveDslConfigPath
+// [LAW:types-are-the-program] Exactly the three inputs resolveDslConfig
 // takes. `configFile` is the session's explicit override (`--config` or a
 // load-config pick) or null.
 export interface RenderOrigin {

@@ -103,8 +103,8 @@ export interface ClientHints {
 
 // [LAW:single-enforcer] The ONE checkpoint where wire-supplied client hints
 // become trusted values. Per-field sanitizers stay separate (each fact has its
-// own validity rule) but nothing outside this function calls them, so a new
-// hint cannot reach the render path un-sanitized. The parameter is the hint
+// own validity rule) but every hint crosses HERE, so a new hint cannot reach
+// the render path un-sanitized. The parameter is the hint
 // field-set over `unknown` rather than `RenderRequest`, so the daemon can push a
 // RECORDED hint (JSON it wrote itself, read back from SessionState) through the
 // same checkpoint a live frame crosses — one stamp, two provenances.
@@ -115,7 +115,7 @@ export function parseClientHints(
   const termRows = sanitizeTermExtent(req.termRows);
   const ssh = sanitizeSsh(req.ssh);
   const tmux = sanitizeTmux(req.tmux);
-  const configEnv = sanitizeConfigEnv(req.configEnv);
+  const configEnv = sanitizeConfigPath(req.configEnv);
   return {
     ...(termCols !== undefined && { termCols }),
     ...(termRows !== undefined && { termRows }),
@@ -125,12 +125,12 @@ export function parseClientHints(
   };
 }
 
-// [LAW:no-defensive-null-guards] exception: trust boundary, same shape as
-// sanitizeSsh. A non-string or empty value is "no override" (`undefined`),
-// never an empty path. `~` is expanded HERE, the same rule `parseRenderArgs`
-// applies to `--config`, so every consumer downstream receives a literal path
-// and the resolver never sees a `~` from either spelling.
-export function sanitizeConfigEnv(v: unknown): string | undefined {
+// [LAW:single-enforcer] The one rule for a client-supplied explicit config
+// path, whichever spelling carried it — the `configEnv` hint here, the
+// `--config` flag in server.ts's parseRenderArgs. A non-string or empty value
+// is "no override" (`undefined`), never an empty path; `~` is expanded, so the
+// resolver only ever sees a literal path.
+export function sanitizeConfigPath(v: unknown): string | undefined {
   return typeof v === "string" && v !== "" ? expandHome(v) : undefined;
 }
 

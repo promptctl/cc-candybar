@@ -68,7 +68,7 @@ Wire format lives in `src/daemon/protocol.ts`. The Rust client mirrors the wire 
 
 ### Config resolution (`src/config/dsl-loader.ts`)
 
-`resolveDslConfigPath(projectDir, cwd)` picks the first existing path from this order:
+`resolveDslConfig(projectDir, cwd, configFile)` picks the first existing path from this order:
 
 1. `$CC_CANDYBAR_CONFIG` — read by the **client** (`src/config-hint.ts`, mirrored in the Rust client) and sent as the `configEnv` client hint, composed with `--config` at the request boundary in `server.ts`; the daemon consults no env of its own for it (it is detached, so its env is whichever shell spawned it — brandon-config-5g8). Resolution is the typed `ConfigResolution` (`file` | `default` | `missing`): an explicit path that names no file is `missing`, rendering the bundled default under a warning that names the path (liveness: the watcher loads it when it appears), never the silent `default`.
 2. `<projectDir>/.cc-candybar.json5` (then `.json` at the same location)

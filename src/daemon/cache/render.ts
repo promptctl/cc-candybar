@@ -160,9 +160,9 @@ export interface DslRenderState {
 // every render request. The wire boundary in server.ts validates the
 // underlying hookData and returns BAD_REQUEST when either is absent, so by
 // the time a cache entry is built they are real non-empty paths. `configFile`
-// is the (`~`-expanded) value of the client's `--config` flag — present
-// when overriding the standard precedence chain, undefined otherwise. The
-// type carries the optionality where it actually exists.
+// is the client's explicit path (server.ts composes a load-config pick,
+// `--config`, and the `configEnv` hint; `~` already expanded) — present when
+// overriding the standard precedence chain, undefined otherwise.
 export interface CacheEntry {
   projectDir: string;
   cwd: string;

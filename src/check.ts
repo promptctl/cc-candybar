@@ -23,9 +23,9 @@ import {
   resolveDslConfig,
   detectConfigCollisions,
   ConfigError,
+  expandHome,
 } from "./config/dsl-loader.js";
-import { expandHome } from "./config/loader/discovery.js";
-import type { ConfigResolution } from "./config/loader/discovery.js";
+import type { ConfigResolution } from "./config/dsl-loader.js";
 import { detectConfigEnv } from "./config-hint.js";
 import { DEFAULT_DSL_CONFIG } from "./config/default-dsl-config.js";
 import { VariableStore } from "./var-system/store.js";
