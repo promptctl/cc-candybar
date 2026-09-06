@@ -11,6 +11,8 @@ import {
   findKeyLine,
 } from "../src/config/dsl-loader";
 import { parseAndValidate } from "./helpers/parse-and-validate";
+import { validateVariables } from "../src/config/loader/variables";
+import type { ConfigIssue } from "../src/config/loader/diagnostics";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { listResolvablePaletteNames } from "../src/themes/policy";
 import type { LayoutNode } from "../src/config/dsl-types";
@@ -600,6 +602,28 @@ describe("loadDslConfig — the parse step of shell/file sources", () => {
       path: "variables.x.default",
       message: "variables.x.default must be a JSON value",
     });
+    // A programmatic config can hand the stamp an object JSON5 never produces;
+    // an exotic object with no own enumerable fields is not a document.
+    const issues: ConfigIssue[] = [];
+    validateVariables(
+      { source: "", issues, allowedPalettes: new Set(), groups: [] },
+      "variables",
+      {
+        x: {
+          kind: "shell",
+          command: "echo",
+          parse: { json: true },
+          cache: { never: true },
+          default: new Date(0),
+        },
+      },
+    );
+    expect(issues).toContainEqual(
+      expect.objectContaining({
+        path: "variables.x.default",
+        message: expect.stringContaining("must be a JSON value"),
+      }),
+    );
   });
 
   test("a json source's fields are dotted reads the cross-ref check accepts; a text source's are not", () => {

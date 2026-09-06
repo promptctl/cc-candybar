@@ -310,10 +310,14 @@ function isJsonValue(value: unknown): value is JsonValue {
       return true;
     case "number":
       return Number.isFinite(value);
-    case "object":
-      return Array.isArray(value)
-        ? value.every(isJsonValue)
-        : Object.values(value as Record<string, unknown>).every(isJsonValue);
+    case "object": {
+      if (Array.isArray(value)) return value.every(isJsonValue);
+      const proto: unknown = Object.getPrototypeOf(value);
+      return (
+        (proto === Object.prototype || proto === null) &&
+        Object.values(value as Record<string, unknown>).every(isJsonValue)
+      );
+    }
     default:
       return false;
   }

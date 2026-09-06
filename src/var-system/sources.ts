@@ -185,9 +185,12 @@ function shellReader(command: string, signal: AbortSignal): SourceReader {
         signal,
       });
       if (!r.ok && r.reason === "aborted") throw signal.reason;
-      return r.ok
-        ? ok(r.stdout)
-        : failed(`shell "${command}" exited with code ${r.exitCode ?? 1}`);
+      if (r.ok) return ok(r.stdout);
+      const why =
+        r.exitCode === null
+          ? [r.reason, r.error].filter((s) => s !== undefined).join(": ")
+          : `exited with code ${r.exitCode}`;
+      return failed(`shell "${command}" ${why}`);
     },
   };
 }

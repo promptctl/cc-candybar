@@ -13,7 +13,8 @@
 //
 // [LAW:types-are-the-program] (kz8.6) Process lifetime is encoded in the
 // operation, not in a flag. `launch`/`launchSync` are *waited*: the child is
-// reaped before the caller resumes, so it cannot outlive its frame.
+// reaped before the caller resumes, so it cannot outlive its frame (the one
+// exception is a group the launcher was refused to signal: `signal-refused`).
 // `launchDetachedSync` is the *orphan*: it detaches and unrefs, deliberately
 // outliving its caller — the daemon-handoff escape hatch, used only by the
 // daemon-acquisition path. There is no `detached: boolean` flag on `LaunchOpts`
@@ -21,7 +22,7 @@
 // return contracts, so an unwaited helper that survives a render frame is
 // unrepresentable here rather than forbidden by convention.
 //
-// A waited child leads its own process group, so terminating it (the timeout,
+// A `launch` child leads its own process group, so terminating it (the timeout,
 // or the caller's `signal`) reaches everything it spawned: `sh -c "sleep 5;
 // echo x"` keeps `sh` as the parent and `sleep` as a grandchild, and signalling
 // `sh` alone would orphan the `sleep`. The price is that a terminal's SIGINT
@@ -143,14 +144,17 @@ export type LaunchResult =
       // clean exit with a non-zero code; "spawn-error" is a failure before
       // the child started; "rate-limited" means the primitive refused to
       // spawn because the per-category minimum interval was not yet elapsed
-      // — no child process was launched.
+      // — no child process was launched. "signal-refused" means the OS
+      // refused the termination signal (EPERM: the child changed its real
+      // uid), so the child is NOT reaped; `error` carries the errno.
       reason:
         | "timeout"
         | "aborted"
         | "signal"
         | "spawn-error"
         | "non-zero"
-        | "rate-limited";
+        | "rate-limited"
+        | "signal-refused";
       stdout: string;
       stderr: string;
       exitCode: number | null;
@@ -227,7 +231,7 @@ export async function launch(opts: LaunchOpts): Promise<LaunchResult> {
   const t0 = Date.now();
   statsHandle?.onStart(opts.category);
 
-  return new Promise<LaunchResult>((resolve, reject) => {
+  return new Promise<LaunchResult>((resolve) => {
     let child: ChildProcess;
     try {
       child = spawn(opts.bin, opts.args ?? [], {
@@ -274,14 +278,23 @@ export async function launch(opts: LaunchOpts): Promise<LaunchResult> {
       deliver();
     };
     const settle = (r: LaunchResult) => finish(() => resolve(r));
-    // [LAW:effects-at-boundaries] A group that cannot be signalled (EPERM:
-    // the child changed its real uid) is this run's failure, delivered to the
-    // caller's frame — never a throw out of a timer callback.
+    // [LAW:one-type-per-behavior] A group that cannot be signalled (EPERM:
+    // the child changed its real uid) is this run's result like any other
+    // failure — a `LaunchResult` arm, never a rejection or a throw out of a
+    // timer callback, so the single-enforcer primitive stays total.
     const signal = (pid: number, sig: NodeJS.Signals) => {
       try {
         signalGroup(pid, sig);
       } catch (err) {
-        finish(() => reject(err));
+        settle({
+          ok: false,
+          reason: "signal-refused",
+          stdout,
+          stderr,
+          exitCode: null,
+          signal: null,
+          error: err instanceof Error ? err.message : String(err),
+        });
       }
     };
 

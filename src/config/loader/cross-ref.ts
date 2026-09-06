@@ -736,7 +736,7 @@ function checkDependsOn(
   for (let i = 0; i < v.cache.depends_on.length; i++) {
     const target = v.cache.depends_on[i]!;
     // [LAW:one-source-of-truth] Exact membership, not refResolves: the
-    // depends_on reaction calls store.read(name) with each listed name
+    // depends_on reaction calls store.changeKey(name) with each listed name
     // verbatim, and the store is an exact-key map. A dotted prefix that
     // merely navigates INTO a value (resolvable in a template) is not a
     // store key and would throw at runtime.

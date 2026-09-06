@@ -120,7 +120,7 @@ describe("launch (async)", () => {
     expect(alive(nap)).toBe(false);
   });
 
-  it("a group the launcher cannot signal rejects the run with that error — nothing escapes a timer", async () => {
+  it("a group the launcher cannot signal settles as signal-refused — nothing rejects or escapes a timer", async () => {
     // process.kill refuses the group (EPERM: a child that changed its real
     // uid). The child ends on its own soon after, so nothing is orphaned.
     const realKill = process.kill.bind(process);
@@ -131,14 +131,18 @@ describe("launch (async)", () => {
       return realKill(pid, sig);
     });
     try {
-      await expect(
-        launch({
-          bin: "/bin/sh",
-          args: ["-c", "sleep 0.4"],
-          timeoutMs: 50,
-          category: "user-shell",
-        }),
-      ).rejects.toMatchObject({ code: "EPERM" });
+      const r = await launch({
+        bin: "/bin/sh",
+        args: ["-c", "sleep 0.4"],
+        timeoutMs: 50,
+        category: "user-shell",
+      });
+      expect(r).toMatchObject({
+        ok: false,
+        reason: "signal-refused",
+        exitCode: null,
+        error: "EPERM",
+      });
     } finally {
       spy.mockRestore();
     }
