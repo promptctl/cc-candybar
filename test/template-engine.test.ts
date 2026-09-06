@@ -367,6 +367,19 @@ describe("documents in scope", () => {
     );
   });
 
+  test("array- and scalar-rooted documents print bare the same Go way", () => {
+    expect(evalStore("{{ .budget }}", docStore(ok(toDocument([1, 2, 3]))))).toBe(
+      "[1 2 3]",
+    );
+    expect(evalStore("{{ .budget }}", docStore(ok(toDocument(42))))).toBe("42");
+  });
+
+  test("a template cannot edit a document in place: sprig set throws and the store is unchanged", () => {
+    const store = docStore(ok(toDocument({ spent: 1 })));
+    expect(() => evalStore('{{ set .budget "spent" 0 }}', store)).toThrow(TypeError);
+    expect(store.readDocument("budget")).toEqual({ kind: "ok", value: { spent: 1 } });
+  });
+
   test("a document not yet scanned reads as an error naming the variable", () => {
     const store = docStore(ABSENT);
     expect(() => evalStore("{{ .budget.spent }}", store)).toThrow(

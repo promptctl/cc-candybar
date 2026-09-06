@@ -96,6 +96,21 @@ describe("checkConfig — explicit target", () => {
     expect(checkPlan(outcome).code).toBe(0);
   }, 15000);
 
+  it("a json document with no default still unscanned at the deadline is a fatal segment error naming it", async () => {
+    const p = write(
+      "slow-doc.json5",
+      `{
+        variables: {
+          slow2: { kind: "shell", command: "sleep 6; echo {}", parse: { json: true }, cache: { never: true } },
+        },
+        segments: { a: { template: "{{ .slow2.x }}" } },
+        root: { h: ["a"] },
+      }`,
+    );
+    const message = expectFatal(await checkConfig(p, dir));
+    expect(message).toContain('variable "slow2" has no value yet');
+  }, 15000);
+
   it("reports a structurally invalid config with the loader's message", async () => {
     const p = write("bad.json5", `{ segments: { a: { template: 42 } } }`);
     const message = expectFatal(await checkConfig(p, dir));

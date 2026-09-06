@@ -1,7 +1,7 @@
 import fs from "fs";
 import os from "os";
 import path from "path";
-import { execSync } from "child_process";
+import { execSync, spawnSync } from "child_process";
 import {
   VariableStore,
   SourceRegistry,
@@ -1812,5 +1812,53 @@ describe("SourceRegistry — parse seam", () => {
     expect(store.read("val")).toBe("");
     expect(registry.getLastError("val")).toBeUndefined();
     registry.dispose();
+  });
+});
+
+// ─── in-flight runs are the registry's ────────────────────────────────────────
+
+describe("SourceRegistry — in-flight runs", () => {
+  it("settled() waits for the run a publish triggered: a depends_on re-run fired inside the wait", async () => {
+    const { dir, cleanup } = makeTmpDir();
+    try {
+      const spawns = path.join(dir, "spawns");
+      const { store, registry } = make();
+      // A is the slow one: its first publish lands while settled() is
+      // waiting, and that publish is what re-runs B. B's own first run is
+      // long done by then, so the re-run is a new in-flight entry that only
+      // a re-snapshot of inFlight after A's publish can await.
+      registry.declareShell("A", "sleep 0.5; echo a", { parse: TEXT, cache: { kind: "never" } });
+      registry.declareShell("B", `echo x >> ${spawns}; wc -l < ${spawns} | tr -d ' '`, {
+        parse: TEXT,
+        cache: { kind: "depends_on", varNames: ["A"] },
+      });
+      expect(await registry.settled(3000)).toEqual([]);
+      expect(store.read("A")).toBe("a");
+      expect(store.read("B")).toBe("2");
+      registry.dispose();
+    } finally {
+      cleanup();
+    }
+  });
+
+  it("dispose() aborts an in-flight shell run: the child tree dies with the registry and nothing is published", async () => {
+    const stamp = `${process.pid}${Date.now()}`;
+    const marker = `ccb-registry-abort-${stamp}`;
+    const nap = `sleep 5.${stamp}`;
+    const alive = (pattern: string) => spawnSync("pgrep", ["-f", pattern]).status === 0;
+    const { store, registry } = make();
+    registry.declareShell("s", `${nap}; echo ${marker}`, {
+      parse: text("pending"),
+      cache: { kind: "never" },
+    });
+    expect(alive(marker)).toBe(true);
+    registry.dispose();
+    // The run completes (the child is reaped) — the launcher resolves only
+    // on the actual exit, so an empty settled() is the proof of death.
+    expect(await registry.settled(3000)).toEqual([]);
+    expect(alive(marker)).toBe(false);
+    expect(alive(nap)).toBe(false);
+    expect(store.read("s")).toBe("pending");
+    expect(registry.getLastError("s")).toBeUndefined();
   });
 });

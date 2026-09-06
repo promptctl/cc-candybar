@@ -162,52 +162,51 @@ export const SESSION_ID_VAR_NAME = "session.id";
 
 // ─── Private infrastructure ───────────────────────────────────────────────────
 
-// Execute command in /bin/sh; resolve with stdout (raw) and exit code.
-// [LAW:no-defensive-null-guards] Errors surface as exitCode=1 + empty stdout
-// rather than throwing — the caller owns the fallback chain.
-async function execShell(
-  command: string,
-): Promise<{ stdout: string; exitCode: number }> {
-  const r = await launch({
-    bin: "/bin/sh",
-    args: ["-c", command],
-    category: "user-shell",
-  });
-  if (r.ok) return { stdout: r.stdout, exitCode: r.exitCode ?? 0 };
-  return { stdout: r.stdout, exitCode: r.exitCode ?? 1 };
-}
-
 // [LAW:effects-at-boundaries] A reader is the effect half of a source: it
 // performs the read and classifies its own failure (a non-zero exit, an
 // unreadable file) as a value. `where` names the text's origin for the
 // parser's failure message ("regex no-match in output of \"uptime\"").
+// A read the registry cancelled (`signal`, fired by dispose) is not a value
+// the source yielded: it rejects with the signal's reason, which is the one
+// rejection the pipeline expects.
 interface SourceReader {
   readonly where: string;
   read(): Promise<Outcome<string>>;
 }
 
-function shellReader(command: string): SourceReader {
+function shellReader(command: string, signal: AbortSignal): SourceReader {
   return {
     where: `output of "${command}"`,
     read: async () => {
-      const { stdout, exitCode } = await execShell(command);
-      return exitCode === 0
-        ? ok(stdout)
-        : failed(`shell "${command}" exited with code ${exitCode}`);
+      const r = await launch({
+        bin: "/bin/sh",
+        args: ["-c", command],
+        category: "user-shell",
+        signal,
+      });
+      if (!r.ok && r.reason === "aborted") throw signal.reason;
+      return r.ok
+        ? ok(r.stdout)
+        : failed(`shell "${command}" exited with code ${r.exitCode ?? 1}`);
     },
   };
 }
 
-function fileReader(filePath: string, readMode: ReadMode): SourceReader {
+function fileReader(
+  filePath: string,
+  readMode: ReadMode,
+  signal: AbortSignal,
+): SourceReader {
   return {
     where: `"${filePath}"`,
     read: async () => {
       try {
-        const raw = await fsReadFile(filePath, "utf8");
+        const raw = await fsReadFile(filePath, { encoding: "utf8", signal });
         return ok(
           readMode === "first-line" ? (raw.split(/\r?\n/)[0] ?? "") : raw,
         );
       } catch {
+        if (signal.aborted) throw signal.reason;
         return failed(`file unreadable: ${filePath}`);
       }
     },
@@ -579,6 +578,12 @@ export class SourceRegistry {
   // explicit "every source has completed its current run" state a caller
   // (`cc-candybar check`) awaits instead of guessing a delay.
   private readonly inFlight = new Map<string, Promise<void>>();
+  // [LAW:single-enforcer] The registry owns every async handle its sources
+  // hold — timers, watchers, reactions, and the child processes and file
+  // reads in flight. This is their cancellation: dispose() aborts it, so a
+  // run cannot outlive the registry that started it (RenderCache's
+  // dispose-before-swap contract reaches the children too).
+  private readonly abort = new AbortController();
   // Shared engine instance — parse() is expensive; the engine is reused for
   // all key: template compilations.
   // [LAW:one-source-of-truth] One engine per registry, not one per variable.
@@ -675,7 +680,7 @@ export class SourceRegistry {
   declareShell(name: string, command: string, opts: ShellOptions): void {
     this.declareSource(
       name,
-      shellReader(command),
+      shellReader(command, this.abort.signal),
       clampShellCache(name, opts.cache),
       opts.parse,
     );
@@ -686,7 +691,7 @@ export class SourceRegistry {
   declareFile(name: string, filePath: string, opts: FileOptions): void {
     this.declareSource(
       name,
-      fileReader(filePath, opts.readMode ?? "whole"),
+      fileReader(filePath, opts.readMode ?? "whole", this.abort.signal),
       opts.cache,
       opts.parse,
     );
@@ -778,9 +783,14 @@ export class SourceRegistry {
     publish: Publish,
   ): void {
     if (this.inFlight.has(name)) return;
+    // [LAW:no-silent-failure] A cancelled read publishes nothing; the
+    // registry's own abort is the one rejection a run may end in. Any other
+    // rejection is a bug and stays unhandled — loud.
     const run = reader
       .read()
-      .then(publish)
+      .then(publish, (err: unknown) => {
+        if (err !== this.abort.signal.reason) throw err;
+      })
       .finally(() => this.inFlight.delete(name));
     this.inFlight.set(name, run);
   }
@@ -1012,10 +1022,12 @@ export class SourceRegistry {
 
   // ─── Lifecycle ────────────────────────────────────────────────────────────
 
-  // Tear down all TTL timers, fs watchers, MobX reactions, and git
-  // subscriptions registered by async source kinds.  Call when the registry
-  // is no longer needed (e.g. on daemon shutdown or config hot-reload).
+  // Tear down all TTL timers, fs watchers, MobX reactions, git
+  // subscriptions, and in-flight reads registered by async source kinds.
+  // Call when the registry is no longer needed (e.g. on daemon shutdown or
+  // config hot-reload).
   dispose(): void {
+    this.abort.abort();
     for (const cleanup of this.cleanups) cleanup();
     this.cleanups.length = 0;
     for (const sub of this.gitSubscriptions.values()) sub.unsubscribe();

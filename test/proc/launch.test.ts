@@ -1,3 +1,5 @@
+import { spawnSync } from "node:child_process";
+
 import {
   launch,
   launchDetachedSync,
@@ -86,6 +88,51 @@ describe("launch (async)", () => {
       expect(r.reason).toBe("timeout");
       expect(r.signal).toBe("SIGKILL");
     }
+  });
+
+  it("aborting the signal terminates the child's whole group and reports \"aborted\" once it is reaped", async () => {
+    // `sh` stays the parent of a two-statement command, so the `sleep` is a
+    // grandchild: only a process-group signal reaches it. The marker names
+    // the sh; the per-run duration names the sleep (both computed here, so
+    // no enclosing shell's argv can ever match them).
+    const stamp = `${process.pid}${Date.now()}`;
+    const marker = `ccb-launch-abort-${stamp}`;
+    const nap = `sleep 5.${stamp}`;
+    const alive = (pattern: string) =>
+      spawnSync("pgrep", ["-f", pattern]).status === 0;
+    const controller = new AbortController();
+    const pending = launch({
+      bin: "/bin/sh",
+      args: ["-c", `${nap}; echo ${marker}`],
+      category: "user-shell",
+      signal: controller.signal,
+    });
+    expect(alive(marker)).toBe(true);
+    expect(alive(nap)).toBe(true);
+    controller.abort();
+    const r = await pending;
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.reason).toBe("aborted");
+      expect(r.signal).toBe("SIGTERM");
+    }
+    expect(alive(marker)).toBe(false);
+    expect(alive(nap)).toBe(false);
+  });
+
+  it("an already-aborted signal spawns nothing", async () => {
+    const controller = new AbortController();
+    controller.abort();
+    const { handle, starts } = makeSpyHandle();
+    setLaunchStats(handle);
+    const r = await launch({
+      bin: "/bin/sh",
+      args: ["-c", "echo ran"],
+      category: "user-shell",
+      signal: controller.signal,
+    });
+    expect(r).toMatchObject({ ok: false, reason: "aborted", stdout: "" });
+    expect(starts).toEqual([]);
   });
 
   it("reports signal (not timeout) when external SIGTERM kills a no-timeout child", async () => {

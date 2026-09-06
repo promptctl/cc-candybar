@@ -101,6 +101,15 @@ describe("shipped example configs (examples/*.json5)", () => {
     expect(out).toContain("v1.15.0");
     expect(out).toContain("63%"); // block utilization
   });
+
+  // [LAW:verifiable-goals] The shipped demonstration of `parse: { json: true }`
+  // must prove the scan completed: `demoPkg` reads the document's fields by
+  // dotted path, and its `default` (`? · 0 deps`) is what a scan that never
+  // landed would render.
+  test("demo-variables renders the json document's scanned fields, never its default", async () => {
+    const out = visible(await renderExample("demo-variables.json5"));
+    expect(out).toContain("📦 cc-candybar · 3 deps");
+  });
 });
 
 // [LAW:verifiable-goals] brandon-presets-0yk.3's own done-gate: "the examples/

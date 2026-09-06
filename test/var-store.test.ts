@@ -319,6 +319,22 @@ describe("VariableStore — documents", () => {
     expect(Object.keys(again.value as object)).toEqual(["toString"]);
   });
 
+  it("every document is frozen at every level: an in-place edit throws instead of rewriting the store", () => {
+    const store = new VariableStore();
+    store.defineDocument("d", ok({ b: { z: 1 }, a: [{ q: 1 }, 2] }));
+    const d = store.readDocument("d");
+    if (d.kind !== "ok") throw new Error("expected ok");
+    const root = d.value as Record<string, unknown>;
+    expect(Object.isFrozen(root)).toBe(true);
+    expect(Object.isFrozen(root.b)).toBe(true);
+    expect(Object.isFrozen(root.a)).toBe(true);
+    expect(Object.isFrozen((root.a as unknown[])[0])).toBe(true);
+    expect(() => {
+      (root.b as Record<string, unknown>).z = 2;
+    }).toThrow(TypeError);
+    expect(store.readDocument("d")).toEqual({ kind: "ok", value: { a: [{ q: 1 }, 2], b: { z: 1 } } });
+  });
+
   it("changeKey is canonical: the same content in another key order is the same key", () => {
     const store = new VariableStore();
     store.defineDocument("d", ok({ a: 1, b: { c: "x", d: 2 } }));

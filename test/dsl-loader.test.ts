@@ -531,6 +531,11 @@ describe("loadDslConfig — the parse step of shell/file sources", () => {
     });
   });
 
+  test("a malformed json flag is ONE issue: its default still reads in the json domain", () => {
+    const err = expectError(shell(`parse: { json: "yes" }, default: { a: 1 }`));
+    expect(err.issues.map((i) => i.path)).toEqual(["variables.x.parse.json"]);
+  });
+
   test("a regex must compile and must carry the capture group the runtime reads", () => {
     expectIssue(shell(`parse: { regex: "(" }`), {
       path: "variables.x.parse.regex",

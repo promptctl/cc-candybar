@@ -30,9 +30,12 @@ export type JsonValue =
 // user's document — with keys SORTED, so JSON.stringify of any document is
 // canonical and a structural change measure needs no second canonicaliser.
 // JSON.parse never yields anything but JSON shapes, so this is a re-shape,
-// not a check; the primitive arm's cast is that fact.
+// not a check; the primitive arm's cast is that fact. Every level is frozen:
+// sprig's `set`/`merge` assign into their argument, and the store's document
+// is a scan's result, not a template's scratch space — an in-place edit
+// throws instead of rewriting what every other reader sees.
 export function toDocument(value: unknown): JsonValue {
-  if (Array.isArray(value)) return value.map(toDocument);
+  if (Array.isArray(value)) return Object.freeze(value.map(toDocument));
   if (value !== null && typeof value === "object") {
     const out: Record<string, JsonValue> = Object.create(null) as Record<
       string,
@@ -42,7 +45,7 @@ export function toDocument(value: unknown): JsonValue {
       ([a], [b]) => (a < b ? -1 : a > b ? 1 : 0),
     );
     for (const [key, v] of entries) out[key] = toDocument(v);
-    return out;
+    return Object.freeze(out);
   }
   return value as JsonValue;
 }
