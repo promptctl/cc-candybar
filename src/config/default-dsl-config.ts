@@ -203,10 +203,10 @@ const GIT_TEMPLATE =
 // `cc-candybar check` fails), never a silently reordered cascade.
 //
 // block/weekly heat as the displayed (rounded) percentage rises: calm to
-// HEAT_MID, warning to the threshold, error beyond — and the text flips to
-// the button foreground at the same HEAT_MID, so bg and fg cannot disagree
-// about where the cell first warms.
-const HEAT_MID = 50;
+// `heatThreshold`, warning to `warningThreshold`, error beyond — and the text
+// flips to the button foreground at the same `heatThreshold`, so bg and fg
+// cannot disagree about where the cell first warms. Both are variables, so
+// the ascending constraint is between two knobs the user can see.
 
 // ─── The settings drawer (candybar-config-engine-71o.4) ──────────────────────
 
@@ -608,6 +608,7 @@ export const RAW_DEFAULT_DSL_CONFIG = {
     // name cascade. Matches the legacy DEFAULT_CONFIG.budget.block.warning
     // Threshold.
     "block.budget.warningThreshold": { kind: "literal", value: 80 },
+    "block.budget.heatThreshold": { kind: "literal", value: 50 },
 
     // Weekly — direct projection of hookData.rate_limits.seven_day.
     "weekly.percentage": {
@@ -623,6 +624,7 @@ export const RAW_DEFAULT_DSL_CONFIG = {
       default: 0,
     },
     "weekly.budget.warningThreshold": { kind: "literal", value: 80 },
+    "weekly.budget.heatThreshold": { kind: "literal", value: 50 },
 
     // Burn rate + cap projection — daemon-derived (see render-payload.ts).
     // Each projection is ABSENT when not projectable; the var-system fills the
@@ -955,8 +957,8 @@ export const RAW_DEFAULT_DSL_CONFIG = {
       template:
         "◱ {{ round .block.nativeUtilization }}% " +
         '({{ template "formatResetCountdown" .block.resetsAt }})',
-      bg: `{{ ramp (round .block.nativeUtilization) "step" 0 "panel" ${HEAT_MID} "warning" .block.budget.warningThreshold "error" }}`,
-      fg: `{{ ramp (round .block.nativeUtilization) "step" 0 "foreground" ${HEAT_MID} "button-color-foreground" }}`,
+      bg: '{{ ramp (round .block.nativeUtilization) "step" 0 "panel" .block.budget.heatThreshold "warning" .block.budget.warningThreshold "error" }}',
+      fg: '{{ ramp (round .block.nativeUtilization) "step" 0 "foreground" .block.budget.heatThreshold "button-color-foreground" }}',
       // Hide unless we have a five-hour-window snapshot.
       when: "{{ gt .block.resetsAt 0 }}",
     },
@@ -964,8 +966,8 @@ export const RAW_DEFAULT_DSL_CONFIG = {
       template:
         "◑ {{ round .weekly.percentage }}% " +
         '({{ template "formatResetCountdown" .weekly.resetsAt }})',
-      bg: `{{ ramp (round .weekly.percentage) "step" 0 "panel" ${HEAT_MID} "warning" .weekly.budget.warningThreshold "error" }}`,
-      fg: `{{ ramp (round .weekly.percentage) "step" 0 "foreground" ${HEAT_MID} "button-color-foreground" }}`,
+      bg: '{{ ramp (round .weekly.percentage) "step" 0 "panel" .weekly.budget.heatThreshold "warning" .weekly.budget.warningThreshold "error" }}',
+      fg: '{{ ramp (round .weekly.percentage) "step" 0 "foreground" .weekly.budget.heatThreshold "button-color-foreground" }}',
       when: "{{ gt .weekly.resetsAt 0 }}",
     },
     // Burn rate + cap projection: "$X/hr · Nm to 5h · Nd to wk". The headline

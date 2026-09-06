@@ -94,7 +94,26 @@ const CONTEXT_LEFT: readonly Row[] = [
   { value: 100, bg: "surface-active", fg: "foreground" },
 ];
 
+// A lowered heat threshold moves BOTH the first warm colour and the text flip
+// — one variable feeds the bg and the fg ramp, so they cannot disagree.
+const HEAT_LOW: readonly Row[] = [
+  { value: 19, bg: "panel", fg: "foreground" },
+  { value: 20, bg: "warning", fg: "button-color-foreground" },
+  { value: 79, bg: "warning", fg: "button-color-foreground" },
+  { value: 80, bg: "error", fg: "button-color-foreground" },
+];
+
 const CASES: readonly Case[] = [
+  ...(["block", "weekly"] as const).map((segment) => ({
+    segment,
+    glyph: segment === "block" ? "◱" : "◑",
+    vars: { [`${segment}.budget.heatThreshold`]: 20 },
+    payload: (v: number) =>
+      segment === "block"
+        ? { block: { nativeUtilization: v, resetsAt: RESETS_AT } }
+        : { weekly: { percentage: v, resetsAt: RESETS_AT } },
+    rows: HEAT_LOW,
+  })),
   ...([80, 50] as const).map((threshold) => ({
     segment: "block",
     glyph: "◱",
@@ -142,7 +161,12 @@ const HOOK = {
   workspace: { current_dir: "/tmp", project_dir: "/tmp", added_dirs: [] },
 };
 
-function renderOne(c: Case, value: number, palette: Palette): string {
+function renderOne(
+  c: Case,
+  value: number,
+  palette: Palette,
+  onSegmentError?: (segName: string, message: string) => void,
+): string {
   const parsed = parseAndValidate("<default>", SERIALIZED);
   const one = {
     ...narrowToSegment(parsed, c.segment),
@@ -168,6 +192,7 @@ function renderOne(c: Case, value: number, palette: Palette): string {
       { ...HOOK, ...c.payload(value) },
       palette,
       OPTS,
+      { onSegmentError },
     );
   } finally {
     registry.dispose();
@@ -225,4 +250,30 @@ describe.each(PALETTES)("threshold colours under %s", (paletteName) => {
       },
     );
   }
+});
+
+// [LAW:no-silent-failure] A warning threshold set below the heat threshold is
+// a descending pair. The old `if ge …` cascade rendered it by silently
+// dropping the warning band; the ramp refuses to sort and names both
+// positions, so the user can see which two knobs to move together.
+describe("a threshold below its neighbour is a loud render error", () => {
+  const palette = getThemePalette("textual-dark")!;
+  test.each(["block", "weekly"] as const)(
+    "%s warningThreshold 30 under heatThreshold 50 names both positions",
+    (segment) => {
+      const c = CASES.find((x) => x.segment === segment)!;
+      const errors: string[] = [];
+      const rendered = renderOne(
+        { ...c, vars: { [`${segment}.budget.warningThreshold`]: 30 } },
+        60,
+        palette,
+        (name, message) => errors.push(`${name}: ${message}`),
+      );
+      expect(rendered).toContain("⚠");
+      expect(errors).toHaveLength(1);
+      expect(errors[0]).toMatch(
+        new RegExp(`^${segment}: .*ascending position order; stop 2 at 30 follows stop 1 at 50`),
+      );
+    },
+  );
 });
