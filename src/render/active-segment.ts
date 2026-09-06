@@ -73,12 +73,12 @@ export function createActiveSegmentRef(): ActiveSegmentRef {
  */
 export function requireActiveSegment(
   ref: ActiveSegmentRef,
-  func: string,
+  spelling: string,
 ): ActiveSegment {
   const active = ref.current;
   if (active === null) {
     throw new Error(
-      `{{ ${func} }} is only available inside a segment's templates — ` +
+      `${spelling} is only available inside a segment's templates — ` +
         `there is no active segment here. Segment-scoped functions cannot be ` +
         `used in variable declarations or layout-node "when" predicates, ` +
         `which are evaluated outside any segment.`,

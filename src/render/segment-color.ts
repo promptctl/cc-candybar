@@ -4,8 +4,8 @@
 // rich-js owns every color operation and knows nothing about segments;
 // cc-candybar owns segments and performs no color arithmetic of its own
 // [LAW:rich-js-owns-color-math]. This module is exactly the join: it supplies
-// rich-js's `color` with *which* palette, and adds the one function whose
-// meaning is candybar-specific — `bgOf`, the background of the segment
+// rich-js's `color` and `ramp` with *which* palette, and adds the one function
+// whose meaning is candybar-specific — `bgOf`, the background of the segment
 // currently rendering. [LAW:one-way-deps]
 
 import type { FuncMap, TemplateFunc } from "@promptctl/go-template-js";
@@ -52,7 +52,7 @@ import {
 export function segmentColorFuncs(ref: ActiveSegmentRef): FuncMap {
   const bgOf: TemplateFunc = {
     fn: (() => {
-      const active = requireActiveSegment(ref, "bgOf");
+      const active = requireActiveSegment(ref, "{{ bgOf }}");
       if (active.bg === undefined) {
         throw new Error(
           `{{ bgOf }} is not available while segments.${active.segName}'s own ` +
@@ -68,7 +68,10 @@ export function segmentColorFuncs(ref: ActiveSegmentRef): FuncMap {
   };
 
   return {
-    ...paletteFuncs(() => requireActiveSegment(ref, "color").palette),
+    // One getter serves both palette readers, so the message names both.
+    ...paletteFuncs(
+      () => requireActiveSegment(ref, "{{ color }} / {{ ramp }}").palette,
+    ),
     bgOf,
   };
 }

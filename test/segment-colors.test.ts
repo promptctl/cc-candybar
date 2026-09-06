@@ -274,6 +274,10 @@ describe("phase ordering — palette, then bg, then fg", () => {
     expect(() => h.parse('{{ color "primary" }}').evaluate({})).toThrow(
       /no active segment/,
     );
+    // `ramp` shares `color`'s palette getter, so its message must name ramp too.
+    expect(() =>
+      h.parse('{{ ramp 50 "step" 0 "primary" 100 "error" }}').evaluate({}),
+    ).toThrow(/\{\{ ramp \}\}.*no active segment/);
   });
 
   test("the published palette is the one passed in, not one captured at parse", () => {
