@@ -1,3 +1,10 @@
+# [1.57.0](https://github.com/promptctl/cc-candybar/compare/v1.56.2...v1.57.0) (2026-09-06)
+
+
+### Features
+
+* **var-system:** shell/file sources parse once — parse: { regex } | { json } seam, documents read by dotted path (brandon-custom-segments-g5z.1) ([#221](https://github.com/promptctl/cc-candybar/issues/221)) ([8931484](https://github.com/promptctl/cc-candybar/commit/8931484115e4307a7b3aa11c64376436d227a32c))
+
 ## [1.56.2](https://github.com/promptctl/cc-candybar/compare/v1.56.1...v1.56.2) (2026-09-05)
 
 
