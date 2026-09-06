@@ -167,11 +167,11 @@ function renderOne(
   palette: Palette,
   onSegmentError?: (segName: string, message: string) => void,
 ): string {
-  const parsed = parseAndValidate("<default>", SERIALIZED);
+  const narrowed = narrowToSegment(parseAndValidate("<default>", SERIALIZED), c.segment);
   const one = {
-    ...narrowToSegment(parsed, c.segment),
+    ...narrowed,
     variables: {
-      ...parsed.variables,
+      ...narrowed.variables,
       ...Object.fromEntries(
         Object.entries(c.vars).map(([name, v]) => [
           name,
@@ -258,22 +258,24 @@ describe.each(PALETTES)("threshold colours under %s", (paletteName) => {
 // positions, so the user can see which two knobs to move together.
 describe("a threshold below its neighbour is a loud render error", () => {
   const palette = getThemePalette("textual-dark")!;
-  test.each(["block", "weekly"] as const)(
-    "%s warningThreshold 30 under heatThreshold 50 names both positions",
-    (segment) => {
-      const c = CASES.find((x) => x.segment === segment)!;
-      const errors: string[] = [];
-      const rendered = renderOne(
-        { ...c, vars: { [`${segment}.budget.warningThreshold`]: 30 } },
-        60,
-        palette,
-        (name, message) => errors.push(`${name}: ${message}`),
-      );
-      expect(rendered).toContain("⚠");
-      expect(errors).toHaveLength(1);
-      expect(errors[0]).toMatch(
-        new RegExp(`^${segment}: .*ascending position order; stop 2 at 30 follows stop 1 at 50`),
-      );
-    },
-  );
+  const INVERTED: readonly { segment: string; vars: Readonly<Record<string, number>>; pair: string }[] = [
+    { segment: "block", vars: { "block.budget.warningThreshold": 30 }, pair: "stop 2 at 30 follows stop 1 at 50" },
+    { segment: "weekly", vars: { "weekly.budget.warningThreshold": 30 }, pair: "stop 2 at 30 follows stop 1 at 50" },
+    { segment: "burnrate", vars: { "burn.eta.warnMinutes": 60, "burn.eta.errorMinutes": 90 }, pair: "stop 3 at 60 follows stop 2 at 90" },
+  ];
+  test.each(INVERTED)("$segment $vars names both positions", ({ segment, vars, pair }) => {
+    // The found case lends its payload and glyph; `vars` are this row's own,
+    // over the bundled defaults, so the pair inverts exactly as stated.
+    const c = CASES.find((x) => x.segment === segment)!;
+    const errors: string[] = [];
+    const rendered = renderOne(
+      { ...c, vars },
+      60,
+      palette,
+      (name, message) => errors.push(`${name}: ${message}`),
+    );
+    expect(rendered).toContain("⚠");
+    expect(errors).toHaveLength(1);
+    expect(errors[0]).toMatch(new RegExp(`^${segment}: .*ascending position order; ${pair}`));
+  });
 });
