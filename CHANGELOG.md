@@ -1,3 +1,10 @@
+# [1.58.0](https://github.com/promptctl/cc-candybar/compare/v1.57.0...v1.58.0) (2026-09-06)
+
+
+### Features
+
+* **color:** block/weekly/burnrate thresholds are one ramp call each — colour ramp primitive (brandon-custom-segments-g5z.2) ([#222](https://github.com/promptctl/cc-candybar/issues/222)) ([a9a8905](https://github.com/promptctl/cc-candybar/commit/a9a8905b5a30c7987c466db2ad15c7cec90aa253))
+
 # [1.57.0](https://github.com/promptctl/cc-candybar/compare/v1.56.2...v1.57.0) (2026-09-06)
 
 
