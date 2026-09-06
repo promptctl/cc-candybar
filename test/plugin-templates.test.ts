@@ -115,10 +115,10 @@ describe("plugin config templates (plugin/templates/*.json)", () => {
 
     test.each(fills)(
       "filled with %s is clean under `cc-candybar check` and renders",
-      (label, values) => {
+      async (label, values) => {
         const filled = fill(template, values);
         expect(placeholdersIn(filled)).toEqual([]);
-        checkText(`${file} ${label}`, filled);
+        await checkText(`${file} ${label}`, filled);
       },
     );
   });

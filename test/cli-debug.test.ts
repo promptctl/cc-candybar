@@ -6,7 +6,7 @@
 // introspector.
 
 import { formatDebug } from "../src/daemon/client-debug";
-import type { DebugSnapshot } from "../src/daemon/debug-types";
+import type { DebugSnapshot, VarSnapshot } from "../src/daemon/debug-types";
 
 describe("formatDebug", () => {
   it("renders populated vars with name, source, and value", () => {
@@ -45,6 +45,31 @@ describe("formatDebug", () => {
       ],
     };
     expect(formatDebug(snap)).toContain("env var not set");
+  });
+
+  it("aligns the value column across a string var and a document var", () => {
+    const row = (
+      name: string,
+      type: VarSnapshot["type"],
+      value: VarSnapshot["value"],
+    ): VarSnapshot => ({
+      name,
+      source: "shell" as const,
+      type,
+      value,
+      lastError: null,
+      ageMs: null,
+    });
+    const out = formatDebug({
+      what: "vars",
+      vars: [row("a", "string", "main"), row("b", "document", '{"spent":1}')],
+    });
+    const valueColumn = (line: string) =>
+      line.match(/^ {2}\S+ +\S+ +\S+ +/)![0].length;
+    const [a, b] = out.split("\n").filter((l) => /^ {2}[ab] /.test(l));
+    expect(a).toContain("main");
+    expect(b).toContain('{"spent":1}');
+    expect(valueColumn(a!)).toBe(valueColumn(b!));
   });
 
   it("renders empty vars as 'DSL not active'", () => {

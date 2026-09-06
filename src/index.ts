@@ -110,7 +110,7 @@ async function main(): Promise<void> {
     // verdict, one pipeline, one exit-code contract (0/1/2). check subsumes the
     // old lint (same loader, plus register + render coverage).
     if (subcommand === "check" || subcommand === "lint") {
-      runCheck(process.argv.slice(3)); // owns its own exit code (0/1/2)
+      await runCheck(process.argv.slice(3)); // owns its own exit code (0/1/2)
       return;
     }
     if (subcommand === "schema") {

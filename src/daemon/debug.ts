@@ -22,7 +22,7 @@
 // snapshots are empty in production. When bzh.2 wires the store, the
 // snapshots populate without any change to this module or the protocol.
 
-import type { VariableStore } from "../var-system/store";
+import type { StoreNode, VariableStore } from "../var-system/store";
 import type { SourceRegistry } from "../var-system/sources";
 import type { DslConfig, SourceKind, VariableDecl } from "../config/dsl-types";
 import { walkNodes } from "../config/dsl-types";
@@ -112,8 +112,7 @@ export function introspectVars(
     out.push({
       name,
       source: sourceByName.get(name) ?? null,
-      type: node.type,
-      value: node.read(),
+      ...valueOf(node),
       lastError:
         err !== undefined
           ? { timestampMs: err.timestamp, message: err.message }
@@ -122,6 +121,25 @@ export function introspectVars(
     });
   }
   return out;
+}
+
+// [LAW:one-type-per-behavior] One total projection of a store node onto the
+// snapshot's (type, value) pair: a scalar node reads its typed value; a
+// document reads as its JSON text, or — before its first scan / after a
+// failed one — as the state a template read of it would surface.
+function valueOf(node: StoreNode): Pick<VarSnapshot, "type" | "value"> {
+  if (node.kind !== "document") {
+    return { type: node.type, value: node.read() };
+  }
+  const doc = node.read();
+  switch (doc.kind) {
+    case "ok":
+      return { type: "document", value: JSON.stringify(doc.value) };
+    case "absent":
+      return { type: "document", value: "(not yet scanned)" };
+    case "failed":
+      return { type: "document", value: doc.reason };
+  }
 }
 
 function ageFromNode(lastUpdatedMs: number | null): number | null {

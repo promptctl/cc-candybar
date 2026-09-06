@@ -287,6 +287,22 @@ function rejectUnknownKeys(
   }
 }
 
+// [LAW:single-enforcer] One arm helper to push a variant's bespoke message and
+// drop — the message is the only thing that varies per arm, carried as DATA.
+// Shared by every present-key schema (cache, parse).
+export function reject<M>(
+  ctx: ValidateCtx,
+  path: string,
+  message: string,
+): M | null {
+  ctx.issues.push({
+    path,
+    message,
+    line: findKeyLine(ctx.source, path.split(".")),
+  });
+  return null;
+}
+
 // [LAW:types-are-the-program] A tag-by-which-key-present union: every member
 // carries exactly one own key (CacheDecl's ttl/watch_file/…, an action's
 // set/copy/open). PresentArm parses the VALUE held at that key into its member

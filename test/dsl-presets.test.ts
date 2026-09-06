@@ -417,19 +417,22 @@ describe("preset selection — the arrangement the bar renders", () => {
 // ─── cc-candybar check ────────────────────────────────────────────────────────
 
 describe("cc-candybar check — presets", () => {
-  const withConfigFile = <T,>(body: string, fn: (p: string) => T): T => {
+  const withConfigFile = async <T,>(
+    body: string,
+    fn: (p: string) => Promise<T>,
+  ): Promise<T> => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "ccb-presets-"));
     const p = path.join(dir, ".cc-candybar.json5");
     fs.writeFileSync(p, body);
     try {
-      return fn(p);
+      return await fn(p);
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
     }
   };
 
-  test("a preset naming a nonexistent segment is FATAL, and the message locates it", () => {
-    const outcome = withConfigFile(
+  test("a preset naming a nonexistent segment is FATAL, and the message locates it", async () => {
+    const outcome = await withConfigFile(
       `{ presets: { wide: { root: { v: ['directory', 'no-such-segment'] } } } }`,
       (p) => checkConfig(p),
     );
@@ -441,8 +444,8 @@ describe("cc-candybar check — presets", () => {
     );
   });
 
-  test("a preset staging only real segments is clean", () => {
-    const outcome = withConfigFile(
+  test("a preset staging only real segments is clean", async () => {
+    const outcome = await withConfigFile(
       `{ presets: { wide: { root: { v: ['directory'] } } } }`,
       (p) => checkConfig(p),
     );
