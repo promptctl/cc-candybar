@@ -44,6 +44,10 @@
     "demo.version": { kind: "literal", value: "2.0" },
     "demo.limit":   { kind: "literal", value: 100 },         // number literal
     "demo.flag":    { kind: "literal", value: true },         // boolean literal
+    // Thresholds for demoContext's ramps: a knob in a position slot, so a user
+    // override moves the colour edge without touching the template.
+    "demo.contextWarnAt": { kind: "literal", value: 21 },     // below → error
+    "demo.contextCalmAt": { kind: "literal", value: 41 },     // below → warning
 
     // ── 2. input ────────────────────────────────────────────────────────────
     // Reads from the daemon's augmented render payload — the primary source
@@ -119,7 +123,7 @@
     // ── 5. shell ────────────────────────────────────────────────────────────
     // Spawns a subprocess in /bin/sh. stdout is the text the parse step sees
     // (absent parse: trimmed text is the value). The minimum shell TTL is
-    // 10 s — shorter ttl values are clamped up.
+    // 500 ms — shorter ttl values are clamped up.
     //
     // Same cache and parse vocabulary as file. watch_file and ttl are most
     // common.
@@ -392,11 +396,11 @@
       fg: "foreground",
     },
 
-    // Context percentage with helper call
+    // Context percentage: a number → a colour is one `ramp` per slot.
     demoContext: {
       template: ' ◔ {{ .demo.contextLeft }}% left ',
-      bg: '{{ if le (int .demo.contextLeft) 20 }}error{{ else if le (int .demo.contextLeft) 40 }}warning{{ else }}surface{{ end }}',
-      fg: '{{ if le (int .demo.contextLeft) 40 }}button-color-foreground{{ else }}foreground{{ end }}',
+      bg: '{{ ramp .demo.contextLeft "step" 0 "error" .demo.contextWarnAt "warning" .demo.contextCalmAt "surface" }}',
+      fg: '{{ ramp .demo.contextLeft "step" 0 "button-color-foreground" .demo.contextCalmAt "foreground" }}',
       when: '{{ gt (int .demo.contextLeft) 0 }}',
     },
 

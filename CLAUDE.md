@@ -87,12 +87,7 @@ Both functions are called verbatim by the daemon — no parallel render path, no
 
 Segment data providers live in `src/segments/` (`git`, `session`, `context`, `metrics`, `tmux`, `pricing`). These produce structured data — `GitInfo`, `UsageInfo`, etc. The `session`/`today` cost aggregates are served by `src/daemon/cache/session-usage-store.ts` (folds over per-session records), and `block`/`weekly` read straight from `hookData.rate_limits` in `buildRenderPayload` — neither scans transcripts per render. The daemon's `buildRenderPayload` (`src/daemon/render-payload.ts`) composes them into one augmented payload that the DSL's `kind: "input"` declarations read.
 
-Add a new built-in segment by:
-
-1. Adding the data provider under `src/segments/` (if it needs daemon-side fetching). Project its shape into `RenderPayload` (`src/daemon/render-payload.ts`).
-2. Declaring the relevant input variables in `DEFAULT_DSL_CONFIG.variables` (`src/config/default-dsl-config.ts`), with `path` strings matching the payload shape.
-3. Declaring the segment in `DEFAULT_DSL_CONFIG.segments` with a `template`, `bg`/`fg` palette spec names, and (optionally) `when` for visibility gating.
-4. Optionally adding the segment name to `DEFAULT_DSL_CONFIG.root` if it should render by default (the default `root` is a vertical container of two horizontal rows — an identity row `directory · gitaculous` over a status row `model · context · cacheTimer · block · weekly` — so add the segment to the `children` array of whichever row it belongs in).
+**Authoring a custom segment?** Read `docs/segment-authoring.md` first — the agent-facing walkthrough of a data-backed segment (a peer script → a `shell`/`file` source with a `parse:` arm → dotted reads → a segment → a `ramp` for colour), one CI-tested snippet per step and the loader's real error text beside each mistake (`test/doc-snippets.test.ts`, which also materializes the doc's `sh stub:` fences onto PATH so a `shell` snippet runs on any CI box). A **built-in** segment is the same authoring against `DEFAULT_DSL_CONFIG` (`src/config/default-dsl-config.ts`) — variables, segment, and its row in `root` — with one difference: its data is a provider under `src/segments/` projected into `RenderPayload` (`src/daemon/render-payload.ts`) and read by `input` variables whose `path` matches the payload shape, not a shell source.
 
 ### Themes (`src/themes/`)
 
