@@ -795,13 +795,14 @@ export class SourceRegistry {
     this.inFlight.set(name, run);
   }
 
-  // [LAW:no-ambient-temporal-coupling] Resolves when every async source's
-  // current run — and every run one of them triggered (a `depends_on`
+  // [LAW:no-ambient-temporal-coupling] Resolves when every shell/file run
+  // in flight — and every run one of them triggered (a `depends_on`
   // reaction fires inside a publish) — has completed, or at the deadline.
   // The value is the names still in flight: empty when all settled. This is
   // the state a one-shot render (`cc-candybar check`) awaits so it renders
-  // what the sources yielded, never a guessed delay; the registry owns the
-  // timer, so no caller races one of its own.
+  // what those sources yielded, never a guessed delay; the registry owns the
+  // timer, so no caller races one of its own. A git subscription's first
+  // delivery is not a run here: `check` renders a git box as declared.
   async settled(withinMs: number): Promise<readonly string[]> {
     const deadline = Date.now() + withinMs;
     while (this.inFlight.size > 0) {

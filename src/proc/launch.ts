@@ -227,7 +227,7 @@ export async function launch(opts: LaunchOpts): Promise<LaunchResult> {
   const t0 = Date.now();
   statsHandle?.onStart(opts.category);
 
-  return new Promise<LaunchResult>((resolve) => {
+  return new Promise<LaunchResult>((resolve, reject) => {
     let child: ChildProcess;
     try {
       child = spawn(opts.bin, opts.args ?? [], {
@@ -264,14 +264,25 @@ export async function launch(opts: LaunchOpts): Promise<LaunchResult> {
 
     const onAbort = () => terminate("aborted");
 
-    const settle = (r: LaunchResult) => {
+    const finish = (deliver: () => void) => {
       if (settled) return;
       settled = true;
       if (timer) clearTimeout(timer);
       if (killTimer) clearTimeout(killTimer);
       opts.signal?.removeEventListener("abort", onAbort);
       statsHandle?.onEnd(opts.category, Date.now() - t0);
-      resolve(r);
+      deliver();
+    };
+    const settle = (r: LaunchResult) => finish(() => resolve(r));
+    // [LAW:effects-at-boundaries] A group that cannot be signalled (EPERM:
+    // the child changed its real uid) is this run's failure, delivered to the
+    // caller's frame — never a throw out of a timer callback.
+    const signal = (pid: number, sig: NodeJS.Signals) => {
+      try {
+        signalGroup(pid, sig);
+      } catch (err) {
+        finish(() => reject(err));
+      }
     };
 
     // [LAW:types-are-the-program] Do NOT settle here. We signal and let the
@@ -291,10 +302,12 @@ export async function launch(opts: LaunchOpts): Promise<LaunchResult> {
       opts.signal?.removeEventListener("abort", onAbort);
       const pid = child.pid;
       if (pid !== undefined) {
-        signalGroup(pid, "SIGTERM");
-        killTimer = setTimeout(() => {
-          signalGroup(pid, "SIGKILL");
-        }, TIMEOUT_KILL_GRACE_MS);
+        // Escalation armed first, so a refused SIGTERM's cleanup clears it.
+        killTimer = setTimeout(
+          () => signal(pid, "SIGKILL"),
+          TIMEOUT_KILL_GRACE_MS,
+        );
+        signal(pid, "SIGTERM");
       }
     };
 

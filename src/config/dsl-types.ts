@@ -531,10 +531,10 @@ export type ParseDecl =
 // [LAW:one-source-of-truth] THE discriminator over the present-key union:
 // which arm a `parse:` names (absent = text). Cross-ref's "is this a
 // document" and render's lowering onto SourceParse both switch on it, so
-// which arm publishes a document is spelled once. Total over objects, by key
-// presence: the loader reads it off an unstamped `parse:` too, so a malformed
-// arm still selects its own domain rather than a second issue's.
-export function parseArm(parse: object | undefined): "text" | "regex" | "json" {
+// which arm publishes a document is spelled once, by key presence.
+export function parseArm(
+  parse: ParseDecl | undefined,
+): "text" | "regex" | "json" {
   if (parse === undefined || "text" in parse) return "text";
   return "regex" in parse ? "regex" : "json";
 }

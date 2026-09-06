@@ -536,6 +536,18 @@ describe("loadDslConfig — the parse step of shell/file sources", () => {
     expect(err.issues.map((i) => i.path)).toEqual(["variables.x.parse.json"]);
   });
 
+  test("an unrecognised parse key is not the json arm: a document default is rejected beside it", () => {
+    const err = expectError(shell(`parse: { format: "json" }, default: { a: 1 }`));
+    expect(err.issues.map((i) => i.path).sort()).toEqual([
+      "variables.x.default",
+      "variables.x.parse",
+      "variables.x.parse.format",
+    ]);
+    expect(err.issues.find((i) => i.path === "variables.x.default")?.message).toContain(
+      "must be a string",
+    );
+  });
+
   test("a regex must compile and must carry the capture group the runtime reads", () => {
     expectIssue(shell(`parse: { regex: "(" }`), {
       path: "variables.x.parse.regex",

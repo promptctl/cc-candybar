@@ -78,11 +78,11 @@
     // Reads a file from disk. Paths MUST be absolute — ~ is not expanded.
     //
     // readMode — WHAT TEXT the file yields (a reader fact):
-    //   "whole"       — full file contents (default; newlines become spaces)
+    //   "whole"       — full file contents (default)
     //   "first-line"  — only the first line
     //
     // parse — what the text becomes (the same step shell sources have):
-    //   absent / { text: true } — the text itself
+    //   absent / { text: true } — the text, newlines folded to spaces
     //   { regex: "…" }          — capture group 1 of the text
     //   { json: true }          — the text parsed once as a document; read its
     //                             fields by dotted path (see demo.pkg below)

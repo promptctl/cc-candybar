@@ -8,7 +8,6 @@
 
 import {
   GIT_FIELDS,
-  parseArm,
   type GitField,
   type ParseDecl,
   type SourceDefault,
@@ -263,8 +262,9 @@ function parseSpec(): FieldSpec<ParseDecl> {
 // the way inputDefaultSpec reads `raw.type`. This is THE enforcer of the
 // arm↔default pairing: FileVarDecl/ShellVarDecl type `default` as the union
 // of both domains and declareOne's lowering trusts the stamp. The sibling's
-// own errors are parseSpec's to report: a malformed `parse:` reads as its
-// present-key arm here (the same `parseArm` every consumer switches on).
+// own errors are parseSpec's to report: the json domain is the json key
+// PRESENT on the raw `parse:` — the tag of that present-key union — never a
+// fallthrough over keys it does not recognise.
 function sourceDefaultSpec(): FieldSpec<SourceDefault> {
   return {
     required: false,
@@ -274,7 +274,7 @@ function sourceDefaultSpec(): FieldSpec<SourceDefault> {
         "The value published when the source fails: a string under the text/regex parse arms, any non-null JSON value under the json arm",
     },
     parse: (ctx, path, _field, raw) =>
-      isPlainObject(raw.parse) && parseArm(raw.parse) === "json"
+      isPlainObject(raw.parse) && "json" in raw.parse
         ? jsonDefault(ctx, path, raw.default)
         : optionalStringField(ctx, path, raw, "default"),
   };
