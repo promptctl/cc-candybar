@@ -10,16 +10,17 @@ import path from "node:path";
 
 import { checkConfig, checkPlan, type CheckOutcome } from "../../src/check";
 
-// Run `fn` against a real temp config file holding `text`.
-export function withTempConfig<T>(
+// Run `fn` against a real temp config file holding `text`. The file outlives
+// the whole of `fn` (checkConfig is async: it awaits its sources' first run).
+export async function withTempConfig<T>(
   text: string,
-  fn: (configPath: string) => T,
-): T {
+  fn: (configPath: string) => Promise<T> | T,
+): Promise<T> {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "ccb-check-config-"));
   const configPath = path.join(dir, ".cc-candybar.json5");
   fs.writeFileSync(configPath, text);
   try {
-    return fn(configPath);
+    return await fn(configPath);
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }
@@ -46,6 +47,8 @@ export function expectClean(
 export function checkText(
   label: string,
   text: string,
-): Extract<CheckOutcome, { kind: "clean" }> {
-  return withTempConfig(text, (p) => expectClean(label, checkConfig(p)));
+): Promise<Extract<CheckOutcome, { kind: "clean" }>> {
+  return withTempConfig(text, async (p) =>
+    expectClean(label, await checkConfig(p)),
+  );
 }

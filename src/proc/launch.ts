@@ -13,13 +13,21 @@
 //
 // [LAW:types-are-the-program] (kz8.6) Process lifetime is encoded in the
 // operation, not in a flag. `launch`/`launchSync` are *waited*: the child is
-// reaped before the caller resumes, so it cannot outlive its frame.
+// reaped before the caller resumes, so it cannot outlive its frame (the one
+// exception is a group the launcher was refused to signal: `signal-refused`).
 // `launchDetachedSync` is the *orphan*: it detaches and unrefs, deliberately
 // outliving its caller — the daemon-handoff escape hatch, used only by the
 // daemon-acquisition path. There is no `detached: boolean` flag on `LaunchOpts`
 // ([LAW:no-mode-explosion]); the two lifetimes are two functions with two
 // return contracts, so an unwaited helper that survives a render frame is
 // unrepresentable here rather than forbidden by convention.
+//
+// A `launch` child leads its own process group, so terminating it (the timeout,
+// or the caller's `signal`) reaches everything it spawned: `sh -c "sleep 5;
+// echo x"` keeps `sh` as the parent and `sleep` as a grandchild, and signalling
+// `sh` alone would orphan the `sleep`. The price is that a terminal's SIGINT
+// no longer reaches a foreground CLI's children through the tty: a child ends
+// by its timeout, its caller's `signal`, or its own exit.
 
 import { spawn, spawnSync } from "node:child_process";
 import type { ChildProcess, StdioOptions } from "node:child_process";
@@ -121,24 +129,38 @@ export interface LaunchOpts {
   category: LaunchCategory;
 }
 
+// [LAW:types-are-the-program] Cancellation exists only where a frame is
+// alive to observe it: `launch`. A sync launcher cannot read a signal while
+// it blocks, so the option is unrepresentable there rather than ignored.
+export interface AsyncLaunchOpts extends LaunchOpts {
+  // The caller's cancellation: aborting it terminates the child (and its
+  // group); the result is `reason: "aborted"` once the child is reaped.
+  signal?: AbortSignal;
+}
+
 export type LaunchResult =
   | { ok: true; stdout: string; stderr: string; exitCode: number | null }
   | {
       ok: false;
       // [LAW:one-type-per-behavior] Distinct termination causes get distinct
       // tags so callers + stats can attribute correctly. "timeout" means the
-      // local timer fired; "signal" means the OS or external killer ended the
-      // child for some other reason (SIGKILL/SIGINT/SIGPIPE/SIGHUP/...);
-      // "non-zero" is a clean exit with a non-zero code; "spawn-error" is a
-      // failure before the child started; "rate-limited" means the primitive
-      // refused to spawn because the per-category minimum interval was not
-      // yet elapsed — no child process was launched.
+      // local timer fired; "aborted" means the caller's `signal` fired;
+      // "signal" means the OS or external killer ended the child for some
+      // other reason (SIGKILL/SIGINT/SIGPIPE/SIGHUP/...); "non-zero" is a
+      // clean exit with a non-zero code; "spawn-error" is a failure before
+      // the child started; "rate-limited" means the primitive refused to
+      // spawn because the per-category minimum interval was not yet elapsed
+      // — no child process was launched. "signal-refused" means the OS
+      // refused the termination signal (EPERM: the child changed its real
+      // uid), so the child is NOT reaped; `error` carries the errno.
       reason:
         | "timeout"
+        | "aborted"
         | "signal"
         | "spawn-error"
         | "non-zero"
-        | "rate-limited";
+        | "rate-limited"
+        | "signal-refused";
       stdout: string;
       stderr: string;
       exitCode: number | null;
@@ -177,7 +199,32 @@ export function setLaunchStats(handle: LaunchStatsHandle | null): void {
 // backstop so the promise cannot resolve while the child is still alive.
 const TIMEOUT_KILL_GRACE_MS = 250;
 
-export async function launch(opts: LaunchOpts): Promise<LaunchResult> {
+// A termination the launcher itself initiated — carried as data because the
+// OS reports only the signal, never why it was sent.
+type Terminated = "timeout" | "aborted";
+
+// Signal a waited child's whole process group (it leads its own; see the
+// header). [LAW:no-silent-failure] exception: ESRCH is the group already gone
+// — the state this call exists to reach; any other failure propagates.
+function signalGroup(pid: number, sig: NodeJS.Signals): void {
+  try {
+    process.kill(-pid, sig);
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code !== "ESRCH") throw err;
+  }
+}
+
+export async function launch(opts: AsyncLaunchOpts): Promise<LaunchResult> {
+  if (opts.signal?.aborted) {
+    return {
+      ok: false,
+      reason: "aborted",
+      stdout: "",
+      stderr: "",
+      exitCode: null,
+      signal: null,
+    };
+  }
   const gate = checkRateLimit(opts.category);
   if (!gate.allowed) {
     return rateLimitedResult(
@@ -197,6 +244,7 @@ export async function launch(opts: LaunchOpts): Promise<LaunchResult> {
         cwd: opts.cwd,
         env: opts.env,
         stdio: ["pipe", "pipe", "pipe"],
+        detached: true,
       });
     } catch (err) {
       statsHandle?.onEnd(opts.category, Date.now() - t0);
@@ -218,19 +266,68 @@ export async function launch(opts: LaunchOpts): Promise<LaunchResult> {
     let timer: NodeJS.Timeout | null = null;
     let killTimer: NodeJS.Timeout | null = null;
     // [LAW:dataflow-not-control-flow] Whether the close was caused by *our*
-    // timer is data we have to carry. The OS doesn't tell us why a child was
-    // signalled — without this flag, SIGKILL from the OOM killer, SIGINT
-    // propagated through the tty, SIGPIPE on a closed pipe, etc. all get
-    // misreported as "timeout".
-    let timedOut = false;
+    // termination — and which — is data we have to carry. The OS doesn't tell
+    // us why a child was signalled — without it, SIGKILL from the OOM killer,
+    // SIGINT propagated through the tty, SIGPIPE on a closed pipe, etc. would
+    // all be misreported as "timeout" or "aborted".
+    let terminated: Terminated | null = null;
 
-    const settle = (r: LaunchResult) => {
+    const onAbort = () => terminate("aborted");
+
+    const finish = (deliver: () => void) => {
       if (settled) return;
       settled = true;
       if (timer) clearTimeout(timer);
       if (killTimer) clearTimeout(killTimer);
+      opts.signal?.removeEventListener("abort", onAbort);
       statsHandle?.onEnd(opts.category, Date.now() - t0);
-      resolve(r);
+      deliver();
+    };
+    const settle = (r: LaunchResult) => finish(() => resolve(r));
+    // [LAW:one-type-per-behavior] A group that cannot be signalled (EPERM:
+    // the child changed its real uid) is this run's result like any other
+    // failure — a `LaunchResult` arm, never a rejection or a throw out of a
+    // timer callback, so the single-enforcer primitive stays total.
+    const signal = (pid: number, sig: NodeJS.Signals) => {
+      try {
+        signalGroup(pid, sig);
+      } catch (err) {
+        settle({
+          ok: false,
+          reason: "signal-refused",
+          stdout,
+          stderr,
+          exitCode: null,
+          signal: null,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+    };
+
+    // [LAW:types-are-the-program] Do NOT settle here. We signal and let the
+    // `close` handler resolve once the child is actually gone, so the promise
+    // never resolves while the child is still alive. SIGTERM first; SIGKILL
+    // after a grace period if the child ignores it. One termination per
+    // child: the other trigger is disarmed so the cause cannot be rewritten.
+    //
+    // [LAW:dataflow-not-control-flow] `child.pid` is undefined when the spawn
+    // failed asynchronously (ENOENT) — there is no process to signal and the
+    // `error` event settles that case. kill() on a pid-less child signals the
+    // wrong target (verified: it can terminate the caller), so escalation is
+    // gated on the pid actually existing.
+    const terminate = (cause: Terminated) => {
+      terminated = cause;
+      if (timer) clearTimeout(timer);
+      opts.signal?.removeEventListener("abort", onAbort);
+      const pid = child.pid;
+      if (pid !== undefined) {
+        // Escalation armed first, so a refused SIGTERM's cleanup clears it.
+        killTimer = setTimeout(
+          () => signal(pid, "SIGKILL"),
+          TIMEOUT_KILL_GRACE_MS,
+        );
+        signal(pid, "SIGTERM");
+      }
     };
 
     child.stdout?.on("data", (chunk: Buffer) => {
@@ -254,13 +351,13 @@ export async function launch(opts: LaunchOpts): Promise<LaunchResult> {
 
     child.on("close", (code, signal) => {
       // [LAW:types-are-the-program] We resolve here, on the *actual* exit —
-      // including the timeout path. Once `timedOut` is set the deadline has
-      // elapsed, so the outcome is "timeout" regardless of which signal
-      // (SIGTERM or the escalated SIGKILL) finally ended the child.
-      if (timedOut) {
+      // including the termination paths. Once `terminated` is set the cause
+      // is known, whichever signal (SIGTERM or the escalated SIGKILL) finally
+      // ended the child.
+      if (terminated !== null) {
         settle({
           ok: false,
-          reason: "timeout",
+          reason: terminated,
           stdout,
           stderr,
           exitCode: code,
@@ -284,26 +381,9 @@ export async function launch(opts: LaunchOpts): Promise<LaunchResult> {
     });
 
     if (opts.timeoutMs && opts.timeoutMs > 0) {
-      timer = setTimeout(() => {
-        timedOut = true;
-        // [LAW:types-are-the-program] Do NOT settle here. We signal and let
-        // the `close` handler resolve once the child is actually gone, so the
-        // promise never resolves while the child is still alive. SIGTERM
-        // first; SIGKILL after a grace period if the child ignores it.
-        //
-        // [LAW:dataflow-not-control-flow] `child.pid` is undefined when the
-        // spawn failed asynchronously (ENOENT) — there is no process to signal
-        // and the `error` event settles that case. kill() on a pid-less child
-        // signals the wrong target (verified: it can terminate the caller), so
-        // escalation is gated on the pid actually existing.
-        if (child.pid !== undefined) {
-          child.kill("SIGTERM");
-          killTimer = setTimeout(() => {
-            child.kill("SIGKILL");
-          }, TIMEOUT_KILL_GRACE_MS);
-        }
-      }, opts.timeoutMs);
+      timer = setTimeout(() => terminate("timeout"), opts.timeoutMs);
     }
+    opts.signal?.addEventListener("abort", onAbort, { once: true });
 
     if (opts.stdinInput !== undefined && child.stdin) {
       child.stdin.end(opts.stdinInput);

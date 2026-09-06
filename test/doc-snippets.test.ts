@@ -143,8 +143,8 @@ describe("doc snippet contract", () => {
 
   test.each(passSnippets.map((f) => [f.doc, f.line, f] as const))(
     "pass snippet at %s line %d is clean under check (exit 0, no warnings)",
-    (_doc, _line, f) => {
-      const outcome = checkSnippet(f);
+    async (_doc, _line, f) => {
+      const outcome = await checkSnippet(f);
       if (outcome.kind !== "clean") {
         throw new Error(
           `${f.doc} line ${f.line}: expected clean, got ${outcome.kind}: ${
@@ -162,7 +162,7 @@ describe("doc snippet contract", () => {
     failSnippets.map(({ f, next }) => [f.doc, f.line, f, next] as const),
   )(
     "fail snippet at %s line %d is fatal and prints its quoted error",
-    (_doc, _line, f, next) => {
+    async (_doc, _line, f, next) => {
       // The block immediately after a check:fail snippet is its quoted error —
       // the doc's contract, enforced here so a snippet can never drift away
       // from its quote.
@@ -173,7 +173,7 @@ describe("doc snippet contract", () => {
       }
       const quoted = next.body.trim();
       expect(quoted.length).toBeGreaterThan(0);
-      const outcome = checkSnippet(f);
+      const outcome = await checkSnippet(f);
       if (outcome.kind !== "fatal") {
         throw new Error(
           `${f.doc} line ${f.line}: expected fatal, got ${outcome.kind}`,

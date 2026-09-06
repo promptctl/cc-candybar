@@ -5,6 +5,7 @@ import {
   toBool,
   typeOf,
 } from "../src/var-system";
+import { ABSENT, failed, ok } from "../src/utils/outcome";
 
 describe("VariableStore — boxes", () => {
   it("returns the initial value", () => {
@@ -166,7 +167,7 @@ describe("VariableStore — introspection", () => {
     // The advertised surface works.
     expect(node.name).toBe("seed");
     expect(node.kind).toBe("box");
-    expect(node.type).toBe("number");
+    expect(node.kind !== "document" && node.type).toBe("number");
     expect(node.read()).toBe(7);
     expect(node.lastUpdatedMs()).toBeGreaterThan(0);
 
@@ -247,5 +248,123 @@ describe("type-checked cast helpers", () => {
       expect(typeOf(0)).toBe("number");
       expect(typeOf(false)).toBe("boolean");
     });
+  });
+});
+
+// ─── Documents ───────────────────────────────────────────────────────────────
+
+// [LAW:behavior-not-structure] A document node holds an Outcome, is read by its
+// own accessor, and is refused by the scalar reads by name — the contract the
+// scope proxy and the registry's publishers build on.
+describe("VariableStore — documents", () => {
+  const doc = () => ({ a: 1, b: { c: "x" } });
+
+  it("round-trips an outcome through defineDocument / readDocument / setDocument", () => {
+    const store = new VariableStore();
+    store.defineDocument("d", ABSENT);
+    expect(store.readDocument("d")).toEqual({ kind: "absent" });
+    store.setDocument("d", ok(doc()));
+    expect(store.readDocument("d")).toEqual({ kind: "ok", value: doc() });
+    store.setDocument("d", failed("boom"));
+    expect(store.readDocument("d")).toEqual({ kind: "failed", reason: "boom" });
+  });
+
+  it("is a distinct node kind", () => {
+    const store = new VariableStore();
+    store.defineDocument("d", ok(doc()));
+    expect(store.getKind("d")).toBe("document");
+    expect(store.names()).toEqual(["d"]);
+  });
+
+  it("the scalar reads refuse a document by name, pointing at the path form", () => {
+    const store = new VariableStore();
+    store.defineDocument("d", ok(doc()));
+    expect(() => store.read("d")).toThrow(
+      /Variable "d" is a document; read its fields by path \(\.d\.<field>\)/,
+    );
+    expect(() => store.getType("d")).toThrow(/is a document/);
+  });
+
+  it("the document reads refuse a scalar by name", () => {
+    const store = new VariableStore();
+    store.defineBox("s", "string", "x");
+    expect(() => store.readDocument("s")).toThrow(/"s" is a box, not a document/);
+    expect(() => store.setDocument("s", ok(doc()))).toThrow(/is a box, not a document/);
+  });
+
+  it("a document name cannot be re-declared as anything", () => {
+    const store = new VariableStore();
+    store.defineDocument("d", ABSENT);
+    expect(() => store.defineBox("d", "string", "")).toThrow(/already declared/);
+    expect(() => store.defineDocument("d", ABSENT)).toThrow(/already declared/);
+  });
+
+  it("shapes every ok document on write: null prototypes and sorted keys at every level", () => {
+    const store = new VariableStore();
+    store.defineDocument("d", ok({ b: { z: 1, y: 2 }, a: [{ q: 1, p: 2 }] }));
+    const d = store.readDocument("d");
+    if (d.kind !== "ok") throw new Error("expected ok");
+    const root = d.value as Record<string, unknown>;
+    expect(Object.getPrototypeOf(root)).toBeNull();
+    expect(Object.keys(root)).toEqual(["a", "b"]);
+    expect(Object.getPrototypeOf(root.b)).toBeNull();
+    expect(Object.keys(root.b as object)).toEqual(["y", "z"]);
+    const item = (root.a as unknown[])[0] as object;
+    expect(Object.getPrototypeOf(item)).toBeNull();
+    expect(Object.keys(item)).toEqual(["p", "q"]);
+    store.setDocument("d", ok({ toString: "own" }));
+    const again = store.readDocument("d");
+    if (again.kind !== "ok") throw new Error("expected ok");
+    expect(Object.getPrototypeOf(again.value)).toBeNull();
+    expect(Object.keys(again.value as object)).toEqual(["toString"]);
+  });
+
+  it("every document is frozen at every level: an in-place edit throws instead of rewriting the store", () => {
+    const store = new VariableStore();
+    store.defineDocument("d", ok({ b: { z: 1 }, a: [{ q: 1 }, 2] }));
+    const d = store.readDocument("d");
+    if (d.kind !== "ok") throw new Error("expected ok");
+    const root = d.value as Record<string, unknown>;
+    expect(Object.isFrozen(root)).toBe(true);
+    expect(Object.isFrozen(root.b)).toBe(true);
+    expect(Object.isFrozen(root.a)).toBe(true);
+    expect(Object.isFrozen((root.a as unknown[])[0])).toBe(true);
+    expect(() => {
+      (root.b as Record<string, unknown>).z = 2;
+    }).toThrow(TypeError);
+    expect(store.readDocument("d")).toEqual({ kind: "ok", value: { a: [{ q: 1 }, 2], b: { z: 1 } } });
+  });
+
+  it("changeKey is canonical: the same content in another key order is the same key", () => {
+    const store = new VariableStore();
+    store.defineDocument("d", ok({ a: 1, b: { c: "x", d: 2 } }));
+    const before = store.changeKey("d");
+    store.setDocument("d", ok({ b: { d: 2, c: "x" }, a: 1 }));
+    expect(store.changeKey("d")).toBe(before);
+    store.setDocument("d", ok({ b: { d: 2, c: "y" }, a: 1 }));
+    expect(store.changeKey("d")).not.toBe(before);
+  });
+
+  it("changeKey is structural over documents and total over node kinds", () => {
+    const store = new VariableStore();
+    store.defineDocument("d", ok(doc()));
+    store.defineBox("n", "number", 7);
+    const before = store.changeKey("d");
+    store.setDocument("d", ok(doc())); // a rescan yielding the same content
+    expect(store.changeKey("d")).toBe(before);
+    store.setDocument("d", ok({ ...doc(), a: 2 }));
+    expect(store.changeKey("d")).not.toBe(before);
+    expect(store.changeKey("n")).toBe("7");
+  });
+
+  it("getNode hands out a document wrapper with no mutation surface and no scalar type", () => {
+    const store = new VariableStore();
+    store.defineDocument("d", ok(doc()));
+    const node = store.getNode("d");
+    expect(node.kind).toBe("document");
+    expect(node.read()).toEqual({ kind: "ok", value: doc() });
+    expect(node.lastUpdatedMs()).toBeGreaterThan(0);
+    expect("type" in node).toBe(false);
+    expect((node as unknown as Record<string, unknown>).set).toBeUndefined();
   });
 });

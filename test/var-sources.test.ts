@@ -1,15 +1,17 @@
 import fs from "fs";
 import os from "os";
 import path from "path";
-import { execSync } from "child_process";
+import { execSync, spawnSync } from "child_process";
 import {
   VariableStore,
   SourceRegistry,
   parseDuration,
   formatGoTime,
   MIN_SHELL_TTL_MS,
+  type SourceParse,
 } from "../src/var-system";
 import { SessionState } from "../src/daemon/session-state";
+import { buildScope } from "../src/template-engine/scope";
 
 // [LAW:one-source-of-truth] Tests pin to the production constant so a future
 // MIN_SHELL_TTL_MS bump doesn't silently desync test timings.
@@ -20,6 +22,16 @@ import { SessionState } from "../src/daemon/session-state";
 // drift + the cat-subprocess round trip.
 const TTL_TICK_BUFFER_MS = 200;
 const TTL_TICK_WAIT_MS = MIN_SHELL_TTL_MS + TTL_TICK_BUFFER_MS;
+
+// The parse step every shell/file declaration names: the identity, the
+// identity with a fallback, or a group-1 slice (with an optional fallback).
+const TEXT: SourceParse = { kind: "text", default: undefined };
+const text = (dflt: string): SourceParse => ({ kind: "text", default: dflt });
+const regex = (pattern: string, dflt?: string): SourceParse => ({
+  kind: "regex",
+  regex: new RegExp(pattern),
+  default: dflt,
+});
 
 // Helper: fresh pair so tests are fully isolated.
 function make(defaultEmptyValue?: string) {
@@ -362,7 +374,7 @@ function settle(ms = 150): Promise<void> {
 describe("SourceRegistry — shell: basic", () => {
   it("populates box with command stdout (never policy)", async () => {
     const { store, registry } = make();
-    registry.declareShell("val", 'echo "hello world"', { cache: { kind: "never" } });
+    registry.declareShell("val", 'echo "hello world"', { parse: TEXT, cache: { kind: "never" } });
     await settle();
     expect(store.read("val")).toBe("hello world");
     registry.dispose();
@@ -370,16 +382,29 @@ describe("SourceRegistry — shell: basic", () => {
 
   it("replaces newlines with spaces in multi-line output", async () => {
     const { store, registry } = make();
-    registry.declareShell("val", 'printf "a\\nb\\nc"', { cache: { kind: "never" } });
+    registry.declareShell("val", 'printf "a\\nb\\nc"', { parse: TEXT, cache: { kind: "never" } });
     await settle();
     expect(store.read("val")).toBe("a b c");
+    registry.dispose();
+  });
+
+  it("folds CRLF and bare CR line breaks to spaces in text and regex output", async () => {
+    const { store, registry } = make();
+    registry.declareShell("crlf", 'printf "a\\r\\nb\\rc\\r\\n"', { parse: TEXT, cache: { kind: "never" } });
+    registry.declareShell("gap", 'printf "a\\r\\nb"', {
+      parse: regex("a(\\s*)b"),
+      cache: { kind: "never" },
+    });
+    await settle();
+    expect(store.read("crlf")).toBe("a b c");
+    expect(store.read("gap")).toBe(" ");
     registry.dispose();
   });
 
   it("extracts regex group-1 from stdout", async () => {
     const { store, registry } = make();
     registry.declareShell("val", 'echo "load: 0.52 0.48 0.45"', {
-      regex: "load:\\s*([0-9.]+)",
+      parse: regex("load:\\s*([0-9.]+)"),
       cache: { kind: "never" },
     });
     await settle();
@@ -390,7 +415,7 @@ describe("SourceRegistry — shell: basic", () => {
   it("shell failure → varDefault", async () => {
     const { store, registry } = make();
     registry.declareShell("val", "exit 1", {
-      varDefault: "fallback",
+      parse: text("fallback"),
       cache: { kind: "never" },
     });
     await settle();
@@ -401,7 +426,7 @@ describe("SourceRegistry — shell: basic", () => {
   it("shell failure → records last_error", async () => {
     const before = Date.now();
     const { registry } = make();
-    registry.declareShell("val", "exit 2", { cache: { kind: "never" } });
+    registry.declareShell("val", "exit 2", { parse: TEXT, cache: { kind: "never" } });
     await settle();
     const err = registry.getLastError("val");
     expect(err).toBeDefined();
@@ -412,7 +437,7 @@ describe("SourceRegistry — shell: basic", () => {
 
   it("shell failure → defaultEmptyValue when no varDefault", async () => {
     const { store, registry } = make("(none)");
-    registry.declareShell("val", "exit 1", { cache: { kind: "never" } });
+    registry.declareShell("val", "exit 1", { parse: TEXT, cache: { kind: "never" } });
     await settle();
     expect(store.read("val")).toBe("(none)");
     registry.dispose();
@@ -421,8 +446,7 @@ describe("SourceRegistry — shell: basic", () => {
   it("regex no-match → varDefault", async () => {
     const { store, registry } = make();
     registry.declareShell("val", 'echo "nothing here"', {
-      regex: "([0-9]+)",
-      varDefault: "—",
+      parse: regex("([0-9]+)", "—"),
       cache: { kind: "never" },
     });
     await settle();
@@ -433,7 +457,7 @@ describe("SourceRegistry — shell: basic", () => {
   it("regex no-match → records last_error", async () => {
     const { registry } = make();
     registry.declareShell("val", 'echo "no digits"', {
-      regex: "([0-9]+)",
+      parse: regex("([0-9]+)"),
       cache: { kind: "never" },
     });
     await settle();
@@ -453,6 +477,7 @@ describe("SourceRegistry — shell: basic", () => {
       const { store, registry } = make();
       // First: failing command
       registry.declareShell("val", `grep nonexistent ${dataFile}`, {
+        parse: TEXT,
         cache: { kind: "never" },
       });
       await settle();
@@ -461,7 +486,7 @@ describe("SourceRegistry — shell: basic", () => {
       // Can't re-run on "never" — use a separate variable to test error-clearing
       const { store: store2, registry: registry2 } = make();
       // Command that succeeds
-      registry2.declareShell("val", `echo "ok"`, { cache: { kind: "never" } });
+      registry2.declareShell("val", `echo "ok"`, { parse: TEXT, cache: { kind: "never" } });
       await settle();
       expect(registry2.getLastError("val")).toBeUndefined();
       expect(store2.read("val")).toBe("ok");
@@ -487,6 +512,7 @@ describe("SourceRegistry — shell: TTL floor", () => {
       // Request 50ms — well below the floor. The floor must clamp the
       // effective TTL, so a sub-floor settle window must NOT see the refresh.
       registry.declareShell("val", `cat ${f}`, {
+        parse: TEXT,
         cache: { kind: "ttl", durationMs: 50 },
       });
 
@@ -521,6 +547,7 @@ describe("SourceRegistry — shell: ttl cache policy", () => {
       // [LAW:single-enforcer] Shell TTLs are floored at MIN_SHELL_TTL_MS.
       // Tests use that exact value and wait MIN_SHELL_TTL_MS+buffer for a tick.
       registry.declareShell("val", `cat ${f}`, {
+        parse: TEXT,
         cache: { kind: "ttl", durationMs: MIN_SHELL_TTL_MS },
       });
 
@@ -546,9 +573,11 @@ describe("SourceRegistry — shell: ttl cache policy", () => {
       fs.writeFileSync(f2, "b1");
       const { store, registry } = make();
       registry.declareShell("v1", `cat ${f1}`, {
+        parse: TEXT,
         cache: { kind: "ttl", durationMs: MIN_SHELL_TTL_MS },
       });
       registry.declareShell("v2", `cat ${f2}`, {
+        parse: TEXT,
         cache: { kind: "ttl", durationMs: MIN_SHELL_TTL_MS },
       });
 
@@ -575,6 +604,7 @@ describe("SourceRegistry — shell: ttl cache policy", () => {
       fs.writeFileSync(f, "v1");
       const { store, registry } = make();
       registry.declareShell("val", `cat ${f}`, {
+        parse: TEXT,
         cache: { kind: "ttl", durationMs: MIN_SHELL_TTL_MS },
       });
 
@@ -605,6 +635,7 @@ describe("SourceRegistry — shell: watch_file cache policy", () => {
       fs.writeFileSync(dataFile, "v1");
       const { store, registry } = make();
       registry.declareShell("val", `cat ${dataFile}`, {
+        parse: TEXT,
         cache: { kind: "watch_file", path: watchedFile },
       });
 
@@ -633,9 +664,11 @@ describe("SourceRegistry — shell: watch_file cache policy", () => {
       fs.writeFileSync(f2, "b1");
       const { store, registry } = make();
       registry.declareShell("v1", `cat ${f1}`, {
+        parse: TEXT,
         cache: { kind: "watch_file", path: watchedFile },
       });
       registry.declareShell("v2", `cat ${f2}`, {
+        parse: TEXT,
         cache: { kind: "watch_file", path: watchedFile },
       });
 
@@ -671,6 +704,7 @@ describe("SourceRegistry — shell: key: cache policy", () => {
       // Put a box directly in the store — the key template will read it.
       store.defineBox("trigger", "string", "a");
       registry.declareShell("val", `cat ${dataFile}`, {
+        parse: TEXT,
         cache: { kind: "key", template: "{{ .trigger }}" },
       });
 
@@ -699,6 +733,7 @@ describe("SourceRegistry — shell: key: cache policy", () => {
       const registry = new SourceRegistry(store);
       store.defineBox("trigger", "string", "a");
       registry.declareShell("val", `cat ${dataFile}`, {
+        parse: TEXT,
         cache: { kind: "key", template: "{{ .trigger }}" },
       });
 
@@ -727,7 +762,7 @@ describe("SourceRegistry — file: basic", () => {
       const f = path.join(dir, "f");
       fs.writeFileSync(f, "line1\nline2\nline3");
       const { store, registry } = make();
-      registry.declareFile("val", f, { cache: { kind: "never" } });
+      registry.declareFile("val", f, { parse: TEXT, cache: { kind: "never" } });
       await settle();
       expect(store.read("val")).toBe("line1 line2 line3");
       registry.dispose();
@@ -742,7 +777,7 @@ describe("SourceRegistry — file: basic", () => {
       const f = path.join(dir, "f");
       fs.writeFileSync(f, "ref: refs/heads/main\nother");
       const { store, registry } = make();
-      registry.declareFile("val", f, { readMode: "first-line", cache: { kind: "never" } });
+      registry.declareFile("val", f, { parse: TEXT, readMode: "first-line", cache: { kind: "never" } });
       await settle();
       expect(store.read("val")).toBe("ref: refs/heads/main");
       registry.dispose();
@@ -758,7 +793,7 @@ describe("SourceRegistry — file: basic", () => {
       fs.writeFileSync(f, "ref: refs/heads/feature-branch\n");
       const { store, registry } = make();
       registry.declareFile("val", f, {
-        regex: "refs/heads/(.+)",
+        parse: regex("refs/heads/(.+)"),
         cache: { kind: "never" },
       });
       await settle();
@@ -772,7 +807,7 @@ describe("SourceRegistry — file: basic", () => {
   it("file missing → varDefault", async () => {
     const { store, registry } = make();
     registry.declareFile("val", "/nonexistent/path/xyz.txt", {
-      varDefault: "(missing)",
+      parse: text("(missing)"),
       cache: { kind: "never" },
     });
     await settle();
@@ -783,7 +818,7 @@ describe("SourceRegistry — file: basic", () => {
   it("file missing → records last_error", async () => {
     const before = Date.now();
     const { registry } = make();
-    registry.declareFile("val", "/nonexistent/path/xyz.txt", { cache: { kind: "never" } });
+    registry.declareFile("val", "/nonexistent/path/xyz.txt", { parse: TEXT, cache: { kind: "never" } });
     await settle();
     const err = registry.getLastError("val");
     expect(err).toBeDefined();
@@ -799,8 +834,7 @@ describe("SourceRegistry — file: basic", () => {
       fs.writeFileSync(f, "nothing to match");
       const { store, registry } = make();
       registry.declareFile("val", f, {
-        regex: "([0-9]+)",
-        varDefault: "—",
+        parse: regex("([0-9]+)", "—"),
         cache: { kind: "never" },
       });
       await settle();
@@ -817,7 +851,7 @@ describe("SourceRegistry — file: basic", () => {
       const f = path.join(dir, "f");
       fs.writeFileSync(f, "no numbers");
       const { registry } = make();
-      registry.declareFile("val", f, { regex: "([0-9]+)", cache: { kind: "never" } });
+      registry.declareFile("val", f, { parse: regex("([0-9]+)"), cache: { kind: "never" } });
       await settle();
       expect(registry.getLastError("val")).toBeDefined();
       expect(registry.getLastError("val")!.message).toMatch(/regex no-match/);
@@ -837,7 +871,7 @@ describe("SourceRegistry — file: watch_file cache policy", () => {
       const f = path.join(dir, "f");
       fs.writeFileSync(f, "v1");
       const { store, registry } = make();
-      registry.declareFile("val", f, { cache: { kind: "watch_file", path: f } });
+      registry.declareFile("val", f, { parse: TEXT, cache: { kind: "watch_file", path: f } });
 
       await settle(100);
       expect(store.read("val")).toBe("v1");
@@ -863,8 +897,8 @@ describe("SourceRegistry — file: watch_file cache policy", () => {
       fs.writeFileSync(f2, "b1");
       const { store, registry } = make();
       // Both variables watch the same path (different source files)
-      registry.declareFile("v1", f1, { cache: { kind: "watch_file", path: watchedFile } });
-      registry.declareFile("v2", f2, { cache: { kind: "watch_file", path: watchedFile } });
+      registry.declareFile("v1", f1, { parse: TEXT, cache: { kind: "watch_file", path: watchedFile } });
+      registry.declareFile("v2", f2, { parse: TEXT, cache: { kind: "watch_file", path: watchedFile } });
 
       await settle(100);
       expect(store.read("v1")).toBe("a1");
@@ -894,6 +928,7 @@ describe("SourceRegistry — dispose", () => {
       fs.writeFileSync(f, "v1");
       const { store, registry } = make();
       registry.declareShell("val", `cat ${f}`, {
+        parse: TEXT,
         cache: { kind: "ttl", durationMs: MIN_SHELL_TTL_MS },
       });
 
@@ -915,7 +950,7 @@ describe("SourceRegistry — dispose", () => {
       const f = path.join(dir, "f");
       fs.writeFileSync(f, "v1");
       const { store, registry } = make();
-      registry.declareFile("val", f, { cache: { kind: "watch_file", path: f } });
+      registry.declareFile("val", f, { parse: TEXT, cache: { kind: "watch_file", path: f } });
 
       await settle(100);
       registry.dispose();
@@ -1118,6 +1153,7 @@ describe("SourceRegistry — depends_on cache policy", () => {
       const registry = new SourceRegistry(store);
       store.defineBox("trigger", "string", "a");
       registry.declareShell("val", `cat ${dataFile}`, {
+        parse: TEXT,
         cache: { kind: "depends_on", varNames: ["trigger"] },
       });
 
@@ -1145,6 +1181,7 @@ describe("SourceRegistry — depends_on cache policy", () => {
       const registry = new SourceRegistry(store);
       store.defineBox("trigger", "string", "a");
       registry.declareShell("val", `cat ${dataFile}`, {
+        parse: TEXT,
         cache: { kind: "depends_on", varNames: ["trigger"] },
       });
 
@@ -1173,6 +1210,7 @@ describe("SourceRegistry — depends_on cache policy", () => {
       store.defineBox("a", "string", "x");
       store.defineBox("b", "string", "y");
       registry.declareShell("val", `cat ${dataFile}`, {
+        parse: TEXT,
         cache: { kind: "depends_on", varNames: ["a", "b"] },
       });
 
@@ -1200,6 +1238,7 @@ describe("SourceRegistry — depends_on cache policy", () => {
       const registry = new SourceRegistry(store);
       store.defineBox("trigger", "string", "a");
       registry.declareShell("val", `cat ${dataFile}`, {
+        parse: TEXT,
         cache: { kind: "depends_on", varNames: ["trigger"] },
       });
 
@@ -1586,5 +1625,253 @@ describe("SourceRegistry — state: read-through to SessionState", () => {
     expect(() =>
       registry.declareState("theme", { key: "theme" }),
     ).toThrow(/state-kind variables require a SessionState/);
+  });
+});
+
+// ─── parse seam: read → parse → publish ──────────────────────────────────────
+
+// [LAW:behavior-not-structure] The ticket's done-when, as behavior: one scan
+// yields a document whose fields are dotted reads (spawn count asserted, not
+// output); a bad scan is a loud error naming the variable, or the declared
+// default document with the error recorded; the same parsers apply to a file's
+// text, after readMode picked it.
+describe("SourceRegistry — parse seam", () => {
+  const json = (dflt?: Record<string, unknown>): SourceParse => ({
+    kind: "json",
+    default: dflt as SourceParse extends { default: infer D } ? D : never,
+  });
+  // The scope proxy is untyped by design (it is what `.` is in a template). A read
+  // of a declared document returns its fields or throws naming the variable — never
+  // undefined — so the test reads one named document as the field record it presents.
+  const doc = (store: VariableStore, name: string) =>
+    Reflect.get(buildScope(store), name) as Record<string, unknown>;
+  const readDoc = (store: VariableStore, name: string) => {
+    const doc = store.readDocument(name);
+    if (doc.kind !== "ok") throw new Error(`expected ok, got ${JSON.stringify(doc)}`);
+    return doc.value;
+  };
+
+  it("one scan, many fields: a json shell source is spawned once and read by dotted path", async () => {
+    const { dir, cleanup } = makeTmpDir();
+    try {
+      const counter = path.join(dir, "spawns");
+      const { store, registry } = make();
+      registry.declareShell(
+        "doc",
+        `echo >> ${counter}; echo '{"a": 1, "b": "x", "c": true, "nest": {"d": [1, 2]}}'`,
+        { parse: json(), cache: { kind: "never" } },
+      );
+      registry.declareTemplate(
+        "t",
+        "{{ .doc.a }}-{{ .doc.b }}-{{ .doc.c }}-{{ index .doc.nest.d 1 }}",
+        { varDefault: "(pending)" },
+      );
+      expect(await registry.settled(2000)).toEqual([]);
+      expect(readDoc(store, "doc")).toEqual({ a: 1, b: "x", c: true, nest: { d: [1, 2] } });
+      expect(store.read("t")).toBe("1-x-true-2");
+      expect(doc(store, "doc").b).toBe("x");
+      // Three fields, one template, a direct scope read: still ONE spawn.
+      expect(fs.readFileSync(counter, "utf8").split("\n").length - 1).toBe(1);
+      registry.dispose();
+    } finally {
+      cleanup();
+    }
+  });
+
+  it("a document is a namespace, never a scalar: the scalar reads refuse it by name", async () => {
+    const { store, registry } = make();
+    registry.declareShell("doc", `echo '{"a": 1}'`, { parse: json(), cache: { kind: "never" } });
+    await registry.settled(2000);
+    expect(() => store.read("doc")).toThrow(/is a document; read its fields by path/);
+    registry.dispose();
+  });
+
+  it("malformed JSON without a default: the document holds the failure and a read throws naming the variable", async () => {
+    const { store, registry } = make();
+    registry.declareShell("doc", `echo '{not json'`, { parse: json(), cache: { kind: "never" } });
+    await registry.settled(2000);
+    expect(store.readDocument("doc")).toMatchObject({ kind: "failed" });
+    expect(() => doc(store, "doc")).toThrow(/^variable "doc": JSON parse failed: /);
+    expect(registry.getLastError("doc")!.message).toMatch(/JSON parse failed/);
+    registry.dispose();
+  });
+
+  it("malformed JSON with a default: the default document reads, the error is recorded", async () => {
+    const { store, registry } = make();
+    registry.declareShell("doc", `echo '{not json'`, {
+      parse: json({ spent: 0, label: "?" }),
+      cache: { kind: "never" },
+    });
+    await registry.settled(2000);
+    expect(readDoc(store, "doc")).toEqual({ spent: 0, label: "?" });
+    expect(doc(store, "doc").label).toBe("?");
+    expect(registry.getLastError("doc")!.message).toMatch(/JSON parse failed/);
+    registry.dispose();
+  });
+
+  it("a failed command without a default is the same failure state, naming where it came from", async () => {
+    const { store, registry } = make();
+    registry.declareShell("doc", `exit 3`, { parse: json(), cache: { kind: "never" } });
+    await registry.settled(2000);
+    expect(() => doc(store, "doc")).toThrow(/variable "doc": .*exited with code 3/);
+    registry.dispose();
+  });
+
+  it("before the first scan lands, a read says so; settled() is the state a one-shot render awaits", async () => {
+    const { store, registry } = make();
+    registry.declareShell("doc", `sleep 0.3; echo '{"a": 1}'`, { parse: json(), cache: { kind: "never" } });
+    expect(store.readDocument("doc")).toEqual({ kind: "absent" });
+    expect(() => doc(store, "doc")).toThrow(
+      'variable "doc" has no value yet: its source has not completed a scan',
+    );
+    expect(await registry.settled(2000)).toEqual([]);
+    expect(doc(store, "doc").a).toBe(1);
+    registry.dispose();
+  });
+
+  it("settled() names the sources still in flight at its deadline", async () => {
+    const { registry } = make();
+    registry.declareShell("slow", `sleep 1; echo x`, { parse: TEXT, cache: { kind: "never" } });
+    registry.declareShell("fast", `echo y`, { parse: TEXT, cache: { kind: "never" } });
+    expect(await registry.settled(100)).toEqual(["slow"]);
+    expect(await registry.settled(3000)).toEqual([]);
+    registry.dispose();
+  });
+
+  it("a file source takes the same json parser", async () => {
+    const { dir, cleanup } = makeTmpDir();
+    try {
+      const f = path.join(dir, "budget.json");
+      fs.writeFileSync(f, '{"spent": 12.5, "limit": 20}\n');
+      const { store, registry } = make();
+      registry.declareFile("budget", f, { parse: json(), cache: { kind: "never" } });
+      await registry.settled(2000);
+      expect(doc(store, "budget").spent).toBe(12.5);
+      registry.dispose();
+    } finally {
+      cleanup();
+    }
+  });
+
+  it("readMode is a reader fact: first-line selects the text the regex parser sees", async () => {
+    const { dir, cleanup } = makeTmpDir();
+    try {
+      const f = path.join(dir, "f");
+      fs.writeFileSync(f, "v1.2 first\nv9.9 second\n");
+      const { store, registry } = make();
+      registry.declareFile("first", f, {
+        readMode: "first-line",
+        parse: regex("v([0-9.]+)"),
+        cache: { kind: "never" },
+      });
+      registry.declareFile("whole", f, { parse: regex("v([0-9.]+) second"), cache: { kind: "never" } });
+      await registry.settled(2000);
+      expect(store.read("first")).toBe("1.2");
+      expect(store.read("whole")).toBe("9.9");
+      registry.dispose();
+    } finally {
+      cleanup();
+    }
+  });
+
+  it("first-line ends at CR LF too: the regex parser never sees a trailing \\r", async () => {
+    const { dir, cleanup } = makeTmpDir();
+    try {
+      const f = path.join(dir, "crlf");
+      fs.writeFileSync(f, "v1.2\r\nv9.9\r\n");
+      const { store, registry } = make();
+      registry.declareFile("first", f, {
+        readMode: "first-line",
+        parse: regex("^v([0-9.]+)$"),
+        cache: { kind: "never" },
+      });
+      registry.declareFile("head", f, {
+        readMode: "first-line",
+        parse: json(),
+        cache: { kind: "never" },
+      });
+      await registry.settled(2000);
+      expect(store.read("first")).toBe("1.2");
+      expect(registry.getLastError("first")).toBeUndefined();
+      expect(registry.getLastError("head")?.message).toMatch(/^JSON parse failed/);
+      registry.dispose();
+    } finally {
+      cleanup();
+    }
+  });
+
+  it("readMode first-line feeds the json parser one line", async () => {
+    const { dir, cleanup } = makeTmpDir();
+    try {
+      const f = path.join(dir, "ndjson");
+      fs.writeFileSync(f, '{"n": 1}\n{"n": 2}\n');
+      const { store, registry } = make();
+      registry.declareFile("head", f, { readMode: "first-line", parse: json(), cache: { kind: "never" } });
+      await registry.settled(2000);
+      expect(doc(store, "head").n).toBe(1);
+      registry.dispose();
+    } finally {
+      cleanup();
+    }
+  });
+
+  it("a regex match with an empty group 1 is a match, not a failure", async () => {
+    const { store, registry } = make();
+    registry.declareShell("val", `echo "prefix:"`, {
+      parse: regex("prefix:(.*)", "fallback"),
+      cache: { kind: "never" },
+    });
+    await registry.settled(2000);
+    expect(store.read("val")).toBe("");
+    expect(registry.getLastError("val")).toBeUndefined();
+    registry.dispose();
+  });
+});
+
+// ─── in-flight runs are the registry's ────────────────────────────────────────
+
+describe("SourceRegistry — in-flight runs", () => {
+  it("settled() waits for the run a publish triggered: a depends_on re-run fired inside the wait", async () => {
+    const { dir, cleanup } = makeTmpDir();
+    try {
+      const spawns = path.join(dir, "spawns");
+      const { store, registry } = make();
+      // A is the slow one: its first publish lands while settled() is
+      // waiting, and that publish is what re-runs B. B's own first run is
+      // long done by then, so the re-run is a new in-flight entry that only
+      // a re-snapshot of inFlight after A's publish can await.
+      registry.declareShell("A", "sleep 0.5; echo a", { parse: TEXT, cache: { kind: "never" } });
+      registry.declareShell("B", `echo x >> ${spawns}; wc -l < ${spawns} | tr -d ' '`, {
+        parse: TEXT,
+        cache: { kind: "depends_on", varNames: ["A"] },
+      });
+      expect(await registry.settled(3000)).toEqual([]);
+      expect(store.read("A")).toBe("a");
+      expect(store.read("B")).toBe("2");
+      registry.dispose();
+    } finally {
+      cleanup();
+    }
+  });
+
+  it("dispose() aborts an in-flight shell run: the child tree dies with the registry and nothing is published", async () => {
+    const stamp = `${process.pid}${Date.now()}`;
+    const marker = `ccb-registry-abort-${stamp}`;
+    const nap = `sleep 5.${stamp}`;
+    const alive = (pattern: string) => spawnSync("pgrep", ["-f", pattern]).status === 0;
+    const { store, registry } = make();
+    registry.declareShell("s", `${nap}; echo ${marker}`, {
+      parse: text("pending"),
+      cache: { kind: "never" },
+    });
+    expect(alive(marker)).toBe(true);
+    registry.dispose();
+    // The run completes (the child is reaped) — the launcher resolves only
+    // on the actual exit, so an empty settled() is the proof of death.
+    expect(await registry.settled(3000)).toEqual([]);
+    expect(alive(marker)).toBe(false);
+    expect(alive(nap)).toBe(false);
+    expect(store.read("s")).toBe("pending");
+    expect(registry.getLastError("s")).toBeUndefined();
   });
 });

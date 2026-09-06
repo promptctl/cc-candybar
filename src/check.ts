@@ -12,7 +12,9 @@
 // buildState, then the per-request render in server.ts) — resolveDslConfig →
 // detectConfigCollisions → loadConfig → validateConfig → registerDslConfig →
 // deriveActionValidators → renderDsl. "check passes" and "the daemon renders"
-// cannot diverge, because they are one code path.
+// cannot diverge, because they are one code path — check additionally waits a
+// bounded settle for shell/file sources' first run, which the daemon's first
+// cold render does not (its next render shows what check showed).
 
 import fs from "node:fs";
 import path from "node:path";
@@ -45,6 +47,11 @@ import {
 // evaluate in full before any width-driven wrap/pagination, so width shapes
 // layout, never diagnostics.
 const CHECK_WIDTH = 200;
+
+// How long the verdict waits for a shell/file source's first run before
+// rendering with whatever it holds (and naming the stragglers as a warning).
+// Generous against a slow `uptime`, short against a hung command.
+const SOURCE_SETTLE_MS = 5000;
 
 // One faked Claude Code hook event, shaped like the daemon's augmented payload
 // (see src/daemon/render-payload.ts) — the `input` vars read out of it by their
@@ -195,10 +202,10 @@ function searchedFile(cwd: string, warnings: string[]): string | null {
 // default, watch for the file to appear — is liveness for a long-running
 // renderer; a verdict command must not report "clean" about a file it never
 // read.)
-export function checkConfig(
+export async function checkConfig(
   target: string | undefined,
   cwd: string = process.cwd(),
-): CheckOutcome {
+): Promise<CheckOutcome> {
   // Advisories accumulate from the search onward, independent of load
   // success — mirror of RenderCache.reloadInto.
   const warnings: string[] = [];
@@ -244,7 +251,7 @@ export function checkConfig(
   if (collision !== null) warnings.push(collision);
 
   try {
-    const rendered = loadRegisterRender(configPath, cwd, warnings);
+    const rendered = await loadRegisterRender(configPath, cwd, warnings);
     return { kind: "clean", configPath, warnings, rendered };
   } catch (e) {
     // A filesystem error on the config file itself (ENOENT/EACCES from
@@ -284,11 +291,11 @@ export function checkConfig(
 // rendered line; appends the register pass's advisory `loadWarnings` (partial
 // declaration failures) to `warnings` — the same channel RenderCache merges
 // them into.
-function loadRegisterRender(
+async function loadRegisterRender(
   configPath: string | null,
   cwd: string,
   warnings: string[],
-): string {
+): Promise<string> {
   const { config: merged, source } = loadConfig(configPath, DEFAULT_DSL_CONFIG);
   const config = validateConfig(merged, configPath ?? "<default>", source);
 
@@ -304,6 +311,18 @@ function loadRegisterRender(
     // Registered before the validator pass so a derive throw (a key-kind
     // clash) still carries the partial-load warnings into the fatal outcome.
     warnings.push(...compiled.loadWarnings);
+    // [LAW:no-ambient-temporal-coupling] A shell/file source's first run is
+    // async; the verdict renders what the sources YIELDED, not their pre-scan
+    // fallbacks (a json document with no default is an error cell until it is
+    // scanned — exactly what an author must see). The registry owns the
+    // "every run complete" state; a source still out at the deadline is named
+    // and the render proceeds on what it holds.
+    const pending = await registry.settled(SOURCE_SETTLE_MS);
+    if (pending.length > 0) {
+      warnings.push(
+        `source${pending.length === 1 ? "" : "s"} still running after ${SOURCE_SETTLE_MS} ms, rendered with fallback values: ${pending.join(", ")}`,
+      );
+    }
     // Derivation only (the throw-on-clash coherence pass over the action
     // table); the daemon additionally registers the results in its global
     // validator registry, which a one-shot check has no wire to serve.
@@ -486,14 +505,16 @@ export function checkPlan(o: CheckOutcome): CliPlan {
 // cause is an unquoted or mis-expanded shell variable). An empty string is not
 // "no argument": `checkConfig(undefined)` means "resolve like the daemon",
 // while `""` is a malformed target that would otherwise EISDIR on the cwd.
-export function runCheck(args: readonly string[]): never {
+export async function runCheck(args: readonly string[]): Promise<never> {
   if (args.length > 1 || args[0] === "") {
     process.stderr.write(
       "check: expected at most one non-empty path\nUsage: cc-candybar check [config-file]\n",
     );
     process.exit(EXIT_USAGE);
   }
-  const plan = checkPlan(checkConfig(args[0] ?? detectConfigEnv(process.env)));
+  const plan = checkPlan(
+    await checkConfig(args[0] ?? detectConfigEnv(process.env)),
+  );
   process.stdout.write(plan.stdout);
   process.stderr.write(plan.stderr);
   process.exit(plan.code);
