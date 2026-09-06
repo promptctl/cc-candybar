@@ -119,6 +119,16 @@ export function __resetRateLimitsForTest(): void {
   lastStartAt.clear();
 }
 
+// [LAW:one-source-of-truth] The environment a child inherits is THIS module's
+// `process.env`, resolved here for every spawn site. Passing `undefined` lets
+// node read the host process's environment directly, which is a second clock:
+// under a realm boundary (Jest's sandbox copies `process.env` per test file)
+// the two diverge, and a PATH the test set for a `shell` source never reached
+// the shell it spawned (brandon-custom-segments-g5z.3's doc stubs ran as 127).
+function childEnv(opts: LaunchOpts): NodeJS.ProcessEnv {
+  return opts.env ?? process.env;
+}
+
 export interface LaunchOpts {
   bin: string;
   args?: string[];
@@ -242,7 +252,7 @@ export async function launch(opts: AsyncLaunchOpts): Promise<LaunchResult> {
     try {
       child = spawn(opts.bin, opts.args ?? [], {
         cwd: opts.cwd,
-        env: opts.env,
+        env: childEnv(opts),
         stdio: ["pipe", "pipe", "pipe"],
         detached: true,
       });
@@ -412,7 +422,7 @@ export function launchSync(opts: LaunchOpts): LaunchResult {
   try {
     const result = spawnSync(opts.bin, opts.args ?? [], {
       cwd: opts.cwd,
-      env: opts.env,
+      env: childEnv(opts),
       input: opts.stdinInput,
       timeout:
         opts.timeoutMs && opts.timeoutMs > 0 ? opts.timeoutMs : undefined,
@@ -507,7 +517,7 @@ function launchDetachedSyncInner(opts: LaunchOpts): LaunchResult {
   try {
     child = spawn(opts.bin, opts.args ?? [], {
       cwd: opts.cwd,
-      env: opts.env,
+      env: childEnv(opts),
       detached: true,
       stdio: "ignore",
     });
