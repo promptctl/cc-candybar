@@ -40,7 +40,7 @@ import { testVerbContext, clickUrl } from "./helpers/click";
 import { effectsUrl, VERB_SET_STATE } from "../src/click/wire";
 import { presetNames } from "../src/config/presets";
 import { EDIT_MODE_KEY, EDIT_MODE_OPEN } from "../src/config/loader/edit-mode";
-import { narrowToSegment, oneSegmentRoot } from "./helpers/narrow-to-segment";
+import { narrowToSegment } from "./helpers/narrow-to-segment";
 import { checkPayload } from "../src/check";
 import {
   resolveEffectiveGlobals,
