@@ -120,6 +120,38 @@ describe("launch (async)", () => {
     expect(alive(nap)).toBe(false);
   });
 
+  it("with both triggers armed, the timeout that fired first owns the cause; an abort during escalation is inert", async () => {
+    // The child ignores SIGTERM, so the timeout's termination is still in
+    // its SIGKILL grace window when the abort lands (100 ms timeout, abort at
+    // 150 ms, grace 250 ms). One termination per child: the reason stays
+    // "timeout" and the escalation still reaps the child.
+    const controller = new AbortController();
+    setTimeout(() => controller.abort(), 150);
+    const r = await launch({
+      bin: process.execPath,
+      args: ["-e", "process.on('SIGTERM', () => {}); setInterval(() => {}, 1000);"],
+      timeoutMs: 100,
+      category: "user-shell",
+      signal: controller.signal,
+    });
+    expect(r).toMatchObject({ ok: false, reason: "timeout", signal: "SIGKILL" });
+  });
+
+  it("with both triggers armed, an abort under a longer timeout owns the cause and disarms the timer", async () => {
+    const controller = new AbortController();
+    setTimeout(() => controller.abort(), 20);
+    const t0 = Date.now();
+    const r = await launch({
+      bin: "/bin/sh",
+      args: ["-c", "sleep 5"],
+      timeoutMs: 5000,
+      category: "user-shell",
+      signal: controller.signal,
+    });
+    expect(r).toMatchObject({ ok: false, reason: "aborted", signal: "SIGTERM" });
+    expect(Date.now() - t0).toBeLessThan(2000);
+  });
+
   it("a group the launcher cannot signal settles as signal-refused — nothing rejects or escapes a timer", async () => {
     // process.kill refuses the group (EPERM: a child that changed its real
     // uid). The child ends on its own soon after, so nothing is orphaned.

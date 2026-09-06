@@ -127,6 +127,12 @@ export interface LaunchOpts {
   timeoutMs?: number;
   stdinInput?: string | Buffer;
   category: LaunchCategory;
+}
+
+// [LAW:types-are-the-program] Cancellation exists only where a frame is
+// alive to observe it: `launch`. A sync launcher cannot read a signal while
+// it blocks, so the option is unrepresentable there rather than ignored.
+export interface AsyncLaunchOpts extends LaunchOpts {
   // The caller's cancellation: aborting it terminates the child (and its
   // group); the result is `reason: "aborted"` once the child is reaped.
   signal?: AbortSignal;
@@ -208,7 +214,7 @@ function signalGroup(pid: number, sig: NodeJS.Signals): void {
   }
 }
 
-export async function launch(opts: LaunchOpts): Promise<LaunchResult> {
+export async function launch(opts: AsyncLaunchOpts): Promise<LaunchResult> {
   if (opts.signal?.aborted) {
     return {
       ok: false,

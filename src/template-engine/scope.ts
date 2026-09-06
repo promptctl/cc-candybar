@@ -46,10 +46,9 @@ function makeProxy(
       // Leaf: exact variable in the store. A document leaf hands the engine
       // the document itself — its fields are the rest of the chain.
       if (names.has(fullKey)) {
-        const node = store.getNode(fullKey);
-        return node.kind === "document"
-          ? unwrapDocument(fullKey, node.read())
-          : node.read();
+        return store.getKind(fullKey) === "document"
+          ? unwrapDocument(fullKey, store.readDocument(fullKey))
+          : store.read(fullKey);
       }
 
       // Interior: a namespace prefix for at least one stored variable.

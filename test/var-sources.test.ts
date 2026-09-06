@@ -388,6 +388,19 @@ describe("SourceRegistry — shell: basic", () => {
     registry.dispose();
   });
 
+  it("folds CRLF and bare CR line breaks to spaces in text and regex output", async () => {
+    const { store, registry } = make();
+    registry.declareShell("crlf", 'printf "a\\r\\nb\\rc\\r\\n"', { parse: TEXT, cache: { kind: "never" } });
+    registry.declareShell("gap", 'printf "a\\r\\nb"', {
+      parse: regex("a(\\s*)b"),
+      cache: { kind: "never" },
+    });
+    await settle();
+    expect(store.read("crlf")).toBe("a b c");
+    expect(store.read("gap")).toBe(" ");
+    registry.dispose();
+  });
+
   it("extracts regex group-1 from stdout", async () => {
     const { store, registry } = make();
     registry.declareShell("val", 'echo "load: 0.52 0.48 0.45"', {

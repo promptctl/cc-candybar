@@ -1,6 +1,6 @@
 // [LAW:types-are-the-program] The parse step of a user source (shell / file)
 // as a VALUE: what turns the text a reader yields into the value the store
-// publishes. `text` is the identity (newlines folded to spaces, trimmed),
+// publishes. `text` is the identity (line breaks folded to spaces, trimmed),
 // `regex` slices one capture group out of the text, `json` parses the whole
 // text as a document — shaped by the store as it is written — whose fields
 // templates read by dotted path (`.budget.spent`) — the way an `input` var's
@@ -31,8 +31,13 @@ export type SourceParse =
 // came from [LAW:effects-at-boundaries].
 export type Parser<V> = (text: string) => Outcome<V>;
 
+// [LAW:one-source-of-truth] The one fold every string arm applies: CRLF,
+// bare CR, and LF are each a line break, and a stray `\r` in a published
+// value would move the terminal's cursor.
+const LINE_BREAK = /\r\n|\r|\n/g;
+
 export const textParser: Parser<string> = (text) =>
-  ok(text.replace(/\n/g, " ").trim());
+  ok(text.replace(LINE_BREAK, " ").trim());
 
 // Capture group 1. A regex that matches with an EMPTY group 1 is a match
 // (the author asked for that group; it is empty) — only no match at all,
@@ -43,7 +48,7 @@ export function regexParser(regex: RegExp): Parser<string> {
     const group = m?.[1];
     return group === undefined
       ? failed("regex no-match")
-      : ok(group.replace(/\n/g, " "));
+      : ok(group.replace(LINE_BREAK, " "));
   };
 }
 
