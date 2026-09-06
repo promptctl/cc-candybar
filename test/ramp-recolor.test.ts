@@ -132,7 +132,7 @@ function buildRuntime() {
 
 // The bg SGR that paints a cell's text — the `48;2;r;g;b` run before it.
 function bgOf(rendered: string, text: string): string {
-  const m = rendered.match(new RegExp(`48;2;(\\d+;\\d+;\\d+)[^]*?${text}`));
+  const m = rendered.match(new RegExp(`48;2;(\\d+;\\d+;\\d+)[^\\x1b]*?${text}`));
   expect(m).not.toBeNull();
   return m![1]!;
 }

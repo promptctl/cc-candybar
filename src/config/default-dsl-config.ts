@@ -42,11 +42,9 @@ import { mergeWithDefault } from "./loader/merge.js";
 
 // ─── Shared template fragments ───────────────────────────────────────────────
 //
-// Factored out of the segments' `template` fields so:
-//   (1) the git working-tree counts and status icon can be shared by the two
-//       git-style segments (git, gitaculous) without duplication, and
-//   (2) the block/weekly threshold cascade can be parameterized on the
-//       variable name without resorting to runtime string surgery.
+// Factored out of the segments' `template` fields so the git working-tree
+// counts and status icon are shared by the two git-style segments (git,
+// gitaculous) without duplication.
 
 // Directory: ~ collapse under $HOME, project-relative under workspace.project_dir,
 // else raw. Inline-recomputes the project-relative path because the DSL has no

@@ -16,7 +16,7 @@ import {
 } from "./active-segment.js";
 
 /**
- * Bind `color` and `bgOf` to the segment the walk has published.
+ * Bind `color`, `ramp` and `bgOf` to the segment the walk has published.
  *
  * **Why `color` reads a live palette.** A segment's rendered palette is not a
  * property of the loaded config — it is the base theme (session choice over
