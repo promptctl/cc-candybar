@@ -19,7 +19,10 @@ import type {
   VariableDecl,
   CacheDecl,
   LayoutNode,
+  ParseDecl,
+  SourceDefault,
 } from "../config/dsl-types.js";
+import { parseArm } from "../config/dsl-types.js";
 import { perConfigDomainsFor } from "../config/option-domain.js";
 import { PRESET_FLOOR, presetNames, presetRoot } from "../config/presets.js";
 import { addableSegmentDomains } from "../config/edit-chrome.js";
@@ -30,6 +33,8 @@ import {
   type CachePolicy,
   type GitField,
 } from "../var-system/sources.js";
+import type { SourceParse } from "../var-system/parse.js";
+import type { JsonValue } from "../var-system/types.js";
 import type { BuildLineOptions } from "../render/strip.js";
 import { DEFAULT_PADDING, renderStripCells } from "../render/strip.js";
 import { paletteForThemeName, transposedPalette } from "../themes/index.js";
@@ -139,6 +144,31 @@ function toCachePolicy(cache: CacheDecl): CachePolicy {
   );
 }
 
+// [LAW:one-source-of-truth] The authored parse step lowered onto the runtime
+// seam — the ONE place "no `parse:`" is read as the text arm. The regex
+// compiles here from the source string the loader proved compiles (and has
+// its capture group). `default` crosses in the arm's own domain: the loader's
+// sourceDefaultSpec is the enforcer of that pairing, so each arm's cast
+// restates its stamp rather than re-checking it [LAW:parse-dont-validate];
+// the store shapes a json default as it shapes a scan (toDocument).
+function toSourceParse(
+  parse: ParseDecl | undefined,
+  dflt: SourceDefault | undefined,
+): SourceParse {
+  switch (parseArm(parse)) {
+    case "json":
+      return { kind: "json", default: dflt as JsonValue | undefined };
+    case "regex":
+      return {
+        kind: "regex",
+        regex: new RegExp((parse as { regex: string }).regex),
+        default: dflt as string | undefined,
+      };
+    case "text":
+      return { kind: "text", default: dflt as string | undefined };
+  }
+}
+
 // ─── Single variable declaration ──────────────────────────────────────────────
 
 // [LAW:single-enforcer] One function dispatches every VariableDecl kind to its
@@ -175,17 +205,15 @@ function declareOne(
     case "file":
       registry.declareFile(name, decl.path, {
         readMode: decl.readMode,
-        regex: decl.regex,
         cache: toCachePolicy(decl.cache),
-        varDefault: decl.default,
+        parse: toSourceParse(decl.parse, decl.default),
       });
       break;
 
     case "shell":
       registry.declareShell(name, decl.command, {
-        regex: decl.regex,
         cache: toCachePolicy(decl.cache),
-        varDefault: decl.default,
+        parse: toSourceParse(decl.parse, decl.default),
       });
       break;
 

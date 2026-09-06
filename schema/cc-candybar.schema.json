@@ -158,8 +158,45 @@
                   "first-line"
                 ]
               },
-              "regex": {
-                "type": "string"
+              "parse": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "text": {
+                        "const": true
+                      }
+                    },
+                    "required": [
+                      "text"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "regex": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "regex"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "json": {
+                        "const": true
+                      }
+                    },
+                    "required": [
+                      "json"
+                    ],
+                    "additionalProperties": false
+                  }
+                ]
               },
               "cache": {
                 "anyOf": [
@@ -229,7 +266,14 @@
                 ]
               },
               "default": {
-                "type": "string"
+                "type": [
+                  "string",
+                  "number",
+                  "boolean",
+                  "array",
+                  "object"
+                ],
+                "description": "The value published when the source fails: a string under the text/regex parse arms, any non-null JSON value under the json arm"
               }
             },
             "required": [
@@ -248,8 +292,45 @@
               "command": {
                 "type": "string"
               },
-              "regex": {
-                "type": "string"
+              "parse": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "text": {
+                        "const": true
+                      }
+                    },
+                    "required": [
+                      "text"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "regex": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "regex"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "json": {
+                        "const": true
+                      }
+                    },
+                    "required": [
+                      "json"
+                    ],
+                    "additionalProperties": false
+                  }
+                ]
               },
               "cache": {
                 "anyOf": [
@@ -319,7 +400,14 @@
                 ]
               },
               "default": {
-                "type": "string"
+                "type": [
+                  "string",
+                  "number",
+                  "boolean",
+                  "array",
+                  "object"
+                ],
+                "description": "The value published when the source fails: a string under the text/regex parse arms, any non-null JSON value under the json arm"
               }
             },
             "required": [
@@ -702,8 +790,45 @@
                         "first-line"
                       ]
                     },
-                    "regex": {
-                      "type": "string"
+                    "parse": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "text": {
+                              "const": true
+                            }
+                          },
+                          "required": [
+                            "text"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "regex": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "regex"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "json": {
+                              "const": true
+                            }
+                          },
+                          "required": [
+                            "json"
+                          ],
+                          "additionalProperties": false
+                        }
+                      ]
                     },
                     "cache": {
                       "anyOf": [
@@ -773,7 +898,14 @@
                       ]
                     },
                     "default": {
-                      "type": "string"
+                      "type": [
+                        "string",
+                        "number",
+                        "boolean",
+                        "array",
+                        "object"
+                      ],
+                      "description": "The value published when the source fails: a string under the text/regex parse arms, any non-null JSON value under the json arm"
                     }
                   },
                   "required": [
@@ -792,8 +924,45 @@
                     "command": {
                       "type": "string"
                     },
-                    "regex": {
-                      "type": "string"
+                    "parse": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "text": {
+                              "const": true
+                            }
+                          },
+                          "required": [
+                            "text"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "regex": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "regex"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "json": {
+                              "const": true
+                            }
+                          },
+                          "required": [
+                            "json"
+                          ],
+                          "additionalProperties": false
+                        }
+                      ]
                     },
                     "cache": {
                       "anyOf": [
@@ -863,7 +1032,14 @@
                       ]
                     },
                     "default": {
-                      "type": "string"
+                      "type": [
+                        "string",
+                        "number",
+                        "boolean",
+                        "array",
+                        "object"
+                      ],
+                      "description": "The value published when the source fails: a string under the text/regex parse arms, any non-null JSON value under the json arm"
                     }
                   },
                   "required": [

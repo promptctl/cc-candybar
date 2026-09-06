@@ -9,6 +9,8 @@
 import {
   GIT_FIELDS,
   type GitField,
+  type ParseDecl,
+  type SourceDefault,
   type EnvVarDecl,
   type FileVarDecl,
   type InputVarDecl,
@@ -20,14 +22,20 @@ import {
   type TimeVarDecl,
   type VariableDecl,
 } from "../dsl-types.js";
+import type { JsonValue } from "../../var-system/types.js";
 import { findKeyLine } from "./diagnostics.js";
 import {
   describeType,
+  describeValue,
   fields,
   isPlainObject,
   objectJson,
+  oneOfPresent,
+  oneOfPresentJson,
+  optionalStringField,
   optionalStringSpec,
   optionalTypedDefault,
+  reject,
   requireStringSpec,
   optionalEnumSpec,
   taggedUnion,
@@ -36,6 +44,7 @@ import {
   type FieldSpec,
   type FieldSpecMap,
   type JsonNode,
+  type OneOfPresentSchema,
   type TaggedArm,
   type TaggedUnionSchema,
   type ValidateCtx,
@@ -145,6 +154,175 @@ function inputDefaultSpec(): FieldSpec<string | number | boolean> {
   };
 }
 
+// [LAW:types-are-the-program] The parse-step schema as DATA, through the same
+// tag-by-present-key engine `cache:` runs through: text/json are flags whose
+// value is the literal true (like cache.never); regex is a pattern string. The
+// pattern is proven here — it compiles, and it has the capture group the
+// runtime reads (group 1 IS the value, so a groupless pattern could only ever
+// "not match") — while the decl keeps the SOURCE string: DslConfig is
+// serializable data, and declareOne (src/dsl/render.ts) compiles the RegExp the
+// runtime runs. Past this point a pattern is one `new RegExp` cannot throw on.
+const PARSE_SCHEMA: OneOfPresentSchema<ParseDecl> = {
+  noun: "parse",
+  arms: {
+    text: {
+      json: { const: true },
+      parse: (ctx, path, value) =>
+        value === true
+          ? { text: true }
+          : reject(
+              ctx,
+              path,
+              `parse.text must be the literal boolean true, got ${describeValue(value)}`,
+            ),
+    },
+    regex: {
+      json: { type: "string" },
+      parse: (ctx, path, value) =>
+        typeof value === "string"
+          ? capturingPattern(ctx, path, value)
+          : reject(
+              ctx,
+              path,
+              `parse.regex must be a pattern string, got ${describeValue(value)}`,
+            ),
+    },
+    json: {
+      json: { const: true },
+      parse: (ctx, path, value) =>
+        value === true
+          ? { json: true }
+          : reject(
+              ctx,
+              path,
+              `parse.json must be the literal boolean true, got ${describeValue(value)}`,
+            ),
+    },
+  },
+};
+
+function capturingPattern(
+  ctx: ValidateCtx,
+  path: string,
+  pattern: string,
+): { regex: string } | null {
+  let groups: number;
+  try {
+    // The compile proof is the pattern ALONE (`(a)\\` does not compile, but
+    // `(a)\\|` does — the backslash would escape the alternation). Then the
+    // standard group count: a compiling pattern alternated with the empty
+    // pattern always matches, and every group is a (non-participating) slot.
+    new RegExp(pattern);
+    groups = new RegExp(`${pattern}|`).exec("")!.length - 1;
+  } catch (e) {
+    return reject(
+      ctx,
+      path,
+      `parse.regex is not a valid regular expression: ${(e as Error).message}`,
+    );
+  }
+  return groups >= 1
+    ? { regex: pattern }
+    : reject(
+        ctx,
+        path,
+        `parse.regex must contain a capture group — its group 1 is the value; got ${JSON.stringify(pattern)}`,
+      );
+}
+
+// [LAW:one-source-of-truth] The `parse` field: absent means the text arm, and
+// that default is spelled ONCE, in declareOne's lowering — the decl records
+// what the author wrote. The retired top-level `regex:` is reported HERE
+// because a variable arm's field map ignores keys it does not declare: an old
+// config would otherwise load with its regex silently dropped
+// [LAW:no-silent-failure].
+function parseSpec(): FieldSpec<ParseDecl> {
+  return {
+    required: false,
+    json: oneOfPresentJson(PARSE_SCHEMA),
+    parse: (ctx, path, _field, raw) => {
+      if (raw.regex !== undefined) {
+        ctx.issues.push({
+          path: `${path}.regex`,
+          message: `${path}.regex was retired; the regex is the parse step's regex arm now: parse: { regex: ${JSON.stringify(raw.regex)} }`,
+          line: findKeyLine(ctx.source, [...path.split("."), "regex"]),
+        });
+      }
+      return raw.parse === undefined
+        ? undefined
+        : (oneOfPresent(ctx, PARSE_SCHEMA, `${path}.parse`, raw.parse) ??
+            undefined);
+    },
+  };
+}
+
+// [LAW:types-are-the-program] A source's `default` lives in its parser's
+// OUTPUT domain — a string for the text/regex arms, any JSON value for the
+// json arm — so this spec reads its sibling `raw.parse` to pick the domain,
+// the way inputDefaultSpec reads `raw.type`. This is THE enforcer of the
+// arm↔default pairing: FileVarDecl/ShellVarDecl type `default` as the union
+// of both domains and declareOne's lowering trusts the stamp. The sibling's
+// own errors are parseSpec's to report: the json domain is the json key
+// PRESENT on the raw `parse:` — the tag of that present-key union — never a
+// fallthrough over keys it does not recognise.
+function sourceDefaultSpec(): FieldSpec<SourceDefault> {
+  return {
+    required: false,
+    json: {
+      type: ["string", "number", "boolean", "array", "object"],
+      description:
+        "The value published when the source fails: a string under the text/regex parse arms, any non-null JSON value under the json arm",
+    },
+    parse: (ctx, path, _field, raw) =>
+      isPlainObject(raw.parse) && "json" in raw.parse
+        ? jsonDefault(ctx, path, raw.default)
+        : optionalStringField(ctx, path, raw, "default"),
+  };
+}
+
+function jsonDefault(
+  ctx: ValidateCtx,
+  path: string,
+  value: unknown,
+): SourceDefault | undefined {
+  if (value === undefined) return undefined;
+  return isSourceDefault(value)
+    ? value
+    : (reject<SourceDefault>(
+        ctx,
+        `${path}.default`,
+        `${path}.default must be a JSON value (a json-parsed source's document), got ${describeValue(value)}`,
+      ) ?? undefined);
+}
+
+// [LAW:parse-dont-validate] The stamp for the json arm's default: a config
+// file's values are JSON-shaped by construction (JSON5 admits Infinity/NaN,
+// which JSON does not), a programmatic config's are whatever TS let through.
+function isSourceDefault(value: unknown): value is SourceDefault {
+  return value !== null && isJsonValue(value);
+}
+
+function isJsonValue(value: unknown): value is JsonValue {
+  if (value === null) return true;
+  switch (typeof value) {
+    case "string":
+    case "boolean":
+      return true;
+    case "number":
+      return Number.isFinite(value);
+    case "object": {
+      if (Array.isArray(value)) return value.every(isJsonValue);
+      const proto: unknown = Object.getPrototypeOf(value);
+      return (
+        (proto === Object.prototype || proto === null) &&
+        Object.values(value as Record<string, unknown>).every(isJsonValue)
+      );
+    }
+    default:
+      return false;
+  }
+}
+
 // [LAW:dataflow-not-control-flow] Each arm's field set is DATA over the member's
 // non-`kind` fields; the engine supplies the discriminator. `fields` runs every
 // spec (reporting all issues) and fails the arm when a required field is absent
@@ -165,15 +343,15 @@ const ENV_FIELDS: FieldSpecMap<Omit<EnvVarDecl, "kind">> = {
 const FILE_FIELDS: FieldSpecMap<Omit<FileVarDecl, "kind">> = {
   path: requireStringSpec(),
   readMode: optionalEnumSpec(["whole", "first-line"] as const),
-  regex: optionalStringSpec(),
+  parse: parseSpec(),
   cache: requireCacheSpec("file"),
-  default: optionalStringSpec(),
+  default: sourceDefaultSpec(),
 };
 const SHELL_FIELDS: FieldSpecMap<Omit<ShellVarDecl, "kind">> = {
   command: requireStringSpec(),
-  regex: optionalStringSpec(),
+  parse: parseSpec(),
   cache: requireCacheSpec("shell"),
-  default: optionalStringSpec(),
+  default: sourceDefaultSpec(),
 };
 const TEMPLATE_FIELDS: FieldSpecMap<Omit<TemplateVarDecl, "kind">> = {
   template: requireStringSpec(),

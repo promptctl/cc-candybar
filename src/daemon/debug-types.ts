@@ -48,7 +48,10 @@ export interface VarSnapshot {
   // present for completeness so a programmatic-only var still shows up in
   // introspection rather than being silently invisible.
   readonly source: SourceKind | null;
-  readonly type: VarType;
+  // A scalar's declared type, or "document" for a `parse: { json }` source
+  // (its `value` is then the document's JSON text, or the state a template
+  // read would surface: not yet scanned / the scan's failure reason).
+  readonly type: VarType | "document";
   // Current store value. For Computed nodes this triggers re-evaluation if
   // MobX has invalidated the cache; for Box nodes it is the last value set.
   readonly value: VarValue;

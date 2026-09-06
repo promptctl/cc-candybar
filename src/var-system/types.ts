@@ -6,6 +6,50 @@
 export type VarType = "string" | "number" | "boolean";
 export type VarValue = string | number | boolean;
 
+// [LAW:types-are-the-program] A document: the value of a `parse: { json }`
+// source. Deliberately NOT a VarValue — a document is a NAMESPACE, not a
+// scalar: templates read its leaves by dotted path (`.budget.spent`), the way
+// an `input` var's payload subtree is read, and the store holds it in its own
+// node kind (VariableStore.defineDocument) beside the scalar boxes. The leaves
+// are JSON's scalars; a `null` leaf prints as Go's `<no value>` and a field OF
+// it is a missing field. Objects carry null prototypes with sorted keys (see
+// toDocument).
+export type JsonValue =
+  | string
+  | number
+  | boolean
+  | null
+  | readonly JsonValue[]
+  | { readonly [key: string]: JsonValue };
+
+// [LAW:single-enforcer] The shape every document in the store has, applied
+// where a document is written (VariableStore.defineDocument / setDocument) to
+// a scan's JSON.parse output and an authored default alike: objects rebuilt
+// on null prototypes — the template engine walks fields with `in`, so a plain
+// object would expose `constructor` / `toString` as readable fields of a
+// user's document — with keys SORTED, so JSON.stringify of any document is
+// canonical and a structural change measure needs no second canonicaliser.
+// JSON.parse never yields anything but JSON shapes, so this is a re-shape,
+// not a check; the primitive arm's cast is that fact. Every level is frozen:
+// sprig's `set`/`merge` assign into their argument, and the store's document
+// is a scan's result, not a template's scratch space — an in-place edit
+// throws instead of rewriting what every other reader sees.
+export function toDocument(value: unknown): JsonValue {
+  if (Array.isArray(value)) return Object.freeze(value.map(toDocument));
+  if (value !== null && typeof value === "object") {
+    const out: Record<string, JsonValue> = Object.create(null) as Record<
+      string,
+      JsonValue
+    >;
+    const entries = Object.entries(value as Record<string, unknown>).sort(
+      ([a], [b]) => (a < b ? -1 : a > b ? 1 : 0),
+    );
+    for (const [key, v] of entries) out[key] = toDocument(v);
+    return Object.freeze(out);
+  }
+  return value as JsonValue;
+}
+
 export function typeOf(v: VarValue): VarType {
   const t = typeof v;
   if (t === "string" || t === "number" || t === "boolean") return t;

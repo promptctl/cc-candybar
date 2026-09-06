@@ -77,11 +77,12 @@ function formatVars(vars: readonly VarSnapshot[]): string {
   const lines: string[] = [`variables (${vars.length})`, ``];
   const nameW = vars.reduce((w, v) => Math.max(w, v.name.length), 4);
   const srcW = vars.reduce((w, v) => Math.max(w, (v.source ?? "—").length), 6);
+  const typeW = vars.reduce((w, v) => Math.max(w, v.type.length), 4);
   for (const v of vars) {
     const age = v.ageMs === null ? "" : `  ${fmtAge(v.ageMs)}`;
     const err = v.lastError ? `  ✗ ${v.lastError.message}` : "";
     lines.push(
-      `  ${v.name.padEnd(nameW)}  ${(v.source ?? "—").padEnd(srcW)}  ${v.type.padEnd(7)}  ${fmtValue(v.value)}${age}${err}`,
+      `  ${v.name.padEnd(nameW)}  ${(v.source ?? "—").padEnd(srcW)}  ${v.type.padEnd(typeW)}  ${fmtValue(v.value)}${age}${err}`,
     );
   }
   return lines.join("\n") + "\n";
