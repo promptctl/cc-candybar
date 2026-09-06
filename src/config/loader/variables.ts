@@ -208,8 +208,11 @@ function capturingPattern(
 ): { regex: string } | null {
   let groups: number;
   try {
-    // The standard group count: alternate with the empty pattern so exec
-    // always matches, then every group is a (non-participating) slot.
+    // The compile proof is the pattern ALONE (`(a)\\` does not compile, but
+    // `(a)\\|` does — the backslash would escape the alternation). Then the
+    // standard group count: a compiling pattern alternated with the empty
+    // pattern always matches, and every group is a (non-participating) slot.
+    new RegExp(pattern);
     groups = new RegExp(`${pattern}|`).exec("")!.length - 1;
   } catch (e) {
     return reject(
@@ -265,8 +268,9 @@ function sourceDefaultSpec(): FieldSpec<SourceDefault> {
   return {
     required: false,
     json: {
+      type: ["string", "number", "boolean", "array", "object"],
       description:
-        "The value published when the source fails: a string under the text/regex parse arms, any JSON value under the json arm",
+        "The value published when the source fails: a string under the text/regex parse arms, any non-null JSON value under the json arm",
     },
     parse: (ctx, path, _field, raw) =>
       isPlainObject(raw.parse) && raw.parse.json === true

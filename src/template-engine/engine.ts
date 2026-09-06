@@ -68,6 +68,10 @@ export function createCcCandybarEngine(
   return createEngine<RichText>({
     fromString: (s) => new RichText(s),
     toString: (rt) => rt.plain,
+    // A bare document in a template (`{{ .doc }}` for `{{ .doc.field }}`)
+    // prints as Go prints a map, instead of leaking the object into the
+    // fragments as if it were text.
+    isT: (v): v is RichText => v instanceof RichText,
     clock,
     // [LAW:no-defensive-null-guards] missing fields must throw at the boundary,
     // not silently produce "<no value>". Callers (SourceRegistry, segments)

@@ -13,6 +13,7 @@ import {
   type LayoutNode,
   type PresetDecl,
   type VariableDecl,
+  parseArm,
 } from "../dsl-types.js";
 import {
   actionBindsPersist,
@@ -697,9 +698,7 @@ function templateScopeOf(cfg: DslConfig): TemplateScope {
 
 function isDocumentDecl(v: VariableDecl): boolean {
   return (
-    (v.kind === "shell" || v.kind === "file") &&
-    v.parse !== undefined &&
-    "json" in v.parse
+    (v.kind === "shell" || v.kind === "file") && parseArm(v.parse) === "json"
   );
 }
 

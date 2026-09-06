@@ -14,7 +14,6 @@ import { readFile as fsReadFile } from "fs/promises";
 import { watch as fsWatch, type FSWatcher } from "fs";
 import { setInterval, clearInterval } from "timers";
 import { reaction, type IReactionDisposer } from "mobx";
-import type { RichText } from "@promptctl/rich-js";
 import {
   typeOf,
   toString,
@@ -205,7 +204,9 @@ function fileReader(filePath: string, readMode: ReadMode): SourceReader {
     read: async () => {
       try {
         const raw = await fsReadFile(filePath, "utf8");
-        return ok(readMode === "first-line" ? (raw.split("\n")[0] ?? "") : raw);
+        return ok(
+          readMode === "first-line" ? (raw.split(/\r?\n/)[0] ?? "") : raw,
+        );
       } catch {
         return failed(`file unreadable: ${filePath}`);
       }
@@ -826,7 +827,8 @@ export class SourceRegistry {
     this.store.defineComputed(name, "string", (_read) => {
       const scope = buildScope(this.store);
       try {
-        const result = (parsedTpl.evaluate(scope) as RichText[])
+        const result = parsedTpl
+          .evaluate(scope)
           .map((f) => f.plain)
           .join("");
         this.lastErrors.delete(name);
@@ -1059,7 +1061,8 @@ export class SourceRegistry {
         const disposer: IReactionDisposer = reaction(() => {
           const scope = buildScope(this.store);
           try {
-            return (parsedKey.evaluate(scope) as RichText[])
+            return parsedKey
+              .evaluate(scope)
               .map((f) => f.plain)
               .join("");
           } catch {

@@ -1761,6 +1761,32 @@ describe("SourceRegistry — parse seam", () => {
     }
   });
 
+  it("first-line ends at CR LF too: the regex parser never sees a trailing \\r", async () => {
+    const { dir, cleanup } = makeTmpDir();
+    try {
+      const f = path.join(dir, "crlf");
+      fs.writeFileSync(f, "v1.2\r\nv9.9\r\n");
+      const { store, registry } = make();
+      registry.declareFile("first", f, {
+        readMode: "first-line",
+        parse: regex("^v([0-9.]+)$"),
+        cache: { kind: "never" },
+      });
+      registry.declareFile("head", f, {
+        readMode: "first-line",
+        parse: json(),
+        cache: { kind: "never" },
+      });
+      await registry.settled(2000);
+      expect(store.read("first")).toBe("1.2");
+      expect(registry.getLastError("first")).toBeUndefined();
+      expect(registry.getLastError("head")?.message).toMatch(/^JSON parse failed/);
+      registry.dispose();
+    } finally {
+      cleanup();
+    }
+  });
+
   it("readMode first-line feeds the json parser one line", async () => {
     const { dir, cleanup } = makeTmpDir();
     try {

@@ -10,12 +10,12 @@ export {
   textParser,
   regexParser,
   jsonParser,
-  toDocument,
 } from "./parse";
 export {
   type VarType,
   type VarValue,
   type JsonValue,
+  toDocument,
   typeOf,
   toString,
   toNumber,

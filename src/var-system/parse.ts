@@ -2,8 +2,9 @@
 // as a VALUE: what turns the text a reader yields into the value the store
 // publishes. `text` is the identity (newlines folded to spaces, trimmed),
 // `regex` slices one capture group out of the text, `json` parses the whole
-// text as a document whose fields templates read by dotted path
-// (`.budget.spent`) — the way an `input` var's payload subtree is read.
+// text as a document — shaped by the store as it is written — whose fields
+// templates read by dotted path (`.budget.spent`) — the way an `input` var's
+// payload subtree is read.
 //
 // [LAW:dataflow-not-control-flow] A source runs read → parse → publish on
 // every refresh; the parser is data flowing through that ONE pipeline
@@ -46,31 +47,12 @@ export function regexParser(regex: RegExp): Parser<string> {
   };
 }
 
+// JSON.parse never yields anything but JSON shapes (the cast is that fact);
+// the store re-shapes what it is handed (types.ts toDocument).
 export const jsonParser: Parser<JsonValue> = (text) => {
   try {
-    return ok(toDocument(JSON.parse(text)));
+    return ok(JSON.parse(text) as JsonValue);
   } catch (e) {
     return failed(`JSON parse failed: ${(e as Error).message}`);
   }
 };
-
-// [LAW:parse-dont-validate] Rebuild JSON.parse's output (or an authored
-// default) on null prototypes: the template engine walks fields with `in`,
-// so a plain object would expose `constructor` / `toString` / `__proto__`
-// as readable fields of a user's document. JSON.parse never yields anything
-// but JSON shapes, so this is a re-shape, not a check; the primitive arm's
-// cast is that fact.
-export function toDocument(value: unknown): JsonValue {
-  if (Array.isArray(value)) return value.map(toDocument);
-  if (value !== null && typeof value === "object") {
-    const out: Record<string, JsonValue> = Object.create(null) as Record<
-      string,
-      JsonValue
-    >;
-    for (const [key, v] of Object.entries(value as Record<string, unknown>)) {
-      out[key] = toDocument(v);
-    }
-    return out;
-  }
-  return value as JsonValue;
-}

@@ -299,6 +299,36 @@ describe("VariableStore — documents", () => {
     expect(() => store.defineDocument("d", ABSENT)).toThrow(/already declared/);
   });
 
+  it("shapes every ok document on write: null prototypes and sorted keys at every level", () => {
+    const store = new VariableStore();
+    store.defineDocument("d", ok({ b: { z: 1, y: 2 }, a: [{ q: 1, p: 2 }] }));
+    const d = store.readDocument("d");
+    if (d.kind !== "ok") throw new Error("expected ok");
+    const root = d.value as Record<string, unknown>;
+    expect(Object.getPrototypeOf(root)).toBeNull();
+    expect(Object.keys(root)).toEqual(["a", "b"]);
+    expect(Object.getPrototypeOf(root.b)).toBeNull();
+    expect(Object.keys(root.b as object)).toEqual(["y", "z"]);
+    const item = (root.a as unknown[])[0] as object;
+    expect(Object.getPrototypeOf(item)).toBeNull();
+    expect(Object.keys(item)).toEqual(["p", "q"]);
+    store.setDocument("d", ok({ toString: "own" }));
+    const again = store.readDocument("d");
+    if (again.kind !== "ok") throw new Error("expected ok");
+    expect(Object.getPrototypeOf(again.value)).toBeNull();
+    expect(Object.keys(again.value as object)).toEqual(["toString"]);
+  });
+
+  it("changeKey is canonical: the same content in another key order is the same key", () => {
+    const store = new VariableStore();
+    store.defineDocument("d", ok({ a: 1, b: { c: "x", d: 2 } }));
+    const before = store.changeKey("d");
+    store.setDocument("d", ok({ b: { d: 2, c: "x" }, a: 1 }));
+    expect(store.changeKey("d")).toBe(before);
+    store.setDocument("d", ok({ b: { d: 2, c: "y" }, a: 1 }));
+    expect(store.changeKey("d")).not.toBe(before);
+  });
+
   it("changeKey is structural over documents and total over node kinds", () => {
     const store = new VariableStore();
     store.defineDocument("d", ok(doc()));

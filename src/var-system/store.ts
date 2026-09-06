@@ -16,7 +16,13 @@ import {
   type IObservableValue,
   type IComputedValue,
 } from "mobx";
-import { typeOf, type JsonValue, type VarType, type VarValue } from "./types";
+import {
+  toDocument,
+  typeOf,
+  type JsonValue,
+  type VarType,
+  type VarValue,
+} from "./types";
 import type { Outcome } from "../utils/outcome.js";
 
 export interface VarNode {
@@ -109,7 +115,10 @@ class ComputedNode implements VarNode {
 // place that unwraps it (the scope proxy, src/template-engine/scope.ts) and
 // surfaces there naming the variable. A scalar box has no such states: its
 // fallback is a string. Same observable-box mechanics as BoxNode (deep:false —
-// a scan replaces the whole document, dependents invalidate once).
+// a scan replaces the whole document, dependents invalidate once). Every ok
+// value is shaped by toDocument on the way IN — the one place the document
+// invariant (null prototypes, sorted keys) is enforced, for a scan's output
+// and an authored default alike [LAW:single-enforcer].
 export interface DocumentNode {
   readonly name: string;
   readonly kind: "document";
@@ -126,7 +135,7 @@ class DocumentCell implements DocumentNode {
     readonly name: string,
     initial: Outcome<JsonValue>,
   ) {
-    this.cell = observable.box(initial, { deep: false });
+    this.cell = observable.box(shaped(initial), { deep: false });
     this.lastSetAt = Date.now();
   }
 
@@ -135,13 +144,19 @@ class DocumentCell implements DocumentNode {
   }
 
   set(value: Outcome<JsonValue>): void {
-    this.cell.set(value);
+    this.cell.set(shaped(value));
     this.lastSetAt = Date.now();
   }
 
   lastUpdatedMs(): number {
     return this.lastSetAt;
   }
+}
+
+function shaped(outcome: Outcome<JsonValue>): Outcome<JsonValue> {
+  return outcome.kind === "ok"
+    ? { kind: "ok", value: toDocument(outcome.value) }
+    : outcome;
 }
 
 // [LAW:one-type-per-behavior] Every node the store holds. `read`'s result type
@@ -258,8 +273,9 @@ export class VariableStore {
   // [LAW:one-source-of-truth] A string that changes exactly when the node's
   // value does — the ONE spelling a change-driven reaction (a `depends_on`
   // cache policy) compares, total over node kinds so a document can be
-  // depended on like a scalar. Structural for documents: a rescan yielding
-  // the same content is not a change.
+  // depended on like a scalar. Structural for documents: every stored
+  // document has sorted keys (toDocument), so a rescan yielding the same
+  // content in another key order is not a change.
   changeKey(name: string): string {
     const node = this.requireNode(name);
     return node.kind === "document"

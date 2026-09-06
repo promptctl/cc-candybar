@@ -11,8 +11,9 @@ export type VarValue = string | number | boolean;
 // scalar: templates read its leaves by dotted path (`.budget.spent`), the way
 // an `input` var's payload subtree is read, and the store holds it in its own
 // node kind (VariableStore.defineDocument) beside the scalar boxes. The leaves
-// are JSON's scalars; `null` reads as a missing field. Objects carry null
-// prototypes (see parse.ts toDocument).
+// are JSON's scalars; a `null` leaf prints as Go's `<no value>` and a field OF
+// it is a missing field. Objects carry null prototypes with sorted keys (see
+// toDocument).
 export type JsonValue =
   | string
   | number
@@ -20,6 +21,31 @@ export type JsonValue =
   | null
   | readonly JsonValue[]
   | { readonly [key: string]: JsonValue };
+
+// [LAW:single-enforcer] The shape every document in the store has, applied
+// where a document is written (VariableStore.defineDocument / setDocument) to
+// a scan's JSON.parse output and an authored default alike: objects rebuilt
+// on null prototypes — the template engine walks fields with `in`, so a plain
+// object would expose `constructor` / `toString` as readable fields of a
+// user's document — with keys SORTED, so JSON.stringify of any document is
+// canonical and a structural change measure needs no second canonicaliser.
+// JSON.parse never yields anything but JSON shapes, so this is a re-shape,
+// not a check; the primitive arm's cast is that fact.
+export function toDocument(value: unknown): JsonValue {
+  if (Array.isArray(value)) return value.map(toDocument);
+  if (value !== null && typeof value === "object") {
+    const out: Record<string, JsonValue> = Object.create(null) as Record<
+      string,
+      JsonValue
+    >;
+    const entries = Object.entries(value as Record<string, unknown>).sort(
+      ([a], [b]) => (a < b ? -1 : a > b ? 1 : 0),
+    );
+    for (const [key, v] of entries) out[key] = toDocument(v);
+    return out;
+  }
+  return value as JsonValue;
+}
 
 export function typeOf(v: VarValue): VarType {
   const t = typeof v;

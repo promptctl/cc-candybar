@@ -77,6 +77,25 @@ describe("checkConfig — explicit target", () => {
     }
   });
 
+  it("a source still running at the settle deadline is a warning naming it, not a hang or a failure", async () => {
+    const p = write(
+      "slow.json5",
+      `{
+        variables: {
+          slow: { kind: "shell", command: "sleep 6; echo late", parse: { text: true }, cache: { never: true }, default: "pending" },
+        },
+        segments: { a: { template: "{{ .slow }}" } },
+        root: { h: ["a"] },
+      }`,
+    );
+    const outcome = await checkConfig(p, dir);
+    if (outcome.kind !== "clean") throw new Error(`expected clean, got ${outcome.kind}`);
+    expect(outcome.warnings).toContain(
+      "source still running after 5000 ms, rendered with fallback values: slow",
+    );
+    expect(checkPlan(outcome).code).toBe(0);
+  }, 15000);
+
   it("reports a structurally invalid config with the loader's message", async () => {
     const p = write("bad.json5", `{ segments: { a: { template: 42 } } }`);
     const message = expectFatal(await checkConfig(p, dir));

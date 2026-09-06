@@ -12,7 +12,9 @@
 // buildState, then the per-request render in server.ts) — resolveDslConfig →
 // detectConfigCollisions → loadConfig → validateConfig → registerDslConfig →
 // deriveActionValidators → renderDsl. "check passes" and "the daemon renders"
-// cannot diverge, because they are one code path.
+// cannot diverge, because they are one code path — check additionally waits a
+// bounded settle for shell/file sources' first run, which the daemon's first
+// cold render does not (its next render shows what check showed).
 
 import fs from "node:fs";
 import path from "node:path";

@@ -7,7 +7,7 @@ import { ccCandybarFuncs } from "../src/template-engine/funcs";
 import { VariableStore } from "../src/var-system/store";
 import { MissingFieldError, ParseError } from "@promptctl/go-template-js";
 import { ABSENT, failed, ok } from "../src/utils/outcome";
-import { toDocument } from "../src/var-system/parse";
+import { toDocument } from "../src/var-system/types";
 
 // Helper: evaluate a template against a plain-object scope, return joined text.
 function evalText(source: string, scope: object): string {
@@ -346,6 +346,25 @@ describe("documents in scope", () => {
     const store = docStore(ok(toDocument({ spent: 1 })));
     const tpl = createCcCandybarEngine().parse("{{ .budget.constructor }}");
     expect(() => tpl.evaluate(buildScope(store))).toThrow(MissingFieldError);
+  });
+
+  test("a null leaf prints as <no value>, is falsy, and has no fields", () => {
+    const store = docStore(ok(toDocument({ owner: null })));
+    expect(evalStore("[{{ .budget.owner }}]", store)).toBe("[<no value>]");
+    expect(evalStore("{{ if .budget.owner }}set{{ else }}unset{{ end }}", store)).toBe(
+      "unset",
+    );
+    const tpl = createCcCandybarEngine().parse("{{ .budget.owner.name }}");
+    expect(() => tpl.evaluate(buildScope(store))).toThrow(MissingFieldError);
+  });
+
+  test("a bare document prints Go-style with sorted keys, never [object Object]", () => {
+    const store = docStore(
+      ok(toDocument({ spent: 1, limits: { weekly: 100, daily: 20 } })),
+    );
+    expect(evalStore("{{ .budget }}", store)).toBe(
+      "map[limits:map[daily:20 weekly:100] spent:1]",
+    );
   });
 
   test("a document not yet scanned reads as an error naming the variable", () => {

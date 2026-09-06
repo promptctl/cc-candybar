@@ -22,6 +22,7 @@ import type {
   ParseDecl,
   SourceDefault,
 } from "../config/dsl-types.js";
+import { parseArm } from "../config/dsl-types.js";
 import { perConfigDomainsFor } from "../config/option-domain.js";
 import { PRESET_FLOOR, presetNames, presetRoot } from "../config/presets.js";
 import { addableSegmentDomains } from "../config/edit-chrome.js";
@@ -32,7 +33,8 @@ import {
   type CachePolicy,
   type GitField,
 } from "../var-system/sources.js";
-import { toDocument, type SourceParse } from "../var-system/parse.js";
+import type { SourceParse } from "../var-system/parse.js";
+import type { JsonValue } from "../var-system/types.js";
 import type { BuildLineOptions } from "../render/strip.js";
 import { DEFAULT_PADDING, renderStripCells } from "../render/strip.js";
 import { paletteForThemeName, transposedPalette } from "../themes/index.js";
@@ -146,24 +148,25 @@ function toCachePolicy(cache: CacheDecl): CachePolicy {
 // seam — the ONE place "no `parse:`" is read as the text arm. The regex
 // compiles here from the source string the loader proved compiles (and has
 // its capture group). `default` crosses in the arm's own domain: the loader's
-// sourceDefaultSpec is the enforcer of that pairing, so the text-arm cast
-// restates its stamp rather than re-checking it [LAW:parse-dont-validate]. A
-// json default is re-shaped onto null prototypes like a scanned document
-// (toDocument), so a fallback and a scan read identically.
+// sourceDefaultSpec is the enforcer of that pairing, so each arm's cast
+// restates its stamp rather than re-checking it [LAW:parse-dont-validate];
+// the store shapes a json default as it shapes a scan (toDocument).
 function toSourceParse(
   parse: ParseDecl | undefined,
   dflt: SourceDefault | undefined,
 ): SourceParse {
-  if (parse !== undefined && "json" in parse) {
-    return {
-      kind: "json",
-      default: dflt === undefined ? undefined : toDocument(dflt),
-    };
+  switch (parseArm(parse)) {
+    case "json":
+      return { kind: "json", default: dflt as JsonValue | undefined };
+    case "regex":
+      return {
+        kind: "regex",
+        regex: new RegExp((parse as { regex: string }).regex),
+        default: dflt as string | undefined,
+      };
+    case "text":
+      return { kind: "text", default: dflt as string | undefined };
   }
-  const text = dflt as string | undefined;
-  return parse !== undefined && "regex" in parse
-    ? { kind: "regex", regex: new RegExp(parse.regex), default: text }
-    : { kind: "text", default: text };
 }
 
 // ─── Single variable declaration ──────────────────────────────────────────────

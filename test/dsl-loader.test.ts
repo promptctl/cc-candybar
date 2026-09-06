@@ -536,6 +536,12 @@ describe("loadDslConfig — the parse step of shell/file sources", () => {
       path: "variables.x.parse.regex",
       message: "parse.regex is not a valid regular expression",
     });
+    // A trailing backslash compiles ONLY when something follows it — the
+    // proof is the pattern alone, never the pattern piped for its group count.
+    expectIssue(shell(`parse: { regex: "(a)\\\\" }`), {
+      path: "variables.x.parse.regex",
+      message: "parse.regex is not a valid regular expression",
+    });
     expectIssue(shell(`parse: { regex: "v[0-9]+" }`), {
       path: "variables.x.parse.regex",
       message: "parse.regex must contain a capture group",

@@ -528,7 +528,16 @@ export type ParseDecl =
   | { readonly regex: string }
   | { readonly json: true };
 
-export const PARSE_KEYS = ["text", "regex", "json"] as const;
+// [LAW:one-source-of-truth] THE discriminator over the present-key union:
+// which arm a `parse:` names (absent = text). Cross-ref's "is this a
+// document" and render's lowering onto SourceParse both switch on it, so
+// which arm publishes a document is spelled once.
+export function parseArm(
+  parse: ParseDecl | undefined,
+): "text" | "regex" | "json" {
+  if (parse === undefined || "text" in parse) return "text";
+  return "regex" in parse ? "regex" : "json";
+}
 
 // A source's `default` lives in its parser's OUTPUT domain — a string for the
 // text/regex arms, a JSON document for the json arm. The type is the union of
