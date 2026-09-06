@@ -42,11 +42,9 @@ import { mergeWithDefault } from "./loader/merge.js";
 
 // ─── Shared template fragments ───────────────────────────────────────────────
 //
-// Factored out of the segments' `template` fields so:
-//   (1) the git working-tree counts and status icon can be shared by the two
-//       git-style segments (git, gitaculous) without duplication, and
-//   (2) the block/weekly threshold cascade can be parameterized on the
-//       variable name without resorting to runtime string surgery.
+// Factored out of the segments' `template` fields so the git working-tree
+// counts and status icon are shared by the two git-style segments (git,
+// gitaculous) without duplication.
 
 // Directory: ~ collapse under $HOME, project-relative under workspace.project_dir,
 // else raw. Inline-recomputes the project-relative path because the DSL has no
@@ -192,50 +190,21 @@ const GIT_TEMPLATE =
   " " +
   GIT_STATUS;
 
-// [LAW:dataflow-not-control-flow] block and weekly share the same threshold
-// cascade (≥warningThreshold → error, ≥50 → warning, else panel) on a numeric
-// ref. The builders parameterize BOTH the percentage ref and the threshold
-// ref so each segment reads its own configured threshold from the var store
-// rather than the literal 80 baked into the template. User overrides flow
-// through the variables-merge-by-name cascade in mergeWithDefault — no new
-// override mechanism required.
-function blockLikeBg(pctRef: string, thresholdRef: string): string {
-  return (
-    `{{ if ge (round ${pctRef}) ${thresholdRef} }}error` +
-    `{{ else }}{{ if ge (round ${pctRef}) 50 }}warning` +
-    `{{ else }}panel{{ end }}{{ end }}`
-  );
-}
-
-function blockLikeFg(pctRef: string): string {
-  return (
-    `{{ if ge (round ${pctRef}) 50 }}button-color-foreground` +
-    `{{ else }}foreground{{ end }}`
-  );
-}
-
-// [LAW:dataflow-not-control-flow] The burn segment heats as the cap NEARS, so
-// the cascade reads the projected minutes-to-cap (smaller = hotter), the
-// inverse direction of blockLikeBg's fuller-is-hotter. The not-projectable
-// sentinel (-1, sorts below every threshold) is caught first so "we cannot
-// project" colors calm, never error. Thresholds are var refs so a user
-// overrides them through the same by-name variables cascade.
-function etaHeatBg(etaRef: string, warnRef: string, errRef: string): string {
-  return (
-    `{{ if lt ${etaRef} 0 }}panel` +
-    `{{ else }}{{ if lt ${etaRef} ${errRef} }}error` +
-    `{{ else }}{{ if lt ${etaRef} ${warnRef} }}warning` +
-    `{{ else }}panel{{ end }}{{ end }}{{ end }}`
-  );
-}
-
-function etaHeatFg(etaRef: string, warnRef: string): string {
-  return (
-    `{{ if lt ${etaRef} 0 }}foreground` +
-    `{{ else }}{{ if lt ${etaRef} ${warnRef} }}button-color-foreground` +
-    `{{ else }}foreground{{ end }}{{ end }}`
-  );
-}
+// [LAW:dataflow-not-control-flow] Every threshold cascade below is one
+// `ramp <value> "step" <at> <colour> …` call (rich-js `paletteFuncs`): the
+// value flows through ascending stops and the cell wears the last stop it
+// passed, so "≥ threshold → hotter" is data, not an `if` chain, and the
+// colour transposes with the palette and look like any `color`. The
+// thresholds stay var refs a user overrides through the variables-merge-
+// by-name cascade in mergeWithDefault; a threshold set below its neighbour
+// is a loud render error (stops must ascend — the segment shows ⚠ and
+// `cc-candybar check` fails), never a silently reordered cascade.
+//
+// block/weekly heat as the displayed (rounded) percentage rises: calm to
+// `heatThreshold`, warning to `warningThreshold`, error beyond — and the text
+// flips to the button foreground at the same `heatThreshold`, so bg and fg
+// cannot disagree about where the cell first warms. Both are variables, so
+// the ascending constraint is between two knobs the user can see.
 
 // ─── The settings drawer (candybar-config-engine-71o.4) ──────────────────────
 
@@ -637,6 +606,7 @@ export const RAW_DEFAULT_DSL_CONFIG = {
     // name cascade. Matches the legacy DEFAULT_CONFIG.budget.block.warning
     // Threshold.
     "block.budget.warningThreshold": { kind: "literal", value: 80 },
+    "block.budget.heatThreshold": { kind: "literal", value: 50 },
 
     // Weekly — direct projection of hookData.rate_limits.seven_day.
     "weekly.percentage": {
@@ -652,6 +622,7 @@ export const RAW_DEFAULT_DSL_CONFIG = {
       default: 0,
     },
     "weekly.budget.warningThreshold": { kind: "literal", value: 80 },
+    "weekly.budget.heatThreshold": { kind: "literal", value: 50 },
 
     // Burn rate + cap projection — daemon-derived (see render-payload.ts).
     // Each projection is ABSENT when not projectable; the var-system fills the
@@ -984,11 +955,8 @@ export const RAW_DEFAULT_DSL_CONFIG = {
       template:
         "◱ {{ round .block.nativeUtilization }}% " +
         '({{ template "formatResetCountdown" .block.resetsAt }})',
-      bg: blockLikeBg(
-        ".block.nativeUtilization",
-        ".block.budget.warningThreshold",
-      ),
-      fg: blockLikeFg(".block.nativeUtilization"),
+      bg: '{{ ramp (round .block.nativeUtilization) "step" 0 "panel" .block.budget.heatThreshold "warning" .block.budget.warningThreshold "error" }}',
+      fg: '{{ ramp (round .block.nativeUtilization) "step" 0 "foreground" .block.budget.heatThreshold "button-color-foreground" }}',
       // Hide unless we have a five-hour-window snapshot.
       when: "{{ gt .block.resetsAt 0 }}",
     },
@@ -996,26 +964,24 @@ export const RAW_DEFAULT_DSL_CONFIG = {
       template:
         "◑ {{ round .weekly.percentage }}% " +
         '({{ template "formatResetCountdown" .weekly.resetsAt }})',
-      bg: blockLikeBg(".weekly.percentage", ".weekly.budget.warningThreshold"),
-      fg: blockLikeFg(".weekly.percentage"),
+      bg: '{{ ramp (round .weekly.percentage) "step" 0 "panel" .weekly.budget.heatThreshold "warning" .weekly.budget.warningThreshold "error" }}',
+      fg: '{{ ramp (round .weekly.percentage) "step" 0 "foreground" .weekly.budget.heatThreshold "button-color-foreground" }}',
       when: "{{ gt .weekly.resetsAt 0 }}",
     },
     // Burn rate + cap projection: "$X/hr · Nm to 5h · Nd to wk". The headline
     // number of a usage monitor — how fast you are spending and when you hit
     // the wall. All math is daemon-side (render-payload.ts); the template only
-    // formats. Heats as the 5h cap nears (etaHeat*). Shown when either
+    // formats. Heats as the 5h cap NEARS — the ramp runs over minutes-to-cap,
+    // smaller = hotter, the inverse of block's fuller-is-hotter — and the -1
+    // "cannot project" sentinel sits calm at the first stop. Shown when either
     // rate-limit window is active — the same signal block/weekly gate on.
     burnrate: {
       template:
         '⚡ {{ template "formatRate" .burn.costPerHour }} · ' +
         '{{ template "formatEta" .block.etaMinutes }} to 5h · ' +
         '{{ template "formatEta" .weekly.etaMinutes }} to wk',
-      bg: etaHeatBg(
-        ".block.etaMinutes",
-        ".burn.eta.warnMinutes",
-        ".burn.eta.errorMinutes",
-      ),
-      fg: etaHeatFg(".block.etaMinutes", ".burn.eta.warnMinutes"),
+      bg: '{{ ramp .block.etaMinutes "step" -1 "panel" 0 "error" .burn.eta.errorMinutes "warning" .burn.eta.warnMinutes "panel" }}',
+      fg: '{{ ramp .block.etaMinutes "step" -1 "foreground" 0 "button-color-foreground" .burn.eta.warnMinutes "foreground" }}',
       when: "{{ or (gt .block.resetsAt 0) (gt .weekly.resetsAt 0) }}",
     },
     // Token throughput for the active turn — output / input / total tok/s, each a
@@ -1069,13 +1035,10 @@ export const RAW_DEFAULT_DSL_CONFIG = {
     context: {
       template:
         "◔ {{ formatInteger .context.totalTokens }} ({{ .context.contextLeft }}%)",
-      bg:
-        "{{ if le .context.contextLeft 20 }}error" +
-        "{{ else }}{{ if le .context.contextLeft 40 }}warning" +
-        "{{ else }}surface-active{{ end }}{{ end }}",
-      fg:
-        "{{ if le .context.contextLeft 40 }}button-color-foreground" +
-        "{{ else }}foreground{{ end }}",
+      // contextLeft is an integer (src/segments/context.ts rounds it), so the
+      // "≤ 20 / ≤ 40" edges are the stops at 21 and 41 exactly.
+      bg: '{{ ramp .context.contextLeft "step" 0 "error" 21 "warning" 41 "surface-active" }}',
+      fg: '{{ ramp .context.contextLeft "step" 0 "button-color-foreground" 41 "foreground" }}',
       when: "{{ gt .context.totalTokens 0 }}",
     },
     metrics: {

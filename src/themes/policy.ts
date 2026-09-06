@@ -13,11 +13,8 @@
 // darken/contrast, hue/transpose) lives in rich-js, as does the semantic/anchor
 // knowledge of which tokens keep their hue (ANCHORED_ROOTS).
 
-import {
-  listThemePalettes,
-  type ColorSystemSpec,
-  type ThemeKey,
-} from "@promptctl/rich-js";
+import { listThemePalettes, type ThemeKey } from "@promptctl/rich-js";
+import type { ColorSystemSpec } from "@promptctl/rich-js/widgets";
 
 // --- Theme name aliasing ---
 

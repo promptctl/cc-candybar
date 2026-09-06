@@ -397,7 +397,7 @@ export function pickerFuncs(
           // the default — the same resolution a `{{ menu }}` with no
           // "distribution" option makes.
           (position) =>
-            bandItemStyle(requireActiveSegment(activeSegment, "picker"), {
+            bandItemStyle(requireActiveSegment(activeSegment, "{{ picker }}"), {
               ...position,
               distribution: placedBy(undefined),
             }),
