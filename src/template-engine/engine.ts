@@ -44,7 +44,8 @@ import {
   sprigConversions,
   sprigDicts,
 } from "@promptctl/go-template-js";
-import { richTextFuncs, RichText } from "@promptctl/rich-js";
+import { RichText } from "@promptctl/rich-js";
+import { richTextFuncs } from "@promptctl/rich-js/template-bindings";
 import { ccCandybarFuncs, formatterFuncs } from "./funcs.js";
 
 // [LAW:single-enforcer] fromString/toString are declared once here.
