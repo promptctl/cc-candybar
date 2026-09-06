@@ -12,8 +12,8 @@ import {
   DEFAULT_DSL_CONFIG,
   RAW_DEFAULT_DSL_CONFIG,
 } from "../src/config/default-dsl-config";
-import { walkNodes, type ValidatedConfig } from "../src/config/dsl-types";
-import { rootNode, rootOf } from "../src/config/root";
+import { walkNodes } from "../src/config/dsl-types";
+import { rootNode } from "../src/config/root";
 import {
   parseDslConfig,
   mergeWithDefault,
@@ -39,12 +39,8 @@ import {
 import { testVerbContext, clickUrl } from "./helpers/click";
 import { effectsUrl, VERB_SET_STATE } from "../src/click/wire";
 import { presetNames } from "../src/config/presets";
-import {
-  EDIT_NS,
-  EDIT_MODE_KEY,
-  EDIT_MODE_OPEN,
-  EDIT_TOGGLE_ACTION,
-} from "../src/config/loader/edit-mode";
+import { EDIT_MODE_KEY, EDIT_MODE_OPEN } from "../src/config/loader/edit-mode";
+import { narrowToSegment } from "./helpers/narrow-to-segment";
 import { checkPayload } from "../src/check";
 import {
   resolveEffectiveGlobals,
@@ -57,68 +53,6 @@ import {
 // `menus.*`). Reparsing DEFAULT_DSL_CONFIG itself (already-synthesized) would
 // trip the reserved-namespace guard on its own synthesized entries.
 const SERIALIZED = JSON.stringify(RAW_DEFAULT_DSL_CONFIG, null, 2);
-
-// A canonical one-leaf vertical root — narrows a spread config to a single
-// segment so the rendered line is exactly that segment's text.
-const oneSegmentRoot = (segment: string) =>
-  ({
-    kind: "container" as const,
-    direction: "vertical" as const,
-    children: [
-      {
-        kind: "container" as const,
-        direction: "horizontal" as const,
-        children: [{ kind: "segment" as const, name: segment }],
-      },
-    ],
-  });
-
-// [LAW:locality-or-seam] Narrow an already-VALIDATED config to one segment.
-// Overriding just `root` is not enough once the bundled default references
-// `edit.toggle` (brandon-layout-edit-2gc.4, via the toolbar segment):
-// `synthesizeEditChrome` runs inside `parseAndValidate` — BEFORE any call
-// site here narrows the layout — and, for every preset including the
-// `"default"` floor, bakes a spliced copy of the FULL original root into
-// `presets.default.root`. `registerDslConfig`'s per-preset compile prefers a
-// preset's own `.root` over the top-level `root` field
-// (`presetRoot`/`presets.ts`), so a bare `{ ...parsed, root: oneSegmentRoot(x) }`
-// silently renders the untouched full tree instead of the narrowed one.
-//
-// Resetting `presets` alone isn't enough either: `synthesizeEditChrome` also
-// bakes one `insertSegmentFrom` action per preset (`edit.addable.<name>`
-// naming that preset's own addable-segment domain) into `config.actions`, and
-// `registerDslConfig` compiles every declared action regardless of what's in
-// `root` — so an orphaned reference to a domain only the now-discarded
-// "compact"/"verbose" presets registered throws `unknown option domain`. None
-// of this per-preset edit-chrome machinery is what these single-segment tests
-// exercise (test/dsl-edit-mode.test.ts and test/dsl-layout-edit.test.ts own
-// that surface), so the clean narrowing drops every synthesized per-preset
-// `edit.*` chrome artifact too — EXCEPT the two bare, preset-independent
-// names (`edit.mode`/`edit.toggle`) Phase A synthesis writes once, which stay
-// so a narrowed `toolbar` (whose template references `edit.toggle` directly)
-// still compiles.
-const EDIT_CHROME_NAME = (name: string) =>
-  name.startsWith(EDIT_NS) &&
-  name !== EDIT_MODE_KEY &&
-  name !== EDIT_TOGGLE_ACTION;
-
-const narrowToSegment = (
-  parsed: ValidatedConfig,
-  segment: string,
-): ValidatedConfig => {
-  const dropEditChrome = <V>(rec: Readonly<Record<string, V>>) =>
-    Object.fromEntries(
-      Object.entries(rec).filter(([name]) => !EDIT_CHROME_NAME(name)),
-    );
-  return {
-    ...parsed,
-    root: rootOf(oneSegmentRoot(segment)),
-    presets: {},
-    variables: dropEditChrome(parsed.variables),
-    actions: dropEditChrome(parsed.actions),
-    segments: dropEditChrome(parsed.segments),
-  };
-};
 
 describe("DEFAULT_DSL_CONFIG", () => {
   test("loader round-trips the bundled default", () => {
@@ -193,7 +127,15 @@ describe("DEFAULT_DSL_CONFIG", () => {
     );
     // Declared-but-opt-in: present in `segments` for reference/user opt-in, but
     // deliberately absent from the default `root`.
-    for (const optIn of ["git", "session", "today", "speed", "tokenSparkline", "burnrate", "gitPr"]) {
+    for (const optIn of [
+      "git",
+      "session",
+      "today",
+      "speed",
+      "tokenSparkline",
+      "burnrate",
+      "gitPr",
+    ]) {
       expect(DEFAULT_DSL_CONFIG.segments).toHaveProperty([optIn]);
       expect(laidOut.has(optIn)).toBe(false);
     }
@@ -204,12 +146,19 @@ describe("DEFAULT_DSL_CONFIG", () => {
     const store = new VariableStore();
     // The default now carries `kind: "state"` vars (the style picker); a
     // SessionState is required to declare them, exactly as the daemon supplies.
-    const registry = new SourceRegistry(store, "", undefined, new SessionState());
+    const registry = new SourceRegistry(
+      store,
+      "",
+      undefined,
+      new SessionState(),
+    );
     try {
       const compiled = registerDslConfig(parsed, registry, {
         cwd: process.cwd(),
       });
-      const basePalette = getThemePalette(parsed.globals.palette ?? "textual-dark")!;
+      const basePalette = getThemePalette(
+        parsed.globals.palette ?? "textual-dark",
+      )!;
       const payload = {
         hook_event_name: "Status",
         session_id: "deadbeef-1234-5678-9abc-def012345678",
@@ -228,7 +177,14 @@ describe("DEFAULT_DSL_CONFIG", () => {
         registry,
         payload,
         basePalette,
-        { style: "powerline", colorCompatibility: "truecolor", wrap: true, padding: 1, charset: "unicode", width: Number.POSITIVE_INFINITY },
+        {
+          style: "powerline",
+          colorCompatibility: "truecolor",
+          wrap: true,
+          padding: 1,
+          charset: "unicode",
+          width: Number.POSITIVE_INFINITY,
+        },
       );
       // Hidden segments (no git repo, no usage data) drop out; the
       // directory and model segments remain, so the line is non-empty.
@@ -268,11 +224,13 @@ describe("DEFAULT_DSL_CONFIG", () => {
       width: Number.POSITIVE_INFINITY,
     };
     const render = (): string => {
-      const theme = effectiveThemeName(undefined, 
+      const theme = effectiveThemeName(
+        undefined,
         sessionState.get(SID, "theme"),
         parsed.globals.palette,
       );
-      const look = effectiveLookName(undefined, 
+      const look = effectiveLookName(
+        undefined,
         sessionState.get(SID, "look"),
         parsed.globals.look,
         parsed.looks,
@@ -287,7 +245,11 @@ describe("DEFAULT_DSL_CONFIG", () => {
           session_id: SID,
           cwd: "/tmp",
           model: { id: "claude-opus-4-7", display_name: "Opus 4.7" },
-          workspace: { current_dir: "/tmp", project_dir: "/tmp", added_dirs: [] },
+          workspace: {
+            current_dir: "/tmp",
+            project_dir: "/tmp",
+            added_dirs: [],
+          },
           theme: { effective: theme },
           look: { effective: look },
         },
@@ -324,7 +286,9 @@ describe("DEFAULT_DSL_CONFIG", () => {
       expect(before).not.toContain(targetTheme);
 
       clickUrl(
-        effectsUrl([{ verb: VERB_SET_STATE, args: [SID, "theme", targetTheme] }]),
+        effectsUrl([
+          { verb: VERB_SET_STATE, args: [SID, "theme", targetTheme] },
+        ]),
         testVerbContext(sessionState),
       );
       const afterTheme = render();
@@ -336,7 +300,7 @@ describe("DEFAULT_DSL_CONFIG", () => {
       );
       if (targetLook === undefined) {
         throw new Error(
-          "the merged config's looks block held only the \"none\" identity floor " +
+          'the merged config\'s looks block held only the "none" identity floor ' +
             "— need at least one other declared look to exercise a look-switching click",
         );
       }
@@ -370,7 +334,12 @@ describe("DEFAULT_DSL_CONFIG", () => {
     const ANSI = /\x1b\[[0-9;]*m|\x1b\]8;;[^\x1b]*\x1b\\/g;
     const render = (padding: number): string => {
       const store = new VariableStore();
-      const registry = new SourceRegistry(store, "", undefined, new SessionState());
+      const registry = new SourceRegistry(
+        store,
+        "",
+        undefined,
+        new SessionState(),
+      );
       try {
         const compiled = registerDslConfig(parsed, registry, { cwd: "/tmp" });
         const bp = getThemePalette("textual-dark"!)!;
@@ -425,13 +394,21 @@ describe("DEFAULT_DSL_CONFIG", () => {
     };
     const opts = {
       style: "powerline" as const,
-      colorCompatibility: "truecolor" as const, wrap: true, padding: 1, charset: "unicode" as const,
+      colorCompatibility: "truecolor" as const,
+      wrap: true,
+      padding: 1,
+      charset: "unicode" as const,
       width: Number.POSITIVE_INFINITY,
     };
 
     function render(cfg: typeof configA): string {
       const store = new VariableStore();
-      const registry = new SourceRegistry(store, "", undefined, new SessionState());
+      const registry = new SourceRegistry(
+        store,
+        "",
+        undefined,
+        new SessionState(),
+      );
       try {
         const compiled = registerDslConfig(cfg, registry, { cwd: "/tmp" });
         const bp = getThemePalette(cfg.globals.palette ?? "textual-dark"!)!;
@@ -468,15 +445,30 @@ describe("DEFAULT_DSL_CONFIG", () => {
     const configA = parseAndValidate("<test>", srcA, ALLOWED);
     const configVerbose = parseAndValidate("<test>", srcVerbose, ALLOWED);
 
-    const payload = { hook_event_name: "Status", session_id: "x", cwd: "/tmp",
+    const payload = {
+      hook_event_name: "Status",
+      session_id: "x",
+      cwd: "/tmp",
       model: { id: "x", display_name: "x" },
-      workspace: { current_dir: "/tmp", project_dir: "/tmp", added_dirs: [] } };
-    const opts = { style: "powerline" as const, colorCompatibility: "truecolor" as const, wrap: true, padding: 1, charset: "unicode" as const,
-      width: Number.POSITIVE_INFINITY };
+      workspace: { current_dir: "/tmp", project_dir: "/tmp", added_dirs: [] },
+    };
+    const opts = {
+      style: "powerline" as const,
+      colorCompatibility: "truecolor" as const,
+      wrap: true,
+      padding: 1,
+      charset: "unicode" as const,
+      width: Number.POSITIVE_INFINITY,
+    };
 
     function render(cfg: typeof configA): string {
       const store = new VariableStore();
-      const registry = new SourceRegistry(store, "", undefined, new SessionState());
+      const registry = new SourceRegistry(
+        store,
+        "",
+        undefined,
+        new SessionState(),
+      );
       try {
         const compiled = registerDslConfig(cfg, registry, { cwd: "/tmp" });
         const bp = getThemePalette("textual-dark"!)!;
@@ -583,12 +575,19 @@ describe("DEFAULT_DSL_CONFIG", () => {
       // on the payload object directly; no env-var mutation needed.
       const dirOnly = narrowToSegment(parsed, "directory");
       const store = new VariableStore();
-      const registry = new SourceRegistry(store, "", undefined, new SessionState());
+      const registry = new SourceRegistry(
+        store,
+        "",
+        undefined,
+        new SessionState(),
+      );
       try {
         const compiled = registerDslConfig(dirOnly, registry, {
           cwd: process.cwd(),
         });
-        const basePalette = getThemePalette(dirOnly.globals.palette ?? "textual-dark")!;
+        const basePalette = getThemePalette(
+          dirOnly.globals.palette ?? "textual-dark",
+        )!;
         const payload = {
           hook_event_name: "Status",
           session_id: "x",
@@ -609,7 +608,14 @@ describe("DEFAULT_DSL_CONFIG", () => {
           registry,
           payload,
           basePalette,
-          { style: "powerline", colorCompatibility: "truecolor", wrap: true, padding: 1, charset: "unicode", width: Number.POSITIVE_INFINITY },
+          {
+            style: "powerline",
+            colorCompatibility: "truecolor",
+            wrap: true,
+            padding: 1,
+            charset: "unicode",
+            width: Number.POSITIVE_INFINITY,
+          },
         );
         // Strip ANSI escapes AND the Powerline joiner glyphs
         // (U+E0B0..U+E0BC range) so assertions can probe visible
@@ -724,7 +730,11 @@ describe("DEFAULT_DSL_CONFIG", () => {
     // misread as the fg introducer, or (mirror bug) mask a real one that
     // follows it. Same class of collision
     // test/segment-interior-color.test.ts's skipTruecolorRun fixes.
-    type SgrRun = { offset: number; fg?: string; bg?: string };
+    interface SgrRun {
+      offset: number;
+      fg?: string;
+      bg?: string;
+    }
     function sgrRuns(line: string): SgrRun[] {
       const runs: SgrRun[] = [];
       for (const m of line.matchAll(/\x1b\[([0-9;]*)m/g)) {
@@ -769,20 +779,33 @@ describe("DEFAULT_DSL_CONFIG", () => {
       const parsed = parseAndValidate("<default>", SERIALIZED);
       const cfg = narrowToSegment(parsed, segment);
       const store = new VariableStore();
-      const registry = new SourceRegistry(store, "", undefined, new SessionState());
+      const registry = new SourceRegistry(
+        store,
+        "",
+        undefined,
+        new SessionState(),
+      );
       try {
         const compiled = registerDslConfig(cfg, registry, { cwd: "/tmp" });
         const basePalette = paletteForThemeName(
           theme ?? cfg.globals.palette ?? "textual-dark",
         );
-        return renderDsl(cfg, compiled, store, registry, GIT_PAYLOAD, basePalette, {
-          style: "powerline",
-          colorCompatibility: "truecolor",
-          wrap: true,
-          padding: 1,
-          charset: "unicode",
-          width: Number.POSITIVE_INFINITY,
-        });
+        return renderDsl(
+          cfg,
+          compiled,
+          store,
+          registry,
+          GIT_PAYLOAD,
+          basePalette,
+          {
+            style: "powerline",
+            colorCompatibility: "truecolor",
+            wrap: true,
+            padding: 1,
+            charset: "unicode",
+            width: Number.POSITIVE_INFINITY,
+          },
+        );
       } finally {
         registry.dispose();
       }
@@ -806,8 +829,8 @@ describe("DEFAULT_DSL_CONFIG", () => {
     // behavior (single-space-separated counts, never concatenated) rather
     // than trusting the analogy in the comment above GIT_WORKTREE.
     test("worktree counts render single-space-separated, never concatenated", () => {
-      // eslint-disable-next-line no-control-regex
-      const ANSI = /\x1b\[[0-9;]*m|\x1b\]8;;[^\x1b]*\x1b\\|[\u{E0B0}-\u{E0BC}]/gu;
+      const ANSI =
+        /\x1b\[[0-9;]*m|\x1b\]8;;[^\x1b]*\x1b\\|[\u{E0B0}-\u{E0BC}]/gu;
       const visible = renderSegment("git").replace(ANSI, "");
       expect(visible).toContain("+2 ~3 ?4 !1");
       expect(visible).not.toMatch(/[+~?!]\d[+~?!]/);
@@ -915,7 +938,9 @@ describe("DEFAULT_DSL_CONFIG", () => {
           expect(bg).toBeDefined();
           // 2.99 not 3: ensureContrast bisects to the threshold, and the 8-bit
           // quantization of the result can land a hair under the exact target.
-          expect(contrastRatio(sgrToRgba(quiet!), sgrToRgba(bg!))).toBeGreaterThan(2.99);
+          expect(
+            contrastRatio(sgrToRgba(quiet!), sgrToRgba(bg!)),
+          ).toBeGreaterThan(2.99);
         },
       );
     });
@@ -940,18 +965,29 @@ describe("DEFAULT_DSL_CONFIG", () => {
       const parsed = parseAndValidate("<default>", SERIALIZED);
       const metricsOnly = narrowToSegment(parsed, "metrics");
       const store = new VariableStore();
-      const registry = new SourceRegistry(store, "", undefined, new SessionState());
+      const registry = new SourceRegistry(
+        store,
+        "",
+        undefined,
+        new SessionState(),
+      );
       try {
         const compiled = registerDslConfig(metricsOnly, registry, {
           cwd: process.cwd(),
         });
-        const basePalette = getThemePalette(metricsOnly.globals.palette ?? "textual-dark")!;
+        const basePalette = getThemePalette(
+          metricsOnly.globals.palette ?? "textual-dark",
+        )!;
         const payload = {
           hook_event_name: "Status",
           session_id: "x",
           cwd: "/tmp",
           model: { id: "x", display_name: "x" },
-          workspace: { current_dir: "/tmp", project_dir: "/tmp", added_dirs: [] },
+          workspace: {
+            current_dir: "/tmp",
+            project_dir: "/tmp",
+            added_dirs: [],
+          },
           metrics,
         };
         const line = renderDsl(
@@ -961,7 +997,14 @@ describe("DEFAULT_DSL_CONFIG", () => {
           registry,
           payload,
           basePalette,
-          { style: "powerline", colorCompatibility: "truecolor", wrap: true, padding: 1, charset: "unicode", width: Number.POSITIVE_INFINITY },
+          {
+            style: "powerline",
+            colorCompatibility: "truecolor",
+            wrap: true,
+            padding: 1,
+            charset: "unicode",
+            width: Number.POSITIVE_INFINITY,
+          },
         );
         return line.replace(
           // eslint-disable-next-line no-control-regex
@@ -1026,12 +1069,19 @@ describe("DEFAULT_DSL_CONFIG", () => {
           },
         };
         const store = new VariableStore();
-        const registry = new SourceRegistry(store, "", undefined, new SessionState());
+        const registry = new SourceRegistry(
+          store,
+          "",
+          undefined,
+          new SessionState(),
+        );
         try {
           const compiled = registerDslConfig(blockOnly, registry, {
             cwd: process.cwd(),
           });
-          const basePalette = getThemePalette(blockOnly.globals.palette ?? "textual-dark")!;
+          const basePalette = getThemePalette(
+            blockOnly.globals.palette ?? "textual-dark",
+          )!;
           const payload = {
             hook_event_name: "Status",
             session_id: "x",
@@ -1055,7 +1105,14 @@ describe("DEFAULT_DSL_CONFIG", () => {
             registry,
             payload,
             basePalette,
-            { style: "powerline", colorCompatibility: "truecolor", wrap: true, padding: 1, charset: "unicode", width: Number.POSITIVE_INFINITY },
+            {
+              style: "powerline",
+              colorCompatibility: "truecolor",
+              wrap: true,
+              padding: 1,
+              charset: "unicode",
+              width: Number.POSITIVE_INFINITY,
+            },
           );
         } finally {
           registry.dispose();
@@ -1092,7 +1149,11 @@ describe("DEFAULT_DSL_CONFIG", () => {
       // [FRAMING:representation] `source` is the text validation errors quote
       // from — it must be the config actually being validated (`merged`), not
       // the bundled default's serialization.
-      const config = validateConfig(merged, "<merged>", JSON.stringify(merged, null, 2));
+      const config = validateConfig(
+        merged,
+        "<merged>",
+        JSON.stringify(merged, null, 2),
+      );
       const sessionOnly = narrowToSegment(config, "session");
       const store = new VariableStore();
       // The merged bundled default declares `activeStyle`/`stylePage` as state
@@ -1101,12 +1162,19 @@ describe("DEFAULT_DSL_CONFIG", () => {
       // it those two vars silently fail to declare into loadWarnings — harmless
       // for the session segment here, but the fixture should exercise the
       // genuinely-complete default config, not a partially-registered one.
-      const registry = new SourceRegistry(store, "", undefined, new SessionState());
+      const registry = new SourceRegistry(
+        store,
+        "",
+        undefined,
+        new SessionState(),
+      );
       try {
         const compiled = registerDslConfig(sessionOnly, registry, {
           cwd: process.cwd(),
         });
-        const basePalette = getThemePalette(sessionOnly.globals.palette ?? "textual-dark")!;
+        const basePalette = getThemePalette(
+          sessionOnly.globals.palette ?? "textual-dark",
+        )!;
         return renderDsl(
           sessionOnly,
           compiled,
@@ -1125,7 +1193,14 @@ describe("DEFAULT_DSL_CONFIG", () => {
             ...payload,
           },
           basePalette,
-          { style: "powerline", colorCompatibility: "truecolor", wrap: true, padding: 1, charset: "unicode", width: Number.POSITIVE_INFINITY },
+          {
+            style: "powerline",
+            colorCompatibility: "truecolor",
+            wrap: true,
+            padding: 1,
+            charset: "unicode",
+            width: Number.POSITIVE_INFINITY,
+          },
         );
       } finally {
         registry.dispose();
@@ -1139,15 +1214,18 @@ describe("DEFAULT_DSL_CONFIG", () => {
       // budgetStatus helper's non-displayable value — so the suffix
       // contributes zero bytes through the same unconditional template.
       // Oracle: the same segment with the retired (suffix-less) template.
-      const preBudget = renderSession(PAYLOAD, JSON.stringify({
-        segments: {
-          session: {
-            template:
-              '§ {{ template "formatCost" .session.cost }} ({{ template "formatTokens" .session.tokens }})',
-            fg: "foreground",
+      const preBudget = renderSession(
+        PAYLOAD,
+        JSON.stringify({
+          segments: {
+            session: {
+              template:
+                '§ {{ template "formatCost" .session.cost }} ({{ template "formatTokens" .session.tokens }})',
+              fg: "foreground",
+            },
           },
-        },
-      }));
+        }),
+      );
       expect(renderSession(PAYLOAD)).toEqual(preBudget);
     });
 
@@ -1155,11 +1233,14 @@ describe("DEFAULT_DSL_CONFIG", () => {
       // [LAW:one-source-of-truth] The knob lives in one variable declaration;
       // the user file's override flows through mergeWithDefault's
       // variables-by-name spread. cost 8.5 / amount 10 = 85% ≥ warn 80 → " !85%".
-      const line = renderSession(PAYLOAD, JSON.stringify({
-        variables: {
-          "session.budget.amount": { kind: "literal", value: 10 },
-        },
-      }));
+      const line = renderSession(
+        PAYLOAD,
+        JSON.stringify({
+          variables: {
+            "session.budget.amount": { kind: "literal", value: 10 },
+          },
+        }),
+      );
       expect(line).toContain("!85%");
     });
 
@@ -1169,17 +1250,23 @@ describe("DEFAULT_DSL_CONFIG", () => {
       // threshold → different bytes, proving the template reads the variable,
       // not a baked-in literal.
       const spend = { session: { cost: 6, tokens: 1000 } };
-      const defaultWarn = renderSession(spend, JSON.stringify({
-        variables: {
-          "session.budget.amount": { kind: "literal", value: 10 },
-        },
-      }));
-      const tightWarn = renderSession(spend, JSON.stringify({
-        variables: {
-          "session.budget.amount": { kind: "literal", value: 10 },
-          "session.budget.warningThreshold": { kind: "literal", value: 50 },
-        },
-      }));
+      const defaultWarn = renderSession(
+        spend,
+        JSON.stringify({
+          variables: {
+            "session.budget.amount": { kind: "literal", value: 10 },
+          },
+        }),
+      );
+      const tightWarn = renderSession(
+        spend,
+        JSON.stringify({
+          variables: {
+            "session.budget.amount": { kind: "literal", value: 10 },
+            "session.budget.warningThreshold": { kind: "literal", value: 50 },
+          },
+        }),
+      );
       expect(defaultWarn).toContain("+60%");
       expect(tightWarn).toContain("!60%");
     });
@@ -1360,7 +1447,11 @@ describe("bundled preset library renders clean at every width — brandon-preset
     const ANSI = /\x1b\[[0-9;]*m|\x1b\]8;;[^\x1b]*\x1b\\/g;
     const line = renderPreset("verbose", 200, (base) => ({
       ...base,
-      git: { ...(base.git as object), prUrl: "https://example.com/pr/181", prNumber: 181 },
+      git: {
+        ...(base.git as object),
+        prUrl: "https://example.com/pr/181",
+        prNumber: 181,
+      },
       speed: { history: "10,25,15,30,20" },
     })).rendered.replace(ANSI, "");
     expect(line).toContain("⇆ #181"); // gitPr

@@ -21,10 +21,10 @@
 //  • richTextFuncs: fg, bg, bold, italic, link, style (painting) PLUS the
 //    palette-free color math (darken, lighten, mix, contrastOn, readableOn,
 //    shiftHue, scaleChroma, scaleLightness, shiftLightness) — all from rich-js.
-//    Naming a THEME color (`{{ color "primary" }}`) and asking for the current
-//    segment's background (`{{ bgOf }}`) are segment-scoped, so they arrive
-//    through `extraFuncs` from the DSL render layer, which is the only place
-//    that knows which segment is rendering.
+//    Naming a THEME color (`{{ color "primary" }}`, `{{ ramp … }}` over palette
+//    names) and asking for the current segment's background (`{{ bgOf }}`)
+//    are segment-scoped, so they arrive through `extraFuncs` from the DSL
+//    render layer, which is the only place that knows which segment is rendering.
 //  • ccCandybarFuncs: basename, dirname, int, string, bool, urlEncode,
 //    themes, styles, sparkline.
 //  • formatterFuncs: minutesUntilReset (clock-reading numeric primitive),
@@ -44,7 +44,8 @@ import {
   sprigConversions,
   sprigDicts,
 } from "@promptctl/go-template-js";
-import { richTextFuncs, RichText } from "@promptctl/rich-js";
+import { RichText } from "@promptctl/rich-js";
+import { richTextFuncs } from "@promptctl/rich-js/template-bindings";
 import { ccCandybarFuncs, formatterFuncs } from "./funcs.js";
 
 // [LAW:single-enforcer] fromString/toString are declared once here.
