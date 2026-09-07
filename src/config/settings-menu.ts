@@ -6,7 +6,7 @@
 // [LAW:dataflow-not-control-flow] Placement is a POSITION, never a mode. The
 // synthesis runs the same two total functions on every preset root, in the same
 // order, every load: `withAnchor` yields a tree that CONTAINS the anchor — the
-// author's own placement untouched, or the default position appended — and
+// author's own placement untouched, or the default position prepended — and
 // `expandAnchor` replaces that one leaf with the lowered disclosure subtree.
 // "The author placed it" and "the author did not" differ only in the VALUE
 // handed to one splice; there is no second code path to keep in agreement.
@@ -360,12 +360,13 @@ type AnchoredRoot = LayoutNode & { readonly [anchored]: true };
 
 // [LAW:dataflow-not-control-flow] The default position, as structural recursion
 // over the LayoutNode union rather than a placement mode: descend to the bar's
-// FIRST horizontal row and append there — where the bundled default's own
-// settings affordance already sits, and the place a one-row user config puts
-// everything. Total over every tree shape, including the degenerate ones: a
-// bare-segment root (the A-grammar collapses a lone top-level ref) grows a
-// horizontal wrapper, and an empty container simply becomes the row.
-function appendAnchor(node: LayoutNode): LayoutNode {
+// FIRST horizontal row and take the LEADING cell there — the bar's first item,
+// a fixed corner the eye and the mouse find without reading the row, and the
+// one position that does not drift as a config's content grows to its right.
+// Total over every tree shape, including the degenerate ones: a bare-segment
+// root (the A-grammar collapses a lone top-level ref) grows a horizontal
+// wrapper, and an empty container simply becomes the row.
+function prependAnchor(node: LayoutNode): LayoutNode {
   const anchorRef: LayoutNode = { kind: "segment", name: SETTINGS_ANCHOR };
   if (node.kind === "segment") {
     // [LAW:no-silent-failure] A bare-segment root may carry its OWN `when` — an
@@ -377,7 +378,7 @@ function appendAnchor(node: LayoutNode): LayoutNode {
     return {
       kind: "container",
       direction: "horizontal",
-      children: [node, anchorRef],
+      children: [anchorRef, node],
       ...(node.when !== undefined && { when: node.when }),
     };
   }
@@ -388,7 +389,7 @@ function appendAnchor(node: LayoutNode): LayoutNode {
   // inside a repo) has no idea the default placement attaches the menu there,
   // and inheriting that gate would silently delete the one surface this pass
   // exists to make undeletable, under exactly their condition. When the first
-  // row is gated the anchor becomes its own ungated row on this container
+  // row is gated the anchor becomes its own ungated row leading this container
   // instead, which is a position the author can still override by placing the
   // anchor themselves.
   //
@@ -403,9 +404,9 @@ function appendAnchor(node: LayoutNode): LayoutNode {
     first !== undefined &&
     first.when === undefined
   ) {
-    return { ...node, children: [appendAnchor(first), ...rest] };
+    return { ...node, children: [prependAnchor(first), ...rest] };
   }
-  return { ...node, children: [...node.children, anchorRef] };
+  return { ...node, children: [anchorRef, ...node.children] };
 }
 
 // [LAW:parse-dont-validate] The checkpoint: in, a tree that may or may not name
@@ -413,7 +414,7 @@ function appendAnchor(node: LayoutNode): LayoutNode {
 // through byte-identical — the position they chose IS the answer — and its
 // absence is answered with the default position. One value, two sources.
 function withAnchor(node: LayoutNode): AnchoredRoot {
-  const placed = countAnchors(node) > 0 ? node : appendAnchor(node);
+  const placed = countAnchors(node) > 0 ? node : prependAnchor(node);
   return placed as AnchoredRoot;
 }
 
