@@ -1,3 +1,10 @@
+# [1.59.0](https://github.com/promptctl/cc-candybar/compare/v1.58.0...v1.59.0) (2026-09-08)
+
+
+### Features
+
+* **settings:** the global menu leads the bar, as one symbol in accent ([#224](https://github.com/promptctl/cc-candybar/issues/224)) ([dbdeb52](https://github.com/promptctl/cc-candybar/commit/dbdeb5229cd38dc7bc3e6a45a626a389b0bca19f))
+
 # [1.58.0](https://github.com/promptctl/cc-candybar/compare/v1.57.0...v1.58.0) (2026-09-06)
 
 
