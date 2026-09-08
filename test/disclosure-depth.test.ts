@@ -16,8 +16,10 @@
 //     no depth — the same tree with and without the gate renders byte-identical;
 //   - a group's toggle is a trigger like any other: state when open, its
 //     address's tint when closed;
-//   - the closed ☰ door on the bar wears its address's tint (the ai7.5 claim,
-//     re-stated here as the depth-0 anchor of the chain).
+//   - the closed ☰ door on the bar paints `accent` over its address's tint
+//     (the one synthesized cell that authors a `bg:`), while the band it opens
+//     still derives from the hue that address deals — the depth-0 anchor of
+//     the chain.
 
 import { getThemePalette } from "@promptctl/rich-js";
 import type { Palette, RichText } from "@promptctl/rich-js";

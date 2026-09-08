@@ -6,6 +6,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { doctorPlan } from "../src/doctor/cli";
+import { DISCLOSURE_GLYPH_CLOSED, DOOR_GLYPH } from "../src/config/disclosure";
 import type { DoctorEdge } from "../src/doctor/edge";
 
 const IN_TMUX = { TMUX: "/tmp/tmux-501/default,123,0", TMUX_PANE: "%1" };
@@ -62,7 +63,7 @@ describe("doctorPlan", () => {
     expect(plan.stderr).toBe("");
     expect(plan.stdout).toBe(
       "✗ tmux truecolor — Claude Code renders the bar in 256 colours inside tmux" +
-        " (fix: click ☰ 🧰 tools ▸ 🩺 doctor, then [fix] on the bar)\n",
+        ` (fix: click ${DOOR_GLYPH} 🧰 tools ${DISCLOSURE_GLYPH_CLOSED} 🩺 doctor, then [fix] on the bar)\n`,
     );
   });
 });
