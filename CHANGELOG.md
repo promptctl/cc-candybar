@@ -1,3 +1,10 @@
+# [1.60.0](https://github.com/promptctl/cc-candybar/compare/v1.59.0...v1.60.0) (2026-09-08)
+
+
+### Features
+
+* **config:** segments and presets merge by name then by field — a first durable write lands one field (brandon-config-ph5) ([#225](https://github.com/promptctl/cc-candybar/issues/225)) ([3aca17b](https://github.com/promptctl/cc-candybar/commit/3aca17bef2a28388653492dd542b43708694fb21))
+
 # [1.59.0](https://github.com/promptctl/cc-candybar/compare/v1.58.0...v1.59.0) (2026-09-08)
 
 
