@@ -31,6 +31,10 @@ import {
 } from "./helpers/spawn-isolated-daemon";
 import { SETTINGS_ANCHOR } from "../src/config/settings-menu";
 import { EDIT_MODE_KEY } from "../src/config/loader/edit-mode";
+import {
+  DISCLOSURE_GLYPH_CLOSE,
+  DOOR_GLYPH,
+} from "../src/config/disclosure";
 
 jest.setTimeout(30_000);
 
@@ -57,7 +61,7 @@ describe("candybar-settings-ui-aok.1: real daemon, real user config", () => {
 
       // 1. The door exists, from a config that declared only two segments.
       const closed = await render(sockPath, SID, projectDir);
-      expect(stripAnsi(closed)).toContain("☰ ▸");
+      expect(stripAnsi(closed)).toContain(DOOR_GLYPH);
       expect(stripAnsi(closed)).not.toContain("✎ edit");
 
       // 2. Its click opens the body — found in the rendered bytes and
@@ -65,7 +69,8 @@ describe("candybar-settings-ui-aok.1: real daemon, real user config", () => {
       //    validators did not admit would fail here rather than no-op.
       await click(sockPath, urlWriting(closed, SETTINGS_ANCHOR, "open"));
       const opened = stripAnsi(await render(sockPath, SID, projectDir));
-      expect(opened).toContain("☰ ▾");
+      expect(opened).toContain(DISCLOSURE_GLYPH_CLOSE);
+      expect(opened).not.toContain(DOOR_GLYPH);
       expect(opened).toContain("✎ edit"); // edit mode
       expect(opened).toContain("▦"); // preset switching
 

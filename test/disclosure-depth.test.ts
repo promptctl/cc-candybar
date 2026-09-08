@@ -16,8 +16,10 @@
 //     no depth — the same tree with and without the gate renders byte-identical;
 //   - a group's toggle is a trigger like any other: state when open, its
 //     address's tint when closed;
-//   - the closed ☰ door on the bar wears its address's tint (the ai7.5 claim,
-//     re-stated here as the depth-0 anchor of the chain).
+//   - the closed ☰ door on the bar paints `accent` over its address's tint
+//     (the one synthesized cell that authors a `bg:`), while the band it opens
+//     still derives from the hue that address deals — the depth-0 anchor of
+//     the chain.
 
 import { getThemePalette } from "@promptctl/rich-js";
 import type { Palette, RichText } from "@promptctl/rich-js";
@@ -252,7 +254,7 @@ function build(src: string, withDefault = false) {
   };
 }
 
-// The bundled default with a two-cell first row: ☰ lands after `model`.
+// The bundled default with a two-cell first row: ☰ leads it.
 const BUNDLED = `{ globals: { palette: '${THEME}' }, root: { h: ['directory', 'model'] } }`;
 
 describe("candybar-render-ai7.9 — the bundled ☰ → ⚙ → picker chain, depth by depth", () => {
@@ -262,8 +264,12 @@ describe("candybar-render-ai7.9 — the bundled ☰ → ⚙ → picker chain, de
     rt.render();
     const hue = rt.hueOf(SETTINGS_ANCHOR);
 
-    // Depth-0 anchor: the closed door on the bar wears its address's tint.
-    expect(rt.bgOf(SETTINGS_ANCHOR)).toBe(rt.expectedTint(SETTINGS_ANCHOR));
+    // Depth-0 anchor: the closed door authors its own background (the palette's
+    // `accent`, measured in test/settings-door.test.ts), so it is the one cell
+    // in this chain whose CLOSED colour is not its tint. What it opens is
+    // unaffected — the band below still derives from the hue its ADDRESS deals,
+    // which is what every assertion from here down measures.
+    expect(rt.bgOf(SETTINGS_ANCHOR)).not.toBe(rt.expectedTint(SETTINGS_ANCHOR));
 
     // ☰ open: the trigger wears the depth-0 state; its body row's cells are
     // depth-0 items, each placed by its band-relative step, text chosen.
