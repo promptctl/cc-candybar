@@ -1021,12 +1021,16 @@ globals that *do* have one.)
 ### The global settings menu: `settings.menu`
 
 One disclosure is present in **every** bar, whatever the config says: the
-global settings menu, rendered as `☰ ▸`.
+global settings menu, rendered as `☰`. It is one symbol per state rather than a
+label plus an arrow: `☰` closed, `✕` open. By default it is the leading cell of
+the bar's first row, and it authors the palette's `accent` so it reads as a
+landmark rather than as one more decorated cell — place the reserved
+`settings.menu` segment name yourself to move it anywhere else.
 
 Opening it shows the always-available functionality:
 
 ```
-☰ ▾
+✕
   ☐ persist?  (?)   ▦ default ▸ ↺   ⚙ config ▾   🧰 tools ▸   ✎ edit
      🎨 tokyo-night ▸ ↺   ◐ none ▸ ↺   ✦ powerline ▸ ↺   wrap: on ↺   ◀ padding 1 ▶ ↺
 ```

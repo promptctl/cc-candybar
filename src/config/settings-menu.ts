@@ -48,8 +48,10 @@ import {
 } from "./dsl-types.js";
 import {
   DISCLOSURE_CLOSED,
+  DISCLOSURE_GLYPH_CLOSE,
   DISCLOSURE_GLYPH_CLOSED,
   DISCLOSURE_GLYPH_OPEN,
+  DOOR_GLYPH,
   disclosureCycleAction,
   disclosureNode,
   disclosureStateVar,
@@ -177,18 +179,48 @@ const doctorRowSeg = (check: string): string => `${DOCTOR_SEG}.${check}`;
 // the same two sentences `--help` prints.
 const PERSIST_HELP_SEG = `${SETTINGS_NS}help.persist`;
 
-// [LAW:one-source-of-truth] The door is the ONE cell of this menu that
-// authors a text colour. Every other cell — the controls, the `(?)` and its
-// lines, the ⚙ trigger — sits on the band its trigger opens, where the text
-// is CHOSEN against the band item the cell wears (`textOn`, the walk's text
-// floor for an unauthored `fg:`; candybar-render-ai7.9). A fixed `foreground`
-// there measures as low as 1.1 : 1 against the pale states and items of the
-// dark themes (atom-one-dark, catppuccin-frappe, solarized-dark), so the body
-// authors nothing and the floor decides. No `bg:` anywhere: a settings cell
-// states nothing by its background, so the closed `☰` wears the vocabulary
-// tint its address selects like every other decorated segment
-// (candybar-render-ai7.5), and the body cells wear their band's items.
-const DOOR_TEXT = { fg: "foreground" } as const;
+// [LAW:one-source-of-truth] The door is the ONE cell of this menu that authors
+// colour, and it authors BOTH halves. Every other cell — the controls, the
+// `(?)` and its lines, the ⚙ trigger — sits on the band its trigger opens,
+// where the background is the band item its address selects and the text is
+// CHOSEN against it (`textOn`, the walk's text floor for an unauthored `fg:`;
+// candybar-render-ai7.9). A fixed `foreground` there measures as low as
+// 1.1 : 1 against the pale states and items of the dark themes
+// (atom-one-dark, catppuccin-frappe, solarized-dark), so the body authors
+// nothing and the floor decides.
+//
+// The door's `bg:` is the exception candybar-render-ai7.4 defines: an authored
+// background STATES MEANING and paints over the vocabulary tint. What it states
+// is identity — this is the one control every bar carries, at a fixed corner,
+// and a user has to find it before they can use anything in here. Left
+// undecorated it would wear the tint its address selects, and as the row's
+// leading cell that address is vocabulary index 0: `primary` at the LOWEST
+// amount, the palest entry the decorative vocabulary has. The landmark would be
+// the quietest cell on the bar.
+//
+// `accent` is the palette's own name for the colour that draws the eye, so the
+// door wears it pure — a colour no decorated cell can be dealt, since the
+// vocabulary only ever blends a hue into a base at ≤ 0.30. Measured over every
+// bundled theme it stands ≥ 0.111 ΔE off the nearest of the 18 vocabulary
+// entries (test/settings-door.test.ts), clearing the .10 trigger/plane floor
+// the region model reads by. `lighten (color "accent") 3` was the first cut and
+// is a dark-theme answer: on the five light themes it lands 0.02–0.03 from the
+// tints they already wear, which is a landmark that disappears on a third of
+// the registry.
+//
+// The text is `contrastOn (bgOf)` rather than a fixed pole for the same reason
+// the body's is chosen: `accent` is a light cell on some themes and a dark one
+// on others, and a fixed `foreground` would measure 2.6 : 1 on
+// rose-pine-dawn. Reading it off the background the cell resolved to gives
+// ≥ 4.80 : 1 on every theme.
+//
+// This is the CLOSED cell only. An open door wears its band's state colour like
+// every other trigger (`stateCell`, ai7.9) — the ✕ ties to the panel it opened,
+// which is the one thing on the bar that outranks the door itself.
+const DOOR_COLORS = {
+  bg: '{{ color "accent" }}',
+  fg: "{{ contrastOn (bgOf) }}",
+} as const;
 
 // [LAW:one-source-of-truth] One accordion key for every picker in the menu:
 // one key holds one open member, so opening a theme picker closes the look
@@ -589,15 +621,23 @@ function settingsArtifacts(): {
       },
     },
     segments: {
-      // [LAW:representation] The glyph trails the label it gates, per the
-      // disclosure vocabulary every other toggle in the bar reads by.
+      // [LAW:representation] ONE symbol per state, unlike the labelled toggles
+      // below, which are a word plus the ▸/▾ that gates it. The door has no
+      // label to gate: it is a glyph, so a second glyph beside it would be the
+      // only thing on the bar that spells its state twice. `☰` names what it
+      // opens, `✕` names what the click does — the SAME `✕` the picker's close
+      // affordance and edit mode's open `+` wear, because it is the one glyph
+      // for that one meaning (DISCLOSURE_GLYPH_CLOSE).
+      //
+      // Two displays through the same `[closed, member]` cycle every other
+      // disclosure binds: the shape did not change, only the values.
       [SETTINGS_ANCHOR]: {
         template: disclosureTrigger(
           SETTINGS_ANCHOR,
-          `☰ ${DISCLOSURE_GLYPH_CLOSED}`,
-          `☰ ${DISCLOSURE_GLYPH_OPEN}`,
+          DOOR_GLYPH,
+          DISCLOSURE_GLYPH_CLOSE,
         ),
-        ...DOOR_TEXT,
+        ...DOOR_COLORS,
       },
       // [LAW:representation] The checkbox states what the NEXT write does,
       // which is why the glyph and the word live together: "☑ persist?" is

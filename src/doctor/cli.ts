@@ -13,7 +13,7 @@
 
 import process from "node:process";
 import type { CliPlan } from "../check.js";
-import { DISCLOSURE_GLYPH_CLOSED } from "../config/disclosure.js";
+import { DISCLOSURE_GLYPH_CLOSED, DOOR_GLYPH } from "../config/disclosure.js";
 import { detectTmuxHint } from "../tmux-hint.js";
 import { runDoctor, type CheckReport, type DoctorFacts } from "./checks.js";
 import { gatherFacts, productionEdge, type DoctorEdge } from "./edge.js";
@@ -22,7 +22,7 @@ const EXIT_OK = 0;
 const EXIT_FAILED = 1;
 const EXIT_USAGE = 2;
 
-const FIX_HINT = ` (fix: click ☰ ${DISCLOSURE_GLYPH_CLOSED} 🧰 tools ${DISCLOSURE_GLYPH_CLOSED} 🩺 doctor, then [fix] on the bar)`;
+const FIX_HINT = ` (fix: click ${DOOR_GLYPH} 🧰 tools ${DISCLOSURE_GLYPH_CLOSED} 🩺 doctor, then [fix] on the bar)`;
 
 function reportLine({ check, verdict }: CheckReport): string {
   return verdict.ok

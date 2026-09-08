@@ -1,13 +1,13 @@
-import { DISCLOSURE_GLYPH_CLOSED } from "./config/disclosure";
+import { DOOR_GLYPH } from "./config/disclosure";
 import { HELP_GLYPH_CLOSED } from "./config/help";
 import { NODE_FLAGS } from "./cli-flags";
 
 // [LAW:effects-at-boundaries] Pure data, no I/O — index.ts owns the console.log
 // effect. Kept as its own module so the text is importable (and testable) without
 // pulling in index.ts's top-level `main()` call.
-// [LAW:one-source-of-truth] The disclosure glyph comes from config/disclosure.ts
-// (the same constant the theme/look picker itself renders with), so this text
-// can't drift from what a user actually sees on the bar.
+// [LAW:one-source-of-truth] The door's glyph comes from config/disclosure.ts —
+// the same constant the bar's own settings door renders with — so an
+// instruction to click it can't drift from what a user actually sees.
 // [LAW:one-source-of-truth] THE help corpus, as data. `--help` and the bar's
 // own `(?)` disclosures are two RENDERINGS of these arrays, never two copies of
 // the sentences: a `(?)` segment's template IS one of these strings, and the
@@ -51,7 +51,7 @@ Configuration:
 
   Every bar carries a settings menu, whatever your config says — no config
   needed, and writing your own \`root\` cannot delete it. Click
-  ☰ ${DISCLOSURE_GLYPH_CLOSED} on the bar for preset switching, edit mode, and a config menu
+  ${DOOR_GLYPH} on the bar for preset switching, edit mode, and a config menu
   of clickable theme/look/style/wrap/padding controls. The \`persist?\`
   checkbox there chooses where a change lands: ${PERSIST_HELP.join(", ")}.
   Its 🧰 tools row holds 🩺 doctor: click it to check your setup, and click a

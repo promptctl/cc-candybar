@@ -62,7 +62,7 @@ describe("doctorPlan", () => {
     expect(plan.stderr).toBe("");
     expect(plan.stdout).toBe(
       "✗ tmux truecolor — Claude Code renders the bar in 256 colours inside tmux" +
-        " (fix: click ☰ ▸ 🧰 tools ▸ 🩺 doctor, then [fix] on the bar)\n",
+        " (fix: click ☰ 🧰 tools ▸ 🩺 doctor, then [fix] on the bar)\n",
     );
   });
 });
