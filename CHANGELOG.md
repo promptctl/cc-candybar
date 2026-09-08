@@ -1,3 +1,10 @@
+# [1.61.0](https://github.com/promptctl/cc-candybar/compare/v1.60.0...v1.61.0) (2026-09-08)
+
+
+### Features
+
+* **config:** a duplicate object key warns at load, named by file and line (brandon-config-16g) ([#227](https://github.com/promptctl/cc-candybar/issues/227)) ([e7f0e12](https://github.com/promptctl/cc-candybar/commit/e7f0e12618c002c3850f1218fcc73249072377a7))
+
 # [1.60.0](https://github.com/promptctl/cc-candybar/compare/v1.59.0...v1.60.0) (2026-09-08)
 
 
