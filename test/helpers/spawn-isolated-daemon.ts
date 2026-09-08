@@ -26,6 +26,7 @@ import {
 } from "./spawn-test-daemon";
 import { daemonPool } from "./daemon-pool";
 import { sendDaemonRequest } from "./daemon-wire";
+import { logPath } from "../../src/daemon/paths";
 import { PROTOCOL_VERSION } from "../../src/daemon/protocol";
 
 export interface IsolatedDaemonEnv {
@@ -186,7 +187,8 @@ export async function spawnDaemonWithEnv(
     release();
     throw new Error(
       "daemon did not answer a stats round trip within 5000ms (socket file" +
-        ` ${fs.existsSync(sockPath) ? "exists" : "absent"})`,
+        ` ${fs.existsSync(sockPath) ? "exists" : "absent"})\n` +
+        daemonLogTail(env),
     );
   }
 
@@ -197,6 +199,23 @@ export async function spawnDaemonWithEnv(
       release();
     },
   };
+}
+
+// [LAW:no-silent-failure] A daemon that never answered wrote its own reason
+// down — `refusing to boot`, `EADDRINUSE … exiting`, `parent watchdog` — in
+// the log this env points it at (its stdio is drained into nothing). A
+// readiness failure that quotes that log names its cause; one that only says
+// "socket file exists" reads like a slow daemon and costs an afternoon.
+function daemonLogTail(env: NodeJS.ProcessEnv, lines = 20): string {
+  const file = logPath(env);
+  let text: string;
+  try {
+    text = fs.readFileSync(file, "utf8");
+  } catch (e) {
+    return `daemon log ${file}: ${(e as Error).message}`;
+  }
+  const tail = text.trimEnd().split("\n").slice(-lines).join("\n");
+  return `daemon log ${file} (last ${lines} lines):\n${tail}`;
 }
 
 export interface IsolatedDaemonHandle {

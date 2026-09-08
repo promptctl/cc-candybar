@@ -1,6 +1,5 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import fs from "node:fs";
-import net from "node:net";
 import os from "node:os";
 import path from "node:path";
 
@@ -12,6 +11,8 @@ import {
   type LeaseRead,
 } from "../src/daemon/socket-lease";
 import { readStartTime } from "../src/daemon/process-fingerprint";
+import { waitForExit } from "./helpers/daemon-wire";
+import { spawnDaemonWithEnv } from "./helpers/spawn-isolated-daemon";
 import { spawnTestDaemon } from "./helpers/spawn-test-daemon";
 
 // The real kernel start-time of a live pid, so a planted lease matches the true
@@ -254,18 +255,6 @@ function makeFixture(): Fixture {
   };
 }
 
-function waitForExit(
-  child: ChildProcess,
-): Promise<{ code: number | null; signal: NodeJS.Signals | null }> {
-  return new Promise((resolve) => {
-    if (child.exitCode !== null || child.signalCode !== null) {
-      resolve({ code: child.exitCode, signal: child.signalCode });
-      return;
-    }
-    child.once("exit", (code, signal) => resolve({ code, signal }));
-  });
-}
-
 function raceExit(
   child: ChildProcess,
   budgetMs: number,
@@ -276,26 +265,6 @@ function raceExit(
       setTimeout(() => resolve("timeout"), budgetMs).unref(),
     ),
   ]);
-}
-
-async function waitForConnectable(
-  sockPath: string,
-  budgetMs: number,
-): Promise<boolean> {
-  const deadline = Date.now() + budgetMs;
-  while (Date.now() < deadline) {
-    const ok = await new Promise<boolean>((resolve) => {
-      const s = net.connect(sockPath);
-      s.once("connect", () => {
-        s.destroy();
-        resolve(true);
-      });
-      s.once("error", () => resolve(false));
-    });
-    if (ok) return true;
-    await new Promise((r) => setTimeout(r, 25).unref());
-  }
-  return false;
 }
 
 // Does this pid name a live process? Signal 0 probes existence without
@@ -387,13 +356,23 @@ describe("daemon EADDRINUSE arbitration (integration)", () => {
         startTime: "Wed Jul  8 00:00:00 2026",
       });
 
-      const { child: daemon, killTree, release } = await spawnTestDaemon(fx.env);
+      // Reclaim → unlink stale socket → rebind → serve. First-attempt reclaim
+      // means a request is ANSWERED without any exit in between.
+      //
+      // [LAW:no-ambient-temporal-coupling] Readiness is a served request, not a
+      // successful connect. `server.listen()` binds and listens in the kernel
+      // synchronously, so a connect succeeds from that instant — but the lease
+      // is written in the 'listening' callback, a later tick (measured: a peer
+      // connected 264 ms before that callback ran while the loop was held).
+      // A connect probe therefore reads whatever lease was there before the
+      // daemon claimed the path — here the planted one naming the dead pid —
+      // and the assertion below fails on a loaded runner for a daemon that is
+      // perfectly healthy (brandon-ci-flakes-630). A served request is the
+      // daemon's contract instead: serving implies owning (socket-ownership.ts),
+      // and the first connection is dispatched only after 'listening'.
+      const daemon = await spawnDaemonWithEnv(fx.env);
       try {
-        // Reclaim → unlink stale socket → rebind → serve. First-attempt
-        // reclaim means it becomes connectable without any exit in between.
-        const connectable = await waitForConnectable(fx.sockPath, BUDGET_MS);
-        expect(connectable).toBe(true);
-        // The stale socket was a plain file; a connectable socket here means a
+        // The stale socket was a plain file; a served request here means a
         // live daemon unlinked it, rebound, and now answers — the reclaim. The
         // lease rewritten to `owned` is that same live owner. [LAW:behavior-not-structure]
         const released = readLease(fx.leasePath);
@@ -407,9 +386,8 @@ describe("daemon EADDRINUSE arbitration (integration)", () => {
           expect(isPidAlive(released.pid)).toBe(true);
         }
       } finally {
-        killTree();
-        await waitForExit(daemon);
-        release();
+        daemon.killTree();
+        await waitForExit(daemon.child);
       }
     } finally {
       fx.cleanup();
@@ -441,13 +419,12 @@ describe("daemon EADDRINUSE arbitration (integration)", () => {
         startTime: "Thu Jan  1 00:00:00 1970",
       });
 
-      const { child: daemon, killTree, release } = await spawnTestDaemon(fx.env);
+      // Fingerprint mismatch → reclaim → serve, despite the pid being alive.
+      // A served request, for the reason the dead-lease case spells out.
+      const daemon = await spawnDaemonWithEnv(fx.env);
       try {
-        // Fingerprint mismatch → reclaim → serve, despite the pid being alive.
-        const connectable = await waitForConnectable(fx.sockPath, BUDGET_MS);
-        expect(connectable).toBe(true);
-        // Connectable stale-file socket ⇒ a live daemon reclaimed and serves;
-        // `owned` lease ⇒ that live owner now holds it. [LAW:behavior-not-structure]
+        // A stale-file socket that answers ⇒ a live daemon reclaimed and
+        // serves; `owned` lease ⇒ that live owner now holds it. [LAW:behavior-not-structure]
         const released = readLease(fx.leasePath);
         expect(released.kind).toBe("owned");
         if (released.kind === "owned") {
@@ -458,9 +435,8 @@ describe("daemon EADDRINUSE arbitration (integration)", () => {
           expect(isPidAlive(released.pid)).toBe(true);
         }
       } finally {
-        killTree();
-        await waitForExit(daemon);
-        release();
+        daemon.killTree();
+        await waitForExit(daemon.child);
       }
     } finally {
       holder.kill("SIGKILL");

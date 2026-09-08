@@ -1,4 +1,7 @@
 import { spawnSync } from "node:child_process";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 
 import {
   launch,
@@ -26,6 +29,59 @@ function makeSpyHandle(): {
     ends,
   };
 }
+
+// [LAW:no-ambient-temporal-coupling] A named condition, polled until it holds
+// or loudly failed — never a sleep standing in for it.
+async function until(
+  condition: () => boolean,
+  what: string,
+  budgetMs = 5000,
+): Promise<void> {
+  const deadline = Date.now() + budgetMs;
+  while (!condition()) {
+    if (Date.now() >= deadline) {
+      throw new Error(`${what} did not hold within ${budgetMs}ms`);
+    }
+    await new Promise((r) => setTimeout(r, 5));
+  }
+}
+
+// The signals the launcher sends a child's process group, in the order it
+// sends them. The launcher's OS seam is process.kill on the negated pid
+// (signalGroup); the signal-refused test below stands at the same seam. A
+// pass-through spy records the launcher's own promise — SIGTERM first, SIGKILL
+// only after the grace — independent of which signal the scheduler let the
+// child die of.
+function recordGroupSignals(): { sent: string[]; restore(): void } {
+  const sent: string[] = [];
+  const realKill = process.kill.bind(process);
+  const spy = jest.spyOn(process, "kill").mockImplementation((pid, sig) => {
+    if (typeof pid === "number" && pid < 0 && typeof sig === "string") {
+      sent.push(sig);
+    }
+    return realKill(pid, sig);
+  });
+  return { sent, restore: () => spy.mockRestore() };
+}
+
+// A node child that ignores SIGTERM, provably: it writes `marker` only after
+// its handler is installed, so a test that awaits the marker and THEN asks for
+// termination cannot race the handler — the child can die of nothing but the
+// escalation's SIGKILL.
+function ignoringChild(marker: string): { bin: string; args: string[] } {
+  return {
+    bin: process.execPath,
+    args: [
+      "-e",
+      "process.on('SIGTERM', () => {});" +
+        ` require('fs').writeFileSync(${JSON.stringify(marker)}, '');` +
+        " setInterval(() => {}, 1000);",
+    ],
+  };
+}
+
+const scratch = fs.mkdtempSync(path.join(os.tmpdir(), "ccb-launch-"));
+afterAll(() => fs.rmSync(scratch, { recursive: true, force: true }));
 
 afterEach(() => {
   setLaunchStats(null);
@@ -56,17 +112,25 @@ describe("launch (async)", () => {
     expect(r.ok).toBe(false);
   });
 
-  it("kills the child on timeout", async () => {
-    const r = await launch({
-      bin: "/bin/sh",
-      args: ["-c", "sleep 5"],
-      timeoutMs: 50,
-      category: "user-shell",
-    });
-    expect(r.ok).toBe(false);
-    if (!r.ok) {
-      expect(r.reason).toBe("timeout");
-      expect(r.signal).toBe("SIGTERM");
+  it("kills the child on timeout: the outcome is the timeout, and SIGTERM is sent first", async () => {
+    // [LAW:behavior-not-structure] The signal that ended a child which dies on
+    // SIGTERM is a fact about scheduler latency against the 250 ms grace, not
+    // about the launcher: a runner that starves `sh` past the grace sees
+    // SIGKILL, correctly (brandon-ci-flakes-630 saw exactly that). What the
+    // launcher promises is the outcome — `timeout` — and the ORDER it signals
+    // in, which the seam records whatever the latency.
+    const { sent, restore } = recordGroupSignals();
+    try {
+      const r = await launch({
+        bin: "/bin/sh",
+        args: ["-c", "sleep 5"],
+        timeoutMs: 50,
+        category: "user-shell",
+      });
+      expect(r).toMatchObject({ ok: false, reason: "timeout" });
+      expect(sent[0]).toBe("SIGTERM");
+    } finally {
+      restore();
     }
   });
 
@@ -74,19 +138,29 @@ describe("launch (async)", () => {
     // A single process (no child to orphan) that ignores SIGTERM, so a bare
     // SIGTERM leaves it running and the launcher must escalate to SIGKILL. The
     // promise must still resolve (not hang) and only after the child is reaped
-    // — proving the timeout path upholds the "no helper outlives its frame"
-    // invariant. Timeout is generous so node registers the handler before we
-    // signal; otherwise default SIGTERM termination would race the handler.
-    const r = await launch({
-      bin: process.execPath,
-      args: ["-e", "process.on('SIGTERM', () => {}); setInterval(() => {}, 1000);"],
-      timeoutMs: 300,
-      category: "user-shell",
-    });
-    expect(r.ok).toBe(false);
-    if (!r.ok) {
-      expect(r.reason).toBe("timeout");
-      expect(r.signal).toBe("SIGKILL");
+    // — proving termination upholds the "no helper outlives its frame"
+    // invariant. [LAW:no-ambient-temporal-coupling] The termination is asked
+    // for only once the marker proves the handler is installed, so the child
+    // can die of nothing but the escalation — no timeout budget stands in for
+    // "node has booted by now". The abort trigger is used because it is the
+    // one the test can time; the timeout trigger reaches the same escalation
+    // (one termination per child), and its own outcome is pinned above.
+    const marker = path.join(scratch, "armed");
+    const controller = new AbortController();
+    const { sent, restore } = recordGroupSignals();
+    try {
+      const pending = launch({
+        ...ignoringChild(marker),
+        category: "user-shell",
+        signal: controller.signal,
+      });
+      await until(() => fs.existsSync(marker), "the child's SIGTERM handler");
+      controller.abort();
+      const r = await pending;
+      expect(r).toMatchObject({ ok: false, reason: "aborted", signal: "SIGKILL" });
+      expect(sent).toEqual(["SIGTERM", "SIGKILL"]);
+    } finally {
+      restore();
     }
   });
 
@@ -111,30 +185,33 @@ describe("launch (async)", () => {
     expect(alive(nap)).toBe(true);
     controller.abort();
     const r = await pending;
-    expect(r.ok).toBe(false);
-    if (!r.ok) {
-      expect(r.reason).toBe("aborted");
-      expect(r.signal).toBe("SIGTERM");
-    }
+    // The outcome, not the ending signal: see the timeout test above.
+    expect(r).toMatchObject({ ok: false, reason: "aborted" });
     expect(alive(marker)).toBe(false);
     expect(alive(nap)).toBe(false);
   });
 
-  it("with both triggers armed, the timeout that fired first owns the cause; an abort during escalation is inert", async () => {
-    // The child ignores SIGTERM, so the timeout's termination is still in
-    // its SIGKILL grace window when the abort lands (100 ms timeout, abort at
-    // 150 ms, grace 250 ms). One termination per child: the reason stays
-    // "timeout" and the escalation still reaps the child.
+  it("with both triggers armed, the timeout that fired first owns the cause; a later abort is inert", async () => {
+    // One termination per child: the reason stays "timeout". The abort is
+    // issued once the seam has recorded the timeout's SIGTERM — the named
+    // condition for "the timeout fired first" — not at a wall-clock offset
+    // guessed to land inside the grace window.
     const controller = new AbortController();
-    setTimeout(() => controller.abort(), 150);
-    const r = await launch({
-      bin: process.execPath,
-      args: ["-e", "process.on('SIGTERM', () => {}); setInterval(() => {}, 1000);"],
-      timeoutMs: 100,
-      category: "user-shell",
-      signal: controller.signal,
-    });
-    expect(r).toMatchObject({ ok: false, reason: "timeout", signal: "SIGKILL" });
+    const { sent, restore } = recordGroupSignals();
+    try {
+      const pending = launch({
+        bin: "/bin/sh",
+        args: ["-c", "sleep 5"],
+        timeoutMs: 50,
+        category: "user-shell",
+        signal: controller.signal,
+      });
+      await until(() => sent.includes("SIGTERM"), "the timeout's SIGTERM");
+      controller.abort();
+      expect(await pending).toMatchObject({ ok: false, reason: "timeout" });
+    } finally {
+      restore();
+    }
   });
 
   it("with both triggers armed, an abort under a longer timeout owns the cause and disarms the timer", async () => {
@@ -148,7 +225,7 @@ describe("launch (async)", () => {
       category: "user-shell",
       signal: controller.signal,
     });
-    expect(r).toMatchObject({ ok: false, reason: "aborted", signal: "SIGTERM" });
+    expect(r).toMatchObject({ ok: false, reason: "aborted" });
     expect(Date.now() - t0).toBeLessThan(2000);
   });
 
