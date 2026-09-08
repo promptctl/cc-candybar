@@ -1023,9 +1023,10 @@ globals that *do* have one.)
 One disclosure is present in **every** bar, whatever the config says: the
 global settings menu, rendered as `☰`. It is one symbol per state rather than a
 label plus an arrow: `☰` closed, `✕` open. By default it is the leading cell of
-the bar's first row, and it authors the palette's `accent` so it reads as a
-landmark rather than as one more decorated cell — place the reserved
-`settings.menu` segment name yourself to move it anywhere else.
+the bar's first row. Closed, it wears the palette's `accent` so it reads as a
+landmark rather than as one more decorated cell; open, it wears its band's
+state colour like every other trigger. Place the reserved `settings.menu`
+segment name yourself to move it anywhere else.
 
 Opening it shows the always-available functionality:
 
