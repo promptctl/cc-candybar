@@ -1067,7 +1067,7 @@ overflow it.
 You do not declare it and you cannot delete it. What you *can* do is choose
 where it goes, by placing the reserved segment name `settings.menu` in your
 layout — the anchor. Place it and the menu renders there; leave it out and the
-menu is appended to the bar's first row. Nothing else differs between the two:
+menu leads the bar's first row. Nothing else differs between the two:
 the same toggle, the same body, the same clicks.
 
 ```json5 check:pass
