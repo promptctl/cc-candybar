@@ -296,7 +296,14 @@ async function loadRegisterRender(
   cwd: string,
   warnings: string[],
 ): Promise<string> {
-  const { config: merged, source } = loadConfig(configPath, DEFAULT_DSL_CONFIG);
+  const {
+    config: merged,
+    source,
+    warnings: fileWarnings,
+  } = loadConfig(configPath, DEFAULT_DSL_CONFIG);
+  // The file's own advisories (an editability notice naming a duplicate key)
+  // land before validation, so a fatal outcome still carries them.
+  warnings.push(...fileWarnings);
   const config = validateConfig(merged, configPath ?? "<default>", source);
 
   const store = new VariableStore();

@@ -35,6 +35,7 @@ import {
 import { listResolvablePaletteNames } from "../themes/policy.js";
 import {
   ConfigError,
+  editabilityNotice,
   findKeyLine,
   type ConfigIssue,
 } from "./loader/diagnostics.js";
@@ -72,7 +73,11 @@ import { validateNoCycles } from "./loader/cycles.js";
 // is invisible to them. Moving a symbol between loader/ modules never touches a
 // callsite as long as it stays re-exported here.
 
-export { ConfigError, findKeyLine } from "./loader/diagnostics.js";
+export {
+  ConfigError,
+  editabilityNotice,
+  findKeyLine,
+} from "./loader/diagnostics.js";
 export type { ConfigIssue } from "./loader/diagnostics.js";
 export {
   expandHome,
@@ -118,6 +123,12 @@ export {
  * preset roots it declares; candybar-config-dqe's `preset.customized`), all
  * from one read rather than a re-read or a re-parse downstream.
  *
+ * `warnings` are the advisories the file's own text earns once it has parsed
+ * — today the editability notice (a duplicate key the render path tolerates
+ * but the config-file editor refuses, brandon-config-16g). They ride the same
+ * channel as the register pass's `loadWarnings`; a file that fails to parse
+ * throws instead, so a syntax error is reported once, never as both.
+ *
  * Throws ConfigError on JSON5 syntax / structural / per-record validation
  * failures. Cross-references and cycles are validateConfig()'s job.
  *
@@ -128,20 +139,38 @@ export function loadConfig(
   path: string | null,
   dflt: DslConfig,
   allowedPalettes?: ReadonlySet<string>,
-): { config: DslConfig; raw: RawDslConfig; source: string } {
-  const source = path === null ? "" : fs.readFileSync(path, "utf-8");
+): LoadedFile & { config: DslConfig } {
+  const loaded =
+    path === null ? NO_FILE : readParsed(path, dflt, allowedPalettes);
+  return { ...loaded, config: mergeWithDefault(loaded.raw, dflt) };
+}
+
+interface LoadedFile {
+  readonly raw: RawDslConfig;
+  readonly source: string;
+  readonly warnings: readonly string[];
+}
+
+// "No user file exists": a uniform merge against an empty raw, no text, no
+// advisories to earn.
+const NO_FILE: LoadedFile = { raw: {}, source: "", warnings: [] };
+
+function readParsed(
+  path: string,
+  dflt: DslConfig,
+  allowedPalettes: ReadonlySet<string> | undefined,
+): LoadedFile {
+  const source = fs.readFileSync(path, "utf-8");
   // [LAW:one-source-of-truth] The names a file may author as a delta are the
-  // segments of the very default the merge below lays the file over.
-  const raw: RawDslConfig =
-    path === null
-      ? {}
-      : parseDslConfig(
-          path,
-          source,
-          allowedPalettes,
-          inheritableSegmentNames(dflt),
-        );
-  return { config: mergeWithDefault(raw, dflt), raw, source };
+  // segments of the very default the merge lays the file over.
+  const raw = parseDslConfig(
+    path,
+    source,
+    allowedPalettes,
+    inheritableSegmentNames(dflt),
+  );
+  const notice = editabilityNotice(path, source);
+  return { raw, source, warnings: notice === null ? [] : [notice] };
 }
 
 /**

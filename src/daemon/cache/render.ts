@@ -332,7 +332,9 @@ export class RenderCache {
       configFilePath: null,
       lastError: loaded.error,
       lastWarning: loaded.warning,
-      state: loaded.state ?? this.buildState(cwd, null),
+      // The seed's own advisories go nowhere: the strip already carries the
+      // failed load's, and the default earns none by program invariant.
+      state: loaded.state ?? this.buildState(cwd, null, []),
       watcher: null,
       watcherKey: null,
     };
@@ -436,10 +438,14 @@ export class RenderCache {
     // prior state stays untouched, so the daemon keeps rendering the
     // last-known-good config — the bundled default until one has loaded —
     // plus the error strip (composeWithDiagnostics reads `lastError` and
-    // `lastWarning`).
+    // `lastWarning`). The build appends the advisories it earns along the
+    // way (the file's editability notice, the register pass's partial-load
+    // warnings) to `advisories` as it goes, so every warning produced before
+    // a failure still reaches the strip beside the error — the same channel,
+    // the same ordering, that `cc-candybar check` reports.
     let state: DslRenderState;
     try {
-      state = this.buildState(cwd, resolvedPath);
+      state = this.buildState(cwd, resolvedPath, advisories);
     } catch (err) {
       return {
         resolvedPath,
@@ -453,12 +459,9 @@ export class RenderCache {
               : String(err),
       };
     }
-    // [LAW:dataflow-not-control-flow] Partial-load warnings (variable
-    // declaration failures that didn't abort the load) flow through the same
-    // warning channel as collision warnings; both visible at once.
     return {
       resolvedPath,
-      warning: joinWarnings([...advisories, ...state.compiled.loadWarnings]),
+      warning: joinWarnings(advisories),
       state,
       error: null,
     };
@@ -469,7 +472,11 @@ export class RenderCache {
   // failure inside disposes the partially-built registry so we don't leak
   // timers/watchers from a half-constructed reload, then rethrows so the
   // caller (loadFromDisk) preserves the prior `entry.state` unchanged.
-  private buildState(cwd: string, resolvedPath: string | null): DslRenderState {
+  private buildState(
+    cwd: string,
+    resolvedPath: string | null,
+    warnings: Array<string | null>,
+  ): DslRenderState {
     // [LAW:dataflow-not-control-flow][LAW:single-enforcer] Three primitives,
     // straight-line composition. `loadConfig(null)` returns the bundled
     // default (uniform merge against empty raw); `validateConfig` is the
@@ -484,7 +491,11 @@ export class RenderCache {
       config: merged,
       raw,
       source,
+      warnings: fileWarnings,
     } = loadConfig(resolvedPath, DEFAULT_DSL_CONFIG);
+    // Appended before validation so a cross-ref failure still carries the
+    // file's own advisory (a duplicate key names its line beside the error).
+    warnings.push(...fileWarnings);
     const config = validateConfig(merged, resolvedPath ?? "<default>", source);
 
     const store = new VariableStore();
@@ -516,6 +527,12 @@ export class RenderCache {
       // picker values from registry.variableStore — the same store this entry's
       // registry declares into — so no store reference is threaded separately.
       compiled = registerDslConfig(config, registry, { cwd });
+      // [LAW:dataflow-not-control-flow] Partial-load warnings (variable
+      // declaration failures that didn't abort the load) flow through the
+      // same warning channel as collision warnings; both visible at once —
+      // appended before the validator pass so a derive throw still carries
+      // them.
+      warnings.push(...compiled.loadWarnings);
       // [LAW:one-source-of-truth] Derive the writable-key validators from the
       // config's action table (the sole interaction authority) through one
       // coherence merge (deriveActionValidators), then register them so the click

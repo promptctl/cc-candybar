@@ -89,12 +89,35 @@ describe("checkConfig — explicit target", () => {
       }`,
     );
     const outcome = await checkConfig(p, dir);
-    if (outcome.kind !== "clean") throw new Error(`expected clean, got ${outcome.kind}`);
+    if (outcome.kind !== "clean")
+      throw new Error(`expected clean, got ${outcome.kind}`);
     expect(outcome.warnings).toContain(
       "source still running after 5000 ms, rendered with fallback values: slow",
     );
     expect(checkPlan(outcome).code).toBe(0);
   }, 15000);
+
+  // brandon-config-16g: the same advisory the daemon puts on the strip, so an
+  // authoring agent sees the duplicate before a durable click refuses it.
+  it("a duplicate object key is a clean verdict with a warning naming the key and its line", async () => {
+    const p = write(
+      "dup.json5",
+      `{
+  globals: {
+    padding: 1,
+    padding: 2,
+  },
+}
+`,
+    );
+    const outcome = await checkConfig(p, dir);
+    if (outcome.kind !== "clean")
+      throw new Error(`expected clean, got ${outcome.kind}`);
+    expect(outcome.warnings).toContain(
+      `${p}:4: duplicate key "padding" — the settings menu cannot edit this file until it is fixed`,
+    );
+    expect(checkPlan(outcome).code).toBe(0);
+  });
 
   it("a json document with no default still unscanned at the deadline is a fatal segment error naming it", async () => {
     const p = write(
@@ -127,7 +150,10 @@ describe("checkConfig — explicit target", () => {
   });
 
   it("reports an unreadable file distinctly from an invalid one — never falls through to the bundled default", async () => {
-    const outcome = await checkConfig(path.join(dir, "does-not-exist.json5"), dir);
+    const outcome = await checkConfig(
+      path.join(dir, "does-not-exist.json5"),
+      dir,
+    );
     expect(outcome.kind).toBe("unreadable");
   });
 

@@ -1,7 +1,10 @@
 // [LAW:single-enforcer] One home for config-error reporting: the public issue/
-// error types, the best-effort source-line lookup every validator calls, and the
-// human-readable formatter ConfigError renders. Changes here are display/source-
+// error types, the best-effort source-line lookup every validator calls, the
+// human-readable formatter ConfigError renders, and the advisory that names
+// what the config-file editor would refuse. Changes here are display/source-
 // mapping changes; the schema validators never touch this file.
+
+import { Json5EditError, parseDocument } from "../json5-edit.js";
 
 // ─── Public types ────────────────────────────────────────────────────────────
 
@@ -75,6 +78,39 @@ function lineFromOffset(source: string, offset: number): number {
     if (source.charCodeAt(i) === 0x0a) line++;
   }
   return line;
+}
+
+// ─── Editability advisory ────────────────────────────────────────────────────
+
+/**
+ * The advisory a config file earns when the settings menu could not edit it:
+ * JSON5.parse tolerates a duplicate object key (the last one wins), while the
+ * config-file editor refuses to splice a document whose meaning is ambiguous
+ * (brandon-config-16g). Without this, a copy-paste duplicate surfaces first
+ * as a durable-click failure, far from the line that caused it. Returns the
+ * warning naming the file, the line, and the editor's own reason — or null
+ * when the editor accepts the document.
+ *
+ * [LAW:single-enforcer] The editor's span scanner IS the detector: this runs
+ * `parseDocument` over the source and reports its refusal. There is no second
+ * duplicate-key scan to drift from the one a click hits, and any OTHER
+ * document the editor would refuse (a scanner/JSON5 disagreement) is named
+ * here for the same reason — early, on the bar, before any click.
+ *
+ * [LAW:dataflow-not-control-flow] Runs on every load of every file; the
+ * outcome is a value (a notice or its absence), never a skipped pass.
+ */
+export function editabilityNotice(
+  filePath: string,
+  source: string,
+): string | null {
+  try {
+    parseDocument(source);
+    return null;
+  } catch (e) {
+    if (!(e instanceof Json5EditError)) throw e;
+    return `${filePath}:${lineFromOffset(source, e.offset)}: ${e.reason} — the settings menu cannot edit this file until it is fixed`;
+  }
 }
 
 // ─── Error formatting ────────────────────────────────────────────────────────
