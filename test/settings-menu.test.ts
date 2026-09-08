@@ -40,6 +40,10 @@ import {
   SETTINGS_NS,
 } from "../src/config/settings-menu";
 import { EDIT_MODE_KEY } from "../src/config/loader/edit-mode";
+import {
+  DISCLOSURE_GLYPH_CLOSE,
+  DOOR_GLYPH,
+} from "../src/config/disclosure";
 import { testVerbContext, effectsOf } from "./helpers/click";
 import { parseHandlerUrl } from "../src/install/index";
 import { parseEffects, VERB_DISPATCH } from "../src/click/wire";
@@ -142,9 +146,9 @@ function segmentNames(node: LayoutNode): string[] {
 describe("the global settings menu is reachable from a user config", () => {
   test("a user root of one row of two segments still renders the menu", () => {
     const { render, dispose } = buildRuntime(userConfig(TWO_SEGMENT_ROW));
-    // The user declared two segments; the bar shows three cells, and the third
+    // The user declared two segments; the bar shows three cells, and the first
     // is the door their `root` could not close.
-    expect(stripAnsi(render())).toContain("☰ ▸");
+    expect(stripAnsi(render())).toContain(DOOR_GLYPH);
     dispose();
   });
 
@@ -157,7 +161,9 @@ describe("the global settings menu is reachable from a user config", () => {
 
     clickWriting(render(), SETTINGS_ANCHOR, "open");
     const opened = stripAnsi(render());
-    expect(opened).toContain("☰ ▾");
+    // One symbol per state: the open door is the ✕, and the ☰ is gone.
+    expect(opened).toContain(DISCLOSURE_GLYPH_CLOSE);
+    expect(opened).not.toContain(DOOR_GLYPH);
     // The two things the ticket's acceptance names: enter edit mode, and switch
     // presets (the picker's own disclosure glyph, hosted by the preset entry).
     expect(opened).toContain("✎ edit");
@@ -216,9 +222,9 @@ describe("placement is a position, not a mode", () => {
 
     // Defaulted: the menu joins the bar's first row. Placed: it is the row the
     // author put it on. Same cell, different position — one splice, two values.
-    expect(defaultedLines[0]).toContain("☰ ▸");
-    expect(placedLines[0]).not.toContain("☰ ▸");
-    expect(placedLines[1]).toContain("☰ ▸");
+    expect(defaultedLines[0]).toContain(DOOR_GLYPH);
+    expect(placedLines[0]).not.toContain(DOOR_GLYPH);
+    expect(placedLines[1]).toContain(DOOR_GLYPH);
 
     defaulted.dispose();
     placed.dispose();
@@ -226,7 +232,7 @@ describe("placement is a position, not a mode", () => {
 
   test("a bare-segment root grows the menu beside it", () => {
     const { render, dispose } = buildRuntime(userConfig(`'directory'`));
-    expect(stripAnsi(render())).toContain("☰ ▸");
+    expect(stripAnsi(render())).toContain(DOOR_GLYPH);
     dispose();
   });
 

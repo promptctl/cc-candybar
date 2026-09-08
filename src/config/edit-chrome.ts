@@ -258,11 +258,13 @@ function spliceContainer(
 ): ContainerNode {
   const children: LayoutNode[] = [];
   // [LAW:one-source-of-truth] The trailing `+`'s position is "after the last
-  // CONTENT segment", not "after the last child". Those coincided until a
-  // synthesis started appending exempt chrome (the global settings menu,
-  // candybar-settings-ui-aok.1) to a row's end, at which point reading the last
-  // child silently dropped the row's final insert point — N segments offering
-  // only N insert points instead of N+1.
+  // CONTENT segment", not "after the last child". Those coincide only in a row
+  // of pure content: a row ending in exempt chrome — a group toggle, a menu
+  // host, an authored `settings.menu` — would read its last child as the anchor
+  // and silently drop the row's final insert point, N segments offering only N
+  // insert points instead of N+1. The leading `+` needs no such rule: every
+  // content segment carries its own `before` cell, so exempt chrome at the
+  // front (where the global settings menu defaults) costs no insert point.
   const lastContent = node.children.reduce(
     (idx, child, i) =>
       child.kind === "segment" && !isChromeExempt(child.name) ? i : idx,

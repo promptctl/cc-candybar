@@ -43,6 +43,10 @@ import {
 } from "./helpers/spawn-isolated-daemon";
 import { SETTINGS_ANCHOR } from "../src/config/settings-menu";
 import { RichText } from "@promptctl/rich-js";
+import {
+  DISCLOSURE_GLYPH_CLOSE,
+  DOOR_GLYPH,
+} from "../src/config/disclosure";
 
 jest.setTimeout(30_000);
 
@@ -128,10 +132,10 @@ describe("candybar-settings-ui-0gz: a config that fails to load", () => {
 
       // 3. Beneath the error, a working bar: the bundled default, settings
       //    menu included — and its click is honored by the real gate.
-      expect(text).toContain("☰ ▸");
+      expect(text).toContain(DOOR_GLYPH);
       await click(sockPath, urlWriting(rendered, SETTINGS_ANCHOR, "open"));
       const opened = stripAnsi(await render(sockPath, SID, projectDir));
-      expect(opened).toContain("☰ ▾");
+      expect(opened).toContain(DISCLOSURE_GLYPH_CLOSE);
       expect(opened).toContain("▦"); // preset switching is reachable
       expect(opened).toContain("trigger needs a display"); // still loud
 
