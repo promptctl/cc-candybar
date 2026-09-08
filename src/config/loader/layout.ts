@@ -47,7 +47,7 @@ import {
   disclosureTrigger,
 } from "../disclosure.js";
 import { findKeyLine } from "./diagnostics.js";
-import { reservedNamespaceCollisions } from "./reserved-namespace.js";
+import { GROUP_NS, reservedNamespaceCollisions } from "./reserved-namespace.js";
 import {
   describeType,
   describeValue,
@@ -491,13 +491,6 @@ export function rootFragmentJson(): JsonNode {
 }
 
 // ─── Group sugar (`kind: "group"`) ───────────────────────────────────────────
-
-// [LAW:one-source-of-truth] The reserved namespace every synthesized artifact
-// lives under, in all three sections (variables / actions / segments). One
-// group declaration is the single source; the var, the action, and the toggle
-// segment all derive their name from it. A user-authored name under this
-// prefix is rejected so synthesis can never silently collide.
-export const GROUP_NS = "groups.";
 
 // [LAW:one-source-of-truth] The closed sentinel and ▸/▾ glyphs are the shared
 // disclosure primitive (src/config/disclosure.ts) — a group is one of its two

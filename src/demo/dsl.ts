@@ -14,17 +14,12 @@
 // time) populate the store and shows the line come alive, exactly as the daemon
 // re-renders on each status-line tick.
 
-import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import process from "node:process";
 import { setTimeout as sleep } from "node:timers/promises";
 
-import {
-  parseDslConfig,
-  mergeWithDefault,
-  validateConfig,
-} from "../config/dsl-loader.js";
+import { loadConfig, validateConfig } from "../config/dsl-loader.js";
 import { DEFAULT_DSL_CONFIG } from "../config/default-dsl-config.js";
 import { VariableStore } from "../var-system/store.js";
 import { SourceRegistry } from "../var-system/sources.js";
@@ -41,17 +36,20 @@ const FRAME_INTERVAL_MS = 450;
 
 const here = dirname(fileURLToPath(import.meta.url));
 const configPath = process.argv[2] ?? join(here, "statusline.json5");
-const source = readFileSync(configPath, "utf-8");
 
 // [LAW:one-source-of-truth] The palette names the loader accepts are exactly
 // the names the renderer can resolve — both derive from the same registry, so
 // we hand the loader the live set rather than a hand-maintained copy.
 //
-// Full three-stage pipeline: parse → merge → validate. The renderer accepts
-// only `ValidatedConfig`, so the chain is type-enforced.
+// [LAW:single-enforcer] loadConfig IS the production read → parse → merge
+// cascade; validate promotes its result to the `ValidatedConfig` the renderer
+// accepts, so the chain is type-enforced.
 const ALLOWED = new Set(listResolvablePaletteNames());
-const raw = parseDslConfig(configPath, source, ALLOWED);
-const merged = mergeWithDefault(raw, DEFAULT_DSL_CONFIG);
+const { config: merged, source } = loadConfig(
+  configPath,
+  DEFAULT_DSL_CONFIG,
+  ALLOWED,
+);
 const config = validateConfig(merged, configPath, source, ALLOWED);
 
 // One Claude Code status-line hook event, faked. The `input` vars in the

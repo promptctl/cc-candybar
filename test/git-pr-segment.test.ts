@@ -13,7 +13,7 @@ import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
 import { SessionState } from "../src/daemon/session-state";
 import { registerDslConfig, renderDsl } from "../src/dsl/render";
-import { EDIT_NS } from "../src/config/loader/edit-mode";
+import { EDIT_NS } from "../src/config/loader/reserved-namespace";
 
 // Reparse the AUTHORED literal (pre-synthesis) — see
 // test/default-dsl-config.test.ts for why this must be the raw form, not the

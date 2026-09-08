@@ -20,7 +20,8 @@ import {
   registerStateValidator,
 } from "../src/daemon/verbs/state-validators";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
-import { SETTINGS_ANCHOR, SETTINGS_NS } from "../src/config/settings-menu";
+import { SETTINGS_ANCHOR } from "../src/config/settings-menu";
+import { SETTINGS_NS } from "../src/config/loader/reserved-namespace";
 import { EDIT_MODE_OPEN } from "../src/config/loader/edit-mode";
 import { DISCLOSURE_CLOSED } from "../src/config/disclosure";
 import { testVerbContext, effectsOf } from "./helpers/click";

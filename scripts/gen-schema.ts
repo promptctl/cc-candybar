@@ -13,6 +13,8 @@ import { writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { serializeConfigSchema } from "../src/config/loader/emit-schema.js";
+import { inheritableSegmentNames } from "../src/config/loader/segments.js";
+import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 export const SCHEMA_OUT = resolve(
@@ -22,7 +24,14 @@ export const SCHEMA_OUT = resolve(
   "cc-candybar.schema.json",
 );
 
+// [LAW:one-source-of-truth] THE published schema: the loader's grammar with
+// the bundled default's segment names as the delta-accepting set — spelled
+// once for the generator and the drift check.
+export function bundledConfigSchema(): string {
+  return serializeConfigSchema(inheritableSegmentNames(DEFAULT_DSL_CONFIG));
+}
+
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  writeFileSync(SCHEMA_OUT, serializeConfigSchema());
+  writeFileSync(SCHEMA_OUT, bundledConfigSchema());
   console.log(`gen-schema: wrote ${SCHEMA_OUT}`);
 }

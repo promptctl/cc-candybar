@@ -50,7 +50,10 @@ const DFLT: DslConfig = {
   looks: {
     none: { hueShift: 0, chromaScale: 1, lightnessScale: 1, lightnessShift: 0 },
   },
-  presets: { default: {} },
+  presets: {
+    default: {},
+    compact: { root: hrow("a"), globals: { padding: 0 } },
+  },
   helpers: {},
   editGlobals: {},
 };
@@ -94,6 +97,25 @@ describe("mergeWithDefault", () => {
     expect(out.segments.a!.template).toBe(" A-user ");
     expect(out.segments.b!.template).toBe(" B ");
     expect(out.segments.c!.template).toBe(" C ");
+  });
+
+  // [LAW:single-enforcer] A declaration under a bundled name is a DELTA: the
+  // fields it names replace the base's, every other field inherits.
+  test("segments: a delta over a bundled name merges by field", () => {
+    const raw: RawDslConfig = { segments: { a: { palette: "nord" } } };
+    const out = mergeWithDefault(raw, DFLT);
+    expect(out.segments.a).toEqual({ template: " A ", palette: "nord" });
+    expect(out.segments.b).toEqual(DFLT.segments.b);
+  });
+
+  test("presets: a delta over a bundled name merges by field", () => {
+    const raw: RawDslConfig = { presets: { compact: { root: hrow("b") } } };
+    const out = mergeWithDefault(raw, DFLT);
+    expect(out.presets.compact).toEqual({
+      root: hrow("b"),
+      globals: { padding: 0 },
+    });
+    expect(out.presets.default).toEqual({});
   });
 
   test("root: a whole tree replaces the default's rows outright", () => {

@@ -58,15 +58,7 @@ import {
   disclosureGate,
   disclosureStateVar,
 } from "../disclosure.js";
-import { reservedNamespaceCollisions } from "./reserved-namespace.js";
-
-// [LAW:one-source-of-truth] The reserved namespace every edit-mode artifact —
-// this toggle AND edit-chrome.ts's per-position +/- actions/segments — lives
-// under, mirroring `groups.`/`menus.`. Exported so edit-chrome.ts's LATER
-// synthesis (and its `isChromeExempt` exclusion of edit-mode's own chrome
-// from being treated as ordinary, removable/addable content) reads the same
-// string, never a second copy.
-export const EDIT_NS = "edit.";
+import { EDIT_NS, reservedNamespaceCollisions } from "./reserved-namespace.js";
 
 // [LAW:single-enforcer] The SessionState key edit mode's on/off state lives
 // at, and the toggle action's identity member. Both edit-chrome.ts (every

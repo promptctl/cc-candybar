@@ -27,7 +27,7 @@ import { WatcherRegistry } from "../src/daemon/cache/watchers";
 import { ReloadSignal } from "./helpers/reload-signal";
 import { walkNodes, type LayoutNode } from "../src/config/dsl-types";
 import { rootNode, rootOf } from "../src/config/root";
-import { SETTINGS_NS } from "../src/config/settings-menu";
+import { SETTINGS_NS } from "../src/config/loader/reserved-namespace";
 import { PRESET_FLOOR, presetRoot } from "../src/config/presets";
 
 // Flatten a layout tree to its segment names, in pre-order — the post-`root`

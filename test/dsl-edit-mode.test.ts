@@ -53,8 +53,8 @@ import { encodeLayoutOp } from "../src/config/layout-ops";
 import {
   EDIT_MODE_KEY,
   EDIT_TOGGLE_ACTION,
-  EDIT_NS,
 } from "../src/config/loader/edit-mode";
+import { EDIT_NS } from "../src/config/loader/reserved-namespace";
 import { walkNodes, type RootFragment } from "../src/config/dsl-types";
 import { fragmentNode } from "../src/config/root";
 import { RAW_DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";

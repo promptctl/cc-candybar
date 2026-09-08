@@ -15,7 +15,6 @@ import path from "node:path";
 
 import JSON5 from "json5";
 import { PROTOCOL_VERSION } from "../src/daemon/protocol";
-import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { parseHandlerUrl } from "../src/install/index";
 import { effectsUrl, VERB_SET_STATE } from "../src/click/wire";
 import { effectsOf } from "./helpers/click";
@@ -251,21 +250,19 @@ describe("candybar-config-engine-71o.6: real-daemon segment-palette click → pe
       expect(afterClick.split("\n").at(-1)).toBe(statusRowBefore);
 
       // [LAW:one-source-of-truth] The config FILE is the durable store
-      // (candybar-config-dqe). `segments` merge by name WHOLESALE, so pinning
-      // a palette on a segment the file does not declare first materializes
-      // the WHOLE bundled `directory` declaration into the file, then sets
-      // its `palette` — and nothing else: no globals field, no other
-      // segment.
+      // (candybar-config-dqe). `segments` merge by name then by field, so
+      // pinning a palette on a segment the file does not declare writes
+      // exactly `directory: { palette }` — a delta over the bundled
+      // declaration — and nothing else: no template, no globals field, no
+      // other segment.
       const written = JSON5.parse(readFileSync(userConfigPath, "utf8")) as {
         globals: Record<string, unknown>;
         segments: Record<string, { template?: string; palette?: string }>;
       };
       expect(written.globals).toEqual({});
-      expect(Object.keys(written.segments)).toEqual(["directory"]);
-      expect(written.segments.directory!.palette).toBe(targetPalette);
-      expect(written.segments.directory!.template).toBe(
-        DEFAULT_DSL_CONFIG.segments.directory!.template,
-      );
+      expect(written.segments).toEqual({
+        directory: { palette: targetPalette },
+      });
       const afterFirstWrite = readFileSync(userConfigPath, "utf8");
 
       // Kill this daemon and start a FRESH one against the SAME config file

@@ -267,7 +267,8 @@ export interface PresetDecl {
 export interface RawDslConfig {
   readonly globals?: Partial<Globals>;
   readonly variables?: Readonly<Record<string, VariableDecl>>;
-  readonly segments?: Readonly<Record<string, SegmentDecl>>;
+  // Complete declarations, or deltas over bundled ones — see RawSegmentDecl.
+  readonly segments?: Readonly<Record<string, RawSegmentDecl>>;
   // A fragment over the bundled default's root — see RootFragment: a tree
   // replaces the default's rows, a rows map merges over them by name.
   readonly root?: RootFragment;
@@ -275,6 +276,9 @@ export interface RawDslConfig {
   // Named config fragments ("presets"): each an alternative `root`/`globals`
   // arrangement selected per session, the exact twin of `looks` one level up
   // (a look adapts the THEME; a preset adapts the LAYOUT + display globals).
+  // Both fields are optional, so a file's preset is always a delta over a
+  // bundled one of the same name — laid over it field by field, like a
+  // segment's (loader/merge.ts).
   readonly presets?: Readonly<Record<string, PresetDecl>>;
   // The display globals edit mode stages while it is on — see DslConfig's own
   // `editGlobals` for the shape, the merge, and where it sits in the chain.
@@ -694,6 +698,18 @@ export interface SegmentDecl {
   // with a diagnostic naming the namespaced form. [LAW:one-source-of-truth]
   readonly vars?: Readonly<Record<string, VariableDecl>>;
 }
+
+// [LAW:types-are-the-program] What a FILE may say about a segment: a complete
+// declaration, or a DELTA over the bundled declaration of the same name —
+// `template` is the one field a delta may omit (every other SegmentDecl field
+// is optional already). Which of the two a file authored is decided where the
+// base is known: the loader accepts an absent template exactly for a name in
+// its `inheritedSegments` set (loader/segments.ts), and mergeWithDefault lays
+// the delta over that base field by field (loader/merge.ts), so a file that
+// pins one `palette` never restates — or shadows — the bundled template.
+export type RawSegmentDecl = Omit<SegmentDecl, "template"> & {
+  readonly template?: string;
+};
 
 export type JustifyMode = "left" | "center" | "right";
 export type TruncateMode = "right" | "left" | "middle";

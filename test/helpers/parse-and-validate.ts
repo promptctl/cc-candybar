@@ -8,6 +8,7 @@
 // because the bundled default supplies X. Tests that genuinely want the
 // production cascade pass DEFAULT_DSL_CONFIG explicitly.
 import {
+  inheritableSegmentNames,
   parseDslConfig,
   mergeWithDefault,
   validateConfig,
@@ -35,7 +36,14 @@ export function parseAndValidate(
   allowedPalettes?: ReadonlySet<string>,
   dflt: DslConfig = EMPTY_DEFAULT,
 ): ValidatedConfig {
-  const raw = parseDslConfig(filePath, source, allowedPalettes);
+  // The same delta-accepting set loadConfig derives from the default it
+  // merges over, so a test's cascade is production's.
+  const raw = parseDslConfig(
+    filePath,
+    source,
+    allowedPalettes,
+    inheritableSegmentNames(dflt),
+  );
   const merged = mergeWithDefault(raw, dflt);
   return validateConfig(merged, filePath, source, allowedPalettes);
 }

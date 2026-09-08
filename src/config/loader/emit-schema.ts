@@ -14,7 +14,7 @@
 
 import { editGlobalsJson, globalsJson } from "./globals.js";
 import { variablesMapJson } from "./variables.js";
-import { segmentsJson } from "./segments.js";
+import { segmentDefinitions, segmentsJson } from "./segments.js";
 import { actionsJson } from "./actions.js";
 import { looksJson } from "./looks.js";
 import { presetsJson } from "./presets.js";
@@ -38,8 +38,13 @@ export const SCHEMA_ID =
 // the same composition `validateConfig` performs over the validators. `root`
 // references the RootFragment definition (a whole tree or a `{ rows }` map),
 // whose tree arm is the LayoutNode definition that closes the node recursion
-// via `$ref`.
-export function emitConfigSchema(): JsonNode {
+// via `$ref`. `inheritedSegments` is the base's segment names — the names a
+// file may declare as a delta (loader/segments.ts) — handed in by the script
+// that knows the bundled default, so this module stays generic over the base
+// exactly as loadConfig does [LAW:one-way-deps].
+export function emitConfigSchema(
+  inheritedSegments: ReadonlySet<string>,
+): JsonNode {
   return {
     $schema: "http://json-schema.org/draft-07/schema#",
     $id: SCHEMA_ID,
@@ -49,7 +54,7 @@ export function emitConfigSchema(): JsonNode {
     properties: {
       globals: globalsJson(),
       variables: variablesMapJson(),
-      segments: segmentsJson(),
+      segments: segmentsJson(inheritedSegments),
       root: { $ref: ROOT_FRAGMENT_REF },
       actions: actionsJson(),
       looks: looksJson(),
@@ -58,6 +63,7 @@ export function emitConfigSchema(): JsonNode {
       helpers: { type: "object", additionalProperties: { type: "string" } },
     },
     definitions: {
+      ...segmentDefinitions(),
       [LAYOUT_NODE_DEF_NAME]: layoutNodeJson(),
       [ROOT_FRAGMENT_DEF_NAME]: rootFragmentJson(),
     },
@@ -68,6 +74,8 @@ export function emitConfigSchema(): JsonNode {
 // committed artifact) and `check:schema` (byte-diffs against it) so the two can
 // never disagree on how the schema is produced. Trailing newline + 2-space indent
 // match the committed file's format.
-export function serializeConfigSchema(): string {
-  return JSON.stringify(emitConfigSchema(), null, 2) + "\n";
+export function serializeConfigSchema(
+  inheritedSegments: ReadonlySet<string>,
+): string {
+  return JSON.stringify(emitConfigSchema(inheritedSegments), null, 2) + "\n";
 }
