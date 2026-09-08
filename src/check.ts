@@ -276,6 +276,7 @@ export async function checkConfig(
     // register/render throws (template parse, MissingFieldError, action arity)
     // are all author-facing diagnostics — the daemon would surface each via
     // composeWithDiagnostics, so check surfaces each as fatal text.
+    if (e instanceof ConfigError) warnings.push(...e.warnings);
     const message =
       e instanceof ConfigError
         ? e.message

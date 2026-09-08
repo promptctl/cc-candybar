@@ -22,12 +22,19 @@ export interface ConfigIssue {
 export class ConfigError extends Error {
   readonly file: string;
   readonly issues: readonly ConfigIssue[];
+  /** Advisories the file earned before it failed — reported beside the error. */
+  readonly warnings: readonly string[];
 
-  constructor(file: string, issues: readonly ConfigIssue[]) {
+  constructor(
+    file: string,
+    issues: readonly ConfigIssue[],
+    warnings: readonly string[] = [],
+  ) {
     super(formatIssues(file, issues));
     this.name = "ConfigError";
     this.file = file;
     this.issues = issues;
+    this.warnings = warnings;
   }
 }
 

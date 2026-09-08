@@ -140,6 +140,27 @@ describe("checkConfig — explicit target", () => {
     );
   });
 
+  it("a duplicate key's warning survives beside a fatal structural error", async () => {
+    const p = write(
+      "dup-bogus.json5",
+      `{
+  globals: {
+    padding: 1,
+    padding: 2,
+  },
+  bogus: true,
+}
+`,
+    );
+    const outcome = await checkConfig(p, dir);
+    expect(expectFatal(outcome)).toContain('Unknown top-level key "bogus"');
+    if (outcome.kind !== "fatal")
+      throw new Error(`expected fatal, got ${outcome.kind}`);
+    expect(outcome.warnings).toContain(
+      `${p}:4: duplicate key "padding" — the settings menu cannot edit this file until it is fixed`,
+    );
+  });
+
   it("a json document with no default still unscanned at the deadline is a fatal segment error naming it", async () => {
     const p = write(
       "slow-doc.json5",

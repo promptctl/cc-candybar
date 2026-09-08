@@ -447,6 +447,7 @@ export class RenderCache {
     try {
       state = this.buildState(cwd, resolvedPath, advisories);
     } catch (err) {
+      if (err instanceof ConfigError) advisories.push(...err.warnings);
       return {
         resolvedPath,
         warning: joinWarnings(advisories),
@@ -471,7 +472,10 @@ export class RenderCache {
   // store, registry, compiled segments, palette — as one transaction. Any
   // failure inside disposes the partially-built registry so we don't leak
   // timers/watchers from a half-constructed reload, then rethrows so the
-  // caller (loadFromDisk) preserves the prior `entry.state` unchanged.
+  // caller (loadFromDisk) preserves the prior `entry.state` unchanged. The
+  // advisories each stage earns are appended to `warnings` as they arise —
+  // an accumulator the caller owns, because a return value could not carry
+  // them past the rethrow.
   private buildState(
     cwd: string,
     resolvedPath: string | null,
