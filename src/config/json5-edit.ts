@@ -310,8 +310,8 @@ export const JSON_DIALECT: Dialect = {
 
 /**
  * A JSON value as JSON5 text — identifier keys unquoted, one member per line,
- * two-space indent — so materialized text (a bundled segment decl, a layout
- * tree) reads like the authored surface rather than JSON.stringify output.
+ * two-space indent — so materialized text (a bundled row or preset root)
+ * reads like the authored surface rather than JSON.stringify output.
  * The result is indented from column zero; nest it with `reindent`.
  */
 export function json5Text(value: unknown): string {
@@ -566,16 +566,27 @@ export function setValue(
   throw new Json5EditError("unreachable: path exhausted", 0);
 }
 
-/** Delete the entry at an object path. An absent path returns the text unchanged. */
+/**
+ * Delete the entry at an object path, and every ancestor object its removal
+ * leaves empty — a by-name declaration whose last field is reset returns to
+ * tracking the one it overlaid, instead of shadowing it as `{}`. The document
+ * root is never pruned: a file that authored one value goes back to `{}`, not
+ * to nothing. An absent path returns the text unchanged.
+ */
 export function deleteValue(text: string, path: readonly string[]): string {
   if (path.length === 0) {
     throw new Json5EditError("deleteValue needs a non-empty path", 0);
   }
   if (/^\s*$/.test(text)) return text;
-  const parent = nodeAt(parseDocument(text), path.slice(0, -1));
+  const parentPath = path.slice(0, -1);
+  const parent = nodeAt(parseDocument(text), parentPath);
   const entry =
     parent === undefined ? undefined : entryOf(parent, path[path.length - 1]!);
-  return entry === undefined ? text : removeMember(text, entry.span);
+  if (entry === undefined || parent?.kind !== "object") return text;
+  const pruned = removeMember(text, entry.span);
+  return parentPath.length > 0 && parent.entries.length === 1
+    ? deleteValue(pruned, parentPath)
+    : pruned;
 }
 
 // ─── Layout tree edits on the authored (shape-grammar) tree ─────────────────

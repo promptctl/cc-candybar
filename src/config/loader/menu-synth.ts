@@ -303,9 +303,12 @@ export function synthesizeMenuDecls(
   // named "page" in segment "s" vs the page cursor of a shared key "s").
   const ownerBySynthKey = new Map<string, string>();
 
-  for (const [segName, seg] of Object.entries(segments)) {
-    if (!segmentReferencesMenu(seg.template)) continue;
-    const calls = parseCalls(seg.template);
+  for (const [segName, { template }] of Object.entries(segments)) {
+    // A delta inheriting its template declares no menus of its own: the
+    // bundled template's were synthesized when the bundled default parsed
+    // and reach this config through the by-name merge.
+    if (template === undefined || !segmentReferencesMenu(template)) continue;
+    const calls = parseCalls(template);
     if (calls === "parse-failed") continue;
     for (const call of calls) {
       // [LAW:no-silent-failure] Every non-ok argument shape (missing apply,

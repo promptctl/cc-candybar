@@ -16,7 +16,11 @@ import path from "node:path";
 import JSON5 from "json5";
 import Ajv from "ajv";
 import type { ValidateFunction } from "ajv";
-import { parseDslConfig, validateConfig } from "../src/config/dsl-loader";
+import {
+  inheritableSegmentNames,
+  parseDslConfig,
+  validateConfig,
+} from "../src/config/dsl-loader";
 import { mergeWithDefault } from "../src/config/loader/merge";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { ConfigError } from "../src/config/loader/diagnostics";
@@ -159,11 +163,14 @@ const GOOD: ReadonlyArray<readonly [string, string]> = [
       variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
     }`,
   ],
+  // ── A delta over a bundled segment omits its template (brandon-config-ph5)
+  ["segment delta over a bundled name", `{ segments: { directory: { palette: 'dracula' } } }`],
 ];
 
 // Structurally broken — schema rejects, loader rejects.
 const BAD_STRUCTURAL: ReadonlyArray<readonly [string, string]> = [
   ["unknown top-level key", `{ segmnets: {} }`],
+  ["a new segment without a template", `{ segments: { mine: { palette: 'x' } } }`],
   ["bad doctor verb", `{ actions: { d: { doctor: 'bogus' } } }`],
   ["doctor run carrying a check", `{ actions: { d: { doctor: 'run', check: 'tmuxTruecolor' } } }`],
   ["non-identifier row name", `{ segments: { a: { template: 'a' } }, root: { rows: { 'a-b': 'a' } } }`],
@@ -220,7 +227,12 @@ function schemaAccepts(source: string): boolean {
 // this mirrors its body so the corpus stays inline.
 function loaderAccepts(source: string): boolean {
   try {
-    const raw = parseDslConfig("<test>", source);
+    const raw = parseDslConfig(
+      "<test>",
+      source,
+      undefined,
+      inheritableSegmentNames(DEFAULT_DSL_CONFIG),
+    );
     const merged = mergeWithDefault(raw, DEFAULT_DSL_CONFIG);
     validateConfig(merged, "<test>", source);
     return true;

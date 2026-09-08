@@ -7,10 +7,9 @@
 // always `pnpm gen:schema`, never editing the JSON by hand [LAW:one-source-of-truth].
 
 import { readFileSync } from "node:fs";
-import { serializeConfigSchema } from "../src/config/loader/emit-schema.js";
-import { SCHEMA_OUT } from "./gen-schema.js";
+import { bundledConfigSchema, SCHEMA_OUT } from "./gen-schema.js";
 
-const expected = serializeConfigSchema();
+const expected = bundledConfigSchema();
 
 let actual: string;
 try {

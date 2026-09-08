@@ -6,9 +6,10 @@
 //     Throws ConfigError on syntax / structural problems.
 //
 //   mergeWithDefault (RawDslConfig + DslConfig → DslConfig)
-//     Cascade: shallow merge globals fields, by-name merge variables and
-//     segments, by-name merge of root's rows (a whole tree replaces). Pure
-//     function.
+//     Cascade: shallow merge globals fields, by-name merge variables,
+//     by-name then by-FIELD merge of segments and presets (a file's
+//     declaration under a bundled name is a delta), by-name merge of root's
+//     rows (a whole tree replaces). Pure function.
 //
 //   validateConfig (DslConfig → ValidatedConfig)
 //     Cross-references + cycle detection on the merged shape. Sole producer
@@ -46,7 +47,10 @@ import {
 import { mergeWithDefault } from "./loader/merge.js";
 import { validateEditGlobals, validateGlobals } from "./loader/globals.js";
 import { validateVariables } from "./loader/variables.js";
-import { validateSegments } from "./loader/segments.js";
+import {
+  inheritableSegmentNames,
+  validateSegments,
+} from "./loader/segments.js";
 import { synthesizeGroupDecls, validateRootFragment } from "./loader/layout.js";
 import { synthesizeMenuDecls } from "./loader/menu-synth.js";
 import { synthesizeEditModeToggle } from "./loader/edit-mode.js";
@@ -77,6 +81,7 @@ export {
 } from "./loader/discovery.js";
 export type { ConfigResolution, Unchecked } from "./loader/discovery.js";
 export { mergeWithDefault } from "./loader/merge.js";
+export { inheritableSegmentNames } from "./loader/segments.js";
 export {
   extractTemplateRefs,
   extractActionRefs,
@@ -122,8 +127,17 @@ export function loadConfig(
   allowedPalettes?: ReadonlySet<string>,
 ): { config: DslConfig; raw: RawDslConfig; source: string } {
   const source = path === null ? "" : fs.readFileSync(path, "utf-8");
+  // [LAW:one-source-of-truth] The names a file may author as a delta are the
+  // segments of the very default the merge below lays the file over.
   const raw: RawDslConfig =
-    path === null ? {} : parseDslConfig(path, source, allowedPalettes);
+    path === null
+      ? {}
+      : parseDslConfig(
+          path,
+          source,
+          allowedPalettes,
+          inheritableSegmentNames(dflt),
+        );
   return { config: mergeWithDefault(raw, dflt), raw, source };
 }
 
@@ -177,11 +191,17 @@ export function validateConfig(
  * It defaults to every name that resolves to a concrete Palette, so production
  * always validates loudly against the real registry. Tests inject a custom set
  * to exercise validation without depending on registry contents.
+ *
+ * `inheritedSegments` is the set of segment names the source may declare as a
+ * DELTA (template omitted): the segments of the default it will be merged
+ * over. It defaults to the empty set — a source parsed on its own (the bundled
+ * default itself) must carry every template.
  */
 export function parseDslConfig(
   filePath: string,
   source: string,
   allowedPalettes: ReadonlySet<string> = new Set(listResolvablePaletteNames()),
+  inheritedSegments: ReadonlySet<string> = NO_INHERITED_SEGMENTS,
 ): RawDslConfig {
   // ── Stage 1: JSON5 syntax. A parse error here is single, immediate, and
   // carries line/col from the json5 package — no point continuing to other
@@ -202,7 +222,7 @@ export function parseDslConfig(
     ]);
   }
 
-  const topLevel = validateTopLevel(ctx, raw);
+  const topLevel = validateTopLevel(ctx, raw, inheritedSegments);
 
   if (issues.length > 0) {
     throw new ConfigError(filePath, issues);
@@ -212,6 +232,8 @@ export function parseDslConfig(
 }
 
 // ─── Internals ───────────────────────────────────────────────────────────────
+
+const NO_INHERITED_SEGMENTS: ReadonlySet<string> = new Set();
 
 interface Json5Error extends Error {
   lineNumber?: number;
@@ -241,6 +263,7 @@ function parseJson5OrThrow(filePath: string, source: string): unknown {
 function validateTopLevel(
   ctx: ValidateCtx,
   raw: Record<string, unknown>,
+  inheritedSegments: ReadonlySet<string>,
 ): RawDslConfig {
   for (const key of Object.keys(raw)) {
     if (!TOP_LEVEL_KEYS.has(key)) {
@@ -258,7 +281,7 @@ function validateTopLevel(
   if (raw.variables !== undefined)
     out.variables = validateVariables(ctx, "variables", raw.variables);
   if (raw.segments !== undefined)
-    out.segments = validateSegments(ctx, raw.segments);
+    out.segments = validateSegments(ctx, raw.segments, inheritedSegments);
   // [LAW:no-silent-failure] `layout:` was removed in 2de.19. Reject loudly with
   // a migration hint so the author knows exactly how to rewrite their config.
   if (raw.layout !== undefined) {
