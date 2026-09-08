@@ -14,24 +14,31 @@ import path from "node:path";
 // The Rust client mirrors both path families in rust-client/src/main.rs; both
 // must agree or the client can't find the daemon's socket.
 
-function xdgEnv(name: string): string | undefined {
-  const v = process.env[name];
+function xdgEnv(env: NodeJS.ProcessEnv, name: string): string | undefined {
+  const v = env[name];
   return v && v.length > 0 ? v : undefined;
 }
 
-export function stateDir(): string {
+// [LAW:effects-at-boundaries] The environment is a parameter with the
+// process's own as its default, so a spawner holding a daemon's env (a test
+// fixture) can name that daemon's files — its log above all — without a second
+// derivation of this layout beside this one.
+export function stateDir(env: NodeJS.ProcessEnv = process.env): string {
   const base =
-    xdgEnv("XDG_STATE_HOME") ?? path.join(os.homedir(), ".local", "state");
+    xdgEnv(env, "XDG_STATE_HOME") ?? path.join(os.homedir(), ".local", "state");
   return path.join(base, "cc-candybar");
 }
 
 export function cacheDir(): string {
-  const base = xdgEnv("XDG_CACHE_HOME") ?? path.join(os.homedir(), ".cache");
+  const base =
+    xdgEnv(process.env, "XDG_CACHE_HOME") ?? path.join(os.homedir(), ".cache");
   return path.join(base, "cc-candybar");
 }
 
 export function configDir(): string {
-  const base = xdgEnv("XDG_CONFIG_HOME") ?? path.join(os.homedir(), ".config");
+  const base =
+    xdgEnv(process.env, "XDG_CONFIG_HOME") ??
+    path.join(os.homedir(), ".config");
   return path.join(base, "cc-candybar");
 }
 
@@ -214,6 +221,6 @@ export function diagnosticsDir(): string {
   return path.join(stateDir(), "diagnostics");
 }
 
-export function logPath(): string {
-  return path.join(stateDir(), "daemon.log");
+export function logPath(env: NodeJS.ProcessEnv = process.env): string {
+  return path.join(stateDir(env), "daemon.log");
 }
