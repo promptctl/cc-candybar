@@ -443,9 +443,9 @@ function formatPermanent(outcome: PermanentOutcome): string {
 // [LAW:effects-at-boundaries] Pure string builder — runInstall performs the
 // actual write. Kept separate so the message content is testable without
 // driving the full (fs + Launch Services) install side effects.
-// [LAW:one-source-of-truth] The disclosure glyph comes from config/disclosure.ts,
-// the same constant the theme/look picker itself renders with, so this tip
-// can't drift from what the bundled default bar actually shows.
+// [LAW:one-source-of-truth] The door's glyph comes from config/disclosure.ts,
+// the same constant the bar's own settings door renders with, so this tip
+// can't drift from what the bar actually shows.
 function installSuccessMessage(): string {
   return (
     `✓ install complete.\n` +
