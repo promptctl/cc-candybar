@@ -38,19 +38,16 @@ import { ident } from "./ident.js";
 import {
   EDIT_MODE_GATE,
   EDIT_MODE_REF,
-  EDIT_NS,
   EDIT_TOGGLE_ACTION,
 } from "./loader/edit-mode.js";
+import { EDIT_NS, isReservedName } from "./loader/reserved-namespace.js";
 import { declareHelp } from "./help.js";
 import { EDIT_MODE_HELP } from "../help-text.js";
-import { GROUP_NS } from "./loader/layout.js";
-import { SETTINGS_NS } from "./settings-menu.js";
 import {
   menuActionName,
   menuMember,
   menuPageKey,
   menuStateKey,
-  MENU_NS,
 } from "./menu-keys.js";
 import {
   DISCLOSURE_CLOSED,
@@ -86,24 +83,13 @@ import {
 export const PRESET_CUSTOMIZED_VAR = "preset.customized";
 const CUSTOMIZED_BANNER_GATE = `{{ and ${disclosureTerm(EDIT_MODE_REF)} .${PRESET_CUSTOMIZED_VAR} }}`;
 
-// [LAW:one-source-of-truth] group/menu-synthesized segments (`groups.`/
-// `menus.`) and edit mode's own trigger/chrome (`edit.`) are structural —
-// removing one via `-` would strand its sibling artifacts (a toggle segment
-// with no body, a menu with no host), and offering one back via `+` would
-// insert a bare ref with none of the synthesis that made it work. Ordinary
-// content segments only.
-function isChromeExempt(name: string): boolean {
-  return (
-    name.startsWith(EDIT_NS) ||
-    name.startsWith(MENU_NS) ||
-    name.startsWith(GROUP_NS) ||
-    // The global settings menu is the entry point edit mode is REACHED from
-    // (candybar-settings-ui-aok.1) — offering a `-` beside it would let one
-    // click delete the door back in, the self-lockout the `toolbar` trigger's
-    // placement was chosen to avoid. Structural, like the three above it.
-    name.startsWith(SETTINGS_NS)
-  );
-}
+// [LAW:one-source-of-truth] Every synthesized segment is structural — removing
+// one via `-` would strand its sibling artifacts (a toggle segment with no
+// body, a menu with no host), and offering one back via `+` would insert a
+// bare ref with none of the synthesis that made it work; the settings menu is
+// also the door edit mode is REACHED from, so a `-` beside it would be a
+// self-lockout. Ordinary content segments only.
+const isChromeExempt = isReservedName;
 
 // [LAW:one-source-of-truth] Every synthesized decl this pass produces, keyed
 // by its final name — one accumulator threaded through every preset's splice

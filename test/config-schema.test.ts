@@ -16,7 +16,11 @@ import path from "node:path";
 import JSON5 from "json5";
 import Ajv from "ajv";
 import type { ValidateFunction } from "ajv";
-import { parseDslConfig, validateConfig } from "../src/config/dsl-loader";
+import {
+  inheritableSegmentNames,
+  parseDslConfig,
+  validateConfig,
+} from "../src/config/dsl-loader";
 import { mergeWithDefault } from "../src/config/loader/merge";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { ConfigError } from "../src/config/loader/diagnostics";
@@ -24,9 +28,11 @@ import { ConfigError } from "../src/config/loader/diagnostics";
 const SCHEMA_PATH = path.resolve(__dirname, "..", "schema", "cc-candybar.schema.json");
 
 let validate: ValidateFunction;
+let namedDeltaTargets: string[];
 
 beforeAll(() => {
   const schema = JSON.parse(fs.readFileSync(SCHEMA_PATH, "utf-8"));
+  namedDeltaTargets = Object.keys(schema.properties.segments.properties);
   // strict:false — the generated schema carries `title`/`$id` annotations and
   // discriminated-by-presence `anyOf`s that ajv's strict mode warns on; none
   // affect validation outcome.
@@ -159,11 +165,14 @@ const GOOD: ReadonlyArray<readonly [string, string]> = [
       variables: { 'session.id': { kind: 'input', path: 'session_id', default: '' } },
     }`,
   ],
+  // ── A delta over a bundled segment omits its template (brandon-config-ph5)
+  ["segment delta over a bundled name", `{ segments: { directory: { palette: 'dracula' } } }`],
 ];
 
 // Structurally broken — schema rejects, loader rejects.
 const BAD_STRUCTURAL: ReadonlyArray<readonly [string, string]> = [
   ["unknown top-level key", `{ segmnets: {} }`],
+  ["a new segment without a template", `{ segments: { mine: { palette: 'x' } } }`],
   ["bad doctor verb", `{ actions: { d: { doctor: 'bogus' } } }`],
   ["doctor run carrying a check", `{ actions: { d: { doctor: 'run', check: 'tmuxTruecolor' } } }`],
   ["non-identifier row name", `{ segments: { a: { template: 'a' } }, root: { rows: { 'a-b': 'a' } } }`],
@@ -220,7 +229,12 @@ function schemaAccepts(source: string): boolean {
 // this mirrors its body so the corpus stays inline.
 function loaderAccepts(source: string): boolean {
   try {
-    const raw = parseDslConfig("<test>", source);
+    const raw = parseDslConfig(
+      "<test>",
+      source,
+      undefined,
+      inheritableSegmentNames(DEFAULT_DSL_CONFIG),
+    );
     const merged = mergeWithDefault(raw, DEFAULT_DSL_CONFIG);
     validateConfig(merged, "<test>", source);
     return true;
@@ -253,5 +267,19 @@ describe("config JSON Schema", () => {
     const source = `{ segments: { a: { template: 'a' } }, root: { h: ['a', 'does-not-exist'] } }`;
     expect(schemaAccepts(source)).toBe(true);
     expect(loaderAccepts(source)).toBe(false);
+  });
+
+  // [LAW:one-source-of-truth] Every delta target the schema names by name is
+  // one the loader accepts a delta for. The bundled default carries synthesized
+  // segments under reserved namespaces (a group's toggle) that the loader
+  // rejects outright — a schema naming one would autocomplete a declaration no
+  // file can write.
+  it("names as a delta target only what the loader accepts as one", () => {
+    expect(namedDeltaTargets.length).toBeGreaterThan(0);
+    for (const name of namedDeltaTargets) {
+      const source = `{ segments: { ${JSON.stringify(name)}: {} } }`;
+      expect(schemaAccepts(source)).toBe(true);
+      expect(loaderAccepts(source)).toBe(true);
+    }
   });
 });

@@ -1,9 +1,9 @@
 // [LAW:one-source-of-truth] The single point that merges a raw user config
 // onto a default DslConfig to fill missing keys. A user file declares only
 // what differs; the cascade here (shallow-merge globals, by-name merge
-// variables/segments/actions/…, by-name merge of root's rows) is the one place
-// "absent means inherit" is decided. This file changes when the merge
-// semantics change.
+// variables/actions/…, by-name THEN by-field merge of segments and presets,
+// by-name merge of root's rows) is the one place "absent means inherit" is
+// decided. This file changes when the merge semantics change.
 //
 // [LAW:one-way-deps] `dflt` is a required parameter — this module is generic
 // merge machinery and does not know about DEFAULT_DSL_CONFIG, the specific
@@ -21,7 +21,9 @@ import { EMPTY_ROWS, mergeRoot } from "../root.js";
  *
  *   globals    : shallow merge per field (user wins per-field)
  *   variables  : merge by name (user wins per-name)
- *   segments   : merge by name (user wins per-name)
+ *   segments   : merge by name, then by FIELD within a name (a user's
+ *                declaration under a bundled name is a delta over it)
+ *   presets    : merge by name, then by field, the same overlay
  *   root       : merge by row name (user wins per-name) when the user wrote a
  *                `{ rows }` map; a whole tree replaces the default's rows
  *                (root.ts's mergeRoot — the one fold presets reuse); absent
@@ -37,7 +39,7 @@ export function mergeWithDefault(
   return {
     globals: { ...dflt.globals, ...(raw.globals ?? {}) },
     variables: { ...dflt.variables, ...(raw.variables ?? {}) },
-    segments: { ...dflt.segments, ...(raw.segments ?? {}) },
+    segments: overlayByName(dflt.segments, raw.segments ?? {}),
     root: mergeRoot(raw.root ?? EMPTY_ROWS, dflt.root),
     // [LAW:one-source-of-truth] actions merge by name, same cascade — a user
     // declares only the actions that differ from the bundled default (which
@@ -47,11 +49,12 @@ export function mergeWithDefault(
     // overrides one adaptation by re-declaring its name; the bundled stdlib
     // (incl. the "none" identity floor) survives every merge by construction.
     looks: { ...dflt.looks, ...(raw.looks ?? {}) },
-    // [LAW:one-source-of-truth] presets merge by name, same cascade — a user
-    // overrides one arrangement by re-declaring its name; the bundled stdlib
-    // (incl. the "default" empty-fragment floor effectivePresetName collapses
-    // to) survives every merge by construction, exactly as looks' "none" does.
-    presets: { ...dflt.presets, ...(raw.presets ?? {}) },
+    // [LAW:one-source-of-truth] presets merge by name then by field, the
+    // segments overlay — a user retunes one arrangement's root without
+    // restating its globals; the bundled stdlib (incl. the "default"
+    // empty-fragment floor effectivePresetName collapses to) survives every
+    // merge by construction, exactly as looks' "none" does.
+    presets: overlayByName(dflt.presets, raw.presets ?? {}),
     // [LAW:one-source-of-truth] editGlobals merges FIELD by field — the
     // `globals` cascade above, not the by-name cascades around it, because it
     // IS a globals fragment: a user retuning edit mode's separator says nothing
@@ -63,4 +66,26 @@ export function mergeWithDefault(
     // from the bundled default.
     helpers: { ...dflt.helpers, ...(raw.helpers ?? {}) },
   };
+}
+
+// [LAW:single-enforcer] The by-name overlay whose members merge FIELD by
+// field. A member under a base name is a DELTA the parse already stamped —
+// a segment may omit its template exactly when the base declares the name
+// (loader/segments.ts) — so laying it over the base member is the whole of
+// "inherit what the delta does not say", and a member under a new name
+// spreads over nothing: the declaration itself. The cast reads that stamp;
+// nothing here re-checks it.
+function overlayByName<T extends object>(
+  base: Readonly<Record<string, T>>,
+  over: Readonly<Record<string, Partial<T>>>,
+): Readonly<Record<string, T>> {
+  return {
+    ...base,
+    ...Object.fromEntries(
+      Object.entries(over).map(([name, delta]) => [
+        name,
+        { ...base[name], ...delta },
+      ]),
+    ),
+  } as Record<string, T>;
 }

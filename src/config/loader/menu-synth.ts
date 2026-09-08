@@ -34,7 +34,6 @@ import type { ActionDecl } from "../action.js";
 import { fragmentNode } from "../root.js";
 import type { Mutable, ValidateCtx } from "./validate-core.js";
 import {
-  MENU_NS,
   menuActionName,
   menuMember,
   menuPageKey,
@@ -54,7 +53,7 @@ import {
   type VariableDecl,
 } from "../dsl-types.js";
 import { findKeyLine } from "./diagnostics.js";
-import { reservedNamespaceCollisions } from "./reserved-namespace.js";
+import { MENU_NS, reservedNamespaceCollisions } from "./reserved-namespace.js";
 
 // [LAW:single-enforcer] The helper-name a `{{ menu … }}` call uses — the same
 // string the render FuncMap registers. A segment "hosts a menu" iff its template
@@ -303,9 +302,12 @@ export function synthesizeMenuDecls(
   // named "page" in segment "s" vs the page cursor of a shared key "s").
   const ownerBySynthKey = new Map<string, string>();
 
-  for (const [segName, seg] of Object.entries(segments)) {
-    if (!segmentReferencesMenu(seg.template)) continue;
-    const calls = parseCalls(seg.template);
+  for (const [segName, { template }] of Object.entries(segments)) {
+    // A delta inheriting its template declares no menus of its own: the
+    // bundled template's were synthesized when the bundled default parsed
+    // and reach this config through the by-name merge.
+    if (template === undefined || !segmentReferencesMenu(template)) continue;
+    const calls = parseCalls(template);
     if (calls === "parse-failed") continue;
     for (const call of calls) {
       // [LAW:no-silent-failure] Every non-ok argument shape (missing apply,

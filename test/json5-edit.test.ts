@@ -214,6 +214,16 @@ describe("deleteValue", () => {
     expect(deleteValue(`{ a: 1 }`, ["a"])).toBe(`{  }`);
   });
 
+  // A by-name declaration emptied by its last reset is pruned, so it tracks
+  // the declaration it overlaid instead of shadowing it as `{}`; the root
+  // is never pruned.
+  test("pruning: an emptied ancestor goes with its last member, the root survives, a sibling stays", () => {
+    expect(deleteValue(`{ segments: { directory: { palette: "nord" } } }`, ["segments", "directory", "palette"])).toBe(`{  }`);
+    expect(deleteValue(`{ globals: {}, segments: { directory: { palette: "nord" } } }`, ["segments", "directory", "palette"])).toBe(`{ globals: {} }`);
+    expect(deleteValue(`{ presets: { compact: { root: { h: [] }, globals: { padding: 0 } } } }`, ["presets", "compact", "root"])).toBe(`{ presets: { compact: { globals: { padding: 0 } } } }`);
+    expect(deleteValue(`{ a: 1 }`, ["a"])).toBe(`{  }`);
+  });
+
   test("an absent path returns the text unchanged; an empty document stays empty", () => {
     expect(deleteValue(CONFIG, ["globals", "look"])).toBe(CONFIG);
     expect(deleteValue(CONFIG, ["nope", "x"])).toBe(CONFIG);

@@ -18,15 +18,15 @@
 
 import { actionDestinations, type ActionDecl } from "../../src/config/action";
 import type { DslConfig } from "../../src/config/dsl-types";
-import { EDIT_NS } from "../../src/config/loader/edit-mode";
-import { GROUP_NS } from "../../src/config/loader/layout";
-import { MENU_NS } from "../../src/config/menu-keys";
+import {
+  EDIT_NS,
+  isReservedName,
+  MENU_NS,
+  SETTINGS_NS,
+} from "../../src/config/loader/reserved-namespace";
 import { parsePersistTarget } from "../../src/config/loader/persist-target";
 import { PRESET_CUSTOMIZED_VAR } from "../../src/config/edit-chrome";
-import {
-  SETTINGS_NS,
-  SETTINGS_WRITTEN_KEYS,
-} from "../../src/config/settings-menu";
+import { SETTINGS_WRITTEN_KEYS } from "../../src/config/settings-menu";
 import {
   VERB_RESET_CONFIG,
   VERB_SET_CONFIG,
@@ -99,14 +99,7 @@ function authorWrittenKeys(config: DslConfig): Set<string> {
   return keys;
 }
 
-function isSynthesizedActionName(name: string): boolean {
-  return (
-    name.startsWith(SETTINGS_NS) ||
-    name.startsWith(EDIT_NS) ||
-    name.startsWith(MENU_NS) ||
-    name.startsWith(GROUP_NS)
-  );
-}
+const isSynthesizedActionName = isReservedName;
 
 // [LAW:types-are-the-program] Total over the ActionDecl union: `set` (the
 // SessionState key deriveActionValidators gates), `persist` and `reset` (the
@@ -204,11 +197,6 @@ export function withoutSettingsLinks(urls: readonly string[]): string[] {
 // mean reserving or namespacing the name upstream, not filtering harder here.
 export function ownDeclNames(names: readonly string[]): string[] {
   return names.filter(
-    (n) =>
-      n !== PRESET_CUSTOMIZED_VAR &&
-      !n.startsWith(SETTINGS_NS) &&
-      !n.startsWith(EDIT_NS) &&
-      !n.startsWith(MENU_NS) &&
-      !n.startsWith(GROUP_NS),
+    (n) => n !== PRESET_CUSTOMIZED_VAR && !isReservedName(n),
   );
 }

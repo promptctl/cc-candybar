@@ -28,8 +28,9 @@
 //      CONFIG FILE < ACTIVE PRESET), and the edit survives a real restart
 //      because the file IS the edit. A first-ever edit on a bundled root
 //      row materializes `root.rows.<row>` alone (rows merge by name); one
-//      under a bundled preset's name materializes the whole bundled
-//      declaration (`segments`/`presets` still merge by name, wholesale).
+//      under a bundled preset's name materializes `presets.<name>.root`
+//      alone (presets merge by name then by field), and a reset of that
+//      root prunes the emptied preset so it tracks the bundled one again.
 //   6. brandon-layout-edit-2gc.5's own done-gate: "customized" is now the
 //      fact that the config FILE authors a root at the path presetRoot()
 //      reports for the active preset (`root` for a preset staging the
@@ -42,7 +43,7 @@
 //      bundled tree — never a silent drift between screen and disk.
 
 import { ownLinks } from "./helpers/ambient-chrome";
-import { SETTINGS_NS } from "../src/config/settings-menu";
+import { SETTINGS_NS } from "../src/config/loader/reserved-namespace";
 import { writeFileSync } from "node:fs";
 import { getThemePalette } from "@promptctl/rich-js";
 import { parseAndValidate } from "./helpers/parse-and-validate";
@@ -72,10 +73,10 @@ import {
 import { RenderCache } from "../src/daemon/cache/render";
 import type { CacheEntry } from "../src/daemon/cache/render";
 import {
-  EDIT_NS,
   EDIT_MODE_KEY,
   EDIT_MODE_OPEN,
 } from "../src/config/loader/edit-mode";
+import { EDIT_NS } from "../src/config/loader/reserved-namespace";
 import {
   addableSegmentDomains,
   addableDomainName,
@@ -675,7 +676,9 @@ describe("apply-layout-op click → the config file", () => {
   // [LAW:one-source-of-truth] `restagesFragment` (the document) and
   // `restages` (the loader) must classify one fragment alike: a preset whose
   // root is an empty rows map carrying only a `distribution` IS staged, so its
-  // reset deletes `presets.<p>.root` — never the file's own top-level root.
+  // reset deletes `presets.<p>.root` — never the file's own top-level root —
+  // and with it the `mine: {}` that root alone made up (deleteValue prunes
+  // what it empties).
   test("a reset on a preset authored as `{ rows: {}, distribution }` deletes the preset's root, not the file's", () => {
     const ROOT = "{ v: [ { h: ['directory', 'git'] }, 'bar' ] }";
     const SRC_PLACED = `{
@@ -696,7 +699,7 @@ describe("apply-layout-op click → the config file", () => {
     render();
     const resetUrl = `${URL_SCHEME}://${VERB_RESET_CONFIG}/${encodeSegments(["s1", "presets.mine.root"])}`;
     click(resetUrl);
-    expect(durable.parsed().presets).toEqual({ mine: {} });
+    expect(durable.parsed().presets).toBeUndefined();
     expect(durable.parsed().root).toEqual({ v: [{ h: ["directory", "git"] }, "bar"] });
     expect(durable.history().past).toHaveLength(1);
     dispose();
@@ -1546,13 +1549,15 @@ describe("RenderCache: layout edits land in the file and reload from it", () => 
   // RenderCache and the REAL daemon reset-config handler — not just that
   // the key is derived (the narrower unit test above).
   //
-  // Also the materialization gate: the file never declared `compact`, and
-  // `presets` merge by name WHOLESALE, so the first `-` copies the whole
-  // bundled compact declaration (its `globals` and its `root`, in authoring
-  // grammar) into the file before editing — a one-field `compact` would
-  // shadow the bundled one and lose its `padding: 0`.
+  // Also brandon-config-ph5's acceptance: the file never declared `compact`,
+  // and `presets` merge by name then by FIELD, so the first `-` materializes
+  // `presets.compact.root` alone (the bundled root in authoring grammar, no
+  // `globals`), and the reset of that root prunes the emptied `compact` —
+  // the file is byte-identical to the start and compact renders the bundled
+  // compact layout again.
   test("a preset emptied of every segment can still be reset through a real click", () => {
-    durable.write(`{ globals: {}, segments: {} }`);
+    const INITIAL = `{ globals: {}, segments: {} }`;
+    durable.write(INITIAL);
 
     const { cache, sessionState, cleanups } = makeCache();
     try {
@@ -1580,12 +1585,12 @@ describe("RenderCache: layout edits land in the file and reload from it", () => 
         );
       compactRemove("directory");
       expect(durable.parsed().presets).toEqual({
-        compact: { root: { h: ["git", "context"] }, globals: { padding: 0 } },
+        compact: { root: { h: ["git", "context"] } },
       });
       compactRemove("git");
       compactRemove("context");
       expect(durable.parsed().presets).toEqual({
-        compact: { root: { h: [] }, globals: { padding: 0 } },
+        compact: { root: { h: [] } },
       });
     } finally {
       for (const fn of cleanups) fn();
@@ -1616,9 +1621,9 @@ describe("RenderCache: layout edits land in the file and reload from it", () => 
           "presets.compact.root",
         ),
       ).not.toThrow();
-      // reset = DELETE that path: the authored root is gone from the file.
-      const compact = durable.parsed().presets as Record<string, unknown>;
-      expect(compact.compact).not.toHaveProperty("root");
+      // reset = DELETE that path, pruning the `compact` it empties: the
+      // file is what it was before the first click.
+      expect(durable.text()).toBe(INITIAL);
     } finally {
       for (const fn of cleanups2) fn();
     }
@@ -1632,6 +1637,11 @@ describe("RenderCache: layout edits land in the file and reload from it", () => 
       );
       expect(restored.lastError).toBeNull();
       expect(restored.state.authoredRoots.has("compact")).toBe(false);
+      expect(presetNamesOf(restored, "compact")).toEqual([
+        "directory",
+        "git",
+        "context",
+      ]);
     } finally {
       for (const fn of cleanups3) fn();
     }

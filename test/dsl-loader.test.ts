@@ -9,6 +9,7 @@ import {
   ConfigError,
   extractTemplateRefs,
   findKeyLine,
+  parseDslConfig,
 } from "../src/config/dsl-loader";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { validateVariables } from "../src/config/loader/variables";
@@ -741,11 +742,25 @@ describe("loadDslConfig — cache policies", () => {
 // ─── Segments ────────────────────────────────────────────────────────────────
 
 describe("loadDslConfig — segments", () => {
-  test("template required", () => {
+  test("template required for a segment no base declares", () => {
     expectIssue(`{ segments: { cwd: {} } }`, {
       path: "segments.cwd.template",
-      message: "segments.cwd.template must be a string",
+      message:
+        "segments.cwd declares no template — only a segment the bundled default declares may omit it",
     });
+  });
+
+  // [LAW:single-enforcer] The parse is where a delta is stamped: a name in
+  // the inherited set may omit its template, any other name may not.
+  test("a delta over an inherited name may omit its template; any other name may not", () => {
+    const parse = (source: string) =>
+      parseDslConfig("<test>", source, new Set(["nord"]), new Set(["cwd"]));
+    expect(parse(`{ segments: { cwd: { palette: "nord" } } }`).segments).toEqual({
+      cwd: { palette: "nord" },
+    });
+    expect(() => parse(`{ segments: { mine: { palette: "nord" } } }`)).toThrow(
+      /segments\.mine declares no template/,
+    );
   });
 
   test("width: 'auto' or positive int", () => {

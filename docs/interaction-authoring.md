@@ -636,14 +636,15 @@ deleting the whole tree, see `undo`/`redo` below — the same history steps a
 layout edit back exactly as it steps any other durable write.
 
 The target need not be a preset you wrote. `presets.<name>.root` works
-against the bundled `compact` and `verbose` too, with one thing to expect:
-`presets` merge by name wholesale, so the first click on a preset your file
-does not declare copies the whole bundled declaration — its `globals` and its
-`root` — into your file, then applies the edit. A file declaring only
-`presets.compact.root` would otherwise erase the bundled `compact`'s
-`padding: 0`. A preset staging your config's own root is narrower: the first
+against the bundled `compact` and `verbose` too: `presets` merge by name and
+then by field, so the first click on a preset your file does not declare
+writes only `presets.<name>.root` — the bundled root in the grammar you
+write, with the edit applied — and the bundled `compact`'s `padding: 0`
+keeps reaching you from the bundled declaration. A `reset` of that root
+removes the emptied `compact` with it, so the preset tracks the bundled one
+again. A preset staging your config's own root is narrower still: the first
 click materializes only `root.rows.<row>` — the one bundled row holding the
-clicked segment, in the grammar you write — and edits that row.
+clicked segment — and edits that row.
 
 A click whose target or anchor the tree no longer holds — the bar rendered
 before a later edit removed that segment — is a loud click error (`… holds
@@ -1003,15 +1004,21 @@ number.
 "A segment your config declares" includes the bundled ones — `directory`,
 `git`, `model`, and the rest merge into every config by name — so
 `segments.model.palette` is a legal target in a file that never mentions
-`model`. What that first write does to the file is worth knowing before you
-see the diff: `segments` merge by name wholesale, so a file declaring only
-`segments: { model: { palette: "nord" } }` would replace the whole bundled
-`model` segment with one that has no template. The write therefore copies
-the entire bundled `model` declaration into your file first, then sets its
-`palette`. A segment your file already declares gets only the one `palette`
-line inserted or replaced. Per-field merge is a follow-up ticket; until then
-expect the first pin on a bundled segment to add a full declaration you can
-trim by hand, and `reset` to remove only the `palette` line from it.
+`model`. The first write adds exactly one field: `segments` merge by name
+and then by field, so a declaration under a bundled name is a delta over it,
+and this file is complete on its own — `model` keeps the bundled template
+and wears `nord`:
+
+```json5 check:pass
+{
+  segments: { model: { palette: "nord" } },
+}
+```
+
+Only a segment of your own must carry a `template`; a new name without one
+is a load error naming the one way an absent template is legal. `reset`
+removes the `palette` line, and the `model: {}` it leaves empty goes with
+it, so the segment tracks the bundled declaration again.
 
 Like `charset` and `colorCompatibility` above, a segment's `palette:` has no
 SessionState half — `persist` is its only seam, so there is no session

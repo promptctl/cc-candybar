@@ -13,17 +13,16 @@
 // hand-authored file keeps its comments, key order, quoting, and trailing
 // commas: exactly one span changes per edit.
 //
-// [LAW:dataflow-not-control-flow] Every write runs the same two steps —
-// "ensure the target's declaration is authored in the file", then "splice
-// the value" — and the first step is the identity when the file already
-// authors it. `segments` and `presets` merge BY NAME, WHOLESALE (loader/
-// merge.ts), so a first-ever write under a bundled name materializes the
-// whole bundled declaration first; otherwise the one-field file would shadow
-// the bundled decl and lose its template. A follow-up ticket proposes per-
-// field merge for those decls, after which materialization collapses to the
-// one field. A root's ROWS already merge by name (src/config/root.ts), so a
-// structural edit on a row the file inherits materializes that one row —
-// `root.rows.<name>` — and never the whole tree.
+// [LAW:dataflow-not-control-flow] A VALUE write is one splice at the path its
+// key spells: `globals` merge per field, and so do `segments.<name>` and
+// `presets.<name>` (loader/merge.ts), so a first pin under a bundled name
+// writes that one field and nothing else, and a reset that empties the
+// declaration prunes it (json5-edit's deleteValue) so the name tracks the
+// bundled one again. Only a STRUCTURAL edit on a tree the file inherits has
+// something to author first — the one row (`root.rows.<name>`, the by-name
+// cascade of src/config/root.ts) or the one preset root
+// (`presets.<name>.root`) the edit lands in — and that step is the identity
+// when the file already authors it.
 
 import { BadVerbArgs } from "./verb-error";
 import fs from "node:fs";
@@ -168,17 +167,11 @@ function has(doc: Node | null, p: ConfigPath): boolean {
 
 // ─── Where a target lives, and what authors it ──────────────────────────────
 
-// [LAW:types-are-the-program] A target's placement in THIS file: the path the
-// value is spliced at, and the by-name declaration that must be authored for
-// that path to mean what it means today (`null` when the path's parent merges
-// per field, as `globals` does). `value` is what the merged config holds
-// there now — the bundled declaration — or undefined when nothing does, which
-// `ensureAuthored` turns into a loud error rather than a hollow decl.
-// [LAW:types-are-the-program] `path` is the value span the key names; `unit`
-// is the by-name declaration the file must hold before that path exists —
-// the bundled declaration to materialize — or null when the file already
-// authors it (globals always; a segment/preset the file declares). There is
-// no "declared nowhere" placement: placementOf refuses instead.
+// [LAW:types-are-the-program] A structural edit's placement in THIS file:
+// the path the edited tree is spliced at, and the TREE the file must author
+// before that path exists — the bundled row or preset root the edit lands
+// in — or null when the file already authors it. There is no "declared
+// nowhere" placement: the cascade refuses instead.
 interface Placement {
   readonly path: ConfigPath;
   readonly unit: { readonly path: ConfigPath; readonly value: unknown } | null;
@@ -218,74 +211,48 @@ export function authoredFragment(fragment: RootFragment): unknown {
   };
 }
 
-function authoredPreset(decl: PresetDecl): unknown {
-  return {
-    ...(decl.root !== undefined && { root: authoredFragment(decl.root) }),
-    ...(decl.globals !== undefined && { globals: decl.globals }),
-  };
-}
-
 const RAW = RAW_DEFAULT_DSL_CONFIG;
 const RAW_SEGMENTS: Readonly<Record<string, unknown>> = RAW.segments;
 const RAW_PRESETS: Readonly<Record<string, PresetDecl>> = RAW.presets;
 const RAW_ROOT: Root = RAW.root;
 
-// [LAW:parse-dont-validate] The ONE place "who declares this unit" is
-// decided, by mergeWithDefault's own rule: the file's declaration wins by
-// name (nothing to materialize), else the bundled one is what a first write
-// materializes, else there is no declaration. That last arm is the stale
-// click: the gate admitted a key from a config this file no longer holds (a
-// custom preset deleted by hand since the render, another session's file).
-// It must refuse, never fall through — for a preset, "not declared" once
-// read as "declares no root" and redirected the write onto the file's own
-// top-level `root`.
-type Declaration<T> =
-  | { readonly source: "file" }
-  | { readonly source: "bundled"; readonly decl: T };
-
-function declarationOf<T>(
+// [LAW:no-silent-failure] A write under a by-name declaration NEITHER the
+// file nor the bundled default carries is the stale click: the gate admitted
+// a key from a config this file no longer holds (a custom segment or preset
+// deleted by hand since the render, another session's file). It refuses,
+// never falls through — for a preset, "not declared" once read as "declares
+// no root" and redirected the write onto the file's own top-level `root`.
+function requireDeclared(
   doc: Node | null,
-  unitPath: ConfigPath,
-  bundled: T | undefined,
+  own: ConfigPath,
+  bundled: unknown,
   key: string,
-): Declaration<T> {
-  if (has(doc, unitPath)) return { source: "file" };
-  if (bundled === undefined) {
+): void {
+  if (!has(doc, own) && bundled === undefined) {
     throw new BadVerbArgs(
-      `cannot edit ${key}: neither the config file nor the bundled default declares ${unitPath.join(".")}`,
+      `cannot edit ${key}: neither the config file nor the bundled default declares ${own.join(".")}`,
     );
   }
-  return { source: "bundled", decl: bundled };
-}
-
-function unitOf<T>(
-  declaration: Declaration<T>,
-  unitPath: ConfigPath,
-  spell: (decl: T) => unknown,
-): Placement["unit"] {
-  return declaration.source === "file"
-    ? null
-    : { path: unitPath, value: spell(declaration.decl) };
 }
 
 // [LAW:types-are-the-program] A target that names a VALUE — every scope but
 // the preset root, whose edits are structural (a row, not a scalar).
 type ValueTarget = Exclude<PersistTarget, { scope: "preset-root" }>;
 
-function valuePlacementOf(doc: Node | null, target: ValueTarget): Placement {
-  if (target.scope === "globals") {
-    return { path: persistPath(target), unit: null };
-  }
+// The path a value write splices at. A globals field is always declared; a
+// segment field needs its segment declared somewhere, since the one field
+// the file would then hold is a delta over the bundled declaration.
+function valuePathOf(doc: Node | null, target: ValueTarget): ConfigPath {
   const path = persistPath(target);
-  const own: ConfigPath = ["segments", target.segment];
-  return {
-    path,
-    unit: unitOf(
-      declarationOf(doc, own, RAW_SEGMENTS[target.segment], path.join(".")),
-      own,
-      (decl) => decl,
-    ),
-  };
+  if (target.scope === "segment-palette") {
+    requireDeclared(
+      doc,
+      ["segments", target.segment],
+      RAW_SEGMENTS[target.segment],
+      path.join("."),
+    );
+  }
+  return path;
 }
 
 // ─── The root cascade, as the file spells it ────────────────────────────────
@@ -328,11 +295,26 @@ function fileLayer(doc: Node | null, path: ConfigPath): RootLayer | null {
   return fragment === undefined ? null : { path, fragment, unit: null };
 }
 
+// The bundled preset's root as a layer at its place in the file — a first
+// structural edit materializes `presets.<name>.root` alone, the one field
+// the edit lands in — or null for a preset that stages no root.
+function bundledRootLayer(
+  path: ConfigPath,
+  root: RootFragment | undefined,
+): RootLayer | null {
+  if (root === undefined) return null;
+  const authored = authoredFragment(root);
+  return {
+    path,
+    fragment: bundledDoc(authored),
+    unit: { path, value: authored },
+  };
+}
+
 // [LAW:parse-dont-validate] The preset's fragment, by mergeWithDefault's own
-// rule: the file's declaration wins by name (its `root`, if any), else the
-// bundled one (materialized whole, `globals` included — presets still merge
-// wholesale by name), else the click is stale: the gate admitted a key from a
-// config this file no longer holds, and it must refuse, never fall through.
+// rule, field by field: the file's `root` under that name wins, else the
+// bundled preset's, else the preset stages no root. A preset declared
+// nowhere is the stale click requireDeclared refuses.
 // [LAW:one-source-of-truth] A declared fragment that is the merge identity
 // stages the config's own root, exactly as presetRoot classifies it
 // (root.ts's `restages`), so every path this module names agrees with the
@@ -340,24 +322,9 @@ function fileLayer(doc: Node | null, path: ConfigPath): RootLayer | null {
 function presetLayer(doc: Node | null, preset: string): RootLayer | null {
   const own: ConfigPath = ["presets", preset];
   const path: ConfigPath = [...own, "root"];
-  const declaration = declarationOf(
-    doc,
-    own,
-    RAW_PRESETS[preset],
-    path.join("."),
-  );
-  const root =
-    declaration.source === "file" ? undefined : declaration.decl.root;
-  const layer =
-    declaration.source === "file"
-      ? fileLayer(doc, path)
-      : root === undefined
-        ? null
-        : {
-            path,
-            fragment: bundledDoc(authoredFragment(root)),
-            unit: { path: own, value: authoredPreset(declaration.decl) },
-          };
+  const bundled = RAW_PRESETS[preset];
+  requireDeclared(doc, own, bundled, path.join("."));
+  const layer = fileLayer(doc, path) ?? bundledRootLayer(path, bundled?.root);
   return layer !== null && restagesFragment(layer.fragment) ? layer : null;
 }
 
@@ -490,11 +457,9 @@ export function writeValue(
 ): void {
   const target = requireValueTarget(key);
   const before = readConfigText(file);
-  const placement = valuePlacementOf(docOf(before ?? ""), target);
-  const authored = ensureAuthored(before ?? "", placement);
   const after = setValue(
-    authored,
-    placement.path,
+    before ?? "",
+    valuePathOf(docOf(before ?? ""), target),
     persistValueText(key, raw),
     JSON5_DIALECT,
   );

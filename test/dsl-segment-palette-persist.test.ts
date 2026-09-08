@@ -20,10 +20,11 @@
 //      key spells. A segment the file already declares changes in exactly
 //      one span: every other field, and every byte outside it (comments,
 //      quote style), survives verbatim. A segment the file does NOT declare
-//      but the bundled default does is materialized wholesale first
-//      (`segments` merge by name), then pinned. `reset` deletes `palette`
-//      from the file's declaration; a `palette` the file never authored
-//      changes nothing and records no history.
+//      but the bundled default does gains exactly `<name>: { palette }` — a
+//      delta the loader lays over the bundled declaration field by field.
+//      `reset` deletes `palette` from the file's declaration, pruning the
+//      declaration it empties; a `palette` the file never authored changes
+//      nothing and records no history.
 //   5. RenderCache reads the pin back from the file through the SAME watcher
 //      a hand edit uses, patching the segment's OWN `palette` field (never
 //      wholesale-replacing it, never touching sibling segments); it survives
@@ -395,11 +396,11 @@ describe("segment-palette persist action click → the config file", () => {
     dispose();
   });
 
-  // [LAW:one-source-of-truth] `segments` merge BY NAME, WHOLESALE, so a
-  // one-field `directory: { palette }` in the file would shadow the bundled
-  // decl and lose its template. The first pin on a bundled segment therefore
-  // copies the whole bundled declaration into the file, then sets palette.
-  test("pinning a segment the file does not declare materializes the bundled decl first, then sets palette", () => {
+  // [LAW:one-source-of-truth] `segments` merge by name then by FIELD, so
+  // the first pin on a bundled segment writes exactly one key path — a
+  // delta the loader lays over the bundled declaration — and the reset that
+  // empties it prunes it, leaving the file byte-identical to before the pin.
+  test("pinning a segment the file does not declare writes exactly `directory: { palette }`; reset restores the file byte-for-byte", () => {
     const SRC_BUNDLED = `{
       globals: {},
       variables: {
@@ -414,26 +415,20 @@ describe("segment-palette persist action click → the config file", () => {
       },
       root: { h: ['directory', 'bar'] },
     }`;
-    const bundled = RAW_DEFAULT_DSL_CONFIG.segments.directory;
     const { render, click, dispose } = buildRuntime(
       SRC_BUNDLED,
       "s1",
       DEFAULT_DSL_CONFIG,
     );
     expect(fileSegments(durable).directory).toBeUndefined();
+    const original = durable.text()!;
 
     const [applyUrl, resetUrl] = extractUrls(render());
     click(applyUrl!);
-    expect(fileSegments(durable).directory).toEqual({
-      ...bundled,
-      palette: "nord",
-    });
-    expect(fileSegments(durable).directory!.template).toBe(bundled.template);
+    expect(fileSegments(durable).directory).toEqual({ palette: "nord" });
 
-    // Reset deletes ONLY palette: the materialized decl stays authored,
-    // exactly as if the user had written it by hand.
     click(resetUrl!);
-    expect(fileSegments(durable).directory).toEqual(bundled);
+    expect(durable.text()).toBe(original);
     dispose();
   });
 });
@@ -455,8 +450,8 @@ describe("config-file-store: segment-palette placement", () => {
 
   // [LAW:no-silent-failure] The gate admits keys from the config a session
   // rendered; a key naming a segment that neither this file nor the bundled
-  // default declares cannot be materialized, and a hollow `ghost: { palette }`
-  // would be a declaration with no template. The store refuses loudly and
+  // default declares has nothing for a `ghost: { palette }` delta to overlay:
+  // it would be a declaration with no template. The store refuses loudly and
   // touches nothing.
   test("a segment neither the file nor the bundled default declares cannot be pinned", () => {
     const text = `{
