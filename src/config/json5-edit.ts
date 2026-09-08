@@ -238,8 +238,8 @@ class Scanner {
 
 /**
  * Parse a whole JSON5 document into a span-carrying node tree. Throws
- * Json5EditError on any syntax error — the loader already accepted this text,
- * so a failure here means the file changed underneath the daemon.
+ * Json5EditError on any syntax error or duplicate key — the documents the
+ * editor refuses to splice.
  */
 export function parseDocument(text: string): Node {
   const s = new Scanner(text);

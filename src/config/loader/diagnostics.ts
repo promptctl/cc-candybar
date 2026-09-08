@@ -96,9 +96,6 @@ function lineFromOffset(source: string, offset: number): number {
  * duplicate-key scan to drift from the one a click hits, and any OTHER
  * document the editor would refuse (a scanner/JSON5 disagreement) is named
  * here for the same reason — early, on the bar, before any click.
- *
- * [LAW:dataflow-not-control-flow] Runs on every load of every file; the
- * outcome is a value (a notice or its absence), never a skipped pass.
  */
 export function editabilityNotice(
   filePath: string,
