@@ -484,6 +484,131 @@ describe("RenderCache", () => {
     }
   });
 
+  // [LAW:single-enforcer] brandon-config-16g: a duplicate object key is
+  // tolerated by the render path (last wins) and refused by the config-file
+  // editor; the editor's refusal is the load-time advisory, so the file
+  // defect names its line on the bar before any click reaches it.
+  const DUPLICATE_KEY_CONFIG = `{
+  variables: { x: { kind: "literal", value: "ok" } },
+  segments: {
+    s: { template: " {{ .x }} ", bg: "surface", fg: "foreground" },
+  },
+  globals: {
+    padding: 1,
+    padding: 2,
+  },
+  root: { h: ["s"] },
+}
+`;
+
+  test("lastWarning names a duplicate object key and its line; the load still succeeds with the last value", async () => {
+    const { dir, cleanup } = mkConfigDir();
+    const { cache, cleanups, reloads } = makeCache();
+    try {
+      const cfg = join(dir, ".cc-candybar.json5");
+      writeFileSync(cfg, DUPLICATE_KEY_CONFIG);
+
+      const entry = cache.getOrCreate(dir, dir, undefined);
+      expect(entry.lastError).toBeNull();
+      expect(entry.state.config.globals.padding).toBe(2);
+      expect(entry.lastWarning).toBe(
+        `${cfg}:8: duplicate key "padding" — the settings menu cannot edit this file until it is fixed`,
+      );
+
+      // Removing the duplicate clears the advisory on the next reload.
+      await reloads.after(entry, () => {
+        writeFileSync(cfg, DUPLICATE_KEY_CONFIG.replace("padding: 1,\n", ""));
+      });
+      expect(entry.lastWarning).toBeNull();
+      expect(entry.lastError).toBeNull();
+    } finally {
+      for (const fn of cleanups) fn();
+      cleanup();
+    }
+  });
+
+  test("a duplicate key's advisory survives beside a fatal validation error", () => {
+    const { dir, cleanup } = mkConfigDir();
+    const { cache, cleanups } = makeCache();
+    try {
+      const cfg = join(dir, ".cc-candybar.json5");
+      // The duplicate plus a dangling segment reference: the reference is
+      // fatal; the advisory still reaches the strip beside it.
+      writeFileSync(
+        cfg,
+        DUPLICATE_KEY_CONFIG.replace(
+          `root: { h: ["s"] }`,
+          `root: { h: ["nope"] }`,
+        ),
+      );
+      const entry = cache.getOrCreate(dir, dir, undefined);
+      expect(entry.lastError).toContain("nope");
+      expect(entry.lastWarning).toContain(`${cfg}:8: duplicate key "padding"`);
+    } finally {
+      for (const fn of cleanups) fn();
+      cleanup();
+    }
+  });
+
+  test("a duplicate key's advisory survives beside a fatal structural error", () => {
+    const { dir, cleanup } = mkConfigDir();
+    const { cache, cleanups } = makeCache();
+    try {
+      const cfg = join(dir, ".cc-candybar.json5");
+      // An unknown top-level key fails structural validation before the
+      // merge; the advisory rides the ConfigError onto the strip beside it.
+      writeFileSync(
+        cfg,
+        DUPLICATE_KEY_CONFIG.replace(`root: { h: ["s"] },`, `bogus: true,`),
+      );
+      const entry = cache.getOrCreate(dir, dir, undefined);
+      expect(entry.lastError).toContain('Unknown top-level key "bogus"');
+      expect(entry.lastWarning).toContain(`${cfg}:8: duplicate key "padding"`);
+    } finally {
+      for (const fn of cleanups) fn();
+      cleanup();
+    }
+  });
+
+  test("a partial-load warning survives beside a validator-derivation throw", () => {
+    const { dir, cleanup } = mkConfigDir();
+    const { cache, cleanups } = makeCache();
+    try {
+      const cfg = join(dir, ".cc-candybar.json5");
+      // `s.v` declared twice — once top-level, once segment-local — is the
+      // register pass's partial-load warning; a non-integer literal aimed at
+      // a key another action bounds as a range throws in validator derivation
+      // AFTER the register pass, so the warning must already be on the strip.
+      writeFileSync(
+        cfg,
+        JSON.stringify({
+          variables: {
+            "session.id": { kind: "input", path: "session_id", default: "" },
+            "s.v": { kind: "literal", value: "top" },
+            k: { kind: "state", key: "k", default: "0" },
+          },
+          actions: {
+            lit: { set: "k", to: "x" },
+            step: { set: "k", min: 0, max: 3, by: 1 },
+          },
+          segments: {
+            s: {
+              vars: { v: { kind: "literal", value: "local" } },
+              template: '{{ action "lit" "a" }} {{ action "step" "b" }}',
+            },
+          },
+          root: { h: ["s"] },
+        }),
+      );
+      const entry = cache.getOrCreate(dir, dir, undefined);
+      expect(entry.lastError).toContain('key "k" is an integer spec');
+      expect(entry.lastWarning).toContain('Variable "s.v"');
+    } finally {
+      for (const fn of cleanups) fn();
+      cleanup();
+    }
+  });
+
   test("an observer that throws during the first load leaves the entry reachable", () => {
     const { dir, cleanup } = mkConfigDir();
     const { cache, cleanups, watchers } = makeCache({

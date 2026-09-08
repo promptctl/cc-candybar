@@ -53,12 +53,16 @@ export type Node =
   | { readonly kind: "boolean"; readonly span: Span; readonly value: boolean }
   | { readonly kind: "null"; readonly span: Span };
 
+// [LAW:types-are-the-program] `reason` and `offset` are the two facts of a
+// refusal; `message` is their one rendering. A consumer that positions the
+// refusal in its own vocabulary (the loader names a LINE on the diagnostic
+// strip) reads the facts, never re-parses the rendering.
 export class Json5EditError extends Error {
   constructor(
-    message: string,
+    readonly reason: string,
     readonly offset: number,
   ) {
-    super(`${message} (at offset ${offset})`);
+    super(`${reason} (at offset ${offset})`);
     this.name = "Json5EditError";
   }
 }
@@ -234,8 +238,8 @@ class Scanner {
 
 /**
  * Parse a whole JSON5 document into a span-carrying node tree. Throws
- * Json5EditError on any syntax error — the loader already accepted this text,
- * so a failure here means the file changed underneath the daemon.
+ * Json5EditError on any syntax error or duplicate key — the documents the
+ * editor refuses to splice.
  */
 export function parseDocument(text: string): Node {
   const s = new Scanner(text);

@@ -5,12 +5,21 @@
 // unit-test coverage of their tricky bits, but everything else goes
 // through parseDslConfig.
 
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import {
   ConfigError,
   extractTemplateRefs,
   findKeyLine,
+  loadConfig,
   parseDslConfig,
 } from "../src/config/dsl-loader";
+import {
+  Json5EditError,
+  JSON5_DIALECT,
+  setValue,
+} from "../src/config/json5-edit";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { validateVariables } from "../src/config/loader/variables";
 import type { ConfigIssue } from "../src/config/loader/diagnostics";
@@ -1836,5 +1845,122 @@ describe("findKeyLine", () => {
 
   test("returns undefined when key not found", () => {
     expect(findKeyLine("{}", ["nonexistent"])).toBeUndefined();
+  });
+});
+
+// ─── Editability advisory (brandon-config-16g) ───────────────────────────────
+// [LAW:single-enforcer] JSON5 tolerates a duplicate object key (last wins);
+// the config-file editor refuses the document. The loader reports the editor's
+// refusal as an advisory at load, so the duplicate names its line on the bar
+// before any click — and the two cannot disagree, because the editor's scanner
+// is the one detector.
+
+describe("loadConfig — editability advisory", () => {
+  let dir: string;
+  beforeAll(() => {
+    dir = fs.mkdtempSync(path.join(os.tmpdir(), "cc-loader-dup-"));
+  });
+  afterAll(() => {
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+  function write(name: string, text: string): string {
+    const p = path.join(dir, name);
+    fs.writeFileSync(p, text);
+    return p;
+  }
+
+  const DUPLICATE = `{
+  globals: {
+    padding: 1,
+    padding: 2,
+  },
+}
+`;
+
+  test("a duplicate key loads with the last value and earns one advisory naming the file, key and line", () => {
+    const file = write("dup.json5", DUPLICATE);
+    const { config, warnings } = loadConfig(file, DEFAULT_DSL_CONFIG);
+    expect(config.globals.padding).toBe(2);
+    expect(warnings).toEqual([
+      `${file}:4: duplicate key "padding" — the settings menu cannot edit this file until it is fixed`,
+    ]);
+  });
+
+  test("the advisory names exactly the refusal a durable click would hit", () => {
+    // The same text through the editor: refused, with the same reason.
+    expect(() =>
+      setValue(DUPLICATE, ["globals", "padding"], "3", JSON5_DIALECT),
+    ).toThrow(Json5EditError);
+    expect(() =>
+      setValue(DUPLICATE, ["globals", "padding"], "3", JSON5_DIALECT),
+    ).toThrow(/duplicate key "padding"/);
+  });
+
+  test("a document the editor accepts earns no advisory", () => {
+    const clean = `{ globals: { padding: 1 } }`;
+    const file = write("clean.json5", clean);
+    expect(loadConfig(file, DEFAULT_DSL_CONFIG).warnings).toEqual([]);
+    expect(setValue(clean, ["globals", "padding"], "3", JSON5_DIALECT)).toBe(
+      `{ globals: { padding: 3 } }`,
+    );
+  });
+
+  test("no file earns no advisory", () => {
+    expect(loadConfig(null, DEFAULT_DSL_CONFIG).warnings).toEqual([]);
+  });
+});
+
+describe("loadConfig — the advisory survives a structural failure", () => {
+  let dir: string;
+  beforeAll(() => {
+    dir = fs.mkdtempSync(path.join(os.tmpdir(), "cc-loader-dup-fatal-"));
+  });
+  afterAll(() => {
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+  function write(name: string, text: string): string {
+    const p = path.join(dir, name);
+    fs.writeFileSync(p, text);
+    return p;
+  }
+
+  test("a duplicate key beside an unknown top-level key rides the ConfigError", () => {
+    const file = write(
+      "dup-bogus.json5",
+      `{
+  globals: {
+    padding: 1,
+    padding: 2,
+  },
+  bogus: true,
+}
+`,
+    );
+    let caught: unknown;
+    try {
+      loadConfig(file, DEFAULT_DSL_CONFIG);
+    } catch (e) {
+      caught = e;
+    }
+    if (!(caught instanceof ConfigError))
+      throw new Error("expected ConfigError");
+    expect(caught.message).toContain('Unknown top-level key "bogus"');
+    expect(caught.warnings).toEqual([
+      `${file}:4: duplicate key "padding" — the settings menu cannot edit this file until it is fixed`,
+    ]);
+  });
+
+  test("a JSON5 syntax error is reported once: the ConfigError carries no scanner notice", () => {
+    const file = write("syntax.json5", `{ globals: { padding: 1, padding: `);
+    let caught: unknown;
+    try {
+      loadConfig(file, DEFAULT_DSL_CONFIG);
+    } catch (e) {
+      caught = e;
+    }
+    if (!(caught instanceof ConfigError))
+      throw new Error("expected ConfigError");
+    expect(caught.message).toContain("JSON5 syntax error");
+    expect(caught.warnings).toEqual([]);
   });
 });
