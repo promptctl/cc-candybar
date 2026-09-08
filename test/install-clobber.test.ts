@@ -1,5 +1,5 @@
 import fs from "node:fs";
-import { DISCLOSURE_GLYPH_CLOSED } from "../src/config/disclosure";
+import { DOOR_GLYPH } from "../src/config/disclosure";
 import path from "node:path";
 import os from "node:os";
 import { __test__ } from "../src/install";
@@ -213,7 +213,7 @@ describe("installSuccessMessage", () => {
   test("points at the settings menu, with the glyph the bar actually renders", () => {
     const msg = installSuccessMessage();
     expect(msg).toMatch(/theme\/look\/style\/wrap\/padding controls/i);
-    expect(msg).toContain(`☰ ${DISCLOSURE_GLYPH_CLOSED}`);
+    expect(msg).toContain(DOOR_GLYPH);
   });
 });
 

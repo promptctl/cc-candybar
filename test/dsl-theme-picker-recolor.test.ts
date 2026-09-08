@@ -11,7 +11,15 @@
 // [LAW:single-enforcer] Drives the real spine — registerDslConfig + renderDsl
 // for rendering, parseHandlerUrl + VERBS for the click, and the same
 // effectiveThemeName/paletteForThemeName the daemon calls. No parallel rig.
+//
+// [LAW:behavior-not-structure] A cell's colour is read BY SEGMENT NAME, off the
+// `perSegmentSink` the daemon itself renders with, never by position in the
+// byte string. Position is a fact about the layout, not about the recolor: a
+// regex that measures "the first background SGR" measures whichever cell
+// happens to lead the row, and silently starts measuring a different segment
+// the day a cell is added ahead of it.
 
+import type { RichText } from "@promptctl/rich-js";
 import { parseAndValidate } from "./helpers/parse-and-validate";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
@@ -51,7 +59,18 @@ const SRC = `{
   root: { v: ['plain', 'pickers'] },
 }`;
 
+// The cells SRC above declares — the ones whose repaint IS the mechanism under
+// test. The rendered bar carries more than these: settings-menu synthesizes the
+// global door into every config, and that cell states its own colour.
+const DECLARED = ["plain", "pickers"] as const;
+
 const ALLOWED = new Set([BASE_THEME, PICKED_THEME]);
+
+/** One render: the bytes, and the background each named segment painted. */
+interface Painted {
+  readonly bar: string;
+  readonly bgOf: (segment: string) => string;
+}
 
 function buildRuntime() {
   const config = parseAndValidate("<recolor>", SRC, ALLOWED);
@@ -59,6 +78,7 @@ function buildRuntime() {
   const store = new VariableStore();
   const registry = new SourceRegistry(store, "", undefined, sessionState);
   const compiled = registerDslConfig(config, registry);
+  const sink = new Map<string, readonly RichText[]>();
 
   // [LAW:one-source-of-truth] Resolve basePalette per render the SAME way the
   // daemon does — the session's chosen theme over the config default. This is
@@ -66,14 +86,14 @@ function buildRuntime() {
   // pass while the real daemon recolors. (server.ts: basePalette =
   // paletteForThemeName(effectiveThemeName(undefined, sessionState.get(sid,'theme'),
   // globals.palette))).
-  const render = (): string => {
+  const render = (): Painted => {
     const basePalette = paletteForThemeName(
       effectiveThemeName(undefined, 
         sessionState.get(SID, "theme"),
         config.globals.palette,
       ),
     );
-    return renderDsl(
+    const bar = renderDsl(
       config,
       compiled,
       store,
@@ -81,7 +101,24 @@ function buildRuntime() {
       { session_id: SID },
       basePalette,
       OPTS,
+      { perSegmentSink: sink },
     );
+    // [LAW:no-ambient-temporal-coupling] Snapshot the sink HERE. renderDsl
+    // clears it at the top of the next call, so a colour read deferred past
+    // that call would measure a render this Painted never described.
+    const bgs = new Map(
+      [...sink].map(([name, cells]) => [name, cells[0]?.style?.bgcolor?.value?.hex]),
+    );
+    const bgOf = (segment: string): string => {
+      const hex = bgs.get(segment);
+      // [LAW:no-silent-failure] A segment that did not render, or rendered with
+      // no resolved background, is a broken rig — never a value that compares
+      // unequal to the previous render and passes as a repaint.
+      if (hex === undefined)
+        throw new Error(`segment "${segment}" painted no background`);
+      return hex;
+    };
+    return { bar, bgOf };
   };
   return { sessionState, render };
 }
@@ -109,38 +146,34 @@ describe("DSL theme picker — live recolor (epic k5a done-gate #1)", () => {
   test("clicking a theme repaints the whole bar's background colors", () => {
     const { sessionState, render } = buildRuntime();
 
-    const before = render();
-    const beforeBgs = bgColors(before);
+    const beforeBgs = bgColors(render().bar);
     expect(beforeBgs.size).toBeGreaterThan(0);
 
     clickTheme(sessionState, PICKED_THEME);
 
-    const after = render();
-    const afterBgs = bgColors(after);
-
-    // [LAW:verifiable-goals] The whole-bar recolor IS the contract: the set of
-    // background colors the bar paints with must change. dark↔light themes
-    // share no surface color, so the two footprints are disjoint.
-    expect(afterBgs).not.toEqual(beforeBgs);
-    for (const c of afterBgs) expect(beforeBgs.has(c)).toBe(false);
+    // [LAW:verifiable-goals] The coarse whole-bar claim: the set of backgrounds
+    // the bar paints with must change. Blanket DISJOINTNESS is deliberately NOT
+    // the claim. "No colour survives the pick" is a property of the two
+    // PALETTES — that they agree on nothing anywhere — not of the recolor
+    // mechanism, and a correct cell naming a role both palettes share fails it.
+    // The synthesized settings door states `accent`, and textual-dark and
+    // textual-light hold the identical `accent`, so one colour legitimately
+    // survives. WHICH cells must repaint is the next test's claim, by name.
+    expect(bgColors(render().bar)).not.toEqual(beforeBgs);
   });
 
-  test("the non-picker `plain` segment itself recolors (not just the picker)", () => {
+  test("every cell the config declares repaints — the non-picker `plain` too", () => {
     const { sessionState, render } = buildRuntime();
 
-    // Isolate the `plain` segment's bg by rendering ONLY its known glyph run.
-    // It's the first row, so its bg SGR precedes the "◆ here" text.
-    const bgOf = (rendered: string): string => {
-      const m = rendered.match(/48;2;(\d+;\d+;\d+)[^]*?◆ here/);
-      expect(m).not.toBeNull();
-      return m![1]!;
-    };
+    const bgsOf = (painted: Painted): Record<string, string> =>
+      Object.fromEntries(DECLARED.map((name) => [name, painted.bgOf(name)]));
 
-    const beforeBg = bgOf(render());
+    const before = bgsOf(render());
     clickTheme(sessionState, PICKED_THEME);
-    const afterBg = bgOf(render());
+    const after = bgsOf(render());
 
-    expect(afterBg).not.toBe(beforeBg);
+    const unchanged = DECLARED.filter((name) => after[name] === before[name]);
+    expect(unchanged).toEqual([]);
   });
 
   test("active marking tracks the rendered theme: default marked, then the pick", () => {
@@ -148,15 +181,13 @@ describe("DSL theme picker — live recolor (epic k5a done-gate #1)", () => {
 
     // Before any click, the state var defaults to the config palette, so the
     // base theme option is the single bold (active) region.
-    const before = render();
-    expect(boldUrls(before).map(effectsOf)).toEqual([
+    expect(boldUrls(render().bar).map(effectsOf)).toEqual([
       [{ verb: "set-state", args: [SID, "theme", BASE_THEME] }],
     ]);
 
     clickTheme(sessionState, PICKED_THEME);
 
-    const after = render();
-    expect(boldUrls(after).map(effectsOf)).toEqual([
+    expect(boldUrls(render().bar).map(effectsOf)).toEqual([
       [{ verb: "set-state", args: [SID, "theme", PICKED_THEME] }],
     ]);
   });

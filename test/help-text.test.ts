@@ -1,4 +1,4 @@
-import { DISCLOSURE_GLYPH_CLOSED } from "../src/config/disclosure";
+import { DOOR_GLYPH } from "../src/config/disclosure";
 import { HELP_TEXT } from "../src/help-text";
 
 describe("HELP_TEXT", () => {
@@ -10,7 +10,7 @@ describe("HELP_TEXT", () => {
   // again here — a renamed anchor must break this loudly.
   test("points at the settings menu, with the glyph the bar actually renders", () => {
     expect(HELP_TEXT).toMatch(/theme\/look\/style\/wrap\/padding controls/i);
-    expect(HELP_TEXT).toContain(`☰ ${DISCLOSURE_GLYPH_CLOSED}`);
+    expect(HELP_TEXT).toContain(DOOR_GLYPH);
     expect(HELP_TEXT).toMatch(/persist\?/);
   });
 });

@@ -8,7 +8,7 @@ import { tryClickViaDaemon } from "../daemon/client";
 import type { PermanentOutcome } from "../daemon/client-transport";
 import { obtainDaemonKick } from "../daemon/acquire";
 import { URL_SCHEME, VERB_COPY } from "../click/wire";
-import { DISCLOSURE_GLYPH_CLOSED } from "../config/disclosure";
+import { DOOR_GLYPH } from "../config/disclosure";
 import { PACKAGE_VERSION } from "../version";
 import { claudeSettingsPath } from "../claude-settings";
 import {
@@ -443,14 +443,14 @@ function formatPermanent(outcome: PermanentOutcome): string {
 // [LAW:effects-at-boundaries] Pure string builder — runInstall performs the
 // actual write. Kept separate so the message content is testable without
 // driving the full (fs + Launch Services) install side effects.
-// [LAW:one-source-of-truth] The disclosure glyph comes from config/disclosure.ts,
-// the same constant the theme/look picker itself renders with, so this tip
-// can't drift from what the bundled default bar actually shows.
+// [LAW:one-source-of-truth] The door's glyph comes from config/disclosure.ts,
+// the same constant the bar's own settings door renders with, so this tip
+// can't drift from what the bar actually shows.
 function installSuccessMessage(): string {
   return (
     `✓ install complete.\n` +
     `  Restart Claude Code to pick up the new statusline.\n` +
-    `  Tip: every bar carries a settings menu — click ☰ ${DISCLOSURE_GLYPH_CLOSED} for preset\n` +
+    `  Tip: every bar carries a settings menu — click ${DOOR_GLYPH} for preset\n` +
     `  switching, edit mode, and clickable theme/look/style/wrap/padding controls.\n`
   );
 }

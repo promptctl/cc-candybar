@@ -266,12 +266,27 @@ describe("candybar-render-ai7.5 — the bundled default authors a `bg:` only to 
     rt.dispose();
   });
 
-  test("every other bundled cell — the settings door included — wears its address's tint", () => {
+  test("every other bundled cell wears its address's tint", () => {
     const rt = build(BUNDLED, undefined, DEFAULT_DSL_CONFIG);
     rt.render(HOT);
-    for (const name of ["directory", "model", "gitaculous", "toolbar", SETTINGS_ANCHOR]) {
+    for (const name of ["directory", "model", "gitaculous", "toolbar"]) {
       expect([name, rt.bgOf(name)]).toEqual([name, rt.expectedTint(name)]);
     }
+    rt.dispose();
+  });
+
+  // The settings door is the one synthesized cell that states meaning by its
+  // background, so it belongs with `host` above rather than with the tinted
+  // cells: it names the palette's `accent` to say "this is the control every
+  // bar carries", and as the leading cell of row 0 its address would otherwise
+  // deal it the palest entry the vocabulary has. Measured against the whole
+  // registry in test/settings-door.test.ts; measured here against the model,
+  // so a door that quietly went back to wearing its tint fails.
+  test("the settings door paints `accent` over the tint its address selects", () => {
+    const rt = build(BUNDLED, undefined, DEFAULT_DSL_CONFIG);
+    rt.render(HOT);
+    expect(rt.bgOf(SETTINGS_ANCHOR)).toBe(getThemePalette(THEME).get("accent")!.hex);
+    expect(rt.bgOf(SETTINGS_ANCHOR)).not.toBe(rt.expectedTint(SETTINGS_ANCHOR));
     rt.dispose();
   });
 });
