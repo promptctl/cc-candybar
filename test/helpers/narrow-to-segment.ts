@@ -5,10 +5,10 @@
 import type { ValidatedConfig } from "../../src/config/dsl-types";
 import { rootOf } from "../../src/config/root";
 import {
-  EDIT_NS,
   EDIT_MODE_KEY,
   EDIT_TOGGLE_ACTION,
 } from "../../src/config/loader/edit-mode";
+import { EDIT_NS } from "../../src/config/loader/reserved-namespace";
 
 // A canonical one-leaf vertical root — narrows a spread config to a single
 // segment so the rendered line is exactly that segment's text.

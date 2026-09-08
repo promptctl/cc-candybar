@@ -43,7 +43,7 @@
 //      bundled tree — never a silent drift between screen and disk.
 
 import { ownLinks } from "./helpers/ambient-chrome";
-import { SETTINGS_NS } from "../src/config/settings-menu";
+import { SETTINGS_NS } from "../src/config/loader/reserved-namespace";
 import { writeFileSync } from "node:fs";
 import { getThemePalette } from "@promptctl/rich-js";
 import { parseAndValidate } from "./helpers/parse-and-validate";
@@ -73,10 +73,10 @@ import {
 import { RenderCache } from "../src/daemon/cache/render";
 import type { CacheEntry } from "../src/daemon/cache/render";
 import {
-  EDIT_NS,
   EDIT_MODE_KEY,
   EDIT_MODE_OPEN,
 } from "../src/config/loader/edit-mode";
+import { EDIT_NS } from "../src/config/loader/reserved-namespace";
 import {
   addableSegmentDomains,
   addableDomainName,

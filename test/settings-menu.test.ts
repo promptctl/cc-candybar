@@ -34,11 +34,8 @@ import { ConfigError } from "../src/config/dsl-loader";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { presetNames, presetRoot } from "../src/config/presets";
 import { addableSegmentDomains } from "../src/config/edit-chrome";
-import {
-  countAnchors,
-  SETTINGS_ANCHOR,
-  SETTINGS_NS,
-} from "../src/config/settings-menu";
+import { countAnchors, SETTINGS_ANCHOR } from "../src/config/settings-menu";
+import { SETTINGS_NS } from "../src/config/loader/reserved-namespace";
 import { EDIT_MODE_KEY } from "../src/config/loader/edit-mode";
 import {
   DISCLOSURE_GLYPH_CLOSE,

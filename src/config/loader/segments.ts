@@ -21,6 +21,7 @@ import {
   type VariableDecl,
 } from "../dsl-types.js";
 import { findKeyLine } from "./diagnostics.js";
+import { isReservedName } from "./reserved-namespace.js";
 import {
   describeType,
   describeValue,
@@ -40,14 +41,19 @@ import {
 } from "./validate-core.js";
 import { validateVariables, variablesMapJson } from "./variables.js";
 
-// [LAW:one-source-of-truth] The names a file may declare as a delta: exactly
-// the base's segments — spelled once for loadConfig, the schema emitter, and
-// the test helper that mirrors loadConfig, so the loader's acceptance and the
-// published schema's cannot name different sets.
+// [LAW:one-source-of-truth] The names a file may declare as a delta: the
+// base's segments a user could AUTHOR — its synthesized ones (a bundled
+// group's toggle) live under a reserved namespace the loader rejects outright,
+// so naming them here would publish a delta target no file can write. Spelled
+// once for loadConfig, the schema emitter, and the test helper that mirrors
+// loadConfig, so the loader's acceptance and the published schema's cannot
+// name different sets.
 export function inheritableSegmentNames(
   base: Pick<DslConfig, "segments">,
 ): ReadonlySet<string> {
-  return new Set(Object.keys(base.segments));
+  return new Set(
+    Object.keys(base.segments).filter((name) => !isReservedName(name)),
+  );
 }
 
 export function validateSegments(

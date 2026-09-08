@@ -28,9 +28,11 @@ import { ConfigError } from "../src/config/loader/diagnostics";
 const SCHEMA_PATH = path.resolve(__dirname, "..", "schema", "cc-candybar.schema.json");
 
 let validate: ValidateFunction;
+let namedDeltaTargets: string[];
 
 beforeAll(() => {
   const schema = JSON.parse(fs.readFileSync(SCHEMA_PATH, "utf-8"));
+  namedDeltaTargets = Object.keys(schema.properties.segments.properties);
   // strict:false — the generated schema carries `title`/`$id` annotations and
   // discriminated-by-presence `anyOf`s that ajv's strict mode warns on; none
   // affect validation outcome.
@@ -265,5 +267,19 @@ describe("config JSON Schema", () => {
     const source = `{ segments: { a: { template: 'a' } }, root: { h: ['a', 'does-not-exist'] } }`;
     expect(schemaAccepts(source)).toBe(true);
     expect(loaderAccepts(source)).toBe(false);
+  });
+
+  // [LAW:one-source-of-truth] Every delta target the schema names by name is
+  // one the loader accepts a delta for. The bundled default carries synthesized
+  // segments under reserved namespaces (a group's toggle) that the loader
+  // rejects outright — a schema naming one would autocomplete a declaration no
+  // file can write.
+  it("names as a delta target only what the loader accepts as one", () => {
+    expect(namedDeltaTargets.length).toBeGreaterThan(0);
+    for (const name of namedDeltaTargets) {
+      const source = `{ segments: { ${JSON.stringify(name)}: {} } }`;
+      expect(schemaAccepts(source)).toBe(true);
+      expect(loaderAccepts(source)).toBe(true);
+    }
   });
 });

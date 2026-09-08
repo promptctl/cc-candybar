@@ -7,14 +7,10 @@
 // no validation error and no error cell (⚠) in the output — so any future drift
 // fails CI, not a user's status line.
 
-import { readFileSync, readdirSync } from "node:fs";
+import { readdirSync } from "node:fs";
 import { join } from "node:path";
 import { getThemePalette } from "@promptctl/rich-js";
-import {
-  parseDslConfig,
-  mergeWithDefault,
-  validateConfig,
-} from "../src/config/dsl-loader";
+import { loadConfig, validateConfig } from "../src/config/dsl-loader";
 import { DEFAULT_DSL_CONFIG } from "../src/config/default-dsl-config";
 import { VariableStore } from "../src/var-system/store";
 import { SourceRegistry } from "../src/var-system/sources";
@@ -46,11 +42,15 @@ describe("shipped examples load and render through the real cascade", () => {
 
   test.each(exampleFiles)("%s validates and renders without errors", (file) => {
     const path = join(EXAMPLES_DIR, file);
-    const source = readFileSync(path, "utf8");
 
-    // Production cascade: user file merges ON TOP of the bundled default.
-    const raw = parseDslConfig(path, source, ALLOWED);
-    const merged = mergeWithDefault(raw, DEFAULT_DSL_CONFIG);
+    // [LAW:single-enforcer] loadConfig is the production cascade: the file
+    // merges ON TOP of the bundled default, with the default's own segment
+    // names as the delta-able set.
+    const { config: merged, source } = loadConfig(
+      path,
+      DEFAULT_DSL_CONFIG,
+      ALLOWED,
+    );
     const config = validateConfig(merged, path, source, ALLOWED);
 
     const sessionState = new SessionState();

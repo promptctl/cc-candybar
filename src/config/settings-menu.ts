@@ -77,6 +77,7 @@ import {
   menuStateKey,
 } from "./menu-keys.js";
 import { presetByName, presetNames, presetRoot } from "./presets.js";
+import { SETTINGS_NS } from "./loader/reserved-namespace.js";
 import type { OptionDomain } from "./option-domain.js";
 import {
   BOOLEAN_FALSE,
@@ -84,13 +85,6 @@ import {
   BOOLEAN_TRUE,
   PADDING_RANGE,
 } from "../themes/policy.js";
-
-// [LAW:one-source-of-truth] The reserved namespace every artifact this pass
-// mints lives under, mirroring `groups.`/`menus.`/`edit.`. Reserved at parse
-// time (reservedNamespaceCollisions, from dsl-loader's validateTopLevel) so a
-// user name under it is a loud load error rather than a silent shadowing of
-// the one surface they cannot afford to lose.
-export const SETTINGS_NS = "settings.";
 
 // [LAW:one-source-of-truth] THE anchor: one string that is simultaneously the
 // segment name an author places in `root` to choose the menu's position, the

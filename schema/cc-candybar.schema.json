@@ -725,9 +725,6 @@
         },
         "directoryPaletteControl": {
           "$ref": "#/definitions/SegmentDelta"
-        },
-        "groups.settings": {
-          "$ref": "#/definitions/SegmentDelta"
         }
       },
       "additionalProperties": {

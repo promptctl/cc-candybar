@@ -55,8 +55,11 @@ import { synthesizeGroupDecls, validateRootFragment } from "./loader/layout.js";
 import { synthesizeMenuDecls } from "./loader/menu-synth.js";
 import { synthesizeEditModeToggle } from "./loader/edit-mode.js";
 import { synthesizeEditChrome } from "./edit-chrome.js";
-import { SETTINGS_NS, synthesizeSettingsMenu } from "./settings-menu.js";
-import { reservedNamespaceCollisions } from "./loader/reserved-namespace.js";
+import { synthesizeSettingsMenu } from "./settings-menu.js";
+import {
+  reservedNamespaceCollisions,
+  SETTINGS_NS,
+} from "./loader/reserved-namespace.js";
 import { validateActions } from "./loader/actions.js";
 import { validateLooks } from "./loader/looks.js";
 import { validatePresets } from "./loader/presets.js";

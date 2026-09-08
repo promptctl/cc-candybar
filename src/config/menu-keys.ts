@@ -23,6 +23,7 @@
 //               can see in the template, never on tree position.
 
 import { ident } from "./ident.js";
+import { MENU_NS } from "./loader/reserved-namespace.js";
 import {
   DEFAULT_DISTRIBUTION,
   DISTRIBUTION_NAMES,
@@ -30,12 +31,6 @@ import {
   placedBy,
   type Distribution,
 } from "../themes/decor.js";
-
-// [LAW:one-source-of-truth] The reserved namespace every synthesized menu
-// artifact (state var + cycle action) lives under, mirroring group sugar's
-// `groups.`. A user-authored name under this prefix is a load error so synthesis
-// can never silently collide.
-export const MENU_NS = "menus.";
 
 // [LAW:one-source-of-truth] The closed sentinel and the ▸/▾ glyphs are the shared
 // disclosure primitive, not menu-specific — they live in src/config/disclosure.ts
